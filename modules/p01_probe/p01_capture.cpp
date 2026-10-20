@@ -11,6 +11,8 @@ void P01Capture::begin(uint64_t p_epoch) {
 	poisoned = p_epoch == 0;
 	sealed = false;
 	disposed = false;
+	eof = false;
+	transport_failed = false;
 	active = !poisoned;
 	last_epoch = p_epoch;
 }
@@ -39,7 +41,17 @@ bool P01Capture::seal() {
 	std::lock_guard<std::mutex> lock(mutex);
 	if (poisoned || sealed || epoch == 0 || !pending.empty()) return false;
 	sealed = true;
+	eof = true;
 	active = false;
+	return true;
+}
+
+bool P01Capture::write_transport(const uint8_t *p_data, size_t p_size, size_t p_written) {
+	std::lock_guard<std::mutex> lock(mutex);
+	if (p_data == nullptr || p_written != p_size || !sealed || !eof || transport_failed) {
+		transport_failed = true;
+		return false;
+	}
 	return true;
 }
 

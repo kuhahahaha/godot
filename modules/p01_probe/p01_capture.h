@@ -25,6 +25,8 @@ class P01Capture {
 	bool poisoned = false;
 	bool sealed = false;
 	bool disposed = false;
+	bool eof = false;
+	bool transport_failed = false;
 	bool active = false;
 	uint64_t last_epoch = 0;
 	mutable std::mutex mutex;
@@ -37,8 +39,10 @@ class P01Capture {
 	bool seal();
 	bool dispose_physical();
 	bool drain_complete() const;
+	bool write_transport(const uint8_t *p_data, size_t p_size, size_t p_written);
 	bool is_poisoned() const { return poisoned; }
 	bool is_sealed() const { return sealed; }
 	bool is_disposed() const { return disposed; }
+	bool has_transport_failure() const { return transport_failed; }
 	const std::vector<P01CaptureEvent> &get_events() const { return events; }
 };
