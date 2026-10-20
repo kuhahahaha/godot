@@ -1,6 +1,6 @@
 #include "register_types.h"
 
-// No script surface is registered until the fixture has its real implementation.
+// P01 remains tests-only; capture/fixture are private and expose no ClassDB API.
 void initialize_p01_probe_module(ModuleInitializationLevel p_level) {
 }
 

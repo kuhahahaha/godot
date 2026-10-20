@@ -1,6 +1,7 @@
 #include "p01_capture.h"
 
 void P01Capture::begin(uint64_t p_epoch) {
+	std::lock_guard<std::mutex> lock(mutex);
 	if (!pending.empty() || !events.empty() && !sealed) { poisoned = true; return; }
 	events.clear();
 	pending.clear();
@@ -12,6 +13,7 @@ void P01Capture::begin(uint64_t p_epoch) {
 }
 
 bool P01Capture::append(const P01CaptureEvent &p_event) {
+	std::lock_guard<std::mutex> lock(mutex);
 	if (sealed || disposed || epoch == 0 || p_event.epoch != epoch || p_event.token == 0 || p_event.rid == 0 || p_event.allocation_serial == 0 || UINT32_MAX - p_event.offset < p_event.size || (poisoned && p_event.kind != 2) || (events.size() >= MAX_EVENTS && p_event.kind != 2)) {
 		poisoned = true;
 		return false;
@@ -31,12 +33,14 @@ bool P01Capture::append(const P01CaptureEvent &p_event) {
 }
 
 bool P01Capture::seal() {
+	std::lock_guard<std::mutex> lock(mutex);
 	if (poisoned || sealed || epoch == 0 || !pending.empty()) return false;
 	sealed = true;
 	return true;
 }
 
 bool P01Capture::dispose_physical() {
+	std::lock_guard<std::mutex> lock(mutex);
 	// Poison invalidates evidence publication but must never block engine-owned
 	// retirement once all queued GPU work has drained.
 	if (!pending.empty() || disposed || (!sealed && !poisoned)) return false;

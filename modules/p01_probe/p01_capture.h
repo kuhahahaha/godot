@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <vector>
+#include <mutex>
 
 struct P01CaptureEvent {
 	uint64_t sequence = 0;
@@ -24,6 +25,7 @@ class P01Capture {
 	bool poisoned = false;
 	bool sealed = false;
 	bool disposed = false;
+	mutable std::mutex mutex;
 	static constexpr size_t MAX_EVENTS = 4096;
 	static constexpr size_t MAX_PENDING = 64;
 	public:
