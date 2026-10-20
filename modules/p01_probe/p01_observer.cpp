@@ -1,6 +1,9 @@
 #include "p01_observer.h"
 
-static P01HookSnapshot snapshot;
+// Hook observations are scoped to the owning thread. RenderingDevice instances
+// may issue work concurrently; a process-global mutable snapshot would lose
+// events and introduce a data race between instances.
+static thread_local P01HookSnapshot snapshot;
 
 void p01_observe_buffer_write(uint64_t p_rid, uint32_t p_offset, uint32_t p_size, bool p_success) {
 	(void)p_rid;
