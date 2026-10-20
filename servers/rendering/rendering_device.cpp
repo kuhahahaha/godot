@@ -44,6 +44,9 @@
 #include "servers/rendering/shader_include_db.h"
 
 #include "modules/modules_enabled.gen.h"
+#ifdef MODULE_P01_PROBE_ENABLED
+#include "modules/p01_probe/p01_observer.h"
+#endif
 
 #ifdef MODULE_GLSLANG_ENABLED
 #include "modules/glslang/shader_compile.h"
@@ -1096,6 +1099,9 @@ Error RenderingDevice::_buffer_update(Buffer *p_buffer, RID p_buffer_id, uint32_
 
 		memcpy(dst_data + p_offset, p_data, p_size);
 		direct_copy_count++;
+#ifdef MODULE_P01_PROBE_ENABLED
+		p01_observe_buffer_write(p_buffer_id.get_id(), p_offset, p_size, true);
+#endif
 		buffer_flush(p_buffer_id);
 		return OK;
 	}
@@ -1118,6 +1124,9 @@ Error RenderingDevice::_buffer_update(Buffer *p_buffer, RID p_buffer_id, uint32_
 
 		Error err = _staging_buffer_allocate(upload_staging_buffers, MIN(to_submit, upload_staging_buffers.block_size), required_align, block_write_offset, block_write_amount, required_action);
 		if (err) {
+#ifdef MODULE_P01_PROBE_ENABLED
+			p01_observe_buffer_write(p_buffer_id.get_id(), p_offset + submit_from, to_submit, false);
+#endif
 			return err;
 		}
 
@@ -1146,6 +1155,9 @@ Error RenderingDevice::_buffer_update(Buffer *p_buffer, RID p_buffer_id, uint32_
 		buffer_copy.source = upload_staging_buffers.blocks[upload_staging_buffers.current].driver_id;
 		buffer_copy.region = region;
 		command_buffer_copies_vector.push_back(buffer_copy);
+#ifdef MODULE_P01_PROBE_ENABLED
+		p01_observe_buffer_write(p_buffer_id.get_id(), submit_from + p_offset, block_write_amount, true);
+#endif
 
 		upload_staging_buffers.blocks.write[upload_staging_buffers.current].fill_amount = block_write_offset + block_write_amount;
 
@@ -1354,6 +1366,7 @@ Error RenderingDevice::buffer_get_data_async(RID p_buffer, const Callable &p_cal
 	_check_transfer_worker_buffer(buffer);
 
 	BufferGetDataRequest get_data_request;
+	get_data_request.buffer = p_buffer;
 	get_data_request.callback = p_callback;
 	get_data_request.frame_local_index = frames[frame].download_buffer_copy_regions.size();
 	get_data_request.size = p_size;
@@ -1417,6 +1430,9 @@ Error RenderingDevice::buffer_get_data_async(RID p_buffer, const Callable &p_cal
 		}
 
 		frames[frame].download_buffer_get_data_requests.push_back(get_data_request);
+#ifdef MODULE_P01_PROBE_ENABLED
+		p01_observe_readback_queued(p_buffer.get_id(), p_size);
+#endif
 	}
 
 	return OK;
@@ -8263,6 +8279,9 @@ void RenderingDevice::_stall_for_frame(uint32_t p_frame) {
 					array_offset += region.size;
 				}
 
+#ifdef MODULE_P01_PROBE_ENABLED
+				p01_observe_readback_completed(request.buffer.get_id(), request.size);
+#endif
 				request.callback.call(packed_byte_array);
 			}
 

@@ -97,6 +97,18 @@ TEST_CASE("[P01] Lifetime") {
 	CHECK(prefix.recorded_bytes() == 16);
 	CHECK(prefix.has_failed_prefix());
 	CHECK_FALSE(prefix.record(16, 16));
+
+	p01_hook_reset();
+	p01_observe_buffer_write(5, 0, 16, true);
+	p01_observe_buffer_write(5, 16, 16, false);
+	p01_observe_readback_queued(5, 32);
+	p01_observe_readback_completed(5, 32);
+	const P01HookSnapshot hook = p01_hook_snapshot();
+	CHECK(hook.write_begin_count == 2);
+	CHECK(hook.write_bytes == 16);
+	CHECK(hook.write_failure_count == 1);
+	CHECK(hook.readback_queued_count == 1);
+	CHECK(hook.readback_completed_count == 1);
 }
 } // namespace TestP01Probe
 #endif

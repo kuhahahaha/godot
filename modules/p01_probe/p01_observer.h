@@ -103,3 +103,17 @@ public:
 	uint32_t recorded_bytes() const { return bytes; }
 	bool has_failed_prefix() const { return failed && bytes != 0; }
 };
+
+
+struct P01HookSnapshot {
+	uint64_t write_begin_count = 0;
+	uint64_t write_bytes = 0;
+	uint64_t write_failure_count = 0;
+	uint64_t readback_queued_count = 0;
+	uint64_t readback_completed_count = 0;
+};
+void p01_observe_buffer_write(uint64_t p_rid, uint32_t p_offset, uint32_t p_size, bool p_success);
+void p01_observe_readback_queued(uint64_t p_rid, uint32_t p_size);
+void p01_observe_readback_completed(uint64_t p_rid, uint32_t p_size);
+P01HookSnapshot p01_hook_snapshot();
+void p01_hook_reset();
