@@ -2,6 +2,13 @@
 
 #include <cstdint>
 #include <array>
+#include <vector>
+
+struct P01HookEvent {
+	uint64_t rid = 0, epoch = 0, allocation_serial = 0, sequence = 0;
+	uint32_t offset = 0, size = 0, range = 0;
+	bool success = false, failed_prefix = false;
+};
 
 // Engine-owned lifetime accounting. Transport/parent verdicts never release GPU
 // work. The caller serializes access on the collector's owning thread.
@@ -123,4 +130,5 @@ void p01_observe_buffer_write(uint64_t p_rid, uint32_t p_offset, uint32_t p_size
 void p01_observe_readback_queued(uint64_t p_rid, uint32_t p_size);
 void p01_observe_readback_completed(uint64_t p_rid, uint32_t p_size);
 P01HookSnapshot p01_hook_snapshot();
+std::vector<P01HookEvent> p01_hook_events();
 void p01_hook_reset();
