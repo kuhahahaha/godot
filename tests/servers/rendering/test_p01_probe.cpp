@@ -63,6 +63,10 @@ TEST_CASE("[P01] Lifetime") {
 	CHECK(slots.complete_slot(11, 3));
 	CHECK_FALSE(slots.can_retire());
 	CHECK(slots.complete_slot(11, 9));
+	CHECK_FALSE(slots.can_retire());
+	slots.close();
+	CHECK_FALSE(slots.can_retire());
+	slots.release_native_references();
 	CHECK_FALSE(slots.complete_slot(11, 9));
 	CHECK_FALSE(slots.complete_slot(10, 3));
 	CHECK_FALSE(slots.record_slot(11, 64));
@@ -72,8 +76,8 @@ TEST_CASE("[P01] Lifetime") {
 	no_work.close();
 	no_work.release_native_references();
 	CHECK_FALSE(no_work.can_retire());
-	CHECK(no_work.accept(1));
-	CHECK(no_work.can_retire());
+	CHECK_FALSE(no_work.accept(1));
+	CHECK_FALSE(no_work.can_retire());
 }
 } // namespace TestP01Probe
 #endif
