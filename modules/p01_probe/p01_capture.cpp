@@ -37,7 +37,9 @@ bool P01Capture::seal() {
 }
 
 bool P01Capture::dispose_physical() {
-	if (poisoned || !sealed || !pending.empty()) return false;
+	// Poison invalidates evidence publication but must never block engine-owned
+	// retirement once all queued GPU work has drained.
+	if (!pending.empty() || disposed || (!sealed && !poisoned)) return false;
 	disposed = true;
 	return true;
 }
