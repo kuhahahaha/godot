@@ -43,9 +43,31 @@
 #include <spirv_msl.hpp>
 #include <spirv_parser.hpp>
 
-void RenderingShaderContainerMetal::_initialize_toolchain_properties() {
+#ifdef TESTS_ENABLED
+static void audit_offline_tool(const CharString &p_name, BitField<RenderingDeviceCommons::ShaderCompileFlags> p_flags, const List<String> &p_args, const String &p_tool, const String &p_phase, int p_exit = -1, Error p_error = OK, uint64_t p_size = 0) {
+	Dictionary record;
+	record["shader_name"] = String::utf8(p_name.get_data());
+	record["phase"] = p_phase;
+	record["required_flags"] = static_cast<uint64_t>(p_flags);
+	record["compile_path"] = "offline";
+	record["tool"] = p_tool;
+	PackedStringArray arguments;
+	for (const String &argument : p_args) {
+		arguments.push_back(argument);
+	}
+	record["argv"] = arguments;
+	if (p_phase == "offline_tool_end") {
+		record["raw_tool_exit"] = p_exit;
+		record["os_error"] = p_error;
+		record["product_size"] = p_size;
+	}
+	ShaderCompileAudit::emit(record);
+}
+#endif
+
+Error RenderingShaderContainerMetal::_initialize_toolchain_properties() {
 	if (compiler_props.is_valid()) {
-		return;
+		return OK;
 	}
 
 	String sdk;
@@ -61,7 +83,11 @@ void RenderingShaderContainerMetal::_initialize_toolchain_properties() {
 			break;
 	}
 
-	Vector<String> parts{ "echo", R"("")", "|", "/usr/bin/xcrun", "-sdk", sdk, "metal", "-E", "-dM", "-x", "metal" };
+	Error source_error = OK;
+	Ref<FileAccess> source_file = FileAccess::create_temp(FileAccess::READ_WRITE, "godot_metal_properties", "metal", false, &source_error);
+	ERR_FAIL_COND_V(source_error != OK || source_file.is_null(), ERR_CANT_CREATE);
+	source_file->flush();
+	Vector<String> parts{ "-sdk", sdk, "metal", "-E", "-dM", "-x", "metal" };
 
 	switch (device_profile->platform) {
 		case MetalDeviceProfile::Platform::macOS: {
@@ -78,14 +104,24 @@ void RenderingShaderContainerMetal::_initialize_toolchain_properties() {
 		}
 	}
 
-	parts.append_array({ "-", "|", "grep", "-E", R"(\"__METAL_VERSION__|__ENVIRONMENT_OS\")" });
-
-	List<String> args = { "-c", String(" ").join(parts) };
-
+	parts.push_back(source_file->get_path_absolute());
+	List<String> args;
+	for (const String &part : parts) {
+		args.push_back(part);
+	}
 	String r_pipe;
-	int exit_code;
-	Error err = OS::get_singleton()->execute("sh", args, &r_pipe, &exit_code, true);
-	ERR_FAIL_COND_MSG(err != OK, "Failed to determine Metal toolchain properties");
+	int exit_code = -1;
+#ifdef TESTS_ENABLED
+	audit_offline_tool(shader_name, get_compile_flags(), args, "property_probe", "offline_tool_begin");
+#endif
+	Error err = OS::get_singleton()->execute("/usr/bin/xcrun", args, &r_pipe, &exit_code, true);
+#ifdef TESTS_ENABLED
+	audit_offline_tool(shader_name, get_compile_flags(), args, "property_probe", "offline_tool_end", exit_code, err, r_pipe.utf8().length());
+#endif
+#ifdef TESTS_ENABLED
+	offline_test_result.property_probe = { true, err, exit_code, uint64_t(r_pipe.utf8().length()) };
+#endif
+	ERR_FAIL_COND_V_MSG(err != OK || exit_code != 0, ERR_CANT_CREATE, "Failed to determine Metal toolchain properties");
 
 	// Parse the lines, which are in the form:
 	//
@@ -109,6 +145,15 @@ void RenderingShaderContainerMetal::_initialize_toolchain_properties() {
 			break;
 		}
 	}
+	ERR_FAIL_COND_V_MSG(!compiler_props.is_valid(), ERR_INVALID_DATA, "Metal toolchain did not return required version macros.");
+	return OK;
+}
+
+void RenderingShaderContainerMetal::append_compile_policy_arguments(List<String> &r_args, const StageData &p_stage) {
+	if (p_stage.is_position_invariant) {
+		r_args.push_back("-fpreserve-invariance");
+	}
+	r_args.push_back(p_stage.effective_disable_fast_math ? "-fmetal-math-mode=safe" : "-fmetal-math-mode=fast");
 }
 
 Error RenderingShaderContainerMetal::compile_metal_source(const char *p_source, const StageData &p_stage_data, Vector<uint8_t> &r_binary_data) {
@@ -172,16 +217,19 @@ Error RenderingShaderContainerMetal::compile_metal_source(const char *p_source, 
 			}
 		}
 
-		if (p_stage_data.is_position_invariant) {
-			args.push_back("-fpreserve-invariance");
-		}
-		args.push_back("-fmetal-math-mode=fast");
+		append_compile_policy_arguments(args, p_stage_data);
 		args.push_back(source_file->get_path_absolute());
 		args.push_back("-o");
 		args.push_back(result_file->get_path_absolute());
 		String r_pipe;
-		int exit_code;
+		int exit_code = -1;
+#ifdef TESTS_ENABLED
+		audit_offline_tool(shader_name, get_compile_flags(), args, "metal", "offline_tool_begin");
+#endif
 		Error err = OS::get_singleton()->execute("/usr/bin/xcrun", args, &r_pipe, &exit_code, true);
+#ifdef TESTS_ENABLED
+		audit_offline_tool(shader_name, get_compile_flags(), args, "metal", "offline_tool_end", exit_code, err, result_file->get_length());
+#endif
 		if (!r_pipe.is_empty()) {
 			print_line(r_pipe);
 		}
@@ -192,6 +240,10 @@ Error RenderingShaderContainerMetal::compile_metal_source(const char *p_source, 
 		if (exit_code != 0) {
 			ERR_PRINT(vformat("Metal compiler exited with error code: %d", exit_code));
 		}
+#ifdef TESTS_ENABLED
+		offline_test_result.metal = { true, err, exit_code, result_file->get_length() };
+#endif
+		ERR_FAIL_COND_V(err != OK || exit_code != 0, ERR_CANT_CREATE);
 		int len = result_file->get_length();
 		ERR_FAIL_COND_V_MSG(len == 0, ERR_CANT_CREATE, "Metal compiler created empty library");
 	}
@@ -202,8 +254,14 @@ Error RenderingShaderContainerMetal::compile_metal_source(const char *p_source, 
 	if (device_profile->features.msl_version >= MSL_VERSION_24) {
 		List<String> args{ "-sdk", sdk, "metal-dsymutil", "--remove-source", result_file->get_path_absolute() };
 		String r_pipe;
-		int exit_code;
+		int exit_code = -1;
+#ifdef TESTS_ENABLED
+		audit_offline_tool(shader_name, get_compile_flags(), args, "strip", "offline_tool_begin");
+#endif
 		Error err = OS::get_singleton()->execute("/usr/bin/xcrun", args, &r_pipe, &exit_code, true);
+#ifdef TESTS_ENABLED
+		audit_offline_tool(shader_name, get_compile_flags(), args, "strip", "offline_tool_end", exit_code, err, result_file->get_length());
+#endif
 		if (!r_pipe.is_empty()) {
 			print_line(r_pipe);
 		}
@@ -214,11 +272,17 @@ Error RenderingShaderContainerMetal::compile_metal_source(const char *p_source, 
 		if (exit_code != 0) {
 			ERR_PRINT(vformat("metal-dsymutil Compiler exited with error code: %d", exit_code));
 		}
+#ifdef TESTS_ENABLED
+		offline_test_result.strip = { true, err, exit_code, result_file->get_length() };
+#endif
+		ERR_FAIL_COND_V(err != OK || exit_code != 0, ERR_CANT_CREATE);
 		int len = result_file->get_length();
 		ERR_FAIL_COND_V_MSG(len == 0, ERR_CANT_CREATE, "metal-dsymutil tool created empty library");
 	}
 
+	result_file->seek(0);
 	r_binary_data = result_file->get_buffer(result_file->get_length());
+	ERR_FAIL_COND_V(r_binary_data.is_empty() || uint64_t(r_binary_data.size()) != result_file->get_length(), ERR_FILE_CANT_READ);
 
 	return OK;
 }
@@ -328,8 +392,6 @@ bool RenderingShaderContainerMetal::_set_code_from_spirv(const ReflectShader &p_
 	const LocalVector<ReflectShaderStage> &p_spirv = p_shader.shader_stages;
 
 	if (export_mode) {
-		_initialize_toolchain_properties();
-
 		// When baking shaders for export, check if the SPIR-V requires capabilities
 		// that the target profile can't support natively. SPIRV-Cross would emulate
 		// image atomics with auxiliary buffer bindings incompatible with Godot's binding
@@ -337,6 +399,19 @@ bool RenderingShaderContainerMetal::_set_code_from_spirv(const ReflectShader &p_
 		MetalDeviceProfile::MinimumRequirements reqs = inspect_spirv(p_shader);
 		MetalDeviceProfile::MinimumRequirements target = device_profile->get_minimum_requirements();
 		if (reqs > target) {
+			// Safe-math exports cannot silently fall back to runtime compilation:
+			// the target mismatch would otherwise bypass the required failure policy.
+			bool needs_safe_math = static_cast<uint64_t>(get_compile_flags()) != 0;
+			for (const ReflectShaderStage &stage : p_spirv) {
+				const SpvReflectShaderModule &module = stage.module();
+				for (uint32_t entry = 0; entry < module.entry_point_count; entry++) {
+					const SpvReflectEntryPoint &point = module.entry_points[entry];
+					for (uint32_t mode = 0; mode < point.execution_mode_count; mode++) {
+						needs_safe_math |= point.execution_modes[mode] == SpvExecutionModeSignedZeroInfNanPreserve;
+					}
+				}
+			}
+			ERR_FAIL_COND_V(needs_safe_math, false);
 			uint32_t req_maj, req_min, tgt_maj, tgt_min;
 			parse_msl_version(reqs.msl_version, req_maj, req_min);
 			parse_msl_version(target.msl_version, tgt_maj, tgt_min);
@@ -347,6 +422,7 @@ bool RenderingShaderContainerMetal::_set_code_from_spirv(const ReflectShader &p_
 			mtl_reflection_data.mark_invalid();
 			return true;
 		}
+		_initialize_toolchain_properties();
 	}
 
 	// initialize Metal-specific reflection data
@@ -358,6 +434,7 @@ bool RenderingShaderContainerMetal::_set_code_from_spirv(const ReflectShader &p_
 	mtl_reflection_data.profile = *device_profile;
 
 	CompilerMSL::Options msl_options{};
+	msl_options.use_fast_math_pragmas = false;
 
 	// Determine Metal language version.
 	uint32_t msl_version = 0;
@@ -712,6 +789,7 @@ bool RenderingShaderContainerMetal::_set_code_from_spirv(const ReflectShader &p_
 
 		stage_data.is_position_invariant = compiler.is_position_invariant();
 		stage_data.supports_fast_math = !entry_point.flags.get(spv::ExecutionModeSignedZeroInfNanPreserve);
+		stage_data.effective_disable_fast_math = ShaderCompilePolicy::effective_disable(get_compile_flags(), stage_data.supports_fast_math);
 		stage_data.hash = SHA256Digest(source.c_str(), source.length());
 		stage_data.source_size = source.length();
 		::Vector<uint8_t> binary_data;
@@ -730,7 +808,9 @@ bool RenderingShaderContainerMetal::_set_code_from_spirv(const ReflectShader &p_
 					binary_data.resize(stage_data.source_size + stage_data.library_size);
 					memcpy(binary_data.ptrw() + stage_data.source_size, library_data.ptr(), stage_data.library_size);
 				}
+				ERR_FAIL_COND_V(stage_data.effective_disable_fast_math && compile_err != OK, false);
 			} else {
+				ERR_FAIL_COND_V(stage_data.effective_disable_fast_math, false);
 				WARN_PRINT_ONCE("Metal shader baking limited to SPIR-V: Unable to determine toolchain properties to compile .metallib");
 			}
 		}
@@ -782,29 +862,72 @@ uint32_t RenderingShaderContainerMetal::_to_bytes_shader_extra_data(uint8_t *p_b
 	return sizeof(StageData);
 }
 
-uint32_t RenderingShaderContainerMetal::_from_bytes_reflection_extra_data(const uint8_t *p_bytes) {
-	mtl_reflection_data = *(HeaderData *)p_bytes;
-	return sizeof(HeaderData);
+static bool valid_profile_os_version(MetalDeviceProfile::Platform p_platform, MinOsVersion p_version) {
+	const uint32_t version = p_version;
+	if (p_version.is_null()) {
+		return false;
+	}
+	switch (p_platform) {
+		case MetalDeviceProfile::Platform::macOS:
+			return version >= 110000;
+		case MetalDeviceProfile::Platform::iOS:
+			return version >= 140000;
+		case MetalDeviceProfile::Platform::visionOS:
+			return version >= 20400;
+	}
+	return false;
 }
 
-uint32_t RenderingShaderContainerMetal::_from_bytes_reflection_binding_uniform_extra_data_start(const uint8_t *p_bytes) {
+bool RenderingShaderContainerMetal::HeaderData::has_valid_profile() const {
+	auto known_version = [](uint32_t p_version) {
+		return p_version == MSL_VERSION_23 || p_version == MSL_VERSION_24 || p_version == MSL_VERSION_30 || p_version == MSL_VERSION_31 || p_version == MSL_VERSION_32 || p_version == MSL_VERSION_40;
+	};
+	const bool known_msl = known_version(msl_version) && known_version(profile.features.msl_version);
+	if (!known_msl || uint32_t(profile.gpu) < 1001 || uint32_t(profile.gpu) > 1009 ||
+			!valid_profile_os_version(profile.platform, profile.min_os_version) ||
+			(!os_min_version.is_null() && !valid_profile_os_version(profile.platform, os_min_version)) ||
+			(flags & ~(NEEDS_VIEW_MASK_BUFFER | USES_ARGUMENT_BUFFERS | NEEDS_DEBUG_LOGGING))) {
+		return false;
+	}
+	if (profile.platform == MetalDeviceProfile::Platform::visionOS && profile.gpu < MetalDeviceProfile::GPU::Apple8) {
+		return false;
+	}
+	// The serialized profile contains bool fields. Validate their object bytes
+	// before evaluating them.
+	if (*reinterpret_cast<const uint8_t *>(&profile.features.use_argument_buffers) > 1 ||
+			*reinterpret_cast<const uint8_t *>(&profile.features.simdPermute) > 1) {
+		return false;
+	}
+	// Runtime targets may intentionally lower MSL or disable optional features;
+	// structural validation must not require export-default feature values.
+	return true;
+}
+
+bool RenderingShaderContainerMetal::_from_bytes_reflection_extra_data(ContainerReader &r_reader) {
+	return r_reader.read(&mtl_reflection_data, sizeof(HeaderData)) && mtl_reflection_data.has_valid_profile();
+}
+
+bool RenderingShaderContainerMetal::_from_bytes_reflection_binding_uniform_extra_data_start(ContainerReader &r_reader) {
 	mtl_reflection_binding_set_uniforms_data.resize(reflection_binding_set_uniforms_data.size());
-	return 0;
+	return true;
 }
 
-uint32_t RenderingShaderContainerMetal::_from_bytes_reflection_binding_uniform_extra_data(const uint8_t *p_bytes, uint32_t p_index) {
-	mtl_reflection_binding_set_uniforms_data.ptrw()[p_index] = *(UniformData *)p_bytes;
-	return sizeof(UniformData);
+bool RenderingShaderContainerMetal::_from_bytes_reflection_binding_uniform_extra_data(ContainerReader &r_reader, uint32_t p_index) {
+	return r_reader.read(&mtl_reflection_binding_set_uniforms_data.write[p_index], sizeof(UniformData));
 }
 
-uint32_t RenderingShaderContainerMetal::_from_bytes_shader_extra_data_start(const uint8_t *p_bytes) {
+bool RenderingShaderContainerMetal::_from_bytes_shader_extra_data_start(ContainerReader &r_reader) {
 	mtl_shaders.resize(shaders.size());
-	return 0;
+	return true;
 }
 
-uint32_t RenderingShaderContainerMetal::_from_bytes_shader_extra_data(const uint8_t *p_bytes, uint32_t p_index) {
-	mtl_shaders.ptrw()[p_index] = *(StageData *)p_bytes;
-	return sizeof(StageData);
+bool RenderingShaderContainerMetal::_from_bytes_shader_extra_data(ContainerReader &r_reader, uint32_t p_index) {
+	StageData &stage = mtl_shaders.write[p_index];
+	if (!r_reader.read(&stage, sizeof(StageData))) {
+		return false;
+	}
+	return stage.compile_path_version == 1 && stage.supports_fast_math <= 1 && stage.effective_disable_fast_math <= 1 &&
+			stage.effective_disable_fast_math == ShaderCompilePolicy::effective_disable(get_compile_flags(), stage.supports_fast_math);
 }
 
 RenderingShaderContainerMetal::MetalShaderReflection RenderingShaderContainerMetal::get_metal_shader_reflection() const {
@@ -875,3 +998,17 @@ MinOsVersion::MinOsVersion(const String &p_version) {
 		version = UINT32_MAX;
 	}
 }
+
+#ifdef TESTS_ENABLED
+bool RenderingShaderContainerMetal::validate_test_compute_spirv(const String &p_name, Span<RDC::ShaderStageSPIRVData> p_spirv) {
+	if (p_spirv.size() != 1 || p_spirv[0].shader_stage != RDC::SHADER_STAGE_COMPUTE) {
+		return false;
+	}
+	ReflectShader shader;
+	if (reflect_spirv(p_name, p_spirv, shader) != OK || shader.shader_stages.size() != 1) {
+		return false;
+	}
+	const SpvReflectShaderModule &module = shader.shader_stages[0].module();
+	return module.entry_point_count == 1 && module.entry_points[0].spirv_execution_model == SpvExecutionModelGLCompute;
+}
+#endif

@@ -40,6 +40,11 @@
 class StringBuilder;
 
 class ShaderRD {
+#ifdef TESTS_ENABLED
+	friend class TestShaderCompilePolicyAccess;
+#endif
+	static void _rollback_cache_load(Vector<RID> &r_variants, Vector<Vector<uint8_t>> &r_variant_data, const LocalVector<int> &p_group_indices, const LocalVector<int> &p_loaded_indices, void (*p_free_shader)(RID, void *), void *p_context);
+
 public:
 	struct VariantDefine {
 		int group = 0;

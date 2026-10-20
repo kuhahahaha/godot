@@ -598,7 +598,7 @@ String ShaderRD::_version_get_sha1(Version *p_version) const {
 }
 
 static const char *shader_file_header = "GDSC";
-static const uint32_t cache_file_version = 4;
+static const uint32_t cache_file_version = 5;
 
 String ShaderRD::_get_cache_file_relative_path(Version *p_version, int p_group, const String &p_api_name) {
 	String sha1 = _version_get_sha1(p_version);
@@ -609,6 +609,19 @@ String ShaderRD::_get_cache_file_path(Version *p_version, int p_group, const Str
 	const String &shader_cache_dir = p_user_dir ? shader_cache_user_dir : shader_cache_res_dir;
 	String relative_path = _get_cache_file_relative_path(p_version, p_group, p_api_name);
 	return shader_cache_dir.path_join(relative_path);
+}
+
+void ShaderRD::_rollback_cache_load(Vector<RID> &r_variants, Vector<Vector<uint8_t>> &r_variant_data, const LocalVector<int> &p_group_indices, const LocalVector<int> &p_loaded_indices, void (*p_free_shader)(RID, void *), void *p_context) {
+	for (int index : p_loaded_indices) {
+		RID shader = r_variants[index];
+		if (shader.is_valid()) {
+			r_variants.write[index] = RID();
+			p_free_shader(shader, p_context);
+		}
+	}
+	for (int index : p_group_indices) {
+		r_variant_data.write[index].clear();
+	}
 }
 
 bool ShaderRD::_load_from_cache(Version *p_version, int p_group) {
@@ -641,6 +654,7 @@ bool ShaderRD::_load_from_cache(Version *p_version, int p_group) {
 
 	ERR_FAIL_COND_V(variant_count != (uint32_t)group_to_variant_map[p_group].size(), false); //should not happen but check
 
+	LocalVector<int> loaded_indices;
 	for (uint32_t i = 0; i < variant_count; i++) {
 		int variant_id = group_to_variant_map[p_group][i];
 		uint32_t variant_size = f->get_32();
@@ -673,14 +687,12 @@ bool ShaderRD::_load_from_cache(Version *p_version, int p_group) {
 		{
 			RID shader = RD::get_singleton()->shader_create_from_bytecode_with_samplers(p_version->variant_data[variant_id], p_version->variants[variant_id], immutable_samplers);
 			if (shader.is_null()) {
-				for (uint32_t j = 0; j < i; j++) {
-					int variant_free_id = group_to_variant_map[p_group][j];
-					RD::get_singleton()->free_rid(p_version->variants[variant_free_id]);
-				}
+				_rollback_cache_load(p_version->variants, p_version->variant_data, group_to_variant_map[p_group], loaded_indices, [](RID p_shader, void *) { RD::get_singleton()->free_rid(p_shader); }, nullptr);
 				ERR_FAIL_COND_V(shader.is_null(), false);
 			}
 
 			p_version->variants.write[variant_id] = shader;
+			loaded_indices.push_back(variant_id);
 		}
 	}
 

@@ -111,6 +111,8 @@ public:
 			}
 		}
 
+		bool has_valid_profile() const;
+
 		bool is_invalid() const {
 			return flags == INVALID_SHADER;
 		}
@@ -132,6 +134,8 @@ public:
 		SHA256Digest hash; ///< SHA 256 hash of the shader code
 		uint32_t source_size = 0; ///< size of the source code in the returned bytes
 		uint32_t library_size = 0; ///< size of the compiled library in the returned bytes, 0 if it is not compiled
+		uint32_t effective_disable_fast_math = 0;
+		uint32_t compile_path_version = 1;
 	};
 
 	struct UniformData {
@@ -184,7 +188,7 @@ private:
 
 	ToolchainProperties compiler_props;
 
-	void _initialize_toolchain_properties();
+	Error _initialize_toolchain_properties();
 
 private:
 	const MetalDeviceProfile *device_profile = nullptr;
@@ -197,7 +201,29 @@ private:
 	MetalDeviceProfile::MinimumRequirements inspect_spirv(const ReflectShader &p_shader);
 
 public:
-	static constexpr uint32_t FORMAT_VERSION = 2;
+	static constexpr uint32_t FORMAT_VERSION = 3;
+	static void append_compile_policy_arguments(List<String> &r_args, const StageData &p_stage);
+#ifdef TESTS_ENABLED
+	struct OfflineCompileTestResult {
+		struct ToolResult {
+			bool executed = false;
+			Error os_error = OK;
+			int raw_exit = -1;
+			uint64_t product_size = 0;
+			bool succeeded() const { return executed && os_error == OK && raw_exit == 0 && product_size > 0; }
+		};
+		ToolResult property_probe;
+		ToolResult metal;
+		ToolResult strip;
+	};
+	const OfflineCompileTestResult &get_offline_test_result() const { return offline_test_result; }
+	bool validate_test_compute_spirv(const String &p_name, Span<RDC::ShaderStageSPIRVData> p_spirv);
+
+private:
+	OfflineCompileTestResult offline_test_result;
+
+public:
+#endif
 
 	void set_export_mode(bool p_export_mode) { export_mode = p_export_mode; }
 	void set_device_profile(const MetalDeviceProfile *p_device_profile) { device_profile = p_device_profile; }
@@ -209,11 +235,11 @@ public:
 	MetalShaderReflection get_metal_shader_reflection() const;
 
 protected:
-	virtual uint32_t _from_bytes_reflection_extra_data(const uint8_t *p_bytes) override;
-	virtual uint32_t _from_bytes_reflection_binding_uniform_extra_data_start(const uint8_t *p_bytes) override;
-	virtual uint32_t _from_bytes_reflection_binding_uniform_extra_data(const uint8_t *p_bytes, uint32_t p_index) override;
-	virtual uint32_t _from_bytes_shader_extra_data_start(const uint8_t *p_bytes) override;
-	virtual uint32_t _from_bytes_shader_extra_data(const uint8_t *p_bytes, uint32_t p_index) override;
+	virtual bool _from_bytes_reflection_extra_data(ContainerReader &r_reader) override;
+	virtual bool _from_bytes_reflection_binding_uniform_extra_data_start(ContainerReader &r_reader) override;
+	virtual bool _from_bytes_reflection_binding_uniform_extra_data(ContainerReader &r_reader, uint32_t p_index) override;
+	virtual bool _from_bytes_shader_extra_data_start(ContainerReader &r_reader) override;
+	virtual bool _from_bytes_shader_extra_data(ContainerReader &r_reader, uint32_t p_index) override;
 
 	virtual uint32_t _to_bytes_reflection_extra_data(uint8_t *p_bytes) const override;
 	virtual uint32_t _to_bytes_reflection_binding_uniform_extra_data(uint8_t *p_bytes, uint32_t p_index) const override;
@@ -230,6 +256,7 @@ class RenderingShaderContainerFormatMetal : public RenderingShaderContainerForma
 	const MetalDeviceProfile *device_profile = nullptr;
 
 public:
+	virtual BitField<ShaderCompileFlags> supported_compile_flags() const override { return SHADER_COMPILE_FLAG_DISABLE_FAST_MATH; }
 	virtual Ref<RenderingShaderContainer> create_container() const override;
 	virtual ShaderLanguageVersion get_shader_language_version() const override;
 	virtual ShaderSpirvVersion get_shader_spirv_version() const override;

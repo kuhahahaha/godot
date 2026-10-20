@@ -30,10 +30,69 @@
 
 #include "rendering_shader_container.h"
 
+#include "core/crypto/crypto_core.h"
 #include "core/io/compression.h"
+#include "core/io/marshalls.h"
 #include "servers/rendering/renderer_rd/shader_rd.h"
 
 #include <thirdparty/spirv-reflect/spirv_reflect.h>
+
+PackedByteArray ShaderCompilePolicy::library_key(const LibraryKeyInput &p_input) {
+	PackedByteArray encoded;
+	auto append = [&encoded](const uint8_t *p_bytes, uint64_t p_size) {
+		const int64_t offset = encoded.size();
+		encoded.resize(offset + p_size);
+		if (p_size) {
+			memcpy(encoded.ptrw() + offset, p_bytes, p_size);
+		}
+	};
+	auto u32 = [&append](uint32_t p_value) {
+		uint8_t bytes[4];
+		encode_uint32(p_value, bytes);
+		append(bytes, sizeof(bytes));
+	};
+	auto u64 = [&append](uint64_t p_value) {
+		uint8_t bytes[8];
+		encode_uint64(p_value, bytes);
+		append(bytes, sizeof(bytes));
+	};
+	const char domain[] = "godot.metal.library.v1";
+	u64(sizeof(domain) - 1);
+	append(reinterpret_cast<const uint8_t *>(domain), sizeof(domain) - 1);
+	u32(1);
+	u32(p_input.compile_path_version);
+	u32(p_input.stage);
+	u64(p_input.source.size());
+	append(p_input.source.ptr(), p_input.source.size());
+	u32(p_input.requested_flags);
+	u32(p_input.effective_disable);
+	u32(p_input.msl_version);
+	u32(p_input.position_invariance);
+	u32(p_input.enable_logging);
+	u32(p_input.compiled_platform);
+	u32(p_input.compiled_gpu_family);
+	u32(p_input.profile_min_os_version);
+	u32(p_input.binary_os_min_version);
+	u32(p_input.actual_platform);
+	u32(p_input.actual_gpu_family);
+	u32(p_input.actual_os_version);
+	u32(p_input.origin);
+	u64(p_input.library_size);
+	append(p_input.metallib_sha256, sizeof(p_input.metallib_sha256));
+	PackedByteArray result;
+	result.resize(32);
+	ERR_FAIL_COND_V(CryptoCore::sha256(encoded.ptr(), encoded.size(), result.ptrw()) != OK, PackedByteArray());
+	return result;
+}
+
+bool ShaderCompilePolicy::flags_valid(BitField<RDC::ShaderCompileFlags> p_requested, BitField<RDC::ShaderCompileFlags> p_supported) {
+	const uint64_t requested = static_cast<uint64_t>(p_requested);
+	return (requested & ~uint64_t(RDC::SHADER_COMPILE_FLAG_DISABLE_FAST_MATH)) == 0 && (requested & ~uint64_t(p_supported)) == 0;
+}
+
+bool ShaderCompilePolicy::effective_disable(BitField<RDC::ShaderCompileFlags> p_requested, bool p_supports_fast_math) {
+	return p_requested.has_flag(RDC::SHADER_COMPILE_FLAG_DISABLE_FAST_MATH) || !p_supports_fast_math;
+}
 
 static inline uint32_t aligned_to(uint32_t p_size, uint32_t p_alignment) {
 	if (p_size % p_alignment) {
@@ -75,40 +134,40 @@ const Span<uint32_t> RenderingShaderContainer::ReflectShaderStage::spirv() const
 	return _spirv_data.span().reinterpret<uint32_t>();
 }
 
-uint32_t RenderingShaderContainer::_from_bytes_header_extra_data(const uint8_t *p_bytes) {
-	return 0;
+bool RenderingShaderContainer::_from_bytes_header_extra_data(ContainerReader &r_reader) {
+	return true;
 }
 
-uint32_t RenderingShaderContainer::_from_bytes_reflection_extra_data(const uint8_t *p_bytes) {
-	return 0;
+bool RenderingShaderContainer::_from_bytes_reflection_extra_data(ContainerReader &r_reader) {
+	return true;
 }
 
-uint32_t RenderingShaderContainer::_from_bytes_reflection_binding_uniform_extra_data_start(const uint8_t *p_bytes) {
-	return 0;
+bool RenderingShaderContainer::_from_bytes_reflection_binding_uniform_extra_data_start(ContainerReader &r_reader) {
+	return true;
 }
 
-uint32_t RenderingShaderContainer::_from_bytes_reflection_binding_uniform_extra_data(const uint8_t *p_bytes, uint32_t p_index) {
-	return 0;
+bool RenderingShaderContainer::_from_bytes_reflection_binding_uniform_extra_data(ContainerReader &r_reader, uint32_t p_index) {
+	return true;
 }
 
-uint32_t RenderingShaderContainer::_from_bytes_reflection_specialization_extra_data_start(const uint8_t *p_bytes) {
-	return 0;
+bool RenderingShaderContainer::_from_bytes_reflection_specialization_extra_data_start(ContainerReader &r_reader) {
+	return true;
 }
 
-uint32_t RenderingShaderContainer::_from_bytes_reflection_specialization_extra_data(const uint8_t *p_bytes, uint32_t p_index) {
-	return 0;
+bool RenderingShaderContainer::_from_bytes_reflection_specialization_extra_data(ContainerReader &r_reader, uint32_t p_index) {
+	return true;
 }
 
-uint32_t RenderingShaderContainer::_from_bytes_shader_extra_data_start(const uint8_t *p_bytes) {
-	return 0;
+bool RenderingShaderContainer::_from_bytes_shader_extra_data_start(ContainerReader &r_reader) {
+	return true;
 }
 
-uint32_t RenderingShaderContainer::_from_bytes_shader_extra_data(const uint8_t *p_bytes, uint32_t p_index) {
-	return 0;
+bool RenderingShaderContainer::_from_bytes_shader_extra_data(ContainerReader &r_reader, uint32_t p_index) {
+	return true;
 }
 
-uint32_t RenderingShaderContainer::_from_bytes_footer_extra_data(const uint8_t *p_bytes) {
-	return 0;
+bool RenderingShaderContainer::_from_bytes_footer_extra_data(ContainerReader &r_reader) {
+	return true;
 }
 
 uint32_t RenderingShaderContainer::_to_bytes_header_extra_data(uint8_t *) const {
@@ -707,7 +766,10 @@ void RenderingShaderContainer::set_from_shader_reflection(const ReflectShader &p
 	_set_from_shader_reflection_post(p_reflection);
 }
 
-bool RenderingShaderContainer::set_code_from_spirv(const String &p_shader_name, Span<RDC::ShaderStageSPIRVData> p_spirv) {
+bool RenderingShaderContainer::set_code_from_spirv(const String &p_shader_name, Span<RDC::ShaderStageSPIRVData> p_spirv, BitField<RDC::ShaderCompileFlags> p_flags) {
+	ERR_FAIL_COND_V(!ShaderCompilePolicy::flags_valid(p_flags, RDC::SHADER_COMPILE_FLAG_DISABLE_FAST_MATH), false);
+	ERR_FAIL_COND_V(p_spirv.is_empty(), false);
+	compile_flags = p_flags;
 	ReflectShader shader;
 	ERR_FAIL_COND_V(reflect_spirv(p_shader_name, p_spirv, shader) != OK, false);
 	return _set_code_from_spirv(shader);
@@ -766,106 +828,104 @@ RenderingDeviceCommons::ShaderReflection RenderingShaderContainer::get_shader_re
 }
 
 bool RenderingShaderContainer::from_bytes(const PackedByteArray &p_bytes) {
-	const uint64_t alignment = sizeof(uint32_t);
-	const uint8_t *bytes_ptr = p_bytes.ptr();
-	uint64_t bytes_offset = 0;
-
-	// Read container header.
-	ERR_FAIL_COND_V_MSG(int64_t(bytes_offset + sizeof(ContainerHeader)) > p_bytes.size(), false, "Not enough bytes for a container header in shader container.");
-	const ContainerHeader &container_header = *(const ContainerHeader *)(&bytes_ptr[bytes_offset]);
-	bytes_offset += sizeof(ContainerHeader);
-	bytes_offset += _from_bytes_header_extra_data(&bytes_ptr[bytes_offset]);
-
-	ERR_FAIL_COND_V_MSG(container_header.magic_number != CONTAINER_MAGIC_NUMBER, false, "Incorrect magic number in shader container.");
-	ERR_FAIL_COND_V_MSG(container_header.version > CONTAINER_VERSION, false, "Unsupported version in shader container.");
-	ERR_FAIL_COND_V_MSG(container_header.format != _format(), false, "Incorrect format in shader container.");
-	ERR_FAIL_COND_V_MSG(container_header.format_version > _format_version(), false, "Unsupported format version in shader container.");
-
-	// Adjust shaders to the size indicated by the container header.
-	shaders.resize(container_header.shader_count);
-
-	// Read reflection data.
-	ERR_FAIL_COND_V_MSG(int64_t(bytes_offset + sizeof(ReflectionData)) > p_bytes.size(), false, "Not enough bytes for reflection data in shader container.");
-	reflection_data = *(const ReflectionData *)(&bytes_ptr[bytes_offset]);
-	bytes_offset += sizeof(ReflectionData);
-	bytes_offset += _from_bytes_reflection_extra_data(&bytes_ptr[bytes_offset]);
-
-	// Read shader name.
-	ERR_FAIL_COND_V_MSG(int64_t(bytes_offset + reflection_data.shader_name_len) > p_bytes.size(), false, "Not enough bytes for shader name in shader container.");
-	if (reflection_data.shader_name_len > 0) {
-		String shader_name_str;
-		shader_name_str.append_utf8((const char *)(&bytes_ptr[bytes_offset]), reflection_data.shader_name_len);
-		shader_name = shader_name_str.utf8();
-		bytes_offset = aligned_to(bytes_offset + reflection_data.shader_name_len, alignment);
-	} else {
-		shader_name = CharString();
+#ifdef TESTS_ENABLED
+	loaded_container_digest = String();
+	loaded_container_size = 0;
+#endif
+	ContainerReader reader(p_bytes.ptr(), p_bytes.size());
+	ContainerHeader header;
+	ERR_FAIL_COND_V(!reader.read(&header, 8), false);
+	ERR_FAIL_COND_V(header.magic_number != CONTAINER_MAGIC_NUMBER || header.version != CONTAINER_VERSION, false);
+	ERR_FAIL_COND_V(!reader.read(reinterpret_cast<uint8_t *>(&header) + 8, sizeof(header) - 8), false);
+	ERR_FAIL_COND_V(header.format != _format() || header.format_version != _format_version(), false);
+	ERR_FAIL_COND_V(!ShaderCompilePolicy::flags_valid(header.requested_compile_flags, RDC::SHADER_COMPILE_FLAG_DISABLE_FAST_MATH), false);
+	ERR_FAIL_COND_V(header.shader_count == 0 || header.shader_count > RDC::SHADER_STAGE_MAX, false);
+	compile_flags = header.requested_compile_flags;
+	ERR_FAIL_COND_V(!_from_bytes_header_extra_data(reader), false);
+	ERR_FAIL_COND_V(header.shader_count > reader.remaining() / sizeof(ShaderHeader), false);
+	shaders.resize(header.shader_count);
+	ERR_FAIL_COND_V(!reader.read(&reflection_data, sizeof(reflection_data)), false);
+	ERR_FAIL_COND_V(reflection_data.stage_count != header.shader_count, false);
+	ERR_FAIL_COND_V(reflection_data.set_count > reader.remaining() / sizeof(uint32_t), false);
+	ERR_FAIL_COND_V(reflection_data.specialization_constants_count > reader.remaining() / sizeof(ReflectionSpecializationData), false);
+	ERR_FAIL_COND_V(reflection_data.pipeline_type > RDC::PIPELINE_TYPE_RAYTRACING, false);
+	ERR_FAIL_COND_V(!_from_bytes_reflection_extra_data(reader), false);
+	ERR_FAIL_COND_V(reflection_data.shader_name_len > reader.remaining() || reflection_data.shader_name_len > INT32_MAX, false);
+	Vector<uint8_t> name_bytes;
+	name_bytes.resize(reflection_data.shader_name_len);
+	ERR_FAIL_COND_V(!reader.read(name_bytes.ptrw(), name_bytes.size()) || !reader.align4(), false);
+	String decoded_name;
+	if (!name_bytes.is_empty()) {
+		ERR_FAIL_COND_V(decoded_name.append_utf8(reinterpret_cast<const char *>(name_bytes.ptr()), name_bytes.size()) != OK, false);
 	}
-
+	shader_name = decoded_name.utf8();
+	// Reject normalization (including a leading BOM or embedded NUL) rather than
+	// retaining an input length that no longer describes the decoded buffer.
+	ERR_FAIL_COND_V(shader_name.length() != name_bytes.size(), false);
+	ERR_FAIL_COND_V(!name_bytes.is_empty() && memcmp(shader_name.ptr(), name_bytes.ptr(), name_bytes.size()) != 0, false);
+	ERR_FAIL_COND_V(reflection_data.set_count > reader.remaining() / sizeof(uint32_t), false);
 	reflection_binding_set_uniforms_count.resize(reflection_data.set_count);
 	reflection_binding_set_uniforms_data.clear();
-
 	uint32_t uniform_index = 0;
 	for (uint32_t i = 0; i < reflection_data.set_count; i++) {
-		ERR_FAIL_COND_V_MSG(int64_t(bytes_offset + sizeof(uint32_t)) > p_bytes.size(), false, "Not enough bytes for uniform set count in shader container.");
-		uint32_t uniforms_count = *(uint32_t *)(&bytes_ptr[bytes_offset]);
-		reflection_binding_set_uniforms_count.ptrw()[i] = uniforms_count;
-		bytes_offset += sizeof(uint32_t);
-
-		reflection_binding_set_uniforms_data.resize(reflection_binding_set_uniforms_data.size() + uniforms_count);
-		bytes_offset += _from_bytes_reflection_binding_uniform_extra_data_start(&bytes_ptr[bytes_offset]);
-
-		for (uint32_t j = 0; j < uniforms_count; j++) {
-			ERR_FAIL_COND_V_MSG(int64_t(bytes_offset + sizeof(ReflectionBindingData)) > p_bytes.size(), false, "Not enough bytes for uniform in shader container.");
-			memcpy(&reflection_binding_set_uniforms_data.ptrw()[uniform_index], &bytes_ptr[bytes_offset], sizeof(ReflectionBindingData));
-			bytes_offset += sizeof(ReflectionBindingData);
-			bytes_offset += _from_bytes_reflection_binding_uniform_extra_data(&bytes_ptr[bytes_offset], uniform_index);
-			uniform_index++;
+		uint32_t count = 0;
+		ERR_FAIL_COND_V(!reader.read(&count, sizeof(count)), false);
+		ERR_FAIL_COND_V(count > reader.remaining() / sizeof(ReflectionBindingData) || uint64_t(uniform_index) + count > INT32_MAX, false);
+		reflection_binding_set_uniforms_count.write[i] = count;
+		reflection_binding_set_uniforms_data.resize(uint64_t(uniform_index) + count);
+		ERR_FAIL_COND_V(!_from_bytes_reflection_binding_uniform_extra_data_start(reader), false);
+		for (uint32_t j = 0; j < count; j++, uniform_index++) {
+			ERR_FAIL_COND_V(!reader.read(&reflection_binding_set_uniforms_data.write[uniform_index], sizeof(ReflectionBindingData)), false);
+			ERR_FAIL_COND_V(!_from_bytes_reflection_binding_uniform_extra_data(reader, uniform_index), false);
 		}
 	}
-
+	ERR_FAIL_COND_V(reflection_data.specialization_constants_count > reader.remaining() / sizeof(ReflectionSpecializationData), false);
 	reflection_specialization_data.resize(reflection_data.specialization_constants_count);
-	bytes_offset += _from_bytes_reflection_specialization_extra_data_start(&bytes_ptr[bytes_offset]);
-
+	ERR_FAIL_COND_V(!_from_bytes_reflection_specialization_extra_data_start(reader), false);
 	for (uint32_t i = 0; i < reflection_data.specialization_constants_count; i++) {
-		ERR_FAIL_COND_V_MSG(int64_t(bytes_offset + sizeof(ReflectionSpecializationData)) > p_bytes.size(), false, "Not enough bytes for specialization in shader container.");
-		memcpy(&reflection_specialization_data.ptrw()[i], &bytes_ptr[bytes_offset], sizeof(ReflectionSpecializationData));
-		bytes_offset += sizeof(ReflectionSpecializationData);
-		bytes_offset += _from_bytes_reflection_specialization_extra_data(&bytes_ptr[bytes_offset], i);
+		ERR_FAIL_COND_V(!reader.read(&reflection_specialization_data.write[i], sizeof(ReflectionSpecializationData)), false);
+		ERR_FAIL_COND_V(!_from_bytes_reflection_specialization_extra_data(reader, i), false);
 	}
-
-	const uint32_t stage_count = reflection_data.stage_count;
-	if (stage_count > 0) {
-		ERR_FAIL_COND_V_MSG(int64_t(bytes_offset + stage_count * sizeof(RDC::ShaderStage)) > p_bytes.size(), false, "Not enough bytes for stages in shader container.");
-		reflection_shader_stages.resize(stage_count);
-		bytes_offset += _from_bytes_shader_extra_data_start(&bytes_ptr[bytes_offset]);
-		memcpy(reflection_shader_stages.ptrw(), &bytes_ptr[bytes_offset], stage_count * sizeof(RDC::ShaderStage));
-		bytes_offset += stage_count * sizeof(RDC::ShaderStage);
+	ERR_FAIL_COND_V(reflection_data.stage_count > reader.remaining() / sizeof(RDC::ShaderStage), false);
+	reflection_shader_stages.resize(reflection_data.stage_count);
+	ERR_FAIL_COND_V(!_from_bytes_shader_extra_data_start(reader), false);
+	ERR_FAIL_COND_V(!reader.read(reflection_shader_stages.ptrw(), uint64_t(reflection_data.stage_count) * sizeof(RDC::ShaderStage)), false);
+	uint32_t reflected_mask = 0;
+	for (RDC::ShaderStage stage : reflection_shader_stages) {
+		ERR_FAIL_COND_V(uint32_t(stage) >= RDC::SHADER_STAGE_MAX, false);
+		ERR_FAIL_COND_V(reflected_mask & (1U << stage), false);
+		reflected_mask |= 1U << stage;
 	}
-
-	// Read shaders.
-	for (int64_t i = 0; i < shaders.size(); i++) {
-		ERR_FAIL_COND_V_MSG(int64_t(bytes_offset + sizeof(ShaderHeader)) > p_bytes.size(), false, "Not enough bytes for shader header in shader container.");
-		const ShaderHeader &header = *(const ShaderHeader *)(&bytes_ptr[bytes_offset]);
-		bytes_offset += sizeof(ShaderHeader);
-
-		ERR_FAIL_COND_V_MSG(int64_t(bytes_offset + header.code_compressed_size) > p_bytes.size(), false, "Not enough bytes for a shader in shader container.");
-		Shader &shader = shaders.ptrw()[i];
-		shader.shader_stage = RDC::ShaderStage(header.shader_stage);
-		shader.code_compression_flags = header.code_compression_flags;
-		shader.code_decompressed_size = header.code_decompressed_size;
-		shader.code_compressed_bytes.resize(header.code_compressed_size);
-		memcpy(shader.code_compressed_bytes.ptrw(), &bytes_ptr[bytes_offset], header.code_compressed_size);
-		bytes_offset = aligned_to(bytes_offset + header.code_compressed_size, alignment);
-		bytes_offset += _from_bytes_shader_extra_data(&bytes_ptr[bytes_offset], i);
+	uint32_t shader_mask = 0;
+	for (uint32_t i = 0; i < header.shader_count; i++) {
+		ShaderHeader shader_header;
+		ERR_FAIL_COND_V(!reader.read(&shader_header, sizeof(shader_header)), false);
+		ERR_FAIL_COND_V(shader_header.shader_stage >= RDC::SHADER_STAGE_MAX, false);
+		ERR_FAIL_COND_V(shader_mask & (1U << shader_header.shader_stage), false);
+		shader_mask |= 1U << shader_header.shader_stage;
+		ERR_FAIL_COND_V(shader_header.code_compressed_size > reader.remaining() || shader_header.code_compressed_size > INT32_MAX, false);
+		Shader &shader = shaders.write[i];
+		shader.shader_stage = RDC::ShaderStage(shader_header.shader_stage);
+		shader.code_compression_flags = shader_header.code_compression_flags;
+		shader.code_decompressed_size = shader_header.code_decompressed_size;
+		shader.code_compressed_bytes.resize(shader_header.code_compressed_size);
+		ERR_FAIL_COND_V(!reader.read(shader.code_compressed_bytes.ptrw(), shader_header.code_compressed_size) || !reader.align4(), false);
+		ERR_FAIL_COND_V(!_from_bytes_shader_extra_data(reader, i), false);
 	}
-
-	bytes_offset += _from_bytes_footer_extra_data(&bytes_ptr[bytes_offset]);
-
-	ERR_FAIL_COND_V_MSG(bytes_offset != (uint64_t)p_bytes.size(), false, "Amount of bytes in the container does not match the amount of bytes read.");
+	ERR_FAIL_COND_V(shader_mask != reflected_mask, false);
+	ERR_FAIL_COND_V(!_from_bytes_footer_extra_data(reader), false);
+	ERR_FAIL_COND_V(reader.remaining() != 0, false);
+#ifdef TESTS_ENABLED
+	uint8_t digest[32];
+	ERR_FAIL_COND_V(CryptoCore::sha256(p_bytes.ptr(), p_bytes.size(), digest) != OK, false);
+	loaded_container_digest = String::hex_encode_buffer(digest, sizeof(digest));
+	loaded_container_size = p_bytes.size();
+#endif
 	return true;
 }
 
 PackedByteArray RenderingShaderContainer::to_bytes() const {
+	ERR_FAIL_COND_V(reflection_data.shader_name_len != uint32_t(shader_name.length()), PackedByteArray());
 	// Compute the exact size the container will require for writing everything out.
 	const uint64_t alignment = sizeof(uint32_t);
 	uint64_t total_size = 0;
@@ -907,6 +967,7 @@ PackedByteArray RenderingShaderContainer::to_bytes() const {
 	container_header.format = _format();
 	container_header.format_version = _format_version();
 	container_header.shader_count = shaders.size();
+	container_header.requested_compile_flags = static_cast<uint32_t>(compile_flags);
 	bytes_offset += sizeof(ContainerHeader);
 	bytes_offset += _to_bytes_header_extra_data(&bytes_ptr[bytes_offset]);
 
@@ -960,6 +1021,13 @@ PackedByteArray RenderingShaderContainer::to_bytes() const {
 	bytes_offset += _to_bytes_footer_extra_data(&bytes_ptr[bytes_offset]);
 
 	ERR_FAIL_COND_V_MSG(bytes_offset != total_size, PackedByteArray(), "Amount of bytes written does not match the amount of bytes reserved for the container.");
+#ifdef TESTS_ENABLED
+	Dictionary record;
+	record["shader_name"] = String::utf8(shader_name.get_data());
+	record["phase"] = "container_encode";
+	record["required_flags"] = static_cast<uint64_t>(compile_flags);
+	ShaderCompileAudit::emit(record);
+#endif
 	return bytes;
 }
 
@@ -999,11 +1067,12 @@ bool RenderingShaderContainer::decompress_code(const uint8_t *p_compressed_bytes
 
 	bool uses_zstd = p_compressed_flags & COMPRESSION_FLAG_ZSTD;
 	if (uses_zstd) {
-		if (!Compression::decompress(p_decompressed_bytes, p_decompressed_size, p_compressed_bytes, p_compressed_size, Compression::MODE_ZSTD)) {
+		if (Compression::decompress(p_decompressed_bytes, p_decompressed_size, p_compressed_bytes, p_compressed_size, Compression::MODE_ZSTD) != int64_t(p_decompressed_size)) {
 			ERR_FAIL_V_MSG(false, "Malformed zstd input for decompressing shader code.");
 		}
 	} else {
-		memcpy(p_decompressed_bytes, p_compressed_bytes, MIN(p_compressed_size, p_decompressed_size));
+		ERR_FAIL_COND_V_MSG(p_compressed_size != p_decompressed_size, false, "Raw shader code size does not match the declared output size.");
+		memcpy(p_decompressed_bytes, p_compressed_bytes, p_decompressed_size);
 	}
 
 	return true;
@@ -1012,3 +1081,112 @@ bool RenderingShaderContainer::decompress_code(const uint8_t *p_compressed_bytes
 RenderingShaderContainer::RenderingShaderContainer() {}
 
 RenderingShaderContainer::~RenderingShaderContainer() {}
+
+#ifdef TESTS_ENABLED
+#include "core/io/json.h"
+#include "core/os/os.h"
+
+#include <cstdio>
+
+ShaderCompileAudit::ShaderCompileAudit(const String &p_path, OpenFile p_open_file, void *p_context) :
+		path(p_path), open_file(p_open_file), context(p_context) {
+	if (!open_file) {
+		open_file = [](const String &p_name, FileAccess::ModeFlags p_mode, Error *r_error, void *) { return FileAccess::open(p_name, p_mode, r_error); };
+	}
+}
+
+void ShaderCompileAudit::fail() {
+	failed = true;
+	ERR_PRINT("Shader compile audit failed; subsequent records are disabled.");
+}
+
+bool ShaderCompileAudit::has_failed() {
+	MutexLock lock(mutex);
+	return failed;
+}
+
+uint64_t ShaderCompileAudit::append(const Dictionary &p_record) {
+	MutexLock lock(mutex);
+	if (failed || path.is_empty()) {
+		return 0;
+	}
+	const String name = p_record.get("shader_name", "");
+	if (!name.begins_with("e06:")) {
+		return 0;
+	}
+	if (name.utf8().length() > 256) {
+		fail();
+		return 0;
+	}
+	if (!initialized) {
+		if (!path.is_absolute_path() || path.begins_with("res://") || path.begins_with("user://")) {
+			fail();
+			return 0;
+		}
+#ifdef WINDOWS_ENABLED
+		FILE *reserved = _wfopen(reinterpret_cast<const wchar_t *>(path.utf16().get_data()), L"wbx");
+#else
+		FILE *reserved = fopen(path.utf8().get_data(), "wbx");
+#endif
+		if (!reserved) {
+			fail();
+			return 0;
+		}
+		if (fclose(reserved) != 0) {
+			fail();
+			return 0;
+		}
+		initialized = true;
+	}
+	Dictionary record = p_record.duplicate();
+	record["schema_version"] = 1;
+	record["seq"] = rows + 1;
+	for (const String &field : { String("stage"), String("phase"), String("source_digest"), String("library_key"), String("required_flags"), String("effective_disable"), String("compile_path"), String("actual_options"), String("cache_hit") }) {
+		if (!record.has(field)) {
+			record[field] = Variant();
+		}
+	}
+	CharString line = (JSON::stringify(record) + "\n").utf8();
+	const uint64_t length = line.length();
+	if (rows >= 4096 || length > 4194304 - bytes) {
+		fail();
+		return 0;
+	}
+	Error error = OK;
+	Ref<FileAccess> writer = open_file(path, FileAccess::READ_WRITE, &error, context);
+	if (error != OK || writer.is_null() || writer->get_length() != bytes) {
+		fail();
+		return 0;
+	}
+	writer->seek(bytes);
+	if (!writer->store_buffer(reinterpret_cast<const uint8_t *>(line.get_data()), length)) {
+		fail();
+		return 0;
+	}
+	writer->flush();
+	if (writer->get_error() != OK) {
+		fail();
+		return 0;
+	}
+	writer.unref();
+	Ref<FileAccess> reader = open_file(path, FileAccess::READ, &error, context);
+	if (error != OK || reader.is_null() || reader->get_length() != bytes + length) {
+		fail();
+		return 0;
+	}
+	reader->seek(bytes);
+	PackedByteArray readback;
+	readback.resize(length);
+	if (reader->get_buffer(readback.ptrw(), length) != length || reader->get_error() != OK || memcmp(readback.ptr(), line.get_data(), length) != 0) {
+		fail();
+		return 0;
+	}
+	bytes += length;
+	return ++rows;
+}
+
+uint64_t ShaderCompileAudit::emit(const Dictionary &p_record) {
+	static ShaderCompileAudit sink(OS::get_singleton()->get_environment("GODOT_SHADER_COMPILE_AUDIT_FILE"));
+	return sink.append(p_record);
+}
+#endif

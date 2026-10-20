@@ -80,6 +80,9 @@ public:
 	typedef void (*InvalidationCallback)(void *);
 
 private:
+#ifdef TESTS_ENABLED
+	friend class TestShaderCompilePolicyAccess;
+#endif
 	static RenderingDevice *singleton;
 
 	RenderingContextDriver *context = nullptr;
@@ -939,6 +942,7 @@ private:
 	// does not submit something invalid.
 
 	struct Shader : public ShaderReflection {
+		BitField<ShaderCompileFlags> compile_flags = {};
 		String name; // Used for debug.
 		RDD::ShaderID driver_id;
 		uint32_t layout_hash = 0;
@@ -1030,6 +1034,9 @@ public:
 	bool has_feature(const Features p_feature) const;
 
 	Vector<uint8_t> shader_compile_spirv_from_source(ShaderStage p_stage, const String &p_source_code, ShaderLanguage p_language = SHADER_LANGUAGE_GLSL, String *r_error = nullptr, bool p_allow_cache = true);
+	Vector<uint8_t> shader_compile_binary_from_spirv_with_options(const Vector<ShaderStageSPIRVData> &p_spirv, const String &p_shader_name, BitField<ShaderCompileFlags> p_flags);
+	RID shader_create_from_spirv_with_options(const Vector<ShaderStageSPIRVData> &p_spirv, const String &p_shader_name, BitField<ShaderCompileFlags> p_flags);
+	BitField<ShaderCompileFlags> shader_get_compile_flags(RID p_shader) const;
 	Vector<uint8_t> shader_compile_binary_from_spirv(const Vector<ShaderStageSPIRVData> &p_spirv, const String &p_shader_name = "");
 
 	RID shader_create_from_spirv(const Vector<ShaderStageSPIRVData> &p_spirv, const String &p_shader_name = "");
@@ -2000,6 +2007,8 @@ private:
 	void _draw_list_bind_vertex_buffers_format(DrawListID p_list, VertexFormatID p_vertex_format, uint32_t p_vertex_count, const TypedArray<RID> &p_vertex_buffers, const Vector<int64_t> &p_offsets = Vector<int64_t>());
 
 	Ref<RDShaderSPIRV> _shader_compile_spirv_from_source(const Ref<RDShaderSource> &p_source, bool p_allow_cache = true);
+	Vector<uint8_t> _shader_compile_binary_from_spirv_with_options(const Ref<RDShaderSPIRV> &p_spirv, const String &p_shader_name, BitField<ShaderCompileFlags> p_flags);
+	RID _shader_create_from_spirv_with_options(const Ref<RDShaderSPIRV> &p_spirv, const String &p_shader_name, BitField<ShaderCompileFlags> p_flags);
 	Vector<uint8_t> _shader_compile_binary_from_spirv(const Ref<RDShaderSPIRV> &p_bytecode, const String &p_shader_name = "");
 	RID _shader_create_from_spirv(const Ref<RDShaderSPIRV> &p_spirv, const String &p_shader_name = "");
 
@@ -2023,6 +2032,7 @@ private:
 
 VARIANT_ENUM_CAST_EXT(RenderingDeviceEnums::DeviceType, RenderingDevice::DeviceType)
 VARIANT_ENUM_CAST(RenderingDevice::DriverResource)
+VARIANT_BITFIELD_CAST(RenderingDevice::ShaderCompileFlags)
 VARIANT_ENUM_CAST(RenderingDevice::ShaderStage)
 VARIANT_ENUM_CAST(RenderingDevice::ShaderLanguage)
 VARIANT_ENUM_CAST(RenderingDevice::CompareOperator)

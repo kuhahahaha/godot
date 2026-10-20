@@ -58,6 +58,7 @@ private:
 	bool debug_info_enabled = false;
 
 public:
+	virtual BitField<ShaderCompileFlags> supported_compile_flags() const override { return SHADER_COMPILE_FLAG_DISABLE_FAST_MATH; }
 	virtual Ref<RenderingShaderContainer> create_container() const override;
 	virtual ShaderLanguageVersion get_shader_language_version() const override;
 	virtual ShaderSpirvVersion get_shader_spirv_version() const override;

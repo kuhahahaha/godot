@@ -30,6 +30,10 @@
 
 #include "register_server_types.h"
 
+#if defined(TESTS_ENABLED) && defined(METAL_ENABLED)
+#include "servers/rendering/shader_compile_test_bridge.h"
+#endif
+
 #include "core/config/engine.h"
 #include "core/config/project_settings.h"
 #include "core/object/callable_mp.h"
@@ -144,6 +148,9 @@ static bool has_server_feature_callback(const String &p_feature) {
 static MovieWriterPNGWAV *writer_pngwav = nullptr;
 
 void register_server_types() {
+#if defined(TESTS_ENABLED) && defined(METAL_ENABLED)
+	GDREGISTER_CLASS(RenderingShaderCompileTestBridge);
+#endif
 	OS::get_singleton()->benchmark_begin_measure("Servers", "Register Extensions");
 
 	shader_types = memnew(ShaderTypes);

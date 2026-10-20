@@ -31,7 +31,65 @@
 #pragma once
 
 #include "core/object/ref_counted.h"
+#ifdef TESTS_ENABLED
+#include "core/io/file_access.h"
+#include "core/os/mutex.h"
+#include "core/variant/dictionary.h"
+#endif
 #include "servers/rendering/rendering_device_commons.h"
+
+class ShaderCompilePolicy {
+	using RDC = RenderingDeviceCommons;
+
+public:
+	struct LibraryKeyInput {
+		uint32_t compile_path_version = 1;
+		uint32_t stage = 0;
+		PackedByteArray source;
+		uint32_t requested_flags = 0;
+		uint32_t effective_disable = 0;
+		uint32_t msl_version = 0;
+		uint32_t position_invariance = 0;
+		uint32_t enable_logging = 0;
+		uint32_t compiled_platform = 0;
+		uint32_t compiled_gpu_family = 0;
+		uint32_t profile_min_os_version = 0;
+		uint32_t binary_os_min_version = UINT32_MAX;
+		uint32_t actual_platform = 0;
+		uint32_t actual_gpu_family = 0;
+		uint32_t actual_os_version = 0;
+		uint32_t origin = 0;
+		uint64_t library_size = 0;
+		uint8_t metallib_sha256[32] = {};
+	};
+	static PackedByteArray library_key(const LibraryKeyInput &p_input);
+	static bool flags_valid(BitField<RDC::ShaderCompileFlags> p_requested, BitField<RDC::ShaderCompileFlags> p_supported);
+	static bool effective_disable(BitField<RDC::ShaderCompileFlags> p_requested, bool p_supports_fast_math);
+};
+
+#ifdef TESTS_ENABLED
+class ShaderCompileAudit {
+public:
+	using OpenFile = Ref<FileAccess> (*)(const String &, FileAccess::ModeFlags, Error *, void *);
+
+private:
+	String path;
+	Mutex mutex;
+	bool initialized = false;
+	bool failed = false;
+	uint64_t rows = 0;
+	uint64_t bytes = 0;
+	OpenFile open_file = nullptr;
+	void *context = nullptr;
+	void fail();
+
+public:
+	ShaderCompileAudit(const String &p_path, OpenFile p_open_file = nullptr, void *p_context = nullptr);
+	uint64_t append(const Dictionary &p_record);
+	bool has_failed();
+	static uint64_t emit(const Dictionary &p_record);
+};
+#endif
 
 struct SpvReflectShaderModule;
 struct SpvReflectDescriptorBinding;
@@ -42,10 +100,38 @@ class RenderingShaderContainer : public RefCounted {
 
 public:
 	static const uint32_t CONTAINER_MAGIC_NUMBER = 0x43535247;
-	static const uint32_t CONTAINER_VERSION = 2;
+	static const uint32_t CONTAINER_VERSION = 3;
 
 protected:
 	using RDC = RenderingDeviceCommons;
+
+	class ContainerReader {
+		const uint8_t *bytes;
+		uint64_t size;
+		uint64_t offset = 0;
+
+	public:
+		ContainerReader(const uint8_t *p_bytes, uint64_t p_size) : bytes(p_bytes), size(p_size) {}
+		uint64_t remaining() const { return size - offset; }
+		bool read(void *p_destination, uint64_t p_size) {
+			if (p_size > remaining()) {
+				return false;
+			}
+			if (p_size) {
+				memcpy(p_destination, bytes + offset, p_size);
+			}
+			offset += p_size;
+			return true;
+		}
+		bool skip(uint64_t p_size) {
+			if (p_size > remaining()) {
+				return false;
+			}
+			offset += p_size;
+			return true;
+		}
+		bool align4() { return skip((4 - (offset & 3)) & 3); }
+	};
 
 	struct ContainerHeader {
 		uint32_t magic_number = 0;
@@ -53,7 +139,10 @@ protected:
 		uint32_t format = 0;
 		uint32_t format_version = 0;
 		uint32_t shader_count = 0;
+		uint32_t requested_compile_flags = 0;
 	};
+
+	static_assert(sizeof(ContainerHeader) == 24);
 
 	struct ReflectionData {
 		uint64_t vertex_input_mask = 0;
@@ -96,6 +185,11 @@ protected:
 		uint32_t code_decompressed_size = 0;
 	};
 
+#ifdef TESTS_ENABLED
+	String loaded_container_digest;
+	uint64_t loaded_container_size = 0;
+#endif
+	BitField<RDC::ShaderCompileFlags> compile_flags = {};
 	ReflectionData reflection_data;
 	Vector<uint32_t> reflection_binding_set_uniforms_count;
 	Vector<ReflectionBindingData> reflection_binding_set_uniforms_data;
@@ -105,16 +199,16 @@ protected:
 	virtual uint32_t _format() const = 0;
 	virtual uint32_t _format_version() const = 0;
 
-	// These methods will always be called with a valid pointer.
-	virtual uint32_t _from_bytes_header_extra_data(const uint8_t *p_bytes);
-	virtual uint32_t _from_bytes_reflection_extra_data(const uint8_t *p_bytes);
-	virtual uint32_t _from_bytes_reflection_binding_uniform_extra_data_start(const uint8_t *p_bytes);
-	virtual uint32_t _from_bytes_reflection_binding_uniform_extra_data(const uint8_t *p_bytes, uint32_t p_index);
-	virtual uint32_t _from_bytes_reflection_specialization_extra_data_start(const uint8_t *p_bytes);
-	virtual uint32_t _from_bytes_reflection_specialization_extra_data(const uint8_t *p_bytes, uint32_t p_index);
-	virtual uint32_t _from_bytes_shader_extra_data_start(const uint8_t *p_bytes);
-	virtual uint32_t _from_bytes_shader_extra_data(const uint8_t *p_bytes, uint32_t p_index);
-	virtual uint32_t _from_bytes_footer_extra_data(const uint8_t *p_bytes);
+	// Each callback consumes only bytes checked by the bounded reader.
+	virtual bool _from_bytes_header_extra_data(ContainerReader &r_reader);
+	virtual bool _from_bytes_reflection_extra_data(ContainerReader &r_reader);
+	virtual bool _from_bytes_reflection_binding_uniform_extra_data_start(ContainerReader &r_reader);
+	virtual bool _from_bytes_reflection_binding_uniform_extra_data(ContainerReader &r_reader, uint32_t p_index);
+	virtual bool _from_bytes_reflection_specialization_extra_data_start(ContainerReader &r_reader);
+	virtual bool _from_bytes_reflection_specialization_extra_data(ContainerReader &r_reader, uint32_t p_index);
+	virtual bool _from_bytes_shader_extra_data_start(ContainerReader &r_reader);
+	virtual bool _from_bytes_shader_extra_data(ContainerReader &r_reader, uint32_t p_index);
+	virtual bool _from_bytes_footer_extra_data(ContainerReader &r_reader);
 
 	// These methods will be called with a nullptr to retrieve the size of the data.
 	virtual uint32_t _to_bytes_header_extra_data(uint8_t *p_bytes) const;
@@ -294,8 +388,13 @@ public:
 	CharString shader_name;
 	Vector<Shader> shaders;
 
-	bool set_code_from_spirv(const String &p_shader_name, Span<RDC::ShaderStageSPIRVData> p_spirv);
+	bool set_code_from_spirv(const String &p_shader_name, Span<RDC::ShaderStageSPIRVData> p_spirv, BitField<RDC::ShaderCompileFlags> p_flags = {});
+	BitField<RDC::ShaderCompileFlags> get_compile_flags() const { return compile_flags; }
 	RDC::ShaderReflection get_shader_reflection() const;
+#ifdef TESTS_ENABLED
+	const String &get_loaded_container_digest() const { return loaded_container_digest; }
+	uint64_t get_loaded_container_size() const { return loaded_container_size; }
+#endif
 	bool from_bytes(const PackedByteArray &p_bytes);
 	PackedByteArray to_bytes() const;
 	bool compress_code(const uint8_t *p_decompressed_bytes, uint32_t p_decompressed_size, uint8_t *p_compressed_bytes, uint32_t *r_compressed_size, uint32_t *r_compressed_flags) const;
@@ -308,6 +407,7 @@ class RenderingShaderContainerFormat : public RenderingDeviceCommons {
 	GDSOFTCLASS(RenderingShaderContainerFormat, RenderingDeviceCommons);
 
 public:
+	virtual BitField<ShaderCompileFlags> supported_compile_flags() const { return {}; }
 	virtual Ref<RenderingShaderContainer> create_container() const = 0;
 	virtual ShaderLanguageVersion get_shader_language_version() const = 0;
 	virtual ShaderSpirvVersion get_shader_spirv_version() const = 0;

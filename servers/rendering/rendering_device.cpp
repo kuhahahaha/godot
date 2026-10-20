@@ -240,7 +240,11 @@ Vector<uint8_t> RenderingDevice::shader_compile_spirv_from_source(ShaderStage p_
 }
 
 RID RenderingDevice::shader_create_from_spirv(const Vector<ShaderStageSPIRVData> &p_spirv, const String &p_shader_name) {
-	Vector<uint8_t> bytecode = shader_compile_binary_from_spirv(p_spirv, p_shader_name);
+	return shader_create_from_spirv_with_options(p_spirv, p_shader_name, {});
+}
+
+RID RenderingDevice::shader_create_from_spirv_with_options(const Vector<ShaderStageSPIRVData> &p_spirv, const String &p_shader_name, BitField<ShaderCompileFlags> p_flags) {
+	Vector<uint8_t> bytecode = shader_compile_binary_from_spirv_with_options(p_spirv, p_shader_name, p_flags);
 	ERR_FAIL_COND_V(bytecode.is_empty(), RID());
 	return shader_create_from_bytecode(bytecode);
 }
@@ -4150,12 +4154,19 @@ String RenderingDevice::_shader_uniform_debug(RID p_shader, int p_set) {
 }
 
 Vector<uint8_t> RenderingDevice::shader_compile_binary_from_spirv(const Vector<ShaderStageSPIRVData> &p_spirv, const String &p_shader_name) {
+	return shader_compile_binary_from_spirv_with_options(p_spirv, p_shader_name, {});
+}
+
+Vector<uint8_t> RenderingDevice::shader_compile_binary_from_spirv_with_options(const Vector<ShaderStageSPIRVData> &p_spirv, const String &p_shader_name, BitField<ShaderCompileFlags> p_flags) {
+	ERR_FAIL_COND_V(p_spirv.is_empty(), Vector<uint8_t>());
+	ERR_FAIL_COND_V(!ShaderCompilePolicy::flags_valid(p_flags, SHADER_COMPILE_FLAG_DISABLE_FAST_MATH), Vector<uint8_t>());
 	const RenderingShaderContainerFormat &container_format = driver->get_shader_container_format();
+	ERR_FAIL_COND_V(!ShaderCompilePolicy::flags_valid(p_flags, container_format.supported_compile_flags()), Vector<uint8_t>());
 	Ref<RenderingShaderContainer> shader_container = container_format.create_container();
 	ERR_FAIL_COND_V(shader_container.is_null(), Vector<uint8_t>());
 
 	// Compile shader binary from SPIR-V.
-	bool code_compiled = shader_container->set_code_from_spirv(p_shader_name, p_spirv);
+	bool code_compiled = shader_container->set_code_from_spirv(p_shader_name, p_spirv, p_flags);
 	ERR_FAIL_COND_V_MSG(!code_compiled, Vector<uint8_t>(), vformat("Failed to compile code to native for SPIR-V."));
 
 	return shader_container->to_bytes();
@@ -4177,6 +4188,13 @@ RID RenderingDevice::shader_create_from_bytecode_with_samplers(const Vector<uint
 
 	bool parsed_container = shader_container->from_bytes(p_shader_binary);
 	ERR_FAIL_COND_V_MSG(!parsed_container, RID(), "Failed to parse shader container from binary.");
+
+	ERR_FAIL_COND_V(!ShaderCompilePolicy::flags_valid(shader_container->get_compile_flags(), driver->get_shader_container_format().supported_compile_flags()), RID());
+	if (p_placeholder.is_valid()) {
+		const Shader *placeholder = shader_owner.get_or_null(p_placeholder);
+		ERR_FAIL_NULL_V(placeholder, RID());
+		ERR_FAIL_COND_V(placeholder->driver_id, RID());
+	}
 
 	Vector<RDD::ImmutableSampler> driver_immutable_samplers;
 	for (const PipelineImmutableSampler &source_sampler : p_immutable_samplers) {
@@ -4211,6 +4229,7 @@ RID RenderingDevice::shader_create_from_bytecode_with_samplers(const Vector<uint
 	shader->name.clear();
 	shader->name.append_utf8(shader_container->shader_name);
 	shader->driver_id = shader_id;
+	shader->compile_flags = shader_container->get_compile_flags();
 	shader->layout_hash = driver->shader_get_layout_hash(shader_id);
 
 	for (int i = 0; i < shader->uniform_sets.size(); i++) {
@@ -4269,6 +4288,14 @@ RID RenderingDevice::shader_create_from_bytecode_with_samplers(const Vector<uint
 	set_resource_name(id, "RID:" + itos(id.get_id()));
 #endif
 	return id;
+}
+
+BitField<RenderingDevice::ShaderCompileFlags> RenderingDevice::shader_get_compile_flags(RID p_shader) const {
+	_THREAD_SAFE_METHOD_
+	const Shader *shader = const_cast<RenderingDevice *>(this)->shader_owner.get_or_null(p_shader);
+	ERR_FAIL_NULL_V(shader, {});
+	ERR_FAIL_COND_V(!shader->driver_id, {});
+	return shader->compile_flags;
 }
 
 void RenderingDevice::shader_destroy_modules(RID p_shader) {
@@ -9097,6 +9124,10 @@ void RenderingDevice::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("index_array_create", "index_buffer", "index_offset", "index_count"), &RenderingDevice::index_array_create);
 
 	ClassDB::bind_method(D_METHOD("shader_compile_spirv_from_source", "shader_source", "allow_cache"), &RenderingDevice::_shader_compile_spirv_from_source, DEFVAL(true));
+	BIND_BITFIELD_FLAG(SHADER_COMPILE_FLAG_DISABLE_FAST_MATH);
+	ClassDB::bind_method(D_METHOD("shader_compile_binary_from_spirv_with_options", "spirv", "shader_name", "flags"), &RenderingDevice::_shader_compile_binary_from_spirv_with_options);
+	ClassDB::bind_method(D_METHOD("shader_create_from_spirv_with_options", "spirv", "shader_name", "flags"), &RenderingDevice::_shader_create_from_spirv_with_options);
+	ClassDB::bind_method(D_METHOD("shader_get_compile_flags", "shader"), &RenderingDevice::shader_get_compile_flags);
 	ClassDB::bind_method(D_METHOD("shader_compile_binary_from_spirv", "spirv_data", "name"), &RenderingDevice::_shader_compile_binary_from_spirv, DEFVAL(""));
 	ClassDB::bind_method(D_METHOD("shader_create_from_spirv", "spirv_data", "name"), &RenderingDevice::_shader_create_from_spirv, DEFVAL(""));
 	ClassDB::bind_method(D_METHOD("shader_create_from_bytecode", "binary_data", "placeholder_rid"), &RenderingDevice::shader_create_from_bytecode, DEFVAL(RID()));
@@ -10028,6 +10059,10 @@ Ref<RDShaderSPIRV> RenderingDevice::_shader_compile_spirv_from_source(const Ref<
 }
 
 Vector<uint8_t> RenderingDevice::_shader_compile_binary_from_spirv(const Ref<RDShaderSPIRV> &p_spirv, const String &p_shader_name) {
+	return _shader_compile_binary_from_spirv_with_options(p_spirv, p_shader_name, {});
+}
+
+Vector<uint8_t> RenderingDevice::_shader_compile_binary_from_spirv_with_options(const Ref<RDShaderSPIRV> &p_spirv, const String &p_shader_name, BitField<ShaderCompileFlags> p_flags) {
 	ERR_FAIL_COND_V(p_spirv.is_null(), Vector<uint8_t>());
 
 	Vector<ShaderStageSPIRVData> stage_data;
@@ -10044,10 +10079,14 @@ Vector<uint8_t> RenderingDevice::_shader_compile_binary_from_spirv(const Ref<RDS
 		stage_data.push_back(sd);
 	}
 
-	return shader_compile_binary_from_spirv(stage_data, p_shader_name);
+	return shader_compile_binary_from_spirv_with_options(stage_data, p_shader_name, p_flags);
 }
 
 RID RenderingDevice::_shader_create_from_spirv(const Ref<RDShaderSPIRV> &p_spirv, const String &p_shader_name) {
+	return _shader_create_from_spirv_with_options(p_spirv, p_shader_name, {});
+}
+
+RID RenderingDevice::_shader_create_from_spirv_with_options(const Ref<RDShaderSPIRV> &p_spirv, const String &p_shader_name, BitField<ShaderCompileFlags> p_flags) {
 	ERR_FAIL_COND_V(p_spirv.is_null(), RID());
 
 	Vector<ShaderStageSPIRVData> stage_data;
@@ -10063,7 +10102,7 @@ RID RenderingDevice::_shader_create_from_spirv(const Ref<RDShaderSPIRV> &p_spirv
 		}
 		stage_data.push_back(sd);
 	}
-	return shader_create_from_spirv(stage_data);
+	return shader_create_from_spirv_with_options(stage_data, p_shader_name, p_flags);
 }
 
 RID RenderingDevice::_uniform_set_create(const TypedArray<RDUniform> &p_uniforms, RID p_shader, uint32_t p_shader_set) {

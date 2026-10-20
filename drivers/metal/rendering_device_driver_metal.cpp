@@ -1182,6 +1182,8 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 	Vector<RenderingShaderContainer::Shader> &shaders = shader_container->shaders;
 	Vector<RSCM::StageData> &mtl_shaders = shader_container->mtl_shaders;
 
+	ERR_FAIL_COND_V(!mtl_reflection_data.has_valid_profile(), RDD::ShaderID());
+
 	// We need to regenerate the shader if the cache is moved to an incompatible device or argument buffer support differs.
 	ERR_FAIL_COND_V_MSG(!device_properties->features.argument_buffers_supported() && mtl_reflection_data.uses_argument_buffers(),
 			RDD::ShaderID(),
@@ -1196,13 +1198,10 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 			RDD::ShaderID(),
 			"Shader was generated for a newer Apple GPU");
 
-	NS::SharedPtr<MTL::CompileOptions> options = NS::TransferPtr(MTL::CompileOptions::alloc()->init());
-	uint32_t major = mtl_reflection_data.msl_version / 10000;
-	uint32_t minor = (mtl_reflection_data.msl_version / 100) % 100;
-	options->setLanguageVersion(MTL::LanguageVersion((major << 0x10) + minor));
-	if (__builtin_available(macOS 15.0, iOS 18.0, tvOS 18.0, visionOS 2.0, *)) {
-		options->setEnableLogging(mtl_reflection_data.needs_debug_logging());
-	}
+	ERR_FAIL_COND_V(mtl_reflection_data.profile.platform != device_profile.platform, RDD::ShaderID());
+	ERR_FAIL_COND_V(uint32_t(mtl_reflection_data.profile.platform) > uint32_t(MetalDeviceProfile::Platform::visionOS), RDD::ShaderID());
+	ERR_FAIL_COND_V(uint32_t(mtl_reflection_data.profile.gpu) < 1001 || uint32_t(mtl_reflection_data.profile.gpu) > 1009, RDD::ShaderID());
+	ERR_FAIL_COND_V(shaders.size() != mtl_shaders.size() || shaders.is_empty(), RDD::ShaderID());
 
 	HashMap<RDD::ShaderStage, std::shared_ptr<MDLibrary>> libraries;
 
@@ -1215,10 +1214,14 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 		if (shader.shader_stage == RDD::ShaderStage::SHADER_STAGE_COMPUTE) {
 			pipeline_type = PIPELINE_TYPE_COMPUTE;
 		}
-		if (std::optional<std::shared_ptr<MDLibrary>> lib = shader_cache_get_library(shader_data.hash); lib) {
-			libraries[shader.shader_stage] = std::move(*lib);
-			continue;
-		}
+		ERR_FAIL_COND_V(shader_data.source_size == 0 || shader_data.compile_path_version != 1 || shader_data.supports_fast_math > 1 || shader_data.is_position_invariant > 1, RDD::ShaderID());
+		const bool effective_disable = ShaderCompilePolicy::effective_disable(shader_container->get_compile_flags(), shader_data.supports_fast_math);
+		ERR_FAIL_COND_V(shader_data.effective_disable_fast_math != uint32_t(effective_disable), RDD::ShaderID());
+		const uint64_t payload_size = uint64_t(shader_data.source_size) + shader_data.library_size;
+		ERR_FAIL_COND_V(payload_size != (shader.code_decompressed_size ? shader.code_decompressed_size : uint64_t(shader.code_compressed_bytes.size())), RDD::ShaderID());
+		ERR_FAIL_COND_V(shader.code_compression_flags & ~uint32_t(RenderingShaderContainer::COMPRESSION_FLAG_ZSTD), RDD::ShaderID());
+		ERR_FAIL_COND_V(shader.code_compression_flags && !shader.code_decompressed_size, RDD::ShaderID());
+		ERR_FAIL_COND_V(shader_data.library_size > 0 && (mtl_reflection_data.os_min_version.is_null() || mtl_reflection_data.os_min_version > device_properties->os_version), RDD::ShaderID());
 
 		if (shader.code_decompressed_size > 0) {
 			decompressed_code.resize(shader.code_decompressed_size);
@@ -1228,7 +1231,77 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 			decompressed_code = shader.code_compressed_bytes;
 		}
 
-		ShaderCacheEntry *cd = memnew(ShaderCacheEntry(*this, shader_data.hash));
+		SHA256Digest source_digest(reinterpret_cast<const char *>(decompressed_code.ptr()), shader_data.source_size);
+		ERR_FAIL_COND_V(memcmp(source_digest.data, shader_data.hash.data, sizeof(source_digest.data)) != 0, RDD::ShaderID());
+		ShaderCompilePolicy::LibraryKeyInput key_input;
+		key_input.compile_path_version = shader_data.compile_path_version;
+		key_input.stage = shader.shader_stage;
+		key_input.source = decompressed_code.slice(0, shader_data.source_size);
+		key_input.requested_flags = static_cast<uint32_t>(shader_container->get_compile_flags());
+		key_input.effective_disable = effective_disable;
+		key_input.msl_version = mtl_reflection_data.msl_version;
+		key_input.position_invariance = shader_data.is_position_invariant;
+		key_input.enable_logging = mtl_reflection_data.needs_debug_logging();
+		key_input.compiled_platform = uint32_t(mtl_reflection_data.profile.platform);
+		key_input.compiled_gpu_family = uint32_t(mtl_reflection_data.profile.gpu);
+		key_input.profile_min_os_version = mtl_reflection_data.profile.min_os_version;
+		key_input.binary_os_min_version = shader_data.library_size ? uint32_t(mtl_reflection_data.os_min_version) : UINT32_MAX;
+		key_input.actual_platform = uint32_t(device_profile.platform);
+		key_input.actual_gpu_family = uint32_t(device_profile.gpu);
+		key_input.actual_os_version = device_properties->os_version;
+		key_input.origin = shader_data.library_size ? 1 : 0;
+		key_input.library_size = shader_data.library_size;
+		if (shader_data.library_size) {
+			SHA256Digest metallib_digest(reinterpret_cast<const char *>(decompressed_code.ptr() + shader_data.source_size), shader_data.library_size);
+			memcpy(key_input.metallib_sha256, metallib_digest.data, sizeof(key_input.metallib_sha256));
+		}
+		const PackedByteArray key_bytes = ShaderCompilePolicy::library_key(key_input);
+		ERR_FAIL_COND_V(key_bytes.size() != 32, RDD::ShaderID());
+		const SHA256Digest library_key(reinterpret_cast<const char *>(key_bytes.ptr()));
+		NS::SharedPtr<MTL::CompileOptions> options;
+		if (!shader_data.library_size) {
+			options = make_shader_compile_options(mtl_reflection_data.msl_version, mtl_reflection_data.needs_debug_logging(), shader_data.is_position_invariant, effective_disable);
+		}
+#ifdef TESTS_ENABLED
+		Dictionary audit;
+		audit["shader_name"] = String::utf8(shader_name.get_data());
+		audit["stage"] = int(shader.shader_stage);
+		audit["source_digest"] = String::hex_encode_buffer(source_digest.data, sizeof(source_digest.data));
+		audit["library_key"] = String::hex_encode_buffer(key_bytes.ptr(), key_bytes.size());
+		audit["required_flags"] = key_input.requested_flags;
+		audit["effective_disable"] = effective_disable;
+		audit["compile_path"] = shader_data.library_size ? "precompiled_metallib" : "runtime_source";
+		audit["phase"] = "library_lookup";
+		audit["cache_hit"] = false;
+		if (shader_data.library_size) {
+			audit["metallib_digest"] = String::hex_encode_buffer(key_input.metallib_sha256, 32);
+			audit["library_size"] = shader_data.library_size;
+			audit["container_digest"] = shader_container->get_loaded_container_digest();
+			audit["container_size"] = shader_container->get_loaded_container_size();
+		}
+#endif
+		if (std::optional<std::shared_ptr<MDLibrary>> lib = shader_cache_get_library(library_key); lib) {
+#ifdef TESTS_ENABLED
+			audit["cache_hit"] = true;
+			const uint64_t creation_seq = (*lib)->audit_creation_seq();
+			audit["creation_seq"] = creation_seq ? Variant(creation_seq) : Variant();
+			ShaderCompileAudit::emit(audit);
+#endif
+			libraries[shader.shader_stage] = std::move(*lib);
+			continue;
+		}
+#ifdef TESTS_ENABLED
+		ShaderCompileAudit::emit(audit);
+		if (options) {
+			audit["phase"] = "runtime_options";
+			audit["actual_options"] = observe_shader_compile_options(options.get());
+			ShaderCompileAudit::emit(audit);
+		}
+#endif
+		ShaderCacheEntry *cd = memnew(ShaderCacheEntry(*this, library_key));
+#ifdef TESTS_ENABLED
+		cd->audit_context = audit;
+#endif
 		cd->name = shader_name;
 		cd->stage = shader.shader_stage;
 
@@ -1239,6 +1312,10 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 			ERR_FAIL_COND_V_MSG(mtl_reflection_data.os_min_version > device_properties->os_version,
 					RDD::ShaderID(),
 					"Metal shader binary was generated for a newer target OS");
+#ifdef TESTS_ENABLED
+			audit["phase"] = "binary_load";
+			cd->creation_seq = ShaderCompileAudit::emit(audit);
+#endif
 			dispatch_data_t binary = dispatch_data_create(decompressed_code.ptr() + shader_data.source_size, shader_data.library_size, dispatch_get_main_queue(), DISPATCH_DATA_DESTRUCTOR_DEFAULT);
 			library = MDLibrary::create(cd, device,
 #if DEV_ENABLED
@@ -1246,16 +1323,10 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 #endif
 					binary);
 		} else {
-			options->setPreserveInvariance(shader_data.is_position_invariant);
-#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 150000 || __IPHONE_OS_VERSION_MIN_REQUIRED >= 180000 || __TV_OS_VERSION_MIN_REQUIRED >= 180000 || defined(VISIONOS_ENABLED)
-			options->setMathMode(MTL::MathModeFast);
-#else
-			options->setFastMathEnabled(true);
-#endif
 			library = MDLibrary::create(cd, device, source.get(), options.get(), _shader_load_strategy);
 		}
 
-		shader_cache_set_entry(shader_data.hash, cd);
+		shader_cache_set_entry(library_key, cd);
 		libraries[shader.shader_stage] = library;
 	}
 

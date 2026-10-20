@@ -31,6 +31,7 @@
 #include "metal_objects_shared.h"
 
 #include "drivers/metal/rendering_device_driver_metal.h"
+#include "servers/rendering/rendering_shader_container.h"
 
 #include <os/signpost.h>
 #include <simd/simd.h>
@@ -767,6 +768,58 @@ void MDLibrary::set_label(NS::String *p_label) {
 #pragma mark - MDLazyLibrary
 
 /// Loads the MTLLibrary when the library is first accessed.
+#ifdef TESTS_ENABLED
+uint64_t MDLibrary::audit_creation_seq() const {
+	return _entry->creation_seq.load();
+}
+
+Dictionary observe_shader_compile_options(MTL::CompileOptions *p_options) {
+	Dictionary actual;
+	actual["language_version"] = uint64_t(p_options->languageVersion());
+	actual["preserve_invariance"] = p_options->preserveInvariance();
+	actual["logging"] = Variant();
+	if (__builtin_available(macOS 15.0, iOS 18.0, tvOS 18.0, visionOS 2.0, *)) {
+		actual["logging"] = p_options->enableLogging();
+	}
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 150000 || __IPHONE_OS_VERSION_MAX_ALLOWED >= 180000 || __TV_OS_VERSION_MAX_ALLOWED >= 180000 || defined(VISIONOS_ENABLED)
+	if (__builtin_available(macOS 15.0, iOS 18.0, tvOS 18.0, visionOS 2.0, *)) {
+		actual["api"] = "mathMode";
+		actual["math_mode"] = int(p_options->mathMode());
+	} else
+#endif
+	{
+		actual["api"] = "fastMathEnabled";
+		actual["fast_math_enabled"] = p_options->fastMathEnabled();
+	}
+	return actual;
+}
+
+static void audit_runtime_compile(ShaderCacheEntry *p_entry, MTL::CompileOptions *p_options) {
+	Dictionary record = p_entry->audit_context.duplicate();
+	record["phase"] = "runtime_compile";
+	record["actual_options"] = observe_shader_compile_options(p_options);
+	p_entry->creation_seq = ShaderCompileAudit::emit(record);
+}
+#endif
+
+NS::SharedPtr<MTL::CompileOptions> make_shader_compile_options(uint32_t p_msl_version, bool p_logging, bool p_invariance, bool p_disable_fast_math) {
+	NS::SharedPtr<MTL::CompileOptions> options = NS::TransferPtr(MTL::CompileOptions::alloc()->init());
+	options->setLanguageVersion(MTL::LanguageVersion(((p_msl_version / 10000) << 16) | ((p_msl_version / 100) % 100)));
+	options->setPreserveInvariance(p_invariance);
+	if (__builtin_available(macOS 15.0, iOS 18.0, tvOS 18.0, visionOS 2.0, *)) {
+		options->setEnableLogging(p_logging);
+	}
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 150000 || __IPHONE_OS_VERSION_MAX_ALLOWED >= 180000 || __TV_OS_VERSION_MAX_ALLOWED >= 180000 || defined(VISIONOS_ENABLED)
+	if (__builtin_available(macOS 15.0, iOS 18.0, tvOS 18.0, visionOS 2.0, *)) {
+		options->setMathMode(p_disable_fast_math ? MTL::MathModeSafe : MTL::MathModeFast);
+	} else
+#endif
+	{
+		options->setFastMathEnabled(!p_disable_fast_math);
+	}
+	return options;
+}
+
 class MDLazyLibrary final : public MDLibrary {
 	NS::SharedPtr<MTL::Library> _library;
 	NS::Error *_error = nullptr;
@@ -821,6 +874,9 @@ void MDLazyLibrary::_load() {
 			"shader_name=%{public}s stage=%{public}s hash=%X",
 			_entry->name.get_data(), SHADER_STAGE_NAMES[_entry->stage], _entry->key.short_sha());
 	NS::Error *error = nullptr;
+#ifdef TESTS_ENABLED
+	audit_runtime_compile(_entry, _options.get());
+#endif
 	_library = NS::TransferPtr(_device->newLibrary(_source.get(), _options.get(), &error));
 	os_signpost_interval_end(LOG_INTERVALS, compile_id, "shader_compile");
 	_error = error;
@@ -882,6 +938,9 @@ MDImmediateLibrary::MDImmediateLibrary(ShaderCacheEntry *p_entry,
 			p_entry->name.get_data(), SHADER_STAGE_NAMES[p_entry->stage], p_entry->key.short_sha());
 
 	// Use Metal's async compilation API with std::function callback.
+#ifdef TESTS_ENABLED
+	audit_runtime_compile(p_entry, p_options);
+#endif
 	p_device->newLibrary(p_source, p_options, [this, compile_id, p_entry](MTL::Library *library, NS::Error *error) {
 		os_signpost_interval_end(LOG_INTERVALS, compile_id, "shader_compile");
 		if (library) {

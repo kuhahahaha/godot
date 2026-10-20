@@ -141,12 +141,12 @@ protected:
 	// RenderingShaderContainer overrides.
 	virtual uint32_t _format() const override;
 	virtual uint32_t _format_version() const override;
-	virtual uint32_t _from_bytes_reflection_extra_data(const uint8_t *p_bytes) override;
-	virtual uint32_t _from_bytes_reflection_binding_uniform_extra_data_start(const uint8_t *p_bytes) override;
-	virtual uint32_t _from_bytes_reflection_binding_uniform_extra_data(const uint8_t *p_bytes, uint32_t p_index) override;
-	virtual uint32_t _from_bytes_reflection_specialization_extra_data_start(const uint8_t *p_bytes) override;
-	virtual uint32_t _from_bytes_reflection_specialization_extra_data(const uint8_t *p_bytes, uint32_t p_index) override;
-	virtual uint32_t _from_bytes_footer_extra_data(const uint8_t *p_bytes) override;
+	virtual bool _from_bytes_reflection_extra_data(ContainerReader &r_reader) override;
+	virtual bool _from_bytes_reflection_binding_uniform_extra_data_start(ContainerReader &r_reader) override;
+	virtual bool _from_bytes_reflection_binding_uniform_extra_data(ContainerReader &r_reader, uint32_t p_index) override;
+	virtual bool _from_bytes_reflection_specialization_extra_data_start(ContainerReader &r_reader) override;
+	virtual bool _from_bytes_reflection_specialization_extra_data(ContainerReader &r_reader, uint32_t p_index) override;
+	virtual bool _from_bytes_footer_extra_data(ContainerReader &r_reader) override;
 	virtual uint32_t _to_bytes_reflection_extra_data(uint8_t *p_bytes) const override;
 	virtual uint32_t _to_bytes_reflection_binding_uniform_extra_data(uint8_t *p_bytes, uint32_t p_index) const override;
 	virtual uint32_t _to_bytes_reflection_specialization_extra_data(uint8_t *p_bytes, uint32_t p_index) const override;
