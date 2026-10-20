@@ -1,33 +1,43 @@
 #include "p01_capture.h"
 
 void P01Capture::begin(uint64_t p_epoch) {
+	if (!pending.empty() || !events.empty() && !sealed) { poisoned = true; return; }
 	events.clear();
-	tokens.clear();
+	pending.clear();
 	epoch = p_epoch;
 	next_sequence = 1;
 	poisoned = p_epoch == 0;
 	sealed = false;
+	disposed = false;
 }
 
 bool P01Capture::append(const P01CaptureEvent &p_event) {
-	if (poisoned || sealed || epoch == 0 || p_event.epoch != epoch || p_event.token == 0 || p_event.queue_sequence != p_event.token || p_event.rid == 0 || p_event.allocation_serial == 0 || UINT32_MAX - p_event.offset < p_event.size) {
+	if (poisoned || sealed || disposed || events.size() >= MAX_EVENTS || epoch == 0 || p_event.epoch != epoch || p_event.token == 0 || p_event.rid == 0 || p_event.allocation_serial == 0 || UINT32_MAX - p_event.offset < p_event.size) {
 		poisoned = true;
 		return false;
 	}
-	if (p_event.kind == 2) {
+	if (p_event.kind == 1) {
+		if (p_event.queue_sequence == 0 || pending.size() >= MAX_PENDING) { poisoned = true; return false; }
+		pending.push_back({p_event.token, p_event.epoch, p_event.rid, p_event.allocation_serial, p_event.queue_sequence});
+	} else if (p_event.kind == 2) {
 		bool found = false;
-		for (uint64_t &token : tokens) if (token == p_event.token) { token = 0; found = true; break; }
+		for (auto it = pending.begin(); it != pending.end(); ++it) if (it->token == p_event.token && it->epoch == p_event.epoch && it->rid == p_event.rid && it->serial == p_event.allocation_serial && it->queue == p_event.queue_sequence) { pending.erase(it); found = true; break; }
 		if (!found) { poisoned = true; return false; }
 	}
 	P01CaptureEvent event = p_event;
 	event.sequence = next_sequence++;
 	events.push_back(event);
-	if (p_event.kind == 1) tokens.push_back(p_event.token);
 	return true;
 }
 
 bool P01Capture::seal() {
-	if (poisoned || sealed || epoch == 0) return false;
+	if (poisoned || sealed || epoch == 0 || !pending.empty()) return false;
 	sealed = true;
+	return true;
+}
+
+bool P01Capture::dispose_physical() {
+	if (poisoned || !sealed || !pending.empty()) return false;
+	disposed = true;
 	return true;
 }
