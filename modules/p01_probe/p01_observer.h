@@ -53,10 +53,10 @@ public:
 		}
 		return false;
 	}
-	bool complete_token(uint64_t p_epoch, uint64_t p_token) { return complete_readback_token(p_epoch, p_token); }
 	bool complete_readback(uint64_t p_epoch) {
-		if (!accepted || p_epoch != epoch || pending == 0) return false;
-		for (uint64_t token : generic_tokens) if (token != 0) return complete_readback_token(p_epoch, token);
+		(void)p_epoch;
+		// Completion must identify the exact queued request. Never consume an
+		// arbitrary pending operation based only on the epoch.
 		return false;
 	}
 	uint64_t record_slot_token(uint64_t p_epoch, uint32_t p_slot) {
