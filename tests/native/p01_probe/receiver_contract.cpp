@@ -19,6 +19,6 @@ bool P01ReceiverContract::accept_eof() {
 }
 
 bool P01ReceiverContract::finish(bool p_process_ok) {
-	if (state.poisoned || !p_process_ok || !state.saw_seal || !state.saw_eof) return false;
+	if (state.poisoned || !p_process_ok || !state.saw_seal || !state.saw_eof || (state.expected_bytes != 0 && state.bytes != state.expected_bytes)) return false;
 	return true;
 }

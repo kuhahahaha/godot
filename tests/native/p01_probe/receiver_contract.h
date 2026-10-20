@@ -7,12 +7,14 @@ struct P01ReceiverState {
 	bool saw_seal = false;
 	bool saw_eof = false;
 	bool poisoned = false;
+	uint64_t expected_bytes = 0;
 };
 
 class P01ReceiverContract {
 	P01ReceiverState state;
 public:
 	bool accept_bytes(const uint8_t *p_data, size_t p_size);
+	void set_expected_bytes(uint64_t p_bytes) { state.expected_bytes = p_bytes; }
 	bool accept_seal();
 	bool accept_eof();
 	bool finish(bool p_process_ok);
