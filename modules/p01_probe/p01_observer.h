@@ -5,6 +5,31 @@
 #include <vector>
 #include <limits>
 
+class P01ReadbackRequestBook {
+	struct Request { uint64_t epoch = 0, token = 0, rid = 0; uint32_t size = 0; bool live = false; };
+	std::array<Request, 128> requests{};
+	uint64_t epoch = 0;
+	uint64_t next_token = 1;
+	uint32_t live_count = 0;
+public:
+	bool begin_epoch(uint64_t p_epoch) {
+		if (p_epoch == 0 || p_epoch <= epoch || live_count != 0) return false;
+		epoch = p_epoch;
+		return true;
+	}
+	uint64_t enqueue(uint64_t p_epoch, uint64_t p_rid, uint32_t p_size) {
+		if (p_epoch != epoch || p_epoch == 0 || p_rid == 0 || p_size == 0 || next_token == std::numeric_limits<uint64_t>::max()) return 0;
+		for (Request &r : requests) if (!r.live) { r = {p_epoch, next_token++, p_rid, p_size, true}; ++live_count; return r.token; }
+		return 0;
+	}
+	bool complete(uint64_t p_epoch, uint64_t p_token, uint64_t p_rid, uint32_t p_size) {
+		if (p_epoch != epoch || p_token == 0) return false;
+		for (Request &r : requests) if (r.live && r.epoch == p_epoch && r.token == p_token && r.rid == p_rid && r.size == p_size) { r.live = false; --live_count; return true; }
+		return false;
+	}
+	uint32_t pending() const { return live_count; }
+};
+
 struct P01HookEvent {
 	uint64_t rid = 0, epoch = 0, allocation_serial = 0, sequence = 0;
 	uint32_t offset = 0, size = 0, range = 0;
@@ -89,7 +114,8 @@ public:
 
 
 class P01AllocationIdentity {
-	struct Entry { uint64_t device = 0; uint64_t driver = 0; uint64_t serial = 0; uint32_t references = 0; };
+	struct Owner { uint64_t owner = 0; bool live = false; };
+	struct Entry { uint64_t device = 0; uint64_t driver = 0; uint64_t serial = 0; uint32_t references = 0; bool physically_live = false; std::array<Owner, 8> owners{}; };
 	std::array<Entry, 64> entries{};
 	uint64_t next_serial = 1;
 public:
@@ -100,15 +126,44 @@ public:
 		return 0;
 	}
 	uint64_t acquire_alias(uint64_t p_device, uint64_t p_driver) { return acquire(p_device, p_driver); }
+	uint64_t acquire_owner(uint64_t p_device, uint64_t p_driver, uint64_t p_owner) {
+		if (p_owner == 0) return 0;
+		uint64_t serial = acquire(p_device, p_driver);
+		for (Entry &e : entries) if (e.physically_live && e.device == p_device && e.driver == p_driver) for (Owner &o : e.owners) if (!o.live) { o = {p_owner, true}; return serial; }
+		return serial;
+	}
+	uint64_t resolve_owner(uint64_t p_device, uint64_t p_driver, uint64_t p_owner) const {
+		for (const Entry &e : entries) if (e.physically_live && e.device == p_device && e.driver == p_driver) for (const Owner &o : e.owners) if (o.live && o.owner == p_owner) return e.serial;
+		return 0;
+	}
+	bool logical_free_owner(uint64_t p_device, uint64_t p_driver, uint64_t p_owner) {
+		for (Entry &e : entries) if (e.physically_live && e.device == p_device && e.driver == p_driver) for (Owner &o : e.owners) if (o.live && o.owner == p_owner) { o.live = false; return true; }
+		return false;
+	}
+	bool physical_dispose(uint64_t p_device, uint64_t p_driver) {
+		for (Entry &e : entries) if (e.physically_live && e.device == p_device && e.driver == p_driver) { e.physically_live = false; e.references = 0; e.device = e.driver = e.serial = 0; for (Owner &o : e.owners) o.live = false; return true; }
+		return false;
+	}
 	uint64_t resolve(uint64_t p_device, uint64_t p_driver) const {
 		for (const Entry &e : entries) if (e.references != 0 && e.device == p_device && e.driver == p_driver) return e.serial;
 		return 0;
+	}
+	bool resolve_serial(uint64_t p_device, uint64_t p_driver, uint64_t p_serial) const {
+		for (const Entry &e : entries) if (e.references != 0 && e.device == p_device && e.driver == p_driver && e.serial == p_serial) return true;
+		return false;
 	}
 	bool release(uint64_t p_device, uint64_t p_driver) {
 		for (Entry &e : entries) if (e.references != 0 && e.device == p_device && e.driver == p_driver) { if (--e.references == 0) { e.device = e.driver = e.serial = 0; } return true; }
 		return false;
 	}
 	bool release_alias(uint64_t p_device, uint64_t p_driver) { return release(p_device, p_driver); }
+	bool release_serial(uint64_t p_device, uint64_t p_driver, uint64_t p_serial) {
+		for (Entry &e : entries) if (e.references != 0 && e.device == p_device && e.driver == p_driver && e.serial == p_serial) {
+			if (--e.references == 0) e.device = e.driver = e.serial = 0;
+			return true;
+		}
+		return false;
+	}
 };
 
 
