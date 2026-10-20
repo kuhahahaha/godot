@@ -89,6 +89,14 @@ TEST_CASE("[P01] Lifetime") {
 	const uint64_t reused = identity.acquire(4, 77);
 	CHECK(reused != first);
 	CHECK(identity.resolve(4, 77) == reused);
+
+	P01WritePrefix prefix;
+	CHECK(prefix.begin(4, 77));
+	CHECK(prefix.record(0, 16));
+	CHECK_FALSE(prefix.record_failure(16));
+	CHECK(prefix.recorded_bytes() == 16);
+	CHECK(prefix.has_failed_prefix());
+	CHECK_FALSE(prefix.record(16, 16));
 }
 } // namespace TestP01Probe
 #endif

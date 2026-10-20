@@ -79,3 +79,27 @@ public:
 		return false;
 	}
 };
+
+
+class P01WritePrefix {
+	uint64_t device = 0;
+	uint64_t driver = 0;
+	uint32_t bytes = 0;
+	bool active = false;
+	bool failed = false;
+public:
+	bool begin(uint64_t p_device, uint64_t p_driver) {
+		if (active || p_device == 0 || p_driver == 0) return false;
+		device = p_device; driver = p_driver; bytes = 0; failed = false; active = true; return true;
+	}
+	bool record(uint32_t p_offset, uint32_t p_size) {
+		if (!active || failed || p_offset != bytes || p_size == 0 || UINT32_MAX - bytes < p_size) return false;
+		bytes += p_size; return true;
+	}
+	bool record_failure(uint32_t p_offset) {
+		if (!active || failed || p_offset != bytes) return false;
+		failed = true; return false;
+	}
+	uint32_t recorded_bytes() const { return bytes; }
+	bool has_failed_prefix() const { return failed && bytes != 0; }
+};
