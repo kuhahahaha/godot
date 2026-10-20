@@ -2,7 +2,7 @@
 
 void P01Capture::begin(uint64_t p_epoch) {
 	std::lock_guard<std::mutex> lock(mutex);
-	if (active && (!pending.empty() || !sealed)) { poisoned = true; return; }
+	if (active && !disposed && (!pending.empty() || !sealed)) { poisoned = true; return; }
 	if (p_epoch == 0 || p_epoch <= last_epoch) { poisoned = true; return; }
 	events.clear();
 	pending.clear();
@@ -19,16 +19,16 @@ void P01Capture::begin(uint64_t p_epoch) {
 
 bool P01Capture::append(const P01CaptureEvent &p_event) {
 	std::lock_guard<std::mutex> lock(mutex);
-	if (sealed || disposed || epoch == 0 || p_event.epoch != epoch || p_event.token == 0 || p_event.rid == 0 || p_event.allocation_serial == 0 || (p_event.kind != 1 && p_event.kind != 2) || UINT32_MAX - p_event.offset < p_event.size || (poisoned && p_event.kind != 2) || (events.size() >= MAX_EVENTS && p_event.kind != 2)) {
+	if (sealed || disposed || epoch == 0 || p_event.epoch != epoch || p_event.token == 0 || p_event.rid == 0 || p_event.allocation_serial == 0 || p_event.owner == 0 || p_event.alias == 0 || (p_event.kind != 1 && p_event.kind != 2) || UINT32_MAX - p_event.offset < p_event.size || (poisoned && p_event.kind != 2) || (events.size() >= MAX_EVENTS && p_event.kind != 2) || next_sequence == UINT64_MAX) {
 		poisoned = true;
 		return false;
 	}
 	if (p_event.kind == 1) {
 		if (p_event.queue_sequence == 0 || pending.size() >= MAX_PENDING) { poisoned = true; return false; }
-		pending.push_back({p_event.token, p_event.epoch, p_event.rid, p_event.allocation_serial, p_event.queue_sequence});
+		pending.push_back({p_event.token, p_event.epoch, p_event.rid, p_event.allocation_serial, p_event.owner, p_event.alias, p_event.queue_sequence});
 	} else if (p_event.kind == 2) {
 		bool found = false;
-		for (auto it = pending.begin(); it != pending.end(); ++it) if (it->token == p_event.token && it->epoch == p_event.epoch && it->rid == p_event.rid && it->serial == p_event.allocation_serial && it->queue == p_event.queue_sequence) { pending.erase(it); found = true; break; }
+		for (auto it = pending.begin(); it != pending.end(); ++it) if (it->token == p_event.token && it->epoch == p_event.epoch && it->rid == p_event.rid && it->serial == p_event.allocation_serial && it->owner == p_event.owner && it->alias == p_event.alias && it->queue == p_event.queue_sequence) { pending.erase(it); found = true; break; }
 		if (!found) { poisoned = true; return false; }
 	}
 	P01CaptureEvent event = p_event;
@@ -39,7 +39,9 @@ bool P01Capture::append(const P01CaptureEvent &p_event) {
 
 bool P01Capture::seal() {
 	std::lock_guard<std::mutex> lock(mutex);
-	if (poisoned || sealed || epoch == 0 || !pending.empty()) return false;
+	// Physical retirement is an engine-owned prerequisite for publishing the
+	// capture.  The parent receiver still validates seal/EOF independently.
+	if (poisoned || sealed || epoch == 0 || !pending.empty() || !disposed) return false;
 	sealed = true;
 	eof = true;
 	active = false;
@@ -59,7 +61,7 @@ bool P01Capture::dispose_physical() {
 	std::lock_guard<std::mutex> lock(mutex);
 	// Poison invalidates evidence publication but must never block engine-owned
 	// retirement once all queued GPU work has drained.
-	if (!pending.empty() || disposed || (!sealed && !poisoned)) return false;
+	if (epoch == 0 || pending.size() != 0 || disposed || sealed) return false;
 	disposed = true;
 	return true;
 }
@@ -67,4 +69,29 @@ bool P01Capture::dispose_physical() {
 bool P01Capture::drain_complete() const {
 	std::lock_guard<std::mutex> lock(mutex);
 	return pending.empty();
+}
+
+bool P01Capture::is_poisoned() const {
+	std::lock_guard<std::mutex> lock(mutex);
+	return poisoned;
+}
+
+bool P01Capture::is_sealed() const {
+	std::lock_guard<std::mutex> lock(mutex);
+	return sealed;
+}
+
+bool P01Capture::is_disposed() const {
+	std::lock_guard<std::mutex> lock(mutex);
+	return disposed;
+}
+
+bool P01Capture::has_transport_failure() const {
+	std::lock_guard<std::mutex> lock(mutex);
+	return transport_failed;
+}
+
+std::vector<P01CaptureEvent> P01Capture::get_events() const {
+	std::lock_guard<std::mutex> lock(mutex);
+	return events;
 }

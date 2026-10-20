@@ -6,19 +6,22 @@
 
 struct P01CaptureEvent {
 	uint64_t sequence = 0;
-	uint64_t epoch = 0;
+	uint8_t kind = 0;
 	uint64_t token = 0;
+	uint64_t epoch = 0;
 	uint64_t rid = 0;
 	uint64_t allocation_serial = 0;
+	uint64_t owner = 0;
+	uint64_t alias = 0;
 	uint64_t queue_sequence = 0;
 	uint32_t offset = 0;
 	uint32_t size = 0;
-	uint8_t kind = 0;
+	uint32_t result = 0;
 };
 
 class P01Capture {
 	std::vector<P01CaptureEvent> events;
-	struct Pending { uint64_t token, epoch, rid, serial, queue; };
+	struct Pending { uint64_t token, epoch, rid, serial, owner, alias, queue; };
 	std::vector<Pending> pending;
 	uint64_t epoch = 0;
 	uint64_t next_sequence = 1;
@@ -40,9 +43,9 @@ class P01Capture {
 	bool dispose_physical();
 	bool drain_complete() const;
 	bool write_transport(const uint8_t *p_data, size_t p_size, size_t p_written);
-	bool is_poisoned() const { return poisoned; }
-	bool is_sealed() const { return sealed; }
-	bool is_disposed() const { return disposed; }
-	bool has_transport_failure() const { return transport_failed; }
-	const std::vector<P01CaptureEvent> &get_events() const { return events; }
+	bool is_poisoned() const;
+	bool is_sealed() const;
+	bool is_disposed() const;
+	bool has_transport_failure() const;
+	std::vector<P01CaptureEvent> get_events() const;
 };

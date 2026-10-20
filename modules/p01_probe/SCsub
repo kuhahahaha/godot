@@ -7,4 +7,7 @@ Import("env_modules")
 env_modules.add_source_files(env.modules_sources, "*.cpp")
 
 if env["tests"]:
-	env.add_source_files(env.tests_sources, "tests/p01_capture/*.cpp")
+	# Module tests are linked into the tests library like other built-in
+	# modules.  The old tests_sources path is not a Godot SCons environment
+	# variable and would fail configuration before the test runner is built.
+	env_modules.add_source_files(env.modules_sources, "tests/*.cpp")
