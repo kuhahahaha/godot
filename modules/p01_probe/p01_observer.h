@@ -3,10 +3,12 @@
 #include <cstdint>
 #include <array>
 #include <vector>
+#include <limits>
 
 struct P01HookEvent {
 	uint64_t rid = 0, epoch = 0, allocation_serial = 0, sequence = 0;
 	uint32_t offset = 0, size = 0, range = 0;
+	uint8_t kind = 0;
 	bool success = false, failed_prefix = false;
 };
 
@@ -21,6 +23,9 @@ class P01CollectorLifetime {
 	bool closing = false;
 	bool references_released = false;
 	bool capture_poisoned = false;
+	uint64_t next_token = 1;
+	std::array<uint64_t, 128> generic_tokens{};
+	std::array<uint64_t, 64> slot_tokens{};
 
 public:
 	bool accept(uint64_t p_epoch) {
@@ -31,38 +36,48 @@ public:
 		accepted = true;
 		return true;
 	}
-	bool record(uint64_t p_epoch) {
+	uint64_t record_token(uint64_t p_epoch) {
 		if (!accepted || closing || capture_poisoned || p_epoch != epoch || pending == UINT32_MAX) {
-			return false;
+			return 0;
 		}
-		++pending;
-		return true;
+		for (uint64_t &token : generic_tokens) {
+			if (token == 0) { token = next_token++; ++pending; return token; }
+		}
+		return 0;
 	}
+	bool record(uint64_t p_epoch) { return record_token(p_epoch) != 0; }
+	bool complete_readback_token(uint64_t p_epoch, uint64_t p_token) {
+		if (!accepted || p_epoch != epoch || p_token == 0) return false;
+		for (uint64_t &token : generic_tokens) {
+			if (token == p_token) { token = 0; --pending; return true; }
+		}
+		return false;
+	}
+	bool complete_token(uint64_t p_epoch, uint64_t p_token) { return complete_readback_token(p_epoch, p_token); }
 	bool complete_readback(uint64_t p_epoch) {
-		if (!accepted || p_epoch != epoch || pending == 0) {
-			return false;
-		}
-		--pending;
-		return true;
+		if (!accepted || p_epoch != epoch || pending == 0) return false;
+		for (uint64_t token : generic_tokens) if (token != 0) return complete_readback_token(p_epoch, token);
+		return false;
 	}
-	bool record_slot(uint64_t p_epoch, uint32_t p_slot) {
-		if (p_slot >= slots.size() || !accepted || closing || p_epoch != epoch || slots[p_slot]) {
-			return false;
-		}
-		if (!record(p_epoch)) {
-			return false;
-		}
-		--pending;
-		++slot_pending;
+	uint64_t record_slot_token(uint64_t p_epoch, uint32_t p_slot) {
+		if (p_slot >= slots.size() || !accepted || closing || p_epoch != epoch || slots[p_slot]) return 0;
+		if (next_token == std::numeric_limits<uint64_t>::max()) return 0;
 		slots[p_slot] = true;
+		slot_tokens[p_slot] = next_token++;
+		++slot_pending;
+		return slot_tokens[p_slot];
+	}
+	bool record_slot(uint64_t p_epoch, uint32_t p_slot) { return record_slot_token(p_epoch, p_slot) != 0; }
+	bool complete_slot_token(uint64_t p_epoch, uint32_t p_slot, uint64_t p_token) {
+		if (p_slot >= slots.size() || p_epoch != epoch || !slots[p_slot] || slot_tokens[p_slot] != p_token) return false;
+		slots[p_slot] = false;
+		slot_tokens[p_slot] = 0;
+		--slot_pending;
 		return true;
 	}
 	bool complete_slot(uint64_t p_epoch, uint32_t p_slot) {
 		if (p_slot >= slots.size() || p_epoch != epoch || !slots[p_slot]) return false;
-		if (slot_pending == 0) return false;
-		slots[p_slot] = false;
-		--slot_pending;
-		return true;
+		return complete_slot_token(p_epoch, p_slot, slot_tokens[p_slot]);
 	}
 	void close() { closing = true; }
 	void poison_capture() { capture_poisoned = true; }
@@ -74,24 +89,26 @@ public:
 
 
 class P01AllocationIdentity {
-	struct Entry { uint64_t device = 0; uint64_t driver = 0; uint64_t serial = 0; bool live = false; };
+	struct Entry { uint64_t device = 0; uint64_t driver = 0; uint64_t serial = 0; uint32_t references = 0; };
 	std::array<Entry, 64> entries{};
 	uint64_t next_serial = 1;
 public:
 	uint64_t acquire(uint64_t p_device, uint64_t p_driver) {
 		if (p_device == 0 || p_driver == 0) return 0;
-		for (const Entry &e : entries) if (e.live && e.device == p_device && e.driver == p_driver) return 0;
-		for (Entry &e : entries) if (!e.live) { e = {p_device, p_driver, next_serial++, true}; return e.serial; }
+		for (Entry &e : entries) if (e.references != 0 && e.device == p_device && e.driver == p_driver) { ++e.references; return e.serial; }
+		for (Entry &e : entries) if (e.references == 0) { e = {p_device, p_driver, next_serial++, 1}; return e.serial; }
 		return 0;
 	}
+	uint64_t acquire_alias(uint64_t p_device, uint64_t p_driver) { return acquire(p_device, p_driver); }
 	uint64_t resolve(uint64_t p_device, uint64_t p_driver) const {
-		for (const Entry &e : entries) if (e.live && e.device == p_device && e.driver == p_driver) return e.serial;
+		for (const Entry &e : entries) if (e.references != 0 && e.device == p_device && e.driver == p_driver) return e.serial;
 		return 0;
 	}
 	bool release(uint64_t p_device, uint64_t p_driver) {
-		for (Entry &e : entries) if (e.live && e.device == p_device && e.driver == p_driver) { e.live = false; return true; }
+		for (Entry &e : entries) if (e.references != 0 && e.device == p_device && e.driver == p_driver) { if (--e.references == 0) { e.device = e.driver = e.serial = 0; } return true; }
 		return false;
 	}
+	bool release_alias(uint64_t p_device, uint64_t p_driver) { return release(p_device, p_driver); }
 };
 
 
@@ -127,8 +144,14 @@ struct P01HookSnapshot {
 	uint64_t readback_completed_count = 0;
 };
 void p01_observe_buffer_write(uint64_t p_rid, uint32_t p_offset, uint32_t p_size, bool p_success);
+void p01_observe_buffer_allocation(uint64_t p_rid, uint64_t p_device, uint64_t p_driver);
+void p01_observe_buffer_free(uint64_t p_rid);
+void p01_observe_buffer_clear(uint64_t p_rid, uint32_t p_offset, uint32_t p_size);
+void p01_observe_buffer_copy(uint64_t p_src_rid, uint64_t p_dst_rid, uint32_t p_src_offset, uint32_t p_dst_offset, uint32_t p_size);
 void p01_observe_readback_queued(uint64_t p_rid, uint32_t p_size);
 void p01_observe_readback_completed(uint64_t p_rid, uint32_t p_size);
 P01HookSnapshot p01_hook_snapshot();
 std::vector<P01HookEvent> p01_hook_events();
+void p01_hook_begin(uint64_t p_epoch, uint64_t p_allocation_serial = 0);
+bool p01_hook_is_poisoned();
 void p01_hook_reset();
