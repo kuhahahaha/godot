@@ -2,7 +2,8 @@
 
 void P01Capture::begin(uint64_t p_epoch) {
 	std::lock_guard<std::mutex> lock(mutex);
-	if (!pending.empty() || !events.empty() && !sealed) { poisoned = true; return; }
+	if (active && (!pending.empty() || !sealed)) { poisoned = true; return; }
+	if (p_epoch == 0 || p_epoch <= last_epoch) { poisoned = true; return; }
 	events.clear();
 	pending.clear();
 	epoch = p_epoch;
@@ -10,11 +11,13 @@ void P01Capture::begin(uint64_t p_epoch) {
 	poisoned = p_epoch == 0;
 	sealed = false;
 	disposed = false;
+	active = !poisoned;
+	last_epoch = p_epoch;
 }
 
 bool P01Capture::append(const P01CaptureEvent &p_event) {
 	std::lock_guard<std::mutex> lock(mutex);
-	if (sealed || disposed || epoch == 0 || p_event.epoch != epoch || p_event.token == 0 || p_event.rid == 0 || p_event.allocation_serial == 0 || UINT32_MAX - p_event.offset < p_event.size || (poisoned && p_event.kind != 2) || (events.size() >= MAX_EVENTS && p_event.kind != 2)) {
+	if (sealed || disposed || epoch == 0 || p_event.epoch != epoch || p_event.token == 0 || p_event.rid == 0 || p_event.allocation_serial == 0 || (p_event.kind != 1 && p_event.kind != 2) || UINT32_MAX - p_event.offset < p_event.size || (poisoned && p_event.kind != 2) || (events.size() >= MAX_EVENTS && p_event.kind != 2)) {
 		poisoned = true;
 		return false;
 	}
@@ -36,6 +39,7 @@ bool P01Capture::seal() {
 	std::lock_guard<std::mutex> lock(mutex);
 	if (poisoned || sealed || epoch == 0 || !pending.empty()) return false;
 	sealed = true;
+	active = false;
 	return true;
 }
 
@@ -46,4 +50,9 @@ bool P01Capture::dispose_physical() {
 	if (!pending.empty() || disposed || (!sealed && !poisoned)) return false;
 	disposed = true;
 	return true;
+}
+
+bool P01Capture::drain_complete() const {
+	std::lock_guard<std::mutex> lock(mutex);
+	return pending.empty();
 }

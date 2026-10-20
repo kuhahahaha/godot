@@ -25,6 +25,8 @@ class P01Capture {
 	bool poisoned = false;
 	bool sealed = false;
 	bool disposed = false;
+	bool active = false;
+	uint64_t last_epoch = 0;
 	mutable std::mutex mutex;
 	static constexpr size_t MAX_EVENTS = 4096;
 	static constexpr size_t MAX_PENDING = 64;
@@ -34,6 +36,7 @@ class P01Capture {
 	bool append(const P01CaptureEvent &p_event);
 	bool seal();
 	bool dispose_physical();
+	bool drain_complete() const;
 	bool is_poisoned() const { return poisoned; }
 	bool is_sealed() const { return sealed; }
 	bool is_disposed() const { return disposed; }
