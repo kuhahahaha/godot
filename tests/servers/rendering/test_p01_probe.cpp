@@ -78,6 +78,17 @@ TEST_CASE("[P01] Lifetime") {
 	CHECK_FALSE(no_work.can_retire());
 	CHECK_FALSE(no_work.accept(1));
 	CHECK_FALSE(no_work.can_retire());
+
+	P01AllocationIdentity identity;
+	const uint64_t first = identity.acquire(4, 77);
+	CHECK(first != 0);
+	CHECK(identity.resolve(4, 77) == first);
+	CHECK(identity.resolve(9, 77) == 0);
+	identity.release(4, 77);
+	CHECK(identity.resolve(4, 77) == 0);
+	const uint64_t reused = identity.acquire(4, 77);
+	CHECK(reused != first);
+	CHECK(identity.resolve(4, 77) == reused);
 }
 } // namespace TestP01Probe
 #endif

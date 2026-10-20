@@ -58,3 +58,24 @@ public:
 	void release_native_references() { references_released = true; }
 	bool can_retire() const { return accepted && closing && pending == 0 && references_released; }
 };
+
+
+class P01AllocationIdentity {
+	struct Entry { uint64_t device = 0; uint64_t driver = 0; uint64_t serial = 0; bool live = false; };
+	std::array<Entry, 64> entries{};
+	uint64_t next_serial = 1;
+public:
+	uint64_t acquire(uint64_t p_device, uint64_t p_driver) {
+		if (p_device == 0 || p_driver == 0) return 0;
+		for (Entry &e : entries) if (!e.live) { e = {p_device, p_driver, next_serial++, true}; return e.serial; }
+		return 0;
+	}
+	uint64_t resolve(uint64_t p_device, uint64_t p_driver) const {
+		for (const Entry &e : entries) if (e.live && e.device == p_device && e.driver == p_driver) return e.serial;
+		return 0;
+	}
+	bool release(uint64_t p_device, uint64_t p_driver) {
+		for (Entry &e : entries) if (e.live && e.device == p_device && e.driver == p_driver) { e.live = false; return true; }
+		return false;
+	}
+};
