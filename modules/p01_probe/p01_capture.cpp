@@ -12,7 +12,7 @@ void P01Capture::begin(uint64_t p_epoch) {
 }
 
 bool P01Capture::append(const P01CaptureEvent &p_event) {
-	if (poisoned || sealed || disposed || events.size() >= MAX_EVENTS || epoch == 0 || p_event.epoch != epoch || p_event.token == 0 || p_event.rid == 0 || p_event.allocation_serial == 0 || UINT32_MAX - p_event.offset < p_event.size) {
+	if (sealed || disposed || events.size() >= MAX_EVENTS || epoch == 0 || p_event.epoch != epoch || p_event.token == 0 || p_event.rid == 0 || p_event.allocation_serial == 0 || UINT32_MAX - p_event.offset < p_event.size || (poisoned && p_event.kind != 2)) {
 		poisoned = true;
 		return false;
 	}
