@@ -4,11 +4,32 @@
 #include "modules/p01_probe/p01_capture.h"
 #include "modules/p01_probe/p01_kernels.h"
 #include "modules/p01_probe/p01_transport.h"
+#include "modules/p01_probe/p01_observer.h"
 #include <atomic>
 
 TEST_FORCE_LINK(test_p01_probe_fixture)
 
 namespace TestP01ProbeFixture {
+
+TEST_CASE("[P01] Inactive observation leaves counters and events unchanged") {
+	p01_hook_reset();
+	p01_observe_buffer_write(1, 0, 4, true);
+	p01_observe_buffer_write(1, 4, 4, false);
+	p01_observe_readback_queued(1, 4);
+	p01_observe_readback_completed(1, 4);
+	p01_observe_buffer_allocation(1, 2, 3);
+	p01_observe_buffer_free(1);
+	p01_observe_buffer_clear(1, 0, 4);
+	p01_observe_buffer_copy(1, 2, 0, 0, 4);
+	const auto snapshot = p01_hook_snapshot();
+	CHECK(snapshot.write_begin_count == 0);
+	CHECK(snapshot.write_bytes == 0);
+	CHECK(snapshot.write_failure_count == 0);
+	CHECK(snapshot.readback_queued_count == 0);
+	CHECK(snapshot.readback_completed_count == 0);
+	CHECK(p01_hook_events().empty());
+	CHECK_FALSE(p01_hook_is_poisoned());
+}
 
 TEST_CASE("[P01] Capture full trace permits completion but poisons omitted evidence") {
 	P01Capture capture;

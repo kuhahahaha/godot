@@ -27,6 +27,7 @@ static void append_event(P01HookEvent p_event) {
 
 void p01_observe_buffer_write(uint64_t p_rid, uint32_t p_offset, uint32_t p_size, bool p_success) {
 	std::lock_guard<std::mutex> lock(hook_mutex);
+	if (current_epoch == 0) { return; }
 	snapshot.write_begin_count++;
 	if (p_success) {
 		snapshot.write_bytes += p_size;
@@ -37,28 +38,34 @@ void p01_observe_buffer_write(uint64_t p_rid, uint32_t p_offset, uint32_t p_size
 }
 void p01_observe_readback_queued(uint64_t p_rid, uint32_t p_size) {
 	std::lock_guard<std::mutex> lock(hook_mutex);
+	if (current_epoch == 0) { return; }
 	snapshot.readback_queued_count++;
 	append_event({p_rid, 0, 0, 0, 0, p_size, p_size, EVENT_READBACK_QUEUE, true, false});
 }
 void p01_observe_readback_completed(uint64_t p_rid, uint32_t p_size) {
 	std::lock_guard<std::mutex> lock(hook_mutex);
+	if (current_epoch == 0) { return; }
 	snapshot.readback_completed_count++;
 	append_event({p_rid, 0, 0, 0, 0, p_size, p_size, EVENT_READBACK_COMPLETE, true, false});
 }
 void p01_observe_buffer_allocation(uint64_t p_rid, uint64_t p_device, uint64_t p_driver) {
 	std::lock_guard<std::mutex> lock(hook_mutex);
+	if (current_epoch == 0) { return; }
 	append_event({p_rid, p_device, p_driver, 0, 0, 0, 0, EVENT_ALLOCATE, true, false});
 }
 void p01_observe_buffer_free(uint64_t p_rid) {
 	std::lock_guard<std::mutex> lock(hook_mutex);
+	if (current_epoch == 0) { return; }
 	append_event({p_rid, 0, 0, 0, 0, 0, 0, EVENT_FREE, true, false});
 }
 void p01_observe_buffer_clear(uint64_t p_rid, uint32_t p_offset, uint32_t p_size) {
 	std::lock_guard<std::mutex> lock(hook_mutex);
+	if (current_epoch == 0) { return; }
 	append_event({p_rid, 0, 0, 0, p_offset, p_size, p_size, EVENT_CLEAR, true, false});
 }
 void p01_observe_buffer_copy(uint64_t p_src_rid, uint64_t p_dst_rid, uint32_t p_src_offset, uint32_t p_dst_offset, uint32_t p_size) {
 	std::lock_guard<std::mutex> lock(hook_mutex);
+	if (current_epoch == 0) { return; }
 	append_event({p_dst_rid, p_src_rid, p_dst_rid, 0, p_dst_offset, p_size, p_size, EVENT_COPY, true, false});
 }
 P01HookSnapshot p01_hook_snapshot() { std::lock_guard<std::mutex> lock(hook_mutex); return snapshot; }
