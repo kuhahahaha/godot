@@ -30,6 +30,12 @@
 
 #pragma once
 
+#include "modules/modules_enabled.gen.h"
+#include <atomic>
+#ifdef MODULE_P01_PROBE_ENABLED
+#include "modules/p01_probe/p01_physical_registry.h"
+#endif
+
 #include "core/object/worker_thread_pool.h"
 #include "core/os/condition_variable.h"
 #include "core/os/thread_safe.h"
@@ -85,6 +91,10 @@ private:
 	friend class P01RDPool;
 #endif
 	static RenderingDevice *singleton;
+#ifdef MODULE_P01_PROBE_ENABLED
+	P01PhysicalRegistry p01_physical_registry;
+	std::atomic<bool> p01_physical_coverage_failed = false;
+#endif
 
 	RenderingContextDriver *context = nullptr;
 	RenderingDeviceDriver *driver = nullptr;
@@ -187,6 +197,9 @@ private:
 
 	struct Buffer {
 		RDD::BufferID driver_id;
+#ifdef MODULE_P01_PROBE_ENABLED
+		uint64_t p01_allocation_serial = 0;
+#endif
 		uint32_t size = 0;
 		BitField<RDD::BufferUsageBits> usage = {};
 		RDG::ResourceTracker *draw_tracker = nullptr;

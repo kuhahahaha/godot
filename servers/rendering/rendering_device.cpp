@@ -1515,6 +1515,11 @@ RID RenderingDevice::storage_buffer_create(uint32_t p_size_bytes, Span<uint8_t> 
 	_THREAD_SAFE_UNLOCK_
 
 	RID id = storage_buffer_owner.make_rid(buffer);
+#ifdef MODULE_P01_PROBE_ENABLED
+	const uint64_t serial = p01_physical_registry.allocate(buffer.driver_id.id, id.get_id());
+	storage_buffer_owner.get_or_null(id)->p01_allocation_serial = serial;
+	p01_physical_coverage_failed |= serial == 0;
+#endif
 #ifdef DEV_ENABLED
 	set_resource_name(id, "RID:" + itos(id.get_id()));
 #endif
@@ -3881,6 +3886,11 @@ RID RenderingDevice::vertex_buffer_create(uint32_t p_size_bytes, Span<uint8_t> p
 	_THREAD_SAFE_UNLOCK_
 
 	RID id = vertex_buffer_owner.make_rid(buffer);
+#ifdef MODULE_P01_PROBE_ENABLED
+	const uint64_t serial = p01_physical_registry.allocate(buffer.driver_id.id, id.get_id());
+	vertex_buffer_owner.get_or_null(id)->p01_allocation_serial = serial;
+	p01_physical_coverage_failed |= serial == 0;
+#endif
 #ifdef DEV_ENABLED
 	set_resource_name(id, "RID:" + itos(id.get_id()));
 #endif
@@ -7706,6 +7716,13 @@ void RenderingDevice::_free_internal(RID p_id) {
 
 		RDG::resource_tracker_free(vertex_buffer->draw_tracker);
 		frames[frame].buffers_to_dispose_of.push_back(*vertex_buffer);
+#ifdef MODULE_P01_PROBE_ENABLED
+		if (vertex_buffer->p01_allocation_serial) {
+			p01_physical_coverage_failed |= !p01_physical_registry.release_owner(vertex_buffer->driver_id.id, vertex_buffer->p01_allocation_serial, p_id.get_id());
+		} else {
+			p01_physical_coverage_failed = true;
+		}
+#endif
 		vertex_buffer_owner.free(p_id);
 	} else if (vertex_array_owner.owns(p_id)) {
 		vertex_array_owner.free(p_id);
@@ -7744,6 +7761,13 @@ void RenderingDevice::_free_internal(RID p_id) {
 
 		RDG::resource_tracker_free(storage_buffer->draw_tracker);
 		frames[frame].buffers_to_dispose_of.push_back(*storage_buffer);
+#ifdef MODULE_P01_PROBE_ENABLED
+		if (storage_buffer->p01_allocation_serial) {
+			p01_physical_coverage_failed |= !p01_physical_registry.release_owner(storage_buffer->driver_id.id, storage_buffer->p01_allocation_serial, p_id.get_id());
+		} else {
+			p01_physical_coverage_failed = true;
+		}
+#endif
 		storage_buffer_owner.free(p_id);
 	} else if (uniform_set_owner.owns(p_id)) {
 		UniformSet *uniform_set = uniform_set_owner.get_or_null(p_id);
@@ -8056,6 +8080,11 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 	while (frames[p_frame].buffers_to_dispose_of.front()) {
 		Buffer &buffer = frames[p_frame].buffers_to_dispose_of.front()->get();
 		driver->buffer_free(buffer.driver_id);
+#ifdef MODULE_P01_PROBE_ENABLED
+		if (buffer.p01_allocation_serial) {
+			p01_physical_coverage_failed |= !p01_physical_registry.dispose(buffer.driver_id.id, buffer.p01_allocation_serial);
+		}
+#endif
 		buffer_memory -= buffer.size;
 
 		frames[p_frame].buffers_to_dispose_of.pop_front();

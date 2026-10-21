@@ -1,8 +1,9 @@
 #pragma once
 #include <array>
 #include <cstdint>
+#include <mutex>
 
-// One noncopyable instance per actual RD lifetime, accessed only on its RT.
+// One noncopyable instance per actual RD lifetime, with internally synchronized access.
 // Serial is independent of session epoch. Capacity failure must poison coverage.
 class P01PhysicalRegistry {
 	struct Owner { uint64_t rid = 0; };
@@ -12,6 +13,7 @@ class P01PhysicalRegistry {
 	};
 	std::array<Allocation, 128> allocations{};
 	uint64_t next_serial = 1;
+	mutable std::mutex mutex;
 public:
 	P01PhysicalRegistry() = default;
 	P01PhysicalRegistry(const P01PhysicalRegistry &) = delete;

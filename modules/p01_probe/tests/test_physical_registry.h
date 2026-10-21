@@ -1,6 +1,7 @@
 #pragma once
 #include "modules/p01_probe/p01_physical_registry.h"
 #include "tests/test_macros.h"
+#include <thread>
 namespace TestP01PhysicalRegistry {
 TEST_CASE("[P01] Physical allocation outlives owners and reused handles reject stale disposal") {
 	P01PhysicalRegistry registry;
@@ -37,4 +38,21 @@ TEST_CASE("[P01] Physical registry owner and allocation exhaustion preserve exis
 	}
 	CHECK(registry.allocate(129, 2000) == 0);
 }
+TEST_CASE("[P01] Concurrent physical allocations preserve unique serials and live mappings") {
+	P01PhysicalRegistry registry;
+	std::array<uint64_t, 64> serials{};
+	std::array<std::thread, 4> workers;
+	for (int worker = 0; worker < 4; worker++) {
+		workers[worker] = std::thread([&, worker]() {
+			for (int i = worker; i < 64; i += 4) { serials[i] = registry.allocate(i + 1, i + 1000); }
+		});
+	}
+	for (auto &worker : workers) { worker.join(); }
+	for (int i = 0; i < 64; i++) {
+		CHECK(serials[i] != 0);
+		CHECK(registry.resolve(i + 1, i + 1000) == serials[i]);
+		for (int j = 0; j < i; j++) { CHECK(serials[i] != serials[j]); }
+	}
+}
+
 }

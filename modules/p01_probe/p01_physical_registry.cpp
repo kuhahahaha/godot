@@ -1,6 +1,7 @@
 #include "p01_physical_registry.h"
 
 uint64_t P01PhysicalRegistry::allocate(uint64_t p_driver, uint64_t p_rid) {
+	std::lock_guard<std::mutex> lock(mutex);
 	if (!p_driver || !p_rid || next_serial == UINT64_MAX) { return 0; }
 	for (const Allocation &allocation : allocations) {
 		if (allocation.driver == p_driver) { return 0; }
@@ -19,6 +20,7 @@ uint64_t P01PhysicalRegistry::allocate(uint64_t p_driver, uint64_t p_rid) {
 	return 0;
 }
 bool P01PhysicalRegistry::add_alias(uint64_t p_driver, uint64_t p_serial, uint64_t p_rid) {
+	std::lock_guard<std::mutex> lock(mutex);
 	if (!p_rid) { return false; }
 	for (const Allocation &allocation : allocations) {
 		for (const Owner &owner : allocation.owners) {
@@ -35,6 +37,7 @@ bool P01PhysicalRegistry::add_alias(uint64_t p_driver, uint64_t p_serial, uint64
 	return false;
 }
 bool P01PhysicalRegistry::release_owner(uint64_t p_driver, uint64_t p_serial, uint64_t p_rid) {
+	std::lock_guard<std::mutex> lock(mutex);
 	if (!p_rid) { return false; }
 	for (Allocation &allocation : allocations) {
 		if (allocation.serial && allocation.driver == p_driver && allocation.serial == p_serial) {
@@ -46,6 +49,7 @@ bool P01PhysicalRegistry::release_owner(uint64_t p_driver, uint64_t p_serial, ui
 	return false;
 }
 uint64_t P01PhysicalRegistry::resolve(uint64_t p_driver, uint64_t p_rid) const {
+	std::lock_guard<std::mutex> lock(mutex);
 	if (!p_rid) { return 0; }
 	for (const Allocation &allocation : allocations) {
 		if (allocation.driver == p_driver && allocation.serial) {
@@ -57,6 +61,7 @@ uint64_t P01PhysicalRegistry::resolve(uint64_t p_driver, uint64_t p_rid) const {
 	return 0;
 }
 bool P01PhysicalRegistry::physically_live(uint64_t p_driver, uint64_t p_serial) const {
+	std::lock_guard<std::mutex> lock(mutex);
 	if (!p_serial) { return false; }
 	for (const Allocation &allocation : allocations) {
 		if (allocation.driver == p_driver && allocation.serial == p_serial) { return true; }
@@ -64,6 +69,7 @@ bool P01PhysicalRegistry::physically_live(uint64_t p_driver, uint64_t p_serial) 
 	return false;
 }
 bool P01PhysicalRegistry::dispose(uint64_t p_driver, uint64_t p_serial) {
+	std::lock_guard<std::mutex> lock(mutex);
 	if (!p_serial) { return false; }
 	for (Allocation &allocation : allocations) {
 		if (allocation.driver == p_driver && allocation.serial == p_serial) {

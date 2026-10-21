@@ -192,6 +192,12 @@ Error P01RDPool::enqueue_readback(const P01ReadbackIdentity &p_identity, P01Read
 	const uint32_t role = uint32_t(p_identity.consumer);
 	const RID buffer = p_identity.consumer ? slot.consumer : slot.snapshot;
 	if (!slot.transported || slot.readback_attempted[role] || buffer.get_id() != p_identity.rid) { return ERR_INVALID_PARAMETER; }
+	// Godot ObjectID identifies this actual RD object lifetime, including its
+	// generation bits. A pointer address is not a device lifetime identity.
+	RenderingDevice::Buffer *actual = rd->_get_buffer_from_owner(buffer);
+	if (rd->p01_physical_coverage_failed || !actual || p_identity.device != uint64_t(rd->get_instance_id()) || p_identity.allocation != actual->p01_allocation_serial || rd->p01_physical_registry.resolve(actual->driver_id.id, buffer.get_id()) != p_identity.allocation) {
+		return ERR_INVALID_DATA;
+	}
 	Callable callback;
 	Error error = p_collector.reserve(p_identity, callback);
 	if (error != OK) { return error; }
