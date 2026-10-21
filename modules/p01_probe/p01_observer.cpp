@@ -1,6 +1,8 @@
 #include "p01_observer.h"
 #include "p01_write_census.h"
+#include "p01_capture_startup.h"
 #include <mutex>
+#include <atomic>
 
 // Session capture is serialized; physical operation identity remains separate
 // from session metadata. Missing physical serial stays unknown, never invented.
@@ -14,15 +16,28 @@ static bool capture_poisoned = false;
 static constexpr size_t MAX_EVENTS = 4096;
 enum : uint8_t { EVENT_WRITE = 1, EVENT_READBACK_QUEUE = 2, EVENT_READBACK_COMPLETE = 3, EVENT_ALLOCATE = 4, EVENT_FREE = 5, EVENT_CLEAR = 6, EVENT_COPY = 7 };
 
-static void append_event(P01HookEvent p_event) {
+static thread_local uint64_t recording_token = 0;
+static std::atomic<uint64_t> next_recording_token{1};
+P01RecordingScope::P01RecordingScope() : previous(recording_token) {
+ uint64_t candidate = next_recording_token.load();
+ while (candidate && !next_recording_token.compare_exchange_weak(candidate, candidate == UINT64_MAX ? 0 : candidate + 1)) {}
+ token = candidate;
+ recording_token = token;
+}
+P01RecordingScope::~P01RecordingScope() { recording_token = previous; }
+
+static P01HookEvent append_event(P01HookEvent p_event) {
 	if (events.size() >= MAX_EVENTS) {
 		capture_poisoned = true;
-		return;
+		return {};
 	}
 	p_event.epoch = current_epoch;
 	p_event.session_serial_hint = current_allocation_serial;
 	p_event.sequence = next_sequence++;
+	p_event.recording_token = recording_token;
 	events.push_back(p_event);
+	p01_capture_publish(p_event);
+	return p_event;
 }
 
 void p01_observe_buffer_write(uint64_t p_rid, uint32_t p_offset, uint32_t p_size, bool p_success, uint64_t p_device, uint64_t p_driver, uint64_t p_serial, bool p_failed_prefix) {
@@ -180,4 +195,39 @@ void p01_observe_skeleton_palette_request(uint64_t p_object, uint64_t p_skeleton
 	event.kind = 15;
 	event.success = true;
 	append_event(event);
+}
+
+bool p01_hook_buffer_unchanged(uint64_t p_device, uint64_t p_allocation, uint64_t p_after_sequence, uint64_t p_epoch) {
+	std::lock_guard<std::mutex> lock(hook_mutex);
+	if (!current_epoch || current_epoch != p_epoch || capture_poisoned || !p_device || !p_allocation || !p_after_sequence || p_after_sequence >= next_sequence) { return false; }
+	bool anchor = false;
+	for (const auto &event : events) {
+		if (event.sequence == p_after_sequence) { anchor = event.epoch == current_epoch; }
+		if (event.sequence <= p_after_sequence || event.device != p_device || event.allocation_serial != p_allocation) { continue; }
+		switch (event.kind) {
+			case 1: if (event.success || event.failed_prefix) { return false; } break;
+			case 5: case 6: case 7: case 8: case 9: return false;
+			default: break;
+		}
+	}
+	return anchor;
+}
+
+P01HookEvent p01_observe_draw_record(uint64_t p_device, uint64_t p_mesh_instance, uint64_t p_vertex_array) {
+	std::lock_guard<std::mutex> lock(hook_mutex);
+	if (!current_epoch || capture_poisoned) { return {}; }
+	P01HookEvent event;
+	event.device = p_device; event.rid = p_mesh_instance; event.source_rid = p_vertex_array;
+	event.kind = 16; event.success = true;
+	return append_event(event);
+}
+
+void p01_observe_driver_result(uint64_t p_device, uint32_t p_operation, uint64_t p_fence, int32_t p_error) {
+	std::lock_guard<std::mutex> lock(hook_mutex);
+	if (!current_epoch) { return; }
+	P01HookEvent event;
+	event.device = p_device; event.driver = p_fence; event.write_operation = p_operation;
+	event.kind = 17; event.operation_error = p_error; event.success = p_error == 0;
+	append_event(event);
+	if (p_error != 0) { capture_poisoned = true; }
 }

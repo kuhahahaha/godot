@@ -18,6 +18,7 @@ class P01RDPool {
 		RID upload; // At most one immutable 228B upload and one set per slot.
 		RID deformation_set;
 		RID transport_set;
+		uint64_t capture_sequence = 0, transport_sequence = 0, observation_epoch = 0;
 		bool consumed = false;
 		bool captured = false;
 		bool transported = false;
@@ -33,6 +34,9 @@ class P01RDPool {
 	bool retirement_invalid = false;
 	std::unique_ptr<P01ReadbackCollector> queued_collector;
 	Error qualify_buffer(RID p_buffer) const;
+	Error qualify_collector(uint32_t p_slot, const P01ReadbackCollector &p_collector) const;
+	Error record_boundary(RID p_buffer, uint64_t p_operation, uint64_t &r_sequence, uint64_t &r_epoch) const;
+	Error qualify_readback(const P01ReadbackIdentity &p_identity) const;
 	bool on_owner_thread() const;
 	bool has_active_list() const;
 	RID create_set(RID p_shader, RID p_source, RID p_destination);

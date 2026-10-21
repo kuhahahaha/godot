@@ -43,6 +43,7 @@ struct P01HookEvent {
 	uint32_t writable_usage = 0, write_operation = 0;
 	uint64_t content_version = 0;
 	int32_t operation_error = 0;
+	uint64_t recording_token = 0; // Private exact synchronous recording scope; not wire authority.
 };
 
 // Engine-owned lifetime accounting. Transport/parent verdicts never release GPU
@@ -225,3 +226,21 @@ std::vector<P01HookEvent> p01_hook_events();
 void p01_hook_begin(uint64_t p_epoch, uint64_t p_allocation_serial = 0);
 bool p01_hook_is_poisoned();
 void p01_hook_reset();
+
+// Conservative whole-allocation hazard scan; sequence is publication, not GPU completion.
+bool p01_hook_buffer_unchanged(uint64_t p_device, uint64_t p_allocation, uint64_t p_after_sequence, uint64_t p_epoch);
+
+// Same-thread scope around one original RD operation. Foreign publishers never
+// inherit it; nested scopes get distinct tokens and cannot satisfy their parent.
+class P01RecordingScope {
+ uint64_t previous = 0, token = 0;
+public:
+ P01RecordingScope();
+ ~P01RecordingScope();
+ P01RecordingScope(const P01RecordingScope &) = delete;
+ P01RecordingScope &operator=(const P01RecordingScope &) = delete;
+ uint64_t identity() const { return token; }
+};
+P01HookEvent p01_observe_draw_record(uint64_t p_device, uint64_t p_mesh_instance, uint64_t p_vertex_array);
+
+void p01_observe_driver_result(uint64_t p_device, uint32_t p_operation, uint64_t p_fence, int32_t p_error);

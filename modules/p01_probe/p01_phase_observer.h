@@ -12,3 +12,6 @@ void p01_phase_end();
 void p01_observe_phase(uint64_t p_frame, bool p_after_views);
 std::vector<P01PhaseEvent> p01_phase_events();
 bool p01_phase_poisoned();
+
+// True only on the actual RT hook stack while queued capture work executes.
+bool p01_phase_capture_window(uint64_t &r_frame, bool &r_after_views);

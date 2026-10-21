@@ -28,6 +28,11 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
+#include "modules/modules_enabled.gen.h"
+#ifdef MODULE_P01_PROBE_ENABLED
+#include "modules/p01_probe/p01_native_source.h"
+#endif
+
 #include "renderer_viewport.h"
 
 #include "core/config/engine.h"
@@ -336,6 +341,9 @@ void RendererViewport::_draw_3d(Viewport *p_viewport) {
 }
 
 void RendererViewport::_draw_viewport(Viewport *p_viewport) {
+#ifdef MODULE_P01_PROBE_ENABLED
+	P01ViewportDrawScope p01_viewport_scope(p_viewport->self.get_id());
+#endif
 	if (p_viewport->measure_render_time) {
 		String rt_id = "vp_begin_" + itos(p_viewport->self.get_id());
 		RSG::utilities->capture_timestamp(rt_id);

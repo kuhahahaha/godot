@@ -2,6 +2,11 @@
 #include <mutex>
 #include <thread>
 
+void p01_phase_capture_service(uint64_t p_epoch, uint64_t p_frame, bool p_after_views);
+
+static thread_local bool capture_window = false;
+static thread_local uint64_t capture_frame = 0;
+static thread_local bool capture_after_views = false;
 static std::mutex phase_mutex;
 static std::vector<P01PhaseEvent> phase_events;
 static uint64_t phase_epoch = 0, last_epoch = 0, last_frame = 0;
@@ -35,6 +40,17 @@ void p01_observe_phase(uint64_t p_frame, bool p_after_views) {
 	phase_events.push_back({ phase_events.size() + 1, phase_epoch, p_frame, p_after_views });
 	last_frame = p_frame;
 	awaiting_views = !p_after_views;
+	capture_window = true;
+	capture_frame = p_frame;
+	capture_after_views = p_after_views;
+	p01_phase_capture_service(phase_epoch, p_frame, p_after_views);
+	capture_window = false;
 }
 std::vector<P01PhaseEvent> p01_phase_events() { std::lock_guard<std::mutex> lock(phase_mutex); return phase_events; }
 bool p01_phase_poisoned() { std::lock_guard<std::mutex> lock(phase_mutex); return poisoned; }
+
+bool p01_phase_capture_window(uint64_t &r_frame, bool &r_after_views) {
+	if (!capture_window) { return false; }
+	r_frame = capture_frame; r_after_views = capture_after_views;
+	return true;
+}

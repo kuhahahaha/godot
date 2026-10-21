@@ -392,3 +392,37 @@ TEST_CASE("[P01] Main skeleton signal brackets and palette request retain distin
 	CHECK(events[0].sequence < events[1].sequence); CHECK(events[1].sequence < events[2].sequence);
 	p01_hook_reset();
 }
+
+TEST_CASE("[P01] Whole allocation window detects alias writes and failed prefixes") {
+	p01_hook_reset(); p01_hook_begin(77);
+	p01_observe_buffer_copy(1, 2, 0, 0, 36, 9, 10, 11);
+	const auto anchor = p01_hook_events().back().sequence;
+	CHECK(p01_hook_buffer_unchanged(9, 11, anchor, 77));
+	p01_observe_buffer_write(200, 0, 4, false, 9, 3, 11, false);
+	CHECK(p01_hook_buffer_unchanged(9, 11, anchor, 77));
+	p01_observe_buffer_write(300, 0, 4, true, 9, 4, 12);
+	CHECK(p01_hook_buffer_unchanged(9, 11, anchor, 77));
+	p01_observe_buffer_write(999, 0, 4, false, 9, 3, 11, true);
+	CHECK_FALSE(p01_hook_buffer_unchanged(9, 11, anchor, 77));
+	CHECK_FALSE(p01_hook_buffer_unchanged(9, 11, 0, 77));
+	p01_hook_reset();
+	p01_hook_begin(78);
+	p01_observe_buffer_copy(1, 2, 0, 0, 36, 9, 10, 11);
+	CHECK_FALSE(p01_hook_buffer_unchanged(9, 11, anchor, 77));
+	p01_hook_reset();
+}
+
+TEST_CASE("[P01] Actual driver failure poisons evidence without erasing observations") {
+	p01_hook_reset(); p01_hook_begin(91);
+	p01_observe_driver_result(12, 1, 44, OK);
+	CHECK_FALSE(p01_hook_is_poisoned());
+	p01_observe_driver_result(12, 2, 44, ERR_CANT_CREATE);
+	CHECK(p01_hook_is_poisoned());
+	const auto events = p01_hook_events();
+	REQUIRE(events.size() == 2);
+	CHECK(events[0].success);
+	CHECK_FALSE(events[1].success);
+	CHECK(events[1].operation_error == ERR_CANT_CREATE);
+	CHECK(events[1].device == 12);
+	p01_hook_reset();
+}

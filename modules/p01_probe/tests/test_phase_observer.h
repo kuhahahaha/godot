@@ -51,3 +51,53 @@ TEST_CASE("[P01] Phase coverage rejects overflow unfinished frames and foreign t
 }
 
 }
+
+TEST_CASE("[P01] Capture window is never retained after a phase hook returns") {
+	uint64_t frame = 999;
+	bool views = true;
+	CHECK_FALSE(p01_phase_capture_window(frame, views));
+	CHECK(frame == 999);
+	CHECK(views);
+}
+
+#include "modules/p01_probe/p01_phase_capture.h"
+TEST_CASE("[P01] Scheduled capture executes only its exact native phase and rejects missed windows") {
+	P01PhaseCaptureRequest request;
+	CHECK(p01_phase_capture_enqueue(request) == ERR_INVALID_PARAMETER);
+	request.epoch = 1000; request.request = 1; request.frame = 10;
+	request.scene = RID::from_uint64(1); request.mesh = RID::from_uint64(2); request.skeleton = RID::from_uint64(3);
+	request.pool = std::make_shared<P01RDPool>();
+	CHECK(p01_phase_capture_enqueue(request) == OK);
+	CHECK(p01_phase_capture_enqueue(request) == ERR_INVALID_PARAMETER);
+	CHECK(p01_phase_begin(1000));
+	p01_observe_phase(10, false);
+	auto result = p01_phase_capture_results();
+	REQUIRE(result.size() == 1);
+	CHECK(result[0].request == 1); CHECK(result[0].frame == 10);
+	CHECK_FALSE(result[0].after_views);
+	// Dummy renderer has no RD. A real phase does not fabricate native success.
+	CHECK(result[0].error == ERR_UNAVAILABLE);
+	request.request = 2;
+	CHECK(p01_phase_capture_enqueue(request) == OK);
+	p01_observe_phase(10, true);
+	result = p01_phase_capture_results();
+	REQUIRE(result.size() == 2);
+	CHECK(result[1].error == ERR_INVALID_DATA);
+	p01_phase_end();
+	p01_phase_capture_cancel(1000);
+	request.request = 3;
+	CHECK(p01_phase_capture_enqueue(request) == ERR_INVALID_PARAMETER);
+}
+
+TEST_CASE("[P01] Previous phase requests require an after-views draw selection") {
+ P01PhaseCaptureRequest request;
+ request.epoch = 1001; request.request = 1; request.frame = 10;
+ request.scene = RID::from_uint64(1); request.mesh = RID::from_uint64(2); request.skeleton = RID::from_uint64(3);
+ request.pool = std::make_shared<P01RDPool>(); request.previous = true;
+ CHECK(p01_phase_capture_enqueue(request) == ERR_INVALID_PARAMETER);
+ request.after_views = true; request.request++;
+ CHECK(p01_phase_capture_enqueue(request) == ERR_INVALID_PARAMETER);
+ request.selected_viewport = RID::from_uint64(4); request.request++;
+ CHECK(p01_phase_capture_enqueue(request) == OK);
+ p01_phase_capture_cancel(1001);
+}

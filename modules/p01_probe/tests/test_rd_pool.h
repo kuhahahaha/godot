@@ -1,5 +1,7 @@
 #pragma once
 #include "modules/p01_probe/p01_rd_pool.h"
+#include "modules/p01_probe/p01_gpu_payload.h"
+#include <thread>
 #include "tests/test_macros.h"
 
 namespace TestP01RDPool {
@@ -97,6 +99,61 @@ public:
 		actual->p01_allocation_serial = device.p01_physical_registry.allocate(701, rid.get_id());
 		REQUIRE(actual->p01_allocation_serial != 0);
 		CHECK(pool.qualify_buffer(rid) == OK);
+		p01_hook_reset(); p01_hook_begin(998);
+		uint64_t sequence = 0, epoch = 0;
+		CHECK(pool.record_boundary(rid, 0, sequence, epoch) == ERR_INVALID_DATA);
+		P01RecordingScope operation;
+		p01_observe_buffer_copy(3, rid.get_id(), 0, 0, 36, uint64_t(device.get_instance_id()), 8, actual->p01_allocation_serial);
+		CHECK(pool.record_boundary(rid, operation.identity(), sequence, epoch) == OK);
+		CHECK(sequence == 1); CHECK(epoch == 998);
+		CHECK(pool.record_boundary(rid, operation.identity() + 1, sequence, epoch) == ERR_INVALID_DATA);
+		{
+			P01RecordingScope unrelated;
+			std::thread publisher([&] { p01_observe_buffer_copy(3, rid.get_id(), 0, 0, 36, uint64_t(device.get_instance_id()), 8, actual->p01_allocation_serial); });
+			publisher.join();
+			CHECK(pool.record_boundary(rid, unrelated.identity(), sequence, epoch) == ERR_INVALID_DATA);
+		}
+		p01_hook_reset();
+
+		pool.capacity = 1;
+		P01ReadbackCollector original(1, 2, false), replacement(1, 2, false);
+		const P01ReadbackIdentity snapshot_id{1, 2, 3, 4, 5, 6, 7, 8, 9, 0, false};
+		auto consumer_id = snapshot_id; consumer_id.consumer = true; consumer_id.token++; consumer_id.queue++;
+		Callable pending_snapshot, pending_consumer, substitute_snapshot, substitute_consumer;
+		REQUIRE(original.reserve(snapshot_id, pending_snapshot) == OK);
+		REQUIRE(original.reserve(consumer_id, pending_consumer) == OK);
+		REQUIRE(original.mark_enqueued(snapshot_id) == OK);
+		REQUIRE(original.mark_enqueued(consumer_id) == OK);
+		REQUIRE(replacement.reserve(snapshot_id, substitute_snapshot) == OK);
+		REQUIRE(replacement.reserve(consumer_id, substitute_consumer) == OK);
+		REQUIRE(replacement.mark_enqueued(snapshot_id) == OK);
+		REQUIRE(replacement.mark_enqueued(consumer_id) == OK);
+		substitute_snapshot.call(p01_initial_guarded_buffer());
+		substitute_consumer.call(p01_initial_guarded_buffer());
+		CHECK(replacement.validate_pair(snapshot_id, consumer_id) == OK);
+		CHECK(original.validate_pair(snapshot_id, consumer_id) == ERR_BUSY);
+		pool.queued_collector = std::make_unique<P01ReadbackCollector>(original);
+		pool.slots[0].readback_attempted[0] = true;
+		pool.slots[0].readback_attempted[1] = true;
+		CHECK(pool.qualify_collector(0, replacement) == ERR_INVALID_DATA);
+		CHECK(pool.qualify_collector(0, original) == OK);
+		pool.slots[0].readback_attempted[1] = false;
+		CHECK(pool.qualify_collector(0, original) == ERR_INVALID_DATA);
+
+		pool.slots[0].snapshot = rid;
+		P01ReadbackIdentity identity;
+		identity.device = uint64_t(device.get_instance_id());
+		identity.rid = rid.get_id(); identity.allocation = actual->p01_allocation_serial;
+		CHECK(pool.qualify_readback(identity) == OK);
+		identity.allocation++;
+		CHECK(pool.qualify_readback(identity) == ERR_INVALID_DATA);
+		identity.allocation--;
+		identity.device++;
+		CHECK(pool.qualify_readback(identity) == ERR_INVALID_DATA);
+		identity.device--;
+		identity.consumer = true;
+		CHECK(pool.qualify_readback(identity) == ERR_INVALID_DATA);
+
 		CHECK(pool.qualify_buffer(RID()) == ERR_INVALID_DATA);
 		CHECK(device.p01_physical_registry.mark_access_escaped(701, actual->p01_allocation_serial));
 		CHECK(pool.qualify_buffer(rid) == ERR_UNAVAILABLE);

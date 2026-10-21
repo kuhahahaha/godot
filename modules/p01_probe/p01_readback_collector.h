@@ -19,6 +19,7 @@ class P01ReadbackCollector {
 	struct State;
 	class Callback;
 	std::shared_ptr<State> state;
+	Error copy_completed_locked(const P01ReadbackIdentity &p_identity, PackedByteArray &r_bytes) const;
 
 public:
 	P01ReadbackCollector(uint64_t p_run, uint64_t p_epoch, bool p_dual_view);

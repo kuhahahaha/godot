@@ -5469,7 +5469,15 @@ Error RenderingDevice::screen_prepare_for_drawing(DisplayServerEnums::WindowID p
 	uint32_t to_present_index = 0;
 	while (to_present_index < frames[frame].swap_chains_to_present.size()) {
 		if (frames[frame].swap_chains_to_present[to_present_index] == it->value) {
+
+#ifdef MODULE_P01_PROBE_ENABLED
+			const Error p01_driver_result =
+#endif
 			driver->command_queue_execute_and_present(present_queue, {}, {}, {}, {}, it->value);
+#ifdef MODULE_P01_PROBE_ENABLED
+			p01_observe_driver_result(uint64_t(get_instance_id()), 1, 0, p01_driver_result);
+			if (p01_driver_result != OK) { p01_physical_coverage_failed.store(true); }
+#endif
 			frames[frame].swap_chains_to_present.remove_at(to_present_index);
 		} else {
 			to_present_index++;
@@ -7392,7 +7400,15 @@ void RenderingDevice::_end_transfer_worker(TransferWorker *p_transfer_worker) {
 }
 
 void RenderingDevice::_submit_transfer_worker(TransferWorker *p_transfer_worker, VectorView<RDD::SemaphoreID> p_signal_semaphores) {
+
+#ifdef MODULE_P01_PROBE_ENABLED
+	const Error p01_driver_result =
+#endif
 	driver->command_queue_execute_and_present(transfer_queue, {}, p_transfer_worker->command_buffer, p_signal_semaphores, p_transfer_worker->command_fence, {});
+#ifdef MODULE_P01_PROBE_ENABLED
+	p01_observe_driver_result(uint64_t(get_instance_id()), 1, p_transfer_worker->command_fence.id, p01_driver_result);
+	if (p01_driver_result != OK) { p01_physical_coverage_failed.store(true); }
+#endif
 
 	for (uint32_t i = 0; i < p_signal_semaphores.size(); i++) {
 		// Indicate the frame should wait on these semaphores before executing the main command buffer.
@@ -7408,7 +7424,15 @@ void RenderingDevice::_submit_transfer_worker(TransferWorker *p_transfer_worker,
 }
 
 void RenderingDevice::_wait_for_transfer_worker(TransferWorker *p_transfer_worker) {
+
+#ifdef MODULE_P01_PROBE_ENABLED
+	const Error p01_driver_result =
+#endif
 	driver->fence_wait(p_transfer_worker->command_fence);
+#ifdef MODULE_P01_PROBE_ENABLED
+	p01_observe_driver_result(uint64_t(get_instance_id()), 2, p_transfer_worker->command_fence.id, p01_driver_result);
+	if (p01_driver_result != OK) { p01_physical_coverage_failed.store(true); }
+#endif
 	driver->command_pool_reset(p_transfer_worker->command_pool);
 	p_transfer_worker->staging_buffer_size_in_use = 0;
 	p_transfer_worker->submitted = false;
@@ -8355,9 +8379,17 @@ void RenderingDevice::execute_chained_cmds(bool p_present_swap_chain, RenderingD
 			// Semaphores always need to be signaled if it's not the last command buffer.
 		}
 
+
+#ifdef MODULE_P01_PROBE_ENABLED
+		const Error p01_driver_result =
+#endif
 		driver->command_queue_execute_and_present(main_queue, wait_semaphores, command_buffer,
 				signal_semaphore ? signal_semaphore : VectorView<RDD::SemaphoreID>(), signal_fence,
 				swap_chains);
+#ifdef MODULE_P01_PROBE_ENABLED
+		p01_observe_driver_result(uint64_t(get_instance_id()), 1, signal_fence.id, p01_driver_result);
+		if (p01_driver_result != OK) { p01_physical_coverage_failed.store(true); }
+#endif
 
 		// Make the next command buffer wait on the semaphore signaled by this one.
 		wait_semaphores.resize(1);
@@ -8387,7 +8419,15 @@ void RenderingDevice::_execute_frame(bool p_present) {
 	if (frame_can_present) {
 		if (separate_present_queue) {
 			// Issue the presentation separately if the presentation queue is different from the main queue.
+
+#ifdef MODULE_P01_PROBE_ENABLED
+			const Error p01_driver_result =
+#endif
 			driver->command_queue_execute_and_present(present_queue, frames[frame].semaphore, {}, {}, {}, frames[frame].swap_chains_to_present);
+#ifdef MODULE_P01_PROBE_ENABLED
+			p01_observe_driver_result(uint64_t(get_instance_id()), 1, 0, p01_driver_result);
+			if (p01_driver_result != OK) { p01_physical_coverage_failed.store(true); }
+#endif
 		}
 
 		frames[frame].swap_chains_to_present.clear();
@@ -8399,7 +8439,15 @@ void RenderingDevice::_stall_for_frame(uint32_t p_frame) {
 
 	if (frames[p_frame].fence_signaled) {
 		GodotProfileZoneGroupedFirst(_profile_zone, "driver->fence_wait");
+
+#ifdef MODULE_P01_PROBE_ENABLED
+		const Error p01_driver_result =
+#endif
 		driver->fence_wait(frames[p_frame].fence);
+#ifdef MODULE_P01_PROBE_ENABLED
+		p01_observe_driver_result(uint64_t(get_instance_id()), 2, frames[p_frame].fence.id, p01_driver_result);
+		if (p01_driver_result != OK) { p01_physical_coverage_failed.store(true); }
+#endif
 		frames[p_frame].fence_signaled = false;
 
 		// Flush any pending requests for asynchronous buffer downloads.

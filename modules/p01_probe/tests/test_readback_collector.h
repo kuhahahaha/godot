@@ -101,6 +101,9 @@ TEST_CASE("[P01] S02 a14 requires its own callbacks even when a12 bytes match") 
 	CHECK(collector.reserve(a12_snapshot, old_callback) == OK);
 	CHECK(collector.reserve(a14_snapshot, snapshot_callback) == OK);
 	CHECK(collector.reserve(a14_consumer, consumer_callback) == OK);
+	CHECK(collector.mark_enqueued(a12_snapshot) == OK);
+	CHECK(collector.mark_enqueued(a14_snapshot) == OK);
+	CHECK(collector.mark_enqueued(a14_consumer) == OK);
 	const auto bytes = p01_initial_guarded_buffer();
 	old_callback.call(bytes);
 	collector.close();
@@ -127,6 +130,8 @@ TEST_CASE("[P01] Readback pair rejects guard damage and bitwise transport mismat
 		const auto consumer_id = identity(0, true);
 		CHECK(collector.reserve(snapshot_id, snapshot_callback) == OK);
 		CHECK(collector.reserve(consumer_id, consumer_callback) == OK);
+		CHECK(collector.mark_enqueued(snapshot_id) == OK);
+		CHECK(collector.mark_enqueued(consumer_id) == OK);
 		CHECK(collector.validate_pair(snapshot_id, consumer_id) == ERR_BUSY);
 		auto snapshot = p01_initial_guarded_buffer();
 		auto consumer = p01_initial_guarded_buffer();
@@ -141,4 +146,25 @@ TEST_CASE("[P01] Readback pair rejects guard damage and bitwise transport mismat
 	}
 }
 
+}
+
+TEST_CASE("[P01] Poisoned collector cannot certify previously completed bytes") {
+	P01ReadbackCollector collector(1, 2, false);
+	const auto snapshot_id = TestP01ReadbackCollector::identity();
+	const auto consumer_id = TestP01ReadbackCollector::identity(0, true);
+	Callable snapshot, consumer;
+	REQUIRE(collector.reserve(snapshot_id, snapshot) == OK);
+	REQUIRE(collector.reserve(consumer_id, consumer) == OK);
+	CHECK(collector.mark_enqueued(snapshot_id) == OK);
+	CHECK(collector.mark_enqueued(consumer_id) == OK);
+	snapshot.call(p01_initial_guarded_buffer());
+	consumer.call(p01_initial_guarded_buffer());
+	CHECK(collector.validate_pair(snapshot_id, consumer_id) == OK);
+	snapshot.call(p01_initial_guarded_buffer());
+	CHECK(collector.poisoned());
+	CHECK(collector.validate_pair(snapshot_id, consumer_id) == ERR_INVALID_DATA);
+	PackedByteArray output;
+	CHECK(collector.copy_completed(snapshot_id, output) == ERR_INVALID_DATA);
+	collector.close();
+	CHECK(collector.drained());
 }

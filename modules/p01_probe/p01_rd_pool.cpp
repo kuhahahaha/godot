@@ -1,6 +1,7 @@
 #include "p01_rd_pool.h"
 
 #include "p01_gpu_payload.h"
+#include "p01_observer.h"
 #include "p01_kernels.h"
 #include "servers/rendering/rendering_server.h"
 
@@ -87,6 +88,8 @@ Error P01RDPool::record_transport(uint32_t p_slot) {
 		const Error error = qualify_buffer(rid);
 		if (error != OK) { return error; }
 	}
+	const auto *snapshot_buffer = rd->_get_buffer_from_owner(slots[p_slot].snapshot);
+	if (!p01_hook_buffer_unchanged(uint64_t(device_identity), snapshot_buffer->p01_allocation_serial, slots[p_slot].capture_sequence, slots[p_slot].observation_epoch)) { return ERR_INVALID_DATA; }
 	slots[p_slot].transported = true;
 	const auto list = rd->compute_list_begin();
 	if (list == RenderingDevice::INVALID_ID) {
@@ -94,8 +97,15 @@ Error P01RDPool::record_transport(uint32_t p_slot) {
 	}
 	rd->compute_list_bind_compute_pipeline(list, pipelines[1]);
 	rd->compute_list_bind_uniform_set(list, slots[p_slot].transport_set, 0);
+	const uint64_t before_dispatch = rd->compute_list.state.dispatch_count;
+	P01RecordingScope operation;
 	rd->compute_list_dispatch(list, 1, 1, 1);
+	const bool dispatched = rd->compute_list.state.dispatch_count == before_dispatch + 1;
 	rd->compute_list_end();
+	if (!dispatched) { return ERR_INVALID_DATA; }
+	uint64_t epoch = 0;
+	const Error recorded = record_boundary(slots[p_slot].consumer, operation.identity(), slots[p_slot].transport_sequence, epoch);
+	if (recorded != OK || epoch != slots[p_slot].observation_epoch) { return ERR_INVALID_DATA; }
 	return OK;
 }
 
@@ -135,8 +145,13 @@ Error P01RDPool::record_public(uint32_t p_slot, const P01PublicSnapshot &p_snaps
 	}
 	rd->compute_list_bind_compute_pipeline(list, pipelines[0]);
 	rd->compute_list_bind_uniform_set(list, slot.deformation_set, 0);
+	const uint64_t before_dispatch = rd->compute_list.state.dispatch_count;
+	P01RecordingScope operation;
 	rd->compute_list_dispatch(list, 1, 1, 1);
+	const bool dispatched = rd->compute_list.state.dispatch_count == before_dispatch + 1;
 	rd->compute_list_end();
+	if (!dispatched) { return ERR_INVALID_DATA; }
+	if (record_boundary(slots[p_slot].snapshot, operation.identity(), slots[p_slot].capture_sequence, slots[p_slot].observation_epoch) != OK) { return ERR_INVALID_DATA; }
 	slots[p_slot].captured = true;
 	return OK;
 }
@@ -157,10 +172,12 @@ Error P01RDPool::record_native(uint32_t p_slot, RID p_source, uint32_t p_offset)
 		if (qualification != OK) { return qualification; }
 	}
 	slots[p_slot].consumed = true;
+	P01RecordingScope operation;
 	const Error error = rd->buffer_copy(p_source, slots[p_slot].snapshot, p_offset, 0, 36);
 	if (error != OK) {
 		return error;
 	}
+	if (record_boundary(slots[p_slot].snapshot, operation.identity(), slots[p_slot].capture_sequence, slots[p_slot].observation_epoch) != OK) { return ERR_INVALID_DATA; }
 	slots[p_slot].captured = true;
 	return OK;
 }
@@ -269,15 +286,49 @@ Error P01RDPool::qualify_buffer(RID p_buffer) const {
 	return OK;
 }
 
+Error P01RDPool::qualify_collector(uint32_t p_slot, const P01ReadbackCollector &p_collector) const {
+	if (p_slot >= capacity) { return ERR_INVALID_PARAMETER; }
+	const Slot &slot = slots[p_slot];
+	if (!queued_collector || !queued_collector->shares_state(p_collector) || !slot.readback_attempted[0] || !slot.readback_attempted[1]) { return ERR_INVALID_DATA; }
+	return OK;
+}
+
 Error P01RDPool::validate_pair(const P01ReadbackIdentity &p_snapshot, const P01ReadbackIdentity &p_consumer, const P01ReadbackCollector &p_collector) const {
 	if (!rd) { return ERR_UNCONFIGURED; }
 	if (!on_owner_thread()) { return ERR_UNAVAILABLE; }
 	if (p_snapshot.slot >= capacity || p_snapshot.slot != p_consumer.slot) { return ERR_INVALID_PARAMETER; }
+	if (p_snapshot.consumer || !p_consumer.consumer) { return ERR_INVALID_DATA; }
 	const Slot &slot = slots[p_snapshot.slot];
-	if (slot.snapshot.get_id() != p_snapshot.rid || slot.consumer.get_id() != p_consumer.rid) { return ERR_INVALID_DATA; }
-	for (RID rid : {slot.snapshot, slot.consumer}) {
-		const Error error = qualify_buffer(rid);
+	if (qualify_collector(p_snapshot.slot, p_collector) != OK) { return ERR_INVALID_DATA; }
+	for (const auto &identity : {p_snapshot, p_consumer}) {
+		const Error error = qualify_readback(identity);
 		if (error != OK) { return error; }
 	}
+	if (!p01_hook_buffer_unchanged(p_snapshot.device, p_snapshot.allocation, slot.capture_sequence, slot.observation_epoch) || !p01_hook_buffer_unchanged(p_consumer.device, p_consumer.allocation, slot.transport_sequence, slot.observation_epoch)) { return ERR_INVALID_DATA; }
 	return p_collector.validate_pair(p_snapshot, p_consumer);
+}
+
+Error P01RDPool::qualify_readback(const P01ReadbackIdentity &p_identity) const {
+	if (!rd || p_identity.slot >= capacity || p_identity.device != uint64_t(rd->get_instance_id())) { return ERR_INVALID_DATA; }
+	const Slot &slot = slots[p_identity.slot];
+	const RID rid = p_identity.consumer ? slot.consumer : slot.snapshot;
+	if (rid.is_null() || rid.get_id() != p_identity.rid) { return ERR_INVALID_DATA; }
+	const Error error = qualify_buffer(rid);
+	if (error != OK) { return error; }
+	const auto *actual = rd->_get_buffer_from_owner(rid);
+	return actual->p01_allocation_serial == p_identity.allocation ? OK : ERR_INVALID_DATA;
+}
+
+Error P01RDPool::record_boundary(RID p_buffer, uint64_t p_operation, uint64_t &r_sequence, uint64_t &r_epoch) const {
+	if (!p_operation || qualify_buffer(p_buffer) != OK || p01_hook_is_poisoned()) { return ERR_INVALID_DATA; }
+	const auto *buffer = rd->_get_buffer_from_owner(p_buffer);
+	const auto events = p01_hook_events();
+	for (auto it = events.rbegin(); it != events.rend(); ++it) {
+		if (it->recording_token != p_operation) { continue; }
+		if ((it->kind == 7 || it->kind == 8) && it->success && it->device == uint64_t(rd->get_instance_id()) && it->allocation_serial == buffer->p01_allocation_serial) {
+			r_sequence = it->sequence; r_epoch = it->epoch;
+			return OK;
+		}
+	}
+	return ERR_INVALID_DATA;
 }

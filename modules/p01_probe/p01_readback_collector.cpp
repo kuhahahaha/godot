@@ -85,11 +85,16 @@ Error P01ReadbackCollector::reserve(const P01ReadbackIdentity &p_identity, Calla
 
 Error P01ReadbackCollector::copy_completed(const P01ReadbackIdentity &p_identity, PackedByteArray &r_bytes) const {
 	std::lock_guard<std::mutex> lock(state->mutex);
+	return copy_completed_locked(p_identity, r_bytes);
+}
+Error P01ReadbackCollector::copy_completed_locked(const P01ReadbackIdentity &p_identity, PackedByteArray &r_bytes) const {
+	if (state->poisoned) { return ERR_INVALID_DATA; }
 	if (p_identity.slot >= state->capacity) { return ERR_INVALID_PARAMETER; }
 	const State::Entry &entry = state->entries[p_identity.slot * 2 + uint32_t(p_identity.consumer)];
 	if (!entry.reserved || !(entry.identity == p_identity)) { return ERR_INVALID_PARAMETER; }
 	if (entry.canceled) { return ERR_INVALID_DATA; }
 	if (!entry.completed) { return ERR_BUSY; }
+	if (!entry.enqueued) { return ERR_INVALID_DATA; }
 	if (entry.bytes.size() != 64) { return ERR_INVALID_DATA; }
 	r_bytes = entry.bytes.duplicate();
 	return OK;
@@ -119,11 +124,12 @@ Error P01ReadbackCollector::mark_enqueued(const P01ReadbackIdentity &p_identity)
 }
 
 Error P01ReadbackCollector::validate_pair(const P01ReadbackIdentity &p_snapshot, const P01ReadbackIdentity &p_consumer) const {
+	std::lock_guard<std::mutex> lock(state->mutex);
 	if (p_snapshot.consumer || !p_consumer.consumer || p_snapshot.slot != p_consumer.slot || p_snapshot.run != p_consumer.run || p_snapshot.epoch != p_consumer.epoch) { return ERR_INVALID_PARAMETER; }
 	PackedByteArray snapshot, consumer;
-	Error error = copy_completed(p_snapshot, snapshot);
+	Error error = copy_completed_locked(p_snapshot, snapshot);
 	if (error != OK) { return error; }
-	error = copy_completed(p_consumer, consumer);
+	error = copy_completed_locked(p_consumer, consumer);
 	if (error != OK) { return error; }
 	for (int word = 0; word < 16; word++) {
 		const uint32_t a = decode_uint32(snapshot.ptr() + word * 4);
