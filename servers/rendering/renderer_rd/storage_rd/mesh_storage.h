@@ -334,6 +334,9 @@ private:
 	} skeleton_shader;
 
 	struct Skeleton {
+#ifdef MODULE_P01_PROBE_ENABLED
+		RID p01_owner;
+#endif
 		bool use_2d = false;
 		int size = 0;
 		LocalVector<float> data;

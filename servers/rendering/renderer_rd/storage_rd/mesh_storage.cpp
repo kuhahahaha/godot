@@ -30,6 +30,9 @@
 
 #include "mesh_storage.h"
 #include "modules/modules_enabled.gen.h"
+#ifdef MODULE_P01_PROBE_ENABLED
+#include "modules/p01_probe/p01_observer.h"
+#endif
 
 #include "servers/rendering/renderer_viewport.h"
 #include "servers/rendering/rendering_server.h"
@@ -2327,7 +2330,14 @@ RID MeshStorage::skeleton_allocate() {
 	return skeleton_owner.allocate_rid();
 }
 void MeshStorage::skeleton_initialize(RID p_rid) {
+
+#ifdef MODULE_P01_PROBE_ENABLED
+	Skeleton skeleton;
+	skeleton.p01_owner = p_rid;
+	skeleton_owner.initialize_rid(p_rid, skeleton);
+#else
 	skeleton_owner.initialize_rid(p_rid, Skeleton());
+#endif
 }
 
 void MeshStorage::skeleton_free(RID p_rid) {
@@ -2419,6 +2429,9 @@ void MeshStorage::skeleton_bone_set_transform(RID p_skeleton, int p_bone, const 
 	dataptr[11] = p_transform.origin.z;
 
 	_skeleton_make_dirty(skeleton);
+#ifdef MODULE_P01_PROBE_ENABLED
+	p01_observe_skeleton_setter(p_skeleton.get_id(), skeleton->version);
+#endif
 }
 
 Transform3D MeshStorage::skeleton_bone_get_transform(RID p_skeleton, int p_bone) const {
@@ -2502,7 +2515,12 @@ void MeshStorage::_update_dirty_skeletons() {
 		Skeleton *skeleton = skeleton_dirty_list;
 
 		if (skeleton->size) {
+#ifdef MODULE_P01_PROBE_ENABLED
+			const Error upload_error = RD::get_singleton()->buffer_update(skeleton->buffer, 0, skeleton->data.size() * sizeof(float), skeleton->data.ptr());
+			p01_observe_skeleton_upload(skeleton->p01_owner.get_id(), skeleton->buffer.get_id(), skeleton->data.size() * sizeof(float), upload_error);
+#else
 			RD::get_singleton()->buffer_update(skeleton->buffer, 0, skeleton->data.size() * sizeof(float), skeleton->data.ptr());
+#endif
 		}
 
 		skeleton_dirty_list = skeleton->dirty_list;
@@ -2510,6 +2528,9 @@ void MeshStorage::_update_dirty_skeletons() {
 		skeleton->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_SKELETON_BONES);
 
 		skeleton->version++;
+#ifdef MODULE_P01_PROBE_ENABLED
+		p01_observe_skeleton_version(skeleton->p01_owner.get_id(), skeleton->version);
+#endif
 
 		skeleton->dirty = false;
 		skeleton->dirty_list = nullptr;

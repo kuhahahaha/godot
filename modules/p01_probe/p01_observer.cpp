@@ -40,6 +40,19 @@ void p01_observe_buffer_write(uint64_t p_rid, uint32_t p_offset, uint32_t p_size
 	event.allocation_serial = p_serial;
 	append_event(event);
 }
+
+void p01_observe_skeleton_setter(uint64_t p_skeleton, uint64_t p_version) {
+	std::lock_guard<std::mutex> lock(hook_mutex); if (!current_epoch) return;
+	P01HookEvent event; event.rid = p_skeleton; event.kind = 10; event.content_version = p_version; event.success = true; append_event(event);
+}
+void p01_observe_skeleton_upload(uint64_t p_skeleton, uint64_t p_buffer, uint32_t p_size, int32_t p_error) {
+	std::lock_guard<std::mutex> lock(hook_mutex); if (!current_epoch) return;
+	P01HookEvent event; event.rid = p_skeleton; event.source_rid = p_buffer; event.kind = 11; event.size = p_size; event.success = p_error == 0; event.operation_error = p_error; append_event(event);
+}
+void p01_observe_skeleton_version(uint64_t p_skeleton, uint64_t p_version) {
+	std::lock_guard<std::mutex> lock(hook_mutex); if (!current_epoch) return;
+	P01HookEvent event; event.rid = p_skeleton; event.kind = 12; event.content_version = p_version; event.success = true; append_event(event);
+}
 void p01_observe_readback_queued(uint64_t p_rid, uint32_t p_size) {
 	std::lock_guard<std::mutex> lock(hook_mutex);
 	if (current_epoch == 0) { return; }

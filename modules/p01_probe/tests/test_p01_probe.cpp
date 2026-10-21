@@ -87,6 +87,23 @@ TEST_CASE("[P01] Failed update prefix is independent of absolute destination off
 	CHECK_FALSE(events[2].failed_prefix);
 	p01_hook_reset();
 }
+
+TEST_CASE("[P01] Skeleton producer events preserve setter upload and version order") {
+	p01_hook_reset(); p01_hook_begin(3);
+	p01_observe_skeleton_setter(10, 7);
+	p01_observe_skeleton_upload(10, 20, 48, OK);
+	p01_observe_skeleton_version(10, uint64_t(1) << 40);
+	const auto events = p01_hook_events(); REQUIRE(events.size() == 3);
+	CHECK(events[0].kind == 10); CHECK(events[1].kind == 11); CHECK(events[2].kind == 12);
+	CHECK(events[1].rid == 10); CHECK(events[1].source_rid == 20); CHECK(events[1].size == 48);
+	CHECK(events[1].operation_error == OK);
+	p01_observe_skeleton_upload(10, 20, 48, ERR_OUT_OF_MEMORY);
+	const auto failure = p01_hook_events().back();
+	CHECK_FALSE(failure.success); CHECK_FALSE(failure.failed_prefix);
+	CHECK(failure.operation_error == ERR_OUT_OF_MEMORY);
+	CHECK(events[2].content_version == (uint64_t(1) << 40)); CHECK(events[2].sequence == 3);
+	p01_hook_reset();
+}
 TEST_CASE("[P01] Capture full trace permits completion but poisons omitted evidence") {
 	P01Capture capture;
 	capture.begin(1);

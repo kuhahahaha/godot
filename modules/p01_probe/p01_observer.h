@@ -41,6 +41,8 @@ struct P01HookEvent {
 	uint64_t session_serial_hint = 0;
 	uint64_t source_allocation_serial = 0;
 	uint32_t writable_usage = 0, write_operation = 0;
+	uint64_t content_version = 0;
+	int32_t operation_error = 0;
 };
 
 // Engine-owned lifetime accounting. Transport/parent verdicts never release GPU
@@ -212,6 +214,9 @@ void p01_observe_buffer_clear(uint64_t p_rid, uint32_t p_offset, uint32_t p_size
 void p01_observe_buffer_copy(uint64_t p_src_rid, uint64_t p_dst_rid, uint32_t p_src_offset, uint32_t p_dst_offset, uint32_t p_size, uint64_t p_device = 0, uint64_t p_source_serial = 0, uint64_t p_destination_serial = 0);
 void p01_observe_readback_queued(uint64_t p_rid, uint32_t p_size);
 void p01_observe_readback_completed(uint64_t p_rid, uint32_t p_size);
+void p01_observe_skeleton_setter(uint64_t p_skeleton, uint64_t p_version);
+void p01_observe_skeleton_upload(uint64_t p_skeleton, uint64_t p_buffer, uint32_t p_size, int32_t p_error);
+void p01_observe_skeleton_version(uint64_t p_skeleton, uint64_t p_version);
 P01HookSnapshot p01_hook_snapshot();
 std::vector<P01HookEvent> p01_hook_events();
 void p01_hook_begin(uint64_t p_epoch, uint64_t p_allocation_serial = 0);
