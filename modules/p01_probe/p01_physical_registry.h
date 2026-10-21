@@ -9,6 +9,7 @@ class P01PhysicalRegistry {
 	struct Owner { uint64_t rid = 0; };
 	struct Allocation {
 		uint64_t driver = 0, serial = 0;
+		bool escaped = false;
 		std::array<Owner, 8> owners{};
 	};
 	std::array<Allocation, 128> allocations{};
@@ -24,4 +25,7 @@ public:
 	uint64_t resolve(uint64_t p_driver, uint64_t p_rid) const;
 	bool physically_live(uint64_t p_driver, uint64_t p_serial) const;
 	bool dispose(uint64_t p_driver, uint64_t p_serial);
+	bool mark_access_escaped(uint64_t p_driver, uint64_t p_serial);
+	// Unknown/stale identities cannot establish absence of native access.
+	bool access_escaped(uint64_t p_driver, uint64_t p_serial) const;
 };

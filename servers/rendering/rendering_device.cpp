@@ -1445,6 +1445,11 @@ uint64_t RenderingDevice::buffer_get_device_address(RID p_buffer) {
 	ERR_FAIL_NULL_V_MSG(buffer, 0, "Buffer argument is not a valid buffer of any type.");
 	ERR_FAIL_COND_V_MSG(!buffer->usage.has_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT), 0, "Buffer was not created with device address flag.");
 
+#ifdef MODULE_P01_PROBE_ENABLED
+	if (buffer->p01_allocation_serial && !p01_physical_registry.mark_access_escaped(buffer->driver_id.id, buffer->p01_allocation_serial)) {
+		p01_physical_coverage_failed.store(true);
+	}
+#endif
 	return driver->buffer_get_device_address(buffer->driver_id);
 }
 
@@ -1454,6 +1459,11 @@ uint8_t *RenderingDevice::buffer_persistent_map_advance(RID p_buffer) {
 	Buffer *buffer = _get_buffer_from_owner(p_buffer);
 	ERR_FAIL_NULL_V_MSG(buffer, nullptr, "Buffer argument is not a valid buffer of any type.");
 	direct_copy_count++;
+#ifdef MODULE_P01_PROBE_ENABLED
+	if (buffer->p01_allocation_serial && !p01_physical_registry.mark_access_escaped(buffer->driver_id.id, buffer->p01_allocation_serial)) {
+		p01_physical_coverage_failed.store(true);
+	}
+#endif
 	return driver->buffer_persistent_map_advance(buffer->driver_id, frames_drawn);
 }
 
@@ -8840,6 +8850,11 @@ uint64_t RenderingDevice::get_driver_resource(DriverResource p_resource, RID p_r
 			}
 			ERR_FAIL_NULL_V(buffer, 0);
 
+#ifdef MODULE_P01_PROBE_ENABLED
+			if (buffer->p01_allocation_serial && !p01_physical_registry.mark_access_escaped(buffer->driver_id.id, buffer->p01_allocation_serial)) {
+				p01_physical_coverage_failed.store(true);
+			}
+#endif
 			driver_id = buffer->driver_id.id;
 		} break;
 		case DRIVER_RESOURCE_COMPUTE_PIPELINE: {

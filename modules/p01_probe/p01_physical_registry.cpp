@@ -80,3 +80,23 @@ bool P01PhysicalRegistry::dispose(uint64_t p_driver, uint64_t p_serial) {
 	}
 	return false;
 }
+
+bool P01PhysicalRegistry::mark_access_escaped(uint64_t p_driver, uint64_t p_serial) {
+	std::lock_guard<std::mutex> lock(mutex);
+	if (!p_serial) { return false; }
+	for (Allocation &allocation : allocations) {
+		if (allocation.driver == p_driver && allocation.serial == p_serial) {
+			allocation.escaped = true;
+			return true;
+		}
+	}
+	return false;
+}
+bool P01PhysicalRegistry::access_escaped(uint64_t p_driver, uint64_t p_serial) const {
+	std::lock_guard<std::mutex> lock(mutex);
+	if (!p_serial) { return true; }
+	for (const Allocation &allocation : allocations) {
+		if (allocation.driver == p_driver && allocation.serial == p_serial) { return allocation.escaped; }
+	}
+	return true;
+}

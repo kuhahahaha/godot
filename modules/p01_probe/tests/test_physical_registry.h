@@ -55,4 +55,25 @@ TEST_CASE("[P01] Concurrent physical allocations preserve unique serials and liv
 	}
 }
 
+TEST_CASE("[P01] Escaped native access persists until exact physical disposal") {
+	P01PhysicalRegistry registry;
+	CHECK(registry.access_escaped(10, 0));
+	const auto serial = registry.allocate(10, 20);
+	REQUIRE(serial != 0);
+	CHECK_FALSE(registry.access_escaped(10, serial));
+	CHECK_FALSE(registry.mark_access_escaped(10, serial + 1));
+	CHECK(registry.add_alias(10, serial, 21));
+	CHECK(registry.mark_access_escaped(10, serial));
+	CHECK(registry.access_escaped(10, registry.resolve(10, 21)));
+	CHECK(registry.release_owner(10, serial, 20));
+	CHECK(registry.release_owner(10, serial, 21));
+	CHECK(registry.access_escaped(10, serial));
+	CHECK(registry.dispose(10, serial));
+	CHECK(registry.access_escaped(10, serial));
+	const auto replacement = registry.allocate(10, 22);
+	REQUIRE(replacement > serial);
+	CHECK_FALSE(registry.mark_access_escaped(10, serial));
+	CHECK_FALSE(registry.access_escaped(10, replacement));
+}
+
 }

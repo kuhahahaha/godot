@@ -30,6 +30,7 @@ Error P01NativeSource::capture_current(RID p_scene, RID p_mesh, RID p_skeleton, 
 	const RID buffer_rid = target.vertex_buffer[target.current_buffer];
 	const auto *buffer = rd->_get_buffer_from_owner(buffer_rid);
 	if (!buffer || buffer->size < 36 || !buffer->p01_allocation_serial || rd->p01_physical_registry.resolve(buffer->driver_id.id, buffer_rid.get_id()) != buffer->p01_allocation_serial) { return ERR_INVALID_DATA; }
+	if (rd->p01_physical_registry.access_escaped(buffer->driver_id.id, buffer->p01_allocation_serial)) { return ERR_UNAVAILABLE; }
 	P01NativeSourceObservation result;
 	result.scene = p_scene.get_id();
 	result.mesh = p_mesh.get_id();
