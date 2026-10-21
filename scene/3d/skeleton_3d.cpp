@@ -29,6 +29,10 @@
 /**************************************************************************/
 
 #include "skeleton_3d.h"
+#include "modules/modules_enabled.gen.h"
+#ifdef MODULE_P01_PROBE_ENABLED
+#include "modules/p01_probe/p01_observer.h"
+#endif
 #include "skeleton_3d.compat.inc"
 
 #include "core/object/callable_mp.h"
@@ -347,7 +351,13 @@ void Skeleton3D::_notification(int p_what) {
 				return;
 			}
 
+#ifdef MODULE_P01_PROBE_ENABLED
+			p01_observe_skeleton_signal(uint64_t(get_instance_id()), false);
+#endif
 			emit_signal(SceneStringName(skeleton_updated));
+#ifdef MODULE_P01_PROBE_ENABLED
+			p01_observe_skeleton_signal(uint64_t(get_instance_id()), true);
+#endif
 
 			// Update skins.
 			RenderingServer *rs = RenderingServer::get_singleton();
@@ -402,6 +412,9 @@ void Skeleton3D::_notification(int p_what) {
 				for (uint32_t i = 0; i < bind_count; i++) {
 					uint32_t bone_index = E->skin_bone_indices_ptrs[i];
 					ERR_CONTINUE(bone_index >= (uint32_t)len);
+#ifdef MODULE_P01_PROBE_ENABLED
+					p01_observe_skeleton_palette_request(uint64_t(get_instance_id()), skeleton.get_id(), i);
+#endif
 					rs->skeleton_bone_set_transform(skeleton, i, bonesptr[bone_index].global_pose * skin->get_bind_pose(i));
 				}
 			}

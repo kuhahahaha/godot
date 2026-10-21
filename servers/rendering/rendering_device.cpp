@@ -8900,6 +8900,14 @@ void RenderingDevice::capture_timestamp(const String &p_name) {
 uint64_t RenderingDevice::get_driver_resource(DriverResource p_resource, RID p_rid, uint64_t p_index) {
 	ERR_RENDER_THREAD_GUARD_V(0);
 
+#ifdef MODULE_P01_PROBE_ENABLED
+	// A native device, queue or descriptor export bypasses buffer-local hooks.
+	// Conservatively retain this loss of coverage for the whole RD lifetime.
+	if (p_resource == DRIVER_RESOURCE_LOGICAL_DEVICE || p_resource == DRIVER_RESOURCE_COMMAND_QUEUE || p_resource == DRIVER_RESOURCE_TOPMOST_OBJECT || p_resource == DRIVER_RESOURCE_UNIFORM_SET) {
+		p01_physical_registry.mark_device_access_escaped();
+	}
+#endif
+
 	uint64_t driver_id = 0;
 	switch (p_resource) {
 		case DRIVER_RESOURCE_LOGICAL_DEVICE:

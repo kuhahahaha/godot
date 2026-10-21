@@ -160,3 +160,24 @@ void p01_observe_buffer_dispose(uint64_t p_device, uint64_t p_driver, uint64_t p
 	event.success = true;
 	append_event(event);
 }
+
+void p01_observe_skeleton_signal(uint64_t p_object, bool p_after) {
+	std::lock_guard<std::mutex> lock(hook_mutex);
+	if (!current_epoch) { return; }
+	P01HookEvent event;
+	event.rid = p_object;
+	event.kind = p_after ? 14 : 13;
+	event.success = true;
+	append_event(event);
+}
+void p01_observe_skeleton_palette_request(uint64_t p_object, uint64_t p_skeleton, uint32_t p_bind) {
+	std::lock_guard<std::mutex> lock(hook_mutex);
+	if (!current_epoch) { return; }
+	P01HookEvent event;
+	event.rid = p_skeleton;
+	event.source_rid = p_object;
+	event.offset = p_bind;
+	event.kind = 15;
+	event.success = true;
+	append_event(event);
+}

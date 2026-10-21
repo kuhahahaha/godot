@@ -3,6 +3,26 @@
 #include "tests/test_macros.h"
 #include <thread>
 namespace TestP01PhysicalRegistry {
+TEST_CASE("[P01] Device native escape covers existing future and reused allocations") {
+	P01PhysicalRegistry registry;
+	const auto first = registry.allocate(10, 20);
+	REQUIRE(first != 0);
+	CHECK_FALSE(registry.access_escaped(10, first));
+	registry.mark_device_access_escaped();
+	CHECK(registry.access_escaped(10, first));
+	CHECK(registry.release_owner(10, first, 20));
+	CHECK(registry.dispose(10, first));
+	const auto reused = registry.allocate(10, 21);
+	REQUIRE(reused > first);
+	CHECK(registry.access_escaped(10, reused));
+	const auto future = registry.allocate(11, 22);
+	REQUIRE(future != 0);
+	CHECK(registry.access_escaped(11, future));
+	P01PhysicalRegistry fresh_device;
+	const auto clean = fresh_device.allocate(10, 20);
+	REQUIRE(clean != 0);
+	CHECK_FALSE(fresh_device.access_escaped(10, clean));
+}
 TEST_CASE("[P01] Physical allocation outlives owners and reused handles reject stale disposal") {
 	P01PhysicalRegistry registry;
 	const uint64_t serial = registry.allocate(10, 20);

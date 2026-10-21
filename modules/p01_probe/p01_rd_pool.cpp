@@ -83,6 +83,10 @@ Error P01RDPool::record_transport(uint32_t p_slot) {
 	if (!on_owner_thread()) { return ERR_UNAVAILABLE; }
 	if (has_active_list()) { return ERR_BUSY; }
 	if (p_slot >= capacity || !slots[p_slot].captured || slots[p_slot].transported) { return ERR_INVALID_PARAMETER; }
+	for (RID rid : {slots[p_slot].snapshot, slots[p_slot].consumer}) {
+		const Error error = qualify_buffer(rid);
+		if (error != OK) { return error; }
+	}
 	slots[p_slot].transported = true;
 	const auto list = rd->compute_list_begin();
 	if (list == RenderingDevice::INVALID_ID) {
@@ -106,6 +110,8 @@ Error P01RDPool::record_public(uint32_t p_slot, const P01PublicSnapshot &p_snaps
 	if (p_slot >= capacity || slots[p_slot].consumed) {
 		return ERR_INVALID_PARAMETER;
 	}
+	const Error qualification = qualify_buffer(slots[p_slot].snapshot);
+	if (qualification != OK) { return qualification; }
 	PackedByteArray payload;
 	Error error = p01_encode_gpu_payload(p_snapshot, payload);
 	if (error != OK) {
@@ -145,6 +151,10 @@ Error P01RDPool::record_native(uint32_t p_slot, RID p_source, uint32_t p_offset)
 	if (has_active_list()) { return ERR_BUSY; }
 	if (p_slot >= capacity || slots[p_slot].consumed || p_source.is_null() || p_offset > UINT32_MAX - 36) {
 		return ERR_INVALID_PARAMETER;
+	}
+	for (RID rid : {p_source, slots[p_slot].snapshot}) {
+		const Error qualification = qualify_buffer(rid);
+		if (qualification != OK) { return qualification; }
 	}
 	slots[p_slot].consumed = true;
 	const Error error = rd->buffer_copy(p_source, slots[p_slot].snapshot, p_offset, 0, 36);
@@ -217,6 +227,8 @@ Error P01RDPool::enqueue_readback(const P01ReadbackIdentity &p_identity, P01Read
 	if (rd->p01_physical_coverage_failed || !actual || p_identity.device != uint64_t(rd->get_instance_id()) || p_identity.allocation != actual->p01_allocation_serial || rd->p01_physical_registry.resolve(actual->driver_id.id, buffer.get_id()) != p_identity.allocation) {
 		return ERR_INVALID_DATA;
 	}
+	const Error qualification = qualify_buffer(buffer);
+	if (qualification != OK) { return qualification; }
 	if (queued_collector && !queued_collector->shares_state(p_collector)) { return ERR_INVALID_PARAMETER; }
 	Callable callback;
 	Error error = p_collector.reserve(p_identity, callback);
@@ -247,4 +259,25 @@ Error P01RDPool::physical_retirement_status() const {
 		if (device->p01_physical_registry.physically_live(retirements[i].driver, retirements[i].serial)) { return ERR_BUSY; }
 	}
 	return OK;
+}
+
+Error P01RDPool::qualify_buffer(RID p_buffer) const {
+	if (!rd || rd->p01_physical_coverage_failed) { return ERR_INVALID_DATA; }
+	const auto *buffer = rd->_get_buffer_from_owner(p_buffer);
+	if (!buffer || !buffer->p01_allocation_serial || rd->p01_physical_registry.resolve(buffer->driver_id.id, p_buffer.get_id()) != buffer->p01_allocation_serial) { return ERR_INVALID_DATA; }
+	if (rd->p01_physical_registry.access_escaped(buffer->driver_id.id, buffer->p01_allocation_serial)) { return ERR_UNAVAILABLE; }
+	return OK;
+}
+
+Error P01RDPool::validate_pair(const P01ReadbackIdentity &p_snapshot, const P01ReadbackIdentity &p_consumer, const P01ReadbackCollector &p_collector) const {
+	if (!rd) { return ERR_UNCONFIGURED; }
+	if (!on_owner_thread()) { return ERR_UNAVAILABLE; }
+	if (p_snapshot.slot >= capacity || p_snapshot.slot != p_consumer.slot) { return ERR_INVALID_PARAMETER; }
+	const Slot &slot = slots[p_snapshot.slot];
+	if (slot.snapshot.get_id() != p_snapshot.rid || slot.consumer.get_id() != p_consumer.rid) { return ERR_INVALID_DATA; }
+	for (RID rid : {slot.snapshot, slot.consumer}) {
+		const Error error = qualify_buffer(rid);
+		if (error != OK) { return error; }
+	}
+	return p_collector.validate_pair(p_snapshot, p_consumer);
 }

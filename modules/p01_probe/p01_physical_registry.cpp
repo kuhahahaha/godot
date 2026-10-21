@@ -94,7 +94,7 @@ bool P01PhysicalRegistry::mark_access_escaped(uint64_t p_driver, uint64_t p_seri
 }
 bool P01PhysicalRegistry::access_escaped(uint64_t p_driver, uint64_t p_serial) const {
 	std::lock_guard<std::mutex> lock(mutex);
-	if (!p_serial) { return true; }
+	if (device_access_escaped || !p_serial) { return true; }
 	for (const Allocation &allocation : allocations) {
 		if (allocation.driver == p_driver && allocation.serial == p_serial) { return allocation.escaped; }
 	}
@@ -108,4 +108,9 @@ uint64_t P01PhysicalRegistry::resolve_driver(uint64_t p_driver) const {
 		if (allocation.driver == p_driver && allocation.serial) return allocation.serial;
 	}
 	return 0;
+}
+
+void P01PhysicalRegistry::mark_device_access_escaped() {
+	std::lock_guard<std::mutex> lock(mutex);
+	device_access_escaped = true;
 }

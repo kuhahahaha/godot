@@ -214,6 +214,9 @@ void p01_observe_buffer_clear(uint64_t p_rid, uint32_t p_offset, uint32_t p_size
 void p01_observe_buffer_copy(uint64_t p_src_rid, uint64_t p_dst_rid, uint32_t p_src_offset, uint32_t p_dst_offset, uint32_t p_size, uint64_t p_device = 0, uint64_t p_source_serial = 0, uint64_t p_destination_serial = 0);
 void p01_observe_readback_queued(uint64_t p_rid, uint32_t p_size);
 void p01_observe_readback_completed(uint64_t p_rid, uint32_t p_size);
+// Main publication only; never an RT upload or GPU completion.
+void p01_observe_skeleton_signal(uint64_t p_object, bool p_after);
+void p01_observe_skeleton_palette_request(uint64_t p_object, uint64_t p_skeleton, uint32_t p_bind);
 void p01_observe_skeleton_setter(uint64_t p_skeleton, uint64_t p_version);
 void p01_observe_skeleton_upload(uint64_t p_skeleton, uint64_t p_buffer, uint32_t p_size, int32_t p_error);
 void p01_observe_skeleton_version(uint64_t p_skeleton, uint64_t p_version);

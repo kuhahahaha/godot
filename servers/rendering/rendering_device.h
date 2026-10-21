@@ -89,6 +89,7 @@ private:
 #ifdef TESTS_ENABLED
 	friend class TestShaderCompilePolicyAccess;
 	friend class P01RDPool;
+	friend class P01RDPoolTestAccess;
 	friend class P01NativeSource;
 	friend class P01WriteCensusTestAccess;
 #endif

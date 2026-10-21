@@ -14,6 +14,7 @@ class P01PhysicalRegistry {
 	};
 	std::array<Allocation, 128> allocations{};
 	uint64_t next_serial = 1;
+	bool device_access_escaped = false;
 	mutable std::mutex mutex;
 public:
 	P01PhysicalRegistry() = default;
@@ -26,6 +27,8 @@ public:
 	uint64_t resolve_driver(uint64_t p_driver) const;
 	bool physically_live(uint64_t p_driver, uint64_t p_serial) const;
 	bool dispose(uint64_t p_driver, uint64_t p_serial);
+	// Device/queue/descriptor exports can reach existing and future allocations.
+	void mark_device_access_escaped();
 	bool mark_access_escaped(uint64_t p_driver, uint64_t p_serial);
 	// Unknown/stale identities cannot establish absence of native access.
 	bool access_escaped(uint64_t p_driver, uint64_t p_serial) const;

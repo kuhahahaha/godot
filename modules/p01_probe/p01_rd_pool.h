@@ -7,6 +7,7 @@
 // Private RT-owned resources. Releasing these RIDs is logical release only;
 // the collector/observer must separately establish physical retirement.
 class P01RDPool {
+	friend class P01RDPoolTestAccess;
 	RenderingDevice *rd = nullptr;
 	ObjectID device_identity;
 	RID shaders[2];
@@ -31,6 +32,7 @@ class P01RDPool {
 	bool release_recorded = false;
 	bool retirement_invalid = false;
 	std::unique_ptr<P01ReadbackCollector> queued_collector;
+	Error qualify_buffer(RID p_buffer) const;
 	bool on_owner_thread() const;
 	bool has_active_list() const;
 	RID create_set(RID p_shader, RID p_source, RID p_destination);
@@ -47,6 +49,7 @@ public:
 	Error record_transport(uint32_t p_slot);
 	// Identity must come from the actual allocation registry at this RT call.
 	Error enqueue_readback(const P01ReadbackIdentity &p_identity, P01ReadbackCollector &p_collector);
+	Error validate_pair(const P01ReadbackIdentity &p_snapshot, const P01ReadbackIdentity &p_consumer, const P01ReadbackCollector &p_collector) const;
 	Error release();
 	// Only the listed buffer allocations, never K03 or whole-device retirement.
 	Error physical_retirement_status() const;

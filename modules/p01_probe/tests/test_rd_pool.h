@@ -82,3 +82,28 @@ public:
 TEST_CASE("[P01] Actual RD writable scanner records repeated uses and rejects unknown allocation") {
 	P01WriteCensusTestAccess::check_scanner();
 }
+
+class P01RDPoolTestAccess {
+public:
+	static void check_buffer_qualification() {
+		RenderingDevice device;
+		P01RDPool pool;
+		pool.rd = &device;
+		RenderingDevice::Buffer buffer;
+		buffer.driver_id.id = 701;
+		buffer.size = 64;
+		const RID rid = device.storage_buffer_owner.make_rid(buffer);
+		auto *actual = device.storage_buffer_owner.get_or_null(rid);
+		actual->p01_allocation_serial = device.p01_physical_registry.allocate(701, rid.get_id());
+		REQUIRE(actual->p01_allocation_serial != 0);
+		CHECK(pool.qualify_buffer(rid) == OK);
+		CHECK(pool.qualify_buffer(RID()) == ERR_INVALID_DATA);
+		CHECK(device.p01_physical_registry.mark_access_escaped(701, actual->p01_allocation_serial));
+		CHECK(pool.qualify_buffer(rid) == ERR_UNAVAILABLE);
+		device.storage_buffer_owner.free(rid);
+		pool.rd = nullptr;
+	}
+};
+TEST_CASE("[P01] Pool qualification rejects escaped actual allocations") {
+	P01RDPoolTestAccess::check_buffer_qualification();
+}

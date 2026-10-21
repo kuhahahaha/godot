@@ -378,3 +378,17 @@ TEST_CASE("[P01] Capture event inspection is a synchronized snapshot") {
 }
 
 } // namespace TestP01ProbeFixture
+
+TEST_CASE("[P01] Main skeleton signal brackets and palette request retain distinct owners") {
+	p01_hook_reset(); p01_hook_begin(8);
+	p01_observe_skeleton_signal(123, false);
+	p01_observe_skeleton_signal(123, true);
+	p01_observe_skeleton_palette_request(123, 456, 1);
+	const auto events = p01_hook_events();
+	REQUIRE(events.size() == 3);
+	CHECK(events[0].kind == 13); CHECK(events[1].kind == 14); CHECK(events[2].kind == 15);
+	CHECK(events[0].rid == 123); CHECK(events[1].rid == 123);
+	CHECK(events[2].rid == 456); CHECK(events[2].source_rid == 123); CHECK(events[2].offset == 1);
+	CHECK(events[0].sequence < events[1].sequence); CHECK(events[1].sequence < events[2].sequence);
+	p01_hook_reset();
+}
