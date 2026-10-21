@@ -1,9 +1,8 @@
 #include "p01_observer.h"
 #include <mutex>
 
-// Hook observations are scoped to the owning thread. RenderingDevice instances
-// may issue work concurrently; a process-global mutable snapshot would lose
-// events and introduce a data race between instances.
+// Session capture is serialized; physical operation identity remains separate
+// from session metadata. Missing physical serial stays unknown, never invented.
 static std::mutex hook_mutex;
 static P01HookSnapshot snapshot;
 static std::vector<P01HookEvent> events;
@@ -20,7 +19,7 @@ static void append_event(P01HookEvent p_event) {
 		return;
 	}
 	p_event.epoch = current_epoch;
-	p_event.allocation_serial = current_allocation_serial;
+	p_event.session_serial_hint = current_allocation_serial;
 	p_event.sequence = next_sequence++;
 	events.push_back(p_event);
 }
@@ -51,7 +50,10 @@ void p01_observe_readback_completed(uint64_t p_rid, uint32_t p_size) {
 void p01_observe_buffer_allocation(uint64_t p_rid, uint64_t p_device, uint64_t p_driver) {
 	std::lock_guard<std::mutex> lock(hook_mutex);
 	if (current_epoch == 0) { return; }
-	append_event({p_rid, p_device, p_driver, 0, 0, 0, 0, EVENT_ALLOCATE, true, false});
+	P01HookEvent event{p_rid, 0, 0, 0, 0, 0, 0, EVENT_ALLOCATE, true, false};
+	event.device = p_device;
+	event.driver = p_driver;
+	append_event(event);
 }
 void p01_observe_buffer_free(uint64_t p_rid) {
 	std::lock_guard<std::mutex> lock(hook_mutex);
@@ -66,7 +68,10 @@ void p01_observe_buffer_clear(uint64_t p_rid, uint32_t p_offset, uint32_t p_size
 void p01_observe_buffer_copy(uint64_t p_src_rid, uint64_t p_dst_rid, uint32_t p_src_offset, uint32_t p_dst_offset, uint32_t p_size) {
 	std::lock_guard<std::mutex> lock(hook_mutex);
 	if (current_epoch == 0) { return; }
-	append_event({p_dst_rid, p_src_rid, p_dst_rid, 0, p_dst_offset, p_size, p_size, EVENT_COPY, true, false});
+	P01HookEvent event{p_dst_rid, 0, 0, 0, p_dst_offset, p_size, p_size, EVENT_COPY, true, false};
+	event.source_rid = p_src_rid;
+	event.source_offset = p_src_offset;
+	append_event(event);
 }
 P01HookSnapshot p01_hook_snapshot() { std::lock_guard<std::mutex> lock(hook_mutex); return snapshot; }
 std::vector<P01HookEvent> p01_hook_events() { std::lock_guard<std::mutex> lock(hook_mutex); return events; }

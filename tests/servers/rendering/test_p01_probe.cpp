@@ -145,7 +145,8 @@ TEST_CASE("[P01] Lifetime") {
 	const std::vector<P01HookEvent> events = p01_hook_events();
 	REQUIRE(events.size() == 4);
 	CHECK(events.front().epoch == 42);
-	CHECK(events.front().allocation_serial == 99);
+	CHECK(events.front().allocation_serial == 0);
+	CHECK(events.front().session_serial_hint == 99);
 	CHECK(events.front().sequence == 1);
 }
 } // namespace TestP01Probe

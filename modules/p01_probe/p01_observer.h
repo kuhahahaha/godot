@@ -35,6 +35,10 @@ struct P01HookEvent {
 	uint32_t offset = 0, size = 0, range = 0;
 	uint8_t kind = 0;
 	bool success = false, failed_prefix = false;
+	// Operation identity is distinct from session metadata.
+	uint64_t device = 0, driver = 0, source_rid = 0;
+	uint32_t source_offset = 0;
+	uint64_t session_serial_hint = 0;
 };
 
 // Engine-owned lifetime accounting. Transport/parent verdicts never release GPU
