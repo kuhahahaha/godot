@@ -3,10 +3,71 @@
 #include "modules/p01_probe/p01_fixture.h"
 #include "modules/p01_probe/p01_capture.h"
 #include "modules/p01_probe/p01_kernels.h"
+#include "modules/p01_probe/p01_transport.h"
+#include <atomic>
 
 TEST_FORCE_LINK(test_p01_probe_fixture)
 
 namespace TestP01ProbeFixture {
+
+TEST_CASE("[P01] Transport capacity preserves FIFO during poisoned drain") {
+	P01TransportQueue queue;
+	for (uint64_t token = 1; token <= 128; token++) {
+		P01CaptureEvent event{};
+		event.token = token;
+		REQUIRE(queue.push(event));
+	}
+	CHECK_FALSE(queue.push({}));
+	CHECK(queue.is_poisoned());
+	CHECK(queue.size() == 128);
+	for (uint64_t token = 1; token <= 128; token++) {
+		P01CaptureEvent event{};
+		REQUIRE(queue.pop(event));
+		CHECK(event.token == token);
+	}
+	CHECK(queue.size() == 0);
+	CHECK_FALSE(queue.push({}));
+}
+
+TEST_CASE("[P01] Transport competing initial owners poison without mutation") {
+	for (int round = 0; round < 200; round++) {
+		P01TransportQueue queue;
+		std::atomic<int> ready{0};
+		std::atomic<bool> go{false};
+		std::thread workers[2];
+		for (auto &worker : workers) {
+			worker = std::thread([&] {
+				P01CaptureEvent event{};
+				ready.fetch_add(1);
+				while (!go.load()) { std::this_thread::yield(); }
+				queue.pop(event);
+			});
+		}
+		while (ready.load() != 2) { std::this_thread::yield(); }
+		go.store(true);
+		for (auto &worker : workers) { worker.join(); }
+		CHECK(queue.is_poisoned());
+		CHECK(queue.size() == 0);
+	}
+}
+
+TEST_CASE("[P01] Transport rejects foreign writes and permits owner drain") {
+	P01TransportQueue queue;
+	P01CaptureEvent event{};
+	event.token = 71;
+	REQUIRE(queue.push(event));
+	bool accepted = true;
+	std::thread worker([&] { accepted = queue.push(event); });
+	worker.join();
+	CHECK_FALSE(accepted);
+	CHECK(queue.is_poisoned());
+	CHECK(queue.size() == 1);
+	CHECK_FALSE(queue.push(event));
+	P01CaptureEvent result{};
+	REQUIRE(queue.pop(result));
+	CHECK(result.token == 71);
+	CHECK_FALSE(queue.pop(result));
+}
 
 TEST_CASE("[P01] Fixture lifecycle") {
 	P01Fixture fixture;
