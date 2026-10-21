@@ -23,6 +23,7 @@ public:
 	bool add_alias(uint64_t p_driver, uint64_t p_serial, uint64_t p_rid);
 	bool release_owner(uint64_t p_driver, uint64_t p_serial, uint64_t p_rid);
 	uint64_t resolve(uint64_t p_driver, uint64_t p_rid) const;
+	uint64_t resolve_driver(uint64_t p_driver) const;
 	bool physically_live(uint64_t p_driver, uint64_t p_serial) const;
 	bool dispose(uint64_t p_driver, uint64_t p_serial);
 	bool mark_access_escaped(uint64_t p_driver, uint64_t p_serial);

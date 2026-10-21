@@ -14,8 +14,10 @@ TEST_CASE("[P01] Physical allocation outlives owners and reused handles reject s
 	CHECK(registry.release_owner(10, serial, 21));
 	CHECK(registry.resolve(10, 20) == 0);
 	CHECK(registry.physically_live(10, serial));
+	CHECK(registry.resolve_driver(10) == serial);
 	CHECK(registry.allocate(10, 22) == 0);
 	CHECK(registry.dispose(10, serial));
+	CHECK(registry.resolve_driver(10) == 0);
 	const uint64_t replacement = registry.allocate(10, 22);
 	CHECK(replacement > serial);
 	CHECK_FALSE(registry.dispose(10, serial));
@@ -76,4 +78,30 @@ TEST_CASE("[P01] Escaped native access persists until exact physical disposal") 
 	CHECK_FALSE(registry.access_escaped(10, replacement));
 }
 
+}
+#include "modules/p01_probe/p01_write_census.h"
+#include "modules/p01_probe/p01_observer.h"
+namespace TestP01WriteCensus {
+TEST_CASE("[P01] Shared writable event log rejects unknown identities and bounds events") {
+	p01_hook_reset();
+	p01_write_census_record(1, 2, 3, 11, P01_DRAW);
+	CHECK_FALSE(p01_hook_is_poisoned());
+	CHECK(p01_hook_events().empty());
+	p01_hook_begin(1);
+	p01_write_census_record(0, 2, 3, 11, P01_DRAW);
+	CHECK(p01_hook_is_poisoned());
+	p01_write_census_record(1, 2, 3, 11, P01_DRAW);
+	CHECK(p01_hook_events().empty());
+	p01_hook_reset(); p01_hook_begin(2);
+	for (uint32_t i = 0; i < 4096; i++) p01_write_census_record(1, 2, 3, 11, P01_DRAW);
+	CHECK_FALSE(p01_hook_is_poisoned());
+	const auto events = p01_write_census_events();
+	REQUIRE(events.size() == 4096);
+	CHECK(events.back().sequence == 4096);
+	CHECK(events.back().epoch == 2);
+	p01_write_census_record(1, 2, 3, 11, P01_DRAW);
+	CHECK(p01_hook_is_poisoned());
+	CHECK(p01_hook_events().size() == 4096);
+	p01_hook_reset();
+}
 }

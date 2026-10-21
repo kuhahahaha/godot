@@ -46,6 +46,7 @@
 #include "modules/modules_enabled.gen.h"
 #ifdef MODULE_P01_PROBE_ENABLED
 #include "modules/p01_probe/p01_observer.h"
+#include "modules/p01_probe/p01_write_census.h"
 #endif
 
 #ifdef MODULE_GLSLANG_ENABLED
@@ -1247,6 +1248,19 @@ Error RenderingDevice::driver_callback_add(RDD::DriverCallback p_callback, void 
 	}
 
 	draw_graph.add_driver_callback(p_callback, p_userdata, trackers, usages);
+#ifdef MODULE_P01_PROBE_ENABLED
+	if (p01_write_census_active()) {
+		for (uint32_t i = 0; i < p_resources.size(); i++) {
+			const auto &resource = p_resources[i];
+			const auto usage = usages[i];
+			if (resource.type != CALLBACK_RESOURCE_TYPE_BUFFER) continue;
+			const Buffer *buffer = _get_buffer_from_owner(resource.rid);
+			if (!buffer) { p01_write_census_poison(); continue; }
+			_p01_record_buffer_usage(buffer->driver_id.id, usage, P01_CALLBACK);
+		}
+	}
+#endif
+
 
 	return OK;
 }
@@ -6220,6 +6234,13 @@ void RenderingDevice::draw_list_draw(DrawListID p_list, bool p_use_indices, uint
 		draw_graph.add_draw_list_draw(to_draw, p_instances);
 	}
 
+#ifdef MODULE_P01_PROBE_ENABLED
+	if (p01_write_census_active()) {
+		for (uint32_t i = 0; i < draw_list.state.set_count; i++) {
+			if (draw_list.state.sets[i].pipeline_expected_format != 0) _p01_record_writable_set(draw_list.state.sets[i].uniform_set, P01_DRAW);
+		}
+	}
+#endif
 	draw_list.state.draw_count++;
 }
 
@@ -6323,6 +6344,13 @@ void RenderingDevice::draw_list_draw_indirect(DrawListID p_list, bool p_use_indi
 		draw_graph.add_draw_list_draw_indirect(buffer->driver_id, p_offset, p_draw_count, p_stride);
 	}
 
+#ifdef MODULE_P01_PROBE_ENABLED
+	if (p01_write_census_active()) {
+		for (uint32_t i = 0; i < draw_list.state.set_count; i++) {
+			if (draw_list.state.sets[i].pipeline_expected_format != 0) _p01_record_writable_set(draw_list.state.sets[i].uniform_set, P01_DRAW_INDIRECT);
+		}
+	}
+#endif
 	draw_list.state.draw_count++;
 
 	if (buffer->draw_tracker != nullptr) {
@@ -6701,6 +6729,13 @@ void RenderingDevice::raytracing_list_trace_rays(RaytracingListID p_list, uint32
 	}
 
 	draw_graph.add_raytracing_list_trace_rays(raygen_sbt, miss_sbt, rdd_hit_sbt, p_width, p_height, p_depth);
+#ifdef MODULE_P01_PROBE_ENABLED
+	if (p01_write_census_active()) {
+		for (uint32_t i = 0; i < raytracing_list.state.set_count; i++) {
+			if (raytracing_list.state.sets[i].pipeline_expected_format != 0) _p01_record_writable_set(raytracing_list.state.sets[i].uniform_set, P01_RAYTRACE);
+		}
+	}
+#endif
 	raytracing_list.state.trace_count++;
 }
 
@@ -6985,6 +7020,13 @@ void RenderingDevice::compute_list_dispatch(ComputeListID p_list, uint32_t p_x_g
 		draw_graph.add_compute_list_bind_uniform_sets(compute_list.state.pipeline_shader_driver_id, valid_descriptor_ids, first_set_index, valid_set_count);
 	}
 	draw_graph.add_compute_list_dispatch(p_x_groups, p_y_groups, p_z_groups);
+#ifdef MODULE_P01_PROBE_ENABLED
+	if (p01_write_census_active()) {
+		for (uint32_t i = 0; i < compute_list.state.set_count; i++) {
+			if (compute_list.state.sets[i].pipeline_expected_format != 0) _p01_record_writable_set(compute_list.state.sets[i].uniform_set, P01_COMPUTE);
+		}
+	}
+#endif
 	compute_list.state.dispatch_count++;
 }
 
@@ -7123,6 +7165,13 @@ void RenderingDevice::compute_list_dispatch_indirect(ComputeListID p_list, RID p
 	}
 
 	draw_graph.add_compute_list_dispatch_indirect(buffer->driver_id, p_offset);
+#ifdef MODULE_P01_PROBE_ENABLED
+	if (p01_write_census_active()) {
+		for (uint32_t i = 0; i < compute_list.state.set_count; i++) {
+			if (compute_list.state.sets[i].pipeline_expected_format != 0) _p01_record_writable_set(compute_list.state.sets[i].uniform_set, P01_COMPUTE_INDIRECT);
+		}
+	}
+#endif
 	compute_list.state.dispatch_count++;
 
 	if (buffer->draw_tracker != nullptr) {
@@ -7558,6 +7607,53 @@ bool RenderingDevice::_texture_make_mutable(Texture *p_texture, RID p_texture_id
 		return true;
 	}
 }
+
+
+#ifdef MODULE_P01_PROBE_ENABLED
+void RenderingDevice::_p01_record_buffer_usage(uint64_t p_driver, RDG::ResourceUsage p_usage, uint32_t p_operation) {
+	if (!p01_write_census_active()) return;
+	switch (p_usage) {
+		case RDG::RESOURCE_USAGE_COPY_FROM:
+		case RDG::RESOURCE_USAGE_UNIFORM_BUFFER_READ:
+		case RDG::RESOURCE_USAGE_INDIRECT_BUFFER_READ:
+		case RDG::RESOURCE_USAGE_TEXTURE_BUFFER_READ:
+		case RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ:
+		case RDG::RESOURCE_USAGE_VERTEX_BUFFER_READ:
+		case RDG::RESOURCE_USAGE_INDEX_BUFFER_READ: return;
+		case RDG::RESOURCE_USAGE_COPY_TO:
+		case RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ_WRITE:
+		case RDG::RESOURCE_USAGE_TEXTURE_BUFFER_READ_WRITE:
+		case RDG::RESOURCE_USAGE_GENERAL: break;
+		default: p01_write_census_poison(); return;
+	}
+	if (p01_physical_coverage_failed) { p01_write_census_poison(); return; }
+	p01_write_census_record(p_driver, uint64_t(get_instance_id()), p01_physical_registry.resolve_driver(p_driver), uint32_t(p_usage), p_operation);
+}
+void RenderingDevice::_p01_record_writable_uses(const Vector<RDG::ResourceTracker *> &p_trackers, const Vector<RDG::ResourceUsage> &p_usages, uint32_t p_operation) {
+	if (!p01_write_census_active()) return;
+	if (p_trackers.size() != p_usages.size()) { p01_write_census_poison(); return; }
+	for (int i = 0; i < p_trackers.size(); i++) {
+		const auto *tracker = p_trackers[i];
+		if (!tracker) { p01_write_census_poison(); continue; }
+		// Fixed P01 buffers do not alias texture or acceleration-structure allocations.
+		if (!tracker->buffer_driver_id) {
+			if (!tracker->texture_driver_id && !tracker->acceleration_structure_driver_id) p01_write_census_poison();
+			continue;
+		}
+		_p01_record_buffer_usage(tracker->buffer_driver_id.id, p_usages[i], p_operation);
+	}
+}
+void RenderingDevice::_p01_record_writable_set(RID p_set, uint32_t p_operation) {
+	if (!p01_write_census_active()) return;
+	const UniformSet *set = uniform_set_owner.get_or_null(p_set);
+	if (!set) { p01_write_census_poison(); return; }
+	_p01_record_writable_uses(set->draw_trackers, set->draw_trackers_usage, p_operation);
+	// Writable buffers must already have trackers at reflected binding creation.
+	for (const auto &entry : set->untracked_usage) {
+		if (entry.value == RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ_WRITE || entry.value == RDG::RESOURCE_USAGE_TEXTURE_BUFFER_READ_WRITE || entry.value == RDG::RESOURCE_USAGE_GENERAL) p01_write_census_poison();
+	}
+}
+#endif
 
 bool RenderingDevice::_buffer_make_mutable(Buffer *p_buffer, RID p_buffer_id) {
 	if (p_buffer->draw_tracker != nullptr) {

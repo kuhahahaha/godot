@@ -90,6 +90,7 @@ private:
 	friend class TestShaderCompilePolicyAccess;
 	friend class P01RDPool;
 	friend class P01NativeSource;
+	friend class P01WriteCensusTestAccess;
 #endif
 	static RenderingDevice *singleton;
 #ifdef MODULE_P01_PROBE_ENABLED
@@ -1761,6 +1762,11 @@ private:
 
 	bool _texture_make_mutable(Texture *p_texture, RID p_texture_id);
 	bool _buffer_make_mutable(Buffer *p_buffer, RID p_buffer_id);
+#ifdef MODULE_P01_PROBE_ENABLED
+	void _p01_record_writable_uses(const Vector<RDG::ResourceTracker *> &p_trackers, const Vector<RDG::ResourceUsage> &p_usages, uint32_t p_operation);
+	void _p01_record_writable_set(RID p_set, uint32_t p_operation);
+	void _p01_record_buffer_usage(uint64_t p_driver, RDG::ResourceUsage p_usage, uint32_t p_operation);
+#endif
 	bool _vertex_array_make_mutable(VertexArray *p_vertex_array, RID p_resource_id, RDG::ResourceTracker *p_resource_tracker);
 	bool _index_array_make_mutable(IndexArray *p_index_array, RDG::ResourceTracker *p_resource_tracker);
 	bool _uniform_set_make_mutable(UniformSet *p_uniform_set, RID p_resource_id, RDG::ResourceTracker *p_resource_tracker);

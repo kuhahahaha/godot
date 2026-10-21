@@ -40,6 +40,7 @@ struct P01HookEvent {
 	uint32_t source_offset = 0;
 	uint64_t session_serial_hint = 0;
 	uint64_t source_allocation_serial = 0;
+	uint32_t writable_usage = 0, write_operation = 0;
 };
 
 // Engine-owned lifetime accounting. Transport/parent verdicts never release GPU

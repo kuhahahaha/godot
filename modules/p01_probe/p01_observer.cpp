@@ -1,4 +1,5 @@
 #include "p01_observer.h"
+#include "p01_write_census.h"
 #include <mutex>
 
 // Session capture is serialized; physical operation identity remains separate
@@ -94,4 +95,31 @@ void p01_hook_reset() {
 	current_epoch = 0;
 	current_allocation_serial = 0;
 	capture_poisoned = false;
+}
+
+// Writable uses share copy/write/free sequencing and the same bounded event log.
+bool p01_write_census_active() { std::lock_guard<std::mutex> lock(hook_mutex); return current_epoch != 0; }
+void p01_write_census_poison() { std::lock_guard<std::mutex> lock(hook_mutex); if (current_epoch) capture_poisoned = true; }
+bool p01_write_census_is_poisoned() { return p01_hook_is_poisoned(); }
+void p01_write_census_record(uint64_t p_driver, uint64_t p_device, uint64_t p_serial, uint32_t p_usage, uint32_t p_operation) {
+	std::lock_guard<std::mutex> lock(hook_mutex);
+	if (!current_epoch || capture_poisoned) return;
+	if (!p_driver || !p_device || !p_serial || !p_usage || p_operation < P01_DRAW || p_operation > P01_CALLBACK) { capture_poisoned = true; return; }
+	P01HookEvent event;
+	event.kind = 8;
+	event.driver = p_driver;
+	event.device = p_device;
+	event.allocation_serial = p_serial;
+	event.writable_usage = p_usage;
+	event.write_operation = p_operation;
+	event.success = true;
+	append_event(event);
+}
+std::vector<P01WritableUse> p01_write_census_events() {
+	std::lock_guard<std::mutex> lock(hook_mutex);
+	std::vector<P01WritableUse> result;
+	for (const auto &event : events) {
+		if (event.kind == 8) result.push_back({ event.driver, event.device, event.allocation_serial, event.sequence, event.epoch, event.writable_usage, event.write_operation });
+	}
+	return result;
 }

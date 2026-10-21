@@ -100,3 +100,12 @@ bool P01PhysicalRegistry::access_escaped(uint64_t p_driver, uint64_t p_serial) c
 	}
 	return true;
 }
+
+uint64_t P01PhysicalRegistry::resolve_driver(uint64_t p_driver) const {
+	std::lock_guard<std::mutex> lock(mutex);
+	if (!p_driver) return 0;
+	for (const Allocation &allocation : allocations) {
+		if (allocation.driver == p_driver && allocation.serial) return allocation.serial;
+	}
+	return 0;
+}
