@@ -82,6 +82,7 @@ public:
 private:
 #ifdef TESTS_ENABLED
 	friend class TestShaderCompilePolicyAccess;
+	friend class P01RDPool;
 #endif
 	static RenderingDevice *singleton;
 
