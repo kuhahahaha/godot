@@ -94,6 +94,24 @@ TEST_CASE("[P01] Stale completion cannot consume a distinct current tuple") {
 	CHECK_FALSE(capture.seal());
 }
 
+TEST_CASE("[P01] Token and queue sequence remain independent identities") {
+	P01Capture capture;
+	capture.begin(4);
+	P01CaptureEvent first{0, 1, 7, 4, 2, 3, 4, 5, 11, 0, 4, 0};
+	P01CaptureEvent second = first;
+	second.queue_sequence = 12;
+	REQUIRE(capture.append(first));
+	REQUIRE(capture.append(second));
+	CHECK_FALSE(capture.is_poisoned());
+	first.kind = 2;
+	second.kind = 2;
+	CHECK(capture.append(first));
+	CHECK(capture.append(second));
+	CHECK(capture.drain_complete());
+	CHECK(capture.dispose_physical());
+	CHECK(capture.seal());
+}
+
 TEST_CASE("[P01] Transport foreign pop cannot consume owner data") {
 	P01TransportQueue queue;
 	P01CaptureEvent event{};
