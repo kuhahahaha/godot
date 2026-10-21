@@ -1,5 +1,9 @@
 #include "receiver_contract.h"
 
+#include "tests/test_macros.h"
+
+TEST_FORCE_LINK(receiver_contract)
+
 bool P01ReceiverContract::accept_bytes(const uint8_t *p_data, size_t p_size) {
 	if (state.saw_seal || state.poisoned || (p_size && !p_data)) { state.poisoned = true; return false; }
 	state.bytes += p_size;
