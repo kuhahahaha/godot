@@ -182,3 +182,29 @@ Error P01RDPool::release() {
 	capacity = 0;
 	return OK;
 }
+
+Error P01RDPool::enqueue_readback(const P01ReadbackIdentity &p_identity, P01ReadbackCollector &p_collector) {
+	if (!rd) { return ERR_UNCONFIGURED; }
+	if (!on_owner_thread()) { return ERR_UNAVAILABLE; }
+	if (has_active_list()) { return ERR_BUSY; }
+	if (p_identity.slot >= capacity) { return ERR_INVALID_PARAMETER; }
+	Slot &slot = slots[p_identity.slot];
+	const uint32_t role = uint32_t(p_identity.consumer);
+	const RID buffer = p_identity.consumer ? slot.consumer : slot.snapshot;
+	if (!slot.transported || slot.readback_attempted[role] || buffer.get_id() != p_identity.rid) { return ERR_INVALID_PARAMETER; }
+	Callable callback;
+	Error error = p_collector.reserve(p_identity, callback);
+	if (error != OK) { return error; }
+	slot.readback_attempted[role] = true;
+	// _stall_for_frame invokes this engine-owned callback only after its
+	// frame fence wait and staging-byte copy. Never submit/sync the main RD.
+	error = rd->buffer_get_data_async(buffer, callback, 0, 64);
+	if (error != OK) {
+		// RD stores the callback only after successful staging preparation.
+		// Any recorded staging prefix still retires through normal RD frames;
+		// cancellation is accounting, not physical retirement or reuse.
+		p_collector.cancel_unqueued(p_identity);
+		return error;
+	}
+	return p_collector.mark_enqueued(p_identity);
+}

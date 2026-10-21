@@ -1,4 +1,5 @@
 #include "p01_readback_collector.h"
+#include "core/io/marshalls.h"
 
 bool P01ReadbackIdentity::operator==(const P01ReadbackIdentity &p_other) const {
 	return run == p_other.run && epoch == p_other.epoch && token == p_other.token && queue == p_other.queue && device == p_other.device && allocation == p_other.allocation && rid == p_other.rid && owner == p_other.owner && alias == p_other.alias && slot == p_other.slot && consumer == p_other.consumer;
@@ -114,5 +115,20 @@ Error P01ReadbackCollector::mark_enqueued(const P01ReadbackIdentity &p_identity)
 	State::Entry &entry = state->entries[p_identity.slot * 2 + uint32_t(p_identity.consumer)];
 	if (!entry.reserved || !(entry.identity == p_identity) || entry.canceled || entry.enqueued) { return ERR_INVALID_PARAMETER; }
 	entry.enqueued = true;
+	return OK;
+}
+
+Error P01ReadbackCollector::validate_pair(const P01ReadbackIdentity &p_snapshot, const P01ReadbackIdentity &p_consumer) const {
+	if (p_snapshot.consumer || !p_consumer.consumer || p_snapshot.slot != p_consumer.slot || p_snapshot.run != p_consumer.run || p_snapshot.epoch != p_consumer.epoch) { return ERR_INVALID_PARAMETER; }
+	PackedByteArray snapshot, consumer;
+	Error error = copy_completed(p_snapshot, snapshot);
+	if (error != OK) { return error; }
+	error = copy_completed(p_consumer, consumer);
+	if (error != OK) { return error; }
+	for (int word = 0; word < 16; word++) {
+		const uint32_t a = decode_uint32(snapshot.ptr() + word * 4);
+		const uint32_t b = decode_uint32(consumer.ptr() + word * 4);
+		if (a != b || (word >= 9 && a != 0x7fc12345u)) { return ERR_INVALID_DATA; }
+	}
 	return OK;
 }

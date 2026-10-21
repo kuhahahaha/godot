@@ -92,4 +92,53 @@ TEST_CASE("[P01] Collector rejects malformed requests and malformed completed by
 	CHECK(collector.reserve(identity(1), other) == ERR_UNAVAILABLE);
 }
 
+TEST_CASE("[P01] S02 a14 requires its own callbacks even when a12 bytes match") {
+	P01ReadbackCollector collector(1, 2, false);
+	const auto a12_snapshot = identity(0);
+	const auto a14_snapshot = identity(1);
+	const auto a14_consumer = identity(1, true);
+	Callable old_callback, snapshot_callback, consumer_callback;
+	CHECK(collector.reserve(a12_snapshot, old_callback) == OK);
+	CHECK(collector.reserve(a14_snapshot, snapshot_callback) == OK);
+	CHECK(collector.reserve(a14_consumer, consumer_callback) == OK);
+	const auto bytes = p01_initial_guarded_buffer();
+	old_callback.call(bytes);
+	collector.close();
+	PackedByteArray output;
+	CHECK(collector.copy_completed(a12_snapshot, output) == OK);
+	CHECK(collector.copy_completed(a14_snapshot, output) == ERR_BUSY);
+	CHECK(collector.copy_completed(a14_consumer, output) == ERR_BUSY);
+	CHECK_FALSE(collector.drained());
+	snapshot_callback.call(bytes);
+	CHECK(collector.copy_completed(a14_snapshot, output) == OK);
+	CHECK(collector.copy_completed(a14_consumer, output) == ERR_BUSY);
+	CHECK_FALSE(collector.drained());
+	consumer_callback.call(bytes);
+	CHECK(collector.copy_completed(a14_consumer, output) == OK);
+	CHECK(collector.drained());
+	CHECK_FALSE(collector.poisoned());
+}
+
+TEST_CASE("[P01] Readback pair rejects guard damage and bitwise transport mismatch") {
+	for (int corruption : { -1, 0, 36, 63 }) {
+		P01ReadbackCollector collector(1, 2, false);
+		Callable snapshot_callback, consumer_callback;
+		const auto snapshot_id = identity();
+		const auto consumer_id = identity(0, true);
+		CHECK(collector.reserve(snapshot_id, snapshot_callback) == OK);
+		CHECK(collector.reserve(consumer_id, consumer_callback) == OK);
+		CHECK(collector.validate_pair(snapshot_id, consumer_id) == ERR_BUSY);
+		auto snapshot = p01_initial_guarded_buffer();
+		auto consumer = p01_initial_guarded_buffer();
+		if (corruption >= 0) { consumer.set(corruption, consumer[corruption] ^ 1); }
+		snapshot_callback.call(snapshot);
+		consumer_callback.call(consumer);
+		CHECK(collector.validate_pair(snapshot_id, consumer_id) == (corruption < 0 ? OK : ERR_INVALID_DATA));
+		CHECK(collector.validate_pair(consumer_id, snapshot_id) == ERR_INVALID_PARAMETER);
+		auto wrong = consumer_id;
+		wrong.slot = 1;
+		CHECK(collector.validate_pair(snapshot_id, wrong) == ERR_INVALID_PARAMETER);
+	}
+}
+
 }

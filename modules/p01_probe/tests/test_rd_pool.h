@@ -11,6 +11,8 @@ TEST_CASE("[P01] Main RD pool rejects absent device without admitting recordings
 	CHECK(pool.initialize(true) == ERR_UNAVAILABLE);
 	CHECK(pool.record_public(0, P01PublicSnapshot()) == ERR_UNCONFIGURED);
 	CHECK(pool.record_native(0, RID(), 0) == ERR_UNCONFIGURED);
+	P01ReadbackCollector collector(1, 2, false);
+	CHECK(pool.enqueue_readback(P01ReadbackIdentity(), collector) == ERR_UNCONFIGURED);
 	CHECK(pool.release() == OK);
 	CHECK(pool.release() == OK);
 }

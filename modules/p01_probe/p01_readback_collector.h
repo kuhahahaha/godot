@@ -29,6 +29,8 @@ public:
 	// Never cancel accepted work or use this for timeout cleanup.
 	Error cancel_unqueued(const P01ReadbackIdentity &p_identity);
 	Error copy_completed(const P01ReadbackIdentity &p_identity, PackedByteArray &r_bytes) const;
+	// Requires both original role requests; checks complete64B guards/transport.
+	Error validate_pair(const P01ReadbackIdentity &p_snapshot, const P01ReadbackIdentity &p_consumer) const;
 	void close();
 	bool drained() const;
 	bool poisoned() const;
