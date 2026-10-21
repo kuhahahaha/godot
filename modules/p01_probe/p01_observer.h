@@ -204,10 +204,11 @@ struct P01HookSnapshot {
 	uint64_t readback_queued_count = 0;
 	uint64_t readback_completed_count = 0;
 };
-void p01_observe_buffer_write(uint64_t p_rid, uint32_t p_offset, uint32_t p_size, bool p_success);
+void p01_observe_buffer_write(uint64_t p_rid, uint32_t p_offset, uint32_t p_size, bool p_success, uint64_t p_device = 0, uint64_t p_driver = 0, uint64_t p_serial = 0, bool p_failed_prefix = false);
 void p01_observe_buffer_allocation(uint64_t p_rid, uint64_t p_device, uint64_t p_driver, uint64_t p_serial = 0);
-void p01_observe_buffer_free(uint64_t p_rid);
-void p01_observe_buffer_clear(uint64_t p_rid, uint32_t p_offset, uint32_t p_size);
+void p01_observe_buffer_free(uint64_t p_rid, uint64_t p_device = 0, uint64_t p_driver = 0, uint64_t p_serial = 0);
+void p01_observe_buffer_dispose(uint64_t p_device, uint64_t p_driver, uint64_t p_serial);
+void p01_observe_buffer_clear(uint64_t p_rid, uint32_t p_offset, uint32_t p_size, uint64_t p_device = 0, uint64_t p_driver = 0, uint64_t p_serial = 0);
 void p01_observe_buffer_copy(uint64_t p_src_rid, uint64_t p_dst_rid, uint32_t p_src_offset, uint32_t p_dst_offset, uint32_t p_size, uint64_t p_device = 0, uint64_t p_source_serial = 0, uint64_t p_destination_serial = 0);
 void p01_observe_readback_queued(uint64_t p_rid, uint32_t p_size);
 void p01_observe_readback_completed(uint64_t p_rid, uint32_t p_size);

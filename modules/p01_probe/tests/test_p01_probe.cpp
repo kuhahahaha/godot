@@ -56,6 +56,37 @@ TEST_CASE("[P01] Typed observations preserve allocation and copy identity") {
 	p01_hook_reset();
 }
 
+
+TEST_CASE("[P01] Write clear logical free and physical dispose preserve actual identity") {
+	p01_hook_reset(); p01_hook_begin(7, 999);
+	p01_observe_buffer_write(1, 0, 36, true, 2, 3, 4);
+	p01_observe_buffer_clear(1, 0, 36, 2, 3, 4);
+	p01_observe_buffer_free(1, 2, 3, 4);
+	p01_observe_buffer_dispose(2, 3, 4);
+	const auto events = p01_hook_events();
+	REQUIRE(events.size() == 4);
+	for (const auto &event : events) {
+		CHECK(event.device == 2); CHECK(event.driver == 3);
+		CHECK(event.allocation_serial == 4); CHECK(event.session_serial_hint == 999);
+	}
+	CHECK(events[2].rid == 1); CHECK(events[3].rid == 0);
+	CHECK(events[3].kind != events[2].kind);
+	CHECK(events[3].sequence == events[2].sequence + 1);
+	p01_hook_reset();
+}
+
+TEST_CASE("[P01] Failed update prefix is independent of absolute destination offset") {
+	p01_hook_reset(); p01_hook_begin(1);
+	p01_observe_buffer_write(1, 128, 64, false, 2, 3, 4, false);
+	p01_observe_buffer_write(1, 192, 64, false, 2, 3, 4, true);
+	p01_observe_buffer_write(1, 0, 64, true, 2, 3, 4, true);
+	const auto events = p01_hook_events();
+	REQUIRE(events.size() == 3);
+	CHECK_FALSE(events[0].failed_prefix);
+	CHECK(events[1].failed_prefix);
+	CHECK_FALSE(events[2].failed_prefix);
+	p01_hook_reset();
+}
 TEST_CASE("[P01] Capture full trace permits completion but poisons omitted evidence") {
 	P01Capture capture;
 	capture.begin(1);

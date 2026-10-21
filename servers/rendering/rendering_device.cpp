@@ -8193,6 +8193,7 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 #ifdef MODULE_P01_PROBE_ENABLED
 		if (buffer.p01_allocation_serial) {
 			if (!p01_physical_registry.dispose(buffer.driver_id.id, buffer.p01_allocation_serial)) { p01_physical_coverage_failed.store(true); }
+			else { p01_observe_buffer_dispose(uint64_t(get_instance_id()), buffer.driver_id.id, buffer.p01_allocation_serial); }
 		}
 #endif
 		buffer_memory -= buffer.size;

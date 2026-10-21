@@ -25,7 +25,7 @@ static void append_event(P01HookEvent p_event) {
 	events.push_back(p_event);
 }
 
-void p01_observe_buffer_write(uint64_t p_rid, uint32_t p_offset, uint32_t p_size, bool p_success) {
+void p01_observe_buffer_write(uint64_t p_rid, uint32_t p_offset, uint32_t p_size, bool p_success, uint64_t p_device, uint64_t p_driver, uint64_t p_serial, bool p_failed_prefix) {
 	std::lock_guard<std::mutex> lock(hook_mutex);
 	if (current_epoch == 0) { return; }
 	snapshot.write_begin_count++;
@@ -34,7 +34,11 @@ void p01_observe_buffer_write(uint64_t p_rid, uint32_t p_offset, uint32_t p_size
 	} else {
 		snapshot.write_failure_count++;
 	}
-	append_event({p_rid, 0, 0, 0, p_offset, p_size, p_size, EVENT_WRITE, p_success, !p_success && p_offset != 0});
+	P01HookEvent event{p_rid, 0, 0, 0, p_offset, p_size, p_size, EVENT_WRITE, p_success, !p_success && p_failed_prefix};
+	event.device = p_device;
+	event.driver = p_driver;
+	event.allocation_serial = p_serial;
+	append_event(event);
 }
 void p01_observe_readback_queued(uint64_t p_rid, uint32_t p_size) {
 	std::lock_guard<std::mutex> lock(hook_mutex);
@@ -57,15 +61,23 @@ void p01_observe_buffer_allocation(uint64_t p_rid, uint64_t p_device, uint64_t p
 	event.allocation_serial = p_serial;
 	append_event(event);
 }
-void p01_observe_buffer_free(uint64_t p_rid) {
+void p01_observe_buffer_free(uint64_t p_rid, uint64_t p_device, uint64_t p_driver, uint64_t p_serial) {
 	std::lock_guard<std::mutex> lock(hook_mutex);
 	if (current_epoch == 0) { return; }
-	append_event({p_rid, 0, 0, 0, 0, 0, 0, EVENT_FREE, true, false});
+	P01HookEvent event{p_rid, 0, 0, 0, 0, 0, 0, EVENT_FREE, true, false};
+	event.device = p_device;
+	event.driver = p_driver;
+	event.allocation_serial = p_serial;
+	append_event(event);
 }
-void p01_observe_buffer_clear(uint64_t p_rid, uint32_t p_offset, uint32_t p_size) {
+void p01_observe_buffer_clear(uint64_t p_rid, uint32_t p_offset, uint32_t p_size, uint64_t p_device, uint64_t p_driver, uint64_t p_serial) {
 	std::lock_guard<std::mutex> lock(hook_mutex);
 	if (current_epoch == 0) { return; }
-	append_event({p_rid, 0, 0, 0, p_offset, p_size, p_size, EVENT_CLEAR, true, false});
+	P01HookEvent event{p_rid, 0, 0, 0, p_offset, p_size, p_size, EVENT_CLEAR, true, false};
+	event.device = p_device;
+	event.driver = p_driver;
+	event.allocation_serial = p_serial;
+	append_event(event);
 }
 void p01_observe_buffer_copy(uint64_t p_src_rid, uint64_t p_dst_rid, uint32_t p_src_offset, uint32_t p_dst_offset, uint32_t p_size, uint64_t p_device, uint64_t p_source_serial, uint64_t p_destination_serial) {
 	std::lock_guard<std::mutex> lock(hook_mutex);
@@ -122,4 +134,16 @@ std::vector<P01WritableUse> p01_write_census_events() {
 		if (event.kind == 8) result.push_back({ event.driver, event.device, event.allocation_serial, event.sequence, event.epoch, event.writable_usage, event.write_operation });
 	}
 	return result;
+}
+
+void p01_observe_buffer_dispose(uint64_t p_device, uint64_t p_driver, uint64_t p_serial) {
+	std::lock_guard<std::mutex> lock(hook_mutex);
+	if (!current_epoch) return;
+	P01HookEvent event;
+	event.kind = 9;
+	event.device = p_device;
+	event.driver = p_driver;
+	event.allocation_serial = p_serial;
+	event.success = true;
+	append_event(event);
 }
