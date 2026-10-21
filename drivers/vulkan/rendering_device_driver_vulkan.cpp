@@ -29,6 +29,7 @@
 /**************************************************************************/
 
 #include "rendering_device_driver_vulkan.h"
+#include "vulkan_fence_wait.h"
 
 #include "core/config/engine.h"
 #include "core/config/project_settings.h"
@@ -3053,14 +3054,11 @@ RDD::FenceID RenderingDeviceDriverVulkan::fence_create() {
 
 Error RenderingDeviceDriverVulkan::fence_wait(FenceID p_fence) {
 	Fence *fence = (Fence *)(p_fence.id);
-	VkResult fence_status = vkGetFenceStatus(vk_device, fence->vk_fence);
-	if (fence_status == VK_NOT_READY) {
-		VkResult err = vkWaitForFences(vk_device, 1, &fence->vk_fence, VK_TRUE, UINT64_MAX);
-		ERR_FAIL_COND_V_MSG(err != VK_SUCCESS, FAILED, vformat("Couldn't wait for Vulkan fence (VkResult error %d).", err));
-	}
-
-	VkResult err = vkResetFences(vk_device, 1, &fence->vk_fence);
-	ERR_FAIL_COND_V_MSG(err != VK_SUCCESS, FAILED, vformat("Couldn't reset Vulkan fence (VkResult error %d).", err));
+	const auto observed = vulkan_fence_wait_and_reset(
+			[&] { return vkGetFenceStatus(vk_device, fence->vk_fence); },
+			[&] { return vkWaitForFences(vk_device, 1, &fence->vk_fence, VK_TRUE, UINT64_MAX); },
+			[&] { return vkResetFences(vk_device, 1, &fence->vk_fence); });
+	ERR_FAIL_COND_V_MSG(observed.result != VK_SUCCESS, FAILED, vformat("Vulkan fence phase %d failed (VkResult error %d).", observed.phase, observed.result));
 
 	if (fence->queue_signaled_from != nullptr) {
 		// Release all semaphores that the command queue associated to the fence waited on the last time it was submitted.
