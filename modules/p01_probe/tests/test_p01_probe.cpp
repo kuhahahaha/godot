@@ -10,6 +10,108 @@ TEST_FORCE_LINK(test_p01_probe_fixture)
 
 namespace TestP01ProbeFixture {
 
+TEST_CASE("[P01] Capture full trace permits completion but poisons omitted evidence") {
+	P01Capture capture;
+	capture.begin(1);
+	P01CaptureEvent event{0, 1, 1, 1, 2, 3, 4, 5, 9, 0, 4, 0};
+	for (uint64_t token = 1; token <= 2047; token++) {
+		event.token = token;
+		event.queue_sequence = token + 8;
+		event.kind = 1;
+		REQUIRE(capture.append(event));
+		event.kind = 2;
+		REQUIRE(capture.append(event));
+	}
+	event.token = 2048;
+	event.queue_sequence = 2056;
+	event.kind = 1;
+	REQUIRE(capture.append(event));
+	P01CaptureEvent second = event;
+	second.token++;
+	second.queue_sequence++;
+	REQUIRE(capture.append(second));
+	REQUIRE(capture.get_events().size() == 4096);
+	CHECK_FALSE(capture.is_poisoned());
+	event.kind = 2;
+	second.kind = 2;
+	CHECK(capture.append(event));
+	CHECK(capture.is_poisoned());
+	CHECK_FALSE(capture.drain_complete());
+	CHECK(capture.append(second));
+	CHECK(capture.drain_complete());
+	CHECK(capture.get_events().size() == 4096);
+	CHECK(capture.dispose_physical());
+	CHECK_FALSE(capture.seal());
+}
+
+TEST_CASE("[P01] Capture rejects duplicate and reused request identity") {
+	P01Capture capture;
+	capture.begin(1);
+	P01CaptureEvent event{0, 1, 1, 1, 2, 3, 4, 5, 9, 0, 4, 0};
+	REQUIRE(capture.append(event));
+	CHECK_FALSE(capture.append(event));
+	CHECK(capture.is_poisoned());
+	// Poison still permits the already admitted completion to drain.
+	event.kind = 2;
+	CHECK(capture.append(event));
+	CHECK(capture.drain_complete());
+
+	P01Capture reused;
+	reused.begin(2);
+	event.epoch = 2;
+	event.kind = 1;
+	REQUIRE(reused.append(event));
+	event.kind = 2;
+	REQUIRE(reused.append(event));
+	event.kind = 1;
+	CHECK_FALSE(reused.append(event));
+	CHECK(reused.is_poisoned());
+	CHECK(reused.drain_complete());
+	event.kind = 2;
+	CHECK_FALSE(reused.append(event));
+	CHECK(reused.drain_complete());
+}
+
+TEST_CASE("[P01] Stale completion cannot consume a distinct current tuple") {
+	P01Capture capture;
+	capture.begin(3);
+	P01CaptureEvent first{0, 1, 1, 3, 2, 3, 4, 5, 9, 0, 4, 0};
+	REQUIRE(capture.append(first));
+	first.kind = 2;
+	REQUIRE(capture.append(first));
+	P01CaptureEvent next = first;
+	next.kind = 1;
+	next.token = 2;
+	next.queue_sequence = 10;
+	REQUIRE(capture.append(next));
+	CHECK_FALSE(capture.append(first));
+	CHECK_FALSE(capture.drain_complete());
+	CHECK_FALSE(capture.dispose_physical());
+	next.kind = 2;
+	CHECK(capture.append(next));
+	CHECK(capture.drain_complete());
+	CHECK(capture.dispose_physical());
+	CHECK_FALSE(capture.seal());
+}
+
+TEST_CASE("[P01] Transport foreign pop cannot consume owner data") {
+	P01TransportQueue queue;
+	P01CaptureEvent event{};
+	event.token = 31;
+	REQUIRE(queue.push(event));
+	P01CaptureEvent output{};
+	output.token = 99;
+	bool accepted = true;
+	std::thread worker([&] { accepted = queue.pop(output); });
+	worker.join();
+	CHECK_FALSE(accepted);
+	CHECK(output.token == 99);
+	CHECK(queue.size() == 1);
+	CHECK(queue.is_poisoned());
+	REQUIRE(queue.pop(output));
+	CHECK(output.token == 31);
+}
+
 TEST_CASE("[P01] Transport capacity preserves FIFO during poisoned drain") {
 	P01TransportQueue queue;
 	for (uint64_t token = 1; token <= 128; token++) {

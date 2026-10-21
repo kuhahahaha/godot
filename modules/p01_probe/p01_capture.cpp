@@ -25,6 +25,12 @@ bool P01Capture::append(const P01CaptureEvent &p_event) {
 	}
 	if (p_event.kind == 1) {
 		if (p_event.queue_sequence == 0 || pending.size() >= MAX_PENDING) { poisoned = true; return false; }
+		for (const P01CaptureEvent &prior : events) {
+			if (prior.kind == 1 && prior.token == p_event.token && prior.epoch == p_event.epoch && prior.rid == p_event.rid && prior.allocation_serial == p_event.allocation_serial && prior.owner == p_event.owner && prior.alias == p_event.alias && prior.queue_sequence == p_event.queue_sequence) {
+				poisoned = true;
+				return false;
+			}
+		}
 		pending.push_back({p_event.token, p_event.epoch, p_event.rid, p_event.allocation_serial, p_event.owner, p_event.alias, p_event.queue_sequence});
 	} else if (p_event.kind == 2) {
 		bool found = false;
@@ -33,7 +39,13 @@ bool P01Capture::append(const P01CaptureEvent &p_event) {
 	}
 	P01CaptureEvent event = p_event;
 	event.sequence = next_sequence++;
-	if (events.size() < MAX_EVENTS) events.push_back(event);
+	if (events.size() < MAX_EVENTS) {
+		events.push_back(event);
+	} else {
+		// Completion must still release its exact pending tuple, but missing
+		// evidence makes publication invalid even when retirement succeeds.
+		poisoned = true;
+	}
 	return true;
 }
 
