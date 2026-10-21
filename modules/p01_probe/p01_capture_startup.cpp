@@ -52,6 +52,8 @@ std::unique_ptr<P01CaptureWriter> writer;
 P01CaptureCodec codec;
 bool attempted = false;
 bool valid = false;
+bool claimed = false;
+std::string child;
 }
 void p01_capture_startup() {
 	std::lock_guard<std::mutex> lock(capture_mutex);
@@ -68,6 +70,7 @@ void p01_capture_startup() {
 	if (!writer->start(startup.descriptor)) { writer.reset(); return; }
 	std::string line;
 	valid = codec.start(startup.identity, line) && writer->publish(line);
+	if (valid) { child = startup.identity.child; }
 }
 void p01_capture_publish(const P01HookEvent &p_event) {
 	std::lock_guard<std::mutex> lock(capture_mutex);
@@ -86,4 +89,14 @@ void p01_capture_shutdown() {
 	// EOF without seal remains incomplete at A's unchanged receiver.
 	valid = false;
 	if (writer) { writer->close(); writer.reset(); }
+}
+
+bool p01_capture_claim_child(const std::string &p_member, const std::string &p_route, uint64_t &r_epoch) {
+	std::lock_guard<std::mutex> lock(capture_mutex);
+	if (!valid || !writer || writer->failed() || claimed || child != p_member + "." + p_route) { return false; }
+	claimed = true;
+	// Exactly one acquired child session in this process. This local epoch is
+	// scoped by the parent run/child/build envelope, not a cross-process identity.
+	r_epoch = 1;
+	return true;
 }

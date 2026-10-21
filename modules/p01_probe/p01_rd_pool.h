@@ -32,9 +32,14 @@ class P01RDPool {
 	ObjectID retirement_device;
 	bool release_recorded = false;
 	bool retirement_invalid = false;
+	bool retirement_confirmed = false;
+	uint64_t resource_tokens[40] = {};
+	uint32_t resource_count = 0;
+	bool track_resource(RID p_rid, P01PoolResourceKind p_kind);
 	std::unique_ptr<P01ReadbackCollector> queued_collector;
 	Error qualify_buffer(RID p_buffer) const;
 	Error qualify_collector(uint32_t p_slot, const P01ReadbackCollector &p_collector) const;
+	Error resolve_readback_identity(uint32_t p_slot, bool p_consumer, uint64_t p_run, uint64_t p_epoch, uint64_t p_request, P01ReadbackIdentity &r_identity) const;
 	Error record_boundary(RID p_buffer, uint64_t p_operation, uint64_t &r_sequence, uint64_t &r_epoch) const;
 	Error qualify_readback(const P01ReadbackIdentity &p_identity) const;
 	bool on_owner_thread() const;
@@ -53,8 +58,10 @@ public:
 	Error record_transport(uint32_t p_slot);
 	// Identity must come from the actual allocation registry at this RT call.
 	Error enqueue_readback(const P01ReadbackIdentity &p_identity, P01ReadbackCollector &p_collector);
+	Error enqueue_pair(uint32_t p_slot, uint64_t p_run, uint64_t p_epoch, uint64_t p_request, P01ReadbackCollector &p_collector, P01ReadbackIdentity (&r_identities)[2], uint32_t &r_enqueued);
 	Error validate_pair(const P01ReadbackIdentity &p_snapshot, const P01ReadbackIdentity &p_consumer, const P01ReadbackCollector &p_collector) const;
 	Error release();
-	// Only the listed buffer allocations, never K03 or whole-device retirement.
-	Error physical_retirement_status() const;
+	// Only this pool's buffers, sets, shaders and pipelines; never K03/device retirement.
+	Error physical_retirement_status();
+	bool retirement_required() const { return rd || release_recorded; }
 };

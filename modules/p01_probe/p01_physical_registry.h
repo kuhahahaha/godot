@@ -33,3 +33,20 @@ public:
 	// Unknown/stale identities cannot establish absence of native access.
 	bool access_escaped(uint64_t p_driver, uint64_t p_serial) const;
 };
+
+// Tracks only the pool's explicitly registered native objects. This is not a
+// device-wide or K03 retirement ledger. Registration resolves actual RD owners;
+// release is observed after the original driver free returns.
+enum class P01PoolResourceKind : uint8_t { Shader, ComputePipeline, UniformSet };
+class P01PoolResourceRegistry {
+	struct Entry { uint64_t driver = 0, token = 0; P01PoolResourceKind kind = P01PoolResourceKind::Shader; bool released = false; };
+	std::array<Entry, 128> entries{};
+	uint64_t next_token = 1;
+	mutable std::mutex mutex;
+public:
+	enum class Status { Unknown, Live, Released };
+	uint64_t track(P01PoolResourceKind p_kind, uint64_t p_driver);
+	bool observe_free(P01PoolResourceKind p_kind, uint64_t p_driver);
+	Status status(uint64_t p_token) const;
+	bool acknowledge(uint64_t p_token);
+};

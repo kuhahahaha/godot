@@ -145,6 +145,20 @@ public:
 		identity.device = uint64_t(device.get_instance_id());
 		identity.rid = rid.get_id(); identity.allocation = actual->p01_allocation_serial;
 		CHECK(pool.qualify_readback(identity) == OK);
+		P01ReadbackIdentity resolved;
+		pool.slots[0].transported = true;
+		pool.slots[0].observation_epoch = 2;
+		CHECK(pool.resolve_readback_identity(0, false, 1, 2, 3, resolved) == OK);
+		CHECK(resolved.run == 1); CHECK(resolved.epoch == 2); CHECK(resolved.token == 6); CHECK(resolved.queue == 3);
+		CHECK(resolved.device == uint64_t(device.get_instance_id()));
+		CHECK(resolved.rid == rid.get_id()); CHECK(resolved.owner == rid.get_id());
+		CHECK(resolved.alias == 701); CHECK(resolved.allocation == actual->p01_allocation_serial);
+		const auto saved = resolved;
+		CHECK(pool.resolve_readback_identity(0, false, 1, 2, UINT64_MAX, resolved) == ERR_INVALID_PARAMETER);
+		CHECK(resolved == saved);
+		CHECK(pool.resolve_readback_identity(0, false, 1, 3, 3, resolved) == ERR_INVALID_DATA);
+		CHECK(pool.resolve_readback_identity(0, true, 1, 2, 3, resolved) == ERR_INVALID_DATA);
+
 		identity.allocation++;
 		CHECK(pool.qualify_readback(identity) == ERR_INVALID_DATA);
 		identity.allocation--;

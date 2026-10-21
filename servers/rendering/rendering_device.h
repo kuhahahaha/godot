@@ -96,6 +96,7 @@ private:
 	static RenderingDevice *singleton;
 #ifdef MODULE_P01_PROBE_ENABLED
 	P01PhysicalRegistry p01_physical_registry;
+	P01PoolResourceRegistry p01_pool_resource_registry;
 	std::atomic<bool> p01_physical_coverage_failed = false;
 #endif
 

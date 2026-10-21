@@ -1,4 +1,5 @@
 #include "p01_phase_observer.h"
+#include "p01_native_session.h"
 #include <mutex>
 #include <thread>
 
@@ -44,6 +45,7 @@ void p01_observe_phase(uint64_t p_frame, bool p_after_views) {
 	capture_frame = p_frame;
 	capture_after_views = p_after_views;
 	p01_phase_capture_service(phase_epoch, p_frame, p_after_views);
+	P01NativeSession::service_phase(phase_epoch, p_frame, p_after_views);
 	capture_window = false;
 }
 std::vector<P01PhaseEvent> p01_phase_events() { std::lock_guard<std::mutex> lock(phase_mutex); return phase_events; }

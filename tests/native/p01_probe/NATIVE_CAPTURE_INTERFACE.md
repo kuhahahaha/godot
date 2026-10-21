@@ -57,6 +57,20 @@ and complete hazard interval. Unbound previous input is not a previous draw
 witness. No native source pointer escapes capture. Runtime admission still needs
 true t0 proof and full source/action/retirement closure.
 
+The engine-owned `p01_native_session` now reserves bounded immutable request
+batches on main and sends a native callable through the original RS command
+queue. Only its actual receive admits a batch at the next after-scene phase.
+The session registry and callable retain ownership independently of the fixture;
+close cancels unrecorded requests and cannot declare terminal while any delivery
+callable holder or accepted readback remains. These private status fields are not
+yet serialized action witnesses and the fixture has not yet activated this path.
+
+Pool retirement observes the original buffer disposal plus the pool's registered
+shader, compute pipeline and uniform-set frees. Reused native handles receive
+new tokens; released observations remain until acknowledgment. This is explicitly
+pool scope, not a device-wide retirement certificate. Cleanup is pumped outside
+phase evidence admission so poison/overflow does not suppress retirement.
+
 K01/K03 completion is not supplied by this interface. Original RD issue/wait
 Errors now poison P01 evidence, but the legacy engine control flow remains
 unchanged. Zero-wait poll/recycle, quiet-window admission, exact slot/cutoff

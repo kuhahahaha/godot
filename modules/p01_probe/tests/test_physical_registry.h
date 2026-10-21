@@ -125,3 +125,41 @@ TEST_CASE("[P01] Shared writable event log rejects unknown identities and bounds
 	p01_hook_reset();
 }
 }
+
+TEST_CASE("[P01] Pool native retirement requires each actual free and preserves handle reuse") {
+	P01PoolResourceRegistry registry;
+	const auto shader = registry.track(P01PoolResourceKind::Shader, 11);
+	const auto pipeline = registry.track(P01PoolResourceKind::ComputePipeline, 11);
+	const auto set = registry.track(P01PoolResourceKind::UniformSet, 12);
+	REQUIRE(shader != 0); REQUIRE(pipeline != 0); REQUIRE(set != 0);
+	CHECK(shader != pipeline);
+	CHECK(registry.track(P01PoolResourceKind::Shader, 11) == 0);
+	CHECK_FALSE(registry.acknowledge(shader));
+	registry.observe_free(P01PoolResourceKind::ComputePipeline, 11);
+	CHECK(registry.status(shader) == P01PoolResourceRegistry::Status::Live);
+	CHECK(registry.status(pipeline) == P01PoolResourceRegistry::Status::Released);
+	registry.observe_free(P01PoolResourceKind::Shader, 11);
+	const auto reused = registry.track(P01PoolResourceKind::Shader, 11);
+	CHECK(reused != shader); CHECK(reused != 0);
+	CHECK(registry.acknowledge(shader));
+	CHECK(registry.status(reused) == P01PoolResourceRegistry::Status::Live);
+	CHECK(registry.status(set) == P01PoolResourceRegistry::Status::Live);
+	CHECK(registry.status(shader) == P01PoolResourceRegistry::Status::Unknown);
+}
+TEST_CASE("[P01] Pool resource exhaustion retains released evidence until acknowledgment") {
+	P01PoolResourceRegistry registry;
+	std::array<uint64_t, 128> tokens;
+	for (uint64_t i = 0; i < tokens.size(); ++i) {
+		tokens[i] = registry.track(P01PoolResourceKind::UniformSet, i + 1);
+		REQUIRE(tokens[i] != 0);
+	}
+	CHECK(registry.track(P01PoolResourceKind::Shader, 200) == 0);
+	CHECK(registry.observe_free(P01PoolResourceKind::UniformSet, 1));
+	CHECK(registry.track(P01PoolResourceKind::Shader, 200) == 0);
+	CHECK(registry.status(tokens[0]) == P01PoolResourceRegistry::Status::Released);
+	CHECK(registry.acknowledge(tokens[0]));
+	const auto next = registry.track(P01PoolResourceKind::Shader, 200);
+	CHECK(next > tokens.back());
+	CHECK_FALSE(registry.acknowledge(tokens[0]));
+	CHECK(registry.status(next) == P01PoolResourceRegistry::Status::Live);
+}

@@ -114,3 +114,36 @@ void P01PhysicalRegistry::mark_device_access_escaped() {
 	std::lock_guard<std::mutex> lock(mutex);
 	device_access_escaped = true;
 }
+
+uint64_t P01PoolResourceRegistry::track(P01PoolResourceKind p_kind, uint64_t p_driver) {
+	std::lock_guard<std::mutex> lock(mutex);
+	if (!p_driver || !next_token) { return 0; }
+	for (const auto &entry : entries) { if (entry.token && entry.kind == p_kind && entry.driver == p_driver && !entry.released) { return 0; } }
+	for (auto &entry : entries) {
+		if (!entry.token) {
+			const uint64_t token = next_token;
+			next_token = token == UINT64_MAX ? 0 : token + 1;
+			entry = { p_driver, token, p_kind, false };
+			return token;
+		}
+	}
+	return 0;
+}
+bool P01PoolResourceRegistry::observe_free(P01PoolResourceKind p_kind, uint64_t p_driver) {
+	std::lock_guard<std::mutex> lock(mutex);
+	for (auto &entry : entries) {
+		if (entry.token && entry.kind == p_kind && entry.driver == p_driver && !entry.released) { entry.released = true; return true; }
+	}
+	// Other engine resources were never enrolled in this narrow pool registry.
+	return true;
+}
+P01PoolResourceRegistry::Status P01PoolResourceRegistry::status(uint64_t p_token) const {
+	std::lock_guard<std::mutex> lock(mutex);
+	for (const auto &entry : entries) { if (p_token && entry.token == p_token) { return entry.released ? Status::Released : Status::Live; } }
+	return Status::Unknown;
+}
+bool P01PoolResourceRegistry::acknowledge(uint64_t p_token) {
+	std::lock_guard<std::mutex> lock(mutex);
+	for (auto &entry : entries) { if (p_token && entry.token == p_token && entry.released) { entry = {}; return true; } }
+	return false;
+}

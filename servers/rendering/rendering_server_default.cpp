@@ -32,6 +32,7 @@
 #include "modules/modules_enabled.gen.h"
 #ifdef MODULE_P01_PROBE_ENABLED
 #include "modules/p01_probe/p01_phase_observer.h"
+#include "modules/p01_probe/p01_native_session.h"
 #endif
 
 #include "core/object/callable_mp.h"
@@ -119,6 +120,8 @@ void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
 	RSG::canvas_render->update();
 #ifdef MODULE_P01_PROBE_ENABLED
 	p01_observe_phase(RSG::rasterizer->get_frame_number(), true);
+	// Cleanup is independent of evidence admission, poison and event bounds.
+	P01NativeSession::service_retirement();
 #endif
 
 	GodotProfileZoneGrouped(_profile_zone, "rasterizer->end_frame");

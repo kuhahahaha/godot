@@ -24,7 +24,12 @@ RID P01RDPool::create_set(RID p_shader, RID p_source, RID p_destination) {
 		uniform.append_id(i == 0 ? p_source : p_destination);
 		uniforms.push_back(uniform);
 	}
-	return rd->uniform_set_create(uniforms, p_shader, 0);
+	const RID rid = rd->uniform_set_create(uniforms, p_shader, 0);
+	if (rid.is_valid() && !track_resource(rid, P01PoolResourceKind::UniformSet)) {
+		rd->free_rid(rid);
+		return RID();
+	}
+	return rid;
 }
 
 Error P01RDPool::initialize(bool p_dual_view) {
@@ -55,9 +60,11 @@ Error P01RDPool::initialize(bool p_dual_view) {
 		Vector<RenderingDevice::ShaderStageSPIRVData> stages;
 		stages.push_back(stage);
 		shaders[i] = rd->shader_create_from_spirv(stages, i == 0 ? "P01Public" : "P01Transport");
+		if (shaders[i].is_valid() && !track_resource(shaders[i], P01PoolResourceKind::Shader)) { release(); return ERR_INVALID_DATA; }
 		if (shaders[i].is_valid()) {
 			pipelines[i] = rd->compute_pipeline_create(shaders[i]);
 		}
+		if (pipelines[i].is_valid() && !track_resource(pipelines[i], P01PoolResourceKind::ComputePipeline)) { release(); return ERR_INVALID_DATA; }
 		if (pipelines[i].is_null()) {
 			release();
 			return ERR_CANT_CREATE;
@@ -265,7 +272,8 @@ Error P01RDPool::enqueue_readback(const P01ReadbackIdentity &p_identity, P01Read
 	return p_collector.mark_enqueued(p_identity);
 }
 
-Error P01RDPool::physical_retirement_status() const {
+Error P01RDPool::physical_retirement_status() {
+	if (retirement_confirmed) { return OK; }
 	if (!release_recorded) { return ERR_UNCONFIGURED; }
 	if (retirement_invalid) { return ERR_INVALID_DATA; }
 	RenderingDevice *device = RenderingDevice::get_singleton();
@@ -275,6 +283,15 @@ Error P01RDPool::physical_retirement_status() const {
 	for (uint32_t i = 0; i < retirement_count; i++) {
 		if (device->p01_physical_registry.physically_live(retirements[i].driver, retirements[i].serial)) { return ERR_BUSY; }
 	}
+	for (uint32_t i = 0; i < resource_count; i++) {
+		const auto status = device->p01_pool_resource_registry.status(resource_tokens[i]);
+		if (status == P01PoolResourceRegistry::Status::Unknown) { return ERR_INVALID_DATA; }
+		if (status == P01PoolResourceRegistry::Status::Live) { return ERR_BUSY; }
+	}
+	for (uint32_t i = 0; i < resource_count; i++) {
+		if (!device->p01_pool_resource_registry.acknowledge(resource_tokens[i])) { return ERR_INVALID_DATA; }
+	}
+	retirement_confirmed = true;
 	return OK;
 }
 
@@ -331,4 +348,56 @@ Error P01RDPool::record_boundary(RID p_buffer, uint64_t p_operation, uint64_t &r
 		}
 	}
 	return ERR_INVALID_DATA;
+}
+
+
+Error P01RDPool::resolve_readback_identity(uint32_t p_slot, bool p_consumer, uint64_t p_run, uint64_t p_epoch, uint64_t p_request, P01ReadbackIdentity &r_identity) const {
+	if (!p_run || !p_epoch || !p_request || p_request > UINT64_MAX / 2 || p_slot >= capacity) { return ERR_INVALID_PARAMETER; }
+	const Slot &slot = slots[p_slot];
+	if (!slot.transported || slot.observation_epoch != p_epoch) { return ERR_INVALID_DATA; }
+	const RID rid = p_consumer ? slot.consumer : slot.snapshot;
+	const Error qualification = qualify_buffer(rid);
+	if (qualification != OK) { return qualification; }
+	const auto *buffer = rd->_get_buffer_from_owner(rid);
+	P01ReadbackIdentity result;
+	result.run = p_run; result.epoch = p_epoch; result.token = p_request * 2 + uint64_t(p_consumer);
+	// This is the original capture request sequence, not a native submission serial.
+	result.queue = p_request;
+	result.device = uint64_t(rd->get_instance_id());
+	result.rid = result.owner = rid.get_id();
+	result.alias = buffer->driver_id.id; result.allocation = buffer->p01_allocation_serial;
+	result.slot = p_slot; result.consumer = p_consumer;
+	r_identity = result;
+	return OK;
+}
+Error P01RDPool::enqueue_pair(uint32_t p_slot, uint64_t p_run, uint64_t p_epoch, uint64_t p_request, P01ReadbackCollector &p_collector, P01ReadbackIdentity (&r_identities)[2], uint32_t &r_enqueued) {
+	r_enqueued = 0;
+	if (!rd) { return ERR_UNCONFIGURED; }
+	if (!on_owner_thread()) { return ERR_UNAVAILABLE; }
+	P01ReadbackIdentity identities[2];
+	for (uint32_t role = 0; role < 2; role++) {
+		const Error error = resolve_readback_identity(p_slot, bool(role), p_run, p_epoch, p_request, identities[role]);
+		if (error != OK) { return error; }
+	}
+	for (uint32_t role = 0; role < 2; role++) {
+		r_identities[role] = identities[role];
+		const Error error = enqueue_readback(identities[role], p_collector);
+		if (error != OK) { return error; }
+		++r_enqueued;
+	}
+	return OK;
+}
+
+bool P01RDPool::track_resource(RID p_rid, P01PoolResourceKind p_kind) {
+	uint64_t driver = 0;
+	switch (p_kind) {
+		case P01PoolResourceKind::Shader: { const auto *value = rd->shader_owner.get_or_null(p_rid); if (value) { driver = value->driver_id.id; } } break;
+		case P01PoolResourceKind::ComputePipeline: { const auto *value = rd->compute_pipeline_owner.get_or_null(p_rid); if (value) { driver = value->driver_id.id; } } break;
+		case P01PoolResourceKind::UniformSet: { const auto *value = rd->uniform_set_owner.get_or_null(p_rid); if (value) { driver = value->driver_id.id; } } break;
+	}
+	if (!driver || resource_count >= 40) { retirement_invalid = true; return false; }
+	const uint64_t token = rd->p01_pool_resource_registry.track(p_kind, driver);
+	if (!token) { retirement_invalid = true; return false; }
+	resource_tokens[resource_count++] = token;
+	return true;
 }

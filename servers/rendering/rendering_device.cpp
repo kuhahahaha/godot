@@ -8116,6 +8116,9 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 		ComputePipeline *pipeline = &frames[p_frame].compute_pipelines_to_dispose_of.front()->get();
 
 		driver->pipeline_free(pipeline->driver_id);
+#ifdef MODULE_P01_PROBE_ENABLED
+		p01_pool_resource_registry.observe_free(P01PoolResourceKind::ComputePipeline, pipeline->driver_id.id);
+#endif
 
 		frames[p_frame].compute_pipelines_to_dispose_of.pop_front();
 	}
@@ -8166,6 +8169,9 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 		UniformSet *uniform_set = &frames[p_frame].uniform_sets_to_dispose_of.front()->get();
 
 		driver->uniform_set_free(uniform_set->driver_id);
+#ifdef MODULE_P01_PROBE_ENABLED
+		p01_pool_resource_registry.observe_free(P01PoolResourceKind::UniformSet, uniform_set->driver_id.id);
+#endif
 
 		frames[p_frame].uniform_sets_to_dispose_of.pop_front();
 	}
@@ -8175,6 +8181,9 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 		Shader *shader = &frames[p_frame].shaders_to_dispose_of.front()->get();
 
 		driver->shader_free(shader->driver_id);
+#ifdef MODULE_P01_PROBE_ENABLED
+		p01_pool_resource_registry.observe_free(P01PoolResourceKind::Shader, shader->driver_id.id);
+#endif
 
 		frames[p_frame].shaders_to_dispose_of.pop_front();
 	}
