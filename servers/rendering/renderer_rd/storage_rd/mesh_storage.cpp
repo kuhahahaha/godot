@@ -29,6 +29,7 @@
 /**************************************************************************/
 
 #include "mesh_storage.h"
+#include "modules/modules_enabled.gen.h"
 
 #include "servers/rendering/renderer_viewport.h"
 #include "servers/rendering/rendering_server.h"
@@ -1251,6 +1252,10 @@ void MeshStorage::update_mesh_instances() {
 
 			//dispatch without barrier, so all is done at the same time
 			RD::get_singleton()->compute_list_dispatch_threads(compute_list, push_constant.vertex_count, 1, 1);
+#ifdef MODULE_P01_PROBE_ENABLED
+			uint64_t &count = mi->surfaces[i].p01_dispatch_count[mi->surfaces[i].current_buffer];
+			if (count != UINT64_MAX) { ++count; }
+#endif
 		}
 
 		mi->dirty = false;

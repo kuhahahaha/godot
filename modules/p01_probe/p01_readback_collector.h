@@ -22,6 +22,7 @@ class P01ReadbackCollector {
 
 public:
 	P01ReadbackCollector(uint64_t p_run, uint64_t p_epoch, bool p_dual_view);
+	bool shares_state(const P01ReadbackCollector &p_other) const { return state == p_other.state; }
 	Error reserve(const P01ReadbackIdentity &p_identity, Callable &r_callback);
 	// Call after the actual RD enqueue accepts the callback.
 	Error mark_enqueued(const P01ReadbackIdentity &p_identity);

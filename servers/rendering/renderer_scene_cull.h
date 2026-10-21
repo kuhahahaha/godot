@@ -50,6 +50,9 @@
 class RenderingLightCuller;
 
 class RendererSceneCull : public RenderingMethod {
+#ifdef TESTS_ENABLED
+	friend class P01NativeSource;
+#endif
 public:
 	RendererSceneRender *scene_render = nullptr;
 

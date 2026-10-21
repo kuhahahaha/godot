@@ -29,6 +29,10 @@
 /**************************************************************************/
 
 #include "rendering_server_default.h"
+#include "modules/modules_enabled.gen.h"
+#ifdef MODULE_P01_PROBE_ENABLED
+#include "modules/p01_probe/p01_phase_observer.h"
+#endif
 
 #include "core/object/callable_mp.h"
 #include "core/os/os.h"
@@ -96,6 +100,9 @@ void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
 	RSG::scene->update(); //update scenes stuff before updating instances
 	GodotProfileZoneGrouped(_profile_zone, "canvas->update");
 	RSG::canvas->update();
+#ifdef MODULE_P01_PROBE_ENABLED
+	p01_observe_phase(RSG::rasterizer->get_frame_number(), false);
+#endif
 
 	frame_setup_time = double(OS::get_singleton()->get_ticks_usec() - time_usec) / 1000.0;
 
@@ -110,6 +117,9 @@ void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
 
 	GodotProfileZoneGrouped(_profile_zone, "canvas_render->update");
 	RSG::canvas_render->update();
+#ifdef MODULE_P01_PROBE_ENABLED
+	p01_observe_phase(RSG::rasterizer->get_frame_number(), true);
+#endif
 
 	GodotProfileZoneGrouped(_profile_zone, "rasterizer->end_frame");
 	RSG::rasterizer->end_frame(p_swap_buffers);

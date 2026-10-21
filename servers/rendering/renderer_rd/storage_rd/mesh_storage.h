@@ -30,6 +30,7 @@
 
 #pragma once
 
+#include "modules/modules_enabled.gen.h"
 #include "core/templates/local_vector.h"
 #include "core/templates/rid_owner.h"
 #include "core/templates/self_list.h"
@@ -39,9 +40,14 @@
 #include "servers/rendering/storage/mesh_storage.h"
 #include "servers/rendering/storage/utilities.h"
 
+class P01NativeSource;
+
 namespace RendererRD {
 
 class MeshStorage : public RendererMeshStorage {
+#ifdef TESTS_ENABLED
+	friend class ::P01NativeSource;
+#endif
 public:
 	enum DefaultRDBuffer {
 		DEFAULT_RD_BUFFER_VERTEX,
@@ -191,6 +197,9 @@ private:
 			uint32_t current_buffer = 0;
 			uint32_t previous_buffer = 0;
 			uint64_t last_change = 0;
+#ifdef MODULE_P01_PROBE_ENABLED
+			uint64_t p01_dispatch_count[2] = {};
+#endif
 
 			Mesh::Surface::Version *versions = nullptr; //allocated on demand
 			uint32_t version_count = 0;

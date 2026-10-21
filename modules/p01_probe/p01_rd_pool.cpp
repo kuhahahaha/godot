@@ -6,7 +6,8 @@
 
 bool P01RDPool::on_owner_thread() const {
 	RenderingServer *server = RenderingServer::get_singleton();
-	return rd && rd == RenderingDevice::get_singleton() && server && server->is_on_render_thread();
+	RenderingDevice *current = RenderingDevice::get_singleton();
+	return rd && current == rd && current->get_instance_id() == device_identity && server && server->is_on_render_thread();
 }
 
 bool P01RDPool::has_active_list() const {
@@ -26,10 +27,11 @@ RID P01RDPool::create_set(RID p_shader, RID p_source, RID p_destination) {
 }
 
 Error P01RDPool::initialize(bool p_dual_view) {
-	if (rd) {
+	if (rd || release_recorded) {
 		return ERR_ALREADY_IN_USE;
 	}
 	rd = RenderingDevice::get_singleton();
+	device_identity = rd ? rd->get_instance_id() : ObjectID();
 	if (!on_owner_thread()) {
 		rd = nullptr;
 		return ERR_UNAVAILABLE;
@@ -160,7 +162,23 @@ Error P01RDPool::release() {
 	if (!on_owner_thread()) {
 		return ERR_UNAVAILABLE;
 	}
+	for (const Slot &slot : slots) {
+		if ((slot.readback_attempted[0] || slot.readback_attempted[1]) && (!queued_collector || !queued_collector->drained())) {
+			return ERR_BUSY;
+		}
+	}
+	retirement_device = rd->get_instance_id();
+	release_recorded = true;
 	for (Slot &slot : slots) {
+		for (RID rid : { slot.upload, slot.snapshot, slot.consumer }) {
+			if (rid.is_null()) { continue; }
+			RenderingDevice::Buffer *buffer = rd->_get_buffer_from_owner(rid);
+			if (!buffer || !buffer->p01_allocation_serial || retirement_count >= 54 || rd->p01_physical_registry.resolve(buffer->driver_id.id, rid.get_id()) != buffer->p01_allocation_serial) {
+				retirement_invalid = true;
+			} else {
+				retirements[retirement_count++] = { buffer->driver_id.id, buffer->p01_allocation_serial };
+			}
+		}
 		for (RID rid : { slot.deformation_set, slot.transport_set, slot.upload, slot.snapshot, slot.consumer }) {
 			if (rid.is_valid()) {
 				rd->free_rid(rid);
@@ -180,6 +198,7 @@ Error P01RDPool::release() {
 	}
 	rd = nullptr;
 	capacity = 0;
+	queued_collector.reset();
 	return OK;
 }
 
@@ -198,9 +217,11 @@ Error P01RDPool::enqueue_readback(const P01ReadbackIdentity &p_identity, P01Read
 	if (rd->p01_physical_coverage_failed || !actual || p_identity.device != uint64_t(rd->get_instance_id()) || p_identity.allocation != actual->p01_allocation_serial || rd->p01_physical_registry.resolve(actual->driver_id.id, buffer.get_id()) != p_identity.allocation) {
 		return ERR_INVALID_DATA;
 	}
+	if (queued_collector && !queued_collector->shares_state(p_collector)) { return ERR_INVALID_PARAMETER; }
 	Callable callback;
 	Error error = p_collector.reserve(p_identity, callback);
 	if (error != OK) { return error; }
+	if (!queued_collector) { queued_collector = std::make_unique<P01ReadbackCollector>(p_collector); }
 	slot.readback_attempted[role] = true;
 	// _stall_for_frame invokes this engine-owned callback only after its
 	// frame fence wait and staging-byte copy. Never submit/sync the main RD.
@@ -213,4 +234,17 @@ Error P01RDPool::enqueue_readback(const P01ReadbackIdentity &p_identity, P01Read
 		return error;
 	}
 	return p_collector.mark_enqueued(p_identity);
+}
+
+Error P01RDPool::physical_retirement_status() const {
+	if (!release_recorded) { return ERR_UNCONFIGURED; }
+	if (retirement_invalid) { return ERR_INVALID_DATA; }
+	RenderingDevice *device = RenderingDevice::get_singleton();
+	RenderingServer *server = RenderingServer::get_singleton();
+	if (!device || device->get_instance_id() != retirement_device || !server || !server->is_on_render_thread()) { return ERR_UNAVAILABLE; }
+	if (device->p01_physical_coverage_failed) { return ERR_INVALID_DATA; }
+	for (uint32_t i = 0; i < retirement_count; i++) {
+		if (device->p01_physical_registry.physically_live(retirements[i].driver, retirements[i].serial)) { return ERR_BUSY; }
+	}
+	return OK;
 }

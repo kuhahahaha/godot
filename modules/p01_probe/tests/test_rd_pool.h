@@ -7,6 +7,7 @@ TEST_CASE("[P01] Main RD pool rejects absent device without admitting recordings
 	// doctest uses the dummy renderer. This exercises rejection only, never GPU.
 	REQUIRE(RenderingDevice::get_singleton() == nullptr);
 	P01RDPool pool;
+	CHECK(pool.physical_retirement_status() == ERR_UNCONFIGURED);
 	CHECK(pool.initialize(false) == ERR_UNAVAILABLE);
 	CHECK(pool.initialize(true) == ERR_UNAVAILABLE);
 	CHECK(pool.record_public(0, P01PublicSnapshot()) == ERR_UNCONFIGURED);

@@ -8,6 +8,7 @@
 // the collector/observer must separately establish physical retirement.
 class P01RDPool {
 	RenderingDevice *rd = nullptr;
+	ObjectID device_identity;
 	RID shaders[2];
 	RID pipelines[2];
 	struct Slot {
@@ -23,6 +24,13 @@ class P01RDPool {
 	};
 	Slot slots[18];
 	uint32_t capacity = 0;
+	struct Retirement { uint64_t driver = 0, serial = 0; };
+	Retirement retirements[54];
+	uint32_t retirement_count = 0;
+	ObjectID retirement_device;
+	bool release_recorded = false;
+	bool retirement_invalid = false;
+	std::unique_ptr<P01ReadbackCollector> queued_collector;
 	bool on_owner_thread() const;
 	bool has_active_list() const;
 	RID create_set(RID p_shader, RID p_source, RID p_destination);
@@ -40,4 +48,6 @@ public:
 	// Identity must come from the actual allocation registry at this RT call.
 	Error enqueue_readback(const P01ReadbackIdentity &p_identity, P01ReadbackCollector &p_collector);
 	Error release();
+	// Only the listed buffer allocations, never K03 or whole-device retirement.
+	Error physical_retirement_status() const;
 };

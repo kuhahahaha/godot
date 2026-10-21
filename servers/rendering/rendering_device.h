@@ -89,6 +89,7 @@ private:
 #ifdef TESTS_ENABLED
 	friend class TestShaderCompilePolicyAccess;
 	friend class P01RDPool;
+	friend class P01NativeSource;
 #endif
 	static RenderingDevice *singleton;
 #ifdef MODULE_P01_PROBE_ENABLED
