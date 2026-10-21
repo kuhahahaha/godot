@@ -39,6 +39,7 @@ struct P01HookEvent {
 	uint64_t device = 0, driver = 0, source_rid = 0;
 	uint32_t source_offset = 0;
 	uint64_t session_serial_hint = 0;
+	uint64_t source_allocation_serial = 0;
 };
 
 // Engine-owned lifetime accounting. Transport/parent verdicts never release GPU
@@ -203,10 +204,10 @@ struct P01HookSnapshot {
 	uint64_t readback_completed_count = 0;
 };
 void p01_observe_buffer_write(uint64_t p_rid, uint32_t p_offset, uint32_t p_size, bool p_success);
-void p01_observe_buffer_allocation(uint64_t p_rid, uint64_t p_device, uint64_t p_driver);
+void p01_observe_buffer_allocation(uint64_t p_rid, uint64_t p_device, uint64_t p_driver, uint64_t p_serial = 0);
 void p01_observe_buffer_free(uint64_t p_rid);
 void p01_observe_buffer_clear(uint64_t p_rid, uint32_t p_offset, uint32_t p_size);
-void p01_observe_buffer_copy(uint64_t p_src_rid, uint64_t p_dst_rid, uint32_t p_src_offset, uint32_t p_dst_offset, uint32_t p_size);
+void p01_observe_buffer_copy(uint64_t p_src_rid, uint64_t p_dst_rid, uint32_t p_src_offset, uint32_t p_dst_offset, uint32_t p_size, uint64_t p_device = 0, uint64_t p_source_serial = 0, uint64_t p_destination_serial = 0);
 void p01_observe_readback_queued(uint64_t p_rid, uint32_t p_size);
 void p01_observe_readback_completed(uint64_t p_rid, uint32_t p_size);
 P01HookSnapshot p01_hook_snapshot();

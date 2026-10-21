@@ -34,21 +34,24 @@ TEST_CASE("[P01] Inactive observation leaves counters and events unchanged") {
 TEST_CASE("[P01] Typed observations preserve allocation and copy identity") {
 	p01_hook_reset();
 	p01_hook_begin(42, 99);
-	p01_observe_buffer_allocation(7, 123, 456);
-	p01_observe_buffer_copy(7, 8, 12, 20, 36);
+	p01_observe_buffer_allocation(7, 123, 456, 77);
+	p01_observe_buffer_copy(7, 8, 12, 20, 36, 123, 77, 88);
 	const auto events = p01_hook_events();
 	CHECK(events.size() == 2);
 	if (events.size() == 2) {
 		CHECK(events[0].epoch == 42);
 		CHECK(events[0].device == 123);
 		CHECK(events[0].driver == 456);
-		CHECK(events[0].allocation_serial == 0);
+		CHECK(events[0].allocation_serial == 77);
 		CHECK(events[0].session_serial_hint == 99);
 		CHECK(events[1].source_rid == 7);
 		CHECK(events[1].rid == 8);
 		CHECK(events[1].source_offset == 12);
 		CHECK(events[1].offset == 20);
 		CHECK(events[1].size == 36);
+		CHECK(events[1].device == 123);
+		CHECK(events[1].source_allocation_serial == 77);
+		CHECK(events[1].allocation_serial == 88);
 	}
 	p01_hook_reset();
 }
