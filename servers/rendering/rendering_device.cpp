@@ -1514,11 +1514,13 @@ RID RenderingDevice::storage_buffer_create(uint32_t p_size_bytes, Span<uint8_t> 
 	buffer_memory += buffer.size;
 	_THREAD_SAFE_UNLOCK_
 
-	RID id = storage_buffer_owner.make_rid(buffer);
 #ifdef MODULE_P01_PROBE_ENABLED
-	const uint64_t serial = p01_physical_registry.allocate(buffer.driver_id.id, id.get_id());
-	storage_buffer_owner.get_or_null(id)->p01_allocation_serial = serial;
-	if (serial == 0) { p01_physical_coverage_failed.store(true); }
+	RID id = storage_buffer_owner.allocate_rid();
+	buffer.p01_allocation_serial = p01_physical_registry.allocate(buffer.driver_id.id, id.get_id());
+	if (buffer.p01_allocation_serial == 0) { p01_physical_coverage_failed.store(true); }
+	storage_buffer_owner.initialize_rid(id, buffer);
+#else
+	RID id = storage_buffer_owner.make_rid(buffer);
 #endif
 #ifdef DEV_ENABLED
 	set_resource_name(id, "RID:" + itos(id.get_id()));
@@ -3885,11 +3887,13 @@ RID RenderingDevice::vertex_buffer_create(uint32_t p_size_bytes, Span<uint8_t> p
 	buffer_memory += buffer.size;
 	_THREAD_SAFE_UNLOCK_
 
-	RID id = vertex_buffer_owner.make_rid(buffer);
 #ifdef MODULE_P01_PROBE_ENABLED
-	const uint64_t serial = p01_physical_registry.allocate(buffer.driver_id.id, id.get_id());
-	vertex_buffer_owner.get_or_null(id)->p01_allocation_serial = serial;
-	if (serial == 0) { p01_physical_coverage_failed.store(true); }
+	RID id = vertex_buffer_owner.allocate_rid();
+	buffer.p01_allocation_serial = p01_physical_registry.allocate(buffer.driver_id.id, id.get_id());
+	if (buffer.p01_allocation_serial == 0) { p01_physical_coverage_failed.store(true); }
+	vertex_buffer_owner.initialize_rid(id, buffer);
+#else
+	RID id = vertex_buffer_owner.make_rid(buffer);
 #endif
 #ifdef DEV_ENABLED
 	set_resource_name(id, "RID:" + itos(id.get_id()));
