@@ -584,6 +584,20 @@ RSE::BlendShapeMode MeshStorage::mesh_get_blend_shape_mode(RID p_mesh) const {
 	return mesh->blend_shape_mode;
 }
 
+bool MeshStorage::mesh_get_source_account(RID p_mesh, int p_surface, SourceAccount &r_account) const {
+	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
+	if (!mesh || p_surface < 0 || uint32_t(p_surface) >= mesh->surface_count) {
+		r_account = SourceAccount();
+		return false;
+	}
+	const Mesh::Surface &surface = *mesh->surfaces[p_surface];
+	r_account.generation = surface.source_generation;
+	r_account.revision = surface.source_revision;
+	r_account.capture_supported = surface.static_capture_supported;
+	r_account.invalidated = surface.static_capture_invalidated;
+	return true;
+}
+
 void MeshStorage::mesh_surface_update_vertex_region(RID p_mesh, int p_surface, int p_offset, const Vector<uint8_t> &p_data) {
 	ERR_FAIL_COND(p_data.is_empty());
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);

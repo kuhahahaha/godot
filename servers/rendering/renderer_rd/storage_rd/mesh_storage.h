@@ -396,6 +396,17 @@ public:
 	/// Return stride
 	virtual void mesh_add_surface(RID p_mesh, const RenderingServerTypes::SurfaceData &p_surface) override;
 
+	// E25 read-only source account. This reports MeshStorage-owned classification
+	// state; it does not mint a capture lease or expose source bytes.
+	struct SourceAccount {
+		uint64_t generation = 0;
+		uint64_t revision = 0;
+		bool capture_supported = false;
+		bool invalidated = false;
+	};
+
+	bool mesh_get_source_account(RID p_mesh, int p_surface, SourceAccount &r_account) const;
+
 	virtual int mesh_get_blend_shape_count(RID p_mesh) const override;
 
 	virtual void mesh_set_blend_shape_mode(RID p_mesh, RSE::BlendShapeMode p_mode) override;
