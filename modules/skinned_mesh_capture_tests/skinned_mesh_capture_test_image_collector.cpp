@@ -96,13 +96,14 @@ Error SkinnedMeshCaptureTestImageCollector::reserve(uint32_t p_slot, Callable &r
 	r_callback = Callable(memnew(Callback(state, p_slot)));
 	return OK;
 }
-void SkinnedMeshCaptureTestImageCollector::reject(uint32_t p_slot) {
+Error SkinnedMeshCaptureTestImageCollector::reject(uint32_t p_slot) {
 	std::lock_guard<std::mutex> lock(state->mutex);
 	if (p_slot >= 18 || !state->entries[p_slot].reserved || state->entries[p_slot].complete || state->entries[p_slot].rejected) {
 		state->poisoned = true;
-		return;
+		return ERR_INVALID_PARAMETER;
 	}
 	state->entries[p_slot].rejected = true;
+	return OK;
 }
 Error SkinnedMeshCaptureTestImageCollector::copy(uint32_t p_slot, PackedByteArray &r_bytes) const {
 	std::lock_guard<std::mutex> lock(state->mutex);

@@ -96,8 +96,8 @@ TEST_CASE("[P01] Image rejected enqueue drains holders and forbids late callback
 	SkinnedMeshCaptureTestImageCollector collector;
 	Callable callback;
 	REQUIRE(collector.reserve(0, callback) == OK);
-	collector.reject(0);
-	collector.reject(0);
+	REQUIRE(collector.reject(0) == OK);
+	CHECK(collector.reject(0) == ERR_INVALID_PARAMETER);
 	CHECK(collector.poisoned());
 	PackedByteArray output;
 	CHECK(collector.copy(0, output) == ERR_UNAVAILABLE);
