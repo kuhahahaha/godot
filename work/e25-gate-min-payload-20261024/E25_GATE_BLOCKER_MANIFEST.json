@@ -1,0 +1,32 @@
+{
+  "manifest_version": 1,
+  "status": "BLOCKED_SAFE_OWNER_STAGING",
+  "scope": "E25 static provenance non-empty payload and exact extent admission",
+  "base_commit": "f66ee43f04",
+  "working_tree_note": "mesh_storage.cpp contains unrelated uncommitted ExternalSurface/P01 and render-hook changes; no production hunk was staged or committed.",
+  "observations": {
+    "empty_vertex_or_index_currently_can_mark_supported": true,
+    "provenance_word_count_currently_only_matches_vector_length": true,
+    "physical_vertex_padding_branch": true,
+    "padding_bytes": 4,
+    "padded_branch_condition": "uncompressed normal present and tangent absent",
+    "index_upload_source": "new_surface.index_data",
+    "ordinary_debug_exact_extent_checks_present": true
+  },
+  "required_gate": {
+    "vertex_count_gt_zero": true,
+    "vertex_payload_non_empty": true,
+    "index_count_gt_zero": true,
+    "index_payload_non_empty": true,
+    "vertex_and_attribute_exact_logical_extents": true,
+    "index_exact_extent_for_selected_index_width": true,
+    "provenance_word_count_non_zero_and_exact": true,
+    "reject_uncompressed_normal_without_tangent_until_physical_mirror_contract": true
+  },
+  "validation_plan": {
+    "red_case": "schema=1, typed provenance, vertex/index counts nonzero but empty payload; current gate reports capture_supported=true",
+    "green_case": "same case rejected after owner-local gate; a non-padded exact payload is admitted; padded normal/no-tangent case remains rejected",
+    "verification": "owner-local unit/static check only; no full build or GPU qualification claimed"
+  },
+  "decision": "Do not stage a production patch from this mixed worktree. Rebase the gate onto a clean E25 owner baseline or provide an owner-specific isolated worktree before implementation."
+}
