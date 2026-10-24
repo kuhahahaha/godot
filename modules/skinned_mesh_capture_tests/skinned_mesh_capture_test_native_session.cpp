@@ -350,7 +350,9 @@ void SkinnedMeshCaptureTestNativeSession::maintain() {
 			const Error snapshot = collector.copy_completed(job.identities[0], job.result.snapshot);
 			const Error consumer = collector.copy_completed(job.identities[1], job.result.consumer);
 			if (snapshot != OK || consumer != OK) {
-				fail(ERR_INVALID_DATA);
+				const Error copy_error = snapshot != OK ? snapshot : consumer;
+				job.result.error = copy_error;
+				fail(copy_error);
 				closing = true;
 				continue;
 			}
