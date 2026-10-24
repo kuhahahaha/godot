@@ -362,6 +362,7 @@ void SkinnedMeshCaptureTestNativeSession::maintain() {
 					continue;
 				}
 				if (image != OK) {
+					job.result.error = image;
 					fail(image);
 					closing = true;
 					continue;
