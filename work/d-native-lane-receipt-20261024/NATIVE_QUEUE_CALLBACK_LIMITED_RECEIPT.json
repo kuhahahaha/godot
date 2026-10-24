@@ -1,0 +1,15 @@
+{
+  "date": "2026-10-24",
+  "disposition": "APPROVE_LIMITED",
+  "scope": "native queue/callback source-level lifecycle evidence",
+  "independent_review": true,
+  "source_static": true,
+  "runtime": false,
+  "native_binary": false,
+  "gpu": false,
+  "pck": false,
+  "production_ready": false,
+  "full_build": false,
+  "full_build_blocker": "No space left on device",
+  "selector_limitation": "optional module absent from existing focused binary"
+}
