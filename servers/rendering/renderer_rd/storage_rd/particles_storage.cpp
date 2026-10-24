@@ -833,6 +833,10 @@ void ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 				u.append_id(p_particles->emission_storage_buffer);
 			} else {
 				_particles_ensure_unused_emission_buffer(p_particles);
+				if (p_particles->unused_emission_storage_buffer.is_null()) {
+					ERR_PRINT("Failed to create particle fallback emission buffer.");
+					return;
+				}
 				u.append_id(p_particles->unused_emission_storage_buffer);
 			}
 			uniforms.push_back(u);
@@ -846,9 +850,17 @@ void ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 				if (sub_emitter->emission_buffer == nullptr) { //no emission buffer, allocate emission buffer
 					_particles_allocate_emission_buffer(sub_emitter);
 				}
+				if (sub_emitter->emission_storage_buffer.is_null()) {
+					ERR_PRINT("Failed to create sub-emitter emission buffer.");
+					return;
+				}
 				u.append_id(sub_emitter->emission_storage_buffer);
 			} else {
 				_particles_ensure_unused_emission_buffer(p_particles);
+				if (p_particles->unused_emission_storage_buffer.is_null()) {
+					ERR_PRINT("Failed to create particle fallback emission buffer.");
+					return;
+				}
 				u.append_id(p_particles->unused_emission_storage_buffer);
 			}
 			uniforms.push_back(u);
