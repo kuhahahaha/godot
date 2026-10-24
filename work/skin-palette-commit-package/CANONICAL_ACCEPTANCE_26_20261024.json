@@ -1,0 +1,512 @@
+{
+  "manifest": "godot-fr-canonical-acceptance",
+  "version": 1,
+  "date": "2026-10-24 Asia/Shanghai",
+  "source_of_truth": "This file is the canonical 26-row index; referenced FR/PLAN and receipts remain authoritative for content. Unknown mappings are pending.",
+  "rows": [
+    {
+      "id": "P01-01",
+      "name": "P01 structure and naming freeze",
+      "fr_plan": {
+        "path": "FR_skin_palette_commit.md",
+        "sha256": null
+      },
+      "evidence": [
+        {
+          "path": "work/p01-cleanup-20261024/P01_NAMING_REGISTRATION_AUDIT.json",
+          "sha256": "4fd170681f85ba0618bf5239609ceadab7929803d83d5fdc0f5e05a49798c93f"
+        }
+      ],
+      "status": "implemented",
+      "qualification": "none",
+      "missing_dependencies": [
+        "full macOS editor/tests/dev build",
+        "runtime/native execution evidence"
+      ],
+      "notes": "Historical candidates and static receipts are not acceptance proof."
+    },
+    {
+      "id": "P01-02",
+      "name": "P01 unused receiver placeholder removal",
+      "fr_plan": {
+        "path": "FR_skin_palette_commit_PLAN.md",
+        "sha256": null
+      },
+      "evidence": [
+        {
+          "path": "work/p01-cleanup-20261024/STATIC_CLEANUP_CHECK.json",
+          "sha256": "bbfe57cf9aac72cdd7ea9c1f51c418f1322a5ab3081c89d7f8c4420532ddcff5"
+        }
+      ],
+      "status": "implemented",
+      "qualification": "none",
+      "missing_dependencies": [
+        "full macOS editor/tests/dev build",
+        "runtime/native execution evidence"
+      ],
+      "notes": "Historical candidates and static receipts are not acceptance proof."
+    },
+    {
+      "id": "P01-03",
+      "name": "P01 normal build registration isolation",
+      "fr_plan": {
+        "path": "FR_skin_palette_commit_PLAN.md",
+        "sha256": null
+      },
+      "evidence": [
+        {
+          "path": "work/p01-cleanup-20261024/P01_NAMING_REGISTRATION_AUDIT.json",
+          "sha256": "4fd170681f85ba0618bf5239609ceadab7929803d83d5fdc0f5e05a49798c93f"
+        }
+      ],
+      "status": "implemented",
+      "qualification": "none",
+      "missing_dependencies": [
+        "full macOS editor/tests/dev build",
+        "runtime/native execution evidence"
+      ],
+      "notes": "Historical candidates and static receipts are not acceptance proof."
+    },
+    {
+      "id": "R01-01",
+      "name": "R01 original session registration",
+      "fr_plan": {
+        "path": "native-core-production/FR_core_interface_PLAN.md",
+        "sha256": null
+      },
+      "evidence": [],
+      "status": "pending",
+      "qualification": "none",
+      "missing_dependencies": [
+        "full macOS editor/tests/dev build",
+        "runtime/native execution evidence",
+        "owner-specific integration evidence"
+      ],
+      "notes": "Historical candidates and static receipts are not acceptance proof."
+    },
+    {
+      "id": "R01-02",
+      "name": "R01 duplicate association identity",
+      "fr_plan": {
+        "path": "native-core-production/FR_core_interface_PLAN.md",
+        "sha256": null
+      },
+      "evidence": [],
+      "status": "pending",
+      "qualification": "none",
+      "missing_dependencies": [
+        "full macOS editor/tests/dev build",
+        "runtime/native execution evidence",
+        "owner-specific integration evidence"
+      ],
+      "notes": "Historical candidates and static receipts are not acceptance proof."
+    },
+    {
+      "id": "R01-03",
+      "name": "R01 stale generation and retention",
+      "fr_plan": {
+        "path": "native-core-production/FR_core_interface_PLAN.md",
+        "sha256": null
+      },
+      "evidence": [],
+      "status": "pending",
+      "qualification": "none",
+      "missing_dependencies": [
+        "full macOS editor/tests/dev build",
+        "runtime/native execution evidence",
+        "owner-specific integration evidence"
+      ],
+      "notes": "Historical candidates and static receipts are not acceptance proof."
+    },
+    {
+      "id": "R02-01",
+      "name": "R02 checked append and upload",
+      "fr_plan": {
+        "path": "native-core-production/FR_core_interface_PLAN.md",
+        "sha256": null
+      },
+      "evidence": [],
+      "status": "pending",
+      "qualification": "none",
+      "missing_dependencies": [
+        "full macOS editor/tests/dev build",
+        "runtime/native execution evidence",
+        "owner-specific integration evidence"
+      ],
+      "notes": "Historical candidates and static receipts are not acceptance proof."
+    },
+    {
+      "id": "R02-02",
+      "name": "R02 device epoch validation",
+      "fr_plan": {
+        "path": "native-core-production/FR_core_interface_PLAN.md",
+        "sha256": null
+      },
+      "evidence": [],
+      "status": "pending",
+      "qualification": "none",
+      "missing_dependencies": [
+        "full macOS editor/tests/dev build",
+        "runtime/native execution evidence",
+        "owner-specific integration evidence"
+      ],
+      "notes": "Historical candidates and static receipts are not acceptance proof."
+    },
+    {
+      "id": "R02-03",
+      "name": "R02 completion and disposal evidence",
+      "fr_plan": {
+        "path": "native-core-production/FR_core_interface_PLAN.md",
+        "sha256": null
+      },
+      "evidence": [],
+      "status": "pending",
+      "qualification": "none",
+      "missing_dependencies": [
+        "full macOS editor/tests/dev build",
+        "runtime/native execution evidence",
+        "owner-specific integration evidence"
+      ],
+      "notes": "Historical candidates and static receipts are not acceptance proof."
+    },
+    {
+      "id": "R03-01",
+      "name": "R03 public binding admission",
+      "fr_plan": {
+        "path": "native-core-production/FR_core_interface_PLAN.md",
+        "sha256": null
+      },
+      "evidence": [],
+      "status": "pending",
+      "qualification": "none",
+      "missing_dependencies": [
+        "full macOS editor/tests/dev build",
+        "runtime/native execution evidence",
+        "owner-specific integration evidence"
+      ],
+      "notes": "Historical candidates and static receipts are not acceptance proof."
+    },
+    {
+      "id": "R03-02",
+      "name": "R03 native holder lifecycle",
+      "fr_plan": {
+        "path": "native-core-production/FR_core_interface_PLAN.md",
+        "sha256": null
+      },
+      "evidence": [],
+      "status": "pending",
+      "qualification": "none",
+      "missing_dependencies": [
+        "full macOS editor/tests/dev build",
+        "runtime/native execution evidence",
+        "owner-specific integration evidence"
+      ],
+      "notes": "Historical candidates and static receipts are not acceptance proof."
+    },
+    {
+      "id": "R03-03",
+      "name": "R03 unload and close ownership",
+      "fr_plan": {
+        "path": "native-core-production/FR_core_interface_PLAN.md",
+        "sha256": null
+      },
+      "evidence": [],
+      "status": "pending",
+      "qualification": "none",
+      "missing_dependencies": [
+        "full macOS editor/tests/dev build",
+        "runtime/native execution evidence",
+        "owner-specific integration evidence"
+      ],
+      "notes": "Historical candidates and static receipts are not acceptance proof."
+    },
+    {
+      "id": "E15-01",
+      "name": "E15 resource pool logical release",
+      "fr_plan": {
+        "path": "native-core-production/FR_core_interface.md",
+        "sha256": null
+      },
+      "evidence": [
+        {
+          "path": "work/e15-e16-retirement-audit-20261024/STATIC_RETIREMENT_AUDIT.json",
+          "sha256": "6a77b1ac7936d356268fab38873f4dc7e077e316a1cf89646216094e434566aa"
+        }
+      ],
+      "status": "implemented",
+      "qualification": "none",
+      "missing_dependencies": [
+        "full macOS editor/tests/dev build",
+        "runtime/native execution evidence"
+      ],
+      "notes": "Historical candidates and static receipts are not acceptance proof."
+    },
+    {
+      "id": "E15-02",
+      "name": "E15 allocation serial retirement tracking",
+      "fr_plan": {
+        "path": "native-core-production/FR_core_interface.md",
+        "sha256": null
+      },
+      "evidence": [
+        {
+          "path": "work/e15-e16-retirement-audit-20261024/STATIC_RETIREMENT_AUDIT.json",
+          "sha256": "6a77b1ac7936d356268fab38873f4dc7e077e316a1cf89646216094e434566aa"
+        }
+      ],
+      "status": "implemented",
+      "qualification": "none",
+      "missing_dependencies": [
+        "full macOS editor/tests/dev build",
+        "runtime/native execution evidence"
+      ],
+      "notes": "Historical candidates and static receipts are not acceptance proof."
+    },
+    {
+      "id": "E16-01",
+      "name": "E16 physical retirement polling",
+      "fr_plan": {
+        "path": "native-core-production/FR_core_interface.md",
+        "sha256": null
+      },
+      "evidence": [
+        {
+          "path": "work/e15-e16-retirement-audit-20261024/STATIC_RETIREMENT_AUDIT.json",
+          "sha256": "6a77b1ac7936d356268fab38873f4dc7e077e316a1cf89646216094e434566aa"
+        }
+      ],
+      "status": "implemented",
+      "qualification": "none",
+      "missing_dependencies": [
+        "full macOS editor/tests/dev build",
+        "runtime/native execution evidence"
+      ],
+      "notes": "Historical candidates and static receipts are not acceptance proof."
+    },
+    {
+      "id": "E16-02",
+      "name": "E16 render-thread owner enforcement",
+      "fr_plan": {
+        "path": "native-core-production/FR_core_interface.md",
+        "sha256": null
+      },
+      "evidence": [
+        {
+          "path": "work/e15-e16-retirement-audit-20261024/STATIC_RETIREMENT_AUDIT.json",
+          "sha256": "6a77b1ac7936d356268fab38873f4dc7e077e316a1cf89646216094e434566aa"
+        }
+      ],
+      "status": "implemented",
+      "qualification": "none",
+      "missing_dependencies": [
+        "full macOS editor/tests/dev build",
+        "runtime/native execution evidence"
+      ],
+      "notes": "Historical candidates and static receipts are not acceptance proof."
+    },
+    {
+      "id": "E25-01",
+      "name": "E25 provenance admission gate",
+      "fr_plan": {
+        "path": "native-core-production/FR_core_interface.md",
+        "sha256": null
+      },
+      "evidence": [
+        {
+          "path": "work/e25-scope-split-20261024/STATIC_GATE_CHECK.json",
+          "sha256": "c180331f92d8e62ce606ab3b2dd490307d3321d67bc2cfc31f3ff9a132438f59"
+        }
+      ],
+      "status": "implemented",
+      "qualification": "none",
+      "missing_dependencies": [
+        "full macOS editor/tests/dev build",
+        "runtime/native execution evidence"
+      ],
+      "notes": "Historical candidates and static receipts are not acceptance proof."
+    },
+    {
+      "id": "E25-02",
+      "name": "E25 source account accessor",
+      "fr_plan": {
+        "path": "native-core-production/FR_core_interface.md",
+        "sha256": null
+      },
+      "evidence": [
+        {
+          "path": "work/e25-source-mirror-20261024/STATIC_MIRROR_COMMIT_CHECK.json",
+          "sha256": "24602fe14936236054a72c4356faac60a1052078c20053ccb11cfe2777d44a88"
+        }
+      ],
+      "status": "implemented",
+      "qualification": "none",
+      "missing_dependencies": [
+        "full macOS editor/tests/dev build",
+        "runtime/native execution evidence"
+      ],
+      "notes": "Historical candidates and static receipts are not acceptance proof."
+    },
+    {
+      "id": "E25-03",
+      "name": "E25 source mirror bounded writes",
+      "fr_plan": {
+        "path": "native-core-production/FR_core_interface.md",
+        "sha256": null
+      },
+      "evidence": [
+        {
+          "path": "work/e25-source-mirror-20261024/STATIC_MIRROR_COMMIT_CHECK.json",
+          "sha256": "24602fe14936236054a72c4356faac60a1052078c20053ccb11cfe2777d44a88"
+        }
+      ],
+      "status": "implemented",
+      "qualification": "none",
+      "missing_dependencies": [
+        "full macOS editor/tests/dev build",
+        "runtime/native execution evidence"
+      ],
+      "notes": "Historical candidates and static receipts are not acceptance proof."
+    },
+    {
+      "id": "E25-04",
+      "name": "E25 revision rollover policy",
+      "fr_plan": {
+        "path": "native-core-production/FR_core_interface.md",
+        "sha256": null
+      },
+      "evidence": [
+        {
+          "path": "work/e25-source-mirror-20261024/STATIC_MIRROR_COMMIT_CHECK.json",
+          "sha256": "24602fe14936236054a72c4356faac60a1052078c20053ccb11cfe2777d44a88"
+        }
+      ],
+      "status": "implemented",
+      "qualification": "none",
+      "missing_dependencies": [
+        "full macOS editor/tests/dev build",
+        "runtime/native execution evidence"
+      ],
+      "notes": "Historical candidates and static receipts are not acceptance proof."
+    },
+    {
+      "id": "NATIVE-01",
+      "name": "Native runtime qualification",
+      "fr_plan": {
+        "path": "native-core-production/FR_core_interface_PLAN.md",
+        "sha256": null
+      },
+      "evidence": [],
+      "status": "pending",
+      "qualification": "none",
+      "missing_dependencies": [
+        "full macOS editor/tests/dev build",
+        "runtime/native execution evidence",
+        "owner-specific integration evidence"
+      ],
+      "notes": "Historical candidates and static receipts are not acceptance proof."
+    },
+    {
+      "id": "GPU-01",
+      "name": "GPU qualification on real device",
+      "fr_plan": {
+        "path": "D1_LONG_PACKAGE_IMPLEMENTATION_PLAN.md",
+        "sha256": null
+      },
+      "evidence": [],
+      "status": "pending",
+      "qualification": "none",
+      "missing_dependencies": [
+        "full macOS editor/tests/dev build",
+        "runtime/native execution evidence",
+        "owner-specific integration evidence"
+      ],
+      "notes": "Historical candidates and static receipts are not acceptance proof."
+    },
+    {
+      "id": "PCK-01",
+      "name": "PCK/package integrity qualification",
+      "fr_plan": {
+        "path": "native-core-production/FR_core_interface_PLAN.md",
+        "sha256": null
+      },
+      "evidence": [],
+      "status": "pending",
+      "qualification": "none",
+      "missing_dependencies": [
+        "full macOS editor/tests/dev build",
+        "runtime/native execution evidence",
+        "owner-specific integration evidence"
+      ],
+      "notes": "Historical candidates and static receipts are not acceptance proof."
+    },
+    {
+      "id": "LIFE-01",
+      "name": "Lifecycle close and retention qualification",
+      "fr_plan": {
+        "path": "FR_library_close.md",
+        "sha256": null
+      },
+      "evidence": [],
+      "status": "pending",
+      "qualification": "none",
+      "missing_dependencies": [
+        "full macOS editor/tests/dev build",
+        "runtime/native execution evidence",
+        "owner-specific integration evidence"
+      ],
+      "notes": "Historical candidates and static receipts are not acceptance proof."
+    },
+    {
+      "id": "PLAT-01",
+      "name": "Platform matrix qualification",
+      "fr_plan": {
+        "path": "D1_LONG_PACKAGE_IMPLEMENTATION_PLAN.md",
+        "sha256": null
+      },
+      "evidence": [],
+      "status": "pending",
+      "qualification": "none",
+      "missing_dependencies": [
+        "full macOS editor/tests/dev build",
+        "runtime/native execution evidence",
+        "owner-specific integration evidence"
+      ],
+      "notes": "Historical candidates and static receipts are not acceptance proof."
+    },
+    {
+      "id": "PERF-01",
+      "name": "Performance and capacity qualification",
+      "fr_plan": {
+        "path": "D1_LONG_PACKAGE_IMPLEMENTATION_PLAN.md",
+        "sha256": null
+      },
+      "evidence": [],
+      "status": "pending",
+      "qualification": "none",
+      "missing_dependencies": [
+        "full macOS editor/tests/dev build",
+        "runtime/native execution evidence",
+        "owner-specific integration evidence"
+      ],
+      "notes": "Historical candidates and static receipts are not acceptance proof."
+    }
+  ],
+  "global_gates": {
+    "acceptance": false,
+    "runtime_credit": false,
+    "native_qualification": false,
+    "gpu_qualification": false,
+    "pck_qualification": false,
+    "lifecycle_qualification": false,
+    "platform_qualification": false,
+    "performance_qualification": false,
+    "production_ready": false,
+    "full_build_blocker": "No space left on device while archiving libmodule_glslang.macos.editor.dev.arm64.a"
+  },
+  "mapping_sources": [
+    "work/skin-palette-commit-package/native-core-production/ACCEPTANCE_EVIDENCE_AUDIT_20261024.json",
+    "work/p01-cleanup-20261024/STATIC_CLEANUP_CHECK.json",
+    "work/e25-source-mirror-20261024/STATIC_MIRROR_COMMIT_CHECK.json",
+    "work/e15-e16-retirement-audit-20261024/STATIC_RETIREMENT_AUDIT.json"
+  ]
+}
