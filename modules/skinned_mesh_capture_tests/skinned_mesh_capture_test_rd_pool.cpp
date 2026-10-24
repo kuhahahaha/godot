@@ -356,8 +356,8 @@ Error SkinnedMeshCaptureTestRDPool::enqueue_readback(const SkinnedMeshCaptureTes
 		// RD stores the callback only after successful staging preparation.
 		// Any recorded staging prefix still retires through normal RD frames;
 		// cancellation is accounting, not physical retirement or reuse.
-		p_collector.cancel_unqueued(p_identity);
-		return error;
+		const Error canceled = p_collector.cancel_unqueued(p_identity);
+		return canceled == OK ? error : canceled;
 	}
 	return p_collector.mark_enqueued(p_identity);
 }
