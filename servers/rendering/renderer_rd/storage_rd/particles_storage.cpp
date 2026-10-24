@@ -843,6 +843,10 @@ void ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 		}
 
 		p_particles->particles_material_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, particles_shader.default_shader_rd, 1);
+		if (p_particles->particles_material_uniform_set.is_null()) {
+			ERR_PRINT("Failed to create particle material uniform set.");
+			return;
+		}
 	}
 
 	double new_phase = Math::fmod((double)(p_particles->phase + (p_delta / p_particles->lifetime)), 1.0);
@@ -1267,6 +1271,10 @@ void ParticlesStorage::particles_set_view_axis(RID p_particles, const Vector3 &p
 		}
 		size *= sizeof(float) * 2;
 		particles->particles_sort_buffer = RD::get_singleton()->storage_buffer_create(size);
+		if (particles->particles_sort_buffer.is_null()) {
+			ERR_PRINT("Failed to create particle sort buffer.");
+			return;
+		}
 
 		{
 			Vector<RD::Uniform> uniforms;
@@ -1280,6 +1288,12 @@ void ParticlesStorage::particles_set_view_axis(RID p_particles, const Vector3 &p
 			}
 
 			particles->particles_sort_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, particles_shader.copy_shader.version_get_shader(particles_shader.copy_shader_version, ParticlesShader::COPY_MODE_FILL_SORT_BUFFER), 1);
+			if (particles->particles_sort_uniform_set.is_null()) {
+				ERR_PRINT("Failed to create particle sort uniform set.");
+				RD::get_singleton()->free_rid(particles->particles_sort_buffer);
+				particles->particles_sort_buffer = RID();
+				return;
+			}
 		}
 	}
 
