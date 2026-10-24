@@ -4,8 +4,8 @@
 
 `pending` = canonical acceptance not granted. `bounded_only` = source/static evidence only. Every qualification boolean below is `false`.
 
-| Row | Scope | Acceptance | Source | Native binary | Build/runtime | GPU | PCK | Platform | Production |
-|---|---|---:|---|---:|---:|---:|---:|---:|---:|
+| Row | Scope | Acceptance | Source | Native binary | Build | Runtime | GPU | PCK | Platform | Production |
+|---|---|---:|---|---:|---:|---:|---:|---:|---:|---:|
 | A01 | attribute/lifecycle/reader | pending | bounded_only | false | false | false | false | false | false |
 | A02 | capture ownership and multi-step draw | pending | bounded_only | false | false | false | false | false | false |
 | A03 | channel window semantics | pending | bounded_only | false | false | false | false | false | false |
