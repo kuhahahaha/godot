@@ -97,6 +97,8 @@ TEST_CASE("[P01] Image rejected enqueue drains holders and forbids late callback
 	Callable callback;
 	REQUIRE(collector.reserve(0, callback) == OK);
 	collector.reject(0);
+	collector.reject(0);
+	CHECK(collector.poisoned());
 	PackedByteArray output;
 	CHECK(collector.copy(0, output) == ERR_UNAVAILABLE);
 	CHECK_FALSE(collector.drained());

@@ -98,7 +98,7 @@ Error SkinnedMeshCaptureTestImageCollector::reserve(uint32_t p_slot, Callable &r
 }
 void SkinnedMeshCaptureTestImageCollector::reject(uint32_t p_slot) {
 	std::lock_guard<std::mutex> lock(state->mutex);
-	if (p_slot >= 18 || !state->entries[p_slot].reserved || state->entries[p_slot].complete) {
+	if (p_slot >= 18 || !state->entries[p_slot].reserved || state->entries[p_slot].complete || state->entries[p_slot].rejected) {
 		state->poisoned = true;
 		return;
 	}
