@@ -564,10 +564,16 @@ void ParticlesStorage::_particles_allocate_emission_buffer(Particles *particles)
 
 	particles->emission_buffer_data.resize(sizeof(ParticleEmissionBuffer::Data) * particles->amount + sizeof(uint32_t) * 4);
 	memset(particles->emission_buffer_data.ptrw(), 0, particles->emission_buffer_data.size());
-	particles->emission_buffer = reinterpret_cast<ParticleEmissionBuffer *>(particles->emission_buffer_data.ptrw());
-	particles->emission_buffer->particle_max = particles->amount;
+	ParticleEmissionBuffer *emission_buffer = reinterpret_cast<ParticleEmissionBuffer *>(particles->emission_buffer_data.ptrw());
+	emission_buffer->particle_max = particles->amount;
 
-	particles->emission_storage_buffer = RD::get_singleton()->storage_buffer_create(particles->emission_buffer_data.size(), particles->emission_buffer_data);
+	RID emission_storage_buffer = RD::get_singleton()->storage_buffer_create(particles->emission_buffer_data.size(), particles->emission_buffer_data);
+	if (emission_storage_buffer.is_null()) {
+		particles->emission_buffer_data.clear();
+		return;
+	}
+	particles->emission_buffer = emission_buffer;
+	particles->emission_storage_buffer = emission_storage_buffer;
 
 	if (RD::get_singleton()->uniform_set_is_valid(particles->particles_material_uniform_set)) {
 		//will need to be re-created
