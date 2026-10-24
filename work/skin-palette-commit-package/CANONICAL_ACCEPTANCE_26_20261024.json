@@ -1,494 +1,400 @@
 {
   "manifest": "godot-fr-canonical-acceptance",
-  "version": 1,
+  "version": 2,
   "date": "2026-10-24 Asia/Shanghai",
-  "source_of_truth": "This file is the canonical 26-row index; referenced FR/PLAN and receipts remain authoritative for content. Unknown mappings are pending.",
+  "authority": {
+    "acceptance26_map": {
+      "path": "/Users/macbookair/Documents/Work/Dev/ANGEParticleDesign/work/current-backend-readiness-review-2026-10-22/ACCEPTANCE26_MAP.md",
+      "sha256": "a996bbd533005973348ff2d7554d06fc69b06c7ac721d76c87198aa0a0a1b93c"
+    },
+    "id47_map": {
+      "path": "/Users/macbookair/Documents/Work/Dev/ANGEParticleDesign/work/current-backend-readiness-review-2026-10-22/ID47_MAP.md",
+      "sha256": "53f22d11d890f649538686098cdddbb9076988e5b02a41044141637e59c3884a"
+    },
+    "rule": "ACCEPTANCE26_MAP.md stable rows and FR mappings are authoritative; this manifest is a reconciled index, not a replacement contract."
+  },
   "rows": [
     {
-      "id": "P01-01",
-      "name": "P01 structure and naming freeze",
-      "fr_plan": {
-        "path": "FR_skin_palette_commit.md",
-        "sha256": null
-      },
-      "evidence": [
-        {
-          "path": "work/p01-cleanup-20261024/P01_NAMING_REGISTRATION_AUDIT.json",
-          "sha256": "4fd170681f85ba0618bf5239609ceadab7929803d83d5fdc0f5e05a49798c93f"
-        }
-      ],
-      "status": "implemented",
-      "qualification": "none",
-      "missing_dependencies": [
-        "full macOS editor/tests/dev build",
-        "runtime/native execution evidence"
-      ],
-      "notes": "Historical candidates and static receipts are not acceptance proof."
-    },
-    {
-      "id": "P01-02",
-      "name": "P01 unused receiver placeholder removal",
-      "fr_plan": {
-        "path": "FR_skin_palette_commit_PLAN.md",
-        "sha256": null
-      },
-      "evidence": [
-        {
-          "path": "work/p01-cleanup-20261024/STATIC_CLEANUP_CHECK.json",
-          "sha256": "bbfe57cf9aac72cdd7ea9c1f51c418f1322a5ab3081c89d7f8c4420532ddcff5"
-        }
-      ],
-      "status": "implemented",
-      "qualification": "none",
-      "missing_dependencies": [
-        "full macOS editor/tests/dev build",
-        "runtime/native execution evidence"
-      ],
-      "notes": "Historical candidates and static receipts are not acceptance proof."
-    },
-    {
-      "id": "P01-03",
-      "name": "P01 normal build registration isolation",
-      "fr_plan": {
-        "path": "FR_skin_palette_commit_PLAN.md",
-        "sha256": null
-      },
-      "evidence": [
-        {
-          "path": "work/p01-cleanup-20261024/P01_NAMING_REGISTRATION_AUDIT.json",
-          "sha256": "4fd170681f85ba0618bf5239609ceadab7929803d83d5fdc0f5e05a49798c93f"
-        }
-      ],
-      "status": "implemented",
-      "qualification": "none",
-      "missing_dependencies": [
-        "full macOS editor/tests/dev build",
-        "runtime/native execution evidence"
-      ],
-      "notes": "Historical candidates and static receipts are not acceptance proof."
-    },
-    {
-      "id": "R01-01",
-      "name": "R01 original session registration",
-      "fr_plan": {
-        "path": "native-core-production/FR_core_interface_PLAN.md",
-        "sha256": null
-      },
-      "evidence": [],
+      "id": "A01",
+      "name": "attribute/lifecycle/reader",
+      "authoritative_fr_scope": "E05/E07–E10; attribute/lifecycle/reader PROTOCOL; E09 PLAN §OSR-01",
+      "readiness_class": "XC/XU/N",
       "status": "pending",
-      "qualification": "none",
-      "missing_dependencies": [
-        "full macOS editor/tests/dev build",
-        "runtime/native execution evidence",
-        "owner-specific integration evidence"
-      ],
-      "notes": "Historical candidates and static receipts are not acceptance proof."
-    },
-    {
-      "id": "R01-02",
-      "name": "R01 duplicate association identity",
-      "fr_plan": {
-        "path": "native-core-production/FR_core_interface_PLAN.md",
-        "sha256": null
-      },
       "evidence": [],
-      "status": "pending",
-      "qualification": "none",
       "missing_dependencies": [
-        "full macOS editor/tests/dev build",
-        "runtime/native execution evidence",
-        "owner-specific integration evidence"
+        "owner-specific source/consumer implementation where indicated by authoritative map",
+        "required runtime/native/GPU/PCK/platform/performance evidence",
+        "full macOS editor/tests/dev build"
       ],
-      "notes": "Historical candidates and static receipts are not acceptance proof."
+      "notes": "Map row is not accepted by design text alone; historical candidate/receipt evidence is not promoted."
     },
     {
-      "id": "R01-03",
-      "name": "R01 stale generation and retention",
-      "fr_plan": {
-        "path": "native-core-production/FR_core_interface_PLAN.md",
-        "sha256": null
-      },
+      "id": "A02",
+      "name": "capture ownership and multi-step draw",
+      "authoritative_fr_scope": "E20/E23/E16; CAPTURE_OWNERSHIP §§1–8; VIEW/OWNER_INTAKE I01–04",
+      "readiness_class": "XC/N",
+      "status": "pending",
       "evidence": [],
-      "status": "pending",
-      "qualification": "none",
       "missing_dependencies": [
-        "full macOS editor/tests/dev build",
-        "runtime/native execution evidence",
-        "owner-specific integration evidence"
+        "owner-specific source/consumer implementation where indicated by authoritative map",
+        "required runtime/native/GPU/PCK/platform/performance evidence",
+        "full macOS editor/tests/dev build"
       ],
-      "notes": "Historical candidates and static receipts are not acceptance proof."
+      "notes": "Map row is not accepted by design text alone; historical candidate/receipt evidence is not promoted."
     },
     {
-      "id": "R02-01",
-      "name": "R02 checked append and upload",
-      "fr_plan": {
-        "path": "native-core-production/FR_core_interface_PLAN.md",
-        "sha256": null
-      },
+      "id": "A03",
+      "name": "channel window semantics",
+      "authoritative_fr_scope": "E30; CHANNEL_SEMANTICS/OPERATION",
+      "readiness_class": "XU/N",
+      "status": "pending",
       "evidence": [],
-      "status": "pending",
-      "qualification": "none",
       "missing_dependencies": [
-        "full macOS editor/tests/dev build",
-        "runtime/native execution evidence",
-        "owner-specific integration evidence"
+        "owner-specific source/consumer implementation where indicated by authoritative map",
+        "required runtime/native/GPU/PCK/platform/performance evidence",
+        "full macOS editor/tests/dev build"
       ],
-      "notes": "Historical candidates and static receipts are not acceptance proof."
+      "notes": "Map row is not accepted by design text alone; historical candidate/receipt evidence is not promoted."
     },
     {
-      "id": "R02-02",
-      "name": "R02 device epoch validation",
-      "fr_plan": {
-        "path": "native-core-production/FR_core_interface_PLAN.md",
-        "sha256": null
-      },
+      "id": "A04",
+      "name": "CPU-visible channel delivery",
+      "authoritative_fr_scope": "E32/E33/E07; CHANNEL_DELIVERY/METHODS; sync2 BS04",
+      "readiness_class": "SYNC/XU/N",
+      "status": "pending",
       "evidence": [],
-      "status": "pending",
-      "qualification": "none",
       "missing_dependencies": [
-        "full macOS editor/tests/dev build",
-        "runtime/native execution evidence",
-        "owner-specific integration evidence"
+        "owner-specific source/consumer implementation where indicated by authoritative map",
+        "required runtime/native/GPU/PCK/platform/performance evidence",
+        "full macOS editor/tests/dev build"
       ],
-      "notes": "Historical candidates and static receipts are not acceptance proof."
+      "notes": "Map row is not accepted by design text alone; historical candidate/receipt evidence is not promoted."
     },
     {
-      "id": "R02-03",
-      "name": "R02 completion and disposal evidence",
-      "fr_plan": {
-        "path": "native-core-production/FR_core_interface_PLAN.md",
-        "sha256": null
-      },
+      "id": "A05",
+      "name": "geometry history and motion",
+      "authoritative_fr_scope": "E27–29; GEOMETRY_CONTRACT/HISTORY; ribbon ACCEPTANCE",
+      "readiness_class": "implementation/N",
+      "status": "pending",
       "evidence": [],
-      "status": "pending",
-      "qualification": "none",
       "missing_dependencies": [
-        "full macOS editor/tests/dev build",
-        "runtime/native execution evidence",
-        "owner-specific integration evidence"
+        "owner-specific source/consumer implementation where indicated by authoritative map",
+        "required runtime/native/GPU/PCK/platform/performance evidence",
+        "full macOS editor/tests/dev build"
       ],
-      "notes": "Historical candidates and static receipts are not acceptance proof."
+      "notes": "Map row is not accepted by design text alone; historical candidate/receipt evidence is not promoted."
     },
     {
-      "id": "R03-01",
-      "name": "R03 public binding admission",
-      "fr_plan": {
-        "path": "native-core-production/FR_core_interface_PLAN.md",
-        "sha256": null
-      },
+      "id": "A06",
+      "name": "view history and previous state",
+      "authoritative_fr_scope": "E15/E16; VIEW_CONTRACT; B4 view history ACCEPTANCE",
+      "readiness_class": "implementation/N",
+      "status": "pending",
       "evidence": [],
-      "status": "pending",
-      "qualification": "none",
       "missing_dependencies": [
-        "full macOS editor/tests/dev build",
-        "runtime/native execution evidence",
-        "owner-specific integration evidence"
+        "owner-specific source/consumer implementation where indicated by authoritative map",
+        "required runtime/native/GPU/PCK/platform/performance evidence",
+        "full macOS editor/tests/dev build"
       ],
-      "notes": "Historical candidates and static receipts are not acceptance proof."
+      "notes": "Map row is not accepted by design text alone; historical candidate/receipt evidence is not promoted."
     },
     {
-      "id": "R03-02",
-      "name": "R03 native holder lifecycle",
-      "fr_plan": {
-        "path": "native-core-production/FR_core_interface_PLAN.md",
-        "sha256": null
-      },
+      "id": "A07",
+      "name": "typed operations and GPU lowering",
+      "authoritative_fr_scope": "U02/C03/C05/E19; B3 JOINT_TYPED_OPS; GPU lowering",
+      "readiness_class": "XT/XC",
+      "status": "pending",
       "evidence": [],
-      "status": "pending",
-      "qualification": "none",
       "missing_dependencies": [
-        "full macOS editor/tests/dev build",
-        "runtime/native execution evidence",
-        "owner-specific integration evidence"
+        "owner-specific source/consumer implementation where indicated by authoritative map",
+        "required runtime/native/GPU/PCK/platform/performance evidence",
+        "full macOS editor/tests/dev build"
       ],
-      "notes": "Historical candidates and static receipts are not acceptance proof."
+      "notes": "Map row is not accepted by design text alone; historical candidate/receipt evidence is not promoted."
     },
     {
-      "id": "R03-03",
-      "name": "R03 unload and close ownership",
-      "fr_plan": {
-        "path": "native-core-production/FR_core_interface_PLAN.md",
-        "sha256": null
-      },
+      "id": "A08",
+      "name": "capture ownership overflow and retirement",
+      "authoritative_fr_scope": "E02/E05/E06/R02; CAPTURE_OWNERSHIP §§2–5; X03/05/07/08/09",
+      "readiness_class": "XC/XU/N",
+      "status": "pending",
       "evidence": [],
+      "missing_dependencies": [
+        "owner-specific source/consumer implementation where indicated by authoritative map",
+        "required runtime/native/GPU/PCK/platform/performance evidence",
+        "full macOS editor/tests/dev build"
+      ],
+      "notes": "Map row is not accepted by design text alone; historical candidate/receipt evidence is not promoted."
+    },
+    {
+      "id": "A09",
+      "name": "artifact delivery and packaging",
+      "authoritative_fr_scope": "C07 artifact_delivery; U07 asset_packaging",
+      "readiness_class": "XT/N",
       "status": "pending",
-      "qualification": "none",
-      "missing_dependencies": [
-        "full macOS editor/tests/dev build",
-        "runtime/native execution evidence",
-        "owner-specific integration evidence"
-      ],
-      "notes": "Historical candidates and static receipts are not acceptance proof."
-    },
-    {
-      "id": "E15-01",
-      "name": "E15 resource pool logical release",
-      "fr_plan": {
-        "path": "native-core-production/FR_core_interface.md",
-        "sha256": null
-      },
-      "evidence": [
-        {
-          "path": "work/e15-e16-retirement-audit-20261024/STATIC_RETIREMENT_AUDIT.json",
-          "sha256": "6a77b1ac7936d356268fab38873f4dc7e077e316a1cf89646216094e434566aa"
-        }
-      ],
-      "status": "implemented",
-      "qualification": "none",
-      "missing_dependencies": [
-        "full macOS editor/tests/dev build",
-        "runtime/native execution evidence"
-      ],
-      "notes": "Historical candidates and static receipts are not acceptance proof."
-    },
-    {
-      "id": "E15-02",
-      "name": "E15 allocation serial retirement tracking",
-      "fr_plan": {
-        "path": "native-core-production/FR_core_interface.md",
-        "sha256": null
-      },
-      "evidence": [
-        {
-          "path": "work/e15-e16-retirement-audit-20261024/STATIC_RETIREMENT_AUDIT.json",
-          "sha256": "6a77b1ac7936d356268fab38873f4dc7e077e316a1cf89646216094e434566aa"
-        }
-      ],
-      "status": "implemented",
-      "qualification": "none",
-      "missing_dependencies": [
-        "full macOS editor/tests/dev build",
-        "runtime/native execution evidence"
-      ],
-      "notes": "Historical candidates and static receipts are not acceptance proof."
-    },
-    {
-      "id": "E16-01",
-      "name": "E16 physical retirement polling",
-      "fr_plan": {
-        "path": "native-core-production/FR_core_interface.md",
-        "sha256": null
-      },
-      "evidence": [
-        {
-          "path": "work/e15-e16-retirement-audit-20261024/STATIC_RETIREMENT_AUDIT.json",
-          "sha256": "6a77b1ac7936d356268fab38873f4dc7e077e316a1cf89646216094e434566aa"
-        }
-      ],
-      "status": "implemented",
-      "qualification": "none",
-      "missing_dependencies": [
-        "full macOS editor/tests/dev build",
-        "runtime/native execution evidence"
-      ],
-      "notes": "Historical candidates and static receipts are not acceptance proof."
-    },
-    {
-      "id": "E16-02",
-      "name": "E16 render-thread owner enforcement",
-      "fr_plan": {
-        "path": "native-core-production/FR_core_interface.md",
-        "sha256": null
-      },
-      "evidence": [
-        {
-          "path": "work/e15-e16-retirement-audit-20261024/STATIC_RETIREMENT_AUDIT.json",
-          "sha256": "6a77b1ac7936d356268fab38873f4dc7e077e316a1cf89646216094e434566aa"
-        }
-      ],
-      "status": "implemented",
-      "qualification": "none",
-      "missing_dependencies": [
-        "full macOS editor/tests/dev build",
-        "runtime/native execution evidence"
-      ],
-      "notes": "Historical candidates and static receipts are not acceptance proof."
-    },
-    {
-      "id": "E25-01",
-      "name": "E25 provenance admission gate",
-      "fr_plan": {
-        "path": "native-core-production/FR_core_interface.md",
-        "sha256": null
-      },
-      "evidence": [
-        {
-          "path": "work/e25-scope-split-20261024/STATIC_GATE_CHECK.json",
-          "sha256": "c180331f92d8e62ce606ab3b2dd490307d3321d67bc2cfc31f3ff9a132438f59"
-        }
-      ],
-      "status": "implemented",
-      "qualification": "none",
-      "missing_dependencies": [
-        "full macOS editor/tests/dev build",
-        "runtime/native execution evidence"
-      ],
-      "notes": "Historical candidates and static receipts are not acceptance proof."
-    },
-    {
-      "id": "E25-02",
-      "name": "E25 source account accessor",
-      "fr_plan": {
-        "path": "native-core-production/FR_core_interface.md",
-        "sha256": null
-      },
-      "evidence": [
-        {
-          "path": "work/e25-source-mirror-20261024/STATIC_MIRROR_COMMIT_CHECK.json",
-          "sha256": "24602fe14936236054a72c4356faac60a1052078c20053ccb11cfe2777d44a88"
-        }
-      ],
-      "status": "implemented",
-      "qualification": "none",
-      "missing_dependencies": [
-        "full macOS editor/tests/dev build",
-        "runtime/native execution evidence"
-      ],
-      "notes": "Historical candidates and static receipts are not acceptance proof."
-    },
-    {
-      "id": "E25-03",
-      "name": "E25 source mirror bounded writes",
-      "fr_plan": {
-        "path": "native-core-production/FR_core_interface.md",
-        "sha256": null
-      },
-      "evidence": [
-        {
-          "path": "work/e25-source-mirror-20261024/STATIC_MIRROR_COMMIT_CHECK.json",
-          "sha256": "24602fe14936236054a72c4356faac60a1052078c20053ccb11cfe2777d44a88"
-        }
-      ],
-      "status": "implemented",
-      "qualification": "none",
-      "missing_dependencies": [
-        "full macOS editor/tests/dev build",
-        "runtime/native execution evidence"
-      ],
-      "notes": "Historical candidates and static receipts are not acceptance proof."
-    },
-    {
-      "id": "E25-04",
-      "name": "E25 revision rollover policy",
-      "fr_plan": {
-        "path": "native-core-production/FR_core_interface.md",
-        "sha256": null
-      },
-      "evidence": [
-        {
-          "path": "work/e25-source-mirror-20261024/STATIC_MIRROR_COMMIT_CHECK.json",
-          "sha256": "24602fe14936236054a72c4356faac60a1052078c20053ccb11cfe2777d44a88"
-        }
-      ],
-      "status": "implemented",
-      "qualification": "none",
-      "missing_dependencies": [
-        "full macOS editor/tests/dev build",
-        "runtime/native execution evidence"
-      ],
-      "notes": "Historical candidates and static receipts are not acceptance proof."
-    },
-    {
-      "id": "NATIVE-01",
-      "name": "Native runtime qualification",
-      "fr_plan": {
-        "path": "native-core-production/FR_core_interface_PLAN.md",
-        "sha256": null
-      },
       "evidence": [],
-      "status": "pending",
-      "qualification": "none",
       "missing_dependencies": [
-        "full macOS editor/tests/dev build",
-        "runtime/native execution evidence",
-        "owner-specific integration evidence"
+        "owner-specific source/consumer implementation where indicated by authoritative map",
+        "required runtime/native/GPU/PCK/platform/performance evidence",
+        "full macOS editor/tests/dev build"
       ],
-      "notes": "Historical candidates and static receipts are not acceptance proof."
+      "notes": "Map row is not accepted by design text alone; historical candidate/receipt evidence is not promoted."
     },
     {
-      "id": "GPU-01",
-      "name": "GPU qualification on real device",
-      "fr_plan": {
-        "path": "D1_LONG_PACKAGE_IMPLEMENTATION_PLAN.md",
-        "sha256": null
-      },
-      "evidence": [],
+      "id": "A10",
+      "name": "native mesh and multimesh output",
+      "authoritative_fr_scope": "E01/E27/R03; OUTPUT/GEOMETRY/MULTIMESH_CONTRACT",
+      "readiness_class": "N",
       "status": "pending",
-      "qualification": "none",
+      "evidence": [],
       "missing_dependencies": [
-        "full macOS editor/tests/dev build",
-        "runtime/native execution evidence",
-        "owner-specific integration evidence"
+        "owner-specific source/consumer implementation where indicated by authoritative map",
+        "required runtime/native/GPU/PCK/platform/performance evidence",
+        "full macOS editor/tests/dev build"
       ],
-      "notes": "Historical candidates and static receipts are not acceptance proof."
+      "notes": "Map row is not accepted by design text alone; historical candidate/receipt evidence is not promoted."
     },
     {
-      "id": "PCK-01",
-      "name": "PCK/package integrity qualification",
-      "fr_plan": {
-        "path": "native-core-production/FR_core_interface_PLAN.md",
-        "sha256": null
-      },
-      "evidence": [],
+      "id": "A11",
+      "name": "host integration and typed attach",
+      "authoritative_fr_scope": "U05/E04; host integration; E34 PLAN Sources G-CLI/G-ADAPTER",
+      "readiness_class": "XU/XC/N",
       "status": "pending",
-      "qualification": "none",
+      "evidence": [],
       "missing_dependencies": [
-        "full macOS editor/tests/dev build",
-        "runtime/native execution evidence",
-        "owner-specific integration evidence"
+        "owner-specific source/consumer implementation where indicated by authoritative map",
+        "required runtime/native/GPU/PCK/platform/performance evidence",
+        "full macOS editor/tests/dev build"
       ],
-      "notes": "Historical candidates and static receipts are not acceptance proof."
+      "notes": "Map row is not accepted by design text alone; historical candidate/receipt evidence is not promoted."
     },
     {
-      "id": "LIFE-01",
-      "name": "Lifecycle close and retention qualification",
-      "fr_plan": {
-        "path": "FR_library_close.md",
-        "sha256": null
-      },
-      "evidence": [],
+      "id": "GA-01",
+      "name": "capacity and birth frontier",
+      "authoritative_fr_scope": "E02/E05/E07/E08; whole CASE_COVERAGE GA01",
+      "readiness_class": "XU/XR/N",
       "status": "pending",
-      "qualification": "none",
+      "evidence": [],
       "missing_dependencies": [
-        "full macOS editor/tests/dev build",
-        "runtime/native execution evidence",
-        "owner-specific integration evidence"
+        "owner-specific source/consumer implementation where indicated by authoritative map",
+        "required runtime/native/GPU/PCK/platform/performance evidence",
+        "full macOS editor/tests/dev build"
       ],
-      "notes": "Historical candidates and static receipts are not acceptance proof."
+      "notes": "Map row is not accepted by design text alone; historical candidate/receipt evidence is not promoted."
     },
     {
-      "id": "PLAT-01",
-      "name": "Platform matrix qualification",
-      "fr_plan": {
-        "path": "D1_LONG_PACKAGE_IMPLEMENTATION_PLAN.md",
-        "sha256": null
-      },
-      "evidence": [],
+      "id": "GA-02",
+      "name": "provider and typed method combination",
+      "authoritative_fr_scope": "E21/E22/E23/E25/E26; B3 METHODS/CONDITIONS/JOINT",
+      "readiness_class": "XC/XT/N",
       "status": "pending",
-      "qualification": "none",
+      "evidence": [],
       "missing_dependencies": [
-        "full macOS editor/tests/dev build",
-        "runtime/native execution evidence",
-        "owner-specific integration evidence"
+        "owner-specific source/consumer implementation where indicated by authoritative map",
+        "required runtime/native/GPU/PCK/platform/performance evidence",
+        "full macOS editor/tests/dev build"
       ],
-      "notes": "Historical candidates and static receipts are not acceptance proof."
+      "notes": "Map row is not accepted by design text alone; historical candidate/receipt evidence is not promoted."
     },
     {
-      "id": "PERF-01",
-      "name": "Performance and capacity qualification",
-      "fr_plan": {
-        "path": "D1_LONG_PACKAGE_IMPLEMENTATION_PLAN.md",
-        "sha256": null
-      },
-      "evidence": [],
+      "id": "GA-03",
+      "name": "zero domain, seal, partial publication",
+      "authoritative_fr_scope": "E09/E10/E20/E24; IP01/I02/SHARED_OPERATION_INTAKE",
+      "readiness_class": "XC/N",
       "status": "pending",
-      "qualification": "none",
+      "evidence": [],
       "missing_dependencies": [
-        "full macOS editor/tests/dev build",
-        "runtime/native execution evidence",
-        "owner-specific integration evidence"
+        "owner-specific source/consumer implementation where indicated by authoritative map",
+        "required runtime/native/GPU/PCK/platform/performance evidence",
+        "full macOS editor/tests/dev build"
       ],
-      "notes": "Historical candidates and static receipts are not acceptance proof."
+      "notes": "Map row is not accepted by design text alone; historical candidate/receipt evidence is not promoted."
+    },
+    {
+      "id": "GA-04",
+      "name": "scene query and GPU records",
+      "authoritative_fr_scope": "E11/E17/E18; Scene/E11 protocol",
+      "readiness_class": "XR/N",
+      "status": "pending",
+      "evidence": [],
+      "missing_dependencies": [
+        "owner-specific source/consumer implementation where indicated by authoritative map",
+        "required runtime/native/GPU/PCK/platform/performance evidence",
+        "full macOS editor/tests/dev build"
+      ],
+      "notes": "Map row is not accepted by design text alone; historical candidate/receipt evidence is not promoted."
+    },
+    {
+      "id": "GA-05",
+      "name": "ribbon topology and motion",
+      "authoritative_fr_scope": "E27–29; ribbon five-piece contract",
+      "readiness_class": "implementation/N",
+      "status": "pending",
+      "evidence": [],
+      "missing_dependencies": [
+        "owner-specific source/consumer implementation where indicated by authoritative map",
+        "required runtime/native/GPU/PCK/platform/performance evidence",
+        "full macOS editor/tests/dev build"
+      ],
+      "notes": "Map row is not accepted by design text alone; historical candidate/receipt evidence is not promoted."
+    },
+    {
+      "id": "GA-06",
+      "name": "channel source, roster and CPU-visible split",
+      "authoritative_fr_scope": "E30–33; Channel four contracts",
+      "readiness_class": "XU/SYNC/N",
+      "status": "pending",
+      "evidence": [],
+      "missing_dependencies": [
+        "owner-specific source/consumer implementation where indicated by authoritative map",
+        "required runtime/native/GPU/PCK/platform/performance evidence",
+        "full macOS editor/tests/dev build"
+      ],
+      "notes": "Map row is not accepted by design text alone; historical candidate/receipt evidence is not promoted."
+    },
+    {
+      "id": "GA-07",
+      "name": "multi-view layout and history",
+      "authoritative_fr_scope": "E12–16; B4 three families/JOINT JD04",
+      "readiness_class": "XC/N",
+      "status": "pending",
+      "evidence": [],
+      "missing_dependencies": [
+        "owner-specific source/consumer implementation where indicated by authoritative map",
+        "required runtime/native/GPU/PCK/platform/performance evidence",
+        "full macOS editor/tests/dev build"
+      ],
+      "notes": "Map row is not accepted by design text alone; historical candidate/receipt evidence is not promoted."
+    },
+    {
+      "id": "GT-01",
+      "name": "compound join and delayed publication",
+      "authoritative_fr_scope": "E11/E17/E27–30/E32/E33/E35; GT01_COMPOUND_JOIN",
+      "readiness_class": "XT/XU/XR/SYNC/N",
+      "status": "pending",
+      "evidence": [],
+      "missing_dependencies": [
+        "owner-specific source/consumer implementation where indicated by authoritative map",
+        "required runtime/native/GPU/PCK/platform/performance evidence",
+        "full macOS editor/tests/dev build"
+      ],
+      "notes": "Map row is not accepted by design text alone; historical candidate/receipt evidence is not promoted."
+    },
+    {
+      "id": "GT-02",
+      "name": "compound capture ownership and lifecycle",
+      "authoritative_fr_scope": "E20–26/E35; whole GT02",
+      "readiness_class": "XC/XT/XU/N",
+      "status": "pending",
+      "evidence": [],
+      "missing_dependencies": [
+        "owner-specific source/consumer implementation where indicated by authoritative map",
+        "required runtime/native/GPU/PCK/platform/performance evidence",
+        "full macOS editor/tests/dev build"
+      ],
+      "notes": "Map row is not accepted by design text alone; historical candidate/receipt evidence is not promoted."
+    },
+    {
+      "id": "G0",
+      "name": "shared semantic contract",
+      "authoritative_fr_scope": "C01–07; integration-validation G0",
+      "readiness_class": "XT/SYNC",
+      "status": "pending",
+      "evidence": [],
+      "missing_dependencies": [
+        "owner-specific source/consumer implementation where indicated by authoritative map",
+        "required runtime/native/GPU/PCK/platform/performance evidence",
+        "full macOS editor/tests/dev build"
+      ],
+      "notes": "Map row is not accepted by design text alone; historical candidate/receipt evidence is not promoted."
+    },
+    {
+      "id": "G1",
+      "name": "extension and main-RD lane",
+      "authoritative_fr_scope": "E01/E03/E06/R01/R02; integration-validation G1",
+      "readiness_class": "XC/N",
+      "status": "pending",
+      "evidence": [],
+      "missing_dependencies": [
+        "owner-specific source/consumer implementation where indicated by authoritative map",
+        "required runtime/native/GPU/PCK/platform/performance evidence",
+        "full macOS editor/tests/dev build"
+      ],
+      "notes": "Map row is not accepted by design text alone; historical candidate/receipt evidence is not promoted."
+    },
+    {
+      "id": "G2",
+      "name": "typed input and failure matrix",
+      "authoritative_fr_scope": "E05/E07/E08/E09/E19/E20/C03/C04",
+      "readiness_class": "XT/XC/N",
+      "status": "pending",
+      "evidence": [],
+      "missing_dependencies": [
+        "owner-specific source/consumer implementation where indicated by authoritative map",
+        "required runtime/native/GPU/PCK/platform/performance evidence",
+        "full macOS editor/tests/dev build"
+      ],
+      "notes": "Map row is not accepted by design text alone; historical candidate/receipt evidence is not promoted."
+    },
+    {
+      "id": "G3",
+      "name": "producer timing and world window",
+      "authoritative_fr_scope": "E16/E17/E18/E20/E23/E30",
+      "readiness_class": "XU/XC/N",
+      "status": "pending",
+      "evidence": [],
+      "missing_dependencies": [
+        "owner-specific source/consumer implementation where indicated by authoritative map",
+        "required runtime/native/GPU/PCK/platform/performance evidence",
+        "full macOS editor/tests/dev build"
+      ],
+      "notes": "Map row is not accepted by design text alone; historical candidate/receipt evidence is not promoted."
+    },
+    {
+      "id": "G4",
+      "name": "index copy, motion and multi-view evidence",
+      "authoritative_fr_scope": "E12/E15/E16/E27–29/R03",
+      "readiness_class": "N",
+      "status": "pending",
+      "evidence": [],
+      "missing_dependencies": [
+        "owner-specific source/consumer implementation where indicated by authoritative map",
+        "required runtime/native/GPU/PCK/platform/performance evidence",
+        "full macOS editor/tests/dev build"
+      ],
+      "notes": "Map row is not accepted by design text alone; historical candidate/receipt evidence is not promoted."
+    },
+    {
+      "id": "G5",
+      "name": "source/cache/PCK/full integration",
+      "authoritative_fr_scope": "E30–35/C07",
+      "readiness_class": "XT/XU/XR/SYNC/N",
+      "status": "pending",
+      "evidence": [],
+      "missing_dependencies": [
+        "owner-specific source/consumer implementation where indicated by authoritative map",
+        "required runtime/native/GPU/PCK/platform/performance evidence",
+        "full macOS editor/tests/dev build"
+      ],
+      "notes": "Map row is not accepted by design text alone; historical candidate/receipt evidence is not promoted."
+    }
+  ],
+  "auxiliary_d_evidence": [
+    {
+      "path": "work/p01-cleanup-20261024/STATIC_CLEANUP_CHECK.json",
+      "sha256": "bbfe57cf9aac72cdd7ea9c1f51c418f1322a5ab3081c89d7f8c4420532ddcff5"
+    },
+    {
+      "path": "work/p01-cleanup-20261024/P01_NAMING_REGISTRATION_AUDIT.json",
+      "sha256": "4fd170681f85ba0618bf5239609ceadab7929803d83d5fdc0f5e05a49798c93f"
+    },
+    {
+      "path": "work/e25-source-mirror-20261024/STATIC_MIRROR_COMMIT_CHECK.json",
+      "sha256": "24602fe14936236054a72c4356faac60a1052078c20053ccb11cfe2777d44a88"
+    },
+    {
+      "path": "work/e15-e16-retirement-audit-20261024/STATIC_RETIREMENT_AUDIT.json",
+      "sha256": "6a77b1ac7936d356268fab38873f4dc7e077e316a1cf89646216094e434566aa"
     }
   ],
   "global_gates": {
@@ -504,9 +410,8 @@
     "full_build_blocker": "No space left on device while archiving libmodule_glslang.macos.editor.dev.arm64.a"
   },
   "mapping_sources": [
-    "work/skin-palette-commit-package/native-core-production/ACCEPTANCE_EVIDENCE_AUDIT_20261024.json",
-    "work/p01-cleanup-20261024/STATIC_CLEANUP_CHECK.json",
-    "work/e25-source-mirror-20261024/STATIC_MIRROR_COMMIT_CHECK.json",
-    "work/e15-e16-retirement-audit-20261024/STATIC_RETIREMENT_AUDIT.json"
+    "ACCEPTANCE26_MAP.md",
+    "ID47_MAP.md",
+    "work/skin-palette-commit-package/native-core-production/ACCEPTANCE_EVIDENCE_AUDIT_20261024.json"
   ]
 }

@@ -1,0 +1,65 @@
+{
+  "scope": "canonical acceptance reconciliation",
+  "authority": {
+    "acceptance26_map": {
+      "path": "/Users/macbookair/Documents/Work/Dev/ANGEParticleDesign/work/current-backend-readiness-review-2026-10-22/ACCEPTANCE26_MAP.md",
+      "sha256": "a996bbd533005973348ff2d7554d06fc69b06c7ac721d76c87198aa0a0a1b93c"
+    },
+    "id47_map": {
+      "path": "/Users/macbookair/Documents/Work/Dev/ANGEParticleDesign/work/current-backend-readiness-review-2026-10-22/ID47_MAP.md",
+      "sha256": "53f22d11d890f649538686098cdddbb9076988e5b02a41044141637e59c3884a"
+    },
+    "rule": "ACCEPTANCE26_MAP.md stable rows and FR mappings are authoritative; this manifest is a reconciled index, not a replacement contract."
+  },
+  "row_count": 26,
+  "ids": [
+    "A01",
+    "A02",
+    "A03",
+    "A04",
+    "A05",
+    "A06",
+    "A07",
+    "A08",
+    "A09",
+    "A10",
+    "A11",
+    "GA-01",
+    "GA-02",
+    "GA-03",
+    "GA-04",
+    "GA-05",
+    "GA-06",
+    "GA-07",
+    "GT-01",
+    "GT-02",
+    "G0",
+    "G1",
+    "G2",
+    "G3",
+    "G4",
+    "G5"
+  ],
+  "status_counts": {
+    "pending": 26
+  },
+  "previous_manifest_custom_ids_replaced": true,
+  "qualification_flags": {
+    "acceptance": false,
+    "runtime_credit": false,
+    "native_qualification": false,
+    "gpu_qualification": false,
+    "pck_qualification": false,
+    "lifecycle_qualification": false,
+    "platform_qualification": false,
+    "performance_qualification": false,
+    "production_ready": false,
+    "full_build_blocker": "No space left on device while archiving libmodule_glslang.macos.editor.dev.arm64.a"
+  },
+  "checks": [
+    "stable row IDs match ACCEPTANCE26_MAP A01-A11, GA-01-GA-07, GT-01-GT-02, G0-G5",
+    "historical maps unchanged",
+    "D auxiliary receipt hashes verified",
+    "no qualification promotion"
+  ]
+}
