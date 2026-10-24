@@ -1136,6 +1136,10 @@ void ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 				uniforms.push_back(u);
 			}
 			p_particles->collision_textures_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, particles_shader.default_shader_rd, 2);
+			if (p_particles->collision_textures_uniform_set.is_null()) {
+				ERR_PRINT("Failed to create particle collision texture uniform set.");
+				return;
+			}
 			p_particles->collision_heightmap_texture = collision_heightmap_texture;
 		}
 	}
@@ -1542,6 +1546,10 @@ void ParticlesStorage::update_particles() {
 					RD::get_singleton()->free_rid(particles->frame_params_buffer);
 				}
 				particles->frame_params_buffer = RD::get_singleton()->storage_buffer_create(sizeof(ParticlesFrameParams) * trail_steps);
+				if (particles->frame_params_buffer.is_null()) {
+					ERR_PRINT("Failed to create particle frame parameters buffer.");
+					return;
+				}
 			}
 
 			if (particles->trail_bind_poses.size() > 1 && particles->trail_bind_pose_buffer.is_null()) {
@@ -1565,6 +1573,10 @@ void ParticlesStorage::update_particles() {
 				}
 
 				particles->trail_bind_pose_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, particles_shader.copy_shader.version_get_shader(particles_shader.copy_shader_version, 0), 2);
+				if (particles->trail_bind_pose_uniform_set.is_null()) {
+					ERR_PRINT("Failed to create particle trail bind pose uniform set.");
+					return;
+				}
 			}
 
 			if (particles->trail_bind_pose_buffer.is_valid() && particles->trail_bind_poses_dirty) {
