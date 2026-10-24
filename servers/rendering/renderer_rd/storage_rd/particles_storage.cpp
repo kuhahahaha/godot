@@ -320,9 +320,9 @@ void ParticlesStorage::_particles_free_data(Particles *particles) {
 	}
 	particles->particles_sort_uniform_set = RID();
 
-	if (particles->emission_buffer != nullptr) {
-		particles->emission_buffer = nullptr;
-		particles->emission_buffer_data.clear();
+	particles->emission_buffer = nullptr;
+	particles->emission_buffer_data.clear();
+	if (particles->emission_storage_buffer.is_valid()) {
 		RD::get_singleton()->free_rid(particles->emission_storage_buffer);
 		particles->emission_storage_buffer = RID();
 	}
