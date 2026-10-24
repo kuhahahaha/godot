@@ -222,11 +222,11 @@ void SkinnedMeshCaptureTestNativeSession::record(Job &p_job) {
 			}
 		} else {
 			const auto format = rd->texture_get_format(native_texture);
-			p_job.result.image_texture = native_texture.get_id();
-			p_job.result.image_format = format.format;
 			if (format.width != 128 || format.height != 64 || format.depth != 1 || format.array_layers != 1 || format.mipmaps != 1 || (format.format != RenderingDevice::DATA_FORMAT_R8G8B8A8_UNORM && format.format != RenderingDevice::DATA_FORMAT_R8G8B8A8_SRGB)) {
 				error = ERR_INVALID_DATA;
 			} else {
+				p_job.result.image_texture = native_texture.get_id();
+				p_job.result.image_format = format.format;
 				Callable callback;
 				error = images.reserve(slot, callback);
 				if (error == OK) {
