@@ -1,0 +1,12 @@
+{
+  "commit": "6ff3e53069",
+  "source_static": true,
+  "focused_test_source": true,
+  "binary_selector": "unavailable: optional module absent",
+  "runtime": false,
+  "native_qualification": false,
+  "gpu": false,
+  "pck": false,
+  "production_ready": false,
+  "full_build_blocker": "No space left on device"
+}
