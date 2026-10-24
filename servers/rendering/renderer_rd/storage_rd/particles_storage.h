@@ -560,6 +560,9 @@ public:
 			}
 
 			particles->particles_transforms_buffer_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, p_shader, p_set);
+			if (particles->particles_transforms_buffer_uniform_set.is_null()) {
+				return RID();
+			}
 		}
 
 		return particles->particles_transforms_buffer_uniform_set;

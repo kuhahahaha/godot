@@ -292,6 +292,9 @@ void ParticlesStorage::_particles_free_data(Particles *particles) {
 		RD::get_singleton()->free_rid(particles->frame_params_buffer);
 		particles->frame_params_buffer = RID();
 	}
+	if (RD::get_singleton()->uniform_set_is_valid(particles->particles_transforms_buffer_uniform_set)) {
+		RD::get_singleton()->free_rid(particles->particles_transforms_buffer_uniform_set);
+	}
 	particles->particles_transforms_buffer_uniform_set = RID();
 
 	if (RD::get_singleton()->uniform_set_is_valid(particles->trail_bind_pose_uniform_set)) {
