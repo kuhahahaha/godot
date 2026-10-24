@@ -125,6 +125,7 @@ TEST_CASE("[P01] Collector rejects malformed requests and malformed completed by
 	third.call(skinned_mesh_capture_test_initial_guarded_buffer());
 	CHECK(collector.cancel_unqueued(bad) == OK);
 	CHECK(collector.cancel_unqueued(bad) == ERR_INVALID_PARAMETER);
+	CHECK(collector.poisoned());
 	PackedByteArray wrong_size;
 	wrong_size.resize(63);
 	callback.call(wrong_size);

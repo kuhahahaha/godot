@@ -183,7 +183,11 @@ Error SkinnedMeshCaptureTestReadbackCollector::cancel_unqueued(const SkinnedMesh
 		return ERR_INVALID_PARAMETER;
 	}
 	State::Entry &entry = state->entries[p_identity.slot * 2 + uint32_t(p_identity.consumer)];
-	if (!entry.reserved || !(entry.identity == p_identity) || entry.completed || entry.enqueued || entry.canceled) {
+	if (!entry.reserved || !(entry.identity == p_identity) || entry.completed || entry.enqueued) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (entry.canceled) {
+		state->poisoned = true;
 		return ERR_INVALID_PARAMETER;
 	}
 	entry.canceled = true;
