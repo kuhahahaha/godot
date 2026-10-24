@@ -121,6 +121,13 @@ private:
 			RID index_array;
 			uint32_t index_count = 0;
 
+			// E25 owner-local classification state. No source bytes or authority
+			// token is created by this field.
+			uint64_t source_generation = 0;
+			uint64_t source_revision = 0;
+			bool static_capture_supported = false;
+			bool static_capture_invalidated = false;
+
 			struct LOD {
 				float edge_length = 0.0;
 				uint32_t index_count = 0;

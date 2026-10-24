@@ -377,6 +377,18 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 
 	s->format = new_surface.format;
 	s->primitive = new_surface.primitive;
+	// Source classification is admitted only for static 3D geometry with an
+	// explicit bounded provenance record. This does not mint a capture lease.
+	s->static_capture_supported =
+			new_surface.skin_data.is_empty() && mesh->blend_shape_count == 0 &&
+			!(new_surface.format & RSE::ARRAY_FLAG_USE_2D_VERTICES) &&
+			new_surface.index_provenance_schema == 1 &&
+			new_surface.index_provenance_kind != RenderingServerTypes::SurfaceData::IndexProvenanceKind::NONE &&
+			new_surface.index_provenance_word_count == uint32_t(new_surface.index_provenance_words.size());
+	if (s->static_capture_supported) {
+		s->source_generation = 1;
+		s->source_revision = 1;
+	}
 
 	const bool use_as_storage = (new_surface.skin_data.size() || mesh->blend_shape_count > 0);
 	const BitField<RD::BufferCreationBits> as_storage_flag = use_as_storage ? RD::BUFFER_CREATION_AS_STORAGE_BIT : 0;
@@ -578,6 +590,10 @@ void MeshStorage::mesh_surface_update_vertex_region(RID p_mesh, int p_surface, i
 	ERR_FAIL_NULL(mesh);
 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_surface, mesh->surface_count);
 	ERR_FAIL_COND(mesh->surfaces[p_surface]->vertex_buffer.is_null());
+	// Until E25 COW source mirroring is installed, a region write invalidates
+	// new static captures rather than exposing stale bytes as current.
+	mesh->surfaces[p_surface]->static_capture_supported = false;
+	mesh->surfaces[p_surface]->static_capture_invalidated = true;
 
 	uint64_t data_size = p_data.size();
 	const uint8_t *r = p_data.ptr();
@@ -591,6 +607,10 @@ void MeshStorage::mesh_surface_update_attribute_region(RID p_mesh, int p_surface
 	ERR_FAIL_NULL(mesh);
 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_surface, mesh->surface_count);
 	ERR_FAIL_COND(mesh->surfaces[p_surface]->attribute_buffer.is_null());
+	// Until E25 COW source mirroring is installed, a region write invalidates
+	// new static captures rather than exposing stale bytes as current.
+	mesh->surfaces[p_surface]->static_capture_supported = false;
+	mesh->surfaces[p_surface]->static_capture_invalidated = true;
 
 	uint64_t data_size = p_data.size();
 	const uint8_t *r = p_data.ptr();
@@ -604,6 +624,10 @@ void MeshStorage::mesh_surface_update_skin_region(RID p_mesh, int p_surface, int
 	ERR_FAIL_NULL(mesh);
 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_surface, mesh->surface_count);
 	ERR_FAIL_COND(mesh->surfaces[p_surface]->skin_buffer.is_null());
+	// Skin writes do not advance a static geometry revision. They revoke new
+	// static captures while preserving existing renderer skin behavior.
+	mesh->surfaces[p_surface]->static_capture_supported = false;
+	mesh->surfaces[p_surface]->static_capture_invalidated = true;
 
 	uint64_t data_size = p_data.size();
 	const uint8_t *r = p_data.ptr();
@@ -617,6 +641,10 @@ void RendererRD::MeshStorage::mesh_surface_update_index_region(RID p_mesh, int p
 	ERR_FAIL_NULL(mesh);
 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_surface, mesh->surface_count);
 	ERR_FAIL_COND(mesh->surfaces[p_surface]->index_buffer.is_null());
+	// Until E25 COW source mirroring is installed, a region write invalidates
+	// new static captures rather than exposing stale bytes as current.
+	mesh->surfaces[p_surface]->static_capture_supported = false;
+	mesh->surfaces[p_surface]->static_capture_invalidated = true;
 
 	uint64_t data_size = p_data.size();
 	const uint8_t *r = p_data.ptr();
