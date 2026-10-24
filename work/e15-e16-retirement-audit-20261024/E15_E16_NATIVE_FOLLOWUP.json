@@ -1,0 +1,27 @@
+{
+  "scope": "D-owned E15/E16 native resource and renderer retirement seam",
+  "source_files": [
+    "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_rd_pool.cpp",
+    "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_readback_collector.cpp",
+    "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_image_collector.cpp",
+    "servers/render_capture_test_tracking.cpp"
+  ],
+  "checks": {
+    "device_identity_on_owner_thread": true,
+    "late_callback_poison": true,
+    "physical_retirement_live_busy": true,
+    "resource_acknowledgement": true,
+    "error_propagation": true
+  },
+  "focused_attempts": {
+    "pool_test": "existing binary returned 0 tests matched; no runtime evidence",
+    "readback_test": "existing binary returned 0 tests matched; no runtime evidence"
+  },
+  "result": "Static source review finds no safe independent production-code gap. Existing owner code checks device identity, late callbacks, physical liveness and resource acknowledgement with explicit error propagation.",
+  "acceptance": false,
+  "runtime_credit": false,
+  "native_qualification": false,
+  "gpu_qualification": false,
+  "production_ready": false,
+  "blocker": "Focused E15/E16 selectors are not present in the existing binary; full rebuild remains blocked by No space left on device."
+}
