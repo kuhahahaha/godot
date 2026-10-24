@@ -608,6 +608,10 @@ void MeshStorage::mesh_surface_update_vertex_region(RID p_mesh, int p_surface, i
 	// new static captures rather than exposing stale bytes as current.
 	mesh->surfaces[p_surface]->static_capture_supported = false;
 	mesh->surfaces[p_surface]->static_capture_invalidated = true;
+	if (mesh->surfaces[p_surface]->source_revision == UINT64_MAX)
+		mesh->surfaces[p_surface]->source_revision = 1;
+	else if (mesh->surfaces[p_surface]->source_revision != 0)
+		++mesh->surfaces[p_surface]->source_revision;
 
 	uint64_t data_size = p_data.size();
 	const uint8_t *r = p_data.ptr();
@@ -625,6 +629,10 @@ void MeshStorage::mesh_surface_update_attribute_region(RID p_mesh, int p_surface
 	// new static captures rather than exposing stale bytes as current.
 	mesh->surfaces[p_surface]->static_capture_supported = false;
 	mesh->surfaces[p_surface]->static_capture_invalidated = true;
+	if (mesh->surfaces[p_surface]->source_revision == UINT64_MAX)
+		mesh->surfaces[p_surface]->source_revision = 1;
+	else if (mesh->surfaces[p_surface]->source_revision != 0)
+		++mesh->surfaces[p_surface]->source_revision;
 
 	uint64_t data_size = p_data.size();
 	const uint8_t *r = p_data.ptr();
@@ -659,6 +667,10 @@ void RendererRD::MeshStorage::mesh_surface_update_index_region(RID p_mesh, int p
 	// new static captures rather than exposing stale bytes as current.
 	mesh->surfaces[p_surface]->static_capture_supported = false;
 	mesh->surfaces[p_surface]->static_capture_invalidated = true;
+	if (mesh->surfaces[p_surface]->source_revision == UINT64_MAX)
+		mesh->surfaces[p_surface]->source_revision = 1;
+	else if (mesh->surfaces[p_surface]->source_revision != 0)
+		++mesh->surfaces[p_surface]->source_revision;
 
 	uint64_t data_size = p_data.size();
 	const uint8_t *r = p_data.ptr();
