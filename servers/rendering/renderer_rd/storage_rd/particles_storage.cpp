@@ -160,6 +160,7 @@ void process() {
 		material_storage->samplers_rd_get_default().append_uniforms(uniforms, SAMPLERS_BINDING_FIRST_INDEX);
 
 		particles_shader.base_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, particles_shader.default_shader_rd, BASE_UNIFORM_SET);
+		ERR_FAIL_COND_MSG(particles_shader.base_uniform_set.is_null(), "Failed to create particle base uniform set.");
 	}
 
 	{
@@ -1465,6 +1466,16 @@ void ParticlesStorage::_particles_update_buffers(Particles *particles) {
 			}
 
 			particles->particles_copy_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, particles_shader.copy_shader.version_get_shader(particles_shader.copy_shader_version, 0), 0);
+			if (particles->particles_copy_uniform_set.is_null()) {
+				ERR_PRINT("Failed to create particle copy uniform set.");
+				RD::get_singleton()->free_rid(particles->particle_instance_buffer);
+				particles->particle_instance_buffer = RID();
+				if (particle_buffer_created) {
+					RD::get_singleton()->free_rid(particles->particle_buffer);
+					particles->particle_buffer = RID();
+				}
+				return;
+			}
 		}
 
 		particles->instance_motion_vectors_current_offset = 0;
