@@ -1,0 +1,22 @@
+{
+  "change": "image collector drained requires close",
+  "commit": "ac68e58005",
+  "source_static_check": true,
+  "focused_test_source_assertion": true,
+  "independent_review": "APPROVE_LIMITED",
+  "existing_binary_selector": {
+    "executed": true,
+    "exit_code": 0,
+    "tests_matched": 0,
+    "runtime_evidence": false,
+    "reason": "optional module selector absent from existing binary"
+  },
+  "diff_check": true,
+  "full_build": false,
+  "full_build_blocker": "No space left on device",
+  "runtime_qualification": false,
+  "native_qualification": false,
+  "gpu_qualification": false,
+  "pck_qualification": false,
+  "production_ready": false
+}
