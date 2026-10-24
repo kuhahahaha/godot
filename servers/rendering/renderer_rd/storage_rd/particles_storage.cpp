@@ -272,6 +272,11 @@ bool ParticlesStorage::particles_get_emitting(RID p_particles) {
 }
 
 void ParticlesStorage::_particles_free_data(Particles *particles) {
+	if (RD::get_singleton()->uniform_set_is_valid(particles->particles_copy_uniform_set)) {
+		RD::get_singleton()->free_rid(particles->particles_copy_uniform_set);
+	}
+	particles->particles_copy_uniform_set = RID();
+
 	if (particles->particle_buffer.is_valid()) {
 		RD::get_singleton()->free_rid(particles->particle_buffer);
 		particles->particle_buffer = RID();
@@ -306,8 +311,11 @@ void ParticlesStorage::_particles_free_data(Particles *particles) {
 	if (particles->particles_sort_buffer.is_valid()) {
 		RD::get_singleton()->free_rid(particles->particles_sort_buffer);
 		particles->particles_sort_buffer = RID();
-		particles->particles_sort_uniform_set = RID();
 	}
+	if (RD::get_singleton()->uniform_set_is_valid(particles->particles_sort_uniform_set)) {
+		RD::get_singleton()->free_rid(particles->particles_sort_uniform_set);
+	}
+	particles->particles_sort_uniform_set = RID();
 
 	if (particles->emission_buffer != nullptr) {
 		particles->emission_buffer = nullptr;
@@ -1399,6 +1407,10 @@ void ParticlesStorage::_particles_update_buffers(Particles *particles) {
 		_particles_free_data(particles);
 	} else if (enable_motion_vectors) {
 		// Only motion vectors are required, release the transforms buffer and uniform set.
+		if (RD::get_singleton()->uniform_set_is_valid(particles->particles_copy_uniform_set)) {
+			RD::get_singleton()->free_rid(particles->particles_copy_uniform_set);
+			particles->particles_copy_uniform_set = RID();
+		}
 		if (particles->particle_instance_buffer.is_valid()) {
 			RD::get_singleton()->free_rid(particles->particle_instance_buffer);
 			particles->particle_instance_buffer = RID();
