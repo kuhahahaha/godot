@@ -1,0 +1,13 @@
+{
+  "commit": "aa0896ad85",
+  "source_static": true,
+  "narrow_runtime_fixture": false,
+  "reason": "resolver requires live owner-thread RD pool; selector absent",
+  "runtime": false,
+  "native_qualification": false,
+  "gpu": false,
+  "pck": false,
+  "platform": false,
+  "production_ready": false,
+  "full_build_blocker": "No space left on device"
+}
