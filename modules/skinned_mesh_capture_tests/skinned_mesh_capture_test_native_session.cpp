@@ -377,6 +377,7 @@ void SkinnedMeshCaptureTestNativeSession::maintain() {
 				const bool published_raw = skinned_mesh_capture_test_capture_blob("snapshot-" + id, job.result.snapshot.ptr(), job.result.snapshot.size()) && skinned_mesh_capture_test_capture_blob("consumer-" + id, job.result.consumer.ptr(), job.result.consumer.size());
 				const bool published_image = !job.request.image || (published_raw && skinned_mesh_capture_test_capture_blob("image-" + id, job.result.image.ptr(), job.result.image.size()));
 				if (!published_raw || !published_image) {
+					job.result.error = ERR_UNAVAILABLE;
 					fail(ERR_UNAVAILABLE);
 					closing = true;
 					continue;
