@@ -1393,10 +1393,15 @@ void ParticlesStorage::_particles_update_buffers(Particles *particles) {
 		}
 
 		uint32_t xform_size = particles->mode == RSE::PARTICLES_MODE_2D ? 2 : 3;
+		bool particle_buffer_created = false;
 		if (particles->particle_buffer.is_null()) {
 			particles->particle_buffer = RD::get_singleton()->storage_buffer_create((sizeof(ParticleData) + userdata_count * sizeof(float) * 4) * total_amount);
+			if (particles->particle_buffer.is_null()) {
+				return;
+			}
 			particles->userdata_count = userdata_count;
 			particles->restart_request = true;
+			particle_buffer_created = true;
 		}
 
 		PackedByteArray data;
@@ -1409,6 +1414,13 @@ void ParticlesStorage::_particles_update_buffers(Particles *particles) {
 		data.resize_initialized(particle_instance_buffer_size);
 
 		particles->particle_instance_buffer = RD::get_singleton()->storage_buffer_create(particle_instance_buffer_size, data);
+		if (particles->particle_instance_buffer.is_null()) {
+			if (particle_buffer_created) {
+				RD::get_singleton()->free_rid(particles->particle_buffer);
+				particles->particle_buffer = RID();
+			}
+			return;
+		}
 
 		{
 			Vector<RD::Uniform> uniforms;
