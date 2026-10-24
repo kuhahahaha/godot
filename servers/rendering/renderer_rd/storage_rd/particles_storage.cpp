@@ -602,10 +602,11 @@ void ParticlesStorage::_particles_ensure_unused_emission_buffer(Particles *parti
 	}
 }
 
-void ParticlesStorage::_particles_ensure_unused_trail_buffer(Particles *particles) {
+bool ParticlesStorage::_particles_ensure_unused_trail_buffer(Particles *particles) {
 	if (particles->unused_trail_storage_buffer.is_null()) {
 		particles->unused_trail_storage_buffer = RD::get_singleton()->storage_buffer_create(16 * sizeof(float)); // Size of mat4.
 	}
+	return particles->unused_trail_storage_buffer.is_valid();
 }
 
 void ParticlesStorage::particles_set_subemitter(RID p_particles, RID p_subemitter_particles) {
@@ -1622,7 +1623,10 @@ void ParticlesStorage::update_particles() {
 					if (particles->trail_bind_pose_buffer.is_valid()) {
 						u.append_id(particles->trail_bind_pose_buffer);
 					} else {
-						_particles_ensure_unused_trail_buffer(particles);
+						if (!_particles_ensure_unused_trail_buffer(particles)) {
+							ERR_PRINT("Failed to create particle fallback trail buffer.");
+							return;
+						}
 						u.append_id(particles->unused_trail_storage_buffer);
 					}
 					uniforms.push_back(u);
