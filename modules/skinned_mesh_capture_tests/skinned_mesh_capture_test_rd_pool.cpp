@@ -494,7 +494,7 @@ Error SkinnedMeshCaptureTestRDPool::record_boundary(RID p_buffer, uint64_t p_ope
 }
 
 Error SkinnedMeshCaptureTestRDPool::resolve_readback_identity(uint32_t p_slot, bool p_consumer, uint64_t p_run, uint64_t p_epoch, uint64_t p_request, SkinnedMeshCaptureTestReadbackIdentity &r_identity) const {
-	if (!p_run || !p_epoch || !p_request || p_request > UINT64_MAX / 2 || p_slot >= capacity) {
+	if (!p_run || !p_epoch || !p_request || p_request > (UINT64_MAX - 1) / 2 || p_slot >= capacity) {
 		return ERR_INVALID_PARAMETER;
 	}
 	const Slot &slot = slots[p_slot];
