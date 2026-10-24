@@ -1,0 +1,12 @@
+{
+  "commit": "d07456e072",
+  "source_static": true,
+  "job_error_preserved": true,
+  "runtime": false,
+  "native_qualification": false,
+  "gpu": false,
+  "pck": false,
+  "platform": false,
+  "production_ready": false,
+  "full_build_blocker": "No space left on device"
+}
