@@ -274,6 +274,8 @@ void ParticlesStorage::_particles_free_data(Particles *particles) {
 	if (particles->particle_buffer.is_valid()) {
 		RD::get_singleton()->free_rid(particles->particle_buffer);
 		particles->particle_buffer = RID();
+	}
+	if (particles->particle_instance_buffer.is_valid()) {
 		RD::get_singleton()->free_rid(particles->particle_instance_buffer);
 		particles->particle_instance_buffer = RID();
 	}
