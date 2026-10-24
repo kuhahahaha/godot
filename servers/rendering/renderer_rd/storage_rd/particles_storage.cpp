@@ -1950,8 +1950,13 @@ void ParticlesStorage::particles_collision_initialize(RID p_rid) {
 void ParticlesStorage::particles_collision_free(RID p_rid) {
 	ParticlesCollision *particles_collision = particles_collision_owner.get_or_null(p_rid);
 
+	if (particles_collision->heightfield_fb.is_valid()) {
+		RD::get_singleton()->free_rid(particles_collision->heightfield_fb);
+		particles_collision->heightfield_fb = RID();
+	}
 	if (particles_collision->heightfield_texture.is_valid()) {
 		RD::get_singleton()->free_rid(particles_collision->heightfield_texture);
+		particles_collision->heightfield_texture = RID();
 	}
 	particles_collision->dependency.deleted_notify(p_rid);
 	particles_collision_owner.free(p_rid);
@@ -1982,10 +1987,18 @@ RID ParticlesStorage::particles_collision_get_heightfield_framebuffer(RID p_part
 		tf.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
 		particles_collision->heightfield_texture = RD::get_singleton()->texture_create(tf, RD::TextureView());
+		if (particles_collision->heightfield_texture.is_null()) {
+			return RID();
+		}
 
 		Vector<RID> fb_tex;
 		fb_tex.push_back(particles_collision->heightfield_texture);
 		particles_collision->heightfield_fb = RD::get_singleton()->framebuffer_create(fb_tex);
+		if (particles_collision->heightfield_fb.is_null()) {
+			RD::get_singleton()->free_rid(particles_collision->heightfield_texture);
+			particles_collision->heightfield_texture = RID();
+			return RID();
+		}
 		particles_collision->heightfield_fb_size = size;
 	}
 
@@ -2000,6 +2013,10 @@ void ParticlesStorage::particles_collision_set_collision_type(RID p_particles_co
 		return;
 	}
 
+	if (particles_collision->heightfield_fb.is_valid()) {
+		RD::get_singleton()->free_rid(particles_collision->heightfield_fb);
+		particles_collision->heightfield_fb = RID();
+	}
 	if (particles_collision->heightfield_texture.is_valid()) {
 		RD::get_singleton()->free_rid(particles_collision->heightfield_texture);
 		particles_collision->heightfield_texture = RID();
@@ -2094,6 +2111,10 @@ void ParticlesStorage::particles_collision_set_height_field_resolution(RID p_par
 
 	particles_collision->heightfield_resolution = p_resolution;
 
+	if (particles_collision->heightfield_fb.is_valid()) {
+		RD::get_singleton()->free_rid(particles_collision->heightfield_fb);
+		particles_collision->heightfield_fb = RID();
+	}
 	if (particles_collision->heightfield_texture.is_valid()) {
 		RD::get_singleton()->free_rid(particles_collision->heightfield_texture);
 		particles_collision->heightfield_texture = RID();
