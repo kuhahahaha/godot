@@ -633,6 +633,10 @@ void ParticlesStorage::particles_emit(RID p_particles, const Transform3D &p_tran
 
 	if (particles->emission_buffer == nullptr) {
 		_particles_allocate_emission_buffer(particles);
+		if (particles->emission_buffer == nullptr || particles->emission_storage_buffer.is_null()) {
+			ERR_PRINT("Failed to allocate particle emission buffer.");
+			return;
+		}
 	}
 
 	particles->inactive = false;
