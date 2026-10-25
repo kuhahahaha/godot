@@ -1,0 +1,16 @@
+--- a/servers/rendering/renderer_viewport.cpp
++++ b/servers/rendering/renderer_viewport.cpp
+@@ -1334,7 +1334,12 @@
+ RendererViewport::Viewport::CameraSourceToken RendererViewport::viewport_begin_camera_capture(RID p_viewport) {
+ 	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+ 	ERR_FAIL_NULL_V(viewport, Viewport::CameraSourceToken());
+-	if (!viewport->presentation_registered || viewport->presentation_key.view_id == 0 || viewport->presentation_key.view_epoch == 0 || viewport->camera_capture_ordinal == UINT64_MAX) {
++	// Ordinary viewports do not participate in presentation-source capture.
++	if (!viewport->presentation_registered) {
++		return Viewport::CameraSourceToken();
++	}
++	ERR_FAIL_COND_V(viewport->presentation_key.view_id == 0 || viewport->presentation_key.view_epoch == 0, Viewport::CameraSourceToken());
++	if (viewport->camera_capture_ordinal == UINT64_MAX) {
+ 		ERR_FAIL_V_MSG(Viewport::CameraSourceToken(), "Viewport camera capture ordinal exhausted.");
+ 	}
+ 	viewport->camera_capture_ordinal++;
