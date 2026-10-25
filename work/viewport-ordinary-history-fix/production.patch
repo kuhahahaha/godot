@@ -1,0 +1,47 @@
+--- a/servers/rendering/renderer_viewport.cpp
++++ b/servers/rendering/renderer_viewport.cpp
+@@ -1262,6 +1262,15 @@
+ void RendererViewport::viewport_set_prev_camera_data(RID p_viewport, const RendererSceneRender::CameraData *p_camera_data) {
+ 	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+ 	ERR_FAIL_NULL(viewport);
++	ERR_FAIL_NULL(p_camera_data);
++	if (!viewport->presentation_registered) {
++		const uint64_t frame = RSG::rasterizer->get_frame_number();
++		if (viewport->prev_camera_data_frame != frame) {
++			viewport->prev_camera_data = *p_camera_data;
++			viewport->prev_camera_data_frame = frame;
++		}
++		return;
++	}
+ 	viewport_set_prev_camera_data(p_viewport, p_camera_data, viewport->current_camera_token);
+ }
+ 
+@@ -1334,7 +1343,12 @@
+ RendererViewport::Viewport::CameraSourceToken RendererViewport::viewport_begin_camera_capture(RID p_viewport) {
+ 	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+ 	ERR_FAIL_NULL_V(viewport, Viewport::CameraSourceToken());
+-	if (!viewport->presentation_registered || viewport->presentation_key.view_id == 0 || viewport->presentation_key.view_epoch == 0 || viewport->camera_capture_ordinal == UINT64_MAX) {
++	// Ordinary viewports do not participate in presentation-source capture.
++	if (!viewport->presentation_registered) {
++		return Viewport::CameraSourceToken();
++	}
++	ERR_FAIL_COND_V(viewport->presentation_key.view_id == 0 || viewport->presentation_key.view_epoch == 0, Viewport::CameraSourceToken());
++	if (viewport->camera_capture_ordinal == UINT64_MAX) {
+ 		ERR_FAIL_V_MSG(Viewport::CameraSourceToken(), "Viewport camera capture ordinal exhausted.");
+ 	}
+ 	viewport->camera_capture_ordinal++;
+--- a/servers/rendering/renderer_scene_cull.cpp
++++ b/servers/rendering/renderer_scene_cull.cpp
+@@ -3719,7 +3719,11 @@
+ 		source_token.view_id = p_camera_data->source_view_id;
+ 		source_token.view_epoch = p_camera_data->source_view_epoch;
+ 		source_token.capture_ordinal = p_camera_data->source_capture_ordinal;
+-		RSG::viewport->viewport_stage_camera_data(p_viewport, p_camera_data, source_token);
++		if (RSG::viewport->viewport_get_presentation_key(p_viewport).view_id != 0) {
++			RSG::viewport->viewport_stage_camera_data(p_viewport, p_camera_data, source_token);
++		} else {
++			RSG::viewport->viewport_set_prev_camera_data(p_viewport, p_camera_data);
++		}
+ 	}
+ 
+ 	for (uint32_t i = 0; i < max_shadows_used; i++) {
