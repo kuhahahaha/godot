@@ -48,6 +48,9 @@ class SortEffects;
 
 class ParticlesStorage : public RendererParticlesStorage {
 private:
+#ifdef TESTS_ENABLED
+	friend class TestParticlesTrailAccess;
+#endif
 	static ParticlesStorage *singleton;
 
 	/* EFFECTS */
@@ -196,6 +199,10 @@ private:
 		bool trail_bind_poses_dirty = false;
 		RID trail_bind_pose_buffer;
 		RID trail_bind_pose_uniform_set;
+#ifdef TESTS_ENABLED
+		bool test_reject_trail_allocation_once = false;
+		uint32_t test_trail_uniform_attempts = 0;
+#endif
 
 		RID particle_buffer;
 		RID particle_instance_buffer;
@@ -275,7 +282,8 @@ private:
 	void _particles_process(Particles *p_particles, double p_delta);
 	void _particles_allocate_emission_buffer(Particles *particles);
 	void _particles_ensure_unused_emission_buffer(Particles *particles);
-	bool _particles_ensure_unused_trail_buffer(Particles *particles);
+	static bool _particles_ensure_unused_trail_buffer(Particles *particles);
+	static bool _particles_ensure_trail_uniform(Particles *particles, RID p_shader);
 	void _particles_free_data(Particles *particles);
 	void _particles_update_buffers(Particles *particles);
 

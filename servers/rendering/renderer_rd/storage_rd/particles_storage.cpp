@@ -604,9 +604,46 @@ void ParticlesStorage::_particles_ensure_unused_emission_buffer(Particles *parti
 
 bool ParticlesStorage::_particles_ensure_unused_trail_buffer(Particles *particles) {
 	if (particles->unused_trail_storage_buffer.is_null()) {
+#ifdef TESTS_ENABLED
+		if (particles->test_reject_trail_allocation_once) {
+			particles->test_reject_trail_allocation_once = false;
+			return false;
+		}
+#endif
 		particles->unused_trail_storage_buffer = RD::get_singleton()->storage_buffer_create(16 * sizeof(float)); // Size of mat4.
 	}
 	return particles->unused_trail_storage_buffer.is_valid();
+}
+
+bool ParticlesStorage::_particles_ensure_trail_uniform(Particles *particles, RID p_shader) {
+	if (particles->trail_bind_pose_uniform_set.is_null()) {
+		Vector<RD::Uniform> uniforms;
+		{
+			RD::Uniform u;
+			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+			u.binding = 0;
+			if (particles->trail_bind_pose_buffer.is_valid()) {
+				u.append_id(particles->trail_bind_pose_buffer);
+			} else {
+				if (!_particles_ensure_unused_trail_buffer(particles)) {
+					ERR_PRINT("Failed to create particle fallback trail buffer.");
+					return false;
+				}
+				u.append_id(particles->unused_trail_storage_buffer);
+			}
+			uniforms.push_back(u);
+		}
+
+#ifdef TESTS_ENABLED
+		particles->test_trail_uniform_attempts++;
+#endif
+		particles->trail_bind_pose_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, p_shader, 2);
+		if (particles->trail_bind_pose_uniform_set.is_null()) {
+			ERR_PRINT("Failed to create particle trail bind pose uniform set.");
+			return false;
+		}
+	}
+	return true;
 }
 
 void ParticlesStorage::particles_set_subemitter(RID p_particles, RID p_subemitter_particles) {
@@ -1614,29 +1651,8 @@ void ParticlesStorage::update_particles() {
 				particles->trail_bind_poses_dirty = true;
 			}
 
-			if (particles->trail_bind_pose_uniform_set.is_null()) {
-				Vector<RD::Uniform> uniforms;
-				{
-					RD::Uniform u;
-					u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-					u.binding = 0;
-					if (particles->trail_bind_pose_buffer.is_valid()) {
-						u.append_id(particles->trail_bind_pose_buffer);
-					} else {
-						if (!_particles_ensure_unused_trail_buffer(particles)) {
-							ERR_PRINT("Failed to create particle fallback trail buffer.");
-							return;
-						}
-						u.append_id(particles->unused_trail_storage_buffer);
-					}
-					uniforms.push_back(u);
-				}
-
-				particles->trail_bind_pose_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, particles_shader.copy_shader.version_get_shader(particles_shader.copy_shader_version, 0), 2);
-				if (particles->trail_bind_pose_uniform_set.is_null()) {
-					ERR_PRINT("Failed to create particle trail bind pose uniform set.");
-					return;
-				}
+			if (!_particles_ensure_trail_uniform(particles, particles_shader.copy_shader.version_get_shader(particles_shader.copy_shader_version, 0))) {
+				return;
 			}
 
 			if (particles->trail_bind_pose_buffer.is_valid() && particles->trail_bind_poses_dirty) {
