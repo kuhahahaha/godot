@@ -1,0 +1,13 @@
+{
+  "core/extension/gdextension_interface.json": "698b29399071f1cde0dced6370a945b8a4ec723311dd179d8c710c7c5967b1cc",
+  "core/extension/gdextension_interface.gen.h": "9667f6c02364441c83ff536b78c1b6ad0b9c537c89a14f5fa345945779c07bae",
+  "core/extension/gdextension_interface.cpp": "cca7648033d44611c095caabef6794b18792f585ad534f154a14f638da93e46e",
+  "core/extension/gdextension_typed_lifecycle.cpp": "3c59cfc04863f5f5824870578ded07bf084484635cbc120e6aa7fc3b6c7b4978",
+  "core/extension/gdextension_library_exit_guard.h": "3413399ec0abf440088682e556d97388520b0208b78a6306092fdacf4a5f1220",
+  "core/extension/gdextension_library_exit_guard.cpp": "47836c880561885edefdbabf670907aecc8bc2e3489fcb11cbfe4bc196ebdc71",
+  "core/extension/gdextension_guard_enrollment.cpp": "e1a820868fc19c5350d0336044c2f95546f59485c776ce0c12987d88cf55510c",
+  "tests/core/object/test_device_exit_typed_abi.cpp": "0ac560d48980c89b66a6c92a10a2d27ebd88a9541e62a5ae4ca9a8b770b1b1c6",
+  "servers/rendering/rendering_device.cpp": "2ecdb1c9592c0164b4534b484160c6f530e4d0a617650d66d032b3430dcb5114",
+  "servers/rendering/rendering_device_driver.cpp": "2bf06dcd7b57fbad0a766234bb263fabfbd86398b102ccfadf79a46cbd916633",
+  "bin/godot.macos.editor.dev.arm64": "8b182caf2d3a228a8bb1efe7eb855a09aaffed5ac14e2aa856a9d76f670b3bd5"
+}

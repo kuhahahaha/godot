@@ -1,0 +1,794 @@
+--- a/core/extension/gdextension_interface.json
++++ b/core/extension/gdextension_interface.json
+@@ -3752,8 +3752,227 @@
+                 {
+                     "name": "reserved",
+                     "type": "uint32_t"
++                }
++            ]
++        },
++        {
++            "name": "GDExtensionDeviceExitGuardToken",
++            "kind": "struct",
++            "members": [
++                {
++                    "name": "registry_instance",
++                    "type": "uint64_t"
++                },
++                {
++                    "name": "handle_serial",
++                    "type": "uint64_t"
++                }
++            ]
++        },
++        {
++            "name": "GDExtensionDeviceExitGuardedLibraryRef",
++            "kind": "struct",
++            "members": [
++                {
++                    "name": "registry_instance",
++                    "type": "uint64_t"
++                },
++                {
++                    "name": "handle_serial",
++                    "type": "uint64_t"
++                }
++            ]
++        },
++        {
++            "name": "GDExtensionDeviceExitInitializationLevelContextRef",
++            "kind": "struct",
++            "members": [
++                {
++                    "name": "registry_instance",
++                    "type": "uint64_t"
++                },
++                {
++                    "name": "handle_serial",
++                    "type": "uint64_t"
++                }
++            ]
++        },
++        {
++            "name": "GDExtensionDeviceExitDeinitLevelContextRef",
++            "kind": "struct",
++            "members": [
++                {
++                    "name": "registry_instance",
++                    "type": "uint64_t"
++                },
++                {
++                    "name": "handle_serial",
++                    "type": "uint64_t"
+                 }
+             ]
++        },
++        {
++            "name": "GDExtensionDeviceExitDeinitPreflightContextRef",
++            "kind": "struct",
++            "members": [
++                {
++                    "name": "registry_instance",
++                    "type": "uint64_t"
++                },
++                {
++                    "name": "handle_serial",
++                    "type": "uint64_t"
++                }
++            ]
++        },
++        {
++            "name": "GDExtensionDeviceExitRegisteredCleanupRef",
++            "kind": "struct",
++            "members": [
++                {
++                    "name": "registry_instance",
++                    "type": "uint64_t"
++                },
++                {
++                    "name": "handle_serial",
++                    "type": "uint64_t"
++                }
++            ]
++        },
++        {
++            "name": "GDExtensionDeviceExitLibraryCodeHoldRef",
++            "kind": "struct",
++            "members": [
++                {
++                    "name": "registry_instance",
++                    "type": "uint64_t"
++                },
++                {
++                    "name": "handle_serial",
++                    "type": "uint64_t"
++                }
++            ]
++        },
++        {
++            "name": "GDExtensionDeviceExitUserLevelFnV1",
++            "kind": "function",
++            "arguments": [
++                {
++                    "name": "binding_userdata",
++                    "type": "void*"
++                },
++                {
++                    "name": "level",
++                    "type": "GDExtensionInitializationLevel"
++                }
++            ]
++        },
++        {
++            "name": "GDExtensionDeviceExitPreflightFnV1",
++            "kind": "function",
++            "arguments": [
++                {
++                    "name": "context",
++                    "type": "GDExtensionDeviceExitDeinitPreflightContextRef"
++                },
++                {
++                    "name": "userdata",
++                    "type": "void*"
++                }
++            ],
++            "return_value": {
++                "type": "int32_t"
++            }
++        },
++        {
++            "name": "GDExtensionDeviceExitLevelNeedsV1",
++            "kind": "struct",
++            "members": [
++                {
++                    "name": "user_services",
++                    "type": "uint32_t"
++                },
++                {
++                    "name": "binding_services",
++                    "type": "uint32_t"
++                }
++            ]
++        },
++        {
++            "name": "GDExtensionDeviceExitGuardRegistrationV1",
++            "kind": "struct",
++            "members": [
++                {
++                    "name": "abi",
++                    "type": "GDExtensionDeviceExitAbi"
++                },
++                {
++                    "name": "binding_protocol",
++                    "type": "uint32_t"
++                },
++                {
++                    "name": "level_bitmap",
++                    "type": "uint32_t"
++                },
++                {
++                    "name": "user_cleanup_bitmap",
++                    "type": "uint32_t"
++                },
++                {
++                    "name": "binding_cleanup_bitmap",
++                    "type": "uint32_t"
++                },
++                {
++                    "name": "entry_classes",
++                    "type": "uint64_t"
++                },
++                {
++                    "name": "needs[4]",
++                    "type": "GDExtensionDeviceExitLevelNeedsV1"
++                },
++                {
++                    "name": "expected_initialization",
++                    "type": "GDExtensionInitialization"
++                },
++                {
++                    "name": "user_initializer",
++                    "type": "GDExtensionDeviceExitUserLevelFnV1"
++                },
++                {
++                    "name": "user_terminator",
++                    "type": "GDExtensionDeviceExitUserLevelFnV1"
++                },
++                {
++                    "name": "preflight",
++                    "type": "GDExtensionDeviceExitPreflightFnV1"
++                },
++                {
++                    "name": "preflight_userdata",
++                    "type": "void*"
++                }
++            ]
++        },
++        {
++            "name": "GDExtensionDeviceExitExitDiagnosticV1",
++            "kind": "struct",
++            "members": [
++                {
++                    "name": "abi",
++                    "type": "GDExtensionDeviceExitAbi"
++                },
++                {
++                    "name": "disposition",
++                    "type": "int32_t"
++                },
++                {
++                    "name": "level",
++                    "type": "uint32_t"
++                },
++                {
++                    "name": "pending_count",
++                    "type": "uint64_t"
++                }
++            ]
+         }
+     ],
+     "interface": [
+@@ -9580,8 +9799,563 @@
+                 "type": "int32_t",
+                 "description": [
+                     "Existing Godot Error numeric value."
++                ]
++            }
++        },
++        {
++            "name": "device_exit_register_guard_v1",
++            "since": "4.7",
++            "description": [
++                "Internal reciprocal guarded-lifetime v1 surface. Availability does not enable guarded loading; the complete loader, binding and entry census gate remains required.",
++                "Native aligned, nonaliasing pointers are required. Abi uses version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero; embedded registration and diagnostic headers use their own generated sizeof.",
++                "Borrowed contexts and cleanup handles expire at the exact issuing callback return. The guard token lasts until enrollment revocation. Code holds persist across frames and retire after release at the original outer callback return. Empty outputs remain empty on failure; nonempty outputs are rejected unchanged."
++            ],
++            "arguments": [
++                {
++                    "name": "library",
++                    "type": "GDExtensionClassLibraryPtr",
++                    "description": [
++                        "Library."
++                    ]
++                },
++                {
++                    "name": "registration",
++                    "type": "const GDExtensionDeviceExitGuardRegistrationV1*",
++                    "description": [
++                        "Registration."
++                    ]
++                },
++                {
++                    "name": "out_token",
++                    "type": "GDExtensionDeviceExitGuardToken*",
++                    "description": [
++                        "Out token."
++                    ]
++                }
++            ],
++            "return_value": {
++                "type": "int32_t",
++                "description": [
++                    "Existing Godot Error value."
++                ]
++            }
++        },
++        {
++            "name": "device_exit_borrow_guarded_library_v1",
++            "since": "4.7",
++            "description": [
++                "Internal reciprocal guarded-lifetime v1 surface. Availability does not enable guarded loading; the complete loader, binding and entry census gate remains required.",
++                "Native aligned, nonaliasing pointers are required. Abi uses version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero; embedded registration and diagnostic headers use their own generated sizeof.",
++                "Borrowed contexts and cleanup handles expire at the exact issuing callback return. The guard token lasts until enrollment revocation. Code holds persist across frames and retire after release at the original outer callback return. Empty outputs remain empty on failure; nonempty outputs are rejected unchanged."
++            ],
++            "arguments": [
++                {
++                    "name": "abi",
++                    "type": "const GDExtensionDeviceExitAbi*",
++                    "description": [
++                        "Abi."
++                    ]
++                },
++                {
++                    "name": "library",
++                    "type": "GDExtensionClassLibraryPtr",
++                    "description": [
++                        "Library."
++                    ]
++                },
++                {
++                    "name": "out_library",
++                    "type": "GDExtensionDeviceExitGuardedLibraryRef*",
++                    "description": [
++                        "Out library."
++                    ]
++                }
++            ],
++            "return_value": {
++                "type": "int32_t",
++                "description": [
++                    "Existing Godot Error value."
++                ]
++            }
++        },
++        {
++            "name": "device_exit_borrow_initialize_level_v1",
++            "since": "4.7",
++            "description": [
++                "Internal reciprocal guarded-lifetime v1 surface. Availability does not enable guarded loading; the complete loader, binding and entry census gate remains required.",
++                "Native aligned, nonaliasing pointers are required. Abi uses version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero; embedded registration and diagnostic headers use their own generated sizeof.",
++                "Borrowed contexts and cleanup handles expire at the exact issuing callback return. The guard token lasts until enrollment revocation. Code holds persist across frames and retire after release at the original outer callback return. Empty outputs remain empty on failure; nonempty outputs are rejected unchanged."
++            ],
++            "arguments": [
++                {
++                    "name": "abi",
++                    "type": "const GDExtensionDeviceExitAbi*",
++                    "description": [
++                        "Abi."
++                    ]
++                },
++                {
++                    "name": "library",
++                    "type": "GDExtensionClassLibraryPtr",
++                    "description": [
++                        "Library."
++                    ]
++                },
++                {
++                    "name": "level",
++                    "type": "uint32_t",
++                    "description": [
++                        "Level."
++                    ]
++                },
++                {
++                    "name": "out_context",
++                    "type": "GDExtensionDeviceExitInitializationLevelContextRef*",
++                    "description": [
++                        "Out context."
++                    ]
++                }
++            ],
++            "return_value": {
++                "type": "int32_t",
++                "description": [
++                    "Existing Godot Error value."
++                ]
++            }
++        },
++        {
++            "name": "device_exit_borrow_deinit_level_v1",
++            "since": "4.7",
++            "description": [
++                "Internal reciprocal guarded-lifetime v1 surface. Availability does not enable guarded loading; the complete loader, binding and entry census gate remains required.",
++                "Native aligned, nonaliasing pointers are required. Abi uses version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero; embedded registration and diagnostic headers use their own generated sizeof.",
++                "Borrowed contexts and cleanup handles expire at the exact issuing callback return. The guard token lasts until enrollment revocation. Code holds persist across frames and retire after release at the original outer callback return. Empty outputs remain empty on failure; nonempty outputs are rejected unchanged."
++            ],
++            "arguments": [
++                {
++                    "name": "abi",
++                    "type": "const GDExtensionDeviceExitAbi*",
++                    "description": [
++                        "Abi."
++                    ]
++                },
++                {
++                    "name": "library",
++                    "type": "GDExtensionClassLibraryPtr",
++                    "description": [
++                        "Library."
++                    ]
++                },
++                {
++                    "name": "level",
++                    "type": "uint32_t",
++                    "description": [
++                        "Level."
++                    ]
++                },
++                {
++                    "name": "out_context",
++                    "type": "GDExtensionDeviceExitDeinitLevelContextRef*",
++                    "description": [
++                        "Out context."
++                    ]
++                }
++            ],
++            "return_value": {
++                "type": "int32_t",
++                "description": [
++                    "Existing Godot Error value."
++                ]
++            }
++        },
++        {
++            "name": "device_exit_borrow_level_cleanup_v1",
++            "since": "4.7",
++            "description": [
++                "Internal reciprocal guarded-lifetime v1 surface. Availability does not enable guarded loading; the complete loader, binding and entry census gate remains required.",
++                "Native aligned, nonaliasing pointers are required. Abi uses version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero; embedded registration and diagnostic headers use their own generated sizeof.",
++                "Borrowed contexts and cleanup handles expire at the exact issuing callback return. The guard token lasts until enrollment revocation. Code holds persist across frames and retire after release at the original outer callback return. Empty outputs remain empty on failure; nonempty outputs are rejected unchanged.",
++                "Public phase is USER=0 or BINDING=1, not the internal cleanup enum.",
++                "Cleanup phase is USER=0 or BINDING=1; other values are rejected."
++            ],
++            "arguments": [
++                {
++                    "name": "abi",
++                    "type": "const GDExtensionDeviceExitAbi*",
++                    "description": [
++                        "Abi."
++                    ]
++                },
++                {
++                    "name": "context",
++                    "type": "GDExtensionDeviceExitInitializationLevelContextRef",
++                    "description": [
++                        "Context."
++                    ]
++                },
++                {
++                    "name": "phase",
++                    "type": "uint32_t",
++                    "description": [
++                        "Phase."
++                    ]
++                },
++                {
++                    "name": "out_cleanup",
++                    "type": "GDExtensionDeviceExitRegisteredCleanupRef*",
++                    "description": [
++                        "Out cleanup."
++                    ]
++                }
++            ],
++            "return_value": {
++                "type": "int32_t",
++                "description": [
++                    "Existing Godot Error value."
+                 ]
+             }
++        },
++        {
++            "name": "device_exit_acquire_code_hold_v1",
++            "since": "4.7",
++            "description": [
++                "Internal reciprocal guarded-lifetime v1 surface. Availability does not enable guarded loading; the complete loader, binding and entry census gate remains required.",
++                "Native aligned, nonaliasing pointers are required. Abi uses version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero; embedded registration and diagnostic headers use their own generated sizeof.",
++                "Borrowed contexts and cleanup handles expire at the exact issuing callback return. The guard token lasts until enrollment revocation. Code holds persist across frames and retire after release at the original outer callback return. Empty outputs remain empty on failure; nonempty outputs are rejected unchanged."
++            ],
++            "arguments": [
++                {
++                    "name": "abi",
++                    "type": "const GDExtensionDeviceExitAbi*",
++                    "description": [
++                        "Abi."
++                    ]
++                },
++                {
++                    "name": "library",
++                    "type": "GDExtensionDeviceExitGuardedLibraryRef",
++                    "description": [
++                        "Library."
++                    ]
++                },
++                {
++                    "name": "cleanup",
++                    "type": "GDExtensionDeviceExitRegisteredCleanupRef",
++                    "description": [
++                        "Cleanup."
++                    ]
++                },
++                {
++                    "name": "out_hold",
++                    "type": "GDExtensionDeviceExitLibraryCodeHoldRef*",
++                    "description": [
++                        "Out hold."
++                    ]
++                }
++            ],
++            "return_value": {
++                "type": "int32_t",
++                "description": [
++                    "Existing Godot Error value."
++                ]
++            }
++        },
++        {
++            "name": "device_exit_clone_code_hold_v1",
++            "since": "4.7",
++            "description": [
++                "Internal reciprocal guarded-lifetime v1 surface. Availability does not enable guarded loading; the complete loader, binding and entry census gate remains required.",
++                "Native aligned, nonaliasing pointers are required. Abi uses version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero; embedded registration and diagnostic headers use their own generated sizeof.",
++                "Borrowed contexts and cleanup handles expire at the exact issuing callback return. The guard token lasts until enrollment revocation. Code holds persist across frames and retire after release at the original outer callback return. Empty outputs remain empty on failure; nonempty outputs are rejected unchanged."
++            ],
++            "arguments": [
++                {
++                    "name": "abi",
++                    "type": "const GDExtensionDeviceExitAbi*",
++                    "description": [
++                        "Abi."
++                    ]
++                },
++                {
++                    "name": "source",
++                    "type": "GDExtensionDeviceExitLibraryCodeHoldRef",
++                    "description": [
++                        "Source."
++                    ]
++                },
++                {
++                    "name": "out_hold",
++                    "type": "GDExtensionDeviceExitLibraryCodeHoldRef*",
++                    "description": [
++                        "Out hold."
++                    ]
++                }
++            ],
++            "return_value": {
++                "type": "int32_t",
++                "description": [
++                    "Existing Godot Error value."
++                ]
++            }
++        },
++        {
++            "name": "device_exit_release_code_hold_v1",
++            "since": "4.7",
++            "description": [
++                "Internal reciprocal guarded-lifetime v1 surface. Availability does not enable guarded loading; the complete loader, binding and entry census gate remains required.",
++                "Native aligned, nonaliasing pointers are required. Abi uses version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero; embedded registration and diagnostic headers use their own generated sizeof.",
++                "Borrowed contexts and cleanup handles expire at the exact issuing callback return. The guard token lasts until enrollment revocation. Code holds persist across frames and retire after release at the original outer callback return. Empty outputs remain empty on failure; nonempty outputs are rejected unchanged."
++            ],
++            "arguments": [
++                {
++                    "name": "abi",
++                    "type": "const GDExtensionDeviceExitAbi*",
++                    "description": [
++                        "Abi."
++                    ]
++                },
++                {
++                    "name": "hold",
++                    "type": "GDExtensionDeviceExitLibraryCodeHoldRef",
++                    "description": [
++                        "Hold."
++                    ]
++                }
++            ],
++            "return_value": {
++                "type": "int32_t",
++                "description": [
++                    "Existing Godot Error value."
++                ]
++            }
++        },
++        {
++            "name": "device_exit_after_binding_initialize_v1",
++            "since": "4.7",
++            "description": [
++                "Internal reciprocal guarded-lifetime v1 surface. Availability does not enable guarded loading; the complete loader, binding and entry census gate remains required.",
++                "Native aligned, nonaliasing pointers are required. Abi uses version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero; embedded registration and diagnostic headers use their own generated sizeof.",
++                "Borrowed contexts and cleanup handles expire at the exact issuing callback return. The guard token lasts until enrollment revocation. Code holds persist across frames and retire after release at the original outer callback return. Empty outputs remain empty on failure; nonempty outputs are rejected unchanged."
++            ],
++            "arguments": [
++                {
++                    "name": "abi",
++                    "type": "const GDExtensionDeviceExitAbi*",
++                    "description": [
++                        "Abi."
++                    ]
++                },
++                {
++                    "name": "context",
++                    "type": "GDExtensionDeviceExitInitializationLevelContextRef",
++                    "description": [
++                        "Context."
++                    ]
++                }
++            ],
++            "return_value": {
++                "type": "int32_t",
++                "description": [
++                    "Existing Godot Error value."
++                ]
++            }
++        },
++        {
++            "name": "device_exit_begin_user_terminator_v1",
++            "since": "4.7",
++            "description": [
++                "Internal reciprocal guarded-lifetime v1 surface. Availability does not enable guarded loading; the complete loader, binding and entry census gate remains required.",
++                "Native aligned, nonaliasing pointers are required. Abi uses version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero; embedded registration and diagnostic headers use their own generated sizeof.",
++                "Borrowed contexts and cleanup handles expire at the exact issuing callback return. The guard token lasts until enrollment revocation. Code holds persist across frames and retire after release at the original outer callback return. Empty outputs remain empty on failure; nonempty outputs are rejected unchanged."
++            ],
++            "arguments": [
++                {
++                    "name": "abi",
++                    "type": "const GDExtensionDeviceExitAbi*",
++                    "description": [
++                        "Abi."
++                    ]
++                },
++                {
++                    "name": "token",
++                    "type": "GDExtensionDeviceExitGuardToken",
++                    "description": [
++                        "Token."
++                    ]
++                },
++                {
++                    "name": "context",
++                    "type": "GDExtensionDeviceExitDeinitLevelContextRef",
++                    "description": [
++                        "Context."
++                    ]
++                }
++            ],
++            "return_value": {
++                "type": "int32_t",
++                "description": [
++                    "Existing Godot Error value."
++                ]
++            }
++        },
++        {
++            "name": "device_exit_after_user_terminator_v1",
++            "since": "4.7",
++            "description": [
++                "Internal reciprocal guarded-lifetime v1 surface. Availability does not enable guarded loading; the complete loader, binding and entry census gate remains required.",
++                "Native aligned, nonaliasing pointers are required. Abi uses version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero; embedded registration and diagnostic headers use their own generated sizeof.",
++                "Borrowed contexts and cleanup handles expire at the exact issuing callback return. The guard token lasts until enrollment revocation. Code holds persist across frames and retire after release at the original outer callback return. Empty outputs remain empty on failure; nonempty outputs are rejected unchanged."
++            ],
++            "arguments": [
++                {
++                    "name": "abi",
++                    "type": "const GDExtensionDeviceExitAbi*",
++                    "description": [
++                        "Abi."
++                    ]
++                },
++                {
++                    "name": "context",
++                    "type": "GDExtensionDeviceExitDeinitLevelContextRef",
++                    "description": [
++                        "Context."
++                    ]
++                }
++            ],
++            "return_value": {
++                "type": "int32_t",
++                "description": [
++                    "Existing Godot Error value."
++                ]
++            }
++        },
++        {
++            "name": "device_exit_after_binding_deinit_v1",
++            "since": "4.7",
++            "description": [
++                "Internal reciprocal guarded-lifetime v1 surface. Availability does not enable guarded loading; the complete loader, binding and entry census gate remains required.",
++                "Native aligned, nonaliasing pointers are required. Abi uses version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero; embedded registration and diagnostic headers use their own generated sizeof.",
++                "Borrowed contexts and cleanup handles expire at the exact issuing callback return. The guard token lasts until enrollment revocation. Code holds persist across frames and retire after release at the original outer callback return. Empty outputs remain empty on failure; nonempty outputs are rejected unchanged."
++            ],
++            "arguments": [
++                {
++                    "name": "abi",
++                    "type": "const GDExtensionDeviceExitAbi*",
++                    "description": [
++                        "Abi."
++                    ]
++                },
++                {
++                    "name": "context",
++                    "type": "GDExtensionDeviceExitDeinitLevelContextRef",
++                    "description": [
++                        "Context."
++                    ]
++                }
++            ],
++            "return_value": {
++                "type": "int32_t",
++                "description": [
++                    "Existing Godot Error value."
++                ]
++            }
++        },
++        {
++            "name": "device_exit_publish_exit_result_v1",
++            "since": "4.7",
++            "description": [
++                "Internal reciprocal guarded-lifetime v1 surface. Availability does not enable guarded loading; the complete loader, binding and entry census gate remains required.",
++                "Native aligned, nonaliasing pointers are required. Abi uses version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero; embedded registration and diagnostic headers use their own generated sizeof.",
++                "Borrowed contexts and cleanup handles expire at the exact issuing callback return. The guard token lasts until enrollment revocation. Code holds persist across frames and retire after release at the original outer callback return. Empty outputs remain empty on failure; nonempty outputs are rejected unchanged."
++            ],
++            "arguments": [
++                {
++                    "name": "abi",
++                    "type": "const GDExtensionDeviceExitAbi*",
++                    "description": [
++                        "Abi."
++                    ]
++                },
++                {
++                    "name": "token",
++                    "type": "GDExtensionDeviceExitGuardToken",
++                    "description": [
++                        "Token."
++                    ]
++                },
++                {
++                    "name": "context",
++                    "type": "GDExtensionDeviceExitDeinitPreflightContextRef",
++                    "description": [
++                        "Context."
++                    ]
++                },
++                {
++                    "name": "diagnostic",
++                    "type": "const GDExtensionDeviceExitExitDiagnosticV1*",
++                    "description": [
++                        "Diagnostic."
++                    ]
++                }
++            ],
++            "return_value": {
++                "type": "int32_t",
++                "description": [
++                    "Existing Godot Error value."
++                ]
++            }
++        },
++        {
++            "name": "device_exit_terminate_initialize_blocked_v1",
++            "since": "4.7",
++            "description": [
++                "Internal reciprocal guarded-lifetime v1 surface. Availability does not enable guarded loading; the complete loader, binding and entry census gate remains required.",
++                "Native aligned, nonaliasing pointers are required. Abi uses version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero; embedded registration and diagnostic headers use their own generated sizeof.",
++                "Borrowed contexts and cleanup handles expire at the exact issuing callback return. The guard token lasts until enrollment revocation. Code holds persist across frames and retire after release at the original outer callback return. Empty outputs remain empty on failure; nonempty outputs are rejected unchanged.",
++                "Never returns, including for invalid context. Uses the original fixed core failure route."
++            ],
++            "arguments": [
++                {
++                    "name": "context",
++                    "type": "GDExtensionDeviceExitInitializationLevelContextRef",
++                    "description": [
++                        "Context."
++                    ]
++                },
++                {
++                    "name": "original_error",
++                    "type": "int32_t",
++                    "description": [
++                        "Original error."
++                    ]
++                }
++            ]
++        },
++        {
++            "name": "device_exit_terminate_blocked_v1",
++            "since": "4.7",
++            "description": [
++                "Internal reciprocal guarded-lifetime v1 surface. Availability does not enable guarded loading; the complete loader, binding and entry census gate remains required.",
++                "Native aligned, nonaliasing pointers are required. Abi uses version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero; embedded registration and diagnostic headers use their own generated sizeof.",
++                "Borrowed contexts and cleanup handles expire at the exact issuing callback return. The guard token lasts until enrollment revocation. Code holds persist across frames and retire after release at the original outer callback return. Empty outputs remain empty on failure; nonempty outputs are rejected unchanged.",
++                "Never returns, including for invalid context. Uses the original fixed core failure route."
++            ],
++            "arguments": [
++                {
++                    "name": "context",
++                    "type": "GDExtensionDeviceExitDeinitLevelContextRef",
++                    "description": [
++                        "Context."
++                    ]
++                },
++                {
++                    "name": "original_error",
++                    "type": "int32_t",
++                    "description": [
++                        "Original error."
++                    ]
++                }
++            ]
+         }
+     ]
+ }

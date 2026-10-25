@@ -234,8 +234,14 @@ public:
 	}
 };
 
+namespace GDExtensionDeviceExit {
+bool is_typed_lifecycle_interface(const char *name);
+}
+
 // Core interface functions.
 GDExtensionInterfaceFunctionPtr gdextension_get_proc_address(const char *p_name) {
+	// Legacy lookup never selects guarded enrollment merely by symbol presence.
+	if (GDExtensionDeviceExit::is_typed_lifecycle_interface(p_name)) { return nullptr; }
 	return GDExtension::get_interface_function(p_name);
 }
 
