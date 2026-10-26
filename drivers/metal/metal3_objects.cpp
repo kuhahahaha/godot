@@ -257,7 +257,14 @@ void MDCommandBuffer::_end() {
 
 void MDCommandBuffer::_commit() {
 	end();
-	commandBuffer->commit();
+	// An empty recording still needs a native submission for its fence and
+	// completion handler. Native command buffers are otherwise created lazily.
+	MTL::CommandBuffer *cb = command_buffer();
+	CRASH_COND_MSG(cb == nullptr, "Metal command buffer allocation failed before submission.");
+ auto *record=device_driver->register_completion_record(cb,0);
+ if(!record) {completion_record_failed=true;return;}
+ if(!device_driver->active_completion_records)pending_completion_records.push_back(record);
+	cb->commit();
 	commandBuffer.reset();
 	state_begin = false;
 }

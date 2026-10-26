@@ -876,6 +876,7 @@ void EditorNode::_notification(int p_what) {
 		} break;
 
 		case NOTIFICATION_POSTINITIALIZE: {
+			EditorHelp::begin_doc_lifetime();
 			EditorHelp::generate_doc();
 #if defined(MODULE_GDSCRIPT_ENABLED) || defined(MODULE_MONO_ENABLED)
 			EditorHelpHighlighter::create_singleton();
@@ -968,6 +969,7 @@ void EditorNode::_notification(int p_what) {
 		} break;
 
 		case NOTIFICATION_EXIT_TREE: {
+			EditorHelp::finish_doc_generation();
 			singleton->active_plugins.clear();
 
 			if (progress_dialog) {

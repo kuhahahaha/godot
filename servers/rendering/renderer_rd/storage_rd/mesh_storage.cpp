@@ -29,14 +29,13 @@
 /**************************************************************************/
 
 #include "mesh_storage.h"
-#include "modules/modules_enabled.gen.h"
-#ifdef MODULE_P01_PROBE_ENABLED
-#include "modules/p01_probe/p01_observer.h"
-#endif
 
+#include "servers/rendering/render_capture_test_hooks.h"
 #include "servers/rendering/renderer_viewport.h"
 #include "servers/rendering/rendering_server.h"
 #include "servers/rendering/rendering_server_types.h"
+
+#include "modules/modules_enabled.gen.h"
 
 using namespace RendererRD;
 
@@ -1309,9 +1308,11 @@ void MeshStorage::update_mesh_instances() {
 
 			//dispatch without barrier, so all is done at the same time
 			RD::get_singleton()->compute_list_dispatch_threads(compute_list, push_constant.vertex_count, 1, 1);
-#ifdef MODULE_P01_PROBE_ENABLED
-			uint64_t &count = mi->surfaces[i].p01_dispatch_count[mi->surfaces[i].current_buffer];
-			if (count != UINT64_MAX) { ++count; }
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+			uint64_t &count = mi->surfaces[i].capture_test_dispatch_count[mi->surfaces[i].current_buffer];
+			if (count != UINT64_MAX) {
+				++count;
+			}
 #endif
 		}
 
@@ -2384,10 +2385,9 @@ RID MeshStorage::skeleton_allocate() {
 	return skeleton_owner.allocate_rid();
 }
 void MeshStorage::skeleton_initialize(RID p_rid) {
-
-#ifdef MODULE_P01_PROBE_ENABLED
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
 	Skeleton skeleton;
-	skeleton.p01_owner = p_rid;
+	skeleton.capture_test_owner = p_rid;
 	skeleton_owner.initialize_rid(p_rid, skeleton);
 #else
 	skeleton_owner.initialize_rid(p_rid, Skeleton());
@@ -2483,8 +2483,8 @@ void MeshStorage::skeleton_bone_set_transform(RID p_skeleton, int p_bone, const 
 	dataptr[11] = p_transform.origin.z;
 
 	_skeleton_make_dirty(skeleton);
-#ifdef MODULE_P01_PROBE_ENABLED
-	p01_observe_skeleton_setter(p_skeleton.get_id(), skeleton->version);
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	RenderCaptureTestHooks::observe_skeleton_setter(p_skeleton.get_id(), skeleton->version);
 #endif
 }
 
@@ -2569,9 +2569,9 @@ void MeshStorage::_update_dirty_skeletons() {
 		Skeleton *skeleton = skeleton_dirty_list;
 
 		if (skeleton->size) {
-#ifdef MODULE_P01_PROBE_ENABLED
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
 			const Error upload_error = RD::get_singleton()->buffer_update(skeleton->buffer, 0, skeleton->data.size() * sizeof(float), skeleton->data.ptr());
-			p01_observe_skeleton_upload(skeleton->p01_owner.get_id(), skeleton->buffer.get_id(), skeleton->data.size() * sizeof(float), upload_error);
+			RenderCaptureTestHooks::observe_skeleton_upload(skeleton->capture_test_owner.get_id(), skeleton->buffer.get_id(), skeleton->data.size() * sizeof(float), upload_error);
 #else
 			RD::get_singleton()->buffer_update(skeleton->buffer, 0, skeleton->data.size() * sizeof(float), skeleton->data.ptr());
 #endif
@@ -2582,8 +2582,8 @@ void MeshStorage::_update_dirty_skeletons() {
 		skeleton->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_SKELETON_BONES);
 
 		skeleton->version++;
-#ifdef MODULE_P01_PROBE_ENABLED
-		p01_observe_skeleton_version(skeleton->p01_owner.get_id(), skeleton->version);
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+		RenderCaptureTestHooks::observe_skeleton_version(skeleton->capture_test_owner.get_id(), skeleton->version);
 #endif
 
 		skeleton->dirty = false;

@@ -35,10 +35,17 @@
 
 #include <Metal/Metal.hpp>
 
+#ifdef TESTS_ENABLED
+class TestMetalCompletionAccess;
+#endif
+
 namespace MTL3 {
 
 class API_AVAILABLE(macos(11.0), ios(14.0), tvos(14.0)) RenderingDeviceDriverMetal final : public ::RenderingDeviceDriverMetal {
 	friend class MDCommandBuffer;
+#ifdef TESTS_ENABLED
+	friend class ::TestMetalCompletionAccess;
+#endif
 #pragma mark - Generic
 
 	NS::SharedPtr<MTL::CommandQueue> device_queue;
@@ -46,6 +53,10 @@ class API_AVAILABLE(macos(11.0), ios(14.0), tvos(14.0)) RenderingDeviceDriverMet
 	struct Fence {
 		NS::SharedPtr<MTL::SharedEvent> event;
 		uint64_t value = 0;
+		uint64_t last_recycled_value = 0;
+		bool armed = false;
+		bool observed = false;
+		LocalVector<CompletionRecord *> completion_records;
 		Fence(NS::SharedPtr<MTL::SharedEvent> p_event) :
 				event(p_event) {}
 		void signal(MTL::CommandBuffer *p_cb);
@@ -65,6 +76,7 @@ class API_AVAILABLE(macos(11.0), ios(14.0), tvos(14.0)) RenderingDeviceDriverMet
 	// timestamp encoders against the work they bracket.
 	bool timestamp_queries_supported = false;
 
+	Error _execute_and_present_common(CommandQueueID, VectorView<SemaphoreID>, VectorView<CommandBufferID>, VectorView<SemaphoreID>, FenceID, VectorView<SwapChainID>, bool);
 	Error _execute_and_present_barriers(CommandQueueID p_cmd_queue, VectorView<SemaphoreID> p_wait_semaphores, VectorView<CommandBufferID> p_cmd_buffers, VectorView<SemaphoreID> p_cmd_semaphores, FenceID p_cmd_fence, VectorView<SwapChainID> p_swap_chains);
 	Error _execute_and_present(CommandQueueID p_cmd_queue, VectorView<SemaphoreID> p_wait_semaphores, VectorView<CommandBufferID> p_cmd_buffers, VectorView<SemaphoreID> p_cmd_semaphores, FenceID p_cmd_fence, VectorView<SwapChainID> p_swap_chains);
 
@@ -76,10 +88,14 @@ protected:
 	void remove_residency_set_to_main_queue(MTL::ResidencySet *p_set) override API_AVAILABLE(macos(15.0), ios(18.0), tvos(18.0), visionos(2.0));
 
 public:
+ uint32_t qualification_native_call_bound(uint32_t p_slots) const override;
 	Error initialize(uint32_t p_device_index, uint32_t p_frame_count) override;
 
 	FenceID fence_create() override;
 	Error fence_wait(FenceID p_fence) override;
+	FencePollResult fence_poll(FenceID p_fence, uint64_t p_expected_submission_serial) override;
+	FencePollResult fence_wait_observed(FenceID p_fence, uint64_t p_expected_submission_serial) override;
+	Error fence_recycle(FenceID p_fence, uint64_t p_completed_serial) override;
 	void fence_free(FenceID p_fence) override;
 
 	SemaphoreID semaphore_create() override;

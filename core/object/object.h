@@ -31,6 +31,7 @@
 #pragma once
 
 #include "core/extension/gdextension_interface.gen.h"
+#include "core/extension/gdextension_library_exit_guard.h"
 #include "core/object/gdtype.h"
 #include "core/object/method_info.h"
 #include "core/object/object_id.h"
@@ -40,6 +41,7 @@
 #include "core/templates/hash_map.h"
 #include "core/templates/hash_set.h"
 #include "core/templates/list.h"
+#include "core/templates/local_vector.h"
 #include "core/templates/safe_refcount.h"
 #include "core/variant/variant.h"
 
@@ -72,6 +74,7 @@ class MethodBind;
 class GDExtension;
 
 struct ObjectGDExtension {
+	GDExtensionDeviceExit::SharedRecord callback_record;
 	GDExtension *library = nullptr;
 	ObjectGDExtension *parent = nullptr;
 	List<ObjectGDExtension *> children;
@@ -347,6 +350,7 @@ class ClassDB;
 class ScriptInstance;
 
 class Object {
+	friend class GDExtension; // Original core reload/abort controller checks the exact native extension association.
 public:
 	typedef Object self_type;
 
@@ -397,6 +401,23 @@ public:
 		Connection(const Variant &p_variant);
 	};
 
+	// Internal native continuation registration. It never owns the Object and
+	// never uses ObjectDB as a lifetime permit. Concurrent raw Object deletion
+	// still requires external lifetime synchronization.
+	class NativeContinuation {
+		friend class Object;
+		Object *owner = nullptr;
+		NativeContinuation *previous = nullptr;
+		NativeContinuation *next = nullptr;
+
+	public:
+		explicit NativeContinuation(Object *p_owner);
+		~NativeContinuation();
+		NativeContinuation(const NativeContinuation &) = delete;
+		NativeContinuation &operator=(const NativeContinuation &) = delete;
+		bool is_valid() const { return owner != nullptr; }
+	};
+
 private:
 #ifdef DEBUG_ENABLED
 	friend struct _ObjectDebugLock;
@@ -407,6 +428,7 @@ private:
 
 	ObjectGDExtension *_extension = nullptr;
 	GDExtensionClassInstancePtr _extension_instance = nullptr;
+	GDExtensionDeviceExit::BindingLifetime _extension_lifetime;
 
 	struct SignalData {
 		struct Slot {
@@ -426,6 +448,8 @@ private:
 	SafeRefCount _lock_index;
 #endif // DEBUG_ENABLED
 	ObjectID _instance_id;
+	NativeContinuation *native_continuations = nullptr;
+	void _invalidate_native_continuations();
 	bool _predelete();
 	void _initialize();
 	void _postinitialize();
@@ -436,6 +460,8 @@ private:
 	bool _can_translate : 1;
 	bool _emitting : 1;
 	bool _predelete_ok : 1;
+	bool _deletion_in_progress : 1;
+	bool _native_continuations_invalidated : 1;
 
 public:
 	bool _is_queued_for_deletion : 1; // Set to true by SceneTree::queue_delete().
@@ -489,36 +515,72 @@ private:
 
 	BinaryMutex _instance_binding_mutex;
 	struct InstanceBinding {
+		GDExtensionDeviceExit::SharedRecord owner;
+		GDExtensionDeviceExit::BindingLifetime lifetime;
+		uint64_t binding_id = 0;
+		bool primary = false;
 		void *binding = nullptr;
 		void *token = nullptr;
 		GDExtensionInstanceBindingFreeCallback free_callback = nullptr;
 		GDExtensionInstanceBindingReferenceCallback reference_callback = nullptr;
 	};
-	InstanceBinding *_instance_bindings = nullptr;
-	uint32_t _instance_binding_count = 0;
+	struct ReleaseLifetime {
+		uint64_t generation = 0;
+		uint64_t action_id = 0;
+		GDExtensionDeviceExit::CleanupAction *action = nullptr;
+	};
+	LocalVector<ReleaseLifetime> _release_lifetimes;
+	// Caller holds the binding metadata lock; destroy the returned action outside it.
+	GDExtensionDeviceExit::CleanupAction *_detach_unused_release_lifetime(uint64_t p_generation, GDExtensionDeviceExit::CleanupAction *p_expected = nullptr);
+	uint64_t _predelete_callback_thread = 0;
+	LocalVector<InstanceBinding> _instance_bindings;
+	uint64_t _binding_version = 0;
+	uint64_t _next_binding_id = 1;
+	uint32_t _binding_read_cohorts = 0;
+	bool _binding_mutation = false;
+	Error _replace_script_instance(ScriptInstance *p_instance);
+	uint64_t _next_reference_operation_id = 1;
+	bool _reference_operations_exhausted = false;
+	uint64_t _terminal_release_id = 0;
+	uint64_t _terminal_owner_thread = 0;
+	bool _terminal_destroy_ready = false;
 
 	Object(bool p_reference);
 
 protected:
 	StringName _translation_domain;
 
-	_FORCE_INLINE_ bool _instance_binding_reference(bool p_reference) {
-		bool can_die = true;
-		if (_instance_bindings) {
-			MutexLock instance_binding_lock(_instance_binding_mutex);
-			for (uint32_t i = 0; i < _instance_binding_count; i++) {
-				if (_instance_bindings[i].reference_callback) {
-					if (!_instance_bindings[i].reference_callback(_instance_bindings[i].token, _instance_bindings[i].binding, p_reference)) {
-						can_die = false;
-					}
-				}
-			}
-		}
-		return can_die;
-	}
+	// Callback targets are immutable while the short Object read pin is held.
+	// Generation frames retire independently after explicit Object-pin retirement.
+	class ReferenceCohort {
+		Object *object = nullptr;
+		uint64_t operation_id = 0;
+		Span<const InstanceBinding> bindings;
+		GDExtensionDeviceExit::SharedRecord direct_owner;
+		GDExtensionClassReference direct_reference = nullptr;
+		GDExtensionClassReference direct_unreference = nullptr;
+		void *direct_instance = nullptr;
+		ScriptInstance *script = nullptr;
+
+		using Operation = bool (*)(void *, ReferenceCohort &);
+		Error _execute_after(uint64_t p_generation, bool p_release, Operation p_operation, void *p_context, bool &r_result);
+
+	public:
+		ReferenceCohort() = default;
+		ReferenceCohort(const ReferenceCohort &) = delete;
+		ReferenceCohort &operator=(const ReferenceCohort &) = delete;
+		~ReferenceCohort();
+		Error execute(Object *p_object, bool p_release, Operation p_operation, void *p_context, bool &r_result);
+		uint64_t get_operation_id() const { return operation_id; }
+		bool invoke(bool p_reference);
+		void retire_object_pin();
+	};
+
+	void _reserve_terminal_release(uint64_t p_release_id);
+	void _complete_terminal_release(uint64_t p_release_id);
 
 	// Used in gdvirtual.gen.h
-	void _gdvirtual_init_method_ptr(uint32_t p_compat_hash, void *&r_fn_ptr, const StringName &p_fn_name, bool p_compat) const;
+	bool _gdvirtual_init_method_ptr(uint32_t p_compat_hash, void *&r_fn_ptr, const StringName &p_fn_name, bool p_compat) const;
 
 	friend class GDExtensionMethodBind;
 	_ALWAYS_INLINE_ const ObjectGDExtension *_get_extension() const { return _extension; }
@@ -827,11 +889,21 @@ public:
 #endif
 
 	// Used by script languages to store binding data.
+	// Internal original-owner registration, before this generation publishes
+	// any direct or binding association. This does not authorize normal entry.
+	Error register_release_lifetime(const GDExtensionDeviceExit::RecordRef &p_owner, uint64_t p_destructor_thread, uint64_t p_action_id);
 	void *get_instance_binding(void *p_token, const GDExtensionInstanceBindingCallbacks *p_callbacks);
 	// Used on creation by binding only.
 	void set_instance_binding(void *p_token, void *p_binding, const GDExtensionInstanceBindingCallbacks *p_callbacks);
 	bool has_instance_binding(void *p_token);
 	void free_instance_binding(void *p_token);
+
+private:
+	// Core-only enrollment used by ClassDB and binding publication. This is
+	// intentionally unreachable through the public Object API.
+	Error register_core_release_lifetime(const GDExtensionDeviceExit::RecordRef &p_owner, uint64_t p_destructor_thread, uint64_t p_action_id, GDExtensionDeviceExit::CleanupAction **r_created = nullptr);
+
+public:
 
 #ifdef TOOLS_ENABLED
 	void clear_internal_extension();

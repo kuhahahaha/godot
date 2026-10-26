@@ -71,8 +71,10 @@
 #endif // PHYSICS_3D_DISABLED
 
 #include "modules/modules_tests.gen.h" // IWYU pragma: keep // TODO: Migrate module tests to compilation files.
+#include "tests/core/object/device_exit_startup_fixture.h"
 
 int test_main(int argc, char *argv[]) {
+	TestDeviceExitStartup::test_body_entered();
 	ForceLink::force_link_tests();
 
 	bool run_tests = true;

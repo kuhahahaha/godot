@@ -154,6 +154,12 @@
 				Returns the visible rectangle in global screen coordinates.
 			</description>
 		</method>
+		<method name="get_world_3d_instance_id" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the instance ID of the explicitly assigned [member world_3d] without retaining it, or [code]0[/code] when none is assigned. Unlike [method find_world_3d], this does not select an own world or search parent viewports. The ID does not extend the world's lifetime.
+			</description>
+		</method>
 		<method name="gui_cancel_drag">
 			<return type="void" />
 			<description>

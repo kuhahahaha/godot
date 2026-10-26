@@ -56,6 +56,31 @@
 		mutex.unlock(); \
 	}
 
+namespace {
+
+struct QueueStatistics {
+	uint32_t pages = 0;
+	uint64_t bytes = 0;
+};
+
+// The caller holds the queue lock. Occupancy remains readable during flush/clear,
+// whereas some Message objects in these spans may already have been destroyed.
+QueueStatistics snapshot_queue_statistics(uint32_t p_pages_used, const LocalVector<uint32_t> &p_page_bytes) {
+	QueueStatistics result;
+	result.pages = p_pages_used;
+	for (uint32_t i = 0; i < p_pages_used; i++) {
+		result.bytes += p_page_bytes[i];
+	}
+	return result;
+}
+
+void print_queue_statistics(const QueueStatistics &p_snapshot) {
+	fprintf(stdout, "TOTAL PAGES: %u (%llu bytes).\n", p_snapshot.pages, (unsigned long long)p_snapshot.pages * CallQueue::PAGE_SIZE_BYTES);
+	fprintf(stdout, "BUFFER BYTES: %llu.\n", (unsigned long long)p_snapshot.bytes);
+}
+
+} // namespace
+
 void CallQueue::_add_page() {
 	if (pages_used == page_bytes.size()) {
 		pages.push_back(allocator->alloc());
@@ -87,14 +112,20 @@ Error CallQueue::push_callablep(const Callable &p_callable, const Variant **p_ar
 	ERR_FAIL_COND_V_MSG(room_needed > uint32_t(PAGE_SIZE_BYTES), ERR_INVALID_PARAMETER, "Message is too large to fit on a page (" + itos(PAGE_SIZE_BYTES) + " bytes), consider passing less arguments.");
 
 	LOCK_MUTEX;
+	if (closing) {
+		UNLOCK_MUTEX;
+		return ERR_UNAVAILABLE;
+	}
 
 	_ensure_first_page();
 
 	if ((page_bytes[pages_used - 1] + room_needed) > uint32_t(PAGE_SIZE_BYTES)) {
 		if (pages_used == max_pages) {
-			fprintf(stderr, "Failed method: %s. Message queue out of memory. %s\n", String(p_callable).utf8().get_data(), error_text.utf8().get_data());
-			statistics();
+			const QueueStatistics snapshot = snapshot_queue_statistics(pages_used, page_bytes);
+			const String context = error_text;
 			UNLOCK_MUTEX;
+			print_queue_statistics(snapshot);
+			fprintf(stderr, "Failed call with %d arguments. Message queue out of memory. %s\n", p_argcount, context.utf8().get_data());
 			return ERR_OUT_OF_MEMORY;
 		}
 		_add_page();
@@ -133,20 +164,21 @@ Error CallQueue::push_callablep(const Callable &p_callable, const Variant **p_ar
 
 Error CallQueue::push_set(ObjectID p_id, const StringName &p_prop, const Variant &p_value) {
 	LOCK_MUTEX;
+	if (closing) {
+		UNLOCK_MUTEX;
+		return ERR_UNAVAILABLE;
+	}
 	uint32_t room_needed = sizeof(Message) + sizeof(Variant);
 
 	_ensure_first_page();
 
 	if ((page_bytes[pages_used - 1] + room_needed) > uint32_t(PAGE_SIZE_BYTES)) {
 		if (pages_used == max_pages) {
-			String type;
-			if (ObjectDB::get_instance(p_id)) {
-				type = ObjectDB::get_instance(p_id)->get_class();
-			}
-			fprintf(stderr, "Failed set: %s: %s target ID: %s. Message queue out of memory. %s\n", type.utf8().get_data(), String(p_prop).utf8().get_data(), itos(p_id).utf8().get_data(), error_text.utf8().get_data());
-			statistics();
-
+			const QueueStatistics snapshot = snapshot_queue_statistics(pages_used, page_bytes);
+			const String context = error_text;
 			UNLOCK_MUTEX;
+			print_queue_statistics(snapshot);
+			fprintf(stderr, "Failed set target ID: %llu. Message queue out of memory. %s\n", (unsigned long long)p_id, context.utf8().get_data());
 			return ERR_OUT_OF_MEMORY;
 		}
 		_add_page();
@@ -174,15 +206,21 @@ Error CallQueue::push_set(ObjectID p_id, const StringName &p_prop, const Variant
 Error CallQueue::push_notification(ObjectID p_id, int p_notification) {
 	ERR_FAIL_COND_V(p_notification < 0, ERR_INVALID_PARAMETER);
 	LOCK_MUTEX;
+	if (closing) {
+		UNLOCK_MUTEX;
+		return ERR_UNAVAILABLE;
+	}
 	uint32_t room_needed = sizeof(Message);
 
 	_ensure_first_page();
 
 	if ((page_bytes[pages_used - 1] + room_needed) > uint32_t(PAGE_SIZE_BYTES)) {
 		if (pages_used == max_pages) {
-			fprintf(stderr, "Failed notification: %d target ID: %s. Message queue out of memory. %s\n", p_notification, itos(p_id).utf8().get_data(), error_text.utf8().get_data());
-			statistics();
+			const QueueStatistics snapshot = snapshot_queue_statistics(pages_used, page_bytes);
+			const String context = error_text;
 			UNLOCK_MUTEX;
+			print_queue_statistics(snapshot);
+			fprintf(stderr, "Failed notification: %d target ID: %llu. Message queue out of memory. %s\n", p_notification, (unsigned long long)p_id, context.utf8().get_data());
 			return ERR_OUT_OF_MEMORY;
 		}
 		_add_page();
@@ -223,6 +261,11 @@ void CallQueue::_call_function(const Callable &p_callable, const Variant *p_args
 
 Error CallQueue::flush() {
 	LOCK_MUTEX;
+
+	if (closing) {
+		UNLOCK_MUTEX;
+		return ERR_UNAVAILABLE;
+	}
 
 	if (pages.is_empty()) {
 		// Never allocated
@@ -306,7 +349,7 @@ Error CallQueue::flush() {
 void CallQueue::clear() {
 	LOCK_MUTEX;
 
-	if (pages.is_empty()) {
+	if (flushing || pages.is_empty()) {
 		UNLOCK_MUTEX;
 		return; // Nothing to clear.
 	}
@@ -346,97 +389,20 @@ void CallQueue::clear() {
 
 void CallQueue::statistics() {
 	LOCK_MUTEX;
-	HashMap<StringName, int> set_count;
-	HashMap<int, int> notify_count;
-	HashMap<Callable, int> call_count;
-	int null_count = 0;
-
-	for (uint32_t i = 0; i < pages_used; i++) {
-		uint32_t offset = 0;
-		while (offset < page_bytes[i]) {
-			Page *page = pages[i];
-
-			//lock on each iteration, so a call can re-add itself to the message queue
-
-			Message *message = (Message *)&page->data[offset];
-
-			uint32_t advance = sizeof(Message);
-			if ((message->type & FLAG_MASK) != TYPE_NOTIFICATION) {
-				advance += sizeof(Variant) * message->args;
-			}
-
-			Object *target = message->callable.get_object();
-
-			bool null_target = true;
-			switch (message->type & FLAG_MASK) {
-				case TYPE_CALL: {
-					if (target || (message->type & FLAG_NULL_IS_OK)) {
-						if (!call_count.has(message->callable)) {
-							call_count[message->callable] = 0;
-						}
-
-						call_count[message->callable]++;
-						null_target = false;
-					}
-				} break;
-				case TYPE_NOTIFICATION: {
-					if (target) {
-						if (!notify_count.has(message->notification)) {
-							notify_count[message->notification] = 0;
-						}
-
-						notify_count[message->notification]++;
-						null_target = false;
-					}
-				} break;
-				case TYPE_SET: {
-					if (target) {
-						StringName t = message->callable.get_method();
-						if (!set_count.has(t)) {
-							set_count[t] = 0;
-						}
-
-						set_count[t]++;
-						null_target = false;
-					}
-				} break;
-			}
-			if (null_target) {
-				// Object was deleted.
-				fprintf(stdout, "Object was deleted while awaiting a callback.\n");
-
-				null_count++;
-			}
-
-			offset += advance;
-
-			if ((message->type & FLAG_MASK) != TYPE_NOTIFICATION) {
-				Variant *args = (Variant *)(message + 1);
-				for (int k = 0; k < message->args; k++) {
-					args[k].~Variant();
-				}
-			}
-
-			message->~Message();
-		}
-	}
-
-	fprintf(stdout, "TOTAL PAGES: %d (%d bytes).\n", pages_used, pages_used * PAGE_SIZE_BYTES);
-	fprintf(stdout, "NULL count: %d.\n", null_count);
-
-	for (const KeyValue<StringName, int> &E : set_count) {
-		fprintf(stdout, "SET %s: %d.\n", String(E.key).utf8().get_data(), E.value);
-	}
-
-	for (const KeyValue<Callable, int> &E : call_count) {
-		fprintf(stdout, "CALL %s: %d.\n", String(E.key).utf8().get_data(), E.value);
-	}
-
-	for (const KeyValue<int, int> &E : notify_count) {
-		fprintf(stdout, "NOTIFY %d: %d.\n", E.key, E.value);
-	}
-
+	const QueueStatistics snapshot = snapshot_queue_statistics(pages_used, page_bytes);
 	UNLOCK_MUTEX;
+	print_queue_statistics(snapshot);
+}
+
+Error CallQueue::prepare_close() {
+	LOCK_MUTEX;
+	if (flushing) {
+		UNLOCK_MUTEX;
+		return ERR_BUSY;
+	}
+	closing = true;
+	UNLOCK_MUTEX;
+	return OK;
 }
 
 bool CallQueue::is_flushing() const {

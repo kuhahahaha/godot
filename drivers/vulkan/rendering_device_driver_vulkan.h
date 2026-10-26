@@ -42,16 +42,32 @@
 #define _DEBUG
 #endif
 #endif
+#include "core/os/condition_variable.h"
+
 #include <thirdparty/re-spirv/re-spirv.h>
 #include <thirdparty/vulkan/vk_mem_alloc.h>
 
 #include <drivers/vulkan/godot_vulkan.h>
+
+#include <atomic>
 
 class FileAccess;
 
 // Design principles:
 // - Vulkan structs are zero-initialized and fields not requiring a non-zero value are omitted (except in cases where expresivity reasons apply).
 class RenderingDeviceDriverVulkan : public RenderingDeviceDriver {
+#ifdef TESTS_ENABLED
+	friend class TestVulkanCompletionAccess;
+ uint32_t test_fence_fault_phase = 0;
+ VkResult test_fence_fault_result = VK_SUCCESS;
+ bool test_submit_fault_applied = false;
+ std::atomic<uint64_t> test_native_recycle_cv_waiting{ 0 };
+ friend class TestQualificationVulkanAllocationAccess;
+ uint32_t test_buffer_fault_stage = 0;
+ uint32_t test_buffer_rollback_mask = 0;
+ VkBuffer test_buffer_prefix = VK_NULL_HANDLE;
+ VmaAllocation test_buffer_allocation_prefix = nullptr;
+#endif
 	/*****************/
 	/**** GENERIC ****/
 	/*****************/
@@ -65,6 +81,7 @@ class RenderingDeviceDriverVulkan : public RenderingDeviceDriver {
 	struct Queue {
 		VkQueue queue = VK_NULL_HANDLE;
 		uint32_t virtual_count = 0;
+		uint32_t observation_index = 0;
 		BinaryMutex submit_mutex;
 	};
 
@@ -344,14 +361,54 @@ public:
 	/****************/
 
 private:
+	struct NativeCall {
+		VkFence fence = VK_NULL_HANDLE;
+		uint64_t serial = 0, registry = 0, epoch = 0;
+		uint32_t queue = 0, observers = 0, waiters = 0;
+		bool submitting = true, fence_owned = false, owns_fence = false, source_returned = false;
+		VkResult submit_result = VK_NOT_READY;
+		std::atomic<bool> completed{ false };
+	};
+	BinaryMutex native_call_mutex;
+	ConditionVariable native_call_returned;
+	LocalVector<NativeCall *> native_calls;
+	std::atomic<uint64_t> next_native_call_serial{ 1 };
 	struct Fence {
+		NativeCall *native_call = nullptr;
 		VkFence vk_fence = VK_NULL_HANDLE;
 		CommandQueue *queue_signaled_from = nullptr;
+		uint64_t submission_serial = 0;
+		uint64_t completed_serial = 0;
+		bool armed = false;
+		bool observed = false;
 	};
 
+	Error _native_call_prepare(Fence *, uint32_t, NativeCall *&);
+	void _native_call_abort(NativeCall *);
+	void _native_call_collect_locked(NativeCall *);
+	void _native_fence_return_locked(Fence *);
+	Error _fence_recycle(FenceID, uint64_t, bool);
+	Error _native_call_recycle(uint64_t, bool);
+
 public:
+	Error qualification_prepare_segment(QueueCallReport &out) override {
+		out = {};
+		return OK;
+	}
+	bool native_call_observation_supported() const override { return true; }
+	FencePollResult native_call_poll(uint64_t) override;
+	FencePollResult native_call_wait(uint64_t) override;
+	Error native_call_recycle(uint64_t) override;
+	Error native_call_recycle_wait(uint64_t) override;
+	Error native_call_retain(uint64_t) override;
+	Error native_call_release(uint64_t) override;
+	// Qualification admission still uses the inherited unavailable call bound.
 	virtual FenceID fence_create() override final;
 	virtual Error fence_wait(FenceID p_fence) override final;
+	virtual FencePollResult fence_poll(FenceID p_fence, uint64_t p_expected_submission_serial) override final;
+	FencePollResult fence_wait_observed(FenceID p_fence, uint64_t p_expected_submission_serial) override;
+	virtual Error fence_recycle(FenceID p_fence, uint64_t p_completed_serial) override final;
+	Error fence_recycle_wait(FenceID p_fence, uint64_t p_completed_serial) override;
 	virtual void fence_free(FenceID p_fence) override final;
 
 	/********************/
@@ -495,6 +552,7 @@ private:
 
 public:
 	virtual ShaderID shader_create_from_container(const Ref<RenderingShaderContainer> &p_shader_container, const Vector<ImmutableSampler> &p_immutable_samplers) override final;
+	bool shader_retire_ready_nonblocking(ShaderID p_shader) const override { return bool(p_shader); }
 	virtual void shader_free(ShaderID p_shader) override final;
 
 	virtual void shader_destroy_modules(ShaderID p_shader) override final;

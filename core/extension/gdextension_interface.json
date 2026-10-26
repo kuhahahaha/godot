@@ -3670,6 +3670,1990 @@
                     ]
                 }
             ]
+        },
+        {
+            "name": "GDExtensionDeviceExitAbi",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi_version",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "struct_size",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionDeviceExitLibraryCapability",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "handle_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionDeviceExitLibraryViewRef",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "handle_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionDeviceExitLibrarySnapshot",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "library_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "loader_kind",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "wrapper_association",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "loader_initialize_returned",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "loader_initialize_error",
+                    "type": "int32_t"
+                },
+                {
+                    "name": "guarded_qualified",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionDeviceExitGuardToken",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "handle_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionDeviceExitGuardedLibraryRef",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "handle_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionDeviceExitInitializationLevelContextRef",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "handle_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionDeviceExitDeinitLevelContextRef",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "handle_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionDeviceExitDeinitPreflightContextRef",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "handle_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionDeviceExitRegisteredCleanupRef",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "handle_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionDeviceExitLibraryCodeHoldRef",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "handle_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionDeviceExitUserLevelFnV1",
+            "kind": "function",
+            "arguments": [
+                {
+                    "name": "binding_userdata",
+                    "type": "void*"
+                },
+                {
+                    "name": "level",
+                    "type": "GDExtensionInitializationLevel"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionDeviceExitPreflightFnV1",
+            "kind": "function",
+            "arguments": [
+                {
+                    "name": "context",
+                    "type": "GDExtensionDeviceExitDeinitPreflightContextRef"
+                },
+                {
+                    "name": "userdata",
+                    "type": "void*"
+                }
+            ],
+            "return_value": {
+                "type": "int32_t"
+            }
+        },
+        {
+            "name": "GDExtensionDeviceExitLevelNeedsV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "user_services",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "binding_services",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionDeviceExitGuardRegistrationV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "binding_protocol",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "level_bitmap",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "user_cleanup_bitmap",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "binding_cleanup_bitmap",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "entry_classes",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "needs[4]",
+                    "type": "GDExtensionDeviceExitLevelNeedsV1"
+                },
+                {
+                    "name": "expected_initialization",
+                    "type": "GDExtensionInitialization"
+                },
+                {
+                    "name": "user_initializer",
+                    "type": "GDExtensionDeviceExitUserLevelFnV1"
+                },
+                {
+                    "name": "user_terminator",
+                    "type": "GDExtensionDeviceExitUserLevelFnV1"
+                },
+                {
+                    "name": "preflight",
+                    "type": "GDExtensionDeviceExitPreflightFnV1"
+                },
+                {
+                    "name": "preflight_userdata",
+                    "type": "void*"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionDeviceExitExitDiagnosticV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "disposition",
+                    "type": "int32_t"
+                },
+                {
+                    "name": "level",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "pending_count",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionDeviceRegistryContextRef",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t",
+                    "description": [
+                        "registry_instance"
+                    ]
+                },
+                {
+                    "name": "handle_serial",
+                    "type": "uint64_t",
+                    "description": [
+                        "handle_serial"
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOriginalDeviceSessionRef",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t",
+                    "description": [
+                        "registry_instance"
+                    ]
+                },
+                {
+                    "name": "handle_serial",
+                    "type": "uint64_t",
+                    "description": [
+                        "handle_serial"
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionDeviceSessionViewV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "device_epoch",
+                    "type": "uint64_t",
+                    "description": [
+                        "device_epoch"
+                    ]
+                },
+                {
+                    "name": "session",
+                    "type": "uint64_t",
+                    "description": [
+                        "session"
+                    ]
+                },
+                {
+                    "name": "revision",
+                    "type": "uint64_t",
+                    "description": [
+                        "revision"
+                    ]
+                },
+                {
+                    "name": "state",
+                    "type": "uint32_t",
+                    "description": [
+                        "state"
+                    ]
+                },
+                {
+                    "name": "new_work",
+                    "type": "uint32_t",
+                    "description": [
+                        "new_work"
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionDeviceSessionResultV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "native_error",
+                    "type": "int32_t",
+                    "description": [
+                        "native_error"
+                    ]
+                },
+                {
+                    "name": "reason",
+                    "type": "uint32_t",
+                    "description": [
+                        "reason"
+                    ]
+                },
+                {
+                    "name": "expected",
+                    "type": "uint64_t",
+                    "description": [
+                        "expected"
+                    ]
+                },
+                {
+                    "name": "actual",
+                    "type": "uint64_t",
+                    "description": [
+                        "actual"
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionDeviceExitSceneReadyContextRef",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "handle_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionSceneInstallFeatureV2",
+            "kind": "enum",
+            "values": [
+                {
+                    "name": "GDEXTENSION_SCENE_INSTALL_BASE_V2",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_SCENE_INSTALL_RD_PAIR_V2",
+                    "value": 2
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionSceneInstallOmissionV2",
+            "kind": "enum",
+            "values": [
+                {
+                    "name": "GDEXTENSION_SCENE_INSTALL_OMISSION_NONE_V2",
+                    "value": 0
+                },
+                {
+                    "name": "GDEXTENSION_SCENE_INSTALL_OMISSION_NO_RD_PRESENT_V2",
+                    "value": 1
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionSceneInstallRequirementsV2",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "required_features",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "optional_features",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionSceneInstallPlanV2",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "library_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "required_features",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "optional_features",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "selected_features",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "omitted_optional_features",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "omission_reason",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "tree_id",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "window_id",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "world_id",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "rendering_server_id",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "main_rd_id",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "main_rd_epoch",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionDeviceExitSceneReadyCallbackV2",
+            "kind": "function",
+            "arguments": [
+                {
+                    "name": "original_userdata",
+                    "type": "void*"
+                },
+                {
+                    "name": "original_ready",
+                    "type": "GDExtensionDeviceExitSceneReadyContextRef"
+                },
+                {
+                    "name": "synchronous_plan",
+                    "type": "const GDExtensionSceneInstallPlanV2*"
+                }
+            ],
+            "return_value": {
+                "type": "int32_t"
+            }
+        },
+        {
+            "name": "GDExtensionDeviceExitSceneReadyCallbackV1",
+            "kind": "function",
+            "arguments": [
+                {
+                    "name": "userdata",
+                    "type": "void*"
+                },
+                {
+                    "name": "ready",
+                    "type": "GDExtensionDeviceExitSceneReadyContextRef"
+                }
+            ],
+            "return_value": {
+                "type": "int32_t"
+            }
+        },
+        {
+            "name": "GDExtensionDeviceExitSceneReadyEntryClassV1",
+            "kind": "enum",
+            "values": [
+                {
+                    "name": "GDEXTENSION_DEVICE_EXIT_ENTRY_SCENE_READY_V1",
+                    "value": 2048
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionDeviceExitSceneReadyAbortReasonV1",
+            "kind": "enum",
+            "values": [
+                {
+                    "name": "GDEXTENSION_DEVICE_EXIT_SCENE_READY_ABORT_UNSCHEDULED_PAIR_V1",
+                    "value": 1
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationBridgeRefV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "handle_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationTicketRefV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "handle_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationRecordV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "record_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "request_nonce",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "library_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "qualification_session_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "range_begin",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "range_end",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "vector_ordinal",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "attempt",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "sample_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "body_groups_x",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "request_digest[32]",
+                    "type": "uint8_t"
+                },
+                {
+                    "name": "unit_digest[32]",
+                    "type": "uint8_t"
+                },
+                {
+                    "name": "capture_map_digest[32]",
+                    "type": "uint8_t"
+                },
+                {
+                    "name": "body_map_digest[32]",
+                    "type": "uint8_t"
+                },
+                {
+                    "name": "capture_pipeline",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "capture_set",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "body_pipeline",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "body_set",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "readback_buffer",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "source_allocation_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "observed_backing_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "readback_offset",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "readback_size",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "capture_push[16]",
+                    "type": "uint8_t"
+                },
+                {
+                    "name": "body_push[16]",
+                    "type": "uint8_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationBackingV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "rid",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "backing_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "byte_size",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "usage_bits",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationReportV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "state",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "phase",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "native_error",
+                    "type": "int32_t"
+                },
+                {
+                    "name": "issue_fact",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "native_code",
+                    "type": "int64_t"
+                },
+                {
+                    "name": "revision",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "record_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "request_nonce",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "required_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "known_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "possible_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "fact_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "readback_request",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "source_backing_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "source_offset",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "source_size",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "owned_size",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "request_digest[32]",
+                    "type": "uint8_t"
+                },
+                {
+                    "name": "unit_digest[32]",
+                    "type": "uint8_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationBudgetV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "max_passes",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "max_micros",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationFactV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "graph_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "graph_frame",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "graph_kind",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "graph_index",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "graph_offset",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "semantic_kind",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "command_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "backend_queue",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "phase",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "issue",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "completion",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "error",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "native_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "completion_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "native_code",
+                    "type": "int64_t"
+                },
+                {
+                    "name": "parent_fact",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "source_backing_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "source_offset",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "source_size",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionStorageBackingRefV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "handle_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionStorageRetireRefV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "handle_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionStorageCreateRequestV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "bytes",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "allocation_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "part",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "allocation_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "create_attempt",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionStorageBackingV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "backing",
+                    "type": "GDExtensionStorageBackingRefV1"
+                },
+                {
+                    "name": "rid",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "backing_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "byte_size",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "usage_bits",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "native_error",
+                    "type": "int32_t"
+                },
+                {
+                    "name": "state",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionStorageRetireRequestV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "backing",
+                    "type": "GDExtensionStorageBackingRefV1"
+                },
+                {
+                    "name": "rid",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "observed_backing_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "allocation_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "part",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "allocation_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "retire_attempt",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionStorageRetireReportV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "state",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "return_status",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "rid",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "backing_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "retire_cell_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "frame_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "frame_epoch",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "event_seq",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "allocation_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "retire_attempt",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "allocation_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "part",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "dependency_set_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "native_error",
+                    "type": "int32_t"
+                },
+                {
+                    "name": "reason",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "native_code",
+                    "type": "int64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationUploadPrepareV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "record_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "request_nonce",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "library_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "qualification_session_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "parent_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "reservation_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "request_digest[32]",
+                    "type": "uint8_t"
+                },
+                {
+                    "name": "unit_digest[32]",
+                    "type": "uint8_t"
+                },
+                {
+                    "name": "vector_ordinal",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "attempt",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "upload_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "max_segments",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "expected_result_bytes",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationUploadPlanV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "upload_index",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "role",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "owner_kind",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "rid",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "backing_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "byte_offset",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "byte_size",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "e05_backing",
+                    "type": "GDExtensionStorageBackingRefV1"
+                },
+                {
+                    "name": "payload_digest[32]",
+                    "type": "uint8_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationUploadRequestV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "record_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "parent_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "rid",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "backing_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "byte_offset",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "byte_size",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "upload_index",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "role",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "owner_kind",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "e05_backing",
+                    "type": "GDExtensionStorageBackingRefV1"
+                },
+                {
+                    "name": "payload_digest[32]",
+                    "type": "uint8_t"
+                },
+                {
+                    "name": "expected_revision",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationUploadSegmentV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "upload_index",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "segment_index",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "state",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "byte_begin",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "byte_end",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "graph_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "graph_frame",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "graph_kind",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "graph_index",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "graph_offset",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved2",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "backing_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationUploadReportV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "state",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "native_error",
+                    "type": "int32_t"
+                },
+                {
+                    "name": "revision",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "record_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "parent_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "upload_index",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "known_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "possible_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "out_written",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "appended_begin",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "appended_end",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "possible_begin",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "possible_end",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "unappended_begin",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "unappended_end",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "native_code",
+                    "type": "int64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionNativeUnitRefV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "handle_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionNativeUnitRetireRefV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "handle_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionNativeUnitCreateRequestV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "library_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "preparation_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "operation_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "container_byte_count",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "record_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "physical_unit",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "expected_flags",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved32",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "container_digest[32]",
+                    "type": "uint8_t"
+                },
+                {
+                    "name": "reserved64",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionNativeUnitBackingV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "unit",
+                    "type": "GDExtensionNativeUnitRefV1"
+                },
+                {
+                    "name": "shader_rid",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "pipeline_rid",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "shader_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "pipeline_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "known_mask",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "possible_mask",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "state",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "effective_flags",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "native_error",
+                    "type": "int32_t"
+                },
+                {
+                    "name": "phase",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "event_seq",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionNativeUnitRetireRequestV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "unit",
+                    "type": "GDExtensionNativeUnitRefV1"
+                },
+                {
+                    "name": "retire_operation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionNativeUnitRetireReportV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "unit",
+                    "type": "GDExtensionNativeUnitRefV1"
+                },
+                {
+                    "name": "state",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "return_status",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "enqueued_mask",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "freed_mask",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "absent_mask",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "unresolved_mask",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "shader_frame_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "pipeline_frame_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "shader_rid",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "pipeline_rid",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "shader_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "pipeline_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "shader_frame_epoch",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "pipeline_frame_epoch",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "shader_free_event_seq",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "pipeline_free_event_seq",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "dependency_set_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "report_revision",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "native_error",
+                    "type": "int32_t"
+                },
+                {
+                    "name": "reason",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "native_code",
+                    "type": "int64_t"
+                },
+                {
+                    "name": "retire_operation",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionDeviceSessionQualificationReasonV1",
+            "kind": "enum",
+            "values": [
+                {
+                    "name": "GDEXTENSION_DEVICE_SESSION_REASON_WRONG_PHASE_V1",
+                    "value": 14
+                },
+                {
+                    "name": "GDEXTENSION_DEVICE_SESSION_REASON_WRONG_THREAD_V1",
+                    "value": 15
+                },
+                {
+                    "name": "GDEXTENSION_DEVICE_SESSION_REASON_NOT_ADMITTED_V1",
+                    "value": 16
+                },
+                {
+                    "name": "GDEXTENSION_DEVICE_SESSION_REASON_STALE_TICKET_V1",
+                    "value": 17
+                },
+                {
+                    "name": "GDEXTENSION_DEVICE_SESSION_REASON_NATIVE_UNSUPPORTED_V1",
+                    "value": 18
+                },
+                {
+                    "name": "GDEXTENSION_DEVICE_SESSION_REASON_CAPACITY_V1",
+                    "value": 19
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationUploadRoleV1",
+            "kind": "enum",
+            "values": [
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_DOMAIN_COUNT_V1",
+                    "value": 0
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_FAULT_PLANE_V1",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_INPUT_GATE_V1",
+                    "value": 2
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_INSTANCE_GATE_V1",
+                    "value": 3
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_MAPPING_V1",
+                    "value": 4
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_OUTPUT_GATE_V1",
+                    "value": 5
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_RAW_INPUT_V1",
+                    "value": 6
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_RAW_OUTPUT_V1",
+                    "value": 7
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_COUNT_V1",
+                    "value": 8
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationUploadOwnerKindV1",
+            "kind": "enum",
+            "values": [
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_UPLOAD_OWNER_INVALID_V1",
+                    "value": 0
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_UPLOAD_OWNER_E05_V1",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_UPLOAD_OWNER_E09_V1",
+                    "value": 2
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_UPLOAD_OWNER_E22_V1",
+                    "value": 3
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_UPLOAD_OWNER_E23_V1",
+                    "value": 4
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_UPLOAD_OWNER_E24_V1",
+                    "value": 5
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationRtConfigV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "slot_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "max_request_bytes",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "max_result_bytes",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "max_segment_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "max_payload_bytes",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationRtRequestV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "kind",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "flags",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "operation_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "payload_bytes",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "request_bytes",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "result_capacity",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "segment_capacity",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationRtRefV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "handle_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationRtObservationV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "kind",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "state",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "operation_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "slot_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "result_bytes",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "segment_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "call_result",
+                    "type": "GDExtensionDeviceSessionResultV1"
+                }
+            ]
         }
     ],
     "interface": [
@@ -9322,6 +11306,2308 @@
                 "Registers callbacks to be called at different phases of the main loop."
             ],
             "since": "4.5"
+        },
+        {
+            "name": "device_exit_bootstrap_library_v1",
+            "since": "4.7",
+            "description": [
+                "Borrow the current loader bootstrap authority. The library must match the exact current nested loader scope; the capability expires when that scope returns.",
+                "Metadata only: this reference never authorizes DSO entry, device work or unload. Handles are process-local; each retained or cloned handle may be released once. Callers must supply valid aligned native pointers and must not alias input and output storage.",
+                "Request headers use ABI version 1, struct_size 16 and reserved zero. Writable capability outputs are zeroed on errors; null or misaligned outputs are not written. Threaded builds allow view transfer between threads; thread-disabled builds require single-threaded use."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "const GDExtensionDeviceExitAbi*",
+                    "description": [
+                        "Version 1 request header."
+                    ]
+                },
+                {
+                    "name": "library",
+                    "type": "GDExtensionClassLibraryPtr",
+                    "description": [
+                        "Exact current bootstrap library pointer or borrowed capability."
+                    ]
+                },
+                {
+                    "name": "out_library",
+                    "type": "GDExtensionDeviceExitLibraryCapability*",
+                    "description": [
+                        "Receives borrowed bootstrap authority."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "int32_t",
+                "description": [
+                    "Existing Godot Error numeric value."
+                ]
+            }
+        },
+        {
+            "name": "device_exit_retain_library_view_v1",
+            "since": "4.7",
+            "description": [
+                "Create a separately releasable view during the matching bootstrap scope.",
+                "Metadata only: this reference never authorizes DSO entry, device work or unload. Handles are process-local; each retained or cloned handle may be released once. Callers must supply valid aligned native pointers and must not alias input and output storage.",
+                "Request headers use ABI version 1, struct_size 16 and reserved zero. Writable capability outputs are zeroed on errors; null or misaligned outputs are not written. Threaded builds allow view transfer between threads; thread-disabled builds require single-threaded use."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "const GDExtensionDeviceExitAbi*",
+                    "description": [
+                        "Version 1 request header."
+                    ]
+                },
+                {
+                    "name": "library",
+                    "type": "GDExtensionDeviceExitLibraryCapability",
+                    "description": [
+                        "Exact current bootstrap library pointer or borrowed capability."
+                    ]
+                },
+                {
+                    "name": "out_view",
+                    "type": "GDExtensionDeviceExitLibraryViewRef*",
+                    "description": [
+                        "Receives a fresh view reference."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "int32_t",
+                "description": [
+                    "Existing Godot Error numeric value."
+                ]
+            }
+        },
+        {
+            "name": "device_exit_copy_library_snapshot_v1",
+            "since": "4.7",
+            "description": [
+                "Copy one consistent 48-byte snapshot. The caller supplies ABI version 1, struct_size 48, and zero reserved header; errors leave the entire output unchanged. Detached describes only the wrapper association, not OS unload. Initialize error is valid only if loader_initialize_returned is 1. guarded_qualified is zero in this foundation.",
+                "Metadata only: this reference never authorizes DSO entry, device work or unload. Handles are process-local; each retained or cloned handle may be released once. Callers must supply valid aligned native pointers and must not alias input and output storage.",
+                "Request headers use ABI version 1, struct_size 16 and reserved zero. Writable capability outputs are zeroed on errors; null or misaligned outputs are not written. Threaded builds allow view transfer between threads; thread-disabled builds require single-threaded use."
+            ],
+            "arguments": [
+                {
+                    "name": "view",
+                    "type": "GDExtensionDeviceExitLibraryViewRef",
+                    "description": [
+                        "A live metadata view."
+                    ]
+                },
+                {
+                    "name": "out_snapshot",
+                    "type": "GDExtensionDeviceExitLibrarySnapshot*",
+                    "description": [
+                        "Caller-owned versioned snapshot buffer."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "int32_t",
+                "description": [
+                    "Existing Godot Error numeric value."
+                ]
+            }
+        },
+        {
+            "name": "device_exit_release_library_view_v1",
+            "since": "4.7",
+            "description": [
+                "Consume one view reference. Duplicate or stale release returns ERR_INVALID_DATA without affecting other references. Copy and release remain available while the registry finalizes.",
+                "Metadata only: this reference never authorizes DSO entry, device work or unload. Handles are process-local; each retained or cloned handle may be released once. Callers must supply valid aligned native pointers and must not alias input and output storage.",
+                "Request headers use ABI version 1, struct_size 16 and reserved zero. Writable capability outputs are zeroed on errors; null or misaligned outputs are not written. Threaded builds allow view transfer between threads; thread-disabled builds require single-threaded use."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "const GDExtensionDeviceExitAbi*",
+                    "description": [
+                        "Version 1 request header."
+                    ]
+                },
+                {
+                    "name": "view",
+                    "type": "GDExtensionDeviceExitLibraryViewRef",
+                    "description": [
+                        "A live metadata view."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "int32_t",
+                "description": [
+                    "Existing Godot Error numeric value."
+                ]
+            }
+        },
+        {
+            "name": "device_exit_clone_library_view_v1",
+            "since": "4.7",
+            "description": [
+                "Create a fresh one-use reference to the same metadata from an existing view. Running allows clones, including detached records; Finalizing refuses new clones with ERR_BUSY.",
+                "Metadata only: this reference never authorizes DSO entry, device work or unload. Handles are process-local; each retained or cloned handle may be released once. Callers must supply valid aligned native pointers and must not alias input and output storage.",
+                "Request headers use ABI version 1, struct_size 16 and reserved zero. Writable capability outputs are zeroed on errors; null or misaligned outputs are not written. Threaded builds allow view transfer between threads; thread-disabled builds require single-threaded use."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "const GDExtensionDeviceExitAbi*",
+                    "description": [
+                        "Version 1 request header."
+                    ]
+                },
+                {
+                    "name": "source",
+                    "type": "GDExtensionDeviceExitLibraryViewRef",
+                    "description": [
+                        "The live view to clone."
+                    ]
+                },
+                {
+                    "name": "out_view",
+                    "type": "GDExtensionDeviceExitLibraryViewRef*",
+                    "description": [
+                        "Receives a fresh view reference."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "int32_t",
+                "description": [
+                    "Existing Godot Error numeric value."
+                ]
+            }
+        },
+        {
+            "name": "device_exit_register_guard_v1",
+            "since": "4.7",
+            "description": [
+                "Internal reciprocal guarded-lifetime v1 surface. Availability does not enable guarded loading; the complete loader, binding and entry census gate remains required.",
+                "Native aligned, nonaliasing pointers are required. Abi uses version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero; embedded registration and diagnostic headers use their own generated sizeof.",
+                "Borrowed contexts and cleanup handles expire at the exact issuing callback return. The guard token lasts until enrollment revocation. Code holds persist across frames and retire after release at the original outer callback return. Empty outputs remain empty on failure; nonempty outputs are rejected unchanged."
+            ],
+            "arguments": [
+                {
+                    "name": "library",
+                    "type": "GDExtensionClassLibraryPtr",
+                    "description": [
+                        "Library."
+                    ]
+                },
+                {
+                    "name": "registration",
+                    "type": "const GDExtensionDeviceExitGuardRegistrationV1*",
+                    "description": [
+                        "Registration."
+                    ]
+                },
+                {
+                    "name": "out_token",
+                    "type": "GDExtensionDeviceExitGuardToken*",
+                    "description": [
+                        "Out token."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "int32_t",
+                "description": [
+                    "Existing Godot Error value."
+                ]
+            }
+        },
+        {
+            "name": "device_exit_borrow_guarded_library_v1",
+            "since": "4.7",
+            "description": [
+                "Internal reciprocal guarded-lifetime v1 surface. Availability does not enable guarded loading; the complete loader, binding and entry census gate remains required.",
+                "Native aligned, nonaliasing pointers are required. Abi uses version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero; embedded registration and diagnostic headers use their own generated sizeof.",
+                "Borrowed contexts and cleanup handles expire at the exact issuing callback return. The guard token lasts until enrollment revocation. Code holds persist across frames and retire after release at the original outer callback return. Empty outputs remain empty on failure; nonempty outputs are rejected unchanged."
+            ],
+            "arguments": [
+                {
+                    "name": "abi",
+                    "type": "const GDExtensionDeviceExitAbi*",
+                    "description": [
+                        "Abi."
+                    ]
+                },
+                {
+                    "name": "library",
+                    "type": "GDExtensionClassLibraryPtr",
+                    "description": [
+                        "Library."
+                    ]
+                },
+                {
+                    "name": "out_library",
+                    "type": "GDExtensionDeviceExitGuardedLibraryRef*",
+                    "description": [
+                        "Out library."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "int32_t",
+                "description": [
+                    "Existing Godot Error value."
+                ]
+            }
+        },
+        {
+            "name": "device_exit_borrow_initialize_level_v1",
+            "since": "4.7",
+            "description": [
+                "Internal reciprocal guarded-lifetime v1 surface. Availability does not enable guarded loading; the complete loader, binding and entry census gate remains required.",
+                "Native aligned, nonaliasing pointers are required. Abi uses version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero; embedded registration and diagnostic headers use their own generated sizeof.",
+                "Borrowed contexts and cleanup handles expire at the exact issuing callback return. The guard token lasts until enrollment revocation. Code holds persist across frames and retire after release at the original outer callback return. Empty outputs remain empty on failure; nonempty outputs are rejected unchanged."
+            ],
+            "arguments": [
+                {
+                    "name": "abi",
+                    "type": "const GDExtensionDeviceExitAbi*",
+                    "description": [
+                        "Abi."
+                    ]
+                },
+                {
+                    "name": "library",
+                    "type": "GDExtensionClassLibraryPtr",
+                    "description": [
+                        "Library."
+                    ]
+                },
+                {
+                    "name": "level",
+                    "type": "uint32_t",
+                    "description": [
+                        "Level."
+                    ]
+                },
+                {
+                    "name": "out_context",
+                    "type": "GDExtensionDeviceExitInitializationLevelContextRef*",
+                    "description": [
+                        "Out context."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "int32_t",
+                "description": [
+                    "Existing Godot Error value."
+                ]
+            }
+        },
+        {
+            "name": "device_exit_borrow_deinit_level_v1",
+            "since": "4.7",
+            "description": [
+                "Internal reciprocal guarded-lifetime v1 surface. Availability does not enable guarded loading; the complete loader, binding and entry census gate remains required.",
+                "Native aligned, nonaliasing pointers are required. Abi uses version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero; embedded registration and diagnostic headers use their own generated sizeof.",
+                "Borrowed contexts and cleanup handles expire at the exact issuing callback return. The guard token lasts until enrollment revocation. Code holds persist across frames and retire after release at the original outer callback return. Empty outputs remain empty on failure; nonempty outputs are rejected unchanged."
+            ],
+            "arguments": [
+                {
+                    "name": "abi",
+                    "type": "const GDExtensionDeviceExitAbi*",
+                    "description": [
+                        "Abi."
+                    ]
+                },
+                {
+                    "name": "library",
+                    "type": "GDExtensionClassLibraryPtr",
+                    "description": [
+                        "Library."
+                    ]
+                },
+                {
+                    "name": "level",
+                    "type": "uint32_t",
+                    "description": [
+                        "Level."
+                    ]
+                },
+                {
+                    "name": "out_context",
+                    "type": "GDExtensionDeviceExitDeinitLevelContextRef*",
+                    "description": [
+                        "Out context."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "int32_t",
+                "description": [
+                    "Existing Godot Error value."
+                ]
+            }
+        },
+        {
+            "name": "device_exit_borrow_level_cleanup_v1",
+            "since": "4.7",
+            "description": [
+                "Internal reciprocal guarded-lifetime v1 surface. Availability does not enable guarded loading; the complete loader, binding and entry census gate remains required.",
+                "Native aligned, nonaliasing pointers are required. Abi uses version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero; embedded registration and diagnostic headers use their own generated sizeof.",
+                "Borrowed contexts and cleanup handles expire at the exact issuing callback return. The guard token lasts until enrollment revocation. Code holds persist across frames and retire after release at the original outer callback return. Empty outputs remain empty on failure; nonempty outputs are rejected unchanged.",
+                "Public phase is USER=0 or BINDING=1, not the internal cleanup enum.",
+                "Cleanup phase is USER=0 or BINDING=1; other values are rejected."
+            ],
+            "arguments": [
+                {
+                    "name": "abi",
+                    "type": "const GDExtensionDeviceExitAbi*",
+                    "description": [
+                        "Abi."
+                    ]
+                },
+                {
+                    "name": "context",
+                    "type": "GDExtensionDeviceExitInitializationLevelContextRef",
+                    "description": [
+                        "Context."
+                    ]
+                },
+                {
+                    "name": "phase",
+                    "type": "uint32_t",
+                    "description": [
+                        "Phase."
+                    ]
+                },
+                {
+                    "name": "out_cleanup",
+                    "type": "GDExtensionDeviceExitRegisteredCleanupRef*",
+                    "description": [
+                        "Out cleanup."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "int32_t",
+                "description": [
+                    "Existing Godot Error value."
+                ]
+            }
+        },
+        {
+            "name": "device_exit_schedule_object_cleanup_v1",
+            "since": "4.7",
+            "description": [
+                "Register an exact core Object binding cleanup as due in the borrowed USER or BINDING level action. The original Object action and all bound holders must exist in the same library generation; the original owner still performs the actual free.",
+                "Object ID is the original core ObjectDB ID, not a pointer or caller-invented cleanup authority. Only the issuing initialization frame may enroll, before its binding acknowledgement."
+            ],
+            "arguments": [
+                {
+                    "name": "abi",
+                    "type": "const GDExtensionDeviceExitAbi*",
+                    "description": [
+                        "Abi."
+                    ]
+                },
+                {
+                    "name": "context",
+                    "type": "GDExtensionDeviceExitInitializationLevelContextRef",
+                    "description": [
+                        "Original initialization level context."
+                    ]
+                },
+                {
+                    "name": "terminal",
+                    "type": "GDExtensionDeviceExitRegisteredCleanupRef",
+                    "description": [
+                        "Borrowed USER or BINDING action for this exact level."
+                    ]
+                },
+                {
+                    "name": "object_id",
+                    "type": "uint64_t",
+                    "description": [
+                        "Original core Object ID."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "int32_t",
+                "description": [
+                    "Existing Godot Error value."
+                ]
+            }
+        },
+        {
+            "name": "device_exit_acquire_code_hold_v1",
+            "since": "4.7",
+            "description": [
+                "Internal reciprocal guarded-lifetime v1 surface. Availability does not enable guarded loading; the complete loader, binding and entry census gate remains required.",
+                "Native aligned, nonaliasing pointers are required. Abi uses version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero; embedded registration and diagnostic headers use their own generated sizeof.",
+                "Borrowed contexts and cleanup handles expire at the exact issuing callback return. The guard token lasts until enrollment revocation. Code holds persist across frames and retire after release at the original outer callback return. Empty outputs remain empty on failure; nonempty outputs are rejected unchanged."
+            ],
+            "arguments": [
+                {
+                    "name": "abi",
+                    "type": "const GDExtensionDeviceExitAbi*",
+                    "description": [
+                        "Abi."
+                    ]
+                },
+                {
+                    "name": "library",
+                    "type": "GDExtensionDeviceExitGuardedLibraryRef",
+                    "description": [
+                        "Library."
+                    ]
+                },
+                {
+                    "name": "cleanup",
+                    "type": "GDExtensionDeviceExitRegisteredCleanupRef",
+                    "description": [
+                        "Cleanup."
+                    ]
+                },
+                {
+                    "name": "out_hold",
+                    "type": "GDExtensionDeviceExitLibraryCodeHoldRef*",
+                    "description": [
+                        "Out hold."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "int32_t",
+                "description": [
+                    "Existing Godot Error value."
+                ]
+            }
+        },
+        {
+            "name": "device_exit_clone_code_hold_v1",
+            "since": "4.7",
+            "description": [
+                "Internal reciprocal guarded-lifetime v1 surface. Availability does not enable guarded loading; the complete loader, binding and entry census gate remains required.",
+                "Native aligned, nonaliasing pointers are required. Abi uses version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero; embedded registration and diagnostic headers use their own generated sizeof.",
+                "Borrowed contexts and cleanup handles expire at the exact issuing callback return. The guard token lasts until enrollment revocation. Code holds persist across frames and retire after release at the original outer callback return. Empty outputs remain empty on failure; nonempty outputs are rejected unchanged."
+            ],
+            "arguments": [
+                {
+                    "name": "abi",
+                    "type": "const GDExtensionDeviceExitAbi*",
+                    "description": [
+                        "Abi."
+                    ]
+                },
+                {
+                    "name": "source",
+                    "type": "GDExtensionDeviceExitLibraryCodeHoldRef",
+                    "description": [
+                        "Source."
+                    ]
+                },
+                {
+                    "name": "out_hold",
+                    "type": "GDExtensionDeviceExitLibraryCodeHoldRef*",
+                    "description": [
+                        "Out hold."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "int32_t",
+                "description": [
+                    "Existing Godot Error value."
+                ]
+            }
+        },
+        {
+            "name": "device_exit_release_code_hold_v1",
+            "since": "4.7",
+            "description": [
+                "Internal reciprocal guarded-lifetime v1 surface. Availability does not enable guarded loading; the complete loader, binding and entry census gate remains required.",
+                "Native aligned, nonaliasing pointers are required. Abi uses version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero; embedded registration and diagnostic headers use their own generated sizeof.",
+                "Borrowed contexts and cleanup handles expire at the exact issuing callback return. The guard token lasts until enrollment revocation. Code holds persist across frames and retire after release at the original outer callback return. Empty outputs remain empty on failure; nonempty outputs are rejected unchanged."
+            ],
+            "arguments": [
+                {
+                    "name": "abi",
+                    "type": "const GDExtensionDeviceExitAbi*",
+                    "description": [
+                        "Abi."
+                    ]
+                },
+                {
+                    "name": "hold",
+                    "type": "GDExtensionDeviceExitLibraryCodeHoldRef",
+                    "description": [
+                        "Hold."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "int32_t",
+                "description": [
+                    "Existing Godot Error value."
+                ]
+            }
+        },
+        {
+            "name": "device_exit_after_binding_initialize_v1",
+            "since": "4.7",
+            "description": [
+                "Internal reciprocal guarded-lifetime v1 surface. Availability does not enable guarded loading; the complete loader, binding and entry census gate remains required.",
+                "Native aligned, nonaliasing pointers are required. Abi uses version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero; embedded registration and diagnostic headers use their own generated sizeof.",
+                "Borrowed contexts and cleanup handles expire at the exact issuing callback return. The guard token lasts until enrollment revocation. Code holds persist across frames and retire after release at the original outer callback return. Empty outputs remain empty on failure; nonempty outputs are rejected unchanged."
+            ],
+            "arguments": [
+                {
+                    "name": "abi",
+                    "type": "const GDExtensionDeviceExitAbi*",
+                    "description": [
+                        "Abi."
+                    ]
+                },
+                {
+                    "name": "context",
+                    "type": "GDExtensionDeviceExitInitializationLevelContextRef",
+                    "description": [
+                        "Context."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "int32_t",
+                "description": [
+                    "Existing Godot Error value."
+                ]
+            }
+        },
+        {
+            "name": "device_exit_begin_user_terminator_v1",
+            "since": "4.7",
+            "description": [
+                "Internal reciprocal guarded-lifetime v1 surface. Availability does not enable guarded loading; the complete loader, binding and entry census gate remains required.",
+                "Native aligned, nonaliasing pointers are required. Abi uses version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero; embedded registration and diagnostic headers use their own generated sizeof.",
+                "Borrowed contexts and cleanup handles expire at the exact issuing callback return. The guard token lasts until enrollment revocation. Code holds persist across frames and retire after release at the original outer callback return. Empty outputs remain empty on failure; nonempty outputs are rejected unchanged."
+            ],
+            "arguments": [
+                {
+                    "name": "abi",
+                    "type": "const GDExtensionDeviceExitAbi*",
+                    "description": [
+                        "Abi."
+                    ]
+                },
+                {
+                    "name": "token",
+                    "type": "GDExtensionDeviceExitGuardToken",
+                    "description": [
+                        "Token."
+                    ]
+                },
+                {
+                    "name": "context",
+                    "type": "GDExtensionDeviceExitDeinitLevelContextRef",
+                    "description": [
+                        "Context."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "int32_t",
+                "description": [
+                    "Existing Godot Error value."
+                ]
+            }
+        },
+        {
+            "name": "device_exit_after_user_terminator_v1",
+            "since": "4.7",
+            "description": [
+                "Internal reciprocal guarded-lifetime v1 surface. Availability does not enable guarded loading; the complete loader, binding and entry census gate remains required.",
+                "Native aligned, nonaliasing pointers are required. Abi uses version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero; embedded registration and diagnostic headers use their own generated sizeof.",
+                "Borrowed contexts and cleanup handles expire at the exact issuing callback return. The guard token lasts until enrollment revocation. Code holds persist across frames and retire after release at the original outer callback return. Empty outputs remain empty on failure; nonempty outputs are rejected unchanged."
+            ],
+            "arguments": [
+                {
+                    "name": "abi",
+                    "type": "const GDExtensionDeviceExitAbi*",
+                    "description": [
+                        "Abi."
+                    ]
+                },
+                {
+                    "name": "context",
+                    "type": "GDExtensionDeviceExitDeinitLevelContextRef",
+                    "description": [
+                        "Context."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "int32_t",
+                "description": [
+                    "Existing Godot Error value."
+                ]
+            }
+        },
+        {
+            "name": "device_exit_after_binding_deinit_v1",
+            "since": "4.7",
+            "description": [
+                "Internal reciprocal guarded-lifetime v1 surface. Availability does not enable guarded loading; the complete loader, binding and entry census gate remains required.",
+                "Native aligned, nonaliasing pointers are required. Abi uses version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero; embedded registration and diagnostic headers use their own generated sizeof.",
+                "Borrowed contexts and cleanup handles expire at the exact issuing callback return. The guard token lasts until enrollment revocation. Code holds persist across frames and retire after release at the original outer callback return. Empty outputs remain empty on failure; nonempty outputs are rejected unchanged."
+            ],
+            "arguments": [
+                {
+                    "name": "abi",
+                    "type": "const GDExtensionDeviceExitAbi*",
+                    "description": [
+                        "Abi."
+                    ]
+                },
+                {
+                    "name": "context",
+                    "type": "GDExtensionDeviceExitDeinitLevelContextRef",
+                    "description": [
+                        "Context."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "int32_t",
+                "description": [
+                    "Existing Godot Error value."
+                ]
+            }
+        },
+        {
+            "name": "device_exit_publish_exit_result_v1",
+            "since": "4.7",
+            "description": [
+                "Internal reciprocal guarded-lifetime v1 surface. Availability does not enable guarded loading; the complete loader, binding and entry census gate remains required.",
+                "Native aligned, nonaliasing pointers are required. Abi uses version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero; embedded registration and diagnostic headers use their own generated sizeof.",
+                "Borrowed contexts and cleanup handles expire at the exact issuing callback return. The guard token lasts until enrollment revocation. Code holds persist across frames and retire after release at the original outer callback return. Empty outputs remain empty on failure; nonempty outputs are rejected unchanged."
+            ],
+            "arguments": [
+                {
+                    "name": "abi",
+                    "type": "const GDExtensionDeviceExitAbi*",
+                    "description": [
+                        "Abi."
+                    ]
+                },
+                {
+                    "name": "token",
+                    "type": "GDExtensionDeviceExitGuardToken",
+                    "description": [
+                        "Token."
+                    ]
+                },
+                {
+                    "name": "context",
+                    "type": "GDExtensionDeviceExitDeinitPreflightContextRef",
+                    "description": [
+                        "Context."
+                    ]
+                },
+                {
+                    "name": "diagnostic",
+                    "type": "const GDExtensionDeviceExitExitDiagnosticV1*",
+                    "description": [
+                        "Diagnostic."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "int32_t",
+                "description": [
+                    "Existing Godot Error value."
+                ]
+            }
+        },
+        {
+            "name": "device_exit_terminate_initialize_blocked_v1",
+            "since": "4.7",
+            "description": [
+                "Internal reciprocal guarded-lifetime v1 surface. Availability does not enable guarded loading; the complete loader, binding and entry census gate remains required.",
+                "Native aligned, nonaliasing pointers are required. Abi uses version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero; embedded registration and diagnostic headers use their own generated sizeof.",
+                "Borrowed contexts and cleanup handles expire at the exact issuing callback return. The guard token lasts until enrollment revocation. Code holds persist across frames and retire after release at the original outer callback return. Empty outputs remain empty on failure; nonempty outputs are rejected unchanged.",
+                "Never returns, including for invalid context. Uses the original fixed core failure route."
+            ],
+            "arguments": [
+                {
+                    "name": "context",
+                    "type": "GDExtensionDeviceExitInitializationLevelContextRef",
+                    "description": [
+                        "Context."
+                    ]
+                },
+                {
+                    "name": "original_error",
+                    "type": "int32_t",
+                    "description": [
+                        "Original error."
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "device_exit_terminate_blocked_v1",
+            "since": "4.7",
+            "description": [
+                "Internal reciprocal guarded-lifetime v1 surface. Availability does not enable guarded loading; the complete loader, binding and entry census gate remains required.",
+                "Native aligned, nonaliasing pointers are required. Abi uses version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero; embedded registration and diagnostic headers use their own generated sizeof.",
+                "Borrowed contexts and cleanup handles expire at the exact issuing callback return. The guard token lasts until enrollment revocation. Code holds persist across frames and retire after release at the original outer callback return. Empty outputs remain empty on failure; nonempty outputs are rejected unchanged.",
+                "Never returns, including for invalid context. Uses the original fixed core failure route."
+            ],
+            "arguments": [
+                {
+                    "name": "context",
+                    "type": "GDExtensionDeviceExitDeinitLevelContextRef",
+                    "description": [
+                        "Context."
+                    ]
+                },
+                {
+                    "name": "original_error",
+                    "type": "int32_t",
+                    "description": [
+                        "Original error."
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "device_session_bind_v1",
+            "since": "4.7",
+            "description": [
+                "Candidate original RD session interface; authenticated guarded initialization binding."
+            ],
+            "arguments": [
+                {
+                    "name": "abi",
+                    "type": "const GDExtensionDeviceExitAbi*",
+                    "description": [
+                        "abi"
+                    ]
+                },
+                {
+                    "name": "frame",
+                    "type": "GDExtensionDeviceExitInitializationLevelContextRef",
+                    "description": [
+                        "frame"
+                    ]
+                },
+                {
+                    "name": "rd",
+                    "type": "GDExtensionObjectPtr",
+                    "description": [
+                        "rd"
+                    ]
+                },
+                {
+                    "name": "out_context",
+                    "type": "GDExtensionDeviceRegistryContextRef*",
+                    "description": [
+                        "out_context"
+                    ]
+                },
+                {
+                    "name": "out_session",
+                    "type": "GDExtensionOriginalDeviceSessionRef*",
+                    "description": [
+                        "out_session"
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Native Error plus OI-01 reason, expected and actual. Reasons: 0 success, 1 source_version, 2 canonical, 3 nonzero, 4 context_present, 5 context_match, 6 device_epoch, 7 registered, 8 retained, 9 association_match, 10 authorized_phase, 11 capacity, 12 session_counter_available, 13 epoch_counter_available."
+                ]
+            }
+        },
+        {
+            "name": "device_session_copy_v1",
+            "since": "4.7",
+            "description": [
+                "Candidate original RD session interface; authenticated guarded initialization binding."
+            ],
+            "arguments": [
+                {
+                    "name": "context",
+                    "type": "GDExtensionDeviceRegistryContextRef",
+                    "description": [
+                        "context"
+                    ]
+                },
+                {
+                    "name": "session",
+                    "type": "GDExtensionOriginalDeviceSessionRef",
+                    "description": [
+                        "session"
+                    ]
+                },
+                {
+                    "name": "exporting",
+                    "type": "uint32_t",
+                    "description": [
+                        "exporting"
+                    ]
+                },
+                {
+                    "name": "out_view",
+                    "type": "GDExtensionDeviceSessionViewV1*",
+                    "description": [
+                        "out_view"
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Native Error plus OI-01 reason, expected and actual. Reasons: 0 success, 1 source_version, 2 canonical, 3 nonzero, 4 context_present, 5 context_match, 6 device_epoch, 7 registered, 8 retained, 9 association_match, 10 authorized_phase, 11 capacity, 12 session_counter_available, 13 epoch_counter_available."
+                ]
+            }
+        },
+        {
+            "name": "device_session_resolve_v1",
+            "since": "4.7",
+            "description": [
+                "Candidate original RD session interface; authenticated guarded initialization binding."
+            ],
+            "arguments": [
+                {
+                    "name": "context",
+                    "type": "GDExtensionDeviceRegistryContextRef",
+                    "description": [
+                        "context"
+                    ]
+                },
+                {
+                    "name": "epoch",
+                    "type": "uint64_t",
+                    "description": [
+                        "epoch"
+                    ]
+                },
+                {
+                    "name": "session",
+                    "type": "uint64_t",
+                    "description": [
+                        "session"
+                    ]
+                },
+                {
+                    "name": "out_session",
+                    "type": "GDExtensionOriginalDeviceSessionRef*",
+                    "description": [
+                        "out_session"
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Native Error plus OI-01 reason, expected and actual. Reasons: 0 success, 1 source_version, 2 canonical, 3 nonzero, 4 context_present, 5 context_match, 6 device_epoch, 7 registered, 8 retained, 9 association_match, 10 authorized_phase, 11 capacity, 12 session_counter_available, 13 epoch_counter_available."
+                ]
+            }
+        },
+        {
+            "name": "device_session_release_context_v1",
+            "since": "4.7",
+            "description": [
+                "Candidate original RD session interface; authenticated guarded initialization binding."
+            ],
+            "arguments": [
+                {
+                    "name": "context",
+                    "type": "GDExtensionDeviceRegistryContextRef",
+                    "description": [
+                        "context"
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Native Error plus OI-01 reason, expected and actual. Reasons: 0 success, 1 source_version, 2 canonical, 3 nonzero, 4 context_present, 5 context_match, 6 device_epoch, 7 registered, 8 retained, 9 association_match, 10 authorized_phase, 11 capacity, 12 session_counter_available, 13 epoch_counter_available."
+                ]
+            }
+        },
+        {
+            "name": "device_session_release_session_v1",
+            "since": "4.7",
+            "description": [
+                "Candidate original RD session interface; authenticated guarded initialization binding."
+            ],
+            "arguments": [
+                {
+                    "name": "session",
+                    "type": "GDExtensionOriginalDeviceSessionRef",
+                    "description": [
+                        "session"
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Native Error plus OI-01 reason, expected and actual. Reasons: 0 success, 1 source_version, 2 canonical, 3 nonzero, 4 context_present, 5 context_match, 6 device_epoch, 7 registered, 8 retained, 9 association_match, 10 authorized_phase, 11 capacity, 12 session_counter_available, 13 epoch_counter_available."
+                ]
+            }
+        },
+        {
+            "name": "device_exit_register_scene_ready_v1",
+            "since": "4.7",
+            "description": [
+                "Register the original generation scene-ready callback inside its qualified SCENE initializer before binding acknowledgement. Guarded lookup only; no late effects or enrollment are inferred."
+            ],
+            "arguments": [
+                {
+                    "name": "abi",
+                    "type": "const GDExtensionDeviceExitAbi*",
+                    "description": [
+                        "abi"
+                    ]
+                },
+                {
+                    "name": "original_scene_frame",
+                    "type": "GDExtensionDeviceExitInitializationLevelContextRef",
+                    "description": [
+                        "original_scene_frame"
+                    ]
+                },
+                {
+                    "name": "callback",
+                    "type": "GDExtensionDeviceExitSceneReadyCallbackV1",
+                    "description": [
+                        "callback"
+                    ]
+                },
+                {
+                    "name": "original_userdata",
+                    "type": "void*",
+                    "description": [
+                        "original_userdata"
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "int32_t",
+                "description": [
+                    "Original Godot Error observation; no inferred enrollment or completion."
+                ]
+            }
+        },
+        {
+            "name": "device_exit_register_scene_ready_v2",
+            "since": "4.7",
+            "description": [
+                "Register one original scene-ready transaction with fixed BaseScene/RDPair requirements. The original Registry selects and borrows a same-frame plan before callback; this does not issue a GPU capability. Guarded lookup only; v1 remains strict full installation."
+            ],
+            "arguments": [
+                {
+                    "name": "requirements",
+                    "type": "const GDExtensionSceneInstallRequirementsV2*",
+                    "description": [
+                        "requirements"
+                    ]
+                },
+                {
+                    "name": "original_scene_frame",
+                    "type": "GDExtensionDeviceExitInitializationLevelContextRef",
+                    "description": [
+                        "original_scene_frame"
+                    ]
+                },
+                {
+                    "name": "callback",
+                    "type": "GDExtensionDeviceExitSceneReadyCallbackV2",
+                    "description": [
+                        "callback"
+                    ]
+                },
+                {
+                    "name": "original_userdata",
+                    "type": "void*",
+                    "description": [
+                        "original_userdata"
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "int32_t",
+                "description": [
+                    "Original Godot Error; malformed requirements fail before any record mutation."
+                ]
+            }
+        },
+        {
+            "name": "device_exit_scene_ready_schedule_object_cleanup_v1",
+            "since": "4.7",
+            "description": [
+                "Schedule the actual same-generation cleanup and binding pair onto its already-issued original SCENE USER (0) or BINDING (1) action from the admitted ready frame."
+            ],
+            "arguments": [
+                {
+                    "name": "abi",
+                    "type": "const GDExtensionDeviceExitAbi*",
+                    "description": [
+                        "abi"
+                    ]
+                },
+                {
+                    "name": "ready",
+                    "type": "GDExtensionDeviceExitSceneReadyContextRef",
+                    "description": [
+                        "ready"
+                    ]
+                },
+                {
+                    "name": "phase",
+                    "type": "uint32_t",
+                    "description": [
+                        "phase"
+                    ]
+                },
+                {
+                    "name": "original_object_id",
+                    "type": "uint64_t",
+                    "description": [
+                        "original_object_id"
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "int32_t",
+                "description": [
+                    "Original Godot Error observation; no inferred enrollment or completion."
+                ]
+            }
+        },
+        {
+            "name": "device_session_bind_scene_ready_v1",
+            "since": "4.7",
+            "description": [
+                "Bind the actual original native RD record from the admitted scene-ready frame using the original atomic two-reference session transaction."
+            ],
+            "arguments": [
+                {
+                    "name": "abi",
+                    "type": "const GDExtensionDeviceExitAbi*",
+                    "description": [
+                        "abi"
+                    ]
+                },
+                {
+                    "name": "ready",
+                    "type": "GDExtensionDeviceExitSceneReadyContextRef",
+                    "description": [
+                        "ready"
+                    ]
+                },
+                {
+                    "name": "original_rd",
+                    "type": "GDExtensionObjectPtr",
+                    "description": [
+                        "original_rd"
+                    ]
+                },
+                {
+                    "name": "out_context",
+                    "type": "GDExtensionDeviceRegistryContextRef*",
+                    "description": [
+                        "out_context"
+                    ]
+                },
+                {
+                    "name": "out_session",
+                    "type": "GDExtensionOriginalDeviceSessionRef*",
+                    "description": [
+                        "out_session"
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original Godot Error observation; no inferred enrollment or completion."
+                ]
+            }
+        },
+        {
+            "name": "device_exit_scene_ready_abort_v1",
+            "since": "4.7",
+            "description": [
+                "Validate the original admitted ready frame and exact unscheduled object pair, then perform the fixed non-returning core stop before owner unwinding. Malformed direct calls return Error without side effects."
+            ],
+            "arguments": [
+                {
+                    "name": "abi",
+                    "type": "const GDExtensionDeviceExitAbi*",
+                    "description": [
+                        "abi"
+                    ]
+                },
+                {
+                    "name": "ready",
+                    "type": "GDExtensionDeviceExitSceneReadyContextRef",
+                    "description": [
+                        "ready"
+                    ]
+                },
+                {
+                    "name": "original_schedule_error",
+                    "type": "int32_t",
+                    "description": [
+                        "original_schedule_error"
+                    ]
+                },
+                {
+                    "name": "reason",
+                    "type": "uint32_t",
+                    "description": [
+                        "reason"
+                    ]
+                },
+                {
+                    "name": "original_object_id",
+                    "type": "uint64_t",
+                    "description": [
+                        "original_object_id"
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "int32_t",
+                "description": [
+                    "Original Godot Error observation; no inferred enrollment or completion."
+                ]
+            }
+        },
+        {
+            "name": "device_session_bind_main_scene_ready_v1",
+            "since": "4.7",
+            "description": [
+                "Original-bridge qualification ABI declaration; availability requires the actual guarded implementation. Copied correlation is not recording, completion, or disposal authority."
+            ],
+            "arguments": [
+                {
+                    "name": "abi",
+                    "type": "const GDExtensionDeviceExitAbi*",
+                    "description": [
+                        "Synchronous in-process abi."
+                    ]
+                },
+                {
+                    "name": "ready",
+                    "type": "GDExtensionDeviceExitSceneReadyContextRef",
+                    "description": [
+                        "Synchronous in-process ready."
+                    ]
+                },
+                {
+                    "name": "out_context",
+                    "type": "GDExtensionDeviceRegistryContextRef*",
+                    "description": [
+                        "Synchronous in-process out context."
+                    ]
+                },
+                {
+                    "name": "out_session",
+                    "type": "GDExtensionOriginalDeviceSessionRef*",
+                    "description": [
+                        "Synchronous in-process out session."
+                    ]
+                },
+                {
+                    "name": "out_main_object_id",
+                    "type": "uint64_t*",
+                    "description": [
+                        "Synchronous in-process out main object id."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_open_v1",
+            "since": "4.7",
+            "description": [
+                "Original-bridge qualification ABI declaration; availability requires the actual guarded implementation. Copied correlation is not recording, completion, or disposal authority."
+            ],
+            "arguments": [
+                {
+                    "name": "abi",
+                    "type": "const GDExtensionDeviceExitAbi*",
+                    "description": [
+                        "Synchronous in-process abi."
+                    ]
+                },
+                {
+                    "name": "ready",
+                    "type": "GDExtensionDeviceExitSceneReadyContextRef",
+                    "description": [
+                        "Synchronous in-process ready."
+                    ]
+                },
+                {
+                    "name": "context",
+                    "type": "GDExtensionDeviceRegistryContextRef",
+                    "description": [
+                        "Synchronous in-process context."
+                    ]
+                },
+                {
+                    "name": "session",
+                    "type": "GDExtensionOriginalDeviceSessionRef",
+                    "description": [
+                        "Synchronous in-process session."
+                    ]
+                },
+                {
+                    "name": "code_hold",
+                    "type": "GDExtensionDeviceExitLibraryCodeHoldRef",
+                    "description": [
+                        "Synchronous in-process code hold."
+                    ]
+                },
+                {
+                    "name": "out_bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1*",
+                    "description": [
+                        "Synchronous in-process out bridge."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_backing_v1",
+            "since": "4.7",
+            "description": [
+                "Original-bridge qualification ABI declaration; availability requires the actual guarded implementation. Copied correlation is not recording, completion, or disposal authority."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous in-process bridge."
+                    ]
+                },
+                {
+                    "name": "rid",
+                    "type": "uint64_t",
+                    "description": [
+                        "Synchronous in-process rid."
+                    ]
+                },
+                {
+                    "name": "out_backing",
+                    "type": "GDExtensionQualificationBackingV1*",
+                    "description": [
+                        "Synchronous in-process out backing."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_record_v1",
+            "since": "4.7",
+            "description": [
+                "Original-bridge qualification ABI declaration; availability requires the actual guarded implementation. Copied correlation is not recording, completion, or disposal authority."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous in-process bridge."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "const GDExtensionQualificationRecordV1*",
+                    "description": [
+                        "Synchronous in-process request."
+                    ]
+                },
+                {
+                    "name": "out_ticket",
+                    "type": "GDExtensionQualificationTicketRefV1*",
+                    "description": [
+                        "Synchronous in-process out ticket."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionQualificationReportV1*",
+                    "description": [
+                        "Synchronous in-process out report."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_observe_v1",
+            "since": "4.7",
+            "description": [
+                "Original-bridge qualification ABI declaration; availability requires the actual guarded implementation. Copied correlation is not recording, completion, or disposal authority."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous in-process bridge."
+                    ]
+                },
+                {
+                    "name": "ticket",
+                    "type": "GDExtensionQualificationTicketRefV1",
+                    "description": [
+                        "Synchronous in-process ticket."
+                    ]
+                },
+                {
+                    "name": "budget",
+                    "type": "const GDExtensionQualificationBudgetV1*",
+                    "description": [
+                        "Synchronous in-process budget."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionQualificationReportV1*",
+                    "description": [
+                        "Synchronous in-process out report."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_facts_v1",
+            "since": "4.7",
+            "description": [
+                "Original-bridge qualification ABI declaration; availability requires the actual guarded implementation. Copied correlation is not recording, completion, or disposal authority."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous in-process bridge."
+                    ]
+                },
+                {
+                    "name": "ticket",
+                    "type": "GDExtensionQualificationTicketRefV1",
+                    "description": [
+                        "Synchronous in-process ticket."
+                    ]
+                },
+                {
+                    "name": "revision",
+                    "type": "uint64_t",
+                    "description": [
+                        "Synchronous in-process revision."
+                    ]
+                },
+                {
+                    "name": "first",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous in-process first."
+                    ]
+                },
+                {
+                    "name": "capacity",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous in-process capacity."
+                    ]
+                },
+                {
+                    "name": "out_facts",
+                    "type": "GDExtensionQualificationFactV1*",
+                    "description": [
+                        "Synchronous in-process out facts."
+                    ]
+                },
+                {
+                    "name": "out_written",
+                    "type": "uint32_t*",
+                    "description": [
+                        "Synchronous in-process out written."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_copy_v1",
+            "since": "4.7",
+            "description": [
+                "Original-bridge qualification ABI declaration; availability requires the actual guarded implementation. Copied correlation is not recording, completion, or disposal authority."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous in-process bridge."
+                    ]
+                },
+                {
+                    "name": "ticket",
+                    "type": "GDExtensionQualificationTicketRefV1",
+                    "description": [
+                        "Synchronous in-process ticket."
+                    ]
+                },
+                {
+                    "name": "revision",
+                    "type": "uint64_t",
+                    "description": [
+                        "Synchronous in-process revision."
+                    ]
+                },
+                {
+                    "name": "destination",
+                    "type": "void*",
+                    "description": [
+                        "Synchronous in-process destination."
+                    ]
+                },
+                {
+                    "name": "capacity",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous in-process capacity."
+                    ]
+                },
+                {
+                    "name": "out_written",
+                    "type": "uint32_t*",
+                    "description": [
+                        "Synchronous in-process out written."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_release_v1",
+            "since": "4.7",
+            "description": [
+                "Original-bridge qualification ABI declaration; availability requires the actual guarded implementation. Copied correlation is not recording, completion, or disposal authority."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous in-process bridge."
+                    ]
+                },
+                {
+                    "name": "ticket",
+                    "type": "GDExtensionQualificationTicketRefV1",
+                    "description": [
+                        "Synchronous in-process ticket."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_close_v1",
+            "since": "4.7",
+            "description": [
+                "Original-bridge qualification ABI declaration; availability requires the actual guarded implementation. Copied correlation is not recording, completion, or disposal authority."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous in-process bridge."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_storage_create_v1",
+            "since": "4.7",
+            "description": [
+                "Original-bridge qualification ABI declaration; availability requires the actual guarded implementation. Copied correlation is not recording, completion, or disposal authority."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous in-process bridge."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "const GDExtensionStorageCreateRequestV1*",
+                    "description": [
+                        "Synchronous in-process request."
+                    ]
+                },
+                {
+                    "name": "out_backing",
+                    "type": "GDExtensionStorageBackingV1*",
+                    "description": [
+                        "Synchronous in-process out backing."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_storage_retire_v1",
+            "since": "4.7",
+            "description": [
+                "Original-bridge qualification ABI declaration; availability requires the actual guarded implementation. Copied correlation is not recording, completion, or disposal authority."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous in-process bridge."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "const GDExtensionStorageRetireRequestV1*",
+                    "description": [
+                        "Synchronous in-process request."
+                    ]
+                },
+                {
+                    "name": "out_retire",
+                    "type": "GDExtensionStorageRetireRefV1*",
+                    "description": [
+                        "Synchronous in-process out retire."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionStorageRetireReportV1*",
+                    "description": [
+                        "Synchronous in-process out report."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_storage_retire_observe_v1",
+            "since": "4.7",
+            "description": [
+                "Original-bridge qualification ABI declaration; availability requires the actual guarded implementation. Copied correlation is not recording, completion, or disposal authority."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous in-process bridge."
+                    ]
+                },
+                {
+                    "name": "retire",
+                    "type": "GDExtensionStorageRetireRefV1",
+                    "description": [
+                        "Synchronous in-process retire."
+                    ]
+                },
+                {
+                    "name": "budget",
+                    "type": "const GDExtensionQualificationBudgetV1*",
+                    "description": [
+                        "Synchronous in-process budget."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionStorageRetireReportV1*",
+                    "description": [
+                        "Synchronous in-process out report."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_storage_retire_release_v1",
+            "since": "4.7",
+            "description": [
+                "Original-bridge qualification ABI declaration; availability requires the actual guarded implementation. Copied correlation is not recording, completion, or disposal authority."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous in-process bridge."
+                    ]
+                },
+                {
+                    "name": "retire",
+                    "type": "GDExtensionStorageRetireRefV1",
+                    "description": [
+                        "Synchronous in-process retire."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_prepare_uploads_v1",
+            "since": "4.7",
+            "description": [
+                "Original-bridge qualification ABI declaration; availability requires the actual guarded implementation. Copied correlation is not recording, completion, or disposal authority."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous in-process bridge."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "const GDExtensionQualificationUploadPrepareV1*",
+                    "description": [
+                        "Synchronous in-process request."
+                    ]
+                },
+                {
+                    "name": "plans",
+                    "type": "const GDExtensionQualificationUploadPlanV1*",
+                    "description": [
+                        "Synchronous in-process plans."
+                    ]
+                },
+                {
+                    "name": "plan_count",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous in-process plan count."
+                    ]
+                },
+                {
+                    "name": "out_ticket",
+                    "type": "GDExtensionQualificationTicketRefV1*",
+                    "description": [
+                        "Synchronous in-process out ticket."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionQualificationReportV1*",
+                    "description": [
+                        "Synchronous in-process out report."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_upload_v1",
+            "since": "4.7",
+            "description": [
+                "Original-bridge qualification ABI declaration; availability requires the actual guarded implementation. Copied correlation is not recording, completion, or disposal authority."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous in-process bridge."
+                    ]
+                },
+                {
+                    "name": "ticket",
+                    "type": "GDExtensionQualificationTicketRefV1",
+                    "description": [
+                        "Synchronous in-process ticket."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "const GDExtensionQualificationUploadRequestV1*",
+                    "description": [
+                        "Synchronous in-process request."
+                    ]
+                },
+                {
+                    "name": "owned_bytes",
+                    "type": "const void*",
+                    "description": [
+                        "Synchronous in-process owned bytes."
+                    ]
+                },
+                {
+                    "name": "byte_count",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous in-process byte count."
+                    ]
+                },
+                {
+                    "name": "out_segments",
+                    "type": "GDExtensionQualificationUploadSegmentV1*",
+                    "description": [
+                        "Synchronous in-process out segments."
+                    ]
+                },
+                {
+                    "name": "segment_capacity",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous in-process segment capacity."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionQualificationUploadReportV1*",
+                    "description": [
+                        "Synchronous in-process out report."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_record_prepared_v1",
+            "since": "4.7",
+            "description": [
+                "Original-bridge qualification ABI declaration; availability requires the actual guarded implementation. Copied correlation is not recording, completion, or disposal authority."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous in-process bridge."
+                    ]
+                },
+                {
+                    "name": "ticket",
+                    "type": "GDExtensionQualificationTicketRefV1",
+                    "description": [
+                        "Synchronous in-process ticket."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "const GDExtensionQualificationRecordV1*",
+                    "description": [
+                        "Synchronous in-process request."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionQualificationReportV1*",
+                    "description": [
+                        "Synchronous in-process out report."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_native_unit_create_v1",
+            "since": "4.7",
+            "description": [
+                "Original-bridge qualification ABI declaration; availability requires the actual guarded implementation. Copied correlation is not recording, completion, or disposal authority."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous in-process bridge."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "const GDExtensionNativeUnitCreateRequestV1*",
+                    "description": [
+                        "Synchronous in-process request."
+                    ]
+                },
+                {
+                    "name": "container_bytes",
+                    "type": "const void*",
+                    "description": [
+                        "Synchronous in-process container bytes."
+                    ]
+                },
+                {
+                    "name": "byte_count",
+                    "type": "uint64_t",
+                    "description": [
+                        "Synchronous in-process byte count."
+                    ]
+                },
+                {
+                    "name": "out_backing",
+                    "type": "GDExtensionNativeUnitBackingV1*",
+                    "description": [
+                        "Synchronous in-process out backing."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_native_unit_retire_v1",
+            "since": "4.7",
+            "description": [
+                "Original-bridge qualification ABI declaration; availability requires the actual guarded implementation. Copied correlation is not recording, completion, or disposal authority."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous in-process bridge."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "const GDExtensionNativeUnitRetireRequestV1*",
+                    "description": [
+                        "Synchronous in-process request."
+                    ]
+                },
+                {
+                    "name": "out_retire",
+                    "type": "GDExtensionNativeUnitRetireRefV1*",
+                    "description": [
+                        "Synchronous in-process out retire."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionNativeUnitRetireReportV1*",
+                    "description": [
+                        "Synchronous in-process out report."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_native_unit_retire_observe_v1",
+            "since": "4.7",
+            "description": [
+                "Original-bridge qualification ABI declaration; availability requires the actual guarded implementation. Copied correlation is not recording, completion, or disposal authority."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous in-process bridge."
+                    ]
+                },
+                {
+                    "name": "retire",
+                    "type": "GDExtensionNativeUnitRetireRefV1",
+                    "description": [
+                        "Synchronous in-process retire."
+                    ]
+                },
+                {
+                    "name": "budget",
+                    "type": "const GDExtensionQualificationBudgetV1*",
+                    "description": [
+                        "Synchronous in-process budget."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionNativeUnitRetireReportV1*",
+                    "description": [
+                        "Synchronous in-process out report."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_native_unit_retire_release_v1",
+            "since": "4.7",
+            "description": [
+                "Original-bridge qualification ABI declaration; availability requires the actual guarded implementation. Copied correlation is not recording, completion, or disposal authority."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous in-process bridge."
+                    ]
+                },
+                {
+                    "name": "retire",
+                    "type": "GDExtensionNativeUnitRetireRefV1",
+                    "description": [
+                        "Synchronous in-process retire."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_cancel_v1",
+            "since": "4.7",
+            "description": [
+                "Stops future upload or prepared-record admission on the same original opt-in ticket. It does not acknowledge or discard physical work."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous in-process bridge."
+                    ]
+                },
+                {
+                    "name": "ticket",
+                    "type": "GDExtensionQualificationTicketRefV1",
+                    "description": [
+                        "Synchronous in-process ticket."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_rt_configure_v1",
+            "since": "4.7",
+            "description": [
+                "Original bridge fixed typed owner-to-main-RT transport; a returned call is not native completion or physical retirement."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Bounded synchronous bridge value or span; no caller pointer is retained."
+                    ]
+                },
+                {
+                    "name": "config",
+                    "type": "const GDExtensionQualificationRtConfigV1*",
+                    "description": [
+                        "Bounded synchronous config value or span; no caller pointer is retained."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error and closed device-session reason; API call return is not GPU completion."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_rt_reserve_v1",
+            "since": "4.7",
+            "description": [
+                "Original bridge fixed typed owner-to-main-RT transport; a returned call is not native completion or physical retirement."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Bounded synchronous bridge value or span; no caller pointer is retained."
+                    ]
+                },
+                {
+                    "name": "header",
+                    "type": "const GDExtensionQualificationRtRequestV1*",
+                    "description": [
+                        "Bounded synchronous header value or span; no caller pointer is retained."
+                    ]
+                },
+                {
+                    "name": "request_pod",
+                    "type": "const void*",
+                    "description": [
+                        "Bounded synchronous request_pod value or span; no caller pointer is retained."
+                    ]
+                },
+                {
+                    "name": "payload",
+                    "type": "const void*",
+                    "description": [
+                        "Bounded synchronous payload value or span; no caller pointer is retained."
+                    ]
+                },
+                {
+                    "name": "out_ref",
+                    "type": "GDExtensionQualificationRtRefV1*",
+                    "description": [
+                        "Bounded synchronous out_ref value or span; no caller pointer is retained."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error and closed device-session reason; API call return is not GPU completion."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_rt_activate_v1",
+            "since": "4.7",
+            "description": [
+                "Original bridge fixed typed owner-to-main-RT transport; a returned call is not native completion or physical retirement."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Bounded synchronous bridge value or span; no caller pointer is retained."
+                    ]
+                },
+                {
+                    "name": "ref",
+                    "type": "GDExtensionQualificationRtRefV1",
+                    "description": [
+                        "Bounded synchronous ref value or span; no caller pointer is retained."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error and closed device-session reason; API call return is not GPU completion."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_rt_observe_v1",
+            "since": "4.7",
+            "description": [
+                "Original bridge fixed typed owner-to-main-RT transport; a returned call is not native completion or physical retirement."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Bounded synchronous bridge value or span; no caller pointer is retained."
+                    ]
+                },
+                {
+                    "name": "ref",
+                    "type": "GDExtensionQualificationRtRefV1",
+                    "description": [
+                        "Bounded synchronous ref value or span; no caller pointer is retained."
+                    ]
+                },
+                {
+                    "name": "out_observation",
+                    "type": "GDExtensionQualificationRtObservationV1*",
+                    "description": [
+                        "Bounded synchronous out_observation value or span; no caller pointer is retained."
+                    ]
+                },
+                {
+                    "name": "out_result",
+                    "type": "void*",
+                    "description": [
+                        "Bounded synchronous out_result value or span; no caller pointer is retained."
+                    ]
+                },
+                {
+                    "name": "result_capacity",
+                    "type": "uint32_t",
+                    "description": [
+                        "Bounded synchronous result_capacity value or span; no caller pointer is retained."
+                    ]
+                },
+                {
+                    "name": "out_segments",
+                    "type": "GDExtensionQualificationUploadSegmentV1*",
+                    "description": [
+                        "Bounded synchronous out_segments value or span; no caller pointer is retained."
+                    ]
+                },
+                {
+                    "name": "segment_capacity",
+                    "type": "uint32_t",
+                    "description": [
+                        "Bounded synchronous segment_capacity value or span; no caller pointer is retained."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error and closed device-session reason; API call return is not GPU completion."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_rt_release_v1",
+            "since": "4.7",
+            "description": [
+                "Original bridge fixed typed owner-to-main-RT transport; a returned call is not native completion or physical retirement."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Bounded synchronous bridge value or span; no caller pointer is retained."
+                    ]
+                },
+                {
+                    "name": "ref",
+                    "type": "GDExtensionQualificationRtRefV1",
+                    "description": [
+                        "Bounded synchronous ref value or span; no caller pointer is retained."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error and closed device-session reason; API call return is not GPU completion."
+                ]
+            }
         }
     ]
 }

@@ -38,8 +38,17 @@
 
 class Object;
 
+#ifdef TESTS_ENABLED
+namespace TestMessageQueue {
+class QueueAccessor;
+}
+#endif
+
 class CallQueue {
 	friend class MessageQueue;
+#ifdef TESTS_ENABLED
+	friend class TestMessageQueue::QueueAccessor;
+#endif
 
 public:
 	enum {
@@ -75,6 +84,7 @@ private:
 	uint32_t max_pages = 0;
 	uint32_t pages_used = 0;
 	bool flushing = false;
+	bool closing = false;
 
 #ifdef DEV_ENABLED
 	bool is_current_thread_override = false;
@@ -137,6 +147,9 @@ public:
 	Error flush();
 	void clear();
 	void statistics();
+	// Flush preflight only. The owner must establish external mutation/ticket quiescence;
+	// this queue-local check does not certify that deletion is safe.
+	Error prepare_close();
 
 	bool has_messages() const;
 

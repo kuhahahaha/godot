@@ -175,24 +175,80 @@ String GDExtensionLibraryLoader::find_extension_library(const String &p_path, Re
 	return String();
 }
 
-Error GDExtensionLibraryLoader::open_library(const String &p_path) {
-	Error err = parse_gdextension_file(p_path);
-	if (err != OK) {
-		return err;
+Error GDExtensionLibraryLoader::prepare_open(const String &p_path) {
+	if (close_error != OK) {
+		return close_error;
 	}
+	if (closing) {
+		return ERR_BUSY;
+	}
+	if (library || preparing || prepared || opening) {
+		return ERR_BUSY;
+	}
+	preparing = true;
+	Configuration candidate;
+	const Error err = _parse_gdextension_file(p_path, candidate);
+	if (err == OK) {
+		prepared_configuration = std::move(candidate);
+		prepared = true;
+	}
+	preparing = false;
+	return err;
+}
 
-	String abs_path = ProjectSettings::get_singleton()->globalize_path(library_path);
+void GDExtensionLibraryLoader::abort_prepared_open() {
+	if (preparing || opening) {
+		return;
+	}
+	prepared = false;
+	prepared_configuration = Configuration();
+}
+
+Error GDExtensionLibraryLoader::open_library(const String &p_path) {
+	if (close_error != OK) {
+		return close_error;
+	}
+	if (closing) {
+		return ERR_BUSY;
+	}
+	if (library || preparing || opening) {
+		return ERR_BUSY;
+	}
+	if (!prepared) {
+		const Error err = prepare_open(p_path);
+		if (err != OK) {
+			return err;
+		}
+	}
+	if (prepared_configuration.resource_path != p_path) {
+		abort_prepared_open();
+		return ERR_INVALID_PARAMETER;
+	}
+	if (prepared_configuration.guard_version > 1) {
+		abort_prepared_open();
+		return ERR_INVALID_PARAMETER;
+	}
+	configuration = std::move(prepared_configuration);
+	abort_prepared_open();
+	opening = true;
+	struct OpeningScope {
+		bool &active;
+		~OpeningScope() { active = false; }
+	} opening_scope{ opening };
+	Error err;
+
+	String abs_path = ProjectSettings::get_singleton()->globalize_path(configuration.library_path);
 
 	Vector<String> abs_dependencies_paths;
-	if (!library_dependencies.is_empty()) {
-		for (const SharedObject &dependency : library_dependencies) {
+	if (!configuration.library_dependencies.is_empty()) {
+		for (const SharedObject &dependency : configuration.library_dependencies) {
 			abs_dependencies_paths.push_back(ProjectSettings::get_singleton()->globalize_path(dependency.path));
 		}
 	}
 
 	OS::GDExtensionData data = {
 		true, // also_set_library_path
-		&library_path, // r_resolved_path
+		&configuration.library_path, // r_resolved_path
 		Engine::get_singleton()->is_editor_hint(), // generate_temp_files
 		&abs_dependencies_paths, // library_dependencies
 	};
@@ -213,20 +269,26 @@ Error GDExtensionLibraryLoader::open_library(const String &p_path) {
 }
 
 Error GDExtensionLibraryLoader::initialize(GDExtensionInterfaceGetProcAddress p_get_proc_address, const Ref<GDExtension> &p_extension, GDExtensionInitialization *r_initialization) {
+	if (close_error != OK) {
+		return close_error;
+	}
+	if (closing) {
+		return ERR_BUSY;
+	}
 #ifdef TOOLS_ENABLED
-	p_extension->set_reloadable(is_reloadable && Engine::get_singleton()->is_extension_reloading_enabled());
+	p_extension->set_reloadable(configuration.is_reloadable && Engine::get_singleton()->is_extension_reloading_enabled());
 #endif
 
-	for (const KeyValue<String, String> &icon : class_icon_paths) {
+	for (const KeyValue<String, String> &icon : configuration.class_icon_paths) {
 		p_extension->class_icon_paths[icon.key] = icon.value;
 	}
 
 	void *entry_funcptr = nullptr;
 
-	Error err = OS::get_singleton()->get_dynamic_library_symbol_handle(library, entry_symbol, entry_funcptr, false);
+	Error err = OS::get_singleton()->get_dynamic_library_symbol_handle(library, configuration.entry_symbol, entry_funcptr, false);
 
 	if (err != OK) {
-		ERR_PRINT(vformat("GDExtension entry point '%s' not found in library %s.", entry_symbol, library_path));
+		ERR_PRINT(vformat("GDExtension entry point '%s' not found in library %s.", configuration.entry_symbol, configuration.library_path));
 		return err;
 	}
 
@@ -237,14 +299,41 @@ Error GDExtensionLibraryLoader::initialize(GDExtensionInterfaceGetProcAddress p_
 	if (ret) {
 		return OK;
 	} else {
-		ERR_PRINT(vformat("GDExtension initialization function '%s' returned an error.", entry_symbol));
+		ERR_PRINT(vformat("GDExtension initialization function '%s' returned an error.", configuration.entry_symbol));
 		return FAILED;
 	}
 }
 
-void GDExtensionLibraryLoader::close_library() {
-	OS::get_singleton()->close_dynamic_library(library);
-	library = nullptr;
+Error GDExtensionLibraryLoader::close_library() {
+	if (close_error != OK) {
+		return close_error;
+	}
+	if (preparing || opening || closing) {
+		return ERR_BUSY;
+	}
+	if (!library) {
+		return ERR_UNCONFIGURED;
+	}
+	abort_prepared_open();
+	closing = true;
+#ifdef TESTS_ENABLED
+	test_close_attempts++;
+	if (test_close_error != OK) {
+		close_error = test_close_error;
+		test_close_error = OK;
+	} else
+#endif
+	{
+		GDExtensionDeviceExit::NativeCloseScope::observe(this, false);
+		close_error = OS::get_singleton()->close_dynamic_library(library);
+		GDExtensionDeviceExit::NativeCloseScope::observe(this, true, close_error);
+	}
+	closing = false;
+	if (close_error == OK) {
+		library = nullptr;
+	}
+	// A retained numerical handle after failure is evidence, not call authority.
+	return close_error;
 }
 
 bool GDExtensionLibraryLoader::is_library_open() const {
@@ -256,10 +345,10 @@ bool GDExtensionLibraryLoader::has_library_changed() const {
 	// Check only that the last modified time is different (rather than checking
 	// that it's newer) since some OS's (namely Windows) will preserve the modified
 	// time by default when copying files.
-	if (FileAccess::get_modified_time(resource_path) != resource_last_modified_time) {
+	if (FileAccess::get_modified_time(configuration.resource_path) != configuration.resource_last_modified_time) {
 		return true;
 	}
-	if (FileAccess::get_modified_time(library_path) != library_last_modified_time) {
+	if (FileAccess::get_modified_time(configuration.library_path) != configuration.library_last_modified_time) {
 		return true;
 	}
 #endif
@@ -267,11 +356,11 @@ bool GDExtensionLibraryLoader::has_library_changed() const {
 }
 
 bool GDExtensionLibraryLoader::library_exists() const {
-	return FileAccess::exists(resource_path);
+	return FileAccess::exists(configuration.resource_path);
 }
 
-Error GDExtensionLibraryLoader::parse_gdextension_file(const String &p_path) {
-	resource_path = p_path;
+Error GDExtensionLibraryLoader::_parse_gdextension_file(const String &p_path, Configuration &r_configuration) {
+	r_configuration.resource_path = p_path;
 
 	Ref<ConfigFile> config;
 	config.instantiate();
@@ -283,12 +372,18 @@ Error GDExtensionLibraryLoader::parse_gdextension_file(const String &p_path) {
 		return err;
 	}
 
+	const Variant guard = config->get_value("configuration", "device_exit_guard_version", 0);
+	if (guard.get_type() != Variant::INT || int64_t(guard) < 0 || int64_t(guard) > 1) {
+		return ERR_INVALID_PARAMETER;
+	}
+	r_configuration.guard_version = uint32_t(int64_t(guard));
+
 	if (!config->has_section_key("configuration", "entry_symbol")) {
 		ERR_PRINT(vformat("GDExtension configuration file must contain a \"configuration/entry_symbol\" key: '%s'.", p_path));
 		return ERR_INVALID_DATA;
 	}
 
-	entry_symbol = config->get_value("configuration", "entry_symbol");
+	r_configuration.entry_symbol = config->get_value("configuration", "entry_symbol");
 
 	uint32_t compatibility_minimum[3] = { 0, 0, 0 };
 	if (config->has_section_key("configuration", "compatibility_minimum")) {
@@ -362,27 +457,26 @@ Error GDExtensionLibraryLoader::parse_gdextension_file(const String &p_path) {
 		}
 	}
 
-	library_path = find_extension_library(p_path, config, [](const String &p_feature) { return OS::get_singleton()->has_feature(p_feature); });
+	r_configuration.library_path = find_extension_library(p_path, config, [](const String &p_feature) { return OS::get_singleton()->has_feature(p_feature); });
 
-	if (library_path.is_empty()) {
+	if (r_configuration.library_path.is_empty()) {
 		const String os_arch = OS::get_singleton()->get_name().to_lower() + "." + Engine::get_singleton()->get_architecture_name();
 		ERR_PRINT(vformat("No GDExtension library found for current OS and architecture (%s) in configuration file: %s", os_arch, p_path));
 		return ERR_FILE_NOT_FOUND;
 	}
 
-	if (!library_path.is_resource_file() && !library_path.is_absolute_path()) {
-		library_path = p_path.get_base_dir().path_join(library_path);
+	if (!r_configuration.library_path.is_resource_file() && !r_configuration.library_path.is_absolute_path()) {
+		r_configuration.library_path = p_path.get_base_dir().path_join(r_configuration.library_path);
 	}
 
 #ifdef TOOLS_ENABLED
-	is_reloadable = config->get_value("configuration", "reloadable", false);
+	r_configuration.is_reloadable = config->get_value("configuration", "reloadable", false);
 
-	update_last_modified_time(
-			FileAccess::get_modified_time(resource_path),
-			FileAccess::get_modified_time(library_path));
+	r_configuration.resource_last_modified_time = FileAccess::get_modified_time(r_configuration.resource_path);
+	r_configuration.library_last_modified_time = FileAccess::get_modified_time(r_configuration.library_path);
 #endif
 
-	library_dependencies = find_extension_dependencies(p_path, config, [](const String &p_feature) { return OS::get_singleton()->has_feature(p_feature); });
+	r_configuration.library_dependencies = find_extension_dependencies(p_path, config, [](const String &p_feature) { return OS::get_singleton()->has_feature(p_feature); });
 
 	// Handle icons if any are specified.
 	if (config->has_section("icons")) {
@@ -393,7 +487,7 @@ Error GDExtensionLibraryLoader::parse_gdextension_file(const String &p_path) {
 				icon_path = p_path.get_base_dir().path_join(icon_path);
 			}
 
-			class_icon_paths[key] = icon_path;
+			r_configuration.class_icon_paths[key] = icon_path;
 		}
 	}
 

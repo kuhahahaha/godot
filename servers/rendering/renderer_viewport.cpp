@@ -28,11 +28,6 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#include "modules/modules_enabled.gen.h"
-#ifdef MODULE_P01_PROBE_ENABLED
-#include "modules/p01_probe/p01_native_source.h"
-#endif
-
 #include "renderer_viewport.h"
 
 #include "core/config/engine.h"
@@ -42,6 +37,7 @@
 #include "core/os/os.h"
 #include "core/profiling/profiling.h"
 #include "servers/display/display_server.h"
+#include "servers/rendering/render_capture_test_hooks.h"
 #include "servers/rendering/renderer_canvas_cull.h"
 #include "servers/rendering/renderer_compositor.h"
 #include "servers/rendering/renderer_scene_occlusion_cull.h"
@@ -49,6 +45,8 @@
 #include "servers/rendering/rendering_method.h"
 #include "servers/rendering/rendering_server_globals.h"
 #include "servers/rendering/storage/texture_storage.h"
+
+#include "modules/modules_enabled.gen.h"
 
 #ifndef XR_DISABLED
 #include "servers/xr/xr_interface.h"
@@ -341,8 +339,8 @@ void RendererViewport::_draw_3d(Viewport *p_viewport) {
 }
 
 void RendererViewport::_draw_viewport(Viewport *p_viewport) {
-#ifdef MODULE_P01_PROBE_ENABLED
-	P01ViewportDrawScope p01_viewport_scope(p_viewport->self.get_id());
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	RenderCaptureTestHooks::ViewportDrawScope skinned_mesh_capture_test_viewport_scope(p_viewport->self.get_id());
 #endif
 	if (p_viewport->measure_render_time) {
 		String rt_id = "vp_begin_" + itos(p_viewport->self.get_id());
@@ -764,6 +762,7 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 		WARN_PRINT_ONCE("2D MSAA is enabled while there is no 2D content. Disable 2D MSAA for better performance.");
 		RSG::texture_storage->render_target_do_msaa_resolve(p_viewport->render_target);
 	}
+	viewport_adopt_camera_data(p_viewport->self);
 
 	if (p_viewport->measure_render_time) {
 		String rt_id = "vp_end_" + itos(p_viewport->self.get_id());
@@ -1000,6 +999,15 @@ void RendererViewport::viewport_initialize(RID p_rid) {
 	viewport_owner.initialize_rid(p_rid);
 	Viewport *viewport = viewport_owner.get_or_null(p_rid);
 	viewport->self = p_rid;
+	// Stable identity is allocated once per viewport RID lifetime. A zero
+	// identity is reserved for an uninitialized/foreign viewport.
+	viewport->presentation_key = RendererViewport::Viewport::ViewPresentationKey();
+	viewport->presentation_registered = false;
+	viewport->camera_capture_ordinal = 0;
+	viewport->previous_camera_token = RendererViewport::Viewport::CameraSourceToken();
+	viewport->current_camera_token = RendererViewport::Viewport::CameraSourceToken();
+	viewport->staged_camera_token = RendererViewport::Viewport::CameraSourceToken();
+	viewport->staged_camera_data_valid = false;
 	viewport->render_target = RSG::texture_storage->render_target_create();
 	viewport->shadow_atlas = RSG::light_storage->shadow_atlas_create();
 	viewport->viewport_render_direct_to_screen = false;
@@ -1017,6 +1025,7 @@ void RendererViewport::viewport_set_use_xr(RID p_viewport, bool p_use_xr) {
 	}
 
 	viewport->use_xr = p_use_xr;
+	viewport_invalidate_presentation_key(p_viewport);
 
 	// Re-configure the 3D render buffers when disabling XR. They'll get
 	// re-configured when enabling XR in draw_viewports().
@@ -1116,6 +1125,7 @@ void RendererViewport::viewport_set_size(RID p_viewport, int p_width, int p_heig
 void RendererViewport::_viewport_set_size(Viewport *p_viewport, int p_width, int p_height, uint32_t p_view_count) {
 	Size2i new_size(p_width, p_height);
 	if (p_viewport->size != new_size || p_viewport->view_count != p_view_count) {
+		viewport_invalidate_presentation_key(p_viewport->self);
 		p_viewport->size = new_size;
 		p_viewport->view_count = p_view_count;
 
@@ -1252,17 +1262,145 @@ RID RendererViewport::viewport_get_occluder_debug_texture(RID p_viewport) const 
 void RendererViewport::viewport_set_prev_camera_data(RID p_viewport, const RendererSceneRender::CameraData *p_camera_data) {
 	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
 	ERR_FAIL_NULL(viewport);
+	ERR_FAIL_NULL(p_camera_data);
+	if (!viewport->presentation_registered) {
+		const uint64_t frame = RSG::rasterizer->get_frame_number();
+		if (viewport->prev_camera_data_frame != frame) {
+			viewport->prev_camera_data = *p_camera_data;
+			viewport->prev_camera_data_frame = frame;
+		}
+		return;
+	}
+	viewport_set_prev_camera_data(p_viewport, p_camera_data, viewport->current_camera_token);
+}
+
+void RendererViewport::viewport_set_prev_camera_data(RID p_viewport, const RendererSceneRender::CameraData *p_camera_data, const Viewport::CameraSourceToken &p_token) {
+	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL(viewport);
+	ERR_FAIL_NULL(p_camera_data);
+	if (!p_token.is_valid() || p_token != viewport->current_camera_token ||
+			p_camera_data->source_view_id != p_token.view_id ||
+			p_camera_data->source_view_epoch != p_token.view_epoch ||
+			p_camera_data->source_capture_ordinal != p_token.capture_ordinal) {
+		ERR_FAIL_MSG("Attempted to save a foreign camera source token.");
+	}
 	uint64_t frame = RSG::rasterizer->get_frame_number();
 	if (viewport->prev_camera_data_frame != frame) {
 		viewport->prev_camera_data = *p_camera_data;
 		viewport->prev_camera_data_frame = frame;
+		viewport->previous_camera_token = p_token;
 	}
+}
+
+bool RendererViewport::viewport_stage_camera_data(RID p_viewport, const RendererSceneRender::CameraData *p_camera_data, const Viewport::CameraSourceToken &p_token) {
+	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL_V(viewport, false);
+	ERR_FAIL_NULL_V(p_camera_data, false);
+	if (!p_token.is_valid() || p_token != viewport->current_camera_token || viewport->staged_camera_data_valid || p_camera_data->source_view_id != p_token.view_id || p_camera_data->source_view_epoch != p_token.view_epoch || p_camera_data->source_capture_ordinal != p_token.capture_ordinal) {
+		return false;
+	}
+	viewport->staged_camera_data = *p_camera_data;
+	viewport->staged_camera_token = p_token;
+	viewport->staged_camera_data_valid = true;
+	return true;
+}
+
+bool RendererViewport::viewport_adopt_camera_data(RID p_viewport) {
+	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL_V(viewport, false);
+	if (!viewport->staged_camera_data_valid) {
+		return false;
+	}
+	viewport->prev_camera_data = viewport->staged_camera_data;
+	viewport->prev_camera_data_frame = RSG::rasterizer->get_frame_number();
+	viewport->previous_camera_token = viewport->staged_camera_token;
+	viewport->staged_camera_data = RendererSceneRender::CameraData();
+	viewport->staged_camera_token = Viewport::CameraSourceToken();
+	viewport->staged_camera_data_valid = false;
+	return true;
 }
 
 const RendererSceneRender::CameraData *RendererViewport::viewport_get_prev_camera_data(RID p_viewport) {
 	const Viewport *viewport = viewport_owner.get_or_null(p_viewport);
 	ERR_FAIL_NULL_V(viewport, nullptr);
 	return &viewport->prev_camera_data;
+}
+
+RendererViewport::Viewport::CameraSourceToken RendererViewport::viewport_get_previous_camera_token(RID p_viewport) const {
+	const Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL_V(viewport, Viewport::CameraSourceToken());
+	return viewport->previous_camera_token;
+}
+
+RendererViewport::Viewport::CameraSourceToken RendererViewport::viewport_get_current_camera_token(RID p_viewport) const {
+	const Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL_V(viewport, Viewport::CameraSourceToken());
+	return viewport->current_camera_token;
+}
+
+RendererViewport::Viewport::CameraSourceToken RendererViewport::viewport_begin_camera_capture(RID p_viewport) {
+	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL_V(viewport, Viewport::CameraSourceToken());
+	// Ordinary viewports do not participate in presentation-source capture.
+	if (!viewport->presentation_registered) {
+		return Viewport::CameraSourceToken();
+	}
+	ERR_FAIL_COND_V(viewport->presentation_key.view_id == 0 || viewport->presentation_key.view_epoch == 0, Viewport::CameraSourceToken());
+	if (viewport->camera_capture_ordinal == UINT64_MAX) {
+		ERR_FAIL_V_MSG(Viewport::CameraSourceToken(), "Viewport camera capture ordinal exhausted.");
+	}
+	viewport->camera_capture_ordinal++;
+	Viewport::CameraSourceToken token;
+	token.view_id = viewport->presentation_key.view_id;
+	token.view_epoch = viewport->presentation_key.view_epoch;
+	token.capture_ordinal = viewport->camera_capture_ordinal;
+	viewport->current_camera_token = token;
+	return token;
+}
+
+RendererViewport::Viewport::ViewPresentationKey RendererViewport::viewport_get_presentation_key(RID p_viewport) const {
+	const Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL_V(viewport, Viewport::ViewPresentationKey());
+	return viewport->presentation_key;
+}
+
+bool RendererViewport::viewport_register_presentation_key(RID p_viewport, const Viewport::ViewPresentationKey &p_key) {
+	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL_V(viewport, false);
+	if (p_key.view_id == 0 || p_key.view_epoch == 0) {
+		return false;
+	}
+	if (viewport->presentation_registered && viewport->presentation_key.view_id != p_key.view_id) {
+		return false;
+	}
+	if (viewport->presentation_registered && viewport->presentation_key.view_epoch != p_key.view_epoch) {
+		viewport->previous_camera_token = Viewport::CameraSourceToken();
+		viewport->current_camera_token = Viewport::CameraSourceToken();
+		viewport->prev_camera_data = RendererSceneRender::CameraData();
+		viewport->prev_camera_data_frame = 0;
+		viewport->staged_camera_data = RendererSceneRender::CameraData();
+		viewport->staged_camera_token = Viewport::CameraSourceToken();
+		viewport->staged_camera_data_valid = false;
+	}
+	viewport->presentation_key = p_key;
+	viewport->presentation_registered = true;
+	return true;
+}
+
+void RendererViewport::viewport_invalidate_presentation_key(RID p_viewport) {
+	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL(viewport);
+	viewport->presentation_registered = false;
+	viewport->presentation_key = Viewport::ViewPresentationKey();
+	viewport->previous_camera_token = Viewport::CameraSourceToken();
+	viewport->current_camera_token = Viewport::CameraSourceToken();
+	// Keep the nonwrapping native ordinal for this viewport RID lifetime.
+	// Re-registering an external key must not reissue an old source token.
+	viewport->prev_camera_data = RendererSceneRender::CameraData();
+	viewport->prev_camera_data_frame = 0;
+	viewport->staged_camera_data = RendererSceneRender::CameraData();
+	viewport->staged_camera_token = Viewport::CameraSourceToken();
+	viewport->staged_camera_data_valid = false;
 }
 
 void RendererViewport::viewport_set_disable_2d(RID p_viewport, bool p_disable) {
@@ -1300,6 +1438,9 @@ void RendererViewport::viewport_attach_camera(RID p_viewport, RID p_camera) {
 	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
 	ERR_FAIL_NULL(viewport);
 
+	if (viewport->camera != p_camera) {
+		viewport_invalidate_presentation_key(p_viewport);
+	}
 	viewport->camera = p_camera;
 }
 

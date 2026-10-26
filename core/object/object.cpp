@@ -42,6 +42,30 @@
 #include "core/string/translation_server.h"
 #include "core/variant/typed_array.h"
 
+#include <optional>
+
+namespace {
+// Placeholder callbacks are installed exclusively by ClassDB and execute core
+// code. Their metadata may name an extension, but their bodies are not DSO code.
+class ObjectExtensionCallbackScope {
+	std::optional<GDExtensionDeviceExit::CallbackScope> frame;
+
+public:
+	explicit ObjectExtensionCallbackScope(const ObjectGDExtension *p_extension, bool p_inherited_predelete = false) {
+		if (p_inherited_predelete) {
+			return;
+		}
+#ifdef TOOLS_ENABLED
+		if (p_extension->is_placeholder) {
+			return;
+		}
+#endif
+		frame.emplace(p_extension->callback_record.get_reference());
+	}
+	Error get_error() const { return frame ? frame->get_error() : OK; }
+};
+} // namespace
+
 #ifdef DEBUG_ENABLED
 
 struct _ObjectDebugLock {
@@ -168,12 +192,90 @@ Object::Connection::Connection(const Variant &p_variant) {
 	}
 }
 
+Object::NativeContinuation::NativeContinuation(Object *p_owner) {
+	ObjectSignalLock signal_lock(p_owner);
+	if (p_owner->_native_continuations_invalidated) {
+		return;
+	}
+	owner = p_owner;
+	next = owner->native_continuations;
+	if (next) {
+		next->previous = this;
+	}
+	owner->native_continuations = this;
+}
+
+Object::NativeContinuation::~NativeContinuation() {
+	if (!owner) {
+		return;
+	}
+	ObjectSignalLock signal_lock(owner);
+	if (previous) {
+		previous->next = next;
+	} else {
+		owner->native_continuations = next;
+	}
+	if (next) {
+		next->previous = previous;
+	}
+}
+
+void Object::_invalidate_native_continuations() {
+	ObjectSignalLock signal_lock(this);
+	_native_continuations_invalidated = true;
+	while (native_continuations) {
+		NativeContinuation *registration = native_continuations;
+		native_continuations = registration->next;
+		registration->owner = nullptr;
+		registration->previous = nullptr;
+		registration->next = nullptr;
+	}
+}
+
 bool Object::_predelete() {
+	if (_deletion_in_progress) {
+		return false;
+	}
+	{
+		MutexLock lock(_instance_binding_mutex);
+		const bool terminal_authorized = _terminal_release_id != 0 && _terminal_destroy_ready && _terminal_owner_thread == Thread::get_caller_id();
+		if ((_binding_mutation && !terminal_authorized) || _binding_read_cohorts != 0) {
+			GDExtensionDeviceExit::stop_lifetime_entry(GDExtensionDeviceExit::LifetimeFailure::ASSOCIATION_BUSY);
+		}
+		_binding_mutation = true;
+	}
+	std::optional<ObjectExtensionCallbackScope> direct_frame;
+	std::optional<GDExtensionDeviceExit::CleanupScope> direct_cleanup;
+	if (_extension) {
+		direct_frame.emplace(_extension);
+		if (direct_frame->get_error() != OK) {
+			if (direct_frame->get_error() == ERR_BUSY) {
+				const auto &record = _extension->callback_record.get_reference();
+				const uint64_t generation = record.get_generation();
+				for (const ReleaseLifetime &lifetime : _release_lifetimes) {
+					if (lifetime.generation == generation) {
+						direct_cleanup.emplace(*lifetime.action, record, uint64_t(_instance_id), lifetime.action_id);
+						break;
+					}
+				}
+			}
+			if (!direct_cleanup || direct_cleanup->get_error() != OK) {
+				GDExtensionDeviceExit::stop_lifetime_entry(GDExtensionDeviceExit::LifetimeFailure::UNREGISTERED);
+			}
+		}
+		_predelete_callback_thread = Thread::get_caller_id();
+	}
+	_deletion_in_progress = true;
 	_predelete_ok = true;
 	notification(NOTIFICATION_PREDELETE, true);
 	if (!_predelete_ok) {
+		_predelete_callback_thread = 0;
+		_deletion_in_progress = false;
+		MutexLock lock(_instance_binding_mutex);
+		_binding_mutation = _terminal_release_id != 0;
 		return false;
 	}
+	_invalidate_native_continuations();
 
 	_gdtype_ptr = nullptr; // Must restore, so constructors/destructors have proper class name access at each stage.
 	notification(NOTIFICATION_PREDELETE_CLEANUP, true);
@@ -186,6 +288,10 @@ bool Object::_predelete() {
 	script_instance = nullptr;
 
 	if (_extension) {
+		ObjectExtensionCallbackScope frame(_extension, _predelete_callback_thread == Thread::get_caller_id());
+		if (frame.get_error() != OK) {
+			GDExtensionDeviceExit::stop_lifetime_entry(GDExtensionDeviceExit::LifetimeFailure::UNREGISTERED);
+		}
 #ifdef TOOLS_ENABLED
 		if (_extension->untrack_instance) {
 			_extension->untrack_instance(_extension->tracking_userdata, this);
@@ -196,20 +302,23 @@ bool Object::_predelete() {
 		}
 		_extension = nullptr;
 		_extension_instance = nullptr;
+		_extension_lifetime.record_core_disposal();
+		_extension_lifetime = GDExtensionDeviceExit::BindingLifetime();
 		// _gdtype_ptr = nullptr; // The pointer already set to nullptr above, no need to do it again.
 	}
 #ifdef TOOLS_ENABLED
-	else if (_instance_bindings != nullptr) {
+	else if (!_instance_bindings.is_empty()) {
 		Engine *engine = Engine::get_singleton();
 		GDExtensionManager *gdextension_manager = GDExtensionManager::get_singleton();
 		if (engine && gdextension_manager && engine->is_extension_reloading_enabled()) {
-			for (uint32_t i = 0; i < _instance_binding_count; i++) {
+			for (uint32_t i = 0; i < _instance_bindings.size(); i++) {
 				gdextension_manager->untrack_instance_binding(_instance_bindings[i].token, this);
 			}
 		}
 	}
 #endif
 
+	_predelete_callback_thread = 0;
 	return true;
 }
 
@@ -245,8 +354,15 @@ void Object::set(const StringName &p_name, const Variant &p_value, bool *r_valid
 		}
 	}
 
-	if (_extension && _extension->set) {
-		if (_extension->set(_extension_instance, (GDExtensionConstStringNamePtr)&p_name, (GDExtensionConstVariantPtr)&p_value)) {
+	if (_extension) {
+		ObjectExtensionCallbackScope frame(_extension);
+		if (frame.get_error() != OK) {
+			if (r_valid) {
+				*r_valid = false;
+			}
+			return;
+		}
+		if (_extension->set && _extension->set(_extension_instance, (GDExtensionConstStringNamePtr)&p_name, (GDExtensionConstVariantPtr)&p_value)) {
 			if (r_valid) {
 				*r_valid = true;
 			}
@@ -324,8 +440,15 @@ Variant Object::get(const StringName &p_name, bool *r_valid) const {
 			return ret;
 		}
 	}
-	if (_extension && _extension->get) {
-		if (_extension->get(_extension_instance, (GDExtensionConstStringNamePtr)&p_name, (GDExtensionVariantPtr)&ret)) {
+	if (_extension) {
+		ObjectExtensionCallbackScope frame(_extension);
+		if (frame.get_error() != OK) {
+			if (r_valid) {
+				*r_valid = false;
+			}
+			return Variant();
+		}
+		if (_extension->get && _extension->get(_extension_instance, (GDExtensionConstStringNamePtr)&p_name, (GDExtensionVariantPtr)&ret)) {
 			if (r_valid) {
 				*r_valid = true;
 			}
@@ -484,7 +607,8 @@ void Object::get_property_list(List<PropertyInfo> *p_list, bool p_reversed) cons
 
 			ClassDB::get_property_list(current_extension->class_name, p_list, true, this);
 
-			if (current_extension->get_property_list) {
+			ObjectExtensionCallbackScope frame(current_extension);
+			if (frame.get_error() == OK && current_extension->get_property_list) {
 #ifdef TOOLS_ENABLED
 				// If this is a placeholder, we can't call into the GDExtension on the parent class,
 				// because we don't have a real instance of the class to give it.
@@ -540,25 +664,28 @@ void Object::get_property_list(List<PropertyInfo> *p_list, bool p_reversed) cons
 void Object::validate_property(PropertyInfo &p_property) const {
 	_validate_propertyv(p_property);
 
-	if (_extension && _extension->validate_property) {
-		// GDExtension uses a StringName rather than a String for property name.
-		StringName prop_name = p_property.name;
-		GDExtensionPropertyInfo gdext_prop = {
-			(GDExtensionVariantType)p_property.type,
-			&prop_name,
-			&p_property.class_name,
-			(uint32_t)p_property.hint,
-			&p_property.hint_string,
-			p_property.usage,
-		};
-		if (_extension->validate_property(_extension_instance, &gdext_prop)) {
-			p_property.type = (Variant::Type)gdext_prop.type;
-			p_property.name = *reinterpret_cast<StringName *>(gdext_prop.name);
-			p_property.class_name = *reinterpret_cast<StringName *>(gdext_prop.class_name);
-			p_property.hint = (PropertyHint)gdext_prop.hint;
-			p_property.hint_string = *reinterpret_cast<String *>(gdext_prop.hint_string);
-			p_property.usage = gdext_prop.usage;
-		};
+	if (_extension) {
+		ObjectExtensionCallbackScope frame(_extension);
+		if (frame.get_error() == OK && _extension->validate_property) {
+			// GDExtension uses a StringName rather than a String for property name.
+			StringName prop_name = p_property.name;
+			GDExtensionPropertyInfo gdext_prop = {
+				(GDExtensionVariantType)p_property.type,
+				&prop_name,
+				&p_property.class_name,
+				(uint32_t)p_property.hint,
+				&p_property.hint_string,
+				p_property.usage,
+			};
+			if (_extension->validate_property(_extension_instance, &gdext_prop)) {
+				p_property.type = (Variant::Type)gdext_prop.type;
+				p_property.name = *reinterpret_cast<StringName *>(gdext_prop.name);
+				p_property.class_name = *reinterpret_cast<StringName *>(gdext_prop.class_name);
+				p_property.hint = (PropertyHint)gdext_prop.hint;
+				p_property.hint_string = *reinterpret_cast<String *>(gdext_prop.hint_string);
+				p_property.usage = gdext_prop.usage;
+			};
+		}
 	}
 
 	if (script_instance) { // Call it last to allow user altering already validated properties.
@@ -573,8 +700,12 @@ bool Object::property_can_revert(const StringName &p_name) const {
 		}
 	}
 
-	if (_extension && _extension->property_can_revert) {
-		if (_extension->property_can_revert(_extension_instance, (GDExtensionConstStringNamePtr)&p_name)) {
+	if (_extension) {
+		ObjectExtensionCallbackScope frame(_extension);
+		if (frame.get_error() != OK) {
+			return false;
+		}
+		if (_extension->property_can_revert && _extension->property_can_revert(_extension_instance, (GDExtensionConstStringNamePtr)&p_name)) {
 			return true;
 		}
 	}
@@ -591,8 +722,12 @@ Variant Object::property_get_revert(const StringName &p_name) const {
 		}
 	}
 
-	if (_extension && _extension->property_get_revert) {
-		if (_extension->property_get_revert(_extension_instance, (GDExtensionConstStringNamePtr)&p_name, (GDExtensionVariantPtr)&ret)) {
+	if (_extension) {
+		ObjectExtensionCallbackScope frame(_extension);
+		if (frame.get_error() != OK) {
+			return Variant();
+		}
+		if (_extension->property_get_revert && _extension->property_get_revert(_extension_instance, (GDExtensionConstStringNamePtr)&p_name, (GDExtensionVariantPtr)&ret)) {
 			return ret;
 		}
 	}
@@ -876,7 +1011,11 @@ Variant Object::call_const(const StringName &p_method, const Variant **p_args, i
 	return ret;
 }
 
-void Object::_gdvirtual_init_method_ptr(uint32_t p_compat_hash, void *&r_fn_ptr, const StringName &p_fn_name, bool p_compat) const {
+bool Object::_gdvirtual_init_method_ptr(uint32_t p_compat_hash, void *&r_fn_ptr, const StringName &p_fn_name, bool p_compat) const {
+	ObjectExtensionCallbackScope frame(_extension);
+	if (frame.get_error() != OK) {
+		return false;
+	}
 	void *fn_ptr = nullptr;
 	if (_extension->get_virtual_call_data2 && _extension->call_virtual_with_data) {
 		fn_ptr = _extension->get_virtual_call_data2(_extension->class_userdata, &p_fn_name, p_compat_hash);
@@ -903,46 +1042,70 @@ void Object::_gdvirtual_init_method_ptr(uint32_t p_compat_hash, void *&r_fn_ptr,
 		fn_ptr = reinterpret_cast<void *>(_INVALID_GDVIRTUAL_FUNC_ADDR);
 	}
 	r_fn_ptr = fn_ptr;
+	return true;
 }
 
 void Object::_notification_forward(int p_notification) {
+	const uint64_t predelete_thread = _predelete_callback_thread == Thread::get_caller_id() &&
+			(p_notification == NOTIFICATION_PREDELETE || p_notification == NOTIFICATION_PREDELETE_CLEANUP) ? _predelete_callback_thread : 0;
+	if (predelete_thread) {
+		// Consume inheritance before script/core/DSO code can reenter dispatch.
+		_predelete_callback_thread = 0;
+	}
 	// Notify classes starting with Object and ending with most derived subclass.
 	// e.g. Object -> Node -> Node3D
 	_notification_forwardv(p_notification);
 
 	if (_extension) {
-		if (_extension->notification2) {
-			_extension->notification2(_extension_instance, p_notification, static_cast<GDExtensionBool>(false));
+		ObjectExtensionCallbackScope frame(_extension, predelete_thread != 0);
+		if (frame.get_error() == OK) {
+			if (_extension->notification2) {
+				_extension->notification2(_extension_instance, p_notification, static_cast<GDExtensionBool>(false));
 #ifndef DISABLE_DEPRECATED
-		} else if (_extension->notification) {
-			_extension->notification(_extension_instance, p_notification);
+			} else if (_extension->notification) {
+				_extension->notification(_extension_instance, p_notification);
 #endif // DISABLE_DEPRECATED
+			}
 		}
 	}
 
 	if (script_instance) {
 		script_instance->notification(p_notification, false);
 	}
+	if (predelete_thread) {
+		_predelete_callback_thread = predelete_thread;
+	}
 }
 
 void Object::_notification_backward(int p_notification) {
+	const uint64_t predelete_thread = _predelete_callback_thread == Thread::get_caller_id() &&
+			(p_notification == NOTIFICATION_PREDELETE || p_notification == NOTIFICATION_PREDELETE_CLEANUP) ? _predelete_callback_thread : 0;
+	if (predelete_thread) {
+		_predelete_callback_thread = 0;
+	}
 	if (script_instance) {
 		script_instance->notification(p_notification, true);
 	}
 
 	if (_extension) {
-		if (_extension->notification2) {
-			_extension->notification2(_extension_instance, p_notification, static_cast<GDExtensionBool>(true));
+		ObjectExtensionCallbackScope frame(_extension, predelete_thread != 0);
+		if (frame.get_error() == OK) {
+			if (_extension->notification2) {
+				_extension->notification2(_extension_instance, p_notification, static_cast<GDExtensionBool>(true));
 #ifndef DISABLE_DEPRECATED
-		} else if (_extension->notification) {
-			_extension->notification(_extension_instance, p_notification);
+			} else if (_extension->notification) {
+				_extension->notification(_extension_instance, p_notification);
 #endif // DISABLE_DEPRECATED
+			}
 		}
 	}
 
 	// Notify classes starting with most derived subclass and ending in Object.
 	// e.g. Node3D -> Node -> Object
 	_notification_backwardv(p_notification);
+	if (predelete_thread) {
+		_predelete_callback_thread = predelete_thread;
+	}
 }
 
 String Object::to_string() {
@@ -954,12 +1117,18 @@ String Object::to_string() {
 			return ret;
 		}
 	}
-	if (_extension && _extension->to_string) {
-		String ret;
-		GDExtensionBool is_valid;
-		_extension->to_string(_extension_instance, &is_valid, &ret);
-		if (is_valid) {
-			return ret;
+	if (_extension) {
+		ObjectExtensionCallbackScope frame(_extension);
+		if (frame.get_error() != OK) {
+			return _to_string();
+		}
+		if (_extension->to_string) {
+			String ret;
+			GDExtensionBool is_valid;
+			_extension->to_string(_extension_instance, &is_valid, &ret);
+			if (is_valid) {
+				return ret;
+			}
 		}
 	}
 	return _to_string();
@@ -976,35 +1145,57 @@ void Object::set_script(const Variant &p_script) {
 		ERR_FAIL_COND_MSG(s->is_abstract(), vformat("Cannot set object script. Script '%s' should not be abstract.", s->get_path()));
 	}
 
-	if (script_instance) {
-		memdelete(script_instance);
-		script_instance = nullptr;
-	}
-
+	ERR_FAIL_COND_MSG(_replace_script_instance(nullptr) != OK, "Cannot replace a script during an active callback cohort or association mutation.");
+	ScriptInstance *created = nullptr;
 	if (s.is_valid()) {
 		if (s->can_instantiate()) {
 			OBJ_DEBUG_LOCK
-			script_instance = s->instance_create(this);
+			created = s->instance_create(this);
 		} else if (Engine::get_singleton()->is_editor_hint()) {
 			OBJ_DEBUG_LOCK
-			script_instance = s->placeholder_instance_create(this);
+			created = s->placeholder_instance_create(this);
 		}
+	}
+	// Constructors may install the instance before running user code. Do not
+	// reserve association mutation across that code or its reference callbacks.
+	if (_replace_script_instance(created) != OK) {
+		if (created) {
+			memdelete(created);
+		}
+		ERR_FAIL_MSG("Cannot publish a script during an active callback cohort or association mutation.");
 	}
 
 	notify_property_list_changed(); //scripts may add variables, so refresh is desired
 	emit_signal(CoreStringName(script_changed));
 }
 
+Error Object::_replace_script_instance(ScriptInstance *p_instance) {
+	ScriptInstance *retiring = nullptr;
+	{
+		MutexLock lock(_instance_binding_mutex);
+		if (script_instance == p_instance) {
+			return OK;
+		}
+		if (_binding_mutation || _binding_read_cohorts != 0) {
+			return ERR_BUSY;
+		}
+		_binding_mutation = true;
+		retiring = script_instance;
+		script_instance = nullptr;
+	}
+	if (retiring) {
+		memdelete(retiring);
+	}
+	{
+		MutexLock lock(_instance_binding_mutex);
+		script_instance = p_instance;
+		_binding_mutation = false;
+	}
+	return OK;
+}
+
 void Object::set_script_instance(ScriptInstance *p_instance) {
-	if (script_instance == p_instance) {
-		return;
-	}
-
-	if (script_instance) {
-		memdelete(script_instance);
-	}
-
-	script_instance = p_instance;
+	ERR_FAIL_COND_MSG(_replace_script_instance(p_instance) != OK, "Cannot replace a script during an active callback cohort or association mutation.");
 }
 
 Variant Object::get_script() const {
@@ -1177,6 +1368,14 @@ Error Object::_emit_signal(const Variant **p_args, int p_argcount, Callable::Cal
 }
 
 Error Object::emit_signalp(const StringName &p_name, const Variant **p_args, int p_argcount) {
+	NativeContinuation continuation(this);
+	if (!continuation.is_valid()) {
+		return ERR_UNAVAILABLE;
+	}
+	const StringName signal_name = p_name;
+	const bool was_emitting = _emitting;
+	OBJ_DEBUG_LOCK
+
 	if (_block_signals) {
 		return ERR_CANT_ACQUIRE_RESOURCE; //no emit, signals blocked
 	}
@@ -1193,12 +1392,12 @@ Error Object::emit_signalp(const StringName &p_name, const Variant **p_args, int
 	{
 		ObjectSignalLock signal_lock(this);
 
-		SignalData *s = signal_map.getptr(p_name);
+		SignalData *s = signal_map.getptr(signal_name);
 		if (!s) {
 #ifdef DEBUG_ENABLED
-			bool signal_is_valid = get_gdtype().get_signal_map(false).has(p_name);
+			bool signal_is_valid = get_gdtype().get_signal_map(false).has(signal_name);
 			//check in script
-			ERR_FAIL_COND_V_MSG(!signal_is_valid && script_instance && !script_instance->get_script()->has_script_signal(p_name), ERR_UNAVAILABLE, vformat("Can't emit non-existing signal \"%s\".", p_name));
+			ERR_FAIL_COND_V_MSG(!signal_is_valid && script_instance && !script_instance->get_script()->has_script_signal(signal_name), ERR_UNAVAILABLE, vformat("Can't emit non-existing signal \"%s\".", signal_name));
 #endif
 			//not connected? just return
 			return ERR_UNAVAILABLE;
@@ -1229,24 +1428,25 @@ Error Object::emit_signalp(const StringName &p_name, const Variant **p_args, int
 			disconnect = false;
 		}
 #endif
-		if (disconnect) {
-			_disconnect(p_name, slot_callables[i]);
+		if (disconnect && continuation.is_valid()) {
+			_disconnect(signal_name, slot_callables[i]);
 		}
 	}
-
-	OBJ_DEBUG_LOCK
 
 	// If this is a ref-counted object, prevent it from being destroyed during signal
 	// emission, which is needed in certain edge cases; e.g., GH-73889 and GH-109471.
 	// Moreover, since signals can be emitted from constructors (classic example being
 	// notify_property_list_changed), we must be careful not to do the ref init ourselves,
 	// which would lead to the object being destroyed at the end of this function.
-	bool pending_unref = Object::cast_to<RefCounted>(this) ? ((RefCounted *)this)->reference() : false;
+	bool pending_unref = continuation.is_valid() && Object::cast_to<RefCounted>(this) ? ((RefCounted *)this)->reference() : false;
 
 	Error err = OK;
 
 	Vector<const Variant *> append_source_mem;
-	Variant source = this;
+	Variant source;
+	if (continuation.is_valid()) {
+		source = this;
+	}
 
 	for (uint32_t i = 0; i < slot_count; ++i) {
 		const Callable &callable = slot_callables[i];
@@ -1289,10 +1489,14 @@ Error Object::emit_signalp(const StringName &p_name, const Variant **p_args, int
 			MessageQueue::get_singleton()->push_callablep(callable, args, argc, true);
 		} else {
 			Callable::CallError ce;
-			_emitting = true;
+			if (continuation.is_valid()) {
+				_emitting = true;
+			}
 			Variant ret;
 			callable.callp(args, argc, ret, ce);
-			_emitting = false;
+			if (continuation.is_valid()) {
+				_emitting = was_emitting;
+			}
 
 			if (ce.error != Callable::CallError::CALL_OK) {
 				Object *target = callable.get_object();
@@ -1308,7 +1512,7 @@ Error Object::emit_signalp(const StringName &p_name, const Variant **p_args, int
 				if (ce.error == Callable::CallError::CALL_ERROR_INVALID_METHOD && target && !ClassDB::class_exists(target->get_class_name())) {
 					// Most likely object is not initialized yet, do not throw error.
 				} else {
-					ERR_PRINT(vformat("Error calling from signal '%s' to callable: %s.", String(p_name), Variant::get_callable_error_text(callable, args, argc, ce)));
+					ERR_PRINT(vformat("Error calling from signal '%s' to callable: %s.", String(signal_name), Variant::get_callable_error_text(callable, args, argc, ce)));
 					err = ERR_METHOD_NOT_FOUND;
 				}
 			}
@@ -1324,11 +1528,11 @@ Error Object::emit_signalp(const StringName &p_name, const Variant **p_args, int
 		memfree(slot_flags);
 	}
 
-	if (pending_unref) {
+	if (pending_unref && continuation.is_valid()) {
 		// We have to do the same Ref<T> would do. We can't just use Ref<T>
 		// because it would do the init ref logic, which is something this function
 		// shouldn't do, as explained above.
-		if (((RefCounted *)this)->unreference()) {
+		if (((RefCounted *)this)->unreference() && continuation.is_valid()) {
 			memdelete(this);
 		}
 	}
@@ -2151,59 +2355,478 @@ StringName Object::get_class_name_for_extension(const GDExtension *p_library) co
 }
 
 void Object::set_instance_binding(void *p_token, void *p_binding, const GDExtensionInstanceBindingCallbacks *p_callbacks) {
-	// This is only meant to be used on creation by the binder, but we also
-	// need to account for reloading (where the 'binding' will be cleared).
-	ERR_FAIL_COND(_instance_bindings != nullptr && _instance_bindings[0].binding != nullptr);
-	if (_instance_bindings == nullptr) {
-		_instance_bindings = (InstanceBinding *)memalloc(sizeof(InstanceBinding));
-		_instance_binding_count = 1;
+	InstanceBinding replaced;
+	{
+		MutexLock lock(_instance_binding_mutex);
+		if (_binding_mutation || _binding_read_cohorts != 0) {
+			GDExtensionDeviceExit::stop_lifetime_entry(GDExtensionDeviceExit::LifetimeFailure::ASSOCIATION_BUSY);
+		}
+		ERR_FAIL_COND(!_instance_bindings.is_empty() && _instance_bindings[0].primary && _instance_bindings[0].binding != nullptr);
+		if (_binding_version == UINT64_MAX || _next_binding_id == UINT64_MAX) {
+			GDExtensionDeviceExit::stop_lifetime_entry(GDExtensionDeviceExit::LifetimeFailure::LIMIT);
+		}
+		_binding_mutation = true;
+		if (!_instance_bindings.is_empty() && _instance_bindings[0].primary) {
+			replaced = _instance_bindings[0];
+		}
 	}
-	_instance_bindings[0].binding = p_binding;
-	_instance_bindings[0].free_callback = p_callbacks->free_callback;
-	_instance_bindings[0].reference_callback = p_callbacks->reference_callback;
-	_instance_bindings[0].token = p_token;
+	// The reservation excludes readers/mutators, so generation admission does
+	// not hold Object metadata. Only publication nests metadata then gate.
+	GDExtensionDeviceExit::RecordRef owner;
+	const Error enrolled = GDExtensionDeviceExit::Registry::get_singleton().retain_binding_owner(p_token, owner);
+	if (enrolled != OK && enrolled != ERR_DOES_NOT_EXIST) {
+		GDExtensionDeviceExit::stop_lifetime_entry(enrolled == ERR_PARAMETER_RANGE_ERROR ? GDExtensionDeviceExit::LifetimeFailure::LIMIT : GDExtensionDeviceExit::LifetimeFailure::UNREGISTERED);
+	}
+	if (GDExtensionDeviceExit::Registry::get_singleton().check_entry_classes(owner, 1u << 6) != OK) {
+		GDExtensionDeviceExit::stop_lifetime_entry(GDExtensionDeviceExit::LifetimeFailure::UNREGISTERED);
+	}
+	InstanceBinding binding;
+	binding.owner = GDExtensionDeviceExit::SharedRecord(std::move(owner));
+	binding.primary = true;
+	binding.binding = p_binding;
+	binding.token = p_token;
+	binding.free_callback = p_callbacks->free_callback;
+	binding.reference_callback = p_callbacks->reference_callback;
+	if (binding.owner.get_reference().is_valid()) {
+		const Error cleanup_registration = register_core_release_lifetime(
+				binding.owner.get_reference(), Thread::get_caller_id(), uint64_t(_instance_id));
+		if (cleanup_registration != OK && cleanup_registration != ERR_ALREADY_EXISTS) {
+			GDExtensionDeviceExit::stop_lifetime_entry(cleanup_registration == ERR_PARAMETER_RANGE_ERROR ? GDExtensionDeviceExit::LifetimeFailure::LIMIT : GDExtensionDeviceExit::LifetimeFailure::UNREGISTERED);
+		}
+	}
+	if (binding.owner.get_reference().is_valid() && (binding.free_callback || binding.reference_callback)) {
+		const Error holder = binding.lifetime.acquire_core(binding.owner.get_reference());
+		if (holder == OK) { binding.lifetime.bind_core_action(uint64_t(_instance_id)); }
+		if (holder != OK) {
+			GDExtensionDeviceExit::stop_lifetime_entry(holder == ERR_PARAMETER_RANGE_ERROR ? GDExtensionDeviceExit::LifetimeFailure::LIMIT : GDExtensionDeviceExit::LifetimeFailure::UNREGISTERED);
+		}
+	}
+	{
+		MutexLock lock(_instance_binding_mutex);
+		std::optional<GDExtensionDeviceExit::BindingPublicationScope> publication;
+		if (binding.owner.get_reference().is_valid()) {
+			publication.emplace(binding.owner.get_reference());
+			if (publication->get_error() != OK) {
+				GDExtensionDeviceExit::stop_lifetime_entry(GDExtensionDeviceExit::LifetimeFailure::UNREGISTERED);
+			}
+		}
+		binding.binding_id = _next_binding_id++;
+		if (_instance_bindings.is_empty()) {
+			_instance_bindings.push_back(binding);
+		} else if (_instance_bindings[0].primary) {
+			_instance_bindings[0] = binding;
+		} else {
+			_instance_bindings.insert(0, binding);
+		}
+		_binding_version++;
+		_binding_mutation = false;
+	}
+}
+
+Object::ReferenceCohort::~ReferenceCohort() {
+	retire_object_pin();
+}
+
+Error Object::ReferenceCohort::execute(Object *p_object, bool p_release, Operation p_operation, void *p_context, bool &r_result) {
+	{
+		MutexLock lock(p_object->_instance_binding_mutex);
+		if (p_object->_binding_mutation) {
+			return ERR_BUSY;
+		}
+		if (p_object->_binding_read_cohorts == UINT32_MAX || p_object->_reference_operations_exhausted) {
+			return ERR_PARAMETER_RANGE_ERROR;
+		}
+		operation_id = p_object->_next_reference_operation_id;
+		if (operation_id == UINT64_MAX) {
+			p_object->_reference_operations_exhausted = true;
+		} else {
+			p_object->_next_reference_operation_id++;
+		}
+		p_object->_binding_read_cohorts++;
+		object = p_object;
+		// The read pin refuses all association mutations, so this exact ordered
+		// vector remains immutable without allocating a second target vector.
+		bindings = Span<const InstanceBinding>(p_object->_instance_bindings.ptr(), p_object->_instance_bindings.size());
+		script = p_object->script_instance;
+		if (p_object->_extension) {
+			direct_owner = p_object->_extension->callback_record;
+			direct_reference = p_object->_extension->reference;
+			direct_unreference = p_object->_extension->unreference;
+			direct_instance = p_object->_extension_instance;
+		}
+	}
+	const Error result = _execute_after(0, p_release, p_operation, p_context, r_result);
+	retire_object_pin();
+	return result;
+}
+
+Error Object::ReferenceCohort::_execute_after(uint64_t p_generation, bool p_release, Operation p_operation, void *p_context, bool &r_result) {
+	using namespace GDExtensionDeviceExit;
+	// Stable addresses retain the TLS authority chain without per-owner recursion.
+	// The bound is the Registry's actual maximum live generation count.
+	struct Frames {
+		union Frame {
+			CallbackScope normal;
+			CleanupScope cleanup;
+			Frame() {}
+			~Frame() {}
+		} entries[Registry::MAX_LIVE_GENERATIONS];
+		bool cleanup[Registry::MAX_LIVE_GENERATIONS];
+		uint32_t count = 0;
+		~Frames() {
+			while (count) {
+				--count;
+				if (cleanup[count]) {
+					entries[count].cleanup.~CleanupScope();
+				} else {
+					entries[count].normal.~CallbackScope();
+				}
+			}
+		}
+	} frames;
+	while (true) {
+		const RecordRef *next = nullptr;
+		auto consider = [&](const RecordRef &p_record) {
+			const uint64_t generation = p_record.get_generation();
+			if (generation > p_generation && (!next || generation < next->get_generation())) {
+				next = &p_record;
+			}
+		};
+		consider(direct_owner.get_reference());
+		for (const InstanceBinding &binding : bindings) {
+			consider(binding.owner.get_reference());
+		}
+		if (!next) {
+			r_result = p_operation(p_context, *this);
+			retire_object_pin();
+			return OK;
+		}
+		if (frames.count == Registry::MAX_LIVE_GENERATIONS) {
+			return ERR_PARAMETER_RANGE_ERROR;
+		}
+		p_generation = next->get_generation();
+		auto &entry = frames.entries[frames.count];
+		CallbackScope *normal = ::new (static_cast<void *>(&entry.normal)) CallbackScope(*next);
+		const Error admitted = normal->get_error();
+		if (admitted == OK) {
+			frames.cleanup[frames.count++] = false;
+			continue;
+		}
+		normal->~CallbackScope();
+		bool found = false;
+		if (admitted == ERR_BUSY) {
+			for (const ReleaseLifetime &release : object->_release_lifetimes) {
+				if (release.generation == p_generation && (p_release || release.action->is_scheduled())) {
+					CleanupScope *cleanup = ::new (static_cast<void *>(&entry.cleanup)) CleanupScope(*release.action, *next, uint64_t(object->_instance_id), release.action_id, !p_release);
+					const Error error = cleanup->get_error();
+					if (error != OK) {
+						cleanup->~CleanupScope();
+						return error;
+					}
+					frames.cleanup[frames.count++] = true;
+					found = true;
+					break;
+				}
+			}
+		}
+		if (!found) {
+			return admitted == ERR_PARAMETER_RANGE_ERROR ? ERR_PARAMETER_RANGE_ERROR : ERR_UNAVAILABLE;
+		}
+	}
+}
+
+GDExtensionDeviceExit::CleanupAction *Object::_detach_unused_release_lifetime(uint64_t p_generation, GDExtensionDeviceExit::CleanupAction *p_expected) {
+	if (!p_generation || (_extension && _extension->callback_record.get_reference().get_generation() == p_generation)) {
+		return nullptr;
+	}
+	for (const InstanceBinding &binding : _instance_bindings) {
+		if (binding.owner.get_reference().get_generation() == p_generation) {
+			return nullptr;
+		}
+	}
+	for (uint32_t i = 0; i < _release_lifetimes.size(); i++) {
+		if (_release_lifetimes[i].generation == p_generation && (!p_expected || _release_lifetimes[i].action == p_expected)) {
+			auto *action = _release_lifetimes[i].action;
+			_release_lifetimes.remove_at(i);
+			return action;
+		}
+	}
+	return nullptr;
+}
+
+Error Object::register_release_lifetime(const GDExtensionDeviceExit::RecordRef &p_owner, uint64_t p_destructor_thread, uint64_t p_action_id) {
+	if (!p_owner.is_valid() || !p_destructor_thread || !p_action_id) {
+		return ERR_INVALID_DATA;
+	}
+	const Error authority = GDExtensionDeviceExit::Registry::get_singleton().authenticate_registration(p_owner);
+	if (authority != OK) {
+		return authority;
+	}
+	const uint64_t generation = p_owner.get_generation();
+	MutexLock lock(_instance_binding_mutex);
+	for (const ReleaseLifetime &lifetime : _release_lifetimes) {
+		if (lifetime.generation == generation) {
+			return ERR_ALREADY_EXISTS;
+		}
+	}
+	if (_binding_mutation || _binding_read_cohorts || _deletion_in_progress || _instance_id == ObjectID()) {
+		return ERR_BUSY;
+	}
+	if ((_extension && _extension->callback_record.get_reference().get_generation() == generation)) {
+		return ERR_ALREADY_IN_USE;
+	}
+	for (const InstanceBinding &binding : _instance_bindings) {
+		if (binding.owner.get_reference().get_generation() == generation) {
+			return ERR_ALREADY_IN_USE;
+		}
+	}
+	auto *action = memnew(GDExtensionDeviceExit::CleanupAction);
+	const Error result = GDExtensionDeviceExit::Registry::get_singleton().register_cleanup_action(p_owner, uint64_t(_instance_id), p_destructor_thread, p_action_id, *action);
+	if (result != OK) {
+		memdelete(action);
+		return result;
+	}
+	_release_lifetimes.push_back({ generation, p_action_id, action });
+	return OK;
+}
+
+Error Object::register_core_release_lifetime(const GDExtensionDeviceExit::RecordRef &p_owner, uint64_t p_destructor_thread, uint64_t p_action_id, GDExtensionDeviceExit::CleanupAction **r_created) {
+	if (r_created) {
+		*r_created = nullptr;
+	}
+	if (!p_owner.is_valid() || !p_destructor_thread || !p_action_id) {
+		return ERR_INVALID_DATA;
+	}
+	const uint64_t generation = p_owner.get_generation();
+	MutexLock lock(_instance_binding_mutex);
+	for (const ReleaseLifetime &lifetime : _release_lifetimes) {
+		if (lifetime.generation == generation) {
+			return ERR_ALREADY_EXISTS;
+		}
+	}
+	if (!_binding_mutation || _binding_read_cohorts || _deletion_in_progress || _instance_id == ObjectID()) {
+		return ERR_BUSY;
+	}
+	if (_extension && _extension->callback_record.get_reference().get_generation() == generation) {
+		return ERR_ALREADY_IN_USE;
+	}
+	for (const InstanceBinding &binding : _instance_bindings) {
+		if (binding.owner.get_reference().get_generation() == generation) {
+			return ERR_ALREADY_IN_USE;
+		}
+	}
+	auto *action = memnew(GDExtensionDeviceExit::CleanupAction);
+	const Error result = GDExtensionDeviceExit::Registry::get_singleton().register_cleanup_action(p_owner, uint64_t(_instance_id), p_destructor_thread, p_action_id, *action);
+	if (result != OK) {
+		memdelete(action);
+		return result;
+	}
+	const Error marked = GDExtensionDeviceExit::Registry::get_singleton().mark_core_object_action(p_owner, uint64_t(_instance_id), *action);
+	if (marked != OK) {
+		memdelete(action);
+		return marked;
+	}
+	_release_lifetimes.push_back({ generation, p_action_id, action });
+	if (r_created) {
+		*r_created = action;
+	}
+	return OK;
+}
+
+bool Object::ReferenceCohort::invoke(bool p_reference) {
+	bool can_die = true;
+	if (script) {
+		const GDExtensionDeviceExit::RecordRef script_identity;
+		GDExtensionDeviceExit::CallbackIdentityScope identity(script_identity);
+		if (p_reference) {
+			script->refcount_incremented();
+		} else {
+			can_die = script->refcount_decremented();
+		}
+	}
+	const GDExtensionClassReference direct = p_reference ? direct_reference : direct_unreference;
+	if (direct) {
+		GDExtensionDeviceExit::CallbackIdentityScope identity(direct_owner.get_reference());
+		direct(direct_instance);
+	}
+	for (const InstanceBinding &binding : bindings) {
+		GDExtensionDeviceExit::CallbackIdentityScope identity(binding.owner.get_reference());
+		if (binding.reference_callback && !binding.reference_callback(binding.token, binding.binding, p_reference)) {
+			can_die = false;
+		}
+	}
+	return can_die;
+}
+
+void Object::ReferenceCohort::retire_object_pin() {
+	if (!object) {
+		return;
+	}
+	// Clear every callback target while the Object is still protected. Frame
+	// destruction later only touches independent core Registry records.
+	bindings = Span<const InstanceBinding>();
+	direct_owner = GDExtensionDeviceExit::SharedRecord();
+	script = nullptr;
+	direct_instance = nullptr;
+	direct_reference = direct_unreference = nullptr;
+	{
+		MutexLock lock(object->_instance_binding_mutex);
+		object->_binding_read_cohorts--;
+	}
+	object = nullptr;
+}
+
+void Object::_reserve_terminal_release(uint64_t p_release_id) {
+	MutexLock lock(_instance_binding_mutex);
+	if (!p_release_id || _binding_mutation || _terminal_release_id != 0) {
+		GDExtensionDeviceExit::stop_lifetime_entry(GDExtensionDeviceExit::LifetimeFailure::ASSOCIATION_BUSY);
+	}
+	_terminal_release_id = p_release_id;
+	_terminal_owner_thread = Thread::get_caller_id();
+	_binding_mutation = true;
+}
+
+void Object::_complete_terminal_release(uint64_t p_release_id) {
+	MutexLock lock(_instance_binding_mutex);
+	if (_terminal_release_id != p_release_id || _terminal_owner_thread != Thread::get_caller_id() || _binding_read_cohorts != 0 || _terminal_destroy_ready) {
+		GDExtensionDeviceExit::stop_lifetime_entry(GDExtensionDeviceExit::LifetimeFailure::UNREGISTERED);
+	}
+	_terminal_destroy_ready = true;
 }
 
 void *Object::get_instance_binding(void *p_token, const GDExtensionInstanceBindingCallbacks *p_callbacks) {
-	void *binding = nullptr;
-	MutexLock instance_binding_lock(_instance_binding_mutex);
-	for (uint32_t i = 0; i < _instance_binding_count; i++) {
-		if (_instance_bindings[i].token == p_token) {
-			binding = _instance_bindings[i].binding;
-			break;
+	using GDExtensionDeviceExit::record_binding_entry_result;
+	record_binding_entry_result(OK);
+	InstanceBinding existing;
+	bool found = false;
+	{
+		MutexLock lock(_instance_binding_mutex);
+		if (_binding_mutation || _binding_read_cohorts == UINT32_MAX) {
+			record_binding_entry_result(_binding_mutation ? ERR_BUSY : ERR_PARAMETER_RANGE_ERROR);
+			return nullptr;
+		}
+		for (const InstanceBinding &binding : _instance_bindings) {
+			if (binding.token == p_token && binding.binding) {
+				existing = binding;
+				found = true;
+				_binding_read_cohorts++;
+				break;
+			}
+		}
+		if (!found) {
+			if (!p_callbacks) {
+				return nullptr;
+			}
+			if (_binding_read_cohorts != 0 || _binding_version == UINT64_MAX || _next_binding_id == UINT64_MAX) {
+				record_binding_entry_result(_binding_read_cohorts != 0 ? ERR_BUSY : ERR_PARAMETER_RANGE_ERROR);
+				return nullptr;
+			}
+			_binding_mutation = true;
 		}
 	}
-	if (unlikely(!binding && p_callbacks)) {
-		uint32_t current_size = Math::next_power_of_2(_instance_binding_count);
-		uint32_t new_size = Math::next_power_of_2(_instance_binding_count + 1);
-
-		if (current_size == 0 || new_size > current_size) {
-			_instance_bindings = (InstanceBinding *)memrealloc(_instance_bindings, new_size * sizeof(InstanceBinding));
+	if (found) {
+		std::optional<GDExtensionDeviceExit::CallbackScope> frame;
+		if (existing.owner.get_reference().is_valid()) {
+			frame.emplace(existing.owner.get_reference());
 		}
+		const bool admitted = !frame || frame->get_error() == OK;
+		{
+			MutexLock lock(_instance_binding_mutex);
+			_binding_read_cohorts--;
+		}
+		record_binding_entry_result(admitted ? OK : (frame->get_error() == ERR_PARAMETER_RANGE_ERROR ? ERR_PARAMETER_RANGE_ERROR : ERR_UNAVAILABLE));
+		return admitted ? existing.binding : nullptr;
+	}
 
-		_instance_bindings[_instance_binding_count].free_callback = p_callbacks->free_callback;
-		_instance_bindings[_instance_binding_count].reference_callback = p_callbacks->reference_callback;
-		_instance_bindings[_instance_binding_count].token = p_token;
-
-		binding = p_callbacks->create_callback(p_token, this);
-		_instance_bindings[_instance_binding_count].binding = binding;
-
+	// Creating reserves membership before admission, but publishes no partial
+	// slot. Same-object reentrant lookup/create returns Busy without waiting.
+	const GDExtensionInstanceBindingCallbacks callbacks = *p_callbacks;
+	InstanceBinding candidate;
+	candidate.token = p_token;
+	candidate.free_callback = callbacks.free_callback;
+	candidate.reference_callback = callbacks.reference_callback;
+	GDExtensionDeviceExit::RecordRef owner;
+	const Error enrolled = GDExtensionDeviceExit::Registry::get_singleton().retain_binding_owner(p_token, owner);
+	candidate.owner = GDExtensionDeviceExit::SharedRecord(std::move(owner));
+	std::optional<GDExtensionDeviceExit::CallbackScope> frame;
+	if (enrolled == OK) {
+		frame.emplace(candidate.owner.get_reference());
+	}
+	Error result = enrolled == ERR_DOES_NOT_EXIST ? OK : enrolled;
+	if (result == OK && frame && frame->get_error() != OK) {
+		result = frame->get_error() == ERR_PARAMETER_RANGE_ERROR ? ERR_PARAMETER_RANGE_ERROR : ERR_UNAVAILABLE;
+	}
+	if (result == OK) { result = GDExtensionDeviceExit::Registry::get_singleton().check_entry_classes(candidate.owner.get_reference(), 1u << 6); }
+	bool admitted = result == OK;
+	GDExtensionDeviceExit::CleanupAction *created_cleanup = nullptr;
+	if (admitted && enrolled == OK) {
+		const Error cleanup_registration = register_core_release_lifetime(
+			candidate.owner.get_reference(), Thread::get_caller_id(), uint64_t(_instance_id), &created_cleanup);
+		if (cleanup_registration != OK && cleanup_registration != ERR_ALREADY_EXISTS) {
+			result = cleanup_registration == ERR_PARAMETER_RANGE_ERROR ? ERR_PARAMETER_RANGE_ERROR : ERR_UNAVAILABLE;
+			admitted = false;
+		}
+	}
+	if (admitted && enrolled == OK && (candidate.free_callback || candidate.reference_callback)) {
+		result = candidate.lifetime.acquire_core(candidate.owner.get_reference());
+		if (result == OK) { candidate.lifetime.bind_core_action(uint64_t(_instance_id)); }
+		if (result != OK && result != ERR_PARAMETER_RANGE_ERROR) {
+			result = ERR_UNAVAILABLE;
+		}
+		admitted = result == OK;
+	}
+	if (admitted && callbacks.create_callback) {
+		candidate.binding = callbacks.create_callback(p_token, this);
+	}
+	bool published = false;
+	if (candidate.binding) {
+		MutexLock lock(_instance_binding_mutex);
+		std::optional<GDExtensionDeviceExit::BindingPublicationScope> publication;
+		if (candidate.owner.get_reference().is_valid()) {
+			publication.emplace(candidate.owner.get_reference());
+		}
+		if (!publication || publication->get_error() == OK) {
+			candidate.binding_id = _next_binding_id++;
+			_instance_bindings.push_back(candidate);
+			_binding_version++;
+			published = true;
+		} else {
+			result = ERR_UNAVAILABLE;
+		}
+	}
+	if (candidate.binding && !published && callbacks.free_callback) {
+		// Disposal completes the already accepted creation permit.
+		callbacks.free_callback(p_token, this, candidate.binding);
+	}
+	GDExtensionDeviceExit::CleanupAction *rollback_action = nullptr;
+	if (!published && created_cleanup) {
+		// A failed create never publishes a binding, so its core enrollment must
+		// be retired before releasing the owner's last private reference.
+		MutexLock lock(_instance_binding_mutex);
+		rollback_action = _detach_unused_release_lifetime(candidate.owner.get_reference().get_generation(), created_cleanup);
+	}
 #ifdef TOOLS_ENABLED
-		if (!_extension && Engine::get_singleton()->is_extension_reloading_enabled()) {
-			GDExtensionManager::get_singleton()->track_instance_binding(p_token, this);
-		}
-#endif
-
-		_instance_binding_count++;
+	if (published && !_extension && Engine::get_singleton()->is_extension_reloading_enabled()) {
+		GDExtensionManager::get_singleton()->track_instance_binding(p_token, this);
 	}
-
-	return binding;
+#endif
+	{
+		MutexLock lock(_instance_binding_mutex);
+		_binding_mutation = false;
+	}
+	if (!published) { candidate.lifetime.record_core_disposal(); }
+	if (rollback_action) {
+		rollback_action->record_core_disposal();
+		memdelete(rollback_action);
+	}
+	record_binding_entry_result(result);
+	return published ? candidate.binding : nullptr;
 }
 
 bool Object::has_instance_binding(void *p_token) {
 	bool found = false;
 	MutexLock instance_binding_lock(_instance_binding_mutex);
-	for (uint32_t i = 0; i < _instance_binding_count; i++) {
+	for (uint32_t i = 0; i < _instance_bindings.size(); i++) {
 		if (_instance_bindings[i].token == p_token) {
 			found = true;
 			break;
@@ -2214,69 +2837,254 @@ bool Object::has_instance_binding(void *p_token) {
 }
 
 void Object::free_instance_binding(void *p_token) {
-	bool found = false;
-	MutexLock instance_binding_lock(_instance_binding_mutex);
-	for (uint32_t i = 0; i < _instance_binding_count; i++) {
-		if (!found && _instance_bindings[i].token == p_token) {
-			if (_instance_bindings[i].free_callback) {
-				_instance_bindings[i].free_callback(_instance_bindings[i].token, this, _instance_bindings[i].binding);
-			}
-			found = true;
+	InstanceBinding retiring;
+	uint32_t index = UINT32_MAX;
+	{
+		MutexLock lock(_instance_binding_mutex);
+		if (_binding_mutation || _binding_read_cohorts != 0) {
+			GDExtensionDeviceExit::stop_lifetime_entry(GDExtensionDeviceExit::LifetimeFailure::ASSOCIATION_BUSY);
 		}
-		if (found) {
-			if (i + 1 < _instance_binding_count) {
-				_instance_bindings[i] = _instance_bindings[i + 1];
-			} else {
-				_instance_bindings[i] = { nullptr };
+		if (_binding_version == UINT64_MAX) {
+			GDExtensionDeviceExit::stop_lifetime_entry(GDExtensionDeviceExit::LifetimeFailure::LIMIT);
+		}
+		for (uint32_t i = 0; i < _instance_bindings.size(); i++) {
+			if (_instance_bindings[i].token == p_token) {
+				retiring = _instance_bindings[i];
+				index = i;
+				_binding_mutation = true;
+				break;
 			}
 		}
 	}
-	if (found) {
-		_instance_binding_count--;
+	if (index == UINT32_MAX) {
+		return;
 	}
+	std::optional<GDExtensionDeviceExit::CallbackScope> frame;
+	std::optional<GDExtensionDeviceExit::CleanupScope> cleanup;
+	if (retiring.free_callback && retiring.owner.get_reference().is_valid()) {
+		frame.emplace(retiring.owner.get_reference());
+		if (frame->get_error() != OK) {
+			if (frame->get_error() == ERR_BUSY) {
+				const auto &record = retiring.owner.get_reference();
+				for (const ReleaseLifetime &lifetime : _release_lifetimes) {
+					if (lifetime.generation == record.get_generation()) {
+						cleanup.emplace(*lifetime.action, record, uint64_t(_instance_id), lifetime.action_id);
+						break;
+					}
+				}
+			}
+			if (!cleanup || cleanup->get_error() != OK) {
+				GDExtensionDeviceExit::stop_lifetime_entry(GDExtensionDeviceExit::LifetimeFailure::UNREGISTERED);
+			}
+		}
+	}
+	GDExtensionDeviceExit::CleanupAction *retired_action = nullptr;
+	if (retiring.free_callback) {
+		retiring.free_callback(p_token, this, retiring.binding);
+	}
+	{
+		MutexLock lock(_instance_binding_mutex);
+		if (retiring.primary) {
+			_instance_bindings[index] = InstanceBinding();
+			_instance_bindings[index].primary = true;
+		} else {
+			_instance_bindings.remove_at(index);
+		}
+		_binding_version++;
+		retired_action = _detach_unused_release_lifetime(retiring.owner.get_reference().get_generation());
+		_binding_mutation = false;
+	}
+	if (retired_action) {
+		retired_action->record_core_disposal();
+		memdelete(retired_action);
+	}
+	retiring.lifetime.record_core_disposal();
+	// Local retiring metadata keeps the holder until after the actual return.
 }
 
 #ifdef TOOLS_ENABLED
 void Object::clear_internal_extension() {
 	ERR_FAIL_NULL(_extension);
-
-	// Free the instance inside the GDExtension.
+	InstanceBinding retiring;
+	bool primary_present = false;
+	{
+		MutexLock lock(_instance_binding_mutex);
+		if (_binding_mutation || _binding_read_cohorts != 0) {
+			GDExtensionDeviceExit::stop_lifetime_entry(GDExtensionDeviceExit::LifetimeFailure::ASSOCIATION_BUSY);
+		}
+		if (_binding_version == UINT64_MAX) {
+			GDExtensionDeviceExit::stop_lifetime_entry(GDExtensionDeviceExit::LifetimeFailure::LIMIT);
+		}
+		_binding_mutation = true;
+		primary_present = !_instance_bindings.is_empty() && _instance_bindings[0].primary;
+		if (primary_present) {
+			retiring = _instance_bindings[0];
+		}
+	}
+	ObjectExtensionCallbackScope direct_frame(_extension);
+	std::optional<GDExtensionDeviceExit::CleanupScope> direct_cleanup;
+	const auto &direct_record = _extension->callback_record.get_reference();
+	if (direct_frame.get_error() != OK) {
+		if (direct_frame.get_error() == ERR_BUSY) {
+			for (const ReleaseLifetime &lifetime : _release_lifetimes) {
+				if (lifetime.generation == direct_record.get_generation()) {
+					direct_cleanup.emplace(*lifetime.action, direct_record, uint64_t(_instance_id), lifetime.action_id);
+					break;
+				}
+			}
+		}
+		if (!direct_cleanup || direct_cleanup->get_error() != OK) {
+			GDExtensionDeviceExit::stop_lifetime_entry(GDExtensionDeviceExit::LifetimeFailure::UNREGISTERED);
+		}
+	}
+	std::optional<GDExtensionDeviceExit::CallbackScope> binding_frame;
+	std::optional<GDExtensionDeviceExit::CleanupScope> binding_cleanup;
+	if (retiring.free_callback && retiring.owner.get_reference().is_valid()) {
+		binding_frame.emplace(retiring.owner.get_reference());
+		if (binding_frame->get_error() != OK) {
+			const auto &binding_record = retiring.owner.get_reference();
+			const bool inherited_cleanup = direct_cleanup && binding_record.get_generation() == direct_record.get_generation();
+			if (!inherited_cleanup && binding_frame->get_error() == ERR_BUSY) {
+				for (const ReleaseLifetime &lifetime : _release_lifetimes) {
+					if (lifetime.generation == binding_record.get_generation()) {
+						binding_cleanup.emplace(*lifetime.action, binding_record, uint64_t(_instance_id), lifetime.action_id);
+						break;
+					}
+				}
+			}
+			if (!inherited_cleanup && (!binding_cleanup || binding_cleanup->get_error() != OK)) {
+				GDExtensionDeviceExit::stop_lifetime_entry(GDExtensionDeviceExit::LifetimeFailure::UNREGISTERED);
+			}
+		}
+	}
+	const uint64_t direct_generation = direct_record.get_generation();
+	GDExtensionDeviceExit::CleanupAction *retired_direct = nullptr;
+	GDExtensionDeviceExit::CleanupAction *retired_binding = nullptr;
+	// Both exact callbacks are admitted before either destructive body runs.
 	if (_extension->free_instance) {
+		GDExtensionDeviceExit::CallbackIdentityScope identity(direct_record);
 		_extension->free_instance(_extension->class_userdata, _extension_instance);
 	}
 	_extension = nullptr;
 	_extension_instance = nullptr;
-	// Reset GDType to internal type.
+	_extension_lifetime.record_core_disposal();
+	_extension_lifetime = GDExtensionDeviceExit::BindingLifetime();
 	_gdtype_ptr = &_get_typev();
-
-	// Clear the instance bindings.
-	_instance_binding_mutex.lock();
-	if (_instance_bindings) {
-		if (_instance_bindings[0].free_callback) {
-			_instance_bindings[0].free_callback(_instance_bindings[0].token, this, _instance_bindings[0].binding);
-		}
-		_instance_bindings[0].binding = nullptr;
-		_instance_bindings[0].token = nullptr;
-		_instance_bindings[0].free_callback = nullptr;
-		_instance_bindings[0].reference_callback = nullptr;
+	if (retiring.free_callback) {
+		GDExtensionDeviceExit::CallbackIdentityScope identity(retiring.owner.get_reference());
+		retiring.free_callback(retiring.token, this, retiring.binding);
 	}
-	_instance_binding_mutex.unlock();
-
-	// Clear the virtual methods.
 	while (virtual_method_list) {
 		(*virtual_method_list->method) = nullptr;
 		virtual_method_list = virtual_method_list->next;
 	}
+	{
+		MutexLock lock(_instance_binding_mutex);
+		if (primary_present) {
+			// Slot zero belongs to the direct extension. Keep it vacant so
+			// secondary bindings retain their role when reload republishes it.
+			_instance_bindings[0] = InstanceBinding();
+			_instance_bindings[0].primary = true;
+			_binding_version++;
+		}
+		retired_direct = _detach_unused_release_lifetime(direct_generation);
+		retired_binding = _detach_unused_release_lifetime(retiring.owner.get_reference().get_generation());
+		_binding_mutation = false;
+	}
+	if (retired_direct) {
+		retired_direct->record_core_disposal();
+		memdelete(retired_direct);
+	}
+	if (retired_binding) {
+		retired_binding->record_core_disposal();
+		memdelete(retired_binding);
+	}
+	retiring.lifetime.record_core_disposal();
+	// Retiring metadata keeps its code holder through both real returns.
 }
 
 void Object::reset_internal_extension(ObjectGDExtension *p_extension) {
 	ERR_FAIL_COND(_extension != nullptr);
 
 	if (p_extension) {
-		_extension_instance = p_extension->recreate_instance ? p_extension->recreate_instance(p_extension->class_userdata, (GDExtensionObjectPtr)this) : nullptr;
-		ERR_FAIL_NULL_MSG(_extension_instance, "Unable to recreate GDExtension instance - does this extension support hot reloading?");
-		_extension = p_extension;
-		_gdtype_ptr = p_extension->gdtype;
+		{
+			MutexLock lock(_instance_binding_mutex);
+			if (_binding_mutation || _binding_read_cohorts != 0) {
+				GDExtensionDeviceExit::stop_lifetime_entry(GDExtensionDeviceExit::LifetimeFailure::ASSOCIATION_BUSY);
+			}
+			if (_binding_version == UINT64_MAX) {
+				GDExtensionDeviceExit::stop_lifetime_entry(GDExtensionDeviceExit::LifetimeFailure::LIMIT);
+			}
+			_binding_mutation = true;
+		}
+		ObjectExtensionCallbackScope constructor_frame(p_extension);
+		if (constructor_frame.get_error() != OK) {
+			MutexLock lock(_instance_binding_mutex);
+			_binding_mutation = false;
+			return;
+		}
+		GDExtensionDeviceExit::BindingLifetime lifetime;
+		if (!p_extension->is_placeholder) {
+			const Error held = lifetime.acquire_core(p_extension->callback_record.get_reference());
+			if (held != OK) {
+				GDExtensionDeviceExit::stop_lifetime_entry(held == ERR_PARAMETER_RANGE_ERROR ? GDExtensionDeviceExit::LifetimeFailure::LIMIT : GDExtensionDeviceExit::LifetimeFailure::UNREGISTERED);
+			}
+		}
+		GDExtensionDeviceExit::CleanupAction *created_cleanup = nullptr;
+		if (!p_extension->is_placeholder) {
+			const Error registered = register_core_release_lifetime(p_extension->callback_record.get_reference(), Thread::get_caller_id(), uint64_t(_instance_id), &created_cleanup);
+			if (registered != OK && registered != ERR_ALREADY_EXISTS) {
+				MutexLock lock(_instance_binding_mutex);
+				_binding_mutation = false;
+				GDExtensionDeviceExit::record_binding_entry_result(registered);
+				return;
+			}
+		}
+		lifetime.bind_core_action(uint64_t(_instance_id));
+		auto rollback_cleanup = [&]() {
+			lifetime.record_core_disposal();
+			GDExtensionDeviceExit::CleanupAction *retired = nullptr;
+			{
+				MutexLock lock(_instance_binding_mutex);
+				if (created_cleanup) {
+					retired = _detach_unused_release_lifetime(p_extension->callback_record.get_reference().get_generation(), created_cleanup);
+				}
+				_binding_mutation = false;
+			}
+			if (retired) {
+				retired->record_core_disposal();
+				memdelete(retired);
+			}
+		};
+		GDExtensionClassInstancePtr recreated = p_extension->recreate_instance ? p_extension->recreate_instance(p_extension->class_userdata, (GDExtensionObjectPtr)this) : nullptr;
+		if (!recreated) {
+			rollback_cleanup();
+		}
+		ERR_FAIL_NULL_MSG(recreated, "Unable to recreate GDExtension instance - does this extension support hot reloading?");
+		bool published = false;
+		{
+			MutexLock lock(_instance_binding_mutex);
+			std::optional<GDExtensionDeviceExit::BindingPublicationScope> publication;
+			if (!p_extension->is_placeholder) {
+				publication.emplace(p_extension->callback_record.get_reference());
+			}
+			if (!publication || publication->get_error() == OK) {
+				_extension_instance = recreated;
+				_extension_lifetime = std::move(lifetime);
+				_extension = p_extension;
+				_gdtype_ptr = p_extension->gdtype;
+				_binding_version++;
+				_binding_mutation = false;
+				published = true;
+			}
+		}
+		if (!published) {
+			// Completion of the pre-G1 accepted recreation, not a new cleanup
+			// admission. Keep its frame/holder through the actual free return.
+			p_extension->free_instance(p_extension->class_userdata, recreated);
+			rollback_cleanup();
+			GDExtensionDeviceExit::record_binding_entry_result(ERR_UNAVAILABLE);
+		}
 	}
 }
 #endif
@@ -2287,6 +3095,8 @@ void Object::_construct_object(bool p_reference) {
 	_emitting = false;
 	_is_queued_for_deletion = false;
 	_predelete_ok = false;
+	_deletion_in_progress = false;
+	_native_continuations_invalidated = false;
 
 	// ObjectDB::add_instance relies on AncestralClass::REF_COUNTED
 	// being already set in the case of references.
@@ -2319,6 +3129,9 @@ void Object::detach_from_objectdb() {
 }
 
 Object::~Object() {
+	const uint64_t release_object_id = uint64_t(_instance_id);
+	_deletion_in_progress = true;
+	_invalidate_native_continuations();
 	if (_emitting) {
 		//@todo this may need to actually reach the debugger prioritarily somehow because it may crash before
 		ERR_PRINT(vformat("Object '%s' was freed or unreferenced while a signal is being emitted from it. Try connecting to the signal using 'CONNECT_DEFERRED' flag, or use queue_free() to free the object (if this object is a Node) to avoid this error and potential crashes.", to_string()));
@@ -2357,18 +3170,46 @@ Object::~Object() {
 	}
 	_predelete_ok = true;
 
-	if (_instance_bindings != nullptr) {
-		for (uint32_t i = 0; i < _instance_binding_count; i++) {
+	if (!_instance_bindings.is_empty()) {
+		for (uint32_t i = 0; i < _instance_bindings.size(); i++) {
 			if (_instance_bindings[i].free_callback) {
+				std::optional<GDExtensionDeviceExit::CallbackScope> frame;
+				std::optional<GDExtensionDeviceExit::CleanupScope> cleanup;
+				if (_instance_bindings[i].owner.get_reference().is_valid()) {
+					frame.emplace(_instance_bindings[i].owner.get_reference());
+					if (frame->get_error() != OK) {
+						if (frame->get_error() == ERR_BUSY) {
+							const uint64_t generation = _instance_bindings[i].owner.get_reference().get_generation();
+							for (const ReleaseLifetime &lifetime : _release_lifetimes) {
+								if (lifetime.generation == generation) {
+									cleanup.emplace(*lifetime.action, _instance_bindings[i].owner.get_reference(), release_object_id, lifetime.action_id);
+									break;
+								}
+							}
+						}
+						if (!cleanup || cleanup->get_error() != OK) {
+							GDExtensionDeviceExit::stop_lifetime_entry(GDExtensionDeviceExit::LifetimeFailure::UNREGISTERED);
+						}
+					}
+				}
 				_instance_bindings[i].free_callback(_instance_bindings[i].token, this, _instance_bindings[i].binding);
+				_instance_bindings[i].lifetime.record_core_disposal();
 			}
+			_instance_bindings[i].lifetime.record_core_disposal();
 		}
-		memfree(_instance_bindings);
+		_instance_bindings.clear();
 	}
 
 	if (signal_mutex) {
 		memdelete(signal_mutex);
 	}
+	// Retire the registered authority only after all associated callbacks return.
+	// No metadata lock is held while releasing generation ownership.
+	for (const ReleaseLifetime &lifetime : _release_lifetimes) {
+		lifetime.action->record_core_disposal();
+		memdelete(lifetime.action);
+	}
+	_release_lifetimes.clear();
 }
 
 bool predelete_handler(Object *p_object) {

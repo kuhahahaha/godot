@@ -2410,6 +2410,61 @@ Error RenderingDeviceDriverD3D12::fence_wait(FenceID p_fence) {
 	return (res == WAIT_FAILED) ? FAILED : OK;
 }
 
+RenderingDeviceDriver::FencePollResult RenderingDeviceDriverD3D12::fence_poll(FenceID p_fence, uint64_t p_expected_submission_serial) {
+	FenceInfo *fence = (FenceInfo *)(p_fence.id);
+	FencePollResult out;
+	out.completed_serial = fence->fence_value;
+	const UINT64 completed = fence->d3d_fence->GetCompletedValue();
+	if (completed == UINT64_MAX) {
+		out.native_code = static_cast<int64_t>(device->GetDeviceRemovedReason());
+		out.native_error = true;
+		return out;
+	}
+	if (fence->armed && p_expected_submission_serial != 0 && p_expected_submission_serial == fence->fence_value && completed >= fence->fence_value && fence->fence_value != 0) {
+		out.completed = true;
+		out.completed_serial = fence->fence_value;
+		fence->observed = true;
+	}
+	return out;
+}
+
+RenderingDeviceDriver::FencePollResult RenderingDeviceDriverD3D12::fence_wait_observed(FenceID p_fence, uint64_t p_expected_submission_serial) {
+	FenceInfo *fence = (FenceInfo *)(p_fence.id);
+	FencePollResult out;
+	out.completed_serial = fence->fence_value;
+	if (!fence->armed || p_expected_submission_serial == 0 || p_expected_submission_serial != fence->fence_value) {
+		out.native_error = true;
+		out.native_code = ERR_INVALID_PARAMETER;
+		return out;
+	}
+	HRESULT result = fence->d3d_fence->SetEventOnCompletion(fence->fence_value, fence->event_handle);
+	if (FAILED(result)) {
+		out.native_error = true;
+		out.native_code = static_cast<int64_t>(result);
+		return out;
+	}
+	DWORD wait_result = WaitForSingleObjectEx(fence->event_handle, INFINITE, FALSE);
+#ifdef PIX_ENABLED
+	PIXNotifyWakeFromFenceSignal(fence->event_handle);
+#endif
+	if (wait_result != WAIT_OBJECT_0) {
+		out.native_error = true;
+		out.native_code = wait_result == WAIT_FAILED ? static_cast<int64_t>(GetLastError()) : static_cast<int64_t>(wait_result);
+		return out;
+	}
+	return fence_poll(p_fence, p_expected_submission_serial);
+}
+
+Error RenderingDeviceDriverD3D12::fence_recycle(FenceID p_fence, uint64_t p_completed_serial) {
+	FenceInfo *fence = (FenceInfo *)(p_fence.id);
+	if (p_completed_serial == 0 || p_completed_serial != fence->fence_value || !fence->armed || !fence->observed) {
+		return ERR_INVALID_PARAMETER;
+	}
+	fence->armed = false;
+	fence->observed = false;
+	return OK;
+}
+
 void RenderingDeviceDriverD3D12::fence_free(FenceID p_fence) {
 	FenceInfo *fence = (FenceInfo *)(p_fence.id);
 	CloseHandle(fence->event_handle);
@@ -2474,10 +2529,37 @@ RDD::CommandQueueID RenderingDeviceDriverD3D12::command_queue_create(CommandQueu
 }
 
 Error RenderingDeviceDriverD3D12::command_queue_execute_and_present(CommandQueueID p_cmd_queue, VectorView<SemaphoreID> p_wait_semaphores, VectorView<CommandBufferID> p_cmd_buffers, VectorView<SemaphoreID> p_cmd_semaphores, FenceID p_cmd_fence, VectorView<SwapChainID> p_swap_chains) {
+	reset_queue_call_report();
+	// UINT64_MAX is D3D12's device-removal sentinel, not a valid batch value.
+	if (p_cmd_fence && ((FenceInfo *)p_cmd_fence.id)->fence_value >= UINT64_MAX - 1) {
+		QueueCallReport report;
+		report.error = ERR_UNAVAILABLE;
+		record_queue_call_report(report);
+		return ERR_UNAVAILABLE;
+	}
 	CommandQueueInfo *command_queue = (CommandQueueInfo *)(p_cmd_queue.id);
+	QueueCallReport report;
+	report.present_attempted = p_swap_chains.size() > 0;
+	report.calls.reserve(2 + p_wait_semaphores.size() + p_cmd_semaphores.size() + p_swap_chains.size());
 	for (uint32_t i = 0; i < p_wait_semaphores.size(); i++) {
 		const SemaphoreInfo *semaphore = (const SemaphoreInfo *)(p_wait_semaphores[i].id);
-		command_queue->d3d_queue->Wait(semaphore->d3d_fence.Get(), semaphore->fence_value);
+		const HRESULT wait_result = command_queue->d3d_queue->Wait(semaphore->d3d_fence.Get(), semaphore->fence_value);
+		if (FAILED(wait_result)) {
+			report.native_code = static_cast<int64_t>(wait_result);
+			report.error = FAILED;
+			NativeCallFact fact;
+			fact.issue = IssueFact::NotIssued;
+			fact.native_code = static_cast<int64_t>(wait_result);
+			fact.error = FAILED;
+			report.calls.push_back(fact);
+			record_queue_call_report(report);
+			return FAILED;
+		}
+		NativeCallFact wait_fact;
+		wait_fact.issue = IssueFact::KnownAccepted;
+		wait_fact.native_code = static_cast<int64_t>(wait_result);
+		wait_fact.error = OK;
+		report.calls.push_back(wait_fact);
 	}
 
 	if (p_cmd_buffers.size() > 0) {
@@ -2489,17 +2571,65 @@ Error RenderingDeviceDriverD3D12::command_queue_execute_and_present(CommandQueue
 		}
 
 		command_queue->d3d_queue->ExecuteCommandLists(command_lists.size(), command_lists.ptr());
+		report.issued = true;
+		NativeCallFact execute_fact;
+		execute_fact.issue = IssueFact::IssuedUnknown;
+		execute_fact.error = OK;
+		report.calls.push_back(execute_fact);
 
 		for (uint32_t i = 0; i < p_cmd_semaphores.size(); i++) {
 			SemaphoreInfo *semaphore = (SemaphoreInfo *)(p_cmd_semaphores[i].id);
-			semaphore->fence_value++;
-			command_queue->d3d_queue->Signal(semaphore->d3d_fence.Get(), semaphore->fence_value);
+			const UINT64 signal_value = semaphore->fence_value + 1;
+			const HRESULT signal_result = command_queue->d3d_queue->Signal(semaphore->d3d_fence.Get(), signal_value);
+			if (FAILED(signal_result)) {
+				report.native_code = static_cast<int64_t>(signal_result);
+				report.error = FAILED;
+			NativeCallFact fact;
+			fact.issue = IssueFact::IssuedUnknown;
+			fact.native_code = static_cast<int64_t>(signal_result);
+			fact.error = FAILED;
+			fact.completion = CompletionCapability::None;
+			report.calls.push_back(fact);
+				record_queue_call_report(report);
+				return FAILED;
+			}
+			semaphore->fence_value = signal_value;
+			NativeCallFact signal_fact;
+			signal_fact.issue = IssueFact::KnownAccepted;
+			signal_fact.native_code = static_cast<int64_t>(signal_result);
+			signal_fact.error = OK;
+			signal_fact.completion = CompletionCapability::Fence;
+			signal_fact.completion_serial = semaphore->fence_value;
+			report.calls.push_back(signal_fact);
 		}
 
 		if (p_cmd_fence) {
 			FenceInfo *fence = (FenceInfo *)(p_cmd_fence.id);
-			fence->fence_value++;
-			command_queue->d3d_queue->Signal(fence->d3d_fence.Get(), fence->fence_value);
+			const UINT64 signal_value = fence->fence_value + 1;
+			const HRESULT signal_result = command_queue->d3d_queue->Signal(fence->d3d_fence.Get(), signal_value);
+			if (FAILED(signal_result)) {
+				report.native_code = static_cast<int64_t>(signal_result);
+				report.error = FAILED;
+			NativeCallFact fact;
+			fact.issue = IssueFact::IssuedUnknown;
+			fact.native_code = static_cast<int64_t>(signal_result);
+			fact.error = FAILED;
+			fact.completion = CompletionCapability::None;
+				report.calls.push_back(fact);
+				record_queue_call_report(report);
+				return FAILED;
+			}
+			fence->fence_value = signal_value;
+			report.submission_serial = fence->fence_value;
+			fence->armed = true;
+			fence->observed = false;
+			NativeCallFact signal_fact;
+			signal_fact.issue = IssueFact::KnownAccepted;
+			signal_fact.native_code = static_cast<int64_t>(signal_result);
+			signal_fact.error = OK;
+			signal_fact.completion = CompletionCapability::Fence;
+			signal_fact.completion_serial = report.submission_serial;
+			report.calls.push_back(signal_fact);
 		}
 	}
 
@@ -2512,8 +2642,17 @@ Error RenderingDeviceDriverD3D12::command_queue_execute_and_present(CommandQueue
 			print_verbose(vformat("D3D12: Presenting swapchain failed with error 0x%08ux.", (uint64_t)res));
 			any_present_failed = true;
 		}
+		NativeCallFact present_fact;
+		present_fact.issue = SUCCEEDED(res) ? IssueFact::KnownAccepted : IssueFact::NotIssued;
+		present_fact.native_code = static_cast<int64_t>(res);
+		present_fact.error = SUCCEEDED(res) ? OK : FAILED;
+		present_fact.present = true;
+		report.calls.push_back(present_fact);
 	}
 
+	NativeCallFact fact;
+	report.error = any_present_failed ? FAILED : OK;
+	record_queue_call_report(report);
 	return any_present_failed ? FAILED : OK;
 }
 

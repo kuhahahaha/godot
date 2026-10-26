@@ -38,7 +38,18 @@
 #include "core/templates/tuple.h"
 #include "core/typedefs.h"
 
+#ifdef TESTS_ENABLED
+namespace TestCommandQueueBounded { class Access; }
+namespace TestCommandQueue {
+class LockAccessor;
+}
+#endif
+
 class CommandQueueMT {
+#ifdef TESTS_ENABLED
+	friend class TestCommandQueue::LockAccessor;
+	friend class TestCommandQueueBounded::Access;
+#endif
 	static const size_t MAX_COMMAND_SIZE = 1024;
 
 	struct CommandBase {
@@ -119,24 +130,30 @@ class CommandQueueMT {
 	uint64_t flush_read_ptr = 0;
 	std::atomic<bool> pending{ false };
 
-	template <typename T, typename... Args>
-	_FORCE_INLINE_ void create_command(Args &&...p_args) {
-		// alloc size is size+T+safeguard
+	template <typename T>
+	_FORCE_INLINE_ void create_command(const T *p_command) {
 		constexpr uint64_t alloc_size = ((sizeof(T) + 8U - 1U) & ~(8U - 1U));
-		static_assert(alloc_size < UINT32_MAX, "Type too large to fit in the command queue.");
+		static_assert(alloc_size <= MAX_COMMAND_SIZE);
+		static_assert(alignof(T) <= alignof(uint64_t));
 
 		uint64_t size = command_mem.size();
 		command_mem.resize(size + alloc_size + sizeof(uint64_t));
 		*(uint64_t *)&command_mem[size] = alloc_size;
-		void *cmd = &command_mem[size + sizeof(uint64_t)];
-		memnew_placement(cmd, T(std::forward<Args>(p_args)...));
+		// Commands already use byte relocation while growing and flushing this
+		// buffer. Transfer the staged owner without copying its arguments again.
+		memcpy(&command_mem[size + sizeof(uint64_t)], static_cast<const void *>(p_command), sizeof(T));
 		pending.store(true);
 	}
 
 	template <typename T, bool NeedsSync, typename... Args>
 	_FORCE_INLINE_ void _push_internal(Args &&...args) {
+		// Argument construction may reenter this queue. Do it before locking or
+		// reserving a buffer address, then publish the complete command at once.
+		alignas(T) char staged_mem[sizeof(T)];
+		T *staged = memnew_placement(staged_mem, T(std::forward<Args>(args)...));
 		MutexLock mlock(mutex);
-		create_command<T>(std::forward<Args>(args)...);
+		create_command(staged);
+		// The queue now owns the payload; raw staging storage is not destroyed.
 
 		if (pump_task_id != WorkerThreadPool::INVALID_TASK_ID) {
 			WorkerThreadPool::get_singleton()->notify_yield_over(pump_task_id);
@@ -190,18 +207,19 @@ class CommandQueueMT {
 
 			lock.temp_unlock();
 			cmd_local->call();
+			const bool needs_sync = cmd_local->sync;
+			// Keep the active cursor claimed through callback-capable cleanup.
+			// Reentrant pushes may grow command_mem while this owner stays local.
+			cmd_local->~CommandBase();
 			lock.temp_relock();
+			flush_read_ptr += size;
 
-			if (unlikely(cmd_local->sync)) {
+			if (unlikely(needs_sync)) {
 				sync_head++;
 				lock.temp_unlock(); // Give an opportunity to awaiters right away.
 				sync_cond_var.notify_all();
 				lock.temp_relock();
 			}
-
-			cmd_local->~CommandBase();
-
-			flush_read_ptr += size;
 		}
 
 		command_mem.clear();
@@ -226,8 +244,29 @@ class CommandQueueMT {
 	void _no_op() {}
 
 public:
-	template <typename T, typename M, typename... Args>
-	void push(T *p_instance, M p_method, Args &&...p_args) {
+ // Narrow maintenance path: scalar values cannot run a copying destructor or
+ // reenter the queue while its short publication lock is held. Full/contended
+ // refusal constructs nothing and preserves the caller's retained work.
+ template <typename T, typename M, typename... Args>
+ bool try_push_bounded(uint64_t p_max_pending_bytes, T *p_instance, M p_method, Args... p_args) {
+  static_assert(((std::is_integral_v<Args> || std::is_enum_v<Args>) && ...), "Bounded maintenance commands carry only scalar identities.");
+  using CommandType = Command<T, M, false, Args...>;
+  constexpr uint64_t bytes=((sizeof(CommandType)+7U)&~uint64_t(7U))+sizeof(uint64_t);
+  static_assert(sizeof(CommandType)<=MAX_COMMAND_SIZE);
+  if (bytes>p_max_pending_bytes || !mutex.try_lock()) return false;
+  const uint64_t used=command_mem.size();
+  if (used>p_max_pending_bytes-bytes) { mutex.unlock();return false; }
+  alignas(CommandType) char staged_mem[sizeof(CommandType)];
+  CommandType *staged=memnew_placement(staged_mem,CommandType(p_instance,p_method,p_args...));
+  create_command(staged);
+  const auto task=pump_task_id;
+  mutex.unlock();
+  if (task!=WorkerThreadPool::INVALID_TASK_ID) WorkerThreadPool::get_singleton()->notify_yield_over(task);
+  return true;
+ }
+
+ template <typename T, typename M, typename... Args>
+ void push(T *p_instance, M p_method, Args &&...p_args) {
 		// Standard command, no sync.
 		using CommandType = Command<T, M, false, Args...>;
 		static_assert(sizeof(CommandType) <= MAX_COMMAND_SIZE);

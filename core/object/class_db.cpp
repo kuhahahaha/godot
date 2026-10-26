@@ -36,6 +36,14 @@
 #include "core/templates/sort_array.h"
 #include "core/version.h"
 
+#include <optional>
+
+#ifdef TESTS_ENABLED
+namespace ObjectAssociationTest {
+void (*before_direct_publication)() = nullptr;
+}
+#endif
+
 #define ERR_FAIL_NO_CLASS(m_type, m_class) ERR_FAIL_NULL_MSG(m_type, vformat("Cannot get class \"%s\".", m_class))
 
 #ifdef DEBUG_ENABLED
@@ -540,6 +548,18 @@ StringName ClassDB::get_compatibility_class(const StringName &p_class) {
 }
 
 Object *ClassDB::_instantiate_from_gdextension(ObjectGDExtension *p_object_gd_extension, bool p_notify_postinitialize, bool p_with_refcount) {
+	// This frame also spans the original init_ref/deinit_ref adjustment below.
+	// ClassDB placeholders contain only core callbacks and need no DSO permit.
+	std::optional<GDExtensionDeviceExit::CallbackScope> constructor_frame;
+#ifdef TOOLS_ENABLED
+	if (!p_object_gd_extension->is_placeholder)
+#endif
+	{
+		constructor_frame.emplace(p_object_gd_extension->callback_record.get_reference());
+		if (constructor_frame->get_error() != OK) {
+			return nullptr;
+		}
+	}
 	if (p_with_refcount) {
 		if (p_object_gd_extension->create_instance3 != nullptr) {
 			// Caller expects refcount=1, creation func returns with refcount=1. It's a match.
@@ -641,6 +661,10 @@ Object *ClassDB::_instantiate_internal(const StringName &p_class, bool p_require
 		return _instantiate_from_gdextension(extension, p_notify_postinitialize, p_with_refcount);
 	} else if (ti->gdextension && ti->gdextension->create_instance) {
 		ObjectGDExtension *extension = ti->gdextension;
+		GDExtensionDeviceExit::CallbackScope constructor_frame(extension->callback_record.get_reference());
+		if (constructor_frame.get_error() != OK) {
+			return nullptr;
+		}
 		return (Object *)extension->create_instance(extension->class_userdata);
 	}
 #endif // DISABLE_DEPRECATED
@@ -739,6 +763,7 @@ ObjectGDExtension *ClassDB::get_placeholder_extension(const StringName &p_class)
 	placeholder_extension->is_placeholder = true;
 
 	if (ti->gdextension) {
+		placeholder_extension->callback_record = ti->gdextension->callback_record;
 		placeholder_extension->library = ti->gdextension->library;
 		placeholder_extension->parent = ti->gdextension->parent;
 		placeholder_extension->children = ti->gdextension->children;
@@ -827,16 +852,96 @@ void ClassDB::set_object_extension_instance(Object *p_object, const StringName &
 		ERR_FAIL_NULL_MSG(ti->gdextension, vformat("Class '%s' has no native extension.", String(p_class)));
 	}
 
-	p_object->_extension = ti->gdextension;
-	p_object->_extension_instance = p_instance;
-
-	p_object->_reset_gdtype();
+	bool already_associated = false;
+	{
+		MutexLock lock(p_object->_instance_binding_mutex);
+		if (p_object->_binding_mutation || p_object->_binding_read_cohorts != 0) {
+			GDExtensionDeviceExit::stop_lifetime_entry(GDExtensionDeviceExit::LifetimeFailure::ASSOCIATION_BUSY);
+		}
+		if (p_object->_binding_version == UINT64_MAX) {
+			GDExtensionDeviceExit::stop_lifetime_entry(GDExtensionDeviceExit::LifetimeFailure::LIMIT);
+		}
+		already_associated = p_object->_extension == ti->gdextension && p_object->_extension_instance == p_instance;
+		p_object->_binding_mutation = true;
+	}
+	if (already_associated) {
+#ifdef TOOLS_ENABLED
+		if (!ti->gdextension->is_placeholder)
+#endif
+		{
+			GDExtensionDeviceExit::CallbackScope frame(ti->gdextension->callback_record.get_reference());
+			if (frame.get_error() != OK) {
+				GDExtensionDeviceExit::stop_lifetime_entry(GDExtensionDeviceExit::LifetimeFailure::UNREGISTERED);
+			}
+		}
+		MutexLock lock(p_object->_instance_binding_mutex);
+		p_object->_binding_mutation = false;
+		return;
+	}
+	GDExtensionDeviceExit::BindingLifetime lifetime;
+#ifdef TOOLS_ENABLED
+	if (!ti->gdextension->is_placeholder)
+#endif
+	{
+		const Error held = lifetime.acquire_core(ti->gdextension->callback_record.get_reference());
+		if (held != OK) {
+			GDExtensionDeviceExit::stop_lifetime_entry(held == ERR_PARAMETER_RANGE_ERROR ? GDExtensionDeviceExit::LifetimeFailure::LIMIT : GDExtensionDeviceExit::LifetimeFailure::UNREGISTERED);
+		}
+	}
+	GDExtensionDeviceExit::CallbackScope frame(ti->gdextension->callback_record.get_reference());
+#ifdef TOOLS_ENABLED
+	if (!ti->gdextension->is_placeholder)
+#endif
+	{
+		if (frame.get_error() != OK) {
+			GDExtensionDeviceExit::stop_lifetime_entry(GDExtensionDeviceExit::LifetimeFailure::UNREGISTERED);
+		}
+	}
+	// Reserve the exact cleanup permit before publishing the direct extension
+	// association.  The same object/record ticket is shared with later binding
+	// holders and is consumed only after the real free callback returns.
+	const Error cleanup_registration = p_object->register_core_release_lifetime(
+			ti->gdextension->callback_record.get_reference(), Thread::get_caller_id(), uint64_t(p_object->get_instance_id()));
+	if (cleanup_registration != OK && cleanup_registration != ERR_ALREADY_EXISTS) {
+		GDExtensionDeviceExit::stop_lifetime_entry(GDExtensionDeviceExit::LifetimeFailure::UNREGISTERED);
+	}
+	lifetime.bind_core_action(uint64_t(p_object->get_instance_id()));
+#ifdef TESTS_ENABLED
+	if (ObjectAssociationTest::before_direct_publication) {
+		ObjectAssociationTest::before_direct_publication();
+	}
+#endif
+	GDExtensionDeviceExit::BindingLifetime retired_lifetime;
+	{
+		MutexLock lock(p_object->_instance_binding_mutex);
+		std::optional<GDExtensionDeviceExit::BindingPublicationScope> publication;
+#ifdef TOOLS_ENABLED
+		if (!ti->gdextension->is_placeholder)
+#endif
+		{
+			publication.emplace(ti->gdextension->callback_record.get_reference());
+		}
+		if (publication && publication->get_error() != OK) {
+			GDExtensionDeviceExit::stop_lifetime_entry(GDExtensionDeviceExit::LifetimeFailure::UNREGISTERED);
+		}
+		// Retire any previous holder outside the generation publication lock.
+		retired_lifetime = std::move(p_object->_extension_lifetime);
+		p_object->_extension_lifetime = std::move(lifetime);
+		p_object->_extension = ti->gdextension;
+		p_object->_extension_instance = p_instance;
+		p_object->_gdtype_ptr = ti->gdextension->gdtype;
+	}
 
 #ifdef TOOLS_ENABLED
 	if (p_object->_extension->track_instance) {
 		p_object->_extension->track_instance(p_object->_extension->tracking_userdata, p_object);
 	}
 #endif
+	{
+		MutexLock lock(p_object->_instance_binding_mutex);
+		p_object->_binding_version++;
+		p_object->_binding_mutation = false;
+	}
 }
 
 bool ClassDB::can_instantiate(const StringName &p_class) {

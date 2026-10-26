@@ -48,6 +48,30 @@
 
 class RenderingDeviceGraph {
 public:
+	// Identity of a command actually copied into this graph's record storage.
+	// A compute instruction remains inside its list until add_compute_list_end;
+	// its list index and byte offset are both needed to identify it exactly.
+	struct RecordHandle {
+		uint64_t graph_instance = 0;
+		uint64_t graph_frame = 0;
+		uint32_t kind = 0; // 1 = graph command, 2 = compute-list instruction.
+		uint32_t index = 0;
+		uint32_t offset = 0;
+		bool is_valid() const { return graph_instance != 0 && graph_frame != 0 && kind != 0; }
+	};
+	enum class RecordMappingState : uint8_t {
+		Invalid,
+		Pending,
+		Recorded,
+		Failed,
+		Unknown,
+	};
+	bool contains_record(const RecordHandle &p_handle) const;
+	bool has_driver_callbacks() const;
+ uint32_t qualification_command_count() const {return command_count;}
+ bool has_synchronization_edge(const RecordHandle &p_before, const RecordHandle &p_after) const;
+	RecordMappingState record_mapping_state(const RecordHandle &p_handle) const;
+	bool resolve_record_command_buffer_slot(const RecordHandle &p_handle, uint32_t &r_slot) const;
 	struct RaytracingListInstruction {
 		enum Type {
 			TYPE_NONE,
@@ -125,6 +149,7 @@ public:
 
 		Type type = TYPE_NONE;
 		int32_t adjacent_command_list_index = -1;
+		int32_t consumed_synchronization_begin = -1;
 		RDD::MemoryAccessBarrier memory_barrier;
 		int32_t normalization_barrier_index = -1;
 		int normalization_barrier_count = 0;
@@ -256,6 +281,8 @@ public:
 		LocalVector<RDD::SemaphoreID> semaphores;
 		uint32_t buffers_used = 0;
 	};
+	bool resolve_record_command_buffer(const RecordHandle &p_handle, RDD::CommandBufferID &r_command_buffer) const;
+	bool recording_failed() const { return command_buffer_begin_failed; }
 
 	struct WorkaroundsState {
 		bool draw_list_found = false;
@@ -408,6 +435,7 @@ private:
 	};
 
 	struct RecordedComputeListCommand : RecordedCommand {
+		uint32_t list_index = 0;
 		uint32_t instruction_data_size = 0;
 		uint32_t breadcrumb = 0;
 
@@ -815,11 +843,18 @@ private:
 	};
 
 	RDD *driver = nullptr;
+	uint64_t graph_instance = 0;
 	RDD::DriverWorkarounds driver_workarounds;
 	RenderPassCreationFunction render_pass_creation_function = nullptr;
 	int64_t tracking_frame = 0;
 	LocalVector<uint8_t> command_data;
 	LocalVector<uint32_t> command_data_offsets;
+	LocalVector<uint32_t> command_buffer_slots;
+	LocalVector<RDD::CommandBufferID> command_buffer_ids;
+	LocalVector<bool> command_buffer_begun;
+	bool primary_command_buffer_begun = true;
+	bool command_buffer_begin_failed = false;
+	bool graph_end_called = false;
 	LocalVector<RDD::TextureBarrier> command_normalization_barriers;
 	LocalVector<RDD::TextureBarrier> command_transition_barriers;
 	LocalVector<RDD::BufferBarrier> command_buffer_barriers;
@@ -893,13 +928,13 @@ public:
 	~RenderingDeviceGraph();
 	void initialize(RDD *p_driver, RenderPassCreationFunction p_render_pass_creation_function, uint32_t p_frame_count, RDD::CommandQueueFamilyID p_secondary_command_queue_family, uint32_t p_secondary_command_buffers_per_frame);
 	void finalize();
-	void begin();
+	void begin(bool p_primary_command_buffer_begun = true);
 	void add_blas_build(RDD::AccelerationStructureID p_blas, RDD::BufferID p_scratch_buffer, ResourceTracker *p_dst_tracker, VectorView<ResourceTracker *> p_src_trackers);
 	void add_tlas_build(RDD::AccelerationStructureID p_tlas, RDD::BufferID p_scratch_buffer, RDD::BufferID p_instance_buffer, uint32_t p_instance_offset, uint32_t p_instance_count, ResourceTracker *p_dst_tracker, VectorView<ResourceTracker *> p_src_trackers);
 	void add_buffer_clear(RDD::BufferID p_dst, ResourceTracker *p_dst_tracker, uint32_t p_offset, uint32_t p_size);
 	void add_buffer_copy(RDD::BufferID p_src, ResourceTracker *p_src_tracker, RDD::BufferID p_dst, ResourceTracker *p_dst_tracker, RDD::BufferCopyRegion p_region);
-	void add_buffer_get_data(RDD::BufferID p_src, ResourceTracker *p_src_tracker, RDD::BufferID p_dst, RDD::BufferCopyRegion p_region);
-	void add_buffer_update(RDD::BufferID p_dst, ResourceTracker *p_dst_tracker, VectorView<RecordedBufferCopy> p_buffer_copies);
+	RecordHandle add_buffer_get_data(RDD::BufferID p_src, ResourceTracker *p_src_tracker, RDD::BufferID p_dst, RDD::BufferCopyRegion p_region);
+	RecordHandle add_buffer_update(RDD::BufferID p_dst, ResourceTracker *p_dst_tracker, VectorView<RecordedBufferCopy> p_buffer_copies);
 	void add_driver_callback(RDD::DriverCallback p_callback, void *p_userdata, VectorView<ResourceTracker *> p_trackers, VectorView<ResourceUsage> p_usages);
 	void add_raytracing_list_begin();
 	void add_raytracing_list_bind_pipeline(RDD::RaytracingPipelineID p_pipeline);
@@ -914,8 +949,8 @@ public:
 	void add_compute_list_bind_pipeline(RDD::PipelineID p_pipeline);
 	void add_compute_list_bind_uniform_set(RDD::ShaderID p_shader, RDD::UniformSetID p_uniform_set, uint32_t set_index);
 	void add_compute_list_bind_uniform_sets(RDD::ShaderID p_shader, VectorView<RDD::UniformSetID> p_uniform_set, uint32_t p_first_set_index, uint32_t p_set_count);
-	void add_compute_list_dispatch(uint32_t p_x_groups, uint32_t p_y_groups, uint32_t p_z_groups);
-	void add_compute_list_dispatch_indirect(RDD::BufferID p_buffer, uint32_t p_offset);
+	RecordHandle add_compute_list_dispatch(uint32_t p_x_groups, uint32_t p_y_groups, uint32_t p_z_groups);
+	RecordHandle add_compute_list_dispatch_indirect(RDD::BufferID p_buffer, uint32_t p_offset);
 	void add_compute_list_set_push_constant(RDD::ShaderID p_shader, const void *p_data, uint32_t p_data_size);
 	void add_compute_list_uniform_set_prepare_for_use(RDD::ShaderID p_shader, RDD::UniformSetID p_uniform_set, uint32_t set_index);
 	void add_compute_list_usage(ResourceTracker *p_tracker, ResourceUsage p_usage);

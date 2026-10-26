@@ -39,6 +39,7 @@
 
 extern void gdextension_setup_interface();
 extern GDExtensionInterfaceFunctionPtr gdextension_get_proc_address(const char *p_name);
+extern GDExtensionInterfaceFunctionPtr gdextension_get_guarded_proc_address(const char *p_name);
 
 typedef GDExtensionBool (*GDExtensionLegacyInitializationFunction)(void *p_interface, GDExtensionClassLibraryPtr p_library, GDExtensionInitialization *r_initialization);
 
@@ -47,6 +48,7 @@ String GDExtension::get_extension_list_config_file() {
 }
 
 class GDExtensionMethodBind : public MethodBind {
+	GDExtensionDeviceExit::RecordRef library_exit_ref;
 	GDExtensionClassMethodCall call_func;
 	GDExtensionClassMethodValidatedCall validated_call_func;
 	GDExtensionClassMethodPtrCall ptrcall_func;
@@ -54,7 +56,8 @@ class GDExtensionMethodBind : public MethodBind {
 	bool vararg;
 	uint32_t argument_count;
 	PropertyInfo return_value_info;
-	GodotTypeInfo::Metadata return_value_metadata;
+	bool return_is_refcounted = false;
+	GodotTypeInfo::Metadata return_value_metadata = GodotTypeInfo::METADATA_NONE;
 	List<PropertyInfo> arguments_info;
 	List<GodotTypeInfo::Metadata> arguments_metadata;
 
@@ -82,6 +85,139 @@ protected:
 		}
 	}
 
+	void encode_closed_return(void *r_ret) const {
+		if (!r_ret || !has_return()) {
+			return;
+		}
+		// Core ABI encoders assign into the caller's initialized return storage.
+		// Integer/real metadata uses the canonical int64/double ptrcall lanes.
+		switch (return_value_info.type) {
+			case Variant::NIL:
+				PtrToArg<Variant>::encode(Variant{}, r_ret);
+				break;
+			case Variant::BOOL:
+				PtrToArg<bool>::encode(bool{}, r_ret);
+				break;
+			case Variant::INT:
+				PtrToArg<int64_t>::encode(int64_t{}, r_ret);
+				break;
+			case Variant::FLOAT:
+				PtrToArg<double>::encode(double{}, r_ret);
+				break;
+			case Variant::STRING:
+				PtrToArg<String>::encode(String{}, r_ret);
+				break;
+			case Variant::VECTOR2:
+				PtrToArg<Vector2>::encode(Vector2{}, r_ret);
+				break;
+			case Variant::VECTOR2I:
+				PtrToArg<Vector2i>::encode(Vector2i{}, r_ret);
+				break;
+			case Variant::RECT2:
+				PtrToArg<Rect2>::encode(Rect2{}, r_ret);
+				break;
+			case Variant::RECT2I:
+				PtrToArg<Rect2i>::encode(Rect2i{}, r_ret);
+				break;
+			case Variant::VECTOR3:
+				PtrToArg<Vector3>::encode(Vector3{}, r_ret);
+				break;
+			case Variant::VECTOR3I:
+				PtrToArg<Vector3i>::encode(Vector3i{}, r_ret);
+				break;
+			case Variant::TRANSFORM2D:
+				PtrToArg<Transform2D>::encode(Transform2D{}, r_ret);
+				break;
+			case Variant::VECTOR4:
+				PtrToArg<Vector4>::encode(Vector4{}, r_ret);
+				break;
+			case Variant::VECTOR4I:
+				PtrToArg<Vector4i>::encode(Vector4i{}, r_ret);
+				break;
+			case Variant::PLANE:
+				PtrToArg<Plane>::encode(Plane{}, r_ret);
+				break;
+			case Variant::QUATERNION:
+				PtrToArg<Quaternion>::encode(Quaternion{}, r_ret);
+				break;
+			case Variant::AABB:
+				PtrToArg<AABB>::encode(AABB{}, r_ret);
+				break;
+			case Variant::BASIS:
+				PtrToArg<Basis>::encode(Basis{}, r_ret);
+				break;
+			case Variant::TRANSFORM3D:
+				PtrToArg<Transform3D>::encode(Transform3D{}, r_ret);
+				break;
+			case Variant::PROJECTION:
+				PtrToArg<Projection>::encode(Projection{}, r_ret);
+				break;
+			case Variant::COLOR:
+				PtrToArg<Color>::encode(Color{}, r_ret);
+				break;
+			case Variant::STRING_NAME:
+				PtrToArg<StringName>::encode(StringName{}, r_ret);
+				break;
+			case Variant::NODE_PATH:
+				PtrToArg<NodePath>::encode(NodePath{}, r_ret);
+				break;
+			case Variant::RID:
+				PtrToArg<RID>::encode(RID{}, r_ret);
+				break;
+			case Variant::OBJECT:
+				if (return_is_refcounted) {
+					PtrToArg<Ref<RefCounted>>::encode(Ref<RefCounted>(), r_ret);
+				} else {
+					PtrToArg<Object *>::encode(nullptr, r_ret);
+				}
+				break;
+			case Variant::CALLABLE:
+				PtrToArg<Callable>::encode(Callable{}, r_ret);
+				break;
+			case Variant::SIGNAL:
+				PtrToArg<Signal>::encode(Signal{}, r_ret);
+				break;
+			case Variant::DICTIONARY:
+				PtrToArg<Dictionary>::encode(Dictionary{}, r_ret);
+				break;
+			case Variant::ARRAY:
+				PtrToArg<Array>::encode(Array{}, r_ret);
+				break;
+			case Variant::PACKED_BYTE_ARRAY:
+				PtrToArg<PackedByteArray>::encode(PackedByteArray{}, r_ret);
+				break;
+			case Variant::PACKED_INT32_ARRAY:
+				PtrToArg<PackedInt32Array>::encode(PackedInt32Array{}, r_ret);
+				break;
+			case Variant::PACKED_INT64_ARRAY:
+				PtrToArg<PackedInt64Array>::encode(PackedInt64Array{}, r_ret);
+				break;
+			case Variant::PACKED_FLOAT32_ARRAY:
+				PtrToArg<PackedFloat32Array>::encode(PackedFloat32Array{}, r_ret);
+				break;
+			case Variant::PACKED_FLOAT64_ARRAY:
+				PtrToArg<PackedFloat64Array>::encode(PackedFloat64Array{}, r_ret);
+				break;
+			case Variant::PACKED_STRING_ARRAY:
+				PtrToArg<PackedStringArray>::encode(PackedStringArray{}, r_ret);
+				break;
+			case Variant::PACKED_VECTOR2_ARRAY:
+				PtrToArg<PackedVector2Array>::encode(PackedVector2Array{}, r_ret);
+				break;
+			case Variant::PACKED_VECTOR3_ARRAY:
+				PtrToArg<PackedVector3Array>::encode(PackedVector3Array{}, r_ret);
+				break;
+			case Variant::PACKED_COLOR_ARRAY:
+				PtrToArg<PackedColorArray>::encode(PackedColorArray{}, r_ret);
+				break;
+			case Variant::PACKED_VECTOR4_ARRAY:
+				PtrToArg<PackedVector4Array>::encode(PackedVector4Array{}, r_ret);
+				break;
+			default:
+				ERR_FAIL_MSG("UNSUPPORTED_ENTRY_CLASS");
+		}
+	}
+
 public:
 #ifdef TOOLS_ENABLED
 	virtual bool is_valid() const override { return valid; }
@@ -98,6 +234,13 @@ public:
 #endif // DEBUG_ENABLED
 
 	virtual Variant call(Object *p_object, const Variant **p_args, int p_arg_count, Callable::CallError &r_error) const override {
+		GDExtensionDeviceExit::CallbackScope callback_scope(library_exit_ref);
+		if (callback_scope.get_error() != OK) {
+			r_error.error = Callable::CallError::CALL_ERROR_INVALID_METHOD;
+			r_error.argument = 0;
+			r_error.expected = 0;
+			return Variant();
+		}
 #ifdef TOOLS_ENABLED
 		ERR_FAIL_COND_V_MSG(!valid, Variant(), vformat("Cannot call invalid GDExtension method bind '%s'. It's probably cached - you may need to restart Godot.", name));
 		ERR_FAIL_COND_V_MSG(p_object && p_object->is_extension_placeholder(), Variant(), vformat("Cannot call GDExtension method bind '%s' on placeholder instance.", name));
@@ -112,6 +255,14 @@ public:
 		return ret;
 	}
 	virtual void validated_call(Object *p_object, const Variant **p_args, Variant *r_ret) const override {
+		GDExtensionDeviceExit::CallbackScope callback_scope(library_exit_ref);
+		if (callback_scope.get_error() != OK) {
+			if (r_ret && has_return()) {
+				Callable::CallError error;
+				Variant::construct(return_value_info.type, *r_ret, nullptr, 0, error);
+			}
+			ERR_FAIL_MSG("ENTRY_CLOSED");
+		}
 #ifdef TOOLS_ENABLED
 		ERR_FAIL_COND_MSG(!valid, vformat("Cannot call invalid GDExtension method bind '%s'. It's probably cached - you may need to restart Godot.", name));
 		ERR_FAIL_COND_MSG(p_object && p_object->is_extension_placeholder(), vformat("Cannot call GDExtension method bind '%s' on placeholder instance.", name));
@@ -144,6 +295,11 @@ public:
 	}
 
 	virtual void ptrcall(Object *p_object, const void **p_args, void *r_ret) const override {
+		GDExtensionDeviceExit::CallbackScope callback_scope(library_exit_ref);
+		if (callback_scope.get_error() != OK) {
+			encode_closed_return(r_ret);
+			ERR_FAIL_MSG("ENTRY_CLOSED");
+		}
 #ifdef TOOLS_ENABLED
 		ERR_FAIL_COND_MSG(!valid, vformat("Cannot call invalid GDExtension method bind '%s'. It's probably cached - you may need to restart Godot.", name));
 		ERR_FAIL_COND_MSG(p_object && p_object->is_extension_placeholder(), vformat("Cannot call GDExtension method bind '%s' on placeholder instance.", name));
@@ -158,7 +314,7 @@ public:
 	}
 
 #ifdef TOOLS_ENABLED
-	bool try_update(const GDExtensionClassMethodInfo *p_method_info) {
+	bool try_update(const GDExtensionClassMethodInfo *p_method_info, GDExtensionDeviceExit::RecordRef &p_reference) {
 		if (is_static() != (bool)(p_method_info->method_flags & GDEXTENSION_METHOD_FLAG_STATIC)) {
 			return false;
 		}
@@ -175,6 +331,13 @@ public:
 			return false;
 		}
 
+		if (has_return() && return_value_info.type == Variant::OBJECT) {
+			const StringName &return_class = *reinterpret_cast<const StringName *>(p_method_info->return_value_info->class_name);
+			if (return_is_refcounted != ClassDB::is_parent_class(return_class, "RefCounted")) {
+				return false;
+			}
+		}
+
 		if (argument_count != p_method_info->argument_count) {
 			return false;
 		}
@@ -186,6 +349,7 @@ public:
 			}
 		}
 
+		library_exit_ref = std::move(p_reference);
 		update(p_method_info);
 		return true;
 	}
@@ -203,6 +367,7 @@ public:
 
 		if (p_method_info->has_return_value) {
 			return_value_info = PropertyInfo(*p_method_info->return_value_info);
+			return_is_refcounted = return_value_info.type == Variant::OBJECT && ClassDB::is_parent_class(return_value_info.class_name, "RefCounted");
 			return_value_metadata = GodotTypeInfo::Metadata(p_method_info->return_value_metadata);
 		}
 
@@ -233,7 +398,7 @@ public:
 		set_default_arguments(defargs);
 	}
 
-	explicit GDExtensionMethodBind(const GDExtensionClassMethodInfo *p_method_info) {
+	GDExtensionMethodBind(const GDExtensionClassMethodInfo *p_method_info, GDExtensionDeviceExit::RecordRef &&p_reference) : library_exit_ref(std::move(p_reference)) {
 		update(p_method_info);
 	}
 };
@@ -447,6 +612,26 @@ void GDExtension::_register_extension_class6(GDExtensionClassLibraryPtr p_librar
 void GDExtension::_register_extension_class_internal(GDExtensionClassLibraryPtr p_library, GDExtensionConstStringNamePtr p_class_name, GDExtensionConstStringNamePtr p_parent_class_name, const GDExtensionClassCreationInfo6 *p_extension_funcs, const ClassCreationDeprecatedInfo *p_deprecated_funcs) {
 	GDExtension *self = reinterpret_cast<GDExtension *>(p_library);
 
+	GDExtensionDeviceExit::CallbackScope registration(self->library_exit_ref);
+	ERR_FAIL_COND(registration.get_error() != OK);
+	uint64_t entry_classes = (1u << 5) | (1u << 7); // construction and destruction
+	if (p_extension_funcs->set_func || p_extension_funcs->get_func || p_extension_funcs->get_property_list_func || p_extension_funcs->free_property_list_func || p_extension_funcs->property_can_revert_func || p_extension_funcs->property_get_revert_func || p_extension_funcs->validate_property_func || p_extension_funcs->to_string_func) { entry_classes |= 1u << 2; }
+	if (p_extension_funcs->notification_func) { entry_classes |= 1u << 3; }
+	if (p_extension_funcs->get_virtual_func || p_extension_funcs->get_virtual_call_data_func || p_extension_funcs->call_virtual_with_data_func) { entry_classes |= 1u << 4; }
+	if (p_extension_funcs->reference_func || p_extension_funcs->unreference_func) { entry_classes |= 1u << 9; }
+#ifndef DISABLE_DEPRECATED
+	if (p_deprecated_funcs) {
+		if (p_deprecated_funcs->notification_func) { entry_classes |= 1u << 3; }
+		if (p_deprecated_funcs->free_property_list_func || p_deprecated_funcs->get_rid_func) { entry_classes |= 1u << 2; }
+		if (p_deprecated_funcs->get_virtual_func || p_deprecated_funcs->get_virtual_call_data_func) { entry_classes |= 1u << 4; }
+	}
+#endif
+	const StringName &registered_parent = *reinterpret_cast<const StringName *>(p_parent_class_name);
+	if (registered_parent == StringName("MainLoop") || ClassDB::is_parent_class(registered_parent, "MainLoop")) { entry_classes |= 1u << 1; }
+	ERR_FAIL_COND_MSG(GDExtensionDeviceExit::Registry::get_singleton().check_entry_classes(self->library_exit_ref, entry_classes) != OK, "UNSUPPORTED_ENTRY_CLASS");
+	GDExtensionDeviceExit::RecordRef class_reference;
+	ERR_FAIL_COND(GDExtensionDeviceExit::Registry::get_singleton().retain_private(self->library_exit_ref, class_reference) != OK);
+
 	StringName class_name = *reinterpret_cast<const StringName *>(p_class_name);
 	StringName parent_class_name = *reinterpret_cast<const StringName *>(p_parent_class_name);
 	ERR_FAIL_COND_MSG(!String(class_name).is_valid_unicode_identifier(), vformat("Attempt to register extension class '%s', which is not a valid class identifier.", class_name));
@@ -507,6 +692,7 @@ void GDExtension::_register_extension_class_internal(GDExtensionClassLibraryPtr 
 		}
 	}
 
+	extension->gdextension.callback_record = GDExtensionDeviceExit::SharedRecord(std::move(class_reference));
 	extension->gdextension.library = self;
 	extension->gdextension.parent_class_name = parent_class_name;
 	extension->gdextension.class_name = class_name;
@@ -575,6 +761,30 @@ void GDExtension::_register_extension_class_internal(GDExtensionClassLibraryPtr 
 
 void GDExtension::_register_extension_class_method(GDExtensionClassLibraryPtr p_library, GDExtensionConstStringNamePtr p_class_name, const GDExtensionClassMethodInfo *p_method_info) {
 	GDExtension *self = reinterpret_cast<GDExtension *>(p_library);
+	GDExtensionDeviceExit::CallbackScope callback_scope(self->library_exit_ref);
+	ERR_FAIL_COND_MSG(callback_scope.get_error() != OK, "ENTRY_CLOSED");
+	ERR_FAIL_COND_MSG(GDExtensionDeviceExit::Registry::get_singleton().check_entry_classes(self->library_exit_ref, 1u << 0) != OK, "UNSUPPORTED_ENTRY_CLASS");
+	if (p_method_info->has_return_value) {
+		if (!p_method_info->return_value_info) {
+			ERR_FAIL_MSG("UNSUPPORTED_ENTRY_CLASS");
+		}
+		const Variant::Type return_type = Variant::Type(p_method_info->return_value_info->type);
+		const auto metadata = p_method_info->return_value_metadata;
+		const bool int_metadata = metadata == GDEXTENSION_METHOD_ARGUMENT_METADATA_NONE ||
+				(metadata >= GDEXTENSION_METHOD_ARGUMENT_METADATA_INT_IS_INT8 && metadata <= GDEXTENSION_METHOD_ARGUMENT_METADATA_INT_IS_UINT64) ||
+				metadata == GDEXTENSION_METHOD_ARGUMENT_METADATA_INT_IS_CHAR16 || metadata == GDEXTENSION_METHOD_ARGUMENT_METADATA_INT_IS_CHAR32;
+		const bool real_metadata = metadata == GDEXTENSION_METHOD_ARGUMENT_METADATA_NONE ||
+				metadata == GDEXTENSION_METHOD_ARGUMENT_METADATA_REAL_IS_FLOAT || metadata == GDEXTENSION_METHOD_ARGUMENT_METADATA_REAL_IS_DOUBLE;
+		const bool object_metadata = metadata == GDEXTENSION_METHOD_ARGUMENT_METADATA_NONE || metadata == GDEXTENSION_METHOD_ARGUMENT_METADATA_OBJECT_IS_REQUIRED;
+		const bool metadata_valid = return_type == Variant::INT ? int_metadata : return_type == Variant::FLOAT ? real_metadata
+				: return_type == Variant::OBJECT															   ? object_metadata
+																											   : metadata == GDEXTENSION_METHOD_ARGUMENT_METADATA_NONE;
+		if (return_type < Variant::NIL || return_type >= Variant::VARIANT_MAX || !metadata_valid || (return_type == Variant::OBJECT && (p_method_info->return_value_info->class_name == nullptr || !ClassDB::class_exists(*reinterpret_cast<const StringName *>(p_method_info->return_value_info->class_name))))) {
+			ERR_FAIL_MSG("UNSUPPORTED_ENTRY_CLASS");
+		}
+	}
+	GDExtensionDeviceExit::RecordRef method_reference;
+	ERR_FAIL_COND(GDExtensionDeviceExit::Registry::get_singleton().retain_private(self->library_exit_ref, method_reference) != OK);
 
 	StringName class_name = *reinterpret_cast<const StringName *>(p_class_name);
 	StringName method_name = *reinterpret_cast<const StringName *>(p_method_info->name);
@@ -594,7 +804,7 @@ void GDExtension::_register_extension_class_method(GDExtensionClassLibraryPtr p_
 
 		// Try to update the method bind. If it doesn't work (because it's incompatible) then
 		// mark as invalid and create a new one.
-		if (!method->is_reloading || !method->try_update(p_method_info)) {
+		if (!method->is_reloading || !method->try_update(p_method_info, method_reference)) {
 			method->valid = false;
 			self->invalid_methods.push_back(method);
 
@@ -603,14 +813,14 @@ void GDExtension::_register_extension_class_method(GDExtensionClassLibraryPtr p_
 	}
 
 	if (method == nullptr) {
-		method = memnew(GDExtensionMethodBind(p_method_info));
+		method = memnew(GDExtensionMethodBind(p_method_info, std::move(method_reference)));
 		method->set_instance_class(class_name);
 		extension->methods[method_name] = method;
 	} else {
 		method->is_reloading = false;
 	}
 #else
-	GDExtensionMethodBind *method = memnew(GDExtensionMethodBind(p_method_info));
+	GDExtensionMethodBind *method = memnew(GDExtensionMethodBind(p_method_info, std::move(method_reference)));
 	method->set_instance_class(class_name);
 #endif
 
@@ -737,14 +947,18 @@ void GDExtension::_unregister_extension_class(GDExtensionClassLibraryPtr p_libra
 
 	Extension *ext = &self->extension_classes[class_name];
 #ifdef TOOLS_ENABLED
-	if (ext->is_reloading) {
+	if (self->scene_ready_aborting) {
+		ERR_FAIL_COND_MSG(ext->gdextension.children.size(), vformat("Attempt to unregister class '%s' while other extension classes inherit from it.", class_name));
+		if (ext->gdextension.parent) { ext->gdextension.parent->children.erase(&ext->gdextension); }
+	}
+	if (ext->is_reloading || self->scene_ready_aborting) {
 		self->_clear_extension(ext);
 	}
 #endif
 	ERR_FAIL_COND_MSG(ext->gdextension.children.size(), vformat("Attempt to unregister class '%s' while other extension classes inherit from it.", class_name));
 
 #ifdef TOOLS_ENABLED
-	ClassDB::unregister_extension_class(class_name, !ext->is_reloading);
+	ClassDB::unregister_extension_class(class_name, !ext->is_reloading && !self->scene_ready_aborting);
 #else
 	ClassDB::unregister_extension_class(class_name);
 #endif
@@ -754,7 +968,7 @@ void GDExtension::_unregister_extension_class(GDExtensionClassLibraryPtr p_libra
 	}
 
 #ifdef TOOLS_ENABLED
-	if (!ext->is_reloading) {
+	if (!ext->is_reloading && !self->scene_ready_aborting) {
 		self->extension_classes.erase(class_name);
 	}
 
@@ -770,7 +984,7 @@ void GDExtension::_get_library_path(GDExtensionClassLibraryPtr p_library, GDExte
 	Ref<GDExtensionLibraryLoader> library_loader = self->loader;
 	String library_path;
 	if (library_loader.is_valid()) {
-		library_path = library_loader->library_path;
+		library_path = library_loader->configuration.library_path;
 	}
 
 	memnew_placement(r_path, String(library_path));
@@ -779,15 +993,55 @@ void GDExtension::_get_library_path(GDExtensionClassLibraryPtr p_library, GDExte
 void GDExtension::_register_get_classes_used_callback(GDExtensionClassLibraryPtr p_library, GDExtensionEditorGetClassesUsedCallback p_callback) {
 #ifdef TOOLS_ENABLED
 	GDExtension *self = reinterpret_cast<GDExtension *>(p_library);
+	GDExtensionDeviceExit::CallbackScope callback_scope(self->library_exit_ref);
+	ERR_FAIL_COND(callback_scope.get_error() != OK);
 	self->get_classes_used_callback = p_callback;
+	self->has_get_classes_used_callback = p_callback != nullptr;
 #endif
 }
 
 void GDExtension::_register_main_loop_callbacks(GDExtensionClassLibraryPtr p_library, const GDExtensionMainLoopCallbacks *p_callbacks) {
 	GDExtension *self = reinterpret_cast<GDExtension *>(p_library);
+	GDExtensionDeviceExit::CallbackScope callback_scope(self->library_exit_ref);
+	ERR_FAIL_COND(callback_scope.get_error() != OK);
+	ERR_FAIL_COND_MSG(GDExtensionDeviceExit::Registry::get_singleton().check_entry_classes(self->library_exit_ref, uint64_t(1) << 1) != OK, "UNSUPPORTED_ENTRY_CLASS");
 	self->startup_callback = p_callbacks->startup_func;
 	self->shutdown_callback = p_callbacks->shutdown_func;
 	self->frame_callback = p_callbacks->frame_func;
+	self->main_loop_callback_mask =
+			(self->startup_callback ? (1u << int(MainLoopCallback::STARTUP)) : 0) |
+			(self->shutdown_callback ? (1u << int(MainLoopCallback::SHUTDOWN)) : 0) |
+			(self->frame_callback ? (1u << int(MainLoopCallback::FRAME)) : 0);
+}
+
+void GDExtension::_call_main_loop_callback(MainLoopCallback p_kind) {
+	// An empty core registration is still a no-op after failed reload. Inspect
+	// only presence here; read the actual DSO pointer after frame admission.
+	if ((main_loop_callback_mask & (1u << int(p_kind))) == 0) {
+		return;
+	}
+	GDExtensionDeviceExit::CallbackScope callback_scope(library_exit_ref);
+	ERR_FAIL_COND(callback_scope.get_error() != OK);
+	// Shutdown is counted here as an actual callback frame, not certified as a
+	// finite cleanup action. The complete K03 cleanup admission remains required.
+	void (*callback)() = nullptr;
+	switch (p_kind) {
+		case MainLoopCallback::STARTUP:
+			callback = startup_callback;
+			break;
+		case MainLoopCallback::SHUTDOWN:
+			callback = shutdown_callback;
+			break;
+		case MainLoopCallback::FRAME:
+			callback = frame_callback;
+			break;
+	}
+	if (callback) {
+		callback();
+		if (p_kind == MainLoopCallback::SHUTDOWN) {
+			shutdown_callback_dispatched = true;
+		}
+	}
 }
 
 void GDExtension::register_interface_function(const StringName &p_function_name, GDExtensionInterfaceFunctionPtr p_function_pointer) {
@@ -802,66 +1056,243 @@ GDExtensionInterfaceFunctionPtr GDExtension::get_interface_function(const String
 }
 
 Error GDExtension::open_library(const String &p_path, const Ref<GDExtensionLoader> &p_loader) {
+	if (library_close_error != OK) {
+		return library_close_error;
+	}
+	ERR_FAIL_COND_V_MSG(library_opening || is_library_open(), ERR_BUSY, "Can't replace an open GDExtension library.");
 	ERR_FAIL_COND_V_MSG(p_loader.is_null(), FAILED, "Can't open GDExtension without a loader.");
-	loader = p_loader;
-
-	Error err = loader->open_library(p_path);
-
+	Ref<GDExtension> self(this);
+	Ref<GDExtensionLoader> candidate = p_loader;
+	library_opening = true;
+	struct OpeningScope {
+		bool &active;
+		~OpeningScope() { active = false; }
+	} opening_scope{ library_opening };
+	Error err = candidate->prepare_open(p_path);
+	if (err != OK) {
+		return err;
+	}
+	struct PreparedOpen {
+		GDExtensionLoader *owner;
+		~PreparedOpen() {
+			if (owner) {
+				owner->abort_prepared_open();
+			}
+		}
+	} prepared{ candidate.ptr() };
+	const uint32_t guard_version = candidate->get_device_exit_guard_version();
+	if (guard_version > 1) {
+		return ERR_INVALID_PARAMETER;
+	}
+	auto &registry = GDExtensionDeviceExit::Registry::get_singleton();
+	GDExtensionDeviceExit::RecordRef wrapper_ref;
+	GDExtensionDeviceExit::RecordRef scope_ref;
+	err = registry.reserve_open(uint32_t(candidate->get_loader_kind()), wrapper_ref, scope_ref, this);
+	if (err != OK) {
+		return err;
+	}
+	loader = candidate;
+	prepared.owner = nullptr; // Built-in open owns every consume/failure exit from here.
+	err = loader->open_library(p_path);
 	ERR_FAIL_COND_V_MSG(err == ERR_FILE_NOT_FOUND, err, vformat("GDExtension dynamic library not found: '%s'.", p_path));
 	ERR_FAIL_COND_V_MSG(err != OK, err, vformat("Can't open GDExtension dynamic library: '%s'.", p_path));
 
-	err = loader->initialize(&gdextension_get_proc_address, this, &initialization);
-
+	library_exit_ref = std::move(wrapper_ref);
+	scene_ready_load_error = OK;
+	library_exit_route = GDExtensionDeviceExit::CloseRoute::LAST_REF;
+	library_exit_route_selected = false;
+	registry.attach(library_exit_ref);
+	{
+		GDExtensionDeviceExit::BootstrapScope scope(std::move(scope_ref), this);
+		err = loader->initialize(guard_version == 1 ? &gdextension_get_guarded_proc_address : &gdextension_get_proc_address, self, &initialization);
+		registry.observe_initialize(scope.reference, err);
+		err = scope.observe_tuple(initialization, err);
+		if (err == OK && guard_version == 1 && !registry.guard_qualified(scope.reference)) {
+			// A version-one entry that skipped registration has no guarded
+			// teardown authority. The original bootstrap still owns this abort.
+			err = ERR_UNAVAILABLE;
+		}
+	}
+	library_opening = false; // Actual entry returned; init-abort cleanup may now close.
 	if (err != OK) {
-		// Errors already logged in initialize().
-		loader->close_library();
+		// Errors already logged in initialize(). Retained views keep the actual outcome.
+		GDExtensionDeviceExit::require_close_success(_close_library(GDExtensionDeviceExit::CloseRoute::INIT_ABORT), GDExtensionDeviceExit::CloseRoute::INIT_ABORT);
 		return err;
 	}
-
 	level_initialized = -1;
-
 	return OK;
 }
 
-void GDExtension::close_library() {
-	ERR_FAIL_COND(!is_library_open());
-	loader->close_library();
+Error GDExtension::preflight_exit(GDExtensionDeviceExit::CloseRoute p_route) {
+	if (library_close_error != OK) {
+		return library_close_error;
+	}
+	if (library_opening || library_closing) {
+		return ERR_BUSY;
+	}
+	if (!is_library_open()) {
+		return ERR_UNCONFIGURED;
+	}
+	// Initialized teardown and main-loop shutdown have no typed issuer in
+	// this build. Refuse them before sealing or touching the image.
+	auto &registry = GDExtensionDeviceExit::Registry::get_singleton();
+	if (registry.guard_qualified(library_exit_ref)) {
+		if (shutdown_callback && !shutdown_callback_dispatched) { return ERR_UNAVAILABLE; } // Control census not activated.
+		const Error result = registry.guarded_preflight(library_exit_ref, p_route);
+		if (result == OK || result == ERR_BUSY) { library_exit_route = p_route; library_exit_route_selected = true; }
+		return result;
+	}
+	if (level_initialized >= 0 || shutdown_callback) {
+		return ERR_UNAVAILABLE;
+	}
+	// An active bootstrap/ordinary frame seals normal admission and returns
+	// Busy; the same attempt can be retried after that frame returns.
+	const Error result = registry.preflight_exit(library_exit_ref, p_route);
+	if (result == OK || result == ERR_BUSY) { library_exit_route = p_route; library_exit_route_selected = true; }
+	return result;
+}
+
+Error GDExtension::close_library() {
+	return _close_library(GDExtensionDeviceExit::CloseRoute::EXPLICIT);
+}
+
+Error GDExtension::_close_library(GDExtensionDeviceExit::CloseRoute p_route) {
+	if (library_close_error != OK) {
+		return library_close_error;
+	}
+	if (library_closing || library_opening) {
+		return ERR_BUSY;
+	}
+	const Error preflight = preflight_exit(p_route);
+	if (preflight != OK) {
+		return preflight;
+	}
+	library_closing = true;
+	struct ClosingScope {
+		bool &active;
+		~ClosingScope() { active = false; }
+	} closing_scope{ library_closing };
+	ERR_FAIL_COND_V(!is_library_open(), ERR_UNCONFIGURED);
+	// Seal normal callback/publication admission before asking the loader to
+	// close. A Busy observation is sticky: active frames/holders must retire,
+	// then the caller may retry this same close operation.
+	const Error published = GDExtensionDeviceExit::Registry::get_singleton().prepare_selected_preclose(library_exit_ref, p_route);
+	if (published != OK) {
+		return published;
+	}
+	const Error admitted = GDExtensionDeviceExit::Registry::get_singleton().begin_close(library_exit_ref, p_route);
+	if (admitted != OK) {
+		return admitted;
+	}
+	{
+		GDExtensionDeviceExit::NativeCloseScope native_close(library_exit_ref, loader.ptr());
+		library_close_error = loader->close_library();
+	}
+	GDExtensionDeviceExit::Registry::get_singleton().observe_close(library_exit_ref, library_close_error);
+	if (library_close_error != OK) {
+		return library_close_error;
+	}
+	GDExtensionDeviceExit::Registry::get_singleton().detach(library_exit_ref);
+	library_exit_ref.reset();
 
 	class_icon_paths.clear();
 
 #ifdef TOOLS_ENABLED
 	instance_bindings.clear();
 #endif
+	return OK;
 }
 
 bool GDExtension::is_library_open() const {
+	if (library_close_error != OK) {
+		return true; // Failed association retained; do not call the failed loader.
+	}
 	return loader.is_valid() && loader->is_library_open();
 }
 
 GDExtension::InitializationLevel GDExtension::get_minimum_library_initialization_level() const {
+	ERR_FAIL_COND_V(library_close_error != OK, INITIALIZATION_LEVEL_CORE);
 	ERR_FAIL_COND_V(!is_library_open(), INITIALIZATION_LEVEL_CORE);
 	return InitializationLevel(initialization.minimum_initialization_level);
 }
 
-void GDExtension::initialize_library(InitializationLevel p_level) {
-	ERR_FAIL_COND(!is_library_open());
-	ERR_FAIL_COND_MSG(p_level <= int32_t(level_initialized), vformat("Level '%d' must be higher than the current level '%d'", p_level, level_initialized));
+Error GDExtension::initialize_library(InitializationLevel p_level) {
+	if (library_close_error != OK) {
+		return library_close_error;
+	}
+	ERR_FAIL_COND_V(!is_library_open(), ERR_UNCONFIGURED);
+	ERR_FAIL_COND_V(p_level < INITIALIZATION_LEVEL_CORE || p_level > INITIALIZATION_LEVEL_EDITOR, ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V_MSG(p_level <= int32_t(level_initialized), ERR_INVALID_PARAMETER, vformat("Level '%d' must be higher than the current level '%d'", p_level, level_initialized));
+	ERR_FAIL_NULL_V(initialization.initialize, ERR_UNCONFIGURED);
 
-	level_initialized = int32_t(p_level);
-
-	ERR_FAIL_NULL(initialization.initialize);
-
-	initialization.initialize(initialization.userdata, GDExtensionInitializationLevel(p_level));
+	{
+		GDExtensionDeviceExit::LevelScope callback_scope(library_exit_ref, this, initialization, int32_t(p_level), true);
+		ERR_FAIL_COND_V(callback_scope.get_error() != OK, callback_scope.get_error());
+		level_initialized = int32_t(p_level);
+		initialization.initialize(initialization.userdata, GDExtensionInitializationLevel(p_level));
+	}
+	if (p_level == INITIALIZATION_LEVEL_SCENE) {
+		scene_ready_load_error = GDExtensionDeviceExit::Registry::get_singleton().scene_ready_initialization_result(library_exit_ref);
+		return scene_ready_load_error;
+	}
+	return OK; // Dispatch completion only; the legacy callback has no typed G2 result.
 }
-void GDExtension::deinitialize_library(InitializationLevel p_level) {
-	ERR_FAIL_COND(!is_library_open());
-	ERR_FAIL_COND(p_level > int32_t(level_initialized));
+Error GDExtension::deinitialize_library(InitializationLevel p_level) {
+	if (library_close_error != OK) {
+		return library_close_error;
+	}
+	ERR_FAIL_COND_V(!is_library_open(), ERR_UNCONFIGURED);
+	ERR_FAIL_COND_V(p_level < INITIALIZATION_LEVEL_CORE || p_level > INITIALIZATION_LEVEL_EDITOR, ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(p_level > int32_t(level_initialized), ERR_INVALID_PARAMETER);
+	ERR_FAIL_NULL_V(initialization.deinitialize, ERR_UNCONFIGURED);
 
+	GDExtensionDeviceExit::LevelScope callback_scope(library_exit_ref, this, initialization, int32_t(p_level), false);
+	ERR_FAIL_COND_V(callback_scope.get_error() != OK, callback_scope.get_error());
 	level_initialized = int32_t(p_level) - 1;
-
-	ERR_FAIL_NULL(initialization.deinitialize);
-
 	initialization.deinitialize(initialization.userdata, GDExtensionInitializationLevel(p_level));
+	return OK; // Dispatch completion only; not a successful finalization witness.
+}
+
+Error GDExtension::abort_scene_ready_load(Error original_error) {
+	if (original_error <= OK || original_error >= ERR_MAX) { return ERR_INVALID_PARAMETER; }
+	using namespace GDExtensionDeviceExit;
+	require_close_success(preflight_exit(CloseRoute::INIT_ABORT), CloseRoute::INIT_ABORT);
+#ifdef TOOLS_ENABLED
+	// Keep cached MethodBinds as invalid native metadata, following the existing
+	// reload strategy; never let ordinary unregister delete a reused cache.
+	scene_ready_aborting = true;
+#endif
+	const int32_t minimum = initialization.minimum_initialization_level;
+	while (level_initialized >= minimum) {
+		const int32_t actual_level = level_initialized;
+		require_level_dispatch_success(deinitialize_library(InitializationLevel(actual_level)), actual_level, false);
+	}
+#ifdef TOOLS_ENABLED
+	clear_instance_bindings(); // Real free callbacks, before the native close.
+	for (KeyValue<StringName, Extension> &entry : extension_classes) {
+		// Every new class must have returned its real binding deinitializer.
+		// Old unregistered reload shells have no gdtype and must not be cleared
+		// again, reconstructed, notified, or passed to a closed generation.
+		require_close_success(entry.value.gdextension.gdtype ? ERR_BUSY : OK, CloseRoute::INIT_ABORT);
+		for (KeyValue<StringName, GDExtensionMethodBind *> &method : entry.value.methods) {
+			method.value->valid = false;
+			method.value->is_reloading = false;
+			if (invalid_methods.find(method.value) == -1) { invalid_methods.push_back(method.value); }
+		}
+		entry.value.methods.clear();
+		entry.value.instance_state.clear(); // Variant destruction stays before close and under original guards.
+		entry.value.instances.clear();
+	}
+	extension_classes.clear();
+	is_reloading = false;
+	scene_ready_aborting = false;
+	has_get_classes_used_callback = false;
+	get_classes_used_callback = nullptr;
+#endif
+	startup_callback = shutdown_callback = frame_callback = nullptr;
+	main_loop_callback_mask = 0;
+	require_close_success(_close_library(CloseRoute::INIT_ABORT), CloseRoute::INIT_ABORT);
+	return original_error;
 }
 
 void GDExtension::_bind_methods() {
@@ -875,9 +1306,13 @@ void GDExtension::_bind_methods() {
 }
 
 GDExtension::~GDExtension() {
-	if (is_library_open()) {
-		close_library();
+	if (library_close_error != OK || is_library_open()) {
+		const auto route = library_exit_route_selected ? library_exit_route : GDExtensionDeviceExit::CloseRoute::LAST_REF;
+		GDExtensionDeviceExit::require_close_success(_close_library(route), route);
 	}
+	GDExtensionDeviceExit::Registry::get_singleton().detach(library_exit_ref);
+	library_exit_ref.reset();
+	GDExtensionDeviceExit::Registry::get_singleton().forget_binding_owner(this);
 #ifdef TOOLS_ENABLED
 	// If we have any invalid method binds still laying around, we can finally free them!
 	for (GDExtensionMethodBind *E : invalid_methods) {
@@ -886,8 +1321,13 @@ GDExtension::~GDExtension() {
 #endif
 }
 
-void GDExtension::initialize_gdextensions() {
+Error GDExtension::initialize_gdextensions(uint64_t &r_cycle) {
+	const Error err = GDExtensionDeviceExit::Registry::get_singleton().begin_cycle(r_cycle);
+	if (err != OK) {
+		return err;
+	}
 	gdextension_setup_interface();
+	GDExtensionDeviceExit::Registry::register_interfaces();
 
 #ifndef DISABLE_DEPRECATED
 	register_interface_function("classdb_register_extension_class", (GDExtensionInterfaceFunctionPtr)&GDExtension::_register_extension_class);
@@ -909,10 +1349,13 @@ void GDExtension::initialize_gdextensions() {
 	register_interface_function("get_library_path", (GDExtensionInterfaceFunctionPtr)&GDExtension::_get_library_path);
 	register_interface_function("editor_register_get_classes_used_callback", (GDExtensionInterfaceFunctionPtr)&GDExtension::_register_get_classes_used_callback);
 	register_interface_function("register_main_loop_callbacks", (GDExtensionInterfaceFunctionPtr)&GDExtension::_register_main_loop_callbacks);
+	return OK;
 }
 
-void GDExtension::finalize_gdextensions() {
-	gdextension_interface_functions.clear();
+void GDExtension::finalize_gdextensions(uint64_t p_cycle) {
+	if (GDExtensionDeviceExit::Registry::get_singleton().begin_finalizing(p_cycle)) {
+		gdextension_interface_functions.clear();
+	}
 }
 
 #ifdef TOOLS_ENABLED
@@ -974,16 +1417,18 @@ void GDExtension::_clear_extension(Extension *p_extension) {
 
 	// Clear all objects of any GDExtension data. It will become its native parent class
 	// until the reload can reset the object with the new GDExtension data.
-	for (const ObjectID &obj_id : p_extension->instances) {
+	Vector<ObjectID> instances;
+	for (const ObjectID &obj_id : p_extension->instances) { instances.push_back(obj_id); }
+	for (const ObjectID &obj_id : instances) {
 		Object *obj = ObjectDB::get_instance(obj_id);
 		if (!obj) {
 			continue;
 		}
 
-		obj->clear_internal_extension();
+		if (obj->_get_extension() == &p_extension->gdextension) { obj->clear_internal_extension(); }
 	}
 
-	p_extension->gdextension.destroy_gdtype();
+	if (p_extension->gdextension.gdtype) { p_extension->gdextension.destroy_gdtype(); }
 }
 
 void GDExtension::track_instance_binding(Object *p_object) {
@@ -995,7 +1440,10 @@ void GDExtension::untrack_instance_binding(Object *p_object) {
 }
 
 void GDExtension::clear_instance_bindings() {
-	for (ObjectID obj_id : instance_bindings) {
+	// Free callbacks may untrack themselves or destroy another tracked object.
+	// Keep the original primitive-ID snapshot alive across those real returns.
+	const Vector<ObjectID> bindings = instance_bindings;
+	for (ObjectID obj_id : bindings) {
 		Object *obj = ObjectDB::get_instance(obj_id);
 		if (!obj) {
 			continue;
@@ -1099,6 +1547,11 @@ void GDExtension::_untrack_instance(void *p_user_data, void *p_instance) {
 
 PackedStringArray GDExtension::get_classes_used() const {
 	PackedStringArray ret;
+	if (!has_get_classes_used_callback) {
+		return ret;
+	}
+	GDExtensionDeviceExit::CallbackScope callback_scope(library_exit_ref);
+	ERR_FAIL_COND_V(callback_scope.get_error() != OK, ret);
 	if (get_classes_used_callback) {
 		get_classes_used_callback((GDExtensionTypePtr)&ret);
 	}

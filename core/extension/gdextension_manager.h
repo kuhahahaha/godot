@@ -37,6 +37,9 @@ GDVIRTUAL_NATIVE_PTR(GDExtensionInitializationFunction)
 
 class GDExtensionManager : public Object {
 	GDCLASS(GDExtensionManager, Object);
+#ifdef TESTS_ENABLED
+	friend struct TestDeviceExitEntry::Access;
+#endif
 
 	int32_t level = -1;
 	HashMap<String, Ref<GDExtension>> gdextension_map;
@@ -44,6 +47,11 @@ class GDExtensionManager : public Object {
 
 	bool startup_callback_called = false;
 	bool shutdown_callback_called = false;
+	bool guarded_levels_deinitialized_before_main_loop = false;
+	bool scene_materialization_seam_reached = false;
+	bool scene_materialization_dispatch_active = false;
+	Error scene_materialization_error = OK;
+	GDExtensionDeviceExit::CloseRoute exit_route = GDExtensionDeviceExit::CloseRoute::LEVEL_DEINIT;
 
 	static void _bind_methods();
 
@@ -60,6 +68,7 @@ public:
 
 private:
 	LoadStatus _load_extension_internal(const Ref<GDExtension> &p_extension, bool p_first_load);
+	LoadStatus _finish_guarded_scene_ready_or_abort(const Ref<GDExtension> &p_extension, bool p_reloading);
 	void _finish_load_extension(const Ref<GDExtension> &p_extension);
 	LoadStatus _unload_extension_internal(const Ref<GDExtension> &p_extension);
 
@@ -80,8 +89,14 @@ public:
 	bool class_has_icon_path(const String &p_class) const;
 	String class_get_icon_path(const String &p_class) const;
 
-	void initialize_extensions(GDExtension::InitializationLevel p_level);
-	void deinitialize_extensions(GDExtension::InitializationLevel p_level);
+	Error initialize_extensions(GDExtension::InitializationLevel p_level);
+	Error preflight_exit(GDExtensionDeviceExit::CloseRoute p_route);
+	Error scene_materialized();
+	bool scene_materialization_seam_has_been_reached() const { return scene_materialization_seam_reached; }
+	Error cancel_pending_scene_ready_for_start_abort(GDExtensionDeviceExit::CloseRoute p_route);
+	Error deinitialize_guarded_core_for_setup_abort();
+	Error deinitialize_guarded_extensions_before_main_loop();
+	Error deinitialize_extensions(GDExtension::InitializationLevel p_level);
 
 #ifdef TOOLS_ENABLED
 	void track_instance_binding(void *p_token, Object *p_object);
@@ -95,7 +110,7 @@ public:
 	bool ensure_extensions_loaded(const HashSet<String> &p_extensions);
 
 	void startup();
-	void shutdown();
+	Error shutdown();
 	void frame();
 
 	GDExtensionManager();

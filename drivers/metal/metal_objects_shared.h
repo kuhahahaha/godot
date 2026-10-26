@@ -851,6 +851,7 @@ public:
 	uint64_t audit_creation_seq() const;
 #endif
 
+	virtual bool retire_ready_nonblocking() const { return true; }
 	virtual MTL::Library *get_library() = 0;
 	virtual NS::Error *get_error() = 0;
 	virtual void set_label(NS::String *p_label);

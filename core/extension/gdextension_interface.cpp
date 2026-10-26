@@ -42,8 +42,31 @@
 #include "core/os/memory.h"
 #include "core/variant/variant.h"
 #include "core/version.h"
+#include <optional>
 
 class CallableCustomExtension : public CallableCustom {
+	GDExtensionDeviceExit::RecordRef owner;
+	GDExtensionDeviceExit::CleanupAction cleanup;
+	uint64_t cleanup_serial = 0;
+	Error enrollment_error = OK;
+	bool adopted = false;
+
+	bool enter(std::optional<GDExtensionDeviceExit::CallbackScope> &frame) const {
+		if (!owner.is_valid()) { return true; }
+		frame.emplace(owner);
+		return frame->get_error() == OK;
+	}
+	void enter_comparison(std::optional<GDExtensionDeviceExit::CleanupScope> &frame) const {
+		if (!owner.is_valid()) { return; }
+		frame.emplace(cleanup, owner, reinterpret_cast<uintptr_t>(this), cleanup_serial, true);
+		GDExtensionDeviceExit::require_close_success(frame->get_error(), GDExtensionDeviceExit::CloseRoute::LAST_REF);
+	}
+	bool enroll() {
+		if (!owner.is_valid()) { return true; }
+		enrollment_error = GDExtensionDeviceExit::Registry::get_singleton().register_callable_cleanup(owner, reinterpret_cast<uintptr_t>(this), cleanup, cleanup_serial);
+		return enrollment_error == OK;
+	}
+
 	void *userdata;
 	void *token;
 
@@ -89,6 +112,9 @@ class CallableCustomExtension : public CallableCustom {
 		if (a->equal_func != b->equal_func) {
 			return false;
 		}
+		std::optional<GDExtensionDeviceExit::CleanupScope> first, second;
+		a->enter_comparison(first);
+		if (a != b) { b->enter_comparison(second); }
 		return a->equal_func(a->userdata, b->userdata);
 	}
 
@@ -99,6 +125,9 @@ class CallableCustomExtension : public CallableCustom {
 		if (a->less_than_func != b->less_than_func) {
 			return default_compare_less(p_a, p_b);
 		}
+		std::optional<GDExtensionDeviceExit::CleanupScope> first, second;
+		a->enter_comparison(first);
+		if (a != b) { b->enter_comparison(second); }
 		return a->less_than_func(a->userdata, b->userdata);
 	}
 
@@ -108,6 +137,9 @@ public:
 	}
 
 	String get_as_text() const override {
+		std::optional<GDExtensionDeviceExit::CallbackScope> frame;
+		if (!enter(frame)) { return "<CallableCustom>"; }
+
 		if (to_string_func != nullptr) {
 			String out;
 			GDExtensionBool is_valid = false;
@@ -130,6 +162,9 @@ public:
 	}
 
 	bool is_valid() const override {
+		std::optional<GDExtensionDeviceExit::CallbackScope> frame;
+		if (!enter(frame)) { return false; }
+
 		if (is_valid_func != nullptr && !is_valid_func(userdata)) {
 			return false;
 		}
@@ -145,6 +180,10 @@ public:
 	}
 
 	int get_argument_count(bool &r_is_valid) const override {
+		std::optional<GDExtensionDeviceExit::CallbackScope> frame;
+		r_is_valid = false;
+		if (!enter(frame)) { return 0; }
+
 		if (get_argument_count_func != nullptr) {
 			GDExtensionBool is_valid = false;
 
@@ -164,6 +203,14 @@ public:
 	}
 
 	void call(const Variant **p_arguments, int p_argcount, Variant &r_return_value, Callable::CallError &r_call_error) const override {
+		std::optional<GDExtensionDeviceExit::CallbackScope> frame;
+		if (!enter(frame)) {
+			r_return_value = Variant();
+			r_call_error.error = Callable::CallError::CALL_ERROR_INVALID_METHOD;
+			r_call_error.argument = r_call_error.expected = 0;
+			return;
+		}
+
 		GDExtensionCallError error;
 
 		call_func(userdata, (GDExtensionConstVariantPtr *)p_arguments, p_argcount, (GDExtensionVariantPtr)&r_return_value, &error);
@@ -174,7 +221,11 @@ public:
 	}
 
 #ifndef DISABLE_DEPRECATED
-	CallableCustomExtension(GDExtensionCallableCustomInfo *p_info) {
+	CallableCustomExtension(GDExtensionCallableCustomInfo *p_info, GDExtensionDeviceExit::RecordRef &&p_owner) : owner(std::move(p_owner)) {
+		if (!enroll()) { return; }
+		std::optional<GDExtensionDeviceExit::CallbackScope> frame;
+		if (!enter(frame)) { enrollment_error = ERR_UNAVAILABLE; return; }
+		adopted = true;
 		userdata = p_info->callable_userdata;
 		token = p_info->token;
 
@@ -201,7 +252,11 @@ public:
 	}
 #endif
 
-	CallableCustomExtension(GDExtensionCallableCustomInfo2 *p_info) {
+	CallableCustomExtension(GDExtensionCallableCustomInfo2 *p_info, GDExtensionDeviceExit::RecordRef &&p_owner) : owner(std::move(p_owner)) {
+		if (!enroll()) { return; }
+		std::optional<GDExtensionDeviceExit::CallbackScope> frame;
+		if (!enter(frame)) { enrollment_error = ERR_UNAVAILABLE; return; }
+		adopted = true;
 		userdata = p_info->callable_userdata;
 		token = p_info->token;
 
@@ -227,10 +282,16 @@ public:
 		}
 	}
 
+	Error get_enrollment_error() const { return enrollment_error; }
 	~CallableCustomExtension() {
-		if (free_func != nullptr) {
-			free_func(userdata);
+		if (!adopted) { return; }
+		std::optional<GDExtensionDeviceExit::CleanupScope> frame;
+		if (owner.is_valid()) {
+			frame.emplace(cleanup, owner, reinterpret_cast<uintptr_t>(this), cleanup_serial);
+			GDExtensionDeviceExit::require_close_success(frame->get_error(), GDExtensionDeviceExit::CloseRoute::LAST_REF);
 		}
+		if (free_func != nullptr) { free_func(userdata); }
+		// CleanupScope records the actual free return before the action member retires.
 	}
 };
 
@@ -241,7 +302,11 @@ bool is_typed_lifecycle_interface(const char *name);
 // Core interface functions.
 GDExtensionInterfaceFunctionPtr gdextension_get_proc_address(const char *p_name) {
 	// Legacy lookup never selects guarded enrollment merely by symbol presence.
-	if (GDExtensionDeviceExit::is_typed_lifecycle_interface(p_name)) { return nullptr; }
+	if ((p_name && strncmp(p_name, "device_session_", 15) == 0) || GDExtensionDeviceExit::is_typed_lifecycle_interface(p_name)) { return nullptr; }
+	return GDExtension::get_interface_function(p_name);
+}
+
+GDExtensionInterfaceFunctionPtr gdextension_get_guarded_proc_address(const char *p_name) {
 	return GDExtension::get_interface_function(p_name);
 }
 
@@ -1616,12 +1681,38 @@ static void gdextension_object_set_script_instance(GDExtensionObjectPtr p_object
 
 #ifndef DISABLE_DEPRECATED
 static void gdextension_callable_custom_create(GDExtensionUninitializedTypePtr r_callable, GDExtensionCallableCustomInfo *p_custom_callable_info) {
-	memnew_placement(r_callable, Callable(memnew(CallableCustomExtension(p_custom_callable_info))));
+	GDExtensionDeviceExit::RecordRef owner;
+	const Error enrolled = GDExtensionDeviceExit::Registry::get_singleton().retain_callable_owner(p_custom_callable_info->token, owner);
+	if ((enrolled != OK && enrolled != ERR_DOES_NOT_EXIST) || GDExtensionDeviceExit::Registry::get_singleton().check_entry_classes(owner, 1u << 8) != OK) {
+		memnew_placement(r_callable, Callable());
+		ERR_FAIL_MSG("UNSUPPORTED_ENTRY_CLASS");
+	}
+
+	auto *custom = memnew(CallableCustomExtension(p_custom_callable_info, std::move(owner)));
+	if (custom->get_enrollment_error() != OK) {
+		memdelete(custom);
+		memnew_placement(r_callable, Callable());
+		ERR_FAIL_MSG("CALLABLE_ENROLLMENT_FAILED");
+	}
+	memnew_placement(r_callable, Callable(custom));
 }
 #endif
 
 static void gdextension_callable_custom_create2(GDExtensionUninitializedTypePtr r_callable, GDExtensionCallableCustomInfo2 *p_custom_callable_info) {
-	memnew_placement(r_callable, Callable(memnew(CallableCustomExtension(p_custom_callable_info))));
+	GDExtensionDeviceExit::RecordRef owner;
+	const Error enrolled = GDExtensionDeviceExit::Registry::get_singleton().retain_callable_owner(p_custom_callable_info->token, owner);
+	if ((enrolled != OK && enrolled != ERR_DOES_NOT_EXIST) || GDExtensionDeviceExit::Registry::get_singleton().check_entry_classes(owner, 1u << 8) != OK) {
+		memnew_placement(r_callable, Callable());
+		ERR_FAIL_MSG("UNSUPPORTED_ENTRY_CLASS");
+	}
+
+	auto *custom = memnew(CallableCustomExtension(p_custom_callable_info, std::move(owner)));
+	if (custom->get_enrollment_error() != OK) {
+		memdelete(custom);
+		memnew_placement(r_callable, Callable());
+		ERR_FAIL_MSG("CALLABLE_ENROLLMENT_FAILED");
+	}
+	memnew_placement(r_callable, Callable(custom));
 }
 
 static void *gdextension_callable_custom_get_userdata(GDExtensionTypePtr p_callable, void *p_token) {
@@ -1686,6 +1777,7 @@ static void *gdextension_classdb_get_class_tag(GDExtensionConstStringNamePtr p_c
 #endif
 
 static void gdextension_editor_add_plugin(GDExtensionConstStringNamePtr p_classname) {
+	ERR_FAIL_COND_MSG(GDExtensionDeviceExit::Registry::get_singleton().check_current_entry_classes(1u << 10) != OK, "UNSUPPORTED_ENTRY_CLASS");
 #ifdef TOOLS_ENABLED
 	const StringName classname = *reinterpret_cast<const StringName *>(p_classname);
 	GDExtensionEditorPlugins::add_extension_class(classname);

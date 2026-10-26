@@ -43,6 +43,24 @@ public:
 	};
 
 	struct Viewport {
+		struct ViewPresentationKey {
+			uint64_t view_id = 0;
+			uint64_t view_epoch = 0;
+			uint64_t present_seq = 0;
+		};
+
+		struct CameraSourceToken {
+			uint64_t view_id = 0;
+			uint64_t view_epoch = 0;
+			uint64_t capture_ordinal = 0;
+
+			bool is_valid() const { return view_id != 0 && capture_ordinal != 0; }
+			bool operator==(const CameraSourceToken &p_other) const {
+				return view_id == p_other.view_id && view_epoch == p_other.view_epoch && capture_ordinal == p_other.capture_ordinal;
+			}
+			bool operator!=(const CameraSourceToken &p_other) const { return !(*this == p_other); }
+		};
+
 		RID self;
 		RID parent;
 
@@ -76,6 +94,18 @@ public:
 
 		RendererSceneRender::CameraData prev_camera_data;
 		uint64_t prev_camera_data_frame = 0;
+		RendererSceneRender::CameraData staged_camera_data;
+		CameraSourceToken staged_camera_token;
+		bool staged_camera_data_valid = false;
+
+		// E15/E16 identity is owned by the registered viewport. These fields
+		// are updated only at the real camera invocation and color adoption
+		// boundaries; they are never inferred from the global frame counter.
+		ViewPresentationKey presentation_key;
+		CameraSourceToken previous_camera_token;
+		CameraSourceToken current_camera_token;
+		uint64_t camera_capture_ordinal = 0;
+		bool presentation_registered = false;
 
 		bool use_occlusion_culling = false;
 		bool occlusion_buffer_dirty = false;
@@ -249,7 +279,16 @@ public:
 	RID viewport_get_occluder_debug_texture(RID p_viewport) const;
 
 	void viewport_set_prev_camera_data(RID p_viewport, const RendererSceneRender::CameraData *p_camera_data);
+	void viewport_set_prev_camera_data(RID p_viewport, const RendererSceneRender::CameraData *p_camera_data, const Viewport::CameraSourceToken &p_token);
+	bool viewport_stage_camera_data(RID p_viewport, const RendererSceneRender::CameraData *p_camera_data, const Viewport::CameraSourceToken &p_token);
+	bool viewport_adopt_camera_data(RID p_viewport);
 	const RendererSceneRender::CameraData *viewport_get_prev_camera_data(RID p_viewport);
+	Viewport::CameraSourceToken viewport_get_previous_camera_token(RID p_viewport) const;
+	Viewport::CameraSourceToken viewport_get_current_camera_token(RID p_viewport) const;
+	Viewport::CameraSourceToken viewport_begin_camera_capture(RID p_viewport);
+	Viewport::ViewPresentationKey viewport_get_presentation_key(RID p_viewport) const;
+	bool viewport_register_presentation_key(RID p_viewport, const Viewport::ViewPresentationKey &p_key);
+	void viewport_invalidate_presentation_key(RID p_viewport);
 
 	void viewport_set_disable_2d(RID p_viewport, bool p_disable);
 	void viewport_set_environment_mode(RID p_viewport, RSE::ViewportEnvironmentMode p_mode);

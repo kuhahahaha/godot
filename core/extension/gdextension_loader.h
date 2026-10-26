@@ -38,9 +38,20 @@ class GDExtensionLoader : public RefCounted {
 	GDSOFTCLASS(GDExtensionLoader, RefCounted);
 
 public:
+	enum class LoaderKind : uint32_t {
+		DYNAMIC = 1,
+		FUNCTION = 2,
+		CUSTOM = 3,
+	};
+
+	virtual Error prepare_open(const String &p_path) { return OK; }
+	virtual void abort_prepared_open() {}
+	virtual uint32_t get_device_exit_guard_version() const { return 0; }
+	virtual LoaderKind get_loader_kind() const { return LoaderKind::CUSTOM; }
+
 	virtual Error open_library(const String &p_path) = 0;
 	virtual Error initialize(GDExtensionInterfaceGetProcAddress p_get_proc_address, const Ref<GDExtension> &p_extension, GDExtensionInitialization *r_initialization) = 0;
-	virtual void close_library() = 0;
+	virtual Error close_library() = 0;
 	virtual bool is_library_open() const = 0;
 	virtual bool has_library_changed() const = 0;
 	virtual bool library_exists() const = 0;

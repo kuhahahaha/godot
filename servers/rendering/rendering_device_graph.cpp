@@ -35,15 +35,134 @@
 #define PRINT_RESOURCE_TRACKER_TOTAL 0
 #define PRINT_COMMAND_RECORDING 0
 
+#include <atomic>
+
+static std::atomic<uint64_t> next_record_graph_instance{ 1 };
+
 // Prints the total number of bytes used for draw lists in a frame.
 #define PRINT_DRAW_LIST_STATS 0
 
 RenderingDeviceGraph::RenderingDeviceGraph() {
+	graph_instance = next_record_graph_instance.fetch_add(1, std::memory_order_relaxed);
+	CRASH_COND_MSG(graph_instance == 0, "RenderingDeviceGraph record identity exhausted.");
 	driver_honors_barriers = false;
 	driver_clears_with_copy_engine = false;
 }
 
 RenderingDeviceGraph::~RenderingDeviceGraph() {
+}
+
+bool RenderingDeviceGraph::contains_record(const RecordHandle &p_handle) const {
+	if (!p_handle.is_valid() || p_handle.graph_instance != graph_instance || p_handle.graph_frame != uint64_t(tracking_frame)) {
+		return false;
+	}
+	if (p_handle.kind == 1) {
+		if (p_handle.index >= command_count || p_handle.index >= command_data_offsets.size() || p_handle.offset != 0 || command_data_offsets[p_handle.index] >= command_data.size()) {
+			return false;
+		}
+		const auto *command = reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offsets[p_handle.index]]);
+		return command->type == RecordedCommand::TYPE_BUFFER_UPDATE || command->type == RecordedCommand::TYPE_BUFFER_GET_DATA;
+	}
+	if (p_handle.kind == 2 && p_handle.index == uint32_t(compute_instruction_list.index)) {
+		if (p_handle.offset >= compute_instruction_list.data.size()) {
+			return false;
+		}
+		const auto *instruction = reinterpret_cast<const ComputeListInstruction *>(&compute_instruction_list.data[p_handle.offset]);
+		return instruction->type == ComputeListInstruction::TYPE_DISPATCH || instruction->type == ComputeListInstruction::TYPE_DISPATCH_INDIRECT;
+	}
+	if (p_handle.kind == 2) {
+		for (uint32_t i = 0; i < command_count; i++) {
+			const auto *command = reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offsets[i]]);
+			if (command->type != RecordedCommand::TYPE_COMPUTE_LIST) {
+				continue;
+			}
+			const auto *list = static_cast<const RecordedComputeListCommand *>(command);
+			if (list->list_index != p_handle.index || p_handle.offset >= list->instruction_data_size) {
+				continue;
+			}
+			const auto *instruction = reinterpret_cast<const ComputeListInstruction *>(list->instruction_data() + p_handle.offset);
+			return instruction->type == ComputeListInstruction::TYPE_DISPATCH || instruction->type == ComputeListInstruction::TYPE_DISPATCH_INDIRECT;
+		}
+	}
+	return false;
+}
+
+bool RenderingDeviceGraph::has_driver_callbacks() const {
+ for(uint32_t i=0;i<command_count;++i) {
+  const auto *command=reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offsets[i]]);
+  if(command->type==RecordedCommand::TYPE_DRIVER_CALLBACK)return true;
+ }
+ return false;
+}
+
+bool RenderingDeviceGraph::has_synchronization_edge(const RecordHandle &before, const RecordHandle &after) const {
+ if (!contains_record(before) || !contains_record(after) || (before.kind!=1 && before.kind!=2) || after.kind!=2) return false;
+ uint32_t source=before.kind==1?before.index:UINT32_MAX,destination=UINT32_MAX;
+ for (uint32_t i=0;i<command_count;++i) {
+  const auto *command=reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offsets[i]]);
+  if (command->type!=RecordedCommand::TYPE_COMPUTE_LIST) continue;
+  const auto *list=static_cast<const RecordedComputeListCommand *>(command);
+  if (before.kind==2 && list->list_index==before.index) source=i;
+  if (list->list_index==after.index) destination=i;
+ }
+ if (source==UINT32_MAX || destination==UINT32_MAX || source>=destination) return false;
+ const auto *next=reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offsets[destination]]);
+ if (next->consumed_synchronization_begin<0 || source<uint32_t(next->consumed_synchronization_begin)) return false;
+ const auto *previous=reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offsets[source]]);
+ for (int32_t node=previous->adjacent_command_list_index;node>=0;node=command_list_nodes[node].next_list_index) {
+  if (uint32_t(node)>=command_list_nodes.size()) return false;
+  if (command_list_nodes[node].command_index==int32_t(destination)) return true;
+ }
+ return false;
+}
+
+RenderingDeviceGraph::RecordMappingState RenderingDeviceGraph::record_mapping_state(const RecordHandle &p_handle) const {
+	if (!contains_record(p_handle)) {
+		return RecordMappingState::Invalid;
+	}
+	uint32_t slot;
+	if (resolve_record_command_buffer_slot(p_handle, slot)) {
+		return RecordMappingState::Recorded;
+	}
+	if (!graph_end_called) {
+		return RecordMappingState::Pending;
+	}
+	return command_buffer_begin_failed ? RecordMappingState::Failed : RecordMappingState::Unknown;
+}
+
+bool RenderingDeviceGraph::resolve_record_command_buffer_slot(const RecordHandle &p_handle, uint32_t &r_slot) const {
+	if (!contains_record(p_handle)) {
+		return false;
+	}
+	uint32_t command_index = p_handle.index;
+	if (p_handle.kind == 2) {
+		command_index = UINT32_MAX;
+		for (uint32_t i = 0; i < command_count; i++) {
+			const auto *command = reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offsets[i]]);
+			if (command->type == RecordedCommand::TYPE_COMPUTE_LIST && static_cast<const RecordedComputeListCommand *>(command)->list_index == p_handle.index) {
+				command_index = i;
+				break;
+			}
+		}
+	}
+	if (command_index >= command_buffer_slots.size() || command_buffer_slots[command_index] == UINT32_MAX ||
+			command_buffer_slots[command_index] >= command_buffer_begun.size() || !command_buffer_begun[command_buffer_slots[command_index]]) {
+		return false;
+	}
+	r_slot = command_buffer_slots[command_index];
+	return true;
+}
+
+bool RenderingDeviceGraph::resolve_record_command_buffer(const RecordHandle &p_handle, RDD::CommandBufferID &r_command_buffer) const {
+	uint32_t slot;
+	if (!resolve_record_command_buffer_slot(p_handle, slot)) {
+		return false;
+	}
+	if (slot >= command_buffer_ids.size() || slot >= command_buffer_begun.size() || !command_buffer_ids[slot] || !command_buffer_begun[slot]) {
+		return false;
+	}
+	r_command_buffer = command_buffer_ids[slot];
+	return true;
 }
 
 String RenderingDeviceGraph::_usage_to_string(ResourceUsage p_usage) {
@@ -302,6 +421,7 @@ RenderingDeviceGraph::RecordedCommand *RenderingDeviceGraph::_allocate_command(u
 	uint32_t command_data_offset = command_data.size();
 	command_data_offset = GRAPH_ALIGN(command_data_offset);
 	command_data_offsets.push_back(command_data_offset);
+	command_buffer_slots.push_back(UINT32_MAX);
 	command_data.resize(command_data_offset + p_command_size);
 	r_command_index = command_count++;
 	RecordedCommand *new_command = reinterpret_cast<RecordedCommand *>(&command_data[command_data_offset]);
@@ -389,6 +509,7 @@ void RenderingDeviceGraph::_add_command_to_graph(ResourceTracker **p_resource_tr
 	if (command_synchronization_pending) {
 		// All previous commands should be adjacent to this command.
 		int32_t start_command_index = uint32_t(MAX(command_synchronization_index, 0));
+		r_command->consumed_synchronization_begin = start_command_index;
 		for (int32_t i = start_command_index; i < p_command_index; i++) {
 			_add_adjacent_command(i, p_command_index, r_command);
 		}
@@ -1090,6 +1211,12 @@ void RenderingDeviceGraph::_wait_for_secondary_command_buffer_tasks() {
 }
 
 void RenderingDeviceGraph::_run_render_commands(int32_t p_level, const RecordedCommandSort *p_sorted_commands, uint32_t p_sorted_commands_count, RDD::CommandBufferID &r_command_buffer, CommandBufferPool &r_command_buffer_pool, int32_t &r_current_label_index, int32_t &r_current_label_level) {
+	if (command_buffer_begun.is_empty()) {
+		command_buffer_begun.push_back(primary_command_buffer_begun); // Primary begin belongs to RenderingDevice.
+	}
+	if (!primary_command_buffer_begun || command_buffer_begin_failed) {
+		return;
+	}
 	driver->command_group_begin(r_command_buffer);
 	for (uint32_t i = 0; i < p_sorted_commands_count; i++) {
 		const uint32_t command_index = p_sorted_commands[i].index;
@@ -1151,7 +1278,12 @@ void RenderingDeviceGraph::_run_render_commands(int32_t p_level, const RecordedC
 					// Start recording on the next usable command buffer from the pool.
 					uint32_t command_buffer_index = r_command_buffer_pool.buffers_used++;
 					r_command_buffer = r_command_buffer_pool.buffers[command_buffer_index];
-					driver->command_buffer_begin(r_command_buffer);
+					const bool begun = driver->command_buffer_begin(r_command_buffer);
+					command_buffer_begun.push_back(begun);
+					if (!begun) {
+						command_buffer_begin_failed = true;
+						return;
+					}
 				}
 
 				const RecordedComputeListCommand *compute_list_command = reinterpret_cast<const RecordedComputeListCommand *>(command);
@@ -1181,7 +1313,12 @@ void RenderingDeviceGraph::_run_render_commands(int32_t p_level, const RecordedC
 					// Start recording on the next usable command buffer from the pool.
 					uint32_t command_buffer_index = r_command_buffer_pool.buffers_used++;
 					r_command_buffer = r_command_buffer_pool.buffers[command_buffer_index];
-					driver->command_buffer_begin(r_command_buffer);
+					const bool begun = driver->command_buffer_begin(r_command_buffer);
+					command_buffer_begun.push_back(begun);
+					if (!begun) {
+						command_buffer_begin_failed = true;
+						return;
+					}
 				}
 
 				const VectorView clear_values(draw_list_command->clear_values(), draw_list_command->clear_values_count);
@@ -1241,6 +1378,12 @@ void RenderingDeviceGraph::_run_render_commands(int32_t p_level, const RecordedC
 				return;
 			}
 		}
+		const uint32_t slot = r_command_buffer_pool.buffers_used;
+		while (command_buffer_ids.size() <= slot) {
+			command_buffer_ids.push_back(RDD::CommandBufferID());
+		}
+		command_buffer_slots[command_index] = slot;
+		command_buffer_ids[slot] = r_command_buffer;
 	}
 	driver->command_group_end(r_command_buffer);
 }
@@ -1774,9 +1917,15 @@ void RenderingDeviceGraph::finalize() {
 	frames.clear();
 }
 
-void RenderingDeviceGraph::begin() {
+void RenderingDeviceGraph::begin(bool p_primary_command_buffer_begun) {
+	primary_command_buffer_begun = p_primary_command_buffer_begun;
+	command_buffer_begin_failed = !p_primary_command_buffer_begun;
+	graph_end_called = false;
 	command_data.clear();
 	command_data_offsets.clear();
+	command_buffer_slots.clear();
+	command_buffer_ids.clear();
+	command_buffer_begun.clear();
 	command_normalization_barriers.clear();
 	command_transition_barriers.clear();
 	command_buffer_barriers.clear();
@@ -1900,7 +2049,7 @@ void RenderingDeviceGraph::add_buffer_copy(RDD::BufferID p_src, ResourceTracker 
 	_add_command_to_graph(trackers, usages, p_src_tracker != nullptr ? 2 : 1, command_index, command);
 }
 
-void RenderingDeviceGraph::add_buffer_get_data(RDD::BufferID p_src, ResourceTracker *p_src_tracker, RDD::BufferID p_dst, RDD::BufferCopyRegion p_region) {
+RenderingDeviceGraph::RecordHandle RenderingDeviceGraph::add_buffer_get_data(RDD::BufferID p_src, ResourceTracker *p_src_tracker, RDD::BufferID p_dst, RDD::BufferCopyRegion p_region) {
 	// Source tracker is allowed to be null as it could be a read-only buffer.
 	int32_t command_index;
 	RecordedBufferGetDataCommand *command = static_cast<RecordedBufferGetDataCommand *>(_allocate_command(sizeof(RecordedBufferGetDataCommand), command_index));
@@ -1916,9 +2065,10 @@ void RenderingDeviceGraph::add_buffer_get_data(RDD::BufferID p_src, ResourceTrac
 	} else {
 		_add_command_to_graph(nullptr, nullptr, 0, command_index, command);
 	}
+	return { graph_instance, uint64_t(tracking_frame), 1, uint32_t(command_index), 0 };
 }
 
-void RenderingDeviceGraph::add_buffer_update(RDD::BufferID p_dst, ResourceTracker *p_dst_tracker, VectorView<RecordedBufferCopy> p_buffer_copies) {
+RenderingDeviceGraph::RecordHandle RenderingDeviceGraph::add_buffer_update(RDD::BufferID p_dst, ResourceTracker *p_dst_tracker, VectorView<RecordedBufferCopy> p_buffer_copies) {
 	DEV_ASSERT(p_dst_tracker != nullptr);
 
 	size_t buffer_copies_size = p_buffer_copies.size() * sizeof(RecordedBufferCopy);
@@ -1937,6 +2087,7 @@ void RenderingDeviceGraph::add_buffer_update(RDD::BufferID p_dst, ResourceTracke
 
 	ResourceUsage buffer_usage = RESOURCE_USAGE_COPY_TO;
 	_add_command_to_graph(&p_dst_tracker, &buffer_usage, 1, command_index, command);
+	return { graph_instance, uint64_t(tracking_frame), 1, uint32_t(command_index), 0 };
 }
 
 void RenderingDeviceGraph::add_driver_callback(RDD::DriverCallback p_callback, void *p_userdata, VectorView<ResourceTracker *> p_trackers, VectorView<RenderingDeviceGraph::ResourceUsage> p_usages) {
@@ -2072,20 +2223,24 @@ void RenderingDeviceGraph::add_compute_list_bind_uniform_sets(RDD::ShaderID p_sh
 	}
 }
 
-void RenderingDeviceGraph::add_compute_list_dispatch(uint32_t p_x_groups, uint32_t p_y_groups, uint32_t p_z_groups) {
+RenderingDeviceGraph::RecordHandle RenderingDeviceGraph::add_compute_list_dispatch(uint32_t p_x_groups, uint32_t p_y_groups, uint32_t p_z_groups) {
+	const uint32_t instruction_offset = GRAPH_ALIGN(compute_instruction_list.data.size());
 	ComputeListDispatchInstruction *instruction = reinterpret_cast<ComputeListDispatchInstruction *>(_allocate_compute_list_instruction(sizeof(ComputeListDispatchInstruction)));
 	instruction->type = ComputeListInstruction::TYPE_DISPATCH;
 	instruction->x_groups = p_x_groups;
 	instruction->y_groups = p_y_groups;
 	instruction->z_groups = p_z_groups;
+	return { graph_instance, uint64_t(tracking_frame), 2, uint32_t(compute_instruction_list.index), instruction_offset };
 }
 
-void RenderingDeviceGraph::add_compute_list_dispatch_indirect(RDD::BufferID p_buffer, uint32_t p_offset) {
+RenderingDeviceGraph::RecordHandle RenderingDeviceGraph::add_compute_list_dispatch_indirect(RDD::BufferID p_buffer, uint32_t p_offset) {
+	const uint32_t instruction_offset = GRAPH_ALIGN(compute_instruction_list.data.size());
 	ComputeListDispatchIndirectInstruction *instruction = reinterpret_cast<ComputeListDispatchIndirectInstruction *>(_allocate_compute_list_instruction(sizeof(ComputeListDispatchIndirectInstruction)));
 	instruction->type = ComputeListInstruction::TYPE_DISPATCH_INDIRECT;
 	instruction->buffer = p_buffer;
 	instruction->offset = p_offset;
 	compute_instruction_list.stages.set_flag(RDD::PIPELINE_STAGE_DRAW_INDIRECT_BIT);
+	return { graph_instance, uint64_t(tracking_frame), 2, uint32_t(compute_instruction_list.index), instruction_offset };
 }
 
 void RenderingDeviceGraph::add_compute_list_set_push_constant(RDD::ShaderID p_shader, const void *p_data, uint32_t p_data_size) {
@@ -2137,6 +2292,7 @@ void RenderingDeviceGraph::add_compute_list_end() {
 	uint32_t command_size = sizeof(RecordedComputeListCommand) + instruction_data_size;
 	RecordedComputeListCommand *command = static_cast<RecordedComputeListCommand *>(_allocate_command(command_size, command_index));
 	command->type = RecordedCommand::TYPE_COMPUTE_LIST;
+	command->list_index = uint32_t(compute_instruction_list.index);
 	command->self_stages = compute_instruction_list.stages;
 	command->instruction_data_size = instruction_data_size;
 	memcpy(command->instruction_data(), compute_instruction_list.data.ptr(), instruction_data_size);
@@ -2601,7 +2757,8 @@ void RenderingDeviceGraph::end_label() {
 }
 
 void RenderingDeviceGraph::end(bool p_reorder_commands, bool p_full_barriers, RDD::CommandBufferID &r_command_buffer, CommandBufferPool &r_command_buffer_pool) {
-	if (command_count == 0) {
+	graph_end_called = true;
+	if (command_count == 0 || !primary_command_buffer_begun) {
 		// No commands have been logged, do nothing.
 		return;
 	}
@@ -2759,6 +2916,9 @@ void RenderingDeviceGraph::end(bool p_reorder_commands, bool p_full_barriers, RD
 					_boost_priority_for_render_commands(level_command_ptr, level_command_count, boosted_priority);
 					_group_barriers_for_render_commands(r_command_buffer, level_command_ptr, level_command_count, p_full_barriers);
 					_run_render_commands(current_level, level_command_ptr, level_command_count, r_command_buffer, r_command_buffer_pool, current_label_index, current_label_level);
+					if (command_buffer_begin_failed) {
+						break;
+					}
 					current_level = commands_sorted[i].level;
 					current_level_start = i;
 				}
@@ -2767,20 +2927,27 @@ void RenderingDeviceGraph::end(bool p_reorder_commands, bool p_full_barriers, RD
 			RecordedCommandSort *level_command_ptr = &commands_sorted[current_level_start];
 			uint32_t level_command_count = command_count - current_level_start;
 			_boost_priority_for_render_commands(level_command_ptr, level_command_count, boosted_priority);
-			_group_barriers_for_render_commands(r_command_buffer, level_command_ptr, level_command_count, p_full_barriers);
-			_run_render_commands(current_level, level_command_ptr, level_command_count, r_command_buffer, r_command_buffer_pool, current_label_index, current_label_level);
+			if (!command_buffer_begin_failed) {
+				_group_barriers_for_render_commands(r_command_buffer, level_command_ptr, level_command_count, p_full_barriers);
+				_run_render_commands(current_level, level_command_ptr, level_command_count, r_command_buffer, r_command_buffer_pool, current_label_index, current_label_level);
+			}
 
 #if PRINT_RENDER_GRAPH
 			print_line("COMMANDS", command_count, "LEVELS", current_level + 1);
 #endif
 		} else {
 			for (uint32_t i = 0; i < command_count; i++) {
+				if (command_buffer_begin_failed) {
+					break;
+				}
 				_group_barriers_for_render_commands(r_command_buffer, &commands_sorted[i], 1, p_full_barriers);
 				_run_render_commands(i, &commands_sorted[i], 1, r_command_buffer, r_command_buffer_pool, current_label_index, current_label_level);
 			}
 		}
 
-		_run_label_command_change(r_command_buffer, -1, -1, false, false, nullptr, 0, current_label_index, current_label_level);
+		if (!command_buffer_begin_failed) {
+			_run_label_command_change(r_command_buffer, -1, -1, false, false, nullptr, 0, current_label_index, current_label_level);
+		}
 
 #if PRINT_DRAW_LIST_STATS
 		print_line(vformat("Draw list %d bytes", draw_list_total_size));

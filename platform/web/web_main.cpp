@@ -164,6 +164,14 @@ extern EMSCRIPTEN_KEEPALIVE int godot_web_main(int argc, char *argv[]) {
 
 	int ret = Main::start();
 	os->set_exit_code(ret);
+	if (ret != EXIT_SUCCESS || !os->get_main_loop()) {
+		Main::cleanup();
+		main_started = false; // exit_callback must not perform cleanup a second time.
+		os->set_exit_code(ret);
+		emscripten_set_main_loop(exit_callback, -1, false);
+		godot_js_os_finish_async(cleanup_after_sync);
+		return ret;
+	}
 	os->get_main_loop()->initialize();
 #ifdef TOOLS_ENABLED
 	if (Engine::get_singleton()->is_project_manager_hint() && FileAccess::exists("/tmp/preload.zip")) {

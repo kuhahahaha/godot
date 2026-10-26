@@ -29,15 +29,14 @@
 /**************************************************************************/
 
 #include "skeleton_3d.h"
-#include "modules/modules_enabled.gen.h"
-#ifdef MODULE_P01_PROBE_ENABLED
-#include "modules/p01_probe/p01_observer.h"
-#endif
 #include "skeleton_3d.compat.inc"
 
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "scene/3d/skeleton_modifier_3d.h"
+#include "servers/rendering/render_capture_test_hooks.h"
+
+#include "modules/modules_enabled.gen.h"
 #if !defined(DISABLE_DEPRECATED) && !defined(PHYSICS_3D_DISABLED)
 #include "scene/3d/physics/physical_bone_simulator_3d.h"
 #endif // _DISABLE_DEPRECATED && PHYSICS_3D_DISABLED
@@ -351,12 +350,12 @@ void Skeleton3D::_notification(int p_what) {
 				return;
 			}
 
-#ifdef MODULE_P01_PROBE_ENABLED
-			p01_observe_skeleton_signal(uint64_t(get_instance_id()), false);
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+			RenderCaptureTestHooks::observe_skeleton_signal(uint64_t(get_instance_id()), false);
 #endif
 			emit_signal(SceneStringName(skeleton_updated));
-#ifdef MODULE_P01_PROBE_ENABLED
-			p01_observe_skeleton_signal(uint64_t(get_instance_id()), true);
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+			RenderCaptureTestHooks::observe_skeleton_signal(uint64_t(get_instance_id()), true);
 #endif
 
 			// Update skins.
@@ -412,8 +411,8 @@ void Skeleton3D::_notification(int p_what) {
 				for (uint32_t i = 0; i < bind_count; i++) {
 					uint32_t bone_index = E->skin_bone_indices_ptrs[i];
 					ERR_CONTINUE(bone_index >= (uint32_t)len);
-#ifdef MODULE_P01_PROBE_ENABLED
-					p01_observe_skeleton_palette_request(uint64_t(get_instance_id()), skeleton.get_id(), i);
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+					RenderCaptureTestHooks::observe_skeleton_palette_request(uint64_t(get_instance_id()), skeleton.get_id(), i);
 #endif
 					rs->skeleton_bone_set_transform(skeleton, i, bonesptr[bone_index].global_pose * skin->get_bind_pose(i));
 				}

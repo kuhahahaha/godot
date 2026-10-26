@@ -47,11 +47,13 @@
 #include "servers/rendering/rendering_server_types.h"
 #include "servers/rendering/storage/utilities.h"
 
+#include "modules/modules_enabled.gen.h"
+
 class RenderingLightCuller;
 
 class RendererSceneCull : public RenderingMethod {
-#ifdef TESTS_ENABLED
-	friend class P01NativeSource;
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	friend class RenderCaptureTestAccess;
 #endif
 public:
 	RendererSceneRender *scene_render = nullptr;

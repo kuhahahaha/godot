@@ -53,3 +53,65 @@ TEST_CASE("[ViewportHistory] ordinary two-frame history preserves registered adm
 	CHECK(RSG::viewport->viewport_adopt_camera_data(rid));
 	CHECK(RSG::viewport->viewport_get_previous_camera_token(rid) == token);
 }
+
+TEST_CASE("[ViewportHistory] registered same-frame history keeps data and token together") {
+	REQUIRE(RSG::viewport != nullptr);
+	REQUIRE(RSG::rasterizer != nullptr);
+	RID rid = RSG::viewport->viewport_allocate();
+	RSG::viewport->viewport_initialize(rid);
+	struct Cleanup {
+		RID rid;
+		~Cleanup() { RSG::viewport->free(rid); }
+	} cleanup{ rid };
+	RendererViewport::Viewport::ViewPresentationKey key;
+	key.view_id = 72;
+	key.view_epoch = 1;
+	REQUIRE(RSG::viewport->viewport_register_presentation_key(rid, key));
+	RSG::rasterizer->begin_frame(1.0 / 60.0);
+	RendererSceneRender::CameraData camera{};
+	const auto first = RSG::viewport->viewport_begin_camera_capture(rid);
+	camera.source_view_id = first.view_id;
+	camera.source_view_epoch = first.view_epoch;
+	camera.source_capture_ordinal = first.capture_ordinal;
+	camera.main_transform.origin.x = 1;
+	RSG::viewport->viewport_set_prev_camera_data(rid, &camera, first);
+	const auto second = RSG::viewport->viewport_begin_camera_capture(rid);
+	REQUIRE(second != first);
+	camera.source_capture_ordinal = second.capture_ordinal;
+	camera.main_transform.origin.x = 2;
+	RSG::viewport->viewport_set_prev_camera_data(rid, &camera, second);
+	const auto *previous = RSG::viewport->viewport_get_prev_camera_data(rid);
+	REQUIRE(previous != nullptr);
+	CHECK(previous->main_transform.origin.x == 1);
+	CHECK(previous->source_capture_ordinal == first.capture_ordinal);
+	CHECK(RSG::viewport->viewport_get_previous_camera_token(rid) == first);
+}
+
+TEST_CASE("[ViewportHistory] invalidation never reissues an old camera source token") {
+	REQUIRE(RSG::viewport != nullptr);
+	RID rid = RSG::viewport->viewport_allocate();
+	RSG::viewport->viewport_initialize(rid);
+	struct Cleanup {
+		RID rid;
+		~Cleanup() { RSG::viewport->free(rid); }
+	} cleanup{ rid };
+	RendererViewport::Viewport::ViewPresentationKey key;
+	key.view_id = 73;
+	key.view_epoch = 1;
+	REQUIRE(RSG::viewport->viewport_register_presentation_key(rid, key));
+	const auto old = RSG::viewport->viewport_begin_camera_capture(rid);
+	REQUIRE(old.is_valid());
+	RSG::viewport->viewport_invalidate_presentation_key(rid);
+	CHECK_FALSE(RSG::viewport->viewport_begin_camera_capture(rid).is_valid());
+	CHECK_FALSE(RSG::viewport->viewport_adopt_camera_data(rid));
+	REQUIRE(RSG::viewport->viewport_register_presentation_key(rid, key));
+	const auto current = RSG::viewport->viewport_begin_camera_capture(rid);
+	CHECK(current != old);
+	CHECK(current.capture_ordinal > old.capture_ordinal);
+	RendererSceneRender::CameraData stale{};
+	stale.source_view_id = old.view_id;
+	stale.source_view_epoch = old.view_epoch;
+	stale.source_capture_ordinal = old.capture_ordinal;
+	CHECK_FALSE(RSG::viewport->viewport_stage_camera_data(rid, &stale, old));
+	CHECK_FALSE(RSG::viewport->viewport_adopt_camera_data(rid));
+}

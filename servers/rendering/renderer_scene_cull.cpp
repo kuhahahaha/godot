@@ -38,6 +38,7 @@
 #include "servers/rendering/rendering_light_culler.h"
 #include "servers/rendering/rendering_server.h"
 #include "servers/rendering/rendering_server_default.h"
+#include "servers/rendering/renderer_viewport.h"
 
 #ifndef XR_DISABLED
 #include "servers/xr/xr_interface.h"
@@ -2772,6 +2773,14 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 		}
 #endif // XR_DISABLED
 	}
+	// Freeze the token only after CameraData is fully constructed. This keeps
+	// failed/unsupported camera setup from consuming a source ordinal.
+	if (p_viewport.is_valid() && RSG::viewport) {
+		const RendererViewport::Viewport::CameraSourceToken source_token = RSG::viewport->viewport_begin_camera_capture(p_viewport);
+		camera_data.source_view_id = source_token.view_id;
+		camera_data.source_view_epoch = source_token.view_epoch;
+		camera_data.source_capture_ordinal = source_token.capture_ordinal;
+	}
 
 	RID environment = _render_get_environment(p_camera, p_scenario);
 	RID compositor = _render_get_compositor(p_camera, p_scenario);
@@ -3706,7 +3715,15 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 	scene_render->render_scene(p_render_buffers, p_camera_data, prev_camera_data, scene_cull_result.geometry_instances, scene_cull_result.light_instances, scene_cull_result.reflections, scene_cull_result.voxel_gi_instances, scene_cull_result.decals, scene_cull_result.lightmaps, scene_cull_result.fog_volumes, p_environment, camera_attributes, p_compositor, p_shadow_atlas, occluders_tex, p_reflection_probe.is_valid() ? RID() : scenario->reflection_atlas, p_reflection_probe, p_reflection_probe_pass, p_screen_mesh_lod_threshold, render_shadow_data, max_shadows_used, render_sdfgi_data, cull.sdfgi.region_count, p_window_output_max_value, &sdfgi_update_data, r_render_info);
 
 	if (p_viewport.is_valid()) {
-		RSG::viewport->viewport_set_prev_camera_data(p_viewport, p_camera_data);
+		RendererViewport::Viewport::CameraSourceToken source_token;
+		source_token.view_id = p_camera_data->source_view_id;
+		source_token.view_epoch = p_camera_data->source_view_epoch;
+		source_token.capture_ordinal = p_camera_data->source_capture_ordinal;
+		if (RSG::viewport->viewport_get_presentation_key(p_viewport).view_id != 0) {
+			RSG::viewport->viewport_stage_camera_data(p_viewport, p_camera_data, source_token);
+		} else {
+			RSG::viewport->viewport_set_prev_camera_data(p_viewport, p_camera_data);
+		}
 	}
 
 	for (uint32_t i = 0; i < max_shadows_used; i++) {

@@ -185,6 +185,8 @@ class OS_MacOS_NSApp : public OS_MacOS {
 	id delegate = nullptr;
 	bool should_terminate = false;
 	bool main_started = false;
+	bool main_loop_begun = false;
+	int main_start_status = 0;
 
 	CFRunLoopObserverRef pre_wait_observer = nil;
 

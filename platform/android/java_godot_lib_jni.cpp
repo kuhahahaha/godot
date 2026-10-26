@@ -84,6 +84,7 @@ enum StartupStep {
 };
 
 static SafeNumeric<int> step; // Shared between UI and render threads
+static SafeFlag main_loop_begun;
 
 static Vector3 accelerometer;
 static Vector3 gravity;
@@ -111,7 +112,7 @@ static void _terminate(JNIEnv *env, bool p_restart = false) {
 	bool restart_on_cleanup = false;
 	if (os_android) {
 		restart_on_cleanup = os_android->is_restart_on_exit_set();
-		os_android->main_loop_end();
+		if (main_loop_begun.clear_if_set()) { os_android->main_loop_end(); }
 		Main::cleanup();
 		delete os_android;
 	}
@@ -338,6 +339,7 @@ JNIEXPORT jboolean JNICALL Java_org_godotengine_godot_GodotLib_step(JNIEnv *env,
 
 		godot_java->on_godot_setup_completed(env);
 		os_android->main_loop_begin();
+		main_loop_begun.set();
 		godot_java->on_godot_main_loop_started(env);
 		step.increment();
 	}

@@ -4852,6 +4852,11 @@ Ref<World3D> Viewport::get_world_3d() const {
 	return world_3d;
 }
 
+ObjectID Viewport::get_world_3d_instance_id() const {
+	ERR_READ_THREAD_GUARD_V(ObjectID());
+	return world_3d.is_valid() ? world_3d.ptr()->get_instance_id() : ObjectID();
+}
+
 Ref<World3D> Viewport::find_world_3d() const {
 	ERR_READ_THREAD_GUARD_V(Ref<World3D>());
 	if (own_world_3d.is_valid()) {
@@ -5302,6 +5307,7 @@ void Viewport::_bind_methods() {
 #ifndef _3D_DISABLED
 	ClassDB::bind_method(D_METHOD("set_world_3d", "world_3d"), &Viewport::set_world_3d);
 	ClassDB::bind_method(D_METHOD("get_world_3d"), &Viewport::get_world_3d);
+	ClassDB::bind_method(D_METHOD("get_world_3d_instance_id"), &Viewport::get_world_3d_instance_id);
 	ClassDB::bind_method(D_METHOD("find_world_3d"), &Viewport::find_world_3d);
 
 	ClassDB::bind_method(D_METHOD("set_use_own_world_3d", "enable"), &Viewport::set_use_own_world_3d);

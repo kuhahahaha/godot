@@ -36,47 +36,62 @@
 
 #include <functional>
 
+#ifdef TESTS_ENABLED
+namespace TestDeviceExitLibraryClose {
+struct Access;
+}
+#endif
+
 class GDExtensionLibraryLoader : public GDExtensionLoader {
+#ifdef TESTS_ENABLED
+	friend struct TestDeviceExitLibraryClose::Access;
+	Error test_close_error = OK;
+	uint32_t test_close_attempts = 0;
+#endif
 	GDSOFTCLASS(GDExtensionLibraryLoader, GDExtensionLoader);
 
 	friend class GDExtensionManager;
 	friend class GDExtension;
 
 private:
-	String resource_path;
-
-	void *library = nullptr; // pointer if valid.
-	String library_path;
-	String entry_symbol;
-
+	struct Configuration {
+		String resource_path;
+		String library_path;
+		String entry_symbol;
+		Vector<SharedObject> library_dependencies;
+		HashMap<String, String> class_icon_paths;
+		uint32_t guard_version = 0;
 #ifdef TOOLS_ENABLED
-	bool is_reloadable = false;
+		bool is_reloadable = false;
+		uint64_t resource_last_modified_time = 0;
+		uint64_t library_last_modified_time = 0;
 #endif
+	};
+	Configuration configuration;
+	Configuration prepared_configuration;
+	void *library = nullptr;
+	bool preparing = false;
+	bool prepared = false;
+	bool opening = false;
+	bool closing = false;
+	Error close_error = OK;
 
-	Vector<SharedObject> library_dependencies;
-
-	HashMap<String, String> class_icon_paths;
-
-#ifdef TOOLS_ENABLED
-	uint64_t resource_last_modified_time = 0;
-	uint64_t library_last_modified_time = 0;
-
-	void update_last_modified_time(uint64_t p_resource_last_modified_time, uint64_t p_library_last_modified_time) {
-		resource_last_modified_time = p_resource_last_modified_time;
-		library_last_modified_time = p_library_last_modified_time;
-	}
-#endif
+	Error _parse_gdextension_file(const String &p_path, Configuration &r_configuration);
 
 public:
 	static String find_extension_library(const String &p_path, Ref<ConfigFile> p_config, std::function<bool(String)> p_has_feature, PackedStringArray *r_tags = nullptr);
 	static Vector<SharedObject> find_extension_dependencies(const String &p_path, Ref<ConfigFile> p_config, std::function<bool(String)> p_has_feature);
 
+	virtual Error prepare_open(const String &p_path) override;
+	virtual void abort_prepared_open() override;
+	virtual uint32_t get_device_exit_guard_version() const override { return prepared ? prepared_configuration.guard_version : configuration.guard_version; }
+	virtual LoaderKind get_loader_kind() const override { return LoaderKind::DYNAMIC; }
 	virtual Error open_library(const String &p_path) override;
 	virtual Error initialize(GDExtensionInterfaceGetProcAddress p_get_proc_address, const Ref<GDExtension> &p_extension, GDExtensionInitialization *r_initialization) override;
-	virtual void close_library() override;
+	virtual Error close_library() override;
 	virtual bool is_library_open() const override;
 	virtual bool has_library_changed() const override;
 	virtual bool library_exists() const override;
 
-	Error parse_gdextension_file(const String &p_path);
+	Error parse_gdextension_file(const String &p_path) { return prepare_open(p_path); }
 };

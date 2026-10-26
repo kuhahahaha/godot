@@ -1,3 +1,4 @@
+#include <optional>
 /**************************************************************************/
 /*  rendering_device_driver_vulkan.cpp                                    */
 /**************************************************************************/
@@ -1501,8 +1502,11 @@ Error RenderingDeviceDriverVulkan::_initialize_device(const LocalVector<VkDevice
 		ERR_FAIL_COND_V_MSG(err != VK_SUCCESS, ERR_CANT_CREATE, vformat("Couldn't create Vulkan device (VkResult error %d).", err));
 	}
 
+	uint32_t observation_queue = 0;
 	for (uint32_t i = 0; i < queue_families.size(); i++) {
 		for (uint32_t j = 0; j < queue_families[i].size(); j++) {
+			ERR_FAIL_COND_V(observation_queue == UINT32_MAX, ERR_UNAVAILABLE);
+			queue_families[i][j].observation_index = ++observation_queue;
 			vkGetDeviceQueue(vk_device, i, j, &queue_families[i][j].queue);
 		}
 	}
@@ -1945,6 +1949,11 @@ static_assert(ENUM_MEMBERS_EQUAL(RDD::BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_
 static_assert(ENUM_MEMBERS_EQUAL(RDD::BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR));
 
 RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitField<BufferUsageBits> p_usage, MemoryAllocationType p_allocation_type, uint64_t p_frames_drawn) {
+ bool extra_tracking=Engine::get_singleton()->is_extra_gpu_memory_tracking_enabled();
+#ifdef TESTS_ENABLED
+ extra_tracking=extra_tracking || test_buffer_fault_stage;
+ test_buffer_rollback_mask=0;test_buffer_prefix=VK_NULL_HANDLE;test_buffer_allocation_prefix=nullptr;
+#endif
 	uint32_t alignment = 16u; // 16 bytes is reasonable.
 	if (p_usage.has_flag(BUFFER_USAGE_UNIFORM_BIT)) {
 		// Some GPUs (e.g. NVIDIA) have absurdly high alignments, like 256 bytes.
@@ -1993,7 +2002,7 @@ RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitFie
 		} break;
 		case MEMORY_ALLOCATION_TYPE_GPU: {
 			vma_usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
-			if (!Engine::get_singleton()->is_extra_gpu_memory_tracking_enabled()) {
+			if (!extra_tracking) {
 				// We must set it right now or else vmaFindMemoryTypeIndexForBufferInfo will use wrong parameters.
 				alloc_create_info.usage = vma_usage;
 			}
@@ -2016,8 +2025,24 @@ RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitFie
 	VkBuffer vk_buffer = VK_NULL_HANDLE;
 	VmaAllocation allocation = nullptr;
 	VmaAllocationInfo alloc_info = {};
+ auto rollback=[&]() {
+  if(extra_tracking) {
+   vkDestroyBuffer(vk_device,vk_buffer,VKC::get_allocation_callbacks(VK_OBJECT_TYPE_BUFFER));
+#ifdef TESTS_ENABLED
+   test_buffer_rollback_mask|=1;
+#endif
+   if(allocation) {
+    vmaFreeMemory(allocator,allocation);
+#ifdef TESTS_ENABLED
+    test_buffer_rollback_mask|=2;
+#endif
+   }
+  } else {
+   vmaDestroyBuffer(allocator,vk_buffer,allocation);
+  }
+ };
 
-	if (!Engine::get_singleton()->is_extra_gpu_memory_tracking_enabled()) {
+	if (!extra_tracking) {
 		alloc_create_info.preferredFlags &= ~vma_flags_to_remove;
 		alloc_create_info.usage = vma_usage;
 		VkResult err = vmaCreateBuffer(allocator, &create_info, &alloc_create_info, &vk_buffer, &allocation, &alloc_info);
@@ -2025,10 +2050,26 @@ RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitFie
 	} else {
 		VkResult err = vkCreateBuffer(vk_device, &create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_BUFFER), &vk_buffer);
 		ERR_FAIL_COND_V_MSG(err, BufferID(), vformat("Can't create buffer of size: %d (VkResult error %d).", p_size, err));
+#ifdef TESTS_ENABLED
+  test_buffer_prefix=vk_buffer;
+  err=test_buffer_fault_stage==1 ? VK_ERROR_OUT_OF_DEVICE_MEMORY : vmaAllocateMemoryForBuffer(allocator,vk_buffer,&alloc_create_info,&allocation,&alloc_info);
+  test_buffer_allocation_prefix=allocation;
+#else
 		err = vmaAllocateMemoryForBuffer(allocator, vk_buffer, &alloc_create_info, &allocation, &alloc_info);
-		ERR_FAIL_COND_V_MSG(err, BufferID(), vformat("Can't allocate memory for buffer of size: %d (VkResult error %d).", p_size, err));
+#endif
+  if(err!=VK_SUCCESS) {
+   rollback();
+   ERR_FAIL_V_MSG(BufferID(),vformat("Can't allocate memory for buffer of size: %d (VkResult error %d).",p_size,err));
+  }
+#ifdef TESTS_ENABLED
+  err=test_buffer_fault_stage==2 ? VK_ERROR_OUT_OF_DEVICE_MEMORY : vmaBindBufferMemory2(allocator,allocation,0,vk_buffer,nullptr);
+#else
 		err = vmaBindBufferMemory2(allocator, allocation, 0, vk_buffer, nullptr);
-		ERR_FAIL_COND_V_MSG(err, BufferID(), vformat("Can't bind memory to buffer of size: %d (VkResult error %d).", p_size, err));
+#endif
+  if(err!=VK_SUCCESS) {
+   rollback();
+   ERR_FAIL_V_MSG(BufferID(),vformat("Can't bind memory to buffer of size: %d (VkResult error %d).",p_size,err));
+  }
 	}
 
 	// Bookkeep.
@@ -2036,7 +2077,10 @@ RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitFie
 	if (p_usage.has_flag(BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT)) {
 		void *persistent_ptr = nullptr;
 		VkResult err = vmaMapMemory(allocator, allocation, &persistent_ptr);
-		ERR_FAIL_COND_V_MSG(err, BufferID(), vformat("Couldn't map Vulkan buffer memory (VkResult error %d).", err));
+  if(err!=VK_SUCCESS) {
+   rollback();
+   ERR_FAIL_V_MSG(BufferID(),vformat("Couldn't map Vulkan buffer memory (VkResult error %d).",err));
+  }
 
 		BufferDynamicInfo *dyn_buffer = VersatileResource::allocate<BufferDynamicInfo>(resources_allocator);
 		buf_info = dyn_buffer;
@@ -3039,6 +3083,333 @@ void RenderingDeviceDriverVulkan::command_pipeline_barrier(
 /**** FENCES ****/
 /****************/
 
+Error RenderingDeviceDriverVulkan::_native_call_prepare(Fence *fence, uint32_t queue, NativeCall *&out) {
+	out = nullptr;
+	uint64_t registry = 0, epoch = 0;
+	session_loss_identity(registry, epoch);
+	uint64_t serial = next_native_call_serial.load();
+	while (serial) {
+		if (next_native_call_serial.compare_exchange_weak(serial, serial + 1)) {
+			break;
+		}
+	}
+	if (!serial) {
+		return ERR_UNAVAILABLE;
+	}
+	auto *call = memnew(NativeCall);
+	call->serial = serial;
+	call->queue = queue;
+	call->registry = registry;
+	call->epoch = epoch;
+	call->fence_owned = fence != nullptr;
+	call->owns_fence = fence == nullptr;
+	if (fence) {
+		call->fence = fence->vk_fence;
+	} else {
+		VkFenceCreateInfo info{};
+		info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+		const auto result = vkCreateFence(vk_device, &info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_FENCE), &call->fence);
+		if (result != VK_SUCCESS) {
+			memdelete(call);
+			if (result == VK_ERROR_DEVICE_LOST) {
+				if (epoch) {
+					notify_session_device_lost(registry, epoch);
+				} else {
+					// Synchronous Vulkan observation still has the stored original
+					// owner. Registration may have occurred after source creation.
+					notify_session_device_lost();
+				}
+			}
+			return ERR_CANT_CREATE;
+		}
+	}
+	// Ordinary submit callers cannot retry a bookkeeping-lock refusal: they
+	// poison the worker or frame. Serialize this reservation only; native
+	// observation and typed maintenance retain their bounded try-lock behavior.
+	native_call_mutex.lock();
+	if (fence && (fence->armed || fence->native_call)) {
+		native_call_mutex.unlock();
+		memdelete(call);
+		return ERR_BUSY;
+	}
+	native_calls.push_back(call);
+	if (fence) {
+		fence->native_call = call;
+	}
+	native_call_mutex.unlock();
+	out = call;
+	return OK;
+}
+void RenderingDeviceDriverVulkan::_native_call_abort(NativeCall *call) {
+	MutexLock lock(native_call_mutex);
+	CRASH_COND(!call->submitting || call->observers || call->waiters);
+	// No native submit occurred and no call fact was published. Dispose only
+	// the unpublished reservation; never manufacture a completion for it.
+	if (call->owns_fence && call->fence) {
+		vkDestroyFence(vk_device, call->fence, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_FENCE));
+	}
+	for (uint32_t i = 0; i < native_calls.size(); ++i) {
+		if (native_calls[i] == call) {
+			native_calls.remove_at(i);
+			memdelete(call);
+			return;
+		}
+	}
+	CRASH_NOW();
+}
+void RenderingDeviceDriverVulkan::_native_call_collect_locked(NativeCall *call) {
+	if (!call->source_returned || call->observers || call->waiters) {
+		return;
+	}
+	CRASH_COND(!call->completed.load());
+	if (call->owns_fence && call->fence) {
+		vkDestroyFence(vk_device, call->fence, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_FENCE));
+	}
+	for (uint32_t i = 0; i < native_calls.size(); ++i) {
+		if (native_calls[i] == call) {
+			native_calls.remove_at(i);
+			memdelete(call);
+			return;
+		}
+	}
+	CRASH_NOW();
+}
+void RenderingDeviceDriverVulkan::_native_fence_return_locked(Fence *fence) {
+	auto *call = fence->native_call;
+	if (!call) {
+		return;
+	}
+	CRASH_COND(!call->completed.load() || call->waiters || call->submitting || call->submit_result != VK_SUCCESS);
+	call->fence = VK_NULL_HANDLE;
+	call->fence_owned = false;
+	call->source_returned = true;
+	fence->native_call = nullptr;
+	_native_call_collect_locked(call);
+}
+RenderingDeviceDriver::FencePollResult RenderingDeviceDriverVulkan::native_call_poll(uint64_t serial) {
+	FencePollResult out;
+	if (!serial || !native_call_mutex.try_lock()) {
+		return out;
+	}
+	uint64_t registry = 0, epoch = 0;
+	bool lost = false;
+	for (auto *call : native_calls) {
+		if (call->serial == serial) {
+			out.completed_serial = serial;
+			if (call->submitting) {
+				break;
+			}
+			if (call->submit_result != VK_SUCCESS) {
+				out.native_error = true;
+				out.native_code = call->submit_result;
+				break;
+			}
+			VkResult result = VK_SUCCESS;
+			if (!call->completed.load()) {
+#ifdef TESTS_ENABLED
+				if (test_fence_fault_phase == 1) {
+					result = test_fence_fault_result;
+				} else
+#endif
+					result = vkGetFenceStatus(vk_device, call->fence);
+			}
+			if (result == VK_SUCCESS) {
+				call->completed.store(true);
+				out.completed = true;
+			} else if (result != VK_NOT_READY) {
+				out.native_error = true;
+			}
+			out.native_code = result;
+			lost = result == VK_ERROR_DEVICE_LOST;
+			registry = call->registry;
+			epoch = call->epoch;
+			break;
+		}
+	}
+	native_call_mutex.unlock();
+	if (lost) {
+		if (epoch) {
+			notify_session_device_lost(registry, epoch);
+		} else {
+			// Synchronous Vulkan observation still has the stored original
+			// owner. Registration may have occurred after source creation.
+			notify_session_device_lost();
+		}
+	}
+	return out;
+}
+RenderingDeviceDriver::FencePollResult RenderingDeviceDriverVulkan::native_call_wait(uint64_t serial) {
+	FencePollResult out;
+	NativeCall *selected = nullptr;
+	VkFence source = VK_NULL_HANDLE;
+	uint64_t registry = 0, epoch = 0;
+	{
+		MutexLock lock(native_call_mutex);
+		for (auto *call : native_calls) {
+			if (call->serial == serial) {
+				out.completed_serial = serial;
+				if (call->submitting) {
+					return out;
+				}
+				if (call->submit_result != VK_SUCCESS) {
+					out.native_error = true;
+					out.native_code = call->submit_result;
+					return out;
+				}
+				if (call->completed.load()) {
+					out.completed = true;
+					return out;
+				}
+				if (call->waiters == UINT32_MAX) {
+					return out;
+				}
+				++call->waiters;
+				selected = call;
+				source = call->fence;
+				registry = call->registry;
+				epoch = call->epoch;
+				break;
+			}
+		}
+	}
+	if (!selected) {
+		return out;
+	}
+	VkResult result;
+#ifdef TESTS_ENABLED
+	if (test_fence_fault_phase == 2) {
+		result = test_fence_fault_result;
+	} else
+#endif
+		result = vkWaitForFences(vk_device, 1, &source, VK_TRUE, UINT64_MAX);
+	{
+		MutexLock lock(native_call_mutex);
+		CRASH_COND(!selected->waiters);
+		--selected->waiters;
+		if (result == VK_SUCCESS) {
+			selected->completed.store(true);
+		}
+		out.completed = result == VK_SUCCESS;
+		out.native_error = result != VK_SUCCESS;
+		out.native_code = result;
+		native_call_returned.notify_all();
+		_native_call_collect_locked(selected);
+	}
+	if (result == VK_ERROR_DEVICE_LOST) {
+		if (epoch) {
+			notify_session_device_lost(registry, epoch);
+		} else {
+			// Synchronous Vulkan observation still has the stored original
+			// owner. Registration may have occurred after source creation.
+			notify_session_device_lost();
+		}
+	}
+	return out;
+}
+Error RenderingDeviceDriverVulkan::native_call_retain(uint64_t serial) {
+	if (!native_call_mutex.try_lock()) {
+		return ERR_BUSY;
+	}
+	for (auto *call : native_calls) {
+		if (call->serial == serial) {
+			if (call->submitting) {
+				native_call_mutex.unlock();
+				return ERR_BUSY;
+			}
+			if (call->observers == UINT32_MAX) {
+				native_call_mutex.unlock();
+				return ERR_PARAMETER_RANGE_ERROR;
+			}
+			++call->observers;
+			native_call_mutex.unlock();
+			return OK;
+		}
+	}
+	native_call_mutex.unlock();
+	return ERR_DOES_NOT_EXIST;
+}
+Error RenderingDeviceDriverVulkan::native_call_release(uint64_t serial) {
+	if (!native_call_mutex.try_lock()) {
+		return ERR_BUSY;
+	}
+	for (auto *call : native_calls) {
+		if (call->serial == serial) {
+			if (!call->observers) {
+				native_call_mutex.unlock();
+				return ERR_DOES_NOT_EXIST;
+			}
+			--call->observers;
+			_native_call_collect_locked(call);
+			native_call_mutex.unlock();
+			return OK;
+		}
+	}
+	native_call_mutex.unlock();
+	return ERR_DOES_NOT_EXIST;
+}
+Error RenderingDeviceDriverVulkan::native_call_recycle(uint64_t serial) {
+	return _native_call_recycle(serial, false);
+}
+Error RenderingDeviceDriverVulkan::native_call_recycle_wait(uint64_t serial) {
+	return _native_call_recycle(serial, true);
+}
+Error RenderingDeviceDriverVulkan::_native_call_recycle(uint64_t serial, bool p_blocking) {
+	std::optional<MutexLock<BinaryMutex>> blocking_lock;
+	if (p_blocking) {
+		blocking_lock.emplace(native_call_mutex);
+	} else if (!native_call_mutex.try_lock()) {
+		return ERR_BUSY;
+	}
+	auto unlock = [&] {
+		if (blocking_lock) {
+			blocking_lock.reset();
+		} else {
+			native_call_mutex.unlock();
+		}
+	};
+	for (auto *call : native_calls) {
+		if (call->serial == serial) {
+			if (p_blocking) {
+				while (call->waiters) {
+#ifdef TESTS_ENABLED
+					test_native_recycle_cv_waiting.store(serial);
+#endif
+					native_call_returned.wait(*blocking_lock);
+#ifdef TESTS_ENABLED
+					test_native_recycle_cv_waiting.store(0);
+#endif
+					// Original source ownership can return while the CV releases
+					// the lock. No observer is implied by this maintenance call.
+					// Revalidate identity before touching the cell again.
+					call = nullptr;
+					for (auto *candidate : native_calls) {
+						if (candidate->serial == serial) {
+							call = candidate;
+							break;
+						}
+					}
+					if (!call) {
+						unlock();
+						return ERR_DOES_NOT_EXIST;
+					}
+				}
+			}
+			if (call->submitting || call->submit_result != VK_SUCCESS || !call->completed.load() || call->waiters) {
+				unlock();
+				return ERR_BUSY;
+			}
+			if (!call->fence_owned) {
+				call->source_returned = true;
+				_native_call_collect_locked(call);
+			}
+			unlock();
+			return OK;
+		}
+	}
+	unlock();
+	return ERR_DOES_NOT_EXIST;
+}
+
 RDD::FenceID RenderingDeviceDriverVulkan::fence_create() {
 	VkFence vk_fence = VK_NULL_HANDLE;
 	VkFenceCreateInfo create_info = {};
@@ -3054,10 +3425,52 @@ RDD::FenceID RenderingDeviceDriverVulkan::fence_create() {
 
 Error RenderingDeviceDriverVulkan::fence_wait(FenceID p_fence) {
 	Fence *fence = (Fence *)(p_fence.id);
+	if (fence->native_call && fence->native_call->submit_result != VK_SUCCESS) {
+		return FAILED;
+	}
+	std::optional<MutexLock<BinaryMutex>> reset_lock;
 	const auto observed = vulkan_fence_wait_and_reset(
-			[&] { return vkGetFenceStatus(vk_device, fence->vk_fence); },
-			[&] { return vkWaitForFences(vk_device, 1, &fence->vk_fence, VK_TRUE, UINT64_MAX); },
-			[&] { return vkResetFences(vk_device, 1, &fence->vk_fence); });
+			[&] {
+#ifdef TESTS_ENABLED
+				if (test_fence_fault_phase == 1)
+					return test_fence_fault_result;
+#endif
+				return vkGetFenceStatus(vk_device, fence->vk_fence);
+			},
+			[&] {
+#ifdef TESTS_ENABLED
+				if (test_fence_fault_phase == 2)
+					return test_fence_fault_result;
+#endif
+				return vkWaitForFences(vk_device, 1, &fence->vk_fence, VK_TRUE, UINT64_MAX);
+			},
+			[&] {
+				if (fence->native_call) {
+					fence->native_call->completed.store(true);
+					reset_lock.emplace(native_call_mutex);
+					while (fence->native_call->waiters)
+						native_call_returned.wait(*reset_lock);
+				}
+#ifdef TESTS_ENABLED
+				if (test_fence_fault_phase == 3)
+					return test_fence_fault_result;
+#endif
+				return vkResetFences(vk_device, 1, &fence->vk_fence);
+			});
+	if (reset_lock) {
+		if (observed.result == VK_SUCCESS) {
+			_native_fence_return_locked(fence);
+		}
+		reset_lock.reset();
+	}
+	if (observed.result == VK_SUCCESS) {
+		fence->completed_serial = fence->submission_serial;
+		fence->armed = false;
+		fence->observed = false;
+	}
+	if (observed.result == VK_ERROR_DEVICE_LOST) {
+		notify_session_device_lost();
+	}
 	ERR_FAIL_COND_V_MSG(observed.result != VK_SUCCESS, FAILED, vformat("Vulkan fence phase %d failed (VkResult error %d).", observed.phase, observed.result));
 
 	if (fence->queue_signaled_from != nullptr) {
@@ -3080,9 +3493,167 @@ Error RenderingDeviceDriverVulkan::fence_wait(FenceID p_fence) {
 	return OK;
 }
 
-void RenderingDeviceDriverVulkan::fence_free(FenceID p_fence) {
+RenderingDeviceDriver::FencePollResult RenderingDeviceDriverVulkan::fence_poll(FenceID p_fence, uint64_t p_expected_submission_serial) {
 	Fence *fence = (Fence *)(p_fence.id);
-	vkDestroyFence(vk_device, fence->vk_fence, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_FENCE));
+	if (fence->native_call && fence->native_call->submit_result != VK_SUCCESS) {
+		FencePollResult failed;
+		failed.completed_serial = fence->submission_serial;
+		failed.native_error = true;
+		failed.native_code = fence->native_call->submit_result;
+		return failed;
+	}
+	VkResult result;
+#ifdef TESTS_ENABLED
+	if (test_fence_fault_phase == 1) {
+		result = test_fence_fault_result;
+	} else
+#endif
+		result = vkGetFenceStatus(vk_device, fence->vk_fence);
+	if (result == VK_ERROR_DEVICE_LOST) {
+		notify_session_device_lost();
+	}
+	FencePollResult out;
+	out.completed_serial = fence->submission_serial;
+	out.native_code = static_cast<int64_t>(result);
+	if (result == VK_SUCCESS) {
+		if (fence->native_call) {
+			fence->native_call->completed.store(true);
+		}
+		if (fence->armed && p_expected_submission_serial != 0 && p_expected_submission_serial == fence->submission_serial) {
+			out.completed = true;
+			out.completed_serial = fence->submission_serial;
+			fence->observed = true;
+		}
+	} else if (result != VK_NOT_READY) {
+		// Preserve device-lost and other raw errors for the typed owner.
+		out.completed = false;
+		out.native_error = true;
+	}
+	return out;
+}
+
+RenderingDeviceDriver::FencePollResult RenderingDeviceDriverVulkan::fence_wait_observed(FenceID p_fence, uint64_t p_expected_submission_serial) {
+	Fence *fence = (Fence *)(p_fence.id);
+	FencePollResult out;
+	out.completed_serial = fence->submission_serial;
+	if (!fence->armed || p_expected_submission_serial == 0 || p_expected_submission_serial != fence->submission_serial) {
+		out.native_error = true;
+		out.native_code = ERR_INVALID_PARAMETER;
+		return out;
+	}
+	if (fence->native_call && fence->native_call->submit_result != VK_SUCCESS) {
+		out.native_error = true;
+		out.native_code = fence->native_call->submit_result;
+		return out;
+	}
+	VkResult result;
+#ifdef TESTS_ENABLED
+	if (test_fence_fault_phase == 2) {
+		result = test_fence_fault_result;
+	} else
+#endif
+		result = vkWaitForFences(vk_device, 1, &fence->vk_fence, VK_TRUE, UINT64_MAX);
+	if (result == VK_ERROR_DEVICE_LOST) {
+		notify_session_device_lost();
+	}
+	if (result != VK_SUCCESS) {
+		out.native_error = true;
+		out.native_code = static_cast<int64_t>(result);
+		return out;
+	}
+	if (fence->native_call) {
+		fence->native_call->completed.store(true);
+	}
+	return fence_poll(p_fence, p_expected_submission_serial);
+}
+
+Error RenderingDeviceDriverVulkan::fence_recycle(FenceID p_fence, uint64_t p_completed_serial) {
+	return _fence_recycle(p_fence, p_completed_serial, false);
+}
+Error RenderingDeviceDriverVulkan::fence_recycle_wait(FenceID p_fence, uint64_t p_completed_serial) {
+	return _fence_recycle(p_fence, p_completed_serial, true);
+}
+Error RenderingDeviceDriverVulkan::_fence_recycle(FenceID p_fence, uint64_t p_completed_serial, bool p_blocking) {
+	Fence *fence = (Fence *)(p_fence.id);
+	if (p_completed_serial == 0 || p_completed_serial != fence->submission_serial || p_completed_serial <= fence->completed_serial || !fence->armed || !fence->observed) {
+		return ERR_INVALID_PARAMETER;
+	}
+	std::optional<MutexLock<BinaryMutex>> blocking_lock;
+	if (p_blocking) {
+		blocking_lock.emplace(native_call_mutex);
+	} else if (!native_call_mutex.try_lock()) {
+		return ERR_BUSY;
+	}
+	auto unlock = [&] {
+		if (blocking_lock) {
+			blocking_lock.reset();
+		} else {
+			native_call_mutex.unlock();
+		}
+	};
+	if (fence->native_call) {
+		auto *call = fence->native_call;
+		if (p_blocking) {
+			while (call->waiters) {
+				native_call_returned.wait(*blocking_lock);
+			}
+		}
+		if (call->submitting || call->submit_result != VK_SUCCESS || call->waiters) {
+			unlock();
+			return ERR_BUSY;
+		}
+		call->completed.store(true);
+	}
+	VkResult result;
+#ifdef TESTS_ENABLED
+	if (test_fence_fault_phase == 3) {
+		result = test_fence_fault_result;
+	} else
+#endif
+		result = vkResetFences(vk_device, 1, &fence->vk_fence);
+	if (result == VK_SUCCESS) {
+		_native_fence_return_locked(fence);
+	}
+	unlock();
+	if (result == VK_ERROR_DEVICE_LOST) {
+		notify_session_device_lost();
+	}
+	if (result != VK_SUCCESS) {
+		return ERR_CANT_CREATE;
+	}
+	if (fence->queue_signaled_from != nullptr) {
+		LocalVector<Pair<Fence *, uint32_t>> &pairs = fence->queue_signaled_from->image_semaphores_for_fences;
+		for (uint32_t i = 0; i < pairs.size();) {
+			if (pairs[i].first == fence) {
+				_release_image_semaphore(fence->queue_signaled_from, pairs[i].second, true);
+				fence->queue_signaled_from->free_image_semaphores.push_back(pairs[i].second);
+				pairs.remove_at(i);
+			} else {
+				i++;
+			}
+		}
+		fence->queue_signaled_from = nullptr;
+	}
+	fence->completed_serial = p_completed_serial;
+	fence->armed = false;
+	fence->observed = false;
+	return OK;
+}
+
+void RenderingDeviceDriverVulkan::fence_free(FenceID p_fence) {
+	auto *fence = (Fence *)p_fence.id;
+	{
+		MutexLock lock(native_call_mutex);
+		if (fence->native_call) {
+			auto *call = fence->native_call;
+			ERR_FAIL_COND_MSG(call->submitting || call->submit_result != VK_SUCCESS || !call->completed.load(), "Vulkan fence still owns an unresolved native submission.");
+			while (call->waiters) {
+				native_call_returned.wait(lock);
+			}
+		}
+		vkDestroyFence(vk_device, fence->vk_fence, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_FENCE));
+		_native_fence_return_locked(fence);
+	}
 	memdelete(fence);
 }
 
@@ -3186,13 +3757,41 @@ RDD::CommandQueueID RenderingDeviceDriverVulkan::command_queue_create(CommandQue
 }
 
 Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueueID p_cmd_queue, VectorView<SemaphoreID> p_wait_semaphores, VectorView<CommandBufferID> p_cmd_buffers, VectorView<SemaphoreID> p_cmd_semaphores, FenceID p_cmd_fence, VectorView<SwapChainID> p_swap_chains) {
+	reset_queue_call_report();
 	DEV_ASSERT(p_cmd_queue.id != 0);
 
 	VkResult err;
 	CommandQueue *command_queue = (CommandQueue *)(p_cmd_queue.id);
 	Queue &device_queue = queue_families[command_queue->queue_family][command_queue->queue_index];
 	Fence *fence = (Fence *)(p_cmd_fence.id);
-	VkFence vk_fence = (fence != nullptr) ? fence->vk_fence : VK_NULL_HANDLE;
+	if (fence != nullptr && fence->submission_serial == UINT64_MAX) {
+		QueueCallReport report;
+		report.error = ERR_UNAVAILABLE;
+		record_queue_call_report(report);
+		return ERR_UNAVAILABLE;
+	}
+	NativeCall *native = nullptr;
+	if (p_cmd_buffers.size() > 0) {
+		const Error prepared = _native_call_prepare(fence, device_queue.observation_index, native);
+		if (prepared != OK) {
+			QueueCallReport report;
+			report.error = prepared;
+			record_queue_call_report(report);
+			return prepared;
+		}
+	}
+	// The reservation precedes queue/semaphore mutations and VMA flushes. Any
+	// pre-submit return disposes its unpublished source and keeps the serial burned.
+	auto abort_unissued = [&](NativeCall *call) {
+		if (call && call->submitting) {
+			if (fence) {
+				fence->native_call = nullptr;
+			}
+			_native_call_abort(call);
+		}
+	};
+	std::unique_ptr<NativeCall, decltype(abort_unissued)> reservation(native, abort_unissued);
+	VkFence vk_fence = native ? native->fence : VK_NULL_HANDLE;
 
 	thread_local LocalVector<VkSemaphore> wait_semaphores;
 	thread_local LocalVector<VkPipelineStageFlags> wait_semaphores_stages;
@@ -3228,6 +3827,10 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 	}
 
 	if (p_cmd_buffers.size() > 0) {
+		QueueCallReport report;
+		report.calls.reserve(1 + p_swap_chains.size());
+		report.issued = true;
+		report.present_attempted = p_swap_chains.size() > 0;
 		thread_local LocalVector<VkCommandBuffer> command_buffers;
 		thread_local LocalVector<VkSemaphore> present_semaphores;
 		thread_local LocalVector<VkSemaphore> signal_semaphores;
@@ -3262,8 +3865,42 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 		submit_info.pSignalSemaphores = signal_semaphores.ptr();
 
 		device_queue.submit_mutex.lock();
+		reservation.release(); // From this actual call onward a failed prefix is retained.
 		err = vkQueueSubmit(device_queue.queue, 1, &submit_info, vk_fence);
 		device_queue.submit_mutex.unlock();
+#ifdef TESTS_ENABLED
+		// Fault-injection control only: real work was submitted successfully,
+		// then report an uncertain outcome to exercise conservative retention.
+		// This does not simulate physical device loss or grant completion.
+		if (err == VK_SUCCESS && test_fence_fault_phase == 4) {
+			test_submit_fault_applied = true;
+			err = test_fence_fault_result;
+		}
+#endif
+		{
+			MutexLock lock(native_call_mutex);
+			native->submit_result = err;
+			native->submitting = false;
+		}
+		report.native_code = static_cast<int64_t>(err);
+		report.error = err == VK_SUCCESS ? OK : FAILED;
+		if (fence != nullptr && err == VK_SUCCESS) {
+			fence->submission_serial++;
+			fence->armed = true;
+			fence->observed = false;
+			report.submission_serial = fence->submission_serial;
+		}
+		NativeCallFact fact;
+		fact.serial = native->serial;
+		fact.queue_index = native->queue;
+		fact.issue = err == VK_SUCCESS ? IssueFact::KnownAccepted : IssueFact::IssuedUnknown;
+		fact.native_code = static_cast<int64_t>(err);
+		fact.error = err == VK_SUCCESS ? OK : FAILED;
+		fact.completion = CompletionCapability::Fence;
+		fact.completion_serial = native->serial;
+		fact.present = p_swap_chains.size() > 0;
+		report.calls.push_back(fact);
+		record_queue_call_report(report);
 
 		if (err == VK_ERROR_DEVICE_LOST) {
 			print_lost_device_info();
@@ -3335,11 +3972,25 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 				context_driver->surface_set_needs_resize(swap_chain->surface, true);
 				any_result_is_out_of_date = true;
 			}
+			NativeCallFact present_fact;
+			present_fact.issue = (results[i] == VK_SUCCESS || results[i] == VK_SUBOPTIMAL_KHR) ? IssueFact::KnownAccepted : IssueFact::NotIssued;
+			present_fact.native_code = static_cast<int64_t>(results[i]);
+			present_fact.error = (results[i] == VK_SUCCESS || results[i] == VK_SUBOPTIMAL_KHR) ? OK : FAILED;
+			present_fact.present = true;
+			present_fact.presentation_only = true;
+			if (QueueCallReport *active_report = get_active_queue_call_report()) {
+				active_report->calls.push_back(present_fact);
+			}
 		}
 
 		if (any_result_is_out_of_date || err == VK_ERROR_OUT_OF_DATE_KHR) {
 			// It is possible for presentation to fail with out of date while acquire might've succeeded previously. This case
 			// will be considered a silent failure as it can be triggered easily by resizing a window in the OS natively.
+			QueueCallReport *report = active_queue_call_report;
+			if (report != nullptr) {
+				report->error = FAILED;
+				report->native_code = static_cast<int64_t>(err);
+			}
 			return FAILED;
 		}
 
@@ -6928,6 +7579,7 @@ void RenderingDeviceDriverVulkan::command_insert_breadcrumb(CommandBufferID p_cm
 }
 
 void RenderingDeviceDriverVulkan::on_device_lost() const {
+ notify_session_device_lost();
 	if (device_functions.GetDeviceFaultInfoEXT == nullptr) {
 		_err_print_error(FUNCTION_STR, __FILE__, __LINE__, "VK_EXT_device_fault not available.");
 		return;
@@ -7482,6 +8134,7 @@ RenderingDeviceDriverVulkan::RenderingDeviceDriverVulkan(RenderingContextDriverV
 }
 
 RenderingDeviceDriverVulkan::~RenderingDeviceDriverVulkan() {
+	CRASH_COND_MSG(!native_calls.is_empty(), "Vulkan native completion sources or observers remain at driver destruction.");
 #if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
 	if (breadcrumb_buffer != BufferID()) {
 		buffer_free(breadcrumb_buffer);

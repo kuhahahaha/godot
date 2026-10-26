@@ -1748,6 +1748,10 @@ void EditorFileSystem::scan_changes() {
 void EditorFileSystem::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_EXIT_TREE: {
+			// Script documentation loaders borrow this filesystem's directories.
+			// Retire those consumers before this child frees its native tree;
+			// the parent EditorNode receives EXIT_TREE only afterward.
+			EditorHelp::finish_doc_generation();
 			Thread &active_thread = thread.is_started() ? thread : thread_sources;
 			if (use_threads && active_thread.is_started()) {
 				while (scanning) {

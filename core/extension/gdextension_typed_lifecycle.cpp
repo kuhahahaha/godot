@@ -8,6 +8,25 @@
 
 namespace GDExtensionDeviceExit {
 namespace {
+int32_t register_scene_ready_abi(const GDExtensionDeviceExitAbi *abi, GDExtensionDeviceExitInitializationLevelContextRef frame, GDExtensionDeviceExitSceneReadyCallbackV1 callback, void *userdata) {
+	return Registry::get_singleton().register_scene_ready(abi, { frame.registry_instance, frame.handle_serial }, callback, userdata);
+}
+int32_t register_scene_ready_v2_abi(const GDExtensionSceneInstallRequirementsV2 *requirements,GDExtensionDeviceExitInitializationLevelContextRef frame,GDExtensionDeviceExitSceneReadyCallbackV2 callback,void *userdata) {
+ return Registry::get_singleton().register_scene_ready_v2(requirements,{frame.registry_instance,frame.handle_serial},callback,userdata);
+}
+static_assert(std::is_same_v<decltype(&register_scene_ready_v2_abi),GDExtensionInterfaceDeviceExitRegisterSceneReadyV2>);
+int32_t schedule_scene_ready_abi(const GDExtensionDeviceExitAbi *abi, GDExtensionDeviceExitSceneReadyContextRef frame, uint32_t phase, uint64_t object_id) {
+	return Registry::get_singleton().schedule_scene_ready_object_cleanup(abi, frame, phase, object_id);
+}
+int32_t abort_scene_ready_abi(const GDExtensionDeviceExitAbi *abi, GDExtensionDeviceExitSceneReadyContextRef frame, int32_t schedule_error, uint32_t reason, uint64_t object_id) {
+	return Registry::get_singleton().scene_ready_abort_unscheduled_pair(abi, frame, schedule_error, reason, object_id);
+}
+static_assert(std::is_same_v<decltype(&register_scene_ready_abi), GDExtensionInterfaceDeviceExitRegisterSceneReadyV1>);
+static_assert(std::is_same_v<decltype(&schedule_scene_ready_abi), GDExtensionInterfaceDeviceExitSceneReadyScheduleObjectCleanupV1>);
+static_assert(std::is_same_v<decltype(&abort_scene_ready_abi), GDExtensionInterfaceDeviceExitSceneReadyAbortV1>);
+static_assert(sizeof(GDExtensionDeviceExitSceneReadyContextRef) == 16);
+static_assert(alignof(GDExtensionDeviceExitSceneReadyContextRef) == alignof(uint64_t));
+static_assert(GDEXTENSION_DEVICE_EXIT_ENTRY_SCENE_READY_V1 == (UINT64_C(1) << 11));
 template <typename T>
 bool native_pointer(const T *p) {
 	return p && reinterpret_cast<uintptr_t>(p) % alignof(T) == 0;
@@ -220,6 +239,17 @@ static_assert(
 		std::is_same_v<decltype(&borrow_level_cleanup_abi),
 				GDExtensionInterfaceDeviceExitBorrowLevelCleanupV1>);
 
+int32_t schedule_object_cleanup_abi(const GDExtensionDeviceExitAbi *abi,
+		GDExtensionDeviceExitInitializationLevelContextRef context,
+		GDExtensionDeviceExitRegisteredCleanupRef terminal, uint64_t object_id) {
+	if (!native_abi(abi)) { return ERR_INVALID_PARAMETER; }
+	return Registry::get_singleton().schedule_object_cleanup(abi,
+			handle_value<InitializationLevelContextRef>(context),
+			handle_value<RegisteredCleanupRef>(terminal), object_id);
+}
+static_assert(std::is_same_v<decltype(&schedule_object_cleanup_abi),
+		GDExtensionInterfaceDeviceExitScheduleObjectCleanupV1>);
+
 int32_t
 acquire_code_hold_abi(const GDExtensionDeviceExitAbi *abi,
 		GDExtensionDeviceExitGuardedLibraryRef library,
@@ -378,6 +408,12 @@ bool is_typed_lifecycle_interface(const char *name) {
 	if (!name) {
 		return false;
 	}
+	if (std::strcmp(name, "device_exit_register_scene_ready_v1") == 0 ||
+			std::strcmp(name, "device_exit_register_scene_ready_v2") == 0 ||
+			std::strcmp(name, "device_exit_scene_ready_schedule_object_cleanup_v1") == 0 ||
+			std::strcmp(name, "device_exit_scene_ready_abort_v1") == 0) {
+		return true;
+	}
 	if (std::strcmp(name, "device_exit_register_guard_v1") == 0) {
 		return true;
 	}
@@ -391,6 +427,9 @@ bool is_typed_lifecycle_interface(const char *name) {
 		return true;
 	}
 	if (std::strcmp(name, "device_exit_borrow_level_cleanup_v1") == 0) {
+		return true;
+	}
+	if (std::strcmp(name, "device_exit_schedule_object_cleanup_v1") == 0) {
 		return true;
 	}
 	if (std::strcmp(name, "device_exit_acquire_code_hold_v1") == 0) {
@@ -433,6 +472,10 @@ GDExtensionInterfaceFunctionPtr test_typed_lifecycle_lookup(const char *name) {
 #endif
 
 void register_typed_lifecycle_interfaces() {
+	GDExtension::register_interface_function("device_exit_register_scene_ready_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&register_scene_ready_abi));
+	GDExtension::register_interface_function("device_exit_register_scene_ready_v2",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&register_scene_ready_v2_abi));
+	GDExtension::register_interface_function("device_exit_scene_ready_schedule_object_cleanup_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&schedule_scene_ready_abi));
+	GDExtension::register_interface_function("device_exit_scene_ready_abort_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&abort_scene_ready_abi));
 	GDExtension::register_interface_function(
 			"device_exit_register_guard_v1",
 			reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&register_guard_abi));
@@ -452,6 +495,9 @@ void register_typed_lifecycle_interfaces() {
 			"device_exit_borrow_level_cleanup_v1",
 			reinterpret_cast<GDExtensionInterfaceFunctionPtr>(
 					&borrow_level_cleanup_abi));
+	GDExtension::register_interface_function(
+			"device_exit_schedule_object_cleanup_v1",
+			reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&schedule_object_cleanup_abi));
 	GDExtension::register_interface_function(
 			"device_exit_acquire_code_hold_v1",
 			reinterpret_cast<GDExtensionInterfaceFunctionPtr>(

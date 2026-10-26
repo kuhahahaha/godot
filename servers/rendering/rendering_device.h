@@ -30,12 +30,15 @@
 
 #pragma once
 
+#include "core/extension/gdextension_qualification_physical.h"
 #include "modules/modules_enabled.gen.h"
+
 #include <atomic>
-#ifdef MODULE_P01_PROBE_ENABLED
-#include "modules/p01_probe/p01_physical_registry.h"
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+#include "servers/rendering/render_capture_test_tracking.h"
 #endif
 
+#include "core/object/ref_counted.h"
 #include "core/object/worker_thread_pool.h"
 #include "core/os/condition_variable.h"
 #include "core/os/thread_safe.h"
@@ -71,6 +74,10 @@ class RDPipelineShader;
 class RDHitGroup;
 
 class RenderingDevice : public RenderingDeviceCommons {
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	friend class RenderCaptureTestAccess;
+#endif
+
 	GDCLASS(RenderingDevice, Object)
 
 	_THREAD_SAFE_CLASS_
@@ -86,18 +93,27 @@ public:
 	typedef void (*InvalidationCallback)(void *);
 
 private:
+	friend class GDExtensionDeviceExit::Registry;
+ friend struct GDExtensionDeviceExit::QualificationTicket;
+	friend class RenderingServerDefault;
 #ifdef TESTS_ENABLED
 	friend class TestShaderCompilePolicyAccess;
-	friend class P01RDPool;
-	friend class P01RDPoolTestAccess;
-	friend class P01NativeSource;
-	friend class P01WriteCensusTestAccess;
+	friend class TestTransferWorkerAccess;
+	friend class TestFrameWaitAccess;
+	friend class TestQualificationFrameAccess;
+	friend class TestQualificationSerialAccess;
+	friend class TestQualificationFinalizeAccess;
+	friend class TestQualificationPhysicalAccess;
+ friend class TestQualificationAckAccess;
+ friend class TestQualificationStagingAccess;
+ friend class TestQualificationTicketAccess;
+ friend class TestQualificationRtAccess;
 #endif
 	static RenderingDevice *singleton;
-#ifdef MODULE_P01_PROBE_ENABLED
-	P01PhysicalRegistry p01_physical_registry;
-	P01PoolResourceRegistry p01_pool_resource_registry;
-	std::atomic<bool> p01_physical_coverage_failed = false;
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	RenderCaptureTestAllocationRegistry capture_test_allocation_registry;
+	RenderCaptureTestResourceRegistry capture_test_resource_registry;
+	std::atomic<bool> capture_test_coverage_failed = false;
 #endif
 
 	RenderingContextDriver *context = nullptr;
@@ -106,6 +122,12 @@ private:
 
 	bool local_device_processing = false;
 	bool is_main_instance = false;
+#ifdef TESTS_ENABLED
+	bool test_main_screen_prepared = false;
+	uint64_t test_main_screen_epoch = 0;
+#endif
+	bool native_finalization_returned = false;
+	void _finalize_on_rendering_server_thread();
 
 protected:
 	static void _bind_methods();
@@ -193,16 +215,43 @@ private:
 	};
 
 	Error _staging_buffer_allocate(StagingBuffers &p_staging_buffers, uint32_t p_amount, uint32_t p_required_align, uint32_t &r_alloc_offset, uint32_t &r_alloc_size, StagingRequiredAction &r_required_action, bool p_can_segment = true);
-	void _staging_buffer_execute_required_action(StagingBuffers &p_staging_buffers, StagingRequiredAction p_required_action);
+	Error _staging_buffer_execute_required_action(StagingBuffers &p_staging_buffers, StagingRequiredAction p_required_action);
 	Error _insert_staging_block(StagingBuffers &p_staging_buffers);
 
 	StagingBuffers upload_staging_buffers;
 	StagingBuffers download_staging_buffers;
 
+	std::atomic<uint64_t> next_backing_serial = 1;
+	uint64_t _reserve_backing_serial();
+ uint64_t next_qualification_object_serial = 1;
+ uint64_t next_qualification_free_event = 1;
+ uint64_t next_qualification_frame_epoch = 1;
+ bool qualification_retiring = false;
+ bool qualification_recording = false;
+ RDG::RecordHandle _qualification_dispatch(ComputeListID p_list, uint32_t p_x, uint32_t p_y, uint32_t p_z);
+ Error _qualification_maintenance();
+ bool _qualification_resource_busy(RID p_rid);
+ Error _qualification_pin_resources(GDExtensionDeviceExit::QualificationTicket *p_ticket, const LocalVector<RID> &p_resources);
+ void _qualification_unpin_resources(GDExtensionDeviceExit::QualificationTicket *p_ticket);
+ void _qualification_add_frame_ticket(GDExtensionDeviceExit::QualificationTicket *p_ticket);
+ void _qualification_seal_tickets();
+ void _qualification_issue_tickets(uint32_t p_slot, const RDD::QueueCallReport &p_report, Error p_error);
+ void _qualification_issue_tickets_locked(uint32_t p_slot, const RDD::QueueCallReport &p_report, Error p_error);
+ Error _qualification_retain_tickets(uint32_t p_frame);
+ Error _qualification_poll_tickets(uint32_t p_frame);
+ void _qualification_return_frame_tickets(uint32_t p_frame);
+ std::atomic<bool> qualification_frame_advance_pending{false};
+ Error _qualification_enqueue(GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
+ void _qualification_freed(GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
+ RID _qualification_storage_create(uint32_t p_bytes, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
+
 	struct Buffer {
+  uint32_t qualification_users = 0;
+		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
+		uint64_t backing_serial = 0;
 		RDD::BufferID driver_id;
-#ifdef MODULE_P01_PROBE_ENABLED
-		uint64_t p01_allocation_serial = 0;
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+		uint64_t capture_test_allocation_serial = 0;
 #endif
 		uint32_t size = 0;
 		BitField<RDD::BufferUsageBits> usage = {};
@@ -231,15 +280,52 @@ private:
 	RID_Owner<Buffer, true> storage_buffer_owner;
 	RID_Owner<Buffer, true> texture_buffer_owner;
 
+	class BufferGetDataResult : public RefCounted {
+	public:
+		// Owned storage for one raw async request across internal staging flushes.
+		// Copy identities are observations, not authenticated completion proof.
+		struct CopyRecord {
+			RDG::RecordHandle handle;
+			RDD::BufferID source;
+			RDD::BufferID destination;
+			RDD::BufferCopyRegion region;
+			bool mapping_sealed = false;
+			RDG::RecordMappingState mapping = RDG::RecordMappingState::Pending;
+			uint32_t command_slot = UINT32_MAX;
+			RDD::CommandBufferID command_buffer;
+			bool issue_attempted = false;
+			Error queue_error = OK;
+			RDD::QueueCallReport issue_report;
+		};
+		PackedByteArray bytes;
+		LocalVector<CopyRecord> copies;
+		uint32_t completed_size = 0;
+  uint32_t issued_size = 0;
+  uint64_t request_serial = 0;
+		Error error = OK;
+		bool delivered = false;
+		bool qualification_owned = false;
+	};
+
+ Error _buffer_get_data_async(RID, const Callable &, uint32_t, uint32_t, const Ref<BufferGetDataResult> &p_owned = {});
+
 	struct BufferGetDataRequest {
 		RID buffer;
 		uint32_t frame_local_index = 0;
 		uint32_t frame_local_count = 0;
 		Callable callback;
 		uint32_t size = 0;
+		uint32_t result_offset = 0;
+		bool final_segment = true;
+		Ref<BufferGetDataResult> result;
 	};
 
-	Error _buffer_update(Buffer *p_buffer, RID p_buffer_id, uint32_t p_offset, uint32_t p_size, const void *p_data);
+	struct QualificationUploadProgress {
+  struct Segment {RDG::RecordHandle handle;uint32_t begin=0,end=0;};
+  LocalVector<Segment> segments;
+  uint32_t consumed=0,max_segments=0;
+ };
+ Error _buffer_update(Buffer *p_buffer, RID p_buffer_id, uint32_t p_offset, uint32_t p_size, const void *p_data, QualificationUploadProgress *p_progress = nullptr);
 
 public:
 	Error buffer_copy(RID p_src_buffer, RID p_dst_buffer, uint32_t p_src_offset, uint32_t p_dst_offset, uint32_t p_size);
@@ -895,6 +981,9 @@ public:
 	VertexFormatID vertex_format_create(const Vector<VertexAttribute> &p_vertex_descriptions);
 	RID vertex_array_create(uint32_t p_vertex_count, VertexFormatID p_vertex_format, const Vector<RID> &p_src_buffers, const Vector<uint64_t> &p_offsets = Vector<uint64_t>());
 
+	// Internal Indexed144 admission check. This does not expose arbitrary buffers to the public API.
+	bool validate_external_indexed_surface_buffers(RID p_current_vertex_buffer, RID p_previous_vertex_buffer, RID p_index_buffer, RID p_index_array, uint32_t p_vertex_capacity, uint32_t p_index_capacity);
+
 	RID index_buffer_create(uint32_t p_index_count, IndexBufferFormat p_format, Span<uint8_t> p_data = {}, bool p_use_restart_indices = false, BitField<BufferCreationBits> p_creation_bits = 0);
 	RID _index_buffer_create(uint32_t p_index_count, IndexBufferFormat p_format, const Vector<uint8_t> &p_data, bool p_use_restart_indices = false, BitField<BufferCreationBits> p_creation_bits = 0) {
 		return index_buffer_create(p_index_count, p_format, p_data, p_use_restart_indices, p_creation_bits);
@@ -961,6 +1050,7 @@ private:
 	// does not submit something invalid.
 
 	struct Shader : public ShaderReflection {
+		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
 		BitField<ShaderCompileFlags> compile_flags = {};
 		String name; // Used for debug.
 		RDD::ShaderID driver_id;
@@ -1158,6 +1248,8 @@ public:
 	RID shader_create_from_bytecode_with_samplers(const Vector<uint8_t> &p_shader_binary, RID p_placeholder = RID(), const Vector<PipelineImmutableSampler> &p_immutable_samplers = Vector<PipelineImmutableSampler>());
 
 private:
+ RID _qualification_shader_create(const Vector<uint8_t> &, RID, const Vector<PipelineImmutableSampler> &, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID);
+ RID _qualification_pipeline_create(RID, const Vector<PipelineSpecializationConstant> &, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID);
 	static const uint32_t MAX_UNIFORM_SETS = 16;
 	static const uint32_t MAX_PUSH_CONSTANT_SIZE = 128;
 
@@ -1170,6 +1262,8 @@ private:
 	// the above restriction is not too serious.
 
 	struct UniformSet {
+  uint32_t qualification_users = 0;
+		LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> qualification_dependencies;
 		uint32_t format = 0;
 		RID shader_id;
 		uint32_t shader_set = 0;
@@ -1266,6 +1360,8 @@ private:
 	static void _save_pipeline_cache(void *p_data);
 
 	struct ComputePipeline {
+  uint32_t qualification_users = 0;
+		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
 		RID shader;
 		RDD::ShaderID shader_driver_id;
 		uint32_t shader_layout_hash = 0;
@@ -1725,6 +1821,12 @@ private:
 		LocalVector<RDD::TextureBarrier> texture_barriers;
 		bool recording = false;
 		bool submitted = false;
+  bool qualification_observer_pending = false;
+		bool poisoned = false;
+		RDD::QueueCallReport last_submission;
+		RDD::FencePollResult last_completion;
+		Error completion_error = OK;
+		uint64_t submission_serial = 0;
 		BinaryMutex thread_mutex;
 		uint64_t operations_processed = 0;
 		uint64_t operations_submitted = 0;
@@ -1745,17 +1847,17 @@ private:
 	TransferWorker *_acquire_transfer_worker(uint32_t p_transfer_size, uint32_t p_required_align, uint32_t &r_staging_offset);
 	void _release_transfer_worker(TransferWorker *p_transfer_worker);
 	void _end_transfer_worker(TransferWorker *p_transfer_worker);
-	void _submit_transfer_worker(TransferWorker *p_transfer_worker, VectorView<RDD::SemaphoreID> p_signal_semaphores = VectorView<RDD::SemaphoreID>());
-	void _wait_for_transfer_worker(TransferWorker *p_transfer_worker);
-	void _flush_barriers_for_transfer_worker(TransferWorker *p_transfer_worker);
+	void _submit_transfer_worker(TransferWorker *p_transfer_worker, VectorView<RDD::SemaphoreID> p_signal_semaphores = VectorView<RDD::SemaphoreID>(), bool p_operations_locked = false);
+	bool _wait_for_transfer_worker(TransferWorker *p_transfer_worker, bool p_blocking = false);
+	void _flush_barriers_for_transfer_worker(TransferWorker *p_transfer_worker, bool p_barriers_locked = false);
 	void _check_transfer_worker_operation(uint32_t p_transfer_worker_index, uint64_t p_transfer_worker_operation);
 	void _check_transfer_worker_buffer(Buffer *p_buffer);
 	void _check_transfer_worker_texture(Texture *p_texture);
 	void _check_transfer_worker_vertex_array(VertexArray *p_vertex_array);
 	void _check_transfer_worker_index_array(IndexArray *p_index_array);
-	void _submit_transfer_workers(RDD::CommandBufferID p_draw_command_buffer = RDD::CommandBufferID());
+	Error _submit_transfer_workers(RDD::CommandBufferID p_draw_command_buffer = RDD::CommandBufferID(), bool p_nonblocking = false);
 	void _submit_transfer_barriers(RDD::CommandBufferID p_draw_command_buffer);
-	void _wait_for_transfer_workers();
+	bool _wait_for_transfer_workers();
 	void _free_transfer_workers();
 
 	/***********************/
@@ -1764,10 +1866,10 @@ private:
 
 	bool _texture_make_mutable(Texture *p_texture, RID p_texture_id);
 	bool _buffer_make_mutable(Buffer *p_buffer, RID p_buffer_id);
-#ifdef MODULE_P01_PROBE_ENABLED
-	void _p01_record_writable_uses(const Vector<RDG::ResourceTracker *> &p_trackers, const Vector<RDG::ResourceUsage> &p_usages, uint32_t p_operation);
-	void _p01_record_writable_set(RID p_set, uint32_t p_operation);
-	void _p01_record_buffer_usage(uint64_t p_driver, RDG::ResourceUsage p_usage, uint32_t p_operation);
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	void _capture_test_record_writable_uses(const Vector<RDG::ResourceTracker *> &p_trackers, const Vector<RDG::ResourceUsage> &p_usages, uint32_t p_operation);
+	void _capture_test_record_writable_set(RID p_set, uint32_t p_operation);
+	void _capture_test_record_buffer_usage(uint64_t p_driver, RDG::ResourceUsage p_usage, uint32_t p_operation);
 #endif
 	bool _vertex_array_make_mutable(VertexArray *p_vertex_array, RID p_resource_id, RDG::ResourceTracker *p_resource_tracker);
 	bool _index_array_make_mutable(IndexArray *p_index_array, RDG::ResourceTracker *p_resource_tracker);
@@ -1809,6 +1911,7 @@ private:
 	// when the frame is cycled.
 
 	struct Frame {
+		uint64_t qualification_epoch = 0;
 		// List in usage order, from last to free to first to free.
 		List<Buffer> buffers_to_dispose_of;
 		List<Texture> textures_to_dispose_of;
@@ -1844,6 +1947,14 @@ private:
 		// Signaled by the command buffer submission. Must wait on this fence before beginning command recording for the frame.
 		RDD::FenceID fence;
 		bool fence_signaled = false;
+		bool primary_command_buffer_begun = true;
+		LocalVector<RenderingDeviceDriver::QueueCallReport> chain_reports;
+  // Owns source observer references transferred by the original hidden queue.
+  LocalVector<RDD::QueueCallReport> qualification_hidden_reports;
+  LocalVector<GDExtensionDeviceExit::QualificationTicket *> qualification_tickets;
+		RDD::QueueCallReport present_report;
+		bool present_attempted = false;
+		bool chain_prefix_poisoned = false;
 
 		// Semaphores the frame must wait on before executing the command buffer.
 		LocalVector<RDD::SemaphoreID> semaphores_to_wait_on;
@@ -1881,6 +1992,18 @@ private:
 	int frame = 0;
 	TightLocalVector<Frame> frames;
 	uint64_t frames_drawn = 0;
+	std::atomic<Error> frame_wait_error = OK;
+	std::atomic<Error> frame_issue_error = OK;
+	int failed_wait_frame = -1;
+	std::atomic<bool> frame_wait_draining = false;
+	Error _recording_error() const {
+		const Error issue_error = frame_issue_error.load();
+		if (issue_error != OK) {
+			return issue_error;
+		}
+		const Error wait_error = frame_wait_error.load();
+		return wait_error != OK ? wait_error : ((frame_wait_draining.load() || qualification_frame_advance_pending.load()) ? ERR_BUSY : OK);
+	}
 
 	// Whenever logic/physics request a graphics operation (not just deleting a resource) that requires
 	// us to flush all graphics commands, we must set frames_pending_resources_for_processing = frames.size().
@@ -1894,23 +2017,26 @@ public:
 
 private:
 	void _free_pending_resources(int p_frame);
+	Error _fail_frame_issue(Error p_error);
+	void _seal_buffer_readback_records();
+	void _observe_buffer_readback_issue(uint32_t p_slot, RDD::CommandBufferID p_command_buffer, Error p_error, const RDD::QueueCallReport &p_report);
 
 	uint64_t texture_memory = 0;
 	uint64_t buffer_memory = 0;
 
 protected:
-	void execute_chained_cmds(bool p_present_swap_chain,
+	bool execute_chained_cmds(bool p_present_swap_chain,
 			RenderingDeviceDriver::FenceID p_draw_fence,
 			RenderingDeviceDriver::SemaphoreID p_dst_draw_semaphore_to_signal);
 
 public:
 	void _free_internal(RID p_id);
-	void _begin_frame(bool p_presented = false);
-	void _end_frame();
-	void _execute_frame(bool p_present);
-	void _stall_for_frame(uint32_t p_frame);
-	void _stall_for_previous_frames();
-	void _flush_and_stall_for_all_frames(bool p_begin_frame = true);
+	Error _begin_frame(bool p_presented = false, bool p_nonblocking = false);
+	Error _end_frame(bool p_nonblocking = false);
+	Error _execute_frame(bool p_present);
+	Error _stall_for_frame(uint32_t p_frame, bool p_nonblocking = false);
+	Error _stall_for_previous_frames();
+	Error _flush_and_stall_for_all_frames(bool p_begin_frame = true);
 
 	template <typename T>
 	void _free_rids(T &p_owner, const char *p_type);

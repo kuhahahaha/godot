@@ -31,17 +31,38 @@
 #pragma once
 
 #include "core/extension/gdextension_interface.gen.h"
+#include "core/extension/gdextension_library_exit_guard.h"
 #include "core/extension/gdextension_loader.h"
 #include "core/io/resource.h"
 
 class GDExtensionMethodBind;
+#ifdef TESTS_ENABLED
+namespace TestDeviceExitMethod {
+struct Access;
+}
+#endif
 
 class GDExtension : public Resource {
+#ifdef TESTS_ENABLED
+	friend struct TestDeviceExitLibraryClose::Access;
+	friend struct TestDeviceExitEntry::Access;
+	friend struct TestDeviceExitMethod::Access;
+#endif
 	GDCLASS(GDExtension, Resource)
 
 	friend class GDExtensionManager;
 
 	Ref<GDExtensionLoader> loader;
+	GDExtensionDeviceExit::RecordRef library_exit_ref;
+	bool library_opening = false;
+	bool library_closing = false;
+	Error library_close_error = OK;
+	Error scene_ready_load_error = OK;
+	GDExtensionDeviceExit::CloseRoute library_exit_route = GDExtensionDeviceExit::CloseRoute::LAST_REF;
+	bool library_exit_route_selected = false;
+	Error _close_library(GDExtensionDeviceExit::CloseRoute p_route);
+	Error dispatch_scene_ready_if_materialized();
+	Error abort_scene_ready_load(Error p_original_error);
 
 	bool reloadable = false;
 
@@ -103,8 +124,10 @@ class GDExtension : public Resource {
 
 #ifdef TOOLS_ENABLED
 	bool is_reloading = false;
+	bool scene_ready_aborting = false;
 	Vector<GDExtensionMethodBind *> invalid_methods;
 	Vector<ObjectID> instance_bindings;
+	bool has_get_classes_used_callback = false;
 	GDExtensionEditorGetClassesUsedCallback get_classes_used_callback = nullptr;
 
 	static void _track_instance(void *p_user_data, void *p_instance);
@@ -118,8 +141,13 @@ class GDExtension : public Resource {
 	void clear_instance_bindings();
 #endif
 
+	enum class MainLoopCallback { STARTUP, SHUTDOWN, FRAME };
+	void _call_main_loop_callback(MainLoopCallback p_kind);
+	bool is_shutdown_callback_dispatched() const { return shutdown_callback_dispatched; }
+	uint8_t main_loop_callback_mask = 0;
 	GDExtensionMainLoopStartupCallback startup_callback = nullptr;
 	GDExtensionMainLoopShutdownCallback shutdown_callback = nullptr;
+	bool shutdown_callback_dispatched = false;
 	GDExtensionMainLoopFrameCallback frame_callback = nullptr;
 
 	static inline HashMap<StringName, GDExtensionInterfaceFunctionPtr> gdextension_interface_functions;
@@ -137,7 +165,8 @@ public:
 	const Ref<GDExtensionLoader> get_loader() const { return loader; }
 
 	Error open_library(const String &p_path, const Ref<GDExtensionLoader> &p_loader);
-	void close_library();
+	Error close_library();
+	Error preflight_exit(GDExtensionDeviceExit::CloseRoute p_route);
 	bool is_library_open() const;
 
 	enum InitializationLevel {
@@ -169,13 +198,14 @@ public:
 #endif
 
 	InitializationLevel get_minimum_library_initialization_level() const;
-	void initialize_library(InitializationLevel p_level);
-	void deinitialize_library(InitializationLevel p_level);
+	// OK means the legacy void callback returned, not a binding/core G2 acknowledgement.
+	Error initialize_library(InitializationLevel p_level);
+	Error deinitialize_library(InitializationLevel p_level);
 
 	static void register_interface_function(const StringName &p_function_name, GDExtensionInterfaceFunctionPtr p_function_pointer);
 	static GDExtensionInterfaceFunctionPtr get_interface_function(const StringName &p_function_name);
-	static void initialize_gdextensions();
-	static void finalize_gdextensions();
+	static Error initialize_gdextensions(uint64_t &r_cycle);
+	static void finalize_gdextensions(uint64_t p_cycle);
 
 	~GDExtension();
 };

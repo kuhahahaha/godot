@@ -86,6 +86,9 @@
 #include "modules/register_module_types.h"
 #include "platform/register_platform_apis.h"
 
+#include <cstdio>
+#include <cstdlib>
+
 // 2D
 #ifndef NAVIGATION_2D_DISABLED
 #include "servers/navigation_2d/navigation_server_2d.h"
@@ -113,6 +116,7 @@
 #ifdef TESTS_ENABLED
 #include "servers/rendering/dummy/rasterizer_dummy.h"
 #include "tests/test_main.h"
+#include "tests/core/object/device_exit_startup_fixture.h"
 #endif
 
 #ifdef TOOLS_ENABLED
@@ -172,6 +176,13 @@ static PackedData *packed_data = nullptr;
 static ZipArchive *zip_packed_data = nullptr;
 #endif
 static MessageQueue *message_queue = nullptr;
+static bool core_modules_initialized = false;
+enum class Setup2ExtensionFailure {
+	NONE,
+	SCENE,
+	EDITOR,
+};
+static Setup2ExtensionFailure setup2_extension_failure = Setup2ExtensionFailure::NONE;
 
 #if defined(STEAMAPI_ENABLED)
 static SteamTracker *steam_tracker = nullptr;
@@ -744,6 +755,7 @@ void Main::test_cleanup() {}
 // The order is the same as in `Main::setup()`, only core and some editor types
 // are initialized here. This also combines `Main::setup2()` initialization.
 Error Main::test_setup() {
+	_start_success = false;
 	Thread::make_main_thread();
 
 	set_current_thread_safe_for_nodes(true);
@@ -789,7 +801,10 @@ Error Main::test_setup() {
 	// From `Main::setup2()`.
 	register_early_core_singletons();
 	initialize_modules(MODULE_INITIALIZATION_LEVEL_CORE);
-	register_core_extensions();
+	const Error extension_error = register_core_extensions();
+	if (extension_error != OK) {
+		return extension_error;
+	}
 
 	register_core_singletons();
 
@@ -883,9 +898,11 @@ Error Main::test_setup() {
 
 // The order is the same as in `Main::cleanup()`.
 void Main::test_cleanup() {
+	TestDeviceExitStartup::test_cleanup_entered();
 	ERR_FAIL_COND(!_start_success);
 
 	Thread::make_main_thread();
+	GDExtensionDeviceExit::require_close_success(GDExtensionManager::get_singleton()->preflight_exit(GDExtensionDeviceExit::CloseRoute::TEST_CLEANUP), GDExtensionDeviceExit::CloseRoute::TEST_CLEANUP);
 
 	// Printing in the usual way can become problematic during/after cleanup.
 	CoreGlobals::print_ready = false;
@@ -899,12 +916,12 @@ void Main::test_cleanup() {
 	PropertyListHelper::clear_base_helpers();
 
 #ifdef TOOLS_ENABLED
-	GDExtensionManager::get_singleton()->deinitialize_extensions(GDExtension::INITIALIZATION_LEVEL_EDITOR);
+	GDExtensionDeviceExit::require_close_success(GDExtensionManager::get_singleton()->deinitialize_extensions(GDExtension::INITIALIZATION_LEVEL_EDITOR), GDExtensionDeviceExit::CloseRoute::TEST_CLEANUP);
 	uninitialize_modules(MODULE_INITIALIZATION_LEVEL_EDITOR);
 	unregister_editor_types();
 #endif
 
-	GDExtensionManager::get_singleton()->deinitialize_extensions(GDExtension::INITIALIZATION_LEVEL_SCENE);
+	GDExtensionDeviceExit::require_close_success(GDExtensionManager::get_singleton()->deinitialize_extensions(GDExtension::INITIALIZATION_LEVEL_SCENE), GDExtensionDeviceExit::CloseRoute::TEST_CLEANUP);
 	uninitialize_modules(MODULE_INITIALIZATION_LEVEL_SCENE);
 
 	unregister_platform_apis();
@@ -933,7 +950,7 @@ void Main::test_cleanup() {
 	NavigationServer3DManager::finalize_server_manager();
 #endif // NAVIGATION_3D_DISABLED
 
-	GDExtensionManager::get_singleton()->deinitialize_extensions(GDExtension::INITIALIZATION_LEVEL_SERVERS);
+	GDExtensionDeviceExit::require_close_success(GDExtensionManager::get_singleton()->deinitialize_extensions(GDExtension::INITIALIZATION_LEVEL_SERVERS), GDExtensionDeviceExit::CloseRoute::TEST_CLEANUP);
 	uninitialize_modules(MODULE_INITIALIZATION_LEVEL_SERVERS);
 	unregister_server_types();
 
@@ -980,6 +997,18 @@ void Main::test_cleanup() {
 #endif // TESTS_ENABLED
 
 int Main::test_entrypoint(int argc, char *argv[], bool &tests_need_run) {
+#ifdef TESTS_ENABLED
+	TestDeviceExitStartup::configure(argc, argv);
+	if (TestDeviceExitStartup::core_cycle_requested(argc, argv)) {
+		tests_need_run = true;
+		Thread::make_main_thread();
+		OS::get_singleton()->initialize();
+		const int result = TestDeviceExitStartup::run_core_cycle();
+		OS::get_singleton()->finalize_core();
+		Thread::release_main_thread();
+		return result;
+	}
+#endif
 	for (int x = 0; x < argc; x++) {
 		// Early return to ignore a possible user-provided "--test" argument.
 		if ((strlen(argv[x]) == 2) && ((strncmp(argv[x], "--", 2) == 0) || (strncmp(argv[x], "++", 2) == 0))) {
@@ -991,7 +1020,13 @@ int Main::test_entrypoint(int argc, char *argv[], bool &tests_need_run) {
 #ifdef TESTS_ENABLED
 			// TODO: need to come up with different test contexts.
 			// Not every test requires high-level functionality like `ClassDB`.
-			test_setup();
+			const Error setup_error = test_setup();
+			TestDeviceExitStartup::mark("TEST_SETUP_RETURN", setup_error);
+			if (setup_error != OK) {
+				std::fprintf(stderr, "DEVICE_EXIT_TEST_SETUP_FAILED error=%d\n", int(setup_error));
+				std::fflush(stderr);
+				std::_Exit(int(setup_error));
+			}
 			int status = test_main(argc, argv);
 			test_cleanup();
 			return status;
@@ -1033,6 +1068,9 @@ int Main::test_entrypoint(int argc, char *argv[], bool &tests_need_run) {
  */
 
 Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_phase) {
+	_start_success = false;
+	core_modules_initialized = false;
+	setup2_extension_failure = Setup2ExtensionFailure::NONE;
 	GodotProfileZone("setup");
 	Thread::make_main_thread();
 	set_current_thread_safe_for_nodes(true);
@@ -2066,6 +2104,11 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 				goto error;
 			}
 
+#ifdef TESTS_ENABLED
+		} else if (TestDeviceExitStartup::is_fixture_argument(arg.utf8().get_data())) {
+			// The isolated startup fixture consumes these before normal argument
+			// parsing; they are not game arguments or substitutes for a main scene.
+#endif
 		} else if (arg == "--" || arg == "++") {
 			adding_user_args = true;
 		} else {
@@ -2279,7 +2322,14 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 
 	register_early_core_singletons();
 	initialize_modules(MODULE_INITIALIZATION_LEVEL_CORE);
-	register_core_extensions(); // core extensions must be registered after globals setup and before display
+	core_modules_initialized = true;
+	{
+		const Error extension_error = register_core_extensions(); // After globals setup and before display.
+		if (extension_error != OK) {
+			exit_err = extension_error;
+			goto error;
+		}
+	}
 
 	if (!editor) {
 		ResourceUID::get_singleton()->enable_reverse_cache();
@@ -2942,6 +2992,18 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 	return OK;
 
 error:
+	if (GDExtensionManager::get_singleton()) {
+		GDExtensionDeviceExit::require_close_success(GDExtensionManager::get_singleton()->cancel_pending_scene_ready_for_start_abort(GDExtensionDeviceExit::CloseRoute::SETUP_ABORT), GDExtensionDeviceExit::CloseRoute::SETUP_ABORT);
+		GDExtensionDeviceExit::require_close_success(GDExtensionManager::get_singleton()->preflight_exit(GDExtensionDeviceExit::CloseRoute::SETUP_ABORT), GDExtensionDeviceExit::CloseRoute::SETUP_ABORT);
+		if (setup2_extension_failure != Setup2ExtensionFailure::NONE) {
+			cleanup_setup2_extension_failure();
+		}
+		GDExtensionDeviceExit::require_close_success(GDExtensionManager::get_singleton()->deinitialize_guarded_core_for_setup_abort(), GDExtensionDeviceExit::CloseRoute::SETUP_ABORT);
+	}
+
+#ifdef TESTS_ENABLED
+	TestDeviceExitStartup::mark("NORMAL_UNWIND_BEGIN", exit_err);
+#endif
 
 	text_driver = "";
 	display_driver = "";
@@ -2979,8 +3041,18 @@ error:
 		memdelete(packed_data);
 	}
 
+	if (message_queue) {
+		message_queue->flush();
+		memdelete(message_queue);
+		message_queue = nullptr;
+	}
+
 	unregister_core_driver_types();
 	unregister_core_extensions();
+	if (core_modules_initialized) {
+		uninitialize_modules(MODULE_INITIALIZATION_LEVEL_CORE);
+		core_modules_initialized = false;
+	}
 
 	if (engine) {
 		memdelete(engine);
@@ -2990,10 +3062,6 @@ error:
 
 	OS::get_singleton()->_cmdline.clear();
 	OS::get_singleton()->_user_args.clear();
-
-	if (message_queue) {
-		memdelete(message_queue);
-	}
 
 	OS::get_singleton()->benchmark_end_measure("Startup", "Main::Setup");
 
@@ -3008,6 +3076,9 @@ error:
 
 	Thread::release_main_thread();
 
+#ifdef TESTS_ENABLED
+	TestDeviceExitStartup::mark("NORMAL_UNWIND_END", exit_err);
+#endif
 	return exit_err;
 }
 
@@ -3028,6 +3099,86 @@ Error _parse_resource_dummy(void *p_data, VariantParser::Stream *p_stream, Ref<R
 	}
 
 	return OK;
+}
+
+void Main::cleanup_setup2_extension_failure() {
+	// Only these returned extension errors reach here. Scene native services
+	// already exist; platform APIs, physics servers and script language init
+	// have not run. Preserve normal teardown dependencies without inventing
+	// completion of those later startup stages.
+	for (int i = 0; i < tsman->get_interface_count(); i++) {
+		tsman->get_interface(i)->cleanup();
+	}
+	ResourceLoader::clear_thread_load_tasks();
+	ResourceLoader::remove_custom_loaders();
+	ResourceSaver::remove_custom_savers();
+	PropertyListHelper::clear_base_helpers();
+	message_queue->flush();
+	ResourceLoader::clear_translation_remaps();
+	rendering_server->sync();
+	rendering_server->global_shader_parameters_clear();
+#ifndef XR_DISABLED
+	if (xr_server) {
+		xr_server->set_primary_interface(Ref<XRInterface>());
+	}
+#endif
+#ifdef TOOLS_ENABLED
+	if (setup2_extension_failure == Setup2ExtensionFailure::EDITOR) {
+		GDExtensionDeviceExit::require_close_success(GDExtensionManager::get_singleton()->deinitialize_extensions(GDExtension::INITIALIZATION_LEVEL_EDITOR), GDExtensionDeviceExit::CloseRoute::SETUP_ABORT);
+		uninitialize_modules(MODULE_INITIALIZATION_LEVEL_EDITOR);
+		unregister_editor_types();
+	} else if (EditorPaths::get_singleton()) {
+		// Paths are created before Scene init, independently of Editor types.
+		EditorPaths::free();
+	}
+#endif
+	ImageLoader::cleanup();
+	GDExtensionDeviceExit::require_close_success(GDExtensionManager::get_singleton()->deinitialize_extensions(GDExtension::INITIALIZATION_LEVEL_SCENE), GDExtensionDeviceExit::CloseRoute::SETUP_ABORT);
+	uninitialize_modules(MODULE_INITIALIZATION_LEVEL_SCENE);
+	unregister_driver_types();
+	unregister_scene_types();
+	finalize_theme_db();
+
+	// These servers can be supplied by SERVERS extensions, so finish them
+	// while that original extension level is still live.
+#ifndef NAVIGATION_2D_DISABLED
+	NavigationServer2DManager::finalize_server();
+	NavigationServer2DManager::finalize_server_manager();
+#endif
+#ifndef NAVIGATION_3D_DISABLED
+	NavigationServer3DManager::finalize_server();
+	NavigationServer3DManager::finalize_server_manager();
+#endif
+	GDExtensionDeviceExit::require_close_success(GDExtensionManager::get_singleton()->deinitialize_extensions(GDExtension::INITIALIZATION_LEVEL_SERVERS), GDExtensionDeviceExit::CloseRoute::SETUP_ABORT);
+	uninitialize_modules(MODULE_INITIALIZATION_LEVEL_SERVERS);
+	unregister_server_types();
+	EngineDebugger::deinitialize();
+#ifndef XR_DISABLED
+	if (xr_server) {
+		memdelete(xr_server);
+		xr_server = nullptr;
+	}
+#endif
+	audio_server->finish();
+	memdelete(audio_server);
+	audio_server = nullptr;
+	OS::get_singleton()->finalize();
+	finalize_display();
+	rendering_server = nullptr;
+	display_server = nullptr;
+	accessibility_server = nullptr;
+	memdelete(input);
+	input = nullptr;
+	memdelete(tsman);
+	tsman = nullptr;
+#ifndef PHYSICS_3D_DISABLED
+	memdelete(physics_server_3d_manager);
+	physics_server_3d_manager = nullptr;
+#endif
+#ifndef PHYSICS_2D_DISABLED
+	memdelete(physics_server_2d_manager);
+	physics_server_2d_manager = nullptr;
+#endif
 }
 
 Error Main::setup2(bool p_show_boot_logo) {
@@ -3367,6 +3518,7 @@ Error Main::setup2(bool p_show_boot_logo) {
 		String rendering_driver = OS::get_singleton()->get_current_rendering_driver_name();
 		display_server = DisplayServer::create(display_driver_idx, rendering_driver, window_mode, window_vsync_mode, window_flags, window_position, window_size, init_screen, context, init_embed_parent_window_id, err);
 		if (err != OK || display_server == nullptr) {
+			GDExtensionDeviceExit::require_close_success(GDExtensionManager::get_singleton()->preflight_exit(GDExtensionDeviceExit::CloseRoute::DISPLAY_ABORT), GDExtensionDeviceExit::CloseRoute::DISPLAY_ABORT);
 			String last_name = DisplayServer::get_create_function_name(display_driver_idx);
 
 			// We can't use this display server, try other ones as fallback.
@@ -3393,7 +3545,7 @@ Error Main::setup2(bool p_show_boot_logo) {
 				memdelete(display_server);
 			}
 
-			GDExtensionManager::get_singleton()->deinitialize_extensions(GDExtension::INITIALIZATION_LEVEL_SERVERS);
+			GDExtensionDeviceExit::require_close_success(GDExtensionManager::get_singleton()->deinitialize_extensions(GDExtension::INITIALIZATION_LEVEL_SERVERS), GDExtensionDeviceExit::CloseRoute::DISPLAY_ABORT);
 			uninitialize_modules(MODULE_INITIALIZATION_LEVEL_SERVERS);
 			unregister_server_types();
 
@@ -3790,9 +3942,13 @@ Error Main::setup2(bool p_show_boot_logo) {
 		OS::get_singleton()->benchmark_begin_measure("Scene", "Modules and Extensions");
 
 		initialize_modules(MODULE_INITIALIZATION_LEVEL_SCENE);
-		GDExtensionManager::get_singleton()->initialize_extensions(GDExtension::INITIALIZATION_LEVEL_SCENE);
+		const Error extension_error = GDExtensionManager::get_singleton()->initialize_extensions(GDExtension::INITIALIZATION_LEVEL_SCENE);
 
 		OS::get_singleton()->benchmark_end_measure("Scene", "Modules and Extensions");
+		if (extension_error != OK) {
+			setup2_extension_failure = Setup2ExtensionFailure::SCENE;
+			return extension_error;
+		}
 
 		// We need to initialize the movie writer here in case
 		// one of the user-provided GDExtensions subclasses MovieWriter.
@@ -3823,9 +3979,13 @@ Error Main::setup2(bool p_show_boot_logo) {
 		OS::get_singleton()->benchmark_begin_measure("Editor", "Modules and Extensions");
 
 		initialize_modules(MODULE_INITIALIZATION_LEVEL_EDITOR);
-		GDExtensionManager::get_singleton()->initialize_extensions(GDExtension::INITIALIZATION_LEVEL_EDITOR);
+		const Error extension_error = GDExtensionManager::get_singleton()->initialize_extensions(GDExtension::INITIALIZATION_LEVEL_EDITOR);
 
 		OS::get_singleton()->benchmark_end_measure("Editor", "Modules and Extensions");
+		if (extension_error != OK) {
+			setup2_extension_failure = Setup2ExtensionFailure::EDITOR;
+			return extension_error;
+		}
 	}
 
 	ClassDB::set_current_api(ClassDB::API_CORE);
@@ -4011,6 +4171,9 @@ static MainTimerSync main_timer_sync;
 // and should move on to `OS::run`, and EXIT_FAILURE otherwise for
 // an early exit with that error code.
 int Main::start() {
+#ifdef TESTS_ENABLED
+	TestDeviceExitStartup::normal_start_entered();
+#endif
 	GodotProfileZone("start");
 	OS::get_singleton()->benchmark_begin_measure("Startup", "Main::Start");
 
@@ -4434,6 +4597,11 @@ int Main::start() {
 	}
 
 	OS::get_singleton()->set_main_loop(main_loop);
+	const Error scene_ready_error = GDExtensionManager::get_singleton()->scene_materialized();
+	if (scene_ready_error != OK) {
+		ERR_PRINT(vformat("SceneReady materialization failed (%d).", int(scene_ready_error)));
+		return EXIT_FAILURE;
+	}
 
 	SceneTree *sml = Object::cast_to<SceneTree>(main_loop);
 	if (sml) {
@@ -5221,6 +5389,14 @@ void Main::cleanup(bool p_force) {
 	if (!p_force) {
 		ERR_FAIL_COND(!_start_success);
 	}
+	if (GDExtensionManager::get_singleton()) {
+		// No selected main loop proves a pre-seam start/tool exit. A selected
+		// loop with a missed seam must retain Pending and fail G1 closed.
+		if (!GDExtensionManager::get_singleton()->scene_materialization_seam_has_been_reached() && !OS::get_singleton()->get_main_loop()) {
+			GDExtensionDeviceExit::require_close_success(GDExtensionManager::get_singleton()->cancel_pending_scene_ready_for_start_abort(GDExtensionDeviceExit::CloseRoute::SHUTDOWN), GDExtensionDeviceExit::CloseRoute::SHUTDOWN);
+		}
+		GDExtensionDeviceExit::require_close_success(GDExtensionManager::get_singleton()->preflight_exit(GDExtensionDeviceExit::CloseRoute::SHUTDOWN), GDExtensionDeviceExit::CloseRoute::SHUTDOWN);
+	}
 
 	// Printing in the usual way can become problematic during/after cleanup.
 	CoreGlobals::print_ready = false;
@@ -5231,7 +5407,7 @@ void Main::cleanup(bool p_force) {
 	}
 #endif
 
-	GDExtensionManager::get_singleton()->shutdown();
+	GDExtensionDeviceExit::require_close_success(GDExtensionManager::get_singleton()->shutdown(), GDExtensionDeviceExit::CloseRoute::SHUTDOWN);
 
 	for (int i = 0; i < TextServerManager::get_singleton()->get_interface_count(); i++) {
 		TextServerManager::get_singleton()->get_interface(i)->cleanup();
@@ -5255,6 +5431,9 @@ void Main::cleanup(bool p_force) {
 
 	// Flush before uninitializing the scene, but delete the MessageQueue as late as possible.
 	message_queue->flush();
+	GDExtensionDeviceExit::require_close_success(
+			GDExtensionManager::get_singleton()->deinitialize_guarded_extensions_before_main_loop(),
+			GDExtensionDeviceExit::CloseRoute::SHUTDOWN);
 
 	OS::get_singleton()->delete_main_loop();
 
@@ -5284,7 +5463,7 @@ void Main::cleanup(bool p_force) {
 #endif // XR_DISABLED
 
 #ifdef TOOLS_ENABLED
-	GDExtensionManager::get_singleton()->deinitialize_extensions(GDExtension::INITIALIZATION_LEVEL_EDITOR);
+	GDExtensionDeviceExit::require_close_success(GDExtensionManager::get_singleton()->deinitialize_extensions(GDExtension::INITIALIZATION_LEVEL_EDITOR), GDExtensionDeviceExit::CloseRoute::SHUTDOWN);
 	uninitialize_modules(MODULE_INITIALIZATION_LEVEL_EDITOR);
 	unregister_editor_types();
 
@@ -5292,7 +5471,7 @@ void Main::cleanup(bool p_force) {
 
 	ImageLoader::cleanup();
 
-	GDExtensionManager::get_singleton()->deinitialize_extensions(GDExtension::INITIALIZATION_LEVEL_SCENE);
+	GDExtensionDeviceExit::require_close_success(GDExtensionManager::get_singleton()->deinitialize_extensions(GDExtension::INITIALIZATION_LEVEL_SCENE), GDExtensionDeviceExit::CloseRoute::SHUTDOWN);
 	uninitialize_modules(MODULE_INITIALIZATION_LEVEL_SCENE);
 
 	unregister_platform_apis();
@@ -5312,7 +5491,7 @@ void Main::cleanup(bool p_force) {
 #endif // NAVIGATION_3D_DISABLED
 	finalize_physics();
 
-	GDExtensionManager::get_singleton()->deinitialize_extensions(GDExtension::INITIALIZATION_LEVEL_SERVERS);
+	GDExtensionDeviceExit::require_close_success(GDExtensionManager::get_singleton()->deinitialize_extensions(GDExtension::INITIALIZATION_LEVEL_SERVERS), GDExtensionDeviceExit::CloseRoute::SHUTDOWN);
 	uninitialize_modules(MODULE_INITIALIZATION_LEVEL_SERVERS);
 	unregister_server_types();
 
@@ -5390,6 +5569,7 @@ void Main::cleanup(bool p_force) {
 	unregister_core_driver_types();
 	unregister_core_extensions();
 	uninitialize_modules(MODULE_INITIALIZATION_LEVEL_CORE);
+	core_modules_initialized = false;
 
 	if (engine) {
 		memdelete(engine);

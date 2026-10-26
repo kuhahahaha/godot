@@ -39,12 +39,21 @@ class GDExtensionFunctionLoader : public GDExtensionLoader {
 	friend class GDExtension;
 
 	String library_path;
+	String prepared_library_path;
 	GDExtensionInitializationFunction initialization_function = nullptr;
+	GDExtensionInitializationFunction prepared_initialization_function = nullptr;
+	uint32_t device_exit_guard_version = 0;
+	uint32_t prepared_guard_version = 0;
 
 public:
+	virtual Error prepare_open(const String &p_path) override;
+	virtual void abort_prepared_open() override;
+	virtual uint32_t get_device_exit_guard_version() const override { return prepared_library_path.is_empty() ? device_exit_guard_version : prepared_guard_version; }
+	virtual LoaderKind get_loader_kind() const override { return LoaderKind::FUNCTION; }
+	void set_device_exit_guard_version(uint32_t p_version) { device_exit_guard_version = p_version; }
 	virtual Error open_library(const String &p_path) override;
 	virtual Error initialize(GDExtensionInterfaceGetProcAddress p_get_proc_address, const Ref<GDExtension> &p_extension, GDExtensionInitialization *r_initialization) override;
-	virtual void close_library() override;
+	virtual Error close_library() override;
 	virtual bool is_library_open() const override;
 	virtual bool has_library_changed() const override;
 	virtual bool library_exists() const override;

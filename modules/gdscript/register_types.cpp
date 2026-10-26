@@ -176,6 +176,11 @@ void initialize_gdscript_module(ModuleInitializationLevel p_level) {
 
 void uninitialize_gdscript_module(ModuleInitializationLevel p_level) {
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SERVERS) {
+#ifdef TOOLS_ENABLED
+		// Registered at SERVERS even when startup never reaches EDITOR.
+		EditorTranslationParser::get_singleton()->remove_parser(gdscript_translation_parser_plugin, EditorTranslationParser::STANDARD);
+		gdscript_translation_parser_plugin.unref();
+#endif
 		ScriptServer::unregister_language(script_language_gd);
 
 		if (gdscript_cache) {
@@ -198,8 +203,6 @@ void uninitialize_gdscript_module(ModuleInitializationLevel p_level) {
 
 #ifdef TOOLS_ENABLED
 	if (p_level == MODULE_INITIALIZATION_LEVEL_EDITOR) {
-		EditorTranslationParser::get_singleton()->remove_parser(gdscript_translation_parser_plugin, EditorTranslationParser::STANDARD);
-		gdscript_translation_parser_plugin.unref();
 #ifndef GDSCRIPT_NO_LSP
 		memdelete(GDScriptLanguageProtocol::get_singleton());
 #endif // GDSCRIPT_NO_LSP

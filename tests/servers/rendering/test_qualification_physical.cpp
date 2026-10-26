@@ -1,0 +1,88 @@
+#include "tests/test_macros.h"
+#include <thread>
+#include "servers/rendering/rendering_device.h"
+#include "core/extension/gdextension_qualification_internal.h"
+#include "tests/servers/rendering/transfer_test_driver_base.h"
+TEST_FORCE_LINK(test_qualification_physical)
+class TestQualificationPhysicalAccess {
+public:
+ static void retire_window(RenderingDevice &device,RenderingDeviceDriver &driver,uint32_t mode) {
+  using namespace GDExtensionDeviceExit;
+  auto *bridge=memnew(Registry::QualificationBridge);auto *child=memnew(Registry::QualificationBridge::Storage);
+  bridge->storage[0]=child;child->serial=31;child->retiring=true;child->physical.bridge=11;child->physical.child=31;
+  RID rid=device._qualification_storage_create(128,&child->physical);REQUIRE(rid.is_valid());child->physical.use_closed=true;
+  device.draw_graph.initialize(&driver,[](RenderingDeviceDriver *,VectorView<RenderingDeviceDriver::AttachmentLoadOp>,VectorView<RenderingDeviceDriver::AttachmentStoreOp>,void *){return RenderingDeviceDriver::RenderPassID();},1,RenderingDeviceDriver::CommandQueueFamilyID(1),0);device.draw_graph.begin();
+  if(mode==1)device.draw_list.active=true;
+  if(mode==2)device.compute_list.active=true;
+  if(mode==3)device.raytracing_list.active=true;
+  if(mode==4)device.draw_graph.add_driver_callback(nullptr,nullptr,{},{});
+  Registry::get_singleton().qualification_retire_step(bridge,&device,31,1);
+  CHECK(device.storage_buffer_owner.owns(rid));CHECK_FALSE(child->physical.enqueued);CHECK(child->report.state==0);
+  device.draw_list.active=false;device.compute_list.active=false;device.raytracing_list.active=false;device.draw_graph.begin();
+  Registry::get_singleton().qualification_retire_step(bridge,&device,31,1);
+  CHECK_FALSE(device.storage_buffer_owner.owns(rid));CHECK(child->physical.enqueued);CHECK(child->physical.free_event==0);
+  // This control checks enqueue safety only. Keep the queued return cell alive
+  // through the original driver's disposal, then delete the original child.
+  device._free_pending_resources(0);CHECK(child->physical.free_event!=0);memdelete(child);memdelete(bridge);
+ }
+ static void attach(RenderingDevice &device, RenderingDeviceDriver &driver) { device.driver=&driver;device.frames.resize(1);device.frames[0].qualification_epoch=71;device.qualification_retiring=true; }
+ static RID create(RenderingDevice &device,GDExtensionDeviceExit::QualificationPhysicalReturn &cell) { cell.bridge=11;cell.child=13;return device._qualification_storage_create(128,&cell); }
+ static bool marked(RenderingDevice &device,RID rid,GDExtensionDeviceExit::QualificationPhysicalReturn &cell) { auto *b=device.storage_buffer_owner.get_or_null(rid);return b && b->qualification_return==&cell && cell.serial==b->backing_serial && cell.rid==rid.get_id(); }
+ static void enqueue(RenderingDevice &device,RID rid,GDExtensionDeviceExit::QualificationPhysicalReturn &cell) { cell.use_closed=true;device._free_internal(rid); }
+ static uint64_t event(const GDExtensionDeviceExit::QualificationPhysicalReturn &cell) { return cell.free_event; }
+ static void dispose(RenderingDevice &device) { device._free_pending_resources(0); }
+ static RID dependent(RenderingDevice &device,GDExtensionDeviceExit::QualificationPhysicalReturn &cell) {
+  RenderingDevice::UniformSet set;set.driver_id=RenderingDeviceDriver::UniformSetID(23);set.qualification_dependencies.push_back(&cell);cell.dependent_children.fetch_add(1);return device.uniform_set_owner.make_rid(set);
+ }
+ static uint32_t dependents(const GDExtensionDeviceExit::QualificationPhysicalReturn &cell) {return cell.dependent_children.load();}
+ static void reserve_unused_workers(RenderingDevice &device) {device.transfer_worker_pool.resize(4);}
+ static Error worker_try(RenderingDevice &device) {return device._submit_transfer_workers({},true);}
+ static BinaryMutex &worker_mutex(RenderingDevice &device) {return device.transfer_worker_pool_mutex;}
+ static void detach(RenderingDevice &device) { device.frames.clear();device.driver=nullptr; }
+};
+namespace TestQualificationPhysical {
+class Driver : public TransferTestDriverBase {
+public:
+ GDExtensionDeviceExit::QualificationPhysicalReturn *cell=nullptr;
+ int creates=0,frees=0,sets_freed=0;
+ void uniform_set_free(UniformSetID id) override {CHECK(id==UniformSetID(23));CHECK(TestQualificationPhysicalAccess::dependents(*cell)==1);sets_freed++;}
+ BufferID buffer_create(uint64_t size,BitField<BufferUsageBits>,MemoryAllocationType,uint64_t) override { CHECK(size==128);creates++;return BufferID(19); }
+ void buffer_free(BufferID id) override { CHECK(id==BufferID(19));if(cell)CHECK(TestQualificationPhysicalAccess::event(*cell)==0);frees++; }
+};
+TEST_CASE("[RenderingDevice][Qualification] buffer return follows exact physical free and survives RID erase") {
+ RenderingDevice device;Driver driver;GDExtensionDeviceExit::QualificationPhysicalReturn cell;driver.cell=&cell;
+ TestQualificationPhysicalAccess::attach(device,driver);
+ RID rid=TestQualificationPhysicalAccess::create(device,cell);
+ CHECK(rid.is_valid());CHECK(TestQualificationPhysicalAccess::marked(device,rid,cell));
+ TestQualificationPhysicalAccess::enqueue(device,rid,cell);
+ CHECK_FALSE(TestQualificationPhysicalAccess::marked(device,rid,cell));CHECK(TestQualificationPhysicalAccess::event(cell)==0);CHECK(driver.frees==0);
+ TestQualificationPhysicalAccess::dispose(device);
+ CHECK(driver.frees==1);const auto event=TestQualificationPhysicalAccess::event(cell);CHECK(event!=0);
+ TestQualificationPhysicalAccess::dispose(device);CHECK(driver.frees==1);CHECK(TestQualificationPhysicalAccess::event(cell)==event);
+ TestQualificationPhysicalAccess::detach(device);
+}
+TEST_CASE("[RenderingDevice][Qualification] dependent descriptor pin survives RID erase until driver return") {
+ RenderingDevice device;Driver driver;GDExtensionDeviceExit::QualificationPhysicalReturn cell;driver.cell=&cell;
+ TestQualificationPhysicalAccess::attach(device,driver);
+ RID set=TestQualificationPhysicalAccess::dependent(device,cell);
+ device.free_rid(set);CHECK(TestQualificationPhysicalAccess::dependents(cell)==1);CHECK(driver.sets_freed==0);
+ TestQualificationPhysicalAccess::dispose(device);CHECK(driver.sets_freed==1);CHECK(TestQualificationPhysicalAccess::dependents(cell)==0);
+ TestQualificationPhysicalAccess::detach(device);
+}
+TEST_CASE("[Qualification] retire keeps exact original RID live while lists or callbacks are active") {
+ for(uint32_t mode=1;mode<=4;++mode) {
+  RenderingDevice device;Driver driver;TestQualificationPhysicalAccess::attach(device,driver);
+  TestQualificationPhysicalAccess::retire_window(device,driver,mode);CHECK(driver.frees==1);TestQualificationPhysicalAccess::detach(device);
+ }
+}
+#ifdef THREADS_ENABLED
+TEST_CASE("[RenderingDevice][Qualification] contended transfer lock refuses maintenance before driver effect") {
+ RenderingDevice device;Driver driver;TestQualificationPhysicalAccess::attach(device,driver);
+ auto &mutex=TestQualificationPhysicalAccess::worker_mutex(device);mutex.lock();
+ Error result=OK;std::thread worker([&]{result=TestQualificationPhysicalAccess::worker_try(device);});worker.join();
+ CHECK(result==ERR_BUSY);mutex.unlock();TestQualificationPhysicalAccess::reserve_unused_workers(device);CHECK(TestQualificationPhysicalAccess::worker_try(device)==OK);
+ TestQualificationPhysicalAccess::detach(device);
+}
+#endif
+
+}

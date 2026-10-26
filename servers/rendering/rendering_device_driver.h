@@ -87,8 +87,19 @@ struct VersatileResourceTemplate {
 	}
 };
 
+class RenderingDevice;
 class RenderingDeviceDriver : public RenderingDeviceCommons {
 	GDSOFTCLASS(RenderingDeviceDriver, RenderingDeviceCommons);
+ friend class RenderingDevice;
+#ifdef TESTS_ENABLED
+ friend class TestVulkanCompletionAccess;
+#endif
+ RenderingDevice *session_owner = nullptr;
+protected:
+ void notify_session_device_lost() const;
+ void session_loss_identity(uint64_t&,uint64_t&) const;
+ static void notify_session_device_lost(uint64_t,uint64_t);
+
 
 public:
 	struct ID {
@@ -142,6 +153,74 @@ public:
 	DEFINE_ID(Semaphore);
 	DEFINE_ID(AccelerationStructure);
 	DEFINE_ID(RaytracingPipeline);
+
+	// Typed native completion facts. These records deliberately retain the
+	// backend's raw status and serial; an ordinary Error cannot prove GPU
+	// completion or preserve an issued-but-unknown submission.
+	enum class IssueFact : uint8_t {
+		NotIssued,
+		KnownAccepted,
+		IssuedUnknown,
+	};
+
+	enum class CompletionCapability : uint8_t {
+		None,
+		Fence,
+		CommandBuffer,
+	};
+
+	struct NativeCallFact {
+		uint64_t serial = 0;
+		IssueFact issue = IssueFact::NotIssued;
+		int64_t native_code = 0;
+		Error error = OK;
+		CompletionCapability completion = CompletionCapability::None;
+		uint64_t completion_serial = 0;
+		bool present = false;
+  uint32_t queue_index = 0;
+  bool source_owner_returned = false;
+  bool frame_observer_owned = false;
+  // WSI call diagnostics have no GPU-submission completion obligation.
+  bool presentation_only = false;
+	};
+
+	struct QueueCallReport {
+		Vector<NativeCallFact> calls;
+		Error error = OK;
+		bool issued = false;
+		bool present_attempted = false;
+		uint64_t submission_serial = 0;
+		int64_t native_code = 0;
+	};
+
+	struct FencePollResult {
+		bool completed = false;
+		bool native_error = false;
+		uint64_t completed_serial = 0;
+		int64_t native_code = 0;
+		bool matches(uint64_t p_expected_serial) const {
+			return completed && !native_error && p_expected_serial != 0 && completed_serial == p_expected_serial;
+		}
+	};
+
+protected:
+	mutable QueueCallReport last_queue_call_report;
+	mutable Mutex queue_call_report_mutex;
+	static thread_local QueueCallReport *active_queue_call_report;
+	void reset_queue_call_report() const {
+		MutexLock lock(queue_call_report_mutex);
+		last_queue_call_report = QueueCallReport();
+	}
+	void record_queue_call_report(const QueueCallReport &p_report) const {
+		{
+			MutexLock lock(queue_call_report_mutex);
+			last_queue_call_report = p_report;
+		}
+		if (active_queue_call_report != nullptr) {
+			*active_queue_call_report = p_report;
+		}
+	}
+	QueueCallReport *get_active_queue_call_report() const { return active_queue_call_report; }
 
 public:
 	/*****************/
@@ -410,6 +489,31 @@ public:
 
 	virtual FenceID fence_create() = 0;
 	virtual Error fence_wait(FenceID p_fence) = 0;
+	// Non-blocking observation and independent recycle. A driver that cannot
+	// expose these facts fails closed instead of laundering completion through
+	// the legacy blocking wait/Error API.
+	virtual FencePollResult fence_poll(FenceID p_fence, uint64_t p_expected_submission_serial);
+ // Exact original native-call observations, independent of a later tail fence.
+ // Backends without this original mapping refuse qualification before append.
+ // Transfer original hidden-copy observation ownership into the current Frame.
+ // No fallback may invoke end_segment's legacy wait on a qualification pass.
+ virtual Error qualification_prepare_segment(QueueCallReport &r_report) { r_report={};return ERR_UNAVAILABLE; }
+ virtual uint32_t qualification_native_call_bound(uint32_t p_slots) const { return 0; }
+ virtual bool native_call_observation_supported() const { return false; }
+ virtual FencePollResult native_call_poll(uint64_t p_native_serial) { return {}; }
+ virtual FencePollResult native_call_wait(uint64_t p_native_serial) { return {}; }
+ virtual Error native_call_recycle(uint64_t p_native_serial) { return ERR_UNAVAILABLE; }
+ virtual Error native_call_recycle_wait(uint64_t p_native_serial) { return native_call_recycle(p_native_serial); }
+ virtual Error native_call_retain(uint64_t p_native_serial) { return ERR_UNAVAILABLE; }
+ virtual Error native_call_release(uint64_t p_native_serial) { return ERR_UNAVAILABLE; }
+	// Blocking observation only; recycling remains a separate, checked step.
+	virtual FencePollResult fence_wait_observed(FenceID p_fence, uint64_t p_expected_submission_serial);
+	virtual Error fence_recycle(FenceID p_fence, uint64_t p_completed_serial);
+	// Ordinary blocking transfer retirement may wait for backend bookkeeping;
+	// bounded typed maintenance continues to call fence_recycle().
+	virtual Error fence_recycle_wait(FenceID p_fence, uint64_t p_completed_serial) { return fence_recycle(p_fence, p_completed_serial); }
+	virtual QueueCallReport get_last_queue_call_report() const;
+	Error command_queue_execute_and_present_observed(CommandQueueID p_cmd_queue, VectorView<SemaphoreID> p_wait_semaphores, VectorView<CommandBufferID> p_cmd_buffers, VectorView<SemaphoreID> p_cmd_semaphores, FenceID p_cmd_fence, VectorView<SwapChainID> p_swap_chains, QueueCallReport &r_report);
 	virtual void fence_free(FenceID p_fence) = 0;
 
 	/********************/
@@ -518,6 +622,8 @@ public:
 	virtual ShaderID shader_create_from_container(const Ref<RenderingShaderContainer> &p_shader_container, const Vector<ImmutableSampler> &p_immutable_samplers) = 0;
 	// Only meaningful if API_TRAIT_SHADER_CHANGE_INVALIDATION is SHADER_CHANGE_INVALIDATION_ALL_OR_NONE_ACCORDING_TO_LAYOUT_HASH.
 	virtual uint32_t shader_get_layout_hash(ShaderID p_shader) { return 0; }
+	// Must not wait for any shader-owned callback or destroy the shader.
+	virtual bool shader_retire_ready_nonblocking(ShaderID p_shader) const { return false; }
 	virtual void shader_free(ShaderID p_shader) = 0;
 	virtual void shader_destroy_modules(ShaderID p_shader) = 0;
 

@@ -29,20 +29,19 @@
 /**************************************************************************/
 
 #include "rendering_server_default.h"
-#include "modules/modules_enabled.gen.h"
-#ifdef MODULE_P01_PROBE_ENABLED
-#include "modules/p01_probe/p01_phase_observer.h"
-#include "modules/p01_probe/p01_native_session.h"
-#endif
+#include "core/extension/gdextension_library_exit_guard.h"
 
 #include "core/object/callable_mp.h"
 #include "core/os/os.h"
 #include "core/profiling/profiling.h"
 #include "servers/display/display_server.h"
+#include "servers/rendering/render_capture_test_hooks.h"
 #include "servers/rendering/renderer_canvas_cull.h"
 #include "servers/rendering/renderer_scene_cull.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_globals.h"
+
+#include "modules/modules_enabled.gen.h"
 
 #ifndef XR_DISABLED
 #include "servers/xr/xr_server.h"
@@ -101,8 +100,8 @@ void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
 	RSG::scene->update(); //update scenes stuff before updating instances
 	GodotProfileZoneGrouped(_profile_zone, "canvas->update");
 	RSG::canvas->update();
-#ifdef MODULE_P01_PROBE_ENABLED
-	p01_observe_phase(RSG::rasterizer->get_frame_number(), false);
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	RenderCaptureTestHooks::observe_phase(RSG::rasterizer->get_frame_number(), false);
 #endif
 
 	frame_setup_time = double(OS::get_singleton()->get_ticks_usec() - time_usec) / 1000.0;
@@ -118,10 +117,10 @@ void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
 
 	GodotProfileZoneGrouped(_profile_zone, "canvas_render->update");
 	RSG::canvas_render->update();
-#ifdef MODULE_P01_PROBE_ENABLED
-	p01_observe_phase(RSG::rasterizer->get_frame_number(), true);
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	RenderCaptureTestHooks::observe_phase(RSG::rasterizer->get_frame_number(), true);
 	// Cleanup is independent of evidence admission, poison and event bounds.
-	P01NativeSession::service_retirement();
+	RenderCaptureTestHooks::retirement_pump();
 #endif
 
 	GodotProfileZoneGrouped(_profile_zone, "rasterizer->end_frame");
@@ -284,6 +283,11 @@ void RenderingServerDefault::_finish() {
 	memdelete(RSG::rasterizer);
 	memdelete(RSG::scene);
 	memdelete(RSG::camera_attributes);
+ if (create_thread) {
+  // Complete native disposal on the assigned rendering thread before main destroys the Object.
+  RenderingDevice *rd=RenderingDevice::get_singleton();
+  if (rd && rd->is_main_instance) rd->_finalize_on_rendering_server_thread();
+ }
 }
 
 void RenderingServerDefault::init() {
@@ -299,9 +303,11 @@ void RenderingServerDefault::init() {
 		server_thread = Thread::MAIN_ID;
 		_init();
 	}
+	GDExtensionDeviceExit::Registry::get_singleton().service_started(1u << 5);
 }
 
 void RenderingServerDefault::finish() {
+	GDExtensionDeviceExit::require_close_success(GDExtensionDeviceExit::Registry::get_singleton().service_stopping(1u << 5), GDExtensionDeviceExit::CloseRoute::LAST_REF);
 	if (create_thread) {
 		command_queue.push(this, &RenderingServerDefault::_finish);
 		command_queue.push(this, &RenderingServerDefault::_thread_exit);
@@ -485,4 +491,19 @@ RenderingServerDefault::RenderingServerDefault(bool p_create_thread) {
 }
 
 RenderingServerDefault::~RenderingServerDefault() {
+}
+
+void RenderingServerDefault::_qualification_rt_dispatch(uint64_t bridge,uint64_t serial) {
+ GDExtensionDeviceExit::Registry::get_singleton().qualification_rt_dispatch(bridge,serial);
+}
+bool RenderingServerDefault::_try_qualification_rt_dispatch(uint64_t bridge,uint64_t serial) {
+ if(Thread::get_caller_id()==server_thread){_qualification_rt_dispatch(bridge,serial);return true;}
+ return command_queue.try_push_bounded(65536,this,&RenderingServerDefault::_qualification_rt_dispatch,bridge,serial);
+}
+void RenderingServerDefault::_qualification_service(uint64_t bridge,uint64_t child,uint32_t kind,uint32_t passes,uint32_t micros) {
+ GDExtensionDeviceExit::Registry::get_singleton().qualification_service(bridge,child,kind,passes,micros);
+}
+bool RenderingServerDefault::_try_qualification_service(uint64_t bridge,uint64_t child,uint32_t kind,uint32_t passes,uint32_t micros) {
+ if(Thread::get_caller_id()==server_thread) { _qualification_service(bridge,child,kind,passes,micros);return true; }
+ return command_queue.try_push_bounded(65536,this,&RenderingServerDefault::_qualification_service,bridge,child,kind,passes,micros);
 }

@@ -902,7 +902,7 @@ NS::Error *MDLazyLibrary::get_error() {
 class MDImmediateLibrary final : public MDLibrary {
 	NS::SharedPtr<MTL::Library> _library;
 	NS::Error *_error = nullptr;
-	std::mutex _cv_mutex;
+	mutable std::mutex _cv_mutex;
 	std::condition_variable _cv;
 	bool _complete = false;
 
@@ -917,6 +917,10 @@ public:
 			NS::String *p_source,
 			MTL::CompileOptions *p_options);
 	~MDImmediateLibrary() override;
+	bool retire_ready_nonblocking() const override {
+		std::unique_lock<std::mutex> lock(_cv_mutex, std::try_to_lock);
+		return lock.owns_lock() && _complete;
+	}
 
 	MTL::Library *get_library() override;
 	NS::Error *get_error() override;

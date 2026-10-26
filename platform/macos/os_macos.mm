@@ -41,6 +41,7 @@
 
 #include "core/config/engine.h"
 #include "core/crypto/crypto_core.h"
+#include "core/extension/gdextension_manager.h"
 #include "core/input/input.h"
 #include "core/io/file_access.h"
 #include "core/os/main_loop.h"
@@ -49,6 +50,9 @@
 #include "core/version_generated.gen.h"
 #include "drivers/apple/os_log_logger.h"
 #include "main/main.h"
+#ifdef TESTS_ENABLED
+#include "tests/core/object/device_exit_startup_fixture.h"
+#endif
 
 #ifdef SDL_ENABLED
 #include "drivers/sdl/joypad_sdl.h"
@@ -356,6 +360,11 @@ String OS_MacOS::get_version_alias() const {
 }
 
 void OS_MacOS::alert(const String &p_alert, const String &p_title) {
+#ifdef TESTS_ENABLED
+	if (TestDeviceExitStartup::observe_configuration_alert(p_alert.utf8().get_data())) {
+		return;
+	}
+#endif
 	NSAlert *window = [[NSAlert alloc] init];
 	NSString *ns_title = [NSString stringWithUTF8String:p_title.utf8().get_data()];
 	NSString *ns_alert = [NSString stringWithUTF8String:p_alert.utf8().get_data()];
@@ -1121,11 +1130,13 @@ void OS_MacOS_NSApp::start_main() {
 		@autoreleasepool {
 			ret = Main::start();
 		}
+		main_start_status = ret;
 		if (ret == EXIT_SUCCESS) {
 			if (main_loop) {
 				@autoreleasepool {
 					main_loop->initialize();
 				}
+				main_loop_begun = true;
 				DisplayServer *ds = DisplayServer::get_singleton();
 				DisplayServerMacOS *ds_mac = Object::cast_to<DisplayServerMacOS>(ds);
 
@@ -1161,7 +1172,7 @@ void OS_MacOS_NSApp::start_main() {
 				return;
 			}
 		} else {
-			set_exit_code(EXIT_FAILURE);
+			set_exit_code(ret);
 		}
 	} else if (err == ERR_HELP) { // Returned by --help and --version, so success.
 		set_exit_code(EXIT_SUCCESS);
@@ -1184,15 +1195,32 @@ void OS_MacOS_NSApp::terminate() {
 	[NSApp terminate:nil];
 }
 
+static void prepare_guarded_main_loop_finalize() {
+	GDExtensionManager *manager = GDExtensionManager::get_singleton();
+	if (!manager) {
+		return;
+	}
+	GDExtensionDeviceExit::require_close_success(
+			manager->preflight_exit(GDExtensionDeviceExit::CloseRoute::SHUTDOWN),
+			GDExtensionDeviceExit::CloseRoute::SHUTDOWN);
+	GDExtensionDeviceExit::require_close_success(
+			manager->deinitialize_guarded_extensions_before_main_loop(),
+			GDExtensionDeviceExit::CloseRoute::SHUTDOWN);
+}
+
 void OS_MacOS_NSApp::cleanup() {
-	if (main_loop) {
+	if (main_loop && main_loop_begun) {
+		main_loop_begun = false;
+		prepare_guarded_main_loop_finalize();
 		main_loop->finalize();
 	}
 	if (main_started) {
+		main_started = false;
 		@autoreleasepool {
 			Main::cleanup();
 		}
 	}
+	if (main_start_status != EXIT_SUCCESS) { set_exit_code(main_start_status); }
 	godot_cleanup_profiler();
 }
 
@@ -1236,6 +1264,9 @@ void OS_MacOS_Headless::run() {
 
 	@autoreleasepool {
 		Error err = Main::setup(execpath, argc, argv);
+#ifdef TESTS_ENABLED
+		TestDeviceExitStartup::normal_setup_returned(err);
+#endif
 		if (err != OK) {
 			if (err == ERR_HELP) {
 				return set_exit_code(EXIT_SUCCESS);
@@ -1272,10 +1303,12 @@ void OS_MacOS_Headless::run() {
 			}
 		}
 
+		prepare_guarded_main_loop_finalize();
 		main_loop->finalize();
 	}
 
 	Main::cleanup();
+	if (ret != EXIT_SUCCESS) { set_exit_code(ret); }
 }
 
 OS_MacOS_Headless::OS_MacOS_Headless(const char *p_execpath, int p_argc, char **p_argv) :
@@ -1338,10 +1371,12 @@ void OS_MacOS_Embedded::run() {
 			}
 		}
 
+		prepare_guarded_main_loop_finalize();
 		main_loop->finalize();
 	}
 
 	Main::cleanup();
+	if (ret != EXIT_SUCCESS) { set_exit_code(ret); }
 }
 
 OS_MacOS_Embedded::OS_MacOS_Embedded(const char *p_execpath, int p_argc, char **p_argv) :

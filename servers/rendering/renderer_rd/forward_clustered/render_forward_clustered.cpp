@@ -28,14 +28,10 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#include "modules/modules_enabled.gen.h"
-#ifdef MODULE_P01_PROBE_ENABLED
-#include "modules/p01_probe/p01_native_source.h"
-#endif
-
 #include "render_forward_clustered.h"
 
 #include "core/config/project_settings.h"
+#include "servers/rendering/render_capture_test_hooks.h"
 #include "servers/rendering/renderer_rd/environment/fog.h"
 #include "servers/rendering/renderer_rd/framebuffer_cache_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/light_storage.h"
@@ -46,6 +42,8 @@
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_default.h"
 #include "servers/rendering/storage/ltc_lut.gen.h"
+
+#include "modules/modules_enabled.gen.h"
 
 using namespace RendererSceneRenderImplementation;
 
@@ -607,8 +605,8 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 
 			bool indirect = bool(surf->owner->base_flags & INSTANCE_DATA_FLAG_MULTIMESH_INDIRECT);
 
-#ifdef MODULE_P01_PROBE_ENABLED
-			const uint64_t p01_before_draw = P01NativeSource::draw_record_count();
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+			const uint64_t skinned_mesh_capture_test_before_draw = RenderCaptureTestHooks::draw_record_count();
 #endif
 			if (emulate_point_size) {
 				if (indirect) {
@@ -620,9 +618,9 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 			} else {
 				RD::get_singleton()->draw_list_draw(draw_list, index_array_rd.is_valid(), instance_count);
 			}
-#ifdef MODULE_P01_PROBE_ENABLED
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
 			if ((p_params->pass_mode == PASS_MODE_COLOR) && surf->owner->mesh_instance.is_valid()) {
-				P01NativeSource::observe_draw(surf->owner->mesh_instance, surf->surface_index, vertex_array_rd, p01_before_draw, 1, uint32_t(p_params->pass_mode));
+				RenderCaptureTestHooks::observe_draw(surf->owner->mesh_instance, surf->surface_index, vertex_array_rd, skinned_mesh_capture_test_before_draw, 1, uint32_t(p_params->pass_mode));
 			}
 #endif
 		}

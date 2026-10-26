@@ -3,7 +3,12 @@ from misc.utility.scons_hints import *
 
 Import("env")
 
-env.add_source_files(env.servers_sources, "*.cpp")
+env.add_source_files(
+    env.servers_sources,
+    [source for source in Glob("*.cpp") if str(source).split("/")[-1] != "render_capture_test_tracking.cpp"],
+)
+if env["tests"] and "skinned_mesh_capture_tests" in env.module_list:
+    env.add_source_files(env.servers_sources, "render_capture_test_tracking.cpp")
 
 SConscript("dummy/SCsub")
 SConscript("renderer_rd/SCsub")
