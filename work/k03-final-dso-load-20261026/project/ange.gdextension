@@ -1,0 +1,7 @@
+[configuration]
+entry_symbol="ange_init"
+compatibility_minimum="4.7"
+reloadable=false
+device_exit_guard_version=1
+[libraries]
+macos.debug.arm64="/Users/macbookair/Documents/Work/godot_ANGE/work/k03-final-dso-load-20261026/bin/ange-debug.99c22545.dylib"

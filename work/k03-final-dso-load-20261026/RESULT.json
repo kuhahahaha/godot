@@ -1,0 +1,33 @@
+{
+  "host_sha256": "ee08f82d900ef5556baba1c71db0de69dce4fb25de378dd8027d0f346aad549e",
+  "dso_sha256": "99c22545bf4d4e90018c7c2214f2daa896fae3368bc794995f302b181327fd8c",
+  "expected_dso_sha256": "99c22545bf4d4e90018c7c2214f2daa896fae3368bc794995f302b181327fd8c",
+  "command": [
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/k03-final-dso-load-20261026/godot.cfada.ee08f82d.arm64",
+    "--path",
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/k03-final-dso-load-20261026/project",
+    "--display-driver",
+    "macos",
+    "--rendering-driver",
+    "metal",
+    "--rendering-method",
+    "mobile",
+    "--render-thread",
+    "safe",
+    "--script",
+    "res://probe.gd"
+  ],
+  "rc": 0,
+  "log": "/Users/macbookair/Documents/Work/godot_ANGE/work/k03-final-dso-load-20261026/load.log",
+  "first_lines": [
+    "Godot Engine v4.7.2.stable.custom_build.9808d5211 (2026-10-26 03:56:50 UTC) - https://godotengine.org",
+    "Metal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M3 Pro (Apple9)",
+    "",
+    "[audio] buses ready \u00e2\u0080\u0094 Master=0 Music=1 SFX=2 analyzer_effect=0",
+    "[PHS1] materialized library=1 local_rd=34863056342 owner_is_rt=true",
+    "K03_DSO_LOAD=0"
+  ],
+  "selected_api_json_sha256": "5d1f7ddc2981d715eb2958e670007de4ed19d2c55f05805593611ca45a318b81",
+  "generated_header_sha256": "8fd9ba08ced7b39aff9f5f532602a381f46c0da193d07e7e38b2ee884fad33de",
+  "sdk_archive_commit": "2a6c5fcd79077eb20f52532e9e06010584044237"
+}
