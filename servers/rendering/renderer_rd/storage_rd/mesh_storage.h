@@ -73,6 +73,9 @@ public:
 	};
 
 private:
+#ifdef TESTS_ENABLED
+	friend class TestMultimeshRebuildAccess;
+#endif
 	static MeshStorage *singleton;
 
 	RID default_rd_storage_buffer;
@@ -82,6 +85,7 @@ private:
 	RID mesh_default_rd_buffers[DEFAULT_RD_BUFFER_MAX];
 
 	struct MeshInstance;
+	struct MultiMesh;
 
 	struct Mesh {
 		struct Surface {
@@ -185,6 +189,7 @@ private:
 		Vector<RID> material_cache;
 
 		List<MeshInstance *> instances;
+		HashSet<MultiMesh *> multimeshes;
 
 		RID shadow_mesh;
 		HashSet<Mesh *> shadow_owners;
@@ -246,6 +251,7 @@ private:
 	/* MultiMesh */
 
 	struct MultiMesh {
+		RID self;
 		RID mesh;
 		int instances = 0;
 		RSE::MultimeshTransformFormat xform_format = RSE::MULTIMESH_TRANSFORM_3D;
@@ -275,6 +281,7 @@ private:
 		RID uniform_set_3d;
 		RID uniform_set_2d;
 		RID command_buffer; //used if indirect setting is used
+		uint32_t command_buffer_bytes = 0;
 
 		bool dirty = false;
 		MultiMesh *dirty_list = nullptr;
@@ -288,8 +295,15 @@ private:
 
 	MultiMesh *multimesh_dirty_list = nullptr;
 
+	void _multimesh_rebuild_command_buffer(MultiMesh *p_multimesh);
+	void _multimesh_refresh_mesh(MultiMesh *p_multimesh);
+	void _multimesh_mesh_changed(Mesh *p_mesh);
+	void _multimesh_invalidate_command_buffer(MultiMesh *p_multimesh);
+	void _multimesh_invalidate_gpu_resources(MultiMesh *p_multimesh);
+	void _multimesh_restore_command_buffer(MultiMesh *p_multimesh);
+	static uint32_t _multimesh_dirty_upload_size(uint32_t p_regions, uint32_t p_region_bytes, uint32_t p_buffer_bytes);
 	_FORCE_INLINE_ void _multimesh_make_local(MultiMesh *multimesh) const;
-	_FORCE_INLINE_ void _multimesh_enable_motion_vectors(MultiMesh *multimesh);
+	_FORCE_INLINE_ bool _multimesh_enable_motion_vectors(MultiMesh *multimesh);
 	_FORCE_INLINE_ void _multimesh_update_motion_vectors_data_cache(MultiMesh *multimesh);
 	_FORCE_INLINE_ bool _multimesh_uses_motion_vectors(MultiMesh *multimesh);
 	_FORCE_INLINE_ void _multimesh_mark_dirty(MultiMesh *multimesh, int p_index, bool p_aabb);
