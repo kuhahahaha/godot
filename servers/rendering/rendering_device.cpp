@@ -1072,6 +1072,10 @@ Error RenderingDevice::_staging_buffer_execute_required_action(StagingBuffers &p
 }
 
 Error RenderingDevice::buffer_copy(RID p_src_buffer, RID p_dst_buffer, uint32_t p_src_offset, uint32_t p_dst_offset, uint32_t p_size) {
+	return _buffer_copy_recorded(p_src_buffer, p_dst_buffer, p_src_offset, p_dst_offset, p_size).error;
+}
+
+RenderingDevice::CopyAppendResult RenderingDevice::_buffer_copy_recorded(RID p_src_buffer, RID p_dst_buffer, uint32_t p_src_offset, uint32_t p_dst_offset, uint32_t p_size) {
 	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
 	if (_recording_error() != OK) {
 		return _recording_error();
@@ -1096,9 +1100,15 @@ Error RenderingDevice::buffer_copy(RID p_src_buffer, RID p_dst_buffer, uint32_t 
 
 	ERR_FAIL_COND_V(src_buffer->qualification_return || dst_buffer->qualification_return, ERR_UNAUTHORIZED);
 	// Validate the copy's dimensions for both buffers.
-	ERR_FAIL_COND_V_MSG((p_size + p_src_offset) > src_buffer->size, ERR_INVALID_PARAMETER, "Size is larger than the source buffer.");
-	ERR_FAIL_COND_V_MSG((p_size + p_dst_offset) > dst_buffer->size, ERR_INVALID_PARAMETER, "Size is larger than the destination buffer.");
+	ERR_FAIL_COND_V_MSG(uint64_t(p_src_offset) + uint64_t(p_size) > src_buffer->size, ERR_INVALID_PARAMETER, "Size is larger than the source buffer.");
+	ERR_FAIL_COND_V_MSG(uint64_t(p_dst_offset) + uint64_t(p_size) > dst_buffer->size, ERR_INVALID_PARAMETER, "Size is larger than the destination buffer.");
 
+	CopyAppendResult result;
+	for (const Buffer *buffer : { src_buffer, dst_buffer }) {
+		if (buffer->transfer_worker_index >= 0) {
+			result.transfers[result.transfer_count++] = { uint32_t(buffer->transfer_worker_index), buffer->transfer_worker_operation };
+		}
+	}
 	_check_transfer_worker_buffer(src_buffer);
 	_check_transfer_worker_buffer(dst_buffer);
 
@@ -1110,15 +1120,17 @@ Error RenderingDevice::buffer_copy(RID p_src_buffer, RID p_dst_buffer, uint32_t 
 
 	if (_buffer_make_mutable(dst_buffer, p_dst_buffer)) {
 		// The destination buffer must be mutable to be used as a copy destination.
+		result.destination_became_mutable = true;
 		draw_graph.add_synchronization();
 	}
 
-	draw_graph.add_buffer_copy(src_buffer->driver_id, src_buffer->draw_tracker, dst_buffer->driver_id, dst_buffer->draw_tracker, region);
+	result.copy_handle = draw_graph.add_buffer_copy(src_buffer->driver_id, src_buffer->draw_tracker, dst_buffer->driver_id, dst_buffer->draw_tracker, region);
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
 	RenderCaptureTestHooks::observe_buffer_copy(p_src_buffer.get_id(), p_dst_buffer.get_id(), p_src_offset, p_dst_offset, p_size, uint64_t(get_instance_id()), src_buffer->capture_test_allocation_serial, dst_buffer->capture_test_allocation_serial);
 #endif
 
-	return OK;
+	result.effect = NativeAppendEffect::Recorded;
+	return result;
 }
 
 Error RenderingDevice::_buffer_update(Buffer *p_buffer, RID p_buffer_id, uint32_t p_offset, uint32_t p_size, const void *p_data, QualificationUploadProgress *p_progress) {
@@ -6543,50 +6555,55 @@ void RenderingDevice::draw_list_draw(DrawListID p_list, bool p_use_indices, uint
 }
 
 void RenderingDevice::draw_list_draw_indirect(DrawListID p_list, bool p_use_indices, RID p_buffer, uint32_t p_offset, uint32_t p_draw_count, uint32_t p_stride) {
-	ERR_RENDER_THREAD_GUARD();
-	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
+	_draw_list_draw_indirect_recorded(p_list, p_use_indices, p_buffer, p_offset, p_draw_count, p_stride, false);
+}
 
-	ERR_FAIL_COND(!draw_list.active);
+RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_draw_indirect_recorded(DrawListID p_list, bool p_use_indices, RID p_buffer, uint32_t p_offset, uint32_t p_draw_count, uint32_t p_stride, bool p_capture) {
+	DrawAppendResult result;
+	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
+
+	ERR_FAIL_COND_V(!draw_list.active, result.failure(ERR_INVALID_PARAMETER));
 
 	Buffer *buffer = storage_buffer_owner.get_or_null(p_buffer);
-	ERR_FAIL_NULL(buffer);
-	ERR_FAIL_COND(buffer->qualification_return);
+	ERR_FAIL_NULL_V(buffer, result.failure(ERR_INVALID_PARAMETER));
+	ERR_FAIL_COND_V(buffer->qualification_return, result.failure(ERR_UNAUTHORIZED));
 
-	ERR_FAIL_COND_MSG(!buffer->usage.has_flag(RDD::BUFFER_USAGE_INDIRECT_BIT), "Buffer provided was not created to do indirect dispatch.");
+	ERR_FAIL_COND_V_MSG(!buffer->usage.has_flag(RDD::BUFFER_USAGE_INDIRECT_BIT), result.failure(ERR_INVALID_PARAMETER), "Buffer provided was not created to do indirect dispatch.");
 
 	// Validate the complete indirect command span before touching descriptor
 	// state or recording graph instructions. A zero stride retains the existing
 	// tightly packed single-command meaning; multiple commands must provide an
 	// explicit stride at least as large as the command itself.
 	const uint64_t command_size = p_use_indices ? 20u : 16u;
-	ERR_FAIL_COND_MSG((p_offset & 3u) != 0, "Indirect command offset must be 4-byte aligned.");
-	ERR_FAIL_COND_MSG((p_stride & 3u) != 0, "Indirect command stride must be 4-byte aligned.");
+	ERR_FAIL_COND_V_MSG((p_offset & 3u) != 0, result.failure(ERR_INVALID_PARAMETER), "Indirect command offset must be 4-byte aligned.");
+	ERR_FAIL_COND_V_MSG((p_stride & 3u) != 0, result.failure(ERR_INVALID_PARAMETER), "Indirect command stride must be 4-byte aligned.");
 	if (p_draw_count > 1) {
-		ERR_FAIL_COND_MSG(p_stride == 0 || uint64_t(p_stride) < command_size, "Indirect command stride is too small for multiple draws.");
+		ERR_FAIL_COND_V_MSG(p_stride == 0 || uint64_t(p_stride) < command_size, result.failure(ERR_INVALID_PARAMETER), "Indirect command stride is too small for multiple draws.");
 	} else if (p_draw_count == 1 && p_stride != 0) {
-		ERR_FAIL_COND_MSG(uint64_t(p_stride) < command_size, "Indirect command stride is too small for one draw.");
+		ERR_FAIL_COND_V_MSG(uint64_t(p_stride) < command_size, result.failure(ERR_INVALID_PARAMETER), "Indirect command stride is too small for one draw.");
 	}
 	if (p_draw_count != 0) {
 		const uint64_t effective_stride = p_stride == 0 ? command_size : p_stride;
 		const uint64_t command_end = uint64_t(p_offset) + effective_stride * uint64_t(p_draw_count - 1) + command_size;
-		ERR_FAIL_COND_MSG(command_end < uint64_t(p_offset) || command_end > buffer->size, "Indirect command span is past the end of the buffer.");
+		ERR_FAIL_COND_V_MSG(command_end < uint64_t(p_offset) || command_end > buffer->size, result.failure(ERR_INVALID_PARAMETER), "Indirect command span is past the end of the buffer.");
 	}
 
 #ifdef DEBUG_ENABLED
-	ERR_FAIL_COND_MSG(!draw_list.validation.pipeline_active,
+	ERR_FAIL_COND_V_MSG(!draw_list.validation.pipeline_active, result.failure(ERR_INVALID_PARAMETER),
 			"No render pipeline was set before attempting to draw.");
 	if (draw_list.validation.pipeline_vertex_format != INVALID_ID) {
 		// Pipeline uses vertices, validate format.
-		ERR_FAIL_COND_MSG(draw_list.validation.vertex_format == INVALID_ID,
+		ERR_FAIL_COND_V_MSG(draw_list.validation.vertex_format == INVALID_ID, result.failure(ERR_INVALID_PARAMETER),
 				"No vertex array was bound, and render pipeline expects vertices.");
 		// Make sure format is right.
-		ERR_FAIL_COND_MSG(draw_list.validation.pipeline_vertex_format != draw_list.validation.vertex_format,
+		ERR_FAIL_COND_V_MSG(draw_list.validation.pipeline_vertex_format != draw_list.validation.vertex_format, result.failure(ERR_INVALID_PARAMETER),
 				"The vertex format used to create the pipeline does not match the vertex format bound.");
 	}
 
 	if (draw_list.validation.pipeline_push_constant_size > 0) {
 		// Using push constants, check that they were supplied.
-		ERR_FAIL_COND_MSG(!draw_list.validation.pipeline_push_constant_supplied,
+		ERR_FAIL_COND_V_MSG(!draw_list.validation.pipeline_push_constant_supplied, result.failure(ERR_INVALID_PARAMETER),
 				"The shader in this pipeline requires a push constant to be set before drawing, but it's not present.");
 	}
 #endif
@@ -6600,17 +6617,52 @@ void RenderingDevice::draw_list_draw_indirect(DrawListID p_list, bool p_use_indi
 
 		if (draw_list.state.sets[i].pipeline_expected_format != draw_list.state.sets[i].uniform_set_format) {
 			if (draw_list.state.sets[i].uniform_set_format == 0) {
-				ERR_FAIL_MSG(vformat("Uniforms were never supplied for set (%d) at the time of drawing, which are required by the pipeline.", i));
+				ERR_FAIL_V_MSG(result.failure(ERR_INVALID_PARAMETER), vformat("Uniforms were never supplied for set (%d) at the time of drawing, which are required by the pipeline.", i));
 			} else if (uniform_set_owner.owns(draw_list.state.sets[i].uniform_set)) {
 				UniformSet *us = uniform_set_owner.get_or_null(draw_list.state.sets[i].uniform_set);
 				const String us_info = us ? vformat("(%d):\n%s\n", i, _shader_uniform_debug(us->shader_id, us->shader_set)) : vformat("(%d, which was just freed) ", i);
-				ERR_FAIL_MSG(vformat("Uniforms supplied for set %sare not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n%s", us_info, _shader_uniform_debug(draw_list.state.pipeline_shader)));
+				ERR_FAIL_V_MSG(result.failure(ERR_INVALID_PARAMETER), vformat("Uniforms supplied for set %sare not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n%s", us_info, _shader_uniform_debug(draw_list.state.pipeline_shader)));
 			} else {
-				ERR_FAIL_MSG(vformat("Uniforms supplied for set (%d, which was just freed) are not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n%s", i, _shader_uniform_debug(draw_list.state.pipeline_shader)));
+				ERR_FAIL_V_MSG(result.failure(ERR_INVALID_PARAMETER), vformat("Uniforms supplied for set (%d, which was just freed) are not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n%s", i, _shader_uniform_debug(draw_list.state.pipeline_shader)));
 			}
 		}
 	}
 #endif
+
+	if (p_capture) {
+		static_assert(MAX_UNIFORM_SETS * 2 == 32);
+		ERR_FAIL_COND_V(draw_list.state.set_count > MAX_UNIFORM_SETS, result.failure(ERR_INVALID_PARAMETER));
+		// Capture permits only already-prepared immutable bindings. Ordinary
+		// public RD drawing keeps its original shared-copy/clear behavior below.
+		// Those original preparation operations need their own native capture
+		// before an output packet may borrow the resulting material generation.
+		for (uint32_t i = 0; i < draw_list.state.set_count; i++) {
+			if (draw_list.state.sets[i].pipeline_expected_format == 0) {
+				continue;
+			}
+			UniformSet *set = uniform_set_owner.get_or_null(draw_list.state.sets[i].uniform_set);
+			ERR_FAIL_NULL_V(set, result.failure(ERR_INVALID_PARAMETER));
+			for (const UniformSet::SharedTexture &shared : set->shared_textures_to_update) {
+				Texture *texture = texture_owner.get_or_null(shared.texture);
+				ERR_FAIL_NULL_V(texture, result.failure(ERR_INVALID_PARAMETER));
+				if (texture->shared_fallback == nullptr) {
+					continue;
+				}
+				ERR_FAIL_COND_V(shared.writing, result.failure(ERR_UNAVAILABLE));
+				if (texture->owner.is_valid()) {
+					Texture *owner = texture_owner.get_or_null(texture->owner);
+					ERR_FAIL_COND_V(!owner || !owner->shared_fallback, result.failure(ERR_INVALID_PARAMETER));
+					ERR_FAIL_COND_V(texture->shared_fallback->revision != owner->shared_fallback->revision, result.failure(ERR_UNAVAILABLE));
+				}
+			}
+			for (RID rid : set->pending_clear_textures) {
+				Texture *texture = texture_owner.get_or_null(rid);
+				ERR_FAIL_NULL_V(texture, result.failure(ERR_INVALID_PARAMETER));
+				ERR_FAIL_COND_V(texture->pending_clear, result.failure(ERR_UNAVAILABLE));
+			}
+		}
+		result.capture_complete = true;
+	}
 
 	// Prepare descriptor sets if the API doesn't use pipeline barriers.
 	if (!driver->api_trait_get(RDD::API_TRAIT_HONORS_PIPELINE_BARRIERS)) {
@@ -6620,7 +6672,11 @@ void RenderingDevice::draw_list_draw_indirect(DrawListID p_list, bool p_use_indi
 				continue;
 			}
 
-			draw_graph.add_draw_list_uniform_set_prepare_for_use(draw_list.state.pipeline_shader_driver_id, draw_list.state.sets[i].uniform_set_driver_id, i);
+			result.effect = NativeAppendEffect::NativePrefixOnly;
+			const auto prepare = draw_graph.add_draw_list_uniform_set_prepare_for_use(draw_list.state.pipeline_shader_driver_id, draw_list.state.sets[i].uniform_set_driver_id, i);
+			if (p_capture) {
+				result.prefix_handles[result.prefix_count++] = prepare;
+			}
 		}
 	}
 
@@ -6631,10 +6687,14 @@ void RenderingDevice::draw_list_draw_indirect(DrawListID p_list, bool p_use_indi
 		}
 		if (!draw_list.state.sets[i].bound) {
 			// All good, see if this requires re-binding.
-			draw_graph.add_draw_list_bind_uniform_set(draw_list.state.pipeline_shader_driver_id, draw_list.state.sets[i].uniform_set_driver_id, i);
+			result.effect = NativeAppendEffect::NativePrefixOnly;
+			const auto bind = draw_graph.add_draw_list_bind_uniform_set(draw_list.state.pipeline_shader_driver_id, draw_list.state.sets[i].uniform_set_driver_id, i);
+			if (p_capture) {
+				result.prefix_handles[result.prefix_count++] = bind;
+			}
 
 			UniformSet *uniform_set = uniform_set_owner.get_or_null(draw_list.state.sets[i].uniform_set);
-			ERR_FAIL_NULL(uniform_set);
+			ERR_FAIL_NULL_V(uniform_set, result.failure(ERR_INVALID_PARAMETER));
 			_uniform_set_update_shared(uniform_set);
 			_uniform_set_update_clears(uniform_set);
 
@@ -6646,16 +6706,16 @@ void RenderingDevice::draw_list_draw_indirect(DrawListID p_list, bool p_use_indi
 
 	if (p_use_indices) {
 #ifdef DEBUG_ENABLED
-		ERR_FAIL_COND_MSG(!draw_list.validation.index_array_count,
+		ERR_FAIL_COND_V_MSG(!draw_list.validation.index_array_count, result.failure(ERR_INVALID_PARAMETER),
 				"Draw command requested indices, but no index buffer was set.");
 
-		ERR_FAIL_COND_MSG(draw_list.validation.pipeline_uses_restart_indices != draw_list.validation.index_buffer_uses_restart_indices,
+		ERR_FAIL_COND_V_MSG(draw_list.validation.pipeline_uses_restart_indices != draw_list.validation.index_buffer_uses_restart_indices, result.failure(ERR_INVALID_PARAMETER),
 				"The usage of restart indices in index buffer does not match the render primitive in the pipeline.");
 #endif
 
-		draw_graph.add_draw_list_draw_indexed_indirect(buffer->driver_id, p_offset, p_draw_count, p_stride);
+		result.draw_handle = draw_graph.add_draw_list_draw_indexed_indirect(buffer->driver_id, p_offset, p_draw_count, p_stride);
 	} else {
-		draw_graph.add_draw_list_draw_indirect(buffer->driver_id, p_offset, p_draw_count, p_stride);
+		result.draw_handle = draw_graph.add_draw_list_draw_indirect(buffer->driver_id, p_offset, p_draw_count, p_stride);
 	}
 
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
@@ -6673,7 +6733,13 @@ void RenderingDevice::draw_list_draw_indirect(DrawListID p_list, bool p_use_indi
 		draw_graph.add_draw_list_usage(buffer->draw_tracker, RDG::RESOURCE_USAGE_INDIRECT_BUFFER_READ);
 	}
 
+	if (buffer->transfer_worker_index >= 0) {
+		result.has_transfer = true;
+		result.transfer = { uint32_t(buffer->transfer_worker_index), buffer->transfer_worker_operation };
+	}
 	_check_transfer_worker_buffer(buffer);
+	result.effect = NativeAppendEffect::Recorded;
+	return result;
 }
 
 void RenderingDevice::draw_list_set_viewport(DrawListID p_list, const Rect2 &p_rect) {

@@ -97,6 +97,7 @@ private:
  friend struct GDExtensionDeviceExit::QualificationTicket;
 	friend class RenderingServerDefault;
 #ifdef TESTS_ENABLED
+	friend class TestExternalOutputAccess;
 	friend class TestShaderCompilePolicyAccess;
 	friend class TestTransferWorkerAccess;
 	friend class TestFrameWaitAccess;
@@ -326,6 +327,44 @@ private:
   uint32_t consumed=0,max_segments=0;
  };
  Error _buffer_update(Buffer *p_buffer, RID p_buffer_id, uint32_t p_offset, uint32_t p_size, const void *p_data, QualificationUploadProgress *p_progress = nullptr);
+
+	enum class NativeAppendEffect : uint8_t {
+		NoNewEffect,
+		NativePrefixOnly,
+		Recorded,
+		Unknown,
+	};
+	struct NativeTransferDependency {
+		uint32_t worker = 0;
+		uint64_t operation = 0;
+	};
+	struct CopyAppendResult {
+		Error error = OK;
+		NativeAppendEffect effect = NativeAppendEffect::NoNewEffect;
+		RDG::RecordHandle copy_handle;
+		NativeTransferDependency transfers[2];
+		uint32_t transfer_count = 0;
+		bool destination_became_mutable = false;
+		CopyAppendResult(Error p_error = OK) : error(p_error) {}
+	};
+	struct DrawAppendResult {
+		Error error = OK;
+		NativeAppendEffect effect = NativeAppendEffect::NoNewEffect;
+		RDG::RecordHandle draw_handle;
+		// At most one preparation and one bind per original uniform set.
+		RDG::RecordHandle prefix_handles[32];
+		uint32_t prefix_count = 0;
+		bool capture_complete = false;
+		NativeTransferDependency transfer;
+		bool has_transfer = false;
+		DrawAppendResult failure(Error p_error) const {
+			DrawAppendResult result = *this;
+			result.error = p_error;
+			return result;
+		}
+	};
+	CopyAppendResult _buffer_copy_recorded(RID p_src_buffer, RID p_dst_buffer, uint32_t p_src_offset, uint32_t p_dst_offset, uint32_t p_size);
+	DrawAppendResult _draw_list_draw_indirect_recorded(DrawListID p_list, bool p_use_indices, RID p_buffer, uint32_t p_offset, uint32_t p_draw_count, uint32_t p_stride, bool p_capture = true);
 
 public:
 	Error buffer_copy(RID p_src_buffer, RID p_dst_buffer, uint32_t p_src_offset, uint32_t p_dst_offset, uint32_t p_size);

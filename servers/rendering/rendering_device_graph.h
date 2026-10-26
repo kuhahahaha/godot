@@ -31,6 +31,7 @@
 #pragma once
 
 #include "core/object/worker_thread_pool.h"
+#include "core/templates/hash_set.h"
 #include "servers/rendering/rendering_device_commons.h"
 #include "servers/rendering/rendering_device_driver.h"
 
@@ -54,7 +55,7 @@ public:
 	struct RecordHandle {
 		uint64_t graph_instance = 0;
 		uint64_t graph_frame = 0;
-		uint32_t kind = 0; // 1 = graph command, 2 = compute-list instruction.
+		uint32_t kind = 0; // 1 = graph command, 2 = compute instruction, 3 = draw instruction.
 		uint32_t index = 0;
 		uint32_t offset = 0;
 		bool is_valid() const { return graph_instance != 0 && graph_frame != 0 && kind != 0; }
@@ -449,6 +450,7 @@ private:
 	};
 
 	struct RecordedDrawListCommand : RecordedCommand {
+		uint32_t list_index = 0;
 		FramebufferCache *framebuffer_cache = nullptr;
 		RDD::FramebufferID framebuffer;
 		RDD::RenderPassID render_pass;
@@ -851,6 +853,9 @@ private:
 	LocalVector<uint32_t> command_data_offsets;
 	LocalVector<uint32_t> command_buffer_slots;
 	LocalVector<RDD::CommandBufferID> command_buffer_ids;
+	// Exact append boundaries, not opcode-shaped words inside instruction payloads.
+	HashSet<uint64_t> compute_record_offsets;
+	HashSet<uint64_t> draw_record_offsets;
 	LocalVector<bool> command_buffer_begun;
 	bool primary_command_buffer_begun = true;
 	bool command_buffer_begin_failed = false;
@@ -897,6 +902,7 @@ private:
 	int32_t _add_to_slice_read_list(int32_t p_command_index, Rect2i p_subresources, int32_t p_list_index);
 	int32_t _add_to_write_list(int32_t p_command_index, Rect2i p_subresources, int32_t p_list_index, bool p_partial_coverage);
 	RecordedCommand *_allocate_command(uint32_t p_command_size, int32_t &r_command_index);
+	bool _resolve_record_command_index(const RecordHandle &p_handle, uint32_t &r_index) const;
 	DrawListInstruction *_allocate_draw_list_instruction(uint32_t p_instruction_size);
 	ComputeListInstruction *_allocate_compute_list_instruction(uint32_t p_instruction_size);
 	void _check_discardable_attachment_dependency(ResourceTracker *p_resource_tracker, int32_t p_previous_command_index, int32_t p_command_index);
@@ -932,7 +938,7 @@ public:
 	void add_blas_build(RDD::AccelerationStructureID p_blas, RDD::BufferID p_scratch_buffer, ResourceTracker *p_dst_tracker, VectorView<ResourceTracker *> p_src_trackers);
 	void add_tlas_build(RDD::AccelerationStructureID p_tlas, RDD::BufferID p_scratch_buffer, RDD::BufferID p_instance_buffer, uint32_t p_instance_offset, uint32_t p_instance_count, ResourceTracker *p_dst_tracker, VectorView<ResourceTracker *> p_src_trackers);
 	void add_buffer_clear(RDD::BufferID p_dst, ResourceTracker *p_dst_tracker, uint32_t p_offset, uint32_t p_size);
-	void add_buffer_copy(RDD::BufferID p_src, ResourceTracker *p_src_tracker, RDD::BufferID p_dst, ResourceTracker *p_dst_tracker, RDD::BufferCopyRegion p_region);
+	RecordHandle add_buffer_copy(RDD::BufferID p_src, ResourceTracker *p_src_tracker, RDD::BufferID p_dst, ResourceTracker *p_dst_tracker, RDD::BufferCopyRegion p_region);
 	RecordHandle add_buffer_get_data(RDD::BufferID p_src, ResourceTracker *p_src_tracker, RDD::BufferID p_dst, RDD::BufferCopyRegion p_region);
 	RecordHandle add_buffer_update(RDD::BufferID p_dst, ResourceTracker *p_dst_tracker, VectorView<RecordedBufferCopy> p_buffer_copies);
 	void add_driver_callback(RDD::DriverCallback p_callback, void *p_userdata, VectorView<ResourceTracker *> p_trackers, VectorView<ResourceUsage> p_usages);
@@ -960,14 +966,14 @@ public:
 	void add_draw_list_begin(RDD::RenderPassID p_render_pass, RDD::FramebufferID p_framebuffer, Rect2i p_region, VectorView<AttachmentOperation> p_attachment_operations, VectorView<RDD::RenderPassClearValue> p_attachment_clear_values, BitField<RDD::PipelineStageBits> p_stages, uint32_t p_breadcrumb = 0, bool p_split_cmd_buffer = false);
 	void add_draw_list_bind_index_buffer(RDD::BufferID p_buffer, RDD::IndexBufferFormat p_format, uint32_t p_offset);
 	void add_draw_list_bind_pipeline(RDD::PipelineID p_pipeline, BitField<RDD::PipelineStageBits> p_pipeline_stage_bits);
-	void add_draw_list_bind_uniform_set(RDD::ShaderID p_shader, RDD::UniformSetID p_uniform_set, uint32_t set_index);
-	void add_draw_list_bind_uniform_sets(RDD::ShaderID p_shader, VectorView<RDD::UniformSetID> p_uniform_set, uint32_t p_first_index, uint32_t p_set_count);
+	RecordHandle add_draw_list_bind_uniform_set(RDD::ShaderID p_shader, RDD::UniformSetID p_uniform_set, uint32_t set_index);
+	RecordHandle add_draw_list_bind_uniform_sets(RDD::ShaderID p_shader, VectorView<RDD::UniformSetID> p_uniform_set, uint32_t p_first_index, uint32_t p_set_count);
 	void add_draw_list_bind_vertex_buffers(Span<RDD::BufferID> p_vertex_buffers, Span<uint64_t> p_vertex_buffer_offsets);
 	void add_draw_list_clear_attachments(VectorView<RDD::AttachmentClear> p_attachments_clear, VectorView<Rect2i> p_attachments_clear_rect);
 	void add_draw_list_draw(uint32_t p_vertex_count, uint32_t p_instance_count);
 	void add_draw_list_draw_indexed(uint32_t p_index_count, uint32_t p_instance_count, uint32_t p_first_index);
-	void add_draw_list_draw_indirect(RDD::BufferID p_buffer, uint32_t p_offset, uint32_t p_draw_count, uint32_t p_stride);
-	void add_draw_list_draw_indexed_indirect(RDD::BufferID p_buffer, uint32_t p_offset, uint32_t p_draw_count, uint32_t p_stride);
+	RecordHandle add_draw_list_draw_indirect(RDD::BufferID p_buffer, uint32_t p_offset, uint32_t p_draw_count, uint32_t p_stride);
+	RecordHandle add_draw_list_draw_indexed_indirect(RDD::BufferID p_buffer, uint32_t p_offset, uint32_t p_draw_count, uint32_t p_stride);
 	void add_draw_list_execute_commands(RDD::CommandBufferID p_command_buffer);
 	void add_draw_list_next_subpass(RDD::CommandBufferType p_command_buffer_type);
 	void add_draw_list_set_blend_constants(const Color &p_color);
@@ -975,7 +981,7 @@ public:
 	void add_draw_list_set_push_constant(RDD::ShaderID p_shader, const void *p_data, uint32_t p_data_size);
 	void add_draw_list_set_scissor(Rect2i p_rect);
 	void add_draw_list_set_viewport(Rect2i p_rect);
-	void add_draw_list_uniform_set_prepare_for_use(RDD::ShaderID p_shader, RDD::UniformSetID p_uniform_set, uint32_t set_index);
+	RecordHandle add_draw_list_uniform_set_prepare_for_use(RDD::ShaderID p_shader, RDD::UniformSetID p_uniform_set, uint32_t set_index);
 	void add_draw_list_usage(ResourceTracker *p_tracker, ResourceUsage p_usage);
 	void add_draw_list_usages(VectorView<ResourceTracker *> p_trackers, VectorView<ResourceUsage> p_usages);
 	void add_draw_list_end();
