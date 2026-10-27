@@ -1,0 +1,24 @@
+{
+  "review_type": "K03 acceptance matrix successor v29",
+  "package": "K03_ACCEPTANCE_MATRIX_20261028_V29",
+  "previous_matrix": "K03_ACCEPTANCE_MATRIX_20261028_V28",
+  "expected_package_count": 72,
+  "new_package": {
+    "name": "ange_c04_spirv_target_revalidation",
+    "commit": "7a3c49828",
+    "repo": "ANGE"
+  },
+  "questions": [
+    "Does revalidation commit resolve and preserve current 65/1 result?",
+    "Is prior 64/2 historical result kept distinct?",
+    "Are default/native/GPU/Ready boundaries false?"
+  ],
+  "required_checks": [
+    "verify all commit prefixes",
+    "verify revalidation receipt/review and counts",
+    "verify historical allocator red distinction",
+    "verify current pair unchanged",
+    "verify claims all false"
+  ],
+  "independent_review": "K03_ACCEPTANCE_MATRIX_20261028_V29_INDEPENDENT_REVIEW.md"
+}
