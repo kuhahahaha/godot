@@ -3,14 +3,14 @@
   "package": "K03_acceptance_matrix",
   "review_target": "K03_ACCEPTANCE_MATRIX_20261027.md",
   "questions": [
-    "Do all sixteen package commits and scopes match their source receipts?",
-    "Are final2 binary, D source-only, owner boundaries, current-A v1 and current-A/E34 v2 scopes separated?",
-    "Are E34/bootstrap/native/GPU/Ready boundaries and all false claims preserved?"
+    "Do all seventeen package commits and scopes match receipts?",
+    "Are owner handoff map and current-A/final2 scopes separated?",
+    "Are all owner inputs and false claims preserved?"
   ],
   "required_checks": [
-    "verify sixteen commit prefixes",
+    "verify seventeen commit prefixes",
     "verify final2 build receipt",
-    "check v2 source/CPU scope",
+    "check owner map fields",
     "check no positive owner or GPU promotion"
   ],
   "tests_rerun": false

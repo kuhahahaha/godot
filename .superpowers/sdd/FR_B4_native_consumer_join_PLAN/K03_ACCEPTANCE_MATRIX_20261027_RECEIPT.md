@@ -1,6 +1,6 @@
 # K03 acceptance matrix receipt — 2026-10-27
 
-- Sixteen independently reviewed K03/queue packages are indexed with exact commit prefixes.
-- Final2 binary pair, D source-only, owner boundaries, I02, current-A v1 and current-A/E34 v2 remain separate scopes.
-- Current-A/E34 v2 covers E34 bootstrap successor and E21–E29/P4/scene-install source/CPU/contract evidence only.
+- Seventeen independently reviewed K03/queue packages are indexed with exact commit prefixes.
+- Final2 binary pair, D source-only, owner boundaries, current-A sets, and external handoff map remain separate scopes.
+- External owner map records E03/E04, E05/E20, E34/P01, and U08/E09 inputs without treating local unavailable paths as queue-wide failure.
 - All positive owner/completion/readback/packet/Ready/Verified/GPU claims remain false.

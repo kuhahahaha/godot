@@ -65,6 +65,10 @@
     {
       "name": "current_a_boundary_set_v2",
       "commit": "b092756b25"
+    },
+    {
+      "name": "external_owner_handoff_blocker_map",
+      "commit": "cad566bb89"
     }
   ],
   "historical_fixed_pair": {
