@@ -30,3 +30,5 @@
 - 2026-10-27 acceptance matrix indexed D VFX projection validation/rollback source audit `290383df79`: eleven package scopes reviewed; source-only D validation/rollback and same-path erase guard kept separate from final2 binary pair, all claims false, limited-scope accept with no P0-P3.
 
 - 2026-10-27 E03/E04 current-source owner boundary indexed: ANGE host-storage build rc0, E04 3/65, E03 17/1187; production capture remains UNAVAILABLE pending `host.preparation_authority`, `host.world_detach_authority`, `host.session_close_authority`, and `capture.original_source_authority`. Local loader/test handles remain non-authority; no R01/K01/Ready/GPU claim.
+
+- 2026-10-27 acceptance matrix indexed E03/E04 owner boundary package `65b8469e1b`: twelve package scopes reviewed; E03 17/1187 and E04 3/65 remain CPU/source evidence, while four production owner fields stay UNAVAILABLE pending original authority/R01/K01 issuer; limited-scope accept, no P0-P3, claims false.

@@ -1,18 +1,22 @@
 # K03 acceptance matrix independent review — 2026-10-27
 
-Read-only review of the eleven-package matrix and evidence artifacts; no
+Read-only review of the twelve-package matrix and evidence artifacts; no
 source edits, builds, or fixture reruns.
 
-All eleven package prefixes resolve, including `290383df79` (D VFX projection
-validation/rollback). That package is explicitly source-only: fail-closed
-projection publication, pre-mount validation/rollback, and same-path runtime
-erase guard. It carries no binary attribution and no packet, operation, or GPU
-authority, so it remains separate from the final2 binary pair provenance.
+All twelve package prefixes resolve, including `65b8469e1b` for the E03/E04
+current-source owner boundary. Its bounded source/CPU evidence is consistent:
+E03 is 17 cases/1187 assertions and E04 is 3 cases/65 assertions, both rc0.
+Production capture remains `UNAVAILABLE` pending the four exact owner fields:
+`host.preparation_authority`, `host.world_detach_authority`,
+`host.session_close_authority`, and `capture.original_source_authority`.
+The package correctly requires accepted original preparation/source/session/
+detach authority and an R01/K01 issuer; local handles are not substitutes.
 
-Final2 binary provenance remains editor `2ee0e5c3…`, ANGE HEAD
-`53ff6aa1…`, DSO `a078f6de…`, with VFX/no-VFX source-stage, world-entry,
-explicit `exit_world()` close, and unload evidence. Close/unload evidence is
-separate from external physical disposal and `Released` authority.
+Final2 binary provenance remains separate from D source-only projection
+validation/rollback evidence. The current final2 pair is editor `2ee0e5c3…`,
+ANGE HEAD `53ff6aa1…`, DSO `a078f6de…`. Neither the E03/E04 source/CPU package
+nor D source-only package supplies R01/K01, native operation, GPU, or Ready
+authority.
 
 All claims remain `false`: U08, E09, operation, completion, readback
 authority/bytes, packet publication, physical disposal, Released, Ready,

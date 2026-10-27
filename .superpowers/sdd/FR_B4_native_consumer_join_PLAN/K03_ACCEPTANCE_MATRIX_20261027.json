@@ -45,6 +45,10 @@
     {
       "name": "d_vfx_projection_validation_rollback_audit",
       "commit": "290383df79"
+    },
+    {
+      "name": "e03_e04_current_source_owner_boundary",
+      "commit": "65b8469e1b"
     }
   ],
   "historical_fixed_pair": {
