@@ -1,0 +1,30 @@
+{
+  "review_type": "non-author I02 imported-texture CPU consumer audit",
+  "package": "K03_i02_imported_texture_consumer",
+  "review_target": "K03_I02_IMPORTED_TEXTURE_CONSUMER_20261027.md",
+  "questions": [
+    "Do I02 and family logs match 1/30 and 19/7671 rc0?",
+    "Is material/lint CPU consumer scope separated from P01/E34/native/GPU/Ready authority?",
+    "Are all K03 positive claims false?"
+  ],
+  "required_checks": [
+    "verify source-manifest and log hashes",
+    "verify focused/family counts",
+    "check no owner/packet/GPU promotion",
+    "report P0-P3 or limited-scope acceptance"
+  ],
+  "tests_rerun": false,
+  "claim_matrix": {
+    "u08": false,
+    "e09": false,
+    "operation": false,
+    "completion": false,
+    "readback": false,
+    "packet": false,
+    "physical_disposal": false,
+    "released": false,
+    "ready": false,
+    "verified": false,
+    "gpu": false
+  }
+}

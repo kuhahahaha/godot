@@ -1,0 +1,49 @@
+{
+  "package": "K03_i02_imported_texture_consumer",
+  "date": "2026-10-27",
+  "ange_source_head": "b00560bd636fd8d223984f834befd3dd75031ab0",
+  "source_package": "/Users/macbookair/Documents/Work/ANGE/work/i02-imported-texture-current-20261027",
+  "source_manifest_sha256": "acbbb2f36659a1ab29b5d0e4c68f0af9a8259201d684cc1fbb449bdc9a53e1bc",
+  "logs": {
+    "i02.log": {
+      "path": "K03_I02_IMPORTED_TEXTURE_CONSUMER_20261027_i02.log",
+      "sha256": "baa704df7b98bf297ff3a69bea26f81ad88a51643f5ea1067bc1c4ba355f1c9d"
+    },
+    "family.log": {
+      "path": "K03_I02_IMPORTED_TEXTURE_CONSUMER_20261027_family.log",
+      "sha256": "ec62c5d43d31aa53ed3d4c72dcd81f29ccdcecd6fb9a6f42e6aa070e1b0decc8"
+    }
+  },
+  "focused": {
+    "i02": {
+      "rc": 0,
+      "cases": 1,
+      "assertions": 30
+    },
+    "family": {
+      "rc": 0,
+      "cases": 19,
+      "assertions": 7671
+    }
+  },
+  "scope": "CPU material/lint consumer; no native/live GPU execution",
+  "claims": {
+    "u08": false,
+    "e09": false,
+    "operation": false,
+    "completion": false,
+    "readback": false,
+    "packet": false,
+    "physical_disposal": false,
+    "released": false,
+    "ready": false,
+    "verified": false,
+    "gpu": false
+  },
+  "independent_review": {
+    "reviewer": "acceptance_matrix_review",
+    "status": "limited-scope accept; no actionable P0-P3",
+    "tests_rerun": false,
+    "receipt": "K03_I02_IMPORTED_TEXTURE_CONSUMER_20261027_INDEPENDENT_REVIEW.md"
+  }
+}
