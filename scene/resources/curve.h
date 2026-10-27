@@ -143,6 +143,10 @@ public:
 
 	void ensure_default_setup(real_t p_min, real_t p_max);
 
+#ifdef TESTS_ENABLED
+	real_t _test_get_baked_value(int p_index) const { return _baked_cache[p_index]; }
+#endif
+
 protected:
 	bool _set(const StringName &p_name, const Variant &p_value) { return property_helper.property_set_value(p_name, p_value); }
 	bool _get(const StringName &p_name, Variant &r_ret) const { return property_helper.property_get_value(p_name, r_ret); }
