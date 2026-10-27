@@ -1,25 +1,24 @@
 # K03 acceptance matrix independent review — 2026-10-27
 
-Read-only review of the refreshed eight-package matrix and its JSON/receipt/
-review-input artifacts. No source edits, builds, or fixture reruns were made.
+Read-only review of the corrected nine-package matrix and evidence artifacts.
+No source edits, builds, or fixture reruns were made.
 
-All eight package prefixes resolve in the persistent checkout: `1921759a6e`,
-`2008230c5f`, `82604358c4`, `e8f4781870`, `8b3b0af0ae`, `409527e584`,
-`fc03fd5c18`, and `1d683b0c61`. The added withdraw/retire audit scope is
-consistent: withdrawal tombstone and Busy/Withdrawing admission, NativeUse
-retirement, authenticated Registry release, and destructor ordering are
-covered, while public physical-disposal/Released receipts and producer
-association remain outside scope.
+All nine package prefixes resolve, including final recheck `6ead13473f`.
+Its VFX/no-VFX source-stage, world-entry/unload probes and explicit
+`exit_world()` active true→false close are bounded away from U08/E09,
+operation, packet, completion, readback, physical-disposal, Ready, and GPU
+claims. Explicit close/unload remains distinct from external physical disposal
+and `Released` authority.
 
-Pair identity remains correctly layered: historical fixed pair, prior ABI-
-negative pair (rc2 before world entry due to missing
-`device_exit_register_scene_ready_v2`), and current aligned editor/ANGE/DSO
-pair with fresh non-headless Metal/mobile probes are distinct. Withdrawal and
-Registry release evidence is not conflated with public physical disposal or
-Released claims.
+The final pair is now internally consistent: editor `2ee0e5c3…`, ANGE HEAD
+`b4a8924322454a2f153aab2437a721577677d881`, and DSO
+`149342a6a099199bc345bd2e23844491f58485f02ef2fc8529dd7da4fe0811f7`. The
+preceding `a087a905…` DSO is correctly retained only in the earlier alignment
+receipt. Historical and prior ABI-negative pairs remain separate.
 
-The global matrix conservatively leaves U08, E09, operation, completion,
-readback authority/bytes, packet publication, physical disposal, Released,
-Ready, Verified, and GPU all `false`.
+All claims remain conservative: U08, E09, operation, completion, readback
+authority/bytes, packet publication, physical disposal, Released, Ready,
+Verified, and GPU are `false`.
 
-**Decision: limited-scope accept; no P0–P3 findings.**
+**Decision: limited-scope accept; P1 current-pair metadata mismatch is closed;
+no P0–P3 findings.**
