@@ -1,0 +1,12 @@
+ERROR: Attempted to save a foreign camera source token.
+   at: viewport_set_prev_camera_data (servers/rendering/renderer_viewport.cpp:1285)
+ERROR: Attempted to save a foreign camera source token.
+   at: viewport_set_prev_camera_data (servers/rendering/renderer_viewport.cpp:1285)
+ERROR: Attempted to save a foreign camera source token.
+   at: viewport_set_prev_camera_data (servers/rendering/renderer_viewport.cpp:1285)
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+[doctest] test cases:  20 |  20 passed | 0 failed | 1768 skipped
+[doctest] assertions: 419 | 419 passed | 0 failed |
+[doctest] Status: SUCCESS!

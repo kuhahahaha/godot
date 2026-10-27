@@ -1,0 +1,60 @@
+{
+  "package": "K03_current_pair_renderer_packet_guard",
+  "date": "2026-10-27",
+  "godot_source_commit": "1753faf66685154b1ffe2482bfe367c6039d4216",
+  "ange_source_head": "695921a207d89b27da6687453eba6a4ff2ec383d",
+  "editor_sha256": "2ee0e5c3840782ce44514ae76b063a65e13eee8c22ca76c27f6b4a2e9b1b8853",
+  "dso_sha256": "a087a9054c1079efdec85a91759647bea37aa46a0b1fd4d09a7b26ed4b9713e6",
+  "source_sha256": {
+    "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp": "aeec5bf21ff0d715456c59a5f32d8e3e70bb9e9f645a4d191032a459248509ec",
+    "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp": "135e10c0aeab1f2266cbcdee7f3de36b2417b8f2429e50d290ba8f75a7df7203",
+    "servers/rendering/rendering_device_native_use.cpp": "0abecadcb8c5de5d1b7f2f03b106afae5038996e927ee873b8e33ef2934a1ad7",
+    "servers/rendering/renderer_rd/storage_rd/external_output_storage.cpp": "24c805ef8fd5ed9f4f569dae602eabecda5300a19102920a7acd5d8b98094b67",
+    "servers/rendering/renderer_rd/storage_rd/particles_storage.cpp": "e6f9d7f4fceba379d2516022b8d37f3add846555b52065db0beee88a2c479bfe",
+    "tests/servers/rendering/test_external_output_contract.cpp": "0be556cb543f25a032e1f885d1882184f1db2aa7be4046fe2b26a9ee8d9dbf91"
+  },
+  "logs": {
+    "b4": {
+      "path": "K03_CURRENT_PAIR_RENDERER_PACKET_GUARD_20261027_B4.log",
+      "sha256": "1a622dd12c17a9619ae99c00899ced520f37bfe0fd2f8b1c50dfc2395d7533a4",
+      "rc": 0,
+      "cases": 20,
+      "assertions": 419
+    },
+    "particles_trail": {
+      "path": "K03_CURRENT_PAIR_RENDERER_PACKET_GUARD_20261027_PARTICLES_TRAIL.log",
+      "sha256": "df63154bbedde7412093e6d38d5fa4d6fdc4d9951d20150608ff7b1230d89404",
+      "rc": 0,
+      "cases": 1,
+      "assertions": 5
+    }
+  },
+  "source_boundaries": {
+    "forward_plus_external_guard": true,
+    "mobile_external_guard": true,
+    "native_use_issue_completion_readback_retirement": true,
+    "external_producer_owner": false,
+    "same_request_operation_association": false,
+    "packet_consumer": false
+  },
+  "claims": {
+    "u08": false,
+    "e09": false,
+    "operation": false,
+    "completion": false,
+    "readback": false,
+    "packet": false,
+    "physical_disposal": false,
+    "released": false,
+    "ready": false,
+    "verified": false,
+    "gpu": false
+  },
+  "independent_review": {
+    "reviewer": "current_pair_abi_negative_review",
+    "status": "limited-scope accept; no actionable P0-P2; P3 evidence note only",
+    "tests_rerun": false,
+    "receipt": "K03_CURRENT_PAIR_RENDERER_PACKET_GUARD_20261027_INDEPENDENT_REVIEW.md",
+    "note": "Source and log hashes were independently recomputed. The live worktree did not contain binaries matching the recorded editor/DSO hashes, so binary hashes were accepted from the pair receipt."
+  }
+}
