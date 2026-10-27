@@ -1,0 +1,25 @@
+{
+  "review_type": "K03 ledger consistency successor v22",
+  "package": "K03_LEDGER_CONSISTENCY_AUDIT_V22_20261027",
+  "matrix": "K03_ACCEPTANCE_MATRIX_20261027_V18",
+  "expected_package_count": 37,
+  "new_package": {
+    "name": "ange_texture_provider_runner_refresh",
+    "commit": "68b94bb466",
+    "resolved": "68b94bb46639e10784229b2580301603261dfcd3",
+    "repo": "Godot"
+  },
+  "questions": [
+    "Do all 37 matrix package commit prefixes resolve?",
+    "Does the texture provider runner package resolve to 68b94bb466?",
+    "Are current pair and false claims unchanged?"
+  ],
+  "required_checks": [
+    "verify all commit prefixes",
+    "verify matrix/report package count",
+    "verify texture runner baseline/restored census is recorded",
+    "verify current pair/DSO and claims",
+    "check provider evidence remains bounded from native authority"
+  ],
+  "independent_review": "K03_LEDGER_CONSISTENCY_AUDIT_V22_20261027_INDEPENDENT_REVIEW.md"
+}
