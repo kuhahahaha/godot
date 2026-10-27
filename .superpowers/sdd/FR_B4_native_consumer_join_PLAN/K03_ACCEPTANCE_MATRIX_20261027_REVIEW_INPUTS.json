@@ -3,15 +3,14 @@
   "package": "K03_acceptance_matrix",
   "review_target": "K03_ACCEPTANCE_MATRIX_20261027.md",
   "questions": [
-    "Do all ten package commits and scopes match their source receipts?",
-    "Are historical, prior ABI-negative, aligned, final1, and final2 pair identities separated?",
-    "Does final2 explicit close remain distinct from external physical disposal/Released?",
-    "Are U08/E09/operation/completion/readback/packet/Ready/Verified/GPU claims false?"
+    "Do all eleven package commits and scopes match their source receipts?",
+    "Are binary pair generations separated from the D source-only projection audit?",
+    "Does the matrix preserve close vs physical disposal/Released and all false qualification claims?"
   ],
   "required_checks": [
-    "verify ten commit prefixes",
-    "verify final2 pair identity and probe summaries",
-    "check final1/final2 provenance separation",
+    "verify eleven commit prefixes",
+    "verify final2 pair identity",
+    "check D source-only scope",
     "check no positive owner or GPU promotion"
   ],
   "tests_rerun": false

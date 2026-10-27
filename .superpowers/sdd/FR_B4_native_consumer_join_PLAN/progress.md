@@ -26,3 +26,5 @@
 - 2026-10-27 acceptance matrix indexed final2 package `1b08fb7519`: current pair now editor `2ee0e5c3…`, ANGE HEAD `53ff6aa1…`, DSO `a078f6de…`; final1 `149342a6…` retained separately. Ten package scopes and pair provenance independently reviewed, limited-scope accept, no P0-P3, all claims false.
 
 - 2026-10-27 D-side VFX projection validation/rollback source audit at ANGE HEAD `e6bb496f…`: WorldLoader resets state, requires Ready model + valid lease/projection/bundle identity, clears on failure; EcsWorld validates before mount and rolls back at `vfx_semantic_projection`; same-path deferred runtime erase retains live `WorldPath`. Final2 binary evidence kept separate from newer source provenance; no positive packet/operation/completion/readback/Ready/GPU claims.
+
+- 2026-10-27 acceptance matrix indexed D VFX projection validation/rollback source audit `290383df79`: eleven package scopes reviewed; source-only D validation/rollback and same-path erase guard kept separate from final2 binary pair, all claims false, limited-scope accept with no P0-P3.

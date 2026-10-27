@@ -41,6 +41,10 @@
     {
       "name": "final2_pair_u01_close_recheck",
       "commit": "1b08fb7519"
+    },
+    {
+      "name": "d_vfx_projection_validation_rollback_audit",
+      "commit": "290383df79"
     }
   ],
   "historical_fixed_pair": {
