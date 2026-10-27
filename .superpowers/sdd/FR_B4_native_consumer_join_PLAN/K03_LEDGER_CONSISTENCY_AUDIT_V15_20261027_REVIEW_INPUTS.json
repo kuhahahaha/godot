@@ -1,0 +1,17 @@
+{
+  "review_type": "K03 ledger consistency successor v15",
+  "package": "K03_LEDGER_CONSISTENCY_AUDIT_V15_20261027",
+  "matrix": "K03_ACCEPTANCE_MATRIX_20261027_V11",
+  "expected_package_count": 30,
+  "questions": [
+    "Do all 30 matrix package commit prefixes resolve?",
+    "Does semantic/VFX package resolve to b78c7b4ce3?",
+    "Are current pair and false claims unchanged?"
+  ],
+  "required_checks": [
+    "verify all commit prefixes",
+    "verify matrix/report package count",
+    "verify current pair/DSO and claims"
+  ],
+  "independent_review": "K03_LEDGER_CONSISTENCY_AUDIT_V15_20261027_INDEPENDENT_REVIEW.md"
+}
