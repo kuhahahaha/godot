@@ -1,0 +1,18 @@
+{
+  "review_type": "independent limited-scope ANGE current host/particle native regression",
+  "package": "K03_ANGE_CURRENT_HOST_PARTICLE_FOCUSED_20261027",
+  "review_target": "K03_ANGE_CURRENT_HOST_PARTICLE_FOCUSED_20261027.md",
+  "questions": [
+    "Do the 11 tag groups total 54 cases and 1772 assertions?",
+    "Does the receipt preserve the required isolated-child environment?",
+    "Does the scope stay CPU/in-process with all authority claims false?"
+  ],
+  "required_checks": [
+    "inspect exact log",
+    "verify source/test binary/DSO/log hashes",
+    "confirm typed_host_root passes with explicit environment",
+    "check no producer/operation/completion/readback/Ready/GPU claim"
+  ],
+  "tests_rerun": false,
+  "independent_review": "K03_ANGE_CURRENT_HOST_PARTICLE_FOCUSED_20261027_INDEPENDENT_REVIEW.md"
+}

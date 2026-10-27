@@ -1,0 +1,91 @@
+{
+  "status": "PASS_LIMITED_K03_ANGE_CURRENT_HOST_PARTICLE_FOCUSED",
+  "date": "2026-10-27",
+  "source_repo": "ANGE",
+  "source_head": "fd555ffadb20340351b05658eced39f1c474ea1f",
+  "test_binary_sha256": "6f58854b55853f88b02c93d1a92799c892668f9222c1d7b628d9b30f6e15f52f",
+  "dso_sha256": "38c3da7e20377ed7988c683ffd7e98db0e1ea10fb3979916d321466bfc260252",
+  "environment": {
+    "ANGE_LOADER_TEST_EXECUTABLE": "/Users/macbookair/Documents/Work/ANGE/bin/ange_test"
+  },
+  "log": {
+    "path": "/tmp/k03-ange-current-host-particle-focused-20261027.log",
+    "sha256": "c9680c1c6f3340c1cd29f4a1bac2873c6a15646931851eb5cf82598e7d3a9c83"
+  },
+  "tags": 11,
+  "cases": 54,
+  "assertions": 1772,
+  "return_code": 0,
+  "scope": "CPU/in-process host attachment, lifecycle, storage, capture admission/layout, E05 native guard, C02/E05 binding, and particle system bundle regressions",
+  "claims": {
+    "u08": false,
+    "e09": false,
+    "operation": false,
+    "completion": false,
+    "readback": false,
+    "packet": false,
+    "physical_disposal": false,
+    "released": false,
+    "ready": false,
+    "verified": false,
+    "gpu": false
+  },
+  "tag_groups": [
+    {
+      "tag": "[host_control_budget]",
+      "cases": 3,
+      "assertions": 269
+    },
+    {
+      "tag": "[host_attachment]",
+      "cases": 3,
+      "assertions": 73
+    },
+    {
+      "tag": "[host_lifecycle_boundary]",
+      "cases": 4,
+      "assertions": 150
+    },
+    {
+      "tag": "[typed_host_root]",
+      "cases": 13,
+      "assertions": 509
+    },
+    {
+      "tag": "[host_capture_admission]",
+      "cases": 4,
+      "assertions": 57
+    },
+    {
+      "tag": "[host_storage_boundary]",
+      "cases": 5,
+      "assertions": 208
+    },
+    {
+      "tag": "[capture_store_layout]",
+      "cases": 5,
+      "assertions": 222
+    },
+    {
+      "tag": "[e06_capture_owner]",
+      "cases": 1,
+      "assertions": 15
+    },
+    {
+      "tag": "[c02_e05]",
+      "cases": 9,
+      "assertions": 116
+    },
+    {
+      "tag": "[particle_system_bundle]",
+      "cases": 6,
+      "assertions": 81
+    },
+    {
+      "tag": "[capture_limits]",
+      "cases": 1,
+      "assertions": 72
+    }
+  ],
+  "fixture_note": "[typed_host_root] requires ANGE_LOADER_TEST_EXECUTABLE for its isolated child; with that environment set the full tag passes."
+}
