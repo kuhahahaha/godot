@@ -1,0 +1,13 @@
+{
+  "review_type": "read_only_limited_scope",
+  "package": "K03_acceptance_matrix_v42",
+  "previous_matrix": "K03_ACCEPTANCE_MATRIX_20261028_V41.json",
+  "expected_package_count": 85,
+  "new_package": "ange_capture_reader_contract_current",
+  "questions": [
+    "Is the bounded 118-test green result recorded?",
+    "Are four full-suite environment errors distinguished from source failures?",
+    "Are runtime/native/owner claims still false?"
+  ],
+  "required_checks": ["all commit prefixes resolve in their repos", "package count is 85", "claims remain false"]
+}
