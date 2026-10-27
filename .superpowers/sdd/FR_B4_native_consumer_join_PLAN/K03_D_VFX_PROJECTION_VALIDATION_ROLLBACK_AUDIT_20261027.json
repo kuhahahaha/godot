@@ -1,0 +1,36 @@
+{
+  "package": "K03_d_vfx_projection_validation_rollback_audit",
+  "date": "2026-10-27",
+  "ange_source_head": "e6bb496f4b374e8727470637f7e312b5df1fdf83",
+  "source_sha256": {
+    "src/godot/bridge/ecs_world.cpp": "851460f90103af427c273d7b2ec194ef7acf8d975b8e167248e652959be24ddf",
+    "src/godot/bridge/ecs_world.h": "d38685fddab05bdc2afcc0b625f057e4777da7b3495b0d12c11939548906ebfa",
+    "src/godot/loader/world_loader.cpp": "32d1b15304c0dcf38ef731f0cc738f7b018a4c83bec828545f1fca89acac0d6b",
+    "src/godot/loader/world_loader.h": "77f296144672bc0a4d9bcc9415e0f32a9a3614d872e8d20c9e5df0170e0d7445",
+    "src/particle/semantic/system_bundle.cpp": "bcac96d6853693a39ea4560b5cd77aac2ffa379503450068f21c2de690b22925",
+    "src/particle/semantic/system_bundle.h": "0547b517ae3790104490068c4500f3641213c2ae092b4d4c3dcada634bc71331"
+  },
+  "runtime_reference": "K03_FINAL2_PAIR_U01_CLOSE_RECHECK_20261027",
+  "runtime_reference_scope": "separate prior binary snapshot; not attributed to current source",
+  "tests_rerun": false,
+  "claims": {
+    "u08": false,
+    "e09": false,
+    "operation": false,
+    "completion": false,
+    "readback": false,
+    "packet": false,
+    "physical_disposal": false,
+    "released": false,
+    "ready": false,
+    "verified": false,
+    "gpu": false
+  },
+  "independent_review": {
+    "reviewer": "current_pair_abi_negative_review",
+    "status": "limited-scope accept; no actionable P0-P2",
+    "tests_rerun": false,
+    "receipt": "K03_D_VFX_PROJECTION_VALIDATION_ROLLBACK_AUDIT_20261027_INDEPENDENT_REVIEW.md",
+    "note": "Source hashes are provenance-level; runtime reference is explicitly a separate prior final2 binary snapshot."
+  }
+}
