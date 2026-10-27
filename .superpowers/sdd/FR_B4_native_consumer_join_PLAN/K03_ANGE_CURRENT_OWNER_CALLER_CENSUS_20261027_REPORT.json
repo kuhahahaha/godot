@@ -1,0 +1,40 @@
+{
+  "status": "PASS_LIMITED_K03_ANGE_CURRENT_OWNER_CALLER_CENSUS",
+  "date": "2026-10-27",
+  "source_repo": "ANGE+Godot",
+  "ange_source_head": "fd555ffadb20340351b05658eced39f1c474ea1f",
+  "godot_source_head": "2ed51c89e8",
+  "log": {
+    "path": "/tmp/k03-current-source-owner-census-fd555-20261027.log",
+    "sha256": "aa49e6ec42659c390f4e2c32495481d7797375f07ff679d2c21b3bb517b3ef1f"
+  },
+  "findings": {
+    "public_particle_program_loader_request_native_callers": [],
+    "public_particle_program_loader_poll_native_callers": [],
+    "public_particle_program_loader_acquire_native_callers": [],
+    "internal_program_preparation_store_acquire_native_callers": [
+      "src/particle/runtime/qualification_scope.cpp:383"
+    ],
+    "public_particle_program_loader_request_qualification_callers": [],
+    "internal_program_preparation_store_request_qualification_callers": [],
+    "stage_executor_start_native_qualification_callers": [],
+    "bind_main_device_real_callers": [
+      "src/register_types.cpp:335"
+    ],
+    "godot_mesh_add_external_surface_production_callers": []
+  },
+  "boundary": "The host/capture commits provide bounded owner/session/storage guards and internal acquire behavior, but no external particle producer reaches the public loader request/qualification path or StageExecutor E09 start. Godot external-surface remains declaration/definition only.",
+  "claims": {
+    "u08": false,
+    "e09": false,
+    "operation": false,
+    "completion": false,
+    "readback": false,
+    "packet": false,
+    "physical_disposal": false,
+    "released": false,
+    "ready": false,
+    "verified": false,
+    "gpu": false
+  }
+}
