@@ -1,0 +1,35 @@
+{
+  "status": "GODOT_NATIVE_PRODUCER_CALLER_GAP_CONFIRMED",
+  "godot_source_head": "c2ebe2578021378700e0db0cd707d7406f6eecc6",
+  "d_source_head": "bba55f3ba",
+  "godot_dso_sha256": "38c3da7e20377ed7988c683ffd7e98db0e1ea10fb3979916d321466bfc260252",
+  "search_command": "rg -n \"mesh_add_external_surface|set_camera_source\\(|set_previous_camera_source\\(|admit_surface_status|admit_camera_status|external_camera_admitted\" servers tests",
+  "evidence_file": "/tmp/k03-native-caller-gap-20261027.txt",
+  "evidence_sha256": "be2c061514939ed57a72a709191c38edb5e4ac9c221edad566b4ad53f47d4239",
+  "findings": {
+    "mesh_add_external_surface_production_callers": 0,
+    "mesh_add_external_surface_declaration_or_definition": 2,
+    "camera_source_production_writer": "RendererSceneRenderRD::render_scene only copies existing CameraData tuple",
+    "external_packet_consumers": [
+      "RenderForwardClustered::_fill_render_list",
+      "RenderForwardClustered::_render_scene",
+      "RenderForwardMobile::_fill_render_list",
+      "RenderForwardMobile::_render_scene"
+    ],
+    "producer_owner": "UNAVAILABLE: no authenticated U08/E09 producer/association caller in current Godot tree"
+  },
+  "scope": "caller-gap evidence; no synthetic producer, operation, completion, readback, Ready or GPU claim",
+  "claims": {
+    "u08": false,
+    "e09": false,
+    "operation": false,
+    "completion": false,
+    "readback": false,
+    "packet": false,
+    "physical_disposal": false,
+    "released": false,
+    "ready": false,
+    "verified": false,
+    "gpu": false
+  }
+}
