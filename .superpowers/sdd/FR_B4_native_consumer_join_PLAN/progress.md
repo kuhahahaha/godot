@@ -68,3 +68,5 @@
 - 2026-10-27 Godot native queue census: dirty worktree still contains independent GDScript lifecycle/active-reload and RD external mesh/packet/camera slices; dev editor rebuild rc0; focused GDScript 13/162, B4 20/419, ParticlesTrail 1/5, K03/P2 22/350 all green. Native source remains uncommitted for separate integration review; no U08/E09/operation/completion/readback/Ready/GPU claim.
 
 - 2026-10-27 Godot native queue landed: GDScript lifecycle `2ca1cac188`, RD external packet/mesh/camera `0db15cbe67`, Curve bake-cache `c2ebe25780`; post-commit dev editor rc0; GDScript 13/162, B4 20/419, ParticlesTrail 1/5, K03/P2 22/350, E22 snapshot 3/1005 all green. External owner and qualification claims remain false.
+
+- 2026-10-27 post-native-landing fixed-pair recheck: editor `d4938be7…` with ANGE DSO `a078f6de…`; non-headless Metal/mobile VFX (2/1), no-VFX (1/0), and explicit close active true→false all rc0 with extension/world/unload success. Unsupported owner/operation/completion/readback/Ready/GPU claims remain false.

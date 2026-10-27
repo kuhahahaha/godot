@@ -1,0 +1,59 @@
+{
+  "status": "CURRENT_PAIR_NATIVE_LANDED_RECHECK_PASS_LIMITED",
+  "editor_sha256": "d4938be792ae05f6868f73d13270c8ebe92292043eadadb6114717752924bb9f",
+  "dso_sha256": "a078f6dec6661d5fb5217c8b95c59d162f18ac5aa8bc81cef9e9c85c548fcb45",
+  "godot_source_head": "c2ebe2578021378700e0db0cd707d7406f6eecc6",
+  "ange_source_head": "53ff6aa1d48aa3697beff91eb31fee850ca326af",
+  "host": "Apple M3 Pro; non-headless Metal/mobile",
+  "probes": [
+    {
+      "name": "vfx",
+      "rc": 0,
+      "entries": 2,
+      "systems": 1,
+      "extension": true,
+      "enter_world": true,
+      "unload": true,
+      "log": "/tmp/k03-native-landed-u01-vfx-20261027.log"
+    },
+    {
+      "name": "no_vfx",
+      "rc": 0,
+      "entries": 1,
+      "systems": 0,
+      "extension": true,
+      "enter_world": true,
+      "unload": true,
+      "log": "/tmp/k03-native-landed-u01-novfx-20261027.log"
+    },
+    {
+      "name": "explicit_close",
+      "rc": 0,
+      "extension": true,
+      "enter_world": true,
+      "active_before": true,
+      "active_after_exit": false,
+      "unload": true,
+      "log": "/tmp/k03-native-landed-u01-close-20261027.log"
+    }
+  ],
+  "log_sha256": {
+    "vfx": "88d61d32e7a706130121b901277d697600ef742fa3ce49d8d635bd4a97cee7c2",
+    "novfx": "c91c6bfaf81b241cb93f89a490dd3a9451d1b199f803d38984a128b80f5aebda",
+    "close": "25ec3a65f96efb8b238005a8b8b2917b53234b59848f6c54446570837e838654"
+  },
+  "claims": {
+    "u08": false,
+    "e09": false,
+    "operation": false,
+    "completion": false,
+    "readback": false,
+    "packet": false,
+    "physical_disposal": false,
+    "released": false,
+    "ready": false,
+    "verified": false,
+    "gpu": false
+  },
+  "scope": "fresh fixed-pair non-headless VFX/U01/close recheck after native commits; no external owner or qualification authority"
+}

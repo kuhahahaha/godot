@@ -1,0 +1,19 @@
+{
+  "review_type": "non-author fixed-pair recheck after native landing",
+  "package": "K03_godot_native_queue_pair_recheck",
+  "review_target": "K03_GODOT_NATIVE_QUEUE_PAIR_RECHECK_20261027.md",
+  "questions": [
+    "Do editor/DSO identities match the listed raw logs?",
+    "Do VFX/no-VFX/close markers match the stated scope?",
+    "Are unsupported owner/qualification claims absent?"
+  ],
+  "required_checks": [
+    "verify binary hashes",
+    "verify three raw log hashes and markers",
+    "check all claims false"
+  ],
+  "tests_rerun": false,
+  "independent_review": "K03_GODOT_NATIVE_QUEUE_PAIR_RECHECK_20261027_INDEPENDENT_REVIEW.md",
+  "independent_review_sha256": "06f5f4e8deeaa200aee66422bba4a87c8f103196e3e6b3cf5bf0af50717d4e9f",
+  "conclusion": "limited-scope accept; no P0-P3"
+}
