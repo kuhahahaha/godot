@@ -96,3 +96,5 @@
 - 2026-10-27 K03 ledger consistency v9: 24 repo-aware package commits resolve; D projection guard/current DSO `38c3da7e…` indexed; PASS_LIMITED ledger-only, all claims false.
 
 - 2026-10-27 Godot native caller-gap census: `mesh_add_external_surface` has zero production callers; camera tuple is copied only from existing CameraData; Forward+/Mobile are consumers. Authenticated U08/E09 producer/association remains precise external owner gap; all claims false.
+
+- 2026-10-27 acceptance matrix v6: 25 packages include explicit Godot native producer caller-gap census (mesh external producer callers=0; Forward+/Mobile consumer guards only); current DSO/pair and claims remain consistent.

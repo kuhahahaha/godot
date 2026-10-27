@@ -1,0 +1,171 @@
+{
+  "package": "K03_acceptance_matrix_v6",
+  "date": "2026-10-27",
+  "packages": [
+    {
+      "name": "vfx_projection_consumer",
+      "commit": "1921759a6e",
+      "repo": "Godot"
+    },
+    {
+      "name": "typed_close_cancel",
+      "commit": "2008230c5f",
+      "repo": "Godot"
+    },
+    {
+      "name": "typed_close_parent",
+      "commit": "82604358c4",
+      "repo": "Godot"
+    },
+    {
+      "name": "external_poll_state",
+      "commit": "e8f4781870",
+      "repo": "Godot"
+    },
+    {
+      "name": "completion_readback_join",
+      "commit": "8b3b0af0ae",
+      "repo": "Godot"
+    },
+    {
+      "name": "editor_dso_pair_alignment",
+      "commit": "409527e584",
+      "repo": "Godot"
+    },
+    {
+      "name": "renderer_packet_guard",
+      "commit": "fc03fd5c18",
+      "repo": "Godot"
+    },
+    {
+      "name": "withdraw_retire_lifecycle",
+      "commit": "1d683b0c61",
+      "repo": "Godot"
+    },
+    {
+      "name": "final_pair_u01_close_recheck",
+      "commit": "6ead13473f",
+      "repo": "Godot"
+    },
+    {
+      "name": "final2_pair_u01_close_recheck",
+      "commit": "1b08fb7519",
+      "repo": "Godot"
+    },
+    {
+      "name": "d_vfx_projection_validation_rollback_audit",
+      "commit": "290383df79",
+      "repo": "Godot"
+    },
+    {
+      "name": "e03_e04_current_source_owner_boundary",
+      "commit": "65b8469e1b",
+      "repo": "Godot"
+    },
+    {
+      "name": "e34_p01_current_owner_boundary",
+      "commit": "5bd8124839",
+      "repo": "Godot"
+    },
+    {
+      "name": "i02_imported_texture_consumer",
+      "commit": "e645c1ca92",
+      "repo": "Godot"
+    },
+    {
+      "name": "current_a_consumer_boundary_set",
+      "commit": "e1ed218af9",
+      "repo": "Godot"
+    },
+    {
+      "name": "current_a_boundary_set_v2",
+      "commit": "b092756b25",
+      "repo": "Godot"
+    },
+    {
+      "name": "external_owner_handoff_blocker_map",
+      "commit": "cad566bb89",
+      "repo": "Godot"
+    },
+    {
+      "name": "e09_r01_current_cpu_consumer",
+      "commit": "91cc0084cb",
+      "repo": "Godot"
+    },
+    {
+      "name": "godot_native_queue_landed",
+      "commit": "4968f2ce23",
+      "repo": "Godot"
+    },
+    {
+      "name": "godot_native_queue_pair_recheck",
+      "commit": "f9bd40569c",
+      "repo": "Godot"
+    },
+    {
+      "name": "d_vfx_diagnostic_rebuild",
+      "commit": "253d6fa22",
+      "repo": "ANGE"
+    },
+    {
+      "name": "godot_native_queue_pair_recheck2",
+      "commit": "dbf12c241b",
+      "repo": "Godot"
+    },
+    {
+      "name": "ange_native_cpu_focused",
+      "commit": "b3f621b1bd",
+      "repo": "Godot"
+    },
+    {
+      "name": "d_vfx_projection_guard_rebuild",
+      "commit": "c2e966c6c7",
+      "repo": "Godot"
+    },
+    {
+      "name": "godot_native_producer_caller_gap",
+      "commit": "dffea6e447",
+      "repo": "Godot"
+    }
+  ],
+  "historical_fixed_pair": {
+    "editor_sha256": "0c4e23c1ae93ba0455bdda99674f221677eb3c4ee051d2e55b3337520025bdba",
+    "ange_head": "b2038e9a5be40624f6b19613f209422da49b4355",
+    "dso_sha256": "dfdb1e94e2694cfde7b0259efc232c42fb3388a73c63847504eb7c3606c6d566",
+    "vfx": "entries=2 systems=1; lifecycle true",
+    "no_vfx": "entries=2 systems=0; lifecycle true"
+  },
+  "prior_abi_negative": {
+    "editor_sha256": "b64fd2c4a2697ffacdb04ba848d4aad19fa52097322957073551ea90a75a3953",
+    "dso_sha256": "c82f09f62b84af0ac14965a7bab29ab62e408aa5106d3264a2be7eb91777cff0",
+    "status": "rc2 before world entry; missing device_exit_register_scene_ready_v2",
+    "receipt": "K03_CURRENT_PAIR_ABI_DRIFT_NEGATIVE_20261027"
+  },
+  "current_pair": {
+    "editor_sha256": "d4938be792ae05f6868f73d13270c8ebe92292043eadadb6114717752924bb9f",
+    "editor_embedded_version_hash": "c2bb425e81c0c6ea69e74fcf23d45fa40c7b7f01",
+    "godot_source_head": "c2ebe2578021378700e0db0cd707d7406f6eecc6",
+    "ange_head": "bba55f3ba",
+    "dso_sha256": "38c3da7e20377ed7988c683ffd7e98db0e1ea10fb3979916d321466bfc260252",
+    "status": "post-D-projection-guard rebuild; non-headless Metal/mobile VFX/no-VFX/explicit close rc0",
+    "vfx": "entries=2 systems=1; extension/world/unload true",
+    "no_vfx": "entries=1 systems=0; extension/world/unload true",
+    "explicit_close": "active true->false; extension/world/unload true",
+    "d_diagnostic_receipt": "K03_D_VFX_DIAGNOSTIC_REBUILD_20261027",
+    "pair_recheck_receipt": "K03_GODOT_NATIVE_QUEUE_PAIR_RECHECK2_20261027",
+    "d_projection_guard_receipt": "K03_D_VFX_PROJECTION_GUARD_REBUILD_20261027"
+  },
+  "claims": {
+    "u08": false,
+    "e09": false,
+    "operation": false,
+    "completion": false,
+    "readback": false,
+    "packet": false,
+    "physical_disposal": false,
+    "released": false,
+    "ready": false,
+    "verified": false,
+    "gpu": false
+  }
+}
