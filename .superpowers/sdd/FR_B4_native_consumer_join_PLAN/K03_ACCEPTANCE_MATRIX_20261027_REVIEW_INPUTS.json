@@ -3,13 +3,15 @@
   "package": "K03_acceptance_matrix",
   "review_target": "K03_ACCEPTANCE_MATRIX_20261027.md",
   "questions": [
-    "Do all seven package commits and scopes match their source receipts?",
+    "Do all eight package commits and scopes match their source receipts?",
     "Are historical, prior ABI-negative, and current aligned pair identities separated?",
-    "Does the matrix preserve false claims for U08/E09/operation/completion/readback/packet/Ready/Verified/GPU?"
+    "Does the matrix distinguish withdrawal/Registry release from physical disposal and public Released?",
+    "Does it preserve false claims for U08/E09/operation/completion/readback/packet/Ready/Verified/GPU?"
   ],
   "required_checks": [
-    "verify seven commit prefixes",
+    "verify eight commit prefixes",
     "verify current pair identity and probe summaries",
+    "check withdraw/retire scope",
     "check no positive owner or GPU promotion"
   ],
   "tests_rerun": false
