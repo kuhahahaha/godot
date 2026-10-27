@@ -3,15 +3,14 @@
   "package": "K03_acceptance_matrix",
   "review_target": "K03_ACCEPTANCE_MATRIX_20261027.md",
   "questions": [
-    "Do all twelve package commits and scopes match their source receipts?",
-    "Are final2 binary, D source-only, and E03/E04 owner-boundary provenance separated?",
-    "Are the four E03/E04 owner fields kept distinct from local CPU evidence and R01/K01 authority?",
-    "Are all positive claims false?"
+    "Do all fourteen package commits and scopes match their source receipts?",
+    "Are binary pair, D source-only, E03/E04, E34/P01, and I02 scopes separated?",
+    "Are owner/bootstrap/CPU boundaries precise and all positive claims false?"
   ],
   "required_checks": [
-    "verify twelve commit prefixes",
-    "verify final2 pair identity",
-    "check source-only and owner-boundary scopes",
+    "verify fourteen commit prefixes",
+    "verify final2 pair/build receipt",
+    "check owner and CPU-only scopes",
     "check no positive owner or GPU promotion"
   ],
   "tests_rerun": false

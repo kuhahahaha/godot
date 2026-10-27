@@ -36,3 +36,5 @@
 - 2026-10-27 E34/P01 current owner boundary indexed: adapter no-root rc3 and drift rc2; selector 2 cases and parent contract 4 cases pass; clean bootstrap unavailable due prebuilt server missing GDScript loader. Required parent root/OwnerPayloadBridge/E35/bootstrap inputs recorded; no native/GPU/Ready claim.
 
 - 2026-10-27 I02 imported-texture CPU consumer indexed: exact case rc0 1/30 and family rc0 19/7671; material/lint routing only, no P01/E34/native/GPU/Ready or K03 positive claim.
+
+- 2026-10-27 acceptance matrix indexed E34/P01 owner boundary `5bd8124839` and I02 CPU consumer `e645c1ca92`: fourteen package scopes reviewed; E34/P01 remains unavailable pending parent root/OwnerPayloadBridge/E35/bootstrap inputs, I02 remains CPU-only 1/30 + 19/7671; no R01/K01/native/GPU/Ready claims.

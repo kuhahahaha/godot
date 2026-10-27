@@ -49,6 +49,14 @@
     {
       "name": "e03_e04_current_source_owner_boundary",
       "commit": "65b8469e1b"
+    },
+    {
+      "name": "e34_p01_current_owner_boundary",
+      "commit": "5bd8124839"
+    },
+    {
+      "name": "i02_imported_texture_consumer",
+      "commit": "e645c1ca92"
     }
   ],
   "historical_fixed_pair": {
