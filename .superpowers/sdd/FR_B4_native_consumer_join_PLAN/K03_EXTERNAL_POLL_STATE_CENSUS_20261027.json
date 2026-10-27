@@ -1,0 +1,11 @@
+{
+  "package": "K03_external_poll_state_census",
+  "date": "2026-10-27",
+  "source_branch": "d/b4-native-output-20261027",
+  "source_commit": "1753faf66685154b1ffe2482bfe367c6039d4216",
+  "states": ["Created", "Withdrawing"],
+  "guards": ["exact eight-byte generation", "withdrawal admission tombstone", "NativeUse completion/retirement", "authenticated Registry release"],
+  "released_poll": false,
+  "claims": {"operation": false, "completion": false, "readback": false, "released": false, "ready": false, "verified": false, "gpu_qualification": false},
+  "independent_review": {"reviewer": "poll_state_census_review2", "status": "limited-scope accept", "tests_rerun": false, "receipt": "K03_EXTERNAL_POLL_STATE_CENSUS_20261027_INDEPENDENT_REVIEW.md"}
+}
