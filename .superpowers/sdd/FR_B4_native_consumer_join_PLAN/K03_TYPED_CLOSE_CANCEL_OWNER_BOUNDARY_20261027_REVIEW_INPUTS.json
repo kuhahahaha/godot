@@ -1,0 +1,12 @@
+{
+  "review_type": "non-author source census review",
+  "package": "K03_typed_close_cancel_owner_boundary",
+  "review_target": "K03_TYPED_CLOSE_CANCEL_OWNER_BOUNDARY_20261027.md",
+  "questions": [
+    "Does the source path accurately distinguish cancel from final Registry release?",
+    "Does the census preserve fail-closed behavior when no authenticated ticket exists?",
+    "Are the minimum A/owner inputs precise without fabricating operation/completion authority?"
+  ],
+  "required_checks": ["read the source branch symbols", "verify refusal details and call chain", "report P0-P3 or limited-scope acceptance"],
+  "tests_rerun": false
+}
