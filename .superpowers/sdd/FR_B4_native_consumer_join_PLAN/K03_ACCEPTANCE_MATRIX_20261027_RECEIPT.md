@@ -1,6 +1,6 @@
 # K03 acceptance matrix receipt — 2026-10-27
 
-- Fourteen independently reviewed K03/queue packages are indexed with exact commit prefixes.
-- Final2 binary pair, D source-only audit, E03/E04 and E34/P01 owner boundaries, and I02 CPU consumer evidence remain separate scopes.
-- E34/P01 bootstrap is unavailable pending parent root/OwnerPayloadBridge/E35/bootstrap inputs; I02 is CPU material/lint only.
+- Fifteen independently reviewed K03/queue packages are indexed with exact commit prefixes.
+- Final2 binary pair, D source-only audit, owner boundaries, I02 CPU, and current-A consumer slices remain separate scopes.
+- The current-A set covers E05/E17/E21/E22/E23/E30 source/CPU evidence only; E20/owner/native/GPU/Ready authority remains absent.
 - All positive owner/completion/readback/packet/Ready/Verified/GPU claims remain false.

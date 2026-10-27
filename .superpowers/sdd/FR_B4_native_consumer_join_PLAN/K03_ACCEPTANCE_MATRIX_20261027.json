@@ -57,6 +57,10 @@
     {
       "name": "i02_imported_texture_consumer",
       "commit": "e645c1ca92"
+    },
+    {
+      "name": "current_a_consumer_boundary_set",
+      "commit": "e1ed218af9"
     }
   ],
   "historical_fixed_pair": {
