@@ -1,0 +1,136 @@
+{
+  "status": "PASS_LIMITED_K03_LEDGER_CONSISTENCY",
+  "package_count": 16,
+  "checks": [
+    {
+      "name": "vfx_projection_consumer",
+      "commit": "1921759a6e",
+      "commit_resolves": true
+    },
+    {
+      "name": "typed_close_cancel",
+      "commit": "2008230c5f",
+      "commit_resolves": true
+    },
+    {
+      "name": "typed_close_parent",
+      "commit": "82604358c4",
+      "commit_resolves": true
+    },
+    {
+      "name": "external_poll_state",
+      "commit": "e8f4781870",
+      "commit_resolves": true
+    },
+    {
+      "name": "completion_readback_join",
+      "commit": "8b3b0af0ae",
+      "commit_resolves": true
+    },
+    {
+      "name": "editor_dso_pair_alignment",
+      "commit": "409527e584",
+      "commit_resolves": true
+    },
+    {
+      "name": "renderer_packet_guard",
+      "commit": "fc03fd5c18",
+      "commit_resolves": true
+    },
+    {
+      "name": "withdraw_retire_lifecycle",
+      "commit": "1d683b0c61",
+      "commit_resolves": true
+    },
+    {
+      "name": "final_pair_u01_close_recheck",
+      "commit": "6ead13473f",
+      "commit_resolves": true
+    },
+    {
+      "name": "final2_pair_u01_close_recheck",
+      "commit": "1b08fb7519",
+      "commit_resolves": true
+    },
+    {
+      "name": "d_vfx_projection_validation_rollback_audit",
+      "commit": "290383df79",
+      "commit_resolves": true
+    },
+    {
+      "name": "e03_e04_current_source_owner_boundary",
+      "commit": "65b8469e1b",
+      "commit_resolves": true
+    },
+    {
+      "name": "e34_p01_current_owner_boundary",
+      "commit": "5bd8124839",
+      "commit_resolves": true
+    },
+    {
+      "name": "i02_imported_texture_consumer",
+      "commit": "e645c1ca92",
+      "commit_resolves": true
+    },
+    {
+      "name": "current_a_consumer_boundary_set",
+      "commit": "e1ed218af9",
+      "commit_resolves": true
+    },
+    {
+      "name": "current_a_boundary_set_v2",
+      "commit": "b092756b25",
+      "commit_resolves": true
+    },
+    {
+      "check": "package_count_is_16",
+      "ok": true
+    },
+    {
+      "check": "all_commit_prefixes_resolve",
+      "ok": true
+    },
+    {
+      "check": "current_pair_editor_matches_final2",
+      "ok": true
+    },
+    {
+      "check": "current_pair_dso_matches_final2",
+      "ok": true
+    },
+    {
+      "check": "current_pair_ange_head_matches_final2",
+      "ok": true
+    },
+    {
+      "check": "formal_dso_receipt_product_matches",
+      "ok": true
+    },
+    {
+      "check": "matrix_claims_all_false",
+      "ok": true
+    },
+    {
+      "check": "final2_claims_all_false",
+      "ok": true
+    },
+    {
+      "check": "v2_claims_all_false",
+      "ok": true
+    }
+  ],
+  "claims": {
+    "u08": false,
+    "e09": false,
+    "operation": false,
+    "completion": false,
+    "readback": false,
+    "packet": false,
+    "physical_disposal": false,
+    "released": false,
+    "ready": false,
+    "verified": false,
+    "gpu": false
+  },
+  "scope": "ledger consistency only; no runtime/native/GPU/Ready qualification"
+}

@@ -1,0 +1,24 @@
+{
+  "review_type": "non-author K03 ledger consistency v3 audit",
+  "package": "K03_ledger_consistency_audit_v3",
+  "review_target": "K03_LEDGER_CONSISTENCY_AUDIT_V3_20261027.md",
+  "questions": [
+    "Do all sixteen matrix package commits resolve?",
+    "Do final2 pair and formal DSO receipt hashes match?",
+    "Are current-A/E34 v2 claims false and scope-separated?"
+  ],
+  "required_checks": [
+    "verify report JSON and commit resolution",
+    "verify final2 pair/build hash identity",
+    "check v2 claims and scope",
+    "report P0-P3 or limited-scope acceptance"
+  ],
+  "tests_rerun": false,
+  "report_sha256": "59b0df556b2d923037c502cbda2e1400d4e8a8b6d617996bd29fef60e3b214d0",
+  "independent_review": {
+    "reviewer": "acceptance_matrix_review",
+    "status": "limited-scope accept; no actionable P0-P3",
+    "tests_rerun": false,
+    "receipt": "K03_LEDGER_CONSISTENCY_AUDIT_V3_20261027_INDEPENDENT_REVIEW.md"
+  }
+}
