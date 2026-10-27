@@ -1,0 +1,32 @@
+{
+  "status": "ANGE_LIFECYCLE_SPRITE_CALLER_GAP_CONFIRMED",
+  "ange_source_head": "bba55f3ba",
+  "ange_dso_sha256": "38c3da7e20377ed7988c683ffd7e98db0e1ea10fb3979916d321466bfc260252",
+  "evidence_file": "/tmp/k03-lifecycle-sprite-gap-20261028.txt",
+  "evidence_sha256": "d2fc851fcb6379329e0227b6d0e52698cfe12805be3416f4e9619a71afc4c38f",
+  "searches": {
+    "particle_lifecycle_symbol_matches": 0,
+    "lifecycle_frame_symbol_matches": 0,
+    "step_particle_lifecycle_matches": 0,
+    "existing_gpu_particles_or_multimesh_matches": "existing unrelated terrain/builder/render paths only"
+  },
+  "findings": {
+    "lifecycle_entry": "UNAVAILABLE in current source tree",
+    "attribute_update_to_sprite": "UNAVAILABLE; no lifecycle→attribute→Sprite/GPUParticles3D production caller",
+    "existing_render_paths": "GPUParticles3D builder and MultiMesh terrain/grass consumers exist but are not fed by a lifecycle service"
+  },
+  "scope": "source caller-gap evidence only; no synthetic lifecycle service, Sprite link, native completion, Ready, or GPU claim",
+  "claims": {
+    "u08": false,
+    "e09": false,
+    "operation": false,
+    "completion": false,
+    "readback": false,
+    "packet": false,
+    "physical_disposal": false,
+    "released": false,
+    "ready": false,
+    "verified": false,
+    "gpu": false
+  }
+}

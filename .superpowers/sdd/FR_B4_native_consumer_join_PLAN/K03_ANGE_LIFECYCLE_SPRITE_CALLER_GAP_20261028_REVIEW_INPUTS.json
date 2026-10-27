@@ -1,0 +1,19 @@
+{
+  "review_type": "non-author ANGE lifecycle Sprite caller gap",
+  "package": "K03_ange_lifecycle_sprite_caller_gap",
+  "review_target": "K03_ANGE_LIFECYCLE_SPRITE_CALLER_GAP_20261028.md",
+  "questions": [
+    "Does the census show no lifecycle production entry?",
+    "Are existing GPUParticles3D/MultiMesh paths distinguished from a lifecycle caller?",
+    "Are unsupported claims false?"
+  ],
+  "required_checks": [
+    "verify source search hash",
+    "verify existing render paths are unrelated",
+    "check claims false"
+  ],
+  "tests_rerun": false,
+  "independent_review": "K03_ANGE_LIFECYCLE_SPRITE_CALLER_GAP_20261028_INDEPENDENT_REVIEW.md",
+  "independent_review_sha256": "99db955c607e24cd88de31958f94d924737a1d75a737163fa45966de41e4ee76",
+  "conclusion": "limited-scope accept; no P0-P3"
+}
