@@ -336,6 +336,7 @@ void Curve::set_limits(const Array &p_input) {
 		_max_value = 1;
 		_min_domain = 0;
 		_max_domain = 1;
+		_baked_cache_dirty = true;
 		return;
 	}
 
@@ -344,6 +345,10 @@ void Curve::set_limits(const Array &p_input) {
 	_max_value = p_input[1];
 	_min_domain = p_input[2];
 	_max_domain = p_input[3];
+	// This setter is used by resource deserialization and intentionally bypasses
+	// the public range/domain setters. Keep the baked cache coherent without
+	// emitting editor notifications during load.
+	_baked_cache_dirty = true;
 }
 
 void Curve::set_min_value(real_t p_min) {
