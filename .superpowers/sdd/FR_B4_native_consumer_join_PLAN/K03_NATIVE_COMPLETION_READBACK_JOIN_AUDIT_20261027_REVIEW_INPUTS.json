@@ -1,0 +1,12 @@
+{
+  "review_type": "non-author source audit",
+  "package": "K03_native_completion_readback_join_audit",
+  "review_target": "K03_NATIVE_COMPLETION_READBACK_JOIN_AUDIT_20261027.md",
+  "questions": [
+    "Does the audit follow real queue completion and BufferGetDataResult delivery paths?",
+    "Is the first missing U08/E09 owner boundary precise?",
+    "Does the audit avoid promoting internal readback/serial state into external authority?"
+  ],
+  "required_checks": ["verify all source hashes", "check NativeUse/readback/renderer symbols", "report P0-P3 or limited-scope acceptance"],
+  "tests_rerun": false
+}
