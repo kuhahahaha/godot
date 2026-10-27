@@ -1,6 +1,6 @@
 {
-  "godot_head": "0b377dba294b26d5514d235668589676ef0cc5eb",
-  "ange_head": "1360c744b24ca1468b927aa187e29d31ae743803",
+  "godot_head": "3eb16671ccab231b09751cfa2ae2b499bba6fb83",
+  "ange_head": "66c0a42c1617df401994b4cc2649ad95df3f4308",
   "godot_status_tracked": " D work/skin-palette-commit-package/native-core-production/ACCEPTANCE_EVIDENCE_AUDIT_20261024.json\n D work/skin-palette-commit-package/native-core-production/FR_core_interface.md\n D work/skin-palette-commit-package/native-core-production/FR_core_interface_PLAN.md\n D work/skin-palette-commit-package/native-core-production/code-holder/FR_library_close.md\n M work/typed-lifecycle-abi-v1/MANIFEST.json\n M work/typed-lifecycle-abi-v1/PROGRESS.md\n M work/typed-lifecycle-abi-v1/gdextension_interface.h\n",
   "ange_status_tracked": " M docs/network_evidence/physics_replay_probe/results/cross_process.csv\n M docs/network_evidence/physics_replay_probe/results/stack_60_reversed_250_invalidate_receipts.csv\n M src/cli/cmd_validate.cpp\n M src/engine/cache/asset_cache.cpp\n M src/engine/cache/asset_cache.h\n M src/engine/file_format/file_format_ctx.h\n M src/engine/geometry/earth_assets.cpp\n M src/engine/util/durable_file_ops.cpp\n M src/engine/util/fs_hook.cpp\n M src/engine/util/fs_hook.h\n M src/engine/validation/analysis_run.cpp\n M src/engine/validation/analysis_run.h\n M src/godot/util/godot_fs_hook.cpp\n D tests/native/p01_probe/oracle.py\n D tests/native/p01_probe/project/extension-template.gdextension\n D tests/native/p01_probe/project/public_source_test.gd\n D tests/native/p01_probe/test_evidence.py\n D tests/native/p01_probe/test_public_source.py\n D tests/native/p01_public_source.cpp\n D tests/native/p01_public_source.h\n M tests/particle/contract/test_c01_semantic_contract.cpp\n M tests/test_asset_cache.cpp\n M tests/test_road_earth.cpp\n M tools/check_webview_removal.py\n M tools/tests/test_check_webview_removal.py\n M work/c04-spirv-target-revalidation-20261028/CLEANUP.json\n M work/c04-spirv-target-revalidation-20261028/INDEPENDENT_REVIEW.md\n M work/c04-spirv-target-revalidation-20261028/RECEIPT.json\n M work/c04-spirv-target-revalidation-20261028/RESULT.md\n M work/c04-spirv-target-revalidation-20261028/SOURCE_MANIFEST.json\n M work/particle-integration-baseline-20261025/guarded-dso/ange.gdextension\n",
   "main_qualification_registration": {
@@ -22,6 +22,9 @@
   "queue_receipts_seen": [
     "0452978ea",
     "f399e25a2",
-    "1360c744b"
+    "1360c744b",
+    "9b03a268e",
+    "b1c65251b",
+    "dad31be6d"
   ]
 }

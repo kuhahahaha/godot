@@ -9,4 +9,4 @@ New bounded evidence is real progress:
 
 The acceptance boundary is unchanged. The source census still has no production caller of `require_main_rd_qualification()`, no normal production actor issuing `StageExecutor::start_native_qualification` / `ParticleProgramLoader::request_qualification`, and no proof of the complete R02/K01 checked append → native issuer → completion → same-request readback chain. Runtime SceneTree/Engine wrappers still require exact original BINDING terminal enrollment before G1. These remain item-scoped owner/integration work; the independent queue continues.
 
-No fallback, synthetic authority, Ready/Verified promotion, or G1 relaxation was introduced.
+The queue now also contains bounded C01 shared-contract and skinned-mesh offline-tooling receipts; neither promotes native authority. No fallback, synthetic authority, Ready/Verified promotion, or G1 relaxation was introduced.
