@@ -1469,6 +1469,11 @@ void RendererSceneRenderRD::render_scene(const Ref<RenderSceneBuffers> &p_render
 	//assign render data
 	RenderDataRD render_data;
 	{
+		// Preserve the exact camera source tuple through RenderDataRD. Consumers
+		// may use it to match a packet to the viewport epoch; no frame counter or
+		// mutable camera state is substituted here.
+		render_data.set_camera_source(p_camera_data->source_view_id, p_camera_data->source_view_epoch, p_camera_data->source_capture_ordinal);
+		render_data.set_previous_camera_source(p_prev_camera_data->source_view_id, p_prev_camera_data->source_view_epoch, p_prev_camera_data->source_capture_ordinal);
 		render_data.render_buffers = rb;
 		render_data.scene_data = &scene_data;
 

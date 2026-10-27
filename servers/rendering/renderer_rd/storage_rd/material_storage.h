@@ -91,6 +91,7 @@ public:
 	};
 
 	struct MaterialData {
+		uint64_t generation = 0;
 		Vector<RendererRD::TextureStorage::RenderTarget *> render_target_cache;
 		void update_uniform_buffer(const HashMap<StringName, ShaderLanguage::ShaderNode::Uniform> &p_uniforms, const uint32_t *p_uniform_offsets, const HashMap<StringName, Variant> &p_parameters, uint8_t *p_buffer, uint32_t p_buffer_size, bool p_use_linear_color);
 		void update_textures(const HashMap<StringName, Variant> &p_parameters, const HashMap<StringName, HashMap<int, RID>> &p_default_textures, const Vector<ShaderCompiler::GeneratedCode::Texture> &p_texture_uniforms, RID *p_textures, bool p_use_linear_color, bool p_3d_material);
@@ -289,6 +290,7 @@ private:
 
 	struct Material {
 		RID self;
+		uint64_t generation = 1;
 		MaterialData *data = nullptr;
 		Shader *shader = nullptr;
 		//shortcut to shader data and type
@@ -499,6 +501,7 @@ public:
 
 	virtual void material_set_next_pass(RID p_material, RID p_next_material) override;
 	virtual void material_set_render_priority(RID p_material, int priority) override;
+	uint64_t material_get_generation(RID p_material) const;
 
 	virtual bool material_is_animated(RID p_material) override;
 	virtual bool material_casts_shadows(RID p_material) override;

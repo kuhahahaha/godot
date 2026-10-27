@@ -540,6 +540,7 @@ private:
 		RID material_uniform_set;
 		SceneShaderForwardClustered::ShaderData *shader = nullptr;
 		SceneShaderForwardClustered::MaterialData *material = nullptr;
+		uint64_t material_generation = 0;
 
 		void *surface_shadow = nullptr;
 		RID material_uniform_set_shadow;

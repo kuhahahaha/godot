@@ -382,6 +382,8 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 	// explicit bounded provenance record. This does not mint a capture lease.
 	s->static_capture_supported =
 			new_surface.skin_data.is_empty() && mesh->blend_shape_count == 0 &&
+			!new_surface.vertex_data.is_empty() &&
+			!new_surface.index_data.is_empty() &&
 			!(new_surface.format & RSE::ARRAY_FLAG_USE_2D_VERTICES) &&
 			new_surface.index_provenance_schema == 1 &&
 			new_surface.index_provenance_kind != RenderingServerTypes::SurfaceData::IndexProvenanceKind::NONE &&
@@ -532,10 +534,100 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 	mesh->material_cache.clear();
 }
 
+Error MeshStorage::mesh_add_external_surface(RID p_mesh, const ExternalSurfaceDescriptor &p_surface, uint32_t &r_surface_index, uint64_t &r_generation) {
+	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
+	ERR_FAIL_NULL_V(mesh, ERR_DOES_NOT_EXIST);
+	ERR_FAIL_COND_V(mesh->surface_count == RSE::MAX_MESH_SURFACES, ERR_OUT_OF_MEMORY);
+	ERR_FAIL_COND_V(p_surface.vertex_count == 0 || p_surface.index_count == 0, ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(p_surface.current_vertex_buffer.is_null() || p_surface.previous_vertex_buffer.is_null() || p_surface.index_buffer.is_null() || p_surface.index_array.is_null(), ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(p_surface.material.is_null(), ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(p_surface.generation == 0 || p_surface.current_allocation_generation == 0 || p_surface.previous_allocation_generation == 0, ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(p_surface.current_allocation_generation == p_surface.previous_allocation_generation, ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(p_surface.vertex_buffer_size < uint64_t(p_surface.vertex_count) * 144 || p_surface.previous_vertex_buffer_size < uint64_t(p_surface.vertex_count) * 144, ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(p_surface.index_buffer_size < uint64_t(p_surface.index_count) * sizeof(uint32_t), ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(!RD::get_singleton()->validate_external_indexed_surface_buffers(p_surface.current_vertex_buffer, p_surface.previous_vertex_buffer, p_surface.index_buffer, p_surface.index_array, p_surface.vertex_count, p_surface.index_count), ERR_INVALID_PARAMETER);
+
+	Mesh::Surface *surface = memnew(Mesh::Surface);
+	surface->external = true;
+	surface->external_generation = p_surface.generation;
+	surface->current_allocation_generation = p_surface.current_allocation_generation;
+	surface->previous_allocation_generation = p_surface.previous_allocation_generation;
+	surface->primitive = p_surface.primitive;
+	surface->vertex_count = p_surface.vertex_count;
+	surface->vertex_buffer = p_surface.current_vertex_buffer;
+	surface->previous_vertex_buffer = p_surface.previous_vertex_buffer;
+	surface->vertex_buffer_size = p_surface.vertex_buffer_size;
+	surface->index_buffer = p_surface.index_buffer;
+	surface->index_buffer_size = p_surface.index_buffer_size;
+	surface->index_count = p_surface.index_count;
+	surface->index_array = p_surface.index_array;
+	surface->material = p_surface.material;
+	surface->aabb = p_surface.aabb;
+
+	Mesh::Surface **new_surfaces = (Mesh::Surface **)memrealloc(mesh->surfaces, sizeof(Mesh::Surface *) * (mesh->surface_count + 1));
+	if (!new_surfaces) {
+		memdelete(surface);
+		return ERR_OUT_OF_MEMORY;
+	}
+	mesh->surfaces = new_surfaces;
+	mesh->surfaces[mesh->surface_count] = surface;
+	r_surface_index = mesh->surface_count++;
+	r_generation = surface->external_generation;
+	for (MeshInstance *mi : mesh->instances) {
+		_mesh_instance_add_surface(mi, mesh, r_surface_index);
+	}
+	mesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
+	mesh->material_cache.clear();
+	return OK;
+}
+
+void MeshStorage::_mesh_surface_generate_external_version(Mesh::Surface::Version &v, Mesh::Surface *s, bool p_input_motion_vectors, bool p_point_size_emulated) {
+	Vector<RD::VertexAttribute> attributes;
+	auto add = [&attributes](uint32_t p_location, uint32_t p_binding, uint32_t p_offset, RD::DataFormat p_format) {
+		RD::VertexAttribute a;
+		a.binding = p_binding;
+		a.location = p_location;
+		a.offset = p_offset;
+		a.format = p_format;
+		a.stride = 144;
+		a.frequency = RD::VERTEX_FREQUENCY_VERTEX;
+		attributes.push_back(a);
+	};
+	add(0, 0, 0, RD::DATA_FORMAT_R32G32B32A32_SFLOAT);
+	add(1, 0, 16, RD::DATA_FORMAT_R32G32B32A32_SFLOAT);
+	add(2, 0, 32, RD::DATA_FORMAT_R32G32B32A32_SFLOAT);
+	add(3, 0, 48, RD::DATA_FORMAT_R32G32B32A32_SFLOAT);
+	add(4, 0, 64, RD::DATA_FORMAT_R32G32_SFLOAT);
+	add(5, 0, 72, RD::DATA_FORMAT_R32G32_SFLOAT);
+	for (uint32_t i = 0; i < 4; i++) {
+		add(6 + i, 0, 80 + i * 16, RD::DATA_FORMAT_R32G32B32A32_SFLOAT);
+	}
+	if (p_input_motion_vectors) {
+		add(12, 1, 0, RD::DATA_FORMAT_R32G32B32A32_SFLOAT);
+		add(13, 1, 16, RD::DATA_FORMAT_R32G32B32A32_SFLOAT);
+		add(14, 1, 32, RD::DATA_FORMAT_R32G32B32A32_SFLOAT);
+	}
+	v.vertex_format = RD::get_singleton()->vertex_format_create(attributes);
+	if (!v.vertex_format) {
+		v.vertex_array = RID();
+		return;
+	}
+	Vector<RID> buffers;
+	buffers.push_back(s->vertex_buffer);
+	if (p_input_motion_vectors) {
+		buffers.push_back(s->previous_vertex_buffer);
+	}
+	v.vertex_array = RD::get_singleton()->vertex_array_create(p_point_size_emulated ? 0 : s->vertex_count, v.vertex_format, buffers);
+	v.input_motion_vectors = p_input_motion_vectors;
+	v.point_size_emulated = p_point_size_emulated;
+	v.current_allocation_generation = s->current_allocation_generation;
+	v.previous_allocation_generation = s->previous_allocation_generation;
+}
+
 void MeshStorage::_mesh_surface_clear(Mesh *p_mesh, int p_surface) {
 	Mesh::Surface &s = *p_mesh->surfaces[p_surface];
 
-	if (s.vertex_buffer.is_valid()) {
+	if (s.vertex_buffer.is_valid() && !s.external) {
 		RD::get_singleton()->free_rid(s.vertex_buffer); // Clears arrays as dependency automatically, including all versions.
 	}
 	if (s.attribute_buffer.is_valid()) {
@@ -545,10 +637,17 @@ void MeshStorage::_mesh_surface_clear(Mesh *p_mesh, int p_surface) {
 		RD::get_singleton()->free_rid(s.skin_buffer);
 	}
 	if (s.versions) {
+		if (s.external) {
+			for (uint32_t j = 0; j < s.version_count; j++) {
+				if (s.versions[j].vertex_array.is_valid()) {
+					RD::get_singleton()->free_rid(s.versions[j].vertex_array);
+				}
+			}
+		}
 		memfree(s.versions); // reallocs, so free with memfree.
 	}
 
-	if (s.index_buffer.is_valid()) {
+	if (s.index_buffer.is_valid() && !s.external) {
 		RD::get_singleton()->free_rid(s.index_buffer);
 	}
 
@@ -586,20 +685,6 @@ RSE::BlendShapeMode MeshStorage::mesh_get_blend_shape_mode(RID p_mesh) const {
 	return mesh->blend_shape_mode;
 }
 
-bool MeshStorage::mesh_get_source_account(RID p_mesh, int p_surface, SourceAccount &r_account) const {
-	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
-	if (!mesh || p_surface < 0 || uint32_t(p_surface) >= mesh->surface_count) {
-		r_account = SourceAccount();
-		return false;
-	}
-	const Mesh::Surface &surface = *mesh->surfaces[p_surface];
-	r_account.generation = surface.source_generation;
-	r_account.revision = surface.source_revision;
-	r_account.capture_supported = surface.static_capture_supported;
-	r_account.invalidated = surface.static_capture_invalidated;
-	return true;
-}
-
 void MeshStorage::mesh_surface_update_vertex_region(RID p_mesh, int p_surface, int p_offset, const Vector<uint8_t> &p_data) {
 	ERR_FAIL_COND(p_data.is_empty());
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
@@ -610,10 +695,6 @@ void MeshStorage::mesh_surface_update_vertex_region(RID p_mesh, int p_surface, i
 	// new static captures rather than exposing stale bytes as current.
 	mesh->surfaces[p_surface]->static_capture_supported = false;
 	mesh->surfaces[p_surface]->static_capture_invalidated = true;
-	if (mesh->surfaces[p_surface]->source_revision == UINT64_MAX)
-		mesh->surfaces[p_surface]->source_revision = 1;
-	else if (mesh->surfaces[p_surface]->source_revision != 0)
-		++mesh->surfaces[p_surface]->source_revision;
 
 	uint64_t data_size = p_data.size();
 	const uint8_t *r = p_data.ptr();
@@ -631,10 +712,6 @@ void MeshStorage::mesh_surface_update_attribute_region(RID p_mesh, int p_surface
 	// new static captures rather than exposing stale bytes as current.
 	mesh->surfaces[p_surface]->static_capture_supported = false;
 	mesh->surfaces[p_surface]->static_capture_invalidated = true;
-	if (mesh->surfaces[p_surface]->source_revision == UINT64_MAX)
-		mesh->surfaces[p_surface]->source_revision = 1;
-	else if (mesh->surfaces[p_surface]->source_revision != 0)
-		++mesh->surfaces[p_surface]->source_revision;
 
 	uint64_t data_size = p_data.size();
 	const uint8_t *r = p_data.ptr();
@@ -669,10 +746,6 @@ void RendererRD::MeshStorage::mesh_surface_update_index_region(RID p_mesh, int p
 	// new static captures rather than exposing stale bytes as current.
 	mesh->surfaces[p_surface]->static_capture_supported = false;
 	mesh->surfaces[p_surface]->static_capture_invalidated = true;
-	if (mesh->surfaces[p_surface]->source_revision == UINT64_MAX)
-		mesh->surfaces[p_surface]->source_revision = 1;
-	else if (mesh->surfaces[p_surface]->source_revision != 0)
-		++mesh->surfaces[p_surface]->source_revision;
 
 	uint64_t data_size = p_data.size();
 	const uint8_t *r = p_data.ptr();

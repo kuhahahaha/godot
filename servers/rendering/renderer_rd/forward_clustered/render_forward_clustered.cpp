@@ -1117,6 +1117,10 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 		}
 
 		while (surf) {
+			if (!RenderDataRD::admission_succeeded(p_render_data->admit_surface_status(surf->material_generation))) {
+				surf = surf->next;
+				continue;
+			}
 			surf->sort.uses_forward_gi = 0;
 			surf->sort.uses_lightmap = 0;
 
@@ -1725,6 +1729,18 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 
 	ERR_FAIL_NULL(p_render_data);
+
+	// External packets must carry an admitted camera source tuple. Ordinary
+	// Mesh packets keep the existing path because `external` remains false.
+	if (!RenderDataRD::admission_succeeded(p_render_data->admit_camera_status())) {
+		ERR_PRINT("External render packet has no admitted camera source.");
+		return;
+	}
+	if (p_render_data->packet_identity.external && !p_render_data->previous_camera_source_admitted()) {
+		ERR_PRINT("External render packet has no admitted previous camera source.");
+		p_render_data->retire_packet();
+		return;
+	}
 
 	Ref<RenderSceneBuffersRD> rb = p_render_data->render_buffers;
 	ERR_FAIL_COND(rb.is_null());
@@ -4266,6 +4282,7 @@ void RenderForwardClustered::_geometry_instance_add_surface_with_material(Geomet
 
 	sdcache->shader = p_material->shader_data;
 	sdcache->material = p_material;
+	sdcache->material_generation = p_material->generation;
 	sdcache->material_uniform_set = p_material->uniform_set;
 	sdcache->surface = mesh_storage->mesh_get_surface(p_mesh, p_surface);
 	sdcache->primitive = mesh_storage->mesh_surface_get_primitive(sdcache->surface);

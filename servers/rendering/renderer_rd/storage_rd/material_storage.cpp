@@ -2481,6 +2481,9 @@ void MaterialStorage::material_free(RID p_rid) {
 void MaterialStorage::material_set_shader(RID p_material, RID p_shader) {
 	Material *material = material_owner.get_or_null(p_material);
 	ERR_FAIL_NULL(material);
+	if (material->generation != UINT64_MAX) {
+		material->generation++;
+	}
 
 	if (material->data) {
 		memdelete(material->data);
@@ -2521,6 +2524,7 @@ void MaterialStorage::material_set_shader(RID p_material, RID p_shader) {
 
 	material->data = material_data_request_func[shader->type](shader->data);
 	material->data->self = p_material;
+	material->data->generation = material->generation;
 	material->data->set_next_pass(material->next_pass);
 	material->data->set_render_priority(material->priority);
 	//updating happens later
@@ -2540,6 +2544,9 @@ MaterialStorage::ShaderData *MaterialStorage::material_get_shader_data(RID p_mat
 void MaterialStorage::material_set_param(RID p_material, const StringName &p_param, const Variant &p_value) {
 	Material *material = material_owner.get_or_null(p_material);
 	ERR_FAIL_NULL(material);
+	if (material->generation != UINT64_MAX) {
+		material->generation++;
+	}
 
 	if (p_value.get_type() == Variant::NIL) {
 		material->params.erase(p_param);
@@ -2553,6 +2560,9 @@ void MaterialStorage::material_set_param(RID p_material, const StringName &p_par
 		_material_queue_update(material, !is_texture, is_texture);
 	} else {
 		_material_queue_update(material, true, true);
+	}
+	if (material->data) {
+		material->data->generation = material->generation;
 	}
 }
 
@@ -2575,8 +2585,12 @@ void MaterialStorage::material_set_next_pass(RID p_material, RID p_next_material
 	}
 
 	material->next_pass = p_next_material;
+	if (material->generation != UINT64_MAX) {
+		material->generation++;
+	}
 	if (material->data) {
 		material->data->set_next_pass(p_next_material);
+		material->data->generation = material->generation;
 	}
 
 	material->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MATERIAL);
@@ -2586,10 +2600,20 @@ void MaterialStorage::material_set_render_priority(RID p_material, int priority)
 	Material *material = material_owner.get_or_null(p_material);
 	ERR_FAIL_NULL(material);
 	material->priority = priority;
+	if (material->generation != UINT64_MAX) {
+		material->generation++;
+	}
 	if (material->data) {
 		material->data->set_render_priority(priority);
+		material->data->generation = material->generation;
 	}
 	material->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MATERIAL);
+}
+
+uint64_t MaterialStorage::material_get_generation(RID p_material) const {
+	const Material *material = material_owner.get_or_null(p_material);
+	ERR_FAIL_NULL_V(material, 0);
+	return material->generation;
 }
 
 bool MaterialStorage::material_is_animated(RID p_material) {

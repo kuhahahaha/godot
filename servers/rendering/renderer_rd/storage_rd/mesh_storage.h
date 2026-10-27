@@ -90,6 +90,11 @@ private:
 	struct Mesh {
 		struct Surface {
 			RSE::PrimitiveType primitive = RSE::PRIMITIVE_POINTS;
+			bool external = false;
+			uint64_t external_generation = 0;
+			uint64_t current_allocation_generation = 0;
+			uint64_t previous_allocation_generation = 0;
+			RID previous_vertex_buffer;
 			uint64_t format = 0;
 
 			uint32_t vertex_count = 0;
@@ -111,6 +116,8 @@ private:
 
 			struct Version {
 				uint64_t input_mask = 0;
+				uint64_t current_allocation_generation = 0;
+				uint64_t previous_allocation_generation = 0;
 				uint32_t current_buffer = 0;
 				uint32_t previous_buffer = 0;
 				bool input_motion_vectors = false;
@@ -236,6 +243,7 @@ private:
 
 	RD::VertexFormatID _mesh_surface_generate_vertex_format(uint64_t p_surface_format, uint64_t p_input_mask, bool p_instanced_surface, bool p_input_motion_vectors, bool p_point_size_emulated, uint32_t &r_position_stride);
 	void _mesh_surface_generate_version_for_input_mask(Mesh::Surface::Version &v, Mesh::Surface *s, uint64_t p_input_mask, bool p_input_motion_vectors, bool p_point_size_emulated, MeshInstance::Surface *mis = nullptr, uint32_t p_current_buffer = 0, uint32_t p_previous_buffer = 0);
+	void _mesh_surface_generate_external_version(Mesh::Surface::Version &v, Mesh::Surface *s, bool p_input_motion_vectors, bool p_point_size_emulated);
 	void _mesh_surface_clear(Mesh *p_mesh, int p_surface);
 
 	void _mesh_instance_clear(MeshInstance *mi);
@@ -413,16 +421,27 @@ public:
 	/// Return stride
 	virtual void mesh_add_surface(RID p_mesh, const RenderingServerTypes::SurfaceData &p_surface) override;
 
-	// E25 read-only source account. This reports MeshStorage-owned classification
-	// state; it does not mint a capture lease or expose source bytes.
-	struct SourceAccount {
+	// Private K05 admission seam. The caller retains all buffers; MeshStorage
+	// stores only a borrowed surface and publishes it after every resource is valid.
+	struct ExternalSurfaceDescriptor {
+		RSE::PrimitiveType primitive = RSE::PRIMITIVE_TRIANGLES;
+		uint32_t vertex_count = 0;
+		uint32_t index_count = 0;
+		RID current_vertex_buffer;
+		RID previous_vertex_buffer;
+		uint32_t vertex_buffer_size = 0;
+		uint32_t previous_vertex_buffer_size = 0;
+		RID index_buffer;
+		RID index_array;
+		uint32_t index_buffer_size = 0;
+		RID material;
+		AABB aabb;
 		uint64_t generation = 0;
-		uint64_t revision = 0;
-		bool capture_supported = false;
-		bool invalidated = false;
+		uint64_t current_allocation_generation = 0;
+		uint64_t previous_allocation_generation = 0;
 	};
 
-	bool mesh_get_source_account(RID p_mesh, int p_surface, SourceAccount &r_account) const;
+	Error mesh_add_external_surface(RID p_mesh, const ExternalSurfaceDescriptor &p_surface, uint32_t &r_surface_index, uint64_t &r_generation);
 
 	virtual int mesh_get_blend_shape_count(RID p_mesh) const override;
 
@@ -556,6 +575,25 @@ public:
 
 	_FORCE_INLINE_ void mesh_surface_get_vertex_arrays_and_format(void *p_surface, uint64_t p_input_mask, bool p_input_motion_vectors, bool p_point_size_emulated, RID &r_vertex_array_rd, RD::VertexFormatID &r_vertex_format) {
 		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
+
+		if (s->external) {
+			s->version_lock.lock();
+			for (uint32_t i = 0; i < s->version_count; i++) {
+				if (s->versions[i].input_motion_vectors == p_input_motion_vectors && s->versions[i].point_size_emulated == p_point_size_emulated && s->versions[i].current_allocation_generation == s->current_allocation_generation && s->versions[i].previous_allocation_generation == s->previous_allocation_generation) {
+					r_vertex_format = s->versions[i].vertex_format;
+					r_vertex_array_rd = s->versions[i].vertex_array;
+					s->version_lock.unlock();
+					return;
+				}
+			}
+			uint32_t version = s->version_count++;
+			s->versions = (Mesh::Surface::Version *)memrealloc(s->versions, sizeof(Mesh::Surface::Version) * s->version_count);
+			_mesh_surface_generate_external_version(s->versions[version], s, p_input_motion_vectors, p_point_size_emulated);
+			r_vertex_format = s->versions[version].vertex_format;
+			r_vertex_array_rd = s->versions[version].vertex_array;
+			s->version_lock.unlock();
+			return;
+		}
 
 		s->version_lock.lock();
 
