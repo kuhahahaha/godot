@@ -1,0 +1,35 @@
+Godot Engine v4.7.2.stable.custom_build.60b0cd48d (2026-10-27 10:46:03 UTC) - https://godotengine.org
+Metal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M3 Pro (Apple9)
+
+[PHS1] world direct-space world=-9223372005967919670 space=2422361554944 child=31356618199
+[audio] buses ready â Master=0 Music=1 SFX=2 analyzer_effect=0
+[PHS1] materialized library=1 local_rd=31373395416 owner_is_rt=true
+U01_EXTENSION_STATUS=0
+U01_EXTENSION_OK=true
+[AIEngine] enter_world: res://pack/arena.world
+[AssetResolver] engine asset root not set â engine_asset_dir() returns empty
+WARNING: ANGE: tree defaults failed to load: expected a mapping of parameters
+     at: push_warning (core/variant/variant_utility.cpp:1033)
+     GDScript backtrace (most recent call first):
+         [0] run_probe (res://probe.gd:14)
+WARNING: ANGE: flower defaults failed to load: expected a mapping of parameters
+     at: push_warning (core/variant/variant_utility.cpp:1033)
+     GDScript backtrace (most recent call first):
+         [0] run_probe (res://probe.gd:14)
+input_map registration begin
+[WorldLoader] Input map: 0 actions registered (prefix=res://pack/arena.world::)
+[WorldLoader] Blueprint 'arena' <- res://pack/arena.bp
+[vfx] runtime sources ready entries=2 systems=1
+[WorldLoader] World loaded from res://pack/arena.world
+[world-resources] prepare begin res://pack/arena.world
+[world-resources] prepare end built=0 hit=0 failed=0 procedural_built=0 texture_graph_built=0 provider_built=0 provider_hit=1
+[world-resources] texture GPU prepare end encoded=0 transcoded=0 hit=0 failed=0 rgba_fallback=0
+[AIEngine] do_world_load: res://pack/arena.world
+[world-resources] spawn begin res://pack/arena.world
+[AIEngine] do_world_mount: res://pack/arena.world
+[AIEngine] Entered world: res://pack/arena.world
+U01_ENTER_WORLD=true
+RENDER_CACHE_RELEASE {"entries":0,"evicted_entries":0,"families":{},"family_observations":{},"hits":0,"invalidated_entries":0,"limit_bytes":536870912,"measurement":"provider payload estimate; excludes original inputs; not RAM or VRAM","misses":0,"payload_bytes_estimate":0,"pin_observations":{},"pinned_payload_bytes_estimate":0,"pressure":false,"pressure_bytes_estimate":0,"released_entries":0,"retired_entries":0,"scope":"world","unique_resources":0,"units":"bytes","unused_payload_bytes_estimate":0}
+[AIEngine] World torn down (per-world; flecs kept).
+U01_UNLOAD_STATUS=0
+U01_UNLOAD_OK=true

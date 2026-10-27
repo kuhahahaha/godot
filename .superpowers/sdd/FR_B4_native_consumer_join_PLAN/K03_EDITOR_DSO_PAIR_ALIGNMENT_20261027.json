@@ -1,0 +1,50 @@
+{
+  "package": "K03_editor_dso_pair_alignment",
+  "date": "2026-10-27",
+  "godot_source_commit": "60b0cd48d037ea176ee8c805361c5dcadd49b099",
+  "editor_sha256": "2ee0e5c3840782ce44514ae76b063a65e13eee8c22ca76c27f6b4a2e9b1b8853",
+  "ange_source_head": "695921a207d89b27da6687453eba6a4ff2ec383d",
+  "dso_sha256": "a087a9054c1079efdec85a91759647bea37aa46a0b1fd4d09a7b26ed4b9713e6",
+  "builds": {
+    "editor_rc": 0,
+    "dso_rc": 0
+  },
+  "probes": {
+    "vfx": {
+      "rc": 0,
+      "log_sha256": "7bd3f5a3afcb5e8c27b05df5704c192ba4f24e4917e21913b6457c3ec63dbdc9",
+      "entries": 2,
+      "systems": 1,
+      "extension_ok": true,
+      "enter_world": true,
+      "unload_ok": true
+    },
+    "no_vfx": {
+      "rc": 0,
+      "log_sha256": "afa3bc109ef30af0ac14965a7bab29ab62e408aa5106d3264a2be7eb91777cff0",
+      "entries": 1,
+      "systems": 0,
+      "extension_ok": true,
+      "enter_world": true,
+      "unload_ok": true
+    }
+  },
+  "claims": {
+    "u08": false,
+    "e09": false,
+    "operation": false,
+    "completion": false,
+    "readback": false,
+    "packet": false,
+    "physical_disposal": false,
+    "ready": false,
+    "verified": false,
+    "gpu": false
+  },
+  "independent_review": {
+    "reviewer": "editor_dso_pair_alignment_review",
+    "status": "limited-scope accept",
+    "tests_rerun": false,
+    "receipt": "K03_EDITOR_DSO_PAIR_ALIGNMENT_20261027_INDEPENDENT_REVIEW.md"
+  }
+}

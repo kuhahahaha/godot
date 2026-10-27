@@ -1,0 +1,8 @@
+{
+  "review_type": "non-author build/runtime evidence review",
+  "package": "K03_editor_dso_pair_alignment",
+  "review_target": "K03_EDITOR_DSO_PAIR_ALIGNMENT_20261027.md",
+  "questions": ["Do build and DSO/editor hashes match the raw logs?", "Do both fresh probes show the claimed entries/systems and lifecycle booleans?", "Are claims limited to ABI/source-stage/world/close?"],
+  "required_checks": ["verify raw log hashes", "read probe first/last status lines", "report P0-P3 or limited-scope acceptance"],
+  "tests_rerun": false
+}
