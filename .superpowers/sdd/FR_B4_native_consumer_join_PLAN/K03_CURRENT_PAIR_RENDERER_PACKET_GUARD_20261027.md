@@ -30,10 +30,13 @@ Forward+ `render_forward_clustered.cpp` and Mobile
 `render_forward_mobile.cpp` both handle `RSE::INSTANCE_PARTICLES` as follows:
 
 1. They call `particles_storage->particles_is_external()` before ordinary
-   simulation getters or draw-pass lookup.
+   draw-pass and amount lookup.
 2. For an external object they set `ginstance->instance_count = 0` and leave
-   the ordinary particle path.
-3. The source comment explicitly states that external output has no ordinary
+   the ordinary draw-pass path.
+3. Later particle setup accessors are themselves external-aware: amount and
+   frame-counter reads return zero, the transform uniform RID is invalid, and
+   `update_particles()` removes external rows without native simulation.
+4. The source comment explicitly states that external output has no ordinary
    particle draw-pass or amount source until an authenticated packet/read-use
    bridge exists.
 
