@@ -1,0 +1,13 @@
+{
+  "review_type": "read_only_limited_scope",
+  "package": "K03_LEDGER_CONSISTENCY_V40",
+  "matrix": "K03_ACCEPTANCE_MATRIX_20261028_V36.json",
+  "expected_package_count": 79,
+  "new_package": "godot_native_qualification_current_validation",
+  "questions": [
+    "Do all 79 prefixes resolve?",
+    "Do matrix and ledger counts agree?",
+    "Does the ledger keep existing-binary evidence bounded?"
+  ],
+  "required_checks": ["verify all commit prefixes", "verify count equality", "verify all claims false"]
+}

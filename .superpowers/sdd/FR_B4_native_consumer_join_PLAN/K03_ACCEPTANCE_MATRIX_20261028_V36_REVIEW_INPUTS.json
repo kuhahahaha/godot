@@ -1,0 +1,13 @@
+{
+  "review_type": "read_only_limited_scope",
+  "package": "K03_acceptance_matrix_v36",
+  "previous_matrix": "K03_ACCEPTANCE_MATRIX_20261028_V35.json",
+  "expected_package_count": 79,
+  "new_package": "godot_native_qualification_current_validation",
+  "questions": [
+    "Are both focused native Qualification totals and rc0 recorded?",
+    "Is the existing-binary/no-fresh-build boundary explicit?",
+    "Are fixed-pair and authority claims still false?"
+  ],
+  "required_checks": ["all commit prefixes resolve", "package count is 79", "claims remain false"]
+}
