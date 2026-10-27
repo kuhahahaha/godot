@@ -1,0 +1,18 @@
+{
+  "review_type": "K03 ledger consistency successor v16",
+  "package": "K03_LEDGER_CONSISTENCY_AUDIT_V16_20261027",
+  "matrix": "K03_ACCEPTANCE_MATRIX_20261027_V12",
+  "expected_package_count": 31,
+  "questions": [
+    "Do all 31 matrix package commit prefixes resolve?",
+    "Does the caller-gap recheck resolve to fdf4ae16b7?",
+    "Are current pair and false claims unchanged?"
+  ],
+  "required_checks": [
+    "verify all commit prefixes",
+    "verify matrix/report package count",
+    "verify current pair/DSO and claims",
+    "check internal/public caller distinction is preserved"
+  ],
+  "independent_review": "K03_LEDGER_CONSISTENCY_AUDIT_V16_20261027_INDEPENDENT_REVIEW.md"
+}
