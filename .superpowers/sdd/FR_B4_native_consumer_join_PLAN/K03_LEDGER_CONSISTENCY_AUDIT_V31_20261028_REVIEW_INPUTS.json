@@ -1,0 +1,24 @@
+{
+  "review_type": "K03 ledger consistency successor v31",
+  "package": "K03_LEDGER_CONSISTENCY_AUDIT_V31_20261028",
+  "matrix": "K03_ACCEPTANCE_MATRIX_20261028_V27",
+  "expected_package_count": 70,
+  "new_package": {
+    "name": "ange_c04_spirv_opt_in_target",
+    "repo": "ANGE",
+    "commit": "80008a266",
+    "resolved": "80008a266f3a1d676e75b345f04449132b7a8b48"
+  },
+  "questions": [
+    "Does the real opt-in C04 target resolve/build/run?",
+    "Are 64/2 results and default graph unchanged?",
+    "Are claims false?"
+  ],
+  "required_checks": [
+    "verify all commit prefixes",
+    "verify target receipt/review and counts",
+    "verify contract reds retained",
+    "verify current pair/DSO and claims"
+  ],
+  "independent_review": "K03_LEDGER_CONSISTENCY_AUDIT_V31_20261028_INDEPENDENT_REVIEW.md"
+}

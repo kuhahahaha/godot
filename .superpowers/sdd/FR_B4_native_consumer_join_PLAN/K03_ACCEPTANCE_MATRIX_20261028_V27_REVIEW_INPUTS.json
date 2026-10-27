@@ -1,0 +1,26 @@
+{
+  "review_type": "K03 acceptance matrix successor v27",
+  "package": "K03_ACCEPTANCE_MATRIX_20261028_V27",
+  "previous_matrix": "K03_ACCEPTANCE_MATRIX_20261028_V26",
+  "expected_package_count": 70,
+  "new_packages": [
+    {
+      "name": "ange_c04_spirv_opt_in_target",
+      "commit": "80008a266",
+      "repo": "ANGE"
+    }
+  ],
+  "questions": [
+    "Does the opt-in target commit resolve?",
+    "Are build/run totals and two contract failures preserved?",
+    "Is default graph unchanged and are claims false?"
+  ],
+  "required_checks": [
+    "verify all commit prefixes",
+    "verify target receipt/review and 64/2 result",
+    "verify no fallback/test rewrite/default graph promotion",
+    "verify current pair unchanged",
+    "verify claims all false"
+  ],
+  "independent_review": "K03_ACCEPTANCE_MATRIX_20261028_V27_INDEPENDENT_REVIEW.md"
+}
