@@ -22,3 +22,5 @@
 - 2026-10-27 acceptance matrix indexed final pair VFX/U01/close package `6ead13473f`; corrected current-pair provenance to editor `2ee0e5c3…`, ANGE HEAD `b4a892432…`, final DSO `149342a6…`, with `a087…` retained only as the preceding alignment receipt. Independent re-review closed the P1 metadata inconsistency; limited-scope accept, no P0-P3, all claims false.
 
 - 2026-10-27 final2 pair after the next completed shared DSO build: editor `2ee0e5c3…`, DSO `a078f6de…`, ANGE HEAD `53ff6aa1…`; VFX/no-VFX/explicit-close probes all rc0 with entries/systems `2/1` and `1/0`, active true→false, unload true. No close error or positive operation/completion/readback/packet/physical/Ready/Verified/GPU claim. Receipt/manifest/review inputs: `K03_FINAL2_PAIR_U01_CLOSE_RECHECK_20261027.*`.
+
+- 2026-10-27 acceptance matrix indexed final2 package `1b08fb7519`: current pair now editor `2ee0e5c3…`, ANGE HEAD `53ff6aa1…`, DSO `a078f6de…`; final1 `149342a6…` retained separately. Ten package scopes and pair provenance independently reviewed, limited-scope accept, no P0-P3, all claims false.

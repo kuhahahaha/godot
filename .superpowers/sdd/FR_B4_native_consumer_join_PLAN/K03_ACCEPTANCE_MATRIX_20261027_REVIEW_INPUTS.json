@@ -3,15 +3,15 @@
   "package": "K03_acceptance_matrix",
   "review_target": "K03_ACCEPTANCE_MATRIX_20261027.md",
   "questions": [
-    "Do all nine package commits and scopes match their source receipts?",
-    "Are historical, prior ABI-negative, current aligned, and final close pair identities separated?",
-    "Does the matrix distinguish explicit EcsWorld close from external physical disposal and public Released?",
-    "Does it preserve false claims for U08/E09/operation/completion/readback/packet/Ready/Verified/GPU?"
+    "Do all ten package commits and scopes match their source receipts?",
+    "Are historical, prior ABI-negative, aligned, final1, and final2 pair identities separated?",
+    "Does final2 explicit close remain distinct from external physical disposal/Released?",
+    "Are U08/E09/operation/completion/readback/packet/Ready/Verified/GPU claims false?"
   ],
   "required_checks": [
-    "verify nine commit prefixes",
-    "verify final pair identity and probe summaries",
-    "check explicit close scope",
+    "verify ten commit prefixes",
+    "verify final2 pair identity and probe summaries",
+    "check final1/final2 provenance separation",
     "check no positive owner or GPU promotion"
   ],
   "tests_rerun": false

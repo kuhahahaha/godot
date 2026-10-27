@@ -37,6 +37,10 @@
     {
       "name": "final_pair_u01_close_recheck",
       "commit": "6ead13473f"
+    },
+    {
+      "name": "final2_pair_u01_close_recheck",
+      "commit": "1b08fb7519"
     }
   ],
   "historical_fixed_pair": {
@@ -54,15 +58,16 @@
   },
   "current_pair": {
     "editor_sha256": "2ee0e5c3840782ce44514ae76b063a65e13eee8c22ca76c27f6b4a2e9b1b8853",
-    "ange_head": "b4a8924322454a2f153aab2437a721577677d881",
-    "dso_sha256": "149342a6a099199bc345bd2e23844491f58485f02ef2fc8529dd7da4fe0811f7",
-    "status": "final pair; non-headless Metal/mobile VFX/no-VFX source-stage, world entry, explicit exit_world, and unload rc0",
+    "ange_head": "53ff6aa1d48aa3697beff91eb31fee850ca326af",
+    "dso_sha256": "a078f6dec6661d5fb5217c8b95c59d162f18ac5aa8bc81cef9e9c85c548fcb45",
+    "status": "final2 pair; non-headless Metal/mobile VFX/no-VFX source-stage, world entry, explicit exit_world, and unload rc0",
     "vfx": "entries=2 systems=1; extension/world/unload true",
     "no_vfx": "entries=1 systems=0; extension/world/unload true",
     "alignment_receipt": "K03_EDITOR_DSO_PAIR_ALIGNMENT_20261027",
     "guard_receipt": "K03_CURRENT_PAIR_RENDERER_PACKET_GUARD_20261027",
     "final_close_receipt": "K03_FINAL_PAIR_U01_CLOSE_RECHECK_20261027",
-    "final_recheck_receipt": "K03_FINAL_PAIR_U01_CLOSE_RECHECK_20261027"
+    "final_recheck_receipt": "K03_FINAL_PAIR_U01_CLOSE_RECHECK_20261027",
+    "final2_recheck_receipt": "K03_FINAL2_PAIR_U01_CLOSE_RECHECK_20261027"
   },
   "claims": {
     "u08": false,
