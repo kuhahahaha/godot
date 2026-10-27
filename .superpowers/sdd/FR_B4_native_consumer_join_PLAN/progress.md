@@ -108,3 +108,5 @@
 - 2026-10-28 K03 ledger consistency v11: 26 repo-aware package commits resolve; Godot producer and ANGE lifecycle→Sprite caller gaps indexed; current DSO/pair consistent; PASS_LIMITED ledger-only, claims false.
 
 - 2026-10-28 ANGE E09 production caller census: bind_main_device has real register_types.cpp:335 path; request_native/poll/acquire/request_qualification and StageExecutor::start_native_qualification have zero production callers (test support only). First missing boundary is original producer/admission + same-request E09 association; claims false.
+
+- 2026-10-28 acceptance matrix v8: 27 packages include ANGE E09 production caller-gap census; bind_main_device real registration path but no production request/qualification callers; current DSO/pair and claims unchanged.
