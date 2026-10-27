@@ -1,0 +1,13 @@
+{
+  "review_type": "read_only_limited_scope",
+  "package": "K03_LEDGER_CONSISTENCY_V50",
+  "matrix": "K03_ACCEPTANCE_MATRIX_20261028_V46.json",
+  "expected_package_count": 89,
+  "new_package": "ange_e05_r01_owner_abi_census",
+  "questions": [
+    "Do all 89 prefixes resolve in their declared repositories?",
+    "Do matrix and ledger counts agree?",
+    "Does the ledger preserve the owner-issuer boundary?"
+  ],
+  "required_checks": ["verify all commit prefixes", "verify count equality", "verify all claims false"]
+}
