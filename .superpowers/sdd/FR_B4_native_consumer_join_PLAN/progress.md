@@ -78,3 +78,7 @@
 - 2026-10-27 D diagnostic rebuild landed at ANGE `253d6fa22` / current HEAD `b6c362304b…`, DSO `a60b3fa5…`; malformed source negative rc1 emits `FILE-001`, rolls back at `load_resources:vfx`, unload rc0; fresh VFX/no-VFX/explicit-close pair all rc0.
 
 - 2026-10-27 acceptance matrix v3: 22 package scopes include D diagnostic rebuild and pair2; current DSO `a60b3fa5…`, ANGE `b6c362304b…`, editor/markers consistent; D negative remains fail-closed, all claims false; limited-scope accept.
+
+- 2026-10-27 K03 ledger consistency v7: 22 package commits all resolve; current DSO/pair2/D diagnostic provenance consistent; PASS_LIMITED ledger-only, all claims false.
+
+- 2026-10-27 v7 ledger correction: D diagnostic package `253d6fa22` is declared as an ANGE-repository commit; report resolution is repository-aware (21 Godot + 1 ANGE), all 22 resolve and claims remain false.
