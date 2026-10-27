@@ -76,3 +76,5 @@
 - 2026-10-27 K03 ledger consistency v6: successor matrix has 20 package scopes; all commit prefixes resolve; native landed/pair packages and separated embedded-version/source-head metadata are consistent; PASS_LIMITED ledger-only, all claims false.
 
 - 2026-10-27 D diagnostic rebuild landed at ANGE `253d6fa22` / current HEAD `b6c362304b…`, DSO `a60b3fa5…`; malformed source negative rc1 emits `FILE-001`, rolls back at `load_resources:vfx`, unload rc0; fresh VFX/no-VFX/explicit-close pair all rc0.
+
+- 2026-10-27 acceptance matrix v3: 22 package scopes include D diagnostic rebuild and pair2; current DSO `a60b3fa5…`, ANGE `b6c362304b…`, editor/markers consistent; D negative remains fail-closed, all claims false; limited-scope accept.

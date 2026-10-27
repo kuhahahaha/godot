@@ -1,0 +1,19 @@
+{
+  "review_type": "non-author K03 acceptance matrix v3",
+  "package": "K03_acceptance_matrix_v3",
+  "review_target": "K03_ACCEPTANCE_MATRIX_20261027_V3.md",
+  "questions": [
+    "Do all package commits resolve after pair2 doc commit?",
+    "Does current pair match DSO a60b3fa5 and pair2 logs?",
+    "Are claims false and D diagnostic fail-closed?"
+  ],
+  "required_checks": [
+    "verify package commits",
+    "verify current pair hashes and markers",
+    "check D negative scope and claims"
+  ],
+  "tests_rerun": false,
+  "independent_review": "K03_ACCEPTANCE_MATRIX_20261027_V3_INDEPENDENT_REVIEW.md",
+  "independent_review_sha256": "a9146fcdcd24e0bc737534c9596fa9b06fedd72ab346863fd7bd2779e37e12f5",
+  "conclusion": "limited-scope accept; no P0-P3"
+}
