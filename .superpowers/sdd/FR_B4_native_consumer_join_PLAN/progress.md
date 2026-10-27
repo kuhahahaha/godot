@@ -64,3 +64,5 @@
 - 2026-10-27 acceptance matrix indexed E09/R01 CPU consumer `91cc0084cb`: eighteen package scopes reviewed; R01 14/2051, extent 109, handoff 57, origin 44, upload-data 781 rc0, CPU/in-process only and no native/readback/GPU/Ready authority.
 
 - 2026-10-27 K03 ledger consistency v5: all eighteen matrix packages resolve; final2/formal DSO identity, owner-map and E09/R01 CPU claims consistent; PASS_LIMITED ledger-only audit.
+
+- 2026-10-27 Godot native queue census: dirty worktree still contains independent GDScript lifecycle/active-reload and RD external mesh/packet/camera slices; dev editor rebuild rc0; focused GDScript 13/162, B4 20/419, ParticlesTrail 1/5, K03/P2 22/350 all green. Native source remains uncommitted for separate integration review; no U08/E09/operation/completion/readback/Ready/GPU claim.
