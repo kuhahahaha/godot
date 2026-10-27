@@ -1,0 +1,73 @@
+{
+  "package": "K03_external_owner_handoff_blocker_map",
+  "date": "2026-10-27",
+  "references": {
+    "e03-e04-current-20261027": {
+      "RECEIPT.json": {
+        "path": "/Users/macbookair/Documents/Work/ANGE/work/e03-e04-current-20261027/RECEIPT.json",
+        "sha256": "5de14e2a1c9d776369a94849561361532c509e71ccea4b588ce2e2b1e29e0e54"
+      },
+      "BLOCKER.json": {
+        "path": "/Users/macbookair/Documents/Work/ANGE/work/e03-e04-current-20261027/BLOCKER.json",
+        "sha256": "240aad0abcb7a652a4fb9d55caf9d05e5ea9be04af8d11a5db4ed6da069515d4"
+      },
+      "SOURCE_MANIFEST.json": {
+        "path": "/Users/macbookair/Documents/Work/ANGE/work/e03-e04-current-20261027/SOURCE_MANIFEST.json",
+        "sha256": "3c23c1d9dc4ef892e6f2ce56c3a193e902d570a23cd4466a97cad8576b434afe"
+      }
+    },
+    "e05-host-storage-boundary-current-20261027": {
+      "RECEIPT.json": {
+        "path": "/Users/macbookair/Documents/Work/ANGE/work/e05-host-storage-boundary-current-20261027/RECEIPT.json",
+        "sha256": "58c375656026d3fdeab63a48a44dc6c87d609351b4d4dfba589115d905032418"
+      },
+      "BLOCKER.json": {
+        "path": "/Users/macbookair/Documents/Work/ANGE/work/e05-host-storage-boundary-current-20261027/BLOCKER.json",
+        "sha256": "a77de4f07d9748b0b315d247f09195eec8cc5d7f560567026d69972ebf07c016"
+      },
+      "SOURCE_MANIFEST.json": {
+        "path": "/Users/macbookair/Documents/Work/ANGE/work/e05-host-storage-boundary-current-20261027/SOURCE_MANIFEST.json",
+        "sha256": "363b74eda4fefa78c04f2353742b81afb467cd5d169249d0fa8d481671496797"
+      }
+    },
+    "e34-p01-current-20261027": {
+      "RECEIPT.json": {
+        "path": "/Users/macbookair/Documents/Work/ANGE/work/e34-p01-current-20261027/RECEIPT.json",
+        "sha256": "762c8b8a4242cf062dd8fb93f0f478b0e6b4b88c5f0a745b2fd5839ce8293fac"
+      },
+      "BLOCKER.json": {
+        "path": "/Users/macbookair/Documents/Work/ANGE/work/e34-p01-current-20261027/BLOCKER.json",
+        "sha256": "7ba8ee7c99158980f4e2f1a2b6a5c04c6fea8f60af9b024310b3655d3a643e1c"
+      },
+      "SOURCE_MANIFEST.json": {
+        "path": "/Users/macbookair/Documents/Work/ANGE/work/e34-p01-current-20261027/SOURCE_MANIFEST.json",
+        "sha256": "ca7688415ed12ee451a26cfe926e4b58d85fcfe8f9badc2c77be6fe8a1b65adb"
+      }
+    }
+  },
+  "boundaries": [
+    "E03/E04 host/storage",
+    "E05/E20 storage",
+    "E34/P01 bootstrap",
+    "U08/E09/K03"
+  ],
+  "claims": {
+    "u08": false,
+    "e09": false,
+    "operation": false,
+    "completion": false,
+    "readback": false,
+    "packet": false,
+    "physical_disposal": false,
+    "released": false,
+    "ready": false,
+    "verified": false,
+    "gpu": false
+  },
+  "independent_review": {
+    "reviewer": "acceptance_matrix_review",
+    "status": "limited-scope accept; no actionable P0-P3",
+    "tests_rerun": false,
+    "receipt": "K03_EXTERNAL_OWNER_HANDOFF_BLOCKER_MAP_20261027_INDEPENDENT_REVIEW.md"
+  }
+}

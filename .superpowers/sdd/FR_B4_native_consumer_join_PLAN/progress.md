@@ -52,3 +52,5 @@
 - 2026-10-27 acceptance matrix indexed current-A/E34 successor boundary set v2 `b092756b25`: sixteen package scopes reviewed; E34 bootstrap and E21–E29/P4/scene-install remain source/CPU/contract-only, with owner/native/GPU/Ready boundaries explicit and claims false.
 
 - 2026-10-27 K03 ledger consistency v3: all sixteen matrix package prefixes resolve; final2 pair/formal DSO receipt and current-A/E34 v2 claims match; PASS_LIMITED ledger-only audit.
+
+- 2026-10-27 external owner handoff blocker map: consolidated E03/E04 host fields, E05/E20 StorageTransport/StorageLimits, E34/P01 parent/bootstrap inputs, and U08/E09 producer/association inputs; local UNAVAILABLE boundaries remain scoped and queue-wide progress preserved.
