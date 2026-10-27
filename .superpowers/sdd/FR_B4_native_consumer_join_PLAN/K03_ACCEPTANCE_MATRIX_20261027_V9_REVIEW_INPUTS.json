@@ -1,0 +1,19 @@
+{
+  "review_type": "non-author K03 acceptance matrix v9",
+  "package": "K03_acceptance_matrix_v9",
+  "review_target": "K03_ACCEPTANCE_MATRIX_20261027_V9.md",
+  "questions": [
+    "Do all 28 package commits resolve?",
+    "Does native reader package match receipt?",
+    "Are claims false?"
+  ],
+  "required_checks": [
+    "verify package commits/repo",
+    "verify E05/E06 hashes/counts",
+    "check claims false"
+  ],
+  "tests_rerun": false,
+  "independent_review": "K03_ACCEPTANCE_MATRIX_20261027_V9_INDEPENDENT_REVIEW.md",
+  "independent_review_sha256": "1554ee05240b26f260970329a1d91062333e428cd2888c9681126d5540486518",
+  "conclusion": "limited-scope accept; no P0-P3"
+}
