@@ -1,0 +1,20 @@
+{
+  "review_type": "K03 acceptance matrix successor v13",
+  "package": "K03_ACCEPTANCE_MATRIX_20261027_V13",
+  "review_target": "K03_ACCEPTANCE_MATRIX_20261027_V13.md",
+  "source_matrix": "K03_ACCEPTANCE_MATRIX_20261027_V12",
+  "expected_package_count": 32,
+  "questions": [
+    "Does v13 preserve all 31 v12 rows and append exactly one row?",
+    "Does the row match 1ae829042d and its receipt?",
+    "Are current pair values and false claims preserved?"
+  ],
+  "required_checks": [
+    "verify package count 32",
+    "resolve commit prefixes",
+    "verify current pair/hash/claims unchanged",
+    "check environment requirement remains in scope"
+  ],
+  "tests_rerun": false,
+  "independent_review": "K03_ACCEPTANCE_MATRIX_20261027_V13_INDEPENDENT_REVIEW.md"
+}
