@@ -1,0 +1,31 @@
+{
+  "review_type": "K03 acceptance matrix successor v23",
+  "package": "K03_ACCEPTANCE_MATRIX_20261028_V23",
+  "previous_matrix": "K03_ACCEPTANCE_MATRIX_20261028_V22",
+  "expected_package_count": 52,
+  "new_packages": [
+    {
+      "name": "ange_c04_spirv_test_graph_refined",
+      "commit": "85e38ba47",
+      "repo": "ANGE"
+    },
+    {
+      "name": "ange_default_freshness_c01_c05_successor",
+      "commit": "bd51f0c00",
+      "repo": "ANGE"
+    }
+  ],
+  "questions": [
+    "Do both successor commits resolve?",
+    "Are fresh C01/C05 totals and C04 53/1 private-link result correct?",
+    "Are default/native/GPU/Ready boundaries preserved?"
+  ],
+  "required_checks": [
+    "verify all commit prefixes",
+    "verify two receipts/reviews and source heads",
+    "verify C04 default graph and allocator mismatch boundaries",
+    "verify current pair unchanged",
+    "verify claims all false"
+  ],
+  "independent_review": "K03_ACCEPTANCE_MATRIX_20261028_V23_INDEPENDENT_REVIEW.md"
+}
