@@ -28,3 +28,5 @@
 - 2026-10-27 D-side VFX projection validation/rollback source audit at ANGE HEAD `e6bb496f…`: WorldLoader resets state, requires Ready model + valid lease/projection/bundle identity, clears on failure; EcsWorld validates before mount and rolls back at `vfx_semantic_projection`; same-path deferred runtime erase retains live `WorldPath`. Final2 binary evidence kept separate from newer source provenance; no positive packet/operation/completion/readback/Ready/GPU claims.
 
 - 2026-10-27 acceptance matrix indexed D VFX projection validation/rollback source audit `290383df79`: eleven package scopes reviewed; source-only D validation/rollback and same-path erase guard kept separate from final2 binary pair, all claims false, limited-scope accept with no P0-P3.
+
+- 2026-10-27 E03/E04 current-source owner boundary indexed: ANGE host-storage build rc0, E04 3/65, E03 17/1187; production capture remains UNAVAILABLE pending `host.preparation_authority`, `host.world_detach_authority`, `host.session_close_authority`, and `capture.original_source_authority`. Local loader/test handles remain non-authority; no R01/K01/Ready/GPU claim.
