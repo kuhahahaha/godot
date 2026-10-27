@@ -1,0 +1,13 @@
+{
+  "review_type": "read_only_limited_scope",
+  "package": "K03_LEDGER_CONSISTENCY_V38",
+  "matrix": "K03_ACCEPTANCE_MATRIX_20261028_V34.json",
+  "expected_package_count": 77,
+  "new_package": "godot_object_lifetime_authority_tests",
+  "questions": [
+    "Do all 77 prefixes resolve?",
+    "Do matrix and ledger counts agree?",
+    "Does the ledger avoid promoting CPU test evidence?"
+  ],
+  "required_checks": ["verify all commit prefixes", "verify count equality", "verify all claims false"]
+}
