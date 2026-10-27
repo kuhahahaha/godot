@@ -1,0 +1,24 @@
+{
+  "review_type": "K03 ledger consistency successor v35",
+  "package": "K03_LEDGER_CONSISTENCY_AUDIT_V35_20261028",
+  "matrix": "K03_ACCEPTANCE_MATRIX_20261028_V31",
+  "expected_package_count": 74,
+  "new_package": {
+    "name": "ange_current_producer_census_recheck",
+    "repo": "Godot",
+    "commit": "d555910c8",
+    "resolved": "d555910c8a0b9d0f60b7a0e1c58c1b4315b16be5"
+  },
+  "questions": [
+    "Do all 74 prefixes resolve?",
+    "Does census preserve consumer/producer distinction?",
+    "Are claims false?"
+  ],
+  "required_checks": [
+    "verify all commit prefixes",
+    "verify census receipt/review",
+    "verify no authority promotion",
+    "verify current pair/DSO and claims"
+  ],
+  "independent_review": "K03_LEDGER_CONSISTENCY_AUDIT_V35_20261028_INDEPENDENT_REVIEW.md"
+}
