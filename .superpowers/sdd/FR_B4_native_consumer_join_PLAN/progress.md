@@ -58,3 +58,5 @@
 - 2026-10-27 acceptance matrix indexed external owner handoff blocker map `cad566bb89`: seventeen package scopes reviewed; E03/E04, E05/E20, E34/P01, U08/E09 fields precise, local fail-closed scope preserved, all claims false.
 
 - 2026-10-27 K03 ledger consistency v4: all seventeen matrix packages resolve; final2/formal DSO identity and owner-map claims consistent; PASS_LIMITED ledger-only audit.
+
+- 2026-10-27 E09/R01 current CPU consumer indexed: R01 owner/dispatch 14/2051, exact extent 109, handoff 57, origin 44, upload-data 781 all rc0; no RenderingDevice/native submission/readback/GPU, accepted E09/E06 owner, Ready or K03 positive claim.

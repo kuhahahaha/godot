@@ -1,0 +1,30 @@
+{
+  "review_type": "non-author E09/R01 current CPU consumer boundary audit",
+  "package": "K03_e09_r01_current_cpu_consumer",
+  "review_target": "K03_E09_R01_CURRENT_CPU_CONSUMER_20261027.md",
+  "questions": [
+    "Do the R01/E09 logs match all stated rc/case/assertion counts?",
+    "Is CPU/in-process scope separated from RenderingDevice/native submission/readback?",
+    "Are E09/E06 owner and K03 positive claims false?"
+  ],
+  "required_checks": [
+    "verify source-manifest and log hashes",
+    "verify focused counts",
+    "check native/render-thread boundary",
+    "report P0-P3 or limited-scope acceptance"
+  ],
+  "tests_rerun": false,
+  "claim_matrix": {
+    "u08": false,
+    "e09": false,
+    "operation": false,
+    "completion": false,
+    "readback": false,
+    "packet": false,
+    "physical_disposal": false,
+    "released": false,
+    "ready": false,
+    "verified": false,
+    "gpu": false
+  }
+}

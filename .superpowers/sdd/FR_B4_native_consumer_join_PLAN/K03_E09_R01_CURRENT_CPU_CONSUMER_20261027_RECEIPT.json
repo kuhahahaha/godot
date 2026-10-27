@@ -1,0 +1,66 @@
+{
+  "status": "PASS_LIMITED_E09_R01_CURRENT_CPU_CONSUMER",
+  "source_snapshot_head": "746bd725636314e598ba91499ab7538a3220f0b9",
+  "build": {
+    "command": [
+      "/usr/bin/python3",
+      "/Users/macbookair/.local/bin/scons",
+      "-Q",
+      "-j2",
+      "test-host-storage"
+    ],
+    "rc": 0,
+    "up_to_date": true,
+    "log": "work/e09-r01-current-20261027/scons.log"
+  },
+  "focused": [
+    {
+      "name": "R01 owner/dispatch",
+      "spec": "[R01]",
+      "rc": 0,
+      "cases": 14,
+      "assertions": 2051,
+      "log": "work/e09-r01-current-20261027/R01.log"
+    },
+    {
+      "name": "exact dispatch extent",
+      "spec": "[exact_result_extent]",
+      "rc": 0,
+      "cases": 1,
+      "assertions": 109,
+      "log": "work/e09-r01-current-20261027/exact_result_extent.log"
+    },
+    {
+      "name": "qualification handoff",
+      "spec": "[qualification_handoff]",
+      "rc": 0,
+      "cases": 1,
+      "assertions": 57,
+      "log": "work/e09-r01-current-20261027/qualification_handoff.log"
+    },
+    {
+      "name": "result origin",
+      "spec": "[result_origin]",
+      "rc": 0,
+      "cases": 1,
+      "assertions": 44,
+      "log": "work/e09-r01-current-20261027/result_origin.log"
+    },
+    {
+      "name": "qualification upload data",
+      "spec": "[qualification_upload_data]",
+      "rc": 0,
+      "cases": 1,
+      "assertions": 781,
+      "log": "work/e09-r01-current-20261027/qualification_upload_data.log"
+    }
+  ],
+  "scope": "R01 owner/dispatch lifecycle and E09 bounded upload-data consumer; CPU/in-process only",
+  "limitations": [
+    "No RenderingDevice render-thread execution or native submission/readback",
+    "No accepted D/U04/E06 owner authority or E34/P01 parent",
+    "Release/ASan/UBSan variants not run in this package",
+    "No GPU/native/PCK/Ready qualification"
+  ],
+  "source_manifest": "work/e09-r01-current-20261027/SOURCE_MANIFEST.json"
+}

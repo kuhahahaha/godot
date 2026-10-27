@@ -1,0 +1,76 @@
+{
+  "package": "K03_e09_r01_current_cpu_consumer",
+  "date": "2026-10-27",
+  "ange_source_head": "746bd725636314e598ba91499ab7538a3220f0b9",
+  "source_package": "/Users/macbookair/Documents/Work/ANGE/work/e09-r01-current-20261027",
+  "source_manifest_sha256": "6dc3a16cd631c2fe7a815871d2c5e99007e7617b183c0f86f72cd0911c8b222c",
+  "logs": {
+    "scons.log": {
+      "path": "K03_E09_R01_CURRENT_CPU_CONSUMER_20261027_scons.log",
+      "sha256": "50ebf5c706c972cd84bde42e1e49acf1b30a263a5c8f61a0847b52bc54b3c5cd"
+    },
+    "R01.log": {
+      "path": "K03_E09_R01_CURRENT_CPU_CONSUMER_20261027_R01.log",
+      "sha256": "8115b76bfb79efcfdeaf4146247f48ebf4dc449b6a73c7d5a0f4ae5cb98a8e34"
+    },
+    "exact_result_extent.log": {
+      "path": "K03_E09_R01_CURRENT_CPU_CONSUMER_20261027_exact_result_extent.log",
+      "sha256": "51d4f73f954f6c148f5003e0cfd421b398798c41c25409e2d113cd0fe0067e2c"
+    },
+    "qualification_handoff.log": {
+      "path": "K03_E09_R01_CURRENT_CPU_CONSUMER_20261027_qualification_handoff.log",
+      "sha256": "c4b75f7d572bf18eb37ab0e9b422f7f7c78c2ed9204735dfd89f56877685cbdb"
+    },
+    "result_origin.log": {
+      "path": "K03_E09_R01_CURRENT_CPU_CONSUMER_20261027_result_origin.log",
+      "sha256": "c41d0792d4b4f44095768810ea0e27515d648db8d6080d2ae0f55299e2aa5a91"
+    },
+    "qualification_upload_data.log": {
+      "path": "K03_E09_R01_CURRENT_CPU_CONSUMER_20261027_qualification_upload_data.log",
+      "sha256": "24a7c6444275fec7b2103951d993def30f542327d842d03c64afa49c6d46bfe3"
+    }
+  },
+  "focused": {
+    "r01": {
+      "rc": 0,
+      "cases": 14,
+      "assertions": 2051
+    },
+    "exact_result_extent": {
+      "rc": 0,
+      "assertions": 109
+    },
+    "qualification_handoff": {
+      "rc": 0,
+      "assertions": 57
+    },
+    "result_origin": {
+      "rc": 0,
+      "assertions": 44
+    },
+    "qualification_upload_data": {
+      "rc": 0,
+      "assertions": 781
+    }
+  },
+  "scope": "CPU/in-process only; no RenderingDevice/native submission/readback/GPU",
+  "claims": {
+    "u08": false,
+    "e09": false,
+    "operation": false,
+    "completion": false,
+    "readback": false,
+    "packet": false,
+    "physical_disposal": false,
+    "released": false,
+    "ready": false,
+    "verified": false,
+    "gpu": false
+  },
+  "independent_review": {
+    "reviewer": "acceptance_matrix_review",
+    "status": "limited-scope accept; no actionable P0-P3",
+    "tests_rerun": false,
+    "receipt": "K03_E09_R01_CURRENT_CPU_CONSUMER_20261027_INDEPENDENT_REVIEW.md"
+  }
+}

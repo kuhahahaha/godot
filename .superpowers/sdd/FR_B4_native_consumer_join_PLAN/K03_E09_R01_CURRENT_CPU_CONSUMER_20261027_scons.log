@@ -1,0 +1,3 @@
+Building for architecture arm64 on platform macos
+  keep     /Users/macbookair/Documents/Work/ANGE/demo/neohub/addons/rmlui (real directory with content)
+scons: `test-host-storage' is up to date.
