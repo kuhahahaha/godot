@@ -1,0 +1,18 @@
+{
+  "review_type": "independent limited-scope ANGE provider oracle focused regression",
+  "package": "K03_ANGE_CURRENT_PROVIDER_ORACLE_FOCUSED_20261027",
+  "review_target": "K03_ANGE_CURRENT_PROVIDER_ORACLE_FOCUSED_20261027.md",
+  "questions": [
+    "Do raw reports match curve/mesh/texture assertion and mutant counts?",
+    "Is the texture runner mismatch explicitly separated from production source?",
+    "Does scope remain pure CPU semantics with claims false?"
+  ],
+  "required_checks": [
+    "inspect three raw JSON reports",
+    "verify hashes and restored-green markers",
+    "confirm temporary harness only",
+    "check no owner/operation/completion/readback/Ready/GPU claim"
+  ],
+  "tests_rerun": false,
+  "independent_review": "K03_ANGE_CURRENT_PROVIDER_ORACLE_FOCUSED_20261027_INDEPENDENT_REVIEW.md"
+}
