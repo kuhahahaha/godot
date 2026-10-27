@@ -1,0 +1,42 @@
+{
+  "status": "E22_TEXTURE_PROVIDER_CURRENT_A_CONSUMER",
+  "snapshot_head": "65eacb484b16675357437e67ffa53ddf60924a8c",
+  "files": [
+    {
+      "path": "src/particle/providers/texture_provider.cpp",
+      "bytes": 12978,
+      "sha256": "427304b448acec45fd98d2ddfdf90b8a98feba5eb4451cf04411e89c00b46c1a",
+      "git_blob": "89cf1f073b62bc936316d61a3e4f82561c0d4af2",
+      "worktree_status": ""
+    },
+    {
+      "path": "src/particle/providers/texture_provider.h",
+      "bytes": 4360,
+      "sha256": "892beeb784f685b6006419b03d60a7fdbf972530e125c8448af6fdadc489580f",
+      "git_blob": "b6beea237fc83ac82cdfa7b4747d9c135c88e777",
+      "worktree_status": ""
+    },
+    {
+      "path": "tests/particle/texture_provider_test.cpp",
+      "bytes": 16556,
+      "sha256": "58798628dad8ca0cc0c7e6b694cb16db2ac79be563e9382041cada9c34b92025",
+      "git_blob": "917f7b175a7ef9c762b9e561b8de5e1746241f55",
+      "worktree_status": ""
+    },
+    {
+      "path": "tests/particle/texture_provider_vectors.inc",
+      "bytes": 149803,
+      "sha256": "f355a7ff472bcd91ba1845cca04786fb2664cf94660c75847b037a6978cd819d",
+      "git_blob": "3ad7e112cb17ab16dba62f29dff909774ea7c9a9",
+      "worktree_status": ""
+    }
+  ],
+  "scope": "texture provider pure CPU policy/oracle consumer and exact vector closure",
+  "claims_not_made": [
+    "E20 owner",
+    "D/core exports",
+    "native",
+    "GPU",
+    "Ready"
+  ]
+}

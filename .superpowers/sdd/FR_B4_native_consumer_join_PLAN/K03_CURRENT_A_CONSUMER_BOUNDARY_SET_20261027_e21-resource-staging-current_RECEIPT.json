@@ -1,0 +1,25 @@
+{
+  "status": "PASS_SCOPED_E21_RESOURCE_STAGING",
+  "snapshot_head": "173f69aa54ad5272fef8d2e79cdc21152dfec968",
+  "verification": {
+    "debug_compile_rc": 0,
+    "debug_run_rc": 0,
+    "release_compile_rc": 0,
+    "release_run_rc": 0,
+    "ubsan_compile_rc": 0,
+    "ubsan_run_rc": 0,
+    "failures_each_variant": 0,
+    "release_warning_fixed_by_test_only_maybe_unused": true
+  },
+  "artifacts": {
+    "temporary_binaries_deleted": true,
+    "retained_artifact": "source/test/log evidence only"
+  },
+  "claims_not_made": [
+    "E20 owner",
+    "D/core exports",
+    "native",
+    "GPU",
+    "Ready"
+  ]
+}

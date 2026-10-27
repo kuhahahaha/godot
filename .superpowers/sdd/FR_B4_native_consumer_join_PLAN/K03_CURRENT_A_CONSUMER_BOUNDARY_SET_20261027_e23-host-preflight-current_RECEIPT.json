@@ -1,0 +1,26 @@
+{
+  "status": "PASS_SCOPED_E23_HOST_PREFLIGHT",
+  "snapshot_head": "24e091c29970e51ecf761d75507b589a9c28f26e",
+  "verification": {
+    "debug_compile_rc": 0,
+    "debug_run_rc": 0,
+    "release_compile_rc": 0,
+    "release_run_rc": 0,
+    "ubsan_compile_rc": 0,
+    "ubsan_run_rc": 0,
+    "failures_each_variant": 0
+  },
+  "artifacts": {
+    "temporary_binaries_deleted": true,
+    "retained_artifact": "source/test/log evidence only"
+  },
+  "claims_not_made": [
+    "E20 owner",
+    "permit",
+    "reservation",
+    "publication",
+    "native",
+    "GPU",
+    "Ready"
+  ]
+}

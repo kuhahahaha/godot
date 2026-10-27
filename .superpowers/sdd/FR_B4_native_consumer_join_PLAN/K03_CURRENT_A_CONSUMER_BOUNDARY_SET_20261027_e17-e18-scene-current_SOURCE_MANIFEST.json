@@ -1,0 +1,50 @@
+{
+  "status": "E17_E18_SCENE_CURRENT_A_CONSUMER",
+  "snapshot_head": "d8dc4d29ef8300e4f5a1b71e818c948bf3c219d0",
+  "files": [
+    {
+      "path": "src/particle/providers/scene_collision_contract.cpp",
+      "bytes": 7535,
+      "sha256": "20cfa6f3ba429406cb0e64aad6751b7ebf654b7f027d0bdd2ffcc5778f826a33",
+      "git_blob": "9879de3d79e92922de814d0d0786986a15d3829c",
+      "worktree_status": ""
+    },
+    {
+      "path": "src/particle/providers/scene_collision_contract.h",
+      "bytes": 1303,
+      "sha256": "6798a8a831bf2ca252e2f24638d37233a15d7c36f5ed32762826744de4926c59",
+      "git_blob": "1b522e29cf470f6133e5b6e2142000d0524aeb5a",
+      "worktree_status": ""
+    },
+    {
+      "path": "src/particle/contract/particle_semantic_contract.h",
+      "bytes": 4601,
+      "sha256": "035809d9703292090261b05b4e7688e5744664f1d6c3155447b629456290f04c",
+      "git_blob": "e5cc66aebbf8a5fdc0019e94db6c5b916a286f09",
+      "worktree_status": ""
+    },
+    {
+      "path": "tests/test_particle_scene_sphere.cpp",
+      "bytes": 9880,
+      "sha256": "0fac20c2242a5b8c829f71abcdad1ba979b51320f7bc54f9fdff98445c9f3eba",
+      "git_blob": "f050d01e44a0c0851867533d0e1d8e1b796e3ead",
+      "worktree_status": ""
+    },
+    {
+      "path": "tests/test_particle_scene_heightfield.cpp",
+      "bytes": 8356,
+      "sha256": "4dcb61b70203c43a5ecd177be7af5a6b2906233440f35d823e2fb797532bef50",
+      "git_blob": "ed90133ba9f4766a731a6df0a2d87b16fc78a98a",
+      "worktree_status": ""
+    }
+  ],
+  "scope": "scene collision sphere/receiver/heightfield geometry preparation and focused Catch2 consumers",
+  "claims_not_made": [
+    "sampling",
+    "phase ownership",
+    "E07 allocation",
+    "runtime/native",
+    "GPU",
+    "Ready"
+  ]
+}

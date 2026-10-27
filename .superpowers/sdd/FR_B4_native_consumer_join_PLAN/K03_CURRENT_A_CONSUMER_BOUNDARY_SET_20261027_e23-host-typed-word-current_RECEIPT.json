@@ -1,0 +1,24 @@
+{
+  "status": "PASS_SCOPED_E23_HOST_TYPED_WORD",
+  "snapshot_head": "c5d0d76e762f7e1d5425d07a365f3c0c3190657c",
+  "verification": {
+    "debug_compile_rc": 0,
+    "debug_run_rc": 0,
+    "release_compile_rc": 0,
+    "release_run_rc": 0,
+    "ubsan_compile_rc": 0,
+    "ubsan_run_rc": 0,
+    "failures_each_variant": 0
+  },
+  "artifacts": {
+    "temporary_binaries_deleted": true,
+    "retained_artifact": "source/test/log evidence only"
+  },
+  "claims_not_made": [
+    "host capture owner",
+    "E20 transaction",
+    "native",
+    "GPU",
+    "Ready"
+  ]
+}

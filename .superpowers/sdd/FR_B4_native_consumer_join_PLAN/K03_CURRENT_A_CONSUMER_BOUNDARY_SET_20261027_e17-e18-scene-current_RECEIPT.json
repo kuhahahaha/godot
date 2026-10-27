@@ -1,0 +1,27 @@
+{
+  "status": "PASS_SCOPED_E17_E18_SCENE_GEOMETRY",
+  "snapshot_head": "d8dc4d29ef8300e4f5a1b71e818c948bf3c219d0",
+  "verification": {
+    "debug_compile_rc": 0,
+    "debug_run_rc": 0,
+    "release_compile_rc": 0,
+    "release_run_rc": 0,
+    "ubsan_compile_rc": 0,
+    "ubsan_run_rc": 0,
+    "cases_each_variant": 3,
+    "assertions_each_variant": 966,
+    "failures_each_variant": 0
+  },
+  "artifacts": {
+    "temporary_binaries_deleted": true,
+    "retained_artifact": "source/test/log evidence only"
+  },
+  "claims_not_made": [
+    "sampling",
+    "phase ownership",
+    "E07 allocation",
+    "runtime/native",
+    "GPU",
+    "Ready"
+  ]
+}

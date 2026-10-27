@@ -1,0 +1,84 @@
+{
+  "status": "E30_E33_CHANNEL_CURRENT_A_CONSUMER",
+  "snapshot_head": "f14277cea066145ad5fbefb9a6fdbb916f1913aa",
+  "files": [
+    {
+      "path": "src/particle/channel/world_channel.h",
+      "bytes": 512,
+      "sha256": "23740171a1da6f5210de5e6f438c2f7138f20a3610ad801bead40f8e67797d46",
+      "git_blob": "7c3e8dd8ceecf37412ae2115862ada1f523e7acb",
+      "worktree_status": ""
+    },
+    {
+      "path": "src/particle/channel/world_channel.cpp",
+      "bytes": 1148,
+      "sha256": "869a00a268272b5b03ba669f2416d71e92cb7b418e38d51e596d621700822a5a",
+      "git_blob": "26073b329bd85b117c8380a5a0b449c1a93ed9f6",
+      "worktree_status": ""
+    },
+    {
+      "path": "src/particle/channel/channel_methods.h",
+      "bytes": 677,
+      "sha256": "90272dc2b64ad93b09089991e5ad5019237020d1d21651a98378b30207fdec25",
+      "git_blob": "34bcad2466c566565a913ac374dd6337d5310cd9",
+      "worktree_status": ""
+    },
+    {
+      "path": "src/particle/channel/channel_methods.cpp",
+      "bytes": 1389,
+      "sha256": "76829938dc691ad35426ce65c245060eaf0accf1b91ca47bd3205c53d5456342",
+      "git_blob": "111352022295f2eea28e383c26843c5de67a8bfe",
+      "worktree_status": ""
+    },
+    {
+      "path": "src/particle/channel/channel_publication.h",
+      "bytes": 854,
+      "sha256": "3c54ebc181a9594083cb4c7aa4f31c734bcc4b4969ef87e27cdc94c82bebddd3",
+      "git_blob": "6ef1165a043264dd264f3d83c28e76aceb17d7a1",
+      "worktree_status": ""
+    },
+    {
+      "path": "src/particle/channel/channel_publication.cpp",
+      "bytes": 2007,
+      "sha256": "33b0eb5bd48a0ae3e53dfae722dec65904713857fdfcb6b441fb17088095825c",
+      "git_blob": "d462b8194b451caf0c532ce7289ac5ce770366a7",
+      "worktree_status": ""
+    },
+    {
+      "path": "tests/particle/channel_world_test.cpp",
+      "bytes": 1475,
+      "sha256": "94502354971e0a0637ec4b985a4499cbd45c85a96922de220e5694874bff5497",
+      "git_blob": "2eacf17343b07b0821426780e6a5cc96abb30eaa",
+      "worktree_status": ""
+    },
+    {
+      "path": "tests/particle/channel_spawn_test.cpp",
+      "bytes": 3012,
+      "sha256": "dfe3ce6e6eba93dbb392f441a16b72831bd602cf05435eb04d433d451d611870",
+      "git_blob": "42211c48b067c7ac285a130f66d569ee8521b9b5",
+      "worktree_status": ""
+    },
+    {
+      "path": "tests/particle/channel_contract_test.cpp",
+      "bytes": 3025,
+      "sha256": "00b98b58e7ad55867d28775d10e263489230a8243b31af688b2aca04601e6cb2",
+      "git_blob": "cce7c32121a225dd11bfb7645c46ed9894324ceb",
+      "worktree_status": ""
+    }
+  ],
+  "scope": "current channel pure kernels and focused Catch2 consumer only",
+  "claims_not_made": [
+    "U03",
+    "U04",
+    "E07",
+    "E11",
+    "C02",
+    "R01",
+    "C06",
+    "E09",
+    "host",
+    "runtime/native/GPU",
+    "qualification",
+    "Ready"
+  ]
+}

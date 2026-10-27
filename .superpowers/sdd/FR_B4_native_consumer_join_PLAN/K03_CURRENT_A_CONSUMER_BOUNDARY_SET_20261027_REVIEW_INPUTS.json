@@ -1,0 +1,30 @@
+{
+  "review_type": "non-author current-A consumer boundary set audit",
+  "package": "K03_current_a_consumer_boundary_set",
+  "review_target": "K03_CURRENT_A_CONSUMER_BOUNDARY_SET_20261027.md",
+  "questions": [
+    "Do all eight copied receipt/result/review/manifest artifacts hash consistently?",
+    "Are per-slice counts and boundaries accurately preserved?",
+    "Does the set avoid merging snapshots or promoting E20/owner/native/GPU/Ready authority?"
+  ],
+  "required_checks": [
+    "verify all copied metadata hashes",
+    "verify slice counts/statuses",
+    "check no fallback/owner/qualification promotion",
+    "report P0-P3 or limited-scope acceptance"
+  ],
+  "tests_rerun": false,
+  "claim_matrix": {
+    "u08": false,
+    "e09": false,
+    "operation": false,
+    "completion": false,
+    "readback": false,
+    "packet": false,
+    "physical_disposal": false,
+    "released": false,
+    "ready": false,
+    "verified": false,
+    "gpu": false
+  }
+}

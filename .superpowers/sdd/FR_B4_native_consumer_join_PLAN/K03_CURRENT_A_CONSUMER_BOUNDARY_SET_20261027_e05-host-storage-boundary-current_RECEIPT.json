@@ -1,0 +1,20 @@
+{
+  "status": "PASS_SCOPED_E05_HOST_STORAGE_BOUNDARY_PIN",
+  "snapshot_head": "e6dc1aa8042c1914d366e7273d6fc88f92d1681d",
+  "verification": {
+    "focused_rc": 0,
+    "focused_cases": 5,
+    "focused_assertions": 208,
+    "focused_failures": 0,
+    "fresh_compile_provenance": "UNAVAILABLE_SHARED_SCONS_IN_FLIGHT"
+  },
+  "blocker": "missing production concrete StorageTransport/StorageLimits same-transaction owner input",
+  "claims_not_made": [
+    "concrete StorageTransport",
+    "owner adoption",
+    "E20 transaction",
+    "native",
+    "GPU",
+    "Ready"
+  ]
+}

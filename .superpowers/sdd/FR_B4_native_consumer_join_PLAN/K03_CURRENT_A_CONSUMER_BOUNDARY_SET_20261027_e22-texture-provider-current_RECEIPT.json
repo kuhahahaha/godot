@@ -1,0 +1,27 @@
+{
+  "status": "PASS_SCOPED_E22_TEXTURE_PROVIDER",
+  "snapshot_head": "65eacb484b16675357437e67ffa53ddf60924a8c",
+  "verification": {
+    "debug_compile_rc": 0,
+    "debug_run_rc": 0,
+    "release_compile_rc": 0,
+    "release_run_rc": 0,
+    "ubsan_compile_rc": 0,
+    "ubsan_run_rc": 0,
+    "assertions_each_variant": 5242,
+    "policy_rows_each_variant": 90,
+    "oracle_vectors_each_variant": 670,
+    "failures_each_variant": 0
+  },
+  "artifacts": {
+    "temporary_binaries_deleted": true,
+    "retained_artifact": "source/test/log evidence only"
+  },
+  "claims_not_made": [
+    "E20 owner",
+    "D/core exports",
+    "native",
+    "GPU",
+    "Ready"
+  ]
+}
