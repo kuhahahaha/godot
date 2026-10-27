@@ -90,3 +90,5 @@
 - 2026-10-27 K03 ledger consistency v8: 23 package/repository commits resolve; ANGE CPU/native focused evidence indexed; current pair/DSO consistent; PASS_LIMITED ledger-only, all claims false.
 
 - 2026-10-27 D projection guard commit `bba55f3ba`: mount-time SystemRegistryProjection validation and same-path erase guard; DSO `38c3da7e…`; VFX/no-VFX/close rc0; malformed source rollback/unload fail-closed.
+
+- 2026-10-27 acceptance matrix v5: 24 package scopes include D projection guard rebuild; current ANGE `bba55f3ba` / DSO `38c3da7e…`, VFX/no-VFX/close and malformed rollback evidence consistent; claims false.
