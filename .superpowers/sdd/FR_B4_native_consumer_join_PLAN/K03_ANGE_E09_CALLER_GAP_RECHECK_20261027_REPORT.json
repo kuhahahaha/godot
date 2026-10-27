@@ -1,0 +1,41 @@
+{
+  "status": "PASS_LIMITED_K03_ANGE_E09_CALLER_GAP_RECHECK",
+  "date": "2026-10-27",
+  "source_repo": "ANGE",
+  "source_head": "bd51f0c0029bd0b82822ba29ed03dd128f155878",
+  "log": {
+    "path": "/tmp/k03-current-native-owner-census-20261027.log",
+    "sha256": "c40948505c55332d8900569e023096f507f12bb77af6c9ff920bb1becc2a390f"
+  },
+  "scope": "read-only source census of public native qualification entrypoints and Godot external-surface producer callsites",
+  "findings": {
+    "bind_main_device_real_callers": [
+      "src/register_types.cpp:335"
+    ],
+    "particle_program_loader_request_native_callers": [],
+    "particle_program_loader_poll_native_callers": [],
+    "particle_program_loader_acquire_native_callers": [],
+    "program_preparation_store_acquire_native_internal_callers": [
+      "src/particle/runtime/qualification_scope.cpp:383"
+    ],
+    "particle_program_loader_request_qualification_callers": [],
+    "program_preparation_store_request_qualification_callers": [],
+    "stage_executor_start_native_qualification_callers": [],
+    "particle_lifecycle_symbols": [],
+    "godot_mesh_add_external_surface_production_callers": []
+  },
+  "corrected_boundary": "The internal ProgramPreparationStore acquire path exists, but no production caller reaches the public ParticleProgramLoader request/qualification entrypoints or StageExecutor start. The first missing boundary remains the original particle producer/admission path and same-request E09 association.",
+  "claims": {
+    "u08": false,
+    "e09": false,
+    "operation": false,
+    "completion": false,
+    "readback": false,
+    "packet": false,
+    "physical_disposal": false,
+    "released": false,
+    "ready": false,
+    "verified": false,
+    "gpu": false
+  }
+}
