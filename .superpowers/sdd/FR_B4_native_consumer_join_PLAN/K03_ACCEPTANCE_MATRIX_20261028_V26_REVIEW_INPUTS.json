@@ -1,0 +1,61 @@
+{
+  "review_type": "K03 acceptance matrix successor v26",
+  "package": "K03_ACCEPTANCE_MATRIX_20261028_V26",
+  "previous_matrix": "K03_ACCEPTANCE_MATRIX_20261028_V25",
+  "expected_package_count": 69,
+  "new_packages": [
+    {
+      "name": "ange_gpu_policy_successor",
+      "commit": "d2aa27e43",
+      "repo": "ANGE"
+    },
+    {
+      "name": "ange_mesh_provider_successor",
+      "commit": "e8b297ec8",
+      "repo": "ANGE"
+    },
+    {
+      "name": "ange_e22_e23_provider_successor",
+      "commit": "7aeeeb976",
+      "repo": "ANGE"
+    },
+    {
+      "name": "ange_e22_texture_provider_successor",
+      "commit": "d1b7a6cac",
+      "repo": "ANGE"
+    },
+    {
+      "name": "ange_e09_r01_successor",
+      "commit": "f47dd0d63",
+      "repo": "ANGE"
+    },
+    {
+      "name": "ange_e05_caller_boundary_successor",
+      "commit": "5e46fc4c9",
+      "repo": "ANGE"
+    },
+    {
+      "name": "ange_e34_p01_boundary_successor",
+      "commit": "18d44e11b",
+      "repo": "ANGE"
+    },
+    {
+      "name": "ange_k03_dso_rebuild_successor",
+      "commit": "18d44e11b",
+      "repo": "ANGE"
+    }
+  ],
+  "questions": [
+    "Do all eight commits resolve?",
+    "Are provider/R01/E05/E34/DSO scopes and counts correct?",
+    "Are owner and dirty-build limitations preserved?"
+  ],
+  "required_checks": [
+    "verify all commit prefixes",
+    "verify eight receipts/reviews and counts",
+    "verify E05 owner and E34 external-input boundaries",
+    "verify dirty DSO is not current-pair/native proof",
+    "verify claims all false"
+  ],
+  "independent_review": "K03_ACCEPTANCE_MATRIX_20261028_V26_INDEPENDENT_REVIEW.md"
+}
