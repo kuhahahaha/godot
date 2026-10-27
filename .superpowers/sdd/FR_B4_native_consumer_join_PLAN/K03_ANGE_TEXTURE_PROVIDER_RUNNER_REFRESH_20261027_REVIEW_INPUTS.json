@@ -1,0 +1,17 @@
+{
+  "review_type": "independent limited-scope texture provider runner maintenance",
+  "package": "K03_ANGE_TEXTURE_PROVIDER_RUNNER_REFRESH_20261027",
+  "review_target": "K03_ANGE_TEXTURE_PROVIDER_RUNNER_REFRESH_20261027.md",
+  "questions": [
+    "Does the commit update only the stale expected count/census?",
+    "Does the raw run show 5242 baseline/restored and 13 mutants rejected?",
+    "Does scope remain pure harness maintenance with claims false?"
+  ],
+  "required_checks": [
+    "inspect commit diff",
+    "verify raw report hash/counts",
+    "check no production source or authority claim"
+  ],
+  "tests_rerun": false,
+  "independent_review": "K03_ANGE_TEXTURE_PROVIDER_RUNNER_REFRESH_20261027_INDEPENDENT_REVIEW.md"
+}

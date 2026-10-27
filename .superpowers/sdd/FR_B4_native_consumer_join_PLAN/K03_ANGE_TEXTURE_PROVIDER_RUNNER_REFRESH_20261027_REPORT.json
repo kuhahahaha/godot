@@ -1,0 +1,31 @@
+{
+  "status": "PASS_LIMITED_K03_ANGE_TEXTURE_PROVIDER_RUNNER_REFRESH",
+  "date": "2026-10-27",
+  "source_repo": "ANGE",
+  "source_commit": "f4ee1bd22f1c8565dae0ebd36dd941bbcab6b053",
+  "report": "/tmp/k03-texture-provider-fixed-20261027/RUN.json",
+  "report_sha256": "839608dfcb4434cc8f86acd830ec9a53d7c2cb95a22c4840bbc6b0330f8d96d1",
+  "result": {
+    "baseline_assertions": 5242,
+    "mutants_rejected": 13,
+    "restored_green": true,
+    "policy_rows": 90,
+    "oracle_vectors": 670,
+    "return_code": 0
+  },
+  "fix": "Refresh EXPECTED_ASSERTIONS from 5230 to 5242 and add capture_shape_plan_and_ranges=12 to EXPECTED_CENSUS.",
+  "scope": "test harness maintenance for private pure E22 texture provider checks; no production owner/native/GPU authority",
+  "claims": {
+    "u08": false,
+    "e09": false,
+    "operation": false,
+    "completion": false,
+    "readback": false,
+    "packet": false,
+    "physical_disposal": false,
+    "released": false,
+    "ready": false,
+    "verified": false,
+    "gpu": false
+  }
+}
