@@ -1,0 +1,28 @@
+{
+  "current_head": "7787073abadb2a70870e544ad7426cc112a8b530",
+  "binary_sha256": "01660f9105c2bfbd869f2e0d34afba8f54e62dd7403cc8a5efa9a248b8de9348",
+  "source_sha256": {
+    "drivers/metal/rendering_device_driver_metal.cpp": "347f7d4bb2e662541ff3a158c46edf6919a09dfec5cffc10ee4037e108b5c2aa",
+    "drivers/metal/rendering_device_driver_metal3.cpp": "4c995ad3ac1eb3820f31133d202a31146992ab1af0545a0856e3e2a82d9dcf92",
+    "drivers/vulkan/rendering_device_driver_vulkan.cpp": "36a74609d6b63957d5971131254c5155871204410cb557c53c465e2cd4c9c5de",
+    "servers/rendering/rendering_device.cpp": "48d8dc2c793a197d93047e173da6141699418707913f60a15812b55f3a77a495",
+    "tests/servers/rendering/test_qualification_metal_calls.cpp": "8141548849541a588fce4e3b7af112a5c16d93cde844ea7cc9958dd852b73656",
+    "tests/servers/rendering/test_qualification_vulkan_allocation.cpp": "283e26abada65c7076399b52cba6840883c6529ccd5e4ebee319c8509af9be37"
+  },
+  "run": {
+    "filter": "*[QualificationNative]*",
+    "rc": 0,
+    "cases": 3,
+    "assertions": 59,
+    "log": "qualification-native.log"
+  },
+  "claims": {
+    "actual_backend_control": true,
+    "operation": false,
+    "completion": false,
+    "readback": false,
+    "ready": false,
+    "verified": false,
+    "gpu": false
+  }
+}
