@@ -1,0 +1,13 @@
+{
+  "review_type": "read_only_limited_scope",
+  "package": "K03_LEDGER_CONSISTENCY_V47",
+  "matrix": "K03_ACCEPTANCE_MATRIX_20261028_V43.json",
+  "expected_package_count": 86,
+  "new_package": "ange_capture_reader_configured_identity_boundary",
+  "questions": [
+    "Do all 86 prefixes resolve in their declared repositories?",
+    "Do matrix and ledger counts agree?",
+    "Does the ledger preserve stale identity as an external boundary?"
+  ],
+  "required_checks": ["verify all commit prefixes", "verify count equality", "verify all claims false"]
+}
