@@ -88,3 +88,5 @@
 - 2026-10-27 acceptance matrix v4: 23 package scopes include ANGE CPU/native focused regression (bundle 6/81, E05 43/907, E06 7/250, C02 13/402); current DSO/pair unchanged and claims false.
 
 - 2026-10-27 K03 ledger consistency v8: 23 package/repository commits resolve; ANGE CPU/native focused evidence indexed; current pair/DSO consistent; PASS_LIMITED ledger-only, all claims false.
+
+- 2026-10-27 D projection guard commit `bba55f3ba`: mount-time SystemRegistryProjection validation and same-path erase guard; DSO `38c3da7e…`; VFX/no-VFX/close rc0; malformed source rollback/unload fail-closed.

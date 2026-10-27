@@ -1,0 +1,19 @@
+{
+  "review_type": "non-author D VFX projection guard rebuild",
+  "package": "K03_d_vfx_projection_guard_rebuild",
+  "review_target": "K03_D_VFX_PROJECTION_GUARD_REBUILD_20261027.md",
+  "questions": [
+    "Do source commit/DSO/hash/build match?",
+    "Do positive and malformed negative probes match?",
+    "Does projection validation remain fail-closed with no owner promotion?"
+  ],
+  "required_checks": [
+    "verify build/codesign",
+    "verify four raw log hashes and markers",
+    "check claims false"
+  ],
+  "tests_rerun": false,
+  "independent_review": "K03_D_VFX_PROJECTION_GUARD_REBUILD_20261027_INDEPENDENT_REVIEW.md",
+  "independent_review_sha256": "e4d72dcffb9baf9aed6eb94a50251dd92901a3e1bc0042a28007ac97f95ec6ce",
+  "conclusion": "limited-scope accept; no P0-P3"
+}
