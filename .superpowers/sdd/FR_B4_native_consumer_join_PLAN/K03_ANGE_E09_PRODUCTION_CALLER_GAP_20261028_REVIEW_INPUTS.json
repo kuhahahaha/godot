@@ -1,0 +1,19 @@
+{
+  "review_type": "non-author ANGE E09 production caller gap",
+  "package": "K03_ange_e09_production_caller_gap",
+  "review_target": "K03_ANGE_E09_PRODUCTION_CALLER_GAP_20261028.md",
+  "questions": [
+    "Does the census distinguish the real bind_main_device path from missing request/qualification callers?",
+    "Is the first missing boundary precise and external-owner scoped?",
+    "Are claims false without synthetic calls?"
+  ],
+  "required_checks": [
+    "verify source search hash",
+    "verify callsite counts",
+    "check claims false"
+  ],
+  "tests_rerun": false,
+  "independent_review": "K03_ANGE_E09_PRODUCTION_CALLER_GAP_20261028_INDEPENDENT_REVIEW.md",
+  "independent_review_sha256": "f5d14866ec12e5ac1b00699491965b7e5d567288b3e4457258c2b145f86dab63",
+  "conclusion": "limited-scope accept; no P0-P3"
+}
