@@ -1,0 +1,19 @@
+{
+  "review_type": "non-author K03 ledger consistency v10 audit",
+  "package": "K03_ledger_consistency_audit_v10",
+  "review_target": "K03_LEDGER_CONSISTENCY_AUDIT_V10_20261027.md",
+  "questions": [
+    "Do all 25 repo-aware commits resolve?",
+    "Is caller-gap and D guard provenance present?",
+    "Are claims false and scope ledger-only?"
+  ],
+  "required_checks": [
+    "verify report/repo resolution",
+    "verify current pair/caller gap",
+    "check claims false"
+  ],
+  "tests_rerun": false,
+  "independent_review": "K03_LEDGER_CONSISTENCY_AUDIT_V10_20261027_INDEPENDENT_REVIEW.md",
+  "independent_review_sha256": "7aa0c5d217b6aefb8470921322db9573b7097d2dd06d1848d90a6b0efda60a39",
+  "conclusion": "limited-scope accept; no P0-P3"
+}
