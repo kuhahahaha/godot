@@ -1,0 +1,17 @@
+{
+  "review_type": "independent real production particle caller boundary census",
+  "package": "K03_GODOT_REAL_PARTICLE_CALLER_BOUNDARY_20261027",
+  "review_target": "K03_GODOT_REAL_PARTICLE_CALLER_BOUNDARY_20261027.md",
+  "questions": [
+    "Does the BridgeParticle callsite identify a real production consumer?",
+    "Are public loader/StageExecutor and mesh producer caller counts accurate?",
+    "Does the package avoid promoting the consumer to authority?"
+  ],
+  "required_checks": [
+    "inspect raw census log",
+    "verify callsite and source heads",
+    "confirm all authority claims false"
+  ],
+  "tests_rerun": false,
+  "independent_review": "K03_GODOT_REAL_PARTICLE_CALLER_BOUNDARY_20261027_INDEPENDENT_REVIEW.md"
+}
