@@ -1,0 +1,12 @@
+{
+  "review_type": "non-author source census review",
+  "package": "K03_ange_vfx_projection_consumer_census",
+  "review_target": "K03_ANGE_VFX_PROJECTION_CONSUMER_CENSUS_20261027.md",
+  "questions": [
+    "Does the call-chain census distinguish source/projection validation from actual Particle/GPU production?",
+    "Are the VFX/no-VFX marker results used only as source-stage evidence?",
+    "Is the minimum owner join precise and G1 fail-closed?"
+  ],
+  "required_checks": ["verify all five source hashes", "verify marker log strings", "report P0-P3 or limited-scope acceptance"],
+  "tests_rerun": false
+}
