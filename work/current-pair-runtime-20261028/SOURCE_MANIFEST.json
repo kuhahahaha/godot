@@ -1,0 +1,32 @@
+{
+  "status": "CURRENT_PAIR_RUNTIME_PROBE_MANIFEST",
+  "artifacts": {
+    "godot_host": {
+      "path": "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+      "bytes": 302379792,
+      "sha256": "01660f9105c2bfbd869f2e0d34afba8f54e62dd7403cc8a5efa9a248b8de9348"
+    },
+    "ange_dso": {
+      "path": "/Users/macbookair/Documents/Work/ANGE/bin/libange.macos.template_debug.arm64.dylib",
+      "bytes": 59369816,
+      "sha256": "d82b73f35dbde1bcdf283bf003091213c2e0d3d879b8c483638dd471a375a92d"
+    }
+  },
+  "logs": {
+    "runtime-vfx": {
+      "path": "/Users/macbookair/Documents/Work/godot_ANGE/work/current-pair-runtime-20261028/runtime-vfx.log",
+      "sha256": "3310ec290f1e7c94f6b34c7495184cdef7aba6d55de93b9156c058e0ee404529"
+    },
+    "runtime-no-vfx": {
+      "path": "/Users/macbookair/Documents/Work/godot_ANGE/work/current-pair-runtime-20261028/runtime-no-vfx.log",
+      "sha256": "ae454f727811f9d0cef277fafe1941fb6cf25f411dad474ed4ccf5ae3ec7bf65"
+    },
+    "runtime-invalid-vfx": {
+      "path": "/Users/macbookair/Documents/Work/godot_ANGE/work/current-pair-runtime-20261028/runtime-invalid-vfx.log",
+      "sha256": "3a3169309d477963de5ce75d493ddd504928ae1a830ece50f443c573bd08f8bb"
+    }
+  },
+  "godot_source_head_observed": "7772c7797f13a85228c2a8315b0f4071bbf73aa5",
+  "ange_source_head_observed": "745aa3d804d18187ba918d55a532e531951de24f",
+  "scope": "Runtime boundary only: extension initialization, world resource admission, expected invalid-input rejection, unload. No authenticated GPU/native qualification, visible particle output, completion/readback, PCK or Ready claim."
+}

@@ -1,0 +1,107 @@
+{
+  "status": "CURRENT_PAIR_RUNTIME_PROBE",
+  "date": "2026-10-28",
+  "host": "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+  "host_sha256": "01660f9105c2bfbd869f2e0d34afba8f54e62dd7403cc8a5efa9a248b8de9348",
+  "host_bytes": 302379792,
+  "ange_dso": "/Users/macbookair/Documents/Work/ANGE/bin/libange.macos.template_debug.arm64.dylib",
+  "ange_dso_sha256": "d82b73f35dbde1bcdf283bf003091213c2e0d3d879b8c483638dd471a375a92d",
+  "ange_dso_bytes": 59369816,
+  "source_scope": "new Godot dev host paired with current A Debug DSO; runtime boundary only",
+  "rows": [
+    {
+      "fixture": "runtime-vfx",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/current-pair-runtime-20261028/runtime-vfx",
+        "--display-driver",
+        "macos",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "safe",
+        "--script",
+        "res://probe.gd"
+      ],
+      "rc": 0,
+      "expected_rc": 0,
+      "elapsed_s": 4.887,
+      "log": "/Users/macbookair/Documents/Work/godot_ANGE/work/current-pair-runtime-20261028/runtime-vfx.log",
+      "checks": {
+        "expected_rc": true,
+        "extension": true,
+        "world": true,
+        "unload": true,
+        "no_crash": true
+      },
+      "tail": "Godot Engine v4.7.2.stable.custom_build.770eb3fd1 (2026-10-27 16:19:28 UTC) - https://godotengine.org\nMetal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M3 Pro (Apple9)\n\n[PHS1] world direct-space world=-9223372002411149878 space=2422361554944 child=34930165206\n[audio] buses ready â Master=0 Music=1 SFX=2 analyzer_effect=0\n[PHS1] materialized library=1 local_rd=34946942423 owner_is_rt=true\nU01_EXTENSION=0\n[AIEngine] enter_world: res://pack/arena.world\n[AssetResolver] engine asset root not set â engine_asset_dir() returns empty\nWARNING: ANGE: tree defaults failed to load: expected a mapping of parameters\n     at: push_warning (core/variant/variant_utility.cpp:1033)\n     GDScript backtrace (most recent call first):\n         [0] run_probe (res://probe.gd:15)\nWARNING: ANGE: flower defaults failed to load: expected a mapping of parameters\n     at: push_warning (core/variant/variant_utility.cpp:1033)\n     GDScript backtrace (most recent call first):\n         [0] run_probe (res://probe.gd:15)\ninput_map registration begin\n[WorldLoader] Input map: 0 actions registered (prefix=res://pack/arena.world::)\n[WorldLoader] Blueprint 'arena' <- res://pack/arena.bp\n[vfx] runtime sources ready entries=2 systems=1\n[WorldLoader] World loaded from res://pack/arena.world\n[world-resources] prepare begin res://pack/arena.world\n[world-resources] prepare end built=0 hit=0 failed=0 procedural_built=0 texture_graph_built=0 provider_built=0 provider_hit=1\n[world-resources] texture GPU prepare end encoded=0 transcoded=0 hit=0 failed=0 rgba_fallback=0\n[AIEngine] do_world_load: res://pack/arena.world\n[world-resources] spawn begin res://pack/arena.world\n[AIEngine] do_world_mount: res://pack/arena.world\n[AIEngine] Entered world: res://pack/arena.world\nU01_ENTER_WORLD=true\nRENDER_CACHE_RELEASE {\"entries\":0,\"evicted_entries\":0,\"families\":{},\"family_observations\":{},\"hits\":0,\"invalidated_entries\":0,\"limit_bytes\":536870912,\"measurement\":\"provider payload estimate; excludes original inputs; not RAM or VRAM\",\"misses\":0,\"payload_bytes_estimate\":0,\"pin_observations\":{},\"pinned_payload_bytes_estimate\":0,\"pressure\":false,\"pressure_bytes_estimate\":0,\"released_entries\":0,\"retired_entries\":0,\"scope\":\"world\",\"unique_resources\":0,\"units\":\"bytes\",\"unused_payload_bytes_estimate\":0}\n[AIEngine] World torn down (per-world; flecs kept).\nU01_UNLOAD=0\n"
+    },
+    {
+      "fixture": "runtime-no-vfx",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/current-pair-runtime-20261028/runtime-no-vfx",
+        "--display-driver",
+        "macos",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "safe",
+        "--script",
+        "res://probe.gd"
+      ],
+      "rc": 0,
+      "expected_rc": 0,
+      "elapsed_s": 0.94,
+      "log": "/Users/macbookair/Documents/Work/godot_ANGE/work/current-pair-runtime-20261028/runtime-no-vfx.log",
+      "checks": {
+        "expected_rc": true,
+        "extension": true,
+        "world": true,
+        "unload": true,
+        "no_crash": true
+      },
+      "tail": "Godot Engine v4.7.2.stable.custom_build.770eb3fd1 (2026-10-27 16:19:28 UTC) - https://godotengine.org\nMetal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M3 Pro (Apple9)\n\n[PHS1] world direct-space world=-9223372005984696887 space=2422361554944 child=31339840982\n[audio] buses ready â Master=0 Music=1 SFX=2 analyzer_effect=0\n[PHS1] materialized library=1 local_rd=31356618199 owner_is_rt=true\nU01_EXTENSION=0\n[AIEngine] enter_world: res://pack/arena.world\n[AssetResolver] engine asset root not set â engine_asset_dir() returns empty\nWARNING: ANGE: tree defaults failed to load: expected a mapping of parameters\n     at: push_warning (core/variant/variant_utility.cpp:1033)\n     GDScript backtrace (most recent call first):\n         [0] run_probe (res://probe.gd:15)\nWARNING: ANGE: flower defaults failed to load: expected a mapping of parameters\n     at: push_warning (core/variant/variant_utility.cpp:1033)\n     GDScript backtrace (most recent call first):\n         [0] run_probe (res://probe.gd:15)\ninput_map registration begin\n[WorldLoader] Input map: 0 actions registered (prefix=res://pack/arena.world::)\n[WorldLoader] Blueprint 'arena' <- res://pack/arena.bp\n[WorldLoader] World loaded from res://pack/arena.world\n[world-resources] prepare begin res://pack/arena.world\n[world-resources] prepare end built=0 hit=0 failed=0 procedural_built=0 texture_graph_built=0 provider_built=0 provider_hit=1\n[world-resources] texture GPU prepare end encoded=0 transcoded=0 hit=0 failed=0 rgba_fallback=0\n[AIEngine] do_world_load: res://pack/arena.world\n[world-resources] spawn begin res://pack/arena.world\n[AIEngine] do_world_mount: res://pack/arena.world\n[AIEngine] Entered world: res://pack/arena.world\nU01_ENTER_WORLD=true\nRENDER_CACHE_RELEASE {\"entries\":0,\"evicted_entries\":0,\"families\":{},\"family_observations\":{},\"hits\":0,\"invalidated_entries\":0,\"limit_bytes\":536870912,\"measurement\":\"provider payload estimate; excludes original inputs; not RAM or VRAM\",\"misses\":0,\"payload_bytes_estimate\":0,\"pin_observations\":{},\"pinned_payload_bytes_estimate\":0,\"pressure\":false,\"pressure_bytes_estimate\":0,\"released_entries\":0,\"retired_entries\":0,\"scope\":\"world\",\"unique_resources\":0,\"units\":\"bytes\",\"unused_payload_bytes_estimate\":0}\n[AIEngine] World torn down (per-world; flecs kept).\nU01_UNLOAD=0\n"
+    },
+    {
+      "fixture": "runtime-invalid-vfx",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/current-pair-runtime-20261028/runtime-invalid-vfx",
+        "--display-driver",
+        "macos",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "safe",
+        "--script",
+        "res://probe.gd"
+      ],
+      "rc": 1,
+      "expected_rc": 1,
+      "elapsed_s": 0.969,
+      "log": "/Users/macbookair/Documents/Work/godot_ANGE/work/current-pair-runtime-20261028/runtime-invalid-vfx.log",
+      "checks": {
+        "expected_rc": true,
+        "extension": true,
+        "world": true,
+        "unload": true,
+        "no_crash": true,
+        "source_rejection": true
+      },
+      "tail": "Godot Engine v4.7.2.stable.custom_build.770eb3fd1 (2026-10-27 16:19:28 UTC) - https://godotengine.org\nMetal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M3 Pro (Apple9)\n\n[PHS1] world direct-space world=-9223372005984696887 space=2422361554944 child=31339840982\n[audio] buses ready â Master=0 Music=1 SFX=2 analyzer_effect=0\n[PHS1] materialized library=1 local_rd=31356618199 owner_is_rt=true\nU01_EXTENSION=0\n[AIEngine] enter_world: res://pack/arena.world\n[AssetResolver] engine asset root not set â engine_asset_dir() returns empty\nWARNING: ANGE: tree defaults failed to load: expected a mapping of parameters\n     at: push_warning (core/variant/variant_utility.cpp:1033)\n     GDScript backtrace (most recent call first):\n         [0] run_probe (res://probe.gd:15)\nWARNING: ANGE: flower defaults failed to load: expected a mapping of parameters\n     at: push_warning (core/variant/variant_utility.cpp:1033)\n     GDScript backtrace (most recent call first):\n         [0] run_probe (res://probe.gd:15)\ninput_map registration begin\n[WorldLoader] Input map: 0 actions registered (prefix=res://pack/arena.world::)\n[WorldLoader] Blueprint 'arena' <- res://pack/arena.bp\n[vfx] VFX-SYN-001 unknown kind: invalid_ingestion_control\n[WorldLoader] resource stage failed: vfx\n[world_load] rollback at load_resources:vfx: res://pack/arena.world\nRENDER_CACHE_RELEASE {\"entries\":0,\"evicted_entries\":0,\"families\":{},\"family_observations\":{},\"hits\":0,\"invalidated_entries\":0,\"limit_bytes\":536870912,\"measurement\":\"provider payload estimate; excludes original inputs; not RAM or VRAM\",\"misses\":0,\"payload_bytes_estimate\":0,\"pin_observations\":{},\"pinned_payload_bytes_estimate\":0,\"pressure\":false,\"pressure_bytes_estimate\":0,\"released_entries\":0,\"retired_entries\":0,\"scope\":\"world\",\"unique_resources\":0,\"units\":\"bytes\",\"unused_payload_bytes_estimate\":0}\n[AIEngine] World torn down (per-world; flecs kept).\nU01_ENTER_WORLD=false\nU01_UNLOAD=0\n"
+    }
+  ],
+  "godot_source_head_observed": "7772c7797f13a85228c2a8315b0f4071bbf73aa5",
+  "ange_source_head_observed": "745aa3d804d18187ba918d55a532e531951de24f",
+  "source_provenance": "Both worktrees are mixed/dirty; the linked DSO source commit is not asserted from HEAD. Binary identities in this receipt are authoritative."
+}
