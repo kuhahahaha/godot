@@ -2,7 +2,15 @@
   "review_type": "non-author ledger consistency review",
   "package": "K03_acceptance_matrix",
   "review_target": "K03_ACCEPTANCE_MATRIX_20261027.md",
-  "questions": ["Do package commits and scopes match the source receipts?", "Is historical fixed-pair evidence separated from current unverified drift?", "Are all positive claims explicitly false?"],
-  "required_checks": ["verify five commit prefixes", "verify old/new pair identities", "check no completion/Ready/GPU promotion"],
+  "questions": [
+    "Do all seven package commits and scopes match their source receipts?",
+    "Are historical, prior ABI-negative, and current aligned pair identities separated?",
+    "Does the matrix preserve false claims for U08/E09/operation/completion/readback/packet/Ready/Verified/GPU?"
+  ],
+  "required_checks": [
+    "verify seven commit prefixes",
+    "verify current pair identity and probe summaries",
+    "check no positive owner or GPU promotion"
+  ],
   "tests_rerun": false
 }
