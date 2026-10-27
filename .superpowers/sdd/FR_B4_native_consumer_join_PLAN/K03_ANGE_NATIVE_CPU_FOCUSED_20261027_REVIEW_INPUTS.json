@@ -1,0 +1,19 @@
+{
+  "review_type": "non-author ANGE native CPU focused regression",
+  "package": "K03_ange_native_cpu_focused",
+  "review_target": "K03_ANGE_NATIVE_CPU_FOCUSED_20261027.md",
+  "questions": [
+    "Do the four focused suites and counts match logs?",
+    "Does scope stay CPU/in-process and fail-closed?",
+    "Are unsupported claims false?"
+  ],
+  "required_checks": [
+    "verify log hashes and counts",
+    "verify DSO/source identity",
+    "check claims false"
+  ],
+  "tests_rerun": false,
+  "independent_review": "K03_ANGE_NATIVE_CPU_FOCUSED_20261027_INDEPENDENT_REVIEW.md",
+  "independent_review_sha256": "e85ef1dae55b2ab34b1c2e509a6cdaf3709461cbe93127e92b26d79039bc020e",
+  "conclusion": "limited-scope accept; no P0-P3"
+}

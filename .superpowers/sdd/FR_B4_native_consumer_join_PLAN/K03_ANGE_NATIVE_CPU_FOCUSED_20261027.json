@@ -1,0 +1,55 @@
+{
+  "status": "ANGE_NATIVE_CPU_FOCUSED_PASS_LIMITED",
+  "ange_source_head": "b6c362304b884965ab76c65b3889753642ecb1d3",
+  "ange_dso_sha256": "a60b3fa5a2f9de72cbb0be6ccca0d3ae33b87c5108a4b6caf2585d0ae4106a33",
+  "tests": [
+    {
+      "filter": "[particle_system_bundle]",
+      "cases": 6,
+      "assertions": 81,
+      "rc": 0,
+      "log": "/tmp/ange-native-bundle-focused-20261027.log"
+    },
+    {
+      "filter": "E05 *",
+      "cases": 43,
+      "assertions": 907,
+      "rc": 0,
+      "log": "/tmp/ange-native-e05-focused-20261027.log"
+    },
+    {
+      "filter": "E06 *",
+      "cases": 7,
+      "assertions": 250,
+      "rc": 0,
+      "log": "/tmp/ange-native-e06-focused-20261027.log"
+    },
+    {
+      "filter": "C02 *",
+      "cases": 13,
+      "assertions": 402,
+      "rc": 0,
+      "log": "/tmp/ange-native-c02-focused-20261027.log"
+    }
+  ],
+  "log_sha256": {
+    "bundle": "b8b67450136165d260f524ddaf175a47b96121e0e51f2bb7294a849eea90e3f7",
+    "e05": "23df5061688fe8791c0d05e070f33eea4c4e41c89d6172dda98ac48ff84fada2",
+    "e06": "0ae0b0146e51c80f17bb0e6ac382cb4b734cded5800a595608d2193c32a996dc",
+    "c02": "0e091716cb46e6feb85528c2c10e9d04a887ddb25b79a5ad59af721053c5d115"
+  },
+  "scope": "CPU/in-process and semantic/native guard regression only; no producer owner, native completion/readback, Ready, or GPU qualification",
+  "claims": {
+    "u08": false,
+    "e09": false,
+    "operation": false,
+    "completion": false,
+    "readback": false,
+    "packet": false,
+    "physical_disposal": false,
+    "released": false,
+    "ready": false,
+    "verified": false,
+    "gpu": false
+  }
+}
