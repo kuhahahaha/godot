@@ -1,0 +1,51 @@
+{
+  "review_type": "K03 ledger consistency successor v29",
+  "package": "K03_LEDGER_CONSISTENCY_AUDIT_V29_20261028",
+  "matrix": "K03_ACCEPTANCE_MATRIX_20261028_V25",
+  "expected_package_count": 61,
+  "new_packages": [
+    {
+      "name": "ange_c04_allocator_source_test_mismatch",
+      "repo": "ANGE",
+      "commit": "6300dae81",
+      "resolved": "6300dae81d29c226acc7553df64d6e5f85dea60d"
+    },
+    {
+      "name": "ange_c07_artifact_cache_successor",
+      "repo": "ANGE",
+      "commit": "da4f6fe6b",
+      "resolved": "da4f6fe6b85d17c532cc056d9825bc55a21d9feb"
+    },
+    {
+      "name": "ange_c05_method_association_successor",
+      "repo": "ANGE",
+      "commit": "97a398540",
+      "resolved": "97a3985400caf7d0c01acfc53baaad1a53adc377"
+    },
+    {
+      "name": "ange_c05_main_rd_successor",
+      "repo": "ANGE",
+      "commit": "f86f0ab8c",
+      "resolved": "f86f0ab8c3ac57f611c8077a92204543fb4c1ace"
+    },
+    {
+      "name": "ange_c04_c07_link_diagnostic",
+      "repo": "ANGE",
+      "commit": "62c0dba19",
+      "resolved": "62c0dba1989be893dd2115cd50d466753ead46ae"
+    }
+  ],
+  "questions": [
+    "Do all 61 package prefixes resolve?",
+    "Are CPU consumer totals and blocker facts coherent?",
+    "Are allocator/linker failures bounded and claims false?"
+  ],
+  "required_checks": [
+    "verify all commit prefixes",
+    "verify matrix/report package count",
+    "verify five receipts/reviews and diagnostics",
+    "verify current pair/DSO and claims",
+    "keep no fallback/authority promotion"
+  ],
+  "independent_review": "K03_LEDGER_CONSISTENCY_AUDIT_V29_20261028_INDEPENDENT_REVIEW.md"
+}
