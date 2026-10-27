@@ -84,3 +84,5 @@
 - 2026-10-27 v7 ledger correction: D diagnostic package `253d6fa22` is declared as an ANGE-repository commit; report resolution is repository-aware (21 Godot + 1 ANGE), all 22 resolve and claims remain false.
 
 - 2026-10-27 ANGE native CPU focused regression: `[particle_system_bundle]` 6/81, E05 43/907, E06 7/250, C02 13/402 all rc0 against source `b6c362304b…` / DSO `a60b3fa5…`; CPU/in-process only, claims false.
+
+- 2026-10-27 acceptance matrix v4: 23 package scopes include ANGE CPU/native focused regression (bundle 6/81, E05 43/907, E06 7/250, C02 13/402); current DSO/pair unchanged and claims false.
