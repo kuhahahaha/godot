@@ -70,3 +70,5 @@
 - 2026-10-27 Godot native queue landed: GDScript lifecycle `2ca1cac188`, RD external packet/mesh/camera `0db15cbe67`, Curve bake-cache `c2ebe25780`; post-commit dev editor rc0; GDScript 13/162, B4 20/419, ParticlesTrail 1/5, K03/P2 22/350, E22 snapshot 3/1005 all green. External owner and qualification claims remain false.
 
 - 2026-10-27 post-native-landing fixed-pair recheck: editor `d4938be7…` with ANGE DSO `a078f6de…`; non-headless Metal/mobile VFX (2/1), no-VFX (1/0), and explicit close active true→false all rc0 with extension/world/unload success. Unsupported owner/operation/completion/readback/Ready/GPU claims remain false.
+
+- 2026-10-27 metadata correction: current editor embeds version stamp `c2bb425e81…`; the actual Git source HEAD at build is `c2ebe25780…`. Pair and matrix successor receipts now record both fields explicitly; no code or runtime claim changed.

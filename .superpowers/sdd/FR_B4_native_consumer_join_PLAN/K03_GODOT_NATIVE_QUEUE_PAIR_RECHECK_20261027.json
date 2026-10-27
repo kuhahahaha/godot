@@ -55,5 +55,8 @@
     "verified": false,
     "gpu": false
   },
-  "scope": "fresh fixed-pair non-headless VFX/U01/close recheck after native commits; no external owner or qualification authority"
+  "scope": "fresh fixed-pair non-headless VFX/U01/close recheck after native commits; no external owner or qualification authority",
+  "editor_embedded_version_hash": "c2bb425e81c0c6ea69e74fcf23d45fa40c7b7f01",
+  "godot_source_head_at_build": "c2ebe2578021378700e0db0cd707d7406f6eecc6",
+  "metadata_note": "The embedded engine version hash is a build stamp; the Git source HEAD is recorded separately."
 }

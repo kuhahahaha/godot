@@ -1,0 +1,16 @@
+{
+  "review_type": "non-author K03 acceptance matrix v2",
+  "package": "K03_acceptance_matrix_v2",
+  "review_target": "K03_ACCEPTANCE_MATRIX_20261027_V2.md",
+  "questions": [
+    "Do all twenty package commits resolve?",
+    "Does the current pair match the post-native recheck?",
+    "Are all unsupported claims false?"
+  ],
+  "required_checks": [
+    "verify all commit prefixes",
+    "verify current pair hashes and markers",
+    "check owner/qualification claims"
+  ],
+  "tests_rerun": false
+}

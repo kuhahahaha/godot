@@ -4,7 +4,8 @@ The fixed pair was rerun after the three native commits.
 
 - Editor SHA-256: `d4938be792ae05f6868f73d13270c8ebe92292043eadadb6114717752924bb9f`
 - ANGE DSO SHA-256: `a078f6dec6661d5fb5217c8b95c59d162f18ac5aa8bc81cef9e9c85c548fcb45`
-- Godot source HEAD: `c2ebe2578021378700e0db0cd707d7406f6eecc6`
+- Godot source HEAD at build: `c2ebe2578021378700e0db0cd707d7406f6eecc6`
+- Embedded engine version hash: `c2bb425e81c0c6ea69e74fcf23d45fa40c7b7f01` (build stamp; distinct from Git HEAD).
 - ANGE source HEAD: `53ff6aa1d48aa3697beff91eb31fee850ca326af`
 - Host: Apple M3 Pro, non-headless Metal/mobile.
 

@@ -10,6 +10,10 @@ no-VFX passes rc0 with entries=1/systems=0; explicit close passes rc0 with
 `active_before=true` and `active_after_exit=false`; extension, world entry, and
 unload are true in all probes.
 
+The receipt now records embedded engine version hash `c2bb425e81…` as the build
+stamp and Git source HEAD `c2ebe25780…` separately. This closes the prior
+metadata discrepancy; the two identifiers are intentionally distinct fields.
+
 This is a fresh fixed-pair native queue/U01 close recheck only. It grants no
 external owner, operation, completion, readback, packet, physical-disposal,
 Released, Ready, Verified, or GPU authority; all claim flags are `false`.
