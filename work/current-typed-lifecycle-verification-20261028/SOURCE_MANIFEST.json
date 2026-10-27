@@ -1,0 +1,43 @@
+{
+  "status": "CURRENT_TYPED_LIFECYCLE_VERIFICATION",
+  "godot_head": "849cc32d800a6d4abb7b690d93d00d587f942d75",
+  "build": {
+    "command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j8 platform=macos target=editor dev_build=yes tests=yes",
+    "rc": 0,
+    "log": "/Users/macbookair/Documents/Work/godot_ANGE/work/current-typed-lifecycle-verification-20261028/BUILD.log"
+  },
+  "host": {
+    "path": "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+    "bytes": 302379808,
+    "sha256": "15478bc221d385f3e4bb3957704c9790fb077e17c596c95c415917200e8d0bcc"
+  },
+  "source_hashes": {
+    "core/extension/gdextension_interface.cpp": "d3bc8b2ed560d69c289331d7065cf97a1b45ce21f254c6ac5fdf82b0e5cbf0fa",
+    "core/extension/gdextension_library_exit_guard.cpp": "8bee96d244f3febb598e1815810cfd3327ae57c4db8edc6585ac091f294df4e6",
+    "core/extension/gdextension_guard_enrollment.cpp": "9fb2d17216c1480e09a843f5cd8e146f559942e6367415aa92427f866fee98b3",
+    "core/extension/gdextension_library_exit_guard.h": "7871f6703a95c53512d3b657ab7c2383679155d872bb3f4bece23fd4aaff3408",
+    "tests/core/object/test_device_exit_typed_abi.cpp": "3efa18726f93a6fead5984e82507f05fda0615108e088e7a57ba294828dec192"
+  },
+  "tests": [
+    {
+      "command": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case='*device_exit*' --test-threads=1",
+      "rc": 0,
+      "cases": 133,
+      "assertions": 2619,
+      "log": "/Users/macbookair/Documents/Work/godot_ANGE/work/current-typed-lifecycle-verification-20261028/DEVICE_EXIT.log"
+    },
+    {
+      "command": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case='[DeviceExit][TypedABI] Callable holder blocks close until actual final free' --test-threads=1",
+      "rc": 0,
+      "cases": 1,
+      "assertions": 53,
+      "log": "/Users/macbookair/Documents/Work/godot_ANGE/work/current-typed-lifecycle-verification-20261028/CALLABLE.log"
+    }
+  ],
+  "log_sha256": {
+    "BUILD.log": "51e35e5f366e3270350a73e1a20b25750b5cf7daf90a354a27934e0b551fd95d",
+    "DEVICE_EXIT.log": "9506d2d42d86ad4880e9f3691c6b854fb743acf87a367c175468f306a89ce2fe",
+    "CALLABLE.log": "00c4721c8c7186731957911c593c7c0e99dae2b8277d11959a3de0a80ea66b3f"
+  },
+  "scope": "Current D typed lifecycle/Callable source build and focused regressions only; no public guard activation, particle GPU execution, completion/readback or Ready claim."
+}
