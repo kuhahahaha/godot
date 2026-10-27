@@ -1,0 +1,19 @@
+{
+  "review_type": "non-author K03 ledger consistency v11 audit",
+  "package": "K03_ledger_consistency_audit_v11",
+  "review_target": "K03_LEDGER_CONSISTENCY_AUDIT_V11_20261028.md",
+  "questions": [
+    "Do all 26 repo-aware commits resolve?",
+    "Are both producer/lifecycle caller gaps present?",
+    "Are claims false and scope ledger-only?"
+  ],
+  "required_checks": [
+    "verify report/repo resolution",
+    "verify gap packages/current pair",
+    "check claims false"
+  ],
+  "tests_rerun": false,
+  "independent_review": "K03_LEDGER_CONSISTENCY_AUDIT_V11_20261028_INDEPENDENT_REVIEW.md",
+  "independent_review_sha256": "98bcc587c1f052ba9e2b41b2569fb927a07e2d03bfd9e08eee77797fb58f7207",
+  "conclusion": "limited-scope accept; no P0-P3"
+}
