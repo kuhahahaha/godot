@@ -1,0 +1,13 @@
+{
+  "review_type": "read_only_limited_scope",
+  "package": "K03_LEDGER_CONSISTENCY_V43",
+  "matrix": "K03_ACCEPTANCE_MATRIX_20261028_V39.json",
+  "expected_package_count": 82,
+  "new_package": "ange_vfx_current_owner_boundary",
+  "questions": [
+    "Do all 82 prefixes resolve in their declared repositories?",
+    "Do matrix and ledger counts agree?",
+    "Does the ledger preserve the external owner/runtime boundary?"
+  ],
+  "required_checks": ["verify all commit prefixes", "verify count equality", "verify all claims false"]
+}

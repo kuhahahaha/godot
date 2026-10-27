@@ -1,0 +1,13 @@
+{
+  "review_type": "read_only_limited_scope",
+  "package": "K03_acceptance_matrix_v39",
+  "previous_matrix": "K03_ACCEPTANCE_MATRIX_20261028_V38.json",
+  "expected_package_count": 82,
+  "new_package": "ange_vfx_current_owner_boundary",
+  "questions": [
+    "Does the package preserve the fail-closed D diagnostic classification?",
+    "Are zero production callers and the E05 unavailable owner gate explicit?",
+    "Is no runtime or authority result promoted?"
+  ],
+  "required_checks": ["all commit prefixes resolve in their repos", "package count is 82", "claims remain false"]
+}
