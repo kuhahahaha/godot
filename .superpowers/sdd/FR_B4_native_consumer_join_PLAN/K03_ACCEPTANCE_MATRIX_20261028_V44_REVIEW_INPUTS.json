@@ -1,0 +1,13 @@
+{
+  "review_type": "read_only_limited_scope",
+  "package": "K03_acceptance_matrix_v44",
+  "previous_matrix": "K03_ACCEPTANCE_MATRIX_20261028_V43.json",
+  "expected_package_count": 87,
+  "new_package": "ange_c04_spirv_current_rerun",
+  "questions": [
+    "Is the current opt-in C04 result 66/6985 rc0?",
+    "Is the default graph still explicitly opt-in?",
+    "Are native/GPU/owner claims still false?"
+  ],
+  "required_checks": ["all commit prefixes resolve in their repos", "package count is 87", "claims remain false"]
+}
