@@ -1,0 +1,58 @@
+{
+  "review_type": "K03 ledger consistency successor v25",
+  "package": "K03_LEDGER_CONSISTENCY_AUDIT_V25_20261028",
+  "matrix": "K03_ACCEPTANCE_MATRIX_20261028_V21",
+  "expected_package_count": 45,
+  "new_packages": [
+    {
+      "name": "ange_provider_dependency_closure",
+      "repo": "ANGE",
+      "commit": "0774e6c7d",
+      "resolved": "0774e6c7dd81932c2bdeb83ca9317184a3bc1034"
+    },
+    {
+      "name": "ange_provider_math_successor",
+      "repo": "ANGE",
+      "commit": "4a7bd5019",
+      "resolved": "4a7bd50197743ed39570ab88012e5376c87ba56c"
+    },
+    {
+      "name": "ange_writable_ribbon_successor",
+      "repo": "ANGE",
+      "commit": "c795db09d",
+      "resolved": "c795db09da54811ff34103500d6a412b811cbf2a"
+    },
+    {
+      "name": "ange_spirv_destroy_diagnostic",
+      "repo": "ANGE",
+      "commit": "cc4e11518",
+      "resolved": "cc4e11518db48ff4b23a7d0b7ed5c4dcaaec8efc"
+    },
+    {
+      "name": "ange_track_off_link_diagnostic",
+      "repo": "ANGE",
+      "commit": "1b74d1977",
+      "resolved": "1b74d1977cd2fb45c110790ae5e33bca8cacb29e"
+    },
+    {
+      "name": "ange_scene_install_v2_source_pin",
+      "repo": "ANGE",
+      "commit": "ef3f611bb",
+      "resolved": "ef3f611bb4b90df385ef623bc6e26afd4b53d7f4"
+    }
+  ],
+  "questions": [
+    "Do all 45 matrix package prefixes resolve?",
+    "Are CPU provider and V2 source packages bounded correctly?",
+    "Are SPIR-V/track-off diagnostics retained as unavailable without claim promotion?"
+  ],
+  "required_checks": [
+    "verify all commit prefixes",
+    "verify matrix/report package count",
+    "verify new package receipts/reviews and totals",
+    "verify diagnostic statuses and limitations",
+    "verify current pair/DSO and claims",
+    "keep all authority claims false"
+  ],
+  "independent_review": "K03_LEDGER_CONSISTENCY_AUDIT_V25_20261028_INDEPENDENT_REVIEW.md"
+}
