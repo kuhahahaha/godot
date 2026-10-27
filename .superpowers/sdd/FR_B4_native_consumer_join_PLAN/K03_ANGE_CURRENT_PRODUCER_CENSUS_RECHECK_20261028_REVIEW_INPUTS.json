@@ -1,0 +1,16 @@
+{
+  "review_type": "K03 current producer census recheck",
+  "package": "K03_ANGE_CURRENT_PRODUCER_CENSUS_RECHECK_20261028",
+  "questions": [
+    "Does the BridgeParticle consumer remain real?",
+    "Are public qualification and mesh producer callers still absent?",
+    "Are dirty-source and claims bounded?"
+  ],
+  "required_checks": [
+    "read raw census log",
+    "verify six source hashes",
+    "verify no producer callsite",
+    "verify all claims false"
+  ],
+  "independent_review": "K03_ANGE_CURRENT_PRODUCER_CENSUS_RECHECK_20261028_INDEPENDENT_REVIEW.md"
+}
