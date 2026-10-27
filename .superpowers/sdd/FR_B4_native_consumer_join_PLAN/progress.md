@@ -46,3 +46,5 @@
 - 2026-10-27 acceptance matrix indexed current-A consumer boundary set `e1ed218af9`: fifteen package scopes reviewed; E05/E17/E21/E22/E23/E30 remain separate source/CPU slices, no E20/owner/native/GPU/Ready authority, all claims false.
 
 - 2026-10-27 K03 ledger consistency v2: all fifteen matrix package prefixes resolve; final2 pair and formal DSO receipt match; current-A claims remain false and separate; PASS_LIMITED ledger-only audit.
+
+- 2026-10-27 current-A/E34 successor boundary set v2 indexed twelve receipts (E34 bootstrap, E21/E22/E23/E24/E25/E26/E28/E29/P4/scene-install); all remain source/CPU/contract scope with owner/native/GPU/Ready boundaries explicit and claims false.

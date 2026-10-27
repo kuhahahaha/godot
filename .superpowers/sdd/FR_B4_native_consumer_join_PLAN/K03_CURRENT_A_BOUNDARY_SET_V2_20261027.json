@@ -1,0 +1,38 @@
+{
+  "package": "K03_current_a_boundary_set_v2",
+  "date": "2026-10-27",
+  "source_packages": {
+    "e34_bootstrap_current-20261027": {},
+    "e21_curve_provider_current-20261027": {},
+    "e22_adapter_current-20261027": {},
+    "e22_e23_shared_current-20261027": {},
+    "e24_writable_resource_current-20261027": {},
+    "e25_mesh_source_current-20261027": {},
+    "e26_mesh_current-20261027": {},
+    "e26_ribbon_current-20261027": {},
+    "e28_surface_current-20261027": {},
+    "e29_spline_current-20261027": {},
+    "p4_near_current-20261027": {},
+    "scene_install_v2_current-20261027": {}
+  },
+  "scope": "current-A/E34 source, CPU, contract and inherited evidence; no merged binary or qualification",
+  "claims": {
+    "u08": false,
+    "e09": false,
+    "operation": false,
+    "completion": false,
+    "readback": false,
+    "packet": false,
+    "physical_disposal": false,
+    "released": false,
+    "ready": false,
+    "verified": false,
+    "gpu": false
+  },
+  "independent_review": {
+    "reviewer": "acceptance_matrix_review",
+    "status": "limited-scope accept; no actionable P0-P3",
+    "tests_rerun": false,
+    "receipt": "K03_CURRENT_A_BOUNDARY_SET_V2_20261027_INDEPENDENT_REVIEW.md"
+  }
+}
