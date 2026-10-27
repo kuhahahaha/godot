@@ -1,0 +1,11 @@
+{
+  "package": "K03_typed_close_parent_closure_census",
+  "date": "2026-10-27",
+  "source_branch": "d/b4-native-output-20261027",
+  "source_commit": "1753faf66685154b1ffe2482bfe367c6039d4216",
+  "invariant": "live children/credits keep the same parent service node attached and close returns Busy",
+  "close_order": ["authenticate owner/thread", "mark closing", "request bounded service while live", "detach only when empty", "decrement holder/device/library refs", "reclaim"],
+  "service_guards": ["same attachment serial", "main RenderingDevice", "device epoch", "render thread", "bounded requeue"],
+  "claims": {"cancel": false, "operation": false, "completion": false, "readback": false, "released": false, "ready": false, "verified": false, "physical_disposal": false, "gpu_qualification": false},
+  "independent_review": {"reviewer": "parent_closure_census_review4", "status": "limited-scope accept", "tests_rerun": false, "receipt": "K03_TYPED_CLOSE_PARENT_CLOSURE_CENSUS_20261027_INDEPENDENT_REVIEW.md"}
+}

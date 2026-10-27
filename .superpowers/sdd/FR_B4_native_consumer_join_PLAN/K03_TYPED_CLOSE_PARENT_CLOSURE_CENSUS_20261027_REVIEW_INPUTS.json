@@ -1,0 +1,12 @@
+{
+  "review_type": "non-author source census review",
+  "package": "K03_typed_close_parent_closure_census",
+  "review_target": "K03_TYPED_CLOSE_PARENT_CLOSURE_CENSUS_20261027.md",
+  "questions": [
+    "Does Registry close preserve the same parent/service node while live obligations remain?",
+    "Are thread/device/epoch/budget guards and detach ordering accurate?",
+    "Does the census avoid treating close or metadata release as completion or physical disposal?"
+  ],
+  "required_checks": ["read close/service/RenderingServerDefault sources", "check retained-child tests", "report P0-P3 or limited-scope acceptance"],
+  "tests_rerun": false
+}
