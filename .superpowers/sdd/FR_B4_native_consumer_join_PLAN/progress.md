@@ -112,3 +112,5 @@
 - 2026-10-28 acceptance matrix v8: 27 packages include ANGE E09 production caller-gap census; bind_main_device real registration path but no production request/qualification callers; current DSO/pair and claims unchanged.
 
 - 2026-10-28 K03 ledger consistency v12: 27 repo-aware package commits resolve; lifecycle/Sprite and E09 production caller gaps indexed; current DSO/pair consistent; PASS_LIMITED ledger-only, claims false.
+
+- 2026-10-28 ANGE native reader/diagnostic regression: E05 native readers 1/12 and E06 external diagnostics 1/13 rc0 against source `bba55f3ba` / DSO `38c3da7e…`; CPU/in-process only, claims false.
