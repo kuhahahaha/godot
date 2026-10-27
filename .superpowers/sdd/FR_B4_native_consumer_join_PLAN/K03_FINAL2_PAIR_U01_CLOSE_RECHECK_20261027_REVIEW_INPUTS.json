@@ -7,12 +7,14 @@
   "questions": [
     "Do the three final2 logs use the exact pair and show the stated rc/status markers?",
     "Does explicit close remain bounded to exit/node disposal/unload?",
-    "Are warning/error and positive qualification boundaries accurate?"
+    "Are warning/error and positive qualification boundaries accurate?",
+    "Does the formal successor DSO build receipt match the final2 DSO hash and codesign result?"
   ],
   "required_checks": [
     "verify source/raw-log hashes",
     "verify VFX/no-VFX/close markers and rc",
-    "report P0-P3 or limited-scope acceptance"
+    "report P0-P3 or limited-scope acceptance",
+    "verify formal SCons/codesign receipt hash and product hash"
   ],
   "tests_rerun": false,
   "claim_matrix": {

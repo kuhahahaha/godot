@@ -18,8 +18,11 @@ close, node disposal and extension unload.
 - None of the three logs contains `GDEXTENSION_CLOSE_FAILED`; only the known
   tree/flower authoring-default warnings appear.
 - Final pair provenance is consistent: editor `2ee0e5c3…`, DSO `a078f6de…`,
-  ANGE HEAD `53ff6aa1…`. The package discloses direct codesign verification
-  rc0 and that the detached build shell did not preserve a separate exit code.
+  ANGE HEAD `53ff6aa1…`. The successor DSO build receipt independently records
+  SCons recheck rc0 with 3012 compile records, codesign verification rc0, and
+  product SHA-256 `a078f6de…`, matching the package DSO hash. Its scope remains
+  a dirty-worktree template_debug DSO build, not full native/GPU/Ready
+  qualification.
 - Source and fixture hashes are recorded in JSON. This review did not rebuild
   or rerun; the source paths are in the separate ANGE input snapshot, so the
   source checks are provenance-level here.

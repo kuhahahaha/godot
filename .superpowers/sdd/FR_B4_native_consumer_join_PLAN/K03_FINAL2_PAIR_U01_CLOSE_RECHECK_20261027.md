@@ -12,8 +12,7 @@ provenances.
 - ANGE source HEAD: `53ff6aa1d48aa3697beff91eb31fee850ca326af`
 - Host: non-headless Metal/mobile, Apple M3 Pro.
 
-The DSO build log ends at link/postlink signing; direct `codesign --verify`
-returned rc0. The detached build shell did not preserve a separate exit code.
+The formal successor receipt records SCons rc0, 3012 compile records, final link/postlink, and direct deep/strict codesign rc0; its product hash matches the final2 DSO.
 The adjacent JSON records all source and raw-log hashes.
 
 ## Probe results

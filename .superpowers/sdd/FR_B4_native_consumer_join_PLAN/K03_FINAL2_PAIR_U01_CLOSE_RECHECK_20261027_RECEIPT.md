@@ -4,5 +4,5 @@
 - VFX rc0: entries=2, systems=1, enter/unload true.
 - No-VFX rc0: entries=1, systems=0, enter/unload true.
 - Explicit close rc0: active true→false after `exit_world()`, unload true.
-- No `GDEXTENSION_CLOSE_FAILED`; direct DSO codesign verification rc0.
+- No `GDEXTENSION_CLOSE_FAILED`; formal DSO receipt records SCons rc0, 3012 compile records, and deep/strict codesign rc0.
 - No U08/E09, operation, completion, readback, packet, physical disposal, Released, Ready, Verified, or GPU claim.
