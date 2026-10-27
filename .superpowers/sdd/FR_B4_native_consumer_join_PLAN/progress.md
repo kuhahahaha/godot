@@ -102,3 +102,5 @@
 - 2026-10-27 K03 ledger consistency v10: 25 repo-aware package commits resolve; explicit native producer caller-gap and D projection guard indexed; current DSO/pair consistent; PASS_LIMITED ledger-only, claims false.
 
 - 2026-10-28 ANGE lifecycle→Sprite source census: no particle_lifecycle/LifecycleFrame/step_particle_lifecycle symbols and no lifecycle→attribute→Sprite/GPUParticles3D production caller; existing GPUParticles3D/MultiMesh paths are unrelated. Precise gap, claims false.
+
+- 2026-10-28 acceptance matrix v7: 26 packages include ANGE lifecycle→Sprite caller gap; no lifecycle production entry or attribute→Sprite caller; current pair/DSO and claims unchanged.
