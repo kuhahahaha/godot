@@ -32,3 +32,5 @@
 - 2026-10-27 E03/E04 current-source owner boundary indexed: ANGE host-storage build rc0, E04 3/65, E03 17/1187; production capture remains UNAVAILABLE pending `host.preparation_authority`, `host.world_detach_authority`, `host.session_close_authority`, and `capture.original_source_authority`. Local loader/test handles remain non-authority; no R01/K01/Ready/GPU claim.
 
 - 2026-10-27 acceptance matrix indexed E03/E04 owner boundary package `65b8469e1b`: twelve package scopes reviewed; E03 17/1187 and E04 3/65 remain CPU/source evidence, while four production owner fields stay UNAVAILABLE pending original authority/R01/K01 issuer; limited-scope accept, no P0-P3, claims false.
+
+- 2026-10-27 E34/P01 current owner boundary indexed: adapter no-root rc3 and drift rc2; selector 2 cases and parent contract 4 cases pass; clean bootstrap unavailable due prebuilt server missing GDScript loader. Required parent root/OwnerPayloadBridge/E35/bootstrap inputs recorded; no native/GPU/Ready claim.

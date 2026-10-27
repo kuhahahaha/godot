@@ -1,0 +1,66 @@
+FF
+======================================================================
+FAIL: test_unadopted_settings_cannot_start_or_hang (tests.native.skinned_mesh_capture_tests.test_clean_bootstrap.CleanBootstrapTests.test_unadopted_settings_cannot_start_or_hang) (forged_settings=False)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/macbookair/Documents/Work/ANGE/tests/native/skinned_mesh_capture_tests/test_clean_bootstrap.py", line 32, in test_unadopted_settings_cannot_start_or_hang
+    result = subprocess.run([str(godot), '--headless', '--path', str(project)],
+                            capture_output=True, text=True, timeout=5)
+  File "/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 557, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1221, in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 2154, in _communicate
+    self._check_timeout(endtime, orig_timeout, stdout, stderr)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1268, in _check_timeout
+    raise TimeoutExpired(
+    ...<2 lines>...
+            stderr=b''.join(stderr_seq) if stderr_seq else None)
+subprocess.TimeoutExpired: Command '['/Users/macbookair/Documents/Work/ANGE/bin/ange_server', '--headless', '--path', '/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/p01-clean-bootstrap-25wok8g9']' timed out after 5 seconds
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/macbookair/Documents/Work/ANGE/tests/native/skinned_mesh_capture_tests/test_clean_bootstrap.py", line 35, in test_unadopted_settings_cannot_start_or_hang
+    self.fail('unadopted bootstrap did not terminate')
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unadopted bootstrap did not terminate
+
+======================================================================
+FAIL: test_unadopted_settings_cannot_start_or_hang (tests.native.skinned_mesh_capture_tests.test_clean_bootstrap.CleanBootstrapTests.test_unadopted_settings_cannot_start_or_hang) (forged_settings=True)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/macbookair/Documents/Work/ANGE/tests/native/skinned_mesh_capture_tests/test_clean_bootstrap.py", line 32, in test_unadopted_settings_cannot_start_or_hang
+    result = subprocess.run([str(godot), '--headless', '--path', str(project)],
+                            capture_output=True, text=True, timeout=5)
+  File "/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 557, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1221, in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 2154, in _communicate
+    self._check_timeout(endtime, orig_timeout, stdout, stderr)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1268, in _check_timeout
+    raise TimeoutExpired(
+    ...<2 lines>...
+            stderr=b''.join(stderr_seq) if stderr_seq else None)
+subprocess.TimeoutExpired: Command '['/Users/macbookair/Documents/Work/ANGE/bin/ange_server', '--headless', '--path', '/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/p01-clean-bootstrap-qlhbipdw']' timed out after 5 seconds
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/macbookair/Documents/Work/ANGE/tests/native/skinned_mesh_capture_tests/test_clean_bootstrap.py", line 35, in test_unadopted_settings_cannot_start_or_hang
+    self.fail('unadopted bootstrap did not terminate')
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unadopted bootstrap did not terminate
+
+----------------------------------------------------------------------
+Ran 1 test in 10.034s
+
+FAILED (failures=2)
+clean bootstrap temporary bytes deleted: 0
