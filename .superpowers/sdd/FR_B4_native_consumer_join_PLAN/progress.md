@@ -72,3 +72,5 @@
 - 2026-10-27 post-native-landing fixed-pair recheck: editor `d4938be7…` with ANGE DSO `a078f6de…`; non-headless Metal/mobile VFX (2/1), no-VFX (1/0), and explicit close active true→false all rc0 with extension/world/unload success. Unsupported owner/operation/completion/readback/Ready/GPU claims remain false.
 
 - 2026-10-27 metadata correction: current editor embeds version stamp `c2bb425e81…`; the actual Git source HEAD at build is `c2ebe25780…`. Pair and matrix successor receipts now record both fields explicitly; no code or runtime claim changed.
+
+- 2026-10-27 K03 ledger consistency v6: successor matrix has 20 package scopes; all commit prefixes resolve; native landed/pair packages and separated embedded-version/source-head metadata are consistent; PASS_LIMITED ledger-only, all claims false.
