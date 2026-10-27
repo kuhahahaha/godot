@@ -1,0 +1,75 @@
+{
+  "status": "PASS_LIMITED_K03_ANGE_E05_TYPED_CLOSE_FOCUSED",
+  "date": "2026-10-27",
+  "source_repo": "ANGE",
+  "source_head": "da4f6fe6b85d17c532cc056d9825bc55a21d9feb",
+  "dso_sha256": "38c3da7e20377ed7988c683ffd7e98db0e1ea10fb3979916d321466bfc260252",
+  "test_binary_sha256": "6f58854b55853f88b02c93d1a92799c892668f9222c1d7b628d9b30f6e15f52f",
+  "log": {
+    "path": "/tmp/k03-ange-e05-typed-close-focused-20261027.log",
+    "sha256": "56e104a156ffd162c9cee37f13ffcd1cebaa9a98c2cfeda723f2ad2c04940fcf"
+  },
+  "tests": 11,
+  "assertions": 210,
+  "return_code": 0,
+  "scope": "CPU/in-process native reservation, immutable correlation, publication, cancellation, close/drop, generation and invalid-session guards",
+  "claims": {
+    "u08": false,
+    "e09": false,
+    "operation": false,
+    "completion": false,
+    "readback": false,
+    "packet": false,
+    "physical_disposal": false,
+    "released": false,
+    "ready": false,
+    "verified": false,
+    "gpu": false
+  },
+  "tests_run": [
+    {
+      "name": "E05 transport receives the original immutable operation correlation",
+      "assertions": 40
+    },
+    {
+      "name": "E05 pending creation retains reservation through cancellation",
+      "assertions": 32
+    },
+    {
+      "name": "E05 close and dropped leases retain delayed and refused operations",
+      "assertions": 28
+    },
+    {
+      "name": "E05 pending create drop and late failure discharge reservations",
+      "assertions": 20
+    },
+    {
+      "name": "play lifecycle skips a live start reservation",
+      "assertions": 9
+    },
+    {
+      "name": "play start failures release their reservation",
+      "assertions": 19
+    },
+    {
+      "name": "E05 synchronous publication waits for submission return",
+      "assertions": 12
+    },
+    {
+      "name": "E05 worker publication synchronizes payload and context quiescence",
+      "assertions": 8
+    },
+    {
+      "name": "E05 refusal retries the same finite operation identity",
+      "assertions": 9
+    },
+    {
+      "name": "E05 accepted late creation keeps its original generation after reset",
+      "assertions": 17
+    },
+    {
+      "name": "E05 impossible metadata and invalid sessions fail before allocation",
+      "assertions": 16
+    }
+  ]
+}

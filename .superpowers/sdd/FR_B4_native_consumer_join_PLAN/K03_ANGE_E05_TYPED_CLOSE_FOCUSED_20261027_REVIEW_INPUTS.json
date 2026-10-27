@@ -1,0 +1,17 @@
+{
+  "review_type": "independent limited-scope ANGE E05 typed-close native regression",
+  "package": "K03_ANGE_E05_TYPED_CLOSE_FOCUSED_20261027",
+  "review_target": "K03_ANGE_E05_TYPED_CLOSE_FOCUSED_20261027.md",
+  "questions": [
+    "Do the 11 test names and 210 assertion total match the log?",
+    "Does the report keep the scope CPU/in-process and claims false?",
+    "Does the evidence identify the exact source/test binary/DSO/log hashes?"
+  ],
+  "required_checks": [
+    "rerun or inspect the exact log",
+    "verify all hashes",
+    "verify no producer/operation/completion/readback/Ready/GPU claim"
+  ],
+  "tests_rerun": false,
+  "independent_review": "K03_ANGE_E05_TYPED_CLOSE_FOCUSED_20261027_INDEPENDENT_REVIEW.md"
+}
