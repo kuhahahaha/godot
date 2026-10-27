@@ -1,0 +1,14 @@
+{
+  "base_head": "770eb3fd11",
+  "source_base_sha256": {
+    "main/main.cpp": "c142042db9a6cc8000e335f0329b146ccc985af307aa4b36683be849d8b5d336",
+    "main/main.h": "f61c4e9734c07582f711d6a4b47b20a84f685ce835e6f309268fc3ed11df31de",
+    "platform/android/java_godot_lib_jni.cpp": "362b57b0ff52de1f87097ec4030780c6cec6b10a7b7460d4e5a1b803b0217c6a"
+  },
+  "source_current_sha256": {
+    "main/main.cpp": "b332cd1b83ee45b485d15e7a6aea745db43cdc09c2a3c0c512297cd19d6649d4",
+    "main/main.h": "01956ca65466256af39d42ec525906b7671df433ef0bfd53ef5116b96161346c",
+    "platform/android/java_godot_lib_jni.cpp": "362b57b0ff52de1f87097ec4030780c6cec6b10a7b7460d4e5a1b803b0217c6a"
+  },
+  "editor_binary_sha256": "01660f9105c2bfbd869f2e0d34afba8f54e62dd7403cc8a5efa9a248b8de9348"
+}

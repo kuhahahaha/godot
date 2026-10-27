@@ -47,6 +47,7 @@ class Main {
 
 	static void print_header(bool p_rich);
 	static void cleanup_setup2_extension_failure();
+	static void cleanup_setup_failure(Error p_error, const char *p_execpath = nullptr);
 	static void print_help_copyright(const char *p_notice);
 	static void print_help_title(const char *p_title);
 	static void print_help_option(const char *p_option, const char *p_description, CLIOptionAvailability p_availability = CLI_OPTION_AVAILABILITY_TEMPLATE_RELEASE);

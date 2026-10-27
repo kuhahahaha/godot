@@ -183,6 +183,7 @@ enum class Setup2ExtensionFailure {
 	EDITOR,
 };
 static Setup2ExtensionFailure setup2_extension_failure = Setup2ExtensionFailure::NONE;
+static Error setup2_extension_error = OK;
 
 #if defined(STEAMAPI_ENABLED)
 static SteamTracker *steam_tracker = nullptr;
@@ -1071,6 +1072,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 	_start_success = false;
 	core_modules_initialized = false;
 	setup2_extension_failure = Setup2ExtensionFailure::NONE;
+	setup2_extension_error = OK;
 	GodotProfileZone("setup");
 	Thread::make_main_thread();
 	set_current_thread_safe_for_nodes(true);
@@ -2992,93 +2994,11 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 	return OK;
 
 error:
-	if (GDExtensionManager::get_singleton()) {
-		GDExtensionDeviceExit::require_close_success(GDExtensionManager::get_singleton()->cancel_pending_scene_ready_for_start_abort(GDExtensionDeviceExit::CloseRoute::SETUP_ABORT), GDExtensionDeviceExit::CloseRoute::SETUP_ABORT);
-		GDExtensionDeviceExit::require_close_success(GDExtensionManager::get_singleton()->preflight_exit(GDExtensionDeviceExit::CloseRoute::SETUP_ABORT), GDExtensionDeviceExit::CloseRoute::SETUP_ABORT);
-		if (setup2_extension_failure != Setup2ExtensionFailure::NONE) {
-			cleanup_setup2_extension_failure();
-		}
-		GDExtensionDeviceExit::require_close_success(GDExtensionManager::get_singleton()->deinitialize_guarded_core_for_setup_abort(), GDExtensionDeviceExit::CloseRoute::SETUP_ABORT);
-	}
-
-#ifdef TESTS_ENABLED
-	TestDeviceExitStartup::mark("NORMAL_UNWIND_BEGIN", exit_err);
-#endif
-
-	text_driver = "";
-	display_driver = "";
 	audio_driver = "";
-	tablet_driver = "";
-	Engine::get_singleton()->set_write_movie_path(String());
 	project_path = "";
-
 	args.clear();
 	main_args.clear();
-
-	if (show_help) {
-		print_help(execpath);
-	}
-
-	if (editor) {
-		OS::get_singleton()->remove_lock_file();
-	}
-
-	EngineDebugger::deinitialize();
-
-	if (performance) {
-		memdelete(performance);
-	}
-	if (input_map) {
-		memdelete(input_map);
-	}
-	if (translation_server) {
-		memdelete(translation_server);
-	}
-	if (globals) {
-		memdelete(globals);
-	}
-	if (packed_data) {
-		memdelete(packed_data);
-	}
-
-	if (message_queue) {
-		message_queue->flush();
-		memdelete(message_queue);
-		message_queue = nullptr;
-	}
-
-	unregister_core_driver_types();
-	unregister_core_extensions();
-	if (core_modules_initialized) {
-		uninitialize_modules(MODULE_INITIALIZATION_LEVEL_CORE);
-		core_modules_initialized = false;
-	}
-
-	if (engine) {
-		memdelete(engine);
-	}
-
-	unregister_core_types();
-
-	OS::get_singleton()->_cmdline.clear();
-	OS::get_singleton()->_user_args.clear();
-
-	OS::get_singleton()->benchmark_end_measure("Startup", "Main::Setup");
-
-#if defined(STEAMAPI_ENABLED)
-	if (steam_tracker) {
-		memdelete(steam_tracker);
-	}
-#endif
-
-	OS::get_singleton()->finalize_core();
-	locale = String();
-
-	Thread::release_main_thread();
-
-#ifdef TESTS_ENABLED
-	TestDeviceExitStartup::mark("NORMAL_UNWIND_END", exit_err);
-#endif
+	cleanup_setup_failure(exit_err, execpath);
 	return exit_err;
 }
 
@@ -3178,6 +3098,93 @@ void Main::cleanup_setup2_extension_failure() {
 #ifndef PHYSICS_2D_DISABLED
 	memdelete(physics_server_2d_manager);
 	physics_server_2d_manager = nullptr;
+#endif
+}
+
+void Main::cleanup_setup_failure(Error p_error, const char *p_execpath) {
+	if (GDExtensionManager::get_singleton()) {
+		GDExtensionDeviceExit::require_close_success(GDExtensionManager::get_singleton()->cancel_pending_scene_ready_for_start_abort(GDExtensionDeviceExit::CloseRoute::SETUP_ABORT), GDExtensionDeviceExit::CloseRoute::SETUP_ABORT);
+		GDExtensionDeviceExit::require_close_success(GDExtensionManager::get_singleton()->preflight_exit(GDExtensionDeviceExit::CloseRoute::SETUP_ABORT), GDExtensionDeviceExit::CloseRoute::SETUP_ABORT);
+		if (setup2_extension_failure != Setup2ExtensionFailure::NONE) {
+			cleanup_setup2_extension_failure();
+		}
+		GDExtensionDeviceExit::require_close_success(GDExtensionManager::get_singleton()->deinitialize_guarded_core_for_setup_abort(), GDExtensionDeviceExit::CloseRoute::SETUP_ABORT);
+	}
+
+#ifdef TESTS_ENABLED
+	TestDeviceExitStartup::mark("NORMAL_UNWIND_BEGIN", p_error);
+#endif
+
+	text_driver = "";
+	display_driver = "";
+	tablet_driver = "";
+	Engine::get_singleton()->set_write_movie_path(String());
+
+	if (show_help && p_execpath) {
+		print_help(p_execpath);
+	}
+
+	if (editor) {
+		OS::get_singleton()->remove_lock_file();
+	}
+
+	EngineDebugger::deinitialize();
+
+	if (performance) {
+		memdelete(performance);
+	}
+	if (input_map) {
+		memdelete(input_map);
+	}
+	if (translation_server) {
+		memdelete(translation_server);
+	}
+	if (globals) {
+		memdelete(globals);
+	}
+	if (packed_data) {
+		memdelete(packed_data);
+	}
+
+	if (message_queue) {
+		message_queue->flush();
+		memdelete(message_queue);
+		message_queue = nullptr;
+	}
+
+	unregister_core_driver_types();
+	unregister_core_extensions();
+	if (core_modules_initialized) {
+		uninitialize_modules(MODULE_INITIALIZATION_LEVEL_CORE);
+		core_modules_initialized = false;
+	}
+
+	if (engine) {
+		memdelete(engine);
+	}
+
+	unregister_core_types();
+
+	OS::get_singleton()->_cmdline.clear();
+	OS::get_singleton()->_user_args.clear();
+
+	OS::get_singleton()->benchmark_end_measure("Startup", "Main::Setup");
+
+#if defined(STEAMAPI_ENABLED)
+	if (steam_tracker) {
+		memdelete(steam_tracker);
+	}
+#endif
+
+	OS::get_singleton()->finalize_core();
+	locale = String();
+	setup2_extension_failure = Setup2ExtensionFailure::NONE;
+	setup2_extension_error = OK;
+
+	Thread::release_main_thread();
+
+#ifdef TESTS_ENABLED
+	TestDeviceExitStartup::mark("NORMAL_UNWIND_END", p_error);
 #endif
 }
 
@@ -3947,6 +3954,7 @@ Error Main::setup2(bool p_show_boot_logo) {
 		OS::get_singleton()->benchmark_end_measure("Scene", "Modules and Extensions");
 		if (extension_error != OK) {
 			setup2_extension_failure = Setup2ExtensionFailure::SCENE;
+			setup2_extension_error = extension_error;
 			return extension_error;
 		}
 
@@ -3984,6 +3992,7 @@ Error Main::setup2(bool p_show_boot_logo) {
 		OS::get_singleton()->benchmark_end_measure("Editor", "Modules and Extensions");
 		if (extension_error != OK) {
 			setup2_extension_failure = Setup2ExtensionFailure::EDITOR;
+			setup2_extension_error = extension_error;
 			return extension_error;
 		}
 	}
@@ -5386,6 +5395,11 @@ void Main::cleanup(bool p_force) {
 
 	GodotProfileZone("cleanup");
 	OS::get_singleton()->benchmark_begin_measure("Shutdown", "Main::Cleanup");
+	if (setup2_extension_failure != Setup2ExtensionFailure::NONE) {
+		OS::get_singleton()->benchmark_end_measure("Shutdown", "Main::Cleanup");
+		cleanup_setup_failure(setup2_extension_error);
+		return;
+	}
 	if (!p_force) {
 		ERR_FAIL_COND(!_start_success);
 	}
