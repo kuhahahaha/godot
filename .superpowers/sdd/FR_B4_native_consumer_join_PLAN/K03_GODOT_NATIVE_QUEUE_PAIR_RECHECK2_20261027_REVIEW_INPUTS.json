@@ -1,0 +1,19 @@
+{
+  "review_type": "non-author fixed-pair recheck 2 after D diagnostic rebuild",
+  "package": "K03_godot_native_queue_pair_recheck2",
+  "review_target": "K03_GODOT_NATIVE_QUEUE_PAIR_RECHECK2_20261027.md",
+  "questions": [
+    "Do editor/DSO identities match the new logs?",
+    "Do VFX/no-VFX/close markers remain green?",
+    "Are unsupported claims absent?"
+  ],
+  "required_checks": [
+    "verify hashes",
+    "verify markers and rc",
+    "check all claims false"
+  ],
+  "tests_rerun": false,
+  "independent_review": "K03_GODOT_NATIVE_QUEUE_PAIR_RECHECK2_20261027_INDEPENDENT_REVIEW.md",
+  "independent_review_sha256": "dea709b8906687b2585c32e577266205775d1bb7493b0affb21632f246da44cc",
+  "conclusion": "limited-scope accept; no P0-P3"
+}

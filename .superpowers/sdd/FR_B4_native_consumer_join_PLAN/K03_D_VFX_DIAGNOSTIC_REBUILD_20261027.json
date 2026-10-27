@@ -1,0 +1,36 @@
+{
+  "status": "D_VFX_DIAGNOSTIC_REBUILD_AND_NEGATIVE_PASS_LIMITED",
+  "ange_source_head": "b6c362304b884965ab76c65b3889753642ecb1d3",
+  "ange_commit": "253d6fa22",
+  "dso_sha256": "a60b3fa5a2f9de72cbb0be6ccca0d3ae33b87c5108a4b6caf2585d0ae4106a33",
+  "build": {
+    "command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2",
+    "rc": 0,
+    "log": "/tmp/k03-d-vfx-diagnostic-rebuild-20261027.log",
+    "codesign_rc": 0
+  },
+  "negative_probe": {
+    "fixture": "/tmp/k03-d-vfx-diagnostic-negative-20261027",
+    "rc": 1,
+    "log": "/tmp/k03-d-vfx-diagnostic-negative-rebuilt-20261027.log",
+    "log_sha256": "81e12e4a688238eca305cd8356ac6d9a22ceb677b50abadcfccbd289e3ef1d9d",
+    "first_error": "FILE-001 cannot read VFX source",
+    "rollback": "[WorldLoader] resource stage failed: vfx; [world_load] rollback at load_resources:vfx",
+    "extension_status": 0,
+    "unload_status": 0
+  },
+  "behavior": "fail-closed source diagnostic; no fallback/provider/owner synthesis",
+  "claims": {
+    "u08": false,
+    "e09": false,
+    "operation": false,
+    "completion": false,
+    "readback": false,
+    "packet": false,
+    "physical_disposal": false,
+    "released": false,
+    "ready": false,
+    "verified": false,
+    "gpu": false
+  }
+}
