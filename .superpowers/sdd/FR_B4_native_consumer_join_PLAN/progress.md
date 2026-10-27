@@ -48,3 +48,5 @@
 - 2026-10-27 K03 ledger consistency v2: all fifteen matrix package prefixes resolve; final2 pair and formal DSO receipt match; current-A claims remain false and separate; PASS_LIMITED ledger-only audit.
 
 - 2026-10-27 current-A/E34 successor boundary set v2 indexed twelve receipts (E34 bootstrap, E21/E22/E23/E24/E25/E26/E28/E29/P4/scene-install); all remain source/CPU/contract scope with owner/native/GPU/Ready boundaries explicit and claims false.
+
+- 2026-10-27 acceptance matrix indexed current-A/E34 successor boundary set v2 `b092756b25`: sixteen package scopes reviewed; E34 bootstrap and E21–E29/P4/scene-install remain source/CPU/contract-only, with owner/native/GPU/Ready boundaries explicit and claims false.

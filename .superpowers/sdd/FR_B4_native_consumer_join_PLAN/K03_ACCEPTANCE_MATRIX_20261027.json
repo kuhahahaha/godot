@@ -61,6 +61,10 @@
     {
       "name": "current_a_consumer_boundary_set",
       "commit": "e1ed218af9"
+    },
+    {
+      "name": "current_a_boundary_set_v2",
+      "commit": "b092756b25"
     }
   ],
   "historical_fixed_pair": {
