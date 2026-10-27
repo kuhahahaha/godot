@@ -1,0 +1,8 @@
+{
+  "review_type": "non-author ledger consistency review",
+  "package": "K03_acceptance_matrix",
+  "review_target": "K03_ACCEPTANCE_MATRIX_20261027.md",
+  "questions": ["Do package commits and scopes match the source receipts?", "Is historical fixed-pair evidence separated from current unverified drift?", "Are all positive claims explicitly false?"],
+  "required_checks": ["verify five commit prefixes", "verify old/new pair identities", "check no completion/Ready/GPU promotion"],
+  "tests_rerun": false
+}
