@@ -26,9 +26,11 @@ for its original inputs:
 The current ANGE checkout has since moved to source HEAD
 `069196f3a9e8c1d0f36e1f61daf5a3bb2daaa019` and DSO SHA
 `c82f09f62b84af0ac14965a7bab29ab62e408aa5106d3264a2be7eb91777cff0`.
-That new pair has not been rerun against the fixture in this package, so the
-older marker is retained as historical evidence and is not promoted to current
-pair acceptance.
+The fresh pair was probed non-headless on Metal/mobile. Both VFX and no-VFX
+stop before world entry with `U01_EXTENSION_STATUS=1`, rc=2, and the first
+causal error `device_exit_register_scene_ready_v2` missing from the editor.
+This is recorded in `K03_CURRENT_PAIR_ABI_DRIFT_NEGATIVE_20261027.*` and is
+classified as an editor/DSO ABI mismatch, not VFX or close behavior.
 
 ## Global claim matrix
 

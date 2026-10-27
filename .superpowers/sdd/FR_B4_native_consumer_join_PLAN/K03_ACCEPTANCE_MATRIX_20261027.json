@@ -9,6 +9,6 @@
     {"name": "completion_readback_join", "commit": "8b3b0af0ae"}
   ],
   "historical_fixed_pair": {"editor_sha256": "0c4e23c1ae93ba0455bdda99674f221677eb3c4ee051d2e55b3337520025bdba", "ange_head": "b2038e9a5be40624f6b19613f209422da49b4355", "dso_sha256": "dfdb1e94e2694cfde7b0259efc232c42fb3388a73c63847504eb7c3606c6d566", "vfx": "entries=2 systems=1; lifecycle true", "no_vfx": "entries=2 systems=0; lifecycle true"},
-  "current_unverified_pair": {"ange_head": "069196f3a9e8c1d0f36e1f61daf5a3bb2daaa019", "dso_sha256": "c82f09f62b84af0ac14965a7bab29ab62e408aa5106d3264a2be7eb91777cff0", "status": "requires fresh fixture probe"},
+  "current_pair_probe": {"ange_head": "069196f3a9e8c1d0f36e1f61daf5a3bb2daaa019", "dso_sha256": "c82f09f62b84af0ac14965a7bab29ab62e408aa5106d3264a2be7eb91777cff0", "status": "rc2 before world entry; missing device_exit_register_scene_ready_v2", "receipt": "K03_CURRENT_PAIR_ABI_DRIFT_NEGATIVE_20261027"},
   "claims": {"u08": false, "e09": false, "operation": false, "completion": false, "readback": false, "packet": false, "physical_disposal": false, "released": false, "ready": false, "verified": false, "gpu": false}
 }
