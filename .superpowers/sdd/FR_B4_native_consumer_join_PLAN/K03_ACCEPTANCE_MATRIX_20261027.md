@@ -23,6 +23,7 @@ declare the long goal complete.
 | current-A consumer boundary set | `e1ed218af9` | E05/E17/E21/E22/E23/E30 source/CPU consumer slices with per-snapshot rc0 evidence | E20/owner/native/GPU/Ready authority remains absent |
 | current-A/E34 successor boundary set v2 | `b092756b25` | E34 bootstrap successor plus E21/E22/E23/E24/E25/E26/E28/E29/P4/scene-install source/CPU/contract slices | parent/owner/native/GPU/Ready authority remains absent |
 | external owner handoff blocker map | `cad566bb89` | exact E03/E04, E05/E20, E34/P01, and U08/E09 owner inputs with fail-closed local behavior | owner declarations/bridges remain external inputs |
+| E09/R01 current CPU consumer | `91cc0084cb` | R01 dispatch 14/2051 plus extent/handoff/origin/upload-data CPU assertions | no RenderingDevice/native submission/readback/GPU/Ready authority |
 
 ## Fixed-pair freshness
 

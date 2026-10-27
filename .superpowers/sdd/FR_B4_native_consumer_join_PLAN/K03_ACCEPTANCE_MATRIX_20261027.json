@@ -69,6 +69,10 @@
     {
       "name": "external_owner_handoff_blocker_map",
       "commit": "cad566bb89"
+    },
+    {
+      "name": "e09_r01_current_cpu_consumer",
+      "commit": "91cc0084cb"
     }
   ],
   "historical_fixed_pair": {
