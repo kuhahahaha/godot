@@ -21,3 +21,7 @@
 Disposition: no P1/P2 finding in this bounded core-export slice. It closes the
 D/core proc export gap only; E20 owner admission, live production adapter
 caller, native/GPU execution, Ready and G1 remain outside this receipt.
+
+The finite-source follow-up also checks Curve point ordering/tangent modes and
+raw Gradient point finiteness before any texture sampling accessor. Its Debug,
+Release and actual UBSan evidence remains green.

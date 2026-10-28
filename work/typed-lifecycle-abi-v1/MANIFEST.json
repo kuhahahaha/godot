@@ -128,7 +128,7 @@
     "sha256": "934c46bd0bf23ddf7280126d1c131a4376541bea7f277d1fe653961351dc7efc"
   },
   "SConstruct": "c6d32561793fa5987ed8b9e8a7ab3b4beb04ea63bacb912f6fc1b0528b9181a7",
-  "bin/godot.macos.editor.dev.arm64": "95cd9ef25e18ce4aa79f83805076f0ccdc0ee30e4a1af07cd482b9ebb72ac37a",
+  "bin/godot.macos.editor.dev.arm64": "2ba2a5390b12bb766bff1fa2742c75c5be4473d3a9ccf3063535e92be997fdf3",
   "bin/libgodot.macos.template_debug.dev.arm64.a": {
     "bytes": 1893366248,
     "sha256": "b3fb7e2a2d1476e0744e6e3c43fb97ef067450360145ac1a6a91a3c72b2271e7"
@@ -176,7 +176,7 @@
   "scene/resources/gradient.cpp": "51f1c9b6915710649858f2411c750bc77a273af666465192467bd0034339124b",
   "scene/resources/gradient.h": "5b18bafb0448e78092727ab270142bfba5ec06b29caeccf8a5cb04ae07bacb92",
   "scene/resources/resource_snapshot_bridge.h": "0dc36cacab435cd39f1622e25d4535602b440bd7b40fa4b82f5b0b6594fda8bb",
-  "scene/resources/resource_snapshot_native.cpp": "70100a1adf46cff093e3684e7855a5082a82987a16ef97079305efbb646d8fae",
+  "scene/resources/resource_snapshot_native.cpp": "b96200ccbfc0060b1ad7109d8d0329df844d97466e35320cd1bf63de9897cee4",
   "scene/resources/resource_snapshot_native.h": "55690b1da28bc2bfe602e87901d59781f761f2e8732371c81f1fdde54c78e6c9",
   "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp": "e630f9530f2e66896953b0ece962e476da1e2029116aa85d2e510945c17ea6af",
   "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.cpp": "af4899159aaba369440f3ecef0cc37b181e9f7e4c6d85085a527f8a44912dc56",
@@ -921,8 +921,8 @@
   "work/sdk-unloadable-active-context-20261028-r3/threads-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "work/typed-lifecycle-abi-v1/CURRENT_PAIR_U01_VFX_R01_NEGATIVE_RECEIPT_20251025.md": "c6ab0496164e2741f157768a10ffcc6f0217b630a26d95d3d9762c2e22b79a47",
   "work/typed-lifecycle-abi-v1/PROGRESS.md": {
-    "bytes": 146347,
-    "sha256": "18230f3c7a1eb2a153bf0a0488e404a9f458c6aa2931e1e2aafcdc110133c9fe"
+    "bytes": 146648,
+    "sha256": "91490602a0a5fbdc867840a08b2f050905227286c76869d8f0f38d62cac61212"
   },
   "work/typed-lifecycle-abi-v1/gdextension_interface.h": "07ee07f19e31fe5c22154edbba73ce3cb793b87524add5d9dc0c9468815c9a29",
   "work/typed-lifecycle-abi-v1/native-current-open-items-20261028/COMMAND_OUTPUT.json": "feccb44a82af5439c60b4fb8a6f7c8fc8923f9fd97e2bb169099294c67a185ef",
@@ -1461,8 +1461,8 @@
     "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
   },
   "work/e22-core-texture-snapshot-20261029/COMMANDS.json": {
-    "bytes": 2938,
-    "sha256": "4fee5663257118cd8285f59fdf7e0e7027b0430e82c2dca12af61b2c9ab93a7c"
+    "bytes": 4887,
+    "sha256": "5c928399207ccaeb171de4b28fe3c0cc4fdbbdf13431a2620b0923e1fbbe0a49"
   },
   "work/e22-core-texture-snapshot-20261029/DEBUG_BUILD.log": {
     "bytes": 2210,
@@ -1505,8 +1505,8 @@
     "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
   },
   "work/e22-core-texture-snapshot-20261029/INDEPENDENT_REVIEW.md": {
-    "bytes": 1368,
-    "sha256": "fe379ac4cff362eea70190dc004b74aa750250642890cafe672fa485abb61955"
+    "bytes": 1576,
+    "sha256": "749cf2d9f33ee2abaa2c9be77328d06ebc0e681e36db5276dc92fa9b1bc10405"
   },
   "work/e22-core-texture-snapshot-20261029/K03_P2.log": {
     "bytes": 302,
@@ -1525,8 +1525,8 @@
     "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
   },
   "work/e22-core-texture-snapshot-20261029/RECEIPT.md": {
-    "bytes": 2286,
-    "sha256": "92b954830772b6fe9ab2d636e91cd38108fb70fc2a9f0f36b29caae3a635cdae"
+    "bytes": 2671,
+    "sha256": "d2dca93b802a16e4e020fedadfb5edd603703f58e2edc8eefe1c58593fce43ed"
   },
   "work/e22-core-texture-snapshot-20261029/RED_BUILD.log": {
     "bytes": 5565,
@@ -1554,7 +1554,7 @@
   },
   "work/e22-core-texture-snapshot-20261029/SOURCE_MANIFEST.json": {
     "bytes": 2015,
-    "sha256": "1576e89f55ca962ffd7751450382b5bb089e1d5ce44a262d2da81798e9ee5ad6"
+    "sha256": "a3cd3de995546236d302b13e3624d9f8b012b460b1be3faeda79e7d5f7de7475"
   },
   "work/e22-core-texture-snapshot-20261029/UBSAN_BUILD_R3.log": {
     "bytes": 186762,
@@ -1584,8 +1584,8 @@
   "scene/resources/curve_texture.cpp": "d910ebc32487da958b5863a641a27f666f16b3fa601e53025cf1d7bb5bdbef68",
   "scene/resources/gradient_texture.h": "3cad36e241f75687961444287d1b63c91df1efb7c2c3459eebc4b912b03aaf65",
   "scene/resources/gradient_texture.cpp": "c10e08cabdc859b99a0fadd70c00b6944b8b8e8923137185e65b47fcd09e3e67",
-  "bin/godot.macos.template_release.arm64": "4a23531fc16757b8405fb85b0d1c71e19e02eb03e40e9917cbf4a1690c83f7e0",
-  "bin/godot.macos.editor.dev.arm64.san": "b5c390c4836a1eaf6591a8520144cd246ddd100f9c221d6c6450d7cd48e0f8ec",
+  "bin/godot.macos.template_release.arm64": "7a48f8279ddde8e83e1f7f1ae0ade2429562262e7c68a43e1d88691a5f0ab87a",
+  "bin/godot.macos.editor.dev.arm64.san": "f9aaa458adb2eb1f8c4221696cf2717542015e07a1a314a43e9d3091199e9002",
   "work/typed-lifecycle-abi-v1/native-open-items-revalidation-r4-20261029/COMMAND_OUTPUT.json": {
     "bytes": 4769,
     "sha256": "eaac60e891f62bc53726274097a82d250efc70f8fc9cedf248df167d0630f05e"
@@ -1601,5 +1601,69 @@
   "work/typed-lifecycle-abi-v1/native-open-items-revalidation-r4-20261029/SOURCE_HASHES.txt": {
     "bytes": 2182,
     "sha256": "3503dfb231fa0b1e42645d70bec3f80a396aa7110a3d917437c0f2a34c56a53a"
+  },
+  "work/e22-core-texture-snapshot-20261029/SAFETY_DEBUG_BUILD.log": {
+    "bytes": 2227,
+    "sha256": "a28bee12fc35d710587c914896e7b06f58266ff18040f231d5ad7e361feaa4c7"
+  },
+  "work/e22-core-texture-snapshot-20261029/SAFETY_DEBUG_BUILD.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/e22-core-texture-snapshot-20261029/SAFETY_DEBUG_FOCUSED.log": {
+    "bytes": 298,
+    "sha256": "f2a62e3a3e1fca7b99d01bbd86eb325b434cd1e07b23a57e8fa0b1ebcf28a79e"
+  },
+  "work/e22-core-texture-snapshot-20261029/SAFETY_DEBUG_FOCUSED.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/e22-core-texture-snapshot-20261029/SAFETY_DEBUG_REGRESSION.log": {
+    "bytes": 302,
+    "sha256": "399a5b8152691444b230e87424e4100d24213372c57188dd2e344f3e8d732e0d"
+  },
+  "work/e22-core-texture-snapshot-20261029/SAFETY_DEBUG_REGRESSION.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/e22-core-texture-snapshot-20261029/SAFETY_RELEASE_BUILD.log": {
+    "bytes": 2232,
+    "sha256": "42f2ebd311a9a9b545d7ee624b922c26669c2980b24a4b301742d0854216da15"
+  },
+  "work/e22-core-texture-snapshot-20261029/SAFETY_RELEASE_BUILD.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/e22-core-texture-snapshot-20261029/SAFETY_RELEASE_VERSION.log": {
+    "bytes": 36,
+    "sha256": "522ae3dd7c1f8539993da7846e3dea7464f0cc35bf02f3040c245e69fbaafe5f"
+  },
+  "work/e22-core-texture-snapshot-20261029/SAFETY_RELEASE_VERSION.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/e22-core-texture-snapshot-20261029/SAFETY_UBSAN_BUILD.log": {
+    "bytes": 2361,
+    "sha256": "8bdefca444cb4d324318a7dea884c6f651c7d71bebd9a28b6e7c50775e1f8e32"
+  },
+  "work/e22-core-texture-snapshot-20261029/SAFETY_UBSAN_BUILD.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/e22-core-texture-snapshot-20261029/SAFETY_UBSAN_FOCUSED.log": {
+    "bytes": 298,
+    "sha256": "f2a62e3a3e1fca7b99d01bbd86eb325b434cd1e07b23a57e8fa0b1ebcf28a79e"
+  },
+  "work/e22-core-texture-snapshot-20261029/SAFETY_UBSAN_FOCUSED.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/e22-core-texture-snapshot-20261029/SAFETY_UBSAN_REGRESSION.log": {
+    "bytes": 302,
+    "sha256": "399a5b8152691444b230e87424e4100d24213372c57188dd2e344f3e8d732e0d"
+  },
+  "work/e22-core-texture-snapshot-20261029/SAFETY_UBSAN_REGRESSION.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
   }
 }

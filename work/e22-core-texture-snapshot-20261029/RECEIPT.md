@@ -40,3 +40,11 @@ HDR/LDR output formats.
 No E20/B owner transaction, native/GPU qualification, Ready or G1 result is
 claimed. The remaining E22 runtime gate is the original owner transaction and
 live adapter caller, not this core export implementation.
+
+## Finite-source safety follow-up
+
+The snapshot path now validates finite, ordered Curve points and finite
+Gradient points before calling the engine's sampling accessors. This prevents
+malformed source data from reaching sorting/sampling code. The follow-up Debug,
+Release and actual `use_ubsan=yes` builds are rc0; focused and full
+ResourceSnapshot runs remain 1/32 and 14/184, rc0.

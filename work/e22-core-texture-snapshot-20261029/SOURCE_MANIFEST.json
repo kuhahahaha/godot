@@ -26,8 +26,8 @@
       "sha256": "55690b1da28bc2bfe602e87901d59781f761f2e8732371c81f1fdde54c78e6c9"
     },
     "scene/resources/resource_snapshot_native.cpp": {
-      "bytes": 19287,
-      "sha256": "70100a1adf46cff093e3684e7855a5082a82987a16ef97079305efbb646d8fae"
+      "bytes": 20072,
+      "sha256": "b96200ccbfc0060b1ad7109d8d0329df844d97466e35320cd1bf63de9897cee4"
     },
     "tests/scene/test_resource_snapshot_bridge.cpp": {
       "bytes": 20034,
@@ -40,16 +40,16 @@
   },
   "artifacts": {
     "bin/godot.macos.editor.dev.arm64": {
-      "bytes": 302617232,
-      "sha256": "95cd9ef25e18ce4aa79f83805076f0ccdc0ee30e4a1af07cd482b9ebb72ac37a"
+      "bytes": 302617408,
+      "sha256": "2ba2a5390b12bb766bff1fa2742c75c5be4473d3a9ccf3063535e92be997fdf3"
     },
     "bin/godot.macos.template_release.arm64": {
       "bytes": 65752576,
-      "sha256": "4a23531fc16757b8405fb85b0d1c71e19e02eb03e40e9917cbf4a1690c83f7e0"
+      "sha256": "7a48f8279ddde8e83e1f7f1ae0ade2429562262e7c68a43e1d88691a5f0ab87a"
     },
     "bin/godot.macos.editor.dev.arm64.san": {
-      "bytes": 918727824,
-      "sha256": "b5c390c4836a1eaf6591a8520144cd246ddd100f9c221d6c6450d7cd48e0f8ec"
+      "bytes": 918728032,
+      "sha256": "f9aaa458adb2eb1f8c4221696cf2717542015e07a1a314a43e9d3091199e9002"
     }
   }
 }

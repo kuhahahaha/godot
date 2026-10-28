@@ -63,5 +63,45 @@
     "command": "bin/godot.macos.editor.dev.arm64.san --headless --test --test-case=\"[ResourceSnapshot]*\"",
     "returncode": 0,
     "summary": "14 cases / 184 assertions"
+  },
+  "safety_debug_build": {
+    "command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2 platform=macos target=editor dev_build=yes tests=yes builtin_glslang=yes",
+    "returncode": 0,
+    "summary": "finite-source safety follow-up build rc0"
+  },
+  "safety_debug_focused": {
+    "command": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case=\"[ResourceSnapshot] texture plan and capture use real CurveTexture and GradientTexture1D objects\"",
+    "returncode": 0,
+    "summary": "1 case / 32 assertions"
+  },
+  "safety_debug_regression": {
+    "command": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case=\"[ResourceSnapshot]*\"",
+    "returncode": 0,
+    "summary": "14 cases / 184 assertions"
+  },
+  "safety_release_build": {
+    "command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2 platform=macos target=template_release dev_build=no tests=no builtin_glslang=yes",
+    "returncode": 0,
+    "summary": "finite-source safety release build rc0"
+  },
+  "safety_release_version": {
+    "command": "bin/godot.macos.template_release.arm64 --version",
+    "returncode": 0,
+    "summary": "4.7.2.stable.custom_build.d7d16972a"
+  },
+  "safety_ubsan_build": {
+    "command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2 platform=macos target=editor dev_build=yes tests=yes use_ubsan=yes builtin_glslang=yes",
+    "returncode": 0,
+    "summary": "finite-source safety actual UBSan build rc0"
+  },
+  "safety_ubsan_focused": {
+    "command": "bin/godot.macos.editor.dev.arm64.san --headless --test --test-case=\"[ResourceSnapshot] texture plan and capture use real CurveTexture and GradientTexture1D objects\"",
+    "returncode": 0,
+    "summary": "1 case / 32 assertions"
+  },
+  "safety_ubsan_regression": {
+    "command": "bin/godot.macos.editor.dev.arm64.san --headless --test --test-case=\"[ResourceSnapshot]*\"",
+    "returncode": 0,
+    "summary": "14 cases / 184 assertions"
   }
 }

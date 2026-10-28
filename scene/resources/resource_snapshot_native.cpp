@@ -185,6 +185,20 @@ void write_f32(uint8_t *destination, float value) {
 bool valid_float(float value) {
 	return std::isfinite(value);
 }
+
+bool finite_curve_points(const Curve &curve) {
+	for (uint32_t i = 0; i < uint32_t(curve.get_point_count()); ++i) {
+		const auto point = curve.get_point(i);
+		if (!finite_f32(point.position.x) || !finite_f32(point.position.y) ||
+				!finite_f32(point.left_tangent) || !finite_f32(point.right_tangent) ||
+				point.left_mode < Curve::TANGENT_FREE || point.left_mode >= Curve::TANGENT_MODE_COUNT ||
+				point.right_mode < Curve::TANGENT_FREE || point.right_mode >= Curve::TANGENT_MODE_COUNT ||
+				(i && point.position.x < curve.get_point(i - 1).position.x)) {
+			return false;
+		}
+	}
+	return true;
+}
 } //namespace
 
 // Raw finite validation precedes Gradient's first sorting accessor. A NaN
@@ -407,13 +421,14 @@ uint32_t ange_texture_snapshot_v1(void *source, const AngeTextureSnapshotPlanV1 
 	if (view.source_kind == ANGE_TEXTURE_SOURCE_CURVE_V1) {
 		const auto *texture = static_cast<const CurveTexture *>(view.wrapper);
 		const auto *curve = static_cast<const Curve *>(view.child);
+		if (!curve || !finite_curve_points(*curve)) {
+			return fail(ANGE_TEXTURE_INVALID_SOURCE_V1);
+		}
 		for (uint32_t i = 0; i < view.width; ++i) {
 			float value = 0;
-			if (curve) {
-				value = float(curve->sample_baked(real_t(i) / real_t(view.width)));
-				if (!valid_float(value)) {
-					return fail(ANGE_TEXTURE_INVALID_SOURCE_V1);
-				}
+			value = float(curve->sample_baked(real_t(i) / real_t(view.width)));
+			if (!valid_float(value)) {
+				return fail(ANGE_TEXTURE_INVALID_SOURCE_V1);
 			}
 			uint8_t *pixel = output + uint64_t(i) * 16;
 			if (texture->get_texture_mode() == CurveTexture::TEXTURE_MODE_RGB) {
@@ -431,6 +446,9 @@ uint32_t ange_texture_snapshot_v1(void *source, const AngeTextureSnapshotPlanV1 
 	} else {
 		const auto *texture = static_cast<const GradientTexture1D *>(view.wrapper);
 		Gradient *gradient = static_cast<Gradient *>(view.child);
+		if (!ResourceSnapshotAccess::finite_points(*gradient)) {
+			return fail(ANGE_TEXTURE_INVALID_SOURCE_V1);
+		}
 		for (uint32_t i = 0; i < view.width; ++i) {
 			const Color color = gradient->get_color_at_offset(float(i) / float(view.width - 1));
 			if (!finite_color(color)) {
