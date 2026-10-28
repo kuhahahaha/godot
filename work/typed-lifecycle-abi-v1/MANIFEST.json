@@ -288,5 +288,9 @@
   "work/sdk-adopted-source-identity-20261028-r12/CLEANUP.json": "5fa190337343dba5adf926237e6c3dd6a721b951a910f53c3ba24b47cd76ac93",
   "work/sdk-adopted-source-identity-20261028-r12/IDENTITY.json": "9602ec41f2b7fd567a95af32f08de431327f906bca7e6f1f1a5eba901d195396",
   "work/sdk-adopted-source-identity-20261028-r12/SELF_REVIEW.md": "f19bb69be2d8e2a1f1e5736af818c688f3785fb4388511f730a3391518affb77",
-  "work/sdk-adopted-source-identity-20261028-r12/godot.cpp-r9-vs-adopted.diff": "701ad83bc149b1149fb22339f69f489720fd5020d8215e51bb7df2ec3ea80d56"
+  "work/sdk-adopted-source-identity-20261028-r12/godot.cpp-r9-vs-adopted.diff": "701ad83bc149b1149fb22339f69f489720fd5020d8215e51bb7df2ec3ea80d56",
+  "work/qualification-pin-lifecycle-audit-20261028-r1/AUDIT.md": "3e085291c31fc6489cc02d0903c57d20e5431f4e0e755ecfad17404843d6d1c8",
+  "work/qualification-pin-lifecycle-audit-20261028-r1/RECEIPT.json": "c8f030481dc44a080f9c88c79839fa97ff833a2c3ae86f6ebb2d7812f5299365",
+  "work/qualification-pin-lifecycle-audit-20261028-r1/SOURCE_MANIFEST.json": "5942bf186c6b818fa6faeaea63d067c52e7b6030634f31e5b2d823fede3f0e18",
+  "work/qualification-pin-lifecycle-audit-20261028-r1/SOURCE_TRACE.json": "fba44d65de17103db49f00d2920a0e2b45efd0ddaa5708dd7a4698326df34f6a"
 }
