@@ -14,6 +14,10 @@ does not create a parallel graph or resource authority.
 - Red/green build evidence and focused/native regression counts are present;
   no release/UBSan or GPU/Ready claim is present.
 
+The separate release probe is unavailable before compilation because the
+existing identity parser rejects an unclosed `-S` linker operand (rc2). This is
+an existing linker-branch boundary, not a graph implementation failure.
+
 Disposition: no P1/P2 finding in this bounded review. The slice is a real
 native prerequisite for the later typed transfer contract, which remains
 unimplemented and owner-gated.

@@ -33,5 +33,10 @@ The minimal implementation then:
 - Current editor SHA256: `0fa27ca15538200a127ff4350cf3cbb630be79d347bc5b7614d110778268456a`.
 - `git diff --check` on the three changed source/test files: rc0.
 
-Release, UBSan, GPU execution, native completion/readback and Ready/G1 were
-not inferred from this debug focused run and are not claimed here.
+The independent release target probe was attempted with
+`target=template_release dev_build=no tests=no builtin_glslang=yes`, but
+stopped before compilation at the existing identity parser with
+`ValueError: unclosed original native linker operand: -S` (`RELEASE_BUILD.rc=2`).
+This is retained as a separate unsupported-linker branch and does not alter the
+green debug graph result. UBSan, GPU execution, native completion/readback and
+Ready/G1 were not inferred and are not claimed here.

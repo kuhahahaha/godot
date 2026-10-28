@@ -3,6 +3,7 @@
   "platform": "macos",
   "architecture": "arm64",
   "build_command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j4 platform=macos target=editor dev_build=yes tests=yes builtin_glslang=yes",
+  "release_probe_command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j4 platform=macos target=template_release dev_build=no tests=no builtin_glslang=yes",
   "focused_run": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case=[R02][Graph]*",
   "source_sha256": {
     "servers/rendering/rendering_device_graph.h": "abbd827eedf799494f0eac9b09ae54599e63c509663eb667af800453c9608f86",
@@ -13,7 +14,8 @@
   "results": {
     "graph": {"rc": 0, "cases": 8, "assertions": 109},
     "device_exit": {"rc": 0, "cases": 133, "assertions": 2619},
-    "k03_p2": {"rc": 0, "cases": 22, "assertions": 350}
+    "k03_p2": {"rc": 0, "cases": 22, "assertions": 350},
+    "release_probe": {"rc": 2, "status": "unavailable", "first_error": "engine_build_identity.py: unclosed original native linker operand: -S"}
   },
   "scope": "Debug tests=yes graph/native control only; no release/UBSan/GPU/Ready/G1 claim"
 }
