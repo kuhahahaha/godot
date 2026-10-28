@@ -1,5 +1,5 @@
 {
-  "status": "focused V1 writer-pin retirement fix verified; independent review clean",
+  "status": "focused V1 writer-pin retirement fix verified; combined native regression green",
   "files": {
     "INDEPENDENT_REVIEW.md": {
       "bytes": 1177,
@@ -10,12 +10,24 @@
       "sha256": "2dc2e44ac9fa43df35add53a2f4efc8b7dd1049cf0bcb9607ebc01616784ed3e"
     },
     "MANIFEST.json": {
-      "bytes": 344,
-      "sha256": "4319a7b012dca2531f5b77a4cab63496f0a54d536784f74e5e51932e47331366"
+      "bytes": 645,
+      "sha256": "98fe0e92f20f5bbdfd0ce323b66a0c1d5361ed9d753223009bc49a9b3c4a0988"
+    },
+    "POST_PIN_COMBINED.log": {
+      "bytes": 722,
+      "sha256": "1f315d5d7a8722155459a042c3d006d0ff7bc3a37123c5babf4a097975078d74"
+    },
+    "POST_PIN_COMBINED.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "POST_PIN_COMBINED_COMMAND.json": {
+      "bytes": 236,
+      "sha256": "759373a44841a1b69006d3a7fc1d9e06be841a14048a2914259bf1e36a5063dd"
     },
     "RECEIPT.md": {
-      "bytes": 2028,
-      "sha256": "e0c38a6f0035f0eae91a9ee308c138aa16d4d93ab4f4950a7d295233d6baf446"
+      "bytes": 2227,
+      "sha256": "5fe321e1bebdf07bfe6fa9b79c4e1c2f66096cab91b91b2e419dbf6f140b21a3"
     }
   }
 }

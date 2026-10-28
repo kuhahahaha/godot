@@ -15,6 +15,7 @@ The reducer now tracks `upload.attempted`, consumed bytes and captured segments 
 - Before production archive refresh, the new regression against the stale core archive was RED: 19 qualification cases, 1 failed case, 3 failed assertions (`attempted upload keeps original writer pin...`). The stale private link also lacked E06 stamp object and failed unresolved `get_engine_build_identity`; this is preserved as harness provenance.
 - Rebuilt the current core, servers and tests archives; relinked private host with current `engine_build_identity.gen` object. Focused `[Qualification]*` run: 19 cases / 339 assertions, rc0.
 - `git diff --check` is clean for both changed source files. No SDK/ANGE builder or production actor/authority was added.
+- Post-fix combined private host regression `[Qualification]*,[ShaderCompilePolicy]*,[B4]*`: 42 cases / 852 assertions, rc0. The three foreign-camera diagnostics are expected negative history cases.
 
 ## Scope
 

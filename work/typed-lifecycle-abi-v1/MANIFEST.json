@@ -18,8 +18,8 @@
   "tests/core/object/test_device_exit_library_close.cpp": "1d5bc82848c80dd9ea987ef035f1ce8517d1bf9887ad082f53ebc6acdc455357",
   "work/typed-lifecycle-abi-v1/CURRENT_PAIR_U01_VFX_R01_NEGATIVE_RECEIPT_20251025.md": "c6ab0496164e2741f157768a10ffcc6f0217b630a26d95d3d9762c2e22b79a47",
   "work/typed-lifecycle-abi-v1/PROGRESS.md": {
-    "bytes": 125030,
-    "sha256": "b02c487183ef39900993f02a71e12be182cb4ceb3b3dc3901f77d08194eac146"
+    "bytes": 125329,
+    "sha256": "e8b2bbe995fe6fb21e6b9d75508f775e6c37e8a084eea5a195f2a4c76c8161d5"
   },
   "work/r01-frame-wait-20261026/MANIFEST.json": "6665b770d13d966da423741c69f01a58b562b976c9f94811f3e4b442f2907d64",
   "work/r01-frame-wait-20261026/RECEIPT.md": "90930a0824a3c88582ef533e461b66fc5bc3163bb165a66269e1d773b0d25066",
@@ -530,15 +530,15 @@
   "work/e06-loaded-core-shared-20261028-r1/QUEUE.md": "8406eb2ad2886efb2d4d537915a2963276ba5bb2ba33dffd060c9ee2b0a82a31",
   "work/EDITOR_MAIN_HANDOFF_20261028.json": "2187d19f91998a1d2a5de5061e643b38b1899e17983f6ae8275d4c3bddac363b",
   "work/native-ticket-pin-retirement-20261028-r1/RECEIPT.md": {
-    "bytes": 2028,
-    "sha256": "e0c38a6f0035f0eae91a9ee308c138aa16d4d93ab4f4950a7d295233d6baf446"
+    "bytes": 2227,
+    "sha256": "5fe321e1bebdf07bfe6fa9b79c4e1c2f66096cab91b91b2e419dbf6f140b21a3"
   },
   "work/native-ticket-pin-retirement-20261028-r1/INDEPENDENT_REVIEW.md": {
     "bytes": 1177,
     "sha256": "fd9d27600db8ecc701002a9887a6213692347d129e0b0a9450673bcad9fc5cf4"
   },
   "work/native-ticket-pin-retirement-20261028-r1/MANIFEST.json": {
-    "bytes": 645,
-    "sha256": "98fe0e92f20f5bbdfd0ce323b66a0c1d5361ed9d753223009bc49a9b3c4a0988"
+    "bytes": 1082,
+    "sha256": "3b772342c32b51959ffe68de1cb2c7fd6c80b007b4f4dfb968af5b573dc5b072"
   }
 }
