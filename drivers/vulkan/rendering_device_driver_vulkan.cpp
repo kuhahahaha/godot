@@ -2888,6 +2888,9 @@ RDD::SamplerID RenderingDeviceDriverVulkan::sampler_create(const SamplerState &p
 	ERR_FAIL_COND_V(mag_filter > SAMPLER_FILTER_LINEAR, SamplerID());
 	ERR_FAIL_COND_V(min_filter > SAMPLER_FILTER_LINEAR, SamplerID());
 	ERR_FAIL_COND_V(mip_filter > SAMPLER_FILTER_LINEAR, SamplerID());
+	ERR_FAIL_INDEX_V(p_state.repeat_u, SAMPLER_REPEAT_MODE_MAX, SamplerID());
+	ERR_FAIL_INDEX_V(p_state.repeat_v, SAMPLER_REPEAT_MODE_MAX, SamplerID());
+	ERR_FAIL_INDEX_V(p_state.repeat_w, SAMPLER_REPEAT_MODE_MAX, SamplerID());
 	VkSamplerCreateInfo sampler_create_info = {};
 	sampler_create_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
 	sampler_create_info.pNext = nullptr;
