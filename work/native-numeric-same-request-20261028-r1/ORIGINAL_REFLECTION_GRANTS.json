@@ -1,0 +1,19 @@
+{
+  "scope": "Existing C04 static control grants for exact same Metal occurrence0 physical SPIR-V bytes; not U08 authority",
+  "grants": [
+    {
+      "physical": 0,
+      "max_live_bytes": 26068514,
+      "max_work": 257452417691,
+      "origin_log": "/Users/macbookair/Documents/Work/ANGE/work/gpu-policy-successor-20261027/gpu_qualification_unit.log",
+      "matched_original_spirv_sha256": "cb9efb9a5307f2ba3ea2f32cc4c79ab83004b1bd6facd24c8b7528d91ba5c07e"
+    },
+    {
+      "physical": 1,
+      "max_live_bytes": 810640846,
+      "max_work": 45662831425121,
+      "origin_log": "/Users/macbookair/Documents/Work/ANGE/work/gpu-policy-successor-20261027/gpu_qualification_unit.log",
+      "matched_original_spirv_sha256": "b1aba4ba8363e7f87cb3490baa7864027c849e36c80fef3f1226b06e73c4d047"
+    }
+  ]
+}

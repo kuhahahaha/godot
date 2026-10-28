@@ -1,0 +1,14 @@
+[
+  "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+  "--disable-crash-handler",
+  "--path",
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-same-request-20261028-r1/runtime",
+  "--rendering-driver",
+  "metal",
+  "--rendering-method",
+  "mobile",
+  "--render-thread",
+  "safe",
+  "--script",
+  "probe.gd"
+]
