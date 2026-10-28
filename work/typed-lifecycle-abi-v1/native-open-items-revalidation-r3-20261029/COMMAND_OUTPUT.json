@@ -1,0 +1,58 @@
+{
+  "godot_head": {
+    "command": "git rev-parse HEAD",
+    "cwd": "/Users/macbookair/Documents/Work/godot_ANGE",
+    "returncode": 0,
+    "stdout": "ada4f5aae022e04965587b04cc86d3ac71629107\n",
+    "stderr": ""
+  },
+  "ange_head": {
+    "command": "git rev-parse HEAD",
+    "cwd": "/Users/macbookair/Documents/Work/ANGE",
+    "returncode": 0,
+    "stdout": "f93ad7c09362ab084e576524a91ec6bf08e711b3\n",
+    "stderr": ""
+  },
+  "main_rd_qualification_search": {
+    "command": "rg -n require_main_rd_qualification godot-cpp/src/godot.cpp godot-cpp/include/godot_cpp/godot.hpp src/register_types.cpp src tests/native",
+    "cwd": "/Users/macbookair/Documents/Work/ANGE",
+    "returncode": 0,
+    "stdout": "godot-cpp/include/godot_cpp/godot.hpp:161:\t\tvoid require_main_rd_qualification() const;\ngodot-cpp/src/godot.cpp:687:void GDExtensionBinding::InitObject::require_main_rd_qualification() const {\nsrc/register_types.cpp:708:  init_obj.require_main_rd_qualification();\ntests/native/device_exit_scene_ready_surface.cpp:7:  init.require_main_rd_qualification();\ntests/native/host_service_binding_test.py:13:    assert source.count('init_obj.require_main_rd_qualification();') == 1, \\\ntests/native/host_service_binding_test.py:15:    assert source.index('init_obj.require_main_rd_qualification();') > source.index(marker)\nsrc/register_types.cpp:708:  init_obj.require_main_rd_qualification();\n",
+    "stderr": ""
+  },
+  "main_rd_registration_flag_search": {
+    "command": "rg -n main_rd_qualification_required src/register_types.cpp src/godot tests",
+    "cwd": "/Users/macbookair/Documents/Work/ANGE",
+    "returncode": 0,
+    "stdout": "src/register_types.cpp:192:     data.main_rd_qualification_required!=data.frozen_main_rd_qualification_required ||\ntests/native/device_exit_scene_ready_test.cpp:65: data.main_rd_qualification_required=true;data.guard_configured=true;\ntests/native/device_exit_scene_ready_test.cpp:89:   data.main_rd_qualification_required=false;\ntests/native/device_exit_scene_ready_test.cpp:94:   if(variant==4) data.main_rd_qualification_required=true;\ntests/native/device_exit_scene_ready_test.cpp:99:    data.scene_install_requirements_v2.optional_features=0;data.main_rd_qualification_required=true;\ntests/native/device_exit_scene_ready_test.cpp:112:    data.main_rd_qualification_required=true;missing=\"device_session_qualification_upload_v1\";\ntests/native/device_exit_scene_ready_test.cpp:280:     data.main_rd_qualification_required=false;\ntests/native/device_exit_scene_ready_test.cpp:338: check(data.frozen_scene_ready_callback==ready && data.frozen_main_rd_qualification_required);\ntests/native/device_exit_scene_ready_test.cpp:356:   if(variant==1) data.main_rd_qualification_required=false;\ntests/native/host_service_binding_test.py:203:   case 15:d.main_rd_qualification_required=true;break;\ntests/native/scene_ready_source/v2_receiver.py:33: if(which==15 || which==16){binding.main_rd_qualification_required=true;plan.required_features=3;plan.optional_features=0;}\ntests/native/scene_ready_source/probe.cpp.in:70: struct InitData {DeviceExitApi exit_api;bool main_rd_qualification_required=false;};\ntests/native/scene_ready_source/probe.cpp.in:124: binding.main_rd_qualification_required=qualification;\ntests/native/scene_ready_source/verify_discriminators.py:47:      'unconditional-main':('if (binding->main_rd_qualification_required)', 'if (true)'),\n",
+    "stderr": ""
+  },
+  "native_qualification_definitions": {
+    "command": "rg -n StageExecutor::start_native_qualification|ParticleProgramLoader::request_qualification src --glob *.cpp --glob !tests/**",
+    "cwd": "/Users/macbookair/Documents/Work/ANGE",
+    "returncode": 0,
+    "stdout": "src/godot/particle/particle_program_loader.cpp:591:QualificationStartResult ParticleProgramLoader::request_qualification(const BaseNumericRecipeRef& recipe,QualificationDemandRef&& parent,const DeviceCompileTarget& target) noexcept {\nsrc/godot/particle/particle_attribute_storage.cpp:70: return record_detail::StageExecutor::start_native_qualification(records,loader,program,*state_->storage,\nsrc/godot/particle/stage_executor.cpp:5:Result<std::unique_ptr<E09NativeRecorder>> StageExecutor::start_native_qualification(\n",
+    "stderr": ""
+  },
+  "native_qualification_callers": {
+    "command": "sh -c rg -n 'start_native_qualification\\(' src --glob '*.cpp' --glob '!tests/**' | rg -v 'StageExecutor::start_native_qualification' || true",
+    "cwd": "/Users/macbookair/Documents/Work/ANGE",
+    "returncode": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  "loader_callers": {
+    "command": "sh -c rg -n 'request_qualification\\(' src --glob '*.cpp' --glob '!tests/**' | rg -v 'ParticleProgramLoader::request_qualification' || true",
+    "cwd": "/Users/macbookair/Documents/Work/ANGE",
+    "returncode": 0,
+    "stdout": "src/godot/particle/particle_program_loader.cpp:600: return state_->store->request_qualification(recipe,std::move(parent),target);\nsrc/particle/runtime/qualification_scope.cpp:244:QualificationStartResult ProgramPreparationStore::request_qualification(const BaseNumericRecipeRef& recipe,\n",
+    "stderr": ""
+  },
+  "graph_path_consumer": {
+    "command": "rg -n has_dependency_path servers/rendering core/extension tests/servers/rendering",
+    "cwd": "/Users/macbookair/Documents/Work/godot_ANGE",
+    "returncode": 0,
+    "stdout": "tests/servers/rendering/test_qualification_ticket.cpp:272:\t\tCHECK(device.draw_graph.has_dependency_path(capture, body, path_length));\ntests/servers/rendering/test_rendering_device_graph_handles.cpp:98:\tCHECK(graph.has_dependency_path(before, after, path_length));\ntests/servers/rendering/test_rendering_device_graph_handles.cpp:100:\tCHECK_FALSE(graph.has_dependency_path(after, before, path_length));\ntests/servers/rendering/test_rendering_device_graph_handles.cpp:103:\tCHECK_FALSE(graph.has_dependency_path(foreign, after, path_length));\ncore/extension/gdextension_qualification_rd.cpp:76:   ticket->ordering_closed=draw_graph.has_dependency_path(ticket->capture,ticket->body,path_length);\ncore/extension/gdextension_qualification_rd.cpp:81:     const bool source_path=draw_graph.has_dependency_path(graph.handle,ticket->capture,source_path_length);\nservers/rendering/rendering_device_graph.h:74:\tbool has_dependency_path(const RecordHandle &p_before, const RecordHandle &p_after, uint32_t &r_path_length) const;\nservers/rendering/rendering_device_graph.cpp:168:bool RenderingDeviceGraph::has_dependency_path(const RecordHandle &p_before, const RecordHandle &p_after, uint32_t &r_path_length) const {\n",
+    "stderr": ""
+  }
+}

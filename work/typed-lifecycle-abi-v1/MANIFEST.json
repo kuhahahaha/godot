@@ -921,8 +921,8 @@
   "work/sdk-unloadable-active-context-20261028-r3/threads-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "work/typed-lifecycle-abi-v1/CURRENT_PAIR_U01_VFX_R01_NEGATIVE_RECEIPT_20251025.md": "c6ab0496164e2741f157768a10ffcc6f0217b630a26d95d3d9762c2e22b79a47",
   "work/typed-lifecycle-abi-v1/PROGRESS.md": {
-    "bytes": 144215,
-    "sha256": "38b21e2fd96bde30a636f010c2eca1744cbeae1cf7f180c1e3de6eb7b703adbd"
+    "bytes": 144817,
+    "sha256": "bb63954cc7242c123c8661df1eb23a82618ffcccdaadd3068de55cab81964967"
   },
   "work/typed-lifecycle-abi-v1/gdextension_interface.h": "07ee07f19e31fe5c22154edbba73ce3cb793b87524add5d9dc0c9468815c9a29",
   "work/typed-lifecycle-abi-v1/native-current-open-items-20261028/COMMAND_OUTPUT.json": "feccb44a82af5439c60b4fb8a6f7c8fc8923f9fd97e2bb169099294c67a185ef",
@@ -1397,6 +1397,50 @@
     "sha256": "d84bebc2f41e3ff16cf9f8b0430854acb7eed9f92b7f73c7485226d6d2261559"
   },
   "work/e20-qualification-path-consumer-20261029/PATH_MEMBER_QUALIFICATION_REGRESSION.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/typed-lifecycle-abi-v1/native-open-items-revalidation-r3-20261029/COMMAND_OUTPUT.json": {
+    "bytes": 6616,
+    "sha256": "e3f05ead4d9fc419d81fa1f9543ea67841080352159476a91e4531dbf7fd59e0"
+  },
+  "work/typed-lifecycle-abi-v1/native-open-items-revalidation-r3-20261029/RECEIPT.md": {
+    "bytes": 2084,
+    "sha256": "157034b90327c8f21e9ef0e18f1365ba64c4f0d0630cfe8635f43b759d7f7011"
+  },
+  "work/typed-lifecycle-abi-v1/native-open-items-revalidation-r3-20261029/SOURCE_HASHES.txt": {
+    "bytes": 1645,
+    "sha256": "414647ccd76fa61373e7c1dbf3f7f800ddf8a95bf3357351f0d6876af5adffe9"
+  },
+  "work/typed-lifecycle-abi-v1/native-open-items-revalidation-r3-20261029/device_exit.log": {
+    "bytes": 795,
+    "sha256": "38761ea4dc0f5609571ff2f52e3c75ac32b6fa2c5db8fd19680df5fcfe8ad7b1"
+  },
+  "work/typed-lifecycle-abi-v1/native-open-items-revalidation-r3-20261029/device_exit.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/typed-lifecycle-abi-v1/native-open-items-revalidation-r3-20261029/graph.log": {
+    "bytes": 302,
+    "sha256": "922e60a3ad8fa91c88f55fc724545861042cdb47e20831a747c7062312241d57"
+  },
+  "work/typed-lifecycle-abi-v1/native-open-items-revalidation-r3-20261029/graph.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/typed-lifecycle-abi-v1/native-open-items-revalidation-r3-20261029/k03_p2.log": {
+    "bytes": 302,
+    "sha256": "2f0c3a97d8c161ff0bd8978619b9aa8254a0aa239e098d1bdca48d88078e3aea"
+  },
+  "work/typed-lifecycle-abi-v1/native-open-items-revalidation-r3-20261029/k03_p2.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/typed-lifecycle-abi-v1/native-open-items-revalidation-r3-20261029/qualification.log": {
+    "bytes": 302,
+    "sha256": "d84bebc2f41e3ff16cf9f8b0430854acb7eed9f92b7f73c7485226d6d2261559"
+  },
+  "work/typed-lifecycle-abi-v1/native-open-items-revalidation-r3-20261029/qualification.rc": {
     "bytes": 2,
     "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
   }
