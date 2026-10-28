@@ -30,3 +30,13 @@ The ticket now retains the measured capture→body path length internally as
 length. RED first failed to compile because the field was absent; GREEN build
 and focused test pass with the transitive length equal to `2`. The follow-up
 Graph regression remains 8/109 and Qualification is 20/345, rc0.
+
+## Prepared-source path coverage
+
+The focused case now also carries a prepared semantic-6 source member. The
+source→capture path is retained as `GraphMember::path_length == 1`, while the
+capture→body path remains `ordering_path_length == 2`. The incremental build
+and focused run are rc0 with 1 case / 7 assertions; the full Qualification
+regression is 20/346 and the Graph regression is 8/109, both rc0. This adds
+coverage for the internal ordering fact only and does not add completion,
+readback, Ready or G1 authority.

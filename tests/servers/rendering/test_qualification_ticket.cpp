@@ -263,6 +263,7 @@ public:
 		RenderingDeviceGraph::RecordedBufferCopy copy;
 		copy.source = RenderingDeviceDriver::BufferID(71);
 		copy.region = { 0, 0, 32 };
+		const auto source = device.draw_graph.add_buffer_update(RenderingDeviceDriver::BufferID(72), &destination, VectorView(&copy, 1));
 		const auto capture = device.draw_graph.add_buffer_update(RenderingDeviceDriver::BufferID(72), &destination, VectorView(&copy, 1));
 		device.draw_graph.add_buffer_update(RenderingDeviceDriver::BufferID(72), &destination, VectorView(&copy, 1));
 		const auto body = device.draw_graph.add_buffer_update(RenderingDeviceDriver::BufferID(72), &destination, VectorView(&copy, 1));
@@ -276,12 +277,19 @@ public:
 		QualificationTicket ticket;
 		ticket.capture = capture;
 		ticket.body = body;
+		ticket.prepared = true;
+		GDExtensionQualificationFactV1 source_fact = {};
+		source_fact.semantic_kind = 6;
+		source_fact.command_slot = UINT32_MAX;
+		ticket.facts.push_back(source_fact);
+		ticket.graphs.push_back({ source, 0, 0, 0, 1, false, false });
 		ticket.frame_refs = 1;
 		ticket.report.revision = 1;
 		device.frames[0].qualification_tickets.push_back(&ticket);
 		device._qualification_seal_tickets();
 		CHECK(ticket.ordering_closed);
 		CHECK(ticket.ordering_path_length == 2);
+		CHECK(ticket.graphs[0].path_length == 1);
 		CHECK_FALSE(ticket.mapping_failed);
 		device.frames.clear();
 		device.draw_graph.finalize();
