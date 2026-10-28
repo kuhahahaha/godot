@@ -11,14 +11,15 @@
   ],
   "external_root_selected": "/opt/homebrew/opt/glslang",
   "external_glslang_version": "16.6.0",
-  "build_command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j4 platform=macos target=editor dev_build=yes tests=no builtin_glslang=no",
+  "executable_build_command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j4 platform=macos target=editor dev_build=yes tests=no builtin_glslang=no",
+  "shared_build_command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j4 platform=macos target=editor dev_build=yes tests=no builtin_glslang=no library_type=shared_library",
   "source_sha256": {
     "platform/macos/detect.py": "3415360e36a9182e8526ccb7d28001450f20066ad8e9981fc993ea59fff2be88",
     "platform/macos/SCsub": "c9684d9ef7af3ae95c215c7f62eb8e8091184c2c504ce38b7a28ce2aa36040e0"
   },
   "artifact_sha256": {
     "bin/godot.macos.editor.dev.arm64": "b747ac4dbc93e7d2a8ad00496fecfb83f709acf9ed1d0b924c16a82d1abfc476",
-    "bin/libgodot.macos.editor.dev.arm64.dylib": "5703b7bf571a3131439c29653b07fd0a1cb5bb26d5b12697f1ee58cef87ac8cb"
+    "bin/libgodot.macos.editor.dev.arm64.dylib": "bb8f801ad461026855f1065e2e411714109b6f30b810aa3db83fbcbb6735e0bc"
   },
   "external_runtime_dependencies": [
     "/opt/homebrew/opt/glslang/lib/libglslang.16.dylib",

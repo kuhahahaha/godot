@@ -1,7 +1,7 @@
 # Independent review — R1
 
-Scope: `platform/macos/detect.py` external glslang selection and the recorded
-nonbuiltin editor build.
+Scope: `platform/macos/detect.py` external glslang selection, the executable
+build, and the explicitly requested `library_type=shared_library` build.
 
 Findings:
 
@@ -11,8 +11,14 @@ Findings:
   a build error.
 - The three libraries linked by the successful build are the selected external
   installation, as shown by `otool -L`.
+- The shared artifact is separately rebuilt and pinned as
+  `bb8f801ad461026855f1065e2e411714109b6f30b810aa3db83fbcbb6735e0bc`; the
+  earlier builtin dylib was not reused as nonbuiltin evidence.
 - The runtime identity remains schema 0 / unavailable for nonbuiltin builds;
   the receipt does not reinterpret that record as a schema-1 identity.
+- The existing full shared host is schema-1-specific and aborts after its
+  missing-identity guard; only the early-help load/dlclose control is counted
+  as a shared-library runtime result.
 - No change weakens G1, creates an operation/completion/readback authority, or
   promotes Ready.
 
