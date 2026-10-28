@@ -49,6 +49,12 @@ private:
 	int _current_width = 0;
 	TextureMode texture_mode = TEXTURE_MODE_RGB;
 	TextureMode _current_texture_mode = TEXTURE_MODE_RGB;
+	uint64_t _content_revision = 1;
+	void _advance_content_revision() {
+		if (_content_revision != UINT64_MAX) {
+			++_content_revision;
+		}
+	}
 
 	void _update();
 
@@ -61,6 +67,7 @@ public:
 
 	void set_texture_mode(TextureMode p_mode);
 	TextureMode get_texture_mode() const;
+	uint64_t get_content_revision() const { return _content_revision; }
 
 	void ensure_default_setup(float p_min = 0, float p_max = 1);
 

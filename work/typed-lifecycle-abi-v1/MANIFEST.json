@@ -128,7 +128,7 @@
     "sha256": "934c46bd0bf23ddf7280126d1c131a4376541bea7f277d1fe653961351dc7efc"
   },
   "SConstruct": "c6d32561793fa5987ed8b9e8a7ab3b4beb04ea63bacb912f6fc1b0528b9181a7",
-  "bin/godot.macos.editor.dev.arm64": "525a6ce5e7accbc6f0d83d9092dd6ef70864259d03df1a7dd302af5ce5db6ea8",
+  "bin/godot.macos.editor.dev.arm64": "95cd9ef25e18ce4aa79f83805076f0ccdc0ee30e4a1af07cd482b9ebb72ac37a",
   "bin/libgodot.macos.template_debug.dev.arm64.a": {
     "bytes": 1893366248,
     "sha256": "b3fb7e2a2d1476e0744e6e3c43fb97ef067450360145ac1a6a91a3c72b2271e7"
@@ -175,9 +175,9 @@
   "scene/resources/curve.h": "19e900a263651c34f7a7dd7c5937e643fc2c9e3ed5e22732a325229dca590a4e",
   "scene/resources/gradient.cpp": "51f1c9b6915710649858f2411c750bc77a273af666465192467bd0034339124b",
   "scene/resources/gradient.h": "5b18bafb0448e78092727ab270142bfba5ec06b29caeccf8a5cb04ae07bacb92",
-  "scene/resources/resource_snapshot_bridge.h": "1c85f77dd01651b4c9ae29214366bf392594657aa8857e4b2164f308553d0de8",
-  "scene/resources/resource_snapshot_native.cpp": "a515fc3179f635a183842707ddc26d3126e2a40f8612ed150ab6e7f76efe7193",
-  "scene/resources/resource_snapshot_native.h": "be7686b68d453d2111155f969bd0d4f5c8610b05cc549a8bb04971d28fdd9a8b",
+  "scene/resources/resource_snapshot_bridge.h": "0dc36cacab435cd39f1622e25d4535602b440bd7b40fa4b82f5b0b6594fda8bb",
+  "scene/resources/resource_snapshot_native.cpp": "70100a1adf46cff093e3684e7855a5082a82987a16ef97079305efbb646d8fae",
+  "scene/resources/resource_snapshot_native.h": "55690b1da28bc2bfe602e87901d59781f761f2e8732371c81f1fdde54c78e6c9",
   "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp": "e630f9530f2e66896953b0ece962e476da1e2029116aa85d2e510945c17ea6af",
   "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.cpp": "af4899159aaba369440f3ecef0cc37b181e9f7e4c6d85085a527f8a44912dc56",
   "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h": "b4a1f7713c0523fed6974ce52992670900c56c1b6b53f570f5a33dad604109de",
@@ -197,7 +197,7 @@
   "tests/core/object/test_device_exit_library_close.cpp": "1d5bc82848c80dd9ea987ef035f1ce8517d1bf9887ad082f53ebc6acdc455357",
   "tests/core/object/test_device_exit_typed_abi.cpp": "79432daadcec21a5c9dc246ae7c91467366c16c440aae02466a801f72476fb30",
   "tests/core/object/test_editor_help_shutdown.cpp": "ac941ed3a9bcfcd9ec7eda61c02bb5e5a7d399164b646c55b5bd83d255bd6646",
-  "tests/scene/test_resource_snapshot_bridge.cpp": "02e1d5a6cf9a46c76987bbedbc009e1bb996219a77bc4ae9578edcc514d2e152",
+  "tests/scene/test_resource_snapshot_bridge.cpp": "fccd5cb06da37fceca1156f5af50984f81ad55daf0dd668329233e70c1e55eea",
   "tests/servers/rendering/test_external_output_contract.cpp": "79df2df977cb991c13af1c272f2674920324bdf4b2d89cbf775a77d423f08536",
   "tests/servers/rendering/test_mesh_storage_external.cpp": "b606f174bb8121b1ab3951ba068d276a280daf23e041d157f162515bf9a7a4b3",
   "tests/servers/rendering/test_qualification_physical.cpp": "4a4aa539f4de3cb81093065756a745e35a1a8ad9db782d0e8a84d10b649e2d82",
@@ -921,8 +921,8 @@
   "work/sdk-unloadable-active-context-20261028-r3/threads-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "work/typed-lifecycle-abi-v1/CURRENT_PAIR_U01_VFX_R01_NEGATIVE_RECEIPT_20251025.md": "c6ab0496164e2741f157768a10ffcc6f0217b630a26d95d3d9762c2e22b79a47",
   "work/typed-lifecycle-abi-v1/PROGRESS.md": {
-    "bytes": 145114,
-    "sha256": "a1b3333b302be8824d4722fdfaac6cd53a51c2ee2cdb64f75561841b06824604"
+    "bytes": 145835,
+    "sha256": "f7f4cad83390e251f221b465ca1a62f579ba2219f4f49fae594fb5d580d0fe7a"
   },
   "work/typed-lifecycle-abi-v1/gdextension_interface.h": "07ee07f19e31fe5c22154edbba73ce3cb793b87524add5d9dc0c9468815c9a29",
   "work/typed-lifecycle-abi-v1/native-current-open-items-20261028/COMMAND_OUTPUT.json": "feccb44a82af5439c60b4fb8a6f7c8fc8923f9fd97e2bb169099294c67a185ef",
@@ -1459,5 +1459,131 @@
   "work/e20-qualification-path-consumer-20261029/PATH_MEMBER_RELEASE_VERSION.rc": {
     "bytes": 2,
     "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
-  }
+  },
+  "work/e22-core-texture-snapshot-20261029/COMMANDS.json": {
+    "bytes": 2938,
+    "sha256": "4fee5663257118cd8285f59fdf7e0e7027b0430e82c2dca12af61b2c9ab93a7c"
+  },
+  "work/e22-core-texture-snapshot-20261029/DEBUG_BUILD.log": {
+    "bytes": 2210,
+    "sha256": "a1264fcc441aadc06018539daf102e774cece0f42bf9afa1378c413cdd9d2f77"
+  },
+  "work/e22-core-texture-snapshot-20261029/DEBUG_BUILD.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/e22-core-texture-snapshot-20261029/DEBUG_FOCUSED.log": {
+    "bytes": 298,
+    "sha256": "f2a62e3a3e1fca7b99d01bbd86eb325b434cd1e07b23a57e8fa0b1ebcf28a79e"
+  },
+  "work/e22-core-texture-snapshot-20261029/DEBUG_FOCUSED.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/e22-core-texture-snapshot-20261029/DEBUG_REGRESSION.log": {
+    "bytes": 302,
+    "sha256": "399a5b8152691444b230e87424e4100d24213372c57188dd2e344f3e8d732e0d"
+  },
+  "work/e22-core-texture-snapshot-20261029/DEBUG_REGRESSION.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/e22-core-texture-snapshot-20261029/DEVICE_EXIT.log": {
+    "bytes": 795,
+    "sha256": "3dfb618102fdd1b9bce1b2bb9b23be87052dc05ea4a5122000488a30f22af0cb"
+  },
+  "work/e22-core-texture-snapshot-20261029/DEVICE_EXIT.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/e22-core-texture-snapshot-20261029/GRAPH.log": {
+    "bytes": 302,
+    "sha256": "e15fa705b70ff4b4c3a168d731582e657d8203c16616fc3d69d42b85b4025ceb"
+  },
+  "work/e22-core-texture-snapshot-20261029/GRAPH.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/e22-core-texture-snapshot-20261029/INDEPENDENT_REVIEW.md": {
+    "bytes": 1368,
+    "sha256": "fe379ac4cff362eea70190dc004b74aa750250642890cafe672fa485abb61955"
+  },
+  "work/e22-core-texture-snapshot-20261029/K03_P2.log": {
+    "bytes": 302,
+    "sha256": "80fe0ad0a31b3b4648390b438b0a7013caa93297a9c4d37995f4d8613e8375a2"
+  },
+  "work/e22-core-texture-snapshot-20261029/K03_P2.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/e22-core-texture-snapshot-20261029/QUALIFICATION.log": {
+    "bytes": 302,
+    "sha256": "8f4e8b782f66ea955838928a3c629f82ef7ab31ddc3da2547649ccb0f706adc8"
+  },
+  "work/e22-core-texture-snapshot-20261029/QUALIFICATION.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/e22-core-texture-snapshot-20261029/RECEIPT.md": {
+    "bytes": 2286,
+    "sha256": "92b954830772b6fe9ab2d636e91cd38108fb70fc2a9f0f36b29caae3a635cdae"
+  },
+  "work/e22-core-texture-snapshot-20261029/RED_BUILD.log": {
+    "bytes": 5565,
+    "sha256": "dc726f60059af4e2ae07aebf6bb6cd212b71a21e47e37c4a2df1febbde9f08ab"
+  },
+  "work/e22-core-texture-snapshot-20261029/RED_BUILD.rc": {
+    "bytes": 2,
+    "sha256": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3"
+  },
+  "work/e22-core-texture-snapshot-20261029/RELEASE_BUILD.log": {
+    "bytes": 2042,
+    "sha256": "874fa8beed85a6e935c5dfa45f510f8ebbfae0721e9a8e80eccfea8ea8245745"
+  },
+  "work/e22-core-texture-snapshot-20261029/RELEASE_BUILD.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/e22-core-texture-snapshot-20261029/RELEASE_VERSION.log": {
+    "bytes": 36,
+    "sha256": "558675af6b565bec2a658ff7b8dab115c91e564c7b182e41b0d2d4b7a8dc992b"
+  },
+  "work/e22-core-texture-snapshot-20261029/RELEASE_VERSION.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/e22-core-texture-snapshot-20261029/SOURCE_MANIFEST.json": {
+    "bytes": 2015,
+    "sha256": "1576e89f55ca962ffd7751450382b5bb089e1d5ce44a262d2da81798e9ee5ad6"
+  },
+  "work/e22-core-texture-snapshot-20261029/UBSAN_BUILD_R3.log": {
+    "bytes": 186762,
+    "sha256": "632e83d29d5dbf33951857111faf11218e6f033b8d059ad122eedb62b8cd1493"
+  },
+  "work/e22-core-texture-snapshot-20261029/UBSAN_BUILD_R3.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/e22-core-texture-snapshot-20261029/UBSAN_REGRESSION.log": {
+    "bytes": 302,
+    "sha256": "399a5b8152691444b230e87424e4100d24213372c57188dd2e344f3e8d732e0d"
+  },
+  "work/e22-core-texture-snapshot-20261029/UBSAN_REGRESSION.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/e22-core-texture-snapshot-20261029/UBSAN_RUN.log": {
+    "bytes": 298,
+    "sha256": "f2a62e3a3e1fca7b99d01bbd86eb325b434cd1e07b23a57e8fa0b1ebcf28a79e"
+  },
+  "work/e22-core-texture-snapshot-20261029/UBSAN_RUN.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "scene/resources/curve_texture.h": "39a82746b0c92ee83d69344f4576e6c27f01166eec9160fa8b97d3f9ec9b7df9",
+  "scene/resources/curve_texture.cpp": "d910ebc32487da958b5863a641a27f666f16b3fa601e53025cf1d7bb5bdbef68",
+  "scene/resources/gradient_texture.h": "3cad36e241f75687961444287d1b63c91df1efb7c2c3459eebc4b912b03aaf65",
+  "scene/resources/gradient_texture.cpp": "c10e08cabdc859b99a0fadd70c00b6944b8b8e8923137185e65b47fcd09e3e67",
+  "bin/godot.macos.template_release.arm64": "4a23531fc16757b8405fb85b0d1c71e19e02eb03e40e9917cbf4a1690c83f7e0",
+  "bin/godot.macos.editor.dev.arm64.san": "b5c390c4836a1eaf6591a8520144cd246ddd100f9c221d6c6450d7cd48e0f8ec"
 }

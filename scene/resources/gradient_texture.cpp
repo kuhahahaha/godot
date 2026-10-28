@@ -72,6 +72,7 @@ void GradientTexture1D::set_gradient(Ref<Gradient> p_gradient) {
 	if (gradient.is_valid()) {
 		gradient->connect_changed(callable_mp(this, &GradientTexture1D::_queue_update));
 	}
+	_advance_content_revision();
 	_queue_update();
 	emit_changed();
 }
@@ -144,6 +145,9 @@ void GradientTexture1D::_update() const {
 
 void GradientTexture1D::set_width(int p_width) {
 	ERR_FAIL_COND_MSG(p_width <= 0 || p_width > 16384, "Texture dimensions have to be within 1 to 16384 range.");
+	if (width != p_width) {
+		_advance_content_revision();
+	}
 	width = p_width;
 	_queue_update();
 	emit_changed();
@@ -159,6 +163,7 @@ void GradientTexture1D::set_use_hdr(bool p_enabled) {
 	}
 
 	use_hdr = p_enabled;
+	_advance_content_revision();
 	_queue_update();
 	emit_changed();
 }

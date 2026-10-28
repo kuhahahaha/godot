@@ -59,6 +59,7 @@ void CurveTexture::set_width(int p_width) {
 	}
 
 	_width = p_width;
+	_advance_content_revision();
 	_update();
 }
 
@@ -87,6 +88,7 @@ void CurveTexture::set_curve(Ref<Curve> p_curve) {
 		if (_curve.is_valid()) {
 			_curve->connect_changed(callable_mp(this, &CurveTexture::_update));
 		}
+		_advance_content_revision();
 		_update();
 	}
 }
@@ -154,6 +156,7 @@ void CurveTexture::set_texture_mode(TextureMode p_mode) {
 		return;
 	}
 	texture_mode = p_mode;
+	_advance_content_revision();
 	_update();
 }
 CurveTexture::TextureMode CurveTexture::get_texture_mode() const {

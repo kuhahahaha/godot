@@ -42,6 +42,12 @@ private:
 	mutable RID texture;
 	int width = 256;
 	bool use_hdr = false;
+	uint64_t _content_revision = 1;
+	void _advance_content_revision() {
+		if (_content_revision != UINT64_MAX) {
+			++_content_revision;
+		}
+	}
 
 	void _queue_update();
 	void _update() const;
@@ -58,6 +64,7 @@ public:
 
 	void set_use_hdr(bool p_enabled);
 	bool is_using_hdr() const;
+	uint64_t get_content_revision() const { return _content_revision; }
 
 	virtual RID get_rid() const override;
 	virtual int get_height() const override { return 1; }

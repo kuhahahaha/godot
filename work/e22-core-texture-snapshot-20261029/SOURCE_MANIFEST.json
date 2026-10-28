@@ -1,0 +1,55 @@
+{
+  "godot_head": "3c2c200f4b95baa1431cbfafd8244b9e08b2422a",
+  "source": {
+    "scene/resources/curve_texture.h": {
+      "bytes": 4330,
+      "sha256": "39a82746b0c92ee83d69344f4576e6c27f01166eec9160fa8b97d3f9ec9b7df9"
+    },
+    "scene/resources/curve_texture.cpp": {
+      "bytes": 11747,
+      "sha256": "d910ebc32487da958b5863a641a27f666f16b3fa601e53025cf1d7bb5bdbef68"
+    },
+    "scene/resources/gradient_texture.h": {
+      "bytes": 4872,
+      "sha256": "3cad36e241f75687961444287d1b63c91df1efb7c2c3459eebc4b912b03aaf65"
+    },
+    "scene/resources/gradient_texture.cpp": {
+      "bytes": 15544,
+      "sha256": "c10e08cabdc859b99a0fadd70c00b6944b8b8e8923137185e65b47fcd09e3e67"
+    },
+    "scene/resources/resource_snapshot_bridge.h": {
+      "bytes": 9996,
+      "sha256": "0dc36cacab435cd39f1622e25d4535602b440bd7b40fa4b82f5b0b6594fda8bb"
+    },
+    "scene/resources/resource_snapshot_native.h": {
+      "bytes": 779,
+      "sha256": "55690b1da28bc2bfe602e87901d59781f761f2e8732371c81f1fdde54c78e6c9"
+    },
+    "scene/resources/resource_snapshot_native.cpp": {
+      "bytes": 19287,
+      "sha256": "70100a1adf46cff093e3684e7855a5082a82987a16ef97079305efbb646d8fae"
+    },
+    "tests/scene/test_resource_snapshot_bridge.cpp": {
+      "bytes": 20034,
+      "sha256": "fccd5cb06da37fceca1156f5af50984f81ad55daf0dd668329233e70c1e55eea"
+    },
+    "scene/register_scene_types.cpp": {
+      "bytes": 57577,
+      "sha256": "f799946f8e13bdc6efb6df832e37b0a3fbaa899ea81800810fee2e52709c82b7"
+    }
+  },
+  "artifacts": {
+    "bin/godot.macos.editor.dev.arm64": {
+      "bytes": 302617232,
+      "sha256": "95cd9ef25e18ce4aa79f83805076f0ccdc0ee30e4a1af07cd482b9ebb72ac37a"
+    },
+    "bin/godot.macos.template_release.arm64": {
+      "bytes": 65752576,
+      "sha256": "4a23531fc16757b8405fb85b0d1c71e19e02eb03e40e9917cbf4a1690c83f7e0"
+    },
+    "bin/godot.macos.editor.dev.arm64.san": {
+      "bytes": 918727824,
+      "sha256": "b5c390c4836a1eaf6591a8520144cd246ddd100f9c221d6c6450d7cd48e0f8ec"
+    }
+  }
+}

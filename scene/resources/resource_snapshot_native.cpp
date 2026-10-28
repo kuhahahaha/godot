@@ -3,9 +3,13 @@
 #include "core/extension/gdextension.h"
 #include "core/os/thread.h"
 #include "scene/resources/curve.h"
+#include "scene/resources/curve_texture.h"
 #include "scene/resources/gradient.h"
+#include "scene/resources/gradient_texture.h"
 
+#include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <initializer_list>
 #include <limits>
 
@@ -54,6 +58,132 @@ bool sample_span(const double *x, uint32_t count, double lo, double hi) {
 		}
 	}
 	return true;
+}
+
+struct TextureView {
+	Object *wrapper = nullptr;
+	Object *child = nullptr;
+	uint64_t wrapper_id = 0;
+	uint64_t wrapper_revision = 0;
+	uint64_t child_id = 0;
+	uint64_t child_revision = 0;
+	uint32_t source_kind = 0;
+	uint32_t width = 0;
+	uint32_t native_mode = 0;
+	uint32_t child_present = 0;
+};
+
+uint32_t texture_view(void *source, TextureView &view) {
+	if (!Thread::is_main_thread()) {
+		return ANGE_TEXTURE_WRONG_THREAD_V1;
+	}
+	if (!source) {
+		return ANGE_TEXTURE_BAD_ARGUMENT_V1;
+	}
+	Object *object = static_cast<Object *>(source);
+	if (auto *curve_texture = Object::cast_to<CurveTexture>(object)) {
+		view.wrapper = curve_texture;
+		view.wrapper_id = uint64_t(curve_texture->get_instance_id());
+		view.wrapper_revision = curve_texture->get_content_revision();
+		view.source_kind = ANGE_TEXTURE_SOURCE_CURVE_V1;
+		view.width = uint32_t(curve_texture->get_width());
+		view.native_mode = curve_texture->get_texture_mode() == CurveTexture::TEXTURE_MODE_RGB ? ANGE_TEXTURE_CURVE_RGB_V1 : ANGE_TEXTURE_CURVE_RED_V1;
+		const Ref<Curve> child = curve_texture->get_curve();
+		if (child.is_valid()) {
+			view.child = child.ptr();
+			view.child_id = uint64_t(child->get_instance_id());
+			view.child_revision = child->get_content_revision();
+			view.child_present = 1;
+		}
+	} else if (auto *gradient_texture = Object::cast_to<GradientTexture1D>(object)) {
+		view.wrapper = gradient_texture;
+		view.wrapper_id = uint64_t(gradient_texture->get_instance_id());
+		view.wrapper_revision = gradient_texture->get_content_revision();
+		view.source_kind = ANGE_TEXTURE_SOURCE_GRADIENT_1D_V1;
+		view.width = uint32_t(gradient_texture->get_width());
+		view.native_mode = gradient_texture->is_using_hdr() ? ANGE_TEXTURE_GRADIENT_HDR_V1 : ANGE_TEXTURE_GRADIENT_LDR_V1;
+		const Ref<Gradient> child = gradient_texture->get_gradient();
+		if (child.is_valid()) {
+			view.child = child.ptr();
+			view.child_id = uint64_t(child->get_instance_id());
+			view.child_revision = child->get_content_revision();
+			view.child_present = 1;
+		}
+	} else {
+		return ANGE_TEXTURE_WRONG_TYPE_V1;
+	}
+	if (!view.child_present) {
+		return ANGE_TEXTURE_INVALID_SOURCE_V1;
+	}
+	if (!view.wrapper_id || view.wrapper_revision == UINT64_MAX || (view.child_present && (!view.child_id || view.child_revision == UINT64_MAX))) {
+		return ANGE_TEXTURE_INVALID_SOURCE_V1;
+	}
+	return ANGE_TEXTURE_OK_V1;
+}
+
+AngeTextureSourceTupleV1 texture_source(const TextureView &view) {
+	return { view.wrapper_id, view.wrapper_revision, view.child_id, view.child_revision,
+			view.source_kind, view.width, view.native_mode, view.child_present };
+}
+
+bool same_texture_source(const AngeTextureSourceTupleV1 &a, const AngeTextureSourceTupleV1 &b) {
+	return a.wrapper_id == b.wrapper_id && a.wrapper_revision == b.wrapper_revision &&
+			a.child_id == b.child_id && a.child_revision == b.child_revision &&
+			a.source_kind == b.source_kind && a.width == b.width &&
+			a.native_mode == b.native_mode && a.child_present == b.child_present;
+}
+
+bool same_texture_plan(const AngeTextureSnapshotPlanV1 &a, const AngeTextureSnapshotPlanV1 &b) {
+	return same_texture_source(a.source, b.source) && a.output_format == b.output_format &&
+		a.real_bytes == b.real_bytes && a.point_count == b.point_count &&
+		a.bake_resolution == b.bake_resolution && a.output_bytes == b.output_bytes &&
+		a.scratch_bytes == b.scratch_bytes;
+}
+
+uint32_t build_texture_plan(const TextureView &view, uint32_t output_format, AngeTextureSnapshotPlanV1 &plan) {
+	plan = {};
+	plan.source = texture_source(view);
+	if (view.width == 0 || view.width > 4096) {
+		return ANGE_TEXTURE_LIMIT_V1;
+	}
+	if (view.source_kind == ANGE_TEXTURE_SOURCE_CURVE_V1) {
+		if (output_format != ANGE_TEXTURE_FORMAT_RGBAF_V1 || (view.width < 32) || view.native_mode < ANGE_TEXTURE_CURVE_RGB_V1 || view.native_mode > ANGE_TEXTURE_CURVE_RED_V1) {
+			return ANGE_TEXTURE_UNSUPPORTED_V1;
+		}
+		if (view.child_present) {
+			const auto *curve = static_cast<const Curve *>(view.child);
+			if (curve->get_point_count() > 4096) {
+				return ANGE_TEXTURE_LIMIT_V1;
+			}
+			plan.point_count = curve->get_point_count();
+			plan.bake_resolution = std::min(view.width, 1000u);
+			plan.scratch_bytes = uint64_t(plan.bake_resolution) * sizeof(real_t);
+		}
+		plan.real_bytes = sizeof(real_t);
+	} else if (view.source_kind == ANGE_TEXTURE_SOURCE_GRADIENT_1D_V1) {
+		if (!view.child_present || view.width < 2 || (view.native_mode == ANGE_TEXTURE_GRADIENT_HDR_V1 ? output_format != ANGE_TEXTURE_FORMAT_RGBAF_V1 : output_format != ANGE_TEXTURE_FORMAT_RGBA8_V1)) {
+			return view.child_present ? ANGE_TEXTURE_UNSUPPORTED_V1 : ANGE_TEXTURE_INVALID_SOURCE_V1;
+		}
+		Gradient *gradient = static_cast<Gradient *>(view.child);
+		if (gradient->get_point_count() > 4096) {
+			return ANGE_TEXTURE_LIMIT_V1;
+		}
+		plan.point_count = gradient->get_point_count();
+		plan.real_bytes = sizeof(real_t);
+	} else {
+		return ANGE_TEXTURE_WRONG_TYPE_V1;
+	}
+	plan.output_format = output_format;
+	plan.output_bytes = uint64_t(view.width) * (output_format == ANGE_TEXTURE_FORMAT_RGBAF_V1 ? 16u : 4u);
+	return ANGE_TEXTURE_OK_V1;
+}
+
+void write_f32(uint8_t *destination, float value) {
+	std::memcpy(destination, &value, sizeof(value));
+}
+
+bool valid_float(float value) {
+	return std::isfinite(value);
 }
 } //namespace
 
@@ -219,8 +349,124 @@ AngeCaptureStatusV1 ange_gradient_snapshot_v1(void *source, const double *x, uin
 	return gradient->get_content_revision() == *revision ? ANGE_CAPTURE_OK_V1 : ANGE_CAPTURE_SOURCE_BUSY_V1;
 }
 
+uint32_t ange_texture_snapshot_plan_v1(void *source, uint32_t output_format, AngeTextureSnapshotPlanV1 *out) {
+	if (!aligned(out)) {
+		return ANGE_TEXTURE_BAD_ARGUMENT_V1;
+	}
+	*out = {};
+	TextureView view;
+	const uint32_t status = texture_view(source, view);
+	if (status != ANGE_TEXTURE_OK_V1) {
+		return status;
+	}
+	return build_texture_plan(view, output_format, *out);
+}
+
+uint32_t ange_texture_snapshot_v1(void *source, const AngeTextureSnapshotPlanV1 *expected,
+		uint8_t *output, uint64_t output_capacity, void *scratch, uint64_t scratch_capacity,
+		AngeTextureSnapshotResultV1 *out) {
+	if (!aligned(expected) || !aligned(out)) {
+		return ANGE_TEXTURE_BAD_ARGUMENT_V1;
+	}
+	*out = {};
+	TextureView view;
+	const uint32_t source_status = texture_view(source, view);
+	if (source_status != ANGE_TEXTURE_OK_V1) {
+		out->status = source_status;
+		return source_status;
+	}
+	AngeTextureSnapshotPlanV1 current;
+	const uint32_t plan_status = build_texture_plan(view, expected->output_format, current);
+	out->source = current.source;
+	if (plan_status != ANGE_TEXTURE_OK_V1) {
+		out->status = plan_status;
+		return plan_status;
+	}
+	if (!same_texture_source(expected->source, current.source)) {
+		out->status = ANGE_TEXTURE_STALE_SOURCE_V1;
+		return out->status;
+	}
+	if (!same_texture_plan(*expected, current)) {
+		out->status = ANGE_TEXTURE_BAD_ARGUMENT_V1;
+		return out->status;
+	}
+	if (current.output_bytes > output_capacity || (current.output_bytes && !output) ||
+			current.scratch_bytes > scratch_capacity || (current.scratch_bytes && !scratch) ||
+			(current.output_format == ANGE_TEXTURE_FORMAT_RGBAF_V1 && uintptr_t(output) % alignof(float)) ||
+			(current.scratch_bytes && uintptr_t(scratch) % current.real_bytes) ||
+			!disjoint_spans({ { expected, sizeof(*expected) }, { out, sizeof(*out) },
+				{ output, current.output_bytes }, { scratch, current.scratch_bytes } })) {
+		out->status = current.output_bytes > output_capacity || current.scratch_bytes > scratch_capacity ? ANGE_TEXTURE_LIMIT_V1 : ANGE_TEXTURE_BAD_ARGUMENT_V1;
+		return out->status;
+	}
+
+	const auto fail = [&](uint32_t status) {
+		out->status = status;
+		return status;
+	};
+	if (view.source_kind == ANGE_TEXTURE_SOURCE_CURVE_V1) {
+		const auto *texture = static_cast<const CurveTexture *>(view.wrapper);
+		const auto *curve = static_cast<const Curve *>(view.child);
+		for (uint32_t i = 0; i < view.width; ++i) {
+			float value = 0;
+			if (curve) {
+				value = float(curve->sample_baked(real_t(i) / real_t(view.width)));
+				if (!valid_float(value)) {
+					return fail(ANGE_TEXTURE_INVALID_SOURCE_V1);
+				}
+			}
+			uint8_t *pixel = output + uint64_t(i) * 16;
+			if (texture->get_texture_mode() == CurveTexture::TEXTURE_MODE_RGB) {
+				write_f32(pixel + 0, value);
+				write_f32(pixel + 4, value);
+				write_f32(pixel + 8, value);
+			} else {
+				write_f32(pixel + 0, value);
+				write_f32(pixel + 4, 0.0f);
+				write_f32(pixel + 8, 0.0f);
+			}
+			write_f32(pixel + 12, 1.0f);
+			++out->initialized_pixels;
+		}
+	} else {
+		const auto *texture = static_cast<const GradientTexture1D *>(view.wrapper);
+		Gradient *gradient = static_cast<Gradient *>(view.child);
+		for (uint32_t i = 0; i < view.width; ++i) {
+			const Color color = gradient->get_color_at_offset(float(i) / float(view.width - 1));
+			if (!finite_color(color)) {
+				return fail(ANGE_TEXTURE_INVALID_SOURCE_V1);
+			}
+			uint8_t *pixel = output + uint64_t(i) * (current.output_format == ANGE_TEXTURE_FORMAT_RGBAF_V1 ? 16 : 4);
+			if (texture->is_using_hdr()) {
+				write_f32(pixel + 0, float(color.r));
+				write_f32(pixel + 4, float(color.g));
+				write_f32(pixel + 8, float(color.b));
+				write_f32(pixel + 12, float(color.a));
+			} else {
+				pixel[0] = color.get_r8();
+				pixel[1] = color.get_g8();
+				pixel[2] = color.get_b8();
+				pixel[3] = color.get_a8();
+			}
+			++out->initialized_pixels;
+		}
+	}
+	TextureView after;
+	const uint32_t after_status = texture_view(source, after);
+	if (after_status != ANGE_TEXTURE_OK_V1) {
+		return fail(after_status);
+	}
+	out->source = texture_source(after);
+	if (!same_texture_source(out->source, expected->source)) {
+		return fail(ANGE_TEXTURE_STALE_SOURCE_V1);
+	}
+	return fail(ANGE_TEXTURE_OK_V1);
+}
+
 void register_resource_snapshot_bridge() {
 	GDExtension::register_interface_function(ANGE_RESOURCE_CONTENT_REVISION_PROC_V1, reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&ange_resource_content_revision_v1));
 	GDExtension::register_interface_function(ANGE_CURVE_SNAPSHOT_PROC_V1, reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&ange_curve_snapshot_v1));
 	GDExtension::register_interface_function(ANGE_GRADIENT_SNAPSHOT_PROC_V1, reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&ange_gradient_snapshot_v1));
+	GDExtension::register_interface_function(ANGE_TEXTURE_SNAPSHOT_PLAN_PROC_V1, reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&ange_texture_snapshot_plan_v1));
+	GDExtension::register_interface_function(ANGE_TEXTURE_SNAPSHOT_PROC_V1, reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&ange_texture_snapshot_v1));
 }

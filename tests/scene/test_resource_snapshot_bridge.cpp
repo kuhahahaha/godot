@@ -62,6 +62,8 @@ TEST_CASE("[ResourceSnapshot] Gradient revision observes blocked-signal mutation
 }
 
 #include "core/os/thread.h"
+#include "scene/resources/curve_texture.h"
+#include "scene/resources/gradient_texture.h"
 #include "scene/resources/resource_snapshot_native.h"
 
 #include <limits>
@@ -371,4 +373,77 @@ TEST_CASE("[ResourceSnapshot] insufficient stop capacity refuses before native s
 	CHECK_FALSE(TestResourceSnapshotAccess::sorted(g.ptr()));
 	CHECK(TestResourceSnapshotAccess::first_offset(g.ptr()) == 1);
 	CHECK(g->get_content_revision() == before);
+}
+
+TEST_CASE("[ResourceSnapshot] texture plan and capture use real CurveTexture and GradientTexture1D objects") {
+	Ref<CurveTexture> curve_texture;
+	curve_texture.instantiate();
+	curve_texture->set_width(32);
+	curve_texture->set_texture_mode(CurveTexture::TEXTURE_MODE_RED);
+	Ref<Curve> curve;
+	curve.instantiate();
+	curve->add_point(Vector2(0, 0));
+	curve->add_point(Vector2(1, 1));
+	curve_texture->set_curve(curve);
+
+	AngeTextureSnapshotPlanV1 curve_plan = {};
+	CHECK(ange_texture_snapshot_plan_v1(curve_texture.ptr(), ANGE_TEXTURE_FORMAT_RGBAF_V1, &curve_plan) == ANGE_TEXTURE_OK_V1);
+	CHECK(curve_plan.source.source_kind == ANGE_TEXTURE_SOURCE_CURVE_V1);
+	CHECK(curve_plan.source.width == 32);
+	CHECK(curve_plan.source.native_mode == ANGE_TEXTURE_CURVE_RED_V1);
+	CHECK(curve_plan.source.child_present == 1);
+	CHECK(curve_plan.output_format == ANGE_TEXTURE_FORMAT_RGBAF_V1);
+	CHECK(curve_plan.output_bytes == 32 * 16);
+	CHECK(curve_plan.real_bytes == sizeof(real_t));
+	CHECK(curve_plan.scratch_bytes == uint64_t(curve_plan.bake_resolution) * curve_plan.real_bytes);
+	Vector<uint8_t> curve_output;
+	curve_output.resize(curve_plan.output_bytes);
+	Vector<uint8_t> curve_scratch;
+	curve_scratch.resize(curve_plan.scratch_bytes);
+	AngeTextureSnapshotResultV1 curve_result = {};
+	CHECK(ange_texture_snapshot_v1(curve_texture.ptr(), &curve_plan, curve_output.ptrw(), curve_output.size(), curve_scratch.ptrw(), curve_scratch.size(), &curve_result) == ANGE_TEXTURE_OK_V1);
+	CHECK(curve_result.status == ANGE_TEXTURE_OK_V1);
+	CHECK(curve_result.initialized_pixels == 32);
+	float curve_first = 0;
+	memcpy(&curve_first, curve_output.ptr(), sizeof(curve_first));
+	CHECK(curve_first == doctest::Approx(0));
+	const auto curve_child_revision = curve_plan.source.child_revision;
+	curve->set_point_value(1, 0.5);
+	CHECK(curve->get_content_revision() != curve_child_revision);
+	curve_result = {};
+	CHECK(ange_texture_snapshot_v1(curve_texture.ptr(), &curve_plan, curve_output.ptrw(), curve_output.size(), curve_scratch.ptrw(), curve_scratch.size(), &curve_result) == ANGE_TEXTURE_STALE_SOURCE_V1);
+	CHECK(curve_result.initialized_pixels == 0);
+
+	Ref<GradientTexture1D> gradient_texture;
+	gradient_texture.instantiate();
+	gradient_texture->set_width(4);
+	gradient_texture->set_use_hdr(false);
+	Ref<Gradient> gradient;
+	gradient.instantiate();
+	gradient->set_colors(Vector<Color>{ Color(0, 0, 0, 1), Color(1, 0, 0, 1) });
+	gradient_texture->set_gradient(gradient);
+	AngeTextureSnapshotPlanV1 gradient_plan = {};
+	CHECK(ange_texture_snapshot_plan_v1(gradient_texture.ptr(), ANGE_TEXTURE_FORMAT_RGBA8_V1, &gradient_plan) == ANGE_TEXTURE_OK_V1);
+	CHECK(gradient_plan.source.source_kind == ANGE_TEXTURE_SOURCE_GRADIENT_1D_V1);
+	CHECK(gradient_plan.source.native_mode == ANGE_TEXTURE_GRADIENT_LDR_V1);
+	CHECK(gradient_plan.output_format == ANGE_TEXTURE_FORMAT_RGBA8_V1);
+	CHECK(gradient_plan.output_bytes == 16);
+	CHECK(gradient_plan.scratch_bytes == 0);
+	Vector<uint8_t> gradient_output;
+	gradient_output.resize(gradient_plan.output_bytes);
+	AngeTextureSnapshotResultV1 gradient_result = {};
+	CHECK(ange_texture_snapshot_v1(gradient_texture.ptr(), &gradient_plan, gradient_output.ptrw(), gradient_output.size(), nullptr, 0, &gradient_result) == ANGE_TEXTURE_OK_V1);
+	CHECK(gradient_result.initialized_pixels == 4);
+	CHECK(gradient_output[0] == 0);
+	CHECK(gradient_output[4] == 85);
+	CHECK(gradient_output[8] == 170);
+	CHECK(gradient_output[12] == 255);
+	CHECK(GDExtension::get_interface_function(ANGE_TEXTURE_SNAPSHOT_PLAN_PROC_V1) == reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&ange_texture_snapshot_plan_v1));
+	CHECK(GDExtension::get_interface_function(ANGE_TEXTURE_SNAPSHOT_PROC_V1) == reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&ange_texture_snapshot_v1));
+	Ref<CurveTexture> missing_curve;
+	missing_curve.instantiate();
+	missing_curve->set_width(32);
+	AngeTextureSnapshotPlanV1 missing_plan = {};
+	CHECK(ange_texture_snapshot_plan_v1(missing_curve.ptr(), ANGE_TEXTURE_FORMAT_RGBAF_V1, &missing_plan) == ANGE_TEXTURE_INVALID_SOURCE_V1);
+	CHECK(ange_texture_snapshot_plan_v1(curve.ptr(), ANGE_TEXTURE_FORMAT_RGBAF_V1, &missing_plan) == ANGE_TEXTURE_WRONG_TYPE_V1);
 }

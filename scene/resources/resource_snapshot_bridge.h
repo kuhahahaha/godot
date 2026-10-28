@@ -1,10 +1,10 @@
 #ifndef ANGE_RESOURCE_SNAPSHOT_BRIDGE_V1_H
 #define ANGE_RESOURCE_SNAPSHOT_BRIDGE_V1_H
 
-/* Review candidate for the Godot-core / ANGE host adapter seam.
- * Private staging code includes this layout, but no runtime interface is
- * registered or resolved until D/core and the original E20 owner accept
- * matching exports.
+/* Godot-core / ANGE host adapter seam.
+ * Curve/gradient and E22 texture snapshot exports are observational source
+ * reads on a retained original object; they do not mint owner authority or
+ * E20 transaction receipts.
  * Supported layout target: C11/C++17 on arm64 macOS with 8-byte aligned
  * IEEE-754 binary64 double and the matching Godot/GDExtension calling ABI.
  * E22 scratch real_t width is carried explicitly by its plan (4 or 8 bytes).
@@ -20,8 +20,8 @@ extern "C" {
 #define ANGE_GRADIENT_SNAPSHOT_PROC_V1 "ange_gradient_snapshot_v1"
 #define ANGE_RESOURCE_CONTENT_REVISION_PROC_V1 "ange_resource_content_revision_v1"
 
-/* E22 direct-final r3 planning ABI. These names are declarations only; no
- * Godot core export is registered yet. */
+/* E22 direct-final r3 planning ABI. Godot core registers these exports from
+ * the original retained CurveTexture/GradientTexture1D object path. */
 #define ANGE_TEXTURE_SNAPSHOT_PLAN_PROC_V1 "ange_texture_snapshot_plan_v1"
 #define ANGE_TEXTURE_SNAPSHOT_PROC_V1 "ange_texture_snapshot_v1"
 
