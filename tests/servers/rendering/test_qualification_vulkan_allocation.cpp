@@ -80,4 +80,14 @@ TEST_CASE("[QualificationNative][Vulkan] direct format queries reject an invalid
  CHECK_FALSE(raw_reinterpretation);
  CHECK_FALSE(bool(extension));
 }
+TEST_CASE("[QualificationNative][Vulkan] vertex format creation rejects an invalid format") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ RenderingDeviceDriver::VertexAttribute attributes[1];
+ RenderingDeviceDriver::VertexAttributeBindingsMap bindings;
+ ERR_PRINT_OFF;
+ auto vertex_format=driver.vertex_format_create(Span<RenderingDeviceDriver::VertexAttribute>(attributes,1),bindings);
+ ERR_PRINT_ON;
+ CHECK_FALSE(bool(vertex_format));
+}
 #endif

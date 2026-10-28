@@ -2907,6 +2907,9 @@ bool RenderingDeviceDriverVulkan::sampler_is_format_supported_for_filter(DataFor
 /**********************/
 
 RDD::VertexFormatID RenderingDeviceDriverVulkan::vertex_format_create(Span<VertexAttribute> p_vertex_attribs, const VertexAttributeBindingsMap &p_vertex_bindings) {
+	for (const VertexAttribute &attribute : p_vertex_attribs) {
+		ERR_FAIL_INDEX_V(attribute.format, DATA_FORMAT_MAX, VertexFormatID());
+	}
 	// Pre-bookkeep.
 	VertexFormatInfo *vf_info = VersatileResource::allocate<VertexFormatInfo>(resources_allocator);
 
