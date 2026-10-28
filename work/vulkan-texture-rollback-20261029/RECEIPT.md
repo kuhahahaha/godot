@@ -192,3 +192,16 @@ probe are rc0. R17 artifacts carry the `ef9616563` build identity; source hashes
 pin the exact source in `SOURCE_MANIFEST.json`. This remains direct input
 validation only; no qualification, completion, readback, Ready or G1 claim is
 made.
+
+## Cross-platform BLAS vertex-format validation
+
+`blas_create()` now rejects `DATA_FORMAT_MAX` before any `RD_TO_VK_FORMAT`
+access, with the guard placed before the `VULKAN_RAYTRACING_ENABLED` branch so
+non-macOS ray-tracing builds receive the same fail-closed protection. The
+macOS-focused probe is 1 case / 3 assertions and explicitly observes the
+RT-disabled empty result; it does not claim BLAS creation or GPU capability.
+The full Vulkan regression is 17 cases / 73 assertions, K03/P2 is 22 cases /
+350 assertions, actual `use_ubsan=yes` Vulkan regression is 17/73, and the
+template_release rebuild/version probe are rc0. R18 artifacts carry the
+`3856304b2` build identity; source hashes pin the exact source in
+`SOURCE_MANIFEST.json`.

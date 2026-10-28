@@ -85,3 +85,9 @@ lifecycle, owner, completion, readback, Ready or G1 authority.
 The view-count guard runs before the multiview bit shift, so zero and oversized
 counts cannot enter undefined arithmetic or Vulkan creation. Valid counts retain
 existing behavior and this evidence adds no lifecycle authority.
+
+
+The guard is outside the ray-tracing feature macro and precedes the only
+remaining cross-platform `RD_TO_VK_FORMAT[geometry.vertex_format]` access.
+The available macOS evidence proves only rejection/empty behavior; no RT-enabled
+BLAS success is inferred.

@@ -648,5 +648,45 @@
     "command": "bin/godot.macos.template_release.arm64 --version",
     "returncode": 0,
     "summary": "4.7.2.stable.custom_build.ef9616563"
+  },
+  "r18_debug_build": {
+    "command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2 platform=macos target=editor dev_build=yes tests=yes builtin_glslang=yes",
+    "returncode": 0,
+    "summary": "Debug build after cross-platform BLAS format guard rc0"
+  },
+  "r18_blas_format": {
+    "command": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case=\"[QualificationNative][Vulkan] BLAS creation rejects an invalid vertex format\"",
+    "returncode": 0,
+    "summary": "1 case / 3 assertions; macOS RT-disabled path remains empty"
+  },
+  "r18_vulkan_regression": {
+    "command": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case=\"[QualificationNative][Vulkan]*\"",
+    "returncode": 0,
+    "summary": "17 cases / 73 assertions"
+  },
+  "r18_k03_p2": {
+    "command": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case=\"[K03][P2]*\"",
+    "returncode": 0,
+    "summary": "22 cases / 350 assertions"
+  },
+  "r18_ubsan_build": {
+    "command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2 platform=macos target=editor dev_build=yes tests=yes use_ubsan=yes builtin_glslang=yes",
+    "returncode": 0,
+    "summary": "actual use_ubsan=yes build rc0"
+  },
+  "r18_ubsan_vulkan_regression": {
+    "command": "bin/godot.macos.editor.dev.arm64.san --headless --test --test-case=\"[QualificationNative][Vulkan]*\"",
+    "returncode": 0,
+    "summary": "17 cases / 73 assertions"
+  },
+  "r18_release_build": {
+    "command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2 platform=macos target=template_release dev_build=no tests=no builtin_glslang=yes",
+    "returncode": 0,
+    "summary": "template_release rc0"
+  },
+  "r18_release_version": {
+    "command": "bin/godot.macos.template_release.arm64 --version",
+    "returncode": 0,
+    "summary": "4.7.2.stable.custom_build.3856304b2"
   }
 }
