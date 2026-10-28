@@ -1,5 +1,5 @@
 {
-  "status": "macOS arm64 executable producer/getter verified; shared/static and full native long goal active",
+  "status": "executable/shared producer evidence complete; static graph audited and deferred; first-chain active",
   "files": {
     "CANONICAL_BUILD.log": {
       "bytes": 4234,
@@ -48,6 +48,18 @@
     "CANONICAL_RUNTIME_COMMAND.json": {
       "bytes": 240,
       "sha256": "f4a360bfb48abc5b7cba5bc2fb25bbe5deff06c15dd6b85634440a8cb31cf292"
+    },
+    "EDITOR_METAL.log": {
+      "bytes": 549,
+      "sha256": "02b28552ab86e0d0e782aa483cdbb5da0234c318e4b9fbe10abf23cbcf3dafe3"
+    },
+    "EDITOR_METAL.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "EDITOR_METAL_COMMAND.json": {
+      "bytes": 375,
+      "sha256": "49f9e08037c914b455ce6241a254eb0d6c6a4ce437e16db4c4a154154fec7fd8"
     },
     "EXPANDED_GENERATOR.log": {
       "bytes": 116,
@@ -214,12 +226,12 @@
       "sha256": "042f3023e6716ee3345670a954820544c820a789d36613613b542635bb95d4d6"
     },
     "QUEUE.md": {
-      "bytes": 1604,
-      "sha256": "4715b3bd325786508d23d2a39ab5a38dc9e82a785bc2f5ba3ffe589e8a1450e1"
+      "bytes": 1942,
+      "sha256": "ae0ecb89b81fafbbe5c3e36c326dd4a20ea169beb866683124af335f77ae995a"
     },
     "RECEIPT.md": {
-      "bytes": 7380,
-      "sha256": "db6e20a9a4936f88cf8788f344bf8f773f239a9e65d966af5fe47678761afe57"
+      "bytes": 8341,
+      "sha256": "02a3560c9b67b1ea0abe54e63b07c90ad4d0e8ce69312f85da39b4d7d6ecac65"
     },
     "RED_GENERATOR.log": {
       "bytes": 570,
@@ -249,6 +261,14 @@
       "bytes": 2,
       "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
     },
+    "STATIC_GRAPH_AUDIT.log": {
+      "bytes": 42267,
+      "sha256": "9614ea9f7a391454a8007387094a3dc2aaa0b28c5d1ab47f3e83758ed569f58e"
+    },
+    "STATIC_GRAPH_AUDIT.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
     "fixed-inputs/CoreArtifactReceipt.json": {
       "bytes": 530,
       "sha256": "a0029b1943393e55c640d4da7462df210bc79eae232b90f1cd7b85971fe9f326"
@@ -265,6 +285,18 @@
       "bytes": 425,
       "sha256": "deac3dbbf91302a0c73267107d376e71ec84c5cb6a6408a4479fcb0d1cf41b6e"
     },
+    "fixed-inputs/godot.882d69ab.arm64": {
+      "bytes": 302530496,
+      "sha256": "882d69abce4d6be4418e5121f48a444c078f40f17c4087ab0971b895eb932500"
+    },
+    "fixed-inputs/godot.controlled.exe.arm64": {
+      "bytes": 302573616,
+      "sha256": "d216693315918595bf7cf46d57006d88ede1d7000fe3cd68fac06afb63edffac"
+    },
+    "fixed-inputs/relocated-core": {
+      "bytes": 302573632,
+      "sha256": "6a61271b3fdb5910b66e3cb2ad8243f6077ec96190a096c4ffe6043195628962"
+    },
     "runtime/expected.json": {
       "bytes": 311,
       "sha256": "29559c1fca2c59ad7f36ea730f7187168fdcd3364f0cdeb5bfd19b4207479bf7"
@@ -276,18 +308,6 @@
     "runtime/project.godot": {
       "bytes": 77,
       "sha256": "211a8fe5f8fb2f72453e73236d90bf380ff33a81bb75d27dfa3674b844d7e4f3"
-    },
-    "EDITOR_METAL_COMMAND.json": {
-      "bytes": 375,
-      "sha256": "49f9e08037c914b455ce6241a254eb0d6c6a4ce437e16db4c4a154154fec7fd8"
-    },
-    "EDITOR_METAL.log": {
-      "bytes": 549,
-      "sha256": "02b28552ab86e0d0e782aa483cdbb5da0234c318e4b9fbe10abf23cbcf3dafe3"
-    },
-    "EDITOR_METAL.rc": {
-      "bytes": 2,
-      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
     }
   }
 }

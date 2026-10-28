@@ -8,3 +8,6 @@
 6. Normal Binding-held pair/U08/profile/Host/Store real request chain belongs original A/B/C owners; metadata/probe success never creates Ready/G1. Stop oldb35a/104B repetition.
 
 Long goal active; no cron, scheduling, pause or full completion. Current model/strength unchanged.
+
+
+Static graph audit 2026-10-28: `STATIC_GRAPH_AUDIT.log` rc0 proves original `env.LIBS` has the complete ordered archive set while `platform/macos/SCsub` final static target archives only platform objects. No static support claim; next implementation is an original libtool aggregate target, deferred behind editor/Metal + E20 adoption.

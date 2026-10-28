@@ -18,8 +18,8 @@
   "tests/core/object/test_device_exit_library_close.cpp": "1d5bc82848c80dd9ea987ef035f1ce8517d1bf9887ad082f53ebc6acdc455357",
   "work/typed-lifecycle-abi-v1/CURRENT_PAIR_U01_VFX_R01_NEGATIVE_RECEIPT_20251025.md": "c6ab0496164e2741f157768a10ffcc6f0217b630a26d95d3d9762c2e22b79a47",
   "work/typed-lifecycle-abi-v1/PROGRESS.md": {
-    "bytes": 125329,
-    "sha256": "e8b2bbe995fe6fb21e6b9d75508f775e6c37e8a084eea5a195f2a4c76c8161d5"
+    "bytes": 125885,
+    "sha256": "07112a76e2b4d9a5124fc6748d41f27ce69106bf3e9663544e87dda95554a875"
   },
   "work/r01-frame-wait-20261026/MANIFEST.json": "6665b770d13d966da423741c69f01a58b562b976c9f94811f3e4b442f2907d64",
   "work/r01-frame-wait-20261026/RECEIPT.md": "90930a0824a3c88582ef533e461b66fc5bc3163bb165a66269e1d773b0d25066",
@@ -513,10 +513,19 @@
   "servers/rendering/renderer_rd/storage_rd/mesh_storage.h": "9420dfaf2d69abdc72a7b91811e57c4aa21d94571ccf86ab0fe52922482daa3a",
   "servers/rendering/rendering_device.h": "358ecc5a1266886e883cdb30e2660e30f74895776ca059db85e048b7de2038f8",
   "tests/servers/rendering/test_mesh_storage_external.cpp": "b606f174bb8121b1ab3951ba068d276a280daf23e041d157f162515bf9a7a4b3",
-  "work/e06-loaded-core-identity-20261028-r1/MANIFEST.json": "3a5770a741f21672facacff86070672e232fdd1736cea9b3ecef8063f4296f5f",
-  "work/e06-loaded-core-identity-20261028-r1/RECEIPT.md": "db6e20a9a4936f88cf8788f344bf8f773f239a9e65d966af5fe47678761afe57",
+  "work/e06-loaded-core-identity-20261028-r1/MANIFEST.json": {
+    "bytes": 11109,
+    "sha256": "8fb5148beba1fe19465f0ab993a20d3f4eb51be59ab4842d1d03d79fecf16764"
+  },
+  "work/e06-loaded-core-identity-20261028-r1/RECEIPT.md": {
+    "bytes": 8341,
+    "sha256": "02a3560c9b67b1ea0abe54e63b07c90ad4d0e8ce69312f85da39b4d7d6ecac65"
+  },
   "work/e06-loaded-core-identity-20261028-r1/INDEPENDENT_REVIEW.md": "f13a0cac030b4a68d76b5203e9d9cfda1dc5e0e5d45d12edf7bb1c339ffa2270",
-  "work/e06-loaded-core-identity-20261028-r1/QUEUE.md": "4715b3bd325786508d23d2a39ab5a38dc9e82a785bc2f5ba3ffe589e8a1450e1",
+  "work/e06-loaded-core-identity-20261028-r1/QUEUE.md": {
+    "bytes": 1942,
+    "sha256": "ae0ecb89b81fafbbe5c3e36c326dd4a20ea169beb866683124af335f77ae995a"
+  },
   "SConstruct": "c6d32561793fa5987ed8b9e8a7ab3b4beb04ea63bacb912f6fc1b0528b9181a7",
   "core/SCsub": "0fb5bd94238e443b71a69150f31561ac3610a188c07ebef43b76471d2bffae42",
   "core/config/engine.cpp": "52d5b1e83f60d3162746861042a584f799b99fd685627748225e39c4cb69f7e7",
