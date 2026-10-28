@@ -1,0 +1,22 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_qualification_vulkan_allocation.cpp:69:
+TEST CASE:  [QualificationNative][Vulkan] texture creation rejects invalid view swizzles
+
+tests/servers/rendering/test_qualification_vulkan_allocation.cpp:89: ERROR: CHECK_FALSE( bool(texture) ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_qualification_vulkan_allocation.cpp:89: ERROR: CHECK_FALSE( bool(texture) ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_qualification_vulkan_allocation.cpp:89: ERROR: CHECK_FALSE( bool(texture) ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_qualification_vulkan_allocation.cpp:89: ERROR: CHECK_FALSE( bool(texture) ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+===============================================================================
+[doctest] test cases: 1 | 0 passed | 1 failed | 1739 skipped
+[doctest] assertions: 7 | 3 passed | 4 failed |
+[doctest] Status: FAILURE!
