@@ -3073,6 +3073,122 @@
     "ANGE/work/e05-e06-death-test-fix-20261030-asan/SOURCE_MANIFEST.json": {
       "bytes": 516,
       "sha256": "ffd1d581f1978b4a47e4c35d9f592a98061a9d0ed2d0d18f68275cdba5dee43d"
+    },
+    "work/vulkan-texture-swizzle-20261030/BINARY_HASHES.json": {
+      "bytes": 530,
+      "sha256": "ca27ef3cc90eb6c3603bb3b2134b04e121092fc75adfbcd9722033b78b843382"
+    },
+    "work/vulkan-texture-swizzle-20261030/COMMANDS.json": {
+      "bytes": 1986,
+      "sha256": "ed641993c20d24b902607a6820cf43dbc337f020fcadbce38fede8ca8752fd72"
+    },
+    "work/vulkan-texture-swizzle-20261030/DEBUG_BUILD.log": {
+      "bytes": 2021,
+      "sha256": "f000cd6eae59debb8cb79632e1296ede03786d399dd25edd483fa55ec9dbb63a"
+    },
+    "work/vulkan-texture-swizzle-20261030/DEBUG_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-texture-swizzle-20261030/DIFF_CHECK_R1.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "work/vulkan-texture-swizzle-20261030/DIFF_CHECK_R1.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-texture-swizzle-20261030/FOCUSED.log": {
+      "bytes": 294,
+      "sha256": "a80b6c788d22a3a7f5d7c33eeef502ee5b4a9f44b08307536edf082362ec9d0c"
+    },
+    "work/vulkan-texture-swizzle-20261030/FOCUSED.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-texture-swizzle-20261030/INDEPENDENT_REVIEW_R1.md": {
+      "bytes": 440,
+      "sha256": "b5b48fac92d2e0e24ce2e664434dc915bf9e7012672706e6e5727b2ca83d00d3"
+    },
+    "work/vulkan-texture-swizzle-20261030/K03_P2.log": {
+      "bytes": 302,
+      "sha256": "1936e15c307e78be2cc6e9a99334c7b6a1051850f5ce379f3b17bb7369de586d"
+    },
+    "work/vulkan-texture-swizzle-20261030/K03_P2.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-texture-swizzle-20261030/RECEIPT_R1.md": {
+      "bytes": 1250,
+      "sha256": "016d52e62b109b8bc4cfcdef61202a5f045f2b183e24b935adc820696cc283f0"
+    },
+    "work/vulkan-texture-swizzle-20261030/RED.log": {
+      "bytes": 1141,
+      "sha256": "61a2dc309fbc4403f88215574718f8c6f757cfa4e838a699b1071597e96c8b1a"
+    },
+    "work/vulkan-texture-swizzle-20261030/RED.rc": {
+      "bytes": 2,
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    "work/vulkan-texture-swizzle-20261030/RED_BUILD.log": {
+      "bytes": 2345,
+      "sha256": "c2809ddb4122bfb28a2bb847074dfd1f42c3f36d96d603cdc2ec60d33d204d7d"
+    },
+    "work/vulkan-texture-swizzle-20261030/RED_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-texture-swizzle-20261030/REGRESSION.log": {
+      "bytes": 298,
+      "sha256": "c55469311090707b37abb1189972263d4d5cdb593b49cbf7b6445c62d387de68"
+    },
+    "work/vulkan-texture-swizzle-20261030/REGRESSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-texture-swizzle-20261030/RELEASE_BUILD.log": {
+      "bytes": 2245,
+      "sha256": "76d0a13ab9e2a725a0695892355dc3996c9e397a392c2595629ac5fbd2e3c163"
+    },
+    "work/vulkan-texture-swizzle-20261030/RELEASE_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-texture-swizzle-20261030/RELEASE_VERSION.log": {
+      "bytes": 36,
+      "sha256": "4c26a460a96646070a439fd27bc64283e05383fd178b65c9b1313c3882a6a8c9"
+    },
+    "work/vulkan-texture-swizzle-20261030/RELEASE_VERSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-texture-swizzle-20261030/SOURCE_MANIFEST.json": {
+      "bytes": 884,
+      "sha256": "19412b3ac16dd923c4966a6e91262e2809306d4f7a2b27056905ae61712c2e74"
+    },
+    "work/vulkan-texture-swizzle-20261030/UBSAN_BUILD.log": {
+      "bytes": 2505,
+      "sha256": "a1fb6c8c5842a0b4dea121f047c7c300e4f1628beda51244df12a84d2ad8013d"
+    },
+    "work/vulkan-texture-swizzle-20261030/UBSAN_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-texture-swizzle-20261030/UBSAN_FOCUSED.log": {
+      "bytes": 294,
+      "sha256": "a80b6c788d22a3a7f5d7c33eeef502ee5b4a9f44b08307536edf082362ec9d0c"
+    },
+    "work/vulkan-texture-swizzle-20261030/UBSAN_FOCUSED.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-texture-swizzle-20261030/UBSAN_REGRESSION.log": {
+      "bytes": 298,
+      "sha256": "c55469311090707b37abb1189972263d4d5cdb593b49cbf7b6445c62d387de68"
+    },
+    "work/vulkan-texture-swizzle-20261030/UBSAN_REGRESSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
     }
   }
 }
