@@ -127,6 +127,19 @@ TEST_CASE("[QualificationNative][Vulkan] direct buffer format rejects invalid in
  ERR_PRINT_ON;
  CHECK_FALSE(result);
 }
+TEST_CASE("[QualificationNative][Vulkan] sampler creation rejects invalid filter") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ RenderingDeviceDriver::SamplerState state;
+ state.mag_filter=static_cast<RenderingDeviceDriver::SamplerFilter>(2);
+ ERR_PRINT_OFF;
+ auto sampler=driver.sampler_create(state);
+ ERR_PRINT_ON;
+ CHECK_FALSE(bool(sampler));
+ if (sampler) {
+  driver.sampler_free(sampler);
+ }
+}
 TEST_CASE("[QualificationNative][Vulkan] texture creation rejects an invalid shareable format") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);

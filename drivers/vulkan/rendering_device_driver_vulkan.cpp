@@ -2874,14 +2874,27 @@ static_assert(ENUM_MEMBERS_EQUAL(RDD::SAMPLER_BORDER_COLOR_INT_OPAQUE_BLACK, VK_
 static_assert(ENUM_MEMBERS_EQUAL(RDD::SAMPLER_BORDER_COLOR_FLOAT_OPAQUE_WHITE, VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE));
 static_assert(ENUM_MEMBERS_EQUAL(RDD::SAMPLER_BORDER_COLOR_INT_OPAQUE_WHITE, VK_BORDER_COLOR_INT_OPAQUE_WHITE));
 
+static uint32_t _sampler_filter_value(const RDD::SamplerFilter *p_filter) {
+	static_assert(sizeof(RDD::SamplerFilter) == sizeof(uint32_t));
+	uint32_t value = 0;
+	memcpy(&value, p_filter, sizeof(value));
+	return value;
+}
+
 RDD::SamplerID RenderingDeviceDriverVulkan::sampler_create(const SamplerState &p_state) {
+	const uint32_t mag_filter = _sampler_filter_value(&p_state.mag_filter);
+	const uint32_t min_filter = _sampler_filter_value(&p_state.min_filter);
+	const uint32_t mip_filter = _sampler_filter_value(&p_state.mip_filter);
+	ERR_FAIL_COND_V(mag_filter > SAMPLER_FILTER_LINEAR, SamplerID());
+	ERR_FAIL_COND_V(min_filter > SAMPLER_FILTER_LINEAR, SamplerID());
+	ERR_FAIL_COND_V(mip_filter > SAMPLER_FILTER_LINEAR, SamplerID());
 	VkSamplerCreateInfo sampler_create_info = {};
 	sampler_create_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
 	sampler_create_info.pNext = nullptr;
 	sampler_create_info.flags = 0;
-	sampler_create_info.magFilter = p_state.mag_filter == SAMPLER_FILTER_LINEAR ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
-	sampler_create_info.minFilter = p_state.min_filter == SAMPLER_FILTER_LINEAR ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
-	sampler_create_info.mipmapMode = p_state.mip_filter == SAMPLER_FILTER_LINEAR ? VK_SAMPLER_MIPMAP_MODE_LINEAR : VK_SAMPLER_MIPMAP_MODE_NEAREST;
+	sampler_create_info.magFilter = mag_filter == SAMPLER_FILTER_LINEAR ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+	sampler_create_info.minFilter = min_filter == SAMPLER_FILTER_LINEAR ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+	sampler_create_info.mipmapMode = mip_filter == SAMPLER_FILTER_LINEAR ? VK_SAMPLER_MIPMAP_MODE_LINEAR : VK_SAMPLER_MIPMAP_MODE_NEAREST;
 	sampler_create_info.addressModeU = (VkSamplerAddressMode)p_state.repeat_u;
 	sampler_create_info.addressModeV = (VkSamplerAddressMode)p_state.repeat_v;
 	sampler_create_info.addressModeW = (VkSamplerAddressMode)p_state.repeat_w;
