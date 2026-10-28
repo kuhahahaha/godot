@@ -1,0 +1,21 @@
+{
+  "editor": {
+    "path": "bin/godot.macos.editor.dev.arm64",
+    "sha256": "50c8a95537dcb542f520869993d813304134c281534ff7e14487ce4341632bba"
+  },
+  "test": {
+    "command": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case='*[QualificationNative]*'",
+    "returncode": 0,
+    "cases": 3,
+    "assertions": 59,
+    "failed_cases": 0,
+    "failed_assertions": 0
+  },
+  "scope": "current editor native qualification control only",
+  "limitations": [
+    "no authenticated E05 owner input",
+    "no normal production qualification actor",
+    "no request-owned issuer/completion/same-request readback",
+    "no Ready/Verified/G1 production claim"
+  ]
+}
