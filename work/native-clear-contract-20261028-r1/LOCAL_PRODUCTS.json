@@ -1,0 +1,26 @@
+{
+  "test_external.o": {
+    "bytes": 2046720,
+    "sha256": "5d4efd2ce9c5d23b7812d469f8337953c626513afc3622c11d31bb976c358ae2"
+  },
+  "original_rendering_device.cpp": {
+    "bytes": 527489,
+    "sha256": "d273bbb12fb41f8f80a84b3969fc7244d780519a173b49acdc3e049d5dfd6714"
+  },
+  "godot-clear": {
+    "bytes": 302530424,
+    "sha256": "208649fda9b42fc4131e2b672c3a21690eb87a36361345d104466b6940ebc3e6"
+  },
+  "original_rendering_device.o": {
+    "bytes": 8618752,
+    "sha256": "fecafd78bf640ab9bdcc3e97d43d5b29fe7e8389635322f495613d0d19eb47cc"
+  },
+  "rendering_device.o": {
+    "bytes": 8619088,
+    "sha256": "12d312bead7a5af1b2a889a7fef4f032d48f5bb123432f537baa69f603ee8b50"
+  },
+  "fixed-inputs/godot.e3753567.arm64": {
+    "bytes": 302528256,
+    "sha256": "e37535672b89976ab7eaa66d8de53759166df21af313bcb24e0dabcf1d8c4873"
+  }
+}

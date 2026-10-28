@@ -1359,6 +1359,8 @@ Error RenderingDevice::buffer_clear(RID p_buffer, uint32_t p_offset, uint32_t p_
 		return _recording_error();
 	}
 
+	ERR_FAIL_COND_V_MSG((p_offset % 4) != 0, ERR_INVALID_PARAMETER,
+			"Offset must be a multiple of four.");
 	ERR_FAIL_COND_V_MSG((p_size % 4) != 0, ERR_INVALID_PARAMETER,
 			"Size must be a multiple of four.");
 	ERR_FAIL_COND_V_MSG(draw_list.active, ERR_INVALID_PARAMETER,
@@ -1376,9 +1378,12 @@ Error RenderingDevice::buffer_clear(RID p_buffer, uint32_t p_offset, uint32_t p_
 	ERR_FAIL_COND_V_MSG(uint64_t(p_offset) + p_size > buffer->size, ERR_INVALID_PARAMETER,
 			"Attempted to write buffer (" + itos((uint64_t(p_offset) + p_size) - buffer->size) + " bytes) past the end.");
 
-	_check_transfer_worker_buffer(buffer);
+	ERR_FAIL_COND_V(buffer->qualification_return, ERR_UNAUTHORIZED);
+	if (p_size == 0) {
+		return OK;
+	}
 
-	ERR_FAIL_COND_V(buffer->qualification_return,ERR_UNAUTHORIZED);
+	_check_transfer_worker_buffer(buffer);
 
 	if (_buffer_make_mutable(buffer, p_buffer)) {
 		// The destination buffer must be mutable to be used as a clear destination.

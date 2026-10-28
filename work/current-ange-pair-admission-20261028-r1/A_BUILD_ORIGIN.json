@@ -1,0 +1,109 @@
+{
+  "path": "/Users/macbookair/Documents/Work/ANGE/work/e05-scene-ready-transaction-20261028/BUILD_RESULTS.json",
+  "receipt_identity": {
+    "bytes": 17099,
+    "sha256": "c4689c6d44cc36a2bb962a2a5d68a7c65be80d4ea0df4f4e8f05d86410af3cba"
+  },
+  "row": {
+    "label": "ordinary_debug",
+    "command": [
+      "scons",
+      "-Q",
+      "-j8",
+      "verbose=yes",
+      "target=template_debug"
+    ],
+    "source_before": {
+      "src/register_types.cpp": "1402c95af5005116e11ec1728737d08ab4489e19c62dd8074eea0fe0a363f66b",
+      "src/godot/particle/host_attachment.h": "1dcb90964384c23686666b200ea64ed88b9fcb7294a4f3ed2dfc96b1663ec475",
+      "src/godot/particle/host_attachment.cpp": "f5aa51b5db668d7bc0bc710f88aa510092ca8ca2dc52e41796012b6dde67ec12",
+      "src/godot/particle/host_native_device.cpp": "535653120e88e80abb7a33a8651676f79a2b2a3941e6f3aae79ee8f0305eda56",
+      "src/godot/particle/device_session_adapter.cpp": "079fe19697cd4c8a4ea53803cb5e094c268b4cc6710ad4e1d5a07722fa715957",
+      "src/godot/particle/main_rd_storage_access.h": "7246ee76a94b634cb6a4ab26920c4007c69c4ab1fa9dd0a7aaf4bd89ebddc557",
+      "src/godot/particle/particle_program_loader.h": "10b15f4b73e582dbff509671bae5dfc7e961760b7f1b7f02f1ebdd0eedda43ae",
+      "src/godot/particle/particle_program_loader.cpp": "f07a8aa8474e5064626b4a266673c70f8e9ce3a441d177c2bbdf9b14feb4638d",
+      "src/particle/runtime/owner_observation_lease.h": "4956e27306cc4b7c51cfc1c235ff5826689e79b14170f333614968e1732cd3c0",
+      "godot-cpp/include/godot_cpp/godot.hpp": "bea66011458846931cede296486ee2ce53851a403644b4373f1534987fea163e",
+      "godot-cpp/include/godot_cpp/classes/wrapped.hpp": "580f38ae21d901bf075379021bc707ec2b60bc7cf9bdc917edd85ffd8e7e1eb3",
+      "godot-cpp/src/godot.cpp": "561e13cc4b188f7fa40d1c72b294a402d34045988eb0eec59b4dd3071e65e1ac",
+      "godot-cpp/src/classes/wrapped.cpp": "9d5bafa48c9cecf239010784a632d5b2b7439c5c4810d5a1d490efcb44528c90",
+      "godot-cpp/src/core/class_db.cpp": "ce2301cf69724dba71383d1353ea78bf6866606c85c07ea1278574955f8ff246",
+      "godot-cpp/gen/include/gdextension_interface.h": "997a4812a4f7b8369606bb635e0436d55f79ad07ed565203919350be19dcfa0b"
+    },
+    "invalidated_regenerable_products": [
+      {
+        "path": "build/gdext.macos.template_debug.arm64/src/godot/particle/host_attachment.os",
+        "sha256": "74794ed49f981369e3ca74281c721f644104ef954e8b76158d54745ed308c8a2",
+        "bytes": 46352
+      },
+      {
+        "path": "build/gdext.macos.template_debug.arm64/src/godot/particle/host_native_device.os",
+        "sha256": "e90e57e60db9e1094212b1e92b5ade3be44c14932a80bea9aff6cba2815fae9d",
+        "bytes": 30048
+      },
+      {
+        "path": "build/gdext.macos.template_debug.arm64/src/godot/particle/device_session_adapter.os",
+        "sha256": "2cb7ae58587b3d84ffd122c485455341fd747115e0a1f126a27b541abc5f2823",
+        "bytes": 50776
+      },
+      {
+        "path": "build/gdext.macos.template_debug.arm64/src/godot/particle/particle_program_loader.os",
+        "sha256": "68efe5dab78c41f1972ade5dbdf9934e568ba0e485ed8e6b747959d0d0917509",
+        "bytes": 63304
+      },
+      {
+        "path": "build/gdext.macos.template_debug.arm64/src/godot/particle/typed_scene_thunk.os",
+        "sha256": "b7fa17efd87d12086eb65c321533e67e23372601de558777fb24eceac91b8520",
+        "bytes": 6224
+      },
+      {
+        "path": "build/gdext.macos.template_debug.arm64/src/godot/particle/particle_attribute_storage.os",
+        "sha256": "f16db9fd8dd92521b1843e6411ceb52e6ee47351d6b7c2029b015c5b5085137f",
+        "bytes": 7040
+      },
+      {
+        "path": "build/gdext.macos.template_debug.arm64/src/register_types.os",
+        "sha256": "de3514f2ffe228d029f439bb9a179a7617b782f795d5e5e97a4b61fc90047efc",
+        "bytes": 1004688
+      },
+      {
+        "path": "bin/libange.macos.template_debug.arm64.dylib",
+        "sha256": "4412ddd3c0ba1676b3048245b7668e1d799911513701d5ff07eea97e46a0a51c",
+        "bytes": 69628352
+      },
+      {
+        "path": "bin/libange.macos.template_debug.arm64.dylib.signed",
+        "sha256": "717169696744a16c12baf2821f8bdeb145082cdebe2146a446e490f9dc5e3eb5",
+        "bytes": 30
+      }
+    ],
+    "sdk_head": "83d88acfb0c45dc78170a273bb193910baaec5c7",
+    "rc": 0,
+    "source_after": {
+      "src/register_types.cpp": "1402c95af5005116e11ec1728737d08ab4489e19c62dd8074eea0fe0a363f66b",
+      "src/godot/particle/host_attachment.h": "1dcb90964384c23686666b200ea64ed88b9fcb7294a4f3ed2dfc96b1663ec475",
+      "src/godot/particle/host_attachment.cpp": "f5aa51b5db668d7bc0bc710f88aa510092ca8ca2dc52e41796012b6dde67ec12",
+      "src/godot/particle/host_native_device.cpp": "535653120e88e80abb7a33a8651676f79a2b2a3941e6f3aae79ee8f0305eda56",
+      "src/godot/particle/device_session_adapter.cpp": "079fe19697cd4c8a4ea53803cb5e094c268b4cc6710ad4e1d5a07722fa715957",
+      "src/godot/particle/main_rd_storage_access.h": "7246ee76a94b634cb6a4ab26920c4007c69c4ab1fa9dd0a7aaf4bd89ebddc557",
+      "src/godot/particle/particle_program_loader.h": "10b15f4b73e582dbff509671bae5dfc7e961760b7f1b7f02f1ebdd0eedda43ae",
+      "src/godot/particle/particle_program_loader.cpp": "f07a8aa8474e5064626b4a266673c70f8e9ce3a441d177c2bbdf9b14feb4638d",
+      "src/particle/runtime/owner_observation_lease.h": "4956e27306cc4b7c51cfc1c235ff5826689e79b14170f333614968e1732cd3c0",
+      "godot-cpp/include/godot_cpp/godot.hpp": "bea66011458846931cede296486ee2ce53851a403644b4373f1534987fea163e",
+      "godot-cpp/include/godot_cpp/classes/wrapped.hpp": "580f38ae21d901bf075379021bc707ec2b60bc7cf9bdc917edd85ffd8e7e1eb3",
+      "godot-cpp/src/godot.cpp": "561e13cc4b188f7fa40d1c72b294a402d34045988eb0eec59b4dd3071e65e1ac",
+      "godot-cpp/src/classes/wrapped.cpp": "9d5bafa48c9cecf239010784a632d5b2b7439c5c4810d5a1d490efcb44528c90",
+      "godot-cpp/src/core/class_db.cpp": "ce2301cf69724dba71383d1353ea78bf6866606c85c07ea1278574955f8ff246",
+      "godot-cpp/gen/include/gdextension_interface.h": "997a4812a4f7b8369606bb635e0436d55f79ad07ed565203919350be19dcfa0b"
+    },
+    "source_stable": true,
+    "dso_sha256": "b35a777189a098df739a4bd7a349abac7a3649c9683c0f65e60f5d14975c2a79",
+    "dso": "/Users/macbookair/Documents/Work/ANGE/bin/libange.macos.template_debug.arm64.dylib",
+    "codesign_rc": 0,
+    "changed_literals": {
+      "host.main_storage": 2,
+      "host.storage_owner_transport": 1,
+      "host.storage_prefix": 1
+    }
+  }
+}

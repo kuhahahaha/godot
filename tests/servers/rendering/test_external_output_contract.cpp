@@ -453,25 +453,41 @@ TEST_CASE("[RenderingDevice] compute indirect validates aligned complete command
 	}
 }
 
-TEST_CASE("[RenderingDevice] buffer clear rejects overflowing spans before graph append") {
-	for (uint32_t offset : { 0u, 24u, 28u, UINT32_MAX - 3 }) {
-		CAPTURE(offset);
+TEST_CASE("[RenderingDevice] buffer clear validates aligned spans and skips empty commands before effects") {
+	struct ClearRange {
+		uint32_t offset;
+		uint32_t size;
+		bool valid;
+	};
+	for (const ClearRange range : { ClearRange{ 0, 32, true }, { 24, 8, true }, { 1, 4, false }, { 4, 4, true }, { 28, 8, false }, { UINT32_MAX - 3, 8, false }, { 0, 0, true }, { 32, 0, true } }) {
+		CAPTURE(range.offset);
+		CAPTURE(range.size);
 		RenderingDevice device;
 		ExternalOutputGraphDriver driver;
 		TestExternalOutputAccess::attach(device, driver);
 		RID buffer = TestExternalOutputAccess::buffer(device, 71, 32);
-		const bool valid = offset == 0 || offset == 24;
-		const uint32_t size = offset == 0 ? 32 : 8;
+		TestExternalOutputAccess::transfer(device, buffer);
+		const bool issued = range.valid && range.size != 0;
 		const uint32_t before = TestExternalOutputAccess::commands(device);
 		ERR_PRINT_OFF;
-		CHECK(device.buffer_clear(buffer, offset, size) == (valid ? OK : ERR_INVALID_PARAMETER));
+		CHECK(device.buffer_clear(buffer, range.offset, range.size) == (range.valid ? OK : ERR_INVALID_PARAMETER));
 		ERR_PRINT_ON;
-		CHECK(TestExternalOutputAccess::commands(device) == before + (valid ? 1 : 0));
+		CHECK(TestExternalOutputAccess::commands(device) == before + (issued ? 1 : 0));
+		CHECK(TestExternalOutputAccess::transfer_used(device) == (issued ? 9 : 0));
+		if (range.valid && range.size == 0) {
+			GDExtensionDeviceExit::QualificationPhysicalReturn returning;
+			TestExternalOutputAccess::persistent_buffer(device, buffer, &returning);
+			ERR_PRINT_OFF;
+			CHECK(device.buffer_clear(buffer, range.offset, range.size) == ERR_UNAUTHORIZED);
+			ERR_PRINT_ON;
+			CHECK(TestExternalOutputAccess::commands(device) == before);
+			CHECK(TestExternalOutputAccess::transfer_used(device) == 0);
+		}
 		TestExternalOutputAccess::finish_graph(device);
-		CHECK(driver.clears == (valid ? 1 : 0));
-		if (valid) {
-			CHECK(driver.clear_offset == offset);
-			CHECK(driver.clear_size == size);
+		CHECK(driver.clears == (issued ? 1 : 0));
+		if (issued) {
+			CHECK(driver.clear_offset == range.offset);
+			CHECK(driver.clear_size == range.size);
 		}
 		TestExternalOutputAccess::detach(device);
 	}

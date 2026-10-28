@@ -1,0 +1,100 @@
+{
+  "files": {
+    "A_BUILD_ORIGIN.json": {
+      "bytes": 6401,
+      "sha256": "68ccc49f66562a3acc5e8237c66097caba4332a107768a7724dc21b0ba978b56"
+    },
+    "INDEPENDENT_REVIEW.md": {
+      "bytes": 609,
+      "sha256": "7d4d3a22945df489f77ebdc455224eb09c382cf5e6d8c8a5faaf3125dd6e39fe"
+    },
+    "INPUTS_AFTER.json": {
+      "bytes": 2439,
+      "sha256": "5daf971dfb9d7e700d72230ed8ab56a8aa067d108e154d66c9be652d75fb5700"
+    },
+    "INPUTS_BEFORE.json": {
+      "bytes": 2439,
+      "sha256": "5daf971dfb9d7e700d72230ed8ab56a8aa067d108e154d66c9be652d75fb5700"
+    },
+    "RECEIPT.md": {
+      "bytes": 3929,
+      "sha256": "6aa61b832969f7d31905df85250b79acab4156071870c7f0658148c4bc62df4e"
+    },
+    "RESULT.json": {
+      "bytes": 765,
+      "sha256": "262623fff877e4a831bed9fc50c0cdc2bbfcde7e77fc2cf5ac21b04152be6486"
+    },
+    "RUN.log": {
+      "bytes": 505,
+      "sha256": "8148a2da787f28d8e66d59f4b014a6dfe45c546c25c950b2a6c51777847f48b6"
+    },
+    "RUN.rc": {
+      "bytes": 2,
+      "sha256": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3"
+    },
+    "RUN_COMMAND.json": {
+      "bytes": 397,
+      "sha256": "a9df091d73cc42bc19f68ffac419d727a1e3330a24ec046aed74cfdbd9612026"
+    },
+    "SOURCE_OBSERVATION.json": {
+      "bytes": 2180,
+      "sha256": "a373138db340a32bd7aec1dcd0476ec0e0e672ff8ff42d8d3ccf63bbf854c9bb"
+    },
+    "post-clear/INPUTS_AFTER.json": {
+      "bytes": 2439,
+      "sha256": "46e766f5710ad03103f177984fa72eba2ffe02fc55d3c86c8b7242bb279540ab"
+    },
+    "post-clear/INPUTS_BEFORE.json": {
+      "bytes": 2439,
+      "sha256": "46e766f5710ad03103f177984fa72eba2ffe02fc55d3c86c8b7242bb279540ab"
+    },
+    "post-clear/RESULT.json": {
+      "bytes": 400,
+      "sha256": "22d8580547b48f2b95e3228eb1e003d43938c7833fad0327175bd9cbb2263986"
+    },
+    "post-clear/RUN.log": {
+      "bytes": 505,
+      "sha256": "e1c44116f16acfeb70b06166d869741196128a1c987d518aa58dc286c2d07a94"
+    },
+    "post-clear/RUN.rc": {
+      "bytes": 2,
+      "sha256": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3"
+    },
+    "post-clear/RUN_COMMAND.json": {
+      "bytes": 397,
+      "sha256": "a9df091d73cc42bc19f68ffac419d727a1e3330a24ec046aed74cfdbd9612026"
+    },
+    "runtime/ange.gdextension": {
+      "bytes": 229,
+      "sha256": "b3046a5fd963df99c8e2408a687602083946324c035674e79196d133fdbf15a9"
+    },
+    "runtime/pack/.ange_cache/asset_cache_selftest/v0.8.0/reference_blob_v1": {
+      "bytes": 39,
+      "sha256": "59fdb94737a1ed7bb9390fdb74d9e4e96c54a76e453f37de34d902cdcb89da17"
+    },
+    "runtime/pack/arena.bp": {
+      "bytes": 13,
+      "sha256": "0bc8dbd5817222d03b2b25d67b15d9c6526cbd479916c9c6263e673497b01baf"
+    },
+    "runtime/pack/arena.world": {
+      "bytes": 119,
+      "sha256": "bc110dbf399b199fca30884c11305af89fecb2956252cfd2dcffa0598a9bfe78"
+    },
+    "runtime/pack/emitter.vfx": {
+      "bytes": 53,
+      "sha256": "e995c374496152a509660df74bcda74a290af771421219cfcf51bc69bd6a36cc"
+    },
+    "runtime/pack/system.vfx": {
+      "bytes": 67,
+      "sha256": "2902d4b5cf81351fcca66041de3a28c706dee7eb93c8b8dbf637a4570d92ce9d"
+    },
+    "runtime/probe.gd": {
+      "bytes": 707,
+      "sha256": "8dddd34e2048e41fb511a4987c6cf25e3dd84d52acb222c49fa9c24bdaebf553"
+    },
+    "runtime/project.godot": {
+      "bytes": 127,
+      "sha256": "2564b0988d53b173aa95ed038ee0c601233d21d02dcbe62579922e8a42f9c8d0"
+    }
+  }
+}

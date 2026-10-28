@@ -1,0 +1,80 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_external_output_contract.cpp:456:
+TEST CASE:  [RenderingDevice] buffer clear validates aligned spans and skips empty commands before effects
+
+tests/servers/rendering/test_external_output_contract.cpp:473: ERROR: CHECK( device.buffer_clear(buffer, range.offset, range.size) == (range.valid ? OK : ERR_INVALID_PARAMETER) ) is NOT correct!
+  values: CHECK( 0 == 31 )
+  logged: range.offset := 1
+          range.size := 4
+
+tests/servers/rendering/test_external_output_contract.cpp:475: ERROR: CHECK( TestExternalOutputAccess::commands(device) == before + (issued ? 1 : 0) ) is NOT correct!
+  values: CHECK( 1 == 0 )
+  logged: range.offset := 1
+          range.size := 4
+
+tests/servers/rendering/test_external_output_contract.cpp:476: ERROR: CHECK( TestExternalOutputAccess::transfer_used(device) == (issued ? 9 : 0) ) is NOT correct!
+  values: CHECK( 9 == 0 )
+  logged: range.offset := 1
+          range.size := 4
+
+tests/servers/rendering/test_external_output_contract.cpp:487: ERROR: CHECK( driver.clears == (issued ? 1 : 0) ) is NOT correct!
+  values: CHECK( 1 == 0 )
+  logged: range.offset := 1
+          range.size := 4
+
+tests/servers/rendering/test_external_output_contract.cpp:475: ERROR: CHECK( TestExternalOutputAccess::commands(device) == before + (issued ? 1 : 0) ) is NOT correct!
+  values: CHECK( 1 == 0 )
+  logged: range.offset := 0
+          range.size := 0
+
+tests/servers/rendering/test_external_output_contract.cpp:476: ERROR: CHECK( TestExternalOutputAccess::transfer_used(device) == (issued ? 9 : 0) ) is NOT correct!
+  values: CHECK( 9 == 0 )
+  logged: range.offset := 0
+          range.size := 0
+
+tests/servers/rendering/test_external_output_contract.cpp:483: ERROR: CHECK( TestExternalOutputAccess::commands(device) == before ) is NOT correct!
+  values: CHECK( 1 == 0 )
+  logged: range.offset := 0
+          range.size := 0
+
+tests/servers/rendering/test_external_output_contract.cpp:484: ERROR: CHECK( TestExternalOutputAccess::transfer_used(device) == 0 ) is NOT correct!
+  values: CHECK( 9 == 0 )
+  logged: range.offset := 0
+          range.size := 0
+
+tests/servers/rendering/test_external_output_contract.cpp:487: ERROR: CHECK( driver.clears == (issued ? 1 : 0) ) is NOT correct!
+  values: CHECK( 1 == 0 )
+  logged: range.offset := 0
+          range.size := 0
+
+tests/servers/rendering/test_external_output_contract.cpp:475: ERROR: CHECK( TestExternalOutputAccess::commands(device) == before + (issued ? 1 : 0) ) is NOT correct!
+  values: CHECK( 1 == 0 )
+  logged: range.offset := 32
+          range.size := 0
+
+tests/servers/rendering/test_external_output_contract.cpp:476: ERROR: CHECK( TestExternalOutputAccess::transfer_used(device) == (issued ? 9 : 0) ) is NOT correct!
+  values: CHECK( 9 == 0 )
+  logged: range.offset := 32
+          range.size := 0
+
+tests/servers/rendering/test_external_output_contract.cpp:483: ERROR: CHECK( TestExternalOutputAccess::commands(device) == before ) is NOT correct!
+  values: CHECK( 1 == 0 )
+  logged: range.offset := 32
+          range.size := 0
+
+tests/servers/rendering/test_external_output_contract.cpp:484: ERROR: CHECK( TestExternalOutputAccess::transfer_used(device) == 0 ) is NOT correct!
+  values: CHECK( 9 == 0 )
+  logged: range.offset := 32
+          range.size := 0
+
+tests/servers/rendering/test_external_output_contract.cpp:487: ERROR: CHECK( driver.clears == (issued ? 1 : 0) ) is NOT correct!
+  values: CHECK( 1 == 0 )
+  logged: range.offset := 32
+          range.size := 0
+
+===============================================================================
+[doctest] test cases:  1 |  0 passed |  1 failed | 1714 skipped
+[doctest] assertions: 44 | 30 passed | 14 failed |
+[doctest] Status: FAILURE!

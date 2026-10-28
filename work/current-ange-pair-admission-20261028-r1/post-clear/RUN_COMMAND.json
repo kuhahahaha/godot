@@ -1,0 +1,16 @@
+[
+  "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+  "--disable-crash-handler",
+  "--path",
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/current-ange-pair-admission-20261028-r1/runtime",
+  "--display-driver",
+  "macos",
+  "--rendering-driver",
+  "metal",
+  "--rendering-method",
+  "mobile",
+  "--render-thread",
+  "safe",
+  "--script",
+  "res://probe.gd"
+]

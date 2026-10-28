@@ -1,0 +1,26 @@
+{
+  "servers/rendering/rendering_device.cpp": {
+    "bytes": 527633,
+    "sha256": "1b668df6fda0de71a66b30536df306ef42fdd5e06bf6e672b26775f631fff312"
+  },
+  "tests/servers/rendering/test_external_output_contract.cpp": {
+    "bytes": 27434,
+    "sha256": "79df2df977cb991c13af1c272f2674920324bdf4b2d89cbf775a77d423f08536"
+  },
+  "doc/classes/RenderingDevice.xml": {
+    "bytes": 217041,
+    "sha256": "6a1f0ef5ea6e6d4ae074bfec962bb50bf42fec27cd8f8572dd1ea643f5ba5521"
+  },
+  "drivers/metal/SCsub": {
+    "bytes": 2253,
+    "sha256": "983222a4213d3cfb110b398fe330d341752dfd4f218cd0faaf7c7d28c8a90315"
+  },
+  "core/extension/gdextension_qualification.cpp": {
+    "bytes": 47973,
+    "sha256": "cb435c9749eb683a07035588f9c3aac4404bf72553e455157b83fd8571d7ce53"
+  },
+  "core/extension/gdextension_device_session.cpp": {
+    "bytes": 18406,
+    "sha256": "85aaf904831811cb22b893f048038dc6b460a29c22702556313d675e016e4730"
+  }
+}

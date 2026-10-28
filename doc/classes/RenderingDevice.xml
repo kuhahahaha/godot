@@ -44,9 +44,9 @@
 			<param index="1" name="offset" type="int" />
 			<param index="2" name="size_bytes" type="int" />
 			<description>
-				Clears the contents of the [param buffer], clearing [param size_bytes] bytes, starting at [param offset].
+				Clears the contents of the [param buffer], clearing [param size_bytes] bytes, starting at [param offset]. A size of zero performs no buffer operation.
 				Prints an error if:
-				- the size isn't a multiple of four
+				- the offset or size isn't a multiple of four
 				- the region specified by [param offset] + [param size_bytes] exceeds the buffer
 				- a draw list is currently active (created by [method draw_list_begin])
 				- a compute list is currently active (created by [method compute_list_begin])

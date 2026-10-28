@@ -1,0 +1,31 @@
+{
+  "godot_head": "1ba52ac512ba5332825456a04676a9536e1938a5",
+  "ange_head": "9c0f476b9f854da16199bee3d218d624079c4696",
+  "source_hashes": {
+    "/Users/macbookair/Documents/Work/godot_ANGE/core/extension/gdextension_device_session.cpp": "85aaf904831811cb22b893f048038dc6b460a29c22702556313d675e016e4730",
+    "/Users/macbookair/Documents/Work/godot_ANGE/core/extension/gdextension_qualification.cpp": "cb435c9749eb683a07035588f9c3aac4404bf72553e455157b83fd8571d7ce53",
+    "/Users/macbookair/Documents/Work/godot_ANGE/core/extension/gdextension_guard_enrollment.cpp": "9fb2d17216c1480e09a843f5cd8e146f559942e6367415aa92427f866fee98b3",
+    "/Users/macbookair/Documents/Work/ANGE/src/register_types.cpp": "1402c95af5005116e11ec1728737d08ab4489e19c62dd8074eea0fe0a363f66b",
+    "/Users/macbookair/Documents/Work/ANGE/src/godot/particle/device_session_adapter.cpp": "079fe19697cd4c8a4ea53803cb5e094c268b4cc6710ad4e1d5a07722fa715957",
+    "/Users/macbookair/Documents/Work/ANGE/src/godot/particle/host_attachment.cpp": "f5aa51b5db668d7bc0bc710f88aa510092ca8ca2dc52e41796012b6dde67ec12",
+    "/Users/macbookair/Documents/Work/ANGE/src/godot/particle/typed_scene_thunk.cpp": "736f87f60d4da14be69ab1cf2f8c8b1e2c9e56f55e4d1242c99c49c8fee4b905"
+  },
+  "A_current_source_matches_recorded_build_inputs": {
+    "src/register_types.cpp": true,
+    "src/godot/particle/host_attachment.h": true,
+    "src/godot/particle/host_attachment.cpp": true,
+    "src/godot/particle/host_native_device.cpp": true,
+    "src/godot/particle/device_session_adapter.cpp": true,
+    "src/godot/particle/main_rd_storage_access.h": true,
+    "src/godot/particle/particle_program_loader.h": true,
+    "src/godot/particle/particle_program_loader.cpp": true,
+    "src/particle/runtime/owner_observation_lease.h": true,
+    "godot-cpp/include/godot_cpp/godot.hpp": true,
+    "godot-cpp/include/godot_cpp/classes/wrapped.hpp": true,
+    "godot-cpp/src/godot.cpp": true,
+    "godot-cpp/src/classes/wrapped.cpp": true,
+    "godot-cpp/src/core/class_db.cpp": true,
+    "godot-cpp/gen/include/gdextension_interface.h": true
+  },
+  "note": "passive source/build attribution, not a production owner or operation receipt"
+}
