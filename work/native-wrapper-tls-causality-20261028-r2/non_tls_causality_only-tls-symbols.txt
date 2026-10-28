@@ -1,0 +1,31 @@
+0000000000040118 (__DATA,__data) non-external (was a private external) __ZGVN5godot16WorkerThreadPool37_gde_engine_class_registration_helperE
+0000000000040160 (__DATA,__data) non-external (was a private external) __ZGVZN5godot16WorkerThreadPool16get_class_staticEvE11string_name
+000000000003c240 (__DATA_CONST,__const) non-external (was a private external) __ZN5godot16WorkerThreadPool22_gde_binding_callbacksE
+000000000001a50c (__TEXT,__text) non-external (was a private external) __ZN5godot16WorkerThreadPool26_gde_binding_free_callbackEPvS1_S1_
+000000000001a4d0 (__TEXT,__text) non-external (was a private external) __ZN5godot16WorkerThreadPool28_gde_binding_create_callbackEPvS1_
+000000000001a540 (__TEXT,__text) non-external (was a private external) __ZN5godot16WorkerThreadPool31_gde_binding_reference_callbackEPvS1_h
+0000000000043c08 (__DATA,__common) non-external (was a private external) __ZN5godot16WorkerThreadPool9singletonE
+00000000000310b0 (__TEXT,__text) non-external (was a private external) __ZN5godot16WorkerThreadPoolD0Ev
+00000000000310ac (__TEXT,__text) non-external (was a private external) __ZN5godot16WorkerThreadPoolD1Ev
+000000000003101c (__TEXT,__text) non-external (was a private external) __ZN5godot16WorkerThreadPoolD2Ev
+00000000000328ac (__TEXT,__text) non-external __ZN5godot16WorkerThreadPoolD2Ev.cold.1
+0000000000041278 (__DATA,__common) external __ZN5godot18GDExtensionBinding19active_guarded_userE
+000000000001a498 (__TEXT,__text) non-external (was a private external) __ZN5godot8internal23EngineClassRegistrationINS_16WorkerThreadPoolEE8callbackEv
+000000000003142c (__TEXT,__text) non-external __ZN5godot8internal23EngineClassRegistrationINS_16WorkerThreadPoolEE8callbackEv.cold.1
+0000000000005010 (__TEXT,__text) non-external (was a private external) __ZNSt3__111__thread_idC1B9nqe220106EP17_opaque_pthread_t
+0000000000001e9c (__TEXT,__text) non-external (was a private external) __ZNSt3__111__thread_idC1B9nqe220106Ev
+000000000000505c (__TEXT,__text) non-external (was a private external) __ZNSt3__111__thread_idC2B9nqe220106EP17_opaque_pthread_t
+0000000000004e24 (__TEXT,__text) non-external (was a private external) __ZNSt3__111__thread_idC2B9nqe220106Ev
+0000000000003080 (__TEXT,__text) non-external (was a private external) __ZNSt3__111this_thread6get_idB9nqe220106Ev
+0000000000005044 (__TEXT,__text) non-external (was a private external) __ZNSt3__122__libcpp_thread_get_idB9nqe220106EPKP17_opaque_pthread_t
+0000000000004fc0 (__TEXT,__text) non-external (was a private external) __ZNSt3__124__libcpp_thread_id_equalB9nqe220106EP17_opaque_pthread_tS1_
+0000000000004fe4 (__TEXT,__text) non-external (was a private external) __ZNSt3__130__libcpp_thread_get_current_idB9nqe220106Ev
+0000000000004f2c (__TEXT,__text) non-external (was a private external) __ZNSt3__1eqB9nqe220106ENS_11__thread_idES0_
+0000000000003040 (__TEXT,__text) non-external (was a private external) __ZNSt3__1neB9nqe220106ENS_11__thread_idES0_
+000000000003d410 (__DATA_CONST,__const) non-external (was a private external) __ZTIN5godot16WorkerThreadPoolE
+00000000000383d9 (__TEXT,__const) non-external (was a private external) __ZTSN5godot16WorkerThreadPoolE
+000000000003d3e0 (__DATA_CONST,__const) non-external (was a private external) __ZTVN5godot16WorkerThreadPoolE
+0000000000040158 (__DATA,__data) non-external (was a private external) __ZZN5godot16WorkerThreadPool16get_class_staticEvE11string_name
+                 (undefined) external _pthread_self (from libSystem)
+0000000000041938 (__DATA,__common) non-external (was a private external) _worker_thread_pool_add_native_group_task
+0000000000041940 (__DATA,__common) non-external (was a private external) _worker_thread_pool_add_native_task

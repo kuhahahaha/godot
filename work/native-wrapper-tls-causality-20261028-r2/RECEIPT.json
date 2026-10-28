@@ -1,0 +1,28 @@
+{
+  "status": "CONFIRMED_MACOS_SDK_ACTIVE_GUARDED_USER_TLS_IMAGE_RETENTION",
+  "date": "2026-10-28",
+  "scope": "current Godot dev host real Metal; current SDK godot.cpp/ClassDB plus pinned archive; explicit MACOS_ENABLED/UNIX_ENABLED/HOT_RELOAD_ENABLED/THREADS_ENABLED/DEBUG_ENABLED/NDEBUG; private test DSO",
+  "evidence": "RESULTS.json / original_tls.log / non_tls_causality_only.log / restored_tls.log / *-tls-symbols.txt / SOURCE_MANIFEST.json",
+  "contrast": [
+    false,
+    true,
+    false
+  ],
+  "contrast_meaning": "DSO destructor occurs before manager unload return only when active_guarded_user TLS storage is removed in private copies",
+  "symbol_join": "__tlv_bootstrap + active_guarded_user __thread_vars/__thread_bss in original/restored; absent in plain-static mutant",
+  "existing_owner_precedent": "ANGE/godot-cpp/include/godot_cpp/classes/wrapped.hpp:74-95 already avoids native TLS for macOS hot reload and preserves per-thread state in an SDK-owned map",
+  "diagnostic_mutant": "NOT A FIX: plain static pointer changes thread isolation and cannot be adopted",
+  "production_paths_changed": [],
+  "next_owner_work": "SDK owner should replace macOS native TLS with unload-compatible per-thread storage, preserving exact lifecycle entry checks, cross-thread isolation and callback scope reset. Use native TLS on other profiles only under their original contract. Exact implementation requires SDK/source consumer coordination.",
+  "required_acceptance": [
+    "original current SDK native retention RED -> unload-compatible per-thread implementation GREEN",
+    "cross-thread reads cannot see another thread active context",
+    "same-thread nested/reentry refusal and callback return reset remain enforced",
+    "omitted Tree scheduling still refuses with error030 route5 and no premature frees",
+    "current production callers compile against the final SDK API, with matching archive/DSO freeze"
+  ],
+  "remaining": "canonical ANGE E05 owner inputs + install, production qualification actor, same-request production join, complete wrapper cohort and full platform/G1 qualification",
+  "review": "author SELF_REVIEW.md only",
+  "retry_note": "strengthened rerun first encountered missing generated headers during concurrent owner regeneration; failed compile log retained. Final rerun pins all generated .h/.hpp and verified unchanged through all three controls.",
+  "contract_mapping": "CONTRACT_MAPPING.md; ORACLES O6 actual OS-call+OK differs from PROTOCOL §408 fresh-image dynamic reload; preserve core result and sticky claimant"
+}
