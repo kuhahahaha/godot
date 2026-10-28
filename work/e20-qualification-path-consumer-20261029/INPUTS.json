@@ -1,0 +1,15 @@
+{
+  "base_commit": "39bb510ed08d90496343ee8894102058a0e245b0",
+  "source_sha256": {
+    "core/extension/gdextension_qualification_rd.cpp": "2d3140ba758d7198ab49a22dad67d0863e27cb317d261d15d2245d6c87032d2b",
+    "tests/servers/rendering/test_qualification_ticket.cpp": "1d737797e2098aeb528c1918be5d0d18d10074aebf25f30d2c39aed4c842d988"
+  },
+  "binary_sha256": "490fff41ed114513bdde77c5354ff98f58ae324cd5633e4fc99d22629dcde4a7",
+  "results": {
+    "red_transitive_test": {"build_rc": 0, "run_rc": 1, "expected_failure": "ordering_closed=false; mapping_failed=true"},
+    "green_transitive_test": {"build_rc": 0, "run_rc": 0, "cases": 1, "assertions": 5},
+    "graph_regression": {"rc": 0, "cases": 8, "assertions": 109},
+    "qualification_regression": {"rc": 0, "cases": 20, "assertions": 344}
+  },
+  "scope": "Graph ordering consumer only; no native completion/readback/Ready/G1 claim"
+}

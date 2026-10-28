@@ -244,8 +244,53 @@ public:
   CHECK_FALSE(ticket.physically_retired.load());CHECK(ticket.report.state==6);CHECK(ticket.report.owned_size==0);CHECK(device.storage_buffer_owner.get_or_null(rid)->qualification_users==1);
   device.storage_buffer_owner.free(rid);device.driver=nullptr;
  }
+	static void transitive_graph_order() {
+		using namespace GDExtensionDeviceExit;
+		struct Driver : TransferTestDriverBase {
+			void command_pipeline_barrier(CommandBufferID, BitField<PipelineStageBits>, BitField<PipelineStageBits>, VectorView<MemoryAccessBarrier>, VectorView<BufferBarrier>, VectorView<TextureBarrier>, VectorView<AccelerationStructureBarrier>) override {}
+			void command_copy_buffer(CommandBufferID, BufferID, BufferID, VectorView<BufferCopyRegion>) override {}
+		} driver;
+		RenderingDevice device;
+		device.driver = &driver;
+		device.frames.resize(1);
+		device.frames[0].qualification_epoch = 1;
+		device.draw_graph.initialize(&driver,
+				[](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); },
+				1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+		device.draw_graph.begin();
+		RenderingDeviceGraph::ResourceTracker destination;
+		destination.buffer_driver_id = RenderingDeviceDriver::BufferID(72);
+		RenderingDeviceGraph::RecordedBufferCopy copy;
+		copy.source = RenderingDeviceDriver::BufferID(71);
+		copy.region = { 0, 0, 32 };
+		const auto capture = device.draw_graph.add_buffer_update(RenderingDeviceDriver::BufferID(72), &destination, VectorView(&copy, 1));
+		device.draw_graph.add_buffer_update(RenderingDeviceDriver::BufferID(72), &destination, VectorView(&copy, 1));
+		const auto body = device.draw_graph.add_buffer_update(RenderingDeviceDriver::BufferID(72), &destination, VectorView(&copy, 1));
+		uint32_t path_length = 0;
+		CHECK_FALSE(device.draw_graph.has_synchronization_edge(capture, body));
+		CHECK(device.draw_graph.has_dependency_path(capture, body, path_length));
+		CHECK(path_length == 2);
+		RenderingDeviceGraph::CommandBufferPool pool;
+		RenderingDeviceDriver::CommandBufferID primary(11);
+		device.draw_graph.end(true, false, primary, pool);
+		QualificationTicket ticket;
+		ticket.capture = capture;
+		ticket.body = body;
+		ticket.frame_refs = 1;
+		ticket.report.revision = 1;
+		device.frames[0].qualification_tickets.push_back(&ticket);
+		device._qualification_seal_tickets();
+		CHECK(ticket.ordering_closed);
+		CHECK_FALSE(ticket.mapping_failed);
+		device.frames.clear();
+		device.draw_graph.finalize();
+		device.driver = nullptr;
+	}
 };
 TEST_CASE("[Qualification] ticket keeps distinct native and completion identities until every source and frame returns") {TestQualificationTicketAccess::reduction(false);}
+
+TEST_CASE("[Qualification] sealing accepts an actual transitive graph path") { TestQualificationTicketAccess::transitive_graph_order(); }
+
 TEST_CASE("[Qualification] zero-effect prepared ticket reacquires original resource pins before retry") { TestQualificationTicketAccess::no_effect_reacquires_resource_pin(); }
 TEST_CASE("[Qualification] attempted upload keeps original writer pin across zero-effect busy publish") { TestQualificationTicketAccess::no_effect_reacquires_resource_pin(true); }
 TEST_CASE("[Qualification] settled native work releases resource pins after a logical readback copy failure") {TestQualificationTicketAccess::reduction(true);}

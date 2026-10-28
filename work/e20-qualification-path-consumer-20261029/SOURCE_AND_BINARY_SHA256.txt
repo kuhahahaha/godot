@@ -1,0 +1,3 @@
+2d3140ba758d7198ab49a22dad67d0863e27cb317d261d15d2245d6c87032d2b  core/extension/gdextension_qualification_rd.cpp
+1d737797e2098aeb528c1918be5d0d18d10074aebf25f30d2c39aed4c842d988  tests/servers/rendering/test_qualification_ticket.cpp
+490fff41ed114513bdde77c5354ff98f58ae324cd5633e4fc99d22629dcde4a7  bin/godot.macos.editor.dev.arm64
