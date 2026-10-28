@@ -143,3 +143,17 @@ and version probe are rc0. R13 artifacts carry the `c4da5dc43` build identity;
 source hashes pin the exact source in `SOURCE_MANIFEST.json`. This remains
 direct input validation only; no qualification, completion, readback, Ready or G1
 claim is made.
+
+## Direct sample-count and primitive validation
+
+The Vulkan driver now rejects `TEXTURE_SAMPLES_MAX` before sample-count table
+lookup in texture creation and render-pass attachments, and rejects
+`RENDER_PRIMITIVE_MAX` plus invalid pipeline sample counts before pipeline state
+translation. Focused Debug coverage is 1/4 for texture samples, 1/3 for render
+pass samples, and 1/4 for pipeline primitive/sample inputs. The full Vulkan
+regression is 13 cases / 59 assertions, K03/P2 is 22 cases / 350 assertions,
+and actual `use_ubsan=yes` Vulkan regression is 13/59; all are rc0. The
+template_release rebuild and version probe are rc0. R14 artifacts carry the
+`b484c5cac` build identity; source hashes pin the exact source in
+`SOURCE_MANIFEST.json`. This remains direct input validation only; no
+qualification, completion, readback, Ready or G1 claim is made.

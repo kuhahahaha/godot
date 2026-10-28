@@ -62,3 +62,9 @@ The layout guards run before any `RD_TO_VK_LAYOUT` indexing in the render-pass
 attachment/reference paths exercised by this entry. Valid layout behavior is
 unchanged; invalid sentinels fail closed with an empty RenderPassID. Evidence is
 limited to input validation and does not add lifecycle or qualification authority.
+
+
+The sample-count and primitive guards run before RD sample/primitive table
+access and before any pipeline or image allocation. Valid values retain the
+existing closest-supported-sample behavior; sentinel inputs fail closed. The
+evidence adds no owner, completion, readback, Ready or G1 authority.

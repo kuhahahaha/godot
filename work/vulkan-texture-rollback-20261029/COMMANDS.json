@@ -478,5 +478,55 @@
     "command": "bin/godot.macos.template_release.arm64 --version",
     "returncode": 0,
     "summary": "4.7.2.stable.custom_build.c4da5dc43"
+  },
+  "r14_debug_build": {
+    "command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2 platform=macos target=editor dev_build=yes tests=yes builtin_glslang=yes",
+    "returncode": 0,
+    "summary": "Debug build after sample/primitive guards rc0"
+  },
+  "r14_texture_sample": {
+    "command": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case=\"[QualificationNative][Vulkan] texture creation rejects an invalid sample count\"",
+    "returncode": 0,
+    "summary": "1 case / 4 assertions"
+  },
+  "r14_render_pass_sample": {
+    "command": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case=\"[QualificationNative][Vulkan] render pass creation rejects an invalid sample count\"",
+    "returncode": 0,
+    "summary": "1 case / 3 assertions"
+  },
+  "r14_pipeline_enums": {
+    "command": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case=\"[QualificationNative][Vulkan] render pipeline creation rejects invalid primitive and sample count\"",
+    "returncode": 0,
+    "summary": "1 case / 4 assertions"
+  },
+  "r14_vulkan_regression": {
+    "command": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case=\"[QualificationNative][Vulkan]*\"",
+    "returncode": 0,
+    "summary": "13 cases / 59 assertions"
+  },
+  "r14_k03_p2": {
+    "command": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case=\"[K03][P2]*\"",
+    "returncode": 0,
+    "summary": "22 cases / 350 assertions"
+  },
+  "r14_ubsan_build": {
+    "command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2 platform=macos target=editor dev_build=yes tests=yes use_ubsan=yes builtin_glslang=yes",
+    "returncode": 0,
+    "summary": "actual use_ubsan=yes build rc0"
+  },
+  "r14_ubsan_vulkan_regression": {
+    "command": "bin/godot.macos.editor.dev.arm64.san --headless --test --test-case=\"[QualificationNative][Vulkan]*\"",
+    "returncode": 0,
+    "summary": "13 cases / 59 assertions"
+  },
+  "r14_release_build": {
+    "command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2 platform=macos target=template_release dev_build=no tests=no builtin_glslang=yes",
+    "returncode": 0,
+    "summary": "template_release rc0"
+  },
+  "r14_release_version": {
+    "command": "bin/godot.macos.template_release.arm64 --version",
+    "returncode": 0,
+    "summary": "4.7.2.stable.custom_build.b484c5cac"
   }
 }
