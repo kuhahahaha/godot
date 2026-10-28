@@ -1,0 +1,16 @@
+{
+  "ange_head": "f93ad7c09362ab084e576524a91ec6bf08e711b3",
+  "source_sha256": {
+    "src/register_types.cpp": "1402c95af5005116e11ec1728737d08ab4489e19c62dd8074eea0fe0a363f66b",
+    "src/godot/particle/host_attachment.cpp": "bfe57f2c2d0e8c9c240afe222e84a671907f55b74463668e3a22b8a9d137ae46",
+    "src/godot/particle/particle_program_loader.cpp": "bc88a8e0d0f8338b965de4936110a0b17f7eeea6d753c6b20f7bda1b51308513",
+    "src/godot/particle/particle_attribute_storage.cpp": "5b656c725cfd32344b235f52b2b1ecb5016eb1998410e7083796e79b202c5fbc"
+  },
+  "call_sites": {
+    "host_attachment_service": "src/godot/particle/host_attachment.cpp:700",
+    "service_pending_scope": "src/godot/particle/particle_program_loader.cpp:611-643",
+    "storage_start": "src/godot/particle/particle_attribute_storage.cpp:61-70",
+    "stage_executor_definition": "src/godot/particle/stage_executor.cpp:5"
+  },
+  "scope": "Source caller census only; no build, DSO, GPU, completion, readback, Ready or G1 claim"
+}

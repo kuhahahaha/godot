@@ -921,8 +921,8 @@
   "work/sdk-unloadable-active-context-20261028-r3/threads-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "work/typed-lifecycle-abi-v1/CURRENT_PAIR_U01_VFX_R01_NEGATIVE_RECEIPT_20251025.md": "c6ab0496164e2741f157768a10ffcc6f0217b630a26d95d3d9762c2e22b79a47",
   "work/typed-lifecycle-abi-v1/PROGRESS.md": {
-    "bytes": 141700,
-    "sha256": "0e0d64b847fd89ca35db1aa38766bc19030b5b1a5effd185c4825d5a234a7d91"
+    "bytes": 142345,
+    "sha256": "bd3405b2208b7c7af6c2b5ce16138165999fda1a2dd7511390219a8ec97efffb"
   },
   "work/typed-lifecycle-abi-v1/gdextension_interface.h": "07ee07f19e31fe5c22154edbba73ce3cb793b87524add5d9dc0c9468815c9a29",
   "work/typed-lifecycle-abi-v1/native-current-open-items-20261028/COMMAND_OUTPUT.json": "feccb44a82af5439c60b4fb8a6f7c8fc8923f9fd97e2bb169099294c67a185ef",
@@ -1159,5 +1159,17 @@
   "work/e20-native-graph-path-20261029/RELEASE_BUILD.rc": {
     "bytes": 2,
     "sha256": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3"
+  },
+  "work/ange-production-caller-census-20261029/INDEPENDENT_REVIEW.md": {
+    "bytes": 857,
+    "sha256": "9a2c14ffacf1571d4482fb995fcc704192c20cc77aea6b523fd1f05a9457cf82"
+  },
+  "work/ange-production-caller-census-20261029/INPUTS.json": {
+    "bytes": 989,
+    "sha256": "6be33cfb18a25e286783160973a8fcfc2965320957737d6ad648dc847ac8fa0f"
+  },
+  "work/ange-production-caller-census-20261029/RECEIPT.md": {
+    "bytes": 1871,
+    "sha256": "efc07c0c6bb26b996ff2ab02b7e5f2928b6250b23584b4761cd59a077a8294df"
   }
 }
