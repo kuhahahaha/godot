@@ -45,6 +45,8 @@ live adapter caller, not this core export implementation.
 
 The snapshot path now validates finite, ordered Curve points and finite
 Gradient points before calling the engine's sampling accessors. This prevents
-malformed source data from reaching sorting/sampling code. The follow-up Debug,
-Release and actual `use_ubsan=yes` builds are rc0; focused and full
-ResourceSnapshot runs remain 1/32 and 14/184, rc0.
+malformed source data from reaching sorting/sampling code. The follow-up Debug, Release and actual `use_ubsan=yes` builds are rc0; focused and full
+ResourceSnapshot runs remain 1/32 and 14/184, rc0. The recorded artifacts carry
+the pre-commit build identity `d7d16972ad`; their exact source hashes are
+pinned in `SOURCE_MANIFEST.json`, while the current source head is recorded
+there separately.

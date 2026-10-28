@@ -1,5 +1,5 @@
 {
-  "godot_head": "3c2c200f4b95baa1431cbfafd8244b9e08b2422a",
+  "godot_head": "033f59ddfe229a5b135e2a1a2e54f998b83340be",
   "source": {
     "scene/resources/curve_texture.h": {
       "bytes": 4330,
@@ -51,5 +51,6 @@
       "bytes": 918728032,
       "sha256": "f9aaa458adb2eb1f8c4221696cf2717542015e07a1a314a43e9d3091199e9002"
     }
-  }
+  },
+  "artifact_build_identity_head": "d7d16972ad"
 }

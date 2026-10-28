@@ -1525,8 +1525,8 @@
     "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
   },
   "work/e22-core-texture-snapshot-20261029/RECEIPT.md": {
-    "bytes": 2671,
-    "sha256": "d2dca93b802a16e4e020fedadfb5edd603703f58e2edc8eefe1c58593fce43ed"
+    "bytes": 2868,
+    "sha256": "07aa72decc7afb518452e58840fb74463ed6001b991411594eb0e76b5378222a"
   },
   "work/e22-core-texture-snapshot-20261029/RED_BUILD.log": {
     "bytes": 5565,
@@ -1553,8 +1553,8 @@
     "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
   },
   "work/e22-core-texture-snapshot-20261029/SOURCE_MANIFEST.json": {
-    "bytes": 2015,
-    "sha256": "a3cd3de995546236d302b13e3624d9f8b012b460b1be3faeda79e7d5f7de7475"
+    "bytes": 2063,
+    "sha256": "e7ba2c9b8987d02804e20844638bc7b8788fe86158b9e47a16394b9d0979f0fc"
   },
   "work/e22-core-texture-snapshot-20261029/UBSAN_BUILD_R3.log": {
     "bytes": 186762,
