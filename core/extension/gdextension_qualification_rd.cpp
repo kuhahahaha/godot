@@ -71,14 +71,21 @@ void RenderingDevice::_qualification_seal_tickets() {
    member.sealed=true;fact.command_slot=slot;fact.phase=2;ticket->observation_dirty=true;
   }
   if(ticket->capture.is_valid() && ticket->body.is_valid() && draw_graph.contains_record(ticket->capture) && draw_graph.contains_record(ticket->body)) {
+   ticket->ordering_path_length=0;
    uint32_t path_length=0;
    ticket->ordering_closed=draw_graph.has_dependency_path(ticket->capture,ticket->body,path_length);
-   if(ticket->prepared)for(const auto &graph:ticket->graphs)if(ticket->facts[graph.fact].semantic_kind==6) {
+   if(ticket->ordering_closed)ticket->ordering_path_length=path_length;
+   if(ticket->prepared)for(auto &graph:ticket->graphs)if(ticket->facts[graph.fact].semantic_kind==6) {
     if(draw_graph.contains_record(graph.handle)) {
      uint32_t source_path_length=0;
-     ticket->ordering_closed=ticket->ordering_closed && draw_graph.has_dependency_path(graph.handle,ticket->capture,source_path_length);
+     const bool source_path=draw_graph.has_dependency_path(graph.handle,ticket->capture,source_path_length);
+     graph.path_length=source_path?source_path_length:0;
+     ticket->ordering_closed=ticket->ordering_closed && source_path;
     }
-    else ticket->ordering_closed=ticket->ordering_closed && graph.returned && ticket->facts[graph.fact].completion==2;
+    else {
+     graph.path_length=0;
+     ticket->ordering_closed=ticket->ordering_closed && graph.returned && ticket->facts[graph.fact].completion==2;
+    }
    }
    if(!ticket->ordering_closed)ticket->mapping_failed=true;
   }

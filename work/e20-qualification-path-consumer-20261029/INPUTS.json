@@ -1,15 +1,52 @@
 {
-  "base_commit": "39bb510ed08d90496343ee8894102058a0e245b0",
+  "base_commit": "eed387883b7974803ead9ff44750742d140e0f19",
   "source_sha256": {
-    "core/extension/gdextension_qualification_rd.cpp": "2d3140ba758d7198ab49a22dad67d0863e27cb317d261d15d2245d6c87032d2b",
-    "tests/servers/rendering/test_qualification_ticket.cpp": "1d737797e2098aeb528c1918be5d0d18d10074aebf25f30d2c39aed4c842d988"
+    "core/extension/gdextension_qualification_internal.h": "4de4995390f5989ff9174af6db94ad1587f8334eeb04ce5cf1089aebab617d76",
+    "core/extension/gdextension_qualification_rd.cpp": "86f0ebf1602146474214dfd5255925db89bf32a8a8ea43e29c00b097de737d51",
+    "core/extension/gdextension_qualification_ticket.cpp": "1ffc72fbb8d13e7bc557f3ba45f5c550496ac1de1027a14fb980cbcc988c396f",
+    "tests/servers/rendering/test_qualification_ticket.cpp": "996791b906b1b892da5be8ac79f7b510d38ba1e28e901565c8656bd02c51de3d"
   },
-  "binary_sha256": "490fff41ed114513bdde77c5354ff98f58ae324cd5633e4fc99d22629dcde4a7",
+  "binary_sha256": "9434dea31415afb5583ad1423faa38e60aa33f8d2a48e790b1e3f6fabb0eb2c9",
   "results": {
-    "red_transitive_test": {"build_rc": 0, "run_rc": 1, "expected_failure": "ordering_closed=false; mapping_failed=true"},
-    "green_transitive_test": {"build_rc": 0, "run_rc": 0, "cases": 1, "assertions": 5},
-    "graph_regression": {"rc": 0, "cases": 8, "assertions": 109},
-    "qualification_regression": {"rc": 0, "cases": 20, "assertions": 344}
+    "red_transitive_test": {
+      "build_rc": 0,
+      "run_rc": 1,
+      "expected_failure": "ordering_closed=false; mapping_failed=true"
+    },
+    "green_transitive_test": {
+      "build_rc": 0,
+      "run_rc": 0,
+      "cases": 1,
+      "assertions": 5
+    },
+    "graph_regression": {
+      "rc": 0,
+      "cases": 8,
+      "assertions": 109
+    },
+    "qualification_regression": {
+      "rc": 0,
+      "cases": 20,
+      "assertions": 344
+    },
+    "path_length_follow_up": {
+      "red_compile_rc": 2,
+      "green_build_rc": 0,
+      "green_run_rc": 0,
+      "cases": 1,
+      "assertions": 6,
+      "ordering_path_length": 2
+    },
+    "path_length_graph_regression": {
+      "rc": 0,
+      "cases": 8,
+      "assertions": 109
+    },
+    "path_length_qualification_regression": {
+      "rc": 0,
+      "cases": 20,
+      "assertions": 345
+    }
   },
-  "scope": "Graph ordering consumer only; no native completion/readback/Ready/G1 claim"
+  "scope": "Graph ordering consumer only; path lengths are retained as diagnostic ordering facts; no native completion/readback/Ready/G1 claim"
 }

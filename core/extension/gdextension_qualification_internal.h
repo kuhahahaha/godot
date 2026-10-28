@@ -16,7 +16,7 @@ struct QualificationTicket {
  GDExtensionQualificationUploadPrepareV1 preparation={};
  GDExtensionQualificationReportV1 report={};
  LocalVector<GDExtensionQualificationFactV1> facts;
- struct GraphMember {RDG::RecordHandle handle;uint32_t fact=0,frame=0;uint64_t epoch=0;bool sealed=false,returned=false;};
+ struct GraphMember {RDG::RecordHandle handle;uint32_t fact=0,frame=0,path_length=0;uint64_t epoch=0;bool sealed=false,returned=false;};
  struct NativeMember {RDD::NativeCallFact source;uint32_t fact=0,frame=0,slot=UINT32_MAX;uint64_t epoch=0;bool retained=false,owner_released=false;};
  LocalVector<GraphMember> graphs;
  LocalVector<NativeMember> natives;
@@ -36,6 +36,7 @@ struct QualificationTicket {
  bool prepared=false,recorded=false,recording=false,queued=false,acknowledged=false;
  std::atomic<bool> admission_closed{false};
  bool stop_requested=false,continuation_pending=false;
+ uint32_t ordering_path_length=0;
  bool ordering_closed=false,append_failed=false,mapping_failed=false,observation_dirty=false;
  bool resources_returned=false;
  std::atomic<bool> physically_retired{false};

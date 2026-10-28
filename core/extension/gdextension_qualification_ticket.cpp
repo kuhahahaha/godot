@@ -33,7 +33,7 @@ void add_graph(QualificationTicket *ticket,const RDG::RecordHandle &handle,uint3
  if(!handle.is_valid() || ticket->facts.size()>=QualificationTicket::FACT_CAPACITY){ticket->mapping_failed=true;return;}
  GDExtensionQualificationFactV1 fact={};fact.graph_instance=handle.graph_instance;fact.graph_frame=handle.graph_frame;fact.graph_kind=handle.kind;fact.graph_index=handle.index;fact.graph_offset=handle.offset;
  fact.semantic_kind=semantic;fact.command_slot=UINT32_MAX;fact.parent_fact=UINT32_MAX;fact.phase=1;fact.source_backing_serial=backing;fact.source_offset=offset;fact.source_size=size;
- ticket->graphs.push_back({handle,ticket->facts.size(),frame,epoch,false,false});ticket->facts.push_back(fact);ticket->observation_dirty=true;
+ ticket->graphs.push_back({handle,ticket->facts.size(),frame,0,epoch,false,false});ticket->facts.push_back(fact);ticket->observation_dirty=true;
 }
 }
 Error Registry::qualification_ticket_locked(QualificationBridge *bridge,GDExtensionQualificationTicketRefV1 ref,QualificationTicket *&ticket) {

@@ -22,3 +22,11 @@ readback, Ready or G1 authority is added.
 The path result is used only as an ordering fact during sealing. Native issue,
 completion, exact readback, physical retirement and Ready/G1 gates remain
 unchanged and unclaimed.
+
+## Path-length follow-up
+
+The ticket now retains the measured capture→body path length internally as
+`ordering_path_length`, and each graph member retains its measured source path
+length. RED first failed to compile because the field was absent; GREEN build
+and focused test pass with the transitive length equal to `2`. The follow-up
+Graph regression remains 8/109 and Qualification is 20/345, rc0.

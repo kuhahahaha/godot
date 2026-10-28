@@ -192,7 +192,7 @@ public:
   ticket.result->qualification_owned=true;ticket.result->bytes.resize(4);ticket.result->issued_size=4;
   RenderingDevice::Buffer buffer;buffer.qualification_users=1;RID rid=device.storage_buffer_owner.make_rid(buffer);ticket.resource_pins.push_back(rid);
   GDExtensionQualificationFactV1 graph={};graph.semantic_kind=3;graph.command_slot=0;ticket.facts.push_back(graph);
-  ticket.graphs.push_back({{},0,0,1,true,false});ticket.frame_refs=1;
+  ticket.graphs.push_back({{},0,0,0,1,true,false});ticket.frame_refs=1;
   for(uint32_t i=0;i<2;++i) {
    RenderingDeviceDriver::NativeCallFact source;source.serial=17+i;source.completion_serial=73+i;source.queue_index=1;
    GDExtensionQualificationFactV1 fact={};fact.issue=1;fact.completion=i?1:2;
@@ -281,6 +281,7 @@ public:
 		device.frames[0].qualification_tickets.push_back(&ticket);
 		device._qualification_seal_tickets();
 		CHECK(ticket.ordering_closed);
+		CHECK(ticket.ordering_path_length == 2);
 		CHECK_FALSE(ticket.mapping_failed);
 		device.frames.clear();
 		device.draw_graph.finalize();
