@@ -1,0 +1,25 @@
+{
+  "status": "PRIVATE_SDK_PER_THREAD_REPAIR_NATIVE_RELOAD_GREEN_INTEGRATION_PENDING",
+  "scope": "unmodified current core + current SDK private source candidate, macOS arm64 Metal",
+  "fix": "macOS SDK-owned mutex/map keyed by thread id, same technique as Wrapped; other platforms retain native TLS; accessor preserves original per-thread nullable pointer and nested-entry checks",
+  "patches": [
+    "SDK.patch (godot.hpp/godot.cpp/class_db.hpp)",
+    "ANGE_CONSUMER.patch (three original register_types.cpp uses)"
+  ],
+  "checks": [
+    "both git apply --check rc0",
+    "fresh image unload/reload/unload native all rc0, destructor before both unload returns",
+    "simultaneous main/worker pointers isolated and reset",
+    "original SDK callback/frozen-configuration/reentry/return controls rc0, spelling-only test adaptation",
+    "original omission of Tree scheduling remains native error030 route5 rc78, no frees/destructor"
+  ],
+  "production_edits": false,
+  "integration_required": [
+    "SDK owner applies exact source patch and updates all source/test harness accessor consumers",
+    "matching SDK archives and canonical ANGE DSOs rebuilt by the sole owner builder",
+    "canonical full wrapper cohort and full production qualification joins verified",
+    "independent source review and other platform profiles remain open"
+  ],
+  "review": "SELF_REVIEW.md (author only)",
+  "unchanged_input_count": 1089
+}

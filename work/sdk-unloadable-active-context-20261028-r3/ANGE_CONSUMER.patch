@@ -1,0 +1,29 @@
+--- a/src/register_types.cpp
++++ b/src/register_types.cpp
+@@ -262,7 +262,7 @@
+ }
+ int32_t materialize_scene_host(GDExtensionDeviceExitSceneReadyContextRef ready,
+     const GDExtensionSceneInstallPlanV2* plan) noexcept {
+-  auto* binding=GDExtensionBinding::active_guarded_user;
++  auto* binding=GDExtensionBinding::active_guarded_user();
+   if (!binding || !particle_host_root || particle_ready_host.state!=ReadyHostLedger::State::Pending)
+     return int32_t(ERR_INVALID_DATA);
+   if (plan) {
+@@ -515,7 +515,7 @@
+   // init phase is the only legal time to call GDREGISTER_INTERNAL_CLASS.
+   ANGE::register_all_signal_receivers();
+ 
+-  auto* guarded_binding=GDExtensionBinding::active_guarded_user;
++  auto* guarded_binding=GDExtensionBinding::active_guarded_user();
+   if (guarded_binding) {
+     // Only CPU owners and early wrappers exist in the original SCENE frame.
+     auto result=ANGE::particle::host_detail::HostAttachmentInstaller::create_root(
+@@ -617,7 +617,7 @@
+ #ifdef ANGE_SKINNED_MESH_CAPTURE_TESTS
+   detach_skinned_mesh_capture_test_sources();
+ #endif
+-  auto* guarded_binding=GDExtensionBinding::active_guarded_user;
++  auto* guarded_binding=GDExtensionBinding::active_guarded_user();
+   if (guarded_binding && !godot::internal::guarded_scene_owners_unchanged())
+     particle_scene_failed(*guarded_binding,false);
+   if (guarded_binding && particle_host_root) {

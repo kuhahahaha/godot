@@ -1,0 +1,113 @@
+--- a/include/godot_cpp/godot.hpp
++++ b/include/godot_cpp/godot.hpp
+@@ -127,7 +127,7 @@
+ 	static InitData *guarded_claimant;
+ 	static bool legacy_used;
+ 	static std::thread::id binding_owner;
+-	static thread_local InitData *active_guarded_user;
++	static InitData *&active_guarded_user();
+ 	static void guarded_initialize_user(void *, GDExtensionInitializationLevel);
+ 	static void guarded_terminate_user(void *, GDExtensionInitializationLevel);
+ 	static int32_t guarded_scene_ready(void *, GDExtensionDeviceExitSceneReadyContextRef) noexcept;
+--- a/src/godot.cpp
++++ b/src/godot.cpp
+@@ -29,6 +29,8 @@
+ /**************************************************************************/
+ 
+ #include <godot_cpp/godot.hpp>
++#include <map>
++#include <mutex>
+ 
+ #include <godot_cpp/classes/editor_plugin_registration.hpp>
+ #include <godot_cpp/classes/wrapped.hpp>
+@@ -117,7 +119,25 @@
+ GDExtensionBinding::InitData *GDExtensionBinding::guarded_claimant = nullptr;
+ bool GDExtensionBinding::legacy_used = false;
+ std::thread::id GDExtensionBinding::binding_owner;
+-thread_local GDExtensionBinding::InitData *GDExtensionBinding::active_guarded_user = nullptr;
++GDExtensionBinding::InitData *&GDExtensionBinding::active_guarded_user() {
++#if defined(MACOS_ENABLED)
++    // Match Wrapped's unload-compatible per-thread storage on macOS. Native
++    // TLS pins the binding image and prevents a fresh guarded reload.
++    struct ActiveContextStore {
++        std::mutex mutex;
++        std::map<std::thread::id, InitData *> contexts;
++        InitData *&get() {
++            std::lock_guard<std::mutex> lock(mutex);
++            return contexts[std::this_thread::get_id()];
++        }
++    };
++    static ActiveContextStore store;
++    return store.get();
++#else
++    static thread_local InitData *context = nullptr;
++    return context;
++#endif
++}
+ namespace {
+ constexpr GDExtensionDeviceExitAbi exit_abi{1, sizeof(GDExtensionDeviceExitAbi), 0};
+ #if defined(__cplusplus)
+@@ -204,27 +224,27 @@
+ void GDExtensionBinding::guarded_initialize_user(void *userdata, GDExtensionInitializationLevel level) {
+     auto *data = static_cast<InitData *>(userdata);
+     if (!data || data != guarded_claimant || !frozen_configuration(*data)) std::abort();
+-    if (active_guarded_user) std::abort();
+-    active_guarded_user = data;
++    if (active_guarded_user()) std::abort();
++    active_guarded_user() = data;
+     data->frozen_initializer(static_cast<ModuleInitializationLevel>(level));
+-    active_guarded_user = nullptr;
++    active_guarded_user() = nullptr;
+ }
+ void GDExtensionBinding::guarded_terminate_user(void *userdata, GDExtensionInitializationLevel level) {
+     auto *data = static_cast<InitData *>(userdata);
+     if (!data || data != guarded_claimant || !frozen_configuration(*data)) std::abort();
+-    if (active_guarded_user) std::abort();
+-    active_guarded_user = data;
++    if (active_guarded_user()) std::abort();
++    active_guarded_user() = data;
+     if (data->frozen_terminator) data->frozen_terminator(static_cast<ModuleInitializationLevel>(level));
+-    active_guarded_user = nullptr;
++    active_guarded_user() = nullptr;
+ }
+ 
+ int32_t GDExtensionBinding::guarded_scene_ready(void *userdata, GDExtensionDeviceExitSceneReadyContextRef ready) noexcept {
+     auto *data = static_cast<InitData *>(userdata);
+     if (!data || data != guarded_claimant || !frozen_configuration(*data) ||
+-        !data->frozen_scene_ready_callback || active_guarded_user) std::abort();
+-    active_guarded_user = data;
++        !data->frozen_scene_ready_callback || active_guarded_user()) std::abort();
++    active_guarded_user() = data;
+     const auto error = data->frozen_scene_ready_callback(ready);
+-    active_guarded_user = nullptr;
++    active_guarded_user() = nullptr;
+     return error;
+ }
+ 
+@@ -233,12 +253,12 @@
+     auto *data = static_cast<InitData *>(userdata);
+     if (!data || data != guarded_claimant || !frozen_configuration(*data) ||
+         data->frozen_scene_ready_flavor != InitData::SceneReadyFlavor::V2Declared ||
+-        !data->frozen_scene_ready_callback_v2 || active_guarded_user) std::abort();
++        !data->frozen_scene_ready_callback_v2 || active_guarded_user()) std::abort();
+     if (!plan || reinterpret_cast<uintptr_t>(plan) % alignof(GDExtensionSceneInstallPlanV2) ||
+         !valid_plan(*plan, data->frozen_scene_install_requirements_v2)) return ERR_INVALID_DATA;
+-    active_guarded_user = data;
++    active_guarded_user() = data;
+     const auto error = data->frozen_scene_ready_callback_v2(ready, *plan);
+-    active_guarded_user = nullptr;
++    active_guarded_user() = nullptr;
+     return error;
+ }
+ 
+--- a/include/godot_cpp/core/class_db.hpp
++++ b/include/godot_cpp/core/class_db.hpp
+@@ -308,7 +308,7 @@
+ 	// Each guarded enrollment owns a fresh ClassInfo, even when the loader
+ 	// retains this DSO's static GDCLASS initialized flag after a real unload.
+ 	// Extension parents have already been registered before their children.
+-	if (GDExtensionBinding::active_guarded_user) {
++	if (GDExtensionBinding::active_guarded_user()) {
+ 		T::_bind_methods();
+ 		using Parent = typename T::parent_type;
+ 		Parent::template register_virtuals<T, Parent>();

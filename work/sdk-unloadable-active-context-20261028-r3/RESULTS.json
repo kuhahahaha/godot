@@ -1,0 +1,51 @@
+{
+  "build_command": [
+    "clang++",
+    "-std=c++17",
+    "-Werror=pointer-bool-conversion",
+    "-DMACOS_ENABLED",
+    "-DUNIX_ENABLED",
+    "-DHOT_RELOAD_ENABLED",
+    "-DTHREADS_ENABLED",
+    "-DDEBUG_ENABLED",
+    "-DNDEBUG",
+    "-I/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/k03-sdk-context-2sy0a9ko/include",
+    "-I/Users/macbookair/Documents/Work/ANGE/godot-cpp/include",
+    "-I/Users/macbookair/Documents/Work/ANGE/godot-cpp/gen/include",
+    "-dynamiclib",
+    "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/k03-sdk-context-2sy0a9ko/probe.cpp",
+    "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/k03-sdk-context-2sy0a9ko/godot.cpp",
+    "/Users/macbookair/Documents/Work/ANGE/godot-cpp/src/core/class_db.cpp",
+    "/Users/macbookair/Documents/Work/ANGE/godot-cpp/bin/libgodot-cpp.macos.template_debug.arm64.a",
+    "-framework",
+    "CoreFoundation",
+    "-Wl,-dead_strip",
+    "-o",
+    "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/k03-sdk-context-2sy0a9ko/probe.dylib"
+  ],
+  "command": [
+    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+    "--path",
+    "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/k03-sdk-context-2sy0a9ko",
+    "--rendering-driver",
+    "metal",
+    "--rendering-method",
+    "mobile",
+    "--script",
+    "probe.gd"
+  ],
+  "dso_sha256": "d24217e8e58142a46f6c3ae1fa34d58e69e02e1aff41188c1c94dbe384c1e383",
+  "rc": 0,
+  "checks": {
+    "exit": true,
+    "metal": true,
+    "fresh_reload": true,
+    "both_unloads": true,
+    "two_trees": true,
+    "two_engines": true,
+    "two_destructors": true,
+    "first_close_order": true,
+    "last_close_order": true,
+    "clean": true
+  }
+}
