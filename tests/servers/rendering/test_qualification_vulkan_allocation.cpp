@@ -236,6 +236,14 @@ TEST_CASE("[QualificationNative][Vulkan] render uniform binding rejects missing 
  ERR_PRINT_ON;
  CHECK(true);
 }
+TEST_CASE("[QualificationNative][Vulkan] compute uniform binding rejects missing sets before command access") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ ERR_PRINT_OFF;
+ driver.command_bind_compute_uniform_sets(RenderingDeviceDriver::CommandBufferID(),VectorView<RenderingDeviceDriver::UniformSetID>(nullptr,1),RenderingDeviceDriver::ShaderID(),0,1,0);
+ ERR_PRINT_ON;
+ CHECK(true);
+}
 TEST_CASE("[QualificationNative][Vulkan] texture creation rejects an invalid shareable format") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);

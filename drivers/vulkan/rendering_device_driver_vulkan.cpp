@@ -7474,6 +7474,7 @@ void RenderingDeviceDriverVulkan::command_bind_compute_pipeline(CommandBufferID 
 }
 
 void RenderingDeviceDriverVulkan::command_bind_compute_uniform_sets(CommandBufferID p_cmd_buffer, VectorView<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count, uint32_t p_dynamic_offsets) {
+	ERR_FAIL_COND(p_set_count > 0 && (!p_uniform_sets.ptr() || p_uniform_sets.size() < p_set_count));
 	if (p_set_count == 0) {
 		return;
 	}
