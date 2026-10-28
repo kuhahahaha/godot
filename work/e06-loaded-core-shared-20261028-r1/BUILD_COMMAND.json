@@ -1,0 +1,11 @@
+[
+  "/usr/bin/python3",
+  "/Users/macbookair/.local/bin/scons",
+  "-Q",
+  "-j4",
+  "platform=macos",
+  "target=editor",
+  "dev_build=yes",
+  "tests=yes",
+  "library_type=shared_library"
+]

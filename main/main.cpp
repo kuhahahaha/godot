@@ -210,6 +210,13 @@ static XRServer *xr_server = nullptr;
 #endif // XR_DISABLED
 // We error out if setup2() doesn't turn this true
 static bool _start_success = false;
+// Main::setup(false) retains only core services until the platform starts setup2.
+enum class MainSetupPhase {
+	NONE,
+	CORE_ONLY,
+	SECOND_PHASE,
+};
+static MainSetupPhase main_setup_phase = MainSetupPhase::NONE;
 
 // Drivers
 
@@ -1070,6 +1077,7 @@ int Main::test_entrypoint(int argc, char *argv[], bool &tests_need_run) {
 
 Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_phase) {
 	_start_success = false;
+	main_setup_phase = MainSetupPhase::NONE;
 	core_modules_initialized = false;
 	setup2_extension_failure = Setup2ExtensionFailure::NONE;
 	setup2_extension_error = OK;
@@ -2984,6 +2992,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 
 	OS::get_singleton()->benchmark_end_measure("Startup", "Main::Setup");
 
+	main_setup_phase = MainSetupPhase::CORE_ONLY;
 	if (p_second_phase) {
 		exit_err = setup2();
 		if (exit_err != OK) {
@@ -3181,6 +3190,7 @@ void Main::cleanup_setup_failure(Error p_error, const char *p_execpath) {
 	setup2_extension_failure = Setup2ExtensionFailure::NONE;
 	setup2_extension_error = OK;
 
+	main_setup_phase = MainSetupPhase::NONE;
 	Thread::release_main_thread();
 
 #ifdef TESTS_ENABLED
@@ -3189,6 +3199,7 @@ void Main::cleanup_setup_failure(Error p_error, const char *p_execpath) {
 }
 
 Error Main::setup2(bool p_show_boot_logo) {
+	main_setup_phase = MainSetupPhase::SECOND_PHASE;
 	GodotProfileZone("setup2");
 	OS::get_singleton()->benchmark_begin_measure("Startup", "Main::Setup2");
 
@@ -5400,6 +5411,14 @@ void Main::cleanup(bool p_force) {
 		cleanup_setup_failure(setup2_extension_error);
 		return;
 	}
+	if (main_setup_phase == MainSetupPhase::CORE_ONLY && !_start_success && !OS::get_singleton()->get_main_loop()) {
+		// A library host may destroy a retained setup(false) before setup2.
+		// Use the original core-only unwind, including its guarded preflight,
+		// pending SceneReady cancellation and original CORE deinit boundary.
+		OS::get_singleton()->benchmark_end_measure("Shutdown", "Main::Cleanup");
+		cleanup_setup_failure(OK);
+		return;
+	}
 	if (!p_force) {
 		ERR_FAIL_COND(!_start_success);
 	}
@@ -5596,5 +5615,6 @@ void Main::cleanup(bool p_force) {
 
 	OS::get_singleton()->finalize_core();
 
+	main_setup_phase = MainSetupPhase::NONE;
 	Thread::release_main_thread();
 }

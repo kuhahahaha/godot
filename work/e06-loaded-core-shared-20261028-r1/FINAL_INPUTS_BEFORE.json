@@ -1,0 +1,62 @@
+{
+  "main/main.cpp": {
+    "bytes": 220336,
+    "sha256": "29892751c8d197a74038b074390f609fe4b5a97d39dfa7486546d36288c097f2"
+  },
+  "work/e06-loaded-core-shared-20261028-r1/loaded_module_probe": {
+    "bytes": 45824,
+    "sha256": "42f808403300d4035d62a3b0cad86ea1c0a84ba38feb0f05037e8ff4566d9a13"
+  },
+  "work/e06-loaded-core-shared-20261028-r1/loaded_module_probe.mm": {
+    "bytes": 7989,
+    "sha256": "bc20a84dfe4baa6958a097fac0d002a76e8b7909b644651dbd00f103ad30d9ac"
+  },
+  "work/e06-loaded-core-shared-20261028-r1/pending_guard_client.cpp": {
+    "bytes": 22137,
+    "sha256": "cefd8dad44a53d4932f698446868702f823abe97c92b84a3cb3d19351069995a"
+  },
+  "work/e06-loaded-core-shared-20261028-r1/pending_guard.dylib": {
+    "bytes": 302752,
+    "sha256": "233db19f9fb49acb92798a77729bb93b9e29de678e4f48756197dafd719d0c2a"
+  },
+  "work/e06-loaded-core-shared-20261028-r1/fixed-core-only-fix/CoreArtifactReceipt.shared.json": {
+    "bytes": 533,
+    "sha256": "1779af7297bc458f0d1f34291b240a1dc3a3722f7b532c7ac6ae93f70ed1f7aa"
+  },
+  "work/e06-loaded-core-shared-20261028-r1/fixed-core-only-fix/CoreBuildInputs.shared.schema1.json": {
+    "bytes": 73241,
+    "sha256": "ee0d12f4a2988b05af88df46ae70563a21568f44028dafb831776416a2e3eb64"
+  },
+  "work/e06-loaded-core-shared-20261028-r1/fixed-core-only-fix/CoreBuildSelection.shared.schema1.json": {
+    "bytes": 314,
+    "sha256": "f8508a48738802768bc0b785b6782238e26777cc9dabad475942bf058d6be301"
+  },
+  "work/e06-loaded-core-shared-20261028-r1/fixed-core-only-fix/libgodot.core-only-fix.arm64.dylib": {
+    "bytes": 302571976,
+    "sha256": "2ba967362493d24e953405113045d0ca78e2f194162116db12f5721abfe657d4"
+  },
+  "work/e06-loaded-core-shared-20261028-r1/runtime/main.tscn": {
+    "bytes": 70,
+    "sha256": "d898f3101327b8c9603402a104e9f69e5e30459da340a741d780399c6d2b6790"
+  },
+  "work/e06-loaded-core-shared-20261028-r1/runtime/project.godot": {
+    "bytes": 110,
+    "sha256": "73387da0a53959c5fcdd559ec76cde03dcf6d49730218efd61d414c4b2585970"
+  },
+  "work/e06-loaded-core-shared-20261028-r1/guarded-runtime/main.tscn": {
+    "bytes": 70,
+    "sha256": "d898f3101327b8c9603402a104e9f69e5e30459da340a741d780399c6d2b6790"
+  },
+  "work/e06-loaded-core-shared-20261028-r1/guarded-runtime/pending.gdextension": {
+    "bytes": 261,
+    "sha256": "0ee53e12d4c29cedacb74e487894f3baf629911ed1a71efc65f14c3a42dc1102"
+  },
+  "work/e06-loaded-core-shared-20261028-r1/guarded-runtime/project.godot": {
+    "bytes": 110,
+    "sha256": "73387da0a53959c5fcdd559ec76cde03dcf6d49730218efd61d414c4b2585970"
+  },
+  "work/e06-loaded-core-shared-20261028-r1/guarded-runtime/.godot/extension_list.cfg": {
+    "bytes": 26,
+    "sha256": "9ee2ae66f30767837cb7f9be641b21dcc0a858c1ced51a760657f996c7f117c9"
+  }
+}

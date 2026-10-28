@@ -1,0 +1,30 @@
+{
+  "work/e06-loaded-core-shared-20261028-r1/loaded_module_probe": {
+    "bytes": 45696,
+    "sha256": "e058ec73c21057719564e566b94aee0c88c9cde86277441db0e07febca038d2d"
+  },
+  "work/e06-loaded-core-shared-20261028-r1/loaded_module_probe.mm": {
+    "bytes": 6206,
+    "sha256": "6949d98e1ebe0291387b4b849fa3694457580324b477367b0738922439e1f1cc"
+  },
+  "work/e06-loaded-core-shared-20261028-r1/fixed-inputs/CoreArtifactReceipt.shared.json": {
+    "bytes": 533,
+    "sha256": "3172f710a6bfb329224d09500fe7792f72f8f30b9ea5d21572f31e83546592e2"
+  },
+  "work/e06-loaded-core-shared-20261028-r1/fixed-inputs/CoreBuildInputs.shared.schema1.json": {
+    "bytes": 73241,
+    "sha256": "3feea70774c3e0708524c63b6bcab7c8451b719b9a40d6ba8ee233ce35e6ec0b"
+  },
+  "work/e06-loaded-core-shared-20261028-r1/fixed-inputs/CoreBuildSelection.shared.schema1.json": {
+    "bytes": 314,
+    "sha256": "8ce69a8ae0c7ae782a6c6307d2da33a37115cb4c752c214975f75c8c6f6fbff9"
+  },
+  "work/e06-loaded-core-shared-20261028-r1/fixed-inputs/libgodot.controlled.shared.arm64.dylib": {
+    "bytes": 302571864,
+    "sha256": "a3351c29160924c26e4ef5a2e980ce54f5d7001c52f82632c40015d604188480"
+  },
+  "bin/godot.macos.editor.dev.arm64": {
+    "bytes": 302573616,
+    "sha256": "d216693315918595bf7cf46d57006d88ede1d7000fe3cd68fac06afb63edffac"
+  }
+}

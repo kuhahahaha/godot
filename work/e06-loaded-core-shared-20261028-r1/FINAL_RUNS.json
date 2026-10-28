@@ -1,0 +1,67 @@
+{
+  "runs": [
+    {
+      "name": "CORE_ONLY",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/e06-loaded-core-shared-20261028-r1/loaded_module_probe",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/e06-loaded-core-shared-20261028-r1/fixed-core-only-fix/libgodot.core-only-fix.arm64.dylib",
+        "d4e3ef6eb752c14b5b85aeac7372fa66ef6cc5698ffb4229021b21b9a6bc03d9",
+        "796f6955ebd4246cefcf8b995c2657cc6269bb4215d5d468f1f944cba86d1ff2",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/e06-loaded-core-shared-20261028-r1/runtime"
+      ],
+      "refuse": false,
+      "rc": 0
+    },
+    {
+      "name": "STARTED",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/e06-loaded-core-shared-20261028-r1/loaded_module_probe",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/e06-loaded-core-shared-20261028-r1/fixed-core-only-fix/libgodot.core-only-fix.arm64.dylib",
+        "d4e3ef6eb752c14b5b85aeac7372fa66ef6cc5698ffb4229021b21b9a6bc03d9",
+        "796f6955ebd4246cefcf8b995c2657cc6269bb4215d5d468f1f944cba86d1ff2",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/e06-loaded-core-shared-20261028-r1/runtime",
+        "start"
+      ],
+      "refuse": false,
+      "rc": 0
+    },
+    {
+      "name": "EARLY_SETUP",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/e06-loaded-core-shared-20261028-r1/loaded_module_probe",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/e06-loaded-core-shared-20261028-r1/fixed-core-only-fix/libgodot.core-only-fix.arm64.dylib",
+        "d4e3ef6eb752c14b5b85aeac7372fa66ef6cc5698ffb4229021b21b9a6bc03d9",
+        "796f6955ebd4246cefcf8b995c2657cc6269bb4215d5d468f1f944cba86d1ff2",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/e06-loaded-core-shared-20261028-r1/runtime",
+        "early_help"
+      ],
+      "refuse": false,
+      "rc": 0
+    },
+    {
+      "name": "PENDING_GUARDED",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/e06-loaded-core-shared-20261028-r1/loaded_module_probe",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/e06-loaded-core-shared-20261028-r1/fixed-core-only-fix/libgodot.core-only-fix.arm64.dylib",
+        "d4e3ef6eb752c14b5b85aeac7372fa66ef6cc5698ffb4229021b21b9a6bc03d9",
+        "796f6955ebd4246cefcf8b995c2657cc6269bb4215d5d468f1f944cba86d1ff2",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/e06-loaded-core-shared-20261028-r1/guarded-runtime"
+      ],
+      "refuse": false,
+      "rc": 0
+    },
+    {
+      "name": "PREFLIGHT_REFUSE",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/e06-loaded-core-shared-20261028-r1/loaded_module_probe",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/e06-loaded-core-shared-20261028-r1/fixed-core-only-fix/libgodot.core-only-fix.arm64.dylib",
+        "d4e3ef6eb752c14b5b85aeac7372fa66ef6cc5698ffb4229021b21b9a6bc03d9",
+        "796f6955ebd4246cefcf8b995c2657cc6269bb4215d5d468f1f944cba86d1ff2",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/e06-loaded-core-shared-20261028-r1/guarded-runtime"
+      ],
+      "refuse": true,
+      "rc": 78
+    }
+  ],
+  "pins_stable": true
+}

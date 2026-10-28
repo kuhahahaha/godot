@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "core_stamp": "8b86252324832d9a54f2107d6a683b28fc9e550a873c233c66c371e63892f4b4",
+  "compiler_route": "BuiltinGlslangV1",
+  "compiler_stamp": "6f015136c2a34384e255f71e67efd6b35388110d6c5656ba0d0cb4518f26120c",
+  "platform": "macos",
+  "architecture": "arm64",
+  "target_kind": "SharedLibrary"
+}
