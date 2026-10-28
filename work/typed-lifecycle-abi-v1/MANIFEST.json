@@ -921,8 +921,8 @@
   "work/sdk-unloadable-active-context-20261028-r3/threads-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "work/typed-lifecycle-abi-v1/CURRENT_PAIR_U01_VFX_R01_NEGATIVE_RECEIPT_20251025.md": "c6ab0496164e2741f157768a10ffcc6f0217b630a26d95d3d9762c2e22b79a47",
   "work/typed-lifecycle-abi-v1/PROGRESS.md": {
-    "bytes": 156181,
-    "sha256": "e92b79d22b8c6e9d36c9d5e6f70145f112384a8f21ac2fc91d817d4069600f74"
+    "bytes": 156614,
+    "sha256": "8815da45015aeff6492aab8b8092f7b1b683c327201fa3995c7f8425bb28ad06"
   },
   "work/typed-lifecycle-abi-v1/gdextension_interface.h": "07ee07f19e31fe5c22154edbba73ce3cb793b87524add5d9dc0c9468815c9a29",
   "work/typed-lifecycle-abi-v1/native-current-open-items-20261028/COMMAND_OUTPUT.json": "feccb44a82af5439c60b4fb8a6f7c8fc8923f9fd97e2bb169099294c67a185ef",
@@ -2896,5 +2896,29 @@
   "work/vulkan-texture-rollback-20261029/R18_RELEASE_VERSION.log": {
     "bytes": 36,
     "sha256": "cf91d4a18300f965312c565b4fec749cc803712b598cf5f68c22db89d6e15625"
+  },
+  "ANGE/work/current-owner-boundary-recheck-20261030-r2/COMMANDS.json": {
+    "bytes": 1072,
+    "sha256": "07a34e9bc3c071f2cc5e228b7c8068b81becce9caa6cb0a9c4bf492d57dc3904"
+  },
+  "ANGE/work/current-owner-boundary-recheck-20261030-r2/CURRENT_OWNER_CENSUS_R2.log": {
+    "bytes": 12319,
+    "sha256": "77e3bef0b3a4cedc414370d59ad113f9bc8860e61d347a89ddf52c332539e8fc"
+  },
+  "ANGE/work/current-owner-boundary-recheck-20261030-r2/MANIFEST.json": {
+    "bytes": 740,
+    "sha256": "5d1e70d01b13d7f2440295599f09a1b52c73b1ad185c05209cce04f5d91c051c"
+  },
+  "ANGE/work/current-owner-boundary-recheck-20261030-r2/RECEIPT_R2.md": {
+    "bytes": 982,
+    "sha256": "c04250b9b092ede2c657a0b6f99da747c8cfcc41d4d27eca7a50d4e248d4d9f7"
+  },
+  "ANGE/work/current-owner-boundary-recheck-20261030-r2/SOURCE_HASHES_R2.txt": {
+    "bytes": 847,
+    "sha256": "e0784b3180f889901bf348756e38e60abf40e371eb1a3b16b557ce1cda102b93"
+  },
+  "ANGE/work/current-owner-boundary-recheck-20261030-r2/SOURCE_MANIFEST.json": {
+    "bytes": 1279,
+    "sha256": "11fa85e2835ab47ca9e1add449d41d2e9182fc424bbe6f2e8fb6066fc6e121b4"
   }
 }
