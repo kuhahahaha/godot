@@ -1,0 +1,3 @@
+# Author review
+
+The class control adds an actual registered Node, native method call and explicit object destruction before each real manager unload. This exposes original Wrapped construction state that the Engine/Tree-only control did not exercise. Current default archive has native ConstructInfo TLS; manager success is not image replacement proof. Mixed HOT_RELOAD test/SDK construction layout was setup-invalid and is retained without runtime credit. The private refinement preserves per-thread storage and sticky claimant and uses default matching flags; all class/image-order checks pass. No full canonical runtime, product qualification or independent review claim.

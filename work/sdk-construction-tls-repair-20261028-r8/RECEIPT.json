@@ -1,0 +1,16 @@
+{
+  "status": "PRIVATE_WRAPPED_TLS_AND_STICKY_CLAIMANT_CLASS_RELOAD_GREEN",
+  "scope": "default no-HOT_RELOAD macOS profile; current core; private original SDK source refinement with original archive supporting TUs",
+  "patch": "SDK.patch: use existing ConstructInfoStore for all macOS builds; retain guarded claimant until actual image unload",
+  "red": "../sdk-class-reload-archive-20261028-r7/RESULTS.json",
+  "green": "two actual registered Node method calls/destructions, two DSO destructors before matching manager0s, reload0; clean process0",
+  "contract": "FR_particle_device_exit_PROTOCOL.md408 sticky claimant/fresh-image distinction; original core OS close policy unchanged",
+  "production_edits": false,
+  "required_next": [
+    "SDK source owner review/land refined construction storage and sticky policy",
+    "original SDK callback/reentry/return tests on refinement",
+    "same-retained-image reinit negative plus omission gate",
+    "complete matching SDK/canonical Debug and Release products and actual complete production cohort"
+  ],
+  "review": "author only; not independent"
+}

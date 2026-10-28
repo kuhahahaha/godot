@@ -1,0 +1,9 @@
+{
+  "status": "DEFAULT_ARCHIVE_CLASS_RELOAD_IMAGE_LIFETIME_RED",
+  "scope": "actual Debug SDK archive, explicit default no-HOT_RELOAD profile, real Metal registered/instantiated Node class",
+  "result": "two class method calls and two class destructions; both manager unloads/reload0; one DSO destructor only, at process exit. Two manager0s do not prove two fresh images.",
+  "setup_failure": "earlier HOT_RELOAD_ENABLED test-TU mixed with default archive crashes at missing construction callbacks; rejected profile mismatch retained separately",
+  "verified_archive_profile": "archive Wrapped::_get_construct_info native TLS info symbol present; actual product compile flags have MACOS/UNIX/THREADS/DEBUG/NDEBUG and no HOT_RELOAD",
+  "core_current_build": "original PID34649 reached terminal BUILD.rc0; Debug product now exists; this does not close class-image RED",
+  "remaining": "Wrapped default native TLS; claimant clearing contradicts PROTOCOL408 sticky policy; full canonical chain remains incomplete"
+}
