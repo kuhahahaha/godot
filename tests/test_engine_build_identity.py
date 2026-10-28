@@ -166,6 +166,26 @@ class CoreBuildIdentityTests(unittest.TestCase):
         self.assertTrue(all(value == "constructed" for _, value in configuration))
         self.assertNotEqual(tools[0][1], tools[1][1])
 
+    def test_actual_linker_version_switch_matches_tool(self):
+        class Env(dict):
+            def subst(self, value):
+                return self[value[1:]]
+
+        for linker_name, expected_switch in [("ld", "-v"), ("libtool", "-V")]:
+            paths = {}
+            for role in ["CC", "CXX", "LINK", linker_name]:
+                path = self.root / role
+                path.write_text("#!/usr/bin/python3\nimport sys\nprint(' '.join(sys.argv[1:]))\n")
+                path.chmod(0o755)
+                paths[role] = str(path)
+            _, configuration = identity._tool_inputs(
+                Env({"CC": paths["CC"], "CXX": paths["CXX"], "LINK": paths["LINK"]}),
+                paths[linker_name],
+                {"PATH": "/usr/bin"},
+            )
+            linker_version = dict(configuration)["linker.version"]
+            self.assertEqual(linker_version, expected_switch)
+
     def test_shared_install_name_and_rpath_are_semantic_operands(self):
         output = self.root / "libgodot.dylib"
         for name in ["@rpath/libgodot.dylib", str(output)]:
