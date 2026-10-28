@@ -289,6 +289,7 @@ Curve::Point Curve::get_point(int p_index) const {
 }
 
 void Curve::update_auto_tangents(int p_index) {
+	_advance_content_revision();
 	Point &p = _points[p_index];
 
 	if (p_index > 0) {
@@ -330,6 +331,7 @@ Array Curve::get_limits() const {
 }
 
 void Curve::set_limits(const Array &p_input) {
+	_advance_content_revision();
 	if (p_input.size() != 4) {
 		WARN_PRINT_ED(vformat(R"(Could not find Curve limit values when deserializing "%s". Resetting limits to default values.)", this->get_path()));
 		_min_value = 0;
@@ -352,6 +354,7 @@ void Curve::set_limits(const Array &p_input) {
 }
 
 void Curve::set_min_value(real_t p_min) {
+	_advance_content_revision();
 	_min_value = MIN(p_min, _max_value - MIN_Y_RANGE);
 
 	for (const Point &p : _points) {
@@ -362,6 +365,7 @@ void Curve::set_min_value(real_t p_min) {
 }
 
 void Curve::set_max_value(real_t p_max) {
+	_advance_content_revision();
 	_max_value = MAX(p_max, _min_value + MIN_Y_RANGE);
 
 	for (const Point &p : _points) {
@@ -460,6 +464,7 @@ bool Curve::_filter_property(const String &p_name, int p_index) const {
 }
 
 void Curve::mark_dirty() {
+	_advance_content_revision();
 	_baked_cache_dirty = true;
 	emit_changed();
 }

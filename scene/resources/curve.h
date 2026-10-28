@@ -38,7 +38,20 @@
 class Curve : public Resource {
 	GDCLASS(Curve, Resource);
 
+#ifdef TESTS_ENABLED
+	friend class TestResourceSnapshotAccess;
+#endif
+	uint64_t _content_revision = 1;
+	void _advance_content_revision() {
+		// Saturation permanently denies later native capture; never reset/ABA.
+		if (_content_revision != UINT64_MAX) {
+			++_content_revision;
+		}
+	}
+
 public:
+	uint64_t get_content_revision() const { return _content_revision; }
+
 	static const char *SIGNAL_RANGE_CHANGED;
 	static const char *SIGNAL_DOMAIN_CHANGED;
 

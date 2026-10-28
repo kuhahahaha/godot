@@ -1,0 +1,33 @@
+{
+  "status": "PASS_D_CURVE_GRADIENT_NATIVE_MODULE_CANONICAL_CPU_CONTROLS_CALLER_INTEGRATION_OPEN",
+  "scope": "M1.3/M2 original D source/native Curve/Gradient responsibility",
+  "production_source_changed": true,
+  "abi_layout_or_proc_name_changes": false,
+  "canonical_header_byte_equal": true,
+  "build_rc": 0,
+  "refined_build_rc": 0,
+  "final_controls": {
+    "cases": 22,
+    "assertions": 263,
+    "rc": 0,
+    "command": "CANONICAL_RUN_COMMAND.json",
+    "log": "CANONICAL_FINAL_RUN.log"
+  },
+  "red": {
+    "missing_revision": "REVISION_RED.log",
+    "missing_snapshot_symbols": "SNAPSHOT_RED_LINK.log",
+    "scalar_output_alias": {
+      "rc": 1,
+      "failed_assertions": 9,
+      "log": "ALIAS_RED_RUN.log"
+    }
+  },
+  "review": "INDEPENDENT_REVIEW.md",
+  "handoff": "HANDOFF.md",
+  "limitations": [
+    "original C caller and E04 active window/receipt not exercised by these CPU controls",
+    "no GPU/Ready/full G1 claim",
+    "ABI foreign-target and double-real checks are syntax only"
+  ],
+  "goal": "active"
+}

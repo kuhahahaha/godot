@@ -1,0 +1,127 @@
+tests/scene/test_resource_snapshot_bridge.cpp:9:57: error: no member named 'get_content_revision' in 'Curve'
+    9 |  auto changed=[&](auto mutate){const auto before=curve->get_content_revision();mutate();CHECK(curve->get_content_revision()>before);};
+      |                                                  ~~~~~~~^
+tests/scene/test_resource_snapshot_bridge.cpp:9:102: error: no member named 'get_content_revision' in 'Curve'
+    9 |  auto changed=[&](auto mutate){const auto before=curve->get_content_revision();mutate();CHECK(curve->get_content_revision()>before);};
+      |                                                                                               ~~~~~~~^
+./thirdparty/doctest/doctest.h:2974:34: note: expanded from macro 'CHECK'
+ 2974 | #define CHECK(...) DOCTEST_CHECK(__VA_ARGS__)
+      |                                  ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2445:65: note: expanded from macro 'DOCTEST_CHECK'
+ 2445 | #define DOCTEST_CHECK(...) DOCTEST_ASSERT_IMPLEMENT_1(DT_CHECK, __VA_ARGS__)
+      |                                                                 ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2401:49: note: expanded from macro 'DOCTEST_ASSERT_IMPLEMENT_1'
+ 2401 |         DOCTEST_ASSERT_IMPLEMENT_2(assert_type, __VA_ARGS__);                                      \
+      |                                                 ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2395:16: note: expanded from macro 'DOCTEST_ASSERT_IMPLEMENT_2'
+ 2395 |             << __VA_ARGS__)) /* NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks) */         \
+      |                ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2147:32: note: expanded from macro 'DOCTEST_WRAP_IN_TRY'
+ 2147 | #define DOCTEST_WRAP_IN_TRY(x) x;
+      |                                ^
+tests/scene/test_resource_snapshot_bridge.cpp:10:15: error: no member named 'get_content_revision' in 'Curve'
+   10 |  CHECK(curve->get_content_revision()!=0);
+      |        ~~~~~~~^
+./thirdparty/doctest/doctest.h:2974:34: note: expanded from macro 'CHECK'
+ 2974 | #define CHECK(...) DOCTEST_CHECK(__VA_ARGS__)
+      |                                  ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2445:65: note: expanded from macro 'DOCTEST_CHECK'
+ 2445 | #define DOCTEST_CHECK(...) DOCTEST_ASSERT_IMPLEMENT_1(DT_CHECK, __VA_ARGS__)
+      |                                                                 ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2401:49: note: expanded from macro 'DOCTEST_ASSERT_IMPLEMENT_1'
+ 2401 |         DOCTEST_ASSERT_IMPLEMENT_2(assert_type, __VA_ARGS__);                                      \
+      |                                                 ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2395:16: note: expanded from macro 'DOCTEST_ASSERT_IMPLEMENT_2'
+ 2395 |             << __VA_ARGS__)) /* NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks) */         \
+      |                ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2147:32: note: expanded from macro 'DOCTEST_WRAP_IN_TRY'
+ 2147 | #define DOCTEST_WRAP_IN_TRY(x) x;
+      |                                ^
+tests/scene/test_resource_snapshot_bridge.cpp:20:27: error: no member named 'get_content_revision' in 'Curve'
+   20 |  const auto before=curve->get_content_revision();curve->set_bake_resolution(8);curve->bake();CHECK(curve->get_content_revision()==before);
+      |                    ~~~~~~~^
+tests/scene/test_resource_snapshot_bridge.cpp:20:107: error: no member named 'get_content_revision' in 'Curve'
+   20 |  const auto before=curve->get_content_revision();curve->set_bake_resolution(8);curve->bake();CHECK(curve->get_content_revision()==before);
+      |                                                                                                    ~~~~~~~^
+./thirdparty/doctest/doctest.h:2974:34: note: expanded from macro 'CHECK'
+ 2974 | #define CHECK(...) DOCTEST_CHECK(__VA_ARGS__)
+      |                                  ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2445:65: note: expanded from macro 'DOCTEST_CHECK'
+ 2445 | #define DOCTEST_CHECK(...) DOCTEST_ASSERT_IMPLEMENT_1(DT_CHECK, __VA_ARGS__)
+      |                                                                 ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2401:49: note: expanded from macro 'DOCTEST_ASSERT_IMPLEMENT_1'
+ 2401 |         DOCTEST_ASSERT_IMPLEMENT_2(assert_type, __VA_ARGS__);                                      \
+      |                                                 ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2395:16: note: expanded from macro 'DOCTEST_ASSERT_IMPLEMENT_2'
+ 2395 |             << __VA_ARGS__)) /* NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks) */         \
+      |                ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2147:32: note: expanded from macro 'DOCTEST_WRAP_IN_TRY'
+ 2147 | #define DOCTEST_WRAP_IN_TRY(x) x;
+      |                                ^
+tests/scene/test_resource_snapshot_bridge.cpp:21:63: error: no member named 'get_content_revision' in 'Curve'
+   21 |  changed([&]{curve->clear_points();});const auto empty=curve->get_content_revision();curve->clear_points();CHECK(curve->get_content_revision()==empty);
+      |                                                        ~~~~~~~^
+tests/scene/test_resource_snapshot_bridge.cpp:21:121: error: no member named 'get_content_revision' in 'Curve'
+   21 |  changed([&]{curve->clear_points();});const auto empty=curve->get_content_revision();curve->clear_points();CHECK(curve->get_content_revision()==empty);
+      |                                                                                                                  ~~~~~~~^
+./thirdparty/doctest/doctest.h:2974:34: note: expanded from macro 'CHECK'
+ 2974 | #define CHECK(...) DOCTEST_CHECK(__VA_ARGS__)
+      |                                  ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2445:65: note: expanded from macro 'DOCTEST_CHECK'
+ 2445 | #define DOCTEST_CHECK(...) DOCTEST_ASSERT_IMPLEMENT_1(DT_CHECK, __VA_ARGS__)
+      |                                                                 ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2401:49: note: expanded from macro 'DOCTEST_ASSERT_IMPLEMENT_1'
+ 2401 |         DOCTEST_ASSERT_IMPLEMENT_2(assert_type, __VA_ARGS__);                                      \
+      |                                                 ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2395:16: note: expanded from macro 'DOCTEST_ASSERT_IMPLEMENT_2'
+ 2395 |             << __VA_ARGS__)) /* NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks) */         \
+      |                ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2147:32: note: expanded from macro 'DOCTEST_WRAP_IN_TRY'
+ 2147 | #define DOCTEST_WRAP_IN_TRY(x) x;
+      |                                ^
+tests/scene/test_resource_snapshot_bridge.cpp:26:60: error: no member named 'get_content_revision' in 'Gradient'
+   26 |  auto changed=[&](auto mutate){const auto before=gradient->get_content_revision();mutate();CHECK(gradient->get_content_revision()>before);};
+      |                                                  ~~~~~~~~~~^
+tests/scene/test_resource_snapshot_bridge.cpp:26:108: error: no member named 'get_content_revision' in 'Gradient'
+   26 |  auto changed=[&](auto mutate){const auto before=gradient->get_content_revision();mutate();CHECK(gradient->get_content_revision()>before);};
+      |                                                                                                  ~~~~~~~~~~^
+./thirdparty/doctest/doctest.h:2974:34: note: expanded from macro 'CHECK'
+ 2974 | #define CHECK(...) DOCTEST_CHECK(__VA_ARGS__)
+      |                                  ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2445:65: note: expanded from macro 'DOCTEST_CHECK'
+ 2445 | #define DOCTEST_CHECK(...) DOCTEST_ASSERT_IMPLEMENT_1(DT_CHECK, __VA_ARGS__)
+      |                                                                 ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2401:49: note: expanded from macro 'DOCTEST_ASSERT_IMPLEMENT_1'
+ 2401 |         DOCTEST_ASSERT_IMPLEMENT_2(assert_type, __VA_ARGS__);                                      \
+      |                                                 ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2395:16: note: expanded from macro 'DOCTEST_ASSERT_IMPLEMENT_2'
+ 2395 |             << __VA_ARGS__)) /* NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks) */         \
+      |                ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2147:32: note: expanded from macro 'DOCTEST_WRAP_IN_TRY'
+ 2147 | #define DOCTEST_WRAP_IN_TRY(x) x;
+      |                                ^
+tests/scene/test_resource_snapshot_bridge.cpp:28:32: error: no member named 'get_content_revision' in 'Gradient'
+   28 |  const auto unsorted=gradient->get_content_revision();gradient->get_offset(0);gradient->get_color_at_offset(0.5);CHECK(gradient->get_content_revision()==unsorted);
+      |                      ~~~~~~~~~~^
+tests/scene/test_resource_snapshot_bridge.cpp:28:79: warning: ignoring return value of type 'Color' declared with 'nodiscard' attribute [-Wunused-value]
+   28 |  const auto unsorted=gradient->get_content_revision();gradient->get_offset(0);gradient->get_color_at_offset(0.5);CHECK(gradient->get_content_revision()==unsorted);
+      |                                                                               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ~~~
+tests/scene/test_resource_snapshot_bridge.cpp:28:130: error: no member named 'get_content_revision' in 'Gradient'
+   28 |  const auto unsorted=gradient->get_content_revision();gradient->get_offset(0);gradient->get_color_at_offset(0.5);CHECK(gradient->get_content_revision()==unsorted);
+      |                                                                                                                        ~~~~~~~~~~^
+./thirdparty/doctest/doctest.h:2974:34: note: expanded from macro 'CHECK'
+ 2974 | #define CHECK(...) DOCTEST_CHECK(__VA_ARGS__)
+      |                                  ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2445:65: note: expanded from macro 'DOCTEST_CHECK'
+ 2445 | #define DOCTEST_CHECK(...) DOCTEST_ASSERT_IMPLEMENT_1(DT_CHECK, __VA_ARGS__)
+      |                                                                 ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2401:49: note: expanded from macro 'DOCTEST_ASSERT_IMPLEMENT_1'
+ 2401 |         DOCTEST_ASSERT_IMPLEMENT_2(assert_type, __VA_ARGS__);                                      \
+      |                                                 ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2395:16: note: expanded from macro 'DOCTEST_ASSERT_IMPLEMENT_2'
+ 2395 |             << __VA_ARGS__)) /* NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks) */         \
+      |                ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2147:32: note: expanded from macro 'DOCTEST_WRAP_IN_TRY'
+ 2147 | #define DOCTEST_WRAP_IN_TRY(x) x;
+      |                                ^
+1 warning and 11 errors generated.

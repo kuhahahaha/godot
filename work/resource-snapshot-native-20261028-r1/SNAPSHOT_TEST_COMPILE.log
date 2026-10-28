@@ -1,0 +1,4 @@
+tests/scene/test_resource_snapshot_bridge.cpp:28:79: warning: ignoring return value of type 'Color' declared with 'nodiscard' attribute [-Wunused-value]
+   28 |  const auto unsorted=gradient->get_content_revision();gradient->get_offset(0);gradient->get_color_at_offset(0.5);CHECK(gradient->get_content_revision()==unsorted);
+      |                                                                               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ~~~
+1 warning generated.

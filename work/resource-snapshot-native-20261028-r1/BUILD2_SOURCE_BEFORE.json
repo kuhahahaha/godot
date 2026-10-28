@@ -1,0 +1,11 @@
+{
+  "scene/resources/curve.h": "19e900a263651c34f7a7dd7c5937e643fc2c9e3ed5e22732a325229dca590a4e",
+  "scene/resources/curve.cpp": "4f6f1cf26f384e7b1de68fcdc76f32b4d4a714a4b9a610bbe22e3fd4eb4b2240",
+  "scene/resources/gradient.h": "5b18bafb0448e78092727ab270142bfba5ec06b29caeccf8a5cb04ae07bacb92",
+  "scene/resources/gradient.cpp": "51f1c9b6915710649858f2411c750bc77a273af666465192467bd0034339124b",
+  "scene/resources/resource_snapshot_bridge.h": "1c85f77dd01651b4c9ae29214366bf392594657aa8857e4b2164f308553d0de8",
+  "scene/resources/resource_snapshot_native.h": "be7686b68d453d2111155f969bd0d4f5c8610b05cc549a8bb04971d28fdd9a8b",
+  "scene/resources/resource_snapshot_native.cpp": "a515fc3179f635a183842707ddc26d3126e2a40f8612ed150ab6e7f76efe7193",
+  "scene/register_scene_types.cpp": "f799946f8e13bdc6efb6df832e37b0a3fbaa899ea81800810fee2e52709c82b7",
+  "tests/scene/test_resource_snapshot_bridge.cpp": "02e1d5a6cf9a46c76987bbedbc009e1bb996219a77bc4ae9578edcc514d2e152"
+}

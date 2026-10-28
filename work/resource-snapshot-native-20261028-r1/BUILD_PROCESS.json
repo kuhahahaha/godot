@@ -1,0 +1,15 @@
+{
+  "pid": 54491,
+  "command": [
+    "/usr/bin/python3",
+    "/Users/macbookair/.local/bin/scons",
+    "-Q",
+    "-j4",
+    "platform=macos",
+    "target=editor",
+    "dev_build=yes",
+    "tests=yes",
+    "bin/godot.macos.editor.dev.arm64"
+  ],
+  "cwd": "/Users/macbookair/Documents/Work/godot_ANGE"
+}

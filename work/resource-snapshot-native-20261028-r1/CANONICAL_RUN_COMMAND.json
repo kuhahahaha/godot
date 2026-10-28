@@ -1,0 +1,7 @@
+[
+  "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+  "--disable-crash-handler",
+  "--headless",
+  "--test",
+  "--test-case=[ResourceSnapshot]*,[Curve]*,[Gradient]*"
+]

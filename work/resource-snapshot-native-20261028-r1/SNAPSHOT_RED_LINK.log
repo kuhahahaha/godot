@@ -1,0 +1,19 @@
+ld: warning: object file (/opt/homebrew/Cellar/molten-vk/1.4.2/Frameworks/MoltenVK.xcframework/macos-arm64/libMoltenVK.a[2](libMoltenVK.a-arm64-prelink.o)) was built for newer 'macOS' version (12.0) than being linked (11.0)
+Undefined symbols for architecture arm64:
+  "ange_curve_snapshot_v1(void*, double const*, unsigned int, AngeCurvePointV1*, unsigned int, double*, unsigned int, unsigned int*, unsigned int*, double*, double*, unsigned long long*)", referenced from:
+      DOCTEST_ANON_FUNC_6() in test_snapshot.o
+      DOCTEST_ANON_FUNC_6() in test_snapshot.o
+      DOCTEST_ANON_FUNC_6() in test_snapshot.o
+  "ange_gradient_snapshot_v1(void*, double const*, unsigned int, AngeGradientStopV1*, unsigned int, double*, unsigned int, unsigned int*, unsigned int*, int*, int*, unsigned long long*)", referenced from:
+      DOCTEST_ANON_FUNC_8() in test_snapshot.o
+      DOCTEST_ANON_FUNC_8() in test_snapshot.o
+      DOCTEST_ANON_FUNC_8() in test_snapshot.o
+  "ange_resource_content_revision_v1(void*, unsigned long long*)", referenced from:
+      DOCTEST_ANON_FUNC_10() in test_snapshot.o
+      DOCTEST_ANON_FUNC_10() in test_snapshot.o
+      DOCTEST_ANON_FUNC_10() in test_snapshot.o
+      DOCTEST_ANON_FUNC_10() in test_snapshot.o
+      DOCTEST_ANON_FUNC_10() in test_snapshot.o
+      DOCTEST_ANON_FUNC_10()::$_0::operator()() const in test_snapshot.o
+ld: symbol(s) not found for architecture arm64
+clang++: error: linker command failed with exit code 1 (use -v to see invocation)
