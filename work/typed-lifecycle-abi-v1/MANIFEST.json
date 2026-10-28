@@ -862,8 +862,8 @@
   "work/sdk-unloadable-active-context-20261028-r3/threads-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "work/typed-lifecycle-abi-v1/CURRENT_PAIR_U01_VFX_R01_NEGATIVE_RECEIPT_20251025.md": "c6ab0496164e2741f157768a10ffcc6f0217b630a26d95d3d9762c2e22b79a47",
   "work/typed-lifecycle-abi-v1/PROGRESS.md": {
-    "bytes": 136525,
-    "sha256": "fb1264b5d639e7e2579dcf9a229abaa018ca8916b652253a57b170f7a1649574"
+    "bytes": 136934,
+    "sha256": "96581a206cb57f889b0fa1b73d4b5bc268b3b6e8d541a6c496a2614a26c17fea"
   },
   "work/typed-lifecycle-abi-v1/gdextension_interface.h": "07ee07f19e31fe5c22154edbba73ce3cb793b87524add5d9dc0c9468815c9a29",
   "work/typed-lifecycle-abi-v1/native-current-open-items-20261028/COMMAND_OUTPUT.json": "feccb44a82af5439c60b4fb8a6f7c8fc8923f9fd97e2bb169099294c67a185ef",
@@ -871,6 +871,30 @@
   "work/typed-lifecycle-abi-v1/native-current-open-items-20261028/RECEIPT.md": "3bffbaeab142d7f369796c71fef6197e1f7c528f01f2bb4e0e7e7fa04249ebea",
   "work/typed-lifecycle-abi-v1/native-current-open-items-20261028/REVALIDATION.md": "fbd01837fd2991f528247aca78904511cb29595131a5ed0a4d0a439e655fc83d",
   "work/typed-lifecycle-abi-v1/native-current-open-items-20261028/SOURCE_HASHES.txt": "32f1431ef77351a9c01b1fd9e210110eba08e771859cd36cb055038581dcc908",
+  "work/typed-lifecycle-abi-v1/native-current-recheck-20261029/INDEPENDENT_REVIEW.md": {
+    "bytes": 384,
+    "sha256": "210d1d5c5c1de07bb311479fb571508e2e9052f156b309350206be408e7f9fd4"
+  },
+  "work/typed-lifecycle-abi-v1/native-current-recheck-20261029/MANIFEST.json": {
+    "bytes": 643,
+    "sha256": "62c2af81746f1a03d50bcd44def1a1003aaa7186a018a9755940869eb2c3b478"
+  },
+  "work/typed-lifecycle-abi-v1/native-current-recheck-20261029/RECEIPT.md": {
+    "bytes": 797,
+    "sha256": "8c887422a73019abbb3fcc3aedac5a4a2b16728b20cf093db039848fdd82f3ae"
+  },
+  "work/typed-lifecycle-abi-v1/native-current-recheck-20261029/device_exit.log": {
+    "bytes": 795,
+    "sha256": "aaf5611a4d589fe58a2b2105c80d409dda578225b2305033d31e155667030482"
+  },
+  "work/typed-lifecycle-abi-v1/native-current-recheck-20261029/graph.log": {
+    "bytes": 298,
+    "sha256": "415f53a335bd9e15ccec8947349b95dff9e9fba16e7713952c23e976aca3395a"
+  },
+  "work/typed-lifecycle-abi-v1/native-current-recheck-20261029/p2.log": {
+    "bytes": 302,
+    "sha256": "f2cb831b45fe0b69add157f5432213ed498becd62393c47109e9eda8e523a86c"
+  },
   "work/typed-lifecycle-abi-v1/native-open-items-revalidation-r2-20261028/COMMAND_OUTPUT.json": "61b04bc4810866288494668c9318c012d295303d1abe86c66d7e94e6591d8006",
   "work/typed-lifecycle-abi-v1/native-open-items-revalidation-r2-20261028/INDEPENDENT_REVIEW.md": "26dd4e7f21cf9c67acec594636f435f0d46cfc24e873157d8e1ce638c159483e",
   "work/typed-lifecycle-abi-v1/native-open-items-revalidation-r2-20261028/RECEIPT.md": "682dc734550aff0d8906d16c08e8f1090746b9cd3c575ce91f421c2e66a739c0",

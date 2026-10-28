@@ -1,0 +1,13 @@
+{
+  "status": "CURRENT_NATIVE_REGRESSIONS_GREEN",
+  "binary": {
+    "path": "bin/godot.macos.editor.dev.arm64",
+    "sha256": "d216693315918595bf7cf46d57006d88ede1d7000fe3cd68fac06afb63edffac"
+  },
+  "runs": {
+    "device_exit": {"returncode": 0, "cases": 133, "assertions": 2619, "log": "device_exit.log"},
+    "r02_graph": {"returncode": 0, "cases": 6, "assertions": 99, "log": "graph.log"},
+    "k03_p2": {"returncode": 0, "cases": 22, "assertions": 350, "log": "p2.log"}
+  },
+  "claims_not_made": ["production_checked_append", "operation_association", "native_completion", "same_request_readback", "U01_owner_enrollment", "Ready", "G1"]
+}
