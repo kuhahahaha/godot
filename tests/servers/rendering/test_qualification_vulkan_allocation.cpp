@@ -37,6 +37,7 @@ TEST_CASE("[QualificationNative][Vulkan] failed extra-tracking texture creation 
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
  RenderingDeviceDriver::TextureFormat format;
  format.format=RDD::DATA_FORMAT_R8_UNORM;format.width=format.height=format.depth=format.array_layers=format.mipmaps=1;
+ format.samples=RDD::TEXTURE_SAMPLES_1;
  format.usage_bits=RDD::TEXTURE_USAGE_SAMPLING_BIT;
  RenderingDeviceDriver::TextureView view;
  view.format = format.format;
@@ -55,6 +56,7 @@ TEST_CASE("[QualificationNative][Vulkan] texture creation rejects an invalid dir
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
  RenderingDeviceDriver::TextureFormat format;
  format.format=RDD::DATA_FORMAT_R8_UNORM;format.width=format.height=format.depth=format.array_layers=format.mipmaps=1;
+ format.samples=RDD::TEXTURE_SAMPLES_1;
  format.usage_bits=RDD::TEXTURE_USAGE_SAMPLING_BIT;
  RenderingDeviceDriver::TextureView invalid_view;
  const uint32_t before=TestQualificationVulkanAllocationAccess::allocations(driver);
@@ -103,6 +105,7 @@ TEST_CASE("[QualificationNative][Vulkan] texture creation rejects an invalid sha
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
  RenderingDeviceDriver::TextureFormat format;
  format.format=RDD::DATA_FORMAT_R8_UNORM;format.width=format.height=format.depth=format.array_layers=format.mipmaps=1;
+ format.samples=RDD::TEXTURE_SAMPLES_1;
  format.usage_bits=RDD::TEXTURE_USAGE_SAMPLING_BIT;
  format.shareable_formats.push_back(RDD::DATA_FORMAT_MAX);
  RenderingDeviceDriver::TextureView view;view.format=format.format;
@@ -116,6 +119,7 @@ TEST_CASE("[QualificationNative][Vulkan] texture creation rejects an invalid bas
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
  RenderingDeviceDriver::TextureFormat format;
  format.format=RDD::DATA_FORMAT_MAX;format.width=format.height=format.depth=format.array_layers=format.mipmaps=1;
+ format.samples=RDD::TEXTURE_SAMPLES_1;
  format.usage_bits=RDD::TEXTURE_USAGE_SAMPLING_BIT;
  RenderingDeviceDriver::TextureView view;view.format=RDD::DATA_FORMAT_R8_UNORM;
  ERR_PRINT_OFF;
@@ -142,5 +146,46 @@ TEST_CASE("[QualificationNative][Vulkan] render pass creation rejects an invalid
  auto render_pass=driver.render_pass_create(VectorView<RenderingDeviceDriver::Attachment>(attachment),{}, {},1,RenderingDeviceDriver::AttachmentReference());
  ERR_PRINT_ON;
  CHECK_FALSE(bool(render_pass));
+}
+TEST_CASE("[QualificationNative][Vulkan] texture creation rejects an invalid sample count") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ RenderingDeviceDriver::TextureFormat format;
+ format.format=RDD::DATA_FORMAT_R8_UNORM;format.width=format.height=format.depth=format.array_layers=format.mipmaps=1;
+ format.samples=RDD::TEXTURE_SAMPLES_MAX;
+ format.usage_bits=RDD::TEXTURE_USAGE_SAMPLING_BIT;
+ RenderingDeviceDriver::TextureView view;view.format=format.format;
+ const uint32_t before=TestQualificationVulkanAllocationAccess::allocations(driver);
+ ERR_PRINT_OFF;
+ auto texture=driver.texture_create(format,view);
+ ERR_PRINT_ON;
+ CHECK_FALSE(bool(texture));
+ CHECK(TestQualificationVulkanAllocationAccess::allocations(driver)==before);
+}
+TEST_CASE("[QualificationNative][Vulkan] render pass creation rejects an invalid sample count") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ RenderingDeviceDriver::Attachment attachment;
+ attachment.format=RDD::DATA_FORMAT_R8_UNORM;
+ attachment.samples=RDD::TEXTURE_SAMPLES_MAX;
+ ERR_PRINT_OFF;
+ auto render_pass=driver.render_pass_create(VectorView<RenderingDeviceDriver::Attachment>(attachment),{}, {},1,RenderingDeviceDriver::AttachmentReference());
+ ERR_PRINT_ON;
+ CHECK_FALSE(bool(render_pass));
+}
+TEST_CASE("[QualificationNative][Vulkan] render pipeline creation rejects invalid primitive and sample count") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ RenderingDeviceDriver::PipelineRasterizationState rasterization;
+ RenderingDeviceDriver::PipelineMultisampleState multisample;
+ RenderingDeviceDriver::PipelineDepthStencilState depth_stencil;
+ RenderingDeviceDriver::PipelineColorBlendState blend;
+ ERR_PRINT_OFF;
+ auto invalid_primitive=driver.render_pipeline_create(RenderingDeviceDriver::ShaderID(),RenderingDeviceDriver::VertexFormatID(),static_cast<RenderingDeviceDriver::RenderPrimitive>(RDD::RENDER_PRIMITIVE_MAX),rasterization,multisample,depth_stencil,blend,{}, {},RenderingDeviceDriver::RenderPassID(),0,{});
+ multisample.sample_count=RDD::TEXTURE_SAMPLES_MAX;
+ auto invalid_sample=driver.render_pipeline_create(RenderingDeviceDriver::ShaderID(),RenderingDeviceDriver::VertexFormatID(),RDD::RENDER_PRIMITIVE_TRIANGLES,rasterization,multisample,depth_stencil,blend,{}, {},RenderingDeviceDriver::RenderPassID(),0,{});
+ ERR_PRINT_ON;
+ CHECK_FALSE(bool(invalid_primitive));
+ CHECK_FALSE(bool(invalid_sample));
 }
 #endif

@@ -2291,6 +2291,7 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create(const TextureFormat &
 	for (const DataFormat shareable_format : p_format.shareable_formats) {
 		ERR_FAIL_INDEX_V(shareable_format, DATA_FORMAT_MAX, TextureID());
 	}
+	ERR_FAIL_INDEX_V(p_format.samples, TEXTURE_SAMPLES_MAX, TextureID());
 	VkImageCreateInfo create_info = {};
 	create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 
@@ -6104,6 +6105,7 @@ static void _attachment_reference_to_vk(const RDD::AttachmentReference &p_attach
 RDD::RenderPassID RenderingDeviceDriverVulkan::render_pass_create(VectorView<Attachment> p_attachments, VectorView<Subpass> p_subpasses, VectorView<SubpassDependency> p_subpass_dependencies, uint32_t p_view_count, AttachmentReference p_fragment_density_map_attachment) {
 	for (uint32_t i = 0; i < p_attachments.size(); i++) {
 		ERR_FAIL_INDEX_V(p_attachments[i].format, DATA_FORMAT_MAX, RenderPassID());
+		ERR_FAIL_INDEX_V(p_attachments[i].samples, TEXTURE_SAMPLES_MAX, RenderPassID());
 		ERR_FAIL_INDEX_V(p_attachments[i].initial_layout, TEXTURE_LAYOUT_MAX, RenderPassID());
 		ERR_FAIL_INDEX_V(p_attachments[i].final_layout, TEXTURE_LAYOUT_MAX, RenderPassID());
 	}
@@ -6623,6 +6625,9 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 		RenderPassID p_render_pass,
 		uint32_t p_render_subpass,
 		VectorView<PipelineSpecializationConstant> p_specialization_constants) {
+	ERR_FAIL_INDEX_V(p_render_primitive, RENDER_PRIMITIVE_MAX, PipelineID());
+	ERR_FAIL_INDEX_V(p_multisample_state.sample_count, TEXTURE_SAMPLES_MAX, PipelineID());
+
 	// Vertex.
 	const VkPipelineVertexInputStateCreateInfo *vertex_input_state_create_info = nullptr;
 	if (p_vertex_format.id) {
