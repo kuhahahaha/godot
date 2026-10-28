@@ -64,7 +64,16 @@
         "cases": 20,
         "assertions": 346
       }
+    },
+    "release_configuration": {
+      "build_rc": 0,
+      "version_rc": 0,
+      "target": "template_release",
+      "dev_build": false,
+      "tests": false,
+      "builtin_glslang": true
     }
   },
-  "scope": "Graph ordering consumer only; path lengths are retained as diagnostic ordering facts; no native completion/readback/Ready/G1 claim"
+  "scope": "Graph ordering consumer only; path lengths are retained as diagnostic ordering facts; no native completion/readback/Ready/G1 claim",
+  "release_binary_sha256": "1a63bb70f0a0aaebbc9414c2b366c9a2ab6d5721f89f3dd58f1027874524e431"
 }

@@ -40,3 +40,11 @@ and focused run are rc0 with 1 case / 7 assertions; the full Qualification
 regression is 20/346 and the Graph regression is 8/109, both rc0. This adds
 coverage for the internal ordering fact only and does not add completion,
 readback, Ready or G1 authority.
+
+## Release configuration
+
+The current source was rebuilt with `target=template_release dev_build=no
+tests=no builtin_glslang=yes` using the macOS arm64 release target. The build
+returned rc0 and the resulting binary `--version` probe returned rc0. This is
+compile/startup evidence for the same fail-closed ordering code; no release
+GPU, owner, completion, readback, Ready or G1 result is claimed.
