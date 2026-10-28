@@ -1,0 +1,13 @@
+{
+  "observed_utc": "2026-10-28T11:14:42.712543+00:00",
+  "ange_head": "9c0f476b9f854da16199bee3d218d624079c4696",
+  "source_hashes": {
+    "/Users/macbookair/Documents/Work/ANGE/src/register_types.cpp": "1402c95af5005116e11ec1728737d08ab4489e19c62dd8074eea0fe0a363f66b",
+    "/Users/macbookair/Documents/Work/ANGE/src/godot/particle/particle_program_loader.cpp": "f07a8aa8474e5064626b4a266673c70f8e9ce3a441d177c2bbdf9b14feb4638d",
+    "/Users/macbookair/Documents/Work/ANGE/src/godot/particle/stage_executor.cpp": "da3377ebfeb29a1d3f32c3064404577b2e1582423c4d52df94ecd22d742d7012",
+    "/Users/macbookair/Documents/Work/ANGE/src/particle/runtime/qualification_scope.cpp": "07d73843e6a9b714200f59584b66d48131ae22da575bd5b780f1c125bf32c993",
+    "/Users/macbookair/Documents/Work/godot_ANGE/core/extension/gdextension_qualification.cpp": "cb435c9749eb683a07035588f9c3aac4404bf72553e455157b83fd8571d7ce53"
+  },
+  "source_only": true,
+  "note": "No integration-owner source edited, no runtime promotion; root/A USER vs Binding CodeHold contract join explicitly excluded from D changes"
+}

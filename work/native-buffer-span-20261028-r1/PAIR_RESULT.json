@@ -1,0 +1,19 @@
+{
+  "original_source_commit": "cdea26ccd0",
+  "original_source_identity": {
+    "bytes": 527451,
+    "sha256": "648ffb249513c53f8c2fda3ccc8c205077de4e449001471104205a2f230997b8"
+  },
+  "unchanged_link_inputs": true,
+  "red": {
+    "cases": 3,
+    "assertions": 111,
+    "failures": 6
+  },
+  "green": {
+    "cases": 5,
+    "assertions": 280,
+    "failures": 0
+  },
+  "scope": "original RD source under current same archive inputs; CPU receiver only, no real GPU or owner grant"
+}

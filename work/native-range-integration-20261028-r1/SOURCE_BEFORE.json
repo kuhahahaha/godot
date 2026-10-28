@@ -1,0 +1,30 @@
+{
+  "head": "cdea26ccd04936dec26bd9dcfbe7145ad0cb5949",
+  "inputs": {
+    "servers/rendering/rendering_device.cpp": {
+      "bytes": 527489,
+      "sha256": "d273bbb12fb41f8f80a84b3969fc7244d780519a173b49acdc3e049d5dfd6714"
+    },
+    "tests/servers/rendering/test_external_output_contract.cpp": {
+      "bytes": 26621,
+      "sha256": "77d3326656db31ef4691cdec128bf1090437b559ee24e3938e57ba0e56513442"
+    },
+    "drivers/metal/SCsub": {
+      "bytes": 2253,
+      "sha256": "983222a4213d3cfb110b398fe330d341752dfd4f218cd0faaf7c7d28c8a90315"
+    },
+    "SConstruct": {
+      "bytes": 53211,
+      "sha256": "04543898719038aab7c1a222afc8523a0a8a5c48bdfabbcfc01c8fcbd828f5f5"
+    },
+    "servers/SCsub": {
+      "bytes": 606,
+      "sha256": "0220362bcd60af25db6db1599b3bfa8d13c6572d6f1d397fd1b85125dc7dad33"
+    },
+    "tests/SCsub": {
+      "bytes": 764,
+      "sha256": "acb6ada943dc60c72f573436c5a40b523c2524df8665377a564a8dd90ac03e44"
+    }
+  },
+  "tracked_dirty": " M drivers/metal/SCsub\n M servers/rendering/rendering_device.cpp\n M tests/servers/rendering/test_external_output_contract.cpp\n D work/skin-palette-commit-package/native-core-production/ACCEPTANCE_EVIDENCE_AUDIT_20261024.json\n D work/skin-palette-commit-package/native-core-production/FR_core_interface.md\n D work/skin-palette-commit-package/native-core-production/FR_core_interface_PLAN.md\n D work/skin-palette-commit-package/native-core-production/code-holder/FR_library_close.md\n M work/typed-lifecycle-abi-v1/gdextension_interface.h\n"
+}

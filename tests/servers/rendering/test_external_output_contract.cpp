@@ -1,3 +1,4 @@
+#include "core/extension/gdextension_qualification_physical.h"
 #include "servers/rendering/rendering_device_graph.h"
 #include "servers/rendering/rendering_device.h"
 #include "tests/servers/rendering/transfer_test_driver_base.h"
@@ -14,6 +15,25 @@ public:
 	uint32_t draws = 0;
 	uint32_t indexed_draws = 0;
 	uint32_t binds = 0;
+	uint32_t clears = 0;
+	uint32_t allocations = 0;
+	uint32_t persistent_maps = 0;
+	uint64_t clear_offset = 0;
+	uint64_t clear_size = 0;
+	uint8_t mapped_bytes[32] = {};
+	BufferID buffer_create(uint64_t, BitField<BufferUsageBits>, MemoryAllocationType, uint64_t) override {
+		allocations++;
+		return BufferID(); // Stop valid readback at the allocation boundary; no fake GPU result.
+	}
+	uint8_t *buffer_persistent_map_advance(BufferID, uint64_t) override {
+		persistent_maps++;
+		return mapped_bytes;
+	}
+	void command_clear_buffer(CommandBufferID, BufferID, uint64_t p_offset, uint64_t p_size) override {
+		clears++;
+		clear_offset = p_offset;
+		clear_size = p_size;
+	}
 	uint32_t compute_binds = 0;
 	uint32_t indirect_dispatches = 0;
 	uint64_t indirect_offset = 0;
@@ -58,6 +78,11 @@ public:
 		buffer.draw_tracker = RenderingDeviceGraph::resource_tracker_create();
 		buffer.draw_tracker->buffer_driver_id = buffer.driver_id;
 		return p_device.storage_buffer_owner.make_rid(buffer);
+	}
+	static void persistent_buffer(RenderingDevice &p_device, RID p_buffer, GDExtensionDeviceExit::QualificationPhysicalReturn *p_returning) {
+		auto *buffer = p_device.storage_buffer_owner.get_or_null(p_buffer);
+		buffer->usage.set_flag(RenderingDeviceDriver::BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT);
+		buffer->qualification_return = p_returning;
 	}
 	static uint32_t commands(RenderingDevice &p_device) { return p_device.draw_graph.qualification_command_count(); }
 	static auto copy(RenderingDevice &p_device, RID p_source, RID p_destination, uint32_t p_source_offset, uint32_t p_destination_offset, uint32_t p_size) {
@@ -424,6 +449,88 @@ TEST_CASE("[RenderingDevice] compute indirect validates aligned complete command
 		if (valid) {
 			CHECK(driver.indirect_offset == offset);
 		}
+		TestExternalOutputAccess::detach(device);
+	}
+}
+
+TEST_CASE("[RenderingDevice] buffer clear rejects overflowing spans before graph append") {
+	for (uint32_t offset : { 0u, 24u, 28u, UINT32_MAX - 3 }) {
+		CAPTURE(offset);
+		RenderingDevice device;
+		ExternalOutputGraphDriver driver;
+		TestExternalOutputAccess::attach(device, driver);
+		RID buffer = TestExternalOutputAccess::buffer(device, 71, 32);
+		const bool valid = offset == 0 || offset == 24;
+		const uint32_t size = offset == 0 ? 32 : 8;
+		const uint32_t before = TestExternalOutputAccess::commands(device);
+		ERR_PRINT_OFF;
+		CHECK(device.buffer_clear(buffer, offset, size) == (valid ? OK : ERR_INVALID_PARAMETER));
+		ERR_PRINT_ON;
+		CHECK(TestExternalOutputAccess::commands(device) == before + (valid ? 1 : 0));
+		TestExternalOutputAccess::finish_graph(device);
+		CHECK(driver.clears == (valid ? 1 : 0));
+		if (valid) {
+			CHECK(driver.clear_offset == offset);
+			CHECK(driver.clear_size == size);
+		}
+		TestExternalOutputAccess::detach(device);
+	}
+}
+
+TEST_CASE("[RenderingDevice] buffer update validates the full span before return guard and mapping") {
+	for (uint32_t offset : { 0u, 24u, 28u, UINT32_MAX - 3 }) {
+		CAPTURE(offset);
+		RenderingDevice device;
+		ExternalOutputGraphDriver driver;
+		TestExternalOutputAccess::attach(device, driver);
+		RID buffer = TestExternalOutputAccess::buffer(device, 71, 32);
+		const bool valid = offset == 0 || offset == 24;
+		const uint32_t size = offset == 0 ? 32 : 8;
+		uint8_t bytes[32];
+		for (uint32_t i = 0; i < 32; ++i) {
+			bytes[i] = i + 1;
+		}
+		// A real return guard prevents the pre-fix malformed call from mapping
+		// invalid memory. Its distinct error also proves which preflight ran.
+		GDExtensionDeviceExit::QualificationPhysicalReturn returning;
+		TestExternalOutputAccess::persistent_buffer(device, buffer, valid ? nullptr : &returning);
+		const uint32_t before = TestExternalOutputAccess::commands(device);
+		ERR_PRINT_OFF;
+		CHECK(device.buffer_update(buffer, offset, size, bytes) == (valid ? OK : ERR_INVALID_PARAMETER));
+		ERR_PRINT_ON;
+		CHECK(driver.persistent_maps == (valid ? 1 : 0));
+		CHECK(TestExternalOutputAccess::commands(device) == before);
+		if (valid) {
+			for (uint32_t i = 0; i < 32; ++i) {
+				CHECK(driver.mapped_bytes[i] == (i >= offset && i < offset + size ? bytes[i - offset] : 0));
+			}
+			TestExternalOutputAccess::persistent_buffer(device, buffer, &returning);
+			ERR_PRINT_OFF;
+			CHECK(device.buffer_update(buffer, offset, size, bytes) == ERR_UNAUTHORIZED);
+			ERR_PRINT_ON;
+			CHECK(driver.persistent_maps == 1);
+		}
+		TestExternalOutputAccess::detach(device);
+	}
+}
+
+TEST_CASE("[RenderingDevice] buffer readback validates explicit and default spans before allocation") {
+	for (uint32_t offset : { 0u, 24u, 28u, UINT32_MAX - 3, 4u }) {
+		CAPTURE(offset);
+		RenderingDevice device;
+		ExternalOutputGraphDriver driver;
+		TestExternalOutputAccess::attach(device, driver);
+		RID buffer = TestExternalOutputAccess::buffer(device, 71, 32);
+		const bool valid = offset == 0 || offset == 24;
+		const uint32_t size = offset == 0 || offset == 4 ? 0 : 8;
+		const uint32_t before = TestExternalOutputAccess::commands(device);
+		ERR_PRINT_OFF;
+		CHECK(device.buffer_get_data(buffer, offset, size).is_empty());
+		ERR_PRINT_ON;
+		// Legal ranges reach the original allocation call. The receiver refuses
+		// allocation, so this test makes no GPU-copy or successful-readback claim.
+		CHECK(driver.allocations == (valid ? 1 : 0));
+		CHECK(TestExternalOutputAccess::commands(device) == before);
 		TestExternalOutputAccess::detach(device);
 	}
 }
