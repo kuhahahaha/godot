@@ -1,0 +1,10 @@
+PASS generated Scene Install V2 ABI i386-unknown-linux-gnu
+PASS generated Scene Install V2 ABI x86_64-unknown-linux-gnu
+PASS generated Scene Install V2 ABI arm64-apple-macos11
+PASS generated Scene Install V2 ABI x86_64-apple-macos11
+PASS SDK guarded table:25 original missing-member controls plus V2 atomic controls; NO_NATIVE_AUTHORITY negatives=25
+PASS SDK main-loop explicit declaration: 17 enrollment cases; NO_NATIVE_AUTHORITY
+PASS SDK V2: public setters, twenty-one pre-effect refusals, both declarations, twenty-four malformed plans, frozen identity/thread/reentry and registration failure; NO_NATIVE_AUTHORITY
+PASS SDK SceneReady: enrollment owner rollback, four pre-effect refusals, original SCENE registration before acknowledgement, exact callback/error, five frozen/mask/thread/reentry refusals and registration failure stops acknowledgement; NO_NATIVE_AUTHORITY
+PASS SDK active-context thread isolation and reset; NO_NATIVE_AUTHORITY
+SDK_CHECKS_OK; temporary_bytes_deleted=519032; NO_NATIVE_AUTHORITY

@@ -1,0 +1,24 @@
+{
+  "command": [
+    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+    "--path",
+    "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/k03-sdk-context-s765_bku",
+    "--rendering-driver",
+    "metal",
+    "--rendering-method",
+    "mobile",
+    "--script",
+    "probe.gd"
+  ],
+  "rc": 1,
+  "checks": {
+    "exit_rejected": true,
+    "native_ref_once": true,
+    "first_logical_close_ok": true,
+    "same_image_reload_refused": true,
+    "only_one_instance": true,
+    "no_second_terminator": true,
+    "no_destructor_before_first_close": true
+  },
+  "scope": "real extra dlopen ref test-only, unsupported same-image init correctly rejected; no production OS-ref service"
+}

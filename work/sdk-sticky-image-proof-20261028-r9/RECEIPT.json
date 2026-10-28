@@ -1,0 +1,15 @@
+{
+  "status": "PRIVATE_CANDIDATE_DEFAULT_CLASS_FRESH_RELOAD_AND_RETAINED_IMAGE_REFUSAL_GREEN",
+  "scope": "actual default no-HOT_RELOAD macOS Metal registered/instantiated Node class; original SDK source linked controls",
+  "sdk_commit": "pre-refinement private source",
+  "fixes": [
+    "existing ConstructInfoStore on all macOS builds; no native construction TLS in default profile",
+    "keep original guarded claimant sticky until real image unload, per PROTOCOL408"
+  ],
+  "positive": "two class method calls and object dtors; two image dtors before matching manager0s; fresh reload0",
+  "retained_image_negative": "test-only real extra dlopen ref: first manager close0; same-image reinit fails1; exactly one user/class cohort; no second termination, original image dtor after first return",
+  "sdk_controls": "original scripted callbacks/frozen/thread/reentry/returns rc0",
+  "scope_limit": "direct original SDK godot.cpp/Wrapped.cpp plus existing archive supporting TUs; complete SDK/archive/Debug/Release product matching builds pending",
+  "canonical_gates": "E05 source/install, production actor, same-request completion/readback and complete cohort/native qualification remain incomplete",
+  "review": "SELF_REVIEW.md author only"
+}
