@@ -26,4 +26,4 @@ The first `tests=yes` attempt reached the static platform archive but stopped at
 
 This receipt covers the `template_debug` static producer and identity consumer only. It does not claim project lifecycle, GPU execution, owner association, operation/completion/readback, Ready, or G1 qualification.
 
-Machine-readable checks: `STATIC_TEMPLATE_DEBUG_ARCHIVE_CHECK_R1.json`, `STATIC_TEMPLATE_DEBUG_INPUTS_R1.json`.
+Machine-readable checks: `STATIC_TEMPLATE_DEBUG_ARCHIVE_CHECK_R1.json`, `STATIC_TEMPLATE_DEBUG_INPUTS_R1.json`, `STATIC_TEMPLATE_DEBUG_HOST_CHECK_R1.json`.

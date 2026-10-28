@@ -1,0 +1,29 @@
+{
+  "/tmp/typed-template-debug-static-host-nopath.log": {
+    "bytes": 374,
+    "sha256": "699fc5c3a4dd3a623a6f61313e45b15d3c92d248bf5afafe29e4d242d2b035f4"
+  },
+  "/tmp/typed-template-debug-static-host-path.log": {
+    "bytes": 284,
+    "sha256": "f0b1d73d6efe3baf76998cc92638946d250ce3c26526b056de130169d9c7295a"
+  },
+  "/tmp/typed-template-debug-static-host-path.rc": {
+    "bytes": 3,
+    "sha256": "6950980e3aca96f4dc400eb2e47cc5c343e0d3f483a4e70adcae1d7e6bb22d9c"
+  },
+  "link_command": "clang++ -std=c++17 -ObjC++ ... bin/libgodot.macos.template_debug.dev.arm64.a -L/opt/homebrew/Cellar/molten-vk/1.4.2/lib -lMoltenVK ...",
+  "nopath_host_observation": "startup reaches missing .pck/project-data diagnostic and does not produce a lifecycle result; process was terminated after bounded observation",
+  "path_host_rc": 82,
+  "work/e06-loaded-core-identity-20261028-r1/static-template-debug-identity-host/host_runtime_mvk": {
+    "bytes": 180002800,
+    "sha256": "a6b7057aa32059e64e68138fe555bc26119ea89431abb0cc50913932ab806246"
+  },
+  "work/e06-loaded-core-identity-20261028-r1/static-template-debug-identity-host/host_runtime_nopath": {
+    "bytes": 180002800,
+    "sha256": "59301e41025aa35710fd821e7c307a35048f3194b70751896d85768787995685"
+  },
+  "work/e06-loaded-core-identity-20261028-r1/static_template_debug_no_path_host.mm": {
+    "bytes": 5765,
+    "sha256": "195537719a93b1207e5af09313df9d0e58fcbe3782a802596d91d3160edb9bc7"
+  }
+}
