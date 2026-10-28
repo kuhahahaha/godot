@@ -22,3 +22,5 @@ Static prototype audit found a target-path collision. Production now uses `LIBSU
 10. Current identity policy regression remains green after the static consumer follow-up: `python3 -m unittest tests/test_engine_build_identity.py` passes 20/20 (`STATIC_IDENTITY_TESTS_R3.rc=0`), including `ld`/`libtool` switch routing and unsupported/unclosed native option refusal.
 
 11. `template_debug` static consumer now has a regenerated same-name project pack: MoltenVK-linked no-path C ABI host completes `start`, `iteration`, `get_version_info`, and `destroy` rc0 with exact schema1 identity. The path-enabled override refusal remains deliberate. This closes the previous missing-pack probe boundary for the minimal static host only; it does not imply ANGE owner/GPU/Ready/G1.
+
+12. `template_release` static host follow-up: with the regenerated minimal probe pack, `static-template-host` returns rc0 with exact schema1 identity and `STATIC_TEMPLATE_HOST_DESTROY_RETURNED`. This supersedes only the no-pack host-unavailable observation; production project/GPU/owner/Ready/G1 claims remain outside scope.
