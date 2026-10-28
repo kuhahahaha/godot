@@ -1,0 +1,7 @@
+[
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-compute-indirect-span-20261028-r1/godot-span",
+  "--disable-crash-handler",
+  "--headless",
+  "--test",
+  "--test-case=[RenderingDevice] compute indirect*,[B4] native_packet_join"
+]

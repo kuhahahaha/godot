@@ -14,9 +14,17 @@ public:
 	uint32_t draws = 0;
 	uint32_t indexed_draws = 0;
 	uint32_t binds = 0;
+	uint32_t compute_binds = 0;
+	uint32_t indirect_dispatches = 0;
+	uint64_t indirect_offset = 0;
 	void command_pipeline_barrier(CommandBufferID, BitField<PipelineStageBits>, BitField<PipelineStageBits>, VectorView<MemoryAccessBarrier>, VectorView<BufferBarrier>, VectorView<TextureBarrier>, VectorView<AccelerationStructureBarrier>) override {}
 	void command_copy_buffer(CommandBufferID, BufferID, BufferID, VectorView<BufferCopyRegion>) override { copies++; }
 	void command_compute_dispatch(CommandBufferID, uint32_t, uint32_t, uint32_t) override {}
+	void command_bind_compute_uniform_sets(CommandBufferID, VectorView<UniformSetID>, ShaderID, uint32_t, uint32_t, uint32_t) override { compute_binds++; }
+	void command_compute_dispatch_indirect(CommandBufferID, BufferID, uint64_t p_offset) override {
+		indirect_dispatches++;
+		indirect_offset = p_offset;
+	}
 	CommandBufferID command_buffer_create(CommandPoolID) override { return CommandBufferID(12); }
 	bool command_buffer_begin(CommandBufferID) override { return begin_ok; }
 	void command_buffer_end(CommandBufferID) override {}
@@ -108,6 +116,32 @@ public:
 		} else {
 			set->pending_clear_textures.push_back(p_device.texture_owner.make_rid(texture));
 		}
+	}
+	static void compute_begin(RenderingDevice &p_device) {
+		p_device.draw_graph.add_compute_list_begin();
+		p_device.compute_list.active = true;
+#ifdef DEBUG_ENABLED
+		p_device.compute_list.validation.pipeline_active = true;
+#endif
+		RenderingDevice::UniformSet set;
+		set.format = 1;
+		set.driver_id = RenderingDeviceDriver::UniformSetID(82);
+		RID rid = p_device.uniform_set_owner.make_rid(set);
+		p_device.compute_list.state.set_count = 1;
+		auto &state = p_device.compute_list.state.sets[0];
+		state.uniform_set = rid;
+		state.uniform_set_driver_id = set.driver_id;
+		state.pipeline_expected_format = 1;
+		state.uniform_set_format = 1;
+	}
+	static void compute_indirect(RenderingDevice &p_device, RID p_buffer, uint32_t p_offset) {
+		p_device.compute_list_dispatch_indirect(RenderingDevice::ID_TYPE_COMPUTE_LIST, p_buffer, p_offset);
+	}
+	static bool compute_bound(RenderingDevice &p_device) { return p_device.compute_list.state.sets[0].bound; }
+	static uint32_t dispatches(RenderingDevice &p_device) { return p_device.compute_list.state.dispatch_count; }
+	static void compute_end(RenderingDevice &p_device) {
+		p_device.draw_graph.add_compute_list_end();
+		p_device.compute_list.active = false;
 	}
 	static void transfer(RenderingDevice &p_device, RID p_buffer) {
 		auto *worker = memnew(RenderingDevice::TransferWorker);
@@ -363,5 +397,33 @@ TEST_CASE("[B4] native_packet_join") {
 			graph.begin();
 			check(graph, driver, driver.begin_ok, variant != 2);
 		}
+	}
+}
+
+TEST_CASE("[RenderingDevice] compute indirect validates aligned complete command span before effects") {
+	for (uint32_t offset : { 0u, 20u, 2u, 24u, UINT32_MAX - 3 }) {
+		CAPTURE(offset);
+		RenderingDevice device;
+		ExternalOutputGraphDriver driver;
+		TestExternalOutputAccess::attach(device, driver);
+		RID command = TestExternalOutputAccess::buffer(device, 71, 32);
+		TestExternalOutputAccess::compute_begin(device);
+		const uint32_t before = TestExternalOutputAccess::commands(device);
+		const bool valid = offset == 0 || offset == 20;
+		ERR_PRINT_OFF;
+		TestExternalOutputAccess::compute_indirect(device, command, offset);
+		ERR_PRINT_ON;
+		CHECK(TestExternalOutputAccess::compute_bound(device) == valid);
+		CHECK(TestExternalOutputAccess::dispatches(device) == (valid ? 1 : 0));
+		// Compute instructions remain inside their list until compute_end.
+		CHECK(TestExternalOutputAccess::commands(device) == before);
+		TestExternalOutputAccess::compute_end(device);
+		TestExternalOutputAccess::finish_graph(device);
+		CHECK(driver.compute_binds == (valid ? 1 : 0));
+		CHECK(driver.indirect_dispatches == (valid ? 1 : 0));
+		if (valid) {
+			CHECK(driver.indirect_offset == offset);
+		}
+		TestExternalOutputAccess::detach(device);
 	}
 }

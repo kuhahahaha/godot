@@ -1,0 +1,84 @@
+{
+  "files": {
+    "GREEN_LINK.json": {
+      "bytes": 7618,
+      "sha256": "3e65d0fc9329ebc51d72c35e66e6a603ccde2b742903f109c98cff4082c96b92"
+    },
+    "GREEN_LINK.log": {
+      "bytes": 224,
+      "sha256": "a6baf3a303a199da55db5392f07b943b5bfbdc59473c3ad7ce5f2e48e23eace3"
+    },
+    "GREEN_RUN.log": {
+      "bytes": 302,
+      "sha256": "a8477982682be8dc1a0d63aa7fad8608ff4a57dadead53f0cf8431bccdffd951"
+    },
+    "GREEN_RUN.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "GREEN_RUN_COMMAND.json": {
+      "bytes": 243,
+      "sha256": "cf9e7504af68041e4a499b7aef2f6ea93b6808201548d58241df2372edc158c6"
+    },
+    "INDEPENDENT_REVIEW.md": {
+      "bytes": 487,
+      "sha256": "2af79988914881cf27b37dbae3eb5dae32d210a82a59b860abe8bcd22c536e5d"
+    },
+    "INPUT_IDENTITIES.json": {
+      "bytes": 18804,
+      "sha256": "bdb10a7a172be0ebf5d0003c16c29072d15a8d5638319bfd48c3c07040b5dc26"
+    },
+    "LOCAL_PRODUCTS.json": {
+      "bytes": 396,
+      "sha256": "dfe4a21dd6aa4a5d828b0ddd14dd710a54e528327589522651e415c193d1aa05"
+    },
+    "PLAN.md": {
+      "bytes": 1095,
+      "sha256": "4e3795fc2aa14523ab37e29f49e417d51e54c12c89a38daae234684f2c10f5c0"
+    },
+    "RD_COMPILE.json": {
+      "bytes": 1682,
+      "sha256": "8c801cf4d453d4566f620585e97fffe826f13a62785d2f3f1c6e002062067c04"
+    },
+    "RD_COMPILE.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "RECEIPT.md": {
+      "bytes": 2752,
+      "sha256": "a9443e36327faf590478f20182996eef5261801ae739f98f8615e94de2dd4dc0"
+    },
+    "RED_LINK.json": {
+      "bytes": 7548,
+      "sha256": "d3d3ef2ecae8e72b50f9fae20e9c4890dba577f6bd4316e01a7a6035fd6b296b"
+    },
+    "RED_LINK.log": {
+      "bytes": 224,
+      "sha256": "a6baf3a303a199da55db5392f07b943b5bfbdc59473c3ad7ce5f2e48e23eace3"
+    },
+    "RED_RUN.log": {
+      "bytes": 2160,
+      "sha256": "f463cb34c654b9dfee77b99caf52236f0878c7b29bf0896e34e794e3fedb9f0d"
+    },
+    "RED_RUN.rc": {
+      "bytes": 2,
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    "RUN_COMMAND.json": {
+      "bytes": 219,
+      "sha256": "0c2cf1288d246c5a87ee5b281b6a9b5decf6d9021a2bb11ad5730b51a8aecc75"
+    },
+    "TEST_COMPILE.json": {
+      "bytes": 1676,
+      "sha256": "a0c9ba6a09238642db8422f91dafba06d79b359311ddf91a7b120cd4af65be71"
+    },
+    "TEST_COMPILE.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "SOURCE_DIFF.json": {
+      "bytes": 5367,
+      "sha256": "249c8e451490260006ea34867f81e808b3a79945eee863ed831a8fa0a6f9bd74"
+    }
+  }
+}

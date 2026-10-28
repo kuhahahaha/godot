@@ -7,7 +7,7 @@
   "core/extension/gdextension_library_exit_guard.cpp": "8bee96d244f3febb598e1815810cfd3327ae57c4db8edc6585ac091f294df4e6",
   "core/extension/gdextension_guard_enrollment.cpp": "54a7633286c8d408a02e6e60393c0d6d52e9e646e99a91acffecfb2de5c537e8",
   "tests/core/object/test_device_exit_typed_abi.cpp": "79432daadcec21a5c9dc246ae7c91467366c16c440aae02466a801f72476fb30",
-  "servers/rendering/rendering_device.cpp": "3a8894ad9c4f292ccb27b8edb1878dc057094f56f25323f49faa7de42fbd89c8",
+  "servers/rendering/rendering_device.cpp": "648ffb249513c53f8c2fda3ccc8c205077de4e449001471104205a2f230997b8",
   "servers/rendering/rendering_device_driver.cpp": "8f7b898ce34714479308ade26f205b2fd4e35ccc97841df0c1e8f6c6902f9f32",
   "bin/godot.macos.editor.dev.arm64": "4783f50ef533459e633eeaaea8ff2f862496d10bf4223d8bf7bae8eb70739033",
   "work/typed-lifecycle-abi-v1/gdextension_interface.h": "07ee07f19e31fe5c22154edbba73ce3cb793b87524add5d9dc0c9468815c9a29",
@@ -17,7 +17,7 @@
   "core/object/object.cpp": "ab720040fa332f3e370e6937007763f6165831909709def86ba3e952e826d7a8",
   "tests/core/object/test_device_exit_library_close.cpp": "1d5bc82848c80dd9ea987ef035f1ce8517d1bf9887ad082f53ebc6acdc455357",
   "work/typed-lifecycle-abi-v1/CURRENT_PAIR_U01_VFX_R01_NEGATIVE_RECEIPT_20251025.md": "c6ab0496164e2741f157768a10ffcc6f0217b630a26d95d3d9762c2e22b79a47",
-  "work/typed-lifecycle-abi-v1/PROGRESS.md": "0c3f4091cbcb5d2138a2f6ffa6d2702257b5801ec223146c42306e8b7d09827d",
+  "work/typed-lifecycle-abi-v1/PROGRESS.md": "03f57a69d6ca39c2ddc8ad040bab06b4df27f0e813bf960df00d73d11c385375",
   "work/r01-frame-wait-20261026/MANIFEST.json": "6665b770d13d966da423741c69f01a58b562b976c9f94811f3e4b442f2907d64",
   "work/r01-frame-wait-20261026/RECEIPT.md": "90930a0824a3c88582ef533e461b66fc5bc3163bb165a66269e1d773b0d25066",
   "work/r01-frame-wait-20261026/PROGRESS.md": "a3d8d1fb03d674d6d7941b7088dc3bed69655ce36f57178c99ee9bf3edb6570a",
@@ -463,5 +463,8 @@
   "work/native-numeric-late-return-20261028-r1/MANIFEST.json": "b59810887f59a91679e87e52926a0f9c11787f3d16a34fc505b435719381b2b3",
   "work/native-numeric-late-return-20261028-r1/HANDOFF.md": "0ffda62e178413b8800395e24ab6ced2878b686225e121534946cf3657746e13",
   "work/native-numeric-late-return-20261028-r1/INDEPENDENT_REVIEW.md": "e086908b9f2796e8025bd52d6fcef34d1b72bbbd7dda7dd1fbbf773e0adb7e8d",
-  "work/native-numeric-late-return-20261028-r1/RESULTS.json": "1d6ec0f176840cc0d0a95d3520607ca3ec81d9088afb8afe1d599c657d23d848"
+  "work/native-numeric-late-return-20261028-r1/RESULTS.json": "1d6ec0f176840cc0d0a95d3520607ca3ec81d9088afb8afe1d599c657d23d848",
+  "work/native-compute-indirect-span-20261028-r1/MANIFEST.json": "1a5d1180bd110a0f432add90b72c9a89b78ab54232a9466db55731b6ca84fdf8",
+  "work/native-compute-indirect-span-20261028-r1/RECEIPT.md": "a9443e36327faf590478f20182996eef5261801ae739f98f8615e94de2dd4dc0",
+  "tests/servers/rendering/test_external_output_contract.cpp": "2da6756b229e3d8f805f27f21ea7d0057aabd31f6b92cb369cc73ac0bd25dbad"
 }

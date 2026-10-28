@@ -1,0 +1,14 @@
+{
+  "test_external.o": {
+    "bytes": 1973952,
+    "sha256": "ed567d4ab2a67aa61e8058467e24f335d38d5d486f824aafd35b3fae63da1757"
+  },
+  "rendering_device.o": {
+    "bytes": 8618640,
+    "sha256": "9d01bf1a14f8aeb8da91d0fa27ad9dab8fb7935468150fb11c37e923ffebe0cb"
+  },
+  "godot-span": {
+    "bytes": 302504904,
+    "sha256": "eeba7842d2b927d0e05fd35c50eeff9f07e1af082b34ca9f7d2b8e23aae60633"
+  }
+}
