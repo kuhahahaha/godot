@@ -514,8 +514,8 @@
   "servers/rendering/rendering_device.h": "358ecc5a1266886e883cdb30e2660e30f74895776ca059db85e048b7de2038f8",
   "tests/servers/rendering/test_mesh_storage_external.cpp": "b606f174bb8121b1ab3951ba068d276a280daf23e041d157f162515bf9a7a4b3",
   "work/e06-loaded-core-identity-20261028-r1/MANIFEST.json": {
-    "bytes": 705,
-    "sha256": "9ae0bf14a55c33ad6d9e1db3bf64b71fab0e140dce035f8937e54bea4d928aa6"
+    "bytes": 11543,
+    "sha256": "0ba51af75c904b01d84f388c4f7771a6856bb564c0d38fa96487a1cae10dc84c"
   },
   "work/e06-loaded-core-identity-20261028-r1/RECEIPT.md": {
     "bytes": 9060,
