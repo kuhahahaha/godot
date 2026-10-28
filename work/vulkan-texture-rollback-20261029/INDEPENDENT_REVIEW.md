@@ -28,3 +28,8 @@ The query follow-up stays bounded to Vulkan format inputs. Invalid formats are
 rejected before RD_TO_VK_FORMAT access, and the shared-format output is
 initialized before returning false. RED/Debug/UBSan/Release evidence supports
 fail-closed behavior without adding fallback or authority.
+
+
+The extension guard is the same fail-closed format-input policy as the texture
+and query entry points. The RED SIGSEGV is eliminated without creating a
+synthetic image/view or changing ownership and lifecycle behavior.

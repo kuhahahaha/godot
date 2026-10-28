@@ -60,3 +60,17 @@ rc0. The template_release rebuild/version probe is rc0. R7 artifacts carry
 the 11bdfc52b build identity; source hashes pin the follow-up source commit
 separately in SOURCE_MANIFEST.json. This is direct input validation only; no
 qualification, completion, readback, Ready or G1 claim is made.
+
+## Extension texture format validation
+
+The same direct-driver fixture also exercises texture creation from an external
+native image. Before the guard, passing DATA_FORMAT_MAX reached the Vulkan
+format table and crashed with SIGSEGV (rc134). The extension entry now rejects
+the format before any image-view operation. The focused Debug result is 1 case
+/ 7 assertions, Vulkan allocation regression is 4 cases / 30 assertions,
+K03/P2 remains 22 cases / 350 assertions, and actual use_ubsan=yes repeats
+1/7 and 4/30, all rc0. The template_release rebuild/version probe is rc0.
+R8 artifacts carry the 7a1cb83fa build identity; source hashes pin the
+follow-up source commit in SOURCE_MANIFEST.json. This remains bounded direct
+input validation; no owner, qualification, completion, readback, Ready or G1
+claim is made.
