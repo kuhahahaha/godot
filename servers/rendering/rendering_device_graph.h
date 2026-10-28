@@ -69,8 +69,9 @@ public:
 	};
 	bool contains_record(const RecordHandle &p_handle) const;
 	bool has_driver_callbacks() const;
- uint32_t qualification_command_count() const {return command_count;}
- bool has_synchronization_edge(const RecordHandle &p_before, const RecordHandle &p_after) const;
+	uint32_t qualification_command_count() const { return command_count; }
+	bool has_synchronization_edge(const RecordHandle &p_before, const RecordHandle &p_after) const;
+	bool has_dependency_path(const RecordHandle &p_before, const RecordHandle &p_after, uint32_t &r_path_length) const;
 	RecordMappingState record_mapping_state(const RecordHandle &p_handle) const;
 	bool resolve_record_command_buffer_slot(const RecordHandle &p_handle, uint32_t &r_slot) const;
 	struct RaytracingListInstruction {
@@ -985,12 +986,12 @@ public:
 	void add_draw_list_usage(ResourceTracker *p_tracker, ResourceUsage p_usage);
 	void add_draw_list_usages(VectorView<ResourceTracker *> p_trackers, VectorView<ResourceUsage> p_usages);
 	void add_draw_list_end();
-	void add_texture_clear_color(RDD::TextureID p_dst, ResourceTracker *p_dst_tracker, const Color &p_color, const RDD::TextureSubresourceRange &p_range);
+	RecordHandle add_texture_clear_color(RDD::TextureID p_dst, ResourceTracker *p_dst_tracker, const Color &p_color, const RDD::TextureSubresourceRange &p_range);
 	void add_texture_clear_depth_stencil(RDD::TextureID p_dst, ResourceTracker *p_dst_tracker, float p_depth, uint8_t p_stencil, const RDD::TextureSubresourceRange &p_range);
 	void add_texture_copy(RDD::TextureID p_src, ResourceTracker *p_src_tracker, RDD::TextureID p_dst, ResourceTracker *p_dst_tracker, VectorView<RDD::TextureCopyRegion> p_texture_copy_regions);
 	void add_texture_get_data(RDD::TextureID p_src, ResourceTracker *p_src_tracker, RDD::BufferID p_dst, VectorView<RDD::BufferTextureCopyRegion> p_buffer_texture_copy_regions, ResourceTracker *p_dst_tracker = nullptr);
 	void add_texture_resolve(RDD::TextureID p_src, ResourceTracker *p_src_tracker, RDD::TextureID p_dst, ResourceTracker *p_dst_tracker, uint32_t p_src_layer, uint32_t p_src_mipmap, uint32_t p_dst_layer, uint32_t p_dst_mipmap);
-	void add_texture_update(RDD::TextureID p_dst, ResourceTracker *p_dst_tracker, VectorView<RecordedBufferToTextureCopy> p_buffer_copies, VectorView<ResourceTracker *> p_buffer_trackers = VectorView<ResourceTracker *>());
+	RecordHandle add_texture_update(RDD::TextureID p_dst, ResourceTracker *p_dst_tracker, VectorView<RecordedBufferToTextureCopy> p_buffer_copies, VectorView<ResourceTracker *> p_buffer_trackers = VectorView<ResourceTracker *>());
 	void add_capture_timestamp(RDD::QueryPoolID p_query_pool, uint32_t p_index);
 	void add_synchronization();
 	void begin_label(const Span<char> &p_label_name, const Color &p_color);

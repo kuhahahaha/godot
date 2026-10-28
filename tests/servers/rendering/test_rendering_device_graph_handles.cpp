@@ -54,6 +54,55 @@ TEST_CASE("[R02][Graph] append returns distinct original graph handles") {
 	CHECK_FALSE(foreign.contains_record(upload));
 }
 
+TEST_CASE("[R02][Graph] texture update and clear return graph command handles") {
+	RenderingDeviceGraph graph;
+	TransferTestDriverBase driver;
+	graph.initialize(&driver,
+			[](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); },
+			1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+	graph.begin();
+	RenderingDeviceGraph::ResourceTracker source;
+	source.buffer_driver_id = RenderingDeviceDriver::BufferID(71);
+	RenderingDeviceGraph::ResourceTracker destination;
+	destination.texture_driver_id = RenderingDeviceDriver::TextureID(72);
+	RenderingDeviceGraph::RecordedBufferToTextureCopy transfer;
+	transfer.from_buffer = RenderingDeviceDriver::BufferID(71);
+	transfer.region = {};
+	RenderingDeviceGraph::ResourceTracker *source_trackers[] = { &source };
+	const auto update = graph.add_texture_update(RenderingDeviceDriver::TextureID(72), &destination, VectorView(&transfer, 1), VectorView(source_trackers, 1));
+	CHECK(update.is_valid());
+	CHECK(graph.contains_record(update));
+	CHECK(update.kind == 1);
+	const auto clear = graph.add_texture_clear_color(RenderingDeviceDriver::TextureID(72), &destination, Color(0, 0, 0, 1), {});
+	CHECK(clear.is_valid());
+	CHECK(graph.contains_record(clear));
+	CHECK(clear.kind == 1);
+}
+
+TEST_CASE("[R02][Graph] dependency path reports actual adjacency length") {
+	RenderingDeviceGraph graph;
+	TransferTestDriverBase driver;
+	graph.initialize(&driver,
+			[](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); },
+			1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+	graph.begin();
+	RenderingDeviceGraph::ResourceTracker destination;
+	destination.buffer_driver_id = RenderingDeviceDriver::BufferID(72);
+	RenderingDeviceGraph::RecordedBufferCopy copy;
+	copy.source = RenderingDeviceDriver::BufferID(71);
+	copy.region = { 0, 0, 32 };
+	const auto before = graph.add_buffer_update(RenderingDeviceDriver::BufferID(72), &destination, VectorView(&copy, 1));
+	graph.add_synchronization();
+	const auto after = graph.add_buffer_update(RenderingDeviceDriver::BufferID(72), &destination, VectorView(&copy, 1));
+	uint32_t path_length = 0;
+	CHECK(graph.has_dependency_path(before, after, path_length));
+	CHECK(path_length > 0);
+	CHECK_FALSE(graph.has_dependency_path(after, before, path_length));
+	auto foreign = before;
+	foreign.graph_instance++;
+	CHECK_FALSE(graph.has_dependency_path(foreign, after, path_length));
+}
+
 class RecordSlotTestDriver : public TransferTestDriverBase {
 public:
 	bool begin_result = true;

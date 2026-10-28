@@ -1,0 +1,19 @@
+{
+  "source_baseline": "6a300cedfbf0cc678148bb76c85c47b937f11409",
+  "platform": "macos",
+  "architecture": "arm64",
+  "build_command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j4 platform=macos target=editor dev_build=yes tests=yes builtin_glslang=yes",
+  "focused_run": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case=[R02][Graph]*",
+  "source_sha256": {
+    "servers/rendering/rendering_device_graph.h": "abbd827eedf799494f0eac9b09ae54599e63c509663eb667af800453c9608f86",
+    "servers/rendering/rendering_device_graph.cpp": "22df4633879a986a5d20086372c6dc855ca95082f6b62808d806ab874a0681e7",
+    "tests/servers/rendering/test_rendering_device_graph_handles.cpp": "024e79adfd0df53ef734fc1d79e3d325f7ef0f252f00bad61e3ff1884b714303"
+  },
+  "binary_sha256": "0fa27ca15538200a127ff4350cf3cbb630be79d347bc5b7614d110778268456a",
+  "results": {
+    "graph": {"rc": 0, "cases": 8, "assertions": 109},
+    "device_exit": {"rc": 0, "cases": 133, "assertions": 2619},
+    "k03_p2": {"rc": 0, "cases": 22, "assertions": 350}
+  },
+  "scope": "Debug tests=yes graph/native control only; no release/UBSan/GPU/Ready/G1 claim"
+}

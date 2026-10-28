@@ -61,7 +61,8 @@ bool RenderingDeviceGraph::contains_record(const RecordHandle &p_handle) const {
 			return false;
 		}
 		const auto *command = reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offsets[p_handle.index]]);
-		return command->type == RecordedCommand::TYPE_BUFFER_UPDATE || command->type == RecordedCommand::TYPE_BUFFER_GET_DATA || command->type == RecordedCommand::TYPE_BUFFER_COPY;
+		return command->type == RecordedCommand::TYPE_BUFFER_UPDATE || command->type == RecordedCommand::TYPE_BUFFER_GET_DATA || command->type == RecordedCommand::TYPE_BUFFER_COPY ||
+				command->type == RecordedCommand::TYPE_TEXTURE_CLEAR_COLOR || command->type == RecordedCommand::TYPE_TEXTURE_UPDATE;
 	}
 	const uint64_t location = (uint64_t(p_handle.index) << 32) | p_handle.offset;
 	if ((p_handle.kind != 2 && p_handle.kind != 3) ||
@@ -159,6 +160,58 @@ bool RenderingDeviceGraph::has_synchronization_edge(const RecordHandle &p_before
 		}
 		if (command_list_nodes[node].command_index == int32_t(destination)) {
 			return true;
+		}
+	}
+	return false;
+}
+
+bool RenderingDeviceGraph::has_dependency_path(const RecordHandle &p_before, const RecordHandle &p_after, uint32_t &r_path_length) const {
+	r_path_length = 0;
+	uint32_t source;
+	uint32_t destination;
+	if (!_resolve_record_command_index(p_before, source) || !_resolve_record_command_index(p_after, destination) || source >= destination) {
+		return false;
+	}
+	if (source >= command_count || destination >= command_count || source >= command_data_offsets.size() || destination >= command_data_offsets.size() ||
+			command_data_offsets[source] >= command_data.size() || command_data_offsets[destination] >= command_data.size()) {
+		return false;
+	}
+
+	LocalVector<uint32_t> distances;
+	distances.resize(command_count);
+	for (uint32_t i = 0; i < command_count; i++) {
+		distances[i] = UINT32_MAX;
+	}
+	LocalVector<uint32_t> pending;
+	pending.reserve(command_count);
+	distances[source] = 0;
+	pending.push_back(source);
+
+	for (uint32_t pending_index = 0; pending_index < pending.size(); pending_index++) {
+		const uint32_t current = pending[pending_index];
+		if (current >= command_count || current >= command_data_offsets.size() || command_data_offsets[current] >= command_data.size()) {
+			return false;
+		}
+		const auto *command = reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offsets[current]]);
+		for (int32_t node = command->adjacent_command_list_index; node >= 0;) {
+			if (uint32_t(node) >= command_list_nodes.size()) {
+				return false;
+			}
+			const RecordedCommandListNode &edge = command_list_nodes[node];
+			if (edge.command_index < 0 || uint32_t(edge.command_index) >= command_count || uint32_t(edge.command_index) <= current) {
+				return false;
+			}
+			const uint32_t next = uint32_t(edge.command_index);
+			const uint32_t next_distance = distances[current] + 1;
+			if (next == destination) {
+				r_path_length = next_distance;
+				return true;
+			}
+			if (distances[next] == UINT32_MAX) {
+				distances[next] = next_distance;
+				pending.push_back(next);
+			}
+			node = edge.next_list_index;
 		}
 	}
 	return false;
@@ -2620,7 +2673,7 @@ void RenderingDeviceGraph::add_draw_list_end() {
 	_add_command_to_graph(draw_instruction_list.command_trackers.ptr(), draw_instruction_list.command_tracker_usages.ptr(), draw_instruction_list.command_trackers.size(), command_index, command);
 }
 
-void RenderingDeviceGraph::add_texture_clear_color(RDD::TextureID p_dst, ResourceTracker *p_dst_tracker, const Color &p_color, const RDD::TextureSubresourceRange &p_range) {
+RenderingDeviceGraph::RecordHandle RenderingDeviceGraph::add_texture_clear_color(RDD::TextureID p_dst, ResourceTracker *p_dst_tracker, const Color &p_color, const RDD::TextureSubresourceRange &p_range) {
 	DEV_ASSERT(p_dst_tracker != nullptr);
 
 	int32_t command_index;
@@ -2647,6 +2700,7 @@ void RenderingDeviceGraph::add_texture_clear_color(RDD::TextureID p_dst, Resourc
 	}
 
 	_add_command_to_graph(&p_dst_tracker, &usage, 1, command_index, command);
+	return { graph_instance, uint64_t(tracking_frame), 1, uint32_t(command_index), 0 };
 }
 
 void RenderingDeviceGraph::add_texture_clear_depth_stencil(RDD::TextureID p_dst, ResourceTracker *p_dst_tracker, float p_depth, uint8_t p_stencil, const RDD::TextureSubresourceRange &p_range) {
@@ -2745,7 +2799,7 @@ void RenderingDeviceGraph::add_texture_resolve(RDD::TextureID p_src, ResourceTra
 	_add_command_to_graph(trackers, usages, 2, command_index, command);
 }
 
-void RenderingDeviceGraph::add_texture_update(RDD::TextureID p_dst, ResourceTracker *p_dst_tracker, VectorView<RecordedBufferToTextureCopy> p_buffer_copies, VectorView<ResourceTracker *> p_buffer_trackers) {
+RenderingDeviceGraph::RecordHandle RenderingDeviceGraph::add_texture_update(RDD::TextureID p_dst, ResourceTracker *p_dst_tracker, VectorView<RecordedBufferToTextureCopy> p_buffer_copies, VectorView<ResourceTracker *> p_buffer_trackers) {
 	DEV_ASSERT(p_dst_tracker != nullptr);
 
 	int32_t command_index;
@@ -2780,6 +2834,7 @@ void RenderingDeviceGraph::add_texture_update(RDD::TextureID p_dst, ResourceTrac
 		ResourceUsage usage = RESOURCE_USAGE_COPY_TO;
 		_add_command_to_graph(&p_dst_tracker, &usage, 1, command_index, command);
 	}
+	return { graph_instance, uint64_t(tracking_frame), 1, uint32_t(command_index), 0 };
 }
 
 void RenderingDeviceGraph::add_capture_timestamp(RDD::QueryPoolID p_query_pool, uint32_t p_index) {
