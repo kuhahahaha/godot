@@ -1197,8 +1197,8 @@
     "sha256": "b0625c5e57a3c9600fca220c915c8281077db82d8b0da4877cff95d6e747097f"
   },
   "work/e06-linker-flag-parser-20261029/RECEIPT.md": {
-    "bytes": 1320,
-    "sha256": "5c2027b8e570a885693695d6e70e16ca40e3206e4f0b174a99cd697224150eb1"
+    "bytes": 1629,
+    "sha256": "8e0e7d3faf02ae487418f229a8f62302186a5adaab2fe2d8f06ff2f14d4ece0c"
   },
   "work/e06-linker-flag-parser-20261029/RED_S1.log": {
     "bytes": 1173,
@@ -1239,5 +1239,21 @@
   "work/e06-linker-flag-parser-20261029/RELEASE_VERSION.rc": {
     "bytes": 2,
     "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/e06-linker-flag-parser-20261029/IDENTITY_PACK_PROBE.log": {
+    "bytes": 265,
+    "sha256": "a87886e95c1ceab5f5048e08a2def23061887c684bb9c2f55804019d6ebe6e82"
+  },
+  "work/e06-linker-flag-parser-20261029/IDENTITY_PACK_PROBE.rc": {
+    "bytes": 2,
+    "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+  },
+  "work/e06-linker-flag-parser-20261029/IDENTITY_PATH_PROBE.log": {
+    "bytes": 260,
+    "sha256": "e495e8a238364ee81676925872001a17a2929d74406bdfa429d46f050a053e2d"
+  },
+  "work/e06-linker-flag-parser-20261029/IDENTITY_PATH_PROBE.rc": {
+    "bytes": 2,
+    "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
   }
 }

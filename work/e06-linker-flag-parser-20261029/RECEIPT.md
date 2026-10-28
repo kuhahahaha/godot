@@ -21,6 +21,12 @@ closed flags and carry no operand.
 - Release `--version` and `--help`: both rc0.
 - `git diff --check` on parser/test changes: rc0.
 
+Scripted identity probes using `--path` and `--main-pack` both return rc1
+because this release template intentionally has `disable_path_overrides=true`.
+Those logs are retained as `IDENTITY_PATH_PROBE.log` and
+`IDENTITY_PACK_PROBE.log`; no runtime schema1 identity claim is made from a
+path-dependent probe.
+
 The prior release failure at `-S` and the subsequent `-x` failure are retained
 as red evidence. This closes the parser branch only; it does not claim GPU,
 particle qualification, completion, readback, Ready or G1.
