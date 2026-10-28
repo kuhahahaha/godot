@@ -205,6 +205,16 @@ TEST_CASE("[QualificationNative][Vulkan] render pass creation rejects invalid vi
  CHECK_FALSE(bool(zero_views));
  CHECK_FALSE(bool(too_many_views));
 }
+TEST_CASE("[QualificationNative][Vulkan] BLAS creation rejects an invalid vertex format") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ RenderingDeviceDriver::AccelerationStructureGeometry geometry;
+ geometry.vertex_format=RDD::DATA_FORMAT_MAX;
+ ERR_PRINT_OFF;
+ auto blas=driver.blas_create(VectorView<RenderingDeviceDriver::AccelerationStructureGeometry>(geometry),{});
+ ERR_PRINT_ON;
+ CHECK_FALSE(bool(blas));
+}
 TEST_CASE("[QualificationNative][Vulkan] render pass creation rejects an invalid sample count") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
