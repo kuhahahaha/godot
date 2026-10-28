@@ -1,33 +1,37 @@
 {
-  "status": "candidate only; root adoption required before native implementation",
+  "status": "r2 candidate only; complete producer/record/sampler revision; root independent review/adoption required before implementation",
   "files": {
     "ABI_CANDIDATE.h": {
-      "bytes": 4686,
-      "sha256": "6128a71d8281cbe8dd5f34e5c515b37d82e2e9242ab2f674fc1bd52937ba29f5"
+      "bytes": 13101,
+      "sha256": "706ff30b41eb194ef0c36be896a366348166bfb249b3b834ffdf48c1b58a4378"
     },
     "ABI_LAYOUT.c": {
-      "bytes": 710,
-      "sha256": "2b7b60b11051c48f717e1b4bb10ee9ce984dc4b2bb3a09f384ebe81e73eada2c"
+      "bytes": 23914,
+      "sha256": "f48dfa21416331d56f7e37ca03dfbaee53414aba4a250d2c7b20e610bbaa3909"
     },
     "ABI_LAYOUT.cpp": {
-      "bytes": 710,
-      "sha256": "2b7b60b11051c48f717e1b4bb10ee9ce984dc4b2bb3a09f384ebe81e73eada2c"
+      "bytes": 24,
+      "sha256": "581da41f28f1b234b9ef7b96d2bfaf8258a36d92fde1ed935e5558fcf047c26c"
     },
     "ABI_LAYOUT_RESULT.json": {
-      "bytes": 1751,
-      "sha256": "85d8d474f46bc24accb80dadd16e3462e30f55384fdeb99cfc174eba51c8748e"
+      "bytes": 1754,
+      "sha256": "308d05944cbe1f8aaf86cd81c6d1dc797d369424b84648b2387a35cb7dbc8152"
     },
     "ADOPTION.md": {
-      "bytes": 32083,
-      "sha256": "0be534f37581c658d803992017c7345b78f05a6ac6d962419165f7902a7429b4"
+      "bytes": 31269,
+      "sha256": "9abcd01534576d862bd222e75dbb6d31ee9f3f87f674a04cf9e093f10817511f"
     },
     "PARENT_REVIEW.md": {
-      "bytes": 2321,
-      "sha256": "3d9137971da442e57d20a487c9fe79c2fdaf1df994f30ac3de609085405b1637"
+      "bytes": 3940,
+      "sha256": "b1a0e85abb4b4045f61ebfec5ea8bcb5b72cc98d17ea75fdc82f926240180195"
+    },
+    "R2_TYPED_RECORD_TRANSFER.md": {
+      "bytes": 45930,
+      "sha256": "674c3b5a89114f7c040bc5f39f4c46e02a3d37a0fbc871a7bc4430cec56c2434"
     },
     "STATIC_AUDIT.json": {
-      "bytes": 3391,
-      "sha256": "f82a84a93bbf39347057fe9eab275fc41dbe478bca7e939ae8f45a8a34496641"
+      "bytes": 10034,
+      "sha256": "0e2242aa36f34b163743b4a4fad771e91d250b22c10a963aff65425197cc821b"
     }
   }
 }

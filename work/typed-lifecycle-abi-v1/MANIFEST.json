@@ -17,7 +17,7 @@
   "core/object/object.cpp": "ab720040fa332f3e370e6937007763f6165831909709def86ba3e952e826d7a8",
   "tests/core/object/test_device_exit_library_close.cpp": "1d5bc82848c80dd9ea987ef035f1ce8517d1bf9887ad082f53ebc6acdc455357",
   "work/typed-lifecycle-abi-v1/CURRENT_PAIR_U01_VFX_R01_NEGATIVE_RECEIPT_20251025.md": "c6ab0496164e2741f157768a10ffcc6f0217b630a26d95d3d9762c2e22b79a47",
-  "work/typed-lifecycle-abi-v1/PROGRESS.md": "98feb76a4e003b83458607ae8456b891dfaa61c64d65f97357bab21741febd3a",
+  "work/typed-lifecycle-abi-v1/PROGRESS.md": "4dfc5b7a3547209ce502d630f364e21605a192ceee2f1c2391862c63b25ead53",
   "work/r01-frame-wait-20261026/MANIFEST.json": "6665b770d13d966da423741c69f01a58b562b976c9f94811f3e4b442f2907d64",
   "work/r01-frame-wait-20261026/RECEIPT.md": "90930a0824a3c88582ef533e461b66fc5bc3163bb165a66269e1d773b0d25066",
   "work/r01-frame-wait-20261026/PROGRESS.md": "a3d8d1fb03d674d6d7941b7088dc3bed69655ce36f57178c99ee9bf3edb6570a",
@@ -484,8 +484,13 @@
   "work/current-ange-pair-admission-20261028-r1/RECEIPT.md": "6aa61b832969f7d31905df85250b79acab4156071870c7f0658148c4bc62df4e",
   "work/current-ange-pair-admission-20261028-r1/INDEPENDENT_REVIEW.md": "7d4d3a22945df489f77ebdc455224eb09c382cf5e6d8c8a5faaf3125dd6e39fe",
   "doc/classes/RenderingDevice.xml": "6a1f0ef5ea6e6d4ae074bfec962bb50bf42fec27cd8f8572dd1ea643f5ba5521",
-  "work/e20-native-texture-sampler-candidate-20261028-r1/MANIFEST.json": "8fc0f2b4309045b10f2379b9ca36326e0d7332199d039a9e1f29c240118b8953",
-  "work/e20-native-texture-sampler-candidate-20261028-r1/ADOPTION.md": "0be534f37581c658d803992017c7345b78f05a6ac6d962419165f7902a7429b4",
-  "work/e20-native-texture-sampler-candidate-20261028-r1/ABI_CANDIDATE.h": "6128a71d8281cbe8dd5f34e5c515b37d82e2e9242ab2f674fc1bd52937ba29f5",
-  "work/e20-native-texture-sampler-candidate-20261028-r1/PARENT_REVIEW.md": "3d9137971da442e57d20a487c9fe79c2fdaf1df994f30ac3de609085405b1637"
+  "work/e20-native-texture-sampler-candidate-20261028-r1/MANIFEST.json": "79720d68f4720d84132fb5084b9c527b4549e7195c1d35fa1e3aafc2c28be575",
+  "work/e20-native-texture-sampler-candidate-20261028-r1/ADOPTION.md": "9abcd01534576d862bd222e75dbb6d31ee9f3f87f674a04cf9e093f10817511f",
+  "work/e20-native-texture-sampler-candidate-20261028-r1/ABI_CANDIDATE.h": "706ff30b41eb194ef0c36be896a366348166bfb249b3b834ffdf48c1b58a4378",
+  "work/e20-native-texture-sampler-candidate-20261028-r1/PARENT_REVIEW.md": "b1a0e85abb4b4045f61ebfec5ea8bcb5b72cc98d17ea75fdc82f926240180195",
+  "work/e20-native-texture-sampler-candidate-20261028-r1/ABI_LAYOUT.c": "f48dfa21416331d56f7e37ca03dfbaee53414aba4a250d2c7b20e610bbaa3909",
+  "work/e20-native-texture-sampler-candidate-20261028-r1/R2_TYPED_RECORD_TRANSFER.md": "674c3b5a89114f7c040bc5f39f4c46e02a3d37a0fbc871a7bc4430cec56c2434",
+  "work/e20-native-texture-sampler-candidate-20261028-r1/STATIC_AUDIT.json": "0e2242aa36f34b163743b4a4fad771e91d250b22c10a963aff65425197cc821b",
+  "work/e20-native-texture-sampler-candidate-20261028-r1/ABI_LAYOUT_RESULT.json": "308d05944cbe1f8aaf86cd81c6d1dc797d369424b84648b2387a35cb7dbc8152",
+  "work/e20-native-texture-sampler-candidate-20261028-r1/ABI_LAYOUT.cpp": "581da41f28f1b234b9ef7b96d2bfaf8258a36d92fde1ed935e5558fcf047c26c"
 }

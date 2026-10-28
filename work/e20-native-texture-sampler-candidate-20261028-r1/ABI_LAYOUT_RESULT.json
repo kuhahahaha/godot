@@ -1,9 +1,10 @@
 {
-  "scope": "uninstalled candidate C/C++ syntax and static layouts only; no native implementation or runtime",
+  "scope": "r2 uninstalled candidate: C/C++ syntax and all18 POD sizes/offsets only; no implementation/runtime",
+  "candidate_sha256": "706ff30b41eb194ef0c36be896a366348166bfb249b3b834ffdf48c1b58a4378",
   "rows": [
     {
       "arch": "arm64",
-      "language": "C11",
+      "language": "c11",
       "command": [
         "clang",
         "-arch",
@@ -19,7 +20,7 @@
     },
     {
       "arch": "arm64",
-      "language": "C++17",
+      "language": "c++17",
       "command": [
         "clang++",
         "-arch",
@@ -35,7 +36,7 @@
     },
     {
       "arch": "x86_64",
-      "language": "C11",
+      "language": "c11",
       "command": [
         "clang",
         "-arch",
@@ -51,7 +52,7 @@
     },
     {
       "arch": "x86_64",
-      "language": "C++17",
+      "language": "c++17",
       "command": [
         "clang++",
         "-arch",
@@ -65,6 +66,5 @@
       "rc": 0,
       "output": ""
     }
-  ],
-  "candidate_sha256": "6128a71d8281cbe8dd5f34e5c515b37d82e2e9242ab2f674fc1bd52937ba29f5"
+  ]
 }
