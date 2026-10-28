@@ -3017,6 +3017,11 @@ void RenderingDeviceDriverVulkan::command_pipeline_barrier(
 		VectorView<BufferBarrier> p_buffer_barriers,
 		VectorView<TextureBarrier> p_texture_barriers,
 		VectorView<AccelerationStructureBarrier> p_acceleration_structure_barriers) {
+	for (uint32_t i = 0; i < p_texture_barriers.size(); i++) {
+		ERR_FAIL_INDEX(p_texture_barriers[i].prev_layout, TEXTURE_LAYOUT_MAX);
+		ERR_FAIL_INDEX(p_texture_barriers[i].next_layout, TEXTURE_LAYOUT_MAX);
+	}
+
 	VkMemoryBarrier *vk_memory_barriers = ALLOCA_ARRAY(VkMemoryBarrier, p_memory_barriers.size());
 	for (uint32_t i = 0; i < p_memory_barriers.size(); i++) {
 		vk_memory_barriers[i] = {};
@@ -5821,6 +5826,9 @@ void RenderingDeviceDriverVulkan::command_copy_buffer(CommandBufferID p_cmd_buff
 }
 
 void RenderingDeviceDriverVulkan::command_copy_texture(CommandBufferID p_cmd_buffer, TextureID p_src_texture, TextureLayout p_src_texture_layout, TextureID p_dst_texture, TextureLayout p_dst_texture_layout, VectorView<TextureCopyRegion> p_regions) {
+	ERR_FAIL_INDEX(p_src_texture_layout, TEXTURE_LAYOUT_MAX);
+	ERR_FAIL_INDEX(p_dst_texture_layout, TEXTURE_LAYOUT_MAX);
+
 	VkImageCopy *vk_copy_regions = ALLOCA_ARRAY(VkImageCopy, p_regions.size());
 	for (uint32_t i = 0; i < p_regions.size(); i++) {
 		_texture_copy_region_to_vk(p_regions[i], &vk_copy_regions[i]);
@@ -5843,6 +5851,9 @@ void RenderingDeviceDriverVulkan::command_copy_texture(CommandBufferID p_cmd_buf
 }
 
 void RenderingDeviceDriverVulkan::command_resolve_texture(CommandBufferID p_cmd_buffer, TextureID p_src_texture, TextureLayout p_src_texture_layout, uint32_t p_src_layer, uint32_t p_src_mipmap, TextureID p_dst_texture, TextureLayout p_dst_texture_layout, uint32_t p_dst_layer, uint32_t p_dst_mipmap) {
+	ERR_FAIL_INDEX(p_src_texture_layout, TEXTURE_LAYOUT_MAX);
+	ERR_FAIL_INDEX(p_dst_texture_layout, TEXTURE_LAYOUT_MAX);
+
 	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
 	const TextureInfo *src_tex_info = (const TextureInfo *)p_src_texture.id;
 	const TextureInfo *dst_tex_info = (const TextureInfo *)p_dst_texture.id;
@@ -5873,6 +5884,8 @@ void RenderingDeviceDriverVulkan::command_resolve_texture(CommandBufferID p_cmd_
 }
 
 void RenderingDeviceDriverVulkan::command_clear_color_texture(CommandBufferID p_cmd_buffer, TextureID p_texture, TextureLayout p_texture_layout, const Color &p_color, const TextureSubresourceRange &p_subresources) {
+	ERR_FAIL_INDEX(p_texture_layout, TEXTURE_LAYOUT_MAX);
+
 	VkClearColorValue vk_color = {};
 	memcpy(&vk_color.float32, p_color.components, sizeof(VkClearColorValue::float32));
 
@@ -5890,6 +5903,8 @@ void RenderingDeviceDriverVulkan::command_clear_color_texture(CommandBufferID p_
 }
 
 void RenderingDeviceDriverVulkan::command_clear_depth_stencil_texture(CommandBufferID p_cmd_buffer, TextureID p_texture, TextureLayout p_texture_layout, float p_depth, uint8_t p_stencil, const TextureSubresourceRange &p_subresources) {
+	ERR_FAIL_INDEX(p_texture_layout, TEXTURE_LAYOUT_MAX);
+
 	VkClearDepthStencilValue vk_depth_stencil = {};
 	vk_depth_stencil.depth = p_depth;
 	vk_depth_stencil.stencil = p_stencil;
@@ -5908,6 +5923,8 @@ void RenderingDeviceDriverVulkan::command_clear_depth_stencil_texture(CommandBuf
 }
 
 void RenderingDeviceDriverVulkan::command_copy_buffer_to_texture(CommandBufferID p_cmd_buffer, BufferID p_src_buffer, TextureID p_dst_texture, TextureLayout p_dst_texture_layout, VectorView<BufferTextureCopyRegion> p_regions) {
+	ERR_FAIL_INDEX(p_dst_texture_layout, TEXTURE_LAYOUT_MAX);
+
 	const TextureInfo *tex_info = (const TextureInfo *)p_dst_texture.id;
 
 	if (tex_info->is_subsampled) {
@@ -5936,6 +5953,8 @@ void RenderingDeviceDriverVulkan::command_copy_buffer_to_texture(CommandBufferID
 }
 
 void RenderingDeviceDriverVulkan::command_copy_texture_to_buffer(CommandBufferID p_cmd_buffer, TextureID p_src_texture, TextureLayout p_src_texture_layout, BufferID p_dst_buffer, VectorView<BufferTextureCopyRegion> p_regions) {
+	ERR_FAIL_INDEX(p_src_texture_layout, TEXTURE_LAYOUT_MAX);
+
 	const TextureInfo *tex_info = (const TextureInfo *)p_src_texture.id;
 
 	uint32_t pixel_size = get_image_format_pixel_size(tex_info->rd_format);

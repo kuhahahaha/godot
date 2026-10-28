@@ -178,6 +178,23 @@ TEST_CASE("[QualificationNative][Vulkan] texture creation rejects an invalid tex
  CHECK_FALSE(bool(texture));
  CHECK(TestQualificationVulkanAllocationAccess::allocations(driver)==before);
 }
+TEST_CASE("[QualificationNative][Vulkan] texture layout commands reject invalid layouts before resource access") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ const auto invalid_layout=static_cast<RenderingDeviceDriver::TextureLayout>(RDD::TEXTURE_LAYOUT_MAX);
+ RenderingDeviceDriver::TextureBarrier barrier;
+ barrier.prev_layout=invalid_layout;
+ ERR_PRINT_OFF;
+ driver.command_pipeline_barrier(RenderingDeviceDriver::CommandBufferID(),{}, {}, {}, {}, VectorView<RenderingDeviceDriver::TextureBarrier>(barrier),{});
+ driver.command_copy_texture(RenderingDeviceDriver::CommandBufferID(),{},invalid_layout,{},RDD::TEXTURE_LAYOUT_UNDEFINED,{});
+ driver.command_resolve_texture(RenderingDeviceDriver::CommandBufferID(),{},invalid_layout,0,0,{},RDD::TEXTURE_LAYOUT_UNDEFINED,0,0);
+ driver.command_clear_color_texture(RenderingDeviceDriver::CommandBufferID(),{},invalid_layout,Color(),{});
+ driver.command_clear_depth_stencil_texture(RenderingDeviceDriver::CommandBufferID(),{},invalid_layout,0.0f,0,{});
+ driver.command_copy_buffer_to_texture(RenderingDeviceDriver::CommandBufferID(),{}, {},invalid_layout,{});
+ driver.command_copy_texture_to_buffer(RenderingDeviceDriver::CommandBufferID(),{},invalid_layout,{},{});
+ ERR_PRINT_ON;
+ CHECK(true);
+}
 TEST_CASE("[QualificationNative][Vulkan] render pass creation rejects an invalid sample count") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
