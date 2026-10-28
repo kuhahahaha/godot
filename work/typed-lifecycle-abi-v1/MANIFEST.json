@@ -5,8 +5,8 @@
   "core/config/engine.cpp": "52d5b1e83f60d3162746861042a584f799b99fd685627748225e39c4cb69f7e7",
   "core/config/engine_build_identity.h": "b2c39fcc47e22209607c3954386bf1d2c944909e06aed58168f24963b12baa16",
   "core/engine_build_identity.py": {
-    "bytes": 29945,
-    "sha256": "ff05238d5005a20e4b8cc59c6dc09d20a0437f4ebf3c0f3d95b7bd6ade78c5e6"
+    "bytes": 30024,
+    "sha256": "f1667f6f16b96d6a19e74c21e49fed659ff4b9ed59d59ce4a30f61d5c70a3737"
   },
   "core/extension/gdextension_guard_enrollment.cpp": "54a7633286c8d408a02e6e60393c0d6d52e9e646e99a91acffecfb2de5c537e8",
   "core/extension/gdextension_interface.cpp": "d3bc8b2ed560d69c289331d7065cf97a1b45ce21f254c6ac5fdf82b0e5cbf0fa",
@@ -26,7 +26,10 @@
   "main/main.cpp": "ba7027f3158f1faf5e3e69cb0702156b49642adff97f6e4c045ba5aa26057ce1",
   "main/main.h": "f61c4e9734c07582f711d6a4b47b20a84f685ce835e6f309268fc3ed11df31de",
   "modules/gdscript/register_types.cpp": "4dabddcec4371c8e487d98f17125417555d75a93d07d03cb42da4f956332e4f7",
-  "platform/macos/SCsub": "897977415336a88a84d5d0245dad7740b6dd4e8fd566e2d13d36fb8dc3491572",
+  "platform/macos/SCsub": {
+    "bytes": 2062,
+    "sha256": "c9684d9ef7af3ae95c215c7f62eb8e8091184c2c504ce38b7a28ce2aa36040e0"
+  },
   "scene/register_scene_types.cpp": "f799946f8e13bdc6efb6df832e37b0a3fbaa899ea81800810fee2e52709c82b7",
   "scene/resources/curve.cpp": "4f6f1cf26f384e7b1de68fcdc76f32b4d4a714a4b9a610bbe22e3fd4eb4b2240",
   "scene/resources/curve.h": "19e900a263651c34f7a7dd7c5937e643fc2c9e3ed5e22732a325229dca590a4e",
@@ -77,12 +80,12 @@
     "sha256": "0ba51af75c904b01d84f388c4f7771a6856bb564c0d38fa96487a1cae10dc84c"
   },
   "work/e06-loaded-core-identity-20261028-r1/QUEUE.md": {
-    "bytes": 2242,
-    "sha256": "ad1f05a9d90f47d6309fb021185b44a5aafc64e3a3f73308d9a1ee16e1f67485"
+    "bytes": 2453,
+    "sha256": "1d49cada6a5f013b5737cf43678f209581718cf51bb5289cc49b446f0a363882"
   },
   "work/e06-loaded-core-identity-20261028-r1/RECEIPT.md": {
-    "bytes": 9391,
-    "sha256": "29ac04d8fb21e7ab7389c8036c7e5cf073f2d7ba7925e05e4f9afff9b84aa59e"
+    "bytes": 10580,
+    "sha256": "06eba18ba81d3c70afe558743e4d6319b45bb8970936d7c28745258f156293f4"
   },
   "work/e06-loaded-core-identity-20261028-r1/STATIC_ARCHIVE_CHECK_R6.json": {
     "bytes": 789,
@@ -96,6 +99,10 @@
     "bytes": 789,
     "sha256": "8b728ce55db59b67d40b0c9b73bf0c572b7e0f88655f4b7575649ecbcb96da0b"
   },
+  "work/e06-loaded-core-identity-20261028-r1/STATIC_ARCHIVE_CHECK_R9.json": {
+    "bytes": 789,
+    "sha256": "579ede0dc5417cebd9ff8ebfcbe27d9a20446957da33bcc79c670696d75315be"
+  },
   "work/e06-loaded-core-identity-20261028-r1/STATIC_HASH_R10.txt": {
     "bytes": 65,
     "sha256": "b7653db30400c6d7cdfd5d3fd5646f912e752c80fbd3c541e0146f6163b1f39e"
@@ -108,6 +115,14 @@
     "bytes": 65,
     "sha256": "e44b9630f8da2b71b60ff24e64cd1e1a68b3daa97ac02d42559f46af5f44cbdb"
   },
+  "work/e06-loaded-core-identity-20261028-r1/STATIC_HASH_R13.txt": {
+    "bytes": 65,
+    "sha256": "ffc1a986f488b25ef977178a90dccfb65a5cb3f1b9af51bda5a84446bda3723b"
+  },
+  "work/e06-loaded-core-identity-20261028-r1/STATIC_HASH_R14.txt": {
+    "bytes": 65,
+    "sha256": "ffc1a986f488b25ef977178a90dccfb65a5cb3f1b9af51bda5a84446bda3723b"
+  },
   "work/e06-loaded-core-identity-20261028-r1/STATIC_HASH_R9.txt": {
     "bytes": 65,
     "sha256": "b7653db30400c6d7cdfd5d3fd5646f912e752c80fbd3c541e0146f6163b1f39e"
@@ -115,6 +130,38 @@
   "work/e06-loaded-core-identity-20261028-r1/STATIC_RUNTIME_INPUTS_R6.json": {
     "bytes": 1342,
     "sha256": "d299e6f5a689505f329d27c09349392dcbeee5be0795cfedbe847701cbe2e366"
+  },
+  "work/e06-loaded-core-identity-20261028-r1/STATIC_TEMPLATE_ARCHIVE_CHECK_R1.json": {
+    "bytes": 794,
+    "sha256": "7d2fd40037f20d7a0c7c1e9db765a4a343243c031c697d1522ed58802224b5ed"
+  },
+  "work/e06-loaded-core-identity-20261028-r1/STATIC_TEMPLATE_BUILD_R1.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/e06-loaded-core-identity-20261028-r1/STATIC_TEMPLATE_HOST_RUN_R2.log": {
+    "bytes": 338,
+    "sha256": "b18aa181929d42808edce8d9b455a6d4fd31ba030f832b6945467e5fc9762b1c"
+  },
+  "work/e06-loaded-core-identity-20261028-r1/STATIC_TEMPLATE_HOST_UNAVAILABLE.json": {
+    "bytes": 320,
+    "sha256": "1bbf4c75179358d9d370f739e747ca0cb4cac4b14e8284807220772954eabeb2"
+  },
+  "work/e06-loaded-core-identity-20261028-r1/STATIC_TEMPLATE_IDENTITY_HOST_RUN.log": {
+    "bytes": 309,
+    "sha256": "05bf124126103b4e745f61bddf8f2705ad54fe471bbe21563c9aba4d99e3859d"
+  },
+  "work/e06-loaded-core-identity-20261028-r1/STATIC_TEMPLATE_IDENTITY_HOST_RUN.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/e06-loaded-core-identity-20261028-r1/STATIC_VARIANT_IDENTITY_TESTS.log": {
+    "bytes": 119,
+    "sha256": "226e80361caa887fecb338fc2a097b2f45c281b0375d4d418d1c2ecc8cf85e3b"
+  },
+  "work/e06-loaded-core-identity-20261028-r1/STATIC_VARIANT_IDENTITY_TESTS.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
   },
   "work/e06-loaded-core-shared-20261028-r1/INDEPENDENT_REVIEW.md": "667dba8900b2aba696dde6878cea9a1db7f7e83ce2c18c2a4d24463fd9ef03c5",
   "work/e06-loaded-core-shared-20261028-r1/MANIFEST.json": "1438715b801a76ce8375524be53e81c38ccdb0a4a80a24c294a921c4c0dd1d8f",
@@ -631,8 +678,8 @@
   "work/sdk-unloadable-active-context-20261028-r3/threads-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "work/typed-lifecycle-abi-v1/CURRENT_PAIR_U01_VFX_R01_NEGATIVE_RECEIPT_20251025.md": "c6ab0496164e2741f157768a10ffcc6f0217b630a26d95d3d9762c2e22b79a47",
   "work/typed-lifecycle-abi-v1/PROGRESS.md": {
-    "bytes": 129930,
-    "sha256": "18d29610e3fbbaea2937766e8e038503e6293b2b9762478574413cc47b275a25"
+    "bytes": 130993,
+    "sha256": "2d682e832694e0408886314bccec7424eae2ac03a37cd26f7bda73023f127c7b"
   },
   "work/typed-lifecycle-abi-v1/gdextension_interface.h": "07ee07f19e31fe5c22154edbba73ce3cb793b87524add5d9dc0c9468815c9a29",
   "work/typed-lifecycle-abi-v1/native-current-open-items-20261028/COMMAND_OUTPUT.json": "feccb44a82af5439c60b4fb8a6f7c8fc8923f9fd97e2bb169099294c67a185ef",

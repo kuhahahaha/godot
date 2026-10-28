@@ -380,8 +380,9 @@ def install_macos(env, program):
             raise ValueError("static aggregate has missing archive inputs")
         process_env = execution_environment(env)
         libtool = subprocess.check_output(["/usr/bin/xcrun", "--find", "libtool"], text=True, env=process_env).strip()
-        final_path = program[0].abspath.replace("libgodot.platform", "libgodot") + env["LIBSUFFIX"]
-        generated = env.File("#core/engine_build_identity.static.gen.cpp")
+        final_path = program[0].abspath.replace("libgodot.platform", "libgodot")
+        variant = env["LIBSUFFIX"].replace(".", "_")
+        generated = env.File("#core/engine_build_identity.static" + variant + ".gen.cpp")
         stamp = env.Object(generated)
         input_paths = [x.abspath for x in archive_inputs]
         arguments = [{"kind": "Tool", "role": "libtool"}, "-static", "-D", "-o", {"kind": "Output"}]
@@ -395,8 +396,8 @@ def install_macos(env, program):
         values = {"arguments": arguments, "options": options, "platform": env["platform"],
                   "architecture": env["arch"], "target_kind": kind, "builtin_glslang": True}
         tools, tool_configuration = _tool_inputs(env, libtool, process_env)
-        record = env.File("#core/engine_build_identity.static.gen.json")
-        direct = env.File("#core/engine_build_selection.static.gen.json")
+        record = env.File("#core/engine_build_identity.static" + variant + ".gen.json")
+        direct = env.File("#core/engine_build_selection.static" + variant + ".gen.json")
         def generate(target, source, env):
             configuration = list(tool_configuration)
             configuration.append(("sdk.settings.sha256", _content(settings)["sha256"]))
