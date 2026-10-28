@@ -1,0 +1,14 @@
+; Minimal project for static template host probe
+config_version=5
+
+[application]
+config/name="StaticTemplateDebugProbe"
+run/main_scene="res://main.tscn"
+
+[display]
+window/size/viewport_width=64
+window/size/viewport_height=64
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"

@@ -13,6 +13,12 @@
   },
   "link_command": "clang++ -std=c++17 -ObjC++ ... bin/libgodot.macos.template_debug.dev.arm64.a -L/opt/homebrew/Cellar/molten-vk/1.4.2/lib -lMoltenVK ...",
   "nopath_host_observation": "startup reaches missing .pck/project-data diagnostic and does not produce a lifecycle result; process was terminated after bounded observation",
+  "packed_host_binary": "static-template-debug-identity-host/host_runtime_nopath",
+  "packed_host_log": "STATIC_TEMPLATE_DEBUG_HOST_PACKED_R1.log",
+  "packed_host_rc": 0,
+  "packed_observation": "start/iteration/get_version_info/destroy returned exact schema1 identity and STATIC_HOST_DESTROY_RETURNED",
+  "packed_project": "static-template-debug-probe/static_template_debug_probe.pck",
+  "packed_project_sha256": "1cdad1929fc882c2044a21b5049d5af3b9bea2a5acdb6e5235018bf8826c0aff",
   "path_host_rc": 82,
   "work/e06-loaded-core-identity-20261028-r1/static-template-debug-identity-host/host_runtime_mvk": {
     "bytes": 180002800,
