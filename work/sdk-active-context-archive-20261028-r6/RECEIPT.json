@@ -1,0 +1,33 @@
+{
+  "status": "DEBUG_SDK_ARCHIVE_NATIVE_RELOAD_GREEN_CANONICAL_DSO_BUILD_IN_FLIGHT",
+  "archive": {
+    "path": "/Users/macbookair/Documents/Work/ANGE/godot-cpp/bin/libgodot-cpp.macos.template_debug.arm64.a",
+    "sha256": "2fd1fc5da8605d618f2d426a046be0c76f64193585c23530c8d54b9cab422bc0",
+    "bytes": 45388448
+  },
+  "sdk_commit": "a3d64535f2a53595ba653d678e21f45de4116665",
+  "link_scope": "control/test TUs plus rebuilt SDK static archive only; godot.cpp and ClassDB.cpp are not compiled into these controls as overlays",
+  "verified": [
+    "actual archive Metal unload/reload/unload0; destructor before both manager returns",
+    "archive accessor simultaneous thread isolation0",
+    "existing SDK callback/reentry tests0 from archive",
+    "unscheduled Tree original negative030/5/78 with no early frees/destructor",
+    "archive contains accessor T symbol and lacks original active-context TLS wrapper symbol",
+    "original SDK archive/input pins stable throughout controls"
+  ],
+  "product_build": {
+    "owner_pid": 34649,
+    "cwd": "/Users/macbookair/Documents/Work/ANGE",
+    "command": "scons -Q -j4",
+    "log": "/Users/macbookair/Documents/Work/ANGE/work/e09-response-classification-integration-20261028/BUILD.log",
+    "observed": "live, compiling src/godot/builder; full terminal rc unavailable at checkpoint",
+    "another_builder_started": false
+  },
+  "remaining": [
+    "matching canonical Debug DSO terminal rc/current symbol proof",
+    "Release SDK/archive/DSO matching build",
+    "canonical actual ANGE complete cohort and production qualification joins",
+    "independent review and full native/G1 qualification"
+  ],
+  "review": "SELF_REVIEW.md author only"
+}
