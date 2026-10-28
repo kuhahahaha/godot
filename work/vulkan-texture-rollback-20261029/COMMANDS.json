@@ -268,5 +268,70 @@
     "command": "bin/godot.macos.template_release.arm64 --version",
     "returncode": 0,
     "summary": "4.7.2.stable.custom_build.9a61e804e"
+  },
+  "r10_red_buffer_format": {
+    "command": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case=\"[QualificationNative][Vulkan] direct buffer format rejects invalid input\"",
+    "returncode": 134,
+    "summary": "RED: invalid DATA_FORMAT_MAX buffer format dereferenced a null buffer and SIGSEGV"
+  },
+  "r10_red_shareable_format": {
+    "command": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case=\"[QualificationNative][Vulkan] texture creation rejects an invalid shareable format\"",
+    "returncode": 134,
+    "summary": "RED: invalid shareable format published a texture and VMA teardown aborted"
+  },
+  "r10_debug_build": {
+    "command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2 platform=macos target=editor dev_build=yes tests=yes builtin_glslang=yes",
+    "returncode": 0,
+    "summary": "Debug build with buffer/shareable format preflight rc0"
+  },
+  "r10_buffer_format": {
+    "command": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case=\"[QualificationNative][Vulkan] direct buffer format rejects invalid input\"",
+    "returncode": 0,
+    "summary": "1 case / 3 assertions"
+  },
+  "r10_shareable_format": {
+    "command": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case=\"[QualificationNative][Vulkan] texture creation rejects an invalid shareable format\"",
+    "returncode": 0,
+    "summary": "1 case / 3 assertions"
+  },
+  "r10_vulkan_regression": {
+    "command": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case=\"[QualificationNative][Vulkan]*\"",
+    "returncode": 0,
+    "summary": "7 cases / 39 assertions"
+  },
+  "r10_k03_p2": {
+    "command": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case=\"[K03][P2]*\"",
+    "returncode": 0,
+    "summary": "22 cases / 350 assertions"
+  },
+  "r10_ubsan_build": {
+    "command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2 platform=macos target=editor dev_build=yes tests=yes use_ubsan=yes builtin_glslang=yes",
+    "returncode": 0,
+    "summary": "actual use_ubsan=yes build rc0"
+  },
+  "r10_ubsan_buffer_format": {
+    "command": "bin/godot.macos.editor.dev.arm64.san --headless --test --test-case=\"[QualificationNative][Vulkan] direct buffer format rejects invalid input\"",
+    "returncode": 0,
+    "summary": "1 case / 3 assertions"
+  },
+  "r10_ubsan_shareable_format": {
+    "command": "bin/godot.macos.editor.dev.arm64.san --headless --test --test-case=\"[QualificationNative][Vulkan] texture creation rejects an invalid shareable format\"",
+    "returncode": 0,
+    "summary": "1 case / 3 assertions"
+  },
+  "r10_ubsan_vulkan_regression": {
+    "command": "bin/godot.macos.editor.dev.arm64.san --headless --test --test-case=\"[QualificationNative][Vulkan]*\"",
+    "returncode": 0,
+    "summary": "7 cases / 39 assertions"
+  },
+  "r10_release_build": {
+    "command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2 platform=macos target=template_release dev_build=no tests=no builtin_glslang=yes",
+    "returncode": 0,
+    "summary": "template_release rc0"
+  },
+  "r10_release_version": {
+    "command": "bin/godot.macos.template_release.arm64 --version",
+    "returncode": 0,
+    "summary": "4.7.2.stable.custom_build.d08b51635"
   }
 }

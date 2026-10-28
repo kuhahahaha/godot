@@ -39,3 +39,8 @@ The vertex-format guard executes before resource allocation, so invalid input
 cannot publish a native vertex format or leave allocator pages alive. RED,
 Debug, actual UBSan and Release evidence stays within the Vulkan driver input
 boundary and does not broaden lifecycle authority.
+
+
+The two guards execute before native buffer dereference or image allocation.
+RED/Debug/UBSan/Release evidence is bounded to input rejection and allocation
+safety; no owner or lifecycle authority is introduced.

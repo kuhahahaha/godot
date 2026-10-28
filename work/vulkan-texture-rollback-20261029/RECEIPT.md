@@ -88,3 +88,18 @@ version probe are rc0. R9 artifacts carry the 9a61e804e build identity; source
 hashes pin the follow-up source commit in SOURCE_MANIFEST.json. This remains
 bounded direct input validation only; no qualification, completion, readback,
 Ready or G1 claim is made.
+
+## Direct buffer and shareable-format validation
+
+A RED direct-driver buffer test passed DATA_FORMAT_MAX with an empty BufferID;
+the old path dereferenced the buffer and SIGSEGVed. A second RED test supplied
+an invalid shareable format to texture_create; the old path published a
+texture and aborted on VMA teardown. The driver now rejects the buffer format
+before dereference and preflights every shareable format before image
+allocation. Debug focused is 1/3 for each new case, Vulkan allocation
+regression is 7 cases / 39 assertions, K03/P2 remains 22/350, and actual
+use_ubsan=yes repeats 1/3, 1/3 and 7/39, all rc0. The template_release
+rebuild/version probe is rc0. R10 artifacts carry the d08b51635c build
+identity; source hashes pin the follow-up source commit in
+SOURCE_MANIFEST.json. This is direct input validation only; no qualification,
+completion, readback, Ready or G1 claim is made.
