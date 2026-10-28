@@ -1,0 +1,7 @@
+[
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/qualification-retired-upload-control-20261028-r1/godot-source",
+  "--disable-crash-handler",
+  "--headless",
+  "--test",
+  "--source-file=*test_qualification_physical.cpp"
+]

@@ -1,11 +1,60 @@
 #include "tests/test_macros.h"
 #include <thread>
+#include "core/os/thread.h"
+#include "core/crypto/crypto_core.h"
 #include "servers/rendering/rendering_device.h"
 #include "core/extension/gdextension_qualification_internal.h"
 #include "tests/servers/rendering/transfer_test_driver_base.h"
 TEST_FORCE_LINK(test_qualification_physical)
 class TestQualificationPhysicalAccess {
 public:
+ static void retired_prepared_upload(RenderingDevice &device, RenderingDeviceDriver &driver) {
+  using namespace GDExtensionDeviceExit;
+  // Original cells are fixture-enrolled; calls below exercise the original
+  // API lifecycle. This CPU control grants no production/native authority.
+  auto *registry=memnew(Registry);auto *previous=RenderingDevice::singleton;
+  RenderingDevice::singleton=&device;device.is_main_instance=true;device.render_thread_id=Thread::get_caller_id();
+  registry->instance=71;auto &record=registry->records[0];record.owner_thread=Thread::get_caller_id();record.snapshot.library_generation=1;record.guard_enrollment=GuardEnrollment::QUALIFIED;record.private_refs=1;
+  auto &d=registry->device_records[0];d.object=&device;d.live=true;d.epoch=1;d.execution_thread=Thread::get_caller_id();d.refs=1;
+  struct Holder:HolderRetirement{Holder():HolderRetirement(RecordRef{}){}~Holder()=default;} holder;holder.generation=1;holder.qualification_children=1;
+  auto *bridge=memnew(Registry::QualificationBridge);bridge->serial=11;bridge->epoch=1;bridge->holder=&holder;registry->qualification_bridges[0]=bridge;
+  const GDExtensionQualificationBridgeRefV1 ref{71,11};
+  device.draw_graph.initialize(&driver,[](RenderingDeviceDriver *,VectorView<RenderingDeviceDriver::AttachmentLoadOp>,VectorView<RenderingDeviceDriver::AttachmentStoreOp>,void *){return RenderingDeviceDriver::RenderPassID();},1,RenderingDeviceDriver::CommandQueueFamilyID(1),0);device.draw_graph.begin();
+  GDExtensionStorageCreateRequestV1 create{{1,16,0},128,3,1,41,1,0};GDExtensionStorageBackingV1 backing={};
+  REQUIRE(registry->qualification_storage_create(ref,&create,&backing).native_error==OK);
+  uint8_t bytes[32]={};GDExtensionQualificationUploadPlanV1 plan={};plan.abi={1,16,0};plan.role=7;plan.owner_kind=GDEXTENSION_QUALIFICATION_UPLOAD_OWNER_E05_V1;plan.rid=backing.rid;plan.backing_serial=backing.backing_serial;plan.byte_size=sizeof(bytes);plan.e05_backing=backing.backing;
+  REQUIRE(CryptoCore::sha256(bytes,sizeof(bytes),plan.payload_digest)==OK);
+  GDExtensionQualificationUploadPrepareV1 prepare={};prepare.abi={1,16,0};prepare.record_generation=37;prepare.request_nonce=39;prepare.library_generation=1;prepare.qualification_session_serial=7;prepare.parent_serial=31;prepare.reservation_serial=97;prepare.attempt=prepare.upload_count=prepare.max_segments=1;prepare.expected_result_bytes=16;
+  GDExtensionQualificationTicketRefV1 ticket_ref={};GDExtensionQualificationReportV1 report={};
+  REQUIRE(registry->qualification_prepare_uploads(ref,&prepare,&plan,1,&ticket_ref,&report).native_error==OK);
+  auto *ticket=bridge->tickets[0];REQUIRE(ticket!=nullptr);LocalVector<RID> pins;pins.push_back(RID::from_uint64(backing.rid));
+  REQUIRE(device._qualification_pin_resources(ticket,pins)==OK);CHECK(ticket->physical_uses.size()==1);
+  registry->qualification_ticket_publish(ticket,&device);CHECK(ticket->physically_retired.load());CHECK(ticket->resource_pins.is_empty());CHECK_FALSE(ticket->admission_closed.load());
+  GDExtensionQualificationUploadRequestV1 upload={};upload.abi={1,16,0};upload.record_generation=37;upload.parent_serial=31;upload.rid=plan.rid;upload.backing_serial=plan.backing_serial;upload.byte_size=sizeof(bytes);upload.role=plan.role;upload.owner_kind=plan.owner_kind;upload.e05_backing=plan.e05_backing;upload.expected_revision=ticket->report.revision;memcpy(upload.payload_digest,plan.payload_digest,32);
+  GDExtensionQualificationRtConfigV1 config{{1,40,0},1,312,200,1,256};REQUIRE(registry->qualification_rt_configure(ref,&config).native_error==OK);
+  alignas(8) uint8_t payload[48]={};memcpy(payload,&ticket_ref,16);memcpy(payload+16,bytes,sizeof(bytes));
+  GDExtensionQualificationRtRequestV1 header{{1,56,0},8,0,1,sizeof(payload),sizeof(upload),sizeof(GDExtensionQualificationUploadReportV1),1,0};GDExtensionQualificationRtRefV1 rt={};
+  REQUIRE(registry->qualification_rt_reserve(ref,&header,&upload,payload,&rt).native_error==OK);CHECK(ticket->accepted_rt_refs==1);
+  REQUIRE(registry->qualification_upload_destination(bridge,&device,plan)==OK);
+  GDExtensionStorageRetireRequestV1 retire{{1,16,0},backing.backing,backing.rid,backing.backing_serial,3,1,41,2,0};GDExtensionStorageRetireRefV1 retired={};GDExtensionStorageRetireReportV1 retired_report={};
+  REQUIRE(registry->qualification_storage_retire(ref,&retire,&retired,&retired_report).native_error==OK);
+  CHECK_FALSE(device.storage_buffer_owner.owns(RID::from_uint64(backing.rid)));
+  GDExtensionQualificationUploadSegmentV1 segment={};GDExtensionQualificationUploadReportV1 upload_report={};
+  auto refused=registry->qualification_upload(ref,ticket_ref,&upload,bytes,sizeof(bytes),&segment,1,&upload_report);
+  CHECK(refused.native_error==ERR_INVALID_DATA);CHECK(refused.reason==16);CHECK(upload_report.revision==0);CHECK(ticket->graphs.is_empty());CHECK(ticket->natives.is_empty());CHECK(device.draw_graph.qualification_command_count()==0);
+  CHECK(registry->qualification_release(ref,ticket_ref).native_error==ERR_BUSY);
+  REQUIRE(registry->qualification_rt_release(ref,rt).native_error==OK);CHECK(ticket->accepted_rt_refs==0);
+  REQUIRE(registry->qualification_release(ref,ticket_ref).native_error==OK);CHECK(registry->qualification_release(ref,ticket_ref).reason==17);
+  device._free_pending_resources(0);
+  // Drive the original synchronous maintenance step on this fixture Registry;
+  // the global RenderingServer scheduler belongs to the global Registry.
+  registry->qualification_retire_step(bridge,&device,bridge->storage[0]->serial,1);
+  const GDExtensionQualificationBudgetV1 budget{{1,16,0},1,1000,0};
+  REQUIRE(registry->qualification_storage_retire_observe(ref,retired,&budget,&retired_report).native_error==OK);CHECK(retired_report.state==1);
+  REQUIRE(registry->qualification_storage_retire_release(ref,retired).native_error==OK);CHECK(bridge->children==0);CHECK(record.private_refs==1);
+  REQUIRE(registry->qualification_close(ref).native_error==OK);CHECK(registry->qualification_bridges[0]==nullptr);CHECK(holder.qualification_children==0);
+  RenderingDevice::singleton=previous;device.is_main_instance=false;memdelete(registry);
+ }
  static void retire_window(RenderingDevice &device,RenderingDeviceDriver &driver,uint32_t mode) {
   using namespace GDExtensionDeviceExit;
   auto *bridge=memnew(Registry::QualificationBridge);auto *child=memnew(Registry::QualificationBridge::Storage);
@@ -45,6 +94,8 @@ class Driver : public TransferTestDriverBase {
 public:
  GDExtensionDeviceExit::QualificationPhysicalReturn *cell=nullptr;
  int creates=0,frees=0,sets_freed=0;
+ bool native_call_observation_supported() const override {return true;}
+ uint32_t qualification_native_call_bound(uint32_t slots) const override {return slots;}
  void uniform_set_free(UniformSetID id) override {CHECK(id==UniformSetID(23));CHECK(TestQualificationPhysicalAccess::dependents(*cell)==1);sets_freed++;}
  BufferID buffer_create(uint64_t size,BitField<BufferUsageBits>,MemoryAllocationType,uint64_t) override { CHECK(size==128);creates++;return BufferID(19); }
  void buffer_free(BufferID id) override { CHECK(id==BufferID(19));if(cell)CHECK(TestQualificationPhysicalAccess::event(*cell)==0);frees++; }
@@ -85,4 +136,9 @@ TEST_CASE("[RenderingDevice][Qualification] contended transfer lock refuses main
 }
 #endif
 
+}
+
+TEST_CASE("[Qualification] retired E05 backing rejects same prepared upload and preserves RT release and bridge teardown") {
+ RenderingDevice device;TestQualificationPhysical::Driver driver;TestQualificationPhysicalAccess::attach(device,driver);
+ TestQualificationPhysicalAccess::retired_prepared_upload(device,driver);CHECK(driver.creates==1);CHECK(driver.frees==1);TestQualificationPhysicalAccess::detach(device);
 }

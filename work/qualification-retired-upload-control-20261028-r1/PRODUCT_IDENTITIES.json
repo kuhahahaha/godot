@@ -1,0 +1,26 @@
+{
+  "rd-source.o": {
+    "bytes": 1412496,
+    "sha256": "f96422de4b9b97ed3ac53951691fe37e74b8e55483d23a735938faae6bbdba30"
+  },
+  "godot-private": {
+    "bytes": 302403328,
+    "sha256": "560fffac5f0e0ceb5c258e332725bf643a6b5ff456abe29a540f603b82fbe299"
+  },
+  "rd-no-clear.o": {
+    "bytes": 1411032,
+    "sha256": "42e6d11e161a5d939ff0c0d0698023d12c06e22abc89c490de4f8ce30e10b1d9"
+  },
+  "godot-source": {
+    "bytes": 302403312,
+    "sha256": "d9d33f036e7969bf2fc09042a3ab5d72f0def537e9842bedb8ae09cb18662a2c"
+  },
+  "test_physical.o": {
+    "bytes": 2168104,
+    "sha256": "b3f3771aaaff257774967dca01edcec62133951dbcd1376fc481e78b17c197eb"
+  },
+  "godot-no-clear": {
+    "bytes": 302403344,
+    "sha256": "584484519607789966fc3fd801fa58d2814e4f4cba911d01185434c7c93bdec0"
+  }
+}
