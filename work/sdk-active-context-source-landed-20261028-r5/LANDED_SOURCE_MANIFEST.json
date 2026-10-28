@@ -1,0 +1,11 @@
+{
+  "/Users/macbookair/Documents/Work/ANGE/godot-cpp/include/godot_cpp/godot.hpp": "bea66011458846931cede296486ee2ce53851a403644b4373f1534987fea163e",
+  "/Users/macbookair/Documents/Work/ANGE/godot-cpp/include/godot_cpp/core/class_db.hpp": "4824c9e3609a1da72d187c045a8b22affc876837cfa3d592f24198d448121304",
+  "/Users/macbookair/Documents/Work/ANGE/godot-cpp/src/godot.cpp": "25ee20bed1965d09992b827cc9c92cd146be173402bd5c266a7dbd1038fb9c15",
+  "/Users/macbookair/Documents/Work/ANGE/src/register_types.cpp": "1b2b95334798e152bef6493f84cfc548dacacfa2c6d9e5de14c305d10d28f6fd",
+  "/Users/macbookair/Documents/Work/ANGE/tests/native/device_exit_active_context_test.cpp": "71c7aee50594d4aff2c8e31f6b3065a663a4437a7049303cc7f6957076becbc0",
+  "/Users/macbookair/Documents/Work/ANGE/tests/native/run_device_exit_sdk_checks.py": "cb63a25d833d3f78a430501b6d810c647d84560e7a71cf23acb89ded1e5fa1c5",
+  "/Users/macbookair/Documents/Work/ANGE/tests/native/device_exit_scene_ready_test.cpp": "1b92750a036064f01687ca73c6acd8bcc58eba5bc1dca4d605c3378a1989a250",
+  "/Users/macbookair/Documents/Work/ANGE/tests/native/scene_ready_source/v2_receiver.py": "87f8da22ad9447cdd2dce318237b8e55a3866a098c94a06facf587249344f6bc",
+  "/Users/macbookair/Documents/Work/ANGE/tests/native/scene_ready_source/verify_discriminators.py": "e0c1c3aad07d45d8b28f16da1c5d0aadf920e0ce24c49325fa919399a001861d"
+}

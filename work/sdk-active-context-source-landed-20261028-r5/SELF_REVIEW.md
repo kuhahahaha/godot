@@ -1,0 +1,5 @@
+# Landed source review
+
+The reviewed private R3 implementation is now applied to original SDK source, with every live SDK/header consumer migrated. macOS uses mutex-protected std::map nodes indexed by the actual current thread; node references remain stable across insertions. No nodes are erased until SDK image finalization, which follows original core callback/holder drain. Other preprocessing profiles retain thread_local. Sticky claimant, original frozen config, reentry and reset logic retain their semantics. The permanent isolation test executes simultaneous contexts and thread reuse after reset. Original SDK entry/return tests and native omission gate remain intact.
+
+Current product source uses the accessor, but the primary DSOs/complete SDK archives still need matching owner builds. The source-linked native DSO is limited actual control evidence. No canonical ANGE Ready/Verified/G1 or cross-platform runtime claim. Historical source oracle remains unchanged; diagnostic content is outside current controlled receiver scope. No independent reviewer was used in this slice.

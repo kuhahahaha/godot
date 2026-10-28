@@ -1,0 +1,87 @@
+{
+  "cases": [
+    {
+      "case": 1,
+      "rc": 0
+    },
+    {
+      "case": 2,
+      "rc": 0
+    },
+    {
+      "case": 3,
+      "rc": 0
+    },
+    {
+      "case": 4,
+      "rc": 0
+    },
+    {
+      "case": 5,
+      "rc": 0
+    },
+    {
+      "case": 6,
+      "rc": 0
+    },
+    {
+      "case": 7,
+      "rc": 0
+    },
+    {
+      "case": 8,
+      "rc": 0
+    },
+    {
+      "case": 9,
+      "rc": 0
+    },
+    {
+      "case": 10,
+      "rc": 0
+    },
+    {
+      "case": 11,
+      "rc": 0
+    },
+    {
+      "case": 12,
+      "rc": 0
+    },
+    {
+      "case": 13,
+      "rc": 0
+    },
+    {
+      "case": 14,
+      "rc": 0
+    },
+    {
+      "case": 15,
+      "rc": 0
+    },
+    {
+      "case": 16,
+      "rc": 0
+    },
+    {
+      "case": 17,
+      "rc": 0
+    },
+    {
+      "case": 18,
+      "rc": 0
+    }
+  ],
+  "build_command": [
+    "clang++",
+    "-std=c++17",
+    "-DANGE_SCENE_READY_V2_TEST",
+    "-I/Users/macbookair/Documents/Work/ANGE/godot-cpp/gen/include",
+    "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/k03-landed-v2-lnjerpxe/test.cpp",
+    "-o",
+    "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/k03-landed-v2-lnjerpxe/test"
+  ],
+  "temporary_bytes_deleted": 141639,
+  "scope": "current landed target source controlled dependencies; historical oracle/native excluded"
+}

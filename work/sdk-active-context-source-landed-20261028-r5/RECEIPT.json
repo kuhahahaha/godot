@@ -1,0 +1,26 @@
+{
+  "status": "SDK_SOURCE_LANDED_NATIVE_RELOAD_CONTROLS_GREEN_PRODUCT_BUILD_PENDING",
+  "sdk_commit": "a3d64535f2a53595ba653d678e21f45de4116665",
+  "ange_precommit": "a287f62f8c69ed178fb97a7292e4e49edc8b6911",
+  "scope": "formal original SDK source and source consumer migration; independent source-linked controls",
+  "changes": [
+    "macOS active context uses original SDK-owned per-thread map; other branch retains native TLS",
+    "all SDK internal consumers plus original ANGE product and scripted-test consumers use accessor",
+    "current target receiver accessor/diagnostic adapters preserve success bool and historical baseline/oracle",
+    "official SDK test runner compiles current godot.cpp/ClassDB and includes permanent thread-isolation regression"
+  ],
+  "verified": [
+    "official SDK checks rc0 including four C ABI targets, 25 missing-member controls, original lifecycle/reentry tests and new context isolation/reset",
+    "landed current V2 receiver18 controls rc0",
+    "real Metal source-linked current SDK unload/reload/unload all0; two DSO destructors before manager returns",
+    "same landed source omission negative remains030/route5/78/no frees",
+    "exact changed source diff-check0"
+  ],
+  "build_limit": "existing SDK archive linked only for unchanged supporting TUs in standalone controls; complete SDK archives/canonical ANGE product DSOs were not rebuilt here. Existing product binaries must not be labelled as carrying this source fix.",
+  "remaining": [
+    "sole-owner matching Debug/Release SDK/archive/DSO rebuild",
+    "canonical actual ANGE complete cohort and native production join",
+    "independent source review and other native platform qualification"
+  ],
+  "review": "SELF_REVIEW.md author review only"
+}
