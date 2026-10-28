@@ -2793,6 +2793,7 @@ Vector<uint8_t> RenderingDeviceDriverVulkan::texture_get_data(TextureID p_textur
 }
 
 BitField<RDD::TextureUsageBits> RenderingDeviceDriverVulkan::texture_get_usages_supported_by_format(DataFormat p_format, bool p_cpu_readable) {
+	ERR_FAIL_INDEX_V(p_format, DATA_FORMAT_MAX, 0);
 	if (p_format >= DATA_FORMAT_ASTC_4x4_SFLOAT_BLOCK && p_format <= DATA_FORMAT_ASTC_12x12_SFLOAT_BLOCK && !enabled_device_extension_names.has(VK_EXT_TEXTURE_COMPRESSION_ASTC_HDR_EXTENSION_NAME)) {
 		// Formats that were introduced later with extensions must not reach vkGetPhysicalDeviceFormatProperties if the extension isn't available. This means it's not supported.
 		return 0;
@@ -2830,6 +2831,7 @@ BitField<RDD::TextureUsageBits> RenderingDeviceDriverVulkan::texture_get_usages_
 
 bool RenderingDeviceDriverVulkan::texture_can_make_shared_with_format(TextureID p_texture, DataFormat p_format, bool &r_raw_reinterpretation) {
 	r_raw_reinterpretation = false;
+	ERR_FAIL_INDEX_V(p_format, DATA_FORMAT_MAX, false);
 	return true;
 }
 
@@ -2885,6 +2887,7 @@ void RenderingDeviceDriverVulkan::sampler_free(SamplerID p_sampler) {
 }
 
 bool RenderingDeviceDriverVulkan::sampler_is_format_supported_for_filter(DataFormat p_format, SamplerFilter p_filter) {
+	ERR_FAIL_INDEX_V(p_format, DATA_FORMAT_MAX, false);
 	switch (p_filter) {
 		case SAMPLER_FILTER_NEAREST: {
 			return true;

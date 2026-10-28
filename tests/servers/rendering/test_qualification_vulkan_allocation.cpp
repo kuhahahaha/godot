@@ -64,4 +64,18 @@ TEST_CASE("[QualificationNative][Vulkan] texture creation rejects an invalid dir
  CHECK_FALSE(bool(texture));
  CHECK(TestQualificationVulkanAllocationAccess::allocations(driver)==before);
 }
+TEST_CASE("[QualificationNative][Vulkan] direct format queries reject an invalid format") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ ERR_PRINT_OFF;
+ auto usages=driver.texture_get_usages_supported_by_format(RDD::DATA_FORMAT_MAX,false);
+ bool filter_supported=driver.sampler_is_format_supported_for_filter(RDD::DATA_FORMAT_MAX,RDD::SAMPLER_FILTER_LINEAR);
+ bool raw_reinterpretation=true;
+ bool can_share=driver.texture_can_make_shared_with_format(RenderingDeviceDriver::TextureID(),RDD::DATA_FORMAT_MAX,raw_reinterpretation);
+ ERR_PRINT_ON;
+ CHECK(usages==0);
+ CHECK_FALSE(filter_supported);
+ CHECK_FALSE(can_share);
+ CHECK_FALSE(raw_reinterpretation);
+}
 #endif
