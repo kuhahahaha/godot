@@ -17,7 +17,7 @@
   "core/object/object.cpp": "ab720040fa332f3e370e6937007763f6165831909709def86ba3e952e826d7a8",
   "tests/core/object/test_device_exit_library_close.cpp": "1d5bc82848c80dd9ea987ef035f1ce8517d1bf9887ad082f53ebc6acdc455357",
   "work/typed-lifecycle-abi-v1/CURRENT_PAIR_U01_VFX_R01_NEGATIVE_RECEIPT_20251025.md": "c6ab0496164e2741f157768a10ffcc6f0217b630a26d95d3d9762c2e22b79a47",
-  "work/typed-lifecycle-abi-v1/PROGRESS.md": "daf47c7aa0718cfc3a31e05b67bc872c4fe0f9e3cf559cf968065aa34565698c",
+  "work/typed-lifecycle-abi-v1/PROGRESS.md": "0c3f4091cbcb5d2138a2f6ffa6d2702257b5801ec223146c42306e8b7d09827d",
   "work/r01-frame-wait-20261026/MANIFEST.json": "6665b770d13d966da423741c69f01a58b562b976c9f94811f3e4b442f2907d64",
   "work/r01-frame-wait-20261026/RECEIPT.md": "90930a0824a3c88582ef533e461b66fc5bc3163bb165a66269e1d773b0d25066",
   "work/r01-frame-wait-20261026/PROGRESS.md": "a3d8d1fb03d674d6d7941b7088dc3bed69655ce36f57178c99ee9bf3edb6570a",
@@ -459,5 +459,9 @@
   "work/native-numeric-same-request-20261028-r1/run_control.py": "852f2d211298f10d1e0a99d08a137ca97a01aea4a43570fd92014d4b1fe981e8",
   "work/native-numeric-same-request-20261028-r1/runtime/probe.gd": "c5b613004558c54f60e9eb0b9c62327ef8f7dce8cf7ad9573cbee22bc45ad1e1",
   "work/native-numeric-same-request-20261028-r1/runtime/probe.gdextension": "8233c16b21586c683e9c839c2cd8e4b975cd0bbe2a6d1dbf52dec2b7be097d30",
-  "work/native-numeric-same-request-20261028-r1/runtime/project.godot": "e9950d35927fb37ea403b7af82591db1b4e24dca0d231c4d5f7f80758763e5d5"
+  "work/native-numeric-same-request-20261028-r1/runtime/project.godot": "e9950d35927fb37ea403b7af82591db1b4e24dca0d231c4d5f7f80758763e5d5",
+  "work/native-numeric-late-return-20261028-r1/MANIFEST.json": "b59810887f59a91679e87e52926a0f9c11787f3d16a34fc505b435719381b2b3",
+  "work/native-numeric-late-return-20261028-r1/HANDOFF.md": "0ffda62e178413b8800395e24ab6ced2878b686225e121534946cf3657746e13",
+  "work/native-numeric-late-return-20261028-r1/INDEPENDENT_REVIEW.md": "e086908b9f2796e8025bd52d6fcef34d1b72bbbd7dda7dd1fbbf773e0adb7e8d",
+  "work/native-numeric-late-return-20261028-r1/RESULTS.json": "1d6ec0f176840cc0d0a95d3520607ca3ec81d9088afb8afe1d599c657d23d848"
 }

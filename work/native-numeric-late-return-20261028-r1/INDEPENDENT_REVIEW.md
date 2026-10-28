@@ -1,0 +1,9 @@
+# Independent whole-package review
+
+Reviewer: /root/native_late_return_review, fresh context, inherited model/reasoning unchanged. Read-only review of probe/includes/controller, original production sources, baseline artifact equality, current input hashes and raw reports/facts/logs; no reviewer build/GPU/SDK execution.
+
+Result: no actionable P1/P2. Initial reviewed cut was original hidden-transfer native11 IssuedUnknown2/Pending1 after original record/readback issuance. The final role-pinned rerun instead caught the original main native12 IssuedUnknown2/Pending1, with13 facts before/after; final read-only evidence review confirmed those exact bytes: pre state4/phase4, both transfer11/main12 issue2/completion1, final state7/phase6 owned0, both original native identities1/2, all26 checks true, all current pins/output hashes match including8 role payloads. No P1/P2. Same graph handles/ranges/readback request survive legitimate main mapping refinement; cancellation refuses further record and revoked copy. Original accepted RT ref blocks ticket release until original acknowledgement. Early unit/backing retirement refs remain and final physical events occur through original driver frees. Duplicate acknowledgements refuse. Actual SDK after-ClassDB binding terminal returns holder before manager/library close.
+
+Minor provenance finding: role payload files absent from controller before/after pins. Author added all original role0..7.bin pins and reran only this late-return case. RUN.rc0, RESULTS.json all26 checks true, exact current inputs unchanged. No production change or baseline rerun required.
+
+Limits: one real Metal safe-thread issued-unknown cut. No proof successful main shader submission before cancellation or hardware was still executing at that instant; non-completing error branches not exercised. HANDOFF.md retains these and all production authority exclusions.

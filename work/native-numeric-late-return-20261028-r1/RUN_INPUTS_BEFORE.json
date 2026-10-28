@@ -1,0 +1,298 @@
+{
+  "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64": {
+    "bytes": 302501616,
+    "sha256": "62232faf463213fe63341f20c3e4c2d84dd028ccc7fae2b7dda13e5f6d8be7f2"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-late-return-20261028-r1/runtime/probe.dylib": {
+    "bytes": 2555096,
+    "sha256": "899022c7c3f6cd9893793b4615dcc71e7bff3c4e4229e9ae2fd93a0cd827b724"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-late-return-20261028-r1/run_control.py": {
+    "bytes": 6730,
+    "sha256": "1bf391f43e22723eed8b82f03560b2b7ca363bafe8952d515c6e464c16fe78bb"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-late-return-20261028-r1/probe.cpp": {
+    "bytes": 42210,
+    "sha256": "dfcf3d4953f05e82c414cc401b4251946edfbb9ebd3d75abc4a8047a0e545fb3"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-late-return-20261028-r1/late_cut.inc": {
+    "bytes": 5765,
+    "sha256": "3abc528213849edd62b14c557ea23220dca1b2e6d1ffa0991277be4998a3f877"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-late-return-20261028-r1/late_release.inc": {
+    "bytes": 1807,
+    "sha256": "f1ffcff46885276a2d12846586fb8cacf777f86c7490db7deb00b94c129c111b"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-late-return-20261028-r1/original_unit.h": {
+    "bytes": 1728,
+    "sha256": "90bbab5f1a8fa99b1dcc68c518862706049a0ff6eb12c4b3775c521f4e7d6b5b"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-late-return-20261028-r1/expected_unit.h": {
+    "bytes": 447,
+    "sha256": "229b27f4e44c5bf9cb87f9849c6fd3b30f1263928e130b1b8b2756d53d1177b9"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-late-return-20261028-r1/expected_artifacts.h": {
+    "bytes": 1901,
+    "sha256": "b62bb5dd1e4d278f28ceeab47a0ed0aaf8bdd1ce823c4c2bd2f7bbddda5859ef"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-late-return-20261028-r1/runtime/probe.gd": {
+    "bytes": 333,
+    "sha256": "c5b613004558c54f60e9eb0b9c62327ef8f7dce8cf7ad9573cbee22bc45ad1e1"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-late-return-20261028-r1/runtime/probe.gdextension": {
+    "bytes": 198,
+    "sha256": "8233c16b21586c683e9c839c2cd8e4b975cd0bbe2a6d1dbf52dec2b7be097d30"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-late-return-20261028-r1/runtime/project.godot": {
+    "bytes": 105,
+    "sha256": "e9950d35927fb37ea403b7af82591db1b4e24dca0d231c4d5f7f80758763e5d5"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-late-return-20261028-r1/BUILD_COMMAND.json": {
+    "bytes": 5711,
+    "sha256": "9f83527afc2ac81ee882c1e86fd5834ecfc363a8f2cda66f0cd1cebd372e285f"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-late-return-20261028-r1/RUN_COMMAND.json": {
+    "bytes": 357,
+    "sha256": "7989a2d780d96c8c53d5a8cce1c759068a2af769e12258f3614659472cc43d4b"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-same-request-20261028-r1/NATIVE_GENERATION_RECEIPT.json": {
+    "bytes": 6106,
+    "sha256": "c80a9b9a776e2eb7e13775b520630d3d080ae90370759075e793f986066ec88a"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-same-request-20261028-r1/input/unit.json": {
+    "bytes": 1798,
+    "sha256": "9766ec7e38ac94057bcc332c968db25406a62a11a5be90dca9162c3f82c3c620"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-same-request-20261028-r1/input/role0.bin": {
+    "bytes": 4,
+    "sha256": "67abdd721024f0ff4e0b3f4c2fc13bc5bad42d0b7851d456d88d203d15aaa450"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-same-request-20261028-r1/input/role1.bin": {
+    "bytes": 2064,
+    "sha256": "1d830c8af4ff60b1ec36350ea25d99c4247d5d040d8d2c9acbe28011ebb9039e"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-same-request-20261028-r1/input/role2.bin": {
+    "bytes": 4,
+    "sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-same-request-20261028-r1/input/role3.bin": {
+    "bytes": 4,
+    "sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-same-request-20261028-r1/input/role4.bin": {
+    "bytes": 4,
+    "sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-same-request-20261028-r1/input/role5.bin": {
+    "bytes": 4,
+    "sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-same-request-20261028-r1/input/role6.bin": {
+    "bytes": 104,
+    "sha256": "ce3da4016cd204562a553baa8511604065d39909a3552445f18ffef90e035f2a"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-same-request-20261028-r1/input/role7.bin": {
+    "bytes": 104,
+    "sha256": "caecf420176a8768f1b0ab3c17ae87eb24a7633d573f599ffda747be3df64357"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-same-request-20261028-r1/input/capture.comp": {
+    "bytes": 3140,
+    "sha256": "4a6f75a4414fef00f0c30a1da3c443d8603484e082524efee396b549c4275a05"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-same-request-20261028-r1/input/capture.spv": {
+    "bytes": 6048,
+    "sha256": "cb9efb9a5307f2ba3ea2f32cc4c79ab83004b1bd6facd24c8b7528d91ba5c07e"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-same-request-20261028-r1/input/capture.bin": {
+    "bytes": 1960,
+    "sha256": "aa0e2e4718ca32c3f5dc179b58a714dd37c5cf1f2089afd60d2a2f9a01a317e5"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-same-request-20261028-r1/input/body.comp": {
+    "bytes": 19934,
+    "sha256": "6c9c4f7481bacb9ff5d3c74e05cb27c8b107b098fbefab8b9941aee135508546"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-same-request-20261028-r1/input/body.spv": {
+    "bytes": 38224,
+    "sha256": "b1aba4ba8363e7f87cb3490baa7864027c849e36c80fef3f1226b06e73c4d047"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-same-request-20261028-r1/input/body.bin": {
+    "bytes": 5376,
+    "sha256": "64e9b63fa31b9954ce1722b6a9932c4bd038acd07fd9a56deb6c0016a82240b5"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/gpu/gpu_ir.o": {
+    "bytes": 326704,
+    "sha256": "10502812002ead6b21f9579b1d17fc092753769afa40e54b721e39bf74fcf0ca"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/gpu/gpu_numeric_helpers.o": {
+    "bytes": 425536,
+    "sha256": "7a9235d07098731a3067f70543841be3856a4e31b8697a2fb76a3ae87f61698c"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/gpu/gpu_serializer.o": {
+    "bytes": 74696,
+    "sha256": "f9550f42b142929cd0897ccf934f81edfcfadc8a5caa697bf0f74b3f402f7b24"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/gpu/gpu_precreate_estimator.o": {
+    "bytes": 25472,
+    "sha256": "8109bd57ae7b32ac8b5f6029bb2250d253be325147c3fcad28e25cab85fde332"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/gpu/gpu_spirv_interface.o": {
+    "bytes": 80320,
+    "sha256": "f31b39c9a44a41a1c75f5a6630659ba9304afad0681f2a1112d3233bd8a1daf8"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/thirdparty/spirv-reflect/spirv_reflect.o": {
+    "bytes": 112000,
+    "sha256": "3e2e5d8f2afaeb4a0e46410d6e3820ec1aeb4d78355323695f41c47e2fed1c07"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/gpu/gpu_compile_types.o": {
+    "bytes": 29408,
+    "sha256": "29d515d129a6b470b1d35bce9da6519e40d625f88853cc3b985b53f0c652e2b8"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/gpu/gpu_fixed_provider.o": {
+    "bytes": 28128,
+    "sha256": "ca20a03c818a11b72b63f33836e5c5ceee692a6547c20b0675bf27dd5c20babc"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/gpu/method_provider_admission.o": {
+    "bytes": 81712,
+    "sha256": "189ff5ae059fabaa93e415b5ff0d469149e9da2bdcde301d56e1de5a4aebc468"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/gpu/gpu_method_sources.o": {
+    "bytes": 152800,
+    "sha256": "c4e6beb6930d1ee704c9e1b114d72ccb1d1d751bb1fb251a8090a062d4835d03"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/gpu/gpu_method_construction.o": {
+    "bytes": 389920,
+    "sha256": "1d2df06db3629a9e690af4a8a7d0ce9a19ca7db0da9855d670a8fc032186f3ca"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/gpu/gpu_method_codec.o": {
+    "bytes": 160920,
+    "sha256": "2d612d5bfb8bd2b91996a671da9554d43d99943b74224ea49e4cf4400b97fd13"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/gpu/gpu_lowering.o": {
+    "bytes": 12816,
+    "sha256": "c9bb1d9dc1842d674b985fbcadc225b86d1878f32f22236034fbb135dce0d273"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/gpu/method_binding_projection.o": {
+    "bytes": 382120,
+    "sha256": "12658eeaa34e89b17b42f6efd7419cbe4b5489f607f6bcb91a28c2afa69c9b2a"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/gpu/internal_template_bindings.o": {
+    "bytes": 64576,
+    "sha256": "13f54cb5635a5076d0a2e6943ecd869e915fda9d8acf47dbfcdd4204b0364e91"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/gpu/gpu_templates.o": {
+    "bytes": 198872,
+    "sha256": "458a5ae26ef468f57337b09c93d2bf1a6ff774a7894e82fa7531841761c7d801"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/gpu/gpu_linking.o": {
+    "bytes": 163648,
+    "sha256": "64239f83f3fdfc57b0372dd78de11e35bf3edf3ddb5da7997f5799c8ea4f4fa5"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/gpu/gpu_source_closure.o": {
+    "bytes": 3696,
+    "sha256": "979dab38f338d2a339462b6e452cdf985d513a231965f2c1769750adbb1b35a2"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/gpu/method_qualification.o": {
+    "bytes": 20088,
+    "sha256": "f90ee0cd4ee3dae10ba2d15c2d689e28fecd18ef237076904fe080a349fe517b"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/layout/invocation_metadata.o": {
+    "bytes": 10096,
+    "sha256": "915205daf444f8b76aa47c235c550d959d86375ad88f6a874a1d60c237899d9e"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/layout/type_layout.o": {
+    "bytes": 16288,
+    "sha256": "239805c019f1d76c526da441b526c327884ac1cb7aee982b07274e734d9a1ccd"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/di/di_contract_facet.o": {
+    "bytes": 138920,
+    "sha256": "4ac5a357a17cadbde5185dec5148afa41bf22ba24a6ce56a68a6e66cfc949e95"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/semantic/contract_registry.o": {
+    "bytes": 52872,
+    "sha256": "8c4765d10a29ad0dd9f9c1b5ddef1b72e6b745e090e75302407b466a53e6864e"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/semantic/contract_registration.o": {
+    "bytes": 8216,
+    "sha256": "0695392c39f96dfd40fd6a8e7567866d321fd08402f1a1f5e04d892f940d8c41"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/semantic/type_snapshot.o": {
+    "bytes": 23848,
+    "sha256": "b19c3ed42abc56e1c5ac965df1bc96bb2899756382d2460f7a61563e245a63c0"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/semantic/semantic_type.o": {
+    "bytes": 7872,
+    "sha256": "193a932f2ac48aa223173e1f828a07c545c338fe848b75321516549a64f87a63"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/semantic/semantic_budget.o": {
+    "bytes": 1720,
+    "sha256": "89097d1deb514f21680381cb912fbdb6b6b1128ecf9b0b7a3aece0d30b89d688"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/semantic/schema_encoder.o": {
+    "bytes": 6256,
+    "sha256": "b85ab95d1bb9c9dcfbbfae11673fe68af41ba02f7d627bb9dcdd49a35fa7e65e"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/semantic/exact_value.o": {
+    "bytes": 14000,
+    "sha256": "47ce91cf8743bec4abbdc294c4a65e76ca3a8a22a4117da6b724769031181186"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/semantic/exact_numeric.o": {
+    "bytes": 30976,
+    "sha256": "623f3f32784cbb76fc668aff6e6902f5db89ff983e1156fa059d777795f7a93b"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/semantic/operator_selection.o": {
+    "bytes": 3008,
+    "sha256": "40d4287249c4995470b589c7ca6141e2055e15b5e27781047879a1e391716979"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/semantic/contract_capture.o": {
+    "bytes": 2808,
+    "sha256": "96c824c764e52c51ef218cb2719bedb2c07de6d6c5b217e337e62197bc92ae06"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/contracts/pc_core_operators.o": {
+    "bytes": 33192,
+    "sha256": "49cda1ebdf9afa3dbcef3e18054ecd2f896fb3fca2553bc90e6da23288f7b281"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/contracts/pc_buffer_methods.o": {
+    "bytes": 135680,
+    "sha256": "16a17dd7ef0955b8b9c8bb9e38143b2d06e3606fbdd81b25a582c262a4a4ed27"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/contracts/pc_texture_methods.o": {
+    "bytes": 152864,
+    "sha256": "b8101133bea6f6522ec278be90adba8f09d54bb5dde4ad61a800f657fa5f201c"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/engine/runtime/type_spec.o": {
+    "bytes": 11896,
+    "sha256": "b8e200ce6088f6070986977f6d706ac0283666623d2d39a6a3e7f1a9f407a686"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/engine/runtime/types/ty_bool.o": {
+    "bytes": 6320,
+    "sha256": "423b6b422e8502a07c5e1205d2423975ec9bb9061f39aae312556f658ba6e6fe"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/engine/runtime/types/ty_vec3.o": {
+    "bytes": 6320,
+    "sha256": "3dde423f2dbf04fed08553f6b0008981c693c5bcd8bfbb0e4ebb8f528906643a"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/engine/runtime/types/ty_particle.o": {
+    "bytes": 12920,
+    "sha256": "6bc7b9bda756cd9757b0af9b7f6a89b191abecb0df2fff96c7277956fa958586"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/particle/contract/particle_semantic_contract.o": {
+    "bytes": 15440,
+    "sha256": "312015263fc597813729623b6a61aca3fa406ab63b22f969aa309ac2336c107f"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/engine/util/sha256.o": {
+    "bytes": 3968,
+    "sha256": "807e53ab8491e9e66230f535fffc8a6ecdadb3eeb3698f6b84ccb57f5e786c90"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/engine/util/durable_file_ops.o": {
+    "bytes": 49904,
+    "sha256": "d163c53a081daf08b21b9cb92bd5138bd1582e9883d0a62e16322852924143ec"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/src/engine/geometry/earth_assets.o": {
+    "bytes": 227928,
+    "sha256": "a2814a89049186339fa19f7267451897169eb5f2509c4fa915211ac08c04b51a"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/godot-cpp/bin/libgodot-cpp.macos.template_debug.arm64.a": {
+    "bytes": 45280200,
+    "sha256": "c9c7db4288399d9587ef8d615ea0fccea9c70596638d86bac0bc60cca17c30a3"
+  }
+}
