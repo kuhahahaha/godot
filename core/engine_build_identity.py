@@ -309,7 +309,10 @@ def _tool_inputs(env, actual_linker, process_env):
     tools, configuration = [], []
     for role, path in _tool_paths(env, actual_linker, process_env):
         tools.append((role, path.read_bytes()))
-        switch = "-version_details" if role == "linker" else "--version"
+        # Apple libtool does not implement clang's `-version_details`; `-V`
+        # is its supported version probe and remains stable across Xcode
+        # toolchains.
+        switch = "-V" if role == "linker" else "--version"
         version = subprocess.check_output([str(path), switch], text=True, env=process_env)
         # InstalledDir is diagnostic; selected executable content participates.
         version = "\n".join(line for line in version.splitlines() if not line.startswith("InstalledDir:"))
@@ -357,11 +360,67 @@ def install_macos(env, program):
     final = program[0]
     ordinary = list(final.sources)
     kind = {"executable": "Executable", "shared_library": "SharedLibrary", "static_library": "StaticLibrary"}[env["library_type"]]
-    if kind == "StaticLibrary" or not (env.get("builtin_glslang") and env.get("module_glslang_enabled")):
-        # The original static target archives platform objects only; its LIBS
-        # are not merged into that archive. Publishing a full loaded-core stamp
-        # from that subset would be false. Keep that applicable branch explicit.
-        reason = "static core archive closure unavailable" if kind == "StaticLibrary" else "nonbuiltin runtime compiler identity unavailable"
+    if kind == "StaticLibrary" and env.get("builtin_glslang") and env.get("module_glslang_enabled"):
+        # The normal macOS target archives platform objects only. Build one
+        # original aggregate archive from that platform archive plus the
+        # ordered static archives already selected in env.LIBS. Static uses
+        # target-specific generated nodes so it cannot overwrite the fixed
+        # executable/shared stamp or direct-selection records.
+        import subprocess
+        flattened = env.Flatten(env.get("LIBS", []))
+        archive_inputs = [program[0]]
+        for item in flattened:
+            path = str(item)
+            if path.endswith(".a"):
+                archive_inputs.append(item if hasattr(item, "abspath") else env.File(path))
+        if not archive_inputs:
+            raise ValueError("static aggregate has missing archive inputs")
+        process_env = execution_environment(env)
+        libtool = subprocess.check_output(["/usr/bin/xcrun", "--find", "libtool"], text=True, env=process_env).strip()
+        final_path = program[0].abspath.replace("libgodot.platform", "libgodot") + env["LIBSUFFIX"]
+        generated = env.File("#core/engine_build_identity.static.gen.cpp")
+        stamp = env.Object(generated)
+        input_paths = [x.abspath for x in archive_inputs]
+        arguments = [{"kind": "Tool", "role": "libtool"}, "-static", "-o", {"kind": "Output"}]
+        arguments += [{"kind": "Input", "ordinal": i} for i in range(len(input_paths))]
+        options, option_files = collect_options(env["CONTROLLED_BUILD_OPTION_KEYS"], env)
+        sdk = pathlib.Path(env.subst("$MACOS_SDK_PATH"))
+        settings = sdk / "SDKSettings.json"
+        recipes = [env.File("#core/engine_build_identity.py"), env.File("#core/SCsub"),
+                   env.File("#platform/macos/SCsub"), env.File("#platform/macos/detect.py"), env.File("#SConstruct"), env.File("#methods.py")]
+        recipe_paths = [(node.path, node.abspath) for node in recipes]
+        values = {"arguments": arguments, "options": options, "platform": env["platform"],
+                  "architecture": env["arch"], "target_kind": kind, "builtin_glslang": True}
+        tools, tool_configuration = _tool_inputs(env, libtool, process_env)
+        record = env.File("#core/engine_build_identity.static.gen.json")
+        direct = env.File("#core/engine_build_selection.static.gen.json")
+        def generate(target, source, env):
+            configuration = list(tool_configuration)
+            configuration.append(("sdk.settings.sha256", _content(settings)["sha256"]))
+            snapshot = make_snapshot(**values, inputs=[("StaticArchive", path) for path in input_paths],
+                                     tools=tools, configuration=configuration,
+                                     recipes=[(role, pathlib.Path(path).read_bytes()) for role, path in recipe_paths])
+            core, compiler = derive_stamps(snapshot)
+            selection = selection_record(snapshot, core, compiler)
+            pathlib.Path(target[0].abspath).write_text(render_source(selection), encoding="utf8")
+            pathlib.Path(target[1].abspath).write_text(json.dumps({"snapshot": snapshot, "selection": selection,
+                                                                     "diagnostic_inputs": input_paths,
+                                                                     "diagnostic_tools": [(role, str(path)) for role, path in _tool_paths(env, libtool, process_env)],
+                                                                     "diagnostic_recipes": recipe_paths}, indent=2) + "\n", encoding="utf8")
+            pathlib.Path(target[2].abspath).write_text(json.dumps(selection, indent=2) + "\n", encoding="utf8")
+            return 0
+        deps = [env.File(path) for path in input_paths] + recipes + [env.File(str(settings)), env.Value(json.dumps(values, sort_keys=True)), env.File(libtool)]
+        deps += [env.File(str(path)) for path in option_files]
+        deps += [env.File(str(path)) for _, path in _tool_paths(env, libtool, process_env)]
+        env.Command([generated, record, direct], deps, env.Run(generate))
+        def aggregate_action(target, source, env):
+            return subprocess.run([libtool, "-static", "-o", target[0].abspath] + [node.abspath for node in source], env=process_env).returncode
+        aggregate = env.Command(final_path, archive_inputs + [stamp], env.Run(aggregate_action))
+        env["_CONTROLLED_FINAL_PROGRAM"] = aggregate
+        return record
+    if not (env.get("builtin_glslang") and env.get("module_glslang_enabled")):
+        # External compiler identity is still an explicit unsupported branch.
+        reason = "nonbuiltin runtime compiler identity unavailable"
         generated = env.File("#core/engine_build_identity.gen.cpp")
         record = env.File("#core/engine_build_identity.gen.json")
         direct = env.File("#core/engine_build_selection.gen.json")
@@ -372,13 +431,12 @@ def install_macos(env, program):
             pathlib.Path(target[1].abspath).write_text(json.dumps({"status": "unavailable", "reason": reason}, indent=2) + "\n", encoding="utf8")
             pathlib.Path(target[2].abspath).write_text(json.dumps({"schema": 0, "status": "unavailable", "reason": reason}) + "\n", encoding="utf8")
             return 0
-        env.Command([generated, record, direct], env.Value(reason + env["arch"]), Action(unavailable, "Recording unavailable controlled-core identity ..."))
+        env.Command([generated, record, direct], env.Value(reason + env["arch"]), env.Run(unavailable))
         builder = env.SharedObject if kind == "SharedLibrary" else env.Object
         stamp = builder(generated)
         final.add_source(stamp)
         final.get_executor().add_sources(stamp)
         return record
-
     command_variable = "$SHLINKCOM" if kind == "SharedLibrary" else "$LINKCOM"
     command = [str(token) for token in env.subst_list(command_variable, target=program, source=ordinary)[0]]
     sdk = pathlib.Path(env.subst("$MACOS_SDK_PATH"))

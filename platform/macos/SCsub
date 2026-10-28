@@ -50,7 +50,7 @@ else:
     files += ["libgodot_macos.mm"]
 
 if env["library_type"] == "static_library":
-    prog = env.add_library("#bin/godot", files)
+    prog = env.add_library("#bin/godot.platform", files)
 elif env["library_type"] == "shared_library":
     prog = env.add_shared_library("#bin/godot", files)
 else:
@@ -65,4 +65,4 @@ if env["generate_bundle"]:
     env.AlwaysBuild(env.CommandNoCache("generate_bundle", prog, env.Run(platform_macos_builders.generate_bundle)))
 
 # Final artifact receipt follows the existing final-target post-actions.
-engine_build_identity.attach_final_receipt(env, prog, controlled_identity_record)
+engine_build_identity.attach_final_receipt(env, env.get("_CONTROLLED_FINAL_PROGRAM", prog), controlled_identity_record)
