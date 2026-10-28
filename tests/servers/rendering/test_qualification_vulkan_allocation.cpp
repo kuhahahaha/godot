@@ -72,10 +72,12 @@ TEST_CASE("[QualificationNative][Vulkan] direct format queries reject an invalid
  bool filter_supported=driver.sampler_is_format_supported_for_filter(RDD::DATA_FORMAT_MAX,RDD::SAMPLER_FILTER_LINEAR);
  bool raw_reinterpretation=true;
  bool can_share=driver.texture_can_make_shared_with_format(RenderingDeviceDriver::TextureID(),RDD::DATA_FORMAT_MAX,raw_reinterpretation);
+ auto extension=driver.texture_create_from_extension(0,RDD::TEXTURE_TYPE_2D,RDD::DATA_FORMAT_MAX,1,false,1);
  ERR_PRINT_ON;
  CHECK(usages==0);
  CHECK_FALSE(filter_supported);
  CHECK_FALSE(can_share);
  CHECK_FALSE(raw_reinterpretation);
+ CHECK_FALSE(bool(extension));
 }
 #endif

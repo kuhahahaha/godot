@@ -2535,6 +2535,7 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create(const TextureFormat &
 }
 
 RDD::TextureID RenderingDeviceDriverVulkan::texture_create_from_extension(uint64_t p_native_texture, TextureType p_type, DataFormat p_format, uint32_t p_array_layers, bool p_depth_stencil, uint32_t p_mipmaps) {
+	ERR_FAIL_INDEX_V(p_format, DATA_FORMAT_MAX, TextureID());
 	VkImage vk_image = (VkImage)p_native_texture;
 
 	// We only need to create a view into the already existing natively-provided texture.
