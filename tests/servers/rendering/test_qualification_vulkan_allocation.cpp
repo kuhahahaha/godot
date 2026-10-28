@@ -50,4 +50,18 @@ TEST_CASE("[QualificationNative][Vulkan] failed extra-tracking texture creation 
   TestQualificationVulkanAllocationAccess::texture_reset(driver);
  }
 }
+TEST_CASE("[QualificationNative][Vulkan] texture creation rejects an invalid direct view format") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ RenderingDeviceDriver::TextureFormat format;
+ format.format=RDD::DATA_FORMAT_R8_UNORM;format.width=format.height=format.depth=format.array_layers=format.mipmaps=1;
+ format.usage_bits=RDD::TEXTURE_USAGE_SAMPLING_BIT;
+ RenderingDeviceDriver::TextureView invalid_view;
+ const uint32_t before=TestQualificationVulkanAllocationAccess::allocations(driver);
+ ERR_PRINT_OFF;
+ auto texture=driver.texture_create(format,invalid_view);
+ ERR_PRINT_ON;
+ CHECK_FALSE(bool(texture));
+ CHECK(TestQualificationVulkanAllocationAccess::allocations(driver)==before);
+}
 #endif
