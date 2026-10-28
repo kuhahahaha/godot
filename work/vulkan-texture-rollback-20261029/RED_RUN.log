@@ -1,0 +1,31 @@
+Assertion failed: (m_pMetadata->IsEmpty() && "Some allocations were not freed before destruction of this memory block!"), function Destroy, file vk_mem_alloc.h, line 10725.
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_qualification_vulkan_allocation.cpp:35:
+TEST CASE:  [QualificationNative][Vulkan] failed extra-tracking texture creation rolls back image and memory
+
+tests/servers/rendering/test_qualification_vulkan_allocation.cpp:46: ERROR: CHECK_FALSE( bool(texture) ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_qualification_vulkan_allocation.cpp:46: ERROR: CHECK( TestQualificationVulkanAllocationAccess::texture_rollback(driver)==(stage==1?1:3) ) is NOT correct!
+  values: CHECK( 0 == 1 )
+
+tests/servers/rendering/test_qualification_vulkan_allocation.cpp:47: ERROR: CHECK( TestQualificationVulkanAllocationAccess::allocations(driver)==before ) is NOT correct!
+  values: CHECK( 2 == 1 )
+
+tests/servers/rendering/test_qualification_vulkan_allocation.cpp:46: ERROR: CHECK_FALSE( bool(texture) ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_qualification_vulkan_allocation.cpp:46: ERROR: CHECK( TestQualificationVulkanAllocationAccess::texture_rollback(driver)==(stage==1?1:3) ) is NOT correct!
+  values: CHECK( 0 == 3 )
+
+tests/servers/rendering/test_qualification_vulkan_allocation.cpp:47: ERROR: CHECK( TestQualificationVulkanAllocationAccess::allocations(driver)==before ) is NOT correct!
+  values: CHECK( 3 == 2 )
+
+tests/servers/rendering/test_qualification_vulkan_allocation.cpp:35: FATAL ERROR: test case CRASHED: SIGABRT - Abort (abnormal termination) signal
+
+===============================================================================
+[doctest] test cases: 1 | 0 passed | 1 failed | 1723 skipped
+[doctest] assertions: 8 | 2 passed | 6 failed |
+[doctest] Status: FAILURE!

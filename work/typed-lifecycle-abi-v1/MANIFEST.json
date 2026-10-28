@@ -128,7 +128,7 @@
     "sha256": "934c46bd0bf23ddf7280126d1c131a4376541bea7f277d1fe653961351dc7efc"
   },
   "SConstruct": "c6d32561793fa5987ed8b9e8a7ab3b4beb04ea63bacb912f6fc1b0528b9181a7",
-  "bin/godot.macos.editor.dev.arm64": "2ba2a5390b12bb766bff1fa2742c75c5be4473d3a9ccf3063535e92be997fdf3",
+  "bin/godot.macos.editor.dev.arm64": "dfa2cbda78e16d98bb3ee5c82db6cfa427478c4f59632ee499d05680411039bf",
   "bin/libgodot.macos.template_debug.dev.arm64.a": {
     "bytes": 1893366248,
     "sha256": "b3fb7e2a2d1476e0744e6e3c43fb97ef067450360145ac1a6a91a3c72b2271e7"
@@ -921,8 +921,8 @@
   "work/sdk-unloadable-active-context-20261028-r3/threads-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "work/typed-lifecycle-abi-v1/CURRENT_PAIR_U01_VFX_R01_NEGATIVE_RECEIPT_20251025.md": "c6ab0496164e2741f157768a10ffcc6f0217b630a26d95d3d9762c2e22b79a47",
   "work/typed-lifecycle-abi-v1/PROGRESS.md": {
-    "bytes": 146648,
-    "sha256": "91490602a0a5fbdc867840a08b2f050905227286c76869d8f0f38d62cac61212"
+    "bytes": 147100,
+    "sha256": "c5c5babbf5ee475ad7ca54af9fcb738b42380667023bc2902bc3fcb6c604dfcb"
   },
   "work/typed-lifecycle-abi-v1/gdextension_interface.h": "07ee07f19e31fe5c22154edbba73ce3cb793b87524add5d9dc0c9468815c9a29",
   "work/typed-lifecycle-abi-v1/native-current-open-items-20261028/COMMAND_OUTPUT.json": "feccb44a82af5439c60b4fb8a6f7c8fc8923f9fd97e2bb169099294c67a185ef",
@@ -1584,8 +1584,8 @@
   "scene/resources/curve_texture.cpp": "d910ebc32487da958b5863a641a27f666f16b3fa601e53025cf1d7bb5bdbef68",
   "scene/resources/gradient_texture.h": "3cad36e241f75687961444287d1b63c91df1efb7c2c3459eebc4b912b03aaf65",
   "scene/resources/gradient_texture.cpp": "c10e08cabdc859b99a0fadd70c00b6944b8b8e8923137185e65b47fcd09e3e67",
-  "bin/godot.macos.template_release.arm64": "7a48f8279ddde8e83e1f7f1ae0ade2429562262e7c68a43e1d88691a5f0ab87a",
-  "bin/godot.macos.editor.dev.arm64.san": "f9aaa458adb2eb1f8c4221696cf2717542015e07a1a314a43e9d3091199e9002",
+  "bin/godot.macos.template_release.arm64": "7dafb50f965e7939d1fd05e8ffec4f91760028b9b9fb491c98071379d5080e59",
+  "bin/godot.macos.editor.dev.arm64.san": "5f7488053c6b58506acc1a9be203a3502b429b4611e9fd82dbff064620839794",
   "work/typed-lifecycle-abi-v1/native-open-items-revalidation-r4-20261029/COMMAND_OUTPUT.json": {
     "bytes": 4769,
     "sha256": "eaac60e891f62bc53726274097a82d250efc70f8fc9cedf248df167d0630f05e"
@@ -1665,5 +1665,104 @@
   "work/e22-core-texture-snapshot-20261029/SAFETY_UBSAN_REGRESSION.rc": {
     "bytes": 2,
     "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
-  }
+  },
+  "work/vulkan-texture-rollback-20261029/COMMANDS.json": {
+    "bytes": 2393,
+    "sha256": "f9d926a28265ee7b8fa8895e1fb5673514b5f90fefd1d81c7d325e6e95e53cce"
+  },
+  "work/vulkan-texture-rollback-20261029/GREEN_BUILD.log": {
+    "bytes": 2021,
+    "sha256": "7ae6ac9f08a038b0aeae2a11049fa06280193afc2a654a34d236565c7b8de1f7"
+  },
+  "work/vulkan-texture-rollback-20261029/GREEN_BUILD.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/vulkan-texture-rollback-20261029/GREEN_RUN.log": {
+    "bytes": 294,
+    "sha256": "683b41c2585bf73628fbabbb01ad65ee8f9e48ef1c1680b0a5fb16d5078682d2"
+  },
+  "work/vulkan-texture-rollback-20261029/GREEN_RUN.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/vulkan-texture-rollback-20261029/INDEPENDENT_REVIEW.md": {
+    "bytes": 710,
+    "sha256": "5eaa5eb4d02b5b1d37f9ad2cf6ba4f2e014c308a716811b2696306cfb23431e9"
+  },
+  "work/vulkan-texture-rollback-20261029/K03_P2.log": {
+    "bytes": 302,
+    "sha256": "e2cde30ad66a4eba32c74affc668921d9c8028cc1bd55c1e70a0e2c47ceede53"
+  },
+  "work/vulkan-texture-rollback-20261029/K03_P2.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/vulkan-texture-rollback-20261029/RECEIPT.md": {
+    "bytes": 1320,
+    "sha256": "7a4d08b6b0beb1e0226a42e88eef2a8d7dde963abed1625aa39a8f09c8095d7c"
+  },
+  "work/vulkan-texture-rollback-20261029/RED_BUILD.log": {
+    "bytes": 2591,
+    "sha256": "eec484fd0d6d1e90dfaa63e3d3f66f4a07666dfbe2074b3907ceae444325e23c"
+  },
+  "work/vulkan-texture-rollback-20261029/RED_BUILD.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/vulkan-texture-rollback-20261029/RED_RUN.log": {
+    "bytes": 1992,
+    "sha256": "5ff918a0da14380097b8d3afb9f94c0992ab6bda2cddb4e1fac0d8a6cc9c0f6b"
+  },
+  "work/vulkan-texture-rollback-20261029/RED_RUN.rc": {
+    "bytes": 4,
+    "sha256": "e726b440cc164001999e718b51780d80314709efe06e7857282377be9111127b"
+  },
+  "work/vulkan-texture-rollback-20261029/REGRESSION.log": {
+    "bytes": 298,
+    "sha256": "e89ee44e6555596e722206c7b6b0e8825ea1b3f22b4253638e8dbf4359c712ff"
+  },
+  "work/vulkan-texture-rollback-20261029/REGRESSION.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/vulkan-texture-rollback-20261029/RELEASE_BUILD.log": {
+    "bytes": 2310,
+    "sha256": "435b6f4ae30222a8f564739bbdd31406fc6ce45649584a5dc8317f9fa944d413"
+  },
+  "work/vulkan-texture-rollback-20261029/RELEASE_BUILD.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/vulkan-texture-rollback-20261029/RELEASE_VERSION.log": {
+    "bytes": 36,
+    "sha256": "7eef1a811a419e5cb3aaf32bbeaffa2614aa6ebea69bd44927a26619e4b4544c"
+  },
+  "work/vulkan-texture-rollback-20261029/RELEASE_VERSION.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/vulkan-texture-rollback-20261029/SOURCE_MANIFEST.json": {
+    "bytes": 1111,
+    "sha256": "5b4fa891de33e6ea58f03147b3e0312f44efe5ae641d124a31a10770a4ff3811"
+  },
+  "work/vulkan-texture-rollback-20261029/UBSAN_BUILD.log": {
+    "bytes": 2733,
+    "sha256": "ea109f6ca69806b1514093c2f2de60418098a79d520b670080c38d00c7eac7f5"
+  },
+  "work/vulkan-texture-rollback-20261029/UBSAN_BUILD.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/vulkan-texture-rollback-20261029/UBSAN_RUN.log": {
+    "bytes": 294,
+    "sha256": "683b41c2585bf73628fbabbb01ad65ee8f9e48ef1c1680b0a5fb16d5078682d2"
+  },
+  "work/vulkan-texture-rollback-20261029/UBSAN_RUN.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "drivers/vulkan/rendering_device_driver_vulkan.h": "c52bd5ae8a192124fd345587775ed24c715c66877547e067955f1ec2dc28dafb",
+  "drivers/vulkan/rendering_device_driver_vulkan.cpp": "54c701258557a3b879d34aadad4378cbb66832068a89b97682bf24b7fb38ba71",
+  "tests/servers/rendering/test_qualification_vulkan_allocation.cpp": "eda07765399a512030a08338a7a860d8673a6337221da43b18fcdc5c6ba5475e"
 }

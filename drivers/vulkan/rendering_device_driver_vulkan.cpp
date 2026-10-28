@@ -2414,17 +2414,59 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create(const TextureFormat &
 	VmaAllocation allocation = nullptr;
 	VmaAllocationInfo alloc_info = {};
 
-	if (!Engine::get_singleton()->is_extra_gpu_memory_tracking_enabled()) {
+	bool extra_tracking = Engine::get_singleton()->is_extra_gpu_memory_tracking_enabled();
+#ifdef TESTS_ENABLED
+	extra_tracking = extra_tracking || test_texture_fault_stage;
+	test_texture_rollback_mask = 0;
+	test_texture_prefix = VK_NULL_HANDLE;
+	test_texture_allocation_prefix = nullptr;
+#endif
+	auto rollback = [&]() {
+		if (extra_tracking) {
+			if (vk_image) {
+				vkDestroyImage(vk_device, vk_image, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_IMAGE));
+#ifdef TESTS_ENABLED
+				test_texture_rollback_mask |= 1;
+#endif
+			}
+			if (allocation) {
+				vmaFreeMemory(allocator, allocation);
+#ifdef TESTS_ENABLED
+				test_texture_rollback_mask |= 2;
+#endif
+			}
+		} else {
+			vmaDestroyImage(allocator, vk_image, allocation);
+		}
+	};
+
+	if (!extra_tracking) {
 		alloc_create_info.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
 		VkResult err = vmaCreateImage(allocator, &create_info, &alloc_create_info, &vk_image, &allocation, &alloc_info);
 		ERR_FAIL_COND_V_MSG(err, TextureID(), vformat("Couldn't create Vulkan image in memory for use with extra GPU memory tracking (VkResult error %d).", err));
 	} else {
 		VkResult err = vkCreateImage(vk_device, &create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_IMAGE), &vk_image);
 		ERR_FAIL_COND_V_MSG(err, TextureID(), vformat("Couldn't create Vulkan image (VkResult error %d).", err));
+#ifdef TESTS_ENABLED
+		test_texture_prefix = vk_image;
+		err = test_texture_fault_stage == 1 ? VK_ERROR_OUT_OF_DEVICE_MEMORY : vmaAllocateMemoryForImage(allocator, vk_image, &alloc_create_info, &allocation, &alloc_info);
+		test_texture_allocation_prefix = allocation;
+#else
 		err = vmaAllocateMemoryForImage(allocator, vk_image, &alloc_create_info, &allocation, &alloc_info);
-		ERR_FAIL_COND_V_MSG(err, TextureID(), vformat("Couldn't allocate memory for Vulkan image (VkResult error %d).", err));
+#endif
+		if (err != VK_SUCCESS) {
+			rollback();
+			ERR_FAIL_V_MSG(TextureID(), vformat("Couldn't allocate memory for Vulkan image (VkResult error %d).", err));
+		}
+#ifdef TESTS_ENABLED
+		err = test_texture_fault_stage == 2 ? VK_ERROR_OUT_OF_DEVICE_MEMORY : vmaBindImageMemory2(allocator, allocation, 0, vk_image, nullptr);
+#else
 		err = vmaBindImageMemory2(allocator, allocation, 0, vk_image, nullptr);
-		ERR_FAIL_COND_V_MSG(err, TextureID(), vformat("Couldn't bind memory to Vulkan image (VkResult error %d).", err));
+#endif
+		if (err != VK_SUCCESS) {
+			rollback();
+			ERR_FAIL_V_MSG(TextureID(), vformat("Couldn't bind memory to Vulkan image (VkResult error %d).", err));
+		}
 	}
 
 	// Create view.
@@ -2459,12 +2501,7 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create(const TextureFormat &
 	VkImageView vk_image_view = VK_NULL_HANDLE;
 	VkResult err = vkCreateImageView(vk_device, &image_view_create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_IMAGE_VIEW), &vk_image_view);
 	if (err) {
-		if (!Engine::get_singleton()->is_extra_gpu_memory_tracking_enabled()) {
-			vmaDestroyImage(allocator, vk_image, allocation);
-		} else {
-			vkDestroyImage(vk_device, vk_image, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_IMAGE));
-			vmaFreeMemory(allocator, allocation);
-		}
+		rollback();
 
 		ERR_FAIL_COND_V_MSG(err, TextureID(), vformat("Couldn't create Vulkan image view (VkResult error %d).", err));
 	}

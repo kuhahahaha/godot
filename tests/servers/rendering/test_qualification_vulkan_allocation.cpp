@@ -8,6 +8,9 @@ public:
  static void fail(RenderingDeviceDriverVulkan &driver,uint32_t stage){driver.test_buffer_fault_stage=stage;}
  static uint32_t rollback(RenderingDeviceDriverVulkan &driver){return driver.test_buffer_rollback_mask;}
  static uint32_t allocations(RenderingDeviceDriverVulkan &driver){VmaTotalStatistics stats;vmaCalculateStatistics(driver.allocator,&stats);return stats.total.statistics.allocationCount;}
+ static void texture_fail(RenderingDeviceDriverVulkan &driver,uint32_t stage){driver.test_texture_fault_stage=stage;}
+ static uint32_t texture_rollback(RenderingDeviceDriverVulkan &driver){return driver.test_texture_rollback_mask;}
+ static void texture_reset(RenderingDeviceDriverVulkan &driver){driver.test_texture_fault_stage=0;driver.test_texture_rollback_mask=0;driver.test_texture_prefix=VK_NULL_HANDLE;driver.test_texture_allocation_prefix=nullptr;}
  static void clean_red_prefix(RenderingDeviceDriverVulkan &driver) {
   if(driver.test_buffer_prefix && !(driver.test_buffer_rollback_mask&1))vkDestroyBuffer(driver.vk_device,driver.test_buffer_prefix,RenderingContextDriverVulkan::get_allocation_callbacks(VK_OBJECT_TYPE_BUFFER));
   if(driver.test_buffer_allocation_prefix && !(driver.test_buffer_rollback_mask&2))vmaFreeMemory(driver.allocator,driver.test_buffer_allocation_prefix);
@@ -27,6 +30,22 @@ TEST_CASE("[QualificationNative][Vulkan] failed manual buffer creation returns i
   // RED may leave native objects; restore test isolation only after recording
   // the actual production failure. This is not counted as driver rollback.
   TestQualificationVulkanAllocationAccess::clean_red_prefix(driver);
+ }
+}
+TEST_CASE("[QualificationNative][Vulkan] failed extra-tracking texture creation rolls back image and memory") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ RenderingDeviceDriver::TextureFormat format;
+ format.format=RDD::DATA_FORMAT_R8_UNORM;format.width=format.height=format.depth=format.array_layers=format.mipmaps=1;
+ format.usage_bits=RDD::TEXTURE_USAGE_SAMPLING_BIT;
+ for(uint32_t stage=1;stage<=2;++stage) {
+  const uint32_t before=TestQualificationVulkanAllocationAccess::allocations(driver);TestQualificationVulkanAllocationAccess::texture_fail(driver,stage);
+  ERR_PRINT_OFF;
+  auto texture=driver.texture_create(format,{});
+  ERR_PRINT_ON;
+  CHECK_FALSE(bool(texture));CHECK(TestQualificationVulkanAllocationAccess::texture_rollback(driver)==(stage==1?1:3));
+  CHECK(TestQualificationVulkanAllocationAccess::allocations(driver)==before);
+  TestQualificationVulkanAllocationAccess::texture_reset(driver);
  }
 }
 #endif

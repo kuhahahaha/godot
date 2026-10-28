@@ -1,0 +1,52 @@
+{
+  "red_build": {
+    "command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2 platform=macos target=editor dev_build=yes tests=yes builtin_glslang=yes",
+    "returncode": 0,
+    "summary": "test scaffolding compiled; runtime RED follows"
+  },
+  "red_run": {
+    "command": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case=\"[QualificationNative][Vulkan] failed extra-tracking texture creation rolls back image and memory\"",
+    "returncode": 1,
+    "summary": "actual leak/failed rollback assertions; VMA metadata assertion abort recorded"
+  },
+  "green_build": {
+    "command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2 platform=macos target=editor dev_build=yes tests=yes builtin_glslang=yes",
+    "returncode": 0,
+    "summary": "debug build rc0"
+  },
+  "green_run": {
+    "command": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case=\"[QualificationNative][Vulkan] failed extra-tracking texture creation rolls back image and memory\"",
+    "returncode": 0,
+    "summary": "1 case / 8 assertions"
+  },
+  "allocation_regression": {
+    "command": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case=\"[QualificationNative][Vulkan]*\"",
+    "returncode": 0,
+    "summary": "2 cases / 16 assertions"
+  },
+  "k03_p2": {
+    "command": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case=\"[K03][P2]*\"",
+    "returncode": 0,
+    "summary": "22 cases / 350 assertions"
+  },
+  "release_build": {
+    "command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2 platform=macos target=template_release dev_build=no tests=no builtin_glslang=yes",
+    "returncode": 0,
+    "summary": "template_release rc0"
+  },
+  "release_version": {
+    "command": "bin/godot.macos.template_release.arm64 --version",
+    "returncode": 0,
+    "summary": "4.7.2.stable.custom_build.72aa6a207"
+  },
+  "ubsan_build": {
+    "command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2 platform=macos target=editor dev_build=yes tests=yes use_ubsan=yes builtin_glslang=yes",
+    "returncode": 0,
+    "summary": "actual UBSan artifact rc0"
+  },
+  "ubsan_run": {
+    "command": "bin/godot.macos.editor.dev.arm64.san --headless --test --test-case=\"[QualificationNative][Vulkan] failed extra-tracking texture creation rolls back image and memory\"",
+    "returncode": 0,
+    "summary": "1 case / 8 assertions"
+  }
+}

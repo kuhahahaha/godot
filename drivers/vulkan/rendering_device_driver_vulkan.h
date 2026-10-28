@@ -67,6 +67,10 @@ class RenderingDeviceDriverVulkan : public RenderingDeviceDriver {
  uint32_t test_buffer_rollback_mask = 0;
  VkBuffer test_buffer_prefix = VK_NULL_HANDLE;
  VmaAllocation test_buffer_allocation_prefix = nullptr;
+ uint32_t test_texture_fault_stage = 0;
+ uint32_t test_texture_rollback_mask = 0;
+ VkImage test_texture_prefix = VK_NULL_HANDLE;
+ VmaAllocation test_texture_allocation_prefix = nullptr;
 #endif
 	/*****************/
 	/**** GENERIC ****/
