@@ -3445,6 +3445,154 @@
     "work/vulkan-sampler-repeat-20261030/UBSAN_REGRESSION.rc": {
       "bytes": 2,
       "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-sampler-enums-20261030/BINARY_HASHES.json": {
+      "bytes": 530,
+      "sha256": "04c0692d80599d2f17fcc0944bbb0d52089a154af79cbb9bf8e46d1ffe3eba36"
+    },
+    "work/vulkan-sampler-enums-20261030/BORDER.log": {
+      "bytes": 294,
+      "sha256": "cd5994c25a09cbcb255dd4dd67854a4f9ce4d71e037202fe39f249b9ddf385e8"
+    },
+    "work/vulkan-sampler-enums-20261030/BORDER.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-sampler-enums-20261030/COMMANDS.json": {
+      "bytes": 2149,
+      "sha256": "9e39d689f925ff30550ce28f5e431612a4c638bfb8d15af09b538bc7aadc3f31"
+    },
+    "work/vulkan-sampler-enums-20261030/COMPARE.log": {
+      "bytes": 294,
+      "sha256": "cd5994c25a09cbcb255dd4dd67854a4f9ce4d71e037202fe39f249b9ddf385e8"
+    },
+    "work/vulkan-sampler-enums-20261030/COMPARE.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-sampler-enums-20261030/DEBUG_BUILD.log": {
+      "bytes": 2021,
+      "sha256": "b96de4103ce7e647bec908f9bc105f765877dcaddb397ceecf0969be3046b6bd"
+    },
+    "work/vulkan-sampler-enums-20261030/DEBUG_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-sampler-enums-20261030/DIFF_CHECK_R1.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "work/vulkan-sampler-enums-20261030/DIFF_CHECK_R1.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-sampler-enums-20261030/FILTER.log": {
+      "bytes": 294,
+      "sha256": "cd5994c25a09cbcb255dd4dd67854a4f9ce4d71e037202fe39f249b9ddf385e8"
+    },
+    "work/vulkan-sampler-enums-20261030/FILTER.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-sampler-enums-20261030/INDEPENDENT_REVIEW_R1.md": {
+      "bytes": 418,
+      "sha256": "564be135ddd53ab76af6ca2671581d25f61209866b16c9d4d0c27c8381fb6c04"
+    },
+    "work/vulkan-sampler-enums-20261030/K03_P2.log": {
+      "bytes": 302,
+      "sha256": "020fb3dd18e113afe25cb214d93adb5a8855e88de2672f29e5e61a92b51baa86"
+    },
+    "work/vulkan-sampler-enums-20261030/K03_P2.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-sampler-enums-20261030/RECEIPT_R1.md": {
+      "bytes": 1213,
+      "sha256": "149463c8f3f5402bf114fb2c6282bd49002623c01687dbffabb6a43ed01f1420"
+    },
+    "work/vulkan-sampler-enums-20261030/RED_BORDER.log": {
+      "bytes": 686,
+      "sha256": "cc0cfd261ed42368c914bfc3d8ecac87159db423f760be7a53f4b526da238c57"
+    },
+    "work/vulkan-sampler-enums-20261030/RED_BORDER.rc": {
+      "bytes": 2,
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    "work/vulkan-sampler-enums-20261030/RED_BORDER_BUILD.log": {
+      "bytes": 2242,
+      "sha256": "07e2e4098053483d512cc6a1794e004686e2f587ba0a08af6b355cf7be1ad7f1"
+    },
+    "work/vulkan-sampler-enums-20261030/RED_BORDER_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-sampler-enums-20261030/RED_COMPARE.log": {
+      "bytes": 684,
+      "sha256": "130246341aed4c3110b784ecf8aa0581a4dcb51c69766d01cd8d42a55fadd38a"
+    },
+    "work/vulkan-sampler-enums-20261030/RED_COMPARE.rc": {
+      "bytes": 2,
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    "work/vulkan-sampler-enums-20261030/RED_COMPARE_BUILD.log": {
+      "bytes": 2345,
+      "sha256": "bb867734bd39789211a89dbf9e20a59bdc74b3e02d9f810fb2231206b01cd137"
+    },
+    "work/vulkan-sampler-enums-20261030/RED_COMPARE_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-sampler-enums-20261030/REGRESSION.log": {
+      "bytes": 298,
+      "sha256": "c5c552b31049553e20fee845bded01718ad15b113f76c2ffc69a71f355981302"
+    },
+    "work/vulkan-sampler-enums-20261030/REGRESSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-sampler-enums-20261030/RELEASE_BUILD.log": {
+      "bytes": 2245,
+      "sha256": "bf0391111234e9023ab6f92bd61e99293277506518a478184e44515eac82f63c"
+    },
+    "work/vulkan-sampler-enums-20261030/RELEASE_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-sampler-enums-20261030/RELEASE_VERSION.log": {
+      "bytes": 36,
+      "sha256": "52797b5b3984c6037c705fd5fb8184debbe42b5507d34fdb1591b5823c6121d3"
+    },
+    "work/vulkan-sampler-enums-20261030/RELEASE_VERSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-sampler-enums-20261030/REPEAT.log": {
+      "bytes": 294,
+      "sha256": "cd5994c25a09cbcb255dd4dd67854a4f9ce4d71e037202fe39f249b9ddf385e8"
+    },
+    "work/vulkan-sampler-enums-20261030/REPEAT.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-sampler-enums-20261030/SOURCE_MANIFEST.json": {
+      "bytes": 882,
+      "sha256": "d605c0ba19f2fa9fdd3960a3646b70ea20333a702d118e8c0afa6d7f80720646"
+    },
+    "work/vulkan-sampler-enums-20261030/UBSAN_BUILD.log": {
+      "bytes": 2505,
+      "sha256": "5653d21ce41e54e85e2d4073abfc8a81cf3e9f8bc6769a27430e80153020af01"
+    },
+    "work/vulkan-sampler-enums-20261030/UBSAN_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-sampler-enums-20261030/UBSAN_REGRESSION.log": {
+      "bytes": 298,
+      "sha256": "c5c552b31049553e20fee845bded01718ad15b113f76c2ffc69a71f355981302"
+    },
+    "work/vulkan-sampler-enums-20261030/UBSAN_REGRESSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
     }
   }
 }

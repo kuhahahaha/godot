@@ -1,0 +1,13 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_qualification_vulkan_allocation.cpp:170:
+TEST CASE:  [QualificationNative][Vulkan] sampler creation rejects invalid border color
+
+tests/servers/rendering/test_qualification_vulkan_allocation.cpp:178: ERROR: CHECK_FALSE( bool(sampler) ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+===============================================================================
+[doctest] test cases: 1 | 0 passed | 1 failed | 1743 skipped
+[doctest] assertions: 3 | 2 passed | 1 failed |
+[doctest] Status: FAILURE!
