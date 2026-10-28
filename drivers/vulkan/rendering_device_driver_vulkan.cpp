@@ -2499,7 +2499,12 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create(const TextureFormat &
 	}
 
 	VkImageView vk_image_view = VK_NULL_HANDLE;
-	VkResult err = vkCreateImageView(vk_device, &image_view_create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_IMAGE_VIEW), &vk_image_view);
+	VkResult err;
+#ifdef TESTS_ENABLED
+	err = test_texture_fault_stage == 3 ? VK_ERROR_OUT_OF_DEVICE_MEMORY : vkCreateImageView(vk_device, &image_view_create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_IMAGE_VIEW), &vk_image_view);
+#else
+	err = vkCreateImageView(vk_device, &image_view_create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_IMAGE_VIEW), &vk_image_view);
+#endif
 	if (err) {
 		rollback();
 

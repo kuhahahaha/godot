@@ -1,32 +1,32 @@
 {
-  "godot_head": "0288f09637ce29ced5dc532e6a8a6d94fe7477d3",
+  "godot_head": "e322d87abe529047d5c688a618cafccb70e73af2",
   "source": {
     "drivers/vulkan/rendering_device_driver_vulkan.h": {
       "bytes": 42348,
       "sha256": "c52bd5ae8a192124fd345587775ed24c715c66877547e067955f1ec2dc28dafb"
     },
     "drivers/vulkan/rendering_device_driver_vulkan.cpp": {
-      "bytes": 390577,
-      "sha256": "54c701258557a3b879d34aadad4378cbb66832068a89b97682bf24b7fb38ba71"
+      "bytes": 390817,
+      "sha256": "244d01df7adbdd12c798554db87103d7c831f3de591848dd862648ddda27feee"
     },
     "tests/servers/rendering/test_qualification_vulkan_allocation.cpp": {
-      "bytes": 3819,
-      "sha256": "eda07765399a512030a08338a7a860d8673a6337221da43b18fcdc5c6ba5475e"
+      "bytes": 3893,
+      "sha256": "8af2ef9df51e0b09d56411c9020a923230cbcf48b2116b1b462d8ae7a20e0f44"
     }
   },
   "artifacts": {
     "bin/godot.macos.editor.dev.arm64": {
-      "bytes": 302618384,
-      "sha256": "dfa2cbda78e16d98bb3ee5c82db6cfa427478c4f59632ee499d05680411039bf"
+      "bytes": 302618368,
+      "sha256": "8bd6c5680237a3cb5f5e0ba6cfa0bbff1f44ce385d34a24db3f143f521d6e388"
     },
     "bin/godot.macos.template_release.arm64": {
       "bytes": 65752576,
-      "sha256": "7dafb50f965e7939d1fd05e8ffec4f91760028b9b9fb491c98071379d5080e59"
+      "sha256": "0432462ab639add7f4c4cf430bdd64681644e49699a188fe065a036115ad5608"
     },
     "bin/godot.macos.editor.dev.arm64.san": {
-      "bytes": 918745792,
-      "sha256": "5f7488053c6b58506acc1a9be203a3502b429b4611e9fd82dbff064620839794"
+      "bytes": 918745936,
+      "sha256": "00849431af1e92a9525f3bb8946ceec037ec1cbba8df1f418a2d0376b5643f86"
     }
   },
-  "artifact_build_identity_head": "72aa6a2073"
+  "artifact_build_identity_head": "e322d87abe"
 }

@@ -38,10 +38,12 @@ TEST_CASE("[QualificationNative][Vulkan] failed extra-tracking texture creation 
  RenderingDeviceDriver::TextureFormat format;
  format.format=RDD::DATA_FORMAT_R8_UNORM;format.width=format.height=format.depth=format.array_layers=format.mipmaps=1;
  format.usage_bits=RDD::TEXTURE_USAGE_SAMPLING_BIT;
- for(uint32_t stage=1;stage<=2;++stage) {
+ RenderingDeviceDriver::TextureView view;
+ view.format = format.format;
+ for(uint32_t stage=1;stage<=3;++stage) {
   const uint32_t before=TestQualificationVulkanAllocationAccess::allocations(driver);TestQualificationVulkanAllocationAccess::texture_fail(driver,stage);
   ERR_PRINT_OFF;
-  auto texture=driver.texture_create(format,{});
+  auto texture=driver.texture_create(format,view);
   ERR_PRINT_ON;
   CHECK_FALSE(bool(texture));CHECK(TestQualificationVulkanAllocationAccess::texture_rollback(driver)==(stage==1?1:3));
   CHECK(TestQualificationVulkanAllocationAccess::allocations(driver)==before);

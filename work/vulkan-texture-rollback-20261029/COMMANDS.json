@@ -48,5 +48,30 @@
     "command": "bin/godot.macos.editor.dev.arm64.san --headless --test --test-case=\"[QualificationNative][Vulkan] failed extra-tracking texture creation rolls back image and memory\"",
     "returncode": 0,
     "summary": "1 case / 8 assertions"
+  },
+  "r5_debug_build": {
+    "command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2 platform=macos target=editor dev_build=yes tests=yes builtin_glslang=yes",
+    "returncode": 0,
+    "summary": "follow-up Debug build with image-view failure injection rc0"
+  },
+  "r5_focused": {
+    "command": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case=\"[QualificationNative][Vulkan] failed extra-tracking texture creation rolls back image and memory\"",
+    "returncode": 0,
+    "summary": "1 case / 11 assertions; stages 1 allocation, 2 bind and 3 image-view rollback"
+  },
+  "r5_regression": {
+    "command": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case=\"[QualificationNative][Vulkan]*\"",
+    "returncode": 0,
+    "summary": "2 cases / 19 assertions"
+  },
+  "r5_ubsan_build": {
+    "command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2 platform=macos target=editor dev_build=yes tests=yes use_ubsan=yes builtin_glslang=yes",
+    "returncode": 0,
+    "summary": "actual use_ubsan=yes follow-up artifact rc0"
+  },
+  "r5_ubsan_focused": {
+    "command": "bin/godot.macos.editor.dev.arm64.san --headless --test --test-case=\"[QualificationNative][Vulkan] failed extra-tracking texture creation rolls back image and memory\"",
+    "returncode": 0,
+    "summary": "1 case / 11 assertions"
   }
 }

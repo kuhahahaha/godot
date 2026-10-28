@@ -11,3 +11,7 @@ source and binary hashes. The change is independent of the E20 owner,
 qualification, completion, readback and Ready/G1 seams.
 
 Disposition: no P1/P2 finding in this bounded cleanup slice.
+
+The follow-up image-view injection is reproducible after real format setup and
+confirms the post-allocation rollback path; no pre-existing buffer rollback
+case is broadened or altered.

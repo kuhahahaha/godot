@@ -21,4 +21,13 @@ view failure uses the same rollback path.
 The rollback mask proves stage 1 releases the image and stage 2 releases both
 image and memory; VMA allocation count returns to its pre-call value. No
 fallback texture, synthetic owner, qualification authority, or GPU/Ready claim
-is introduced. This is native allocation cleanup evidence only. The recorded binaries carry the pre-commit build identity `72aa6a2073`; exact current source and artifact hashes are pinned separately in `SOURCE_MANIFEST.json`.
+is introduced. This is native allocation cleanup evidence only. The initial recorded binaries carry the pre-commit build identity `72aa6a2073`; the image-view follow-up Debug/UBSan artifacts were rebuilt from the committed `e322d87abe` base plus the pinned follow-up source hashes. Exact source and artifact hashes are pinned separately in `SOURCE_MANIFEST.json`.
+
+## Image-view failure coverage
+
+A follow-up fault stage injects `vkCreateImageView` failure after the image and
+allocation have both been acquired. The same rollback mask and allocation
+count checks pass: Debug focused is 1 case / 11 assertions, Vulkan allocation
+regression is 2 cases / 19 assertions, and actual `use_ubsan=yes` focused is 1
+case / 11 assertions. The test fixture also supplies the real view format, so
+UBSan does not depend on an out-of-range default format.
