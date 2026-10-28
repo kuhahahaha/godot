@@ -84,8 +84,8 @@
     "sha256": "1d49cada6a5f013b5737cf43678f209581718cf51bb5289cc49b446f0a363882"
   },
   "work/e06-loaded-core-identity-20261028-r1/RECEIPT.md": {
-    "bytes": 10580,
-    "sha256": "06eba18ba81d3c70afe558743e4d6319b45bb8970936d7c28745258f156293f4"
+    "bytes": 10654,
+    "sha256": "562fee0211a8f9e4d8c1bec8b3b2ec1ce359704a41ba574b7aa6dcef7feba069"
   },
   "work/e06-loaded-core-identity-20261028-r1/STATIC_ARCHIVE_CHECK_R6.json": {
     "bytes": 789,
@@ -138,6 +138,14 @@
   "work/e06-loaded-core-identity-20261028-r1/STATIC_TEMPLATE_BUILD_R1.rc": {
     "bytes": 2,
     "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "work/e06-loaded-core-identity-20261028-r1/STATIC_TEMPLATE_HOST_RUN_R1.log": {
+    "bytes": 284,
+    "sha256": "f0b1d73d6efe3baf76998cc92638946d250ce3c26526b056de130169d9c7295a"
+  },
+  "work/e06-loaded-core-identity-20261028-r1/STATIC_TEMPLATE_HOST_RUN_R1.rc": {
+    "bytes": 3,
+    "sha256": "6950980e3aca96f4dc400eb2e47cc5c343e0d3f483a4e70adcae1d7e6bb22d9c"
   },
   "work/e06-loaded-core-identity-20261028-r1/STATIC_TEMPLATE_HOST_RUN_R2.log": {
     "bytes": 338,
