@@ -1,0 +1,19 @@
+Assertion failed: (m_pMetadata->IsEmpty() && "Some allocations were not freed before destruction of this memory block!"), function Destroy, file vk_mem_alloc.h, line 10725.
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_qualification_vulkan_allocation.cpp:53:
+TEST CASE:  [QualificationNative][Vulkan] texture creation rejects an invalid direct view format
+
+tests/servers/rendering/test_qualification_vulkan_allocation.cpp:64: ERROR: CHECK_FALSE( bool(texture) ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_qualification_vulkan_allocation.cpp:65: ERROR: CHECK( TestQualificationVulkanAllocationAccess::allocations(driver)==before ) is NOT correct!
+  values: CHECK( 2 == 1 )
+
+tests/servers/rendering/test_qualification_vulkan_allocation.cpp:53: FATAL ERROR: test case CRASHED: SIGABRT - Abort (abnormal termination) signal
+
+===============================================================================
+[doctest] test cases: 1 | 0 passed | 1 failed | 1724 skipped
+[doctest] assertions: 4 | 2 passed | 2 failed |
+[doctest] Status: FAILURE!

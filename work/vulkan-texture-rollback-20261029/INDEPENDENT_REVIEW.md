@@ -15,3 +15,10 @@ Disposition: no P1/P2 finding in this bounded cleanup slice.
 The follow-up image-view injection is reproducible after real format setup and
 confirms the post-allocation rollback path; no pre-existing buffer rollback
 case is broadened or altered.
+
+
+The follow-up rejects `DATA_FORMAT_MAX` before indexing `RD_TO_VK_FORMAT` in
+texture creation and both shared-view entry points. The RED test demonstrates
+that the prior behavior could publish a texture and leak an allocation; the
+GREEN Debug/UBSan and Release evidence shows the guard is fail-closed and does
+not broaden the allocation rollback or lifecycle authority surface.

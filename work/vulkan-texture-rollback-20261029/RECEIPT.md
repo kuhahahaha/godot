@@ -31,3 +31,17 @@ count checks pass: Debug focused is 1 case / 11 assertions, Vulkan allocation
 regression is 2 cases / 19 assertions, and actual `use_ubsan=yes` focused is 1
 case / 11 assertions. The test fixture also supplies the real view format, so
 UBSan does not depend on an out-of-range default format.
+
+## Direct-driver view-format validation
+
+A RED direct-driver test passed the default `DATA_FORMAT_MAX` view into
+`texture_create`; the old path published a texture, increased the VMA allocation
+count, and aborted at teardown (rc134). The driver now rejects invalid formats
+before any Vulkan/VMA effect, and applies the same guard to shared-view entry
+points. GREEN Debug is 1 case / 4 assertions, the Vulkan allocation regression is
+3 cases / 23 assertions, and actual `use_ubsan=yes` reports the same 1/4 and 3/23
+counts, all rc0. The template_release rebuild and version probe are also rc0.
+The R6 binaries carry the pre-commit `7ee45a66b` build identity; source hashes
+are pinned to the committed follow-up `65a70669e5` in `SOURCE_MANIFEST.json`.
+This is a direct-driver input validation repair only; no qualification, owner,
+completion, readback, Ready or G1 claim is made.

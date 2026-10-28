@@ -73,5 +73,50 @@
     "command": "bin/godot.macos.editor.dev.arm64.san --headless --test --test-case=\"[QualificationNative][Vulkan] failed extra-tracking texture creation rolls back image and memory\"",
     "returncode": 0,
     "summary": "1 case / 11 assertions"
+  },
+  "r6_red_invalid_view": {
+    "command": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case=\"[QualificationNative][Vulkan] texture creation rejects an invalid direct view format\"",
+    "returncode": 134,
+    "summary": "RED: invalid DATA_FORMAT_MAX view reached native publication, allocation count increased and VMA aborted at teardown"
+  },
+  "r6_debug_build": {
+    "command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2 platform=macos target=editor dev_build=yes tests=yes builtin_glslang=yes",
+    "returncode": 0,
+    "summary": "Debug build with direct view-format guard rc0"
+  },
+  "r6_invalid_view": {
+    "command": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case=\"[QualificationNative][Vulkan] texture creation rejects an invalid direct view format\"",
+    "returncode": 0,
+    "summary": "1 case / 4 assertions"
+  },
+  "r6_vulkan_regression": {
+    "command": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case=\"[QualificationNative][Vulkan]*\"",
+    "returncode": 0,
+    "summary": "3 cases / 23 assertions"
+  },
+  "r6_ubsan_build": {
+    "command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2 platform=macos target=editor dev_build=yes tests=yes use_ubsan=yes builtin_glslang=yes",
+    "returncode": 0,
+    "summary": "actual use_ubsan=yes build rc0"
+  },
+  "r6_ubsan_invalid_view": {
+    "command": "bin/godot.macos.editor.dev.arm64.san --headless --test --test-case=\"[QualificationNative][Vulkan] texture creation rejects an invalid direct view format\"",
+    "returncode": 0,
+    "summary": "1 case / 4 assertions"
+  },
+  "r6_ubsan_vulkan_regression": {
+    "command": "bin/godot.macos.editor.dev.arm64.san --headless --test --test-case=\"[QualificationNative][Vulkan]*\"",
+    "returncode": 0,
+    "summary": "3 cases / 23 assertions"
+  },
+  "r6_release_build": {
+    "command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2 platform=macos target=template_release dev_build=no tests=no builtin_glslang=yes",
+    "returncode": 0,
+    "summary": "template_release rc0"
+  },
+  "r6_release_version": {
+    "command": "bin/godot.macos.template_release.arm64 --version",
+    "returncode": 0,
+    "summary": "4.7.2.stable.custom_build.7ee45a66b (artifact built from the pre-commit 7ee45a66b base)"
   }
 }
