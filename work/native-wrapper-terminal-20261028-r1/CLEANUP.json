@@ -1,0 +1,6 @@
+{
+  "temporary_bytes_deleted": 427880,
+  "processes": "all compile/runtime subprocesses terminal and reaped",
+  "retained": "probe source, runtime config, reproducible runner, final raw positive/negative logs, failed setup/order evidence, receipts/pins; consumer: SDK terminal regression and native integration",
+  "binary": "test DSO and private .godot cache removed; run.py rebuilds them"
+}

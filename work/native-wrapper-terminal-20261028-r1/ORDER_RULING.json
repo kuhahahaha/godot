@@ -1,0 +1,13 @@
+{
+  "original_failing_check": "destructor-flushed-order-checks.json positive terminal_order=false",
+  "observed_order": "USER level2 -> tree free return -> engine free return -> WRAPPER_UNLOAD result0 -> WRAPPER_DSO_UNLOAD",
+  "buffering_hypothesis": "initial suspicion not established; explicit fflush in DSO destructor preserved same observed order; no buffering explanation claimed",
+  "ruling": "Original predicate conjoined two distinct requirements. Exact wrapper terminal order is proved through manager return. DSO-destructor-before-manager-return is contradicted by this run and remains unclosed. Final CHECKS.json terminal_order deliberately covers only wrapper terminal order; dso_unload means marker observed once during process lifetime.",
+  "not_claimed": [
+    "DSO image removed before manager return",
+    "all native terminal ordering green",
+    "canonical ANGE full wrapper cohort",
+    "full G1/OS close acceptance"
+  ],
+  "no_production_change": true
+}
