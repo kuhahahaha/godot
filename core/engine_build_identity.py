@@ -381,7 +381,7 @@ def install_macos(env, program):
         generated = env.File("#core/engine_build_identity.static.gen.cpp")
         stamp = env.Object(generated)
         input_paths = [x.abspath for x in archive_inputs]
-        arguments = [{"kind": "Tool", "role": "libtool"}, "-static", "-o", {"kind": "Output"}]
+        arguments = [{"kind": "Tool", "role": "libtool"}, "-static", "-D", "-o", {"kind": "Output"}]
         arguments += [{"kind": "Input", "ordinal": i} for i in range(len(input_paths))]
         options, option_files = collect_options(env["CONTROLLED_BUILD_OPTION_KEYS"], env)
         sdk = pathlib.Path(env.subst("$MACOS_SDK_PATH"))
@@ -414,7 +414,7 @@ def install_macos(env, program):
         deps += [env.File(str(path)) for _, path in _tool_paths(env, libtool, process_env)]
         env.Command([generated, record, direct], deps, env.Run(generate))
         def aggregate_action(target, source, env):
-            return subprocess.run([libtool, "-static", "-o", target[0].abspath] + [node.abspath for node in source], env=process_env).returncode
+            return subprocess.run([libtool, "-static", "-D", "-o", target[0].abspath] + [node.abspath for node in source], env=process_env).returncode
         aggregate = env.Command(final_path, archive_inputs + [stamp], env.Run(aggregate_action))
         env["_CONTROLLED_FINAL_PROGRAM"] = aggregate
         return record

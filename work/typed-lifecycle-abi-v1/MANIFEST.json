@@ -71,16 +71,28 @@
     "sha256": "0ba51af75c904b01d84f388c4f7771a6856bb564c0d38fa96487a1cae10dc84c"
   },
   "work/e06-loaded-core-identity-20261028-r1/QUEUE.md": {
-    "bytes": 2179,
-    "sha256": "a724c2b0f4cb8a8d74c4e556686d8eda175632de1afcf030788ff30daa5e019e"
+    "bytes": 2240,
+    "sha256": "2892a88a62094a29c8f00fc9107553744e748de86feebe009b52c8725199391c"
   },
   "work/e06-loaded-core-identity-20261028-r1/RECEIPT.md": {
-    "bytes": 9244,
-    "sha256": "319f398663bc59fc0ee22064534ce737b54d4b807f9dbfe56d6fe76d49335669"
+    "bytes": 9390,
+    "sha256": "1c2b798ac819ed69594606496d36c235a1e5ec378da7a1be467b1d31192b6226"
   },
   "work/e06-loaded-core-identity-20261028-r1/STATIC_ARCHIVE_CHECK_R6.json": {
     "bytes": 789,
     "sha256": "63451bef8c50fa3d4c614d63b37d3e467bba96ef039ea8c241f91545ae2e6740"
+  },
+  "work/e06-loaded-core-identity-20261028-r1/STATIC_ARCHIVE_CHECK_R7.json": {
+    "bytes": 789,
+    "sha256": "95b1d24a6b2843399dc1c15d869fea8dd1ac2123b5b1e9fa47fbd2d78bfdb324"
+  },
+  "work/e06-loaded-core-identity-20261028-r1/STATIC_HASH_R10.txt": {
+    "bytes": 65,
+    "sha256": "b7653db30400c6d7cdfd5d3fd5646f912e752c80fbd3c541e0146f6163b1f39e"
+  },
+  "work/e06-loaded-core-identity-20261028-r1/STATIC_HASH_R9.txt": {
+    "bytes": 65,
+    "sha256": "b7653db30400c6d7cdfd5d3fd5646f912e752c80fbd3c541e0146f6163b1f39e"
   },
   "work/e06-loaded-core-identity-20261028-r1/STATIC_RUNTIME_INPUTS_R6.json": {
     "bytes": 1342,
@@ -539,8 +551,8 @@
   "work/sdk-unloadable-active-context-20261028-r3/threads-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "work/typed-lifecycle-abi-v1/CURRENT_PAIR_U01_VFX_R01_NEGATIVE_RECEIPT_20251025.md": "c6ab0496164e2741f157768a10ffcc6f0217b630a26d95d3d9762c2e22b79a47",
   "work/typed-lifecycle-abi-v1/PROGRESS.md": {
-    "bytes": 127431,
-    "sha256": "d732b1364dcb6166fc806218eea426da18a9ef04a409978fd9bfbee2a8f2c2a2"
+    "bytes": 128031,
+    "sha256": "1858e0be6d51836d55265f87f63af13b6272b687de3a5aa0ab922c263a45db8b"
   },
   "work/typed-lifecycle-abi-v1/gdextension_interface.h": "07ee07f19e31fe5c22154edbba73ce3cb793b87524add5d9dc0c9468815c9a29",
   "work/typed-lifecycle-abi-v1/native-current-open-items-20261028/COMMAND_OUTPUT.json": "feccb44a82af5439c60b4fb8a6f7c8fc8923f9fd97e2bb169099294c67a185ef",
