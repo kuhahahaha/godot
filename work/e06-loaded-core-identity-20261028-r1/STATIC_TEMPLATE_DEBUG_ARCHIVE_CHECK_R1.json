@@ -1,0 +1,17 @@
+{
+  "archive": "/Users/macbookair/Documents/Work/godot_ANGE/bin/libgodot.macos.template_debug.dev.arm64.a",
+  "bytes": 1893366248,
+  "sha256": "b3fb7e2a2d1476e0744e6e3c43fb97ef067450360145ac1a6a91a3c72b2271e7",
+  "ar_rc": 0,
+  "entry_count": 2458,
+  "nested_archive_entries": [],
+  "nm_rc": 0,
+  "required_symbols": {
+    "get_engine_build_identity": true,
+    "libgodot_create_godot_instance": true,
+    "libgodot_destroy_godot_instance": true
+  },
+  "target": "template_debug",
+  "tests": "no",
+  "command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j4 platform=macos target=template_debug dev_build=yes tests=no library_type=static_library"
+}

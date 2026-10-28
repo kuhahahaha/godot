@@ -14,3 +14,5 @@ Static graph audit 2026-10-28: `STATIC_GRAPH_AUDIT.log` rc0 proved original `env
 
 
 Static prototype audit found a target-path collision. Production now uses `LIBSUFFIX`-specific intermediate archives, generated nodes, and receipt attachment; editor repeat builds and template target build cover the collision and archive reproducibility.
+
+8. `template_debug` static variant continuation is now independently built with `tests=no`: `STATIC_TEMPLATE_DEBUG_BUILD_R1.rc=0`, repeated no-op rc0, 2,458-member non-nested archive, exact schema-1 identity host rc0. The exploratory full lifecycle host remains outside this receipt because the static archive requires Vulkan loader symbols; no project/runtime/Ready claim is made. Broader adapter/SDK integration and nonbuiltin/unclosedld variants remain queued.
