@@ -195,6 +195,16 @@ TEST_CASE("[QualificationNative][Vulkan] texture layout commands reject invalid 
  ERR_PRINT_ON;
  CHECK(true);
 }
+TEST_CASE("[QualificationNative][Vulkan] render pass creation rejects invalid view counts") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ ERR_PRINT_OFF;
+ auto zero_views=driver.render_pass_create({}, {}, {},0,RenderingDeviceDriver::AttachmentReference());
+ auto too_many_views=driver.render_pass_create({}, {}, {},32,RenderingDeviceDriver::AttachmentReference());
+ ERR_PRINT_ON;
+ CHECK_FALSE(bool(zero_views));
+ CHECK_FALSE(bool(too_many_views));
+}
 TEST_CASE("[QualificationNative][Vulkan] render pass creation rejects an invalid sample count") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
