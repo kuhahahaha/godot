@@ -309,10 +309,13 @@ def _tool_inputs(env, actual_linker, process_env):
     tools, configuration = [], []
     for role, path in _tool_paths(env, actual_linker, process_env):
         tools.append((role, path.read_bytes()))
-        # Apple libtool does not implement clang's `-version_details`; `-V`
-        # is its supported version probe and remains stable across Xcode
-        # toolchains.
-        switch = "-V" if role == "linker" else "--version"
+        # Apple libtool and ld expose different version switches. Keep the
+        # probe tied to the actual selected tool so shared/executable link
+        # paths do not send libtool's `-V` to ld.
+        if role == "linker":
+            switch = "-V" if path.name == "libtool" else "-v"
+        else:
+            switch = "--version"
         version = subprocess.check_output([str(path), switch], text=True, env=process_env)
         # InstalledDir is diagnostic; selected executable content participates.
         version = "\n".join(line for line in version.splitlines() if not line.startswith("InstalledDir:"))

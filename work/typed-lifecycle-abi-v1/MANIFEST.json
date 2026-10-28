@@ -4,7 +4,10 @@
   "core/SCsub": "0fb5bd94238e443b71a69150f31561ac3610a188c07ebef43b76471d2bffae42",
   "core/config/engine.cpp": "52d5b1e83f60d3162746861042a584f799b99fd685627748225e39c4cb69f7e7",
   "core/config/engine_build_identity.h": "b2c39fcc47e22209607c3954386bf1d2c944909e06aed58168f24963b12baa16",
-  "core/engine_build_identity.py": "f9f7dd031d918b1623402fc38ed9bc2312f1e8a7212afe4f0e19573c7049ab0e",
+  "core/engine_build_identity.py": {
+    "bytes": 29945,
+    "sha256": "ff05238d5005a20e4b8cc59c6dc09d20a0437f4ebf3c0f3d95b7bd6ade78c5e6"
+  },
   "core/extension/gdextension_guard_enrollment.cpp": "54a7633286c8d408a02e6e60393c0d6d52e9e646e99a91acffecfb2de5c537e8",
   "core/extension/gdextension_interface.cpp": "d3bc8b2ed560d69c289331d7065cf97a1b45ce21f254c6ac5fdf82b0e5cbf0fa",
   "core/extension/gdextension_interface.gen.h": "2ff52c7ee8d680987ad647b2ab0009085410f2415c6288681d37b2351a29314b",
@@ -71,12 +74,12 @@
     "sha256": "0ba51af75c904b01d84f388c4f7771a6856bb564c0d38fa96487a1cae10dc84c"
   },
   "work/e06-loaded-core-identity-20261028-r1/QUEUE.md": {
-    "bytes": 2240,
-    "sha256": "2892a88a62094a29c8f00fc9107553744e748de86feebe009b52c8725199391c"
+    "bytes": 2242,
+    "sha256": "ad1f05a9d90f47d6309fb021185b44a5aafc64e3a3f73308d9a1ee16e1f67485"
   },
   "work/e06-loaded-core-identity-20261028-r1/RECEIPT.md": {
-    "bytes": 9390,
-    "sha256": "1c2b798ac819ed69594606496d36c235a1e5ec378da7a1be467b1d31192b6226"
+    "bytes": 9391,
+    "sha256": "29ac04d8fb21e7ab7389c8036c7e5cf073f2d7ba7925e05e4f9afff9b84aa59e"
   },
   "work/e06-loaded-core-identity-20261028-r1/STATIC_ARCHIVE_CHECK_R6.json": {
     "bytes": 789,
@@ -86,9 +89,21 @@
     "bytes": 789,
     "sha256": "95b1d24a6b2843399dc1c15d869fea8dd1ac2123b5b1e9fa47fbd2d78bfdb324"
   },
+  "work/e06-loaded-core-identity-20261028-r1/STATIC_ARCHIVE_CHECK_R8.json": {
+    "bytes": 789,
+    "sha256": "8b728ce55db59b67d40b0c9b73bf0c572b7e0f88655f4b7575649ecbcb96da0b"
+  },
   "work/e06-loaded-core-identity-20261028-r1/STATIC_HASH_R10.txt": {
     "bytes": 65,
     "sha256": "b7653db30400c6d7cdfd5d3fd5646f912e752c80fbd3c541e0146f6163b1f39e"
+  },
+  "work/e06-loaded-core-identity-20261028-r1/STATIC_HASH_R11.txt": {
+    "bytes": 65,
+    "sha256": "e44b9630f8da2b71b60ff24e64cd1e1a68b3daa97ac02d42559f46af5f44cbdb"
+  },
+  "work/e06-loaded-core-identity-20261028-r1/STATIC_HASH_R12.txt": {
+    "bytes": 65,
+    "sha256": "e44b9630f8da2b71b60ff24e64cd1e1a68b3daa97ac02d42559f46af5f44cbdb"
   },
   "work/e06-loaded-core-identity-20261028-r1/STATIC_HASH_R9.txt": {
     "bytes": 65,
@@ -100,8 +115,22 @@
   },
   "work/e06-loaded-core-shared-20261028-r1/INDEPENDENT_REVIEW.md": "667dba8900b2aba696dde6878cea9a1db7f7e83ce2c18c2a4d24463fd9ef03c5",
   "work/e06-loaded-core-shared-20261028-r1/MANIFEST.json": "1438715b801a76ce8375524be53e81c38ccdb0a4a80a24c294a921c4c0dd1d8f",
-  "work/e06-loaded-core-shared-20261028-r1/QUEUE.md": "8406eb2ad2886efb2d4d537915a2963276ba5bb2ba33dffd060c9ee2b0a82a31",
-  "work/e06-loaded-core-shared-20261028-r1/RECEIPT.md": "d9174e5dc2a1674495d7644f912c12a3dfd8845a4eaa17188ba2ce42c2568cee",
+  "work/e06-loaded-core-shared-20261028-r1/QUEUE.md": {
+    "bytes": 1288,
+    "sha256": "567b9504c6347c4e059f7c8ffa4e43810a031be3a7372ef8da23eac0c748275d"
+  },
+  "work/e06-loaded-core-shared-20261028-r1/RECEIPT.md": {
+    "bytes": 5967,
+    "sha256": "5fd56283c9c7ad2b56134a3851f5ca2e4dceef33af4eff8f2f0b4a0fcdd52b27"
+  },
+  "work/e06-loaded-core-shared-20261028-r1/SHARED_CURRENT_ARCHIVE_CHECK.json": {
+    "bytes": 1305,
+    "sha256": "7a2387e79f981cbb0b07e49d7025e642bc37dfe6ef86e15d668f08bd11dce822"
+  },
+  "work/e06-loaded-core-shared-20261028-r1/SHARED_CURRENT_RUNTIME_INPUTS.json": {
+    "bytes": 1706,
+    "sha256": "c3a27da0d77405e49fdc2e15a50bb1ad9e61eda9ea10f30ce06c0dfada4b4d72"
+  },
   "work/e20-native-texture-sampler-candidate-20261028-r1/ABI_CANDIDATE.h": "706ff30b41eb194ef0c36be896a366348166bfb249b3b834ffdf48c1b58a4378",
   "work/e20-native-texture-sampler-candidate-20261028-r1/ABI_LAYOUT.c": "f48dfa21416331d56f7e37ca03dfbaee53414aba4a250d2c7b20e610bbaa3909",
   "work/e20-native-texture-sampler-candidate-20261028-r1/ABI_LAYOUT.cpp": "581da41f28f1b234b9ef7b96d2bfaf8258a36d92fde1ed935e5558fcf047c26c",
@@ -551,8 +580,8 @@
   "work/sdk-unloadable-active-context-20261028-r3/threads-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "work/typed-lifecycle-abi-v1/CURRENT_PAIR_U01_VFX_R01_NEGATIVE_RECEIPT_20251025.md": "c6ab0496164e2741f157768a10ffcc6f0217b630a26d95d3d9762c2e22b79a47",
   "work/typed-lifecycle-abi-v1/PROGRESS.md": {
-    "bytes": 128031,
-    "sha256": "1858e0be6d51836d55265f87f63af13b6272b687de3a5aa0ab922c263a45db8b"
+    "bytes": 128929,
+    "sha256": "98871818da82e8dc90b4d4463290be69d5fa92f362c46e00e2b49dce023054a0"
   },
   "work/typed-lifecycle-abi-v1/gdextension_interface.h": "07ee07f19e31fe5c22154edbba73ce3cb793b87524add5d9dc0c9468815c9a29",
   "work/typed-lifecycle-abi-v1/native-current-open-items-20261028/COMMAND_OUTPUT.json": "feccb44a82af5439c60b4fb8a6f7c8fc8923f9fd97e2bb169099294c67a185ef",

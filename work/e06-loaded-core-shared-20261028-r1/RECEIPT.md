@@ -1,6 +1,6 @@
 # E06 shared witness and retained-core teardown repair — 2026-10-28
 
-Status: original shared target actually built and loaded; narrowly reproduced native create-before-start teardown defect repaired. Full FR/queue remains active. Root priority now editor/Metal first chain; shared/static are not its prerequisites. No static build has begun.
+Status: original shared target actually built and loaded; narrowly reproduced native create-before-start teardown defect repaired. Current shared rebuild also passes the original C ABI core-only, started, and early-help controls. Full FR/queue remains active. Root priority remains editor/Metal first chain; shared/static are independent native queue items.
 
 ## Editor first-chain handoff
 
@@ -14,8 +14,9 @@ Main now tracks private NONE/CORE_ONLY/SECOND_PHASE at actual control-flow bound
 
 ## Sealed actual shared evidence
 
-- Original full shared build0,3127 compile actions/6m33; subsequent actual main archive/stamp/shared links0. No SDK/ANGE builder.
-- Matching fixed-core-only-fix/libgodot.core-only-fix.arm64.dylib SHA5dd66b1c773521e21bf707e4e2259ba6ea53814a2ecbc2f6219924918b7d793e,302571912bytes. Separate closed CoreBuildSelection.shared.schema1.json and CoreArtifactReceipt.shared.json; full input bundle also frozen. Loaded core8b86252324832d9a54f2107d6a683b28fc9e550a873c233c66c371e63892f4b4/compiler6f015136c2a34384e255f71e67efd6b35388110d6c5656ba0d0cb4518f26120c, target SharedLibrary.
+- Original full shared build0,3127 compile actions/6m33; current shared rebuild `SHARED_BUILD_CURRENT_R2.rc=0` and no-op `SHARED_NOOP_CURRENT.rc=0` (`scons: . is up to date`). No SDK/ANGE builder.
+- Current shared artifact: `bin/libgodot.macos.editor.dev.arm64.dylib`, 302,572,232 bytes, SHA256 `6db9d77e50ca2cd4781dc01a306dfb0ade624a8e64c807ede12fe2078f8a1d8e`; current direct selection is schema1, core `80f6eea3641fcbae7c1ffa5484b892a1cf4592cf1a49afcd13b68359b523ca2f`, compiler `80b9e52b96501611f237b85ca25e58ea67d8d69b8b5e14bd0553996061bc0077`, route `BuiltinGlslangV1`, target `SharedLibrary`. See `SHARED_CURRENT_ARCHIVE_CHECK.json` and `SHARED_CURRENT_RUNTIME_INPUTS.json`.
+- Historical fixed-core-only-fix artifact and its separate closed selection/receipt remain preserved below; they are not silently repointed to the current artifact.
 - Private host links only original C ABI declarations+Foundation, no SDK/corestamp values. dlopen actual module→original create→original Engine.get_version_info via supplied interface→exactclosedreadonly7fields→original destroy/dlclose. This proves module constants rather than OS executable path.
 - SEALED_CORE_ONLY rc0: CORE init/deinit1/1, otherlevels0/0, destroy/dlclose0; no partial cleanup diagnostics.
 - SEALED_STARTED rc0: original start/iteration; all4levels1/1, destroy/dlclose0.
@@ -31,4 +32,4 @@ First fixture lacked main scene, original setup alert timed out124; invalid acce
 
 ## Continuation
 
-Natural safe-point delivery complete. Static aggregate repair feasibility reviewed, not executed; keep full native branch queue after first editor chain. Next priority per root is T1 r2 typed texture/sampler original producer/consumer/pinning and required normal start→execute→close gaps. Local test counts are not whole-product progress.
+Natural safe-point delivery complete. Current shared artifact and lifecycle controls are sealed; static macOS arm64 aggregate is independently delivered in `work/e06-loaded-core-identity-20261028-r1/`. Next native items remain T1 r2 typed texture/sampler adoption, K04 ports, nonbuiltin/unsupported linker branches, and the original owner joins for Host/Verified/U08/Ready/G1. Local test counts are not whole-product progress.
