@@ -123,4 +123,13 @@ TEST_CASE("[QualificationNative][Vulkan] texture creation rejects an invalid bas
  ERR_PRINT_ON;
  CHECK_FALSE(bool(texture));
 }
+TEST_CASE("[QualificationNative][Vulkan] render pass creation rejects an invalid attachment format") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ RenderingDeviceDriver::Attachment attachment;
+ ERR_PRINT_OFF;
+ auto render_pass=driver.render_pass_create(VectorView<RenderingDeviceDriver::Attachment>(attachment),{}, {},1,RenderingDeviceDriver::AttachmentReference());
+ ERR_PRINT_ON;
+ CHECK_FALSE(bool(render_pass));
+}
 #endif

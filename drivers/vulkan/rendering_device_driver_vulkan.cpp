@@ -6102,6 +6102,10 @@ static void _attachment_reference_to_vk(const RDD::AttachmentReference &p_attach
 }
 
 RDD::RenderPassID RenderingDeviceDriverVulkan::render_pass_create(VectorView<Attachment> p_attachments, VectorView<Subpass> p_subpasses, VectorView<SubpassDependency> p_subpass_dependencies, uint32_t p_view_count, AttachmentReference p_fragment_density_map_attachment) {
+	for (uint32_t i = 0; i < p_attachments.size(); i++) {
+		ERR_FAIL_INDEX_V(p_attachments[i].format, DATA_FORMAT_MAX, RenderPassID());
+	}
+
 	// These are only used if we use multiview but we need to define them in scope.
 	const uint32_t view_mask = (1 << p_view_count) - 1;
 	const uint32_t correlation_mask = (1 << p_view_count) - 1;
