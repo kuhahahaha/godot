@@ -2292,6 +2292,7 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create(const TextureFormat &
 		ERR_FAIL_INDEX_V(shareable_format, DATA_FORMAT_MAX, TextureID());
 	}
 	ERR_FAIL_INDEX_V(p_format.samples, TEXTURE_SAMPLES_MAX, TextureID());
+	ERR_FAIL_INDEX_V(p_format.texture_type, TEXTURE_TYPE_MAX, TextureID());
 	VkImageCreateInfo create_info = {};
 	create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 

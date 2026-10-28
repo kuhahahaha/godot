@@ -162,6 +162,22 @@ TEST_CASE("[QualificationNative][Vulkan] texture creation rejects an invalid sam
  CHECK_FALSE(bool(texture));
  CHECK(TestQualificationVulkanAllocationAccess::allocations(driver)==before);
 }
+TEST_CASE("[QualificationNative][Vulkan] texture creation rejects an invalid texture type") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ RenderingDeviceDriver::TextureFormat format;
+ format.format=RDD::DATA_FORMAT_R8_UNORM;format.width=format.height=format.depth=format.array_layers=format.mipmaps=1;
+ format.samples=RDD::TEXTURE_SAMPLES_1;
+ format.texture_type=RDD::TEXTURE_TYPE_MAX;
+ format.usage_bits=RDD::TEXTURE_USAGE_SAMPLING_BIT;
+ RenderingDeviceDriver::TextureView view;view.format=format.format;
+ const uint32_t before=TestQualificationVulkanAllocationAccess::allocations(driver);
+ ERR_PRINT_OFF;
+ auto texture=driver.texture_create(format,view);
+ ERR_PRINT_ON;
+ CHECK_FALSE(bool(texture));
+ CHECK(TestQualificationVulkanAllocationAccess::allocations(driver)==before);
+}
 TEST_CASE("[QualificationNative][Vulkan] render pass creation rejects an invalid sample count") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
