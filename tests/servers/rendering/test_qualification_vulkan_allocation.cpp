@@ -111,4 +111,16 @@ TEST_CASE("[QualificationNative][Vulkan] texture creation rejects an invalid sha
  ERR_PRINT_ON;
  CHECK_FALSE(bool(texture));
 }
+TEST_CASE("[QualificationNative][Vulkan] texture creation rejects an invalid base format") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ RenderingDeviceDriver::TextureFormat format;
+ format.format=RDD::DATA_FORMAT_MAX;format.width=format.height=format.depth=format.array_layers=format.mipmaps=1;
+ format.usage_bits=RDD::TEXTURE_USAGE_SAMPLING_BIT;
+ RenderingDeviceDriver::TextureView view;view.format=RDD::DATA_FORMAT_R8_UNORM;
+ ERR_PRINT_OFF;
+ auto texture=driver.texture_create(format,view);
+ ERR_PRINT_ON;
+ CHECK_FALSE(bool(texture));
+}
 #endif

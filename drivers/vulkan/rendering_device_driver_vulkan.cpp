@@ -2287,6 +2287,7 @@ VkSampleCountFlagBits RenderingDeviceDriverVulkan::_ensure_supported_sample_coun
 
 RDD::TextureID RenderingDeviceDriverVulkan::texture_create(const TextureFormat &p_format, const TextureView &p_view) {
 	ERR_FAIL_INDEX_V(p_view.format, DATA_FORMAT_MAX, TextureID());
+	ERR_FAIL_INDEX_V(p_format.format, DATA_FORMAT_MAX, TextureID());
 	for (const DataFormat shareable_format : p_format.shareable_formats) {
 		ERR_FAIL_INDEX_V(shareable_format, DATA_FORMAT_MAX, TextureID());
 	}
