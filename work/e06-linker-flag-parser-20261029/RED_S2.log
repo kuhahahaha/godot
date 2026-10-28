@@ -1,0 +1,22 @@
+..E..................
+======================================================================
+ERROR: test_actual_linker_strip_flag_is_closed_flag (tests.test_engine_build_identity.CoreBuildIdentityTests.test_actual_linker_strip_flag_is_closed_flag)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/macbookair/Documents/Work/godot_ANGE/tests/test_engine_build_identity.py", line 204, in test_actual_linker_strip_flag_is_closed_flag
+    inputs, arguments = identity.resolve_link_inputs(
+                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        ["ld", flag, "-o", str(output), str(self.obj)],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        [self.obj], output, self.root,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/macbookair/Documents/Work/godot_ANGE/core/engine_build_identity.py", line 248, in resolve_link_inputs
+    raise ValueError("unclosed original native linker operand: " + token)
+ValueError: unclosed original native linker operand: -x
+
+----------------------------------------------------------------------
+Ran 21 tests in 3.011s
+
+FAILED (errors=1)

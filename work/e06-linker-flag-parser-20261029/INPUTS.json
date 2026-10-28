@@ -1,0 +1,16 @@
+{
+  "base_commit": "2474f23fbf883c20571acd15f26040a039cd0738",
+  "source_sha256": {
+    "core/engine_build_identity.py": "4a4da5b4d6abd5076367f84006bbdd000e76de61e7b7bb13b15532aae65f1eb0",
+    "tests/test_engine_build_identity.py": "e2e106c32fa4f7c544c9404e3164b7d4a8cc33e2781e70463b5b8a8e0be57e9e"
+  },
+  "closed_flags": ["-S", "-x"],
+  "unit": {"rc": 0, "cases": 21},
+  "release_build": {
+    "rc": 0,
+    "target": "template_release",
+    "binary_sha256": "5f7d8191ecb850fe8109a982afba8a11fd6f0cbd6044f64007b2fdd0984663c7"
+  },
+  "startup": {"version_rc": 0, "help_rc": 0},
+  "scope": "Controlled linker identity parser and release startup only; no GPU/qualification/Ready/G1 claim"
+}

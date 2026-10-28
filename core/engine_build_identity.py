@@ -149,7 +149,7 @@ def resolve_link_inputs(command, ordinary_sources, final_target, sdk):
     if unsupported_search.intersection(command):
         raise ValueError("unsupported original native library search mode")
     flag_only = {"-demangle", "-dynamic", "-dylib", "-no_deduplicate", "-dead_strip", "-pie", "-no_pie",
-                 "-export_dynamic", "-ObjC", "-all_load", "-headerpad_max_install_names", "-search_paths_first",
+                 "-export_dynamic", "-ObjC", "-all_load", "-headerpad_max_install_names", "-search_paths_first", "-S", "-x",
                  "-O0", "-O1", "-O2", "-O3", "-no_uuid"}
     scalar_options = {"-arch": 1, "-platform_version": 3, "-stack_size": 1,
                       "-compatibility_version": 1, "-current_version": 1}
