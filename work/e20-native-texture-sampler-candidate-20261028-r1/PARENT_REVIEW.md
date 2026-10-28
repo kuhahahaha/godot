@@ -1,0 +1,11 @@
+# Parent source/ABI review and exact handoff
+
+Parent rechecked the original buffer-only create and frozen bridge/retirement shape against the candidate, and compiled the uninstalled declarations with actual generated Godot ABI types. C11/C++17 arm64/x86_64 syntax and six sizeof/offset assertions all pass. This is declaration/layout evidence only, not native implementation, installed ABI, GPU or cleanup proof. The original V1 endpoint behavior is preserved by the proposal and no production endpoint was added.
+
+Texture logical byte range is explicitly a logical payload extent width*height*16, not an observed physical heap offset/native tiled allocation span. C04 must map it as an image parent identity plus color/mip0/layer0 subresource; do not reinterpret it as a BufferByteRange or infer physical alias separation from RID equality. The owned/no-import/no-shared profile, original backing serial and retained source/view/version give the typed object boundary; they confer no producer/write/completion authority.
+
+Two source hazards stay mandatory: empty storage texture pending-clear must be captured by the original producer or method Unsupported before use; Vulkan image/allocation/bind partial failures require original rollback or explicit precreation unsupported gating. No helper free_rid/empty image/version0 is successful publication. C original producer and B source-record admission must explicitly accept the content/version dependency join.
+
+K05 work added a TESTS-only friend to RenderingDevice.h after the independent audit snapshot. That has no member layout or production ABI effect; do not blindly refresh historical source hashes or claim a clean-HEAD build. Other candidate source refs/hunks describe their recorded working-tree snapshot. Root adoption remains required before implementation.
+
+Root-to-C minimum is ABI_CANDIDATE.h (descriptor64/create120/view80/backing216/query40), same Storage child/retire port, original RT10/11 transport, actual RGBA32F texture+NEAREST/CLAMP sampler, original qualified producer edge/version/pin, and native last-return hooks after existing driver free. Full16-hunk/20-case candidate is ADOPTION.md. C/B/C04 responsibilities and adoption decisions are in its last section; this is one complete handoff rather than an open-ended owner-unavailable report.

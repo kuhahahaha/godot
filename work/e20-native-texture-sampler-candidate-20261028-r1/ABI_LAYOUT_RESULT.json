@@ -1,0 +1,70 @@
+{
+  "scope": "uninstalled candidate C/C++ syntax and static layouts only; no native implementation or runtime",
+  "rows": [
+    {
+      "arch": "arm64",
+      "language": "C11",
+      "command": [
+        "clang",
+        "-arch",
+        "arm64",
+        "-std=c11",
+        "-fsyntax-only",
+        "-I.",
+        "-Iwork/e20-native-texture-sampler-candidate-20261028-r1",
+        "work/e20-native-texture-sampler-candidate-20261028-r1/ABI_LAYOUT.c"
+      ],
+      "rc": 0,
+      "output": ""
+    },
+    {
+      "arch": "arm64",
+      "language": "C++17",
+      "command": [
+        "clang++",
+        "-arch",
+        "arm64",
+        "-std=c++17",
+        "-fsyntax-only",
+        "-I.",
+        "-Iwork/e20-native-texture-sampler-candidate-20261028-r1",
+        "work/e20-native-texture-sampler-candidate-20261028-r1/ABI_LAYOUT.cpp"
+      ],
+      "rc": 0,
+      "output": ""
+    },
+    {
+      "arch": "x86_64",
+      "language": "C11",
+      "command": [
+        "clang",
+        "-arch",
+        "x86_64",
+        "-std=c11",
+        "-fsyntax-only",
+        "-I.",
+        "-Iwork/e20-native-texture-sampler-candidate-20261028-r1",
+        "work/e20-native-texture-sampler-candidate-20261028-r1/ABI_LAYOUT.c"
+      ],
+      "rc": 0,
+      "output": ""
+    },
+    {
+      "arch": "x86_64",
+      "language": "C++17",
+      "command": [
+        "clang++",
+        "-arch",
+        "x86_64",
+        "-std=c++17",
+        "-fsyntax-only",
+        "-I.",
+        "-Iwork/e20-native-texture-sampler-candidate-20261028-r1",
+        "work/e20-native-texture-sampler-candidate-20261028-r1/ABI_LAYOUT.cpp"
+      ],
+      "rc": 0,
+      "output": ""
+    }
+  ],
+  "candidate_sha256": "6128a71d8281cbe8dd5f34e5c515b37d82e2e9242ab2f674fc1bd52937ba29f5"
+}

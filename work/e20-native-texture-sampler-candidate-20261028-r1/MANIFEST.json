@@ -1,0 +1,33 @@
+{
+  "status": "candidate only; root adoption required before native implementation",
+  "files": {
+    "ABI_CANDIDATE.h": {
+      "bytes": 4686,
+      "sha256": "6128a71d8281cbe8dd5f34e5c515b37d82e2e9242ab2f674fc1bd52937ba29f5"
+    },
+    "ABI_LAYOUT.c": {
+      "bytes": 710,
+      "sha256": "2b7b60b11051c48f717e1b4bb10ee9ce984dc4b2bb3a09f384ebe81e73eada2c"
+    },
+    "ABI_LAYOUT.cpp": {
+      "bytes": 710,
+      "sha256": "2b7b60b11051c48f717e1b4bb10ee9ce984dc4b2bb3a09f384ebe81e73eada2c"
+    },
+    "ABI_LAYOUT_RESULT.json": {
+      "bytes": 1751,
+      "sha256": "85d8d474f46bc24accb80dadd16e3462e30f55384fdeb99cfc174eba51c8748e"
+    },
+    "ADOPTION.md": {
+      "bytes": 32083,
+      "sha256": "0be534f37581c658d803992017c7345b78f05a6ac6d962419165f7902a7429b4"
+    },
+    "PARENT_REVIEW.md": {
+      "bytes": 2321,
+      "sha256": "3d9137971da442e57d20a487c9fe79c2fdaf1df994f30ac3de609085405b1637"
+    },
+    "STATIC_AUDIT.json": {
+      "bytes": 3391,
+      "sha256": "f82a84a93bbf39347057fe9eab275fc41dbe478bca7e939ae8f45a8a34496641"
+    }
+  }
+}

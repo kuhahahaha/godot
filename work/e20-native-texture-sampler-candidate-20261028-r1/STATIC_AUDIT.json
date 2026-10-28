@@ -1,0 +1,103 @@
+{
+  "status": "candidate-needs-root-adoption",
+  "godot_head": "beb1e2c9b38bce8488f173486efad9dd5e38faa3",
+  "evidence": "Working-tree source audit. ctypes layout arithmetic only, not compiled ABI validation. Shared sources may change after this snapshot.",
+  "source_sha256": {
+    "core/extension/gdextension_qualification.cpp": "cb435c9749eb683a07035588f9c3aac4404bf72553e455157b83fd8571d7ce53",
+    "core/extension/gdextension_qualification_internal.h": "f9f195ebc4853f79662c878a461cca4af4f463024ebe2d43cb106ee246167511",
+    "core/extension/gdextension_qualification_physical.h": "9aaaf34ec7d9df9f5c9d3355af4a936b7367b8c3721801b45f3ca5609162a0af",
+    "core/extension/gdextension_qualification_rt.cpp": "a9a8eb5e7e1557a4f5c5cbd1875d2ec4c5ba2a465702c649fac9b30ce7a9ebd3",
+    "core/extension/gdextension_qualification_rd.cpp": "122e1669a5ef89f565854f38ec7b889c73f49114a76268c2c04765048ac2c69b",
+    "core/extension/gdextension_qualification_ticket.cpp": "93762469002c2705a2521f6cf97cdc326c1378fd1a3997bbefe8304daef282e9",
+    "core/extension/gdextension_interface.json": "d6a9fade372d644b153bd79aa133639226db45c1b64c59f47678355593a9b6cd",
+    "servers/rendering/rendering_device.h": "e6c07c3b1fae060ca5c519e013b08ffe0f867df96b33ca2cb0042e070f5849ce",
+    "servers/rendering/rendering_device.cpp": "1b668df6fda0de71a66b30536df306ef42fdd5e06bf6e672b26775f631fff312",
+    "drivers/metal/rendering_device_driver_metal.cpp": "347f7d4bb2e662541ff3a158c46edf6919a09dfec5cffc10ee4037e108b5c2aa",
+    "drivers/vulkan/rendering_device_driver_vulkan.cpp": "36a74609d6b63957d5971131254c5155871204410cb557c53c465e2cd4c9c5de"
+  },
+  "candidate_sha256": {
+    "ABI_CANDIDATE.h": "6128a71d8281cbe8dd5f34e5c515b37d82e2e9242ab2f674fc1bd52937ba29f5",
+    "ADOPTION.md": "0be534f37581c658d803992017c7345b78f05a6ac6d962419165f7902a7429b4"
+  },
+  "candidate_layout_arithmetic": {
+    "Desc": {
+      "size": 64,
+      "alignment": 8,
+      "offsets": {
+        "kind": 0,
+        "format": 4,
+        "width": 8,
+        "height": 12,
+        "depth": 16,
+        "layers": 20,
+        "mipmaps": 24,
+        "samples": 28,
+        "usage": 32,
+        "filter": 40,
+        "repeat": 44,
+        "reserved": 48
+      }
+    },
+    "Request": {
+      "size": 120,
+      "alignment": 8,
+      "offsets": {
+        "abi": 0,
+        "bytes": 16,
+        "slot": 24,
+        "part": 28,
+        "gen": 32,
+        "attempt": 40,
+        "desc": 48,
+        "reserved": 112
+      }
+    },
+    "View": {
+      "size": 80,
+      "alignment": 8,
+      "offsets": {
+        "parent": 0,
+        "parentserial": 8,
+        "view": 16,
+        "content": 24,
+        "begin": 32,
+        "end": 40,
+        "base_mip": 48,
+        "mips": 52,
+        "base_layer": 56,
+        "layers": 60,
+        "kind": 64,
+        "format": 68,
+        "reserved": 72
+      }
+    },
+    "Backing": {
+      "size": 216,
+      "alignment": 8,
+      "offsets": {
+        "abi": 0,
+        "ref": 16,
+        "rid": 32,
+        "serial": 40,
+        "bytes": 48,
+        "usage": 56,
+        "error": 64,
+        "state": 68,
+        "desc": 72,
+        "view": 136
+      }
+    },
+    "Query": {
+      "size": 40,
+      "alignment": 8,
+      "offsets": {
+        "abi": 0,
+        "ref": 16,
+        "serial": 32
+      }
+    }
+  },
+  "engine_build_run": false,
+  "gpu_runtime_run": false,
+  "production_files_edited_by_this_task": []
+}
