@@ -6454,6 +6454,8 @@ void RenderingDeviceDriverVulkan::command_render_set_scissor(CommandBufferID p_c
 }
 
 void RenderingDeviceDriverVulkan::command_render_clear_attachments(CommandBufferID p_cmd_buffer, VectorView<AttachmentClear> p_attachment_clears, VectorView<Rect2i> p_rects) {
+	ERR_FAIL_COND(p_attachment_clears.size() > 0 && !p_attachment_clears.ptr());
+	ERR_FAIL_COND(p_rects.size() > 0 && !p_rects.ptr());
 	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
 
 	VkClearAttachment *vk_clears = ALLOCA_ARRAY(VkClearAttachment, p_attachment_clears.size());

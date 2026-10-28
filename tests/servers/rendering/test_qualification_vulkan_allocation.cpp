@@ -196,6 +196,14 @@ TEST_CASE("[QualificationNative][Vulkan] vertex binding rejects missing arrays b
  ERR_PRINT_ON;
  CHECK(true);
 }
+TEST_CASE("[QualificationNative][Vulkan] attachment clear rejects missing views before command access") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ ERR_PRINT_OFF;
+ driver.command_render_clear_attachments(RenderingDeviceDriver::CommandBufferID(),VectorView<RenderingDeviceDriver::AttachmentClear>(nullptr,1),{});
+ ERR_PRINT_ON;
+ CHECK(true);
+}
 TEST_CASE("[QualificationNative][Vulkan] texture creation rejects an invalid shareable format") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
