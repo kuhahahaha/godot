@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "artifacts": {
+    "bin/godot.macos.editor.dev.arm64": {
+      "bytes": 302678848,
+      "sha256": "9627412832f0a2745451eda4d1f9ebce816e78906afd6de8bb14d068b3d54e36"
+    },
+    "bin/godot.macos.editor.dev.arm64.san": {
+      "bytes": 918897264,
+      "sha256": "5fa06e97d360f21a3eb0bd1bc9266a1cb2aa5ab0adc3f8407d037f5b9c81a0b0"
+    },
+    "bin/godot.macos.template_release.arm64": {
+      "bytes": 65769168,
+      "sha256": "2744c30dc6fec78cdd5da32f3345441827d358f1d0140bb4d3719a49db29611c"
+    }
+  }
+}

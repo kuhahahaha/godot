@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "status": "CURRENT_VULKAN_VERTEX_BINDING_ARRAY_GUARD",
+  "godot_head_at_capture": "67a4c2eea3e22b19621f7a9781b69c10016b02e3",
+  "source": {
+    "drivers/vulkan/rendering_device_driver_vulkan.cpp": {
+      "bytes": 396469,
+      "sha256": "dbbd9da5a20d21c7e29bcfdfe36c0b946e1eecdb4569407bf6e82f43fcfdaa63"
+    },
+    "tests/servers/rendering/test_qualification_vulkan_allocation.cpp": {
+      "bytes": 19692,
+      "sha256": "b153c82e3fe083c600c096f88e845a25a8b04d2469246a1f4f1e3ee78ac95f58"
+    }
+  },
+  "binary_sha256": {
+    "bin/godot.macos.editor.dev.arm64": "9627412832f0a2745451eda4d1f9ebce816e78906afd6de8bb14d068b3d54e36",
+    "bin/godot.macos.editor.dev.arm64.san": "5fa06e97d360f21a3eb0bd1bc9266a1cb2aa5ab0adc3f8407d037f5b9c81a0b0",
+    "bin/godot.macos.template_release.arm64": "2744c30dc6fec78cdd5da32f3345441827d358f1d0140bb4d3719a49db29611c"
+  }
+}
