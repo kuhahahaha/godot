@@ -90,4 +90,25 @@ TEST_CASE("[QualificationNative][Vulkan] vertex format creation rejects an inval
  ERR_PRINT_ON;
  CHECK_FALSE(bool(vertex_format));
 }
+TEST_CASE("[QualificationNative][Vulkan] direct buffer format rejects invalid input") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ ERR_PRINT_OFF;
+ bool result=driver.buffer_set_texel_format(RenderingDeviceDriver::BufferID(),RDD::DATA_FORMAT_MAX);
+ ERR_PRINT_ON;
+ CHECK_FALSE(result);
+}
+TEST_CASE("[QualificationNative][Vulkan] texture creation rejects an invalid shareable format") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ RenderingDeviceDriver::TextureFormat format;
+ format.format=RDD::DATA_FORMAT_R8_UNORM;format.width=format.height=format.depth=format.array_layers=format.mipmaps=1;
+ format.usage_bits=RDD::TEXTURE_USAGE_SAMPLING_BIT;
+ format.shareable_formats.push_back(RDD::DATA_FORMAT_MAX);
+ RenderingDeviceDriver::TextureView view;view.format=format.format;
+ ERR_PRINT_OFF;
+ auto texture=driver.texture_create(format,view);
+ ERR_PRINT_ON;
+ CHECK_FALSE(bool(texture));
+}
 #endif

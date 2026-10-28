@@ -2101,6 +2101,7 @@ RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitFie
 }
 
 bool RenderingDeviceDriverVulkan::buffer_set_texel_format(BufferID p_buffer, DataFormat p_format) {
+	ERR_FAIL_INDEX_V(p_format, DATA_FORMAT_MAX, false);
 	BufferInfo *buf_info = (BufferInfo *)p_buffer.id;
 
 	DEV_ASSERT(!buf_info->vk_view);
@@ -2286,6 +2287,9 @@ VkSampleCountFlagBits RenderingDeviceDriverVulkan::_ensure_supported_sample_coun
 
 RDD::TextureID RenderingDeviceDriverVulkan::texture_create(const TextureFormat &p_format, const TextureView &p_view) {
 	ERR_FAIL_INDEX_V(p_view.format, DATA_FORMAT_MAX, TextureID());
+	for (const DataFormat shareable_format : p_format.shareable_formats) {
+		ERR_FAIL_INDEX_V(shareable_format, DATA_FORMAT_MAX, TextureID());
+	}
 	VkImageCreateInfo create_info = {};
 	create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 
