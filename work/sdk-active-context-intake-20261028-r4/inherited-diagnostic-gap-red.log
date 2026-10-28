@@ -1,0 +1,7 @@
+/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/k03-sdk-intake-gueubtwj/target.cpp:258:69: error: no member named 'error' in 'ANGE::particle::host_detail::Result'
+  258 |       report_scene_initialization_refusal("bind_local_device",local.error());
+      |                                                               ~~~~~ ^
+/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/k03-sdk-intake-gueubtwj/target.cpp:267:69: error: no member named 'error' in 'ANGE::particle::host_detail::Result'
+  267 |         report_scene_initialization_refusal("bind_main_device",main.error());
+      |                                                                ~~~~ ^
+2 errors generated.

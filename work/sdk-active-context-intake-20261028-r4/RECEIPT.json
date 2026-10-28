@@ -1,0 +1,27 @@
+{
+  "status": "PRIVATE_ACCESSOR_CONSUMER_INTAKE_CHECKED_CURRENT_V2_18_GREEN",
+  "scope": "successor to R3 SDK candidate; exact ANGE consumer and current target harness migration only",
+  "patch": "ANGE_INTAKE.patch supersedes R3 ANGE_CONSUMER.patch; R3 SDK.patch remains unchanged",
+  "owned_source_paths": [
+    "src/register_types.cpp",
+    "tests/native/device_exit_scene_ready_test.cpp",
+    "tests/native/scene_ready_source/v2_receiver.py",
+    "tests/native/scene_ready_source/verify_discriminators.py"
+  ],
+  "verified": [
+    "combined patch git apply --check --whitespace=error rc0",
+    "migrated Python receiver syntax rc0",
+    "current V2 receiver compile rc0; all18 existing controls rc0 including exact unscheduled-pair abort case14",
+    "R3 SDK non-macOS preprocessor branch host syntax rc0 with function-pointer-bool warning as error"
+  ],
+  "diagnostic_boundary": "current receiver Result only had success/has_value, so actual materializer diagnostic additions caused missing error() compilation RED; private target adapter now carries opaque DiagnosticCause and inert report sink. Original success bool and all branch/result predicates unchanged. Diagnostic content is not validated by these controls.",
+  "preservation": "no historical source/template/oracle bytes edited; only current target receiver gets accessor shim; reset-entry mutation changes spelling only in target mode",
+  "not_verified": [
+    "historical V1 full oracle equivalence against current production",
+    "foreign platform native build/runtime",
+    "canonical full DSO integration",
+    "full Ready/Verified/G1"
+  ],
+  "production_edits": false,
+  "review": "author self-review, no independent review"
+}

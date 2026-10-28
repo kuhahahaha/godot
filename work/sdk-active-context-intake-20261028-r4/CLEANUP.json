@@ -1,0 +1,5 @@
+{
+  "temporary_bytes_deleted": 206161,
+  "processes": "all children reaped; no shared source edits",
+  "retained": "intake patch, source pins, runner/checks/logs"
+}

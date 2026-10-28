@@ -1,0 +1,116 @@
+--- a/src/register_types.cpp
++++ b/src/register_types.cpp
+@@ -262,7 +262,7 @@
+ }
+ int32_t materialize_scene_host(GDExtensionDeviceExitSceneReadyContextRef ready,
+     const GDExtensionSceneInstallPlanV2* plan) noexcept {
+-  auto* binding=GDExtensionBinding::active_guarded_user;
++  auto* binding=GDExtensionBinding::active_guarded_user();
+   if (!binding || !particle_host_root || particle_ready_host.state!=ReadyHostLedger::State::Pending)
+     return int32_t(ERR_INVALID_DATA);
+   if (plan) {
+@@ -515,7 +515,7 @@
+   // init phase is the only legal time to call GDREGISTER_INTERNAL_CLASS.
+   ANGE::register_all_signal_receivers();
+ 
+-  auto* guarded_binding=GDExtensionBinding::active_guarded_user;
++  auto* guarded_binding=GDExtensionBinding::active_guarded_user();
+   if (guarded_binding) {
+     // Only CPU owners and early wrappers exist in the original SCENE frame.
+     auto result=ANGE::particle::host_detail::HostAttachmentInstaller::create_root(
+@@ -617,7 +617,7 @@
+ #ifdef ANGE_SKINNED_MESH_CAPTURE_TESTS
+   detach_skinned_mesh_capture_test_sources();
+ #endif
+-  auto* guarded_binding=GDExtensionBinding::active_guarded_user;
++  auto* guarded_binding=GDExtensionBinding::active_guarded_user();
+   if (guarded_binding && !godot::internal::guarded_scene_owners_unchanged())
+     particle_scene_failed(*guarded_binding,false);
+   if (guarded_binding && particle_host_root) {
+--- a/tests/native/device_exit_scene_ready_test.cpp
++++ b/tests/native/device_exit_scene_ready_test.cpp
+@@ -18,7 +18,7 @@
+ void inert() {}
+ void initialize(godot::ModuleInitializationLevel) {check(phase==0);phase=1;}
+ int32_t ready(GDExtensionDeviceExitSceneReadyContextRef ref) {
+- check(B::active_guarded_user==saved_userdata && ref.registry_instance==73 && ref.handle_serial==941);
++ check(B::active_guarded_user()==saved_userdata && ref.registry_instance==73 && ref.handle_serial==941);
+  ++ready_calls;return 31;
+ }
+ int32_t guard(GDExtensionClassLibraryPtr,const GDExtensionDeviceExitGuardRegistrationV1* config,GDExtensionDeviceExitGuardToken* out) {
+@@ -55,7 +55,7 @@
+ GDExtensionDeviceExitSceneReadyCallbackV2 saved_callback_v2=nullptr;
+ const GDExtensionSceneInstallRequirementsV2 requirements_v2{{1,32,0},1,2,0};
+ int32_t ready_v2(GDExtensionDeviceExitSceneReadyContextRef ref,const GDExtensionSceneInstallPlanV2& plan) {
+- check(B::active_guarded_user==saved_userdata && ref.registry_instance==73 && ref.handle_serial==941);
++ check(B::active_guarded_user()==saved_userdata && ref.registry_instance==73 && ref.handle_serial==941);
+  check(plan.library_generation==19);++ready_calls;return 31;
+ }
+ int32_t registration_v2(const GDExtensionSceneInstallRequirementsV2* req,GDExtensionDeviceExitInitializationLevelContextRef frame,GDExtensionDeviceExitSceneReadyCallbackV2 callback,void* userdata) {
+@@ -160,7 +160,7 @@
+     if(bad==12) plan.omission_reason=1;
+     if(bad==13) plan.main_rd_id=0;
+     if(bad==14) plan.main_rd_epoch=0;
+-    check(saved_callback_v2(saved_userdata,{73,941},&plan)==godot::ERR_INVALID_DATA && ready_calls==2 && !B::active_guarded_user);
++    check(saved_callback_v2(saved_userdata,{73,941},&plan)==godot::ERR_INVALID_DATA && ready_calls==2 && !B::active_guarded_user());
+    }
+    check(saved_callback_v2(saved_userdata,{73,941},nullptr)==godot::ERR_INVALID_DATA);
+    alignas(GDExtensionSceneInstallPlanV2) unsigned char bytes[sizeof(plan)+1]{};
+@@ -170,7 +170,7 @@
+     if(child==0) {
+      if(illegal==0) data.scene_ready_callback_v2=nullptr;
+      if(illegal==1) data.scene_ready_flavor=B::InitData::SceneReadyFlavor::V1Full;
+-     if(illegal==2) B::active_guarded_user=&data;
++     if(illegal==2) B::active_guarded_user()=&data;
+      if(illegal==3) {std::thread wrong([&]{saved_callback_v2(saved_userdata,{73,941},&valid);});wrong.join();_exit(99);}
+      if(illegal==4) {
+       phase=0;reject_registration=true;data.exit_api.terminate_initialize_blocked=blocked;
+@@ -324,8 +324,8 @@
+  data.exit_api.after_binding_initialize=acknowledgement;
+  B::level_initialized[GDEXTENSION_INITIALIZATION_SCENE]=1;
+  out.initialize(out.userdata,GDEXTENSION_INITIALIZATION_SCENE);
+- check(phase==3 && saved_callback && saved_userdata==&data && !B::active_guarded_user);
+- check(saved_callback(saved_userdata,{73,941})==31 && ready_calls==1 && !B::active_guarded_user);
++ check(phase==3 && saved_callback && saved_userdata==&data && !B::active_guarded_user());
++ check(saved_callback(saved_userdata,{73,941})==31 && ready_calls==1 && !B::active_guarded_user());
+  // A borrowed Ready serial is not numerically equated with the guard serial.
+  check(data.guard.handle_serial==5);
+  for(unsigned variant=mask_only?4:0;variant<5;++variant) {
+@@ -333,7 +333,7 @@
+   if(pid==0) {
+    if(variant==0) data.scene_ready_callback=nullptr;
+    if(variant==1) data.main_rd_qualification_required=false;
+-   if(variant==2) B::active_guarded_user=&data;
++   if(variant==2) B::active_guarded_user()=&data;
+    if(variant==4) data.guard_configuration.entry_classes &= ~uint64_t(GDEXTENSION_DEVICE_EXIT_ENTRY_SCENE_READY_V1);
+    if(variant==3) {
+     std::thread wrong([&]{saved_callback(saved_userdata,{73,941});});wrong.join();_exit(99);
+--- a/tests/native/scene_ready_source/v2_receiver.py
++++ b/tests/native/scene_ready_source/v2_receiver.py
+@@ -92,6 +92,14 @@
+     flavor=extract((ROOT/'godot-cpp/include/godot_cpp/godot.hpp').read_text(),'enum class SceneReadyFlavor {')+';'
+     bus=next(line for line in (ROOT/'src/godot/bridge/audio_buses.h').read_text().splitlines() if 'constexpr const char *kBusMaster =' in line)
+     template=Path(__file__).with_name('probe.cpp.in').read_text()
++    # Adapt only the current target receiver. The pinned baseline template and oracle remain byte-exact.
++    template=template.replace('static InitData* active_guarded_user;', 'static InitData*& active_guarded_user();')
++    template=template.replace('GDExtensionBinding::InitData* GDExtensionBinding::active_guarded_user=&binding;',
++        'GDExtensionBinding::InitData*& GDExtensionBinding::active_guarded_user(){static InitData* value=&binding;return value;}')
++    template=template.replace('GDExtensionBinding::active_guarded_user=nullptr;', 'GDExtensionBinding::active_guarded_user()=nullptr;')
++    # Diagnostics are an opaque, inert boundary in this control-flow receiver.
++    template=template.replace('struct Result {bool success;bool has_value() const {return success;}};', 'struct DiagnosticCause {};struct Result {bool success;bool has_value() const {return success;} DiagnosticCause error() const {return {};}};')
++    template=template.replace('// @PINNED_SOURCE_FUNCTION@', 'template<class Cause> void report_scene_initialization_refusal(const char*,const Cause&) {}\n// @PINNED_SOURCE_FUNCTION@')
+     template=template.replace('int failing_operation=0,','bool force_local_null=false,force_local_alias=false,force_local_bind_failure=false,force_common_replaced=false,force_audio_missing=false;\nint failing_operation=0,')
+     template=template.replace('return operation("create:LocalDevice")?&local_rd:nullptr;','return operation("create:LocalDevice")&&!force_local_null?(force_local_alias?&main_rd:&local_rd):nullptr;')
+     template=template.replace('return operation("get:Audio")?&audio:nullptr;','return operation("get:Audio")&&!force_audio_missing?&audio:nullptr;')
+--- a/tests/native/scene_ready_source/verify_discriminators.py
++++ b/tests/native/scene_ready_source/verify_discriminators.py
+@@ -53,6 +53,9 @@
+       'wrong-audio-ready':('initialize_guarded_audio_buses(api,ready)','initialize_guarded_audio_buses(api,{73,942})'),
+       'wrong-bus-name':('StringName{ANGE::kBusMaster}','StringName{"WrongBus"}'),
+     }
++    if args.target:
++        before,after=mutations['reset-entry-ledger']
++        mutations['reset-entry-ledger']=(before.replace('active_guarded_user;', 'active_guarded_user();'), after.replace('active_guarded_user;', 'active_guarded_user();'))
+     results=[]
+     with tempfile.TemporaryDirectory(prefix='ange-si2-source-discriminators-') as scratch:
+         scratch=Path(scratch)
