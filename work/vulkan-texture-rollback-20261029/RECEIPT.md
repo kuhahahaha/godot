@@ -74,3 +74,17 @@ R8 artifacts carry the 7a1cb83fa build identity; source hashes pin the
 follow-up source commit in SOURCE_MANIFEST.json. This remains bounded direct
 input validation; no owner, qualification, completion, readback, Ready or G1
 claim is made.
+
+## Direct-driver vertex format validation
+
+A RED direct-driver test passed the default DATA_FORMAT_MAX vertex attribute
+into vertex_format_create. The old path returned a format and reported live
+PagedAllocator pages at exit. The driver now preflights every vertex attribute
+format before allocating VertexFormatInfo or indexing RD_TO_VK_FORMAT. GREEN
+Debug is 1 case / 3 assertions, the Vulkan allocation regression is 5 cases /
+33 assertions, K03/P2 remains 22 cases / 350 assertions, and actual
+use_ubsan=yes repeats 1/3 and 5/33, all rc0. The template_release rebuild and
+version probe are rc0. R9 artifacts carry the 9a61e804e build identity; source
+hashes pin the follow-up source commit in SOURCE_MANIFEST.json. This remains
+bounded direct input validation only; no qualification, completion, readback,
+Ready or G1 claim is made.

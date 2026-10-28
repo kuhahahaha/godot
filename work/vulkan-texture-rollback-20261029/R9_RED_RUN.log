@@ -1,0 +1,15 @@
+ERROR: Pages in use exist at exit in PagedAllocator: 25VersatileResourceTemplateIJN27RenderingDeviceDriverVulkan10BufferInfoENS0_11TextureInfoENS0_16VertexFormatInfoENS0_10ShaderInfoENS0_14UniformSetInfoENS0_14RenderPassInfoENS0_17CommandBufferInfoEEE
+   at: ~PagedAllocator (./core/templates/paged_allocator.h:170)
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_qualification_vulkan_allocation.cpp:83:
+TEST CASE:  [QualificationNative][Vulkan] vertex format creation rejects an invalid format
+
+tests/servers/rendering/test_qualification_vulkan_allocation.cpp:91: ERROR: CHECK_FALSE( bool(vertex_format) ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+===============================================================================
+[doctest] test cases: 1 | 0 passed | 1 failed | 1726 skipped
+[doctest] assertions: 3 | 2 passed | 1 failed |
+[doctest] Status: FAILURE!

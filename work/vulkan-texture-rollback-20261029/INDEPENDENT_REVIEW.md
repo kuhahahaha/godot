@@ -33,3 +33,9 @@ fail-closed behavior without adding fallback or authority.
 The extension guard is the same fail-closed format-input policy as the texture
 and query entry points. The RED SIGSEGV is eliminated without creating a
 synthetic image/view or changing ownership and lifecycle behavior.
+
+
+The vertex-format guard executes before resource allocation, so invalid input
+cannot publish a native vertex format or leave allocator pages alive. RED,
+Debug, actual UBSan and Release evidence stays within the Vulkan driver input
+boundary and does not broaden lifecycle authority.
