@@ -1133,8 +1133,8 @@
     "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
   },
   "work/e20-native-graph-path-20261029/RECEIPT.md": {
-    "bytes": 2272,
-    "sha256": "4004b1967040d0efb90bf54ea70381063bdd0c5d7195642337f5d019a29f30d8"
+    "bytes": 2358,
+    "sha256": "ef93f2cdfe1cd428a33ce548127066fbfcf977327aa898b3b37b8b9d9ea850cd"
   },
   "work/e20-native-graph-path-20261029/RED_BUILD_R1.log": {
     "bytes": 17783,
@@ -1171,5 +1171,13 @@
   "work/ange-production-caller-census-20261029/RECEIPT.md": {
     "bytes": 1871,
     "sha256": "efc07c0c6bb26b996ff2ab02b7e5f2928b6250b23584b4761cd59a077a8294df"
+  },
+  "work/e20-native-graph-path-20261029/QUALIFICATION_RUN.log": {
+    "bytes": 294,
+    "sha256": "8830974bbcaa44a301322f33e930c7fd1b138c802fa13d3611d5d9c79ef1fdf1"
+  },
+  "work/e20-native-graph-path-20261029/QUALIFICATION_RUN.rc": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
   }
 }

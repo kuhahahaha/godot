@@ -28,6 +28,7 @@ The minimal implementation then:
 - Source baseline: `6a300cedfbf0cc678148bb76c85c47b937f11409`.
 - `tests=yes` macOS arm64 editor build, builtin glslang: `GREEN_BUILD.rc=0`.
 - Graph focused run: `GRAPH_RUN.rc=0`, 8 cases / 109 assertions.
+- Qualification graph order control: `QUALIFICATION_RUN.rc=0`, 1 case / 6 assertions.
 - Native regression `*device_exit*`: rc0, 133 cases / 2,619 assertions.
 - Native regression `[K03][P2]*`: rc0, 22 cases / 350 assertions.
 - Current editor SHA256: `0fa27ca15538200a127ff4350cf3cbb630be79d347bc5b7614d110778268456a`.
