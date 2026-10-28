@@ -153,6 +153,33 @@ TEST_CASE("[QualificationNative][Vulkan] sampler creation rejects invalid repeat
   driver.sampler_free(sampler);
  }
 }
+TEST_CASE("[QualificationNative][Vulkan] sampler creation rejects invalid compare op") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ RenderingDeviceDriver::SamplerState state;
+ state.enable_compare=true;
+ state.compare_op=RDD::COMPARE_OP_MAX;
+ ERR_PRINT_OFF;
+ auto sampler=driver.sampler_create(state);
+ ERR_PRINT_ON;
+ CHECK_FALSE(bool(sampler));
+ if (sampler) {
+  driver.sampler_free(sampler);
+ }
+}
+TEST_CASE("[QualificationNative][Vulkan] sampler creation rejects invalid border color") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ RenderingDeviceDriver::SamplerState state;
+ state.border_color=RDD::SAMPLER_BORDER_COLOR_MAX;
+ ERR_PRINT_OFF;
+ auto sampler=driver.sampler_create(state);
+ ERR_PRINT_ON;
+ CHECK_FALSE(bool(sampler));
+ if (sampler) {
+  driver.sampler_free(sampler);
+ }
+}
 TEST_CASE("[QualificationNative][Vulkan] texture creation rejects an invalid shareable format") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
