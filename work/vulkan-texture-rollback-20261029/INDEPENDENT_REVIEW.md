@@ -68,3 +68,9 @@ The sample-count and primitive guards run before RD sample/primitive table
 access and before any pipeline or image allocation. Valid values retain the
 existing closest-supported-sample behavior; sentinel inputs fail closed. The
 evidence adds no owner, completion, readback, Ready or G1 authority.
+
+
+The texture-type guard runs before `RD_TEX_TYPE_TO_VK_IMG_TYPE` indexing and
+native image setup. Valid texture types retain existing behavior; the sentinel
+fails closed without allocator growth. This adds no lifecycle or qualification
+authority.

@@ -157,3 +157,14 @@ template_release rebuild and version probe are rc0. R14 artifacts carry the
 `b484c5cac` build identity; source hashes pin the exact source in
 `SOURCE_MANIFEST.json`. This remains direct input validation only; no
 qualification, completion, readback, Ready or G1 claim is made.
+
+## Direct texture type validation
+
+`texture_create()` now rejects `TEXTURE_TYPE_MAX` before the image-type table
+lookup or any native image allocation. Debug focused is 1 case / 4 assertions,
+Vulkan allocation regression is 14 cases / 63 assertions, K03/P2 is 22 cases /
+350 assertions, and actual `use_ubsan=yes` Vulkan regression is 14/63; all rc0.
+The template_release rebuild and version probe are rc0. R15 artifacts carry the
+`f5e874900` build identity; source hashes pin the exact source in
+`SOURCE_MANIFEST.json`. This remains direct input validation only; no
+qualification, completion, readback, Ready or G1 claim is made.
