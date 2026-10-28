@@ -6571,10 +6571,19 @@ void RenderingDeviceDriverVulkan::command_render_bind_vertex_buffers(CommandBuff
 	vkCmdBindVertexBuffers(command_buffer->vk_command_buffer, 0, p_binding_count, vk_buffers, vk_offsets);
 }
 
+static uint32_t _index_buffer_format_value(const RDD::IndexBufferFormat *p_format) {
+	static_assert(sizeof(RDD::IndexBufferFormat) == sizeof(uint32_t));
+	uint32_t value = 0;
+	memcpy(&value, p_format, sizeof(value));
+	return value;
+}
+
 void RenderingDeviceDriverVulkan::command_render_bind_index_buffer(CommandBufferID p_cmd_buffer, BufferID p_buffer, IndexBufferFormat p_format, uint64_t p_offset) {
+	const uint32_t format = _index_buffer_format_value(&p_format);
+	ERR_FAIL_COND(format > INDEX_BUFFER_FORMAT_UINT32);
 	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
 	const BufferInfo *buf_info = (const BufferInfo *)p_buffer.id;
-	vkCmdBindIndexBuffer(command_buffer->vk_command_buffer, buf_info->vk_buffer, p_offset, p_format == INDEX_BUFFER_FORMAT_UINT16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
+	vkCmdBindIndexBuffer(command_buffer->vk_command_buffer, buf_info->vk_buffer, p_offset, format == INDEX_BUFFER_FORMAT_UINT16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
 }
 
 void RenderingDeviceDriverVulkan::command_render_set_blend_constants(CommandBufferID p_cmd_buffer, const Color &p_constants) {

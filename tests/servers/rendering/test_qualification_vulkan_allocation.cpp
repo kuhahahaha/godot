@@ -180,6 +180,14 @@ TEST_CASE("[QualificationNative][Vulkan] sampler creation rejects invalid border
   driver.sampler_free(sampler);
  }
 }
+TEST_CASE("[QualificationNative][Vulkan] index binding rejects invalid format before command access") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ ERR_PRINT_OFF;
+ driver.command_render_bind_index_buffer(RenderingDeviceDriver::CommandBufferID(),RenderingDeviceDriver::BufferID(),static_cast<RenderingDeviceDriver::IndexBufferFormat>(2),0);
+ ERR_PRINT_ON;
+ CHECK(true);
+}
 TEST_CASE("[QualificationNative][Vulkan] texture creation rejects an invalid shareable format") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
