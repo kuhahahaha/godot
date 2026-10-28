@@ -1,5 +1,5 @@
 {
-  "status": "r2 candidate only; complete producer/record/sampler revision; root independent review/adoption required before implementation",
+  "status": "r2 candidate accepted as a current-source-reviewed implementation input; production ABI/engine integration remains owner-gated",
   "files": {
     "ABI_CANDIDATE.h": {
       "bytes": 13101,
@@ -32,6 +32,10 @@
     "STATIC_AUDIT.json": {
       "bytes": 10034,
       "sha256": "0e2242aa36f34b163743b4a4fad771e91d250b22c10a963aff65425197cc821b"
+    },
+    "ROOT_ADOPTION_REVIEW_20261029.md": {
+      "bytes": 2182,
+      "sha256": "171ba579ba8fccb774be2d1cf859383699f6cd1a304a4292d1d9c2cb12b44f8d"
     }
   }
 }
