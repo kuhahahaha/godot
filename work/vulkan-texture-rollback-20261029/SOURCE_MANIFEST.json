@@ -1,5 +1,5 @@
 {
-  "godot_head": "72aa6a2073eaf22876a204bdb6258ef9bd356277",
+  "godot_head": "0288f09637ce29ced5dc532e6a8a6d94fe7477d3",
   "source": {
     "drivers/vulkan/rendering_device_driver_vulkan.h": {
       "bytes": 42348,
@@ -27,5 +27,6 @@
       "bytes": 918745792,
       "sha256": "5f7488053c6b58506acc1a9be203a3502b429b4611e9fd82dbff064620839794"
     }
-  }
+  },
+  "artifact_build_identity_head": "72aa6a2073"
 }

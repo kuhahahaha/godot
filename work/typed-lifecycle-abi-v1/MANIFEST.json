@@ -1699,8 +1699,8 @@
     "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
   },
   "work/vulkan-texture-rollback-20261029/RECEIPT.md": {
-    "bytes": 1320,
-    "sha256": "7a4d08b6b0beb1e0226a42e88eef2a8d7dde963abed1625aa39a8f09c8095d7c"
+    "bytes": 1482,
+    "sha256": "55d7d2ac71e83080a51546645cd501b6e810cf85ddab7cd9ccd963d597c0145f"
   },
   "work/vulkan-texture-rollback-20261029/RED_BUILD.log": {
     "bytes": 2591,
@@ -1743,8 +1743,8 @@
     "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
   },
   "work/vulkan-texture-rollback-20261029/SOURCE_MANIFEST.json": {
-    "bytes": 1111,
-    "sha256": "5b4fa891de33e6ea58f03147b3e0312f44efe5ae641d124a31a10770a4ff3811"
+    "bytes": 1159,
+    "sha256": "feeedc18a359d1862e6dc4bfc91a3bd3ca52af1f083eb64359e18ccd4c2cf59f"
   },
   "work/vulkan-texture-rollback-20261029/UBSAN_BUILD.log": {
     "bytes": 2733,

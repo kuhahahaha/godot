@@ -21,4 +21,4 @@ view failure uses the same rollback path.
 The rollback mask proves stage 1 releases the image and stage 2 releases both
 image and memory; VMA allocation count returns to its pre-call value. No
 fallback texture, synthetic owner, qualification authority, or GPU/Ready claim
-is introduced. This is native allocation cleanup evidence only.
+is introduced. This is native allocation cleanup evidence only. The recorded binaries carry the pre-commit build identity `72aa6a2073`; exact current source and artifact hashes are pinned separately in `SOURCE_MANIFEST.json`.
