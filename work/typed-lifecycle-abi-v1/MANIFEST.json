@@ -17,7 +17,7 @@
   "core/object/object.cpp": "ab720040fa332f3e370e6937007763f6165831909709def86ba3e952e826d7a8",
   "tests/core/object/test_device_exit_library_close.cpp": "1d5bc82848c80dd9ea987ef035f1ce8517d1bf9887ad082f53ebc6acdc455357",
   "work/typed-lifecycle-abi-v1/CURRENT_PAIR_U01_VFX_R01_NEGATIVE_RECEIPT_20251025.md": "c6ab0496164e2741f157768a10ffcc6f0217b630a26d95d3d9762c2e22b79a47",
-  "work/typed-lifecycle-abi-v1/PROGRESS.md": "95a10ed4544eead04b9a11e8ee25a0766cb2affc8b3370eb4991a3fd4485461e",
+  "work/typed-lifecycle-abi-v1/PROGRESS.md": "90a7e5309cc2199de4466a3559d90635b932da84b9cf5b3120bcab51d32e1c5a",
   "work/r01-frame-wait-20261026/MANIFEST.json": "6665b770d13d966da423741c69f01a58b562b976c9f94811f3e4b442f2907d64",
   "work/r01-frame-wait-20261026/RECEIPT.md": "90930a0824a3c88582ef533e461b66fc5bc3163bb165a66269e1d773b0d25066",
   "work/r01-frame-wait-20261026/PROGRESS.md": "a3d8d1fb03d674d6d7941b7088dc3bed69655ce36f57178c99ee9bf3edb6570a",
@@ -100,5 +100,18 @@
   "work/typed-lifecycle-abi-v1/native-template-release-build-20261028/INDEPENDENT_REVIEW.md": "941f869b76b4ef4924a2baed4787d74dcb7b0b7eb26e8c82a2ad562174cd2144",
   "work/typed-lifecycle-abi-v1/native-template-release-build-20261028/RECEIPT.md": "452e0b2de4207f80af1ff4536e24f7e5db3e8c95a6ad6d08eb96d9f18ffbbcee",
   "work/typed-lifecycle-abi-v1/native-template-release-build-20261028/RESULT.md": "deca69694578866a90b5cb032b259960d61f501e43ec82e0a8099a6eef220336",
-  "work/typed-lifecycle-abi-v1/native-template-release-build-20261028/SOURCE_MANIFEST.txt": "108f98d71f039266b5eab4d626760372606efdab77557a648714a7b345475782"
+  "work/typed-lifecycle-abi-v1/native-template-release-build-20261028/SOURCE_MANIFEST.txt": "108f98d71f039266b5eab4d626760372606efdab77557a648714a7b345475782",
+  "work/native-current-qrt-controls-20261028-r6/CPU_RESULTS.json": "2d3af56aa19db7c74d5741e9ef1fc6b259b1a3428e514fd59feebd621c808649",
+  "work/native-current-qrt-controls-20261028-r6/RECEIPT.json": "44c4538c8b20e69468b26090ff02facffe1f7b87de810b439262a6bec84b29be",
+  "work/native-current-qrt-controls-20261028-r6/RESULT.md": "9cca0996d4b60362603e7a0f16b96325af6e1a61954b9030da4a249925c121d2",
+  "work/native-current-qrt-controls-20261028-r6/SELF_REVIEW.md": "f87a8194fc1022531a3ffab802ee52aea6989196920035bbc80ad51a880a2d68",
+  "work/native-current-qrt-controls-20261028-r6/SOURCE_MANIFEST.json": "4cbf61a003d564b5efabdf54f42065036bfe8e416bcc55ad391fbb5d47f622c1",
+  "work/native-current-qrt-controls-20261028-r6/qrt_cancel_empty-safe.log": "d007cfc9fd861a0e7be7dd88eb0a922da9271c4006606e73a6e25fecb2d81887",
+  "work/native-current-qrt-controls-20261028-r6/qrt_cancel_prefix-safe.log": "d4e8442a59e1a83d40e5afc18b8e46a07f6d78a91ba49b1a48bddc99fe119e50",
+  "work/native-current-qrt-controls-20261028-r6/qrt_retirement-safe.log": "32060e509b1ae930b4d3d6b24e9ea8f910f23aca983967cf5adbf9cdb31bdbdf",
+  "work/native-current-qrt-controls-20261028-r6/qrt_retirement-separate.log": "a8a218409b28af8d58724905fe1e736a0d361d2c839fa695c8ece967ce81eed4",
+  "work/native-current-qrt-controls-20261028-r6/qrt_ticket-safe.log": "1e3f47af4d1ebb0375d232e7815fafcae8893c1590ff036d110d92879a8971e2",
+  "work/native-current-qrt-controls-20261028-r6/qrt_upload-safe.log": "e774cd0df4d24eac855987eb46dab4a0127b3918330c5f87828fce7b8c816ad0",
+  "work/native-current-qrt-controls-20261028-r6/results.json": "09ecfa370d7fc4962552526da903fac72b567b7f31e7a639bceb73fd1afb55c2",
+  "work/native-current-qrt-controls-20261028-r6/CLEANUP.json": "51ee82e3d1d1eaa06c574426e1fec2d1d216bda014953485660f4adae11de44c"
 }

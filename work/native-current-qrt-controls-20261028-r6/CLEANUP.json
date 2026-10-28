@@ -1,0 +1,6 @@
+{
+  "temporary_bytes_deleted": 0,
+  "owned_processes": "runner session81645 terminal rc0; all child controls reaped by subprocess.run",
+  "retained": "R6 raw logs/results/source identity pins; consumers: production integration and long goal audit",
+  "note": "no copied binaries/build products created; original shared fixtures retained"
+}
