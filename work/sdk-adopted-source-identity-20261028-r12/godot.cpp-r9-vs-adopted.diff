@@ -1,0 +1,15 @@
+--- r9-private/src/godot.cpp
++++ adopted/src/godot.cpp
+@@ -532,10 +532,8 @@
+     if (guarded) {
+         const auto error = init_data->exit_api.after_binding_deinit(&exit_abi, context);
+         if (error) fatal(error);
+-        // The original minimum-level USER/BINDING actions have returned and
+-        // core accepted their retirement. A later real load receives a fresh
+-        // InitData and generation; never carry this retired claimant into it.
+-        // Claimant remains sticky until the actual binding image is unloaded.
++        // Acknowledged deinit does not prove the OS unloaded this image.
++        // Keep the claimant sticky: only a fresh image can enroll again.
+     }
+ 
+ }

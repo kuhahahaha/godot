@@ -1,0 +1,9 @@
+# Adopted source identity addendum
+
+Adopted SDK commit: `83d88acfb0c45dc78170a273bb193910baaec5c7`. IDENTITY.json records bytes/SHA256 for six original SDK files and confirms each working file equals its adopted Git blob. This addendum supplements R9/R10; their raw evidence and historical receipt labels are unchanged.
+
+R9 was a private candidate and remains labelled PRIVATE_CANDIDATE. Reconstructing its two changed source files from its exact original SDK preimage plus retained SDK.patch yields: Wrapped header byte-identical to adopted source; godot.cpp differs only in the final claimant-policy comments, as the retained diff shows. This is not described as byte-identical. R9 did not independently pin its directly copied wrapped.cpp TU; its precise copied-file identity is not established by R9 alone. R10 directly copied the six adopted SDK files and its retained before/after SHA set matches all six adopted blobs, closing that specific source-identity boundary.
+
+Qualification: R9/R10 are source-linked native controls. They compile original godot.cpp and Wrapped.cpp source with the existing Debug archive for supporting TUs. They prove their real Metal Node/method/dtor/image-order and retained-image-refusal behavior under those exact inputs. They do not prove that a full adopted SDK archive, canonical libANGE, every wrapper cohort or full G1 has been built/qualified. Complete Debug/Release archive/DSO matching remains pending A's original build ownership.
+
+The self-started R11 supervisor was stopped at its waiting phase before any SCons child, artifact invalidation or product deletion. Existing same-tree builder78841 was left untouched. OWNER_DISPOSITION.json in the original R11 package records this single-process disposition; no whole-goal pause or completion is asserted. No runtime controls were repeated for this addendum.
