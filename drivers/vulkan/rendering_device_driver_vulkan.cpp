@@ -6554,6 +6554,7 @@ void RenderingDeviceDriverVulkan::command_render_draw_indirect_count(CommandBuff
 }
 
 void RenderingDeviceDriverVulkan::command_render_bind_vertex_buffers(CommandBufferID p_cmd_buffer, uint32_t p_binding_count, const BufferID *p_buffers, const uint64_t *p_offsets, uint64_t p_dynamic_offsets) {
+	ERR_FAIL_COND(p_binding_count > 0 && (!p_buffers || !p_offsets));
 	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
 	VkBuffer *vk_buffers = ALLOCA_ARRAY(VkBuffer, p_binding_count);
 	uint64_t *vk_offsets = ALLOCA_ARRAY(uint64_t, p_binding_count);
