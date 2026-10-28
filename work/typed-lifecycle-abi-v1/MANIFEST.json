@@ -921,8 +921,8 @@
   "work/sdk-unloadable-active-context-20261028-r3/threads-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "work/typed-lifecycle-abi-v1/CURRENT_PAIR_U01_VFX_R01_NEGATIVE_RECEIPT_20251025.md": "c6ab0496164e2741f157768a10ffcc6f0217b630a26d95d3d9762c2e22b79a47",
   "work/typed-lifecycle-abi-v1/PROGRESS.md": {
-    "bytes": 140018,
-    "sha256": "e1a7f87739e3f57b9a34a3eabd70f22df5e482d08ae0aba82eb74f7960f1fc8e"
+    "bytes": 140645,
+    "sha256": "b33502984ece18c020aeba0e936c87473482eac901f91f8c7a5ff25b6167cc89"
   },
   "work/typed-lifecycle-abi-v1/gdextension_interface.h": "07ee07f19e31fe5c22154edbba73ce3cb793b87524add5d9dc0c9468815c9a29",
   "work/typed-lifecycle-abi-v1/native-current-open-items-20261028/COMMAND_OUTPUT.json": "feccb44a82af5439c60b4fb8a6f7c8fc8923f9fd97e2bb169099294c67a185ef",
@@ -1051,5 +1051,41 @@
   "work/e06-nonbuiltin-macos-glslang-20261029-r1/SHARED_EARLY_R2.log": {
     "bytes": 13075,
     "sha256": "3e165c414d51a76f08740e32fed37cc1488223905a61dc0f1d3e0a0dd67f6c72"
+  },
+  "work/current-pair-runtime-20261029-nonbuiltin/INDEPENDENT_REVIEW.md": {
+    "bytes": 896,
+    "sha256": "5a4b979ec03bedab7708c8835083d0d3f3f434f4d4b68a607daeac023fb6e765"
+  },
+  "work/current-pair-runtime-20261029-nonbuiltin/RECEIPT.md": {
+    "bytes": 2296,
+    "sha256": "851d15d155c1d1c64045b49b55efd01016499fe0137ba5c489489b2c98921cf2"
+  },
+  "work/current-pair-runtime-20261029-nonbuiltin/SOURCE_MANIFEST.json": {
+    "bytes": 1358,
+    "sha256": "fb647a73e1c2642b513656a8699d793b84cef9a33037017b181f0a3b7db5d454"
+  },
+  "work/current-pair-runtime-20261029-nonbuiltin/runtime-invalid-vfx.log": {
+    "bytes": 507,
+    "sha256": "c6391952dc0fc43d1033a6febf5d8a63c45ca80f31c2e2ac8a8017f072150858"
+  },
+  "work/current-pair-runtime-20261029-nonbuiltin/runtime-invalid-vfx.rc": {
+    "bytes": 2,
+    "sha256": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3"
+  },
+  "work/current-pair-runtime-20261029-nonbuiltin/runtime-no-vfx.log": {
+    "bytes": 507,
+    "sha256": "c6391952dc0fc43d1033a6febf5d8a63c45ca80f31c2e2ac8a8017f072150858"
+  },
+  "work/current-pair-runtime-20261029-nonbuiltin/runtime-no-vfx.rc": {
+    "bytes": 2,
+    "sha256": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3"
+  },
+  "work/current-pair-runtime-20261029-nonbuiltin/runtime-vfx.log": {
+    "bytes": 507,
+    "sha256": "c6391952dc0fc43d1033a6febf5d8a63c45ca80f31c2e2ac8a8017f072150858"
+  },
+  "work/current-pair-runtime-20261029-nonbuiltin/runtime-vfx.rc": {
+    "bytes": 2,
+    "sha256": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3"
   }
 }

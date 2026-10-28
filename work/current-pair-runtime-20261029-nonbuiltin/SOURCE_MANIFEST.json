@@ -1,0 +1,30 @@
+{
+  "status": "CURRENT_NONBUILTIN_PAIR_RUNTIME_BOUNDARY",
+  "godot_executable": {
+    "path": "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+    "sha256": "b747ac4dbc93e7d2a8ad00496fecfb83f709acf9ed1d0b924c16a82d1abfc476"
+  },
+  "ange_dso": {
+    "path": "/Users/macbookair/Documents/Work/ANGE/bin/libange.macos.template_debug.arm64.dylib",
+    "sha256": "cde5edb63d7102ac449d7d9e1217871ed890b60e3664b7dfe9a793bf54469e1a"
+  },
+  "renderer": "non-headless Metal 4.0 / Forward Mobile / Apple M3 Pro / safe",
+  "rows": {
+    "runtime-vfx": {
+      "rc": 2,
+      "log_sha256": "c6391952dc0fc43d1033a6febf5d8a63c45ca80f31c2e2ac8a8017f072150858",
+      "first_boundary": "host.storage_owner_transport/E05 code=13 expected=1 actual=0"
+    },
+    "runtime-no-vfx": {
+      "rc": 2,
+      "log_sha256": "c6391952dc0fc43d1033a6febf5d8a63c45ca80f31c2e2ac8a8017f072150858",
+      "first_boundary": "host.storage_owner_transport/E05 code=13 expected=1 actual=0"
+    },
+    "runtime-invalid-vfx": {
+      "rc": 2,
+      "log_sha256": "c6391952dc0fc43d1033a6febf5d8a63c45ca80f31c2e2ac8a8017f072150858",
+      "first_boundary": "host.storage_owner_transport/E05 code=13 expected=1 actual=0"
+    }
+  },
+  "scope": "Extension initialization boundary only; no world, VFX, GPU, native qualification, completion, readback, Ready or G1 claim."
+}
