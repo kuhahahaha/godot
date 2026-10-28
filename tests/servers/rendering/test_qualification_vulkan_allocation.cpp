@@ -132,4 +132,15 @@ TEST_CASE("[QualificationNative][Vulkan] render pass creation rejects an invalid
  ERR_PRINT_ON;
  CHECK_FALSE(bool(render_pass));
 }
+TEST_CASE("[QualificationNative][Vulkan] render pass creation rejects an invalid attachment layout") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ RenderingDeviceDriver::Attachment attachment;
+ attachment.format=RDD::DATA_FORMAT_R8_UNORM;
+ attachment.initial_layout=static_cast<RenderingDeviceDriver::TextureLayout>(RDD::TEXTURE_LAYOUT_MAX);
+ ERR_PRINT_OFF;
+ auto render_pass=driver.render_pass_create(VectorView<RenderingDeviceDriver::Attachment>(attachment),{}, {},1,RenderingDeviceDriver::AttachmentReference());
+ ERR_PRINT_ON;
+ CHECK_FALSE(bool(render_pass));
+}
 #endif

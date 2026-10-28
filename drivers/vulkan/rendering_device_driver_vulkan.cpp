@@ -6104,6 +6104,25 @@ static void _attachment_reference_to_vk(const RDD::AttachmentReference &p_attach
 RDD::RenderPassID RenderingDeviceDriverVulkan::render_pass_create(VectorView<Attachment> p_attachments, VectorView<Subpass> p_subpasses, VectorView<SubpassDependency> p_subpass_dependencies, uint32_t p_view_count, AttachmentReference p_fragment_density_map_attachment) {
 	for (uint32_t i = 0; i < p_attachments.size(); i++) {
 		ERR_FAIL_INDEX_V(p_attachments[i].format, DATA_FORMAT_MAX, RenderPassID());
+		ERR_FAIL_INDEX_V(p_attachments[i].initial_layout, TEXTURE_LAYOUT_MAX, RenderPassID());
+		ERR_FAIL_INDEX_V(p_attachments[i].final_layout, TEXTURE_LAYOUT_MAX, RenderPassID());
+	}
+	for (uint32_t i = 0; i < p_subpasses.size(); i++) {
+		for (uint32_t j = 0; j < p_subpasses[i].input_references.size(); j++) {
+			ERR_FAIL_INDEX_V(p_subpasses[i].input_references[j].layout, TEXTURE_LAYOUT_MAX, RenderPassID());
+		}
+		for (uint32_t j = 0; j < p_subpasses[i].color_references.size(); j++) {
+			ERR_FAIL_INDEX_V(p_subpasses[i].color_references[j].layout, TEXTURE_LAYOUT_MAX, RenderPassID());
+		}
+		for (uint32_t j = 0; j < p_subpasses[i].resolve_references.size(); j++) {
+			ERR_FAIL_INDEX_V(p_subpasses[i].resolve_references[j].layout, TEXTURE_LAYOUT_MAX, RenderPassID());
+		}
+		if (p_subpasses[i].depth_stencil_reference.attachment != AttachmentReference::UNUSED) {
+			ERR_FAIL_INDEX_V(p_subpasses[i].depth_stencil_reference.layout, TEXTURE_LAYOUT_MAX, RenderPassID());
+		}
+	}
+	if (p_fragment_density_map_attachment.attachment != AttachmentReference::UNUSED) {
+		ERR_FAIL_INDEX_V(p_fragment_density_map_attachment.layout, TEXTURE_LAYOUT_MAX, RenderPassID());
 	}
 
 	// These are only used if we use multiview but we need to define them in scope.
