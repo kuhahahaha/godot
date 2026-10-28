@@ -1,0 +1,9 @@
+# Independent E06 executable source and evidence review
+
+Reviewer /root/indexed144_native_review, fresh context read-only original contract/source/neighbors/installed SCons internals and saved evidence. No build, test rerun, runtime execution, SDK operation or edits; independent hashing/snapshot recomputation only.
+
+Initial P1 Executor-source omission reproduced by actual failed link; fixed node+Executor source append. P1 host-vs-action environment mismatch fixed exact sanitized original ENV for driver/tool discovery/version processes. P2 independentCC now bound; P2 diagnostic options/profile/tool/SDK paths get explicit canonical policies; P2 install_name/rpath suffix classification fixed in both stages with implicit default dylib ID retained. P2 search-changing/unknown flags now fail before publication through bounded explicit grammar. Mutable Node callback captures removed. Final source no unresolved concreteP1/P2 in bounded route; no digest cycle/new authority found.
+
+Final evidence independently verified: canonical build/noop/generator/getters/native rc0; noop '.'up to date;19 generator checks; canonical+relocated exactclosed7fields readonly originalversionfields; native30/6111 with intendedforeigncamera errors. All18 runtime pins match currentfiles before/after; all134 actual input/tool/recipe records rehashed match; recomputed saved snapshot stamps equal separate directselection. Every original source appears among121 ordered inputs; stamp/finaltarget absent. Artifact receiptSHA d216693315918595bf7cf46d57006d88ede1d7000fe3cd68fac06afb63edffac matches actualbinary. Final header50lines contains no accidental Engine implementation.
+
+Demonstrated: macOS arm64 executable producer/getter. Shared graph-only, static/nonbuiltin/unsupported modes unfinished. No adapter/SDK integration, production target assembly, U08 or full E06/long-goal success follows.

@@ -1,0 +1,9 @@
+[
+  "SConstruct",
+  "core/SCsub",
+  "core/config/engine.cpp",
+  "core/config/engine_build_identity.h",
+  "core/engine_build_identity.py",
+  "platform/macos/SCsub",
+  "tests/test_engine_build_identity.py"
+]

@@ -1,0 +1,31 @@
+Building for macOS 11.0+.
+WARNING: The screen reader support driver requires dependencies to be installed.
+You can install them by running `python3 misc/scripts/install_accesskit.py`.
+See the documentation for more information:
+	https://docs.godotengine.org/en/latest/engine_details/development/compiling/compiling_for_macos.html
+Alternatively, disable this driver by compiling with `accesskit=no` explicitly.
+WARNING: The ANGLE rendering driver requires dependencies to be installed.
+You can install them by running `python misc/scripts/install_angle.py`.
+See the documentation for more information:
+	https://docs.godotengine.org/en/latest/engine_details/development/compiling/compiling_for_windows.html
+Alternatively, disable this driver by compiling with `angle=no` explicitly.
+MoltenVK found at: /opt/homebrew/Frameworks/MoltenVK.xcframework
+Building for platform "macos", architecture "arm64", target "editor".
+INFO: Developer build, with debug optimization level and debug symbols (unless overridden).
+ValueError: unresolved original link library: to_library:
+  File "/Users/macbookair/Documents/Work/godot_ANGE/SConstruct", line 1254:
+    SConscript("platform/" + env["platform"] + "/SCsub")  # Build selected platform.
+  File "/Users/macbookair/Library/Python/3.9/lib/python/site-packages/SCons/Script/SConscript.py", line 687:
+    return method(*args, **kw)
+  File "/Users/macbookair/Library/Python/3.9/lib/python/site-packages/SCons/Script/SConscript.py", line 623:
+    return _SConscript(self.fs, *files, **subst_kw)
+  File "/Users/macbookair/Library/Python/3.9/lib/python/site-packages/SCons/Script/SConscript.py", line 281:
+    exec(compile(scriptdata, scriptname, 'exec'), call_stack[-1].globals)
+  File "/Users/macbookair/Documents/Work/godot_ANGE/platform/macos/SCsub", line 59:
+    controlled_identity_record = engine_build_identity.install_macos(env, prog)
+  File "/Users/macbookair/Documents/Work/godot_ANGE/core/engine_build_identity.py", line 296:
+    inputs, arguments = resolve_link_inputs(command, [node.abspath for node in ordinary], final.abspath, sdk)
+  File "/Users/macbookair/Documents/Work/godot_ANGE/core/engine_build_identity.py", line 206:
+    arguments.append(add(_resolve_library(token[2:], directories)))
+  File "/Users/macbookair/Documents/Work/godot_ANGE/core/engine_build_identity.py", line 140:
+    raise ValueError("unresolved original link library: " + name)

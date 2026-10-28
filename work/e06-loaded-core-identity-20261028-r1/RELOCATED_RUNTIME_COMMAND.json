@@ -1,0 +1,8 @@
+[
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/e06-loaded-core-identity-20261028-r1/fixed-inputs/relocated-core",
+  "--headless",
+  "--path",
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/e06-loaded-core-identity-20261028-r1/runtime",
+  "--script",
+  "probe.gd"
+]

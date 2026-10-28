@@ -1,0 +1,39 @@
+{
+  "runs": [
+    {
+      "name": "CANONICAL",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--path",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/e06-loaded-core-identity-20261028-r1/runtime",
+        "--script",
+        "probe.gd"
+      ],
+      "rc": 0
+    },
+    {
+      "name": "RELOCATED",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/e06-loaded-core-identity-20261028-r1/fixed-inputs/godot.controlled.exe.arm64",
+        "--headless",
+        "--path",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/e06-loaded-core-identity-20261028-r1/runtime",
+        "--script",
+        "probe.gd"
+      ],
+      "rc": 0
+    },
+    {
+      "name": "CANONICAL_NATIVE",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=[B4]*,[ViewportHistory]*,*[ShaderCompilePolicy]*"
+      ],
+      "rc": 0
+    }
+  ],
+  "pins_stable": true
+}
