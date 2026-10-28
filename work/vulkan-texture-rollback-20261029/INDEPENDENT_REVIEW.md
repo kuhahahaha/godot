@@ -80,3 +80,8 @@ Each command guard executes before its first layout-table access and before
 null resource handles are dereferenced. Valid layouts and command behavior are
 unchanged; invalid sentinels return without issuing Vulkan work. This adds no
 lifecycle, owner, completion, readback, Ready or G1 authority.
+
+
+The view-count guard runs before the multiview bit shift, so zero and oversized
+counts cannot enter undefined arithmetic or Vulkan creation. Valid counts retain
+existing behavior and this evidence adds no lifecycle authority.

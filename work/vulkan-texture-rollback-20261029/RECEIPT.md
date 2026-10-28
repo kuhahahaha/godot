@@ -180,3 +180,15 @@ template_release rebuild and version probe are rc0. R16 artifacts carry the
 `b60612cc9` build identity; source hashes pin the exact source in
 `SOURCE_MANIFEST.json`. This remains direct input validation only; no
 qualification, completion, readback, Ready or G1 claim is made.
+
+## Direct render-pass view-count validation
+
+`render_pass_create()` now rejects zero or greater-than-31 view counts before
+multiview mask shifts or native render-pass creation. The focused Debug probe is
+1 case / 4 assertions; Vulkan allocation regression is 16 cases / 70
+assertions, K03/P2 is 22 cases / 350 assertions, and actual `use_ubsan=yes`
+Vulkan regression is 16/70; all rc0. The template_release rebuild and version
+probe are rc0. R17 artifacts carry the `ef9616563` build identity; source hashes
+pin the exact source in `SOURCE_MANIFEST.json`. This remains direct input
+validation only; no qualification, completion, readback, Ready or G1 claim is
+made.
