@@ -134,6 +134,10 @@ void Registry::qualification_ticket_publish(QualificationTicket *ticket,Renderin
  if(ticket->result.is_valid() && ticket->result->issued_size)next.readback_request=ticket->result->request_serial;
  next.issue_fact=ticket->natives.is_empty()?0:native_success?1:2;
  const bool sources_returned=mapped_all && returned && !ticket->frame_refs && native_success && !ticket->mapping_failed && (ticket->graphs.is_empty() || has_native);
+ bool live_upload_claim = false;
+ for (const auto &upload : ticket->uploads) {
+  live_upload_claim = live_upload_claim || upload.attempted || upload.progress.consumed || !upload.progress.segments.is_empty();
+ }
  const bool no_effect=ticket->graphs.is_empty() && ticket->natives.is_empty() && !ticket->mapping_failed && !ticket->recording && !ticket->frame_refs;
  if(no_effect) {next.state=0;next.phase=0;}
  else if(ticket->mapping_failed || native_unknown) {next.state=6;next.phase=3;}
@@ -155,7 +159,11 @@ void Registry::qualification_ticket_publish(QualificationTicket *ticket,Renderin
  const bool failed_prefix_settled=ticket->append_failed && sources_returned && !ticket->recording;
  const bool cancelled_upload_settled=ticket->prepared && ticket->admission_closed && sources_returned && !ticket->recording;
  if(cancelled_upload_settled){next.state=7;next.phase=6;next.owned_size=0;}
- if(no_effect || next.state==8 || cancelled_upload_settled || failed_prefix_settled) {
+ // A prepared ticket whose upload has already attempted an effect still owns
+ // its original writer claim when the checked call returns with no graph
+ // prefix (for example ERR_BUSY before the first segment). It must remain
+ // non-retired until cancellation or a settled failure releases that claim.
+ if((no_effect && !live_upload_claim) || next.state==8 || cancelled_upload_settled || failed_prefix_settled) {
   rd->_qualification_unpin_resources(ticket);ticket->physically_retired.store(true);
  }
  if(ticket->observation_dirty || memcmp(&next,&ticket->report,sizeof(next))) {

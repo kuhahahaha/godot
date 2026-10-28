@@ -104,7 +104,7 @@ public:
 		device.frames.clear(); device.storage_buffer_owner.free(rid); device.driver = nullptr;
 	}
 
-	static void no_effect_reacquires_resource_pin() {
+	static void no_effect_reacquires_resource_pin(bool p_attempted = false) {
 		using namespace GDExtensionDeviceExit;
 		RenderingDevice device;
 		TransferTestDriverBase driver;
@@ -121,12 +121,28 @@ public:
 		REQUIRE(device._qualification_pin_resources(&ticket, resources) == OK);
 		CHECK(device._qualification_resource_busy(rid));
 		auto &registry = Registry::get_singleton();
+		if (p_attempted) {
+			ticket.uploads.resize(1);
+			ticket.uploads[0].attempted = true;
+		}
 		// The original reducer returns a zero-effect upload's physical pins
 		// while its prepared ticket can still admit the same upload later.
 		registry.qualification_ticket_publish(&ticket, &device);
-		CHECK(ticket.physically_retired.load());
+		CHECK(ticket.physically_retired.load() == !p_attempted);
 		CHECK_FALSE(ticket.admission_closed.load());
-		CHECK(device.storage_buffer_owner.get_or_null(rid)->qualification_users == 0);
+		CHECK(device.storage_buffer_owner.get_or_null(rid)->qualification_users == (p_attempted ? 1 : 0));
+		CHECK(device._qualification_resource_busy(rid) == p_attempted);
+		if (p_attempted) {
+			ticket.admission_closed = true;
+			registry.qualification_ticket_publish(&ticket, &device);
+			CHECK(ticket.physically_retired.load());
+			CHECK(device.storage_buffer_owner.get_or_null(rid)->qualification_users == 0);
+		}
+		if (p_attempted) {
+			device.storage_buffer_owner.free(rid);
+			device.driver = nullptr;
+			return;
+		}
 		CHECK_FALSE(device._qualification_resource_busy(rid));
 		REQUIRE(device._qualification_pin_resources(&ticket, resources) == OK);
 		CHECK(device.storage_buffer_owner.get_or_null(rid)->qualification_users == 1);
@@ -231,6 +247,7 @@ public:
 };
 TEST_CASE("[Qualification] ticket keeps distinct native and completion identities until every source and frame returns") {TestQualificationTicketAccess::reduction(false);}
 TEST_CASE("[Qualification] zero-effect prepared ticket reacquires original resource pins before retry") { TestQualificationTicketAccess::no_effect_reacquires_resource_pin(); }
+TEST_CASE("[Qualification] attempted upload keeps original writer pin across zero-effect busy publish") { TestQualificationTicketAccess::no_effect_reacquires_resource_pin(true); }
 TEST_CASE("[Qualification] settled native work releases resource pins after a logical readback copy failure") {TestQualificationTicketAccess::reduction(true);}
 TEST_CASE("[Qualification] unresolved source mapping keeps failed ticket resource pins") {TestQualificationTicketAccess::unknown_keeps_pin();}
 

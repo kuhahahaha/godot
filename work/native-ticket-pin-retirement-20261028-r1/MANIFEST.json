@@ -1,0 +1,21 @@
+{
+  "status": "focused V1 writer-pin retirement fix verified; independent review clean",
+  "files": {
+    "INDEPENDENT_REVIEW.md": {
+      "bytes": 1177,
+      "sha256": "fd9d27600db8ecc701002a9887a6213692347d129e0b0a9450673bcad9fc5cf4"
+    },
+    "INPUTS.json": {
+      "bytes": 1456,
+      "sha256": "2dc2e44ac9fa43df35add53a2f4efc8b7dd1049cf0bcb9607ebc01616784ed3e"
+    },
+    "MANIFEST.json": {
+      "bytes": 344,
+      "sha256": "4319a7b012dca2531f5b77a4cab63496f0a54d536784f74e5e51932e47331366"
+    },
+    "RECEIPT.md": {
+      "bytes": 2028,
+      "sha256": "e0c38a6f0035f0eae91a9ee308c138aa16d4d93ab4f4950a7d295233d6baf446"
+    }
+  }
+}
