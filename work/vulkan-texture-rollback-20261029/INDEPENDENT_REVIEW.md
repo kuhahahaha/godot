@@ -44,3 +44,8 @@ boundary and does not broaden lifecycle authority.
 The two guards execute before native buffer dereference or image allocation.
 RED/Debug/UBSan/Release evidence is bounded to input rejection and allocation
 safety; no owner or lifecycle authority is introduced.
+
+
+The base-format guard runs before mutable-format list processing and native
+image creation, eliminating the MoltenVK invalid-pixel-format path. Evidence
+is limited to Vulkan input/resource safety and preserves all lifecycle gates.

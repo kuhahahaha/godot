@@ -103,3 +103,16 @@ rebuild/version probe is rc0. R10 artifacts carry the d08b51635c build
 identity; source hashes pin the follow-up source commit in
 SOURCE_MANIFEST.json. This is direct input validation only; no qualification,
 completion, readback, Ready or G1 claim is made.
+
+## Direct-driver base texture format validation
+
+A RED direct-driver test passed DATA_FORMAT_MAX as the base TextureFormat.
+The old path reached MoltenVK with invalid pixelFormat 0 and aborted. The
+driver now rejects the base format before shareable-list handling or image
+allocation. GREEN Debug is 1 case / 3 assertions, Vulkan allocation
+regression is 8 cases / 42 assertions, K03/P2 remains 22/350, and actual
+use_ubsan=yes repeats 1/3 and 8/42, all rc0. The template_release rebuild and
+version probe are rc0. R11 artifacts carry the 9ae7de8310 build identity;
+source hashes pin the follow-up source commit in SOURCE_MANIFEST.json. This
+is direct input validation only; no qualification, completion, readback,
+Ready or G1 claim is made.
