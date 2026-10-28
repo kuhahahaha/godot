@@ -921,8 +921,8 @@
   "work/sdk-unloadable-active-context-20261028-r3/threads-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "work/typed-lifecycle-abi-v1/CURRENT_PAIR_U01_VFX_R01_NEGATIVE_RECEIPT_20251025.md": "c6ab0496164e2741f157768a10ffcc6f0217b630a26d95d3d9762c2e22b79a47",
   "work/typed-lifecycle-abi-v1/PROGRESS.md": {
-    "bytes": 145835,
-    "sha256": "f7f4cad83390e251f221b465ca1a62f579ba2219f4f49fae594fb5d580d0fe7a"
+    "bytes": 146347,
+    "sha256": "18230f3c7a1eb2a153bf0a0488e404a9f458c6aa2931e1e2aafcdc110133c9fe"
   },
   "work/typed-lifecycle-abi-v1/gdextension_interface.h": "07ee07f19e31fe5c22154edbba73ce3cb793b87524add5d9dc0c9468815c9a29",
   "work/typed-lifecycle-abi-v1/native-current-open-items-20261028/COMMAND_OUTPUT.json": "feccb44a82af5439c60b4fb8a6f7c8fc8923f9fd97e2bb169099294c67a185ef",
@@ -1585,5 +1585,21 @@
   "scene/resources/gradient_texture.h": "3cad36e241f75687961444287d1b63c91df1efb7c2c3459eebc4b912b03aaf65",
   "scene/resources/gradient_texture.cpp": "c10e08cabdc859b99a0fadd70c00b6944b8b8e8923137185e65b47fcd09e3e67",
   "bin/godot.macos.template_release.arm64": "4a23531fc16757b8405fb85b0d1c71e19e02eb03e40e9917cbf4a1690c83f7e0",
-  "bin/godot.macos.editor.dev.arm64.san": "b5c390c4836a1eaf6591a8520144cd246ddd100f9c221d6c6450d7cd48e0f8ec"
+  "bin/godot.macos.editor.dev.arm64.san": "b5c390c4836a1eaf6591a8520144cd246ddd100f9c221d6c6450d7cd48e0f8ec",
+  "work/typed-lifecycle-abi-v1/native-open-items-revalidation-r4-20261029/COMMAND_OUTPUT.json": {
+    "bytes": 4769,
+    "sha256": "eaac60e891f62bc53726274097a82d250efc70f8fc9cedf248df167d0630f05e"
+  },
+  "work/typed-lifecycle-abi-v1/native-open-items-revalidation-r4-20261029/INDEPENDENT_REVIEW.md": {
+    "bytes": 599,
+    "sha256": "7d6c8a6d9be95b9912183a1cb5b3f92f6470a8193b550b1a2c709bbdff7443f7"
+  },
+  "work/typed-lifecycle-abi-v1/native-open-items-revalidation-r4-20261029/RECEIPT.md": {
+    "bytes": 1586,
+    "sha256": "fdccf74d41b00620cc767c9966db1a69606e2d80cca22de0f3dcf5fcdef57928"
+  },
+  "work/typed-lifecycle-abi-v1/native-open-items-revalidation-r4-20261029/SOURCE_HASHES.txt": {
+    "bytes": 2182,
+    "sha256": "3503dfb231fa0b1e42645d70bec3f80a396aa7110a3d917437c0f2a34c56a53a"
+  }
 }
