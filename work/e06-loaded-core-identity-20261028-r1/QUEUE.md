@@ -11,3 +11,6 @@ Long goal active; no cron, scheduling, pause or full completion. Current model/s
 
 
 Static graph audit 2026-10-28: `STATIC_GRAPH_AUDIT.log` rc0 proves original `env.LIBS` has the complete ordered archive set while `platform/macos/SCsub` final static target archives only platform objects. No static support claim; next implementation is an original libtool aggregate target, deferred behind editor/Metal + E20 adoption.
+
+
+Static prototype audit found a target-path collision: aggregate action dry-run succeeds, but shared generated stamp/selection nodes are currently common across executable/shared/static. Production static work must first parameterize generated node paths by target kind/variant; the prototype was reverted and no static support claim was made.

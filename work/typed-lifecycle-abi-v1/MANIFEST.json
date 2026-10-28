@@ -18,8 +18,8 @@
   "tests/core/object/test_device_exit_library_close.cpp": "1d5bc82848c80dd9ea987ef035f1ce8517d1bf9887ad082f53ebc6acdc455357",
   "work/typed-lifecycle-abi-v1/CURRENT_PAIR_U01_VFX_R01_NEGATIVE_RECEIPT_20251025.md": "c6ab0496164e2741f157768a10ffcc6f0217b630a26d95d3d9762c2e22b79a47",
   "work/typed-lifecycle-abi-v1/PROGRESS.md": {
-    "bytes": 125885,
-    "sha256": "07112a76e2b4d9a5124fc6748d41f27ce69106bf3e9663544e87dda95554a875"
+    "bytes": 126374,
+    "sha256": "3be98a71aa7eef059a365a8f093444864fce093de3c2f4cf7f5f8fc4dc6f1497"
   },
   "work/r01-frame-wait-20261026/MANIFEST.json": "6665b770d13d966da423741c69f01a58b562b976c9f94811f3e4b442f2907d64",
   "work/r01-frame-wait-20261026/RECEIPT.md": "90930a0824a3c88582ef533e461b66fc5bc3163bb165a66269e1d773b0d25066",
@@ -514,17 +514,17 @@
   "servers/rendering/rendering_device.h": "358ecc5a1266886e883cdb30e2660e30f74895776ca059db85e048b7de2038f8",
   "tests/servers/rendering/test_mesh_storage_external.cpp": "b606f174bb8121b1ab3951ba068d276a280daf23e041d157f162515bf9a7a4b3",
   "work/e06-loaded-core-identity-20261028-r1/MANIFEST.json": {
-    "bytes": 11109,
-    "sha256": "8fb5148beba1fe19465f0ab993a20d3f4eb51be59ab4842d1d03d79fecf16764"
+    "bytes": 705,
+    "sha256": "9ae0bf14a55c33ad6d9e1db3bf64b71fab0e140dce035f8937e54bea4d928aa6"
   },
   "work/e06-loaded-core-identity-20261028-r1/RECEIPT.md": {
-    "bytes": 8341,
-    "sha256": "02a3560c9b67b1ea0abe54e63b07c90ad4d0e8ce69312f85da39b4d7d6ecac65"
+    "bytes": 9060,
+    "sha256": "7ff077d6a124cbf10e17471461bc472b5280e8539d95abbef738610fb9d90956"
   },
   "work/e06-loaded-core-identity-20261028-r1/INDEPENDENT_REVIEW.md": "f13a0cac030b4a68d76b5203e9d9cfda1dc5e0e5d45d12edf7bb1c339ffa2270",
   "work/e06-loaded-core-identity-20261028-r1/QUEUE.md": {
-    "bytes": 1942,
-    "sha256": "ae0ecb89b81fafbbe5c3e36c326dd4a20ea169beb866683124af335f77ae995a"
+    "bytes": 2287,
+    "sha256": "f8e0978700635794556843f65f6b123182d6507bdd29dec997202534a17763d1"
   },
   "SConstruct": "c6d32561793fa5987ed8b9e8a7ab3b4beb04ea63bacb912f6fc1b0528b9181a7",
   "core/SCsub": "0fb5bd94238e443b71a69150f31561ac3610a188c07ebef43b76471d2bffae42",
