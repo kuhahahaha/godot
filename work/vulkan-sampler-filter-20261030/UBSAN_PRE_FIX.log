@@ -1,0 +1,10 @@
+drivers/vulkan/rendering_device_driver_vulkan.cpp:2878:2: runtime error: load of value 2, which is not a valid value for type 'SamplerFilter'
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior drivers/vulkan/rendering_device_driver_vulkan.cpp:2878:2 
+drivers/vulkan/rendering_device_driver_vulkan.cpp:2878:2: runtime error: load of value 2, which is not a valid value for type 'SamplerFilter'
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior drivers/vulkan/rendering_device_driver_vulkan.cpp:2878:2 
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+[doctest] test cases: 1 | 1 passed | 0 failed | 1740 skipped
+[doctest] assertions: 3 | 3 passed | 0 failed |
+[doctest] Status: SUCCESS!
