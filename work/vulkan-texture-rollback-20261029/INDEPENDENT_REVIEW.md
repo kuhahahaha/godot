@@ -22,3 +22,9 @@ texture creation and both shared-view entry points. The RED test demonstrates
 that the prior behavior could publish a texture and leak an allocation; the
 GREEN Debug/UBSan and Release evidence shows the guard is fail-closed and does
 not broaden the allocation rollback or lifecycle authority surface.
+
+
+The query follow-up stays bounded to Vulkan format inputs. Invalid formats are
+rejected before RD_TO_VK_FORMAT access, and the shared-format output is
+initialized before returning false. RED/Debug/UBSan/Release evidence supports
+fail-closed behavior without adding fallback or authority.

@@ -45,3 +45,18 @@ The R6 binaries carry the pre-commit `7ee45a66b` build identity; source hashes
 are pinned to the committed follow-up `65a70669e5` in `SOURCE_MANIFEST.json`.
 This is a direct-driver input validation repair only; no qualification, owner,
 completion, readback, Ready or G1 claim is made.
+
+## Direct-driver format query validation
+
+A RED query test passed DATA_FORMAT_MAX to the Vulkan texture-usage and
+sampler-filter capability methods. The usage method returned a nonzero bitfield
+without rejecting the input; the filter method had no explicit guard. The
+follow-up now rejects invalid formats in both queries and in
+texture_can_make_shared_with_format, initializing the out parameter before
+the fail-closed return. Debug focused is 1 case / 6 assertions, the Vulkan
+allocation regression is 4 cases / 29 assertions, K03/P2 remains 22 cases / 350
+assertions, and actual use_ubsan=yes repeats the 1/6 and 4/29 results, all
+rc0. The template_release rebuild/version probe is rc0. R7 artifacts carry
+the 11bdfc52b build identity; source hashes pin the follow-up source commit
+separately in SOURCE_MANIFEST.json. This is direct input validation only; no
+qualification, completion, readback, Ready or G1 claim is made.
