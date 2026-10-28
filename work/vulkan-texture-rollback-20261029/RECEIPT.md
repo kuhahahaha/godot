@@ -168,3 +168,15 @@ The template_release rebuild and version probe are rc0. R15 artifacts carry the
 `f5e874900` build identity; source hashes pin the exact source in
 `SOURCE_MANIFEST.json`. This remains direct input validation only; no
 qualification, completion, readback, Ready or G1 claim is made.
+
+## Direct texture-layout command validation
+
+Texture-layout command entry points now reject `TEXTURE_LAYOUT_MAX` before any
+barrier table lookup, resource dereference, region conversion, or Vulkan command
+submission. The focused null-resource probe is 1 case / 3 assertions; Vulkan
+allocation regression is 15 cases / 66 assertions, K03/P2 is 22 cases / 350
+assertions, and actual `use_ubsan=yes` Vulkan regression is 15/66; all rc0. The
+template_release rebuild and version probe are rc0. R16 artifacts carry the
+`b60612cc9` build identity; source hashes pin the exact source in
+`SOURCE_MANIFEST.json`. This remains direct input validation only; no
+qualification, completion, readback, Ready or G1 claim is made.

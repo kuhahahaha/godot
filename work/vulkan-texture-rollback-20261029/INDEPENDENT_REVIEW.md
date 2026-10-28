@@ -74,3 +74,9 @@ The texture-type guard runs before `RD_TEX_TYPE_TO_VK_IMG_TYPE` indexing and
 native image setup. Valid texture types retain existing behavior; the sentinel
 fails closed without allocator growth. This adds no lifecycle or qualification
 authority.
+
+
+Each command guard executes before its first layout-table access and before
+null resource handles are dereferenced. Valid layouts and command behavior are
+unchanged; invalid sentinels return without issuing Vulkan work. This adds no
+lifecycle, owner, completion, readback, Ready or G1 authority.
