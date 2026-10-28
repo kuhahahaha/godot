@@ -83,6 +83,7 @@ public:
 		SHADER_GROUP_FP32_MULTIVIEW,
 		SHADER_GROUP_FP16,
 		SHADER_GROUP_FP16_MULTIVIEW,
+		SHADER_GROUP_MAX,
 	};
 
 	struct ShaderSpecialization {
@@ -207,6 +208,7 @@ public:
 			uint32_t render_pass = 0;
 			uint32_t wireframe = false;
 			uint32_t ubershader = false;
+			bool indexed144 = false;
 
 			uint32_t hash() const {
 				uint32_t h = hash_murmur3_one_32(vertex_format_id);
@@ -220,6 +222,9 @@ public:
 				h = hash_murmur3_one_32(render_pass, h);
 				h = hash_murmur3_one_32(wireframe, h);
 				h = hash_murmur3_one_32(ubershader, h);
+				if (indexed144) {
+					h = hash_murmur3_one_32(1, h);
+				}
 				return hash_fmix32(h);
 			}
 		};
@@ -229,7 +234,7 @@ public:
 
 		RID version;
 
-		static const uint32_t VERTEX_INPUT_MASKS_SIZE = SHADER_VERSION_MAX * 2;
+		static const uint32_t VERTEX_INPUT_MASKS_SIZE = SHADER_VERSION_MAX * 4;
 		std::atomic<uint64_t> vertex_input_masks[VERTEX_INPUT_MASKS_SIZE] = {};
 
 		Vector<ShaderCompiler::GeneratedCode::Texture> texture_uniforms;
@@ -314,8 +319,8 @@ public:
 		virtual Pair<ShaderRD *, RID> get_native_shader_and_version() const;
 		RD::PolygonCullMode get_cull_mode_from_cull_variant(CullVariant p_cull_variant);
 		void _clear_vertex_input_mask_cache();
-		RID get_shader_variant(ShaderVersion p_shader_version, bool p_ubershader) const;
-		uint64_t get_vertex_input_mask(ShaderVersion p_shader_version, bool p_ubershader);
+		RID get_shader_variant(ShaderVersion p_shader_version, bool p_ubershader, bool p_indexed144 = false) const;
+		uint64_t get_vertex_input_mask(ShaderVersion p_shader_version, bool p_ubershader, bool p_indexed144 = false);
 		bool is_valid() const;
 
 		SelfList<ShaderData> shader_list_element;
@@ -350,6 +355,8 @@ public:
 	}
 
 	SceneForwardMobileShaderRD shader;
+	static constexpr uint32_t INDEXED144_VARIANT_OFFSET = SHADER_VERSION_MAX * 4;
+	Vector<int> indexed144_shader_groups;
 	ShaderCompiler compiler;
 	bool use_fp16 = false;
 	bool emulate_point_size = false;

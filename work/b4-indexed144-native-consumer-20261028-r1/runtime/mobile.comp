@@ -1,0 +1,129 @@
+#version 450
+#define NORMAL_USED
+#define TANGENT_USED
+#define USE_INDEXED144_VERTEX_INPUT
+#define M_PI 3.14159265358979323846
+layout(local_size_x=1,local_size_y=1,local_size_z=1) in;
+layout(set=0,binding=0,std430) buffer Result { vec4 values[]; } output_data;
+layout(set=0,binding=1,std430) readonly buffer Input { vec4 values[]; } input_data;
+struct Instance {vec4 compressed_aabb_position_pad;vec4 compressed_aabb_size_pad;};
+struct Instances {Instance data[1];};
+Instances instances;
+struct DrawCall {uint instance_index;};
+DrawCall draw_call;
+vec4 vertex_angle_attrib;
+vec4 axis_tangent_attrib;
+vec4 tangent_attrib;
+vec4 previous_vertex_attrib;
+vec4 previous_normal_attrib;
+vec4 previous_tangent_attrib;
+vec3 oct_to_vec3(vec2 e) {
+	vec3 v = vec3(e.xy, 1.0 - abs(e.x) - abs(e.y));
+	float t = max(-v.z, 0.0);
+	v.xy += t * -sign(v.xy);
+	return normalize(v);
+}
+void axis_angle_to_tbn(vec3 axis, float angle, out vec3 tangent, out vec3 binormal, out vec3 normal) {
+	float c = cos(angle);
+	float s = sin(angle);
+	vec3 omc_axis = (1.0 - c) * axis;
+	vec3 s_axis = s * axis;
+	tangent = omc_axis.xxx * axis + vec3(c, -s_axis.z, s_axis.y);
+	binormal = omc_axis.yyy * axis + vec3(s_axis.z, c, -s_axis.x);
+	normal = omc_axis.zzz * axis + vec3(-s_axis.y, s_axis.x, c);
+}
+void _unpack_vertex_attributes(vec4 p_vertex_in, vec3 p_compressed_aabb_position, vec3 p_compressed_aabb_size,
+#if defined(NORMAL_USED) || defined(TANGENT_USED)
+		vec4 p_normal_in,
+#ifdef USE_INDEXED144_VERTEX_INPUT
+		vec4 p_tangent_in,
+#endif
+#ifdef NORMAL_USED
+		out vec3 r_normal,
+#endif
+		out vec3 r_tangent,
+		out vec3 r_binormal,
+#endif
+		out vec3 r_vertex) {
+#ifdef USE_INDEXED144_VERTEX_INPUT
+	r_vertex = p_vertex_in.xyz;
+#ifdef NORMAL_USED
+	r_normal = p_normal_in.xyz;
+#endif
+#if defined(NORMAL_USED) || defined(TANGENT_USED)
+	r_tangent = p_tangent_in.xyz;
+	r_binormal = normalize(cross(p_normal_in.xyz, p_tangent_in.xyz)) * p_tangent_in.w;
+#endif
+#else
+
+	r_vertex = p_vertex_in.xyz * p_compressed_aabb_size + p_compressed_aabb_position;
+#ifdef NORMAL_USED
+	r_normal = oct_to_vec3(p_normal_in.xy * 2.0 - 1.0);
+#endif
+
+#if defined(NORMAL_USED) || defined(TANGENT_USED) || defined(NORMAL_MAP_USED) || defined(BENT_NORMAL_MAP_USED) || defined(LIGHT_ANISOTROPY_USED)
+
+	float binormal_sign;
+
+	// This works because the oct value (0, 1) maps onto (0, 0, -1) which encodes to (1, 1).
+	// Accordingly, if p_normal_in.z contains octahedral values, it won't equal (0, 1).
+	if (p_normal_in.z > 0.0 || p_normal_in.w < 1.0) {
+		// Uncompressed format.
+		vec2 signed_tangent_attrib = p_normal_in.zw * 2.0 - 1.0;
+		r_tangent = oct_to_vec3(vec2(signed_tangent_attrib.x, abs(signed_tangent_attrib.y) * 2.0 - 1.0));
+		binormal_sign = sign(signed_tangent_attrib.y);
+		r_binormal = normalize(cross(r_normal, r_tangent) * binormal_sign);
+	} else {
+		// Compressed format.
+		float angle = p_vertex_in.w;
+		binormal_sign = angle > 0.5 ? 1.0 : -1.0; // 0.5 does not exist in UNORM16, so values are either greater or smaller.
+		angle = abs(angle * 2.0 - 1.0) * M_PI; // 0.5 is basically zero, allowing to encode both signs reliably.
+		vec3 axis = r_normal;
+		axis_angle_to_tbn(axis, angle, r_tangent, r_binormal, r_normal);
+		r_binormal *= binormal_sign;
+	}
+#endif
+#endif
+}
+void main(){
+ draw_call.instance_index=0u;uint instance_index=0u;vertex_angle_attrib=input_data.values[0];axis_tangent_attrib=input_data.values[1];tangent_attrib=input_data.values[2];previous_vertex_attrib=input_data.values[3];previous_normal_attrib=input_data.values[4];previous_tangent_attrib=input_data.values[5];
+instances.data[0].compressed_aabb_position_pad=input_data.values[6];
+instances.data[0].compressed_aabb_size_pad=input_data.values[7];
+vec3 vertex,normal,tangent,binormal,prev_vertex,prev_normal,prev_tangent,prev_binormal;
+
+	_unpack_vertex_attributes(
+			previous_vertex_attrib,
+			instances.data[draw_call.instance_index].compressed_aabb_position_pad.xyz,
+			instances.data[draw_call.instance_index].compressed_aabb_size_pad.xyz,
+#if defined(NORMAL_USED) || defined(TANGENT_USED)
+			previous_normal_attrib,
+#ifdef USE_INDEXED144_VERTEX_INPUT
+			previous_tangent_attrib,
+#endif
+#ifdef NORMAL_USED
+			prev_normal,
+#endif
+			prev_tangent,
+			prev_binormal,
+#endif
+			prev_vertex);
+
+	_unpack_vertex_attributes(
+			vertex_angle_attrib,
+			instances.data[draw_call.instance_index].compressed_aabb_position_pad.xyz,
+			instances.data[draw_call.instance_index].compressed_aabb_size_pad.xyz,
+#if defined(NORMAL_USED) || defined(TANGENT_USED)
+			axis_tangent_attrib,
+#ifdef USE_INDEXED144_VERTEX_INPUT
+			tangent_attrib,
+#endif
+#ifdef NORMAL_USED
+			normal,
+#endif
+			tangent,
+			binormal,
+#endif
+			vertex);
+output_data.values[0]=vec4(vertex,0);output_data.values[1]=vec4(normal,0);output_data.values[2]=vec4(tangent,0);output_data.values[3]=vec4(binormal,0);
+output_data.values[4]=vec4(prev_vertex,0);output_data.values[5]=vec4(prev_normal,0);output_data.values[6]=vec4(prev_tangent,0);output_data.values[7]=vec4(prev_binormal,0);
+}

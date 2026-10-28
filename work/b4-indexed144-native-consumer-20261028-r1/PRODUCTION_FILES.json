@@ -1,0 +1,15 @@
+[
+  "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp",
+  "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.cpp",
+  "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h",
+  "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp",
+  "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.cpp",
+  "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.h",
+  "servers/rendering/renderer_rd/shader_rd.cpp",
+  "servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered.glsl",
+  "servers/rendering/renderer_rd/shaders/forward_mobile/scene_forward_mobile.glsl",
+  "servers/rendering/renderer_rd/storage_rd/mesh_storage.cpp",
+  "servers/rendering/renderer_rd/storage_rd/mesh_storage.h",
+  "servers/rendering/rendering_device.h",
+  "tests/servers/rendering/test_mesh_storage_external.cpp"
+]

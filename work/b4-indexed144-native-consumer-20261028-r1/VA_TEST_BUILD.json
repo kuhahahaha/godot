@@ -1,0 +1,11 @@
+[
+  "/usr/bin/python3",
+  "/Users/macbookair/.local/bin/scons",
+  "-Q",
+  "-j4",
+  "platform=macos",
+  "target=editor",
+  "dev_build=yes",
+  "tests=yes",
+  "bin/obj/tests/libtests.macos.editor.dev.arm64.a"
+]

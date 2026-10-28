@@ -1,0 +1,22 @@
+{
+  "mobile": {
+    "source_path": "/Users/macbookair/Documents/Work/godot_ANGE/servers/rendering/renderer_rd/shaders/forward_mobile/scene_forward_mobile.glsl",
+    "source_sha256": "f431b0fc99879a2a31bc1ddf1cdf710600c8fc96109e7d39692d854d2aba65f8",
+    "fixture_sha256": "570c6dd03669bf70b882a40d32028a58a82eff4f16cbb53117fb0b3458a022da",
+    "actual_calls": [
+      "\n\t_unpack_vertex_attributes(\n\t\t\tprevious_vertex_attrib,\n\t\t\tinstances.data[draw_call.instance_index].compressed_aabb_position_pad.xyz,\n\t\t\tinstances.data[draw_call.instance_index].compressed_aabb_size_pad.xyz,\n#if defined(NORMAL_USED) || defined(TANGENT_USED)\n\t\t\tprevious_normal_attrib,\n#ifdef NORMAL_USED\n\t\t\tprev_normal,\n#endif\n\t\t\tprev_tangent,\n\t\t\tprev_binormal,\n#endif\n\t\t\tprev_vertex);",
+      "\n\t_unpack_vertex_attributes(\n\t\t\tvertex_angle_attrib,\n\t\t\tinstances.data[draw_call.instance_index].compressed_aabb_position_pad.xyz,\n\t\t\tinstances.data[draw_call.instance_index].compressed_aabb_size_pad.xyz,\n#if defined(NORMAL_USED) || defined(TANGENT_USED)\n\t\t\taxis_tangent_attrib,\n#ifdef NORMAL_USED\n\t\t\tnormal,\n#endif\n\t\t\ttangent,\n\t\t\tbinormal,\n#endif\n\t\t\tvertex);"
+    ],
+    "scope": "actual original GLSL decoder+calls in compute scaffolding, not actual vertex-input/draw/material proof"
+  },
+  "clustered": {
+    "source_path": "/Users/macbookair/Documents/Work/godot_ANGE/servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered.glsl",
+    "source_sha256": "82414b8ccdcf180feaa177519898dc71c3daf5c35c1aa284d133532b56395d97",
+    "fixture_sha256": "fba0d1ee2f8267d32e47252c58313b9c4b60987d184dad7447c4986068f69cea",
+    "actual_calls": [
+      "\n\t_unpack_vertex_attributes(\n\t\t\tprevious_vertex_attrib,\n\t\t\tinstances.data[instance_index].compressed_aabb_position_pad.xyz,\n\t\t\tinstances.data[instance_index].compressed_aabb_size_pad.xyz,\n\n#if defined(NORMAL_USED) || defined(TANGENT_USED)\n\t\t\tprevious_normal_attrib,\n#ifdef NORMAL_USED\n\t\t\tprev_normal,\n#endif\n\t\t\tprev_tangent,\n\t\t\tprev_binormal,\n#endif\n\t\t\tprev_vertex);",
+      "\n\t_unpack_vertex_attributes(\n\t\t\tvertex_angle_attrib,\n\t\t\tinstances.data[instance_index].compressed_aabb_position_pad.xyz,\n\t\t\tinstances.data[instance_index].compressed_aabb_size_pad.xyz,\n#if defined(NORMAL_USED) || defined(TANGENT_USED)\n\t\t\taxis_tangent_attrib,\n#ifdef NORMAL_USED\n\t\t\tnormal,\n#endif\n\t\t\ttangent,\n\t\t\tbinormal,\n#endif\n\t\t\tvertex);"
+    ],
+    "scope": "actual original GLSL decoder+calls in compute scaffolding, not actual vertex-input/draw/material proof"
+  }
+}

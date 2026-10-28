@@ -1,0 +1,38 @@
+{
+  "/Users/macbookair/Documents/Work/ANGE/godot-cpp/bin/libgodot-cpp.macos.template_debug.arm64.a": {
+    "bytes": 45282032,
+    "sha256": "cb0fbc01daa4f907d148ecaf70a5d29616d23aa01b4ef0939adefd424aec2cec"
+  },
+  "work/b4-indexed144-native-consumer-20261028-r1/frozen-inputs/libgodot-cpp.debug.a": {
+    "bytes": 45282032,
+    "sha256": "cb0fbc01daa4f907d148ecaf70a5d29616d23aa01b4ef0939adefd424aec2cec"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/godot-cpp/include/godot_cpp/godot.hpp": {
+    "bytes": 8936,
+    "sha256": "59cb3225668dd0b293f4e77c30b7609492ae337573f334b4647a61045c2be1b4"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/godot-cpp/include/godot_cpp/classes/wrapped.hpp": {
+    "bytes": 21165,
+    "sha256": "580f38ae21d901bf075379021bc707ec2b60bc7cf9bdc917edd85ffd8e7e1eb3"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/godot-cpp/include/godot_cpp/core/device_exit_api.hpp": {
+    "bytes": 13954,
+    "sha256": "471e538f4bc671e3732907311158ae5bc55a2505023f7562c68091a90f2706e7"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/godot-cpp/include/godot_cpp/core/guarded_scene_tree.hpp": {
+    "bytes": 1360,
+    "sha256": "c70e2453bddfaee8a67aa2b9b44e6e1f8ffa904ae14c41d2d0484eb406609a8c"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/godot-cpp/gen/include/gdextension_interface.h": {
+    "bytes": 211077,
+    "sha256": "997a4812a4f7b8369606bb635e0436d55f79ad07ed565203919350be19dcfa0b"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/godot-cpp/gen/include/godot_cpp/classes/engine.hpp": {
+    "bytes": 4929,
+    "sha256": "5f1646e03f3894ff3412348c666b7c04063c5b7177c5f2ef650271cce982f015"
+  },
+  "/Users/macbookair/Documents/Work/ANGE/godot-cpp/gen/include/godot_cpp/classes/scene_tree.hpp": {
+    "bytes": 6759,
+    "sha256": "002b3aa2e26ddbdce0341192835d906baa5096474cfef0b31cb053e652008616"
+  }
+}

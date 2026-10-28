@@ -539,6 +539,7 @@ Error MeshStorage::mesh_add_external_surface(RID p_mesh, const ExternalSurfaceDe
 	ERR_FAIL_NULL_V(mesh, ERR_DOES_NOT_EXIST);
 	ERR_FAIL_COND_V(mesh->surface_count == RSE::MAX_MESH_SURFACES, ERR_OUT_OF_MEMORY);
 	ERR_FAIL_COND_V(p_surface.vertex_count == 0 || p_surface.index_count == 0, ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(p_surface.primitive != RSE::PRIMITIVE_TRIANGLES || mesh->blend_shape_count != 0 || !mesh->instances.is_empty(), ERR_INVALID_PARAMETER);
 	ERR_FAIL_COND_V(p_surface.current_vertex_buffer.is_null() || p_surface.previous_vertex_buffer.is_null() || p_surface.index_buffer.is_null() || p_surface.index_array.is_null(), ERR_INVALID_PARAMETER);
 	ERR_FAIL_COND_V(p_surface.material.is_null(), ERR_INVALID_PARAMETER);
 	ERR_FAIL_COND_V(p_surface.generation == 0 || p_surface.current_allocation_generation == 0 || p_surface.previous_allocation_generation == 0, ERR_INVALID_PARAMETER);
@@ -549,6 +550,11 @@ Error MeshStorage::mesh_add_external_surface(RID p_mesh, const ExternalSurfaceDe
 
 	Mesh::Surface *surface = memnew(Mesh::Surface);
 	surface->external = true;
+	surface->format = RSE::ARRAY_FORMAT_VERTEX | RSE::ARRAY_FORMAT_NORMAL | RSE::ARRAY_FORMAT_TANGENT | RSE::ARRAY_FORMAT_COLOR | RSE::ARRAY_FORMAT_TEX_UV | RSE::ARRAY_FORMAT_TEX_UV2 | RSE::ARRAY_FORMAT_CUSTOM0 | RSE::ARRAY_FORMAT_CUSTOM1 | RSE::ARRAY_FORMAT_CUSTOM2 | RSE::ARRAY_FORMAT_CUSTOM3 | RSE::ARRAY_FORMAT_INDEX;
+	for (uint32_t shift : { RSE::ARRAY_FORMAT_CUSTOM0_SHIFT, RSE::ARRAY_FORMAT_CUSTOM1_SHIFT, RSE::ARRAY_FORMAT_CUSTOM2_SHIFT, RSE::ARRAY_FORMAT_CUSTOM3_SHIFT }) {
+		surface->format |= uint64_t(RSE::ARRAY_CUSTOM_RGBA_FLOAT) << shift;
+	}
+
 	surface->external_generation = p_surface.generation;
 	surface->current_allocation_generation = p_surface.current_allocation_generation;
 	surface->previous_allocation_generation = p_surface.previous_allocation_generation;
@@ -570,18 +576,64 @@ Error MeshStorage::mesh_add_external_surface(RID p_mesh, const ExternalSurfaceDe
 		return ERR_OUT_OF_MEMORY;
 	}
 	mesh->surfaces = new_surfaces;
+	if (mesh->surface_count == 0) {
+		mesh->aabb = p_surface.aabb;
+	} else {
+		mesh->aabb.merge_with(p_surface.aabb);
+	}
+	mesh->skeleton_aabb_version = 0;
 	mesh->surfaces[mesh->surface_count] = surface;
 	r_surface_index = mesh->surface_count++;
 	r_generation = surface->external_generation;
-	for (MeshInstance *mi : mesh->instances) {
-		_mesh_instance_add_surface(mi, mesh, r_surface_index);
-	}
+	_multimesh_mesh_changed(mesh);
 	mesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
+	for (Mesh *shadow_owner : mesh->shadow_owners) {
+		shadow_owner->shadow_mesh = RID();
+		shadow_owner->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
+	}
 	mesh->material_cache.clear();
 	return OK;
 }
 
-void MeshStorage::_mesh_surface_generate_external_version(Mesh::Surface::Version &v, Mesh::Surface *s, bool p_input_motion_vectors, bool p_point_size_emulated) {
+void MeshStorage::_mesh_surface_get_external_arrays(Mesh::Surface *s, uint64_t p_input_mask, bool p_input_motion_vectors, bool p_point_size_emulated, RID &r_vertex_array_rd, RD::VertexFormatID &r_vertex_format) {
+	r_vertex_array_rd = RID();
+	r_vertex_format = 0;
+	s->version_lock.lock();
+	for (uint32_t i = 0; i < s->version_count; i++) {
+		const Mesh::Surface::Version &version = s->versions[i];
+		if (version.input_mask == p_input_mask && version.input_motion_vectors == p_input_motion_vectors && version.point_size_emulated == p_point_size_emulated && version.current_allocation_generation == s->current_allocation_generation && version.previous_allocation_generation == s->previous_allocation_generation) {
+			r_vertex_format = version.vertex_format;
+			r_vertex_array_rd = version.vertex_array;
+			s->version_lock.unlock();
+			return;
+		}
+	}
+	if (s->version_count == UINT32_MAX || uint64_t(s->version_count + 1) > SIZE_MAX / sizeof(Mesh::Surface::Version)) {
+		s->version_lock.unlock();
+		return;
+	}
+	Mesh::Surface::Version candidate;
+	_mesh_surface_generate_external_version(candidate, s, p_input_mask, p_input_motion_vectors, p_point_size_emulated);
+	if (candidate.vertex_array.is_null()) {
+		s->version_lock.unlock();
+		return;
+	}
+	auto *versions = static_cast<Mesh::Surface::Version *>(memrealloc(s->versions, sizeof(Mesh::Surface::Version) * (s->version_count + 1)));
+	if (!versions) {
+		s->version_lock.unlock();
+		RD::get_singleton()->free_rid(candidate.vertex_array);
+		return;
+	}
+	s->versions = versions;
+	s->versions[s->version_count++] = candidate;
+	r_vertex_format = candidate.vertex_format;
+	r_vertex_array_rd = candidate.vertex_array;
+	s->version_lock.unlock();
+}
+
+RD::VertexFormatID MeshStorage::_mesh_surface_generate_external_vertex_format(uint64_t p_input_mask, bool p_input_motion_vectors) {
+	const uint64_t supported_inputs = ((1ull << 10) - 1) | (p_input_motion_vectors ? (7ull << 12) : 0);
+	ERR_FAIL_COND_V(p_input_mask & ~supported_inputs, 0);
 	Vector<RD::VertexAttribute> attributes;
 	auto add = [&attributes](uint32_t p_location, uint32_t p_binding, uint32_t p_offset, RD::DataFormat p_format) {
 		RD::VertexAttribute a;
@@ -607,7 +659,11 @@ void MeshStorage::_mesh_surface_generate_external_version(Mesh::Surface::Version
 		add(13, 1, 16, RD::DATA_FORMAT_R32G32B32A32_SFLOAT);
 		add(14, 1, 32, RD::DATA_FORMAT_R32G32B32A32_SFLOAT);
 	}
-	v.vertex_format = RD::get_singleton()->vertex_format_create(attributes);
+	return RD::get_singleton()->vertex_format_create(attributes);
+}
+
+void MeshStorage::_mesh_surface_generate_external_version(Mesh::Surface::Version &v, Mesh::Surface *s, uint64_t p_input_mask, bool p_input_motion_vectors, bool p_point_size_emulated) {
+	v.vertex_format = _mesh_surface_generate_external_vertex_format(p_input_mask, p_input_motion_vectors);
 	if (!v.vertex_format) {
 		v.vertex_array = RID();
 		return;
@@ -617,7 +673,8 @@ void MeshStorage::_mesh_surface_generate_external_version(Mesh::Surface::Version
 	if (p_input_motion_vectors) {
 		buffers.push_back(s->previous_vertex_buffer);
 	}
-	v.vertex_array = RD::get_singleton()->vertex_array_create(p_point_size_emulated ? 0 : s->vertex_count, v.vertex_format, buffers);
+	v.vertex_array = RD::get_singleton()->vertex_array_create(s->vertex_count, v.vertex_format, buffers);
+	v.input_mask = p_input_mask;
 	v.input_motion_vectors = p_input_motion_vectors;
 	v.point_size_emulated = p_point_size_emulated;
 	v.current_allocation_generation = s->current_allocation_generation;
@@ -690,6 +747,7 @@ void MeshStorage::mesh_surface_update_vertex_region(RID p_mesh, int p_surface, i
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL(mesh);
 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_surface, mesh->surface_count);
+	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->external, "Indexed144 external buffers must be updated through their original owner.");
 	ERR_FAIL_COND(mesh->surfaces[p_surface]->vertex_buffer.is_null());
 	// Until E25 COW source mirroring is installed, a region write invalidates
 	// new static captures rather than exposing stale bytes as current.
@@ -707,6 +765,7 @@ void MeshStorage::mesh_surface_update_attribute_region(RID p_mesh, int p_surface
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL(mesh);
 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_surface, mesh->surface_count);
+	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->external, "Indexed144 external buffers must be updated through their original owner.");
 	ERR_FAIL_COND(mesh->surfaces[p_surface]->attribute_buffer.is_null());
 	// Until E25 COW source mirroring is installed, a region write invalidates
 	// new static captures rather than exposing stale bytes as current.
@@ -724,6 +783,7 @@ void MeshStorage::mesh_surface_update_skin_region(RID p_mesh, int p_surface, int
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL(mesh);
 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_surface, mesh->surface_count);
+	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->external, "Indexed144 external buffers must be updated through their original owner.");
 	ERR_FAIL_COND(mesh->surfaces[p_surface]->skin_buffer.is_null());
 	// Skin writes do not advance a static geometry revision. They revoke new
 	// static captures while preserving existing renderer skin behavior.
@@ -741,6 +801,7 @@ void RendererRD::MeshStorage::mesh_surface_update_index_region(RID p_mesh, int p
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL(mesh);
 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_surface, mesh->surface_count);
+	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->external, "Indexed144 external buffers must be updated through their original owner.");
 	ERR_FAIL_COND(mesh->surfaces[p_surface]->index_buffer.is_null());
 	// Until E25 COW source mirroring is installed, a region write invalidates
 	// new static captures rather than exposing stale bytes as current.
@@ -1124,6 +1185,9 @@ Dependency *MeshStorage::mesh_get_dependency(RID p_mesh) const {
 RID MeshStorage::mesh_instance_create(RID p_base) {
 	Mesh *mesh = mesh_owner.get_or_null(p_base);
 	ERR_FAIL_NULL_V(mesh, RID());
+	for (uint32_t i = 0; i < mesh->surface_count; i++) {
+		ERR_FAIL_COND_V_MSG(mesh->surfaces[i]->external, RID(), "Indexed144 external surfaces do not support deformation instances.");
+	}
 
 	RID rid = mesh_instance_owner.make_rid();
 	MeshInstance *mi = mesh_instance_owner.get_or_null(rid);

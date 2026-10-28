@@ -75,6 +75,7 @@ public:
 private:
 #ifdef TESTS_ENABLED
 	friend class TestMultimeshRebuildAccess;
+	friend class TestMeshStorageExternalAccess;
 #endif
 	static MeshStorage *singleton;
 
@@ -243,8 +244,10 @@ private:
 
 	RD::VertexFormatID _mesh_surface_generate_vertex_format(uint64_t p_surface_format, uint64_t p_input_mask, bool p_instanced_surface, bool p_input_motion_vectors, bool p_point_size_emulated, uint32_t &r_position_stride);
 	void _mesh_surface_generate_version_for_input_mask(Mesh::Surface::Version &v, Mesh::Surface *s, uint64_t p_input_mask, bool p_input_motion_vectors, bool p_point_size_emulated, MeshInstance::Surface *mis = nullptr, uint32_t p_current_buffer = 0, uint32_t p_previous_buffer = 0);
-	void _mesh_surface_generate_external_version(Mesh::Surface::Version &v, Mesh::Surface *s, bool p_input_motion_vectors, bool p_point_size_emulated);
-	void _mesh_surface_clear(Mesh *p_mesh, int p_surface);
+	static RD::VertexFormatID _mesh_surface_generate_external_vertex_format(uint64_t p_input_mask, bool p_input_motion_vectors);
+	static void _mesh_surface_generate_external_version(Mesh::Surface::Version &v, Mesh::Surface *s, uint64_t p_input_mask, bool p_input_motion_vectors, bool p_point_size_emulated);
+	static void _mesh_surface_get_external_arrays(Mesh::Surface *s, uint64_t p_input_mask, bool p_input_motion_vectors, bool p_point_size_emulated, RID &r_vertex_array_rd, RD::VertexFormatID &r_vertex_format);
+	static void _mesh_surface_clear(Mesh *p_mesh, int p_surface);
 
 	void _mesh_instance_clear(MeshInstance *mi);
 	void _mesh_instance_add_surface(MeshInstance *mi, Mesh *mesh, uint32_t p_surface);
@@ -563,6 +566,10 @@ public:
 		}
 	}
 
+	_FORCE_INLINE_ bool mesh_surface_is_external(void *p_surface) const {
+		return static_cast<Mesh::Surface *>(p_surface)->external;
+	}
+
 	_FORCE_INLINE_ RID mesh_surface_get_index_array(void *p_surface, uint32_t p_lod) const {
 		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
 
@@ -577,21 +584,7 @@ public:
 		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
 
 		if (s->external) {
-			s->version_lock.lock();
-			for (uint32_t i = 0; i < s->version_count; i++) {
-				if (s->versions[i].input_motion_vectors == p_input_motion_vectors && s->versions[i].point_size_emulated == p_point_size_emulated && s->versions[i].current_allocation_generation == s->current_allocation_generation && s->versions[i].previous_allocation_generation == s->previous_allocation_generation) {
-					r_vertex_format = s->versions[i].vertex_format;
-					r_vertex_array_rd = s->versions[i].vertex_array;
-					s->version_lock.unlock();
-					return;
-				}
-			}
-			uint32_t version = s->version_count++;
-			s->versions = (Mesh::Surface::Version *)memrealloc(s->versions, sizeof(Mesh::Surface::Version) * s->version_count);
-			_mesh_surface_generate_external_version(s->versions[version], s, p_input_motion_vectors, p_point_size_emulated);
-			r_vertex_format = s->versions[version].vertex_format;
-			r_vertex_array_rd = s->versions[version].vertex_array;
-			s->version_lock.unlock();
+			_mesh_surface_get_external_arrays(s, p_input_mask, p_input_motion_vectors, p_point_size_emulated, r_vertex_array_rd, r_vertex_format);
 			return;
 		}
 
@@ -717,6 +710,10 @@ public:
 
 	_FORCE_INLINE_ RD::VertexFormatID mesh_surface_get_vertex_format(void *p_surface, uint64_t p_input_mask, bool p_instanced_surface, bool p_input_motion_vectors, bool p_point_size_emulated) {
 		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
+		if (s->external) {
+			ERR_FAIL_COND_V(p_instanced_surface, 0);
+			return _mesh_surface_generate_external_vertex_format(p_input_mask, p_input_motion_vectors);
+		}
 		uint32_t position_stride = 0;
 		return _mesh_surface_generate_vertex_format(s->format, p_input_mask, p_instanced_surface, p_input_motion_vectors, p_point_size_emulated, position_stride);
 	}

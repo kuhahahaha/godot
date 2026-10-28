@@ -1,0 +1,962 @@
+diff --git a/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp b/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp
+index 0fc494a13a..2cb15308f6 100644
+--- a/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp
++++ b/servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp
+@@ -489,6 +489,7 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
+ 		pipeline_key.framebuffer_format_id = framebuffer_format;
+ 		pipeline_key.wireframe = p_params->force_wireframe;
+ 		pipeline_key.ubershader = 0;
++		pipeline_key.indexed144 = mesh_storage->mesh_surface_is_external(mesh_surface);
+ 
+ 		bool emulate_point_size = shader->uses_point_size && scene_shader.emulate_point_size;
+ 
+@@ -502,7 +503,7 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
+ 			// Skeleton and blend shape.
+ 			RD::VertexFormatID vertex_format = -1;
+ 			bool pipeline_motion_vectors = pipeline_key.color_pass_flags & SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_MOTION_VECTORS;
+-			uint64_t input_mask = shader->get_vertex_input_mask(pipeline_key.version, pipeline_key.color_pass_flags, pipeline_key.ubershader);
++			uint64_t input_mask = shader->get_vertex_input_mask(pipeline_key.version, pipeline_key.color_pass_flags, pipeline_key.ubershader, pipeline_key.indexed144);
+ 			if (surf->owner->mesh_instance.is_valid()) {
+ 				mesh_storage->mesh_instance_surface_get_vertex_arrays_and_format(surf->owner->mesh_instance, surf->surface_index, input_mask, pipeline_motion_vectors, emulate_point_size, vertex_array_rd, vertex_format);
+ 			} else {
+@@ -4269,7 +4270,7 @@ void RenderForwardClustered::_geometry_instance_add_surface_with_material(Geomet
+ 		material_shadow = static_cast<SceneShaderForwardClustered::MaterialData *>(RendererRD::MaterialStorage::get_singleton()->material_get_data(scene_shader.default_material, RendererRD::MaterialStorage::SHADER_TYPE_3D));
+ 
+ 		RID shadow_mesh = mesh_storage->mesh_get_shadow_mesh(p_mesh);
+-		if (shadow_mesh.is_valid()) {
++		if (shadow_mesh.is_valid() && !mesh_storage->mesh_surface_is_external(mesh_storage->mesh_get_surface(p_mesh, p_surface))) {
+ 			surface_shadow = mesh_storage->mesh_get_surface(shadow_mesh, p_surface);
+ 		}
+ 	} else {
+@@ -4705,7 +4706,8 @@ static RD::FramebufferFormatID _get_reflection_probe_depth_framebuffer_format_fo
+ 
+ void RenderForwardClustered::_mesh_compile_pipeline_for_surface(SceneShaderForwardClustered::ShaderData *p_shader, void *p_mesh_surface, bool p_ubershader, bool p_instanced_surface, RSE::PipelineSource p_source, SceneShaderForwardClustered::ShaderData::PipelineKey &r_pipeline_key, Vector<ShaderPipelinePair> *r_pipeline_pairs) {
+ 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
+-	uint64_t input_mask = p_shader->get_vertex_input_mask(r_pipeline_key.version, r_pipeline_key.color_pass_flags, p_ubershader);
++	r_pipeline_key.indexed144 = mesh_storage->mesh_surface_is_external(p_mesh_surface);
++	uint64_t input_mask = p_shader->get_vertex_input_mask(r_pipeline_key.version, r_pipeline_key.color_pass_flags, p_ubershader, r_pipeline_key.indexed144);
+ 	bool pipeline_motion_vectors = r_pipeline_key.color_pass_flags & SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_MOTION_VECTORS;
+ 	bool emulate_point_size = p_shader->uses_point_size && scene_shader.emulate_point_size;
+ 	r_pipeline_key.vertex_format_id = mesh_storage->mesh_surface_get_vertex_format(p_mesh_surface, input_mask, p_instanced_surface, pipeline_motion_vectors, emulate_point_size);
+@@ -5053,7 +5055,7 @@ void RenderForwardClustered::mesh_generate_pipelines(RID p_mesh, bool p_backgrou
+ 			SceneShaderForwardClustered::MaterialData *material_shadow = static_cast<SceneShaderForwardClustered::MaterialData *>(material_storage->material_get_data(scene_shader.default_material, RendererRD::MaterialStorage::SHADER_TYPE_3D));
+ 			if (material_shadow != nullptr) {
+ 				shader_shadow = material_shadow->shader_data;
+-				if (shadow_mesh.is_valid()) {
++				if (shadow_mesh.is_valid() && !mesh_storage->mesh_surface_is_external(mesh_surface)) {
+ 					mesh_surface_shadow = mesh_storage->mesh_get_surface(shadow_mesh, i);
+ 				}
+ 			}
+diff --git a/servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.cpp b/servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.cpp
+index 44a97f3594..0c263ae438 100644
+--- a/servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.cpp
++++ b/servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.cpp
+@@ -499,7 +499,7 @@ void SceneShaderForwardClustered::ShaderData::_create_pipeline(PipelineKey p_pip
+ 	sc.type = RD::PIPELINE_SPECIALIZATION_CONSTANT_TYPE_BOOL;
+ 	specialization_constants.push_back(sc);
+ 
+-	RID shader_rid = get_shader_variant(p_pipeline_key.version, p_pipeline_key.color_pass_flags, p_pipeline_key.ubershader);
++	RID shader_rid = get_shader_variant(p_pipeline_key.version, p_pipeline_key.color_pass_flags, p_pipeline_key.ubershader, p_pipeline_key.indexed144);
+ 	ERR_FAIL_COND(shader_rid.is_null());
+ 
+ 	RID pipeline = RD::get_singleton()->render_pipeline_create(shader_rid, p_pipeline_key.framebuffer_format_id, p_pipeline_key.vertex_format_id, primitive_rd, raster_state, multisample_state, depth_stencil_state, blend_state, 0, 0, specialization_constants);
+@@ -518,9 +518,14 @@ RD::PolygonCullMode SceneShaderForwardClustered::ShaderData::get_cull_mode_from_
+ 	return cull_mode_rd_table[p_cull_variant][cull_mode];
+ }
+ 
+-RID SceneShaderForwardClustered::ShaderData::_get_shader_variant(uint16_t p_shader_version) const {
++RID SceneShaderForwardClustered::ShaderData::_get_shader_variant(uint16_t p_shader_version, bool p_indexed144) const {
+ 	if (version.is_valid()) {
+ 		ERR_FAIL_NULL_V(SceneShaderForwardClustered::singleton, RID());
++		if (p_indexed144) {
++			MutexLock lock(SceneShaderForwardClustered::singleton_mutex);
++			SceneShaderForwardClustered::singleton->shader.enable_group(SceneShaderForwardClustered::singleton->indexed144_shader_groups[p_shader_version]);
++			return SceneShaderForwardClustered::singleton->shader.version_get_shader(version, p_shader_version + INDEXED144_VARIANT_OFFSET);
++		}
+ 		return SceneShaderForwardClustered::singleton->shader.version_get_shader(version, p_shader_version);
+ 	} else {
+ 		return RID();
+@@ -533,20 +538,21 @@ void SceneShaderForwardClustered::ShaderData::_clear_vertex_input_mask_cache() {
+ 	}
+ }
+ 
+-RID SceneShaderForwardClustered::ShaderData::get_shader_variant(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader) const {
+-	return _get_shader_variant(_get_shader_version(p_pipeline_version, p_color_pass_flags, p_ubershader));
++RID SceneShaderForwardClustered::ShaderData::get_shader_variant(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader, bool p_indexed144) const {
++	return _get_shader_variant(_get_shader_version(p_pipeline_version, p_color_pass_flags, p_ubershader), p_indexed144);
+ }
+ 
+-uint64_t SceneShaderForwardClustered::ShaderData::get_vertex_input_mask(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader) {
++uint64_t SceneShaderForwardClustered::ShaderData::get_vertex_input_mask(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader, bool p_indexed144) {
+ 	// Vertex input masks require knowledge of the shader. Since querying the shader can be expensive due to high contention and the necessary mutex, we cache the result instead.
+ 	uint16_t shader_version = _get_shader_version(p_pipeline_version, p_color_pass_flags, p_ubershader);
+-	uint64_t input_mask = vertex_input_masks[shader_version].load(std::memory_order_relaxed);
++	uint32_t input_mask_index = shader_version + (p_indexed144 ? INDEXED144_VARIANT_OFFSET : 0);
++	uint64_t input_mask = vertex_input_masks[input_mask_index].load(std::memory_order_relaxed);
+ 	if (input_mask == 0) {
+-		RID shader_rid = _get_shader_variant(shader_version);
++		RID shader_rid = _get_shader_variant(shader_version, p_indexed144);
+ 		ERR_FAIL_COND_V(shader_rid.is_null(), 0);
+ 
+ 		input_mask = RD::get_singleton()->shader_get_vertex_input_attribute_mask(shader_rid);
+-		vertex_input_masks[shader_version].store(input_mask, std::memory_order_relaxed);
++		vertex_input_masks[input_mask_index].store(input_mask, std::memory_order_relaxed);
+ 	}
+ 
+ 	return input_mask;
+@@ -687,6 +693,15 @@ void SceneShaderForwardClustered::init(const String p_defines) {
+ 			shader_versions.push_back(ShaderRD::VariantDefine(group, version, false));
+ 		}
+ 
++		const uint32_t ordinary_variant_count = shader_versions.size();
++		DEV_ASSERT(ordinary_variant_count == INDEXED144_VARIANT_OFFSET);
++		for (uint32_t i = 0; i < ordinary_variant_count; ++i) {
++			const ShaderRD::VariantDefine ordinary = shader_versions[i];
++			const int indexed_group = ordinary.group + SHADER_GROUP_MAX;
++			indexed144_shader_groups.push_back(indexed_group);
++			shader_versions.push_back(ShaderRD::VariantDefine(indexed_group, String::utf8(ordinary.text.get_data()) + "\n#define USE_INDEXED144_VERTEX_INPUT\n", false));
++		}
++
+ 		Vector<uint64_t> dynamic_buffers;
+ 		dynamic_buffers.push_back(ShaderRD::DynamicBuffer::encode(RenderForwardClustered::RENDER_PASS_UNIFORM_SET, 2));
+ 		shader.initialize(shader_versions, p_defines, Vector<RD::PipelineImmutableSampler>(), dynamic_buffers);
+diff --git a/servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h b/servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h
+index a9d78890a3..768ff528bc 100644
+--- a/servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h
++++ b/servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h
+@@ -48,6 +48,7 @@ public:
+ 		SHADER_GROUP_ADVANCED,
+ 		SHADER_GROUP_MULTIVIEW,
+ 		SHADER_GROUP_ADVANCED_MULTIVIEW,
++		SHADER_GROUP_MAX,
+ 	};
+ 
+ 	// Not an enum because these values are constants that are processed as numbers
+@@ -198,6 +199,7 @@ public:
+ 			ShaderSpecialization shader_specialization = {};
+ 			uint32_t wireframe = false;
+ 			uint32_t ubershader = false;
++			bool indexed144 = false;
+ 
+ 			uint32_t hash() const {
+ 				uint32_t h = hash_murmur3_one_64(vertex_format_id);
+@@ -211,6 +213,9 @@ public:
+ 				h = hash_murmur3_one_32(shader_specialization.packed_2, h);
+ 				h = hash_murmur3_one_32(wireframe, h);
+ 				h = hash_murmur3_one_32(ubershader, h);
++				if (indexed144) {
++					h = hash_murmur3_one_32(1, h);
++				}
+ 				return hash_fmix32(h);
+ 			}
+ 		};
+@@ -220,7 +225,7 @@ public:
+ 
+ 		RID version;
+ 
+-		static const uint32_t VERTEX_INPUT_MASKS_SIZE = ShaderVersion::SHADER_VERSION_COLOR_PASS * 2 + SHADER_COLOR_PASS_FLAG_COUNT;
++		static const uint32_t VERTEX_INPUT_MASKS_SIZE = (ShaderVersion::SHADER_VERSION_COLOR_PASS * 2 + SHADER_COLOR_PASS_FLAG_COUNT) * 2;
+ 		std::atomic<uint64_t> vertex_input_masks[VERTEX_INPUT_MASKS_SIZE] = {};
+ 
+ 		Vector<ShaderCompiler::GeneratedCode::Texture> texture_uniforms;
+@@ -307,10 +312,10 @@ public:
+ 		virtual RenderingServerTypes::ShaderNativeSourceCode get_native_source_code() const;
+ 		virtual Pair<ShaderRD *, RID> get_native_shader_and_version() const;
+ 		uint16_t _get_shader_version(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader) const;
+-		RID _get_shader_variant(uint16_t p_shader_version) const;
++		RID _get_shader_variant(uint16_t p_shader_version, bool p_indexed144 = false) const;
+ 		void _clear_vertex_input_mask_cache();
+-		RID get_shader_variant(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader) const;
+-		uint64_t get_vertex_input_mask(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader);
++		RID get_shader_variant(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader, bool p_indexed144 = false) const;
++		uint64_t get_vertex_input_mask(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader, bool p_indexed144 = false);
+ 		RD::PolygonCullMode get_cull_mode_from_cull_variant(CullVariant p_cull_variant);
+ 		bool is_valid() const;
+ 
+@@ -345,6 +350,8 @@ public:
+ 	}
+ 
+ 	SceneForwardClusteredShaderRD shader;
++	static constexpr uint32_t INDEXED144_VARIANT_OFFSET = ShaderVersion::SHADER_VERSION_COLOR_PASS * 2 + SHADER_COLOR_PASS_FLAG_COUNT;
++	Vector<int> indexed144_shader_groups;
+ 	ShaderCompiler compiler;
+ 	bool emulate_point_size = false;
+ 
+diff --git a/servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp b/servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp
+index e40dbb33de..b6f5cfaf5e 100644
+--- a/servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp
++++ b/servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp
+@@ -392,7 +392,7 @@ void RenderForwardMobile::mesh_generate_pipelines(RID p_mesh, bool p_background_
+ 			SceneShaderForwardMobile::MaterialData *material_shadow = static_cast<SceneShaderForwardMobile::MaterialData *>(material_storage->material_get_data(scene_shader.default_material, RendererRD::MaterialStorage::SHADER_TYPE_3D));
+ 			if (material_shadow != nullptr) {
+ 				shader_shadow = material_shadow->shader_data;
+-				if (shadow_mesh.is_valid()) {
++				if (shadow_mesh.is_valid() && !mesh_storage->mesh_surface_is_external(mesh_surface)) {
+ 					mesh_surface_shadow = mesh_storage->mesh_get_surface(shadow_mesh, i);
+ 				}
+ 			}
+@@ -2649,6 +2649,7 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
+ 		pipeline_key.wireframe = p_params->force_wireframe;
+ 		pipeline_key.render_pass = p_params->subpass;
+ 		pipeline_key.ubershader = 0;
++		pipeline_key.indexed144 = mesh_storage->mesh_surface_is_external(mesh_surface);
+ 
+ 		bool emulate_point_size = shader->uses_point_size && scene_shader.emulate_point_size;
+ 
+@@ -2661,7 +2662,7 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
+ 		bool pipeline_valid = false;
+ 		while (pipeline_key.ubershader < ubershader_iterations) {
+ 			// Skeleton and blend shape.
+-			uint64_t input_mask = shader->get_vertex_input_mask(pipeline_key.version, pipeline_key.ubershader);
++			uint64_t input_mask = shader->get_vertex_input_mask(pipeline_key.version, pipeline_key.ubershader, pipeline_key.indexed144);
+ 			if (surf->owner->mesh_instance.is_valid()) {
+ 				mesh_storage->mesh_instance_surface_get_vertex_arrays_and_format(surf->owner->mesh_instance, surf->surface_index, input_mask, p_pass_mode == PASS_MODE_MOTION_VECTORS, emulate_point_size, vertex_array_rd, vertex_format);
+ 			} else {
+@@ -3043,7 +3044,7 @@ void RenderForwardMobile::_geometry_instance_add_surface_with_material(GeometryI
+ 
+ 		RID shadow_mesh = mesh_storage->mesh_get_shadow_mesh(p_mesh);
+ 
+-		if (shadow_mesh.is_valid()) {
++		if (shadow_mesh.is_valid() && !mesh_storage->mesh_surface_is_external(mesh_storage->mesh_get_surface(p_mesh, p_surface))) {
+ 			surface_shadow = mesh_storage->mesh_get_surface(shadow_mesh, p_surface);
+ 		}
+ 
+@@ -3450,7 +3451,8 @@ void RenderForwardMobile::_mesh_compile_pipeline_for_surface(SceneShaderForwardM
+ 	}
+ 
+ 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
+-	uint64_t input_mask = p_shader->get_vertex_input_mask(r_pipeline_key.version, true);
++	r_pipeline_key.indexed144 = mesh_storage->mesh_surface_is_external(p_mesh_surface);
++	uint64_t input_mask = p_shader->get_vertex_input_mask(r_pipeline_key.version, true, r_pipeline_key.indexed144);
+ 	bool emulate_point_size = p_shader->uses_point_size && scene_shader.emulate_point_size;
+ 	r_pipeline_key.vertex_format_id = mesh_storage->mesh_surface_get_vertex_format(p_mesh_surface, input_mask, p_instanced_surface, false, emulate_point_size);
+ 	r_pipeline_key.ubershader = true;
+diff --git a/servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.cpp b/servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.cpp
+index 4d8c23016a..684e985f65 100644
+--- a/servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.cpp
++++ b/servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.cpp
+@@ -459,7 +459,7 @@ void SceneShaderForwardMobile::ShaderData::_create_pipeline(PipelineKey p_pipeli
+ 	sc.type = RD::PIPELINE_SPECIALIZATION_CONSTANT_TYPE_BOOL;
+ 	specialization_constants.push_back(sc);
+ 
+-	RID shader_rid = get_shader_variant(p_pipeline_key.version, p_pipeline_key.ubershader);
++	RID shader_rid = get_shader_variant(p_pipeline_key.version, p_pipeline_key.ubershader, p_pipeline_key.indexed144);
+ 	ERR_FAIL_COND(shader_rid.is_null());
+ 
+ 	RID pipeline = RD::get_singleton()->render_pipeline_create(shader_rid, p_pipeline_key.framebuffer_format_id, p_pipeline_key.vertex_format_id, primitive_rd, raster_state, multisample_state, depth_stencil_state, blend_state, 0, p_pipeline_key.render_pass, specialization_constants);
+@@ -490,23 +490,28 @@ void SceneShaderForwardMobile::ShaderData::_clear_vertex_input_mask_cache() {
+ 	}
+ }
+ 
+-RID SceneShaderForwardMobile::ShaderData::get_shader_variant(ShaderVersion p_shader_version, bool p_ubershader) const {
++RID SceneShaderForwardMobile::ShaderData::get_shader_variant(ShaderVersion p_shader_version, bool p_ubershader, bool p_indexed144) const {
+ 	if (version.is_valid()) {
+ 		MutexLock lock(SceneShaderForwardMobile::singleton_mutex);
+ 		ERR_FAIL_NULL_V(SceneShaderForwardMobile::singleton, RID());
+-		return SceneShaderForwardMobile::singleton->shader.version_get_shader(version, p_shader_version + (SceneShaderForwardMobile::singleton->use_fp16 ? SHADER_VERSION_MAX * 2 : 0) + (p_ubershader ? SHADER_VERSION_MAX : 0));
++		uint32_t shader_index = p_shader_version + (SceneShaderForwardMobile::singleton->use_fp16 ? SHADER_VERSION_MAX * 2 : 0) + (p_ubershader ? SHADER_VERSION_MAX : 0);
++		if (p_indexed144) {
++			SceneShaderForwardMobile::singleton->shader.enable_group(SceneShaderForwardMobile::singleton->indexed144_shader_groups[shader_index]);
++			shader_index += INDEXED144_VARIANT_OFFSET;
++		}
++		return SceneShaderForwardMobile::singleton->shader.version_get_shader(version, shader_index);
+ 	} else {
+ 		return RID();
+ 	}
+ }
+ 
+-uint64_t SceneShaderForwardMobile::ShaderData::get_vertex_input_mask(ShaderVersion p_shader_version, bool p_ubershader) {
++uint64_t SceneShaderForwardMobile::ShaderData::get_vertex_input_mask(ShaderVersion p_shader_version, bool p_ubershader, bool p_indexed144) {
+ 	// Vertex input masks require knowledge of the shader. Since querying the shader can be expensive due to high contention and the necessary mutex, we cache the result instead.
+ 	// It is intentional for the range of the input masks to be different than the versions available in the shaders as it'll only ever use the regular variants or the FP16 ones.
+-	uint32_t input_mask_index = p_shader_version + (p_ubershader ? SHADER_VERSION_MAX : 0);
++	uint32_t input_mask_index = p_shader_version + (p_ubershader ? SHADER_VERSION_MAX : 0) + (p_indexed144 ? SHADER_VERSION_MAX * 2 : 0);
+ 	uint64_t input_mask = vertex_input_masks[input_mask_index].load(std::memory_order_relaxed);
+ 	if (input_mask == 0) {
+-		RID shader_rid = get_shader_variant(p_shader_version, p_ubershader);
++		RID shader_rid = get_shader_variant(p_shader_version, p_ubershader, p_indexed144);
+ 		ERR_FAIL_COND_V(shader_rid.is_null(), 0);
+ 
+ 		input_mask = RD::get_singleton()->shader_get_vertex_input_attribute_mask(shader_rid);
+@@ -642,6 +647,15 @@ void SceneShaderForwardMobile::init(const String p_defines) {
+ 		immutable_shadow_sampler.append_id(shadow_sampler);
+ 		immutable_shadow_sampler.uniform_type = RenderingDeviceCommons::UNIFORM_TYPE_SAMPLER;
+ 		immutable_samplers.push_back(immutable_shadow_sampler);
++		const uint32_t ordinary_variant_count = shader_versions.size();
++		DEV_ASSERT(ordinary_variant_count == INDEXED144_VARIANT_OFFSET);
++		for (uint32_t i = 0; i < ordinary_variant_count; ++i) {
++			const ShaderRD::VariantDefine ordinary = shader_versions[i];
++			const int indexed_group = ordinary.group + SHADER_GROUP_MAX;
++			indexed144_shader_groups.push_back(indexed_group);
++			shader_versions.push_back(ShaderRD::VariantDefine(indexed_group, String::utf8(ordinary.text.get_data()) + "\n#define USE_INDEXED144_VERTEX_INPUT\n", false));
++		}
++
+ 		Vector<uint64_t> dynamic_buffers;
+ 		dynamic_buffers.push_back(ShaderRD::DynamicBuffer::encode(RenderForwardMobile::RENDER_PASS_UNIFORM_SET, 0));
+ 		dynamic_buffers.push_back(ShaderRD::DynamicBuffer::encode(RenderForwardMobile::RENDER_PASS_UNIFORM_SET, 1));
+diff --git a/servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.h b/servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.h
+index 2e62093076..fa51443cd3 100644
+--- a/servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.h
++++ b/servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.h
+@@ -83,6 +83,7 @@ public:
+ 		SHADER_GROUP_FP32_MULTIVIEW,
+ 		SHADER_GROUP_FP16,
+ 		SHADER_GROUP_FP16_MULTIVIEW,
++		SHADER_GROUP_MAX,
+ 	};
+ 
+ 	struct ShaderSpecialization {
+@@ -207,6 +208,7 @@ public:
+ 			uint32_t render_pass = 0;
+ 			uint32_t wireframe = false;
+ 			uint32_t ubershader = false;
++			bool indexed144 = false;
+ 
+ 			uint32_t hash() const {
+ 				uint32_t h = hash_murmur3_one_32(vertex_format_id);
+@@ -220,6 +222,9 @@ public:
+ 				h = hash_murmur3_one_32(render_pass, h);
+ 				h = hash_murmur3_one_32(wireframe, h);
+ 				h = hash_murmur3_one_32(ubershader, h);
++				if (indexed144) {
++					h = hash_murmur3_one_32(1, h);
++				}
+ 				return hash_fmix32(h);
+ 			}
+ 		};
+@@ -229,7 +234,7 @@ public:
+ 
+ 		RID version;
+ 
+-		static const uint32_t VERTEX_INPUT_MASKS_SIZE = SHADER_VERSION_MAX * 2;
++		static const uint32_t VERTEX_INPUT_MASKS_SIZE = SHADER_VERSION_MAX * 4;
+ 		std::atomic<uint64_t> vertex_input_masks[VERTEX_INPUT_MASKS_SIZE] = {};
+ 
+ 		Vector<ShaderCompiler::GeneratedCode::Texture> texture_uniforms;
+@@ -314,8 +319,8 @@ public:
+ 		virtual Pair<ShaderRD *, RID> get_native_shader_and_version() const;
+ 		RD::PolygonCullMode get_cull_mode_from_cull_variant(CullVariant p_cull_variant);
+ 		void _clear_vertex_input_mask_cache();
+-		RID get_shader_variant(ShaderVersion p_shader_version, bool p_ubershader) const;
+-		uint64_t get_vertex_input_mask(ShaderVersion p_shader_version, bool p_ubershader);
++		RID get_shader_variant(ShaderVersion p_shader_version, bool p_ubershader, bool p_indexed144 = false) const;
++		uint64_t get_vertex_input_mask(ShaderVersion p_shader_version, bool p_ubershader, bool p_indexed144 = false);
+ 		bool is_valid() const;
+ 
+ 		SelfList<ShaderData> shader_list_element;
+@@ -350,6 +355,8 @@ public:
+ 	}
+ 
+ 	SceneForwardMobileShaderRD shader;
++	static constexpr uint32_t INDEXED144_VARIANT_OFFSET = SHADER_VERSION_MAX * 4;
++	Vector<int> indexed144_shader_groups;
+ 	ShaderCompiler compiler;
+ 	bool use_fp16 = false;
+ 	bool emulate_point_size = false;
+diff --git a/servers/rendering/renderer_rd/shader_rd.cpp b/servers/rendering/renderer_rd/shader_rd.cpp
+index a1185721de..4b87c6a33e 100644
+--- a/servers/rendering/renderer_rd/shader_rd.cpp
++++ b/servers/rendering/renderer_rd/shader_rd.cpp
+@@ -954,7 +954,12 @@ void ShaderRD::enable_group(int p_group) {
+ 	for (const RID &version_rid : version_owner.get_owned_list()) {
+ 		Version *version = version_owner.get_or_null(version_rid);
+ 		version->mutex->lock();
+-		_compile_version_start(version, p_group);
++		// A pending code change must refresh every enabled group together on
++		// the next version access. Compiling only this group would clear dirty
++		// and leave the existing groups on their previous source.
++		if (!version->dirty) {
++			_compile_version_start(version, p_group);
++		}
+ 		version->mutex->unlock();
+ 	}
+ }
+diff --git a/servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered.glsl b/servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered.glsl
+index de5f13acfd..93a340d80c 100644
+--- a/servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered.glsl
++++ b/servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered.glsl
+@@ -30,7 +30,9 @@ layout(location = 0) in vec4 vertex_angle_attrib;
+ layout(location = 1) in vec4 axis_tangent_attrib;
+ #endif
+ 
+-// Location 2 is unused.
++#if defined(USE_INDEXED144_VERTEX_INPUT) && (defined(NORMAL_USED) || defined(TANGENT_USED))
++layout(location = 2) in vec4 tangent_attrib;
++#endif
+ 
+ #if defined(COLOR_USED)
+ layout(location = 3) in vec4 color_attrib;
+@@ -73,6 +75,9 @@ layout(location = 12) in vec4 previous_vertex_attrib;
+ 
+ #if defined(NORMAL_USED) || defined(TANGENT_USED)
+ layout(location = 13) in vec4 previous_normal_attrib;
++#ifdef USE_INDEXED144_VERTEX_INPUT
++layout(location = 14) in vec4 previous_tangent_attrib;
++#endif
+ #endif
+ 
+ #endif // MOTION_VECTORS
+@@ -729,6 +734,9 @@ void vertex_shader(vec3 vertex_input,
+ void _unpack_vertex_attributes(vec4 p_vertex_in, vec3 p_compressed_aabb_position, vec3 p_compressed_aabb_size,
+ #if defined(NORMAL_USED) || defined(TANGENT_USED)
+ 		vec4 p_normal_in,
++#ifdef USE_INDEXED144_VERTEX_INPUT
++		vec4 p_tangent_in,
++#endif
+ #ifdef NORMAL_USED
+ 		out vec3 r_normal,
+ #endif
+@@ -736,6 +744,16 @@ void _unpack_vertex_attributes(vec4 p_vertex_in, vec3 p_compressed_aabb_position
+ 		out vec3 r_binormal,
+ #endif
+ 		out vec3 r_vertex) {
++#ifdef USE_INDEXED144_VERTEX_INPUT
++	r_vertex = p_vertex_in.xyz;
++#ifdef NORMAL_USED
++	r_normal = p_normal_in.xyz;
++#endif
++#if defined(NORMAL_USED) || defined(TANGENT_USED)
++	r_tangent = p_tangent_in.xyz;
++	r_binormal = normalize(cross(p_normal_in.xyz, p_tangent_in.xyz)) * p_tangent_in.w;
++#endif
++#else
+ 
+ 	r_vertex = p_vertex_in.xyz * p_compressed_aabb_size + p_compressed_aabb_position;
+ #ifdef NORMAL_USED
+@@ -764,6 +782,7 @@ void _unpack_vertex_attributes(vec4 p_vertex_in, vec3 p_compressed_aabb_position
+ 		r_binormal *= binormal_sign;
+ 	}
+ #endif
++#endif
+ }
+ 
+ void main() {
+@@ -792,6 +811,9 @@ void main() {
+ 
+ #if defined(NORMAL_USED) || defined(TANGENT_USED)
+ 			previous_normal_attrib,
++#ifdef USE_INDEXED144_VERTEX_INPUT
++			previous_tangent_attrib,
++#endif
+ #ifdef NORMAL_USED
+ 			prev_normal,
+ #endif
+@@ -834,6 +856,9 @@ void main() {
+ 			instances.data[instance_index].compressed_aabb_size_pad.xyz,
+ #if defined(NORMAL_USED) || defined(TANGENT_USED)
+ 			axis_tangent_attrib,
++#ifdef USE_INDEXED144_VERTEX_INPUT
++			tangent_attrib,
++#endif
+ #ifdef NORMAL_USED
+ 			normal,
+ #endif
+diff --git a/servers/rendering/renderer_rd/shaders/forward_mobile/scene_forward_mobile.glsl b/servers/rendering/renderer_rd/shaders/forward_mobile/scene_forward_mobile.glsl
+index 1f0c6d67ea..272e213695 100644
+--- a/servers/rendering/renderer_rd/shaders/forward_mobile/scene_forward_mobile.glsl
++++ b/servers/rendering/renderer_rd/shaders/forward_mobile/scene_forward_mobile.glsl
+@@ -32,12 +32,14 @@ layout(location = 0) in vec4 vertex_angle_attrib;
+ 
+ //only for pure render depth when normal is not used
+ 
+-#ifdef NORMAL_USED
++#if defined(NORMAL_USED) || defined(TANGENT_USED)
+ // Contains Normal/Axis in RG, can contain tangent in BA.
+ layout(location = 1) in vec4 axis_tangent_attrib;
+ #endif
+ 
+-// Location 2 is unused.
++#if defined(USE_INDEXED144_VERTEX_INPUT) && (defined(NORMAL_USED) || defined(TANGENT_USED))
++layout(location = 2) in vec4 tangent_attrib;
++#endif
+ 
+ #if defined(COLOR_USED)
+ layout(location = 3) in vec4 color_attrib;
+@@ -80,6 +82,9 @@ layout(location = 12) in vec4 previous_vertex_attrib;
+ 
+ #if defined(NORMAL_USED) || defined(TANGENT_USED)
+ layout(location = 13) in vec4 previous_normal_attrib;
++#ifdef USE_INDEXED144_VERTEX_INPUT
++layout(location = 14) in vec4 previous_tangent_attrib;
++#endif
+ #endif
+ 
+ #endif // MODE_RENDER_MOTION_VECTORS
+@@ -209,6 +214,9 @@ uint multimesh_stride() {
+ void _unpack_vertex_attributes(vec4 p_vertex_in, vec3 p_compressed_aabb_position, vec3 p_compressed_aabb_size,
+ #if defined(NORMAL_USED) || defined(TANGENT_USED)
+ 		vec4 p_normal_in,
++#ifdef USE_INDEXED144_VERTEX_INPUT
++		vec4 p_tangent_in,
++#endif
+ #ifdef NORMAL_USED
+ 		out vec3 r_normal,
+ #endif
+@@ -216,6 +224,16 @@ void _unpack_vertex_attributes(vec4 p_vertex_in, vec3 p_compressed_aabb_position
+ 		out vec3 r_binormal,
+ #endif
+ 		out vec3 r_vertex) {
++#ifdef USE_INDEXED144_VERTEX_INPUT
++	r_vertex = p_vertex_in.xyz;
++#ifdef NORMAL_USED
++	r_normal = p_normal_in.xyz;
++#endif
++#if defined(NORMAL_USED) || defined(TANGENT_USED)
++	r_tangent = p_tangent_in.xyz;
++	r_binormal = normalize(cross(p_normal_in.xyz, p_tangent_in.xyz)) * p_tangent_in.w;
++#endif
++#else
+ 
+ 	r_vertex = p_vertex_in.xyz * p_compressed_aabb_size + p_compressed_aabb_position;
+ #ifdef NORMAL_USED
+@@ -244,6 +262,7 @@ void _unpack_vertex_attributes(vec4 p_vertex_in, vec3 p_compressed_aabb_position
+ 		r_binormal *= binormal_sign;
+ 	}
+ #endif
++#endif
+ }
+ 
+ void vertex_shader(in vec3 vertex,
+@@ -712,6 +731,9 @@ void main() {
+ 			instances.data[draw_call.instance_index].compressed_aabb_size_pad.xyz,
+ #if defined(NORMAL_USED) || defined(TANGENT_USED)
+ 			previous_normal_attrib,
++#ifdef USE_INDEXED144_VERTEX_INPUT
++			previous_tangent_attrib,
++#endif
+ #ifdef NORMAL_USED
+ 			prev_normal,
+ #endif
+@@ -774,6 +796,9 @@ void main() {
+ 			instances.data[draw_call.instance_index].compressed_aabb_size_pad.xyz,
+ #if defined(NORMAL_USED) || defined(TANGENT_USED)
+ 			axis_tangent_attrib,
++#ifdef USE_INDEXED144_VERTEX_INPUT
++			tangent_attrib,
++#endif
+ #ifdef NORMAL_USED
+ 			normal,
+ #endif
+diff --git a/servers/rendering/renderer_rd/storage_rd/mesh_storage.cpp b/servers/rendering/renderer_rd/storage_rd/mesh_storage.cpp
+index 397f27fdf5..3124c3293b 100644
+--- a/servers/rendering/renderer_rd/storage_rd/mesh_storage.cpp
++++ b/servers/rendering/renderer_rd/storage_rd/mesh_storage.cpp
+@@ -539,6 +539,7 @@ Error MeshStorage::mesh_add_external_surface(RID p_mesh, const ExternalSurfaceDe
+ 	ERR_FAIL_NULL_V(mesh, ERR_DOES_NOT_EXIST);
+ 	ERR_FAIL_COND_V(mesh->surface_count == RSE::MAX_MESH_SURFACES, ERR_OUT_OF_MEMORY);
+ 	ERR_FAIL_COND_V(p_surface.vertex_count == 0 || p_surface.index_count == 0, ERR_INVALID_PARAMETER);
++	ERR_FAIL_COND_V(p_surface.primitive != RSE::PRIMITIVE_TRIANGLES || mesh->blend_shape_count != 0 || !mesh->instances.is_empty(), ERR_INVALID_PARAMETER);
+ 	ERR_FAIL_COND_V(p_surface.current_vertex_buffer.is_null() || p_surface.previous_vertex_buffer.is_null() || p_surface.index_buffer.is_null() || p_surface.index_array.is_null(), ERR_INVALID_PARAMETER);
+ 	ERR_FAIL_COND_V(p_surface.material.is_null(), ERR_INVALID_PARAMETER);
+ 	ERR_FAIL_COND_V(p_surface.generation == 0 || p_surface.current_allocation_generation == 0 || p_surface.previous_allocation_generation == 0, ERR_INVALID_PARAMETER);
+@@ -549,6 +550,11 @@ Error MeshStorage::mesh_add_external_surface(RID p_mesh, const ExternalSurfaceDe
+ 
+ 	Mesh::Surface *surface = memnew(Mesh::Surface);
+ 	surface->external = true;
++	surface->format = RSE::ARRAY_FORMAT_VERTEX | RSE::ARRAY_FORMAT_NORMAL | RSE::ARRAY_FORMAT_TANGENT | RSE::ARRAY_FORMAT_COLOR | RSE::ARRAY_FORMAT_TEX_UV | RSE::ARRAY_FORMAT_TEX_UV2 | RSE::ARRAY_FORMAT_CUSTOM0 | RSE::ARRAY_FORMAT_CUSTOM1 | RSE::ARRAY_FORMAT_CUSTOM2 | RSE::ARRAY_FORMAT_CUSTOM3 | RSE::ARRAY_FORMAT_INDEX;
++	for (uint32_t shift : { RSE::ARRAY_FORMAT_CUSTOM0_SHIFT, RSE::ARRAY_FORMAT_CUSTOM1_SHIFT, RSE::ARRAY_FORMAT_CUSTOM2_SHIFT, RSE::ARRAY_FORMAT_CUSTOM3_SHIFT }) {
++		surface->format |= uint64_t(RSE::ARRAY_CUSTOM_RGBA_FLOAT) << shift;
++	}
++
+ 	surface->external_generation = p_surface.generation;
+ 	surface->current_allocation_generation = p_surface.current_allocation_generation;
+ 	surface->previous_allocation_generation = p_surface.previous_allocation_generation;
+@@ -570,18 +576,64 @@ Error MeshStorage::mesh_add_external_surface(RID p_mesh, const ExternalSurfaceDe
+ 		return ERR_OUT_OF_MEMORY;
+ 	}
+ 	mesh->surfaces = new_surfaces;
++	if (mesh->surface_count == 0) {
++		mesh->aabb = p_surface.aabb;
++	} else {
++		mesh->aabb.merge_with(p_surface.aabb);
++	}
++	mesh->skeleton_aabb_version = 0;
+ 	mesh->surfaces[mesh->surface_count] = surface;
+ 	r_surface_index = mesh->surface_count++;
+ 	r_generation = surface->external_generation;
+-	for (MeshInstance *mi : mesh->instances) {
+-		_mesh_instance_add_surface(mi, mesh, r_surface_index);
+-	}
++	_multimesh_mesh_changed(mesh);
+ 	mesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
++	for (Mesh *shadow_owner : mesh->shadow_owners) {
++		shadow_owner->shadow_mesh = RID();
++		shadow_owner->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
++	}
+ 	mesh->material_cache.clear();
+ 	return OK;
+ }
+ 
+-void MeshStorage::_mesh_surface_generate_external_version(Mesh::Surface::Version &v, Mesh::Surface *s, bool p_input_motion_vectors, bool p_point_size_emulated) {
++void MeshStorage::_mesh_surface_get_external_arrays(Mesh::Surface *s, uint64_t p_input_mask, bool p_input_motion_vectors, bool p_point_size_emulated, RID &r_vertex_array_rd, RD::VertexFormatID &r_vertex_format) {
++	r_vertex_array_rd = RID();
++	r_vertex_format = 0;
++	s->version_lock.lock();
++	for (uint32_t i = 0; i < s->version_count; i++) {
++		const Mesh::Surface::Version &version = s->versions[i];
++		if (version.input_mask == p_input_mask && version.input_motion_vectors == p_input_motion_vectors && version.point_size_emulated == p_point_size_emulated && version.current_allocation_generation == s->current_allocation_generation && version.previous_allocation_generation == s->previous_allocation_generation) {
++			r_vertex_format = version.vertex_format;
++			r_vertex_array_rd = version.vertex_array;
++			s->version_lock.unlock();
++			return;
++		}
++	}
++	if (s->version_count == UINT32_MAX || uint64_t(s->version_count + 1) > SIZE_MAX / sizeof(Mesh::Surface::Version)) {
++		s->version_lock.unlock();
++		return;
++	}
++	Mesh::Surface::Version candidate;
++	_mesh_surface_generate_external_version(candidate, s, p_input_mask, p_input_motion_vectors, p_point_size_emulated);
++	if (candidate.vertex_array.is_null()) {
++		s->version_lock.unlock();
++		return;
++	}
++	auto *versions = static_cast<Mesh::Surface::Version *>(memrealloc(s->versions, sizeof(Mesh::Surface::Version) * (s->version_count + 1)));
++	if (!versions) {
++		s->version_lock.unlock();
++		RD::get_singleton()->free_rid(candidate.vertex_array);
++		return;
++	}
++	s->versions = versions;
++	s->versions[s->version_count++] = candidate;
++	r_vertex_format = candidate.vertex_format;
++	r_vertex_array_rd = candidate.vertex_array;
++	s->version_lock.unlock();
++}
++
++RD::VertexFormatID MeshStorage::_mesh_surface_generate_external_vertex_format(uint64_t p_input_mask, bool p_input_motion_vectors) {
++	const uint64_t supported_inputs = ((1ull << 10) - 1) | (p_input_motion_vectors ? (7ull << 12) : 0);
++	ERR_FAIL_COND_V(p_input_mask & ~supported_inputs, 0);
+ 	Vector<RD::VertexAttribute> attributes;
+ 	auto add = [&attributes](uint32_t p_location, uint32_t p_binding, uint32_t p_offset, RD::DataFormat p_format) {
+ 		RD::VertexAttribute a;
+@@ -607,7 +659,11 @@ void MeshStorage::_mesh_surface_generate_external_version(Mesh::Surface::Version
+ 		add(13, 1, 16, RD::DATA_FORMAT_R32G32B32A32_SFLOAT);
+ 		add(14, 1, 32, RD::DATA_FORMAT_R32G32B32A32_SFLOAT);
+ 	}
+-	v.vertex_format = RD::get_singleton()->vertex_format_create(attributes);
++	return RD::get_singleton()->vertex_format_create(attributes);
++}
++
++void MeshStorage::_mesh_surface_generate_external_version(Mesh::Surface::Version &v, Mesh::Surface *s, uint64_t p_input_mask, bool p_input_motion_vectors, bool p_point_size_emulated) {
++	v.vertex_format = _mesh_surface_generate_external_vertex_format(p_input_mask, p_input_motion_vectors);
+ 	if (!v.vertex_format) {
+ 		v.vertex_array = RID();
+ 		return;
+@@ -617,7 +673,8 @@ void MeshStorage::_mesh_surface_generate_external_version(Mesh::Surface::Version
+ 	if (p_input_motion_vectors) {
+ 		buffers.push_back(s->previous_vertex_buffer);
+ 	}
+-	v.vertex_array = RD::get_singleton()->vertex_array_create(p_point_size_emulated ? 0 : s->vertex_count, v.vertex_format, buffers);
++	v.vertex_array = RD::get_singleton()->vertex_array_create(s->vertex_count, v.vertex_format, buffers);
++	v.input_mask = p_input_mask;
+ 	v.input_motion_vectors = p_input_motion_vectors;
+ 	v.point_size_emulated = p_point_size_emulated;
+ 	v.current_allocation_generation = s->current_allocation_generation;
+@@ -690,6 +747,7 @@ void MeshStorage::mesh_surface_update_vertex_region(RID p_mesh, int p_surface, i
+ 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
+ 	ERR_FAIL_NULL(mesh);
+ 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_surface, mesh->surface_count);
++	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->external, "Indexed144 external buffers must be updated through their original owner.");
+ 	ERR_FAIL_COND(mesh->surfaces[p_surface]->vertex_buffer.is_null());
+ 	// Until E25 COW source mirroring is installed, a region write invalidates
+ 	// new static captures rather than exposing stale bytes as current.
+@@ -707,6 +765,7 @@ void MeshStorage::mesh_surface_update_attribute_region(RID p_mesh, int p_surface
+ 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
+ 	ERR_FAIL_NULL(mesh);
+ 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_surface, mesh->surface_count);
++	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->external, "Indexed144 external buffers must be updated through their original owner.");
+ 	ERR_FAIL_COND(mesh->surfaces[p_surface]->attribute_buffer.is_null());
+ 	// Until E25 COW source mirroring is installed, a region write invalidates
+ 	// new static captures rather than exposing stale bytes as current.
+@@ -724,6 +783,7 @@ void MeshStorage::mesh_surface_update_skin_region(RID p_mesh, int p_surface, int
+ 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
+ 	ERR_FAIL_NULL(mesh);
+ 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_surface, mesh->surface_count);
++	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->external, "Indexed144 external buffers must be updated through their original owner.");
+ 	ERR_FAIL_COND(mesh->surfaces[p_surface]->skin_buffer.is_null());
+ 	// Skin writes do not advance a static geometry revision. They revoke new
+ 	// static captures while preserving existing renderer skin behavior.
+@@ -741,6 +801,7 @@ void RendererRD::MeshStorage::mesh_surface_update_index_region(RID p_mesh, int p
+ 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
+ 	ERR_FAIL_NULL(mesh);
+ 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_surface, mesh->surface_count);
++	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->external, "Indexed144 external buffers must be updated through their original owner.");
+ 	ERR_FAIL_COND(mesh->surfaces[p_surface]->index_buffer.is_null());
+ 	// Until E25 COW source mirroring is installed, a region write invalidates
+ 	// new static captures rather than exposing stale bytes as current.
+@@ -1124,6 +1185,9 @@ Dependency *MeshStorage::mesh_get_dependency(RID p_mesh) const {
+ RID MeshStorage::mesh_instance_create(RID p_base) {
+ 	Mesh *mesh = mesh_owner.get_or_null(p_base);
+ 	ERR_FAIL_NULL_V(mesh, RID());
++	for (uint32_t i = 0; i < mesh->surface_count; i++) {
++		ERR_FAIL_COND_V_MSG(mesh->surfaces[i]->external, RID(), "Indexed144 external surfaces do not support deformation instances.");
++	}
+ 
+ 	RID rid = mesh_instance_owner.make_rid();
+ 	MeshInstance *mi = mesh_instance_owner.get_or_null(rid);
+diff --git a/servers/rendering/renderer_rd/storage_rd/mesh_storage.h b/servers/rendering/renderer_rd/storage_rd/mesh_storage.h
+index fb0af51374..035324d51f 100644
+--- a/servers/rendering/renderer_rd/storage_rd/mesh_storage.h
++++ b/servers/rendering/renderer_rd/storage_rd/mesh_storage.h
+@@ -75,6 +75,7 @@ public:
+ private:
+ #ifdef TESTS_ENABLED
+ 	friend class TestMultimeshRebuildAccess;
++	friend class TestMeshStorageExternalAccess;
+ #endif
+ 	static MeshStorage *singleton;
+ 
+@@ -243,8 +244,10 @@ private:
+ 
+ 	RD::VertexFormatID _mesh_surface_generate_vertex_format(uint64_t p_surface_format, uint64_t p_input_mask, bool p_instanced_surface, bool p_input_motion_vectors, bool p_point_size_emulated, uint32_t &r_position_stride);
+ 	void _mesh_surface_generate_version_for_input_mask(Mesh::Surface::Version &v, Mesh::Surface *s, uint64_t p_input_mask, bool p_input_motion_vectors, bool p_point_size_emulated, MeshInstance::Surface *mis = nullptr, uint32_t p_current_buffer = 0, uint32_t p_previous_buffer = 0);
+-	void _mesh_surface_generate_external_version(Mesh::Surface::Version &v, Mesh::Surface *s, bool p_input_motion_vectors, bool p_point_size_emulated);
+-	void _mesh_surface_clear(Mesh *p_mesh, int p_surface);
++	static RD::VertexFormatID _mesh_surface_generate_external_vertex_format(uint64_t p_input_mask, bool p_input_motion_vectors);
++	static void _mesh_surface_generate_external_version(Mesh::Surface::Version &v, Mesh::Surface *s, uint64_t p_input_mask, bool p_input_motion_vectors, bool p_point_size_emulated);
++	static void _mesh_surface_get_external_arrays(Mesh::Surface *s, uint64_t p_input_mask, bool p_input_motion_vectors, bool p_point_size_emulated, RID &r_vertex_array_rd, RD::VertexFormatID &r_vertex_format);
++	static void _mesh_surface_clear(Mesh *p_mesh, int p_surface);
+ 
+ 	void _mesh_instance_clear(MeshInstance *mi);
+ 	void _mesh_instance_add_surface(MeshInstance *mi, Mesh *mesh, uint32_t p_surface);
+@@ -563,6 +566,10 @@ public:
+ 		}
+ 	}
+ 
++	_FORCE_INLINE_ bool mesh_surface_is_external(void *p_surface) const {
++		return static_cast<Mesh::Surface *>(p_surface)->external;
++	}
++
+ 	_FORCE_INLINE_ RID mesh_surface_get_index_array(void *p_surface, uint32_t p_lod) const {
+ 		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
+ 
+@@ -577,21 +584,7 @@ public:
+ 		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
+ 
+ 		if (s->external) {
+-			s->version_lock.lock();
+-			for (uint32_t i = 0; i < s->version_count; i++) {
+-				if (s->versions[i].input_motion_vectors == p_input_motion_vectors && s->versions[i].point_size_emulated == p_point_size_emulated && s->versions[i].current_allocation_generation == s->current_allocation_generation && s->versions[i].previous_allocation_generation == s->previous_allocation_generation) {
+-					r_vertex_format = s->versions[i].vertex_format;
+-					r_vertex_array_rd = s->versions[i].vertex_array;
+-					s->version_lock.unlock();
+-					return;
+-				}
+-			}
+-			uint32_t version = s->version_count++;
+-			s->versions = (Mesh::Surface::Version *)memrealloc(s->versions, sizeof(Mesh::Surface::Version) * s->version_count);
+-			_mesh_surface_generate_external_version(s->versions[version], s, p_input_motion_vectors, p_point_size_emulated);
+-			r_vertex_format = s->versions[version].vertex_format;
+-			r_vertex_array_rd = s->versions[version].vertex_array;
+-			s->version_lock.unlock();
++			_mesh_surface_get_external_arrays(s, p_input_mask, p_input_motion_vectors, p_point_size_emulated, r_vertex_array_rd, r_vertex_format);
+ 			return;
+ 		}
+ 
+@@ -717,6 +710,10 @@ public:
+ 
+ 	_FORCE_INLINE_ RD::VertexFormatID mesh_surface_get_vertex_format(void *p_surface, uint64_t p_input_mask, bool p_instanced_surface, bool p_input_motion_vectors, bool p_point_size_emulated) {
+ 		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
++		if (s->external) {
++			ERR_FAIL_COND_V(p_instanced_surface, 0);
++			return _mesh_surface_generate_external_vertex_format(p_input_mask, p_input_motion_vectors);
++		}
+ 		uint32_t position_stride = 0;
+ 		return _mesh_surface_generate_vertex_format(s->format, p_input_mask, p_instanced_surface, p_input_motion_vectors, p_point_size_emulated, position_stride);
+ 	}
+diff --git a/servers/rendering/rendering_device.h b/servers/rendering/rendering_device.h
+index e7ac0c41b2..a4029bcab5 100644
+--- a/servers/rendering/rendering_device.h
++++ b/servers/rendering/rendering_device.h
+@@ -98,6 +98,7 @@ private:
+ 	friend class RenderingServerDefault;
+ #ifdef TESTS_ENABLED
+ 	friend class TestExternalOutputAccess;
++	friend class TestIndexed144DeviceAccess;
+ 	friend class TestShaderCompilePolicyAccess;
+ 	friend class TestTransferWorkerAccess;
+ 	friend class TestFrameWaitAccess;
+diff --git a/tests/servers/rendering/test_mesh_storage_external.cpp b/tests/servers/rendering/test_mesh_storage_external.cpp
+index cd036537a6..b0c512f01a 100644
+--- a/tests/servers/rendering/test_mesh_storage_external.cpp
++++ b/tests/servers/rendering/test_mesh_storage_external.cpp
+@@ -18,3 +18,178 @@ TEST_CASE("[B4][K05] external surface descriptor requires distinct generations")
+ 	descriptor.previous_allocation_generation = 8;
+ 	CHECK(descriptor.current_allocation_generation != descriptor.previous_allocation_generation);
+ }
++
++#include "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h"
++#include "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.h"
++#include "tests/servers/rendering/transfer_test_driver_base.h"
++
++class Indexed144FormatDriver : public TransferTestDriverBase {
++public:
++	bool fail_format = false;
++	uint32_t formats = 0;
++	Vector<VertexAttribute> last_attributes;
++	VertexFormatID vertex_format_create(Span<VertexAttribute> p_attributes, const VertexAttributeBindingsMap &) override {
++		if (fail_format) {
++			return VertexFormatID();
++		}
++		last_attributes.clear();
++		for (const auto &attribute : p_attributes) {
++			last_attributes.push_back(attribute);
++		}
++		return VertexFormatID(++formats);
++	}
++};
++
++class TestIndexed144DeviceAccess {
++public:
++	static void attach(RenderingDevice &p_device, RenderingDeviceDriver *p_driver) { p_device.driver = p_driver; }
++	static RID buffer(RenderingDevice &p_device, uint64_t p_id) {
++		RenderingDevice::Buffer buffer;
++		buffer.driver_id = RenderingDeviceDriver::BufferID(p_id);
++		buffer.size = 144 * 3;
++		return p_device.vertex_buffer_owner.make_rid(buffer);
++	}
++	static uint64_t binding(RenderingDevice &p_device, RID p_array, uint32_t p_binding) { return p_device.vertex_array_owner.get_or_null(p_array)->buffers[p_binding].id; }
++	static void size(RenderingDevice &p_device, RID p_buffer, uint32_t p_size) { p_device.vertex_buffer_owner.get_or_null(p_buffer)->size = p_size; }
++	static uint32_t arrays(RenderingDevice &p_device) { return p_device.vertex_array_owner.get_owned_list().size(); }
++	static bool owns(RenderingDevice &p_device, RID p_buffer) { return p_device.vertex_buffer_owner.owns(p_buffer); }
++	static void detach(RenderingDevice &p_device) {
++		for (RID rid : p_device.vertex_array_owner.get_owned_list()) {
++			p_device.free_rid(rid);
++		}
++		for (RID rid : p_device.vertex_buffer_owner.get_owned_list()) {
++			p_device._free_dependencies(rid);
++			p_device.vertex_buffer_owner.free(rid);
++		}
++		// These format IDs are test-double metadata, not driver allocations.
++		p_device.vertex_formats.clear();
++		p_device.vertex_format_cache.clear();
++		CHECK(p_device.dependency_map.is_empty());
++		CHECK(p_device.reverse_dependency_map.is_empty());
++		p_device.driver = nullptr;
++	}
++};
++
++namespace RendererRD {
++class TestMeshStorageExternalAccess {
++public:
++	static void run(RenderingDevice &p_device, Indexed144FormatDriver &p_driver, bool p_failure) {
++		MeshStorage::Mesh mesh;
++		mesh.surface_count = 1;
++		mesh.surfaces = static_cast<MeshStorage::Mesh::Surface **>(memalloc(sizeof(MeshStorage::Mesh::Surface *)));
++		auto *surface = memnew(MeshStorage::Mesh::Surface);
++		mesh.surfaces[0] = surface;
++		surface->external = true;
++		surface->vertex_count = 3;
++		surface->current_allocation_generation = 7;
++		surface->previous_allocation_generation = 8;
++		surface->vertex_buffer = TestIndexed144DeviceAccess::buffer(p_device, 71);
++		surface->previous_vertex_buffer = TestIndexed144DeviceAccess::buffer(p_device, 72);
++		const RID current = surface->vertex_buffer, previous = surface->previous_vertex_buffer;
++		RID va;
++		RD::VertexFormatID format = 0;
++		if (p_failure) {
++			p_driver.fail_format = true;
++			ERR_PRINT_OFF;
++			MeshStorage::_mesh_surface_get_external_arrays(surface, 1, false, false, va, format);
++			ERR_PRINT_ON;
++			CHECK(va.is_null());
++			CHECK(surface->version_count == 0);
++			CHECK(TestIndexed144DeviceAccess::arrays(p_device) == 0);
++			p_driver.fail_format = false;
++			TestIndexed144DeviceAccess::size(p_device, current, 144 * 2);
++			ERR_PRINT_OFF;
++			MeshStorage::_mesh_surface_get_external_arrays(surface, 1, false, false, va, format);
++			ERR_PRINT_ON;
++			CHECK(va.is_null());
++			CHECK(surface->version_count == 0);
++			CHECK(TestIndexed144DeviceAccess::arrays(p_device) == 0);
++			TestIndexed144DeviceAccess::size(p_device, current, 144 * 3);
++		}
++		MeshStorage::_mesh_surface_get_external_arrays(surface, 1, false, false, va, format);
++		CHECK(va.is_valid());
++		CHECK(surface->version_count == 1);
++		const RID position_only = va;
++		MeshStorage::_mesh_surface_get_external_arrays(surface, 1, false, false, va, format);
++		CHECK(va == position_only);
++		CHECK(surface->version_count == 1);
++		MeshStorage::_mesh_surface_get_external_arrays(surface, 1 | (1 << 2), false, false, va, format);
++		CHECK(va.is_valid());
++		CHECK(va != position_only);
++		CHECK(surface->version_count == 2);
++		const RID tangent_view = va;
++		surface->previous_allocation_generation++;
++		MeshStorage::_mesh_surface_get_external_arrays(surface, 1 | (1 << 2), false, false, va, format);
++		CHECK(va != tangent_view);
++		CHECK(surface->version_count == 3);
++		const RID previous_changed = va;
++		surface->current_allocation_generation++;
++		MeshStorage::_mesh_surface_get_external_arrays(surface, 1 | (1 << 2), false, false, va, format);
++		CHECK(va != previous_changed);
++		CHECK(surface->version_count == 4);
++		MeshStorage::_mesh_surface_get_external_arrays(surface, (1 << 0) | (1 << 1) | (1 << 2) | (1 << 12) | (1 << 13) | (1 << 14), true, false, va, format);
++		CHECK(va.is_valid());
++		CHECK(surface->version_count == 5);
++		CHECK(p_driver.last_attributes.size() == 13);
++		bool previous_tangent = false;
++		for (const auto &attribute : p_driver.last_attributes) {
++			CHECK(attribute.stride == 144);
++			if (attribute.location == 14) {
++				previous_tangent = true;
++				CHECK(attribute.binding == 1);
++				CHECK(attribute.offset == 32);
++				CHECK(attribute.format == RD::DATA_FORMAT_R32G32B32A32_SFLOAT);
++			}
++		}
++		CHECK(previous_tangent);
++		CHECK(TestIndexed144DeviceAccess::binding(p_device, va, 0) == 71);
++		CHECK(TestIndexed144DeviceAccess::binding(p_device, va, 1) == 72);
++		surface->vertex_buffer = TestIndexed144DeviceAccess::buffer(p_device, 81);
++		surface->previous_vertex_buffer = TestIndexed144DeviceAccess::buffer(p_device, 82);
++		surface->current_allocation_generation++;
++		surface->previous_allocation_generation++;
++		MeshStorage::_mesh_surface_get_external_arrays(surface, 1 | (7 << 12), true, false, va, format);
++		CHECK(va.is_valid());
++		CHECK(TestIndexed144DeviceAccess::binding(p_device, va, 0) == 81);
++		CHECK(TestIndexed144DeviceAccess::binding(p_device, va, 1) == 82);
++		const RID triangle_array = va;
++		MeshStorage::_mesh_surface_get_external_arrays(surface, 1 | (7 << 12), true, true, va, format);
++		CHECK(va.is_valid());
++		CHECK(va != triangle_array);
++		MeshStorage::_mesh_surface_clear(&mesh, 0);
++		memfree(mesh.surfaces);
++		mesh.surfaces = nullptr;
++		mesh.surface_count = 0;
++		CHECK(TestIndexed144DeviceAccess::arrays(p_device) == 0);
++		CHECK(TestIndexed144DeviceAccess::owns(p_device, current));
++		CHECK(TestIndexed144DeviceAccess::owns(p_device, previous));
++	}
++};
++} //namespace RendererRD
++
++TEST_CASE("[B4][K05] actual Indexed144 cache retains exact mask generations and borrowed buffers") {
++	RenderingDevice device;
++	Indexed144FormatDriver driver;
++	TestIndexed144DeviceAccess::attach(device, &driver);
++	RendererRD::TestMeshStorageExternalAccess::run(device, driver, false);
++	TestIndexed144DeviceAccess::detach(device);
++}
++
++TEST_CASE("[B4][K05] failed original VA construction publishes no cached version") {
++	RenderingDevice device;
++	Indexed144FormatDriver driver;
++	TestIndexed144DeviceAccess::attach(device, &driver);
++	RendererRD::TestMeshStorageExternalAccess::run(device, driver, true);
++	TestIndexed144DeviceAccess::detach(device);
++}
++
++TEST_CASE("[B4][K05] original renderer pipeline keys distinguish Indexed144 from ordinary Mesh") {
++	using namespace RendererSceneRenderImplementation;
++	SceneShaderForwardMobile::ShaderData::PipelineKey mobile{};
++	SceneShaderForwardClustered::ShaderData::PipelineKey clustered{};
++	const uint32_t ordinary_mobile = mobile.hash(), ordinary_clustered = clustered.hash();
++	mobile.indexed144 = true;
++	clustered.indexed144 = true;
++	CHECK(mobile.hash() != ordinary_mobile);
++	CHECK(clustered.hash() != ordinary_clustered);
++}

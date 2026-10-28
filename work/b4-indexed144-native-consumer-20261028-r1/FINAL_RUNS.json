@@ -1,0 +1,50 @@
+{
+  "runs": [
+    {
+      "name": "FINAL_RENDER_MOBILE",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/b4-indexed144-native-consumer-20261028-r1/godot-indexed144",
+        "--path",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/b4-indexed144-native-consumer-20261028-r1/render-runtime",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "safe",
+        "--script",
+        "probe.gd"
+      ],
+      "rc": 0
+    },
+    {
+      "name": "FINAL_RENDER_FORWARD_PLUS",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/b4-indexed144-native-consumer-20261028-r1/godot-indexed144",
+        "--path",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/b4-indexed144-native-consumer-20261028-r1/render-runtime",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "forward_plus",
+        "--render-thread",
+        "safe",
+        "--script",
+        "probe.gd"
+      ],
+      "rc": 0
+    },
+    {
+      "name": "FINAL_NATIVE_TESTS",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/b4-indexed144-native-consumer-20261028-r1/godot-indexed144",
+        "--disable-crash-handler",
+        "--headless",
+        "--test",
+        "--test-case=[B4]*,[ViewportHistory]*"
+      ],
+      "rc": 0
+    }
+  ],
+  "pins_stable": true
+}

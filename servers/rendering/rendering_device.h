@@ -98,6 +98,7 @@ private:
 	friend class RenderingServerDefault;
 #ifdef TESTS_ENABLED
 	friend class TestExternalOutputAccess;
+	friend class TestIndexed144DeviceAccess;
 	friend class TestShaderCompilePolicyAccess;
 	friend class TestTransferWorkerAccess;
 	friend class TestFrameWaitAccess;

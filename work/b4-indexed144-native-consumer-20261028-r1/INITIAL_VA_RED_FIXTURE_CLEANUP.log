@@ -1,0 +1,46 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_mesh_storage_external.cpp:140:
+TEST CASE:  [B4][K05] actual Indexed144 cache retains exact mask generations and borrowed buffers
+
+tests/servers/rendering/test_mesh_storage_external.cpp:102: ERROR: CHECK( va != position_only ) is NOT correct!
+  values: CHECK( RID(90194313216) != RID(90194313216) )
+
+tests/servers/rendering/test_mesh_storage_external.cpp:103: ERROR: CHECK( surface->version_count == 2 ) is NOT correct!
+  values: CHECK( 1 == 2 )
+
+tests/servers/rendering/test_mesh_storage_external.cpp:108: ERROR: CHECK( surface->version_count == 3 ) is NOT correct!
+  values: CHECK( 2 == 3 )
+
+tests/servers/rendering/test_mesh_storage_external.cpp:113: ERROR: CHECK( surface->version_count == 4 ) is NOT correct!
+  values: CHECK( 3 == 4 )
+
+tests/servers/rendering/test_mesh_storage_external.cpp:116: ERROR: CHECK( surface->version_count == 5 ) is NOT correct!
+  values: CHECK( 4 == 5 )
+
+tests/servers/rendering/test_mesh_storage_external.cpp:140: FATAL ERROR: test case CRASHED: SIGSEGV - Segmentation violation signal
+
+===============================================================================
+[doctest] test cases:  2 |  1 passed | 1 failed | 1716 skipped
+[doctest] assertions: 41 | 36 passed | 5 failed |
+[doctest] Status: FAILURE!
+
+================================================================
+handle_crash: Program crashed with signal 11
+Engine version: Godot Engine v4.7.2.stable.custom_build (1ba52ac512ba5332825456a04676a9536e1938a5)
+Dumping the backtrace. Please include this when reporting the bug on: https://github.com/godotengine/godot/issues
+Load address: 104174000
+
+[1] 19ddfc144 (libsystem_platform.dylib+4144) - _sigtramp + 56
+[2] 10a3d059c (main+625c59c) - RenderingDevice::finalize() (in godot-indexed144) (/Users/macbookair/Documents/Work/godot_ANGE/servers/rendering/rendering_device.cpp:10309)
+[3] 10a3efa80 (main+627ba80) - RenderingDevice::~RenderingDevice() (in godot-indexed144) (/Users/macbookair/Documents/Work/godot_ANGE/servers/rendering/rendering_device.cpp:11222)
+[4] 10a3f01a8 (main+627c1a8) - RenderingDevice::~RenderingDevice() (in godot-indexed144) (/Users/macbookair/Documents/Work/godot_ANGE/servers/rendering/rendering_device.cpp:11217)
+[5] 1052de6a8 (main+116a6a8) - DOCTEST_ANON_FUNC_4() (in godot-indexed144) (/Users/macbookair/Documents/Work/godot_ANGE/tests/servers/rendering/test_mesh_storage_external.cpp:146)
+[6] 10466c318 (main+4f8318) - doctest::Context::run() (in godot-indexed144) (/Users/macbookair/Documents/Work/godot_ANGE/./thirdparty/doctest/doctest.h:7040)
+[7] 1045c6810 (main+452810) - test_main(int, char**) (in godot-indexed144) (/Users/macbookair/Documents/Work/godot_ANGE/tests/test_main.cpp:148)
+[8] 104507858 (main+393858) - Main::test_entrypoint(int, char**, bool&) (in godot-indexed144) (/Users/macbookair/Documents/Work/godot_ANGE/main/main.cpp:1031)
+[9] 104503ecc (main+38fecc) - main (in godot-indexed144) (/Users/macbookair/Documents/Work/godot_ANGE/platform/macos/godot_main_macos.mm:130)
+[10] 19da1be80 (dyld+31e80) - start + 6688
+-- END OF C++ BACKTRACE --
+================================================================

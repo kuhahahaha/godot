@@ -1,0 +1,86 @@
+{
+  "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp": {
+    "bytes": 240963,
+    "sha256": "e630f9530f2e66896953b0ece962e476da1e2029116aa85d2e510945c17ea6af"
+  },
+  "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.cpp": {
+    "bytes": 49899,
+    "sha256": "af4899159aaba369440f3ecef0cc37b181e9f7e4c6d85085a527f8a44912dc56"
+  },
+  "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h": {
+    "bytes": 15300,
+    "sha256": "b4a1f7713c0523fed6974ce52992670900c56c1b6b53f570f5a33dad604109de"
+  },
+  "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp": {
+    "bytes": 167875,
+    "sha256": "c5bfed7e23f9927b757258baeb515688dd00c1e8237887f18adbd65970cc3f6a"
+  },
+  "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.cpp": {
+    "bytes": 49265,
+    "sha256": "17408bf2bdd22a7a19fec371b36f4082b483cbe50112b800a9c6839e2b2a666f"
+  },
+  "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.h": {
+    "bytes": 13718,
+    "sha256": "5c95dc0ac1a42d75fc94c45d88358597cbd32e88f3e04a77d73f6bace597bc0a"
+  },
+  "servers/rendering/renderer_rd/shader_rd.cpp": {
+    "bytes": 43543,
+    "sha256": "3b564d068a6231a6653d9989b4f78dedcab3422675d299616df2f564e78322b3"
+  },
+  "servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered.glsl": {
+    "bytes": 110354,
+    "sha256": "1464b90e309ca65f4e025dbcc624dedb8cb112d11a0480a771f2fe6a41a3cabd"
+  },
+  "servers/rendering/renderer_rd/shaders/forward_mobile/scene_forward_mobile.glsl": {
+    "bytes": 87355,
+    "sha256": "820393231c7bd5f7d5a0463ba6d32db29c613356c0d14a932bee99f3176f2155"
+  },
+  "servers/rendering/renderer_rd/storage_rd/mesh_storage.cpp": {
+    "bytes": 108341,
+    "sha256": "438dff3bd54faa83495b6fcad4f428829ddb0283b20a848a289e8597d0ffdd23"
+  },
+  "servers/rendering/renderer_rd/storage_rd/mesh_storage.h": {
+    "bytes": 33616,
+    "sha256": "9420dfaf2d69abdc72a7b91811e57c4aa21d94571ccf86ab0fe52922482daa3a"
+  },
+  "servers/rendering/rendering_device.h": {
+    "bytes": 95392,
+    "sha256": "358ecc5a1266886e883cdb30e2660e30f74895776ca059db85e048b7de2038f8"
+  },
+  "tests/servers/rendering/test_mesh_storage_external.cpp": {
+    "bytes": 8796,
+    "sha256": "b606f174bb8121b1ab3951ba068d276a280daf23e041d157f162515bf9a7a4b3"
+  },
+  "work/b4-indexed144-native-consumer-20261028-r1/godot-indexed144": {
+    "bytes": 302576928,
+    "sha256": "988ee5d299413f0419f4820f7ce9f90e29b414dec4b6ef164a3e9334e9a3088a"
+  },
+  "work/b4-indexed144-native-consumer-20261028-r1/native_render_fixture.cpp": {
+    "bytes": 10751,
+    "sha256": "0e225605f4704f7f8f41ff6afeeb7ab9ae58b3f26c336e2825e23d266787561c"
+  },
+  "work/b4-indexed144-native-consumer-20261028-r1/render_client.cpp": {
+    "bytes": 21976,
+    "sha256": "c92aea6f34f40d9f960a9243692d513f4d5c2039e35ca579f401e01d3b93d6e2"
+  },
+  "work/b4-indexed144-native-consumer-20261028-r1/frozen-inputs/libgodot-cpp.debug.a": {
+    "bytes": 45282032,
+    "sha256": "cb0fbc01daa4f907d148ecaf70a5d29616d23aa01b4ef0939adefd424aec2cec"
+  },
+  "work/b4-indexed144-native-consumer-20261028-r1/render-runtime/probe.dylib": {
+    "bytes": 302696,
+    "sha256": "42d5397ba935664d7228528d3cf0d414d685ad7735c6752a916eef0486ede1c0"
+  },
+  "work/b4-indexed144-native-consumer-20261028-r1/render-runtime/probe.gd": {
+    "bytes": 1207,
+    "sha256": "c4c1ef39c3cc2b2499b37e6ad59b85c69861f488c6f5cd840e71fbd89f1b7251"
+  },
+  "work/b4-indexed144-native-consumer-20261028-r1/render-runtime/probe.gdextension": {
+    "bytes": 175,
+    "sha256": "6e7b0dd0c1b1be848bb7d7144318e1cdb5b2ab719b6f76653e78711e9bd388e5"
+  },
+  "bin/godot.macos.editor.dev.arm64": {
+    "bytes": 302530496,
+    "sha256": "882d69abce4d6be4418e5121f48a444c078f40f17c4087ab0971b895eb932500"
+  }
+}

@@ -1,0 +1,4 @@
+[application]
+config/name="Original Indexed144 Native Receiver"
+[rendering]
+renderer/rendering_method="mobile"

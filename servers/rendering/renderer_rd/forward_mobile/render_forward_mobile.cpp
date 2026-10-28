@@ -392,7 +392,7 @@ void RenderForwardMobile::mesh_generate_pipelines(RID p_mesh, bool p_background_
 			SceneShaderForwardMobile::MaterialData *material_shadow = static_cast<SceneShaderForwardMobile::MaterialData *>(material_storage->material_get_data(scene_shader.default_material, RendererRD::MaterialStorage::SHADER_TYPE_3D));
 			if (material_shadow != nullptr) {
 				shader_shadow = material_shadow->shader_data;
-				if (shadow_mesh.is_valid()) {
+				if (shadow_mesh.is_valid() && !mesh_storage->mesh_surface_is_external(mesh_surface)) {
 					mesh_surface_shadow = mesh_storage->mesh_get_surface(shadow_mesh, i);
 				}
 			}
@@ -2649,6 +2649,7 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 		pipeline_key.wireframe = p_params->force_wireframe;
 		pipeline_key.render_pass = p_params->subpass;
 		pipeline_key.ubershader = 0;
+		pipeline_key.indexed144 = mesh_storage->mesh_surface_is_external(mesh_surface);
 
 		bool emulate_point_size = shader->uses_point_size && scene_shader.emulate_point_size;
 
@@ -2661,7 +2662,7 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 		bool pipeline_valid = false;
 		while (pipeline_key.ubershader < ubershader_iterations) {
 			// Skeleton and blend shape.
-			uint64_t input_mask = shader->get_vertex_input_mask(pipeline_key.version, pipeline_key.ubershader);
+			uint64_t input_mask = shader->get_vertex_input_mask(pipeline_key.version, pipeline_key.ubershader, pipeline_key.indexed144);
 			if (surf->owner->mesh_instance.is_valid()) {
 				mesh_storage->mesh_instance_surface_get_vertex_arrays_and_format(surf->owner->mesh_instance, surf->surface_index, input_mask, p_pass_mode == PASS_MODE_MOTION_VECTORS, emulate_point_size, vertex_array_rd, vertex_format);
 			} else {
@@ -3043,7 +3044,7 @@ void RenderForwardMobile::_geometry_instance_add_surface_with_material(GeometryI
 
 		RID shadow_mesh = mesh_storage->mesh_get_shadow_mesh(p_mesh);
 
-		if (shadow_mesh.is_valid()) {
+		if (shadow_mesh.is_valid() && !mesh_storage->mesh_surface_is_external(mesh_storage->mesh_get_surface(p_mesh, p_surface))) {
 			surface_shadow = mesh_storage->mesh_get_surface(shadow_mesh, p_surface);
 		}
 
@@ -3450,7 +3451,8 @@ void RenderForwardMobile::_mesh_compile_pipeline_for_surface(SceneShaderForwardM
 	}
 
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
-	uint64_t input_mask = p_shader->get_vertex_input_mask(r_pipeline_key.version, true);
+	r_pipeline_key.indexed144 = mesh_storage->mesh_surface_is_external(p_mesh_surface);
+	uint64_t input_mask = p_shader->get_vertex_input_mask(r_pipeline_key.version, true, r_pipeline_key.indexed144);
 	bool emulate_point_size = p_shader->uses_point_size && scene_shader.emulate_point_size;
 	r_pipeline_key.vertex_format_id = mesh_storage->mesh_surface_get_vertex_format(p_mesh_surface, input_mask, p_instanced_surface, false, emulate_point_size);
 	r_pipeline_key.ubershader = true;

@@ -459,7 +459,7 @@ void SceneShaderForwardMobile::ShaderData::_create_pipeline(PipelineKey p_pipeli
 	sc.type = RD::PIPELINE_SPECIALIZATION_CONSTANT_TYPE_BOOL;
 	specialization_constants.push_back(sc);
 
-	RID shader_rid = get_shader_variant(p_pipeline_key.version, p_pipeline_key.ubershader);
+	RID shader_rid = get_shader_variant(p_pipeline_key.version, p_pipeline_key.ubershader, p_pipeline_key.indexed144);
 	ERR_FAIL_COND(shader_rid.is_null());
 
 	RID pipeline = RD::get_singleton()->render_pipeline_create(shader_rid, p_pipeline_key.framebuffer_format_id, p_pipeline_key.vertex_format_id, primitive_rd, raster_state, multisample_state, depth_stencil_state, blend_state, 0, p_pipeline_key.render_pass, specialization_constants);
@@ -490,23 +490,28 @@ void SceneShaderForwardMobile::ShaderData::_clear_vertex_input_mask_cache() {
 	}
 }
 
-RID SceneShaderForwardMobile::ShaderData::get_shader_variant(ShaderVersion p_shader_version, bool p_ubershader) const {
+RID SceneShaderForwardMobile::ShaderData::get_shader_variant(ShaderVersion p_shader_version, bool p_ubershader, bool p_indexed144) const {
 	if (version.is_valid()) {
 		MutexLock lock(SceneShaderForwardMobile::singleton_mutex);
 		ERR_FAIL_NULL_V(SceneShaderForwardMobile::singleton, RID());
-		return SceneShaderForwardMobile::singleton->shader.version_get_shader(version, p_shader_version + (SceneShaderForwardMobile::singleton->use_fp16 ? SHADER_VERSION_MAX * 2 : 0) + (p_ubershader ? SHADER_VERSION_MAX : 0));
+		uint32_t shader_index = p_shader_version + (SceneShaderForwardMobile::singleton->use_fp16 ? SHADER_VERSION_MAX * 2 : 0) + (p_ubershader ? SHADER_VERSION_MAX : 0);
+		if (p_indexed144) {
+			SceneShaderForwardMobile::singleton->shader.enable_group(SceneShaderForwardMobile::singleton->indexed144_shader_groups[shader_index]);
+			shader_index += INDEXED144_VARIANT_OFFSET;
+		}
+		return SceneShaderForwardMobile::singleton->shader.version_get_shader(version, shader_index);
 	} else {
 		return RID();
 	}
 }
 
-uint64_t SceneShaderForwardMobile::ShaderData::get_vertex_input_mask(ShaderVersion p_shader_version, bool p_ubershader) {
+uint64_t SceneShaderForwardMobile::ShaderData::get_vertex_input_mask(ShaderVersion p_shader_version, bool p_ubershader, bool p_indexed144) {
 	// Vertex input masks require knowledge of the shader. Since querying the shader can be expensive due to high contention and the necessary mutex, we cache the result instead.
 	// It is intentional for the range of the input masks to be different than the versions available in the shaders as it'll only ever use the regular variants or the FP16 ones.
-	uint32_t input_mask_index = p_shader_version + (p_ubershader ? SHADER_VERSION_MAX : 0);
+	uint32_t input_mask_index = p_shader_version + (p_ubershader ? SHADER_VERSION_MAX : 0) + (p_indexed144 ? SHADER_VERSION_MAX * 2 : 0);
 	uint64_t input_mask = vertex_input_masks[input_mask_index].load(std::memory_order_relaxed);
 	if (input_mask == 0) {
-		RID shader_rid = get_shader_variant(p_shader_version, p_ubershader);
+		RID shader_rid = get_shader_variant(p_shader_version, p_ubershader, p_indexed144);
 		ERR_FAIL_COND_V(shader_rid.is_null(), 0);
 
 		input_mask = RD::get_singleton()->shader_get_vertex_input_attribute_mask(shader_rid);
@@ -642,6 +647,15 @@ void SceneShaderForwardMobile::init(const String p_defines) {
 		immutable_shadow_sampler.append_id(shadow_sampler);
 		immutable_shadow_sampler.uniform_type = RenderingDeviceCommons::UNIFORM_TYPE_SAMPLER;
 		immutable_samplers.push_back(immutable_shadow_sampler);
+		const uint32_t ordinary_variant_count = shader_versions.size();
+		DEV_ASSERT(ordinary_variant_count == INDEXED144_VARIANT_OFFSET);
+		for (uint32_t i = 0; i < ordinary_variant_count; ++i) {
+			const ShaderRD::VariantDefine ordinary = shader_versions[i];
+			const int indexed_group = ordinary.group + SHADER_GROUP_MAX;
+			indexed144_shader_groups.push_back(indexed_group);
+			shader_versions.push_back(ShaderRD::VariantDefine(indexed_group, String::utf8(ordinary.text.get_data()) + "\n#define USE_INDEXED144_VERTEX_INPUT\n", false));
+		}
+
 		Vector<uint64_t> dynamic_buffers;
 		dynamic_buffers.push_back(ShaderRD::DynamicBuffer::encode(RenderForwardMobile::RENDER_PASS_UNIFORM_SET, 0));
 		dynamic_buffers.push_back(ShaderRD::DynamicBuffer::encode(RenderForwardMobile::RENDER_PASS_UNIFORM_SET, 1));

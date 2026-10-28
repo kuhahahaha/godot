@@ -30,7 +30,9 @@ layout(location = 0) in vec4 vertex_angle_attrib;
 layout(location = 1) in vec4 axis_tangent_attrib;
 #endif
 
-// Location 2 is unused.
+#if defined(USE_INDEXED144_VERTEX_INPUT) && (defined(NORMAL_USED) || defined(TANGENT_USED))
+layout(location = 2) in vec4 tangent_attrib;
+#endif
 
 #if defined(COLOR_USED)
 layout(location = 3) in vec4 color_attrib;
@@ -73,6 +75,9 @@ layout(location = 12) in vec4 previous_vertex_attrib;
 
 #if defined(NORMAL_USED) || defined(TANGENT_USED)
 layout(location = 13) in vec4 previous_normal_attrib;
+#ifdef USE_INDEXED144_VERTEX_INPUT
+layout(location = 14) in vec4 previous_tangent_attrib;
+#endif
 #endif
 
 #endif // MOTION_VECTORS
@@ -729,6 +734,9 @@ void vertex_shader(vec3 vertex_input,
 void _unpack_vertex_attributes(vec4 p_vertex_in, vec3 p_compressed_aabb_position, vec3 p_compressed_aabb_size,
 #if defined(NORMAL_USED) || defined(TANGENT_USED)
 		vec4 p_normal_in,
+#ifdef USE_INDEXED144_VERTEX_INPUT
+		vec4 p_tangent_in,
+#endif
 #ifdef NORMAL_USED
 		out vec3 r_normal,
 #endif
@@ -736,6 +744,16 @@ void _unpack_vertex_attributes(vec4 p_vertex_in, vec3 p_compressed_aabb_position
 		out vec3 r_binormal,
 #endif
 		out vec3 r_vertex) {
+#ifdef USE_INDEXED144_VERTEX_INPUT
+	r_vertex = p_vertex_in.xyz;
+#ifdef NORMAL_USED
+	r_normal = p_normal_in.xyz;
+#endif
+#if defined(NORMAL_USED) || defined(TANGENT_USED)
+	r_tangent = p_tangent_in.xyz;
+	r_binormal = normalize(cross(p_normal_in.xyz, p_tangent_in.xyz)) * p_tangent_in.w;
+#endif
+#else
 
 	r_vertex = p_vertex_in.xyz * p_compressed_aabb_size + p_compressed_aabb_position;
 #ifdef NORMAL_USED
@@ -763,6 +781,7 @@ void _unpack_vertex_attributes(vec4 p_vertex_in, vec3 p_compressed_aabb_position
 		axis_angle_to_tbn(axis, angle, r_tangent, r_binormal, r_normal);
 		r_binormal *= binormal_sign;
 	}
+#endif
 #endif
 }
 
@@ -792,6 +811,9 @@ void main() {
 
 #if defined(NORMAL_USED) || defined(TANGENT_USED)
 			previous_normal_attrib,
+#ifdef USE_INDEXED144_VERTEX_INPUT
+			previous_tangent_attrib,
+#endif
 #ifdef NORMAL_USED
 			prev_normal,
 #endif
@@ -834,6 +856,9 @@ void main() {
 			instances.data[instance_index].compressed_aabb_size_pad.xyz,
 #if defined(NORMAL_USED) || defined(TANGENT_USED)
 			axis_tangent_attrib,
+#ifdef USE_INDEXED144_VERTEX_INPUT
+			tangent_attrib,
+#endif
 #ifdef NORMAL_USED
 			normal,
 #endif

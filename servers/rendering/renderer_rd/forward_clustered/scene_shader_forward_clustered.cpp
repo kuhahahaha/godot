@@ -499,7 +499,7 @@ void SceneShaderForwardClustered::ShaderData::_create_pipeline(PipelineKey p_pip
 	sc.type = RD::PIPELINE_SPECIALIZATION_CONSTANT_TYPE_BOOL;
 	specialization_constants.push_back(sc);
 
-	RID shader_rid = get_shader_variant(p_pipeline_key.version, p_pipeline_key.color_pass_flags, p_pipeline_key.ubershader);
+	RID shader_rid = get_shader_variant(p_pipeline_key.version, p_pipeline_key.color_pass_flags, p_pipeline_key.ubershader, p_pipeline_key.indexed144);
 	ERR_FAIL_COND(shader_rid.is_null());
 
 	RID pipeline = RD::get_singleton()->render_pipeline_create(shader_rid, p_pipeline_key.framebuffer_format_id, p_pipeline_key.vertex_format_id, primitive_rd, raster_state, multisample_state, depth_stencil_state, blend_state, 0, 0, specialization_constants);
@@ -518,9 +518,14 @@ RD::PolygonCullMode SceneShaderForwardClustered::ShaderData::get_cull_mode_from_
 	return cull_mode_rd_table[p_cull_variant][cull_mode];
 }
 
-RID SceneShaderForwardClustered::ShaderData::_get_shader_variant(uint16_t p_shader_version) const {
+RID SceneShaderForwardClustered::ShaderData::_get_shader_variant(uint16_t p_shader_version, bool p_indexed144) const {
 	if (version.is_valid()) {
 		ERR_FAIL_NULL_V(SceneShaderForwardClustered::singleton, RID());
+		if (p_indexed144) {
+			MutexLock lock(SceneShaderForwardClustered::singleton_mutex);
+			SceneShaderForwardClustered::singleton->shader.enable_group(SceneShaderForwardClustered::singleton->indexed144_shader_groups[p_shader_version]);
+			return SceneShaderForwardClustered::singleton->shader.version_get_shader(version, p_shader_version + INDEXED144_VARIANT_OFFSET);
+		}
 		return SceneShaderForwardClustered::singleton->shader.version_get_shader(version, p_shader_version);
 	} else {
 		return RID();
@@ -533,20 +538,21 @@ void SceneShaderForwardClustered::ShaderData::_clear_vertex_input_mask_cache() {
 	}
 }
 
-RID SceneShaderForwardClustered::ShaderData::get_shader_variant(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader) const {
-	return _get_shader_variant(_get_shader_version(p_pipeline_version, p_color_pass_flags, p_ubershader));
+RID SceneShaderForwardClustered::ShaderData::get_shader_variant(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader, bool p_indexed144) const {
+	return _get_shader_variant(_get_shader_version(p_pipeline_version, p_color_pass_flags, p_ubershader), p_indexed144);
 }
 
-uint64_t SceneShaderForwardClustered::ShaderData::get_vertex_input_mask(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader) {
+uint64_t SceneShaderForwardClustered::ShaderData::get_vertex_input_mask(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader, bool p_indexed144) {
 	// Vertex input masks require knowledge of the shader. Since querying the shader can be expensive due to high contention and the necessary mutex, we cache the result instead.
 	uint16_t shader_version = _get_shader_version(p_pipeline_version, p_color_pass_flags, p_ubershader);
-	uint64_t input_mask = vertex_input_masks[shader_version].load(std::memory_order_relaxed);
+	uint32_t input_mask_index = shader_version + (p_indexed144 ? INDEXED144_VARIANT_OFFSET : 0);
+	uint64_t input_mask = vertex_input_masks[input_mask_index].load(std::memory_order_relaxed);
 	if (input_mask == 0) {
-		RID shader_rid = _get_shader_variant(shader_version);
+		RID shader_rid = _get_shader_variant(shader_version, p_indexed144);
 		ERR_FAIL_COND_V(shader_rid.is_null(), 0);
 
 		input_mask = RD::get_singleton()->shader_get_vertex_input_attribute_mask(shader_rid);
-		vertex_input_masks[shader_version].store(input_mask, std::memory_order_relaxed);
+		vertex_input_masks[input_mask_index].store(input_mask, std::memory_order_relaxed);
 	}
 
 	return input_mask;
@@ -685,6 +691,15 @@ void SceneShaderForwardClustered::init(const String p_defines) {
 			}
 
 			shader_versions.push_back(ShaderRD::VariantDefine(group, version, false));
+		}
+
+		const uint32_t ordinary_variant_count = shader_versions.size();
+		DEV_ASSERT(ordinary_variant_count == INDEXED144_VARIANT_OFFSET);
+		for (uint32_t i = 0; i < ordinary_variant_count; ++i) {
+			const ShaderRD::VariantDefine ordinary = shader_versions[i];
+			const int indexed_group = ordinary.group + SHADER_GROUP_MAX;
+			indexed144_shader_groups.push_back(indexed_group);
+			shader_versions.push_back(ShaderRD::VariantDefine(indexed_group, String::utf8(ordinary.text.get_data()) + "\n#define USE_INDEXED144_VERTEX_INPUT\n", false));
 		}
 
 		Vector<uint64_t> dynamic_buffers;

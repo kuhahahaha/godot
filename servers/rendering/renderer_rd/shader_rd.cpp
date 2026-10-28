@@ -954,7 +954,12 @@ void ShaderRD::enable_group(int p_group) {
 	for (const RID &version_rid : version_owner.get_owned_list()) {
 		Version *version = version_owner.get_or_null(version_rid);
 		version->mutex->lock();
-		_compile_version_start(version, p_group);
+		// A pending code change must refresh every enabled group together on
+		// the next version access. Compiling only this group would clear dirty
+		// and leave the existing groups on their previous source.
+		if (!version->dirty) {
+			_compile_version_start(version, p_group);
+		}
 		version->mutex->unlock();
 	}
 }

@@ -1,0 +1,1 @@
+ld: warning: object file (/opt/homebrew/Cellar/molten-vk/1.4.2/Frameworks/MoltenVK.xcframework/macos-arm64/libMoltenVK.a[2](libMoltenVK.a-arm64-prelink.o)) was built for newer 'macOS' version (12.0) than being linked (11.0)
