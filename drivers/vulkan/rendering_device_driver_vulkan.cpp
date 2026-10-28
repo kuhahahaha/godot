@@ -6434,6 +6434,7 @@ void RenderingDeviceDriverVulkan::command_next_render_subpass(CommandBufferID p_
 }
 
 void RenderingDeviceDriverVulkan::command_render_set_viewport(CommandBufferID p_cmd_buffer, VectorView<Rect2i> p_viewports) {
+	ERR_FAIL_COND(p_viewports.size() > 0 && !p_viewports.ptr());
 	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
 	VkViewport *vk_viewports = ALLOCA_ARRAY(VkViewport, p_viewports.size());
 	for (uint32_t i = 0; i < p_viewports.size(); i++) {
@@ -6449,6 +6450,7 @@ void RenderingDeviceDriverVulkan::command_render_set_viewport(CommandBufferID p_
 }
 
 void RenderingDeviceDriverVulkan::command_render_set_scissor(CommandBufferID p_cmd_buffer, VectorView<Rect2i> p_scissors) {
+	ERR_FAIL_COND(p_scissors.size() > 0 && !p_scissors.ptr());
 	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
 	vkCmdSetScissor(command_buffer->vk_command_buffer, 0, p_scissors.size(), (VkRect2D *)p_scissors.ptr());
 }

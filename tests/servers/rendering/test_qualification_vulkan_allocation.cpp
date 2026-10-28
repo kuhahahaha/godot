@@ -204,6 +204,22 @@ TEST_CASE("[QualificationNative][Vulkan] attachment clear rejects missing views 
  ERR_PRINT_ON;
  CHECK(true);
 }
+TEST_CASE("[QualificationNative][Vulkan] viewport binding rejects missing view before command access") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ ERR_PRINT_OFF;
+ driver.command_render_set_viewport(RenderingDeviceDriver::CommandBufferID(),VectorView<Rect2i>(nullptr,1));
+ ERR_PRINT_ON;
+ CHECK(true);
+}
+TEST_CASE("[QualificationNative][Vulkan] scissor binding rejects missing view before command access") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ ERR_PRINT_OFF;
+ driver.command_render_set_scissor(RenderingDeviceDriver::CommandBufferID(),VectorView<Rect2i>(nullptr,1));
+ ERR_PRINT_ON;
+ CHECK(true);
+}
 TEST_CASE("[QualificationNative][Vulkan] texture creation rejects an invalid shareable format") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
