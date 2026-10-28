@@ -4181,6 +4181,114 @@
     "work/vulkan-push-constants-20261030/UBSAN_REGRESSION.rc": {
       "bytes": 2,
       "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-render-uniform-sets-20261030/BINARY_HASHES.json": {
+      "bytes": 530,
+      "sha256": "c67fac68eee25e5be71a0ef01453d9a94ce5032ee688bfb2c864890b0f7e04d3"
+    },
+    "work/vulkan-render-uniform-sets-20261030/COMMANDS.json": {
+      "bytes": 1788,
+      "sha256": "f5799f843cd4b528ea6cf032b0e51be19e6fe168473bfb3eff6bf6c130fdf7ea"
+    },
+    "work/vulkan-render-uniform-sets-20261030/DEBUG_BUILD.log": {
+      "bytes": 2021,
+      "sha256": "85cea9dc3df8941dbbdc83b7a586ea1f658f701217e65de6f739a9fda1568eb7"
+    },
+    "work/vulkan-render-uniform-sets-20261030/DEBUG_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-render-uniform-sets-20261030/DIFF_CHECK_R1.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "work/vulkan-render-uniform-sets-20261030/DIFF_CHECK_R1.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-render-uniform-sets-20261030/FOCUSED.log": {
+      "bytes": 294,
+      "sha256": "252c6f68a20ff81bb7440cb649afb50478781e68f83e36ab9d72cd106cdd0b65"
+    },
+    "work/vulkan-render-uniform-sets-20261030/FOCUSED.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-render-uniform-sets-20261030/INDEPENDENT_REVIEW_R1.md": {
+      "bytes": 291,
+      "sha256": "5188b995e15dd523db24c6b94394433c01e0bb8973207924a8b2b428537329d8"
+    },
+    "work/vulkan-render-uniform-sets-20261030/K03_P2.log": {
+      "bytes": 302,
+      "sha256": "9ce4d7f7caad2527d7f680881ba65cf378c04db81052572cdcc0fd05a3c4c864"
+    },
+    "work/vulkan-render-uniform-sets-20261030/K03_P2.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-render-uniform-sets-20261030/RECEIPT_R1.md": {
+      "bytes": 1138,
+      "sha256": "12d8ae032e8ae9830bb198a38e907a4ee5cb04ed0d67172406dbe0c3b55caea7"
+    },
+    "work/vulkan-render-uniform-sets-20261030/RED.log": {
+      "bytes": 696,
+      "sha256": "9e37426a6bd6371ed065a6b6acb6bf4ee5a9d031dc969ee199792e99b81a75be"
+    },
+    "work/vulkan-render-uniform-sets-20261030/RED.rc": {
+      "bytes": 4,
+      "sha256": "e726b440cc164001999e718b51780d80314709efe06e7857282377be9111127b"
+    },
+    "work/vulkan-render-uniform-sets-20261030/RED_BUILD.log": {
+      "bytes": 2345,
+      "sha256": "b65413706159c9fba27e644ad362d31ed2d04f21a30786616eb32f189b4c3c6d"
+    },
+    "work/vulkan-render-uniform-sets-20261030/RED_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-render-uniform-sets-20261030/REGRESSION.log": {
+      "bytes": 302,
+      "sha256": "b2473a2edc144c2954e40157c6134149eef906fd843042e4f8176afb86e9a15e"
+    },
+    "work/vulkan-render-uniform-sets-20261030/REGRESSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-render-uniform-sets-20261030/RELEASE_BUILD.log": {
+      "bytes": 2245,
+      "sha256": "ca544cc062f1ecc7ea3310ba3f6728c967cf1dbec7bfd407496f128121da73e9"
+    },
+    "work/vulkan-render-uniform-sets-20261030/RELEASE_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-render-uniform-sets-20261030/RELEASE_VERSION.log": {
+      "bytes": 36,
+      "sha256": "0d72d9af146a4fc7a1c6072232a7b69e6c368e7008a403e127f352673beabba9"
+    },
+    "work/vulkan-render-uniform-sets-20261030/RELEASE_VERSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-render-uniform-sets-20261030/SOURCE_MANIFEST.json": {
+      "bytes": 892,
+      "sha256": "aa4057636255e4f2e97568e9ea57a2ebbba4fcbb4c36397d094d9a3aaf304c0e"
+    },
+    "work/vulkan-render-uniform-sets-20261030/UBSAN_BUILD.log": {
+      "bytes": 2505,
+      "sha256": "f0ee72f673ad1d82eb35550e682ce933727d2d0acba6ce055eed1f5d6c4bfbf8"
+    },
+    "work/vulkan-render-uniform-sets-20261030/UBSAN_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-render-uniform-sets-20261030/UBSAN_REGRESSION.log": {
+      "bytes": 302,
+      "sha256": "b2473a2edc144c2954e40157c6134149eef906fd843042e4f8176afb86e9a15e"
+    },
+    "work/vulkan-render-uniform-sets-20261030/UBSAN_REGRESSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
     }
   }
 }
