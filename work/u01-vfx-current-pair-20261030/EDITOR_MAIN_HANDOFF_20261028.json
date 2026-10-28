@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "source_commit": "44f32202b3",
+  "status": "executable metadata available; no whole execution/Ready/G1 claim",
+  "platform": "macos",
+  "architecture": "arm64",
+  "target_kind": "Executable",
+  "compiler_route": "BuiltinGlslangV1",
+  "files": {
+    "engine": {
+      "path": "/Users/macbookair/Documents/Work/godot_ANGE/work/e06-loaded-core-identity-20261028-r1/fixed-inputs/godot.controlled.exe.arm64",
+      "bytes": 302573616,
+      "sha256": "d216693315918595bf7cf46d57006d88ede1d7000fe3cd68fac06afb63edffac"
+    },
+    "direct_core_selection": {
+      "path": "/Users/macbookair/Documents/Work/godot_ANGE/work/e06-loaded-core-identity-20261028-r1/fixed-inputs/CoreBuildSelection.schema1.json",
+      "bytes": 311,
+      "sha256": "29559c1fca2c59ad7f36ea730f7187168fdcd3364f0cdeb5bfd19b4207479bf7"
+    },
+    "separate_core_artifact_receipt": {
+      "path": "/Users/macbookair/Documents/Work/godot_ANGE/work/e06-loaded-core-identity-20261028-r1/fixed-inputs/CoreArtifactReceipt.json",
+      "bytes": 530,
+      "sha256": "a0029b1943393e55c640d4da7462df210bc79eae232b90f1cd7b85971fe9f326"
+    }
+  },
+  "original_selection_node": "/Users/macbookair/Documents/Work/godot_ANGE/core/engine_build_selection.gen.json",
+  "consumer_selection_node": "/Users/macbookair/Documents/Work/godot_ANGE/work/e06-loaded-core-identity-20261028-r1/fixed-inputs/CoreBuildSelection.schema1.json",
+  "note": "Use frozen consumer selection with frozen engine. Global generator Node now belongs to later shared build; no wrapped fallback. SDK/adapter integration owned by A. Shared/static are not editor first-chain prerequisites.",
+  "metal_metadata_rc": 0
+}

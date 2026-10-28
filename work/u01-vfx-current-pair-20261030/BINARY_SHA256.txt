@@ -1,0 +1,2 @@
+69b150db17167b4a7e172906d688494e2990b23d68d0503c1cebef6b448c725e  bin/godot.macos.editor.dev.arm64
+d702b483ba821437b89f86912b138dbdc9abd1f988d7e1c1e206733095bb1e77  /Users/macbookair/Documents/Work/ANGE/bin/libange.macos.template_debug.arm64.dylib

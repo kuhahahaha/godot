@@ -1,0 +1,4 @@
+blueprint: arena.bp
+physics: {gravity: 0}
+camera: {mode: fixed, position: [0, 0, 5], look_at: [0, 0, 0]}
+input_map: {}

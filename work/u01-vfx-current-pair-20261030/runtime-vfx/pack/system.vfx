@@ -1,0 +1,5 @@
+version: 1
+kind: system
+emitters:
+  Sparks:
+    ref: ./emitter.vfx

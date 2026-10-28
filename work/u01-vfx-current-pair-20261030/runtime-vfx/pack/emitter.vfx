@@ -1,0 +1,4 @@
+version: 1
+kind: emitter
+capacity: 8
+simulation: gpu
