@@ -116,3 +116,17 @@ version probe are rc0. R11 artifacts carry the 9ae7de8310 build identity;
 source hashes pin the follow-up source commit in SOURCE_MANIFEST.json. This
 is direct input validation only; no qualification, completion, readback,
 Ready or G1 claim is made.
+
+## Direct render-pass attachment format validation
+
+`render_pass_create()` now rejects `DATA_FORMAT_MAX` for every attachment before
+indexing `RD_TO_VK_FORMAT` or constructing the native attachment descriptions.
+The pre-guard baseline probe returned a null handle (1 case / 3 assertions), so
+this defensive slice has no RED crash to claim; the final focused test verifies
+the fail-closed result at the driver boundary. Debug focused is 1 case / 3
+assertions, Vulkan allocation regression is 9 cases / 45 assertions, K03/P2 is
+22 cases / 350 assertions, and actual `use_ubsan=yes` repeats 1/3 and 9/45, all
+rc0. The template_release rebuild and version probe are rc0. R12 artifacts
+carry the `5f082531b7` build identity; source hashes pin the exact source in
+`SOURCE_MANIFEST.json`. This is direct input validation only; no qualification,
+completion, readback, Ready or G1 claim is made.

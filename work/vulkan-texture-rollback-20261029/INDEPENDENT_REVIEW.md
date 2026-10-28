@@ -49,3 +49,10 @@ safety; no owner or lifecycle authority is introduced.
 The base-format guard runs before mutable-format list processing and native
 image creation, eliminating the MoltenVK invalid-pixel-format path. Evidence
 is limited to Vulkan input/resource safety and preserves all lifecycle gates.
+
+
+The render-pass guard executes before any attachment format table lookup or
+native render-pass creation. The baseline and final focused probes both return a
+null handle; the final source path guarantees the invalid sentinel is rejected
+without relying on Vulkan/MoltenVK behavior. Evidence remains limited to direct
+input validation and does not introduce lifecycle or qualification authority.
