@@ -66,6 +66,33 @@ TEST_CASE("[QualificationNative][Vulkan] texture creation rejects an invalid dir
  CHECK_FALSE(bool(texture));
  CHECK(TestQualificationVulkanAllocationAccess::allocations(driver)==before);
 }
+TEST_CASE("[QualificationNative][Vulkan] texture creation rejects invalid view swizzles") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ RenderingDeviceDriver::TextureFormat format;
+ format.format=RDD::DATA_FORMAT_R8_UNORM;format.width=format.height=format.depth=format.array_layers=format.mipmaps=1;
+ format.samples=RDD::TEXTURE_SAMPLES_1;
+ format.usage_bits=RDD::TEXTURE_USAGE_SAMPLING_BIT;
+ const uint32_t before=TestQualificationVulkanAllocationAccess::allocations(driver);
+ for (uint32_t channel = 0; channel < 4; channel++) {
+  RenderingDeviceDriver::TextureView view;
+  view.format=format.format;
+  switch (channel) {
+   case 0: view.swizzle_r=static_cast<RenderingDeviceDriver::TextureSwizzle>(RDD::TEXTURE_SWIZZLE_MAX); break;
+   case 1: view.swizzle_g=static_cast<RenderingDeviceDriver::TextureSwizzle>(RDD::TEXTURE_SWIZZLE_MAX); break;
+   case 2: view.swizzle_b=static_cast<RenderingDeviceDriver::TextureSwizzle>(RDD::TEXTURE_SWIZZLE_MAX); break;
+   case 3: view.swizzle_a=static_cast<RenderingDeviceDriver::TextureSwizzle>(RDD::TEXTURE_SWIZZLE_MAX); break;
+  }
+  ERR_PRINT_OFF;
+  auto texture=driver.texture_create(format,view);
+  ERR_PRINT_ON;
+  CHECK_FALSE(bool(texture));
+  if (texture) {
+   driver.texture_free(texture);
+  }
+ }
+ CHECK(TestQualificationVulkanAllocationAccess::allocations(driver)==before);
+}
 TEST_CASE("[QualificationNative][Vulkan] direct format queries reject an invalid format") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);

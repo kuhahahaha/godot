@@ -2287,6 +2287,10 @@ VkSampleCountFlagBits RenderingDeviceDriverVulkan::_ensure_supported_sample_coun
 
 RDD::TextureID RenderingDeviceDriverVulkan::texture_create(const TextureFormat &p_format, const TextureView &p_view) {
 	ERR_FAIL_INDEX_V(p_view.format, DATA_FORMAT_MAX, TextureID());
+	ERR_FAIL_INDEX_V(p_view.swizzle_r, TEXTURE_SWIZZLE_MAX, TextureID());
+	ERR_FAIL_INDEX_V(p_view.swizzle_g, TEXTURE_SWIZZLE_MAX, TextureID());
+	ERR_FAIL_INDEX_V(p_view.swizzle_b, TEXTURE_SWIZZLE_MAX, TextureID());
+	ERR_FAIL_INDEX_V(p_view.swizzle_a, TEXTURE_SWIZZLE_MAX, TextureID());
 	ERR_FAIL_INDEX_V(p_format.format, DATA_FORMAT_MAX, TextureID());
 	for (const DataFormat shareable_format : p_format.shareable_formats) {
 		ERR_FAIL_INDEX_V(shareable_format, DATA_FORMAT_MAX, TextureID());
@@ -2581,6 +2585,10 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create_from_extension(uint64
 
 RDD::TextureID RenderingDeviceDriverVulkan::texture_create_shared(TextureID p_original_texture, const TextureView &p_view) {
 	ERR_FAIL_INDEX_V(p_view.format, DATA_FORMAT_MAX, TextureID());
+	ERR_FAIL_INDEX_V(p_view.swizzle_r, TEXTURE_SWIZZLE_MAX, TextureID());
+	ERR_FAIL_INDEX_V(p_view.swizzle_g, TEXTURE_SWIZZLE_MAX, TextureID());
+	ERR_FAIL_INDEX_V(p_view.swizzle_b, TEXTURE_SWIZZLE_MAX, TextureID());
+	ERR_FAIL_INDEX_V(p_view.swizzle_a, TEXTURE_SWIZZLE_MAX, TextureID());
 	const TextureInfo *owner_tex_info = (const TextureInfo *)p_original_texture.id;
 #ifdef DEBUG_ENABLED
 	ERR_FAIL_COND_V(!owner_tex_info->allocation.handle && !owner_tex_info->created_from_extension, TextureID());
@@ -2639,6 +2647,10 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create_shared(TextureID p_or
 
 RDD::TextureID RenderingDeviceDriverVulkan::texture_create_shared_from_slice(TextureID p_original_texture, const TextureView &p_view, TextureSliceType p_slice_type, uint32_t p_layer, uint32_t p_layers, uint32_t p_mipmap, uint32_t p_mipmaps) {
 	ERR_FAIL_INDEX_V(p_view.format, DATA_FORMAT_MAX, TextureID());
+	ERR_FAIL_INDEX_V(p_view.swizzle_r, TEXTURE_SWIZZLE_MAX, TextureID());
+	ERR_FAIL_INDEX_V(p_view.swizzle_g, TEXTURE_SWIZZLE_MAX, TextureID());
+	ERR_FAIL_INDEX_V(p_view.swizzle_b, TEXTURE_SWIZZLE_MAX, TextureID());
+	ERR_FAIL_INDEX_V(p_view.swizzle_a, TEXTURE_SWIZZLE_MAX, TextureID());
 	const TextureInfo *owner_tex_info = (const TextureInfo *)p_original_texture.id;
 #ifdef DEBUG_ENABLED
 	ERR_FAIL_COND_V(!owner_tex_info->allocation.handle && !owner_tex_info->created_from_extension, TextureID());
