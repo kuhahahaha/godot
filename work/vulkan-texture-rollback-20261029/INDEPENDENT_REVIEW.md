@@ -56,3 +56,9 @@ native render-pass creation. The baseline and final focused probes both return a
 null handle; the final source path guarantees the invalid sentinel is rejected
 without relying on Vulkan/MoltenVK behavior. Evidence remains limited to direct
 input validation and does not introduce lifecycle or qualification authority.
+
+
+The layout guards run before any `RD_TO_VK_LAYOUT` indexing in the render-pass
+attachment/reference paths exercised by this entry. Valid layout behavior is
+unchanged; invalid sentinels fail closed with an empty RenderPassID. Evidence is
+limited to input validation and does not add lifecycle or qualification authority.

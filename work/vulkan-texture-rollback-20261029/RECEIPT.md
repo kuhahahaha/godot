@@ -130,3 +130,16 @@ rc0. The template_release rebuild and version probe are rc0. R12 artifacts
 carry the `5f082531b7` build identity; source hashes pin the exact source in
 `SOURCE_MANIFEST.json`. This is direct input validation only; no qualification,
 completion, readback, Ready or G1 claim is made.
+
+## Direct render-pass attachment layout validation
+
+`render_pass_create()` now rejects `TEXTURE_LAYOUT_MAX` before attachment
+initial/final layout table lookup, subpass input/color/resolve reference
+conversion, depth-stencil reference conversion, or fragment-density map layout
+lookup. Debug focused is 1 case / 3 assertions, Vulkan allocation regression is
+10 cases / 48 assertions, K03/P2 is 22 cases / 350 assertions, and actual
+`use_ubsan=yes` repeats 1/3 and 10/48, all rc0. The template_release rebuild
+and version probe are rc0. R13 artifacts carry the `c4da5dc43` build identity;
+source hashes pin the exact source in `SOURCE_MANIFEST.json`. This remains
+direct input validation only; no qualification, completion, readback, Ready or G1
+claim is made.
