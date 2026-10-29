@@ -4,7 +4,7 @@ This is a shared-tree verification record for the current ANGE particle method w
 
 The first focused link attempt (`/tmp/ange-gpu-method-focused.log`) compiled the modified GPU objects but failed at `ange_gpu_linking_test` because the focused static closure omitted the lifecycle-kernel, template-layout, and C06 stage-plan owner/view objects. The unresolved symbols included `scalar_shared_scan_recipe`, `resolve_compiled_schedule`, `derive_checked_template_layouts`, and `PhaseCapabilityProfileView` methods.
 
-The existing staged SConstruct source-closure change was then used with the current mixed tree. It includes the C04/C06 stage-plan/layout sources and lifecycle kernel in `PARTICLE_GPU_STATIC_LINK_SOURCES`, and includes the required exception-enabled source set. The warning-only indentation cleanup in the active GPU method sources was also present for this recheck.
+The source-closure change is now recorded by ANGE commit `21d55546d` (`integrate C03 C04 static particle source closure`). The warning-only indentation/control-flow cleanup is recorded separately by ANGE commit `6121d4e5d` (`Clarify particle method control flow`). The shared tree still contains unrelated dirty paths, which were left untouched.
 
 Command:
 
