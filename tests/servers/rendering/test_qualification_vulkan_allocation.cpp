@@ -320,6 +320,14 @@ TEST_CASE("[QualificationNative][Vulkan] compute pipeline creation rejects missi
  ERR_PRINT_ON;
  CHECK_FALSE(bool(pipeline));
 }
+TEST_CASE("[QualificationNative][Vulkan] BLAS creation rejects missing geometry views before feature access") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ ERR_PRINT_OFF;
+ auto blas=driver.blas_create(VectorView<RenderingDeviceDriver::AccelerationStructureGeometry>(nullptr,1),{});
+ ERR_PRINT_ON;
+ CHECK_FALSE(bool(blas));
+}
 TEST_CASE("[QualificationNative][Vulkan] queue submit rejects missing wait view before queue access") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
