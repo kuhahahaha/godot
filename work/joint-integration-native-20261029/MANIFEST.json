@@ -113,6 +113,10 @@
       "bytes": 4582,
       "sha256": "bd7fe6fc830a0a545274f972dde9765ce804e88d5f21939aab8047c39f01858e"
     },
+    "LONG_GOAL_AUDIT_20261029.md": {
+      "bytes": 2632,
+      "sha256": "6c7db642cf0d84290623a4fe4fa05b310a19a4b6aa9cda0eaf352eda4292dc2f"
+    },
     "PATCH_REPLAY.json": {
       "bytes": 590,
       "sha256": "1a268bd93024b5b67f2245ab16fd60bcdbbb016390cc9fdf22c5c61b9386ecbc"
