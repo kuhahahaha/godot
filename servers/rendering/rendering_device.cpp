@@ -1450,7 +1450,13 @@ Vector<uint8_t> RenderingDevice::buffer_get_data(RID p_buffer, uint32_t p_offset
 	}
 
 	uint8_t *buffer_mem = driver->buffer_map(tmp_buffer);
-	ERR_FAIL_NULL_V(buffer_mem, Vector<uint8_t>());
+	if (buffer_mem == nullptr) {
+		// Mapping can fail after the temporary transfer buffer has been issued
+		// and waited. Do not strand that allocation when the caller receives the
+		// fail-closed empty result.
+		driver->buffer_free(tmp_buffer);
+		ERR_FAIL_V(Vector<uint8_t>());
+	}
 
 	Vector<uint8_t> buffer_data;
 	{
@@ -2995,7 +3001,12 @@ Vector<uint8_t> RenderingDevice::texture_get_data(RID p_texture, uint32_t p_laye
 		}
 
 		const uint8_t *read_ptr = driver->buffer_map(tmp_buffer);
-		ERR_FAIL_NULL_V(read_ptr, Vector<uint8_t>());
+		if (read_ptr == nullptr) {
+			// The temporary readback buffer is no longer referenced by the draw
+			// graph after the blocking stall, so release it on map failure too.
+			driver->buffer_free(tmp_buffer);
+			ERR_FAIL_V(Vector<uint8_t>());
+		}
 
 		uint32_t block_w = 0;
 		uint32_t block_h = 0;
