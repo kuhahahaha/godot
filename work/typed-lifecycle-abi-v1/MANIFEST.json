@@ -6029,6 +6029,46 @@
     "work/vulkan-blas-geometry-views-20261030/MANIFEST.json": {
       "bytes": 3661,
       "sha256": "a51007820a59fb3cda630840ef9632980ab6d1292c3475034490edbba227c22d"
+    },
+    "ANGE/work/current-owner-boundary-recheck-20261030-r3/COMMANDS.json": {
+      "bytes": 1072,
+      "sha256": "07a34e9bc3c071f2cc5e228b7c8068b81becce9caa6cb0a9c4bf492d57dc3904"
+    },
+    "ANGE/work/current-owner-boundary-recheck-20261030-r3/CURRENT_OWNER_CENSUS_R3.log": {
+      "bytes": 12363,
+      "sha256": "8d7b20aa138658ac42f25df4f24d42ff03b808205635e1a13aef218684061a4f"
+    },
+    "ANGE/work/current-owner-boundary-recheck-20261030-r3/INDEPENDENT_REVIEW_R3.md": {
+      "bytes": 376,
+      "sha256": "60fb0303c0284e0069657aa0ccafa1aefced32852321014d795ac1c3e4f363d9"
+    },
+    "ANGE/work/current-owner-boundary-recheck-20261030-r3/RECEIPT_R3.md": {
+      "bytes": 1064,
+      "sha256": "027caef2c303456a75733df78e10d90df68b29224525664dc0c32c8ac0daea66"
+    },
+    "ANGE/work/current-owner-boundary-recheck-20261030-r3/SOURCE_HASHES_R3.txt": {
+      "bytes": 866,
+      "sha256": "ad72653e45098074fe357fa74027aec74f6a5d162f76941a44a3fe44681ec526"
+    },
+    "ANGE/work/current-owner-boundary-recheck-20261030-r3/SOURCE_MANIFEST.json": {
+      "bytes": 1279,
+      "sha256": "b0c3bb033f5ec71643fcaec8d5d01d2184fee983ad8a7a3f12c37c34d4433522"
+    },
+    "ANGE/work/current-owner-boundary-recheck-20261030-r3/native_request_chain_census.log": {
+      "bytes": 3136,
+      "sha256": "5f6853b82b16c762b6db187024c2621118da5d75bc692898429941d72e799cb3"
+    },
+    "ANGE/work/current-owner-boundary-recheck-20261030-r3/owner_gate_census.log": {
+      "bytes": 7479,
+      "sha256": "de2dd535068296d472cef5f808f39912d1c5368a67cd40df44fde7717ef81147"
+    },
+    "ANGE/work/current-owner-boundary-recheck-20261030-r3/qualification_chain_census.log": {
+      "bytes": 1652,
+      "sha256": "1648b35310dec0c48efe36913b760701a8ac74f02c0d85afcbb3dc3d3689bdb3"
+    },
+    "ANGE/work/current-owner-boundary-recheck-20261030-r3/MANIFEST.json": {
+      "bytes": 1330,
+      "sha256": "58c75bd31a07b9b95239baa8aedc50fe11c017a611f5203154bce5910bd81833"
     }
   }
 }
