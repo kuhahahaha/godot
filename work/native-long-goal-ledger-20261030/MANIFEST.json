@@ -18,7 +18,8 @@
       "QualificationNative_full": "67/302 rc0"
     },
     "receipt": "work/current-editor-tests-build-20261030/RECEIPT.md",
-    "commit": "3f7b8e4430"
+    "commit": "3f7b8e4430",
+    "source_commit": "84c9b2ee7d"
   },
   "exact_runtime_pair": {
     "editor_sha256": "150c8f1234b6cfd45ad163ed82f8cb50ef6e76d7016ee4c918e56489f1a43162",

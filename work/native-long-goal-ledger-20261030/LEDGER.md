@@ -17,3 +17,5 @@ The same tests-enabled editor passed full `[Qualification]*`: 91 cases / 1829 as
 The same tests-enabled editor passed full `*device_exit*`: 133 cases / 2619 assertions, rc0; expected fail-closed callback diagnostics remain visible.
 
 The same tests-enabled editor passed full `*[QualificationNative]*`: 67 cases / 302 assertions, rc0.
+
+The native/renderer source set is now integrated as commit `84c9b2ee7d`; the tests-enabled binary and selector receipts are pinned to that source state.
