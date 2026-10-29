@@ -264,8 +264,42 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_release(GDExtensionQual
  MutexLock lock(mutex);QualificationBridge *bridge=nullptr;RenderingDevice *rd=nullptr;QualificationTicket *ticket=nullptr;Error error=qualification_bridge_locked(ref,false,false,bridge,rd);if(error!=OK)return result(error,17);error=qualification_ticket_locked(bridge,ticket_ref,ticket);if(error!=OK)return result(error,17);
  if(ticket->accepted_rt_refs || ticket->recording || ticket->frame_refs || !ticket->physically_retired.load())return result(ERR_BUSY,16);
  if(ticket->queued)return result(ERR_BUSY,19);
+ // Writers of physical_uses and cell.uses hold both Registry and RD locks;
+ // the Registry lock alone permits this bounded read-only consistency scan.
+ // Validate an address against original bridge children before dereferencing.
+ auto valid_reverse_edges=[&]() {
+  auto forward_count=[&](QualificationPhysicalReturn *cell) {uint32_t count=0;for(auto *entry:ticket->physical_uses)if(entry==cell)++count;return count;};
+  auto check_cell=[&](QualificationPhysicalReturn *cell,uint64_t child_serial) {
+   uint32_t reverse=0;for(auto *entry:cell->uses)if(entry==ticket)++reverse;
+   const uint32_t forward=forward_count(cell);
+   return reverse==forward && reverse<=1 && (!reverse || (cell->bridge==bridge->serial && cell->child==child_serial));
+  };
+  for(auto *cell:ticket->physical_uses) {
+   if(!cell || forward_count(cell)!=1)return false;
+   bool original=false;
+   for(auto *child:bridge->storage)if(child && &child->physical==cell)original=true;
+   for(auto *child:bridge->units)if(child && (&child->shader==cell || &child->pipeline==cell))original=true;
+   if(!original)return false;
+  }
+  for(auto *child:bridge->storage)if(child && !check_cell(&child->physical,child->serial))return false;
+  for(auto *child:bridge->units)if(child && (!check_cell(&child->shader,child->serial) || !check_cell(&child->pipeline,child->serial)))return false;
+  return true;
+ };
+ if(!valid_reverse_edges())return result(ERR_INVALID_DATA,16);
+ const bool has_reverse_edges=!ticket->physical_uses.is_empty();
+ if(has_reverse_edges) {
+  if(!rd->_thread_safe_.try_lock())return result(ERR_BUSY,19);
+  rd->_thread_safe_.unlock();
+ }
  for(auto &member:ticket->natives)if(member.retained && !member.owner_released) {
   error=rd->driver->native_call_release(member.source.serial);if(error!=OK)return result(error,error==ERR_BUSY?19:17);member.owner_released=true;
+ }
+ RdUnlock rd_unlock;
+ if(has_reverse_edges) {
+  if(!rd->_thread_safe_.try_lock())return result(ERR_BUSY,19);rd_unlock.mutex=&rd->_thread_safe_;
+  if(!valid_reverse_edges())return result(ERR_INVALID_DATA,16);
+  for(auto *cell:ticket->physical_uses)CRASH_COND(!cell->uses.erase(ticket));
+  ticket->physical_uses.clear();
  }
  ticket->result.unref();ticket->admission_closed=true;ticket->acknowledged=true;--bridge->children;--records[bridge->library].private_refs;return result(OK);
 }

@@ -224,21 +224,24 @@ void Registry::qualification_retire_step(QualificationBridge *bridge,RenderingDe
  if(kind==1) {
   QualificationBridge::Storage *child=nullptr;for(auto *entry:bridge->storage)if(entry && entry->serial==serial){child=entry;break;}
   if(!child || !child->retiring)return;
-  uint32_t reason=enqueue(child->physical,1);
+  bool failed=false;{MutexLock lock(mutex);failed=child->maintenance_error!=OK;}
+  uint32_t reason=failed?0:enqueue(child->physical,1);
   MutexLock lock(mutex);MutexLock physical_lock(child->physical.mutex);
   auto &report=child->report;const auto &physical=child->physical;
   report.frame_slot=physical.frame_slot;report.frame_epoch=physical.frame_epoch;report.event_seq=physical.free_event;
   if(physical.enqueued)report.dependency_set_serial=child->dependency_serial;
-  if(physical.free_event) { report.state=1;report.return_status=1;report.reason=0; }
+  if(failed) { report.state=2;report.return_status=0;report.reason=5;report.native_error=child->maintenance_error; }
+  else if(physical.free_event) { report.state=1;report.return_status=1;report.reason=0; }
   else if(reason>=5) { report.state=2;report.reason=reason; }
   else report.reason=reason ? reason : 1;
  } else if(kind==2) {
   QualificationBridge::NativeUnit *child=nullptr;for(auto *entry:bridge->units)if(entry && entry->serial==serial){child=entry;break;}
   if(!child || !child->retiring)return;
-  uint32_t reason=enqueue(child->pipeline,3);
+  bool failed=false;{MutexLock lock(mutex);if(child->report.report_revision==UINT64_MAX)return;failed=child->maintenance_error!=OK;}
+  uint32_t reason=failed?0:enqueue(child->pipeline,3);
   // Pipeline queueing removes its live dependency edge. The original frame
   // disposer still executes pipeline free before shader free in that frame.
-  uint32_t shader_reason=(child->pipeline.enqueued && !child->pipeline.free_event && child->pipeline.frame_slot!=uint32_t(rd->frame)) ? 4 : enqueue(child->shader,2);if(shader_reason)reason=shader_reason;
+  uint32_t shader_reason=failed?0:(child->pipeline.enqueued && !child->pipeline.free_event && child->pipeline.frame_slot!=uint32_t(rd->frame)) ? 4 : enqueue(child->shader,2);if(shader_reason)reason=shader_reason;
   MutexLock lock(mutex);MutexLock shader_lock(child->shader.mutex);MutexLock pipeline_lock(child->pipeline.mutex);
   auto report=child->report;
   const auto &shader=child->shader;const auto &pipeline=child->pipeline;
@@ -249,7 +252,8 @@ void Registry::qualification_retire_step(QualificationBridge *bridge,RenderingDe
   report.shader_free_event_seq=shader.free_event;report.pipeline_free_event_seq=pipeline.free_event;
   report.unresolved_mask=child->backing.possible_mask;
   if(report.enqueued_mask==child->backing.known_mask && !report.unresolved_mask)report.dependency_set_serial=child->dependency_serial;
-  if(report.freed_mask==child->backing.known_mask && !report.unresolved_mask) { report.state=1;report.return_status=1;report.reason=0; }
+  if(failed) { report.state=2;report.return_status=0;report.reason=5;report.native_error=child->maintenance_error; }
+  else if(report.freed_mask==child->backing.known_mask && !report.unresolved_mask) { report.state=1;report.return_status=1;report.reason=0; }
   else if(reason>=5 || report.unresolved_mask) { report.state=2;report.reason=reason==6?6:5; }
   else report.reason=reason?reason:1;
   if(memcmp(&report,&child->report,sizeof(report))) {
@@ -305,19 +309,24 @@ void Registry::qualification_service(uint64_t bridge_serial,uint64_t serial,uint
    }
    if(returned)break;
    const Error error=rd->_qualification_maintenance();
+   // Publish a real maintenance failure before any later retirement step can
+   // enqueue another driver free. Keep the first cause and the original child.
+   if(error!=OK && error!=ERR_BUSY && kind!=3) {
+    MutexLock lock(mutex);
+    if(kind==1)for(auto *child:bridge->storage)if(child && child->serial==serial && child->report.state!=1 && child->maintenance_error==OK) {
+     child->maintenance_error=error;child->report.state=2;child->report.return_status=0;child->report.reason=5;child->report.native_error=error;
+    }
+    if(kind==2)for(auto *child:bridge->units)if(child && child->serial==serial && child->report.state!=1 && child->maintenance_error==OK) {
+     child->maintenance_error=error;
+     if(child->report.report_revision!=UINT64_MAX) {child->report.state=2;child->report.return_status=0;child->report.reason=5;child->report.native_error=error;++child->report.report_revision;}
+    }
+   }
    if(kind==3){for(auto *ticket:bridge->tickets)if(ticket && ticket->serial==serial)qualification_ticket_step(ticket,rd);}
    else qualification_retire_step(bridge,rd,serial,kind);
    if(error!=OK && error!=ERR_BUSY) {
     MutexLock lock(mutex);
     if(kind==3)for(auto *ticket:bridge->tickets)if(ticket && ticket->serial==serial && !ticket->physically_retired.load()) {
      ticket->append_failed=true;ticket->report.native_error=error;qualification_ticket_publish(ticket,rd);
-    }
-    if(kind==1)for(auto *child:bridge->storage)if(child && child->serial==serial && child->report.state!=1) {
-     child->report.state=2;child->report.reason=5;child->report.native_error=error;
-    }
-    if(kind==2)for(auto *child:bridge->units)if(child && child->serial==serial && child->report.state!=1) {
-     child->report.state=2;child->report.reason=5;child->report.native_error=error;
-     if(child->report.report_revision!=UINT64_MAX)++child->report.report_revision;
     }
    }
    if(error!=OK)break;
@@ -415,7 +424,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_storage_retire_release(
  MutexLock lock(mutex);QualificationBridge *bridge=nullptr;RenderingDevice *rd=nullptr;Error error=qualification_bridge_locked(ref,false,false,bridge,rd);if(error!=OK)return result(error,17);
  if(retire.registry_instance!=instance || !retire.handle_serial)return result(ERR_INVALID_DATA,17);
  for(auto *&child:bridge->storage)if(child && !child->acknowledged && child->retire_serial==retire.handle_serial) {
-  if(child->report.state!=1 || !child->physical.free_event)return result(ERR_BUSY,16);
+  if(child->maintenance_error!=OK || child->report.state!=1 || child->report.return_status!=1 || child->report.reason || child->report.native_error || child->report.native_code || !child->physical.free_event)return result(ERR_BUSY,16);
   if(child->queued)return result(ERR_BUSY,19);
   child->acknowledged=true;--bridge->children;--records[bridge->library].private_refs;return result(OK);
  }
@@ -425,8 +434,31 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_native_unit_retire_rele
  MutexLock lock(mutex);QualificationBridge *bridge=nullptr;RenderingDevice *rd=nullptr;Error error=qualification_bridge_locked(ref,false,false,bridge,rd);if(error!=OK)return result(error,17);
  if(retire.registry_instance!=instance || !retire.handle_serial)return result(ERR_INVALID_DATA,17);
  for(auto *&child:bridge->units)if(child && !child->acknowledged && child->retire_serial==retire.handle_serial) {
-  if(child->report.state!=1 || child->report.freed_mask!=child->backing.known_mask || child->backing.possible_mask)return result(ERR_BUSY,16);
+  if(child->maintenance_error!=OK || child->report.state!=1 || child->report.return_status!=1 || child->report.reason || child->report.native_error || child->report.native_code || child->report.unresolved_mask || child->report.freed_mask!=child->backing.known_mask || child->backing.possible_mask)return result(ERR_BUSY,16);
   if(child->queued)return result(ERR_BUSY,19);
+  const auto &backing=child->backing;const auto &report=child->report;
+  const uint32_t known=backing.known_mask;
+  if(!child->retiring || (known!=1U && known!=3U) || !valid_abi(&backing.abi) || !valid_abi(&report.abi) ||
+    backing.unit.registry_instance!=instance || backing.unit.handle_serial!=child->serial ||
+    report.unit.registry_instance!=backing.unit.registry_instance || report.unit.handle_serial!=backing.unit.handle_serial ||
+    !backing.event_seq || !report.report_revision || !report.retire_operation || !child->dependency_serial ||
+    report.dependency_set_serial!=child->dependency_serial || report.enqueued_mask!=known || report.absent_mask)return result(ERR_BUSY,16);
+  MutexLock shader_lock(child->shader.mutex);MutexLock pipeline_lock(child->pipeline.mutex);
+  auto matches=[&](const QualificationPhysicalReturn &cell,uint64_t rid,uint64_t serial,uint64_t reported_rid,uint64_t reported_serial,uint32_t frame,uint64_t epoch,uint64_t event) {
+   return rid && serial && cell.bridge==bridge->serial && cell.child==child->serial && cell.rid==rid && cell.serial==serial &&
+     cell.use_closed.load() && cell.enqueued && cell.frame_slot!=UINT32_MAX && cell.frame_epoch && cell.free_event &&
+     cell.free_event==cell.reserved_event && cell.free_event>backing.event_seq && reported_rid==rid && reported_serial==serial &&
+     frame==cell.frame_slot && epoch==cell.frame_epoch && event==cell.free_event;
+  };
+  auto absent=[](const QualificationPhysicalReturn &cell,uint64_t rid,uint64_t serial,uint64_t reported_rid,uint64_t reported_serial,uint32_t frame,uint64_t epoch,uint64_t event) {
+   return !rid && !serial && !reported_rid && !reported_serial && !frame && !epoch && !event &&
+     !cell.rid && !cell.serial && !cell.enqueued && !cell.reserved_event && !cell.free_event;
+  };
+  if((known&1U)?!matches(child->shader,backing.shader_rid,backing.shader_serial,report.shader_rid,report.shader_serial,report.shader_frame_slot,report.shader_frame_epoch,report.shader_free_event_seq):
+     !absent(child->shader,backing.shader_rid,backing.shader_serial,report.shader_rid,report.shader_serial,report.shader_frame_slot,report.shader_frame_epoch,report.shader_free_event_seq))return result(ERR_BUSY,16);
+  if((known&2U)?!matches(child->pipeline,backing.pipeline_rid,backing.pipeline_serial,report.pipeline_rid,report.pipeline_serial,report.pipeline_frame_slot,report.pipeline_frame_epoch,report.pipeline_free_event_seq):
+     !absent(child->pipeline,backing.pipeline_rid,backing.pipeline_serial,report.pipeline_rid,report.pipeline_serial,report.pipeline_frame_slot,report.pipeline_frame_epoch,report.pipeline_free_event_seq))return result(ERR_BUSY,16);
+  if(known==3U && child->shader.free_event==child->pipeline.free_event)return result(ERR_BUSY,16);
   child->acknowledged=true;--bridge->children;--records[bridge->library].private_refs;return result(OK);
  }
  return result(ERR_DOES_NOT_EXIST,17);
