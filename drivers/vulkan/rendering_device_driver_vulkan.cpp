@@ -2150,6 +2150,7 @@ uint64_t RenderingDeviceDriverVulkan::buffer_get_allocation_size(BufferID p_buff
 
 uint8_t *RenderingDeviceDriverVulkan::buffer_map(BufferID p_buffer) {
 	const BufferInfo *buf_info = (const BufferInfo *)p_buffer.id;
+	ERR_FAIL_NULL_V(buf_info, nullptr);
 	ERR_FAIL_COND_V_MSG(buf_info->is_dynamic(), nullptr, "Buffer must NOT have BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT. Use buffer_persistent_map_advance() instead.");
 	void *data_ptr = nullptr;
 	VkResult err = vmaMapMemory(allocator, buf_info->allocation.handle, &data_ptr);

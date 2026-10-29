@@ -368,6 +368,14 @@ TEST_CASE("[QualificationNative][Vulkan] buffer device-address query rejects inv
  ERR_PRINT_ON;
  CHECK(address==0);
 }
+TEST_CASE("[QualificationNative][Vulkan] buffer map rejects invalid resource before access") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ ERR_PRINT_OFF;
+ auto mapped=driver.buffer_map(RenderingDeviceDriver::BufferID());
+ ERR_PRINT_ON;
+ CHECK(mapped==nullptr);
+}
 TEST_CASE("[QualificationNative][Vulkan] queue submit rejects missing wait view before queue access") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
