@@ -2103,6 +2103,7 @@ RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitFie
 bool RenderingDeviceDriverVulkan::buffer_set_texel_format(BufferID p_buffer, DataFormat p_format) {
 	ERR_FAIL_INDEX_V(p_format, DATA_FORMAT_MAX, false);
 	BufferInfo *buf_info = (BufferInfo *)p_buffer.id;
+	ERR_FAIL_NULL_V(buf_info, false);
 
 	DEV_ASSERT(!buf_info->vk_view);
 

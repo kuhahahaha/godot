@@ -400,6 +400,14 @@ TEST_CASE("[QualificationNative][Vulkan] buffer flush rejects invalid resource b
  ERR_PRINT_ON;
  CHECK(true);
 }
+TEST_CASE("[QualificationNative][Vulkan] buffer texel-format assignment rejects invalid resource before access") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ ERR_PRINT_OFF;
+ auto result=driver.buffer_set_texel_format(RenderingDeviceDriver::BufferID(),RenderingDeviceDriver::DATA_FORMAT_R8_UNORM);
+ ERR_PRINT_ON;
+ CHECK_FALSE(result);
+}
 TEST_CASE("[QualificationNative][Vulkan] queue submit rejects missing wait view before queue access") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
