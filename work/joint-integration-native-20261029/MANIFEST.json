@@ -114,8 +114,8 @@
       "sha256": "bd7fe6fc830a0a545274f972dde9765ce804e88d5f21939aab8047c39f01858e"
     },
     "LONG_GOAL_AUDIT_20261029.md": {
-      "bytes": 2906,
-      "sha256": "71087b9c45e1013c1fc1721aefa595e86e0cc5d8c3c90129e8c08c2045ab16f4"
+      "bytes": 3216,
+      "sha256": "81783e07b3658dc832093cb905491f2b784c29ac766fe614247d2997f310e3d2"
     },
     "PATCH_REPLAY.json": {
       "bytes": 590,
@@ -176,6 +176,10 @@
     "ANGE_GPU_METHOD_RECHECK_20261029.md": {
       "bytes": 1884,
       "sha256": "ccdbe377ba6114eaf1e08d035df38cb8885ccb31c90034630e86ee5a147e64d0"
+    },
+    "ANGE_E07_FAIL_CLOSED_RECHECK_20261029.md": {
+      "bytes": 737,
+      "sha256": "b8a13c4902c2c11cd3476d7b9791a5ba00fa0a5ba8580b55ec7be6f1b2945247"
     }
   }
 }

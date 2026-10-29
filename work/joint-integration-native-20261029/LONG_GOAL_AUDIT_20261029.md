@@ -12,6 +12,7 @@ Status: `active`. This audit is evidence-led and intentionally separates local n
 | U02 holder → E06 request/wait/Prepared production caller | Current joint status explicitly records no production caller; no synthetic demand/observer/Ready fallback used | **Incomplete; separate owner dependency** |
 | Method-native descriptor path | C04 map, C05 `materialize_uniform_sets`/lease receipt, E06 shader/pipeline, E09 receipt consumption; texture producer/reverse pin missing; numeric set0 evidence excluded | **Incomplete by design, not falsely promoted** |
 | C04/C06 focused source closure | `ANGE_GPU_METHOD_RECHECK_20261029.md`: ANGE commits `21d55546d` and `6121d4e5d`; build rc0; linking, method qualification and serializer projection controls rc0 | **Proven at committed focused scope; product/native integration pending** |
+| E07 lifecycle identity fault arm | ANGE commit `16ac6eee9` retains lifecycle identity enum 8 as static source data but rejects it at the installed A3 projection until the formal decoder/map exists; no unsupported product arm is admitted | **Fail-closed boundary committed; formal E07 decoder/map pending** |
 | Full FR/GPU/Verified/Ready/G1 acceptance | No full-corpus, hardware-fault, E09 production, U08, Ready or G1 receipt exists | **Not proven** |
 
 The queue remains active. The E05/U08 owner gate limits the real end-to-end row only; it does not close or cancel the independent D native line. Existing unrelated dirty files in the Godot worktree remain untouched and are not part of the public mainline commits.
