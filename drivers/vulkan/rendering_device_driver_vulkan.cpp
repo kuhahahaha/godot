@@ -5859,6 +5859,7 @@ void RenderingDeviceDriverVulkan::command_copy_buffer(CommandBufferID p_cmd_buff
 }
 
 void RenderingDeviceDriverVulkan::command_copy_texture(CommandBufferID p_cmd_buffer, TextureID p_src_texture, TextureLayout p_src_texture_layout, TextureID p_dst_texture, TextureLayout p_dst_texture_layout, VectorView<TextureCopyRegion> p_regions) {
+	ERR_FAIL_COND(p_regions.size() > 0 && !p_regions.ptr());
 	ERR_FAIL_INDEX(p_src_texture_layout, TEXTURE_LAYOUT_MAX);
 	ERR_FAIL_INDEX(p_dst_texture_layout, TEXTURE_LAYOUT_MAX);
 

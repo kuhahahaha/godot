@@ -268,6 +268,14 @@ TEST_CASE("[QualificationNative][Vulkan] buffer copy rejects missing region view
  ERR_PRINT_ON;
  CHECK(true);
 }
+TEST_CASE("[QualificationNative][Vulkan] texture copy rejects missing region view before command access") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ ERR_PRINT_OFF;
+ driver.command_copy_texture(RenderingDeviceDriver::CommandBufferID(),RenderingDeviceDriver::TextureID(),RenderingDeviceDriver::TEXTURE_LAYOUT_UNDEFINED,RenderingDeviceDriver::TextureID(),RenderingDeviceDriver::TEXTURE_LAYOUT_UNDEFINED,VectorView<RenderingDeviceDriver::TextureCopyRegion>(nullptr,1));
+ ERR_PRINT_ON;
+ CHECK(true);
+}
 TEST_CASE("[QualificationNative][Vulkan] texture creation rejects an invalid shareable format") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
