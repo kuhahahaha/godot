@@ -284,6 +284,14 @@ TEST_CASE("[QualificationNative][Vulkan] uniform set creation rejects missing bi
  ERR_PRINT_ON;
  CHECK_FALSE(bool(uniform_set));
 }
+TEST_CASE("[QualificationNative][Vulkan] render pass creation rejects missing top-level views before resource access") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ ERR_PRINT_OFF;
+ auto render_pass=driver.render_pass_create(VectorView<RenderingDeviceDriver::Attachment>(nullptr,1),{}, {},1,RenderingDeviceDriver::AttachmentReference());
+ ERR_PRINT_ON;
+ CHECK_FALSE(bool(render_pass));
+}
 TEST_CASE("[QualificationNative][Vulkan] queue submit rejects missing wait view before queue access") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
