@@ -437,7 +437,7 @@ def generate_scu_files(max_includes_per_scu):
             "/servers",
             "/servers/rendering",
         ],
-        ["test_macros", "test_main"],
+        ["test_macros", "test_main", "test_particles_trail_failure"],
     )
 
     # Finally change back the path to the calling folder

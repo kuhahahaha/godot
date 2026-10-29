@@ -635,7 +635,7 @@ TEST_CASE("device_exit::object/property-cohorts-and-notifications") {
 				PropertyInfo pi(Variant::INT, property);
 				const auto original_usage = pi.usage;
 				object->validate_property(pi);
-				CHECK_EQ(pi.usage, closed ? original_usage : PROPERTY_USAGE_READ_ONLY);
+				CHECK_EQ(pi.usage, closed ? original_usage : decltype(original_usage)(PROPERTY_USAGE_READ_ONLY));
 			} else if (route == 2) {
 				CHECK_EQ(object->property_can_revert(property), !closed);
 			} else if (route == 3) {
@@ -1408,13 +1408,13 @@ static GDExtensionInterfaceFunctionPtr native_intercept(const char *name) {
 class NativeMethodLoader : public GDExtensionLibraryLoader {
 public:
 	uint64_t generation = 0;
-	Error initialize(GDExtensionInterfaceGetProcAddress get, const Ref<GDExtension> &extension, GDExtensionInitialization *result) override {
+	Error initialize(GDExtensionInterfaceGetProcAddress get_proc_address, const Ref<GDExtension> &extension, GDExtensionInitialization *result) override {
 		owner = extension.ptr();
-		native_get = get;
-		auto bootstrap = reinterpret_cast<GDExtensionInterfaceDeviceExitBootstrapLibraryV1>(get("device_exit_bootstrap_library_v1"));
-		auto retain = reinterpret_cast<GDExtensionInterfaceDeviceExitRetainLibraryViewV1>(get("device_exit_retain_library_view_v1"));
-		auto copy = reinterpret_cast<GDExtensionInterfaceDeviceExitCopyLibrarySnapshotV1>(get("device_exit_copy_library_snapshot_v1"));
-		auto release = reinterpret_cast<GDExtensionInterfaceDeviceExitReleaseLibraryViewV1>(get("device_exit_release_library_view_v1"));
+		native_get = get_proc_address;
+		auto bootstrap = reinterpret_cast<GDExtensionInterfaceDeviceExitBootstrapLibraryV1>(get_proc_address("device_exit_bootstrap_library_v1"));
+		auto retain = reinterpret_cast<GDExtensionInterfaceDeviceExitRetainLibraryViewV1>(get_proc_address("device_exit_retain_library_view_v1"));
+		auto copy = reinterpret_cast<GDExtensionInterfaceDeviceExitCopyLibrarySnapshotV1>(get_proc_address("device_exit_copy_library_snapshot_v1"));
+		auto release = reinterpret_cast<GDExtensionInterfaceDeviceExitReleaseLibraryViewV1>(get_proc_address("device_exit_release_library_view_v1"));
 		const GDExtensionDeviceExitAbi abi = { 1, 16, 0 };
 		GDExtensionDeviceExitLibraryCapability authority = {};
 		GDExtensionDeviceExitLibraryViewRef view = {};

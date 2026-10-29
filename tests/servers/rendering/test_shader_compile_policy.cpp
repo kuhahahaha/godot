@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  test_shader_compile_policy.cpp                                          */
+/*  test_shader_compile_policy.cpp                                        */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -767,7 +767,7 @@ static String new_audit_path() {
 
 TEST_CASE("policy_flags [ShaderCompilePolicy]") {
 	SUBCASE("Unknown and unsupported flags are never narrowed away") {
-		const uint64_t requests[] = { 0, 1, 2, 3, uint64_t(1) << 40, UINT64_MAX };
+		const uint64_t requests[] = { 0, 1, 2, 3, uint64_t(1) << 40, uint64_t(UINT64_MAX) };
 		for (uint64_t supported : { uint64_t(0), uint64_t(1) }) {
 			for (uint64_t requested : requests) {
 				CAPTURE(requested);
@@ -816,7 +816,7 @@ TEST_CASE("policy_flags [ShaderCompilePolicy]") {
 		stage.shader_stage = RenderingDeviceCommons::SHADER_STAGE_COMPUTE;
 		stage.spirv.push_back(0);
 		Vector<RenderingDeviceCommons::ShaderStageSPIRVData> stages{ stage };
-		for (uint64_t flags : { uint64_t(1), uint64_t(2), uint64_t(3), uint64_t(1) << 40, UINT64_MAX }) {
+		for (uint64_t flags : { uint64_t(1), uint64_t(2), uint64_t(3), uint64_t(1) << 40, uint64_t(UINT64_MAX) }) {
 			ERR_PRINT_OFF;
 			CHECK(rd.shader_compile_binary_from_spirv_with_options(stages, "unsupported", flags).is_empty());
 			CHECK(rd.shader_create_from_spirv_with_options(stages, "unsupported", flags).is_null());

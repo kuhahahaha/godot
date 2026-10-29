@@ -190,8 +190,8 @@ class EditorHelp : public VBoxContainer {
 	inline static String doc_version_hash;
 	inline static Thread worker_thread;
 	inline static Thread loader_thread; // Only load scripts here to avoid deadlocking with main thread.
-	inline static SafeFlag doc_shutting_down;
-	inline static SafeFlag script_loader_active;
+	inline static SafeFlag doc_shutting_down = SafeFlag(false);
+	inline static SafeFlag script_loader_active = SafeFlag(false);
 
 	inline static SafeFlag _script_docs_loaded = SafeFlag(false);
 	inline static LocalVector<DocData::ClassDoc> _docs_to_add;

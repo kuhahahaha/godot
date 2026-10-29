@@ -1,6 +1,36 @@
+/**************************************************************************/
+/*  test_external_output_contract.cpp                                     */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
 #include "core/extension/gdextension_qualification_physical.h"
-#include "servers/rendering/rendering_device_graph.h"
 #include "servers/rendering/rendering_device.h"
+#include "servers/rendering/rendering_device_graph.h"
 #include "tests/servers/rendering/transfer_test_driver_base.h"
 #include "tests/test_macros.h"
 
@@ -64,9 +94,7 @@ public:
 	using Effect = RenderingDevice::NativeAppendEffect;
 	static void attach(RenderingDevice &p_device, RenderingDeviceDriver &p_driver) {
 		p_device.driver = &p_driver;
-		p_device.draw_graph.initialize(&p_driver,
-				[](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); },
-				1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+		p_device.draw_graph.initialize(&p_driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
 		p_device.draw_graph.begin();
 	}
 	static RID buffer(RenderingDevice &p_device, uint64_t p_id, uint32_t p_size = 32) {
@@ -327,9 +355,7 @@ TEST_CASE("[B4] native_packet_join") {
 	SUBCASE("J13 record offsets must identify actual instruction boundaries") {
 		RenderingDeviceGraph graph;
 		TransferTestDriverBase driver;
-		graph.initialize(&driver,
-				[](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); },
-				1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+		graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
 		graph.begin();
 		graph.add_compute_list_begin();
 		// The x-group word equals the dispatch opcode. Reading an arbitrary
@@ -351,7 +377,6 @@ TEST_CASE("[B4] native_packet_join") {
 		// This lambda also exercises the pre-feature void APIs without making
 		// a missing return type a compiler error instead of a behavioral RED.
 		auto check = [](auto &graph, ExternalOutputGraphDriver &driver, bool begin_ok, bool render_pass_valid) {
-			using RDD = RenderingDeviceDriver;
 			RenderingDeviceGraph::ResourceTracker destination;
 			destination.buffer_driver_id = RDD::BufferID(72);
 			if constexpr (std::is_void_v<decltype(graph.add_buffer_copy(RDD::BufferID(71), nullptr, RDD::BufferID(72), &destination, RDD::BufferCopyRegion{ 0, 0, 32 }))> ||
@@ -416,9 +441,7 @@ TEST_CASE("[B4] native_packet_join") {
 			RenderingDeviceGraph graph;
 			ExternalOutputGraphDriver driver;
 			driver.begin_ok = variant != 1;
-			graph.initialize(&driver,
-					[](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); },
-					1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+			graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
 			graph.begin();
 			check(graph, driver, driver.begin_ok, variant != 2);
 		}

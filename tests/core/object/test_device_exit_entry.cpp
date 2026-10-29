@@ -447,9 +447,9 @@ static GDExtensionInterfaceFunctionPtr intercepted_get(const char *name) {
 }
 class ProbedLoader : public GDExtensionLibraryLoader {
 public:
-	Error initialize(GDExtensionInterfaceGetProcAddress get, const Ref<GDExtension> &extension, GDExtensionInitialization *result) override {
+	Error initialize(GDExtensionInterfaceGetProcAddress get_proc_address, const Ref<GDExtension> &extension, GDExtensionInitialization *result) override {
 		owner = extension.ptr();
-		original_get = get;
+		original_get = get_proc_address;
 		return GDExtensionLibraryLoader::initialize(intercepted_get, extension, result);
 	}
 	Error close_library() override {
@@ -3885,9 +3885,9 @@ TEST_CASE("device_exit::object/init-compensation-retirement-observation") {
 	RefCounted *object = ::new (DefaultAllocator{}) RefCounted;
 	postinitialize_handler(static_cast<Object *>(object));
 	channel = { [](void *context, Phase phase, const Observation &observation) {
-				   Trace &trace = *static_cast<Trace *>(context);
-				   trace.phases.push_back(phase);
-				   trace.observations.push_back(observation);
+				   Trace &captured_trace = *static_cast<Trace *>(context);
+				   captured_trace.phases.push_back(phase);
+				   captured_trace.observations.push_back(observation);
 			   },
 		&trace };
 	const bool initialized = object->init_ref();

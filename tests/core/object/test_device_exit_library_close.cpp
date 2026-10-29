@@ -354,11 +354,11 @@ TEST_CASE("device_exit::library-close/wrapper-reentrant-close") {
 static uint64_t captured_generation = 0;
 class GenerationLoader : public GDExtensionLibraryLoader {
 public:
-	Error initialize(GDExtensionInterfaceGetProcAddress get, const Ref<GDExtension> &extension, GDExtensionInitialization *result) override {
-		auto bootstrap = (GDExtensionInterfaceDeviceExitBootstrapLibraryV1)get("device_exit_bootstrap_library_v1");
-		auto retain = (GDExtensionInterfaceDeviceExitRetainLibraryViewV1)get("device_exit_retain_library_view_v1");
-		auto copy = (GDExtensionInterfaceDeviceExitCopyLibrarySnapshotV1)get("device_exit_copy_library_snapshot_v1");
-		auto release = (GDExtensionInterfaceDeviceExitReleaseLibraryViewV1)get("device_exit_release_library_view_v1");
+	Error initialize(GDExtensionInterfaceGetProcAddress get_proc_address, const Ref<GDExtension> &extension, GDExtensionInitialization *result) override {
+		auto bootstrap = (GDExtensionInterfaceDeviceExitBootstrapLibraryV1)get_proc_address("device_exit_bootstrap_library_v1");
+		auto retain = (GDExtensionInterfaceDeviceExitRetainLibraryViewV1)get_proc_address("device_exit_retain_library_view_v1");
+		auto copy = (GDExtensionInterfaceDeviceExitCopyLibrarySnapshotV1)get_proc_address("device_exit_copy_library_snapshot_v1");
+		auto release = (GDExtensionInterfaceDeviceExitReleaseLibraryViewV1)get_proc_address("device_exit_release_library_view_v1");
 		const GDExtensionDeviceExitAbi abi = { 1, 16, 0 };
 		GDExtensionDeviceExitLibraryCapability capability = {};
 		GDExtensionDeviceExitLibraryViewRef view = {};
@@ -372,7 +372,7 @@ public:
 			return FAILED;
 		}
 		captured_generation = snapshot.library_generation;
-		return GDExtensionLibraryLoader::initialize(get, extension, result);
+		return GDExtensionLibraryLoader::initialize(get_proc_address, extension, result);
 	}
 };
 
