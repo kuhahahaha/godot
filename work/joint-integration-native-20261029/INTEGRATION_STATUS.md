@@ -18,6 +18,10 @@ The Metal flag applies only to `env_metal` and its third-party clone. metal-cpp 
 
 A's real non-headless Metal/mobile/safe pair exits rc2 at `install_main_storage`, with `host.storage_owner_transport`, E05, expected1/actual0; `U01_EXTENSION=1`. This is the first honest joint integration boundary. It is not an E09/Scope/Ready result. The original owner must still provide no-world U08 storage/account inputs before main pair/storage, native port, qualification context and observer can commit. U02 production holder→E06 request/wait/Prepared publication is also absent.
 
+## A E05 owner intake
+
+A current HEAD `6b4828dc49b3be13d7635dcc17185281858f246c` includes E05 fairness candidate `23ce4e557` and records Main-RD 20/1,787 and host 313/18,944 component assertions, all rc0. The limited review covers the frozen six-file candidate; the SConstruct dependency repair is separately identified. This is mixed-tree CPU/component evidence only. Product DSO must be rebuilt and the real pair rerun; the existing `host.storage_owner_transport/E05` boundary remains.
+
 ## Native scope and unresolved feature boundary
 
 The independent D native substrate remains valid at its own receipts (original numeric safe Metal and QB-D05 map Error/raw code transport). Method-native is explicitly incomplete: C04 owns actual descriptor maps; C05 owns `materialize_uniform_sets` and returns the UniformSetLease/actual binding receipt; E06 is shader/pipeline only; E09 consumes that receipt. Texture load still needs its real pixel producer/reverse dependency/pin/native port. Dimensions stays metadata-only. Numeric set0 storage tests do not certify method set1/texture/sampler behavior. Unknown or unsupported native effects must refuse before new evidence.

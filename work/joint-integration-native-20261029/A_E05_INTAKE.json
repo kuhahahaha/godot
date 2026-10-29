@@ -1,0 +1,65 @@
+{
+  "author_repository": "/Users/macbookair/Documents/Work/ANGE",
+  "author_head": "6b4828dc49b3be13d7635dcc17185281858f246c",
+  "e05_commit": "23ce4e557",
+  "e05_source_manifest": "work/particle-mainline-e05-20261029/SOURCE_MANIFEST.json",
+  "source_pins": {
+    "SConstruct": {
+      "sha256": "03c15535139bdc9778e39f2612f7529da16b27294e2200a658b8ff145368bed3",
+      "bytes": 271381,
+      "manifest_sha256": "03c15535139bdc9778e39f2612f7529da16b27294e2200a658b8ff145368bed3",
+      "matches_manifest": true
+    },
+    "src/engine/particles/attribute_storage.h": {
+      "sha256": "e323a3f5597962ac9d81f598e3bee855b56c49d5bf0c4ecd1426a07177cc7a7b",
+      "bytes": 9401,
+      "manifest_sha256": "e323a3f5597962ac9d81f598e3bee855b56c49d5bf0c4ecd1426a07177cc7a7b",
+      "matches_manifest": true
+    },
+    "src/engine/particles/attribute_storage.cpp": {
+      "sha256": "e37071222feed40c23436fd28ec77e88635bbcec1fad9ea80b4fd2c39c6cdbc1",
+      "bytes": 24592,
+      "manifest_sha256": "e37071222feed40c23436fd28ec77e88635bbcec1fad9ea80b4fd2c39c6cdbc1",
+      "matches_manifest": true
+    },
+    "src/particle/runtime/owner_service_meter.h": {
+      "sha256": "c7257a5a0edc0c5cfc5d154af222da98664c14f0f91dc84e8d55ced272a68876",
+      "bytes": 2032,
+      "manifest_sha256": "c7257a5a0edc0c5cfc5d154af222da98664c14f0f91dc84e8d55ced272a68876",
+      "matches_manifest": true
+    },
+    "src/godot/particle/main_rd_storage_transport.h": {
+      "sha256": "e7fa2d99f8d452e7550ef13010e4f7c3c02f5fe991e2f4f46a5583e307f2a3d8",
+      "bytes": 3458,
+      "manifest_sha256": "e7fa2d99f8d452e7550ef13010e4f7c3c02f5fe991e2f4f46a5583e307f2a3d8",
+      "matches_manifest": true
+    },
+    "src/godot/particle/main_rd_storage_transport.cpp": {
+      "sha256": "3f0914b1e5e3b8775d268c5af7212e957cb79c12b93650175317c4bfb3a49729",
+      "bytes": 24410,
+      "manifest_sha256": "3f0914b1e5e3b8775d268c5af7212e957cb79c12b93650175317c4bfb3a49729",
+      "matches_manifest": true
+    },
+    "tests/particle/main_rd_storage_transport_test.cpp": {
+      "sha256": "41893619a699399003b409d07c6ba0a941a58cf7c7b8d65df59d44193535419f",
+      "bytes": 53573,
+      "manifest_sha256": "41893619a699399003b409d07c6ba0a941a58cf7c7b8d65df59d44193535419f",
+      "matches_manifest": true
+    }
+  },
+  "evidence": {
+    "main_rd_cases": 20,
+    "main_rd_assertions": 1787,
+    "host_cases": 313,
+    "host_assertions": 18944,
+    "main_rd_rc": 0,
+    "host_rc": 0,
+    "review_scope": "frozen W1 six-file candidate only; mixed working tree; SConstruct dependency repair outside review",
+    "review": "work/particle-mainline-e05-20261029/INDEPENDENT_REVIEW.md",
+    "result": "work/particle-mainline-e05-20261029/RESULT.md",
+    "native_gpu": false,
+    "qualification": false
+  },
+  "scope": "Read-only A owner intake; no D source merge or root acceptance of E05 production/native/GPU/Ready status.",
+  "next_owner_action": "A rebuilds product DSO with current source and reruns exact joint pair; current E05 owner reader still blocks at host.storage_owner_transport/E05."
+}

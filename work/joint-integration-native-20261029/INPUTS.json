@@ -1,6 +1,6 @@
 {
   "repository": "/Users/macbookair/Documents/Work/godot_ANGE",
-  "branch": "d/e06-policy-core",
+  "branch": "codex/particle-mainline",
   "source_head": "b364625644fc76121c2d53d9e3d8b6da5b67a15e",
   "common_base_local_team_4_7_2": "20a14abb7a0293961f1ba136f3319207c1e20342",
   "local_tracking_team_ref": "6725459be19bc66e62b6d675c40eefa087af199f",
@@ -82,5 +82,12 @@
   ],
   "source_head_before_mainline": "3a08b7a795a55e9f78755725d294c5d198ba6be6",
   "mainline_commit": "b364625644",
-  "mainline_delta_scope": "PRODUCTION_DELTA and SOURCE_PATHS now cover common-base..current codex/particle-mainline HEAD, including committed fixture and Metal SCsub. REQUIRED_DIRTY_METAL_BUILD.patch is retained as historical pre-commit provenance and is not applied by the current verifier."
+  "mainline_delta_scope": "PRODUCTION_DELTA and SOURCE_PATHS now cover common-base..current codex/particle-mainline HEAD, including committed fixture and Metal SCsub. REQUIRED_DIRTY_METAL_BUILD.patch is retained as historical pre-commit provenance and is not applied by the current verifier.",
+  "public_branch_head": "9f6b9d0bed",
+  "ange_owner_intake": {
+    "repository": "/Users/macbookair/Documents/Work/ANGE",
+    "head": "6b4828dc49b3be13d7635dcc17185281858f246c",
+    "e05_commit": "23ce4e557",
+    "status": "component CPU evidence only; exact source pins in A_E05_INTAKE.json"
+  }
 }
