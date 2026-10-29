@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "status": "CURRENT_VULKAN_COPYABLE_LAYOUT_OUTPUT_GUARD",
+  "godot_head_at_capture": "70daa5ee966120df071f62ae9c6877afb9ee6c7d",
+  "source": {
+    "drivers/vulkan/rendering_device_driver_vulkan.cpp": {
+      "bytes": 398852,
+      "sha256": "a25a87da7c81c7a89ad58810c2e746cb130452051a7c35728b28f06159b032b7"
+    },
+    "tests/servers/rendering/test_qualification_vulkan_allocation.cpp": {
+      "bytes": 31443,
+      "sha256": "01c3984fd4b2a13414cda65c040d70934577085e3aa56afa40a7e43c332d97e7"
+    }
+  },
+  "binary_sha256": {
+    "bin/godot.macos.editor.dev.arm64": "48296c2173c6958ee4601a647df4bc734f1620885f56434e9096615dd965eb75",
+    "bin/godot.macos.template_release.arm64": "782fb9a515d94452d183b43a11d20ec96aec0c2ef5557833444dfa8d19e026a7"
+  }
+}
