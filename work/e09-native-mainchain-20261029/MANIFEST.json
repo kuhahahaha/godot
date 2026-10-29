@@ -1,0 +1,25 @@
+{
+  "scope": "Source-only original issuer endpoint and completed package handoff; no E09 actual-class positive receipt.",
+  "files": {
+    "CURRENT_PINS.json": {
+      "bytes": 5659,
+      "sha256": "22af4ac2df2b21cd72f803e4c14f90bd22071d6948d2415a2ccfbdab8657ae61"
+    },
+    "ENDPOINT.md": {
+      "bytes": 4366,
+      "sha256": "8816885359dc4c018142422dd3820f4c8c458570abc5e19db9ad6b39f985c93d"
+    },
+    "FINAL_HANDOFF.md": {
+      "bytes": 2035,
+      "sha256": "62313a3be318fe07cad7cea1049fe48b018761d3dd10cba0750f4689d3d64f77"
+    },
+    "INDEPENDENT_REVIEW.md": {
+      "bytes": 1111,
+      "sha256": "d73b798f510c56f3dcfe30767dd757c45c3ef6eac063830f521481996901f042"
+    },
+    "SOURCE_CENSUS.json": {
+      "bytes": 3896,
+      "sha256": "3d3632ea4c83b2ab9f8eca386c08208e48006501cb85b9cf4c43686c90ff369c"
+    }
+  }
+}

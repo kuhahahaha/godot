@@ -1,0 +1,105 @@
+{
+  "godot_head": "24df5f5d1416de61ffd7ecef5693b19c75cb859b",
+  "ange_head": "93be38f47fc00b9cae9537b0db0a5006944cda16",
+  "scope": "Current observed hashes; ANGE mixed uncommitted source includes other writers; product DSO is not asserted to include current E09 candidate. Private numeric DSO actually ran under exact inputs in its package; not an E09 class-call receipt.",
+  "ange_dirty_status": [
+    " M docs/network_evidence/physics_replay_probe/results/cross_process.csv",
+    " M docs/network_evidence/physics_replay_probe/results/stack_60_reversed_250_invalidate_receipts.csv",
+    "M  src/godot/particle/e09_native_recorder.cpp",
+    "M  src/godot/particle/e09_native_recorder.h",
+    " M src/godot/particle/host_native_device.cpp",
+    "M  src/godot/particle/particle_program_loader.cpp",
+    " M src/particle/runtime/particle_gpu_program.cpp",
+    " M src/particle/runtime/particle_gpu_program.h",
+    " M src/particle/runtime/qualification_scope.cpp",
+    " D tests/native/p01_probe/oracle.py",
+    " D tests/native/p01_probe/project/extension-template.gdextension",
+    " D tests/native/p01_probe/project/public_source_test.gd",
+    " D tests/native/p01_probe/test_evidence.py",
+    " D tests/native/p01_probe/test_public_source.py",
+    " D tests/native/p01_public_source.cpp",
+    " D tests/native/p01_public_source.h",
+    "AM tests/particle/e09_storage_backpressure_test.inc",
+    "M  tests/particle/preparation_store_test.cpp",
+    "M  tests/particle/support/particle_program_loader_test_access.h",
+    "M  tests/particle/support/record_session_test_access.h",
+    " M work/c04-spirv-target-revalidation-20261028/CLEANUP.json",
+    " M work/c04-spirv-target-revalidation-20261028/INDEPENDENT_REVIEW.md",
+    " M work/c04-spirv-target-revalidation-20261028/RECEIPT.json",
+    " M work/c04-spirv-target-revalidation-20261028/RESULT.md",
+    " M work/c04-spirv-target-revalidation-20261028/SOURCE_MANIFEST.json",
+    " M work/particle-integration-baseline-20261025/guarded-dso/ange.gdextension",
+    " M work/texture-legacy-convergence-20261028/INCREMENTAL_BUILD.log",
+    " M work/texture-legacy-convergence-20261028/INCREMENTAL_BUILD.rc"
+  ],
+  "files": {
+    "/Users/macbookair/Documents/Work/ANGE/src/register_types.cpp": {
+      "bytes": 35538,
+      "sha256": "1402c95af5005116e11ec1728737d08ab4489e19c62dd8074eea0fe0a363f66b"
+    },
+    "/Users/macbookair/Documents/Work/ANGE/src/godot/particle/host_attachment.cpp": {
+      "bytes": 50664,
+      "sha256": "cadc3a76a2e403b5551a29a9597c6d7993c6e2add3c26430692af7994540591b"
+    },
+    "/Users/macbookair/Documents/Work/ANGE/src/godot/particle/host_attachment.h": {
+      "bytes": 19705,
+      "sha256": "f210f7fe2c6fac8477d5d49d355b4f088a010497e559370b1e55c089e7bc3305"
+    },
+    "/Users/macbookair/Documents/Work/ANGE/src/godot/particle/host_native_device.cpp": {
+      "bytes": 8155,
+      "sha256": "0a345ca881c2f459137a1f2d7c47bf48dec37766f4f47502c83536ff3b77bc09"
+    },
+    "/Users/macbookair/Documents/Work/ANGE/src/godot/particle/particle_program_loader.cpp": {
+      "bytes": 51677,
+      "sha256": "4704c412542f46d69b6947534d26f1fe2c94909254af6be089f49f17f227522c"
+    },
+    "/Users/macbookair/Documents/Work/ANGE/src/godot/particle/e09_native_recorder.cpp": {
+      "bytes": 97797,
+      "sha256": "da509508dd36de8316a42776cb4aafdca2085d76536480be7ce69b30fb694e52"
+    },
+    "/Users/macbookair/Documents/Work/ANGE/src/godot/particle/e09_native_recorder.h": {
+      "bytes": 4874,
+      "sha256": "b91d16ce67c6fd47f33ea2c81de38954bb511284b3eef24c9a1694de607b9023"
+    },
+    "/Users/macbookair/Documents/Work/ANGE/src/godot/particle/main_rd_storage_access.h": {
+      "bytes": 3772,
+      "sha256": "7246ee76a94b634cb6a4ab26920c4007c69c4ab1fa9dd0a7aaf4bd89ebddc557"
+    },
+    "/Users/macbookair/Documents/Work/ANGE/src/godot/particle/main_rd_storage_transport.h": {
+      "bytes": 3435,
+      "sha256": "f0e34305f2a3559431d24d8c76696afe99507891ae00296e97d338e53ba6e811"
+    },
+    "/Users/macbookair/Documents/Work/ANGE/src/particle/runtime/qualification_scope.cpp": {
+      "bytes": 49572,
+      "sha256": "0902676b65d7e0583cc99cd72897d071928540406c22c3d9534cc2526c77ce75"
+    },
+    "/Users/macbookair/Documents/Work/ANGE/tests/particle/support/host_attachment_test_access.h": {
+      "bytes": 3996,
+      "sha256": "c4300861d40820ec61a0f557b01e44d2d113af8f3586ddd528de6fda795fba47"
+    },
+    "/Users/macbookair/Documents/Work/ANGE/tests/particle/support/qualification_controller_fixture.h": {
+      "bytes": 12793,
+      "sha256": "0eb75b460f4925b33e8d4abcdc501f4a8a5e38145ed319b807471c2e98c5c86e"
+    },
+    "/Users/macbookair/Documents/Work/ANGE/tests/particle/main_rd_storage_transport_test.cpp": {
+      "bytes": 44733,
+      "sha256": "7fb9b8c04c89109ae98d7b05f5e926129ff6e0463e9f3b9c866373b27de6ff57"
+    },
+    "/Users/macbookair/Documents/Work/ANGE/tests/particle/e09_storage_backpressure_test.inc": {
+      "bytes": 17234,
+      "sha256": "5136e0e2f0ddb57a47dcf303f96e18d65f12f4954cfee330ac334f4a257958b8"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64": {
+      "bytes": 301110608,
+      "sha256": "720900340909ef176290cb20da1f28b903bd1918e1e92ef5e5e54bbb0e0ba197"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-unit-correlation-20261029/runtime/probe.dylib": {
+      "bytes": 2552232,
+      "sha256": "5ff690029a9c0530a3f03fbe416bff2b707275e6781dfa83fea15f08a26dfb25"
+    },
+    "/Users/macbookair/Documents/Work/ANGE/bin/libange.macos.template_debug.arm64.dylib": {
+      "bytes": 59452656,
+      "sha256": "d702b483ba821437b89f86912b138dbdc9abd1f988d7e1c1e206733095bb1e77"
+    }
+  }
+}
