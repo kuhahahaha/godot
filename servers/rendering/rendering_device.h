@@ -32,7 +32,7 @@
 
 #include "core/extension/gdextension_qualification_physical.h"
 
-#include "modules/modules_enabled.gen.h"
+#include "modules/modules_enabled.gen.h" // IWYU pragma: keep. Used for module feature guards.
 
 #include <atomic>
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
