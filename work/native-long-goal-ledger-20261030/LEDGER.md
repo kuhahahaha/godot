@@ -9,3 +9,11 @@ The remaining production seam is external owner input. E05 transport/account dat
 CI run `40930940598` remains in progress only for the Linux doubles GCC sanitizer job; it is tracked separately from the local green evidence.
 
 E06/E09 selector audit: no matching doctest tags exist in the current source; zero-match runs are diagnostic only and do not prove issuer or recorder coverage.
+
+The same tests-enabled editor passed `[DeviceExit][SceneReady]*` with 2 cases / 52 assertions, preserving malformed/guarded scene-ready refusal behavior.
+
+The same tests-enabled editor passed full `[Qualification]*`: 91 cases / 1829 assertions, rc0; expected ERR_UNAUTHORIZED negative diagnostics remain visible.
+
+The same tests-enabled editor passed full `*device_exit*`: 133 cases / 2619 assertions, rc0; expected fail-closed callback diagnostics remain visible.
+
+The same tests-enabled editor passed full `*[QualificationNative]*`: 67 cases / 302 assertions, rc0.

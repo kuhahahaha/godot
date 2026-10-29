@@ -81,5 +81,20 @@
     "selector": "[DeviceExit][SceneReady]*",
     "rc": 0,
     "log": "SCENE_READY.log"
+  },
+  "qualification_full": {
+    "selector": "[Qualification]*",
+    "rc": 0,
+    "log": "QUALIFICATION_FULL.log"
+  },
+  "device_exit_full": {
+    "selector": "*device_exit*",
+    "rc": 0,
+    "log": "DEVICE_EXIT_FULL.log"
+  },
+  "qualification_native_full": {
+    "selector": "*[QualificationNative]*",
+    "rc": 0,
+    "log": "QUAL_NATIVE_FULL.log"
   }
 }

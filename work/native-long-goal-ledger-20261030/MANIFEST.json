@@ -11,7 +11,11 @@
       "ParticlesReadback": "2/5 rc0",
       "E05": "18/417 rc0",
       "QualificationRt": "6/458 rc0",
-      "TypedABI": "12/356 rc0"
+      "TypedABI": "12/356 rc0",
+      "DeviceExit_SceneReady": "2/52 rc0",
+      "Qualification_full": "91/1829 rc0",
+      "Device_exit_full": "133/2619 rc0",
+      "QualificationNative_full": "67/302 rc0"
     },
     "receipt": "work/current-editor-tests-build-20261030/RECEIPT.md",
     "commit": "3f7b8e4430"

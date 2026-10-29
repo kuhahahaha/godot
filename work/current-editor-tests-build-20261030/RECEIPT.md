@@ -20,3 +20,9 @@ The superseded no-tests build diagnostic is retained in `DIAGNOSTIC_NO_TESTS.md`
 Issuer/recorder selector diagnostics on the same editor: `[Qualification][E06]*` and `[Qualification][E09]*` both matched 0 cases (rc0 with no assertions). They are not coverage evidence and no issuer/recorder conclusion is drawn.
 
 SceneReady selector `[DeviceExit][SceneReady]*` rc 0; output is recorded in `SCENE_READY.log`.
+
+Full qualification selector `[Qualification]*` rc 0; output is recorded in `QUALIFICATION_FULL.log`.
+
+Full device-exit selector `*device_exit*` rc 0; output is recorded in `DEVICE_EXIT_FULL.log`.
+
+Full native qualification selector `*[QualificationNative]*` rc 0; output is recorded in `QUAL_NATIVE_FULL.log`.
