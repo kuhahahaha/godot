@@ -7592,6 +7592,7 @@ void RenderingDeviceDriverVulkan::timestamp_query_pool_free(QueryPoolID p_pool_i
 }
 
 void RenderingDeviceDriverVulkan::timestamp_query_pool_get_results(QueryPoolID p_pool_id, uint32_t p_query_count, uint64_t *r_results) {
+	ERR_FAIL_COND(p_query_count > 0 && !r_results);
 	vkGetQueryPoolResults(vk_device, (VkQueryPool)p_pool_id.id, 0, p_query_count, sizeof(uint64_t) * p_query_count, r_results, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT);
 }
 

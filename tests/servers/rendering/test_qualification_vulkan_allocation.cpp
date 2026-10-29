@@ -328,6 +328,14 @@ TEST_CASE("[QualificationNative][Vulkan] BLAS creation rejects missing geometry 
  ERR_PRINT_ON;
  CHECK_FALSE(bool(blas));
 }
+TEST_CASE("[QualificationNative][Vulkan] timestamp query rejects missing result output before native access") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ ERR_PRINT_OFF;
+ driver.timestamp_query_pool_get_results(RenderingDeviceDriver::QueryPoolID(),1,nullptr);
+ ERR_PRINT_ON;
+ CHECK(true);
+}
 TEST_CASE("[QualificationNative][Vulkan] queue submit rejects missing wait view before queue access") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
