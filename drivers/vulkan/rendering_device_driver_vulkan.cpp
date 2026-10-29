@@ -4246,6 +4246,7 @@ void RenderingDeviceDriverVulkan::command_buffer_end(CommandBufferID p_cmd_buffe
 }
 
 void RenderingDeviceDriverVulkan::command_buffer_execute_secondary(CommandBufferID p_cmd_buffer, VectorView<CommandBufferID> p_secondary_cmd_buffers) {
+	ERR_FAIL_COND(p_secondary_cmd_buffers.size() > 0 && !p_secondary_cmd_buffers.ptr());
 	thread_local LocalVector<VkCommandBuffer> secondary_command_buffers;
 	CommandBufferInfo *command_buffer = (CommandBufferInfo *)(p_cmd_buffer.id);
 	secondary_command_buffers.resize(p_secondary_cmd_buffers.size());

@@ -244,6 +244,14 @@ TEST_CASE("[QualificationNative][Vulkan] compute uniform binding rejects missing
  ERR_PRINT_ON;
  CHECK(true);
 }
+TEST_CASE("[QualificationNative][Vulkan] secondary command execution rejects missing view before command access") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ ERR_PRINT_OFF;
+ driver.command_buffer_execute_secondary(RenderingDeviceDriver::CommandBufferID(),VectorView<RenderingDeviceDriver::CommandBufferID>(nullptr,1));
+ ERR_PRINT_ON;
+ CHECK(true);
+}
 TEST_CASE("[QualificationNative][Vulkan] texture creation rejects an invalid shareable format") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
