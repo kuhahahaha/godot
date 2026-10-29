@@ -1,0 +1,14 @@
+{
+  "working_directory": "/Users/macbookair/Documents/Work/godot_ANGE",
+  "red_cases": [
+    "texture copyable-layout query rejects invalid resource before access",
+    "dynamic buffer-offset query rejects invalid resource before access"
+  ],
+  "debug_build": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j4 platform=macos target=editor dev_build=yes tests=yes builtin_glslang=yes",
+  "ubsan_build": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2 platform=macos target=editor dev_build=yes tests=yes use_ubsan=yes builtin_glslang=yes",
+  "release_build": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2 platform=macos target=template_release dev_build=no tests=no builtin_glslang=yes",
+  "regression": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case='[QualificationNative][Vulkan]*'",
+  "k03": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case='[K03][P2]*'",
+  "ubsan": "bin/godot.macos.editor.dev.arm64.san --headless --test --test-case='[QualificationNative][Vulkan]*'",
+  "release_version": "bin/godot.macos.template_release.arm64 --version"
+}

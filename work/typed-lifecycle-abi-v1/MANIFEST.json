@@ -7777,6 +7777,178 @@
     "work/vulkan-shared-texture-slice-test-20261030/MANIFEST.json": {
       "bytes": 3151,
       "sha256": "8d21342c00a40391ed9859c398fb376c44904252784d1c2700c414be48219e45"
+    },
+    "work/vulkan-resource-query-guards-20261030/COMMANDS.json": {
+      "bytes": 1114,
+      "sha256": "2ec8476a1d19b440fa7c5112122131987f4ae6bcb45584a6950e349673559b85"
+    },
+    "work/vulkan-resource-query-guards-20261030/COPYABLE_LAYOUT.log": {
+      "bytes": 294,
+      "sha256": "29c87882829b56cb804f982142ed63f0a3405297a52b078399f50606da9f5263"
+    },
+    "work/vulkan-resource-query-guards-20261030/COPYABLE_LAYOUT.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-resource-query-guards-20261030/DEBUG_BUILD.log": {
+      "bytes": 2124,
+      "sha256": "e846c01c3801be3d03f97239b0135d2dd776ad05043880ae627d5ea0c9dfb542"
+    },
+    "work/vulkan-resource-query-guards-20261030/DEBUG_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-resource-query-guards-20261030/DEBUG_SENTINEL_BUILD.log": {
+      "bytes": 2126,
+      "sha256": "b1ea0cf9fa7178fd01cc6b2a31ee81e4ec48d29f7e6198d434170dbbc5bdca4d"
+    },
+    "work/vulkan-resource-query-guards-20261030/DEBUG_SENTINEL_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-resource-query-guards-20261030/DIFF_CHECK_R1.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "work/vulkan-resource-query-guards-20261030/DIFF_CHECK_R1.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-resource-query-guards-20261030/DYNAMIC_OFFSETS.log": {
+      "bytes": 294,
+      "sha256": "b6d76ec55d55b13113993cc4a1afda98ae3dfb41502cfbf2884f12be74ae4336"
+    },
+    "work/vulkan-resource-query-guards-20261030/DYNAMIC_OFFSETS.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-resource-query-guards-20261030/K03_P2.log": {
+      "bytes": 302,
+      "sha256": "be772f65f7e413c550ffc8de3f943cff1ed6c55949e72f8d15f606eda55a333e"
+    },
+    "work/vulkan-resource-query-guards-20261030/K03_P2.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-resource-query-guards-20261030/MANIFEST.json": {
+      "bytes": 5842,
+      "sha256": "86eced6337d494949623a58c2fe9100f43cebaeb4741ddf366b1da8d5f63d48c"
+    },
+    "work/vulkan-resource-query-guards-20261030/POST_COMMIT_K03.log": {
+      "bytes": 302,
+      "sha256": "be772f65f7e413c550ffc8de3f943cff1ed6c55949e72f8d15f606eda55a333e"
+    },
+    "work/vulkan-resource-query-guards-20261030/POST_COMMIT_K03.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-resource-query-guards-20261030/POST_COMMIT_REGRESSION.log": {
+      "bytes": 302,
+      "sha256": "09b8f856ac7574419034aa2ef00647925716cf74965e9c71f5d120c73ccded89"
+    },
+    "work/vulkan-resource-query-guards-20261030/POST_COMMIT_REGRESSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-resource-query-guards-20261030/POST_COMMIT_RELEASE_VERSION.log": {
+      "bytes": 36,
+      "sha256": "6110833460219a5cc3434aec7fa52eb3165e5757601e43b11f4af428d19fbcd0"
+    },
+    "work/vulkan-resource-query-guards-20261030/POST_COMMIT_RELEASE_VERSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-resource-query-guards-20261030/POST_COMMIT_UBSAN.log": {
+      "bytes": 302,
+      "sha256": "09b8f856ac7574419034aa2ef00647925716cf74965e9c71f5d120c73ccded89"
+    },
+    "work/vulkan-resource-query-guards-20261030/POST_COMMIT_UBSAN.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-resource-query-guards-20261030/RECEIPT_R1.md": {
+      "bytes": 1104,
+      "sha256": "32a7841006fdb95e87230d48e2bc6923ee002a7ad779fe453cccef3cbd73fa3b"
+    },
+    "work/vulkan-resource-query-guards-20261030/RED_COPYABLE_LAYOUT.log": {
+      "bytes": 699,
+      "sha256": "78ab59194c3eb60ed4db672cf36787531a573822a9b1a7813871bd0540b70d88"
+    },
+    "work/vulkan-resource-query-guards-20261030/RED_COPYABLE_LAYOUT.rc": {
+      "bytes": 4,
+      "sha256": "e726b440cc164001999e718b51780d80314709efe06e7857282377be9111127b"
+    },
+    "work/vulkan-resource-query-guards-20261030/RED_DYNAMIC_OFFSETS.log": {
+      "bytes": 697,
+      "sha256": "724c43cfdf2f4da3bc28fda4160a57ea7651d9e6143bc55bb2903498f84e6eb5"
+    },
+    "work/vulkan-resource-query-guards-20261030/RED_DYNAMIC_OFFSETS.rc": {
+      "bytes": 4,
+      "sha256": "e726b440cc164001999e718b51780d80314709efe06e7857282377be9111127b"
+    },
+    "work/vulkan-resource-query-guards-20261030/REGRESSION.log": {
+      "bytes": 302,
+      "sha256": "09b8f856ac7574419034aa2ef00647925716cf74965e9c71f5d120c73ccded89"
+    },
+    "work/vulkan-resource-query-guards-20261030/REGRESSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-resource-query-guards-20261030/RELEASE_BUILD.log": {
+      "bytes": 2019,
+      "sha256": "3a5a6244e8cb1bc89839e0d8ca89187de0ed7316f4201a124d7a75877684ff3a"
+    },
+    "work/vulkan-resource-query-guards-20261030/RELEASE_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-resource-query-guards-20261030/RELEASE_VERSION.log": {
+      "bytes": 36,
+      "sha256": "4e15706628b0a367696ff5f27f24d4de47b42d77b2741c20ac522076eadbe77d"
+    },
+    "work/vulkan-resource-query-guards-20261030/RELEASE_VERSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-resource-query-guards-20261030/SELF_REVIEW_R1.md": {
+      "bytes": 554,
+      "sha256": "7bf2c4c9e63043298aca5e74a93a496d059c98a2f6f43f9e423f8ab4f3ec21d1"
+    },
+    "work/vulkan-resource-query-guards-20261030/SENTINEL_FOCUSED.log": {
+      "bytes": 294,
+      "sha256": "29c87882829b56cb804f982142ed63f0a3405297a52b078399f50606da9f5263"
+    },
+    "work/vulkan-resource-query-guards-20261030/SENTINEL_FOCUSED.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-resource-query-guards-20261030/SENTINEL_REGRESSION.log": {
+      "bytes": 302,
+      "sha256": "09b8f856ac7574419034aa2ef00647925716cf74965e9c71f5d120c73ccded89"
+    },
+    "work/vulkan-resource-query-guards-20261030/SENTINEL_REGRESSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-resource-query-guards-20261030/SOURCE_MANIFEST.json": {
+      "bytes": 1175,
+      "sha256": "3f7cbcf785cad5fadc7a12ff44e0b36e935dd455daa37d5a106e3121858520cc"
+    },
+    "work/vulkan-resource-query-guards-20261030/UBSAN_BUILD.log": {
+      "bytes": 2054,
+      "sha256": "3f9f1d53d0055d32ce156749f84a2732f301d4450831b730d988c373442a90c8"
+    },
+    "work/vulkan-resource-query-guards-20261030/UBSAN_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-resource-query-guards-20261030/UBSAN_REGRESSION.log": {
+      "bytes": 302,
+      "sha256": "09b8f856ac7574419034aa2ef00647925716cf74965e9c71f5d120c73ccded89"
+    },
+    "work/vulkan-resource-query-guards-20261030/UBSAN_REGRESSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
     }
   }
 }
