@@ -1,0 +1,38 @@
+{
+  "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64": {
+    "bytes": 301131312,
+    "sha256": "7e63110bf209811e2b390bea51322d36af01df63d9f1c7c516ad7ef42d8bf1d6"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-bridge-implementation-20261026/integration-preflight-20261026/run_combined_qrt.py": {
+    "bytes": 4212,
+    "sha256": "bac472f6b7e7e14789c497efc33c2236092dd797dcc772ddfb784bd79f53d45b"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-bridge-implementation-20261026/integration-preflight-20261026/native-fixtures/qrt_ticket/probe.gd": {
+    "bytes": 85,
+    "sha256": "7c7e6dfa5a05fec89be669dc2f431b29f7529b8d3d14680ebc897e143a9b1cc2"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-bridge-implementation-20261026/integration-preflight-20261026/native-fixtures/qrt_ticket/project.godot": {
+    "bytes": 127,
+    "sha256": "16d01875dc64eeae2b830ac430e3aabe41c280a171d3fbb02c3e97e40b600e93"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-bridge-implementation-20261026/integration-preflight-20261026/native-fixtures/qrt_ticket/probe.gdextension": {
+    "bytes": 149,
+    "sha256": "8bc1fc7da9f566be55c6233e7c0d7eda741ce3e327ca39ede97fa0e9cdbaaffb"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-bridge-implementation-20261026/integration-preflight-20261026/native-fixtures/qrt_ticket_probe.cpp": {
+    "bytes": 27084,
+    "sha256": "4452ca9d48c9f201343a4118ddcfc7d3e113f7c0e7a60e094ab5e766340e4061"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-bridge-implementation-20261026/integration-preflight-20261026/native-fixtures/qrt_ticket_probe.dylib": {
+    "bytes": 118344,
+    "sha256": "93567d48b3fd2d25fd7d37d6f8da97938004f90fa521fc4ba0a6eab14ef86878"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-bridge-implementation-20261026/integration-preflight-20261026/native-fixtures/ticket_containers/capture.bin": {
+    "bytes": 600,
+    "sha256": "602da96b2d48c732ddeddb2d1d00ec952be6a5d3fd4daabb0d097611157ec360"
+  },
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-bridge-implementation-20261026/integration-preflight-20261026/native-fixtures/ticket_containers/body.bin": {
+    "bytes": 632,
+    "sha256": "c2011bc48390ecb634ff805a7c38e6a5555d4d790ef5f9610376c951d96b761f"
+  }
+}

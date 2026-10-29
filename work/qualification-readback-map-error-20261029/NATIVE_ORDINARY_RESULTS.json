@@ -1,0 +1,89 @@
+{
+  "scope": "Real ordinary async bytes on new observed-map path; no injected hardware map failure or E09/Ready claim",
+  "before": {
+    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64": {
+      "bytes": 301131312,
+      "sha256": "7e63110bf209811e2b390bea51322d36af01df63d9f1c7c516ad7ef42d8bf1d6"
+    },
+    "work/qualification-readback-map-error-20261029/ordinary-runtime/probe.gd": {
+      "bytes": 1507,
+      "sha256": "d9a54a330f41b5c938fe62fd1bb5620be0b09ca9654bc0b89a6053699656b386"
+    },
+    "work/qualification-readback-map-error-20261029/ordinary-runtime/project.godot": {
+      "bytes": 226,
+      "sha256": "1c7bed309ef9f815090d4730cf0d0570bc7de35f5a05fc393f108ff672bc666c"
+    }
+  },
+  "runs": [
+    {
+      "driver": "vulkan",
+      "mode": "separate",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--disable-crash-handler",
+        "--path",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/qualification-readback-map-error-20261029/ordinary-runtime",
+        "--display-driver",
+        "macos",
+        "--rendering-driver",
+        "vulkan",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "separate",
+        "--script",
+        "res://probe.gd"
+      ],
+      "rc": 0,
+      "checks": {
+        "exit": true,
+        "renderer": true,
+        "exact_same_request": true,
+        "one_delivery": true,
+        "clean": true
+      }
+    },
+    {
+      "driver": "metal",
+      "mode": "safe",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--disable-crash-handler",
+        "--path",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/qualification-readback-map-error-20261029/ordinary-runtime",
+        "--display-driver",
+        "macos",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "safe",
+        "--script",
+        "res://probe.gd"
+      ],
+      "rc": 0,
+      "checks": {
+        "exit": true,
+        "renderer": true,
+        "exact_same_request": true,
+        "one_delivery": true,
+        "clean": true
+      }
+    }
+  ],
+  "after": {
+    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64": {
+      "bytes": 301131312,
+      "sha256": "7e63110bf209811e2b390bea51322d36af01df63d9f1c7c516ad7ef42d8bf1d6"
+    },
+    "work/qualification-readback-map-error-20261029/ordinary-runtime/probe.gd": {
+      "bytes": 1507,
+      "sha256": "d9a54a330f41b5c938fe62fd1bb5620be0b09ca9654bc0b89a6053699656b386"
+    },
+    "work/qualification-readback-map-error-20261029/ordinary-runtime/project.godot": {
+      "bytes": 226,
+      "sha256": "1c7bed309ef9f815090d4730cf0d0570bc7de35f5a05fc393f108ff672bc666c"
+    }
+  }
+}

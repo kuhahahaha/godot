@@ -1,0 +1,23 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_qualification_ticket.cpp:567:
+TEST CASE:  [Qualification] original async map failure retains raw code and physical obligations
+
+tests/servers/rendering/test_qualification_ticket.cpp:254: ERROR: CHECK( ticket.report.native_code == (failed && p_observed ? -5 : 0) ) is NOT correct!
+  values: CHECK( 0 == -5 )
+
+tests/servers/rendering/test_qualification_ticket.cpp:254: ERROR: CHECK( ticket.report.native_code == (failed && p_observed ? -5 : 0) ) is NOT correct!
+  values: CHECK( 0 == -5 )
+
+===============================================================================
+tests/servers/rendering/test_qualification_ticket.cpp:571:
+TEST CASE:  [Qualification] async map success and legacy failure preserve original outcome
+
+tests/servers/rendering/test_qualification_ticket.cpp:254: ERROR: CHECK( ticket.report.native_code == (failed && p_observed ? -5 : 0) ) is NOT correct!
+  values: CHECK( -77 == 0 )
+
+===============================================================================
+[doctest] test cases:  2 |  0 passed | 2 failed | 1790 skipped
+[doctest] assertions: 71 | 68 passed | 3 failed |
+[doctest] Status: FAILURE!
