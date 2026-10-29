@@ -959,6 +959,12 @@ Error RenderingDevice::_staging_buffer_allocate(StagingBuffers &p_staging_buffer
 	if (_recording_error() != OK) {
 		return _recording_error();
 	}
+	// A single staging allocation must fit in one block. Reject it before
+	// selecting or marking a block so an oversized request cannot mutate the
+	// allocator before a caller copies into the backing allocation.
+	if (p_amount > p_staging_buffers.block_size) {
+		return ERR_INVALID_PARAMETER;
+	}
 	// Determine a block to use.
 
 	r_alloc_size = p_amount;
@@ -2383,6 +2389,14 @@ uint32_t RenderingDevice::_texture_alignment(Texture *p_texture) const {
 	}
 
 	return least_common_multiple(alignment, driver->api_trait_get(RDD::API_TRAIT_TEXTURE_TRANSFER_ALIGNMENT));
+}
+
+uint32_t RenderingDevice::_normalize_staging_region_size(uint32_t p_size) {
+	if (p_size == 0) {
+		return 1;
+	}
+	const uint32_t normalized = Math::nearest_power_of_2_templated(p_size);
+	return normalized == 0 ? 1 : normalized;
 }
 
 Error RenderingDevice::_texture_initialize(RID p_texture, uint32_t p_layer, const Vector<uint8_t> &p_data, RDD::TextureLayout p_dst_layout, bool p_immediate_flush) {
@@ -10154,10 +10168,10 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 #endif
 
 	texture_upload_region_size_px = GLOBAL_GET("rendering/rendering_device/staging_buffer/texture_upload_region_size_px");
-	texture_upload_region_size_px = Math::nearest_power_of_2_templated(texture_upload_region_size_px);
+	texture_upload_region_size_px = _normalize_staging_region_size(texture_upload_region_size_px);
 
 	texture_download_region_size_px = GLOBAL_GET("rendering/rendering_device/staging_buffer/texture_download_region_size_px");
-	texture_download_region_size_px = Math::nearest_power_of_2_templated(texture_download_region_size_px);
+	texture_download_region_size_px = _normalize_staging_region_size(texture_download_region_size_px);
 
 	// Ensure current staging block is valid and at least one per frame exists.
 	upload_staging_buffers.current = 0;

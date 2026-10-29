@@ -81,6 +81,35 @@ public:
 		return p_rd._acquire_transfer_worker(p_size, 1, offset);
 	}
 	static void release(RenderingDevice &p_rd, Worker *p_worker) { p_rd._release_transfer_worker(p_worker); }
+	static uint32_t normalized_region_size(uint32_t p_size) {
+		return RenderingDevice::_normalize_staging_region_size(p_size);
+	}
+	struct StagingProbe {
+		Error error;
+		uint32_t offset;
+		uint32_t size;
+		uint64_t frame_used;
+		uint32_t fill_amount;
+		bool used;
+	};
+	static StagingProbe staging_probe(RenderingDevice &p_rd, uint32_t p_amount, uint64_t p_frame_used) {
+		auto &staging = p_rd.upload_staging_buffers;
+		staging.blocks.resize(1);
+		staging.block_size = staging.max_size = 64;
+		staging.blocks.write[0].frame_used = p_frame_used;
+		staging.blocks.write[0].fill_amount = 0;
+		p_rd.frames.resize(2);
+		p_rd.frames_drawn = 10;
+		uint32_t offset = 777;
+		uint32_t size = 888;
+		RenderingDevice::StagingRequiredAction action = RenderingDevice::STAGING_REQUIRED_ACTION_NONE;
+		Error error = p_rd._staging_buffer_allocate(staging, p_amount, 1, offset, size, action, false);
+		StagingProbe result{ error, offset, size, staging.blocks[0].frame_used, staging.blocks[0].fill_amount, staging.used };
+		staging.blocks.clear();
+		staging.used = false;
+		p_rd.frames.clear();
+		return result;
+	}
 	static Error sbt(RenderingDevice &p_rd) {
 		Buffer buffer;
 		return p_rd._raytracing_pipeline_create_sbt_buffer(RenderingDeviceDriver::RaytracingPipelineID(801), 1, 1, buffer);
@@ -257,6 +286,25 @@ struct Fixture {
 	Fixture() { Access::attach(rd, &driver); }
 	~Fixture() { Access::detach(rd); }
 };
+
+TEST_CASE("[K03][P2] staging rejects oversized requests and normalizes region sizes") {
+	CHECK(Access::normalized_region_size(0) == 1);
+	CHECK(Access::normalized_region_size(1) == 1);
+	CHECK(Access::normalized_region_size(63) == 64);
+	CHECK(Access::normalized_region_size(UINT32_MAX) == 1);
+	for (uint64_t frame_used : { uint64_t(0), uint64_t(10) }) {
+		Fixture f;
+		auto oversized = Access::staging_probe(f.rd, 65, frame_used);
+		CHECK(oversized.error == ERR_INVALID_PARAMETER);
+		CHECK(oversized.frame_used == frame_used);
+		CHECK(oversized.fill_amount == 0);
+		CHECK_FALSE(oversized.used);
+		auto exact = Access::staging_probe(f.rd, 64, 0);
+		CHECK(exact.error == OK);
+		CHECK(exact.offset == 0);
+		CHECK(exact.size == 64);
+	}
+}
 
 TEST_CASE("[K03][P2] transfer recycle Busy retains original work and permits later completion") {
 	Fixture f;
