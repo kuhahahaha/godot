@@ -1,0 +1,5 @@
+{
+  "bin/godot.macos.editor.dev.arm64": "e27d633e7dca4a1bd3febee2f50e8c1bf9ece2da5cc1fac5fb2b7bee27089fba",
+  "bin/godot.macos.editor.dev.arm64.san": "33c0dda80a3c1dc44d2a70bc74f8138e5ac509a082461b09a69c49a6a2c33d80",
+  "bin/godot.macos.template_release.arm64": "d4b57ae440db2a934f76a4e98b732685f5e69fad46ac3181a690977fb91edec0"
+}
