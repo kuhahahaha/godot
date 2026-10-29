@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "status": "CURRENT_VULKAN_PIPELINE_BARRIER_VIEW_GUARD",
+  "godot_head_at_capture": "041cce253cded886ad1ec20660b7e560181d65e3",
+  "source": {
+    "drivers/vulkan/rendering_device_driver_vulkan.cpp": {
+      "bytes": 397924,
+      "sha256": "e41a174ab476e1d17dfced3fdf0be6e0267d17e34ed2f99266c0d6f787f38416"
+    },
+    "tests/servers/rendering/test_qualification_vulkan_allocation.cpp": {
+      "bytes": 26802,
+      "sha256": "24b1105e4f79da00d72dbc696423ed20884be9767867a2742d5b585c3fd7b5de"
+    }
+  },
+  "binary_sha256": {
+    "bin/godot.macos.editor.dev.arm64": "7bbfbfa04b94730cda0c06de4e54f7e914cb99d1b66c298404d2450c5ac68dfc",
+    "bin/godot.macos.editor.dev.arm64.san": "cbe02083efba876fbff73e1e2f432e418f55eecd5a65ed67d85ac3d6c74b6045",
+    "bin/godot.macos.template_release.arm64": "4562149f32103a79dead794e2652d7d98973af3331827ee8424383ac855bbc34"
+  }
+}
