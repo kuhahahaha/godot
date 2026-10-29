@@ -107,6 +107,9 @@ public:
 	virtual RID particles_get_draw_pass_mesh(RID p_particles, int p_pass) const = 0;
 
 	virtual void particles_set_view_axis(RID p_particles, const Vector3 &p_axis, const Vector3 &p_up_axis) = 0;
+	// Returns the latest GPU particle storage snapshot as raw bytes. This is a
+	// synchronous CPU readback for diagnostics and native consumers.
+	virtual Vector<uint8_t> particles_get_current_data(RID p_particles) const = 0;
 
 	virtual void particles_add_collision(RID p_particles, RID p_particles_collision_instance) = 0;
 	virtual void particles_remove_collision(RID p_particles, RID p_particles_collision_instance) = 0;

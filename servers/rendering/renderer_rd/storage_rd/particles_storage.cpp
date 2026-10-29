@@ -716,6 +716,25 @@ void ParticlesStorage::particles_request_process(RID p_particles) {
 	}
 }
 
+bool ParticlesStorage::_particles_get_data_size(const Particles *p_particles, uint64_t &r_size) {
+	if (p_particles == nullptr || p_particles->amount <= 0) {
+		r_size = 0;
+		return false;
+	}
+
+	uint64_t total_amount = uint64_t(p_particles->amount);
+	if (p_particles->trails_enabled && p_particles->trail_bind_poses.size() > 1) {
+		total_amount *= uint64_t(p_particles->trail_bind_poses.size());
+	}
+	const uint64_t particle_data_size = sizeof(ParticleData) + sizeof(float) * 4 * uint64_t(p_particles->userdata_count);
+	if (particle_data_size != 0 && total_amount > UINT64_MAX / particle_data_size) {
+		r_size = 0;
+		return false;
+	}
+	r_size = total_amount * particle_data_size;
+	return r_size <= UINT32_MAX;
+}
+
 AABB ParticlesStorage::particles_get_current_aabb(RID p_particles) {
 	const Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL_V(particles, AABB());
@@ -765,6 +784,27 @@ AABB ParticlesStorage::particles_get_current_aabb(RID p_particles) {
 	aabb.grow_by(longest_axis_size);
 
 	return aabb;
+}
+
+Vector<uint8_t> ParticlesStorage::particles_get_current_data(RID p_particles) const {
+	const Particles *particles = particles_owner.get_or_null(p_particles);
+	ERR_FAIL_NULL_V(particles, Vector<uint8_t>());
+	if (particles->particle_buffer.is_null() || particles->amount <= 0) {
+		return Vector<uint8_t>();
+	}
+
+	uint64_t expected_size = 0;
+	if (!_particles_get_data_size(particles, expected_size)) {
+		ERR_PRINT("Particle CPU readback exceeds the rendering device buffer size limit.");
+		return Vector<uint8_t>();
+	}
+
+	Vector<uint8_t> buffer = RD::get_singleton()->buffer_get_data(particles->particle_buffer);
+	if (buffer.size() != int(expected_size)) {
+		ERR_PRINT("Particle CPU readback returned an unexpected buffer size.");
+		return Vector<uint8_t>();
+	}
+	return buffer;
 }
 
 AABB ParticlesStorage::particles_get_aabb(RID p_particles) const {

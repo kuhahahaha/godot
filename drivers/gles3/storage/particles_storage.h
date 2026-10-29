@@ -365,6 +365,7 @@ public:
 
 	virtual void particles_request_process(RID p_particles) override;
 	virtual AABB particles_get_current_aabb(RID p_particles) override;
+	virtual Vector<uint8_t> particles_get_current_data(RID p_particles) const override;
 	virtual AABB particles_get_aabb(RID p_particles) const override;
 
 	virtual void particles_set_emission_transform(RID p_particles, const Transform3D &p_transform) override;

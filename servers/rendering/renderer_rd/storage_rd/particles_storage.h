@@ -50,6 +50,7 @@ class ParticlesStorage : public RendererParticlesStorage {
 private:
 #ifdef TESTS_ENABLED
 	friend class TestParticlesTrailAccess;
+	friend class TestParticlesReadbackAccess;
 #endif
 	static ParticlesStorage *singleton;
 
@@ -280,6 +281,7 @@ private:
 	};
 
 	void _particles_process(Particles *p_particles, double p_delta);
+	static bool _particles_get_data_size(const Particles *p_particles, uint64_t &r_size);
 	void _particles_allocate_emission_buffer(Particles *particles);
 	void _particles_ensure_unused_emission_buffer(Particles *particles);
 	static bool _particles_ensure_unused_trail_buffer(Particles *particles);
@@ -510,6 +512,7 @@ public:
 	virtual RID particles_get_draw_pass_mesh(RID p_particles, int p_pass) const override;
 
 	virtual void particles_set_view_axis(RID p_particles, const Vector3 &p_axis, const Vector3 &p_up_axis) override;
+	virtual Vector<uint8_t> particles_get_current_data(RID p_particles) const override;
 
 	virtual bool particles_is_inactive(RID p_particles) const override;
 

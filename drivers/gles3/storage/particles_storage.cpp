@@ -458,6 +458,18 @@ AABB ParticlesStorage::particles_get_current_aabb(RID p_particles) {
 	return aabb;
 }
 
+Vector<uint8_t> ParticlesStorage::particles_get_current_data(RID p_particles) const {
+	const Particles *particles = particles_owner.get_or_null(p_particles);
+	ERR_FAIL_NULL_V(particles, Vector<uint8_t>());
+	if (particles->amount <= 0) {
+		return Vector<uint8_t>();
+	}
+
+	const GLuint read_buffer = particles->sort_buffer_filled ? particles->sort_buffer : particles->back_instance_buffer;
+	const uint32_t stride = particles->mode == RSE::PARTICLES_MODE_2D ? sizeof(ParticleInstanceData2D) : sizeof(ParticleInstanceData3D);
+	return Utilities::buffer_get_data(GL_ARRAY_BUFFER, read_buffer, uint32_t(particles->amount) * stride);
+}
+
 AABB ParticlesStorage::particles_get_aabb(RID p_particles) const {
 	const Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL_V(particles, AABB());
