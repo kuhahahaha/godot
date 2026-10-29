@@ -1,0 +1,18 @@
+{
+  "source_commit": "6218ae64e2ec806f9ca3b632133cb840b04f3b82",
+  "scope": "Test-only CPU snapshot regression; final built test source equals committed source; no GPU/authority assertion.",
+  "files": {
+    "tests/servers/rendering/test_qualification_ticket.cpp": {
+      "bytes": 32414,
+      "sha256": "ff324c151df7550b61547b491d1fae2917456d0ecf180213215d4192cb760859"
+    },
+    "bin/godot.macos.editor.dev.arm64": {
+      "bytes": 301110608,
+      "sha256": "720900340909ef176290cb20da1f28b903bd1918e1e92ef5e5e54bbb0e0ba197"
+    },
+    "core/extension/gdextension_qualification_ticket.cpp": {
+      "bytes": 43581,
+      "sha256": "54b61bb012588da3e12944c9e6717a9b953617ea538e7b79e8a1bd205826bec1"
+    }
+  }
+}
