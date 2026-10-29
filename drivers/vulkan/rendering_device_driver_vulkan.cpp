@@ -2750,6 +2750,7 @@ void RenderingDeviceDriverVulkan::texture_get_copyable_layout(TextureID p_textur
 
 Vector<uint8_t> RenderingDeviceDriverVulkan::texture_get_data(TextureID p_texture, uint32_t p_layer) {
 	const TextureInfo *tex = (const TextureInfo *)p_texture.id;
+	ERR_FAIL_NULL_V(tex, Vector<uint8_t>());
 
 	DataFormat tex_format = tex->rd_format;
 	uint32_t tex_width = tex->vk_create_info.extent.width;
