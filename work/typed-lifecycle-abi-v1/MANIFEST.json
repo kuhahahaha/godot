@@ -7949,6 +7949,22 @@
     "work/vulkan-resource-query-guards-20261030/UBSAN_REGRESSION.rc": {
       "bytes": 2,
       "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/metal-provider-interface-census-20261029/RECEIPT.md": {
+      "bytes": 397,
+      "sha256": "414dd9c0e51c908cad7208fa6e4fb77623c492a097425bc77b436b7a165623b5"
+    },
+    "work/metal-provider-interface-census-20261029/SOURCE_MANIFEST.json": {
+      "bytes": 2294,
+      "sha256": "052ba44bad9798ced3adf9d45e5dd281dfbff38f5af505727769761e042cc934"
+    },
+    "work/metal-provider-interface-census-20261029/INTERFACES.md": {
+      "bytes": 7450,
+      "sha256": "07913cbd44f490d85012a4c06d43d584f901f0b450a792f9e3480276cfcf9636"
+    },
+    "work/metal-provider-interface-census-20261029/MANIFEST.json": {
+      "bytes": 425,
+      "sha256": "c557d4189f6a70c8d7c552dccc8a8c02a1c4d2d951bf0373133513f430ac9525"
     }
   }
 }
