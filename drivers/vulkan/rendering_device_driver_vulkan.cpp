@@ -2719,6 +2719,7 @@ void RenderingDeviceDriverVulkan::texture_free(TextureID p_texture) {
 
 uint64_t RenderingDeviceDriverVulkan::texture_get_allocation_size(TextureID p_texture) {
 	const TextureInfo *tex_info = (const TextureInfo *)p_texture.id;
+	ERR_FAIL_NULL_V(tex_info, 0);
 	return tex_info->allocation.info.size;
 }
 
