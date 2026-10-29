@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "red_build": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2 platform=macos target=editor dev_build=yes tests=yes builtin_glslang=yes",
+  "red": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case='[QualificationNative][Vulkan] buffer copy rejects missing region view before command access'",
+  "debug_build": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2 platform=macos target=editor dev_build=yes tests=yes builtin_glslang=yes",
+  "focused": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case='[QualificationNative][Vulkan] buffer copy rejects missing region view before command access'",
+  "regression": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case='[QualificationNative][Vulkan]*'",
+  "k03_p2": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case='[K03][P2]*'",
+  "ubsan_build": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2 platform=macos target=editor dev_build=yes tests=yes use_ubsan=yes builtin_glslang=yes",
+  "ubsan_regression": "bin/godot.macos.editor.dev.arm64.san --headless --test --test-case='[QualificationNative][Vulkan]*'",
+  "release_build": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2 platform=macos target=template_release dev_build=no tests=no builtin_glslang=yes",
+  "release_version": "bin/godot.macos.template_release.arm64 --version",
+  "working_directory": "/Users/macbookair/Documents/Work/godot_ANGE",
+  "claims": {
+    "red_rc": 134,
+    "focused": "1 case / 3 assertions",
+    "regression": "33 cases / 125 assertions",
+    "k03_p2": "22 cases / 350 assertions",
+    "ubsan_regression": "33 cases / 125 assertions",
+    "ubsan_diagnostics": false,
+    "release_build_rc": 0,
+    "release_version_rc": 0
+  }
+}
