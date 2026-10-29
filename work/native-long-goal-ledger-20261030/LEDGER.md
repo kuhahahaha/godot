@@ -7,3 +7,5 @@ The exact non-headless runtime pair is public editor SHA `150c8f1234b6cfd45ad163
 The remaining production seam is external owner input. E05 transport/account data, E06 issuer, and R01/D completion/readback/disposal authority are absent. The native substrate work continues independently and does not promote these negative runtime results to issuer, completion, Ready, or G1 authority.
 
 CI run `40930940598` remains in progress only for the Linux doubles GCC sanitizer job; it is tracked separately from the local green evidence.
+
+E06/E09 selector audit: no matching doctest tags exist in the current source; zero-match runs are diagnostic only and do not prove issuer or recorder coverage.
