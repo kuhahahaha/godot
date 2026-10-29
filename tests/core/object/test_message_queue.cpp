@@ -41,6 +41,13 @@ namespace TestMessageQueue {
 class QueueAccessor {
 public:
 	static int page_argument_capacity() { return (CallQueue::PAGE_SIZE_BYTES - sizeof(CallQueue::Message)) / sizeof(Variant); }
+	static uint32_t page_message_size() { return sizeof(CallQueue::Message); }
+	static uint32_t page_remaining(const CallQueue &p_queue) {
+		if (p_queue.pages_used == 0) {
+			return CallQueue::PAGE_SIZE_BYTES;
+		}
+		return CallQueue::PAGE_SIZE_BYTES - p_queue.page_bytes[p_queue.pages_used - 1];
+	}
 	static void discard_destroyed_records(CallQueue &p_queue) {
 		// Failure-only recovery for the intentionally destructive baseline.
 		// A passing implementation never calls this helper.
@@ -253,6 +260,13 @@ TEST_CASE("[CallQueue] Capacity diagnostics preserve accepted work") {
 		REQUIRE(queue.push_callablep(callable, pointers.ptrw(), count) == OK);
 	}
 	REQUIRE(destructions == 0);
+	// Variant-sized arguments can leave a tail that is exactly large enough for
+	// one Message. Fill that tail with inert notifications so the next operation
+	// exercises the one-page out-of-memory path on every ABI/precision variant.
+	while (QueueAccessor::page_remaining(queue) >= QueueAccessor::page_message_size()) {
+		REQUIRE(queue.push_notification(&owner, 12345) == OK);
+	}
+	CHECK(QueueAccessor::page_remaining(queue) < QueueAccessor::page_message_size());
 	counts = HookCounts();
 	Error result;
 	if (operation == 0) {
