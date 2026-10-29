@@ -50,6 +50,9 @@ jobs:
             cache-name: linux-editor-double-sanitizers
             target: editor
             # Debug symbols disabled as they're huge on this build and we hit the 14 GB limit for runners.
+            # GCC's static libstdc++ combined with mold can overflow 32-bit
+            # PC-relative exception-table relocations in this sanitizer-sized
+            # editor binary, so keep this job dynamically linked.
             scons-flags: >-
               dev_build=yes
               scu_build=yes
@@ -57,6 +60,7 @@ jobs:
               precision=double
               use_asan=yes
               use_ubsan=yes
+              use_static_cpp=no
               linker=mold
             bin: ./bin/godot.linuxbsd.editor.dev.double.x86_64.san
             proj-test: true
