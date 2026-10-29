@@ -177,14 +177,16 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record(GDExtensionQuali
  *out={};*report={};QualificationBridge *bridge=nullptr;RenderingDevice *rd=nullptr;QualificationTicket *ticket=nullptr;LocalVector<RID> resources;RdUnlock rd_unlock;
  {
   MutexLock lock(mutex);Error error=qualification_bridge_locked(ref,true,true,bridge,rd,6);if(error!=OK)return result(error,error==ERR_UNAUTHORIZED?15:16);
-  if(!rd->_thread_safe_.try_lock())return result(ERR_BUSY,19);rd_unlock.mutex=&rd->_thread_safe_;
-  error=qualification_record_preflight(bridge,rd,*request,resources);if(error!=OK)return result(error,error==ERR_UNAVAILABLE?18:error==ERR_PARAMETER_RANGE_ERROR?19:2);
+  // Exact replay reads the original ticket, without re-admitting its resources
+  // against a later RD window or appending the same work again.
   for(auto *existing:bridge->tickets)if(existing && existing->origin.record_generation==request->record_generation && existing->origin.request_nonce==request->request_nonce) {
    if(existing->acknowledged)return result(ERR_DOES_NOT_EXIST,17);
    if(existing->prepared || memcmp(&existing->origin,request,sizeof(*request)))return result(ERR_INVALID_DATA,16);
    if(existing->recording)return result(ERR_BUSY,19);
    *out={instance,existing->serial};*report=existing->report;return result(OK);
   }
+  if(!rd->_thread_safe_.try_lock())return result(ERR_BUSY,19);rd_unlock.mutex=&rd->_thread_safe_;
+  error=qualification_record_preflight(bridge,rd,*request,resources);if(error!=OK)return result(error,error==ERR_UNAVAILABLE?18:error==ERR_PARAMETER_RANGE_ERROR?19:2);
   uint32_t slot=0;for(;slot<QualificationBridge::CHILD_CAPACITY && bridge->tickets[slot];++slot){}
   if(slot==QualificationBridge::CHILD_CAPACITY || records[bridge->library].private_refs>=private_limit || qualification_serials.exhausted || qualification_serials.next==UINT64_MAX)return result(ERR_PARAMETER_RANGE_ERROR,19);
   ticket=memnew(QualificationTicket);ticket->origin=*request;ticket->bridge_serial=bridge->serial;ticket->library=bridge->library;

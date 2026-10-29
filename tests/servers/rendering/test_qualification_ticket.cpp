@@ -2,6 +2,7 @@
 #include "core/extension/gdextension_qualification_internal.h"
 #include "tests/servers/rendering/transfer_test_driver_base.h"
 #include "core/os/thread.h"
+#include "core/os/semaphore.h"
 #include "servers/rendering/rendering_server.h"
 #include <thread>
 TEST_FORCE_LINK(test_qualification_ticket)
@@ -11,6 +12,56 @@ TEST_FORCE_LINK(test_qualification_ticket)
 // native dispatch; the actual Metal control remains separately required.
 class TestQualificationTicketAccess {
 public:
+#ifdef THREADS_ENABLED
+	static void replay_under_contention() {
+		using namespace GDExtensionDeviceExit;
+		// Seed only original Registry cells; this exercises replay, not issuance.
+		auto *registry = memnew(Registry);
+		RenderingDevice device;
+		auto *previous = RenderingDevice::singleton;
+		RenderingDevice::singleton = &device; device.is_main_instance = true;
+		registry->instance = 71;
+		auto &record = registry->records[0]; record.owner_thread = Thread::get_caller_id();
+		record.snapshot.library_generation = 1; record.guard_enrollment = GuardEnrollment::QUALIFIED;
+		record.private_refs = 7;
+		auto &native = registry->device_records[0]; native.object = &device; native.live = true;
+		native.epoch = 1; native.execution_thread = Thread::get_caller_id();
+		struct Holder : HolderRetirement { Holder() : HolderRetirement(RecordRef{}) {} ~Holder() = default; } holder;
+		holder.generation = 1;
+		auto *bridge = memnew(Registry::QualificationBridge);
+		bridge->serial = 11; bridge->epoch = 1; bridge->holder = &holder; bridge->children = 1;
+		registry->qualification_bridges[0] = bridge;
+		auto *ticket = memnew(QualificationTicket);
+		ticket->serial = 23; ticket->bridge_serial = 11;
+		ticket->origin.abi = {1, sizeof(GDExtensionDeviceExitAbi), 0};
+		ticket->origin.record_generation = 37; ticket->origin.request_nonce = 39;
+		ticket->report.revision = 5; ticket->report.state = 4;
+		bridge->tickets[0] = ticket;
+		Semaphore locked, release;
+		std::thread holder_thread([&] { device._thread_safe_.lock(); locked.post(); release.wait(); device._thread_safe_.unlock(); });
+		locked.wait();
+		GDExtensionQualificationTicketRefV1 out = {};
+		GDExtensionQualificationReportV1 report = {};
+		auto request = ticket->origin;
+		auto status = registry->qualification_record({71, 11}, &request, &out, &report);
+		CHECK(status.native_error == OK);
+		CHECK(out.registry_instance == 71); CHECK(out.handle_serial == 23);
+		CHECK(memcmp(&report, &ticket->report, sizeof(report)) == 0);
+		out = {}; request.body_groups_x++;
+		CHECK(registry->qualification_record({71, 11}, &request, &out, &report).native_error == ERR_INVALID_DATA);
+		CHECK(out.handle_serial == 0);
+		request = ticket->origin; ticket->acknowledged = true;
+		CHECK(registry->qualification_record({71, 11}, &request, &out, &report).native_error == ERR_DOES_NOT_EXIST);
+		ticket->acknowledged = false; request.request_nonce++;
+		CHECK(registry->qualification_record({71, 11}, &request, &out, &report).native_error == ERR_BUSY);
+		CHECK(bridge->children == 1); CHECK(record.private_refs == 7);
+		CHECK(device.draw_graph.qualification_command_count() == 0);
+		release.post(); holder_thread.join();
+		RenderingDevice::singleton = previous; device.is_main_instance = false;
+		registry->qualification_bridges[0] = nullptr;
+		memdelete(ticket); memdelete(bridge); memdelete(registry);
+	}
+#endif
 	static void snapshot_output_overlap() {
 		using namespace GDExtensionDeviceExit;
 		auto *registry = memnew(Registry);
@@ -346,6 +397,7 @@ TEST_CASE("[Qualification] unresolved source mapping keeps failed ticket resourc
 TEST_CASE("[Qualification] owner stop is opt in exact ticket monotone and preserves immutable Complete") {TestQualificationTicketAccess::owner_stop();}
 
 #ifdef THREADS_ENABLED
+TEST_CASE("[Qualification] exact record replay returns original ticket despite RD contention") { TestQualificationTicketAccess::replay_under_contention(); }
 TEST_CASE("[Qualification] ticket continuation refuses contended RD before graph and resumes the same suffix") {TestQualificationTicketAccess::contended_continuation();}
 #endif
 
