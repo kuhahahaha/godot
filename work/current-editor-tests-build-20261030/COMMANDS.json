@@ -1,0 +1,15 @@
+{
+  "build": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2 target=editor dev_build=yes tests=yes",
+  "selectors": [
+    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64 --headless --test --test-case='[K03][P2]*'",
+    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64 --headless --test --test-case='[QualificationNative][Metal]*'",
+    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64 --headless --test --test-case='[QualificationNative][Vulkan]*'"
+  ],
+  "boundary_selectors": [
+    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64 --headless --test --test-case='[K03][MetalCompletion]*'",
+    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64 --headless --test --test-case='[ParticlesReadback]*'",
+    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64 --headless --test --test-case='[Qualification][E05]*'",
+    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64 --headless --test --test-case='[QualificationRt]*'",
+    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64 --headless --test --test-case='[DeviceExit][TypedABI]*'"
+  ]
+}

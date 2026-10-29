@@ -1,0 +1,59 @@
+{
+  "package": "current-editor-tests-build-20261030",
+  "build_rc": 0,
+  "build_log": "BUILD.log",
+  "tests_enabled": true,
+  "binary": "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+  "binary_sha256": "fb8693bd5c159a724793b17f23581b1fdc2e1ba9875c0195834883ec79cc736a",
+  "source_head": "0e324e0eb3ca435f3818f8a935f05b52385b4634",
+  "selectors": {
+    "K03_P2": {
+      "selector": "[K03][P2]*",
+      "rc": 0,
+      "log": "K03_P2.log"
+    },
+    "QUAL_METAL": {
+      "selector": "[QualificationNative][Metal]*",
+      "rc": 0,
+      "log": "QUAL_METAL.log"
+    },
+    "QUAL_VULKAN": {
+      "selector": "[QualificationNative][Vulkan]*",
+      "rc": 0,
+      "log": "QUAL_VULKAN.log"
+    }
+  },
+  "claims_not_made": [
+    "production particle issuer",
+    "same-request readback",
+    "Ready",
+    "G1"
+  ],
+  "boundary_selectors": {
+    "METAL_COMPLETION": {
+      "selector": "[K03][MetalCompletion]*",
+      "rc": 0,
+      "log": "METAL_COMPLETION.log"
+    },
+    "PARTICLES_READBACK": {
+      "selector": "[ParticlesReadback]*",
+      "rc": 0,
+      "log": "PARTICLES_READBACK.log"
+    },
+    "E05": {
+      "selector": "[Qualification][E05]*",
+      "rc": 0,
+      "log": "E05.log"
+    },
+    "QUAL_RT": {
+      "selector": "[QualificationRt]*",
+      "rc": 0,
+      "log": "QUAL_RT.log"
+    },
+    "TYPED_ABI": {
+      "selector": "[DeviceExit][TypedABI]*",
+      "rc": 0,
+      "log": "TYPED_ABI.log"
+    }
+  }
+}
