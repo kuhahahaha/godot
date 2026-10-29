@@ -60,5 +60,21 @@
     "file": "DIAGNOSTIC_NO_TESTS.md",
     "binary_sha256": "7156f3c09bfd99fc35014d92ba44b20f81b92d903330f809626022bb96a9211f",
     "reason": "tests=yes was omitted; --test refused before test execution"
+  },
+  "issuer_record_selectors": {
+    "E06": {
+      "selector": "[Qualification][E06]*",
+      "rc": 0,
+      "log": "E06.log",
+      "matched_cases": 0,
+      "evidence_status": "diagnostic_only_zero_match"
+    },
+    "E09": {
+      "selector": "[Qualification][E09]*",
+      "rc": 0,
+      "log": "E09.log",
+      "matched_cases": 0,
+      "evidence_status": "diagnostic_only_zero_match"
+    }
   }
 }

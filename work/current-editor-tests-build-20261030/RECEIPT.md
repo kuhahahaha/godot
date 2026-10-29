@@ -16,3 +16,5 @@ Boundary selectors on the same tests-enabled editor:
 - `TYPED_ABI` `[DeviceExit][TypedABI]*` rc 0
 
 The superseded no-tests build diagnostic is retained in `DIAGNOSTIC_NO_TESTS.md`; it was a test-support configuration failure, not a native selector regression.
+
+Issuer/recorder selector diagnostics on the same editor: `[Qualification][E06]*` and `[Qualification][E09]*` both matched 0 cases (rc0 with no assertions). They are not coverage evidence and no issuer/recorder conclusion is drawn.

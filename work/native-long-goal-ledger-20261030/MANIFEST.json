@@ -1,0 +1,45 @@
+{
+  "package": "native-long-goal-ledger-20261030",
+  "current_tests_enabled_editor": {
+    "sha256": "fb8693bd5c159a724793b17f23581b1fdc2e1ba9875c0195834883ec79cc736a",
+    "build_rc": 0,
+    "selectors": {
+      "K03_P2": "25/386 rc0",
+      "QualificationNative_Metal": "2/51 rc0",
+      "QualificationNative_Vulkan": "65/251 rc0",
+      "MetalCompletion": "6/386 rc0",
+      "ParticlesReadback": "2/5 rc0",
+      "E05": "18/417 rc0",
+      "QualificationRt": "6/458 rc0",
+      "TypedABI": "12/356 rc0"
+    },
+    "receipt": "work/current-editor-tests-build-20261030/RECEIPT.md",
+    "commit": "3f7b8e4430"
+  },
+  "exact_runtime_pair": {
+    "editor_sha256": "150c8f1234b6cfd45ad163ed82f8cb50ef6e76d7016ee4c918e56489f1a43162",
+    "dso_sha256": "0e1750c7ef509096201c849116d28ae385bd429ee914e4adebbd8960f0284041",
+    "fixtures": "runtime-vfx, runtime-no-vfx, runtime-invalid-vfx",
+    "result": "rc2 each; U01_EXTENSION=1; first host.storage_owner_transport/E05/UNAVAILABLE; no world admission",
+    "receipt": "work/exact-pair-runtime-rerun-20261030/RECEIPT.md",
+    "commit": "1ec9294a5a"
+  },
+  "d_owner_seam": {
+    "owner": "E05",
+    "missing": [
+      "authenticated StorageLimits/account snapshot",
+      "MainRD transport issuer/budget",
+      "E06 request issuer",
+      "R01/D completion/readback/disposal owner"
+    ],
+    "receipt": "/Users/macbookair/Documents/Work/ANGE/work/d-owner-audit-current-20261030-r2/AUDIT.md"
+  },
+  "status": "ACTIVE_CONTINUE",
+  "claims_not_made": [
+    "production particle method issuer",
+    "same-request readback",
+    "Ready",
+    "G1"
+  ],
+  "ci": "run 40930940598 attempt2; 19 completed successes, Linux doubles GCC ASAN/UBSAN still in_progress"
+}
