@@ -110,7 +110,7 @@ void Registry::qualification_record_append(QualificationTicket *ticket,Rendering
 void Registry::qualification_ticket_publish(QualificationTicket *ticket,RenderingDevice *rd) {
  if(ticket->report.state==8)return;
  auto next=ticket->report;
- if(ticket->result.is_valid() && ticket->result->error!=OK){ticket->append_failed=true;next.native_error=ticket->result->error;next.phase=5;}
+ if(ticket->result.is_valid() && ticket->result->error!=OK){ticket->append_failed=true;next.native_error=ticket->result->error;next.native_code=ticket->result->native_code;next.phase=5;}
  next.required_count=ticket->facts.size();next.known_count=0;next.possible_count=0;next.fact_count=ticket->facts.size();
  bool sealed=true,returned=true,mapped_all=true,native_success=true,native_failed=false,native_unknown=false,has_native=!ticket->natives.is_empty();
  for(auto &graph:ticket->graphs) {

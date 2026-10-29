@@ -305,6 +305,7 @@ private:
   uint32_t issued_size = 0;
   uint64_t request_serial = 0;
 		Error error = OK;
+		int64_t native_code = 0;
 		bool delivered = false;
 		bool qualification_owned = false;
 	};

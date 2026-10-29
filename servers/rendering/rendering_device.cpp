@@ -9455,9 +9455,11 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 						result->error = ERR_INVALID_DATA;
 						break;
 					}
-					uint8_t *buffer_data = driver->buffer_map(frames[p_frame].download_buffer_staging_buffers[local_index]);
+					int64_t native_code = 0;
+					uint8_t *buffer_data = driver->buffer_map_observed(frames[p_frame].download_buffer_staging_buffers[local_index], native_code);
 					if (buffer_data == nullptr) {
 						result->error = ERR_CANT_ACQUIRE_RESOURCE;
+						result->native_code = native_code;
 						ERR_PRINT("Failed to map an asynchronous readback staging buffer.");
 						break;
 					}

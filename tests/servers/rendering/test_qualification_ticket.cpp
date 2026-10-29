@@ -172,6 +172,110 @@ public:
 		registry->qualification_bridges[0] = nullptr;
 		memdelete(ticket); memdelete(bridge); memdelete(registry);
 	}
+	static void readback_map_error(uint32_t p_failure_index, bool p_observed = true) {
+		using namespace GDExtensionDeviceExit;
+		// Deterministic backend outcomes feed the original frame readback and
+		// ticket reducer; these seeded sources do not certify a native dispatch.
+		struct MapDriver : TransferTestDriverBase {
+			uint32_t failure_index = 0;
+			const uint32_t *qualification_users = nullptr;
+			uint32_t words[2] = { 7, 8 };
+			Error fence_wait(FenceID) override { return OK; }
+			uint8_t *buffer_map(BufferID p_buffer) override {
+				CHECK(*qualification_users == 1);
+				const uint32_t index = p_buffer.id - 51;
+				return index == failure_index ? nullptr : reinterpret_cast<uint8_t *>(&words[index]);
+			}
+			void buffer_unmap(BufferID p_buffer) override {
+				CRASH_COND(p_buffer.id - 51 == failure_index);
+			}
+		} legacy;
+		struct ObservedMapDriver : MapDriver {
+			uint8_t *buffer_map_observed(BufferID p_buffer, int64_t &r_native_code) override {
+				auto *data = buffer_map(p_buffer);
+				r_native_code = data ? 0 : -5;
+				return data;
+			}
+		} observed;
+		legacy.failure_index = observed.failure_index = p_failure_index;
+		RenderingDevice device;
+		device.driver = p_observed ? &observed : &legacy;
+		device.frames.resize(1);
+		auto &frame = device.frames[0];
+		frame.fence_signaled = true;
+		QualificationTicket ticket;
+		ticket.recorded = ticket.ordering_closed = true;
+		ticket.origin.readback_size = 8;
+		ticket.report.revision = 1;
+		ticket.report.native_code = p_observed ? 0 : -77;
+		ticket.report.source_backing_serial = 11;
+		ticket.report.source_offset = 4;
+		ticket.report.source_size = 8;
+		ticket.result.instantiate();
+		ticket.result->qualification_owned = true;
+		ticket.result->bytes.resize(8);
+		ticket.result->issued_size = 8;
+		ticket.result->request_serial = 101;
+		RenderingDevice::BufferGetDataRequest request;
+		request.size = 8;
+		request.frame_local_count = 2;
+		request.result = ticket.result;
+		frame.download_buffer_get_data_requests.push_back(request);
+		for (uint32_t i = 0; i < 2; ++i) {
+			frame.download_buffer_staging_buffers.push_back(RDD::BufferID(51 + i));
+			frame.download_buffer_copy_regions.push_back({ 0, 0, 4 });
+		}
+		RenderingDevice::Buffer buffer;
+		buffer.qualification_users = 1;
+		const RID rid = device.storage_buffer_owner.make_rid(buffer);
+		legacy.qualification_users = observed.qualification_users = &device.storage_buffer_owner.get_or_null(rid)->qualification_users;
+		ticket.resource_pins.push_back(rid);
+		GDExtensionQualificationFactV1 graph = {};
+		graph.semantic_kind = 3;
+		ticket.facts.push_back(graph);
+		ticket.graphs.push_back({ {}, 0, 0, 0, 1, true, false });
+		ticket.frame_refs = 1;
+		RDD::NativeCallFact source;
+		source.serial = 17;
+		source.completion_serial = 73;
+		source.queue_index = 1;
+		GDExtensionQualificationFactV1 fact = {};
+		fact.issue = 1;
+		fact.completion = 2;
+		ticket.facts.push_back(fact);
+		ticket.natives.push_back({ source, 1, 0, 0, 1, false, false });
+		ERR_PRINT_OFF;
+		CHECK(device._stall_for_frame(0) == OK);
+		ERR_PRINT_ON;
+		auto &registry = Registry::get_singleton();
+		registry.qualification_ticket_publish(&ticket, &device);
+		const bool failed = p_failure_index < 2;
+		CHECK(ticket.report.native_error == (failed ? ERR_CANT_ACQUIRE_RESOURCE : OK));
+		CHECK(ticket.report.native_code == (failed && p_observed ? -5 : 0));
+		CHECK(ticket.result->delivered == !failed);
+		CHECK(ticket.report.readback_request == 101);
+		CHECK(ticket.report.source_backing_serial == 11);
+		CHECK(ticket.report.source_offset == 4);
+		CHECK(ticket.report.source_size == 8);
+		CHECK(ticket.report.owned_size == 0);
+		CHECK_FALSE(ticket.physically_retired.load());
+		CHECK(device.storage_buffer_owner.get_or_null(rid)->qualification_users == 1);
+		ticket.graphs[0].returned = true;
+		ticket.frame_refs = 0;
+		registry.qualification_ticket_publish(&ticket, &device);
+		CHECK(ticket.physically_retired.load());
+		CHECK(device.storage_buffer_owner.get_or_null(rid)->qualification_users == 0);
+		CHECK(ticket.report.state == (failed ? 5 : 8));
+		CHECK(ticket.report.owned_size == (failed ? 0 : 8));
+		CHECK(ticket.admission_closed.load() == failed);
+		if (!failed) {
+			const uint32_t expected[] = { 7, 8 };
+			CHECK(memcmp(ticket.result->bytes.ptr(), expected, sizeof(expected)) == 0);
+		}
+		device.storage_buffer_owner.free(rid);
+		device.frames.clear();
+		device.driver = nullptr;
+	}
 
 	static void continuation_capacity() {
 		using namespace GDExtensionDeviceExit;
@@ -460,6 +564,14 @@ public:
 };
 TEST_CASE("[Qualification] overlapping snapshot outputs are rejected without writing destination") { TestQualificationTicketAccess::snapshot_output_overlap(); }
 TEST_CASE("[Qualification] same ticket snapshots remain readable after overlap refusal") { TestQualificationTicketAccess::snapshot_after_overlap(); }
+TEST_CASE("[Qualification] original async map failure retains raw code and physical obligations") {
+	TestQualificationTicketAccess::readback_map_error(0);
+	TestQualificationTicketAccess::readback_map_error(1);
+}
+TEST_CASE("[Qualification] async map success and legacy failure preserve original outcome") {
+	TestQualificationTicketAccess::readback_map_error(2);
+	TestQualificationTicketAccess::readback_map_error(0, false);
+}
 TEST_CASE("[Qualification] ticket keeps distinct native and completion identities until every source and frame returns") {TestQualificationTicketAccess::reduction(false);}
 
 TEST_CASE("[Qualification] sealing accepts an actual transitive graph path") { TestQualificationTicketAccess::transitive_graph_order(); }

@@ -277,6 +277,12 @@ public:
 	virtual void buffer_free(BufferID p_buffer) = 0;
 	virtual uint64_t buffer_get_allocation_size(BufferID p_buffer) = 0;
 	virtual uint8_t *buffer_map(BufferID p_buffer) = 0;
+	// Observe the native outcome of this same map operation when the backend
+	// exposes one. Zero carries no raw failure for pointer-only backends.
+	virtual uint8_t *buffer_map_observed(BufferID p_buffer, int64_t &r_native_code) {
+		r_native_code = 0;
+		return buffer_map(p_buffer);
+	}
 	virtual void buffer_unmap(BufferID p_buffer) = 0;
 	virtual uint8_t *buffer_persistent_map_advance(BufferID p_buffer, uint64_t p_frames_drawn) = 0;
 	virtual uint64_t buffer_get_dynamic_offsets(Span<BufferID> p_buffers) = 0;
