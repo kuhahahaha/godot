@@ -2121,6 +2121,7 @@ bool RenderingDeviceDriverVulkan::buffer_set_texel_format(BufferID p_buffer, Dat
 
 void RenderingDeviceDriverVulkan::buffer_free(BufferID p_buffer) {
 	BufferInfo *buf_info = (BufferInfo *)p_buffer.id;
+	ERR_FAIL_NULL(buf_info);
 	if (buf_info->vk_view) {
 		vkDestroyBufferView(vk_device, buf_info->vk_view, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_BUFFER_VIEW));
 	}

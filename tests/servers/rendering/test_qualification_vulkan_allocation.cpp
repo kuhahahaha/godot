@@ -424,6 +424,14 @@ TEST_CASE("[QualificationNative][Vulkan] texture data query rejects invalid reso
  ERR_PRINT_ON;
  CHECK(data.is_empty());
 }
+TEST_CASE("[QualificationNative][Vulkan] buffer free rejects invalid resource before access") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ ERR_PRINT_OFF;
+ driver.buffer_free(RenderingDeviceDriver::BufferID());
+ ERR_PRINT_ON;
+ CHECK(true);
+}
 TEST_CASE("[QualificationNative][Vulkan] queue submit rejects missing wait view before queue access") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
