@@ -88,6 +88,13 @@ public:
 		p_rd.draw_graph.initialize(p_driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 1);
 	}
 	static uint32_t texture_count(RenderingDevice &p_rd) { return p_rd.texture_owner.get_owned_list().size(); }
+	static void cleanup_created_texture(RenderingDevice &p_rd, RID p_rid) {
+		p_rd.frames.resize(1);
+		p_rd.render_thread_id = Thread::get_caller_id();
+		p_rd.free_rid(p_rid);
+		p_rd._free_pending_resources(0);
+		p_rd.frames.clear();
+	}
 	static void detach(RenderingDevice &p_rd) {
 		for (RID rid : p_rd.texture_owner.get_owned_list()) {
 			p_rd.texture_owner.free(rid);
@@ -126,6 +133,9 @@ public:
 	int fence_frees = 0;
 	int pool_frees = 0;
 	int texture_frees = 0;
+	int texture_usage_queries = 0;
+	int texture_creates = 0;
+	bool reject_texture_format = false;
 	bool finalize_sentinel = false;
 	bool begin_result = true;
 	int creation_failure = 0;
@@ -166,10 +176,16 @@ public:
 	FenceID fence_create() override { fence_creates++; return creation_failure == 1 ? FenceID() : FenceID(903); }
 	CommandPoolID command_pool_create(CommandQueueFamilyID, CommandBufferType) override { pool_creates++; return creation_failure == 2 ? CommandPoolID() : CommandPoolID(901); }
 	CommandBufferID command_buffer_create(CommandPoolID p_pool) override { CHECK(p_pool.id != 0); buffer_creates++; return creation_failure == 3 ? CommandBufferID() : CommandBufferID(902); }
-	TextureID texture_create(const TextureFormat &, const TextureView &) override { return TextureID(701); }
+	TextureID texture_create(const TextureFormat &, const TextureView &) override {
+		texture_creates++;
+		return TextureID(701);
+	}
 	void texture_free(TextureID) override { texture_frees++; }
 	uint64_t texture_get_allocation_size(TextureID) override { return 4; }
-	BitField<TextureUsageBits> texture_get_usages_supported_by_format(DataFormat, bool) override { return TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_VRS_ATTACHMENT_BIT; }
+	BitField<TextureUsageBits> texture_get_usages_supported_by_format(DataFormat, bool) override {
+		texture_usage_queries++;
+		return reject_texture_format ? BitField<TextureUsageBits>() : BitField<TextureUsageBits>(TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_VRS_ATTACHMENT_BIT);
+	}
 	uint64_t limit_get(Limit) override { return 4096; }
 	uint8_t *buffer_map(BufferID) override { return map_fails ? nullptr : data; }
 	void buffer_unmap(BufferID) override {}
@@ -572,6 +588,64 @@ TEST_CASE("[K03][P2] native worker creation failure rolls back only unissued own
 		CHECK(f.driver.fence_frees == (failure > 1 ? 1 : 0));
 		CHECK(f.driver.pool_frees == (failure > 2 ? 1 : 0));
 	}
+}
+
+TEST_CASE("[K03][P2] texture creation rejects invalid base format before backend queries") {
+	Fixture f;
+	f.driver.reject_texture_format = true;
+	RenderingDevice::TextureFormat format;
+	format.format = RDD::DATA_FORMAT_MAX;
+	format.width = format.height = format.depth = format.array_layers = format.mipmaps = 1;
+	format.usage_bits = RDD::TEXTURE_USAGE_SAMPLING_BIT;
+	ERR_PRINT_OFF;
+	RID invalid = f.rd.texture_create(format, RenderingDevice::TextureView());
+	ERR_PRINT_ON;
+	CHECK(invalid.is_null());
+	CHECK(f.driver.texture_usage_queries == 0);
+	CHECK(Access::texture_count(f.rd) == 0);
+	Vector<uint8_t> bytes;
+	bytes.resize(4);
+	Vector<Vector<uint8_t>> data;
+	data.push_back(bytes);
+	ERR_PRINT_OFF;
+	invalid = f.rd.texture_create(format, RenderingDevice::TextureView(), data);
+	format.usage_bits = RDD::TEXTURE_USAGE_VRS_ATTACHMENT_BIT;
+	RID invalid_vrs = f.rd.texture_create(format, RenderingDevice::TextureView());
+	ERR_PRINT_ON;
+	CHECK(invalid.is_null());
+	CHECK(invalid_vrs.is_null());
+	CHECK(f.driver.texture_usage_queries == 0);
+	CHECK(f.driver.texture_creates == 0);
+	format.usage_bits = RDD::TEXTURE_USAGE_SAMPLING_BIT;
+	// Check malformed enum storage without converting it to an invalid C++ enum.
+	const uint32_t malformed = UINT32_MAX;
+	static_assert(sizeof(format.format) == sizeof(malformed));
+	memcpy(&format.format, &malformed, sizeof(malformed));
+	ERR_PRINT_OFF;
+	invalid = f.rd.texture_create(format, RenderingDevice::TextureView());
+	ERR_PRINT_ON;
+	CHECK(invalid.is_null());
+	CHECK(f.driver.texture_usage_queries == 0);
+	CHECK(Access::texture_count(f.rd) == 0);
+	// A valid format still reaches the ordinary backend capability refusal.
+	format.format = RDD::DATA_FORMAT_R8G8B8A8_UNORM;
+	ERR_PRINT_OFF;
+	RID unsupported = f.rd.texture_create(format, RenderingDevice::TextureView());
+	ERR_PRINT_ON;
+	CHECK(unsupported.is_null());
+	CHECK(f.driver.texture_usage_queries == 1);
+	CHECK(Access::texture_count(f.rd) == 0);
+	f.driver.reject_texture_format = false;
+	format.format = RDD::DATA_FORMAT_R32G32B32A32_SFLOAT;
+	RID valid = f.rd.texture_create(format, RenderingDevice::TextureView());
+	CHECK(valid.is_valid());
+	CHECK(f.driver.texture_creates == 1);
+	CHECK(Access::texture_count(f.rd) == 1);
+	if (valid.is_valid()) {
+		Access::cleanup_created_texture(f.rd, valid);
+	}
+	CHECK(f.driver.texture_frees == 1);
+	CHECK(Access::texture_count(f.rd) == 0);
 }
 
 TEST_CASE("[K03][P2] public immediate texture creation propagates unresolved completion") {

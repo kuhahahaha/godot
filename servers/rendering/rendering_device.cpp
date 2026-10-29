@@ -1708,6 +1708,11 @@ RID RenderingDevice::texture_buffer_create(uint32_t p_size_elements, DataFormat 
 
 RID RenderingDevice::texture_create(const TextureFormat &p_format, const TextureView &p_view, const Vector<Vector<uint8_t>> &p_data) {
 	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
+	// Check the stored enum representation before copying or reading it.
+	static_assert(sizeof(p_format.format) == sizeof(uint32_t));
+	uint32_t format_value = 0;
+	memcpy(&format_value, &p_format.format, sizeof(format_value));
+	ERR_FAIL_UNSIGNED_INDEX_V(format_value, DATA_FORMAT_MAX, RID());
 	// Some adjustments will happen.
 	TextureFormat format = p_format;
 
