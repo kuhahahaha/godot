@@ -168,6 +168,10 @@
     "verify_checkpoint.py": {
       "bytes": 2948,
       "sha256": "898a44acb060dc54f6516f8260a64b5400d55f7bfdcb32a9bc6034b34b52b7d6"
+    },
+    "CURRENT_RECHECK_20261029.md": {
+      "bytes": 701,
+      "sha256": "316f631217f8cef293cc239a53a10889de558a30a6e80da95c88e7a7971bbe0b"
     }
   }
 }
