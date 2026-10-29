@@ -6313,6 +6313,22 @@
     "work/vulkan-copyable-layout-20261030/UBSAN_REGRESSION_R3.rc": {
       "bytes": 2,
       "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/particle-cpu-readback-20261029/INDEPENDENT_REVIEW.md": {
+      "bytes": 1518,
+      "sha256": "9774c4287709c39aa4c78d8c27330e4bdc6cef9f0463e3286355a85a254d9fe9"
+    },
+    "work/particle-cpu-readback-20261029/RECEIPT.md": {
+      "bytes": 2841,
+      "sha256": "bc50e113097688e452347b12deac74aa7a71145634d15248ba377d2ae26a3b80"
+    },
+    "work/particle-cpu-readback-20261029/SOURCE_MANIFEST.md": {
+      "bytes": 2015,
+      "sha256": "ea9113051e9fbb13e62cb5154984fc7d5ebcffa76446f38731caa6b757c18c0b"
+    },
+    "work/particle-cpu-readback-20261029/MANIFEST.json": {
+      "bytes": 455,
+      "sha256": "61bf0543931d21d99a50830d3020927cb640bdfd03726bdcabb2f1c6c5ed58bf"
     }
   }
 }

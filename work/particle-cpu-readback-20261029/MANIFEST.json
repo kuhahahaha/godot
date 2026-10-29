@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "files": {
+    "INDEPENDENT_REVIEW.md": {
+      "bytes": 1518,
+      "sha256": "9774c4287709c39aa4c78d8c27330e4bdc6cef9f0463e3286355a85a254d9fe9"
+    },
+    "RECEIPT.md": {
+      "bytes": 2841,
+      "sha256": "bc50e113097688e452347b12deac74aa7a71145634d15248ba377d2ae26a3b80"
+    },
+    "SOURCE_MANIFEST.md": {
+      "bytes": 2015,
+      "sha256": "ea9113051e9fbb13e62cb5154984fc7d5ebcffa76446f38731caa6b757c18c0b"
+    }
+  }
+}
