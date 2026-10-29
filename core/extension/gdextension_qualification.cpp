@@ -233,7 +233,8 @@ void Registry::qualification_retire_step(QualificationBridge *bridge,RenderingDe
   if(failed) { report.state=2;report.return_status=0;report.reason=5;report.native_error=child->maintenance_error; }
   else if(physical.free_event) { report.state=1;report.return_status=1;report.reason=0; }
   else if(reason>=5) { report.state=2;report.reason=reason; }
-  else report.reason=reason ? reason : 1;
+  // Keep a published Unknown well-formed until an original free event settles it.
+  else if(report.state!=2) report.reason=reason ? reason : 1;
  } else if(kind==2) {
   QualificationBridge::NativeUnit *child=nullptr;for(auto *entry:bridge->units)if(entry && entry->serial==serial){child=entry;break;}
   if(!child || !child->retiring)return;
@@ -254,8 +255,9 @@ void Registry::qualification_retire_step(QualificationBridge *bridge,RenderingDe
   if(report.enqueued_mask==child->backing.known_mask && !report.unresolved_mask)report.dependency_set_serial=child->dependency_serial;
   if(failed) { report.state=2;report.return_status=0;report.reason=5;report.native_error=child->maintenance_error; }
   else if(report.freed_mask==child->backing.known_mask && !report.unresolved_mask) { report.state=1;report.return_status=1;report.reason=0; }
-  else if(reason>=5 || report.unresolved_mask) { report.state=2;report.reason=reason==6?6:5; }
-  else report.reason=reason?reason:1;
+  else if(reason>=5) { report.state=2;report.reason=reason==6?6:5; }
+  else if(report.unresolved_mask && report.state!=2) { report.state=2;report.reason=5; }
+  else if(report.state!=2) report.reason=reason?reason:1;
   if(memcmp(&report,&child->report,sizeof(report))) {
    if(report.report_revision==UINT64_MAX) { report.state=2;report.return_status=0;report.reason=5; }
    else ++report.report_revision;
