@@ -1,0 +1,13 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_qualification_physical.cpp:356:
+TEST CASE:  [Qualification] storage owner reuses returned slots beyond cumulative capacity
+
+tests/servers/rendering/test_qualification_physical.cpp:24: ERROR: CHECK( created.native_error==OK ) is NOT correct!
+  values: CHECK( 5 == 0 )
+
+===============================================================================
+[doctest] test cases:   1 |   0 passed | 1 failed | 1811 skipped
+[doctest] assertions: 647 | 646 passed | 1 failed |
+[doctest] Status: FAILURE!

@@ -13,6 +13,8 @@ bool RenderingDevice::_qualification_resource_busy(RID rid) {
  return false;
 }
 Error RenderingDevice::_qualification_pin_resources(QualificationTicket *ticket,const LocalVector<RID> &resources) {
+ // Production callers hold Registry::mutex and the original RD lock. Release
+ // relies on that shared write discipline for both sides of the reverse edge.
  uint32_t added=0;
  for(RID rid:resources) {
   bool already=false;for(RID held:ticket->resource_pins)if(held==rid){already=true;break;}if(already)continue;

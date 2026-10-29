@@ -1,0 +1,19 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_qualification_physical.cpp:237:
+TEST CASE:  [RenderingDevice][Qualification] failed descriptor release retains original dependent and queue
+
+tests/servers/rendering/test_qualification_physical.cpp:241: ERROR: CHECK( TestQualificationPhysicalAccess::dependents(cell)==1 ) is NOT correct!
+  values: CHECK( 0 == 1 )
+
+tests/servers/rendering/test_qualification_physical.cpp:241: ERROR: CHECK( TestQualificationPhysicalAccess::pending_sets(device)==1 ) is NOT correct!
+  values: CHECK( 0 == 1 )
+
+tests/servers/rendering/test_qualification_physical.cpp:242: ERROR: CHECK( TestQualificationPhysicalAccess::dependents(cell)==1 ) is NOT correct!
+  values: CHECK( 0 == 1 )
+
+===============================================================================
+[doctest] test cases: 1 | 0 passed | 1 failed | 1810 skipped
+[doctest] assertions: 7 | 4 passed | 3 failed |
+[doctest] Status: FAILURE!

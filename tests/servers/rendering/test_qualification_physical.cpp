@@ -1,5 +1,7 @@
 #include "tests/test_macros.h"
 #include <thread>
+#include <atomic>
+#include <chrono>
 #include "core/os/thread.h"
 #include "core/crypto/crypto_core.h"
 #include "servers/rendering/rendering_device.h"
@@ -8,6 +10,124 @@
 TEST_FORCE_LINK(test_qualification_physical)
 class TestQualificationPhysicalAccess {
 public:
+ static void ticket_reverse_unlink(RenderingDevice &device,RenderingDeviceDriver &driver) {
+  using namespace GDExtensionDeviceExit;
+  auto *registry=memnew(Registry);auto *previous=RenderingDevice::singleton;RenderingDevice::singleton=&device;device.is_main_instance=true;device.render_thread_id=Thread::get_caller_id();
+  registry->instance=71;auto &record=registry->records[0];record.owner_thread=Thread::get_caller_id();record.snapshot.library_generation=1;record.private_refs=5;
+  auto &d=registry->device_records[0];d.object=&device;d.live=true;d.epoch=1;
+  struct Holder:HolderRetirement{Holder():HolderRetirement(RecordRef{}){}~Holder()=default;} holder;holder.generation=1;
+  auto *bridge=memnew(Registry::QualificationBridge);bridge->serial=11;bridge->epoch=1;bridge->holder=&holder;bridge->children=4;registry->qualification_bridges[0]=bridge;
+  auto *storage=memnew(Registry::QualificationBridge::Storage);storage->serial=31;storage->physical.bridge=11;storage->physical.child=31;bridge->storage[0]=storage;
+  RID rid=device._qualification_storage_create(128,&storage->physical);REQUIRE(rid.is_valid());
+  device.draw_graph.initialize(&driver,[](RenderingDeviceDriver *,VectorView<RenderingDeviceDriver::AttachmentLoadOp>,VectorView<RenderingDeviceDriver::AttachmentStoreOp>,void *){return RenderingDeviceDriver::RenderPassID();},1,RenderingDeviceDriver::CommandQueueFamilyID(1),0);device.draw_graph.begin();
+  auto *unit=memnew(Registry::QualificationBridge::NativeUnit);unit->serial=32;unit->shader.bridge=11;unit->shader.child=32;bridge->units[0]=unit;
+  auto *first=memnew(QualificationTicket);auto *other=memnew(QualificationTicket);first->serial=23;other->serial=24;first->bridge_serial=other->bridge_serial=11;first->physically_retired=true;other->physically_retired=false;
+  bridge->tickets[0]=first;bridge->tickets[1]=other;first->physical_uses.push_back(&storage->physical);first->physical_uses.push_back(&unit->shader);other->physical_uses.push_back(&storage->physical);storage->physical.uses.push_back(first);storage->physical.uses.push_back(other);unit->shader.uses.push_back(first);
+  const GDExtensionQualificationBridgeRefV1 ref{71,11};const GDExtensionQualificationTicketRefV1 ticket{71,23};
+  first->accepted_rt_refs=1;CHECK(registry->qualification_release(ref,ticket).native_error==ERR_BUSY);first->accepted_rt_refs=0;
+  first->frame_refs=1;CHECK(registry->qualification_release(ref,ticket).native_error==ERR_BUSY);first->frame_refs=0;
+  first->queued=true;CHECK(registry->qualification_release(ref,ticket).native_error==ERR_BUSY);first->queued=false;
+#ifdef THREADS_ENABLED
+  std::atomic<bool> locked=false,done=false;std::thread worker([&]{device._thread_safe_.lock();locked=true;while(!done.load())std::this_thread::yield();device._thread_safe_.unlock();});
+  while(!locked.load())std::this_thread::yield();
+  auto blocked=registry->qualification_release(ref,ticket);CHECK(blocked.native_error==ERR_BUSY);CHECK(blocked.reason==19);
+  CHECK_FALSE(first->acknowledged);CHECK(storage->physical.uses.size()==2);CHECK(first->physical_uses.size()==2);CHECK(unit->shader.uses.size()==1);
+  done=true;worker.join();
+#endif
+  if(!first->acknowledged) {
+   REQUIRE(registry->qualification_release(ref,ticket).native_error==OK);
+   CHECK(first->physical_uses.is_empty());CHECK(storage->physical.uses.size()==1);CHECK(storage->physical.uses[0]==other);CHECK(unit->shader.uses.is_empty());
+   CHECK(other->physical_uses.size()==1);CHECK(bridge->children==3);CHECK(record.private_refs==4);
+   CHECK(registry->qualification_release(ref,ticket).reason==17);
+   storage->retiring=true;storage->physical.use_closed=true;registry->qualification_retire_step(bridge,&device,31,1);
+   CHECK(device.storage_buffer_owner.owns(rid));CHECK_FALSE(storage->physical.enqueued);CHECK(storage->report.reason==3);
+   other->physically_retired=true;registry->qualification_retire_step(bridge,&device,31,1);CHECK_FALSE(device.storage_buffer_owner.owns(rid));CHECK(storage->physical.enqueued);
+   device._free_pending_resources(0);CHECK(storage->physical.free_event!=0);
+  }
+  registry->qualification_bridges[0]=nullptr;RenderingDevice::singleton=previous;device.is_main_instance=false;memdelete(first);memdelete(other);memdelete(storage);memdelete(unit);memdelete(bridge);memdelete(registry);
+ }
+ static void foreign_bridge_pin_is_rejected(RenderingDevice &device) {
+  using namespace GDExtensionDeviceExit;
+  auto *registry=memnew(Registry);auto *bridge=memnew(Registry::QualificationBridge);auto *foreign=memnew(Registry::QualificationBridge);
+  bridge->serial=11;foreign->serial=12;registry->qualification_bridges[0]=bridge;registry->qualification_bridges[1]=foreign;
+  auto *storage=memnew(Registry::QualificationBridge::Storage);storage->serial=31;storage->physical.bridge=12;storage->physical.child=31;foreign->storage[0]=storage;
+  RID rid=device._qualification_storage_create(128,&storage->physical);REQUIRE(rid.is_valid());
+  QualificationTicket ticket;ticket.serial=23;ticket.bridge_serial=11;ticket.physically_retired=true;LocalVector<RID> resources;resources.push_back(rid);
+  Error result;{MutexLock registry_lock(registry->mutex);MutexLock rd_lock(device._thread_safe_);result=device._qualification_pin_resources(&ticket,resources);}
+  CHECK(result==ERR_UNAUTHORIZED);CHECK(ticket.resource_pins.is_empty());CHECK(ticket.physical_uses.is_empty());CHECK(storage->physical.uses.is_empty());CHECK(ticket.physically_retired.load());
+  storage->physical.use_closed=true;device._free_internal(rid);device._free_pending_resources(0);
+  registry->qualification_bridges[0]=registry->qualification_bridges[1]=nullptr;memdelete(storage);memdelete(foreign);memdelete(bridge);memdelete(registry);
+ }
+ static void ticket_empty_release_during_rd_contention(RenderingDevice &device) {
+#ifdef THREADS_ENABLED
+  using namespace GDExtensionDeviceExit;
+  auto *registry=memnew(Registry);auto *previous=RenderingDevice::singleton;RenderingDevice::singleton=&device;device.is_main_instance=true;
+  registry->instance=71;auto &record=registry->records[0];record.owner_thread=Thread::get_caller_id();record.snapshot.library_generation=1;record.private_refs=2;
+  auto &d=registry->device_records[0];d.object=&device;d.live=true;d.epoch=1;
+  struct Holder:HolderRetirement{Holder():HolderRetirement(RecordRef{}){}~Holder()=default;} holder;holder.generation=1;
+  auto *bridge=memnew(Registry::QualificationBridge);bridge->serial=11;bridge->epoch=1;bridge->holder=&holder;bridge->children=1;registry->qualification_bridges[0]=bridge;
+  auto *ticket=memnew(QualificationTicket);ticket->serial=23;ticket->bridge_serial=11;ticket->physically_retired=true;bridge->tickets[0]=ticket;
+  std::atomic<bool> locked=false,done=false;std::thread worker([&]{device._thread_safe_.lock();locked=true;while(!done.load())std::this_thread::yield();device._thread_safe_.unlock();});
+  while(!locked.load())std::this_thread::yield();const auto result=registry->qualification_release({71,11},{71,23});
+  CHECK(result.native_error==OK);CHECK(ticket->acknowledged);CHECK(bridge->children==0);done=true;worker.join();
+  registry->qualification_bridges[0]=nullptr;RenderingDevice::singleton=previous;device.is_main_instance=false;memdelete(ticket);memdelete(bridge);memdelete(registry);
+#endif
+ }
+ static void ticket_relock_busy(RenderingDevice &device,RenderingDeviceDriver &driver,std::atomic<bool> &start,std::atomic<bool> &locked) {
+#ifdef THREADS_ENABLED
+  using namespace GDExtensionDeviceExit;
+  auto *registry=memnew(Registry);auto *previous=RenderingDevice::singleton;RenderingDevice::singleton=&device;device.is_main_instance=true;device.driver=&driver;
+  registry->instance=71;auto &record=registry->records[0];record.owner_thread=Thread::get_caller_id();record.snapshot.library_generation=1;record.private_refs=3;
+  auto &d=registry->device_records[0];d.object=&device;d.live=true;d.epoch=1;
+  struct Holder:HolderRetirement{Holder():HolderRetirement(RecordRef{}){}~Holder()=default;} holder;holder.generation=1;
+  auto *bridge=memnew(Registry::QualificationBridge);bridge->serial=11;bridge->epoch=1;bridge->holder=&holder;bridge->children=2;registry->qualification_bridges[0]=bridge;
+  auto *storage=memnew(Registry::QualificationBridge::Storage);storage->serial=31;storage->physical.bridge=11;storage->physical.child=31;bridge->storage[0]=storage;
+  auto *ticket=memnew(QualificationTicket);ticket->serial=23;ticket->bridge_serial=11;ticket->physically_retired=true;bridge->tickets[0]=ticket;
+  ticket->physical_uses.push_back(&storage->physical);storage->physical.uses.push_back(ticket);
+  RenderingDeviceDriver::NativeCallFact source;source.serial=101;ticket->natives.push_back({source,0,0,0,0,true,false});
+  std::atomic<bool> done=false;std::thread worker([&]{while(!start.load() && !done.load())std::this_thread::yield();if(done.load())return;device._thread_safe_.lock();locked=true;while(!done.load())std::this_thread::yield();device._thread_safe_.unlock();});
+  const auto blocked=registry->qualification_release({71,11},{71,23});CHECK(blocked.native_error==ERR_BUSY);CHECK(blocked.reason==19);
+  CHECK(ticket->natives[0].owner_released);CHECK_FALSE(ticket->acknowledged);CHECK(ticket->physical_uses.size()==1);CHECK(storage->physical.uses.size()==1);
+  done=true;worker.join();
+  if(!ticket->acknowledged){CHECK(registry->qualification_release({71,11},{71,23}).native_error==OK);CHECK(ticket->physical_uses.is_empty());CHECK(storage->physical.uses.is_empty());}
+  registry->qualification_bridges[0]=nullptr;RenderingDevice::singleton=previous;device.driver=nullptr;device.is_main_instance=false;memdelete(ticket);memdelete(storage);memdelete(bridge);memdelete(registry);
+#endif
+ }
+ static void ticket_native_release_retry(RenderingDevice &device,RenderingDeviceDriver &driver) {
+  using namespace GDExtensionDeviceExit;
+  auto *registry=memnew(Registry);auto *previous=RenderingDevice::singleton;RenderingDevice::singleton=&device;device.is_main_instance=true;device.driver=&driver;
+  registry->instance=71;auto &record=registry->records[0];record.owner_thread=Thread::get_caller_id();record.snapshot.library_generation=1;record.private_refs=3;
+  auto &d=registry->device_records[0];d.object=&device;d.live=true;d.epoch=1;
+  struct Holder:HolderRetirement{Holder():HolderRetirement(RecordRef{}){}~Holder()=default;} holder;holder.generation=1;
+  auto *bridge=memnew(Registry::QualificationBridge);bridge->serial=11;bridge->epoch=1;bridge->holder=&holder;bridge->children=2;registry->qualification_bridges[0]=bridge;
+  auto *storage=memnew(Registry::QualificationBridge::Storage);storage->serial=31;storage->physical.bridge=11;storage->physical.child=31;bridge->storage[0]=storage;
+  auto *ticket=memnew(QualificationTicket);ticket->serial=23;ticket->bridge_serial=11;ticket->physically_retired=true;bridge->tickets[0]=ticket;
+  ticket->physical_uses.push_back(&storage->physical);storage->physical.uses.push_back(ticket);
+  RenderingDeviceDriver::NativeCallFact a,b;a.serial=101;b.serial=102;ticket->natives.push_back({a,0,0,0,0,true,false});ticket->natives.push_back({b,0,0,0,0,true,false});
+  auto first=registry->qualification_release({71,11},{71,23});CHECK(first.native_error==ERR_BUSY);CHECK(first.reason==19);
+  CHECK(ticket->natives[0].owner_released);CHECK_FALSE(ticket->natives[1].owner_released);CHECK_FALSE(ticket->acknowledged);CHECK(ticket->physical_uses.size()==1);CHECK(storage->physical.uses.size()==1);
+  REQUIRE(registry->qualification_release({71,11},{71,23}).native_error==OK);CHECK(ticket->natives[1].owner_released);CHECK(ticket->physical_uses.is_empty());CHECK(storage->physical.uses.is_empty());
+  registry->qualification_bridges[0]=nullptr;RenderingDevice::singleton=previous;device.driver=nullptr;device.is_main_instance=false;memdelete(ticket);memdelete(storage);memdelete(bridge);memdelete(registry);
+ }
+ static void ticket_bad_reverse_edges(RenderingDevice &device,uint32_t mode) {
+  using namespace GDExtensionDeviceExit;
+  auto *registry=memnew(Registry);auto *previous=RenderingDevice::singleton;RenderingDevice::singleton=&device;device.is_main_instance=true;
+  registry->instance=71;auto &record=registry->records[0];record.owner_thread=Thread::get_caller_id();record.snapshot.library_generation=1;record.private_refs=3;
+  auto &d=registry->device_records[0];d.object=&device;d.live=true;d.epoch=1;
+  struct Holder:HolderRetirement{Holder():HolderRetirement(RecordRef{}){}~Holder()=default;} holder;holder.generation=1;
+  auto *bridge=memnew(Registry::QualificationBridge);bridge->serial=11;bridge->epoch=1;bridge->holder=&holder;bridge->children=2;registry->qualification_bridges[0]=bridge;
+  auto *storage=memnew(Registry::QualificationBridge::Storage);storage->serial=31;storage->physical.bridge=11;storage->physical.child=31;bridge->storage[0]=storage;
+  auto *ticket=memnew(QualificationTicket);ticket->serial=23;ticket->bridge_serial=11;ticket->physically_retired=true;bridge->tickets[0]=ticket;
+  ticket->physical_uses.push_back(&storage->physical);storage->physical.uses.push_back(ticket);
+  if(mode==0)ticket->physical_uses.push_back(&storage->physical);
+  if(mode==1)storage->physical.uses.push_back(ticket);
+  if(mode==2)storage->physical.uses.clear();
+  if(mode==3)ticket->physical_uses.push_back(reinterpret_cast<QualificationPhysicalReturn *>(uintptr_t(1)));
+  if(mode==4)ticket->physical_uses.clear();
+  const auto result=registry->qualification_release({71,11},{71,23});CHECK(result.native_error==ERR_INVALID_DATA);CHECK_FALSE(ticket->acknowledged);CHECK(bridge->children==2);CHECK(record.private_refs==3);
+  CHECK(ticket->physical_uses.size()==(mode==0 || mode==3?2:mode==4?0:1));CHECK(storage->physical.uses.size()==(mode==1?2:mode==2?0:1));
+  registry->qualification_bridges[0]=nullptr;RenderingDevice::singleton=previous;device.is_main_instance=false;memdelete(ticket);memdelete(storage);memdelete(bridge);memdelete(registry);
+ }
  static void retired_prepared_upload(RenderingDevice &device, RenderingDeviceDriver &driver) {
   using namespace GDExtensionDeviceExit;
   // Original cells are fixture-enrolled; calls below exercise the original
@@ -209,7 +329,8 @@ class Driver : public TransferTestDriverBase {
 public:
  GDExtensionDeviceExit::QualificationPhysicalReturn *cell=nullptr;
  int creates=0,frees=0,sets_freed=0;
- bool fail_poll=false;int polls=0;int shaders_freed=0;
+ bool fail_poll=false;bool fail_native_once=false;std::atomic<bool> *release_start=nullptr,*release_locked=nullptr;int polls=0;int shaders_freed=0;int release_one=0,release_two=0;
+ Error native_call_release(uint64_t serial) override {if(serial==101){++release_one;if(release_start && release_locked){release_start->store(true);const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(2);while(!release_locked->load() && std::chrono::steady_clock::now()<deadline)std::this_thread::yield();if(!release_locked->load())return ERR_BUSY;}return OK;}if(serial==102){++release_two;if(fail_native_once && release_two==1)return ERR_BUSY;return OK;}return ERR_DOES_NOT_EXIST;}
  bool native_call_observation_supported() const override {return true;}
  FencePollResult native_call_poll(uint64_t serial) override { FencePollResult result;if(fail_poll){++polls;result.completed_serial=serial;result.native_error=true;result.native_code=-21;}return result;}
  bool shader_retire_ready_nonblocking(ShaderID) const override {return polls>0;}
@@ -313,4 +434,33 @@ TEST_CASE("[Qualification] queued native service retains maintenance error acros
 TEST_CASE("[Qualification] queued native close retains preexisting maintenance error") {
  RenderingDevice device;TestQualificationPhysical::Driver driver;driver.fail_poll=true;TestQualificationPhysicalAccess::attach(device,driver);
  TestQualificationPhysicalAccess::service_error_before_shader_enqueue(device,driver,true,false,true);CHECK(driver.polls==1);CHECK(driver.shaders_freed==1);TestQualificationPhysicalAccess::detach(device);
+}
+
+TEST_CASE("[Qualification] ticket ack removes only its original reverse uses after RD contention") {
+ RenderingDevice device;TestQualificationPhysical::Driver driver;TestQualificationPhysicalAccess::attach(device,driver);
+ TestQualificationPhysicalAccess::ticket_reverse_unlink(device,driver);CHECK(driver.creates==1);CHECK(driver.frees==1);TestQualificationPhysicalAccess::detach(device);
+}
+
+TEST_CASE("[Qualification] ticket ack rejects damaged or duplicate reverse edges without partial unlink") {
+ for(uint32_t mode=0;mode<5;++mode){RenderingDevice device;TestQualificationPhysicalAccess::ticket_bad_reverse_edges(device,mode);}
+}
+
+TEST_CASE("[Qualification] ticket native release retry retains reverse edges until all observers return") {
+ RenderingDevice device;TestQualificationPhysical::Driver driver;driver.fail_native_once=true;
+ TestQualificationPhysicalAccess::ticket_native_release_retry(device,driver);CHECK(driver.release_one==1);CHECK(driver.release_two==2);
+}
+
+#ifdef THREADS_ENABLED
+TEST_CASE("[Qualification] empty ticket ack preserves progress during RD contention") {
+ RenderingDevice device;TestQualificationPhysicalAccess::ticket_empty_release_during_rd_contention(device);
+}
+TEST_CASE("[Qualification] ticket observer return survives later RD contention without replay") {
+ RenderingDevice device;TestQualificationPhysical::Driver driver;std::atomic<bool> start=false,locked=false;driver.release_start=&start;driver.release_locked=&locked;
+ TestQualificationPhysicalAccess::ticket_relock_busy(device,driver,start,locked);CHECK(driver.release_one==1);
+}
+#endif
+
+TEST_CASE("[Qualification] foreign bridge physical child cannot acquire ticket reverse use") {
+ RenderingDevice device;TestQualificationPhysical::Driver driver;TestQualificationPhysicalAccess::attach(device,driver);
+ TestQualificationPhysicalAccess::foreign_bridge_pin_is_rejected(device);CHECK(driver.creates==1);CHECK(driver.frees==1);TestQualificationPhysicalAccess::detach(device);
 }

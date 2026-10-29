@@ -1,0 +1,19 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_qualification_physical.cpp:348:
+TEST CASE:  [Qualification] ticket ack removes only its original reverse uses after RD contention
+
+tests/servers/rendering/test_qualification_physical.cpp:29: ERROR: CHECK( blocked.native_error==ERR_BUSY ) is NOT correct!
+  values: CHECK( 0 == 44 )
+
+tests/servers/rendering/test_qualification_physical.cpp:29: ERROR: CHECK( blocked.reason==19 ) is NOT correct!
+  values: CHECK( 0 == 19 )
+
+tests/servers/rendering/test_qualification_physical.cpp:30: ERROR: CHECK_FALSE( first->acknowledged ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+===============================================================================
+[doctest] test cases: 1 | 0 passed | 1 failed | 1810 skipped
+[doctest] assertions: 8 | 5 passed | 3 failed |
+[doctest] Status: FAILURE!

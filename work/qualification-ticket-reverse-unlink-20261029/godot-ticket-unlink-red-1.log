@@ -1,0 +1,16 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_qualification_physical.cpp:392:
+TEST CASE:  [Qualification] ticket native release retry retains reverse edges until all observers return
+
+tests/servers/rendering/test_qualification_physical.cpp:55: ERROR: CHECK( ticket->physical_uses.is_empty() ) is NOT correct!
+  values: CHECK( false )
+
+tests/servers/rendering/test_qualification_physical.cpp:55: ERROR: CHECK( storage->physical.uses.is_empty() ) is NOT correct!
+  values: CHECK( false )
+
+===============================================================================
+[doctest] test cases:  1 |  0 passed | 1 failed | 1812 skipped
+[doctest] assertions: 13 | 11 passed | 2 failed |
+[doctest] Status: FAILURE!
