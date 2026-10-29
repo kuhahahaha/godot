@@ -1,3 +1,0 @@
-# Independent review — R46
-
-The patch adds one preflight guard to `texture_get_copyable_layout()` before dereferencing the output pointer and one focused qualification case. RED, current Debug, K03/P2 and release evidence are captured. The first two UBSan attempts hit a shared mixed-worktree pure-virtual interface race; after the external header/implementation stabilized, retry R3 built and ran the current source at 47/167 with no sanitizer diagnostics. The failed attempts remain as audit history. No fallback, owner authority, lifecycle association, completion/readback claim or G1 behavior was introduced.

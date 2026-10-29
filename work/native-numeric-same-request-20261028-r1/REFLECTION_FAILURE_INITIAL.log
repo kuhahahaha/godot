@@ -1,7 +1,0 @@
-Godot Engine v4.7.2.stable.custom_build.56730c52c (2026-10-28 08:16:05 UTC) - https://godotengine.org
-Metal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M3 Pro (Apple9)
-
-ORIGINAL_INTERFACE_ERROR physical=0 field=ReflectAccountWork work=183571
-ORIGINAL_RETAINED_UNIT ordinal=0 unit=848e31c6359945c13dc9785ae3d78a664b18fdadf2cbc976562c3f029eb8e309 flags=1 same_exported_identity=1
-ORIGINAL_SDK_USER_TERMINATOR level=3
-PHS1_FIXTURE_FATAL tag=one where=sdk_code_hold_release error=4

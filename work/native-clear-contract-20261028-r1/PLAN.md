@@ -1,9 +1,0 @@
-# Native clear original entry completion
-
-Root-reviewed followup to632bede301: Vulkan driver forwards clear directly to vkCmdFillBuffer. Official https://docs.vulkan.org/refpages/latest/refpages/source/vkCmdFillBuffer.html requires offset multiple4 (00025), nonzero fill size (00026). Current original clear checks size alignment/range only; no zero-size no-op exists. No4B rule added to buffer_update.
-
-Extend EXISTING real RD receiver case: offset1,size4 refuses; legal4,size4 and existing exact-end/full/overflow neighbors preserved. Aligned0/32 zero-size calls retain ordinary validation/return guard but must not mark transfer watermark, append graph command or reach driver. Existing typed return guard remains authoritative even for empty calls. Reuse original compiler/link/test commands, no new runner/framework or full GPU matrix.
-
-RED freshly compile pre-fix original RD and changed receiver, watch actual public entry violate alignment and empty-command expectations. GREEN minimal original clear alignment + successful empty no-op after validation/return guard and before worker/graph effects; update public docs, run existing combined buffer/indirect/B4/qualification controls in private linked host. Canonical e375 host remains immutable for current actual ANGE pair while source commit/review closes. All source/link inputs and real current ANGE negative admission receipt retain separate scopes.
-
-Ruling: after first private30/1075 and independent clean review, authoritative process snapshot shows no live Godot/SCons readers/builders. Reuse root-authorized incremental canonical integration, preserving exacte375 before replacement. Earlier current-pair and native Metal receipts remain at their original binary and gain no new-core success claim. This completes the production source/build part without additional runner/GPU matrix.

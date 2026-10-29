@@ -1,1 +1,0 @@
-First runtime rc0 is INVALID acceptance: ordinary custom attribute had wrong Variant type and RGB coverage counted background. Corrected float custom stream and alpha coverage. Empty external aggregate AABB was observed independently.

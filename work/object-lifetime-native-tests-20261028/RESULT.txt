@@ -1,5 +1,0 @@
-command=bin/godot.macos.editor.dev.arm64 --headless --test --test-case='[Object][Native lifetime]*'
-rc=0
-cases=9
-assertions=51
-failed=0

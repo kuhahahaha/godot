@@ -1,8 +1,0 @@
-{
-  "source": "servers/rendering/renderer_viewport.cpp",
-  "before_sha256": "38243ab8355f587e01fcfe451610eb5045fd24a287b01af5942b4fb00860cbd9",
-  "after_sha256": "f7003a36a668eee30a7a6a5a093fa9e4ea8e9961ea0101e9304aa6398300dc5a",
-  "binary_sha256": "6237c3527ead271ca69a07eaee8bbc098f8b1cca6331332e61a2fe5ab579065a",
-  "base_head": "76c3b1010f",
-  "source_dependency": "Uncommitted C01/E15 viewport migration; patch applies to recorded before hash, not clean HEAD."
-}

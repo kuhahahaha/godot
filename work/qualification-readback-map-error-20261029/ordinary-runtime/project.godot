@@ -1,7 +1,0 @@
-config_version=5
-[application]
-config/name="Main RD original async readback control"
-[rendering]
-renderer/rendering_method="mobile"
-rendering_device/staging_buffer/block_size_kb=4
-rendering_device/staging_buffer/max_size_mb=1

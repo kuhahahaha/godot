@@ -1,7 +1,0 @@
-# Original prepared-ticket replay
-
-Commit `2804bc463f` resolves exact existing prepare_uploads requests from the original ticket and canonical plans before current RD/destination admission. Pointer/ABI/request shape, original bridge/thread/epoch/holder/generation, plan shape, unique index and segment bounds remain validated before replay. Exact immutable preparation and every canonical plan field must match. Changed or acknowledged requests retain their original refusals; new requests retain every native/destination/capacity check before issuance.
-
-RED: cross-thread RD contention, 1 case / 11 assertions, 6 failures. GREEN: 1/11 with the two original plans supplied in reverse input order, changed valid role refusal, acknowledged tombstone refusal, new-key Busy and unchanged counts/graph. Final Debug Qualification23/380 (also covers ordinary record replay), RT4/378, K03/P2 22/350. UBSan Qualification23/380 with no sanitizer diagnostics. Release build/version rc0. Real non-headless Metal qrt_upload safe control passes rc0 with prepared-ticket replay, actual upload+record, same-ticket facts, physical returns and clean unload.
-
-The contention test uses fixture-enrolled original Registry cells and grants no production authority. Runtime scope is the raw native fixture, not canonical ANGE E09/U08 admission or Ready/G1 acceptance. Source and binary identity are recorded separately because the final source was linked before commit.

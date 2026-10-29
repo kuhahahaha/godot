@@ -1,2 +1,0 @@
-filter=*[QualificationNative]* rc=0 cases=3 assertions=59 failures=0
-fresh_build_this_turn=false

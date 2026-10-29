@@ -1,8 +1,0 @@
-{
-  "cwd": "/Users/macbookair/Documents/Work/godot_ANGE/work/joint-integration-native-20261029/api-dump",
-  "command": [
-    "/Users/macbookair/Documents/Work/godot_ANGE/work/joint-integration-native-20261029/artifacts/godot-macos-editor-7e63110bf209811e",
-    "--headless",
-    "--dump-extension-api"
-  ]
-}

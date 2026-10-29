@@ -1,6 +1,0 @@
-/Users/macbookair/Documents/Work/godot_ANGE/work/k03-final-dso-load-20261026/bin/ange-debug.99c22545.dylib:
-	bin/libange.macos.template_debug.arm64.dylib (compatibility version 0.0.0, current version 0.0.0)
-	/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation (compatibility version 150.0.0, current version 3208.0.0)
-	@rpath/librmlui.macos.template_debug.arm64.dylib (compatibility version 0.0.0, current version 0.0.0)
-	/usr/lib/libc++.1.dylib (compatibility version 1.0.0, current version 1800.105.0)
-	/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1351.0.0)

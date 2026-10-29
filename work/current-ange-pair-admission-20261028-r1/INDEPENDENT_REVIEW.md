@@ -1,3 +1,0 @@
-# Independent exact fixed-pair receipt review
-
-Reviewer /root/native_clear_and_pair_review read original source mappings, actual pre-cleare375+b35a and post-clear882d+b35a logs/pins/build-origin. No P1/P2. Each has11 unchanged runtime inputs; post-clear current hashes and preservede375 identity verified. Raw logs show first R01device_session.not_admitted, rc2/loadstatus1; reason16 has multiple possible native leaves and storage input read follows bind/open. Runtime does not establish a unique Binding leaf, missingU08, world/VFX, explicitunload orG1/Ready success. No reviewer execution or source edits.

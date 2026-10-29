@@ -1,8 +1,0 @@
-{
-  "review_type": "non-author runtime evidence review",
-  "package": "K03_current_pair_abi_drift_negative",
-  "review_target": "K03_CURRENT_PAIR_ABI_DRIFT_NEGATIVE_20261027.md",
-  "questions": ["Do both logs show the same first ABI error and rc/status?", "Is the result correctly classified before U01/VFX/close?", "Are no positive claims made?"],
-  "required_checks": ["verify editor/DSO/log hashes", "read first error lines", "report P0-P3 or limited-scope acceptance"],
-  "tests_rerun": false
-}

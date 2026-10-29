@@ -1,3 +1,0 @@
-workspace=/Users/macbookair/Documents/Work/godot_ANGE
-godot_head=ddf55e6e7d33586757d0433d1d6cbc10cae99c95
-ange_head=bc891747aefb02f0b4e1440b6b7f7e07cc811d8e

@@ -1,6 +1,0 @@
-[configuration]
-entry_symbol="phs1_probe_init"
-compatibility_minimum="4.7"
-device_exit_guard_version=1
-[libraries]
-macos="res://probe.dylib"

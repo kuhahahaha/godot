@@ -1,3 +1,0 @@
-source_contract_rc=0
-diff_check_rc=0
-device_exit_rc=0

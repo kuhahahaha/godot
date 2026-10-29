@@ -1,7 +1,0 @@
-# Native buffer entry range correctness
-
-Existing authorized native correctness queue; adjacent original buffer_clear/update/synchronous get_data use u32 offset+size. Sync default-size path skips range check entirely. Async already checks offset and remaining capacity safely. Preserve all return/list/usage/recording rules and default size=whole-buffer convention; no new scheduling, manager, authority, PF optimization or API.
-
-Reuse original TestExternalOutputAccess receiver. Clear: legal0+32/24+8, reject28+8 and alignedUINT32_MAX-3+8; observe graph count and actual graph playback clear counts/ranges. Update: same ranges, real persistent map for legal cases, real qualification_return prevents malformed pre-fix mapping and gives discriminating error; check original range rejection precedes return guard and legal returning buffers still refuse. Sync readback: legal whole-buffer0+default and24+8 reach original allocation (receiver returns allocation failure); explicit overrun/wrap and4+default reject before any allocation/graph effect. This does not claim successful GPU readback.
-
-Run new original-entry tests RED against canonical existing production archive, then minimal widened span checks; validate sync default branch too. Compile only owned test/RD TU, privately link existing archives, never replace frozen canonical editor. GREEN new cases plus adjacent indirect/B4. Independent whole-source/evidence review and exact commit with raw logs/identities/ledger. No external owner blocker prevents this module.

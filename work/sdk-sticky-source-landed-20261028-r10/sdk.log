@@ -1,3 +1,0 @@
-PASS SDK main-loop explicit declaration: 17 enrollment cases; NO_NATIVE_AUTHORITY
-PASS SDK V2: public setters, twenty-one pre-effect refusals, both declarations, twenty-four malformed plans, frozen identity/thread/reentry and registration failure; NO_NATIVE_AUTHORITY
-PASS SDK SceneReady: enrollment owner rollback, four pre-effect refusals, original SCENE registration before acknowledgement, exact callback/error, five frozen/mask/thread/reentry refusals and registration failure stops acknowledgement; NO_NATIVE_AUTHORITY

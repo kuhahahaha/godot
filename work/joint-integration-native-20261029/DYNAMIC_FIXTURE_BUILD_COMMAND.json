@@ -1,9 +1,0 @@
-[
-  "/usr/bin/clang",
-  "-std=c11",
-  "-dynamiclib",
-  "-I/Users/macbookair/Documents/Work/godot_ANGE",
-  "/Users/macbookair/Documents/Work/godot_ANGE/tests/core/object/fixtures/device_exit_dynamic_library.c",
-  "-o",
-  "/Users/macbookair/Documents/Work/godot_ANGE/work/joint-integration-native-20261029/regenerated-fixture-runtime/work/typed-lifecycle-abi-v1/native-dynamic/libtyped_dynamic.dylib"
-]

@@ -1,7 +1,0 @@
-[
-  "/Users/macbookair/Documents/Work/godot_ANGE/work/b4-indexed144-native-consumer-20261028-r1/godot-indexed144",
-  "--disable-crash-handler",
-  "--headless",
-  "--test",
-  "--test-case=[B4][K05]*"
-]
