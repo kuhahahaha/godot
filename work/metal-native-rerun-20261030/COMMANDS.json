@@ -1,0 +1,7 @@
+{
+  "commands": [
+    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64 --headless --test --test-case='[QualificationNative][Metal]*'",
+    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64 --headless --test --test-case='[K03][MetalCompletion]*'",
+    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64 --headless --test --test-case='[ParticlesReadback]*'"
+  ]
+}

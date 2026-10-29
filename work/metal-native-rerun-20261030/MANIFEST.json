@@ -1,0 +1,28 @@
+{
+  "package": "metal-native-rerun-20261030",
+  "binary": "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+  "binary_sha256": "c6b4d0cf062de3593f1c98732c4adcd6b5f9dfcf41ecc5ffb439a3a40e53e174",
+  "source_head": "febf36c485028f10cbfc945e57703c1a7a36b4c4",
+  "selectors": {
+    "QUAL_METAL": {
+      "selector": "[QualificationNative][Metal]*",
+      "rc": 0,
+      "log": "QUAL_METAL.log"
+    },
+    "K03_METAL_COMPLETION": {
+      "selector": "[K03][MetalCompletion]*",
+      "rc": 0,
+      "log": "K03_METAL_COMPLETION.log"
+    },
+    "PARTICLES_READBACK": {
+      "selector": "[ParticlesReadback]*",
+      "rc": 0,
+      "log": "PARTICLES_READBACK.log"
+    }
+  },
+  "limits": [
+    "backend substrate only",
+    "no production particle issuer",
+    "no Ready/G1 authority"
+  ]
+}
