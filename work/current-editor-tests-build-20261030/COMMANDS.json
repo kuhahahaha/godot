@@ -19,5 +19,8 @@
   "scene_ready_selector": "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64 --headless --test --test-case='[DeviceExit][SceneReady]*'",
   "qualification_full": "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64 --headless --test --test-case='[Qualification]*'",
   "device_exit_full": "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64 --headless --test --test-case='*device_exit*'",
-  "qualification_native_full": "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64 --headless --test --test-case='*[QualificationNative]*'"
+  "qualification_native_full": "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64 --headless --test --test-case='*[QualificationNative]*'",
+  "k03_full": "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64 --headless --test --test-case='*[K03]*'",
+  "r02_full": "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64 --headless --test --test-case='*[R02]*'",
+  "rendering_device_full": "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64 --headless --test --test-case='*[RenderingDevice]*'"
 }

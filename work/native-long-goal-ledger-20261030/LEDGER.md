@@ -19,3 +19,9 @@ The same tests-enabled editor passed full `*device_exit*`: 133 cases / 2619 asse
 The same tests-enabled editor passed full `*[QualificationNative]*`: 67 cases / 302 assertions, rc0.
 
 The native/renderer source set is now integrated as commit `84c9b2ee7d`; the tests-enabled binary and selector receipts are pinned to that source state.
+
+The same tests-enabled editor passed full `*[K03]*`: 44 cases / 1153 assertions, rc0.
+
+The same tests-enabled editor passed full `*[R02]*`: 9 cases / 115 assertions, rc0.
+
+The same tests-enabled editor passed full `*[RenderingDevice]*`: 12 cases / 214 assertions, rc0.

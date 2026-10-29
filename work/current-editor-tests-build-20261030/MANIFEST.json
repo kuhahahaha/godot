@@ -96,5 +96,20 @@
     "selector": "*[QualificationNative]*",
     "rc": 0,
     "log": "QUAL_NATIVE_FULL.log"
+  },
+  "k03_full": {
+    "selector": "*[K03]*",
+    "rc": 0,
+    "log": "K03_FULL.log"
+  },
+  "r02_full": {
+    "selector": "*[R02]*",
+    "rc": 0,
+    "log": "R02_FULL.log"
+  },
+  "rendering_device_full": {
+    "selector": "*[RenderingDevice]*",
+    "rc": 0,
+    "log": "RENDERING_DEVICE_FULL.log"
   }
 }

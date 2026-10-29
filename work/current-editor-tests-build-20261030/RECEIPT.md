@@ -26,3 +26,9 @@ Full qualification selector `[Qualification]*` rc 0; output is recorded in `QUAL
 Full device-exit selector `*device_exit*` rc 0; output is recorded in `DEVICE_EXIT_FULL.log`.
 
 Full native qualification selector `*[QualificationNative]*` rc 0; output is recorded in `QUAL_NATIVE_FULL.log`.
+
+Full K03 selector `*[K03]*` rc 0; output is recorded in `K03_FULL.log`.
+
+Full graph selector `*[R02]*` rc 0; output is recorded in `R02_FULL.log`.
+
+Full RenderingDevice selector `*[RenderingDevice]*` rc 0; output is recorded in `RENDERING_DEVICE_FULL.log`.

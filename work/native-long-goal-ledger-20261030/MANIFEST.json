@@ -15,7 +15,10 @@
       "DeviceExit_SceneReady": "2/52 rc0",
       "Qualification_full": "91/1829 rc0",
       "Device_exit_full": "133/2619 rc0",
-      "QualificationNative_full": "67/302 rc0"
+      "QualificationNative_full": "67/302 rc0",
+      "K03_full": "44/1153 rc0",
+      "R02_full": "9/115 rc0",
+      "RenderingDevice_full": "12/214 rc0"
     },
     "receipt": "work/current-editor-tests-build-20261030/RECEIPT.md",
     "commit": "3f7b8e4430",
