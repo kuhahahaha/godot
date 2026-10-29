@@ -13,7 +13,7 @@ TEST_FORCE_LINK(test_qualification_ticket)
 class TestQualificationTicketAccess {
 public:
 #ifdef THREADS_ENABLED
-	static void replay_under_contention() {
+	static void replay_under_contention(bool p_prepared = false) {
 		using namespace GDExtensionDeviceExit;
 		// Seed only original Registry cells; this exercises replay, not issuance.
 		auto *registry = memnew(Registry);
@@ -36,6 +36,20 @@ public:
 		ticket->origin.abi = {1, sizeof(GDExtensionDeviceExitAbi), 0};
 		ticket->origin.record_generation = 37; ticket->origin.request_nonce = 39;
 		ticket->report.revision = 5; ticket->report.state = 4;
+		ticket->prepared = p_prepared;
+		ticket->preparation.abi = {1, sizeof(GDExtensionDeviceExitAbi), 0};
+		ticket->preparation.record_generation = 37; ticket->preparation.request_nonce = 39;
+		ticket->preparation.library_generation = 1; ticket->preparation.qualification_session_serial = 7;
+		ticket->preparation.parent_serial = 31; ticket->preparation.reservation_serial = 97;
+		ticket->preparation.attempt = 1; ticket->preparation.upload_count = 2;
+		ticket->preparation.max_segments = 2; ticket->preparation.expected_result_bytes = 16;
+		ticket->uploads.resize(2);
+		for (uint32_t i = 0; i < 2; ++i) {
+			auto &plan = ticket->uploads[i].plan;
+			plan.abi = {1, sizeof(GDExtensionDeviceExitAbi), 0}; plan.upload_index = i;
+			plan.role = i; plan.owner_kind = GDEXTENSION_QUALIFICATION_UPLOAD_OWNER_E09_V1;
+			plan.byte_size = 32;
+		}
 		bridge->tickets[0] = ticket;
 		Semaphore locked, release;
 		std::thread holder_thread([&] { device._thread_safe_.lock(); locked.post(); release.wait(); device._thread_safe_.unlock(); });
@@ -43,17 +57,20 @@ public:
 		GDExtensionQualificationTicketRefV1 out = {};
 		GDExtensionQualificationReportV1 report = {};
 		auto request = ticket->origin;
-		auto status = registry->qualification_record({71, 11}, &request, &out, &report);
+		auto prepare = ticket->preparation;
+		GDExtensionQualificationUploadPlanV1 plans[] = {ticket->uploads[1].plan, ticket->uploads[0].plan};
+		auto invoke = [&] { return p_prepared ? registry->qualification_prepare_uploads({71, 11}, &prepare, plans, 2, &out, &report) : registry->qualification_record({71, 11}, &request, &out, &report); };
+		auto status = invoke();
 		CHECK(status.native_error == OK);
 		CHECK(out.registry_instance == 71); CHECK(out.handle_serial == 23);
 		CHECK(memcmp(&report, &ticket->report, sizeof(report)) == 0);
-		out = {}; request.body_groups_x++;
-		CHECK(registry->qualification_record({71, 11}, &request, &out, &report).native_error == ERR_INVALID_DATA);
+		out = {}; request.body_groups_x++; plans[0].role++;
+		CHECK(invoke().native_error == ERR_INVALID_DATA);
 		CHECK(out.handle_serial == 0);
-		request = ticket->origin; ticket->acknowledged = true;
-		CHECK(registry->qualification_record({71, 11}, &request, &out, &report).native_error == ERR_DOES_NOT_EXIST);
-		ticket->acknowledged = false; request.request_nonce++;
-		CHECK(registry->qualification_record({71, 11}, &request, &out, &report).native_error == ERR_BUSY);
+		request = ticket->origin; plans[0] = ticket->uploads[1].plan; ticket->acknowledged = true;
+		CHECK(invoke().native_error == ERR_DOES_NOT_EXIST);
+		ticket->acknowledged = false; request.request_nonce++; prepare.request_nonce++;
+		CHECK(invoke().native_error == ERR_BUSY);
 		CHECK(bridge->children == 1); CHECK(record.private_refs == 7);
 		CHECK(device.draw_graph.qualification_command_count() == 0);
 		release.post(); holder_thread.join();
@@ -398,6 +415,7 @@ TEST_CASE("[Qualification] owner stop is opt in exact ticket monotone and preser
 
 #ifdef THREADS_ENABLED
 TEST_CASE("[Qualification] exact record replay returns original ticket despite RD contention") { TestQualificationTicketAccess::replay_under_contention(); }
+TEST_CASE("[Qualification] exact prepared replay returns canonical original plans despite RD contention") { TestQualificationTicketAccess::replay_under_contention(true); }
 TEST_CASE("[Qualification] ticket continuation refuses contended RD before graph and resumes the same suffix") {TestQualificationTicketAccess::contended_continuation();}
 #endif
 

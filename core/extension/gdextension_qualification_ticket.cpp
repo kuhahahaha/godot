@@ -274,26 +274,28 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_prepare_uploads(GDExten
  *out={};*report={};
  if(!valid_abi(request->abi)||request->reserved||request->upload_count!=plan_count||!request->record_generation||!request->request_nonce||!request->qualification_session_serial||!request->parent_serial||!request->reservation_serial||!request->attempt||!request->max_segments||request->max_segments>4096||!request->expected_result_bytes||request->expected_result_bytes>16384)return result(ERR_INVALID_PARAMETER,2);
  RdUnlock rd_unlock;MutexLock lock(mutex);QualificationBridge *bridge=nullptr;RenderingDevice *rd=nullptr;Error error=qualification_bridge_locked(ref,true,true,bridge,rd,7);if(error!=OK)return result(error,error==ERR_UNAUTHORIZED?15:16);
- if(!rd->_thread_safe_.try_lock())return result(ERR_BUSY,19);rd_unlock.mutex=&rd->_thread_safe_;
  if(request->library_generation!=records[bridge->library].snapshot.library_generation)return result(ERR_INVALID_DATA,17);
- if(!rd->driver->native_call_observation_supported())return result(ERR_UNAVAILABLE,18);
  uint32_t indices[128]={};bool present[128]={};uint64_t segments=0;
  for(uint32_t i=0;i<plan_count;++i) {
   const auto &plan=plans[i];
   if(!valid_abi(plan.abi)||plan.reserved||plan.upload_index>=plan_count||present[plan.upload_index]||plan.role>=GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_COUNT_V1||plan.owner_kind<GDEXTENSION_QUALIFICATION_UPLOAD_OWNER_E05_V1||plan.owner_kind>GDEXTENSION_QUALIFICATION_UPLOAD_OWNER_E24_V1||!plan.byte_size||plan.byte_size>UINT32_MAX||plan.byte_offset>UINT32_MAX||plan.byte_size>UINT32_MAX-plan.byte_offset)return result(ERR_INVALID_PARAMETER,2);
   present[plan.upload_index]=true;indices[plan.upload_index]=i;segments+=(plan.byte_size+31)/32;
   if(segments>request->max_segments)return result(ERR_PARAMETER_RANGE_ERROR,19);
-  error=qualification_upload_destination(bridge,rd,plan);if(error!=OK)return result(error,error==ERR_UNAVAILABLE?18:2);
  }
- const uint64_t graph_bound=segments+(request->expected_result_bytes+31)/32+2;
- error=qualification_native_capacity(*rd->driver,rd->draw_graph.qualification_command_count(),graph_bound,rd->transfer_worker_pool_max_size);
- if(error!=OK)return result(error,error==ERR_UNAVAILABLE?18:19);
  for(auto *ticket:bridge->tickets)if(ticket && ticket->origin.record_generation==request->record_generation && ticket->origin.request_nonce==request->request_nonce) {
   if(ticket->acknowledged)return result(ERR_DOES_NOT_EXIST,17);
   if(!ticket->prepared || memcmp(&ticket->preparation,request,sizeof(*request)))return result(ERR_INVALID_DATA,16);
   for(uint32_t i=0;i<plan_count;++i)if(memcmp(&ticket->uploads[i].plan,&plans[indices[i]],sizeof(*plans)))return result(ERR_INVALID_DATA,16);
   *out={instance,ticket->serial};*report=ticket->report;return result(OK);
  }
+ if(!rd->_thread_safe_.try_lock())return result(ERR_BUSY,19);rd_unlock.mutex=&rd->_thread_safe_;
+ if(!rd->driver->native_call_observation_supported())return result(ERR_UNAVAILABLE,18);
+ for(uint32_t i=0;i<plan_count;++i) {
+  error=qualification_upload_destination(bridge,rd,plans[i]);if(error!=OK)return result(error,error==ERR_UNAVAILABLE?18:2);
+ }
+ const uint64_t graph_bound=segments+(request->expected_result_bytes+31)/32+2;
+ error=qualification_native_capacity(*rd->driver,rd->draw_graph.qualification_command_count(),graph_bound,rd->transfer_worker_pool_max_size);
+ if(error!=OK)return result(error,error==ERR_UNAVAILABLE?18:19);
  uint32_t slot=0;for(;slot<QualificationBridge::CHILD_CAPACITY && bridge->tickets[slot];++slot){}
  if(slot==QualificationBridge::CHILD_CAPACITY || records[bridge->library].private_refs>=private_limit || qualification_serials.exhausted || qualification_serials.next==UINT64_MAX)return result(ERR_PARAMETER_RANGE_ERROR,19);
  auto *ticket=memnew(QualificationTicket);ticket->prepared=true;ticket->preparation=*request;ticket->bridge_serial=bridge->serial;ticket->library=bridge->library;
