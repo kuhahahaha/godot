@@ -2160,6 +2160,7 @@ uint8_t *RenderingDeviceDriverVulkan::buffer_map(BufferID p_buffer) {
 
 void RenderingDeviceDriverVulkan::buffer_unmap(BufferID p_buffer) {
 	const BufferInfo *buf_info = (const BufferInfo *)p_buffer.id;
+	ERR_FAIL_NULL(buf_info);
 	vmaUnmapMemory(allocator, buf_info->allocation.handle);
 }
 
