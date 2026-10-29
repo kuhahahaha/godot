@@ -2,8 +2,16 @@
 /*  test_rendering_device_driver_completion.cpp                           */
 /**************************************************************************/
 
+// X11 defines None as a macro; this public header must remain compatible.
+#define None 0L
 #include "servers/rendering/rendering_device_driver.h"
+#ifndef None
+#error "RenderingDeviceDriver must preserve the X11 None macro"
+#endif
+#undef None
 #include "tests/test_macros.h"
+
+static_assert(static_cast<uint8_t>(RenderingDeviceDriver::CompletionCapability::NoCompletion) == 0);
 
 TEST_FORCE_LINK(test_rendering_device_driver_completion)
 

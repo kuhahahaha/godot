@@ -146,7 +146,7 @@ TEST_CASE("[K03][MetalCompletion] no fence batches do not accumulate unowned rec
 			REQUIRE(driver.command_queue_execute_and_present(queue, {}, command, {}, {}, {}) == OK);
 			CHECK(TestMetalCompletionAccess::records(driver) == 0);
 			for (const auto &fact : driver.get_last_queue_call_report().calls) {
-				CHECK(fact.completion == RDD::CompletionCapability::None);
+				CHECK(fact.completion == RDD::CompletionCapability::NoCompletion);
 			}
 		}
 	}

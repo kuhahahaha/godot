@@ -2584,12 +2584,12 @@ Error RenderingDeviceDriverD3D12::command_queue_execute_and_present(CommandQueue
 			if (FAILED(signal_result)) {
 				report.native_code = static_cast<int64_t>(signal_result);
 				report.error = FAILED;
-			NativeCallFact fact;
-			fact.issue = IssueFact::IssuedUnknown;
-			fact.native_code = static_cast<int64_t>(signal_result);
-			fact.error = FAILED;
-			fact.completion = CompletionCapability::None;
-			report.calls.push_back(fact);
+				NativeCallFact fact;
+				fact.issue = IssueFact::IssuedUnknown;
+				fact.native_code = static_cast<int64_t>(signal_result);
+				fact.error = FAILED;
+				fact.completion = CompletionCapability::NoCompletion;
+				report.calls.push_back(fact);
 				record_queue_call_report(report);
 				return FAILED;
 			}
@@ -2610,11 +2610,11 @@ Error RenderingDeviceDriverD3D12::command_queue_execute_and_present(CommandQueue
 			if (FAILED(signal_result)) {
 				report.native_code = static_cast<int64_t>(signal_result);
 				report.error = FAILED;
-			NativeCallFact fact;
-			fact.issue = IssueFact::IssuedUnknown;
-			fact.native_code = static_cast<int64_t>(signal_result);
-			fact.error = FAILED;
-			fact.completion = CompletionCapability::None;
+				NativeCallFact fact;
+				fact.issue = IssueFact::IssuedUnknown;
+				fact.native_code = static_cast<int64_t>(signal_result);
+				fact.error = FAILED;
+				fact.completion = CompletionCapability::NoCompletion;
 				report.calls.push_back(fact);
 				record_queue_call_report(report);
 				return FAILED;

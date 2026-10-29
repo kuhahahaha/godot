@@ -290,7 +290,7 @@ TEST_CASE("[K03][VulkanNativeCall] submission without frame fence retains its ow
 	REQUIRE(report.calls.size() == 1);
 	const auto &fact = report.calls[0];
 	CHECK(fact.serial != 0);
-	CHECK(fact.completion != RDD::CompletionCapability::None);
+	CHECK(fact.completion != RDD::CompletionCapability::NoCompletion);
 	CHECK(fact.completion_serial == fact.serial);
 	CHECK(driver.native_call_retain(fact.serial) == OK);
 	const auto completed = driver.native_call_wait(fact.serial);
