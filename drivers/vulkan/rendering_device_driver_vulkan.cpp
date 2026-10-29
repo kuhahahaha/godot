@@ -2144,6 +2144,7 @@ void RenderingDeviceDriverVulkan::buffer_free(BufferID p_buffer) {
 
 uint64_t RenderingDeviceDriverVulkan::buffer_get_allocation_size(BufferID p_buffer) {
 	const BufferInfo *buf_info = (const BufferInfo *)p_buffer.id;
+	ERR_FAIL_NULL_V(buf_info, 0);
 	return buf_info->allocation.size;
 }
 
