@@ -1,0 +1,16 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_qualification_physical.cpp:518:
+TEST CASE:  [Qualification] unit pipeline identity failure is not masked by shader pending
+
+tests/servers/rendering/test_qualification_physical.cpp:324: ERROR: CHECK( child->report.state==2 ) is NOT correct!
+  values: CHECK( 0 == 2 )
+
+tests/servers/rendering/test_qualification_physical.cpp:324: ERROR: CHECK( child->report.reason==6 ) is NOT correct!
+  values: CHECK( 4 == 6 )
+
+===============================================================================
+[doctest] test cases: 1 | 0 passed | 1 failed | 1817 skipped
+[doctest] assertions: 8 | 6 passed | 2 failed |
+[doctest] Status: FAILURE!

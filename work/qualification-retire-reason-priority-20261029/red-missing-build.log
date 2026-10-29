@@ -1,0 +1,91 @@
+Building for macOS 11.0+.
+WARNING: The screen reader support driver requires dependencies to be installed.
+You can install them by running `python3 misc/scripts/install_accesskit.py`.
+See the documentation for more information:
+	https://docs.godotengine.org/en/latest/engine_details/development/compiling/compiling_for_macos.html
+Alternatively, disable this driver by compiling with `accesskit=no` explicitly.
+WARNING: The ANGLE rendering driver requires dependencies to be installed.
+You can install them by running `python misc/scripts/install_angle.py`.
+See the documentation for more information:
+	https://docs.godotengine.org/en/latest/engine_details/development/compiling/compiling_for_windows.html
+Alternatively, disable this driver by compiling with `angle=no` explicitly.
+MoltenVK found at: /opt/homebrew/Frameworks/MoltenVK.xcframework
+Building for platform "macos", architecture "arm64", target "editor".
+INFO: Developer build, with debug optimization level and debug symbols (unless overridden).
+Compiling tests/servers/rendering/test_qualification_physical.cpp ...
+tests/servers/rendering/test_qualification_physical.cpp:530:122: warning: operator '?:' has lower precedence than '<<'; '<<' will be evaluated first [-Wparentheses]
+  530 |   TestQualificationPhysicalAccess::unknown_while_dependent(device,driver,native,variant%3==2,variant<3?6:5);CHECK(native ? driver.shaders_freed==1 : driver.frees==1);TestQualificationPhysicalAccess::detach(device);
+      |                                                                                                             ~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2974:34: note: expanded from macro 'CHECK'
+ 2974 | #define CHECK(...) DOCTEST_CHECK(__VA_ARGS__)
+      |                    ~~~~~~~~~~~~~~^~~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2445:65: note: expanded from macro 'DOCTEST_CHECK'
+ 2445 | #define DOCTEST_CHECK(...) DOCTEST_ASSERT_IMPLEMENT_1(DT_CHECK, __VA_ARGS__)
+      |                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2401:49: note: expanded from macro 'DOCTEST_ASSERT_IMPLEMENT_1'
+ 2401 |         DOCTEST_ASSERT_IMPLEMENT_2(assert_type, __VA_ARGS__);                                      \
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2395:16: note: expanded from macro 'DOCTEST_ASSERT_IMPLEMENT_2'
+ 2393 |     DOCTEST_WRAP_IN_TRY(DOCTEST_RB.setResult(                                                      \
+      |     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 2394 |             doctest::detail::ExpressionDecomposer(doctest::assertType::assert_type)                \
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 2395 |             << __VA_ARGS__)) /* NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks) */         \
+      |             ~~~^~~~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2147:32: note: expanded from macro 'DOCTEST_WRAP_IN_TRY'
+ 2147 | #define DOCTEST_WRAP_IN_TRY(x) x;
+      |                                ^
+tests/servers/rendering/test_qualification_physical.cpp:530:122: note: place parentheses around the '<<' expression to silence this warning
+  530 |   TestQualificationPhysicalAccess::unknown_while_dependent(device,driver,native,variant%3==2,variant<3?6:5);CHECK(native ? driver.shaders_freed==1 : driver.frees==1);TestQualificationPhysicalAccess::detach(device);
+      |                                                                                                             ~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2974:34: note: expanded from macro 'CHECK'
+ 2974 | #define CHECK(...) DOCTEST_CHECK(__VA_ARGS__)
+      |                    ~~~~~~~~~~~~~~^~~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2445:65: note: expanded from macro 'DOCTEST_CHECK'
+ 2445 | #define DOCTEST_CHECK(...) DOCTEST_ASSERT_IMPLEMENT_1(DT_CHECK, __VA_ARGS__)
+      |                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2401:49: note: expanded from macro 'DOCTEST_ASSERT_IMPLEMENT_1'
+ 2401 |         DOCTEST_ASSERT_IMPLEMENT_2(assert_type, __VA_ARGS__);                                      \
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2395:16: note: expanded from macro 'DOCTEST_ASSERT_IMPLEMENT_2'
+ 2393 |     DOCTEST_WRAP_IN_TRY(DOCTEST_RB.setResult(                                                      \
+      |     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 2394 |             doctest::detail::ExpressionDecomposer(doctest::assertType::assert_type)                \
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 2395 |             << __VA_ARGS__)) /* NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks) */         \
+      |             ~~~^~~~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2147:32: note: expanded from macro 'DOCTEST_WRAP_IN_TRY'
+ 2147 | #define DOCTEST_WRAP_IN_TRY(x) x;
+      |                                ^
+tests/servers/rendering/test_qualification_physical.cpp:530:122: note: place parentheses around the '?:' expression to evaluate it first
+  530 |   TestQualificationPhysicalAccess::unknown_while_dependent(device,driver,native,variant%3==2,variant<3?6:5);CHECK(native ? driver.shaders_freed==1 : driver.frees==1);TestQualificationPhysicalAccess::detach(device);
+      |                                                                                                                   ~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2974:34: note: expanded from macro 'CHECK'
+ 2974 | #define CHECK(...) DOCTEST_CHECK(__VA_ARGS__)
+      |                                  ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2445:65: note: expanded from macro 'DOCTEST_CHECK'
+ 2445 | #define DOCTEST_CHECK(...) DOCTEST_ASSERT_IMPLEMENT_1(DT_CHECK, __VA_ARGS__)
+      |                                                                 ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2401:49: note: expanded from macro 'DOCTEST_ASSERT_IMPLEMENT_1'
+ 2401 |         DOCTEST_ASSERT_IMPLEMENT_2(assert_type, __VA_ARGS__);                                      \
+      |                                                 ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2395:16: note: expanded from macro 'DOCTEST_ASSERT_IMPLEMENT_2'
+ 2395 |             << __VA_ARGS__)) /* NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks) */         \
+      |                ^~~~~~~~~~~
+./thirdparty/doctest/doctest.h:2147:32: note: expanded from macro 'DOCTEST_WRAP_IN_TRY'
+ 2147 | #define DOCTEST_WRAP_IN_TRY(x) x;
+      |                                ^
+1 warning generated.
+Linking Static Library bin/obj/tests/libtests.macos.editor.dev.arm64.a ...
+Ranlib Library bin/obj/tests/libtests.macos.editor.dev.arm64.a ...
+Generating actual core controlled-build identity ...
+@(#)PROGRAM:ld PROJECT:ld-27037.1
+BUILD 12:05:32 Aug 17 2026
+configured to support archs: armv6 armv7 armv7s arm64 arm64e arm64_32 i386 x86_64 x86_64h armv6m armv7k armv7m armv7em armv8m.main armv8.1m.main
+LTO support using: LLVM version 21.0.0 (static support for 30, runtime is 30)
+TAPI support using: Apple TAPI version 21.0.0 (tapi-2100.3.8.1)
+Compiling core/engine_build_identity.gen.cpp ...
+Linking Program bin/godot.macos.editor.dev.arm64 ...
+ld: warning: object file (/opt/homebrew/Cellar/molten-vk/1.4.2/Frameworks/MoltenVK.xcframework/macos-arm64/libMoltenVK.a[2](libMoltenVK.a-arm64-prelink.o)) was built for newer 'macOS' version (12.0) than being linked (11.0)
+Recording final core artifact bytes ...
+INFO: Time elapsed: 00:00:19.04

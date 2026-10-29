@@ -1,0 +1,9 @@
+{
+  "[Qualification] unit pipeline identity failure is not masked by shader pending": 0,
+  "[Qualification]*": 0,
+  "[QualificationRt]*": 0,
+  "[RenderingDevice][Qualification]*": 0,
+  "[K03][P2]*": 0,
+  "*device_exit*": 0,
+  "*FrameWait*": 0
+}

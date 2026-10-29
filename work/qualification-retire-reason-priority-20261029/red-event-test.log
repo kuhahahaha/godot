@@ -1,0 +1,19 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_qualification_physical.cpp:557:
+TEST CASE:  [Qualification] mismatched pipeline cell cannot publish Returned from an event
+
+tests/servers/rendering/test_qualification_physical.cpp:352: ERROR: CHECK( child->report.state==2 ) is NOT correct!
+  values: CHECK( 1 == 2 )
+
+tests/servers/rendering/test_qualification_physical.cpp:352: ERROR: CHECK( child->report.reason==6 ) is NOT correct!
+  values: CHECK( 0 == 6 )
+
+tests/servers/rendering/test_qualification_physical.cpp:352: ERROR: CHECK( child->report.return_status==0 ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+===============================================================================
+[doctest] test cases: 1 | 0 passed | 1 failed | 1819 skipped
+[doctest] assertions: 3 | 0 passed | 3 failed |
+[doctest] Status: FAILURE!

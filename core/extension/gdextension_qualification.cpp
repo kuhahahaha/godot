@@ -239,10 +239,14 @@ void Registry::qualification_retire_step(QualificationBridge *bridge,RenderingDe
   QualificationBridge::NativeUnit *child=nullptr;for(auto *entry:bridge->units)if(entry && entry->serial==serial){child=entry;break;}
   if(!child || !child->retiring)return;
   bool failed=false;{MutexLock lock(mutex);if(child->report.report_revision==UINT64_MAX)return;failed=child->maintenance_error!=OK;}
-  uint32_t reason=failed?0:enqueue(child->pipeline,3);
+  uint32_t reason=failed?0:((child->backing.known_mask & 2U) && !child->pipeline.rid ? 6 : enqueue(child->pipeline,3));
   // Pipeline queueing removes its live dependency edge. The original frame
   // disposer still executes pipeline free before shader free in that frame.
-  uint32_t shader_reason=failed?0:(child->pipeline.enqueued && !child->pipeline.free_event && child->pipeline.frame_slot!=uint32_t(rd->frame)) ? 4 : enqueue(child->shader,2);if(shader_reason)reason=shader_reason;
+  // A missing or unresolved pipeline may still depend on the shader. Do not
+  // enqueue the shader until the original pipeline state is known.
+  const bool pipeline_unknown=reason>=5 || (child->backing.possible_mask & 2U);
+  uint32_t shader_reason=(failed || pipeline_unknown)?0:(child->pipeline.enqueued && !child->pipeline.free_event && child->pipeline.frame_slot!=uint32_t(rd->frame)) ? 4 : enqueue(child->shader,2);
+  if(shader_reason)reason=shader_reason;
   MutexLock lock(mutex);MutexLock shader_lock(child->shader.mutex);MutexLock pipeline_lock(child->pipeline.mutex);
   auto report=child->report;
   const auto &shader=child->shader;const auto &pipeline=child->pipeline;
@@ -254,8 +258,8 @@ void Registry::qualification_retire_step(QualificationBridge *bridge,RenderingDe
   report.unresolved_mask=child->backing.possible_mask;
   if(report.enqueued_mask==child->backing.known_mask && !report.unresolved_mask)report.dependency_set_serial=child->dependency_serial;
   if(failed) { report.state=2;report.return_status=0;report.reason=5;report.native_error=child->maintenance_error; }
+  else if(reason>=5) { report.state=2;report.return_status=0;report.reason=reason==6?6:5; }
   else if(report.freed_mask==child->backing.known_mask && !report.unresolved_mask) { report.state=1;report.return_status=1;report.reason=0; }
-  else if(reason>=5) { report.state=2;report.reason=reason==6?6:5; }
   else if(report.unresolved_mask && report.state!=2) { report.state=2;report.reason=5; }
   else if(report.state!=2) report.reason=reason?reason:1;
   if(memcmp(&report,&child->report,sizeof(report))) {
