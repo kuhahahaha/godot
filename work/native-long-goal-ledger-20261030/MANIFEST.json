@@ -65,7 +65,9 @@
     "local_checks": "YAML parse and git diff --check pass",
     "status": "NEW_PUBLIC_RUN_REQUIRED",
     "test_failure_repair_commit": "6237e0b4f5",
-    "test_failure_receipt": "local-only work/ci-message-queue-fix-20261030/RECEIPT.md"
+    "test_failure_receipt": "local-only work/ci-message-queue-fix-20261030/RECEIPT.md",
+    "local_repaired_editor_sha256": "dbb1f9df221a3bcff799ef26eea11f1ab68804f1f7a8444b92af9913f95d530f",
+    "local_repaired_selector": "*[CallQueue]*: 6 cases / 92 assertions, rc0"
   },
   "coverage_gaps": {
     "E06_selector": "no [Qualification][E06] doctest tags; selector matched 0",

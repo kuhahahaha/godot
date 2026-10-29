@@ -12,6 +12,8 @@ CI run `40930940598` completed with one failure in the Linux doubles GCC sanitiz
 
 The completed public attempt then exposed a separate test contract failure in `tests/core/object/test_message_queue.cpp`: the capacity helper left a Message-sized tail, so the next operation returned `OK` instead of `ERR_OUT_OF_MEMORY`. The test-only repair is committed as `6237e0b4f5`; its patched translation unit compiles locally with rc0, and a new public run is required. The red CI receipt is local at `work/ci-message-queue-fix-20261030/RECEIPT.md`.
 
+The repaired tests-enabled macOS editor rebuilt with rc0 at SHA `dbb1f9df221a3bcff799ef26eea11f1ab68804f1f7a8444b92af9913f95d530f`; `*[CallQueue]*` passed 6 cases / 92 assertions. This local validation does not change the public CI status and does not certify native/GPU/Ready behavior.
+
 E06/E09 selector audit: no matching doctest tags exist in the current source; zero-match runs are diagnostic only and do not prove issuer or recorder coverage.
 
 The same tests-enabled editor passed `[DeviceExit][SceneReady]*` with 2 cases / 52 assertions, preserving malformed/guarded scene-ready refusal behavior.
