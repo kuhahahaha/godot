@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "files": {
+    "BINARY_HASHES.json": {
+      "bytes": 530,
+      "sha256": "21365e0d1c6fd939766b1155a3194a4b18d8ca42504d41a2d958d7e26930589c"
+    },
+    "BUFFER_TO_TEXTURE.log": {
+      "bytes": 294,
+      "sha256": "293a556eac1bab9c759d0dc90fa6951e551756ba4d68f12af29b25f02994e090"
+    },
+    "BUFFER_TO_TEXTURE.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "COMMANDS.json": {
+      "bytes": 2094,
+      "sha256": "98b2993755cc4e25d7c027ca9e068863e2eb525ba441fe9be5483e1f5bbf1e01"
+    },
+    "DEBUG_BUILD.log": {
+      "bytes": 2461,
+      "sha256": "08a3737b88a8a2fca04db2ca1645382d4ca70c9f7f5a951cdc6369badc71e89a"
+    },
+    "DEBUG_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "DIFF_CHECK_R1.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "DIFF_CHECK_R1.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "INDEPENDENT_REVIEW_R1.md": {
+      "bytes": 326,
+      "sha256": "f5a2358d03bf14b43eca16c722b5c020a3c05e4717871140eef5b4d04afd9cfe"
+    },
+    "K03_P2.log": {
+      "bytes": 302,
+      "sha256": "c8681bb314cc39924fed4689ad6ca542df4ba6a0e8db55e82a89e4f1b1366948"
+    },
+    "K03_P2.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "RECEIPT_R1.md": {
+      "bytes": 1200,
+      "sha256": "2ee346d459a0ffa64ae252cf7e10af6df28d20261ba385243927760a6dd018dd"
+    },
+    "RED_BUFFER_TO_TEXTURE.log": {
+      "bytes": 703,
+      "sha256": "a03eaa79533b01be80f8a4a8f69467a854a24a84b39eec7868448b41d10bd3c6"
+    },
+    "RED_BUFFER_TO_TEXTURE.rc": {
+      "bytes": 4,
+      "sha256": "e726b440cc164001999e718b51780d80314709efe06e7857282377be9111127b"
+    },
+    "RED_BUILD.log": {
+      "bytes": 2345,
+      "sha256": "46729ca07a4e4d06d64b06c0e29c1bf8c9759e4960a94896cd84285938107f0f"
+    },
+    "RED_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "RED_TEXTURE_TO_BUFFER.log": {
+      "bytes": 703,
+      "sha256": "09decb0c328bda9188742ff0f730407b06586a4b854d5b9743bbfafc4b2c6289"
+    },
+    "RED_TEXTURE_TO_BUFFER.rc": {
+      "bytes": 4,
+      "sha256": "e726b440cc164001999e718b51780d80314709efe06e7857282377be9111127b"
+    },
+    "REGRESSION.log": {
+      "bytes": 302,
+      "sha256": "e285c960f637e1921a187c4bd899ea98b2197bccf8fcd1089fb2944a9be7e5d2"
+    },
+    "REGRESSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "RELEASE_BUILD.log": {
+      "bytes": 2245,
+      "sha256": "0ddf6b5bd602236af5b33a6e368dab649a8ad79a7c00df62c0b7522ab14013e6"
+    },
+    "RELEASE_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "RELEASE_VERSION.log": {
+      "bytes": 36,
+      "sha256": "6dd6145a76c6290f44d446579502d77630082d0a8b72921f82cb39cd126facb4"
+    },
+    "RELEASE_VERSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "SOURCE_MANIFEST.json": {
+      "bytes": 895,
+      "sha256": "3759cf676c8f0e58c9aca65f1f344420bed474578734f0eb0e6ae1120a4b0927"
+    },
+    "TEXTURE_TO_BUFFER.log": {
+      "bytes": 294,
+      "sha256": "293a556eac1bab9c759d0dc90fa6951e551756ba4d68f12af29b25f02994e090"
+    },
+    "TEXTURE_TO_BUFFER.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "UBSAN_BUILD.log": {
+      "bytes": 214219,
+      "sha256": "63e7526ab3a57dee0746387e3f1b5fc97ce405ba5136b66e9f5c6c9b207ae98a"
+    },
+    "UBSAN_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "UBSAN_REGRESSION.log": {
+      "bytes": 302,
+      "sha256": "e285c960f637e1921a187c4bd899ea98b2197bccf8fcd1089fb2944a9be7e5d2"
+    },
+    "UBSAN_REGRESSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    }
+  }
+}
