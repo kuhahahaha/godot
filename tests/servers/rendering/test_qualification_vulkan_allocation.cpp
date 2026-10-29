@@ -300,6 +300,18 @@ TEST_CASE("[QualificationNative][Vulkan] dynamic uniform offset query rejects mi
  ERR_PRINT_ON;
  CHECK(offsets==0);
 }
+TEST_CASE("[QualificationNative][Vulkan] render pipeline creation rejects missing view inputs before resource access") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ RenderingDeviceDriver::PipelineRasterizationState rasterization;
+ RenderingDeviceDriver::PipelineMultisampleState multisample;
+ RenderingDeviceDriver::PipelineDepthStencilState depth_stencil;
+ RenderingDeviceDriver::PipelineColorBlendState blend;
+ ERR_PRINT_OFF;
+ auto pipeline=driver.render_pipeline_create(RenderingDeviceDriver::ShaderID(),RenderingDeviceDriver::VertexFormatID(),RenderingDeviceDriver::RENDER_PRIMITIVE_TRIANGLES,rasterization,multisample,depth_stencil,blend,VectorView<int32_t>(nullptr,1),{},RenderingDeviceDriver::RenderPassID(),0,{});
+ ERR_PRINT_ON;
+ CHECK_FALSE(bool(pipeline));
+}
 TEST_CASE("[QualificationNative][Vulkan] queue submit rejects missing wait view before queue access") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);

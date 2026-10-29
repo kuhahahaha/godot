@@ -6705,6 +6705,7 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 		RenderPassID p_render_pass,
 		uint32_t p_render_subpass,
 		VectorView<PipelineSpecializationConstant> p_specialization_constants) {
+	ERR_FAIL_COND_V((p_color_attachments.size() > 0 && !p_color_attachments.ptr()) || (p_specialization_constants.size() > 0 && !p_specialization_constants.ptr()), PipelineID());
 	ERR_FAIL_INDEX_V(p_render_primitive, RENDER_PRIMITIVE_MAX, PipelineID());
 	ERR_FAIL_INDEX_V(p_multisample_state.sample_count, TEXTURE_SAMPLES_MAX, PipelineID());
 
