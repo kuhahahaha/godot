@@ -1,0 +1,47 @@
+{
+  "binary": "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+  "sha256": "baa6069965e9a32ff3c970d1083c80e7b7a511ad73ab9451977c92c4a03888e7",
+  "scope": "D native controls; separateRT only NoRecordedUse; no A grant or Verified",
+  "runs": [
+    {
+      "case": "qrt_upload",
+      "mode": "safe",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-bridge-implementation-20261026/integration-preflight-20261026/native-fixtures/qrt_upload",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "safe",
+        "--script",
+        "probe.gd"
+      ],
+      "rc": 0,
+      "log": "/Users/macbookair/Documents/Work/godot_ANGE/work/qualification-prepared-replay-20261029/native-upload/qrt_upload-safe.log",
+      "kinds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        7,
+        8,
+        9
+      ],
+      "checks": {
+        "exit": true,
+        "actual_metal": true,
+        "kinds": true,
+        "main_loop": true,
+        "clean": true,
+        "unload": true,
+        "terminal_2": true,
+        "terminal_3": true,
+        "same_ticket_return": true
+      }
+    }
+  ]
+}

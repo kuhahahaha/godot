@@ -1,0 +1,8 @@
+{
+  "cwd": "/Users/macbookair/Documents/Work/godot_ANGE",
+  "debug": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j4 platform=macos target=editor dev_build=yes tests=yes builtin_glslang=yes",
+  "ubsan": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j4 platform=macos target=editor dev_build=yes tests=yes use_ubsan=yes builtin_glslang=yes",
+  "ubsan_test": "bin/godot.macos.editor.dev.arm64.san --headless --test --test-case='[Qualification]*'",
+  "release": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j4 platform=macos target=template_release dev_build=no tests=no builtin_glslang=yes",
+  "native": "python3 /Users/macbookair/Documents/Work/godot_ANGE/work/native-bridge-implementation-20261026/integration-preflight-20261026/run_combined_qrt.py bin/godot.macos.editor.dev.arm64 /Users/macbookair/Documents/Work/godot_ANGE/work/qualification-prepared-replay-20261029/native-upload --case qrt_upload"
+}

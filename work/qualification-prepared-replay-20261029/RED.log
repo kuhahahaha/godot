@@ -1,0 +1,28 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_qualification_ticket.cpp:418:
+TEST CASE:  [Qualification] exact prepared replay returns canonical original plans despite RD contention
+
+tests/servers/rendering/test_qualification_ticket.cpp:64: ERROR: CHECK( status.native_error == OK ) is NOT correct!
+  values: CHECK( 44 == 0 )
+
+tests/servers/rendering/test_qualification_ticket.cpp:65: ERROR: CHECK( out.registry_instance == 71 ) is NOT correct!
+  values: CHECK( 0 == 71 )
+
+tests/servers/rendering/test_qualification_ticket.cpp:65: ERROR: CHECK( out.handle_serial == 23 ) is NOT correct!
+  values: CHECK( 0 == 23 )
+
+tests/servers/rendering/test_qualification_ticket.cpp:66: ERROR: CHECK( memcmp(&report, &ticket->report, sizeof(report)) == 0 ) is NOT correct!
+  values: CHECK( -4 == 0 )
+
+tests/servers/rendering/test_qualification_ticket.cpp:68: ERROR: CHECK( invoke().native_error == ERR_INVALID_DATA ) is NOT correct!
+  values: CHECK( 44 == 30 )
+
+tests/servers/rendering/test_qualification_ticket.cpp:71: ERROR: CHECK( invoke().native_error == ERR_DOES_NOT_EXIST ) is NOT correct!
+  values: CHECK( 44 == 33 )
+
+===============================================================================
+[doctest] test cases:  1 | 0 passed | 1 failed | 1788 skipped
+[doctest] assertions: 11 | 5 passed | 6 failed |
+[doctest] Status: FAILURE!
