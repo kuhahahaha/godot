@@ -3047,6 +3047,7 @@ void RenderingDeviceDriverVulkan::command_pipeline_barrier(
 		VectorView<BufferBarrier> p_buffer_barriers,
 		VectorView<TextureBarrier> p_texture_barriers,
 		VectorView<AccelerationStructureBarrier> p_acceleration_structure_barriers) {
+	ERR_FAIL_COND((p_memory_barriers.size() > 0 && !p_memory_barriers.ptr()) || (p_buffer_barriers.size() > 0 && !p_buffer_barriers.ptr()) || (p_texture_barriers.size() > 0 && !p_texture_barriers.ptr()) || (p_acceleration_structure_barriers.size() > 0 && !p_acceleration_structure_barriers.ptr()));
 	for (uint32_t i = 0; i < p_texture_barriers.size(); i++) {
 		ERR_FAIL_INDEX(p_texture_barriers[i].prev_layout, TEXTURE_LAYOUT_MAX);
 		ERR_FAIL_INDEX(p_texture_barriers[i].next_layout, TEXTURE_LAYOUT_MAX);
