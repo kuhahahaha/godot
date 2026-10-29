@@ -12,3 +12,5 @@ LATEST_DSO_U01_INVALID_VFX_RC=2
 PUBLIC_CI_RUN=40930940598
 PUBLIC_CI_HEAD=65c6a08ee6fb6b1408d9ab4fe41859d3f7a9b83d
 PUBLIC_CI_FIRST_ERROR=tests/core/object/test_message_queue.cpp:265
+RUNTIME_FIXTURE=/tmp/godot-current-pair-latest-dso-20261030-r2/runtime-{vfx,no-vfx,invalid-vfx}
+RUNTIME_COMMAND=bin/godot.macos.editor.dev.arm64 --path <fixture> --display-driver macos --rendering-driver metal --rendering-method mobile --render-thread safe --script res://probe.gd
