@@ -4953,6 +4953,74 @@
     "work/vulkan-buffer-texture-conversion-20261030/UBSAN_REGRESSION.rc": {
       "bytes": 2,
       "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "ANGE/work/semantic-initialization-cycle-current-recheck-20261030/CLEANUP.json": {
+      "bytes": 428,
+      "sha256": "3c2a2b4561e5338538579860fdacd1f44ffeb63994c022b99c8163956e09b495"
+    },
+    "ANGE/work/semantic-initialization-cycle-current-recheck-20261030/INDEPENDENT_REVIEW.md": {
+      "bytes": 496,
+      "sha256": "78f5323d87a46213e5c7318d29a14afdc2371d57dbcd253c5283129bf881ad4e"
+    },
+    "ANGE/work/semantic-initialization-cycle-current-recheck-20261030/MANIFEST.json": {
+      "bytes": 2280,
+      "sha256": "e0b0ea3b9a3226bdb68116b60aaa92e1a2fb9cc1dcecce70ab4e72dc567e7e08"
+    },
+    "ANGE/work/semantic-initialization-cycle-current-recheck-20261030/RECEIPT.json": {
+      "bytes": 652,
+      "sha256": "0874253b5cf65650593616fef3e52713b8cc9d2530c4a306dd9d8a0fd081739d"
+    },
+    "ANGE/work/semantic-initialization-cycle-current-recheck-20261030/RESULT.md": {
+      "bytes": 651,
+      "sha256": "b264797d5f67d91e8022c703ebd6c05056cb1adeeea22acabb36835321fc4217"
+    },
+    "ANGE/work/semantic-initialization-cycle-current-recheck-20261030/SOURCE_MANIFEST.json": {
+      "bytes": 4094,
+      "sha256": "73213d76fff6d37bd7737206a5d9bcfba2cd4c055f442241a6b1f31bf8f602db"
+    },
+    "ANGE/work/semantic-initialization-cycle-current-recheck-20261030/VALIDATION.json": {
+      "bytes": 1093,
+      "sha256": "79542e4085e690e71c7ba8fc8a32ac60e6664ad4a2647c620b42b0e85f756a86"
+    },
+    "ANGE/work/semantic-initialization-cycle-current-recheck-20261030/VALIDATION.log": {
+      "bytes": 230,
+      "sha256": "d5e7d84c515f02f96c76cfd44ba13e08f187439a602e11bc21a5dc954f72785c"
+    },
+    "ANGE/work/semantic-initialization-cycle-current-recheck-20261030/VALIDATION.py": {
+      "bytes": 1122,
+      "sha256": "d6d6af6bf64695524423dd06f950bee2aa5cdca4f53c439ef0e67174e24be25d"
+    },
+    "ANGE/work/semantic-initialization-cycle-current-recheck-20261030/evidence/COMMANDS.json": {
+      "bytes": 552,
+      "sha256": "d80ac17be1d8f988c9df07cf514c239da00a233aea905ee20d77f3d1ef151f8f"
+    },
+    "ANGE/work/semantic-initialization-cycle-current-recheck-20261030/evidence/ORIGINAL_RECEIPT.md": {
+      "bytes": 1000,
+      "sha256": "217d53d043aca9ce8439a77aab4749ed83988d9514173928999c9906e92f675f"
+    },
+    "ANGE/work/semantic-initialization-cycle-current-recheck-20261030/evidence/ORIGINAL_REVIEW.md": {
+      "bytes": 471,
+      "sha256": "fbf1b2075e4d7409ef1877ba789e0c097596aaea9fa044f11ab39317a03117fc"
+    },
+    "ANGE/work/semantic-initialization-cycle-current-recheck-20261030/evidence/ORIGINAL_SOURCE_MANIFEST.json": {
+      "bytes": 641,
+      "sha256": "084cd629005adc235b51a89bbbcb6fc961768db9c90531acc51db68ec762c0ee"
+    },
+    "ANGE/work/semantic-initialization-cycle-current-recheck-20261030/evidence/REGRESSION.log": {
+      "bytes": 196,
+      "sha256": "86ad28d07bbb57446f33e83b0954e04caf7e407bd27a7448755d79fef6dd0fdd"
+    },
+    "ANGE/work/semantic-initialization-cycle-current-recheck-20261030/evidence/REGRESSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "ANGE/work/semantic-initialization-cycle-current-recheck-20261030/evidence/TOPOLOGY.log": {
+      "bytes": 228,
+      "sha256": "74beb56d9c2939eff2132cdd8f94abca82ed00c8e3e35e825e339f0c7da1d5d3"
+    },
+    "ANGE/work/semantic-initialization-cycle-current-recheck-20261030/evidence/TOPOLOGY.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
     }
   }
 }
