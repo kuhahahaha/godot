@@ -1,4 +1,33 @@
-#include "device_exit_startup_fixture.h"
+/**************************************************************************/
+/*  test_device_exit_core_cycle.cpp                                       */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
 #include "core/config/engine.h"
 #include "core/config/project_settings.h"
 #include "core/core_globals.h"
@@ -7,6 +36,7 @@
 #include "core/extension/gdextension_manager.h"
 #include "core/os/os.h"
 #include "core/register_core_types.h"
+#include "tests/core/object/device_exit_startup_fixture.h"
 #include "tests/test_macros.h"
 
 #include <cstdio>
@@ -48,7 +78,7 @@ void deinitialize_level(void *, GDExtensionInitializationLevel p_level) {
 	unregister_core_extensions();
 	expect(GDExtension::get_interface_function("device_exit_copy_library_snapshot_v1") != nullptr,
 			"interface-map-remains-live-inside-deinit-reentry");
-	GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 } };
+	GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 }, 0, 0, 0, 0, 0, 0, 0 };
 	expect(copy_view && copy_view(retained, &snapshot) == OK, "saved-view-inside-deinit");
 }
 
@@ -81,7 +111,8 @@ void cycle(bool p_should_open) {
 			loader.instantiate();
 			loader->set_initialization_function(entry);
 			expect(GDExtensionManager::get_singleton()->load_extension_with_loader("libgodot://core-cycle", loader) ==
-					GDExtensionManager::LOAD_STATUS_OK, "actual-manager-load");
+							GDExtensionManager::LOAD_STATUS_OK,
+					"actual-manager-load");
 		}
 	}
 	const int before = deinitializations;
@@ -90,14 +121,14 @@ void cycle(bool p_should_open) {
 	unregister_core_extensions();
 	expect(deinitializations == before + (registered == OK && p_should_open ? 1 : 0), "duplicate-unregister-is-no-op");
 	if (copy_view && clone_view) {
-		GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 } };
+		GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 }, 0, 0, 0, 0, 0, 0, 0 };
 		expect(copy_view(retained, &snapshot) == OK, "saved-view-after-map-clear");
 		GDExtensionDeviceExitLibraryViewRef denied = { 99, 99 };
 		expect(clone_view(&abi, retained, &denied) == ERR_BUSY, "finalizing-refuses-new-clones");
 		expect(denied.handle_serial == 0, "failed-clone-output-cleared");
 	}
 }
-}
+} //namespace
 
 bool core_cycle_requested(int p_argc, char **p_argv) {
 	for (int i = 0; i < p_argc; i++) {
@@ -122,7 +153,7 @@ int run_core_cycle() {
 		cycle(true);
 		expect(retained.registry_instance == UINT64_MAX, "instance-max-issued-once");
 		replace_core_extension_manager();
-		GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 } };
+		GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 }, 0, 0, 0, 0, 0, 0, 0 };
 		expect(copy_view && copy_view(retained, &snapshot) == OK && snapshot.wrapper_association == 2, "max-instance-view-after-manager-destruction");
 		expect(register_core_extensions() == ERR_BUSY, "max-instance-retained-cycle-refuses-restart");
 		expect(release_view && release_view(&abi, retained) == OK, "max-instance-last-view-release");
@@ -142,7 +173,7 @@ int run_core_cycle() {
 	cycle(true); // A: its last observer outlives the actual owned manager.
 	replace_core_extension_manager();
 	const auto old_view = retained;
-	GDExtensionDeviceExitLibrarySnapshot first = { { 1, 48, 0 } };
+	GDExtensionDeviceExitLibrarySnapshot first = { { 1, 48, 0 }, 0, 0, 0, 0, 0, 0, 0 };
 	if (!copy_view || !release_view) {
 		return 2;
 	}
@@ -155,7 +186,7 @@ int run_core_cycle() {
 	memdelete(settings);
 	memdelete(engine);
 	unregister_core_types();
-	GDExtensionDeviceExitLibrarySnapshot third = { { 1, 48, 0 } };
+	GDExtensionDeviceExitLibrarySnapshot third = { { 1, 48, 0 }, 0, 0, 0, 0, 0, 0, 0 };
 	expect(copy_view(retained, &third) == OK && third.wrapper_association == 2, "new-cycle-detached-observation");
 	expect(retained.registry_instance != old_view.registry_instance, "fresh-registry-cycle-identity");
 	expect(third.library_generation > first.library_generation, "generation-not-reset-across-cycles");
@@ -166,4 +197,4 @@ int run_core_cycle() {
 	std::printf("DEVICE_EXIT_CORE_CYCLE_RESULT checks=%d failures=%d initialize=%d deinitialize=%d\n", checks, failures, initializations, deinitializations);
 	return failures == 0 ? 0 : 1;
 }
-}
+} //namespace TestDeviceExitStartup

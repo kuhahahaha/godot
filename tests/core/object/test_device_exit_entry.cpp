@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  test_device_exit_entry.cpp                                       */
+/*  test_device_exit_entry.cpp                                            */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -30,19 +30,19 @@
 
 #include "core/config/engine.h"
 #include "core/crypto/crypto_core.h"
-#include "core/io/marshalls.h"
 #include "core/extension/gdextension.h"
 #include "core/extension/gdextension_function_loader.h"
 #include "core/extension/gdextension_library_loader.h"
 #include "core/extension/gdextension_manager.h"
+#include "core/io/marshalls.h"
 #include "core/object/class_db.h"
 #include "core/object/ref_counted.h"
 #include "core/object/ref_counted_test_hooks.h"
 #include "core/object/script_language.h"
-#include "core/extension/gdextension_manager.h"
 #include "core/os/memory_allocation_test_hooks.h"
 #include "core/os/os.h"
 #include "tests/test_macros.h"
+
 #include "modules/modules_enabled.gen.h"
 #ifdef MODULE_GDSCRIPT_ENABLED
 #include "modules/gdscript/gdscript.h"
@@ -510,10 +510,12 @@ static void control_shutdown() {
 		control_probe();
 	}
 }
+#ifdef TOOLS_ENABLED
 static void control_classes(GDExtensionTypePtr result) {
 	static_cast<PackedStringArray *>(result)->push_back("Node");
 	control_probe();
 }
+#endif // TOOLS_ENABLED
 static void control_level(void *, GDExtensionInitializationLevel) {}
 static GDExtensionBool control_entry(GDExtensionInterfaceGetProcAddress get, GDExtensionClassLibraryPtr library, GDExtensionInitialization *result) {
 	owner = static_cast<GDExtension *>(library);
@@ -611,53 +613,81 @@ static void control_entry_child() {
 }
 REGISTER_TEST_COMMAND("--device-exit-entry-control", control_entry_child);
 struct Access {
- static bool ready_reservation_retired(GDExtension &extension) {
-  auto &ref=extension.library_exit_ref;MutexLock lock(ref.registry->mutex);const auto &record=ref.registry->records[ref.slot];
-  return !record.reserved_scene_ready_frame && !record.scene_ready_view_serial && !record.scene_ready_callback && !record.scene_ready_callback_v2;
- }
- static uint8_t loop_mask(GDExtension &extension) { return extension.main_loop_callback_mask; }
- static void (*loop_frame(GDExtension &extension))() { return extension.frame_callback; }
- static void loop_dispatch(GDExtension &extension) { extension._call_main_loop_callback(GDExtension::MainLoopCallback::FRAME); }
- static Error cancel_ready(GDExtension &extension, GDExtensionDeviceExit::CloseRoute route) {
-  return GDExtensionDeviceExit::Registry::get_singleton().cancel_pending_scene_ready(extension.library_exit_ref, route);
- }
- static Error dispatch_ready(GDExtension &extension) {
-  return GDExtensionDeviceExit::Registry::get_singleton().dispatch_scene_ready(extension.library_exit_ref);
- }
- static Error dispatch_materialized_ready(GDExtension &extension) { return extension.dispatch_scene_ready_if_materialized(); }
- static Error abort_ready(GDExtension &extension, Error error) { return extension.abort_scene_ready_load(error); }
- static bool ready_seam(bool value) {
-  auto *manager = GDExtensionManager::get_singleton();
-  const bool old = manager->scene_materialization_seam_reached;
-  manager->scene_materialization_seam_reached = value;
-  return old;
- }
- static int32_t manager_level() { return GDExtensionManager::get_singleton()->level; }
+	static bool ready_reservation_retired(GDExtension &extension) {
+		auto &ref = extension.library_exit_ref;
+		MutexLock lock(ref.registry->mutex);
+		const auto &record = ref.registry->records[ref.slot];
+		return !record.reserved_scene_ready_frame && !record.scene_ready_view_serial && !record.scene_ready_callback && !record.scene_ready_callback_v2;
+	}
+	static uint8_t loop_mask(GDExtension &extension) { return extension.main_loop_callback_mask; }
+	static void (*loop_frame(GDExtension &extension))() { return extension.frame_callback; }
+	static void loop_dispatch(GDExtension &extension) { extension._call_main_loop_callback(GDExtension::MainLoopCallback::FRAME); }
+	static Error cancel_ready(GDExtension &extension, GDExtensionDeviceExit::CloseRoute route) {
+		return GDExtensionDeviceExit::Registry::get_singleton().cancel_pending_scene_ready(extension.library_exit_ref, route);
+	}
+	static Error dispatch_ready(GDExtension &extension) {
+		return GDExtensionDeviceExit::Registry::get_singleton().dispatch_scene_ready(extension.library_exit_ref);
+	}
+	static Error dispatch_materialized_ready(GDExtension &extension) { return extension.dispatch_scene_ready_if_materialized(); }
+	static Error abort_ready(GDExtension &extension, Error error) { return extension.abort_scene_ready_load(error); }
+	static bool ready_seam(bool value) {
+		auto *manager = GDExtensionManager::get_singleton();
+		const bool old = manager->scene_materialization_seam_reached;
+		manager->scene_materialization_seam_reached = value;
+		return old;
+	}
+	static int32_t manager_level() { return GDExtensionManager::get_singleton()->level; }
 #ifdef TOOLS_ENABLED
- static void clear_bindings(GDExtension &extension) { extension.clear_instance_bindings(); }
- static void forget_closed_test_extension(const String &path) { GDExtensionManager::get_singleton()->gdextension_map.erase(path); }
+	static void clear_bindings(GDExtension &extension) { extension.clear_instance_bindings(); }
+	static void forget_closed_test_extension(const String &path) { GDExtensionManager::get_singleton()->gdextension_map.erase(path); }
 #endif
- static bool quiescing(GDExtension &extension) {
-  auto &ref = extension.library_exit_ref;
-  MutexLock lock(ref.registry->mutex);
-  return ref.registry->records[ref.slot].quiescing;
- }
- static uint32_t ready_private_budget(GDExtension &extension, uint32_t extra) {
-  auto &ref = extension.library_exit_ref;
-  MutexLock lock(ref.registry->mutex);
-  const uint32_t old = ref.registry->private_limit;
-  ref.registry->private_limit = ref.registry->records[ref.slot].private_refs + extra;
-  return old;
- }
- static void session_identity(Object* object,uint64_t& registry,uint64_t& epoch){GDExtensionDeviceExit::Registry::get_singleton().device_loss_identity(object,registry,epoch);}
- static void session_lost_identity(uint64_t registry,uint64_t epoch){GDExtensionDeviceExit::Registry::get_singleton().device_lost(registry,epoch);}
- static bool session_live(Object* object){auto& r=GDExtensionDeviceExit::Registry::get_singleton();MutexLock lock(r.mutex);for(const auto& d:r.device_records)if(d.object==object)return d.live;return false;}
- static void session_lost(Object* object){GDExtensionDeviceExit::Registry::get_singleton().device_lost(object);}
- static void session_counter(Object* object,uint64_t next,bool exhausted){auto& r=GDExtensionDeviceExit::Registry::get_singleton();MutexLock lock(r.mutex);for(auto& d:r.device_records)if(d.object==object){d.sessions.next=next;d.sessions.exhausted=exhausted;}}
- static Error session_create(Object* object){return GDExtensionDeviceExit::Registry::get_singleton().device_created(object);}
- static void session_close(Object* object){GDExtensionDeviceExit::Registry::get_singleton().device_closed(object);}
- static void session_destroy(Object* object){GDExtensionDeviceExit::Registry::get_singleton().device_destroyed(object);}
- static uint32_t session_record_count(){auto& r=GDExtensionDeviceExit::Registry::get_singleton();MutexLock lock(r.mutex);uint32_t count=0;for(const auto& d:r.device_records)count+=d.epoch!=0;return count;}
+	static bool quiescing(GDExtension &extension) {
+		auto &ref = extension.library_exit_ref;
+		MutexLock lock(ref.registry->mutex);
+		return ref.registry->records[ref.slot].quiescing;
+	}
+	static uint32_t ready_private_budget(GDExtension &extension, uint32_t extra) {
+		auto &ref = extension.library_exit_ref;
+		MutexLock lock(ref.registry->mutex);
+		const uint32_t old = ref.registry->private_limit;
+		ref.registry->private_limit = ref.registry->records[ref.slot].private_refs + extra;
+		return old;
+	}
+	static void session_identity(Object *object, uint64_t &registry, uint64_t &epoch) { GDExtensionDeviceExit::Registry::get_singleton().device_loss_identity(object, registry, epoch); }
+	static void session_lost_identity(uint64_t registry, uint64_t epoch) { GDExtensionDeviceExit::Registry::get_singleton().device_lost(registry, epoch); }
+	static bool session_live(Object *object) {
+		auto &r = GDExtensionDeviceExit::Registry::get_singleton();
+		MutexLock lock(r.mutex);
+		for (const auto &d : r.device_records) {
+			if (d.object == object) {
+				return d.live;
+			}
+		}
+		return false;
+	}
+	static void session_lost(Object *object) { GDExtensionDeviceExit::Registry::get_singleton().device_lost(object); }
+	static void session_counter(Object *object, uint64_t next, bool exhausted) {
+		auto &r = GDExtensionDeviceExit::Registry::get_singleton();
+		MutexLock lock(r.mutex);
+		for (auto &d : r.device_records) {
+			if (d.object == object) {
+				d.sessions.next = next;
+				d.sessions.exhausted = exhausted;
+			}
+		}
+	}
+	static Error session_create(Object *object) { return GDExtensionDeviceExit::Registry::get_singleton().device_created(object); }
+	static void session_close(Object *object) { GDExtensionDeviceExit::Registry::get_singleton().device_closed(object); }
+	static void session_destroy(Object *object) { GDExtensionDeviceExit::Registry::get_singleton().device_destroyed(object); }
+	static uint32_t session_record_count() {
+		auto &r = GDExtensionDeviceExit::Registry::get_singleton();
+		MutexLock lock(r.mutex);
+		uint32_t count = 0;
+		for (const auto &d : r.device_records) {
+			count += d.epoch != 0;
+		}
+		return count;
+	}
 
 	static void issuer_terminal_sequences(int missing) {
 		auto &registry = GDExtensionDeviceExit::Registry::get_singleton();
@@ -681,7 +711,8 @@ struct Access {
 	static uint32_t issuer_limit(int which, uint32_t limit) {
 		auto &registry = GDExtensionDeviceExit::Registry::get_singleton();
 		MutexLock lock(registry.mutex);
-		uint32_t &target = which == 0 ? registry.action_limit : which == 1 ? registry.view_limit : registry.private_limit;
+		uint32_t &target = which == 0 ? registry.action_limit : which == 1 ? registry.view_limit
+																		   : registry.private_limit;
 		const uint32_t old = target;
 		target = limit;
 		return old;
@@ -690,10 +721,15 @@ struct Access {
 		auto &ref = extension.library_exit_ref;
 		MutexLock lock(ref.registry->mutex);
 		auto *holder = ref.registry->records[ref.slot].holders;
-		while (holder && handle && holder->handle_serial != handle) { holder = holder->record_next; }
+		while (holder && handle && holder->handle_serial != handle) {
+			holder = holder->record_next;
+		}
 		CRASH_COND(!holder);
-		if (field == 0) { holder->generation ^= uint64_t(1) << 60; }
-		else { holder->terminal_action ^= uint64_t(1) << 60; }
+		if (field == 0) {
+			holder->generation ^= uint64_t(1) << 60;
+		} else {
+			holder->terminal_action ^= uint64_t(1) << 60;
+		}
 	}
 
 	static void exhaust_issuer_sequences(bool value) {
@@ -704,12 +740,18 @@ struct Access {
 	}
 	static bool guard_pointers_clear(GDExtension &extension) {
 		auto &ref = extension.library_exit_ref;
-		if (!ref.registry) { return true; }
+		if (!ref.registry) {
+			return true;
+		}
 		MutexLock lock(ref.registry->mutex);
 		const auto &record = ref.registry->records[ref.slot];
-		if (record.guard.preflight || record.guard.user_initializer || record.guard.user_terminator) { return false; }
+		if (record.guard.preflight || record.guard.user_initializer || record.guard.user_terminator) {
+			return false;
+		}
 		for (const auto &level : record.levels) {
-			if (level.user_action.wrapper || level.binding_action.wrapper || level.user_action.terminator || level.user_action.userdata || level.binding_action.userdata) { return false; }
+			if (level.user_action.wrapper || level.binding_action.wrapper || level.user_action.terminator || level.user_action.userdata || level.binding_action.userdata) {
+				return false;
+			}
 		}
 		return true;
 	}
@@ -1081,8 +1123,12 @@ static void issuer_initialize(void *, GDExtensionInitializationLevel level) {
 	issuer_ack = registry.borrow_initialize_level(&abi, owner, uint32_t(level), &context);
 	if (issuer_ack == OK) {
 		issuer_stale_context = context;
-		if (issuer_init_hook) { issuer_init_hook(context); }
-		if (!issuer_skip_init_ack) { issuer_ack = registry.after_binding_initialize(&abi, context); }
+		if (issuer_init_hook) {
+			issuer_init_hook(context);
+		}
+		if (!issuer_skip_init_ack) {
+			issuer_ack = registry.after_binding_initialize(&abi, context);
+		}
 	}
 }
 static void issuer_terminate(void *, GDExtensionInitializationLevel level) {
@@ -1091,11 +1137,21 @@ static void issuer_terminate(void *, GDExtensionInitializationLevel level) {
 	const GDExtensionDeviceExitAbi abi{ 1, 16, 0 };
 	DeinitLevelContextRef context;
 	issuer_ack = registry.borrow_deinit_level(&abi, owner, uint32_t(level), &context);
-	if (issuer_ack == OK) { issuer_ack = registry.begin_user_terminator(&abi, issuer_token, context); }
-	if (issuer_ack == OK && issuer_term_hook) { issuer_term_hook(context, 1); }
-	if (issuer_ack == OK) { issuer_ack = registry.after_user_terminator(&abi, context); }
-	if (issuer_ack == OK && issuer_term_hook) { issuer_term_hook(context, 2); }
-	if (issuer_ack == OK && !issuer_skip_deinit_ack) { issuer_ack = registry.after_binding_deinit(&abi, context); }
+	if (issuer_ack == OK) {
+		issuer_ack = registry.begin_user_terminator(&abi, issuer_token, context);
+	}
+	if (issuer_ack == OK && issuer_term_hook) {
+		issuer_term_hook(context, 1);
+	}
+	if (issuer_ack == OK) {
+		issuer_ack = registry.after_user_terminator(&abi, context);
+	}
+	if (issuer_ack == OK && issuer_term_hook) {
+		issuer_term_hook(context, 2);
+	}
+	if (issuer_ack == OK && !issuer_skip_deinit_ack) {
+		issuer_ack = registry.after_binding_deinit(&abi, context);
+	}
 }
 static int32_t issuer_preflight(GDExtensionDeviceExit::DeinitPreflightContextRef context, void *) {
 	using namespace GDExtensionDeviceExit;
@@ -1106,8 +1162,11 @@ static int32_t issuer_preflight(GDExtensionDeviceExit::DeinitPreflightContextRef
 	issuer_stale_preflight = context;
 	if (issuer_preflight_publish) {
 		const Error published = Registry::get_singleton().publish_exit_result(&abi, issuer_token, context, &diagnostic);
-		if (issuer_child_mode) { if (published != OK) { std::_Exit(94); } }
-		else {
+		if (issuer_child_mode) {
+			if (published != OK) {
+				std::_Exit(94);
+			}
+		} else {
 			CHECK_EQ(published, OK);
 			CHECK_EQ(Registry::get_singleton().publish_exit_result(&abi, issuer_token, context, &diagnostic), ERR_INVALID_DATA);
 		}
@@ -1132,9 +1191,13 @@ static GDExtensionBool issuer_entry(GDExtensionInterfaceGetProcAddress, GDExtens
 	registration.user_terminator = issuer_terminate;
 	registration.preflight = issuer_preflight;
 	issuer_token = {};
-	if (issuer_before_register) { issuer_before_register(registration); }
+	if (issuer_before_register) {
+		issuer_before_register(registration);
+	}
 	issuer_registration = Registry::get_singleton().register_guard(library, &registration, &issuer_token);
-	if (issuer_entry_hook) { issuer_entry_hook(registration, result); }
+	if (issuer_entry_hook) {
+		issuer_entry_hook(registration, result);
+	}
 	return issuer_registration == OK && issuer_entry_success;
 }
 struct IssuerFixture {
@@ -1165,569 +1228,700 @@ struct IssuerFixture {
 		CHECK_EQ(extension->close_library(), OK);
 	}
 };
-static int loop_entry_calls=0;
-static void loop_entry_frame(){++loop_entry_calls;}
-TEST_CASE("device_exit::issuer/main-loop-bit1-is-required-before-pointer-publication") {
- using namespace GDExtensionDeviceExit;
- for(bool declared:{false,true}) {
-  IssuerFixture fixture;loop_entry_calls=0;
-  if(declared)issuer_before_register=[](GuardRegistrationV1 &r){r.entry_classes|=uint64_t(1)<<1;};
-  REQUIRE(fixture.open()==OK);
-  const auto install=reinterpret_cast<GDExtensionInterfaceRegisterMainLoopCallbacks>(GDExtension::get_interface_function("register_main_loop_callbacks"));REQUIRE(install);
-  GDExtensionMainLoopCallbacks callbacks{nullptr,nullptr,loop_entry_frame};
-  ERR_PRINT_OFF;install(fixture.extension.ptr(),&callbacks);ERR_PRINT_ON;
-  CHECK(Access::loop_mask(*fixture.extension.ptr())==(declared?4:0));CHECK(Access::loop_frame(*fixture.extension.ptr())==(declared?loop_entry_frame:nullptr));
-  Access::loop_dispatch(*fixture.extension.ptr());CHECK(loop_entry_calls==(declared?1:0));
-  REQUIRE(fixture.extension->preflight_exit(CloseRoute::EXPLICIT)==OK);
-  callbacks.frame_func=nullptr;ERR_PRINT_OFF;install(fixture.extension.ptr(),&callbacks);Access::loop_dispatch(*fixture.extension.ptr());ERR_PRINT_ON;
-  CHECK(Access::loop_mask(*fixture.extension.ptr())==(declared?4:0));CHECK(Access::loop_frame(*fixture.extension.ptr())==(declared?loop_entry_frame:nullptr));CHECK(loop_entry_calls==(declared?1:0));
-  fixture.finish();
- }
+static int loop_entry_calls = 0;
+static void loop_entry_frame() {
+	++loop_entry_calls;
 }
-static bool v2_registration_v1_first=false;
-static int v2_registration_bodies=0;
-static int32_t registration_body_v1(void *,GDExtensionDeviceExitSceneReadyContextRef){++v2_registration_bodies;return OK;}
-static int32_t registration_body_v2(void *,GDExtensionDeviceExitSceneReadyContextRef,const GDExtensionSceneInstallPlanV2 *){++v2_registration_bodies;return OK;}
+TEST_CASE("device_exit::issuer/main-loop-bit1-is-required-before-pointer-publication") {
+	using namespace GDExtensionDeviceExit;
+	for (bool declared : { false, true }) {
+		IssuerFixture fixture;
+		loop_entry_calls = 0;
+		if (declared) {
+			issuer_before_register = [](GuardRegistrationV1 &r) { r.entry_classes |= uint64_t(1) << 1; };
+		}
+		REQUIRE(fixture.open() == OK);
+		const auto install = reinterpret_cast<GDExtensionInterfaceRegisterMainLoopCallbacks>(GDExtension::get_interface_function("register_main_loop_callbacks"));
+		REQUIRE(install);
+		GDExtensionMainLoopCallbacks callbacks{ nullptr, nullptr, loop_entry_frame };
+		ERR_PRINT_OFF;
+		install(fixture.extension.ptr(), &callbacks);
+		ERR_PRINT_ON;
+		CHECK(Access::loop_mask(*fixture.extension.ptr()) == (declared ? 4 : 0));
+		CHECK(Access::loop_frame(*fixture.extension.ptr()) == (declared ? loop_entry_frame : nullptr));
+		Access::loop_dispatch(*fixture.extension.ptr());
+		CHECK(loop_entry_calls == (declared ? 1 : 0));
+		REQUIRE(fixture.extension->preflight_exit(CloseRoute::EXPLICIT) == OK);
+		callbacks.frame_func = nullptr;
+		ERR_PRINT_OFF;
+		install(fixture.extension.ptr(), &callbacks);
+		Access::loop_dispatch(*fixture.extension.ptr());
+		ERR_PRINT_ON;
+		CHECK(Access::loop_mask(*fixture.extension.ptr()) == (declared ? 4 : 0));
+		CHECK(Access::loop_frame(*fixture.extension.ptr()) == (declared ? loop_entry_frame : nullptr));
+		CHECK(loop_entry_calls == (declared ? 1 : 0));
+		fixture.finish();
+	}
+}
+static bool v2_registration_v1_first = false;
+static int v2_registration_bodies = 0;
+static int32_t registration_body_v1(void *, GDExtensionDeviceExitSceneReadyContextRef) {
+	++v2_registration_bodies;
+	return OK;
+}
+static int32_t registration_body_v2(void *, GDExtensionDeviceExitSceneReadyContextRef, const GDExtensionSceneInstallPlanV2 *) {
+	++v2_registration_bodies;
+	return OK;
+}
 // Shared original FunctionLoader receiver for TypedABI's SI03 subcase.
 void test_v2_single_registration() {
- using namespace GDExtensionDeviceExit;
- const auto v2=reinterpret_cast<GDExtensionInterfaceDeviceExitRegisterSceneReadyV2>(GDExtension::get_interface_function("device_exit_register_scene_ready_v2"));
- REQUIRE(v2!=nullptr);if(!v2)return;
- for(bool first:{false,true}) {
-  IssuerFixture fixture;v2_registration_v1_first=first;v2_registration_bodies=0;
-  issuer_before_register=[](GuardRegistrationV1 &r){r.entry_classes|=GDEXTENSION_DEVICE_EXIT_ENTRY_SCENE_READY_V1;};
-  issuer_init_hook=[](InitializationLevelContextRef frame){
-   const auto install=reinterpret_cast<GDExtensionInterfaceDeviceExitRegisterSceneReadyV2>(GDExtension::get_interface_function("device_exit_register_scene_ready_v2"));
-   auto &registry=Registry::get_singleton();const GDExtensionDeviceExitAbi abi{1,16,0};const GDExtensionSceneInstallRequirementsV2 q{{1,32,0},1,2,0};
-   const auto refs=Access::private_refs(*owner);const GDExtensionDeviceExitInitializationLevelContextRef c{frame.registry_instance,frame.handle_serial};
-   int wrong_userdata=0;CHECK(install(&q,c,registration_body_v2,&wrong_userdata)==ERR_INVALID_DATA);CHECK(Access::private_refs(*owner)==refs);
+	using namespace GDExtensionDeviceExit;
+	const auto v2 = reinterpret_cast<GDExtensionInterfaceDeviceExitRegisterSceneReadyV2>(GDExtension::get_interface_function("device_exit_register_scene_ready_v2"));
+	REQUIRE(v2 != nullptr);
+	if (!v2) {
+		return;
+	}
+	for (bool first : { false, true }) {
+		IssuerFixture fixture;
+		v2_registration_v1_first = first;
+		v2_registration_bodies = 0;
+		issuer_before_register = [](GuardRegistrationV1 &r) { r.entry_classes |= GDEXTENSION_DEVICE_EXIT_ENTRY_SCENE_READY_V1; };
+		issuer_init_hook = [](InitializationLevelContextRef frame) {
+			const auto install = reinterpret_cast<GDExtensionInterfaceDeviceExitRegisterSceneReadyV2>(GDExtension::get_interface_function("device_exit_register_scene_ready_v2"));
+			auto &registry = Registry::get_singleton();
+			const GDExtensionDeviceExitAbi abi{ 1, 16, 0 };
+			const GDExtensionSceneInstallRequirementsV2 q{ { 1, 32, 0 }, 1, 2, 0 };
+			const auto refs = Access::private_refs(*owner);
+			const GDExtensionDeviceExitInitializationLevelContextRef c{ frame.registry_instance, frame.handle_serial };
+			int wrong_userdata = 0;
+			CHECK(install(&q, c, registration_body_v2, &wrong_userdata) == ERR_INVALID_DATA);
+			CHECK(Access::private_refs(*owner) == refs);
 #ifdef THREADS_ENABLED
-   int32_t wrong=OK;std::thread worker([&]{wrong=install(&q,c,registration_body_v2,nullptr);});worker.join();CHECK(wrong!=OK);CHECK(Access::private_refs(*owner)==refs);
+			int32_t wrong = OK;
+			std::thread worker([&] { wrong = install(&q, c, registration_body_v2, nullptr); });
+			worker.join();
+			CHECK(wrong != OK);
+			CHECK(Access::private_refs(*owner) == refs);
 #endif
-   if(v2_registration_v1_first){REQUIRE(registry.register_scene_ready(&abi,frame,registration_body_v1,nullptr)==OK);CHECK(install(&q,c,registration_body_v2,nullptr)==ERR_INVALID_DATA);}
-   else{REQUIRE(install(&q,c,registration_body_v2,nullptr)==OK);CHECK(registry.register_scene_ready(&abi,frame,registration_body_v1,nullptr)==ERR_INVALID_DATA);CHECK(install(&q,c,registration_body_v2,nullptr)==ERR_INVALID_DATA);}
-   CHECK(Access::private_refs(*owner)==refs);CHECK(v2_registration_bodies==0);
-   REQUIRE(registry.after_binding_initialize(&abi,frame)==OK);issuer_skip_init_ack=true;
-   CHECK(install(&q,c,registration_body_v2,nullptr)==ERR_UNAUTHORIZED);CHECK(Access::private_refs(*owner)==refs);
-  };
-  REQUIRE(fixture.open()==OK);REQUIRE(fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE)==OK);
-  CHECK(v2_registration_bodies==0);const auto pending_refs=Access::private_refs(*fixture.extension.ptr());
-  CHECK(Access::cancel_ready(*fixture.extension.ptr(),CloseRoute::EXPLICIT)==ERR_INVALID_DATA);CHECK(Access::private_refs(*fixture.extension.ptr())==pending_refs);
-  REQUIRE(Access::cancel_ready(*fixture.extension.ptr(),CloseRoute::SETUP_ABORT)==OK);CHECK(Access::private_refs(*fixture.extension.ptr())+1==pending_refs);CHECK(Access::ready_reservation_retired(*fixture.extension.ptr()));
-  CHECK(Access::cancel_ready(*fixture.extension.ptr(),CloseRoute::SETUP_ABORT)==OK);CHECK(Access::private_refs(*fixture.extension.ptr())+1==pending_refs);fixture.finish();CHECK(v2_registration_bodies==0);
- }
+			if (v2_registration_v1_first) {
+				REQUIRE(registry.register_scene_ready(&abi, frame, registration_body_v1, nullptr) == OK);
+				CHECK(install(&q, c, registration_body_v2, nullptr) == ERR_INVALID_DATA);
+			} else {
+				REQUIRE(install(&q, c, registration_body_v2, nullptr) == OK);
+				CHECK(registry.register_scene_ready(&abi, frame, registration_body_v1, nullptr) == ERR_INVALID_DATA);
+				CHECK(install(&q, c, registration_body_v2, nullptr) == ERR_INVALID_DATA);
+			}
+			CHECK(Access::private_refs(*owner) == refs);
+			CHECK(v2_registration_bodies == 0);
+			REQUIRE(registry.after_binding_initialize(&abi, frame) == OK);
+			issuer_skip_init_ack = true;
+			CHECK(install(&q, c, registration_body_v2, nullptr) == ERR_UNAUTHORIZED);
+			CHECK(Access::private_refs(*owner) == refs);
+		};
+		REQUIRE(fixture.open() == OK);
+		REQUIRE(fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE) == OK);
+		CHECK(v2_registration_bodies == 0);
+		const auto pending_refs = Access::private_refs(*fixture.extension.ptr());
+		CHECK(Access::cancel_ready(*fixture.extension.ptr(), CloseRoute::EXPLICIT) == ERR_INVALID_DATA);
+		CHECK(Access::private_refs(*fixture.extension.ptr()) == pending_refs);
+		REQUIRE(Access::cancel_ready(*fixture.extension.ptr(), CloseRoute::SETUP_ABORT) == OK);
+		CHECK(Access::private_refs(*fixture.extension.ptr()) + 1 == pending_refs);
+		CHECK(Access::ready_reservation_retired(*fixture.extension.ptr()));
+		CHECK(Access::cancel_ready(*fixture.extension.ptr(), CloseRoute::SETUP_ABORT) == OK);
+		CHECK(Access::private_refs(*fixture.extension.ptr()) + 1 == pending_refs);
+		fixture.finish();
+		CHECK(v2_registration_bodies == 0);
+	}
 }
-static int32_t ready_no_effects(void *, GDExtensionDeviceExitSceneReadyContextRef) { return OK; }
+static int32_t ready_no_effects(void *, GDExtensionDeviceExitSceneReadyContextRef) {
+	return OK;
+}
 class SceneReadyCountingLoader : public GDExtensionFunctionLoader {
 public:
- int close_count = 0;
- Error close_library() override { close_count++; return GDExtensionFunctionLoader::close_library(); }
+	int close_count = 0;
+	Error close_library() override {
+		close_count++;
+		return GDExtensionFunctionLoader::close_library();
+	}
 };
 static int ready_abort_user_returns = 0;
 static int ready_abort_binding_returns = 0;
 TEST_CASE("device_exit::issuer/scene-ready-init-abort-keeps-original-error-and-single-close") {
- using namespace GDExtensionDeviceExit;
- IssuerFixture fixture;
- Ref<SceneReadyCountingLoader> loader;
- loader.instantiate();
- loader->set_initialization_function(issuer_entry);
- loader->set_device_exit_guard_version(1);
- fixture.loader = loader;
- ready_abort_user_returns = ready_abort_binding_returns = 0;
- issuer_before_register = [](GuardRegistrationV1 &registration) { registration.entry_classes |= GDEXTENSION_DEVICE_EXIT_ENTRY_SCENE_READY_V1; };
- issuer_term_hook = [](DeinitLevelContextRef, int phase) {
-  if (phase == 1) { ready_abort_user_returns++; }
-  if (phase == 2) { ready_abort_binding_returns++; }
- };
- REQUIRE_EQ(fixture.open(), OK);
- REQUIRE_EQ(fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE), ERR_UNAVAILABLE);
- RecordRef original;
- REQUIRE_EQ(Access::retain_record(*fixture.extension.ptr(), original), OK);
- CHECK_EQ(Access::abort_ready(*fixture.extension.ptr(), ERR_UNAVAILABLE), ERR_UNAVAILABLE);
- CHECK_FALSE(fixture.extension->is_library_open());
- CHECK_EQ(loader->close_count, 1);
- CHECK_EQ(ready_abort_user_returns, 1);
- CHECK_EQ(ready_abort_binding_returns, 1);
- CoreCloseReturnFact fact;
- REQUIRE_EQ(Registry::get_singleton().resolve_core_close_return(original, fact), OK);
- CHECK(fact.route == CloseRoute::INIT_ABORT);
- CHECK(fact.close_returned);
- fixture.extension.unref();
- CHECK_EQ(loader->close_count, 1); // No destructor LAST_REF retry.
+	using namespace GDExtensionDeviceExit;
+	IssuerFixture fixture;
+	Ref<SceneReadyCountingLoader> loader;
+	loader.instantiate();
+	loader->set_initialization_function(issuer_entry);
+	loader->set_device_exit_guard_version(1);
+	fixture.loader = loader;
+	ready_abort_user_returns = ready_abort_binding_returns = 0;
+	issuer_before_register = [](GuardRegistrationV1 &registration) { registration.entry_classes |= GDEXTENSION_DEVICE_EXIT_ENTRY_SCENE_READY_V1; };
+	issuer_term_hook = [](DeinitLevelContextRef, int phase) {
+		if (phase == 1) {
+			ready_abort_user_returns++;
+		}
+		if (phase == 2) {
+			ready_abort_binding_returns++;
+		}
+	};
+	REQUIRE_EQ(fixture.open(), OK);
+	REQUIRE_EQ(fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE), ERR_UNAVAILABLE);
+	RecordRef original;
+	REQUIRE_EQ(Access::retain_record(*fixture.extension.ptr(), original), OK);
+	CHECK_EQ(Access::abort_ready(*fixture.extension.ptr(), ERR_UNAVAILABLE), ERR_UNAVAILABLE);
+	CHECK_FALSE(fixture.extension->is_library_open());
+	CHECK_EQ(loader->close_count, 1);
+	CHECK_EQ(ready_abort_user_returns, 1);
+	CHECK_EQ(ready_abort_binding_returns, 1);
+	CoreCloseReturnFact fact;
+	REQUIRE_EQ(Registry::get_singleton().resolve_core_close_return(original, fact), OK);
+	CHECK(fact.route == CloseRoute::INIT_ABORT);
+	CHECK(fact.close_returned);
+	fixture.extension.unref();
+	CHECK_EQ(loader->close_count, 1); // No destructor LAST_REF retry.
 }
 static int materialized_ready_calls = 0;
-static int32_t count_materialized_ready(void *, GDExtensionDeviceExitSceneReadyContextRef) { materialized_ready_calls++; return OK; }
+static int32_t count_materialized_ready(void *, GDExtensionDeviceExitSceneReadyContextRef) {
+	materialized_ready_calls++;
+	return OK;
+}
 TEST_CASE("device_exit::issuer/scene-ready-missing-registration-reports-after-real-return") {
- using namespace GDExtensionDeviceExit;
- IssuerFixture fixture;
- issuer_before_register = [](GuardRegistrationV1 &registration) { registration.entry_classes |= GDEXTENSION_DEVICE_EXIT_ENTRY_SCENE_READY_V1; };
- REQUIRE_EQ(fixture.open(), OK);
- CHECK_EQ(fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE), ERR_UNAVAILABLE);
- CHECK_EQ(issuer_ack, OK); // The real early wrapper actually acknowledged/returned.
- CHECK_EQ(Access::level(*fixture.extension.ptr()), 2);
- fixture.finish(); // Early USER/BINDING remain reachable, no Ready body ran.
+	using namespace GDExtensionDeviceExit;
+	IssuerFixture fixture;
+	issuer_before_register = [](GuardRegistrationV1 &registration) { registration.entry_classes |= GDEXTENSION_DEVICE_EXIT_ENTRY_SCENE_READY_V1; };
+	REQUIRE_EQ(fixture.open(), OK);
+	CHECK_EQ(fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE), ERR_UNAVAILABLE);
+	CHECK_EQ(issuer_ack, OK); // The real early wrapper actually acknowledged/returned.
+	CHECK_EQ(Access::level(*fixture.extension.ptr()), 2);
+	fixture.finish(); // Early USER/BINDING remain reachable, no Ready body ran.
 }
 TEST_CASE("device_exit::issuer/scene-ready-requires-the-real-materialization-seam") {
- using namespace GDExtensionDeviceExit;
- IssuerFixture fixture;
- issuer_before_register = [](GuardRegistrationV1 &registration) { registration.entry_classes |= GDEXTENSION_DEVICE_EXIT_ENTRY_SCENE_READY_V1; };
- issuer_init_hook = [](InitializationLevelContextRef frame) {
-  const GDExtensionDeviceExitAbi abi{1,16,0};
-  REQUIRE_EQ(Registry::get_singleton().register_scene_ready(&abi, frame, ready_no_effects, nullptr), OK);
- };
- REQUIRE_EQ(fixture.open(), OK);
- REQUIRE_EQ(fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE), OK);
- const bool old = Access::ready_seam(false);
- CHECK_EQ(Access::dispatch_materialized_ready(*fixture.extension.ptr()), OK);
- CHECK_EQ(fixture.extension->preflight_exit(CloseRoute::EXPLICIT), ERR_BUSY);
- Access::ready_seam(old);
- REQUIRE_EQ(Access::cancel_ready(*fixture.extension.ptr(), CloseRoute::SETUP_ABORT), OK);
- fixture.finish();
+	using namespace GDExtensionDeviceExit;
+	IssuerFixture fixture;
+	issuer_before_register = [](GuardRegistrationV1 &registration) { registration.entry_classes |= GDEXTENSION_DEVICE_EXIT_ENTRY_SCENE_READY_V1; };
+	issuer_init_hook = [](InitializationLevelContextRef frame) {
+		const GDExtensionDeviceExitAbi abi{ 1, 16, 0 };
+		REQUIRE_EQ(Registry::get_singleton().register_scene_ready(&abi, frame, ready_no_effects, nullptr), OK);
+	};
+	REQUIRE_EQ(fixture.open(), OK);
+	REQUIRE_EQ(fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE), OK);
+	const bool old = Access::ready_seam(false);
+	CHECK_EQ(Access::dispatch_materialized_ready(*fixture.extension.ptr()), OK);
+	CHECK_EQ(fixture.extension->preflight_exit(CloseRoute::EXPLICIT), ERR_BUSY);
+	Access::ready_seam(old);
+	REQUIRE_EQ(Access::cancel_ready(*fixture.extension.ptr(), CloseRoute::SETUP_ABORT), OK);
+	fixture.finish();
 }
 TEST_CASE("device_exit::issuer/scene-ready-no-selected-tree-rejects-before-effects") {
- using namespace GDExtensionDeviceExit;
- REQUIRE(OS::get_singleton()->get_main_loop() == nullptr); // Actual --test harness, before Main::start.
- IssuerFixture fixture;
- materialized_ready_calls = 0;
- issuer_before_register = [](GuardRegistrationV1 &registration) { registration.entry_classes |= GDEXTENSION_DEVICE_EXIT_ENTRY_SCENE_READY_V1; };
- issuer_init_hook = [](InitializationLevelContextRef frame) {
-  const GDExtensionDeviceExitAbi abi{1,16,0};
-  REQUIRE_EQ(Registry::get_singleton().register_scene_ready(&abi, frame, count_materialized_ready, nullptr), OK);
- };
- REQUIRE_EQ(fixture.open(), OK);
- REQUIRE_EQ(fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE), OK);
- struct Restore {
-  bool seam;
-  ~Restore() { Access::ready_seam(seam); }
- } restore{Access::ready_seam(true)};
- CHECK_EQ(Access::dispatch_materialized_ready(*fixture.extension.ptr()), ERR_UNAVAILABLE);
- CHECK_EQ(materialized_ready_calls, 0);
- CHECK_FALSE(Access::quiescing(*fixture.extension.ptr()));
- fixture.finish();
+	using namespace GDExtensionDeviceExit;
+	REQUIRE(OS::get_singleton()->get_main_loop() == nullptr); // Actual --test harness, before Main::start.
+	IssuerFixture fixture;
+	materialized_ready_calls = 0;
+	issuer_before_register = [](GuardRegistrationV1 &registration) { registration.entry_classes |= GDEXTENSION_DEVICE_EXIT_ENTRY_SCENE_READY_V1; };
+	issuer_init_hook = [](InitializationLevelContextRef frame) {
+		const GDExtensionDeviceExitAbi abi{ 1, 16, 0 };
+		REQUIRE_EQ(Registry::get_singleton().register_scene_ready(&abi, frame, count_materialized_ready, nullptr), OK);
+	};
+	REQUIRE_EQ(fixture.open(), OK);
+	REQUIRE_EQ(fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE), OK);
+	struct Restore {
+		bool seam;
+		~Restore() { Access::ready_seam(seam); }
+	} restore{ Access::ready_seam(true) };
+	CHECK_EQ(Access::dispatch_materialized_ready(*fixture.extension.ptr()), ERR_UNAVAILABLE);
+	CHECK_EQ(materialized_ready_calls, 0);
+	CHECK_FALSE(Access::quiescing(*fixture.extension.ptr()));
+	fixture.finish();
 }
 TEST_CASE("device_exit::issuer/scene-ready-late-load-failure-closes-before-publication") {
- using namespace GDExtensionDeviceExit;
- REQUIRE(OS::get_singleton()->get_main_loop() == nullptr);
- REQUIRE(Access::manager_level() >= GDExtension::INITIALIZATION_LEVEL_SCENE);
- IssuerFixture fixture;
- Ref<SceneReadyCountingLoader> loader;
- loader.instantiate();
- loader->set_initialization_function(issuer_entry);
- loader->set_device_exit_guard_version(1);
- materialized_ready_calls = 0;
- ready_abort_user_returns = ready_abort_binding_returns = 0;
- issuer_before_register = [](GuardRegistrationV1 &registration) { registration.entry_classes |= GDEXTENSION_DEVICE_EXIT_ENTRY_SCENE_READY_V1; };
- issuer_init_hook = [](InitializationLevelContextRef) {
-  const GDExtensionDeviceExitAbi abi{1,16,0};
-  InitializationLevelContextRef scene;
-  auto &registry = Registry::get_singleton();
-  if (registry.borrow_initialize_level(&abi, owner, 2, &scene) == OK) {
-   REQUIRE_EQ(registry.register_scene_ready(&abi, scene, count_materialized_ready, nullptr), OK);
-  }
- };
- issuer_term_hook = [](DeinitLevelContextRef, int phase) {
-  if (phase == 1) { ready_abort_user_returns++; }
-  if (phase == 2) { ready_abort_binding_returns++; }
- };
- struct Restore {
-  bool seam;
-  ~Restore() { Access::ready_seam(seam); }
- } restore{Access::ready_seam(true)};
- const String path = "libgodot://scene-ready-late-failure";
- auto *manager = GDExtensionManager::get_singleton();
- CHECK(manager->load_extension_with_loader(path, loader) == GDExtensionManager::LOAD_STATUS_FAILED);
- CHECK_FALSE(manager->is_extension_loaded(path));
- CHECK_EQ(materialized_ready_calls, 0);
- CHECK_EQ(loader->close_count, 1);
- CHECK_EQ(ready_abort_user_returns, Access::manager_level() - 1);
- CHECK_EQ(ready_abort_binding_returns, Access::manager_level() - 1);
+	using namespace GDExtensionDeviceExit;
+	REQUIRE(OS::get_singleton()->get_main_loop() == nullptr);
+	REQUIRE(Access::manager_level() >= GDExtension::INITIALIZATION_LEVEL_SCENE);
+	IssuerFixture fixture;
+	Ref<SceneReadyCountingLoader> loader;
+	loader.instantiate();
+	loader->set_initialization_function(issuer_entry);
+	loader->set_device_exit_guard_version(1);
+	materialized_ready_calls = 0;
+	ready_abort_user_returns = ready_abort_binding_returns = 0;
+	issuer_before_register = [](GuardRegistrationV1 &registration) { registration.entry_classes |= GDEXTENSION_DEVICE_EXIT_ENTRY_SCENE_READY_V1; };
+	issuer_init_hook = [](InitializationLevelContextRef) {
+		const GDExtensionDeviceExitAbi abi{ 1, 16, 0 };
+		InitializationLevelContextRef scene;
+		auto &registry = Registry::get_singleton();
+		if (registry.borrow_initialize_level(&abi, owner, 2, &scene) == OK) {
+			REQUIRE_EQ(registry.register_scene_ready(&abi, scene, count_materialized_ready, nullptr), OK);
+		}
+	};
+	issuer_term_hook = [](DeinitLevelContextRef, int phase) {
+		if (phase == 1) {
+			ready_abort_user_returns++;
+		}
+		if (phase == 2) {
+			ready_abort_binding_returns++;
+		}
+	};
+	struct Restore {
+		bool seam;
+		~Restore() { Access::ready_seam(seam); }
+	} restore{ Access::ready_seam(true) };
+	const String path = "libgodot://scene-ready-late-failure";
+	auto *manager = GDExtensionManager::get_singleton();
+	CHECK(manager->load_extension_with_loader(path, loader) == GDExtensionManager::LOAD_STATUS_FAILED);
+	CHECK_FALSE(manager->is_extension_loaded(path));
+	CHECK_EQ(materialized_ready_calls, 0);
+	CHECK_EQ(loader->close_count, 1);
+	CHECK_EQ(ready_abort_user_returns, Access::manager_level() - 1);
+	CHECK_EQ(ready_abort_binding_returns, Access::manager_level() - 1);
 }
 TEST_CASE("device_exit::issuer/scene-ready-extra-reservation-is-prevalidated") {
- using namespace GDExtensionDeviceExit;
- IssuerFixture fixture;
- issuer_before_register = [](GuardRegistrationV1 &registration) {
-  registration.entry_classes |= GDEXTENSION_DEVICE_EXIT_ENTRY_SCENE_READY_V1;
-  const uint32_t old = Access::ready_private_budget(*owner, 5); // Old control + four level frames only.
-  GuardToken token{};
-  const Error error = Registry::get_singleton().register_guard(owner, &registration, &token);
-  Access::issuer_limit(2, old);
-  CHECK_EQ(error, ERR_PARAMETER_RANGE_ERROR);
-  CHECK_EQ(token.registry_instance, 0);
-  CHECK_EQ(token.handle_serial, 0);
- };
- REQUIRE_EQ(fixture.open(), OK);
- // No SCENE body ran; the unused reservation is retired by the original close.
- fixture.finish();
+	using namespace GDExtensionDeviceExit;
+	IssuerFixture fixture;
+	issuer_before_register = [](GuardRegistrationV1 &registration) {
+		registration.entry_classes |= GDEXTENSION_DEVICE_EXIT_ENTRY_SCENE_READY_V1;
+		const uint32_t old = Access::ready_private_budget(*owner, 5); // Old control + four level frames only.
+		GuardToken token{};
+		const Error error = Registry::get_singleton().register_guard(owner, &registration, &token);
+		Access::issuer_limit(2, old);
+		CHECK_EQ(error, ERR_PARAMETER_RANGE_ERROR);
+		CHECK_EQ(token.registry_instance, 0);
+		CHECK_EQ(token.handle_serial, 0);
+	};
+	REQUIRE_EQ(fixture.open(), OK);
+	// No SCENE body ran; the unused reservation is retired by the original close.
+	fixture.finish();
 }
 TEST_CASE("device_exit::issuer/scene-ready-requires-original-opt-in") {
- using namespace GDExtensionDeviceExit;
- IssuerFixture fixture;
- issuer_init_hook = [](InitializationLevelContextRef frame) {
-  const GDExtensionDeviceExitAbi abi{1,16,0};
-  CHECK_EQ(Registry::get_singleton().register_scene_ready(&abi, frame, ready_no_effects, nullptr), ERR_UNAVAILABLE);
- };
- REQUIRE_EQ(fixture.open(), OK);
- REQUIRE_EQ(fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE), OK);
- fixture.finish();
+	using namespace GDExtensionDeviceExit;
+	IssuerFixture fixture;
+	issuer_init_hook = [](InitializationLevelContextRef frame) {
+		const GDExtensionDeviceExitAbi abi{ 1, 16, 0 };
+		CHECK_EQ(Registry::get_singleton().register_scene_ready(&abi, frame, ready_no_effects, nullptr), ERR_UNAVAILABLE);
+	};
+	REQUIRE_EQ(fixture.open(), OK);
+	REQUIRE_EQ(fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE), OK);
+	fixture.finish();
 }
 static Object *ready_created_object = nullptr;
 static int32_t ready_create_and_schedule(void *, GDExtensionDeviceExitSceneReadyContextRef ready) {
- using namespace GDExtensionDeviceExit;
- auto &registry = Registry::get_singleton();
- const GDExtensionDeviceExitAbi abi{1,16,0};
- const uint32_t before_binding = Access::binding_holders(*owner);
- const uint32_t before_cleanup = Access::cleanup_reservations(*owner);
- ready_created_object = create_real_binding_holder(owner);
- if (!ready_created_object) { return ERR_UNAVAILABLE; }
- CHECK_EQ(Access::binding_holders(*owner), before_binding + 2); // Original cleanup + binding holders.
- CHECK_EQ(Access::cleanup_reservations(*owner), before_cleanup + 1);
- const uint64_t id = uint64_t(ready_created_object->get_instance_id());
- CHECK_EQ(registry.schedule_scene_ready_object_cleanup(&abi, ready, 2, id), ERR_INVALID_DATA);
- // An intervening rejected attempt must invalidate that old fatal receipt.
- CHECK_EQ(registry.schedule_scene_ready_object_cleanup(nullptr, ready, 0, id), ERR_INVALID_PARAMETER);
- CHECK_EQ(registry.scene_ready_abort_unscheduled_pair(&abi, ready, ERR_INVALID_DATA, 1, id), ERR_INVALID_DATA);
- CHECK_EQ(registry.schedule_scene_ready_object_cleanup(&abi, ready, 0, id), OK);
- CHECK_EQ(registry.schedule_scene_ready_object_cleanup(&abi, ready, 0, id), ERR_INVALID_DATA);
- CHECK_EQ(registry.scene_ready_abort_unscheduled_pair(&abi, ready, ERR_INVALID_DATA, 1, id), ERR_INVALID_DATA);
- return OK;
+	using namespace GDExtensionDeviceExit;
+	auto &registry = Registry::get_singleton();
+	const GDExtensionDeviceExitAbi abi{ 1, 16, 0 };
+	const uint32_t before_binding = Access::binding_holders(*owner);
+	const uint32_t before_cleanup = Access::cleanup_reservations(*owner);
+	ready_created_object = create_real_binding_holder(owner);
+	if (!ready_created_object) {
+		return ERR_UNAVAILABLE;
+	}
+	CHECK_EQ(Access::binding_holders(*owner), before_binding + 2); // Original cleanup + binding holders.
+	CHECK_EQ(Access::cleanup_reservations(*owner), before_cleanup + 1);
+	const uint64_t id = uint64_t(ready_created_object->get_instance_id());
+	CHECK_EQ(registry.schedule_scene_ready_object_cleanup(&abi, ready, 2, id), ERR_INVALID_DATA);
+	// An intervening rejected attempt must invalidate that old fatal receipt.
+	CHECK_EQ(registry.schedule_scene_ready_object_cleanup(nullptr, ready, 0, id), ERR_INVALID_PARAMETER);
+	CHECK_EQ(registry.scene_ready_abort_unscheduled_pair(&abi, ready, ERR_INVALID_DATA, 1, id), ERR_INVALID_DATA);
+	CHECK_EQ(registry.schedule_scene_ready_object_cleanup(&abi, ready, 0, id), OK);
+	CHECK_EQ(registry.schedule_scene_ready_object_cleanup(&abi, ready, 0, id), ERR_INVALID_DATA);
+	CHECK_EQ(registry.scene_ready_abort_unscheduled_pair(&abi, ready, ERR_INVALID_DATA, 1, id), ERR_INVALID_DATA);
+	return OK;
 }
 TEST_CASE("device_exit::issuer/scene-ready-materializes-original-pair-before-scheduling") {
- using namespace GDExtensionDeviceExit;
- IssuerFixture fixture;
- ready_created_object = nullptr;
- issuer_before_register = [](GuardRegistrationV1 &registration) { registration.entry_classes |= GDEXTENSION_DEVICE_EXIT_ENTRY_SCENE_READY_V1 | (1u << 6); };
- issuer_init_hook = [](InitializationLevelContextRef frame) {
-  const GDExtensionDeviceExitAbi abi{1,16,0};
-  REQUIRE_EQ(Registry::get_singleton().register_scene_ready(&abi, frame, ready_create_and_schedule, nullptr), OK);
- };
- issuer_term_hook = [](DeinitLevelContextRef, int phase) {
-  if (phase == 1 && ready_created_object) { memdelete(ready_created_object); ready_created_object = nullptr; }
- };
- REQUIRE_EQ(fixture.open(), OK);
- REQUIRE_EQ(fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE), OK);
- REQUIRE_EQ(Access::dispatch_ready(*fixture.extension.ptr()), OK);
- fixture.finish();
- CHECK(ready_created_object == nullptr);
+	using namespace GDExtensionDeviceExit;
+	IssuerFixture fixture;
+	ready_created_object = nullptr;
+	issuer_before_register = [](GuardRegistrationV1 &registration) { registration.entry_classes |= GDEXTENSION_DEVICE_EXIT_ENTRY_SCENE_READY_V1 | (1u << 6); };
+	issuer_init_hook = [](InitializationLevelContextRef frame) {
+		const GDExtensionDeviceExitAbi abi{ 1, 16, 0 };
+		REQUIRE_EQ(Registry::get_singleton().register_scene_ready(&abi, frame, ready_create_and_schedule, nullptr), OK);
+	};
+	issuer_term_hook = [](DeinitLevelContextRef, int phase) {
+		if (phase == 1 && ready_created_object) {
+			memdelete(ready_created_object);
+			ready_created_object = nullptr;
+		}
+	};
+	REQUIRE_EQ(fixture.open(), OK);
+	REQUIRE_EQ(fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE), OK);
+	REQUIRE_EQ(Access::dispatch_ready(*fixture.extension.ptr()), OK);
+	fixture.finish();
+	CHECK(ready_created_object == nullptr);
 }
 class SceneReadyAbortObject : public Object {
 public:
- ~SceneReadyAbortObject() { std::fputs("SCENE_READY_UNEXPECTED_OBJECT_DESTRUCTOR\n", stderr); }
+	~SceneReadyAbortObject() { std::fputs("SCENE_READY_UNEXPECTED_OBJECT_DESTRUCTOR\n", stderr); }
 };
 static int32_t ready_abort_real_pair(void *, GDExtensionDeviceExitSceneReadyContextRef ready) {
- const GDExtensionDeviceExitAbi abi{1,16,0};
- auto *object = memnew(SceneReadyAbortObject);
- const GDExtensionInstanceBindingCallbacks callbacks = {
-  [](void *, void *instance) -> void * { return instance; },
-  [](void *, void *, void *) { std::fputs("SCENE_READY_UNEXPECTED_BINDING_FREE\n", stderr); }, nullptr
- };
- if (object->get_instance_binding(owner, &callbacks) != object) { std::_Exit(91); }
- const auto schedule = reinterpret_cast<GDExtensionInterfaceDeviceExitSceneReadyScheduleObjectCleanupV1>(GDExtension::get_interface_function("device_exit_scene_ready_schedule_object_cleanup_v1"));
- const auto abort_pair = reinterpret_cast<GDExtensionInterfaceDeviceExitSceneReadyAbortV1>(GDExtension::get_interface_function("device_exit_scene_ready_abort_v1"));
- if (!schedule || !abort_pair) { std::_Exit(92); }
- const uint64_t id = uint64_t(object->get_instance_id());
- const int32_t error = schedule(&abi, ready, 2, id);
- if (error != ERR_INVALID_DATA) { std::_Exit(93); }
- abort_pair(&abi, ready, error, GDEXTENSION_DEVICE_EXIT_SCENE_READY_ABORT_UNSCHEDULED_PAIR_V1, id);
- std::fputs("SCENE_READY_UNEXPECTED_ABORT_RETURN\n", stderr);
- std::_Exit(94);
+	const GDExtensionDeviceExitAbi abi{ 1, 16, 0 };
+	auto *object = memnew(SceneReadyAbortObject);
+	const GDExtensionInstanceBindingCallbacks callbacks = {
+		[](void *, void *instance) -> void * { return instance; },
+		[](void *, void *, void *) { std::fputs("SCENE_READY_UNEXPECTED_BINDING_FREE\n", stderr); }, nullptr
+	};
+	if (object->get_instance_binding(owner, &callbacks) != object) {
+		std::_Exit(91);
+	}
+	const auto schedule = reinterpret_cast<GDExtensionInterfaceDeviceExitSceneReadyScheduleObjectCleanupV1>(GDExtension::get_interface_function("device_exit_scene_ready_schedule_object_cleanup_v1"));
+	const auto abort_pair = reinterpret_cast<GDExtensionInterfaceDeviceExitSceneReadyAbortV1>(GDExtension::get_interface_function("device_exit_scene_ready_abort_v1"));
+	if (!schedule || !abort_pair) {
+		std::_Exit(92);
+	}
+	const uint64_t id = uint64_t(object->get_instance_id());
+	const int32_t error = schedule(&abi, ready, 2, id);
+	if (error != ERR_INVALID_DATA) {
+		std::_Exit(93);
+	}
+	abort_pair(&abi, ready, error, GDEXTENSION_DEVICE_EXIT_SCENE_READY_ABORT_UNSCHEDULED_PAIR_V1, id);
+	std::fputs("SCENE_READY_UNEXPECTED_ABORT_RETURN\n", stderr);
+	std::_Exit(94);
 }
 static void scene_ready_unscheduled_pair_child() {
- using namespace GDExtensionDeviceExit;
- IssuerFixture fixture;
- issuer_child_mode = true;
- issuer_before_register = [](GuardRegistrationV1 &registration) { registration.entry_classes |= GDEXTENSION_DEVICE_EXIT_ENTRY_SCENE_READY_V1 | (1u << 6); };
- issuer_init_hook = [](InitializationLevelContextRef frame) {
-  const GDExtensionDeviceExitAbi abi{1,16,0};
-  if (Registry::get_singleton().register_scene_ready(&abi, frame, ready_abort_real_pair, nullptr) != OK) { std::_Exit(95); }
- };
- if (fixture.open() != OK || fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE) != OK) { std::_Exit(96); }
- Access::dispatch_ready(*fixture.extension.ptr());
- std::_Exit(97);
+	using namespace GDExtensionDeviceExit;
+	IssuerFixture fixture;
+	issuer_child_mode = true;
+	issuer_before_register = [](GuardRegistrationV1 &registration) { registration.entry_classes |= GDEXTENSION_DEVICE_EXIT_ENTRY_SCENE_READY_V1 | (1u << 6); };
+	issuer_init_hook = [](InitializationLevelContextRef frame) {
+		const GDExtensionDeviceExitAbi abi{ 1, 16, 0 };
+		if (Registry::get_singleton().register_scene_ready(&abi, frame, ready_abort_real_pair, nullptr) != OK) {
+			std::_Exit(95);
+		}
+	};
+	if (fixture.open() != OK || fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE) != OK) {
+		std::_Exit(96);
+	}
+	Access::dispatch_ready(*fixture.extension.ptr());
+	std::_Exit(97);
 }
 REGISTER_TEST_COMMAND("--device-exit-scene-ready-unscheduled-pair", scene_ready_unscheduled_pair_child);
 #ifdef TOOLS_ENABLED
 static Object *binding_cleanup_objects[3] = {};
 static int binding_cleanup_frees[3] = {};
 TEST_CASE("device_exit::issuer/clear-bindings-survives-callback-untrack-and-object-delete") {
- auto *manager = GDExtensionManager::get_singleton();
- auto *engine = Engine::get_singleton();
- struct Restore {
-  bool reloading;
-  ~Restore() { Engine::get_singleton()->set_extension_reloading_enabled(reloading); }
- } restore{engine->is_extension_reloading_enabled()};
- engine->set_extension_reloading_enabled(true);
- Ref<GDExtensionFunctionLoader> loader;
- loader.instantiate();
- loader->set_initialization_function([](GDExtensionInterfaceGetProcAddress, GDExtensionClassLibraryPtr, GDExtensionInitialization *initialization) -> GDExtensionBool {
-  *initialization = {};
-  initialization->initialize = [](void *, GDExtensionInitializationLevel) {};
-  initialization->deinitialize = [](void *, GDExtensionInitializationLevel) {};
-  return true;
- });
- const String path = "libgodot://binding-clear-reentrant";
- REQUIRE(manager->load_extension_with_loader(path, loader) == GDExtensionManager::LOAD_STATUS_OK);
- Ref<GDExtension> extension = manager->get_extension(path);
- extension->set_reloadable(true);
- const GDExtensionInstanceBindingCallbacks callbacks = {
-  [](void *, void *instance) -> void * { return instance; },
-  [](void *token, void *instance, void *) {
-   for (int i = 0; i < 3; i++) {
-    if (instance == binding_cleanup_objects[i]) { binding_cleanup_frees[i]++; }
-   }
-   if (instance == binding_cleanup_objects[0]) {
-    GDExtensionManager::get_singleton()->untrack_instance_binding(token, binding_cleanup_objects[0]);
-    // The real Object predelete also untracks the later owner from this same
-    // manager vector; the middle live owner must still be visited exactly once.
-    memdelete(binding_cleanup_objects[2]);
-    binding_cleanup_objects[2] = nullptr;
-   }
-  }, nullptr
- };
- for (int i = 0; i < 3; i++) {
-  binding_cleanup_frees[i] = 0;
-  binding_cleanup_objects[i] = memnew(Object);
-  REQUIRE(binding_cleanup_objects[i]->get_instance_binding(extension.ptr(), &callbacks) == binding_cleanup_objects[i]);
- }
- Access::clear_bindings(*extension.ptr());
- CHECK_EQ(binding_cleanup_frees[0], 1);
- CHECK_EQ(binding_cleanup_frees[1], 1);
- CHECK_EQ(binding_cleanup_frees[2], 1);
- for (int i = 0; i < 3; i++) {
-  if (binding_cleanup_objects[i]) { memdelete(binding_cleanup_objects[i]); binding_cleanup_objects[i] = nullptr; }
- }
- for (int32_t i = Access::level(*extension.ptr()); i >= 0; i--) {
-  REQUIRE_EQ(extension->deinitialize_library(GDExtension::InitializationLevel(i)), OK);
- }
- REQUIRE_EQ(extension->close_library(), OK);
- Access::forget_closed_test_extension(path);
+	auto *manager = GDExtensionManager::get_singleton();
+	auto *engine = Engine::get_singleton();
+	struct Restore {
+		bool reloading;
+		~Restore() { Engine::get_singleton()->set_extension_reloading_enabled(reloading); }
+	} restore{ engine->is_extension_reloading_enabled() };
+	engine->set_extension_reloading_enabled(true);
+	Ref<GDExtensionFunctionLoader> loader;
+	loader.instantiate();
+	loader->set_initialization_function([](GDExtensionInterfaceGetProcAddress, GDExtensionClassLibraryPtr, GDExtensionInitialization *initialization) -> GDExtensionBool {
+		*initialization = {};
+		initialization->initialize = [](void *, GDExtensionInitializationLevel) {};
+		initialization->deinitialize = [](void *, GDExtensionInitializationLevel) {};
+		return true;
+	});
+	const String path = "libgodot://binding-clear-reentrant";
+	REQUIRE(manager->load_extension_with_loader(path, loader) == GDExtensionManager::LOAD_STATUS_OK);
+	Ref<GDExtension> extension = manager->get_extension(path);
+	extension->set_reloadable(true);
+	const GDExtensionInstanceBindingCallbacks callbacks = {
+		[](void *, void *instance) -> void * { return instance; },
+		[](void *token, void *instance, void *) {
+			for (int i = 0; i < 3; i++) {
+				if (instance == binding_cleanup_objects[i]) {
+					binding_cleanup_frees[i]++;
+				}
+			}
+			if (instance == binding_cleanup_objects[0]) {
+				GDExtensionManager::get_singleton()->untrack_instance_binding(token, binding_cleanup_objects[0]);
+				// The real Object predelete also untracks the later owner from this same
+				// manager vector; the middle live owner must still be visited exactly once.
+				memdelete(binding_cleanup_objects[2]);
+				binding_cleanup_objects[2] = nullptr;
+			}
+		},
+		nullptr
+	};
+	for (int i = 0; i < 3; i++) {
+		binding_cleanup_frees[i] = 0;
+		binding_cleanup_objects[i] = memnew(Object);
+		REQUIRE(binding_cleanup_objects[i]->get_instance_binding(extension.ptr(), &callbacks) == binding_cleanup_objects[i]);
+	}
+	Access::clear_bindings(*extension.ptr());
+	CHECK_EQ(binding_cleanup_frees[0], 1);
+	CHECK_EQ(binding_cleanup_frees[1], 1);
+	CHECK_EQ(binding_cleanup_frees[2], 1);
+	for (int i = 0; i < 3; i++) {
+		if (binding_cleanup_objects[i]) {
+			memdelete(binding_cleanup_objects[i]);
+			binding_cleanup_objects[i] = nullptr;
+		}
+	}
+	for (int32_t i = Access::level(*extension.ptr()); i >= 0; i--) {
+		REQUIRE_EQ(extension->deinitialize_library(GDExtension::InitializationLevel(i)), OK);
+	}
+	REQUIRE_EQ(extension->close_library(), OK);
+	Access::forget_closed_test_extension(path);
 }
 #endif
 static GDExtensionDeviceExitSceneReadyContextRef last_ready_frame{};
 static int ready_calls = 0;
 static int32_t ready_check_frame(void *, GDExtensionDeviceExitSceneReadyContextRef ready) {
- using namespace GDExtensionDeviceExit;
- ready_calls++;
- last_ready_frame = ready;
- const GDExtensionDeviceExitAbi abi{1,16,0};
- InitializationLevelContextRef initializer{};
- CHECK_EQ(Registry::get_singleton().borrow_initialize_level(&abi, owner, 2, &initializer), ERR_UNAUTHORIZED);
- CHECK_EQ(owner->preflight_exit(CloseRoute::EXPLICIT), ERR_BUSY);
- CHECK_EQ(Registry::get_singleton().schedule_scene_ready_object_cleanup(&abi, ready, 2, 0), ERR_INVALID_DATA);
- return INT32_MAX; // Undefined callback Error must never become success.
+	using namespace GDExtensionDeviceExit;
+	ready_calls++;
+	last_ready_frame = ready;
+	const GDExtensionDeviceExitAbi abi{ 1, 16, 0 };
+	InitializationLevelContextRef initializer{};
+	CHECK_EQ(Registry::get_singleton().borrow_initialize_level(&abi, owner, 2, &initializer), ERR_UNAUTHORIZED);
+	CHECK_EQ(owner->preflight_exit(CloseRoute::EXPLICIT), ERR_BUSY);
+	CHECK_EQ(Registry::get_singleton().schedule_scene_ready_object_cleanup(&abi, ready, 2, 0), ERR_INVALID_DATA);
+	return INT32_MAX; // Undefined callback Error must never become success.
 }
 TEST_CASE("device_exit::issuer/scene-ready-once-fresh-frame-and-unknown-error") {
- using namespace GDExtensionDeviceExit;
- IssuerFixture fixture;
- ready_calls = 0;
- issuer_before_register = [](GuardRegistrationV1 &registration) { registration.entry_classes |= GDEXTENSION_DEVICE_EXIT_ENTRY_SCENE_READY_V1; };
- issuer_init_hook = [](InitializationLevelContextRef frame) {
-  const GDExtensionDeviceExitAbi abi{1,16,0};
-  REQUIRE_EQ(Registry::get_singleton().register_scene_ready(&abi, frame, ready_check_frame, nullptr), OK);
- };
- REQUIRE_EQ(fixture.open(), OK);
- REQUIRE_EQ(fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE), OK);
- CHECK_EQ(Access::dispatch_ready(*fixture.extension.ptr()), ERR_INVALID_DATA);
- CHECK_EQ(ready_calls, 1);
- CHECK_EQ(Access::dispatch_ready(*fixture.extension.ptr()), ERR_INVALID_DATA);
- CHECK_EQ(ready_calls, 1);
- const GDExtensionDeviceExitAbi abi{1,16,0};
- CHECK_NE(Registry::get_singleton().schedule_scene_ready_object_cleanup(&abi, last_ready_frame, 0, 1), OK);
- fixture.finish();
+	using namespace GDExtensionDeviceExit;
+	IssuerFixture fixture;
+	ready_calls = 0;
+	issuer_before_register = [](GuardRegistrationV1 &registration) { registration.entry_classes |= GDEXTENSION_DEVICE_EXIT_ENTRY_SCENE_READY_V1; };
+	issuer_init_hook = [](InitializationLevelContextRef frame) {
+		const GDExtensionDeviceExitAbi abi{ 1, 16, 0 };
+		REQUIRE_EQ(Registry::get_singleton().register_scene_ready(&abi, frame, ready_check_frame, nullptr), OK);
+	};
+	REQUIRE_EQ(fixture.open(), OK);
+	REQUIRE_EQ(fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE), OK);
+	CHECK_EQ(Access::dispatch_ready(*fixture.extension.ptr()), ERR_INVALID_DATA);
+	CHECK_EQ(ready_calls, 1);
+	CHECK_EQ(Access::dispatch_ready(*fixture.extension.ptr()), ERR_INVALID_DATA);
+	CHECK_EQ(ready_calls, 1);
+	const GDExtensionDeviceExitAbi abi{ 1, 16, 0 };
+	CHECK_NE(Registry::get_singleton().schedule_scene_ready_object_cleanup(&abi, last_ready_frame, 0, 1), OK);
+	fixture.finish();
 }
 TEST_CASE("device_exit::issuer/scene-ready-registration-pending-is-not-quiesced") {
- using namespace GDExtensionDeviceExit;
- IssuerFixture fixture;
- issuer_before_register = [](GuardRegistrationV1 &registration) { registration.entry_classes |= GDEXTENSION_DEVICE_EXIT_ENTRY_SCENE_READY_V1; };
- issuer_init_hook = [](InitializationLevelContextRef frame) {
-  const GDExtensionDeviceExitAbi abi{1,16,0};
-  auto &registry = Registry::get_singleton();
-  CHECK_EQ(registry.register_scene_ready(&abi, frame, ready_no_effects, reinterpret_cast<void *>(1)), ERR_INVALID_DATA);
-  CHECK_EQ(registry.register_scene_ready(&abi, frame, ready_no_effects, nullptr), OK);
-  CHECK_EQ(registry.register_scene_ready(&abi, frame, ready_no_effects, nullptr), ERR_INVALID_DATA);
- };
- REQUIRE_EQ(fixture.open(), OK);
- REQUIRE_EQ(fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE), OK);
- const GDExtensionDeviceExitAbi abi{1,16,0};
- CHECK_NE(Registry::get_singleton().register_scene_ready(&abi, issuer_stale_context, ready_no_effects, nullptr), OK);
- CHECK_EQ(fixture.extension->preflight_exit(CloseRoute::EXPLICIT), ERR_BUSY);
- CHECK_FALSE(Access::quiescing(*fixture.extension.ptr()));
- {
-  RecordRef retained;
-  REQUIRE_EQ(Access::retain_record(*fixture.extension.ptr(), retained), OK);
-  CallbackScope callback(retained);
-  REQUIRE_EQ(callback.get_error(), OK);
-  CHECK_EQ(Access::cancel_ready(*fixture.extension.ptr(), CloseRoute::SETUP_ABORT), ERR_UNAUTHORIZED);
- }
- CHECK_EQ(Access::cancel_ready(*fixture.extension.ptr(), CloseRoute::EXPLICIT), ERR_INVALID_DATA);
- CHECK_EQ(Access::cancel_ready(*fixture.extension.ptr(), CloseRoute::SETUP_ABORT), OK);
- CHECK_EQ(Access::cancel_ready(*fixture.extension.ptr(), CloseRoute::SETUP_ABORT), OK);
- CHECK_EQ(Access::cancel_ready(*fixture.extension.ptr(), CloseRoute::SHUTDOWN), ERR_INVALID_DATA);
- fixture.finish();
+	using namespace GDExtensionDeviceExit;
+	IssuerFixture fixture;
+	issuer_before_register = [](GuardRegistrationV1 &registration) { registration.entry_classes |= GDEXTENSION_DEVICE_EXIT_ENTRY_SCENE_READY_V1; };
+	issuer_init_hook = [](InitializationLevelContextRef frame) {
+		const GDExtensionDeviceExitAbi abi{ 1, 16, 0 };
+		auto &registry = Registry::get_singleton();
+		CHECK_EQ(registry.register_scene_ready(&abi, frame, ready_no_effects, reinterpret_cast<void *>(1)), ERR_INVALID_DATA);
+		CHECK_EQ(registry.register_scene_ready(&abi, frame, ready_no_effects, nullptr), OK);
+		CHECK_EQ(registry.register_scene_ready(&abi, frame, ready_no_effects, nullptr), ERR_INVALID_DATA);
+	};
+	REQUIRE_EQ(fixture.open(), OK);
+	REQUIRE_EQ(fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE), OK);
+	const GDExtensionDeviceExitAbi abi{ 1, 16, 0 };
+	CHECK_NE(Registry::get_singleton().register_scene_ready(&abi, issuer_stale_context, ready_no_effects, nullptr), OK);
+	CHECK_EQ(fixture.extension->preflight_exit(CloseRoute::EXPLICIT), ERR_BUSY);
+	CHECK_FALSE(Access::quiescing(*fixture.extension.ptr()));
+	{
+		RecordRef retained;
+		REQUIRE_EQ(Access::retain_record(*fixture.extension.ptr(), retained), OK);
+		CallbackScope callback(retained);
+		REQUIRE_EQ(callback.get_error(), OK);
+		CHECK_EQ(Access::cancel_ready(*fixture.extension.ptr(), CloseRoute::SETUP_ABORT), ERR_UNAUTHORIZED);
+	}
+	CHECK_EQ(Access::cancel_ready(*fixture.extension.ptr(), CloseRoute::EXPLICIT), ERR_INVALID_DATA);
+	CHECK_EQ(Access::cancel_ready(*fixture.extension.ptr(), CloseRoute::SETUP_ABORT), OK);
+	CHECK_EQ(Access::cancel_ready(*fixture.extension.ptr(), CloseRoute::SETUP_ABORT), OK);
+	CHECK_EQ(Access::cancel_ready(*fixture.extension.ptr(), CloseRoute::SHUTDOWN), ERR_INVALID_DATA);
+	fixture.finish();
 }
 // Uses the existing real FunctionLoader guard enrollment and init-frame fixture.
 static Object *session_device = nullptr;
 static GDExtensionDeviceRegistryContextRef session_context{};
 static GDExtensionOriginalDeviceSessionRef original_session{};
 TEST_CASE("device_exit::issuer/device-session-original-context") {
- using namespace GDExtensionDeviceExit;
- IssuerFixture fixture;
- session_device = memnew(Object);
- REQUIRE_EQ(Access::session_create(session_device), OK);
- session_context={};original_session={};
- issuer_init_hook=[](InitializationLevelContextRef frame){
-  auto& r=Registry::get_singleton();
-  const GDExtensionDeviceExitAbi abi{1,16,0};
-  REQUIRE_EQ(r.bind_device_session(&abi,frame,session_device,&session_context,&original_session).native_error,OK);
-  GDExtensionDeviceSessionViewV1 view{};
-  REQUIRE_EQ(r.copy_device_session(session_context,original_session,true,&view).native_error,OK);
-  CHECK_EQ(view.session,1);CHECK_NE(view.device_epoch,0);CHECK_EQ(view.new_work,1);
-  GDExtensionDeviceRegistryContextRef duplicate_context{};
-  GDExtensionOriginalDeviceSessionRef duplicate_session{};
-  REQUIRE_EQ(r.bind_device_session(&abi,frame,session_device,&duplicate_context,&duplicate_session).native_error,OK);
-  REQUIRE_EQ(r.copy_device_session(duplicate_context,original_session,true,&view).native_error,OK);
-  CHECK_EQ(view.session,1);
-  CHECK_EQ(r.release_device_reference(duplicate_session.registry_instance,duplicate_session.handle_serial,true).native_error,OK);
-  CHECK_EQ(r.release_device_reference(duplicate_context.registry_instance,duplicate_context.handle_serial,false).native_error,OK);
-  GDExtensionOriginalDeviceSessionRef resolved{};
-  CHECK_EQ(r.resolve_device_session(session_context,view.device_epoch+1,1,&resolved).reason,6);
-  CHECK_EQ(r.resolve_device_session(session_context,view.device_epoch,0,&resolved).reason,3);
-  CHECK_EQ(r.resolve_device_session(session_context,view.device_epoch,2,&resolved).reason,7);
-  auto foreign=session_context;foreign.registry_instance^=uint64_t(1)<<63;
-  CHECK_EQ(r.resolve_device_session(foreign,view.device_epoch,1,&resolved).reason,5);
-  CHECK_EQ(r.resolve_device_session(session_context,view.device_epoch,1,&resolved).native_error,OK);
-  CHECK_EQ(r.release_device_reference(resolved.registry_instance,resolved.handle_serial,true).native_error,OK);
- };
- REQUIRE_EQ(fixture.open(),OK);
- REQUIRE_EQ(fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE),OK);
- auto& r=Registry::get_singleton();
- const GDExtensionDeviceExitAbi abi{1,16,0};
- GDExtensionDeviceRegistryContextRef denied_context{};
- GDExtensionOriginalDeviceSessionRef denied_session{};
- CHECK_NE(r.bind_device_session(&abi,issuer_stale_context,session_device,&denied_context,&denied_session).native_error,OK);
- Access::session_lost(session_device);
- Access::session_close(session_device);
- GDExtensionDeviceSessionViewV1 view{};
- CHECK_EQ(r.copy_device_session(session_context,original_session,true,&view).reason,10);
- REQUIRE_EQ(r.copy_device_session(session_context,original_session,false,&view).native_error,OK);
- CHECK_EQ(view.state,2);CHECK_EQ(view.new_work,0);
- Access::session_destroy(session_device);memdelete(session_device);session_device=nullptr;
- REQUIRE_EQ(r.copy_device_session(session_context,original_session,false,&view).native_error,OK);
- CHECK_EQ(view.state,3);CHECK_EQ(view.session,1);
- CHECK_EQ(r.release_device_reference(original_session.registry_instance,original_session.handle_serial,true).native_error,OK);
- CHECK_EQ(r.copy_device_session(session_context,original_session,false,&view).reason,8);
- CHECK_EQ(r.release_device_reference(session_context.registry_instance,session_context.handle_serial,false).native_error,OK);
- CHECK_EQ(Access::session_record_count(),0);
- fixture.finish();
+	using namespace GDExtensionDeviceExit;
+	IssuerFixture fixture;
+	session_device = memnew(Object);
+	REQUIRE_EQ(Access::session_create(session_device), OK);
+	session_context = {};
+	original_session = {};
+	issuer_init_hook = [](InitializationLevelContextRef frame) {
+		auto &r = Registry::get_singleton();
+		const GDExtensionDeviceExitAbi abi{ 1, 16, 0 };
+		REQUIRE_EQ(r.bind_device_session(&abi, frame, session_device, &session_context, &original_session).native_error, OK);
+		GDExtensionDeviceSessionViewV1 view{};
+		REQUIRE_EQ(r.copy_device_session(session_context, original_session, true, &view).native_error, OK);
+		CHECK_EQ(view.session, 1);
+		CHECK_NE(view.device_epoch, 0);
+		CHECK_EQ(view.new_work, 1);
+		GDExtensionDeviceRegistryContextRef duplicate_context{};
+		GDExtensionOriginalDeviceSessionRef duplicate_session{};
+		REQUIRE_EQ(r.bind_device_session(&abi, frame, session_device, &duplicate_context, &duplicate_session).native_error, OK);
+		REQUIRE_EQ(r.copy_device_session(duplicate_context, original_session, true, &view).native_error, OK);
+		CHECK_EQ(view.session, 1);
+		CHECK_EQ(r.release_device_reference(duplicate_session.registry_instance, duplicate_session.handle_serial, true).native_error, OK);
+		CHECK_EQ(r.release_device_reference(duplicate_context.registry_instance, duplicate_context.handle_serial, false).native_error, OK);
+		GDExtensionOriginalDeviceSessionRef resolved{};
+		CHECK_EQ(r.resolve_device_session(session_context, view.device_epoch + 1, 1, &resolved).reason, 6);
+		CHECK_EQ(r.resolve_device_session(session_context, view.device_epoch, 0, &resolved).reason, 3);
+		CHECK_EQ(r.resolve_device_session(session_context, view.device_epoch, 2, &resolved).reason, 7);
+		auto foreign = session_context;
+		foreign.registry_instance ^= uint64_t(1) << 63;
+		CHECK_EQ(r.resolve_device_session(foreign, view.device_epoch, 1, &resolved).reason, 5);
+		CHECK_EQ(r.resolve_device_session(session_context, view.device_epoch, 1, &resolved).native_error, OK);
+		CHECK_EQ(r.release_device_reference(resolved.registry_instance, resolved.handle_serial, true).native_error, OK);
+	};
+	REQUIRE_EQ(fixture.open(), OK);
+	REQUIRE_EQ(fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE), OK);
+	auto &r = Registry::get_singleton();
+	const GDExtensionDeviceExitAbi abi{ 1, 16, 0 };
+	GDExtensionDeviceRegistryContextRef denied_context{};
+	GDExtensionOriginalDeviceSessionRef denied_session{};
+	CHECK_NE(r.bind_device_session(&abi, issuer_stale_context, session_device, &denied_context, &denied_session).native_error, OK);
+	Access::session_lost(session_device);
+	Access::session_close(session_device);
+	GDExtensionDeviceSessionViewV1 view{};
+	CHECK_EQ(r.copy_device_session(session_context, original_session, true, &view).reason, 10);
+	REQUIRE_EQ(r.copy_device_session(session_context, original_session, false, &view).native_error, OK);
+	CHECK_EQ(view.state, 2);
+	CHECK_EQ(view.new_work, 0);
+	Access::session_destroy(session_device);
+	memdelete(session_device);
+	session_device = nullptr;
+	REQUIRE_EQ(r.copy_device_session(session_context, original_session, false, &view).native_error, OK);
+	CHECK_EQ(view.state, 3);
+	CHECK_EQ(view.session, 1);
+	CHECK_EQ(r.release_device_reference(original_session.registry_instance, original_session.handle_serial, true).native_error, OK);
+	CHECK_EQ(r.copy_device_session(session_context, original_session, false, &view).reason, 8);
+	CHECK_EQ(r.release_device_reference(session_context.registry_instance, session_context.handle_serial, false).native_error, OK);
+	CHECK_EQ(Access::session_record_count(), 0);
+	fixture.finish();
 }
 
 TEST_CASE("device_exit::issuer/device-session-retained-through-user-then-release") {
- using namespace GDExtensionDeviceExit;
- IssuerFixture fixture;
- session_device=memnew(Object);
- REQUIRE_EQ(Access::session_create(session_device),OK);
- session_context={};original_session={};
- issuer_init_hook=[](InitializationLevelContextRef frame){
-  const GDExtensionDeviceExitAbi abi{1,16,0};
-  REQUIRE_EQ(Registry::get_singleton().bind_device_session(&abi,frame,session_device,&session_context,&original_session).native_error,OK);
- };
- REQUIRE_EQ(fixture.open(),OK);
- REQUIRE_EQ(fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE),OK);
- auto& r=Registry::get_singleton();
- // The device references are core owned metadata; they do not grant normal
- // callbacks after G1. They retain the original association through USER.
- REQUIRE_EQ(fixture.extension->preflight_exit(CloseRoute::EXPLICIT),OK);
- GDExtensionDeviceSessionViewV1 view{};
- CHECK_EQ(r.copy_device_session(session_context,original_session,true,&view).native_error,ERR_UNAUTHORIZED);
- CHECK_EQ(r.copy_device_session(session_context,original_session,false,&view).native_error,OK);
- REQUIRE_EQ(fixture.extension->deinitialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE),OK);
- CHECK_EQ(fixture.extension->close_library(),ERR_BUSY);
- CHECK_EQ(r.release_device_reference(original_session.registry_instance,original_session.handle_serial,true).native_error,OK);
- CHECK_EQ(fixture.extension->close_library(),ERR_BUSY);
- CHECK_EQ(r.release_device_reference(session_context.registry_instance,session_context.handle_serial,false).native_error,OK);
- Access::session_destroy(session_device);memdelete(session_device);session_device=nullptr;
- CHECK_EQ(fixture.extension->close_library(),OK);
+	using namespace GDExtensionDeviceExit;
+	IssuerFixture fixture;
+	session_device = memnew(Object);
+	REQUIRE_EQ(Access::session_create(session_device), OK);
+	session_context = {};
+	original_session = {};
+	issuer_init_hook = [](InitializationLevelContextRef frame) {
+		const GDExtensionDeviceExitAbi abi{ 1, 16, 0 };
+		REQUIRE_EQ(Registry::get_singleton().bind_device_session(&abi, frame, session_device, &session_context, &original_session).native_error, OK);
+	};
+	REQUIRE_EQ(fixture.open(), OK);
+	REQUIRE_EQ(fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE), OK);
+	auto &r = Registry::get_singleton();
+	// The device references are core owned metadata; they do not grant normal
+	// callbacks after G1. They retain the original association through USER.
+	REQUIRE_EQ(fixture.extension->preflight_exit(CloseRoute::EXPLICIT), OK);
+	GDExtensionDeviceSessionViewV1 view{};
+	CHECK_EQ(r.copy_device_session(session_context, original_session, true, &view).native_error, ERR_UNAUTHORIZED);
+	CHECK_EQ(r.copy_device_session(session_context, original_session, false, &view).native_error, OK);
+	REQUIRE_EQ(fixture.extension->deinitialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE), OK);
+	CHECK_EQ(fixture.extension->close_library(), ERR_BUSY);
+	CHECK_EQ(r.release_device_reference(original_session.registry_instance, original_session.handle_serial, true).native_error, OK);
+	CHECK_EQ(fixture.extension->close_library(), ERR_BUSY);
+	CHECK_EQ(r.release_device_reference(session_context.registry_instance, session_context.handle_serial, false).native_error, OK);
+	Access::session_destroy(session_device);
+	memdelete(session_device);
+	session_device = nullptr;
+	CHECK_EQ(fixture.extension->close_library(), OK);
 }
 
 TEST_CASE("device_exit::issuer/device-session-quota-and-terminal-counter") {
- using namespace GDExtensionDeviceExit;
- IssuerFixture fixture;
- session_device=memnew(Object);
- REQUIRE_EQ(Access::session_create(session_device),OK);
- Access::session_counter(session_device,UINT64_MAX,true);
- session_context={};original_session={};
- issuer_init_hook=[](InitializationLevelContextRef frame){
-  auto& r=Registry::get_singleton();const GDExtensionDeviceExitAbi abi{1,16,0};
-  auto version=abi;version.abi_version=2;
-  CHECK_EQ(r.bind_device_session(&version,frame,session_device,&session_context,&original_session).reason,1);
-  CHECK_EQ(r.bind_device_session(&abi,{},session_device,&session_context,&original_session).reason,4);
-  CHECK_EQ(r.bind_device_session(&abi,frame,session_device,&session_context,&original_session).reason,12);
-  CHECK_EQ(session_context.handle_serial,0);CHECK_EQ(original_session.handle_serial,0);
-  Access::session_counter(session_device,UINT64_MAX,false);
-  const uint32_t quota=Access::issuer_limit(2,0);
-  auto denied=r.bind_device_session(&abi,frame,session_device,&session_context,&original_session);
-  CHECK_EQ(denied.reason,11);CHECK_EQ(denied.expected,0);CHECK_GT(denied.actual,0);
-  Access::issuer_limit(2,quota);
-  REQUIRE_EQ(r.bind_device_session(&abi,frame,session_device,&session_context,&original_session).native_error,OK);
-  GDExtensionDeviceSessionViewV1 view{};
-  REQUIRE_EQ(r.copy_device_session(session_context,original_session,true,&view).native_error,OK);
-  CHECK_EQ(view.session,UINT64_MAX);
-  GDExtensionDeviceRegistryContextRef repeat{};GDExtensionOriginalDeviceSessionRef repeated{};
-  REQUIRE_EQ(r.bind_device_session(&abi,frame,session_device,&repeat,&repeated).native_error,OK);
-  REQUIRE_EQ(r.copy_device_session(repeat,repeated,true,&view).native_error,OK);
-  CHECK_EQ(view.session,UINT64_MAX);
-  CHECK_EQ(r.release_device_reference(repeated.registry_instance,repeated.handle_serial,true).native_error,OK);
-  CHECK_EQ(r.release_device_reference(repeat.registry_instance,repeat.handle_serial,false).native_error,OK);
- };
- REQUIRE_EQ(fixture.open(),OK);
- REQUIRE_EQ(fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE),OK);
- auto& r=Registry::get_singleton();
- CHECK_EQ(r.release_device_reference(original_session.registry_instance,original_session.handle_serial,true).native_error,OK);
- CHECK_EQ(r.release_device_reference(session_context.registry_instance,session_context.handle_serial,false).native_error,OK);
- // Releasing every attachment must not reclaim a live RD or reset its counter.
- CHECK_EQ(Access::session_record_count(),1);
- Access::session_destroy(session_device);memdelete(session_device);session_device=nullptr;
- CHECK_EQ(Access::session_record_count(),0);
- fixture.finish();
+	using namespace GDExtensionDeviceExit;
+	IssuerFixture fixture;
+	session_device = memnew(Object);
+	REQUIRE_EQ(Access::session_create(session_device), OK);
+	Access::session_counter(session_device, UINT64_MAX, true);
+	session_context = {};
+	original_session = {};
+	issuer_init_hook = [](InitializationLevelContextRef frame) {
+		auto &r = Registry::get_singleton();
+		const GDExtensionDeviceExitAbi abi{ 1, 16, 0 };
+		auto version = abi;
+		version.abi_version = 2;
+		CHECK_EQ(r.bind_device_session(&version, frame, session_device, &session_context, &original_session).reason, 1);
+		CHECK_EQ(r.bind_device_session(&abi, {}, session_device, &session_context, &original_session).reason, 4);
+		CHECK_EQ(r.bind_device_session(&abi, frame, session_device, &session_context, &original_session).reason, 12);
+		CHECK_EQ(session_context.handle_serial, 0);
+		CHECK_EQ(original_session.handle_serial, 0);
+		Access::session_counter(session_device, UINT64_MAX, false);
+		const uint32_t quota = Access::issuer_limit(2, 0);
+		auto denied = r.bind_device_session(&abi, frame, session_device, &session_context, &original_session);
+		CHECK_EQ(denied.reason, 11);
+		CHECK_EQ(denied.expected, 0);
+		CHECK_GT(denied.actual, 0);
+		Access::issuer_limit(2, quota);
+		REQUIRE_EQ(r.bind_device_session(&abi, frame, session_device, &session_context, &original_session).native_error, OK);
+		GDExtensionDeviceSessionViewV1 view{};
+		REQUIRE_EQ(r.copy_device_session(session_context, original_session, true, &view).native_error, OK);
+		CHECK_EQ(view.session, UINT64_MAX);
+		GDExtensionDeviceRegistryContextRef repeat{};
+		GDExtensionOriginalDeviceSessionRef repeated{};
+		REQUIRE_EQ(r.bind_device_session(&abi, frame, session_device, &repeat, &repeated).native_error, OK);
+		REQUIRE_EQ(r.copy_device_session(repeat, repeated, true, &view).native_error, OK);
+		CHECK_EQ(view.session, UINT64_MAX);
+		CHECK_EQ(r.release_device_reference(repeated.registry_instance, repeated.handle_serial, true).native_error, OK);
+		CHECK_EQ(r.release_device_reference(repeat.registry_instance, repeat.handle_serial, false).native_error, OK);
+	};
+	REQUIRE_EQ(fixture.open(), OK);
+	REQUIRE_EQ(fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE), OK);
+	auto &r = Registry::get_singleton();
+	CHECK_EQ(r.release_device_reference(original_session.registry_instance, original_session.handle_serial, true).native_error, OK);
+	CHECK_EQ(r.release_device_reference(session_context.registry_instance, session_context.handle_serial, false).native_error, OK);
+	// Releasing every attachment must not reclaim a live RD or reset its counter.
+	CHECK_EQ(Access::session_record_count(), 1);
+	Access::session_destroy(session_device);
+	memdelete(session_device);
+	session_device = nullptr;
+	CHECK_EQ(Access::session_record_count(), 0);
+	fixture.finish();
 }
 
 TEST_CASE("device_exit::issuer/device-session-reload-keeps-live-epoch") {
- using namespace GDExtensionDeviceExit;
- session_device=memnew(Object);REQUIRE_EQ(Access::session_create(session_device),OK);
- uint64_t epoch=0;
- for(int attachment=0;attachment<2;++attachment){
-  IssuerFixture fixture;session_context={};original_session={};
-  issuer_init_hook=[](InitializationLevelContextRef frame){
-   const GDExtensionDeviceExitAbi abi{1,16,0};
-   REQUIRE_EQ(Registry::get_singleton().bind_device_session(&abi,frame,session_device,&session_context,&original_session).native_error,OK);
-  };
-  REQUIRE_EQ(fixture.open(),OK);
-  REQUIRE_EQ(fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE),OK);
-  auto& r=Registry::get_singleton();GDExtensionDeviceSessionViewV1 view{};
-  REQUIRE_EQ(r.copy_device_session(session_context,original_session,true,&view).native_error,OK);
-  if(attachment==0)epoch=view.device_epoch;else CHECK_EQ(view.device_epoch,epoch);
-  CHECK_EQ(view.session,1);
-  CHECK_EQ(r.release_device_reference(original_session.registry_instance,original_session.handle_serial,true).native_error,OK);
-  CHECK_EQ(r.release_device_reference(session_context.registry_instance,session_context.handle_serial,false).native_error,OK);
-  fixture.finish();CHECK_EQ(Access::session_record_count(),1);
- }
- Access::session_destroy(session_device);memdelete(session_device);session_device=nullptr;
- CHECK_EQ(Access::session_record_count(),0);
+	using namespace GDExtensionDeviceExit;
+	session_device = memnew(Object);
+	REQUIRE_EQ(Access::session_create(session_device), OK);
+	uint64_t epoch = 0;
+	for (int attachment = 0; attachment < 2; ++attachment) {
+		IssuerFixture fixture;
+		session_context = {};
+		original_session = {};
+		issuer_init_hook = [](InitializationLevelContextRef frame) {
+			const GDExtensionDeviceExitAbi abi{ 1, 16, 0 };
+			REQUIRE_EQ(Registry::get_singleton().bind_device_session(&abi, frame, session_device, &session_context, &original_session).native_error, OK);
+		};
+		REQUIRE_EQ(fixture.open(), OK);
+		REQUIRE_EQ(fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE), OK);
+		auto &r = Registry::get_singleton();
+		GDExtensionDeviceSessionViewV1 view{};
+		REQUIRE_EQ(r.copy_device_session(session_context, original_session, true, &view).native_error, OK);
+		if (attachment == 0) {
+			epoch = view.device_epoch;
+		} else {
+			CHECK_EQ(view.device_epoch, epoch);
+		}
+		CHECK_EQ(view.session, 1);
+		CHECK_EQ(r.release_device_reference(original_session.registry_instance, original_session.handle_serial, true).native_error, OK);
+		CHECK_EQ(r.release_device_reference(session_context.registry_instance, session_context.handle_serial, false).native_error, OK);
+		fixture.finish();
+		CHECK_EQ(Access::session_record_count(), 1);
+	}
+	Access::session_destroy(session_device);
+	memdelete(session_device);
+	session_device = nullptr;
+	CHECK_EQ(Access::session_record_count(), 0);
 }
 
 TEST_CASE("device_exit::issuer/device-session-rebuild-rejects-late-loss") {
- auto* object=memnew(Object);
- REQUIRE_EQ(Access::session_create(object),OK);
- uint64_t registry=0,epoch=0;Access::session_identity(object,registry,epoch);
- REQUIRE_NE(epoch,0);CHECK(Access::session_live(object));
- Access::session_lost_identity(registry,epoch);CHECK_FALSE(Access::session_live(object));
- Access::session_destroy(object);CHECK_EQ(Access::session_record_count(),0);
- // Same address models allocation reuse; only original core creates the epoch.
- REQUIRE_EQ(Access::session_create(object),OK);
- uint64_t next_registry=0,next_epoch=0;Access::session_identity(object,next_registry,next_epoch);
- CHECK_EQ(next_registry,registry);CHECK_GT(next_epoch,epoch);
- Access::session_lost_identity(registry,epoch);CHECK(Access::session_live(object));
- Access::session_lost_identity(registry+1,next_epoch);CHECK(Access::session_live(object));
- Access::session_destroy(object);memdelete(object);CHECK_EQ(Access::session_record_count(),0);
+	auto *object = memnew(Object);
+	REQUIRE_EQ(Access::session_create(object), OK);
+	uint64_t registry = 0, epoch = 0;
+	Access::session_identity(object, registry, epoch);
+	REQUIRE_NE(epoch, 0);
+	CHECK(Access::session_live(object));
+	Access::session_lost_identity(registry, epoch);
+	CHECK_FALSE(Access::session_live(object));
+	Access::session_destroy(object);
+	CHECK_EQ(Access::session_record_count(), 0);
+	// Same address models allocation reuse; only original core creates the epoch.
+	REQUIRE_EQ(Access::session_create(object), OK);
+	uint64_t next_registry = 0, next_epoch = 0;
+	Access::session_identity(object, next_registry, next_epoch);
+	CHECK_EQ(next_registry, registry);
+	CHECK_GT(next_epoch, epoch);
+	Access::session_lost_identity(registry, epoch);
+	CHECK(Access::session_live(object));
+	Access::session_lost_identity(registry + 1, next_epoch);
+	CHECK(Access::session_live(object));
+	Access::session_destroy(object);
+	memdelete(object);
+	CHECK_EQ(Access::session_record_count(), 0);
 }
 
 static GDExtensionDeviceExit::LibraryCodeHoldRef issuer_user_hold;
@@ -1742,7 +1936,9 @@ static void issuer_acquire_holds(GDExtensionDeviceExit::InitializationLevelConte
 	CHECK_EQ(registry.borrow_guarded_library(&abi, owner, &library), OK);
 	CHECK_EQ(registry.borrow_level_cleanup(&abi, context, 0, &user), OK);
 	CHECK_EQ(registry.borrow_level_cleanup(&abi, context, 1, &binding), OK);
-	issuer_user_hold = {}; issuer_binding_hold = {}; issuer_clone_hold = {};
+	issuer_user_hold = {};
+	issuer_binding_hold = {};
+	issuer_clone_hold = {};
 	CHECK_EQ(registry.acquire_code_hold(&abi, library, user, &issuer_user_hold), OK);
 	CHECK_EQ(registry.acquire_code_hold(&abi, library, binding, &issuer_binding_hold), OK);
 	CHECK_EQ(registry.clone_code_hold(&abi, issuer_user_hold, &issuer_clone_hold), OK);
@@ -1799,10 +1995,16 @@ TEST_CASE("device_exit::issuer/nested-same-generation-release-waits-for-initiali
 	// cannot turn the intended failure into an unrelated last-ref fatal stop.
 	issuer_term_hook = [](DeinitLevelContextRef, int stage) {
 		const GDExtensionDeviceExitAbi abi{ 1, 16, 0 };
-		if (!Access::binding_holders(*owner)) { return; }
+		if (!Access::binding_holders(*owner)) {
+			return;
+		}
 		auto &registry = Registry::get_singleton();
-		if (stage == 1) { registry.release_code_hold(&abi, issuer_user_hold); registry.release_code_hold(&abi, issuer_clone_hold); }
-		else { registry.release_code_hold(&abi, issuer_binding_hold); }
+		if (stage == 1) {
+			registry.release_code_hold(&abi, issuer_user_hold);
+			registry.release_code_hold(&abi, issuer_clone_hold);
+		} else {
+			registry.release_code_hold(&abi, issuer_binding_hold);
+		}
 	};
 	REQUIRE_EQ(fixture.open(), OK);
 	REQUIRE_EQ(fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE), OK);
@@ -1868,15 +2070,36 @@ TEST_CASE("device_exit::issuer/registration-validation-is-atomic") {
 			GuardToken token;
 			Error expected = ERR_INVALID_DATA;
 			switch (test) {
-				case 0: registration.abi.struct_size--; break;
-				case 1: registration.abi.reserved = 1; break;
-				case 2: registration.binding_protocol = 2; expected = ERR_UNAVAILABLE; break;
-				case 3: registration.entry_classes = uint64_t(1) << 12; expected = ERR_UNAVAILABLE; break;
-				case 4: registration.level_bitmap = 4; break;
-				case 5: registration.user_terminator = nullptr; break;
-				case 6: registration.needs[0].user_services = 1; break;
-				case 7: registration.needs[2].user_services = 256; expected = ERR_UNAVAILABLE; break;
-				case 8: registration.binding_cleanup_bitmap = 0; break;
+				case 0:
+					registration.abi.struct_size--;
+					break;
+				case 1:
+					registration.abi.reserved = 1;
+					break;
+				case 2:
+					registration.binding_protocol = 2;
+					expected = ERR_UNAVAILABLE;
+					break;
+				case 3:
+					registration.entry_classes = uint64_t(1) << 12;
+					expected = ERR_UNAVAILABLE;
+					break;
+				case 4:
+					registration.level_bitmap = 4;
+					break;
+				case 5:
+					registration.user_terminator = nullptr;
+					break;
+				case 6:
+					registration.needs[0].user_services = 1;
+					break;
+				case 7:
+					registration.needs[2].user_services = 256;
+					expected = ERR_UNAVAILABLE;
+					break;
+				case 8:
+					registration.binding_cleanup_bitmap = 0;
+					break;
 			}
 			CHECK_EQ(registry.register_guard(owner, &registration, &token), expected);
 			CHECK_EQ(token.registry_instance, 0);
@@ -2001,10 +2224,14 @@ TEST_CASE("device_exit::issuer/enrollment-capacity-refuses-without-publication")
 static void issuer_typed_fatal_child() {
 	using namespace GDExtensionDeviceExit;
 	bool init = false;
-	for (const String &arg : OS::get_singleton()->get_cmdline_args()) { init |= arg == "--issuer-init"; }
-	if (init) { Registry::get_singleton().terminate_initialize_blocked({}, ERR_BUSY); }
-	else { Registry::get_singleton().terminate_blocked({}, ERR_BUSY); }
-	std::_Exit(93);
+	for (const String &arg : OS::get_singleton()->get_cmdline_args()) {
+		init |= arg == "--issuer-init";
+	}
+	if (init) {
+		Registry::get_singleton().terminate_initialize_blocked({}, ERR_BUSY);
+	} else {
+		Registry::get_singleton().terminate_blocked({}, ERR_BUSY);
+	}
 }
 REGISTER_TEST_COMMAND("--device-exit-issuer-typed-fatal", issuer_typed_fatal_child);
 static void issuer_terminal_serial_child() {
@@ -2013,9 +2240,15 @@ static void issuer_terminal_serial_child() {
 	issuer_child_mode = true;
 	static int missing = 0;
 	for (const String &arg : OS::get_singleton()->get_cmdline_args()) {
-		if (arg == "--issuer-handle-short") { missing = 1; }
-		if (arg == "--issuer-frame-short") { missing = 2; }
-		if (arg == "--issuer-action-short") { missing = 3; }
+		if (arg == "--issuer-handle-short") {
+			missing = 1;
+		}
+		if (arg == "--issuer-frame-short") {
+			missing = 2;
+		}
+		if (arg == "--issuer-action-short") {
+			missing = 3;
+		}
 	}
 	issuer_before_register = [](GuardRegistrationV1 &) { Access::issuer_terminal_sequences(missing); };
 	const Error opened = fixture.open();
@@ -2024,8 +2257,8 @@ static void issuer_terminal_serial_child() {
 		good = opened != OK && issuer_registration == ERR_PARAMETER_RANGE_ERROR && !issuer_token.registry_instance && !issuer_token.handle_serial;
 	} else {
 		good = opened == OK && fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE) == OK &&
-			fixture.extension->preflight_exit(CloseRoute::EXPLICIT) == OK &&
-			fixture.extension->deinitialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE) == OK && fixture.extension->close_library() == OK;
+				fixture.extension->preflight_exit(CloseRoute::EXPLICIT) == OK &&
+				fixture.extension->deinitialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE) == OK && fixture.extension->close_library() == OK;
 	}
 	std::fprintf(stderr, "ISSUER_TERMINAL_SERIAL missing=%d good=%d\n", missing, int(good));
 	std::_Exit(good ? 0 : 95);
@@ -2035,12 +2268,18 @@ static void issuer_missing_ack_child() {
 	IssuerFixture fixture;
 	issuer_child_mode = true;
 	bool deinit = false;
-	for (const String &arg : OS::get_singleton()->get_cmdline_args()) { deinit |= arg == "--issuer-deinit"; }
-	if (fixture.open() != OK) { std::_Exit(91); }
+	for (const String &arg : OS::get_singleton()->get_cmdline_args()) {
+		deinit |= arg == "--issuer-deinit";
+	}
+	if (fixture.open() != OK) {
+		std::_Exit(91);
+	}
 	issuer_skip_init_ack = !deinit;
 	fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE);
 	if (deinit) {
-		if (fixture.extension->preflight_exit(GDExtensionDeviceExit::CloseRoute::EXPLICIT) != OK) { std::_Exit(92); }
+		if (fixture.extension->preflight_exit(GDExtensionDeviceExit::CloseRoute::EXPLICIT) != OK) {
+			std::_Exit(92);
+		}
 		issuer_skip_deinit_ack = true;
 		fixture.extension->deinitialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE);
 	}
@@ -2055,7 +2294,9 @@ static void issuer_core_action_identity_child() {
 	Ref<GDExtensionFunctionLoader> loader;
 	loader.instantiate();
 	loader->set_initialization_function(entry);
-	if (extension->open_library("libgodot://core-action-identity", loader) != OK) { std::_Exit(91); }
+	if (extension->open_library("libgodot://core-action-identity", loader) != OK) {
+		std::_Exit(91);
+	}
 	RecordRef record;
 	Access::retain_record(*extension.ptr(), record);
 	bool cleanup_only = false;
@@ -2066,14 +2307,20 @@ static void issuer_core_action_identity_child() {
 	}
 	if (cleanup_active) {
 		auto *action = memnew(CleanupAction);
-		if (Registry::get_singleton().register_cleanup_action(record, 71, Thread::get_caller_id(), 81, *action) != OK) { std::_Exit(92); }
+		if (Registry::get_singleton().register_cleanup_action(record, 71, Thread::get_caller_id(), 81, *action) != OK) {
+			std::_Exit(92);
+		}
 		CleanupScope scope(*action, record, 71, 81);
-		if (scope.get_error() != OK) { std::_Exit(92); }
+		if (scope.get_error() != OK) {
+			std::_Exit(92);
+		}
 		memdelete(action); // Scope retains the last storage reference.
 		Access::corrupt_typed_holder(*extension.ptr(), 1);
 	} else if (cleanup_only) {
 		CleanupAction action;
-		if (Registry::get_singleton().register_cleanup_action(record, 71, Thread::get_caller_id(), 81, action) != OK) { std::_Exit(92); }
+		if (Registry::get_singleton().register_cleanup_action(record, 71, Thread::get_caller_id(), 81, action) != OK) {
+			std::_Exit(92);
+		}
 		Access::corrupt_typed_holder(*extension.ptr(), 1);
 	} else {
 		Object *object = memnew(Object);
@@ -2081,7 +2328,9 @@ static void issuer_core_action_identity_child() {
 			[](void *, void *instance) -> void * { return instance; },
 			[](void *, void *, void *) {}, nullptr
 		};
-		if (object->get_instance_binding(extension.ptr(), &callbacks) != object) { std::_Exit(92); }
+		if (object->get_instance_binding(extension.ptr(), &callbacks) != object) {
+			std::_Exit(92);
+		}
 		Access::corrupt_typed_holder(*extension.ptr(), 1);
 		object->free_instance_binding(extension.ptr());
 		memdelete(object);
@@ -2095,15 +2344,23 @@ static void issuer_pending_abort_child() {
 	IssuerFixture fixture;
 	issuer_child_mode = true;
 	static bool mismatch = false;
-	for (const String &arg : OS::get_singleton()->get_cmdline_args()) { mismatch |= arg == "--issuer-tuple-mismatch"; }
+	for (const String &arg : OS::get_singleton()->get_cmdline_args()) {
+		mismatch |= arg == "--issuer-tuple-mismatch";
+	}
 	issuer_entry_success = mismatch;
 	issuer_entry_hook = [](GuardRegistrationV1 &, GDExtensionInitialization *actual) {
 		RecordRef record;
-		if (Access::retain_record(*owner, record) != OK) { std::_Exit(91); }
+		if (Access::retain_record(*owner, record) != OK) {
+			std::_Exit(91);
+		}
 		// Keep an actual bootstrap obligation live across the failed return.
 		auto *holder = memnew(BindingLifetime);
-		if (holder->acquire(record) != OK) { std::_Exit(92); }
-		if (mismatch) { actual->userdata = owner; }
+		if (holder->acquire(record) != OK) {
+			std::_Exit(92);
+		}
+		if (mismatch) {
+			actual->userdata = owner;
+		}
 		std::fputs("ISSUER_PENDING_OBLIGATION_BEFORE_RETURN\n", stderr);
 	};
 	fixture.open();
@@ -2116,12 +2373,17 @@ static void issuer_generic_holder_child() {
 	Ref<GDExtension> extension;
 	extension.instantiate();
 	Ref<GDExtensionFunctionLoader> loader;
-	loader.instantiate(); loader->set_initialization_function(entry);
-	if (extension->open_library("libgodot://generic-holder-source", loader) != OK) { std::_Exit(91); }
+	loader.instantiate();
+	loader->set_initialization_function(entry);
+	if (extension->open_library("libgodot://generic-holder-source", loader) != OK) {
+		std::_Exit(91);
+	}
 	RecordRef record;
 	Access::retain_record(*extension.ptr(), record);
 	BindingLifetime holder;
-	if (holder.acquire(record) != OK) { std::_Exit(92); }
+	if (holder.acquire(record) != OK) {
+		std::_Exit(92);
+	}
 	bool wrong_thread = false;
 	bool same_frame = false;
 	for (const String &arg : OS::get_singleton()->get_cmdline_args()) {
@@ -2129,12 +2391,17 @@ static void issuer_generic_holder_child() {
 		same_frame |= arg == "--issuer-same-frame";
 	}
 	if (wrong_thread) {
-		std::thread worker([h = std::move(holder)]() mutable { h = {}; }); worker.join();
+		std::thread worker([h = std::move(holder)]() mutable { h = {}; });
+		worker.join();
 	} else if (same_frame) {
 		CallbackScope frame(record);
-		if (frame.get_error() != OK) { std::_Exit(92); }
+		if (frame.get_error() != OK) {
+			std::_Exit(92);
+		}
 		holder = {};
-	} else { holder = {}; }
+	} else {
+		holder = {};
+	}
 	std::fputs("UNEXPECTED_GENERIC_RETIREMENT\n", stderr);
 	std::_Exit(93);
 }
@@ -2142,15 +2409,23 @@ REGISTER_TEST_COMMAND("--device-exit-issuer-generic-holder", issuer_generic_hold
 static void issuer_foreign_holder_child() {
 	using namespace GDExtensionDeviceExit;
 	Ref<GDExtension> first, second;
-	first.instantiate(); second.instantiate();
+	first.instantiate();
+	second.instantiate();
 	Ref<GDExtensionFunctionLoader> a, b;
-	a.instantiate(); b.instantiate();
-	a->set_initialization_function(entry); b->set_initialization_function(entry);
-	if (first->open_library("libgodot://foreign-holder-a", a) != OK || second->open_library("libgodot://foreign-holder-b", b) != OK) { std::_Exit(91); }
+	a.instantiate();
+	b.instantiate();
+	a->set_initialization_function(entry);
+	b->set_initialization_function(entry);
+	if (first->open_library("libgodot://foreign-holder-a", a) != OK || second->open_library("libgodot://foreign-holder-b", b) != OK) {
+		std::_Exit(91);
+	}
 	RecordRef first_record, second_record;
-	Access::retain_record(*first.ptr(), first_record); Access::retain_record(*second.ptr(), second_record);
+	Access::retain_record(*first.ptr(), first_record);
+	Access::retain_record(*second.ptr(), second_record);
 	BindingLifetime holder;
-	if (holder.acquire(first_record) != OK) { std::_Exit(92); }
+	if (holder.acquire(first_record) != OK) {
+		std::_Exit(92);
+	}
 	{
 		CallbackScope outer(first_record);
 		CallbackScope foreign(second_record);
@@ -2175,7 +2450,9 @@ TEST_CASE("device_exit::issuer/ack-closes-initialization-publication") {
 		LibraryCodeHoldRef hold;
 		const Error result = registry.acquire_code_hold(&abi, library, action, &hold);
 		CHECK_EQ(result, ERR_UNAUTHORIZED);
-		if (result == OK) { registry.release_code_hold(&abi, hold); }
+		if (result == OK) {
+			registry.release_code_hold(&abi, hold);
+		}
 		RegisteredCleanupRef late;
 		CHECK_EQ(registry.borrow_level_cleanup(&abi, context, 0, &late), ERR_UNAUTHORIZED);
 	};
@@ -2268,7 +2545,9 @@ static void issuer_services_child() {
 	IssuerFixture fixture;
 	issuer_child_mode = true;
 	issuer_before_register = [](GuardRegistrationV1 &registration) { registration.needs[2].user_services = 1; };
-	if (fixture.open() != OK || fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE) != OK) { std::_Exit(91); }
+	if (fixture.open() != OK || fixture.extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE) != OK) {
+		std::_Exit(91);
+	}
 	const Error result = fixture.extension->preflight_exit(CloseRoute::EXPLICIT);
 	const bool good = result == ERR_UNAVAILABLE && Access::attempt(*owner) == 0 && Access::level(*owner) == 2 && fixture.extension->is_library_open();
 	std::fprintf(stderr, "ISSUER_SERVICE_UNAVAILABLE good=%d\n", int(good));
@@ -2297,7 +2576,9 @@ TEST_CASE("device_exit::issuer/clone-revalidates-live-action-and-ack") {
 		LibraryCodeHoldRef copy;
 		const Error result = registry.clone_code_hold(&abi, issuer_clone_hold, &copy);
 		CHECK_EQ(result, ERR_UNAUTHORIZED);
-		if (result == OK) { registry.release_code_hold(&abi, copy); }
+		if (result == OK) {
+			registry.release_code_hold(&abi, copy);
+		}
 		registry.release_code_hold(&abi, issuer_user_hold);
 		registry.release_code_hold(&abi, issuer_binding_hold);
 		registry.release_code_hold(&abi, issuer_clone_hold);
@@ -2350,10 +2631,13 @@ TEST_CASE("device_exit::issuer/first-control-capacity-reserved-at-enrollment") {
 TEST_CASE("device_exit::issuer/core-binding-free-from-foreign-callback") {
 	using namespace GDExtensionDeviceExit;
 	Ref<GDExtensionFunctionLoader> a, b;
-	a.instantiate(); b.instantiate();
-	a->set_initialization_function(entry); b->set_initialization_function(entry);
+	a.instantiate();
+	b.instantiate();
+	a->set_initialization_function(entry);
+	b->set_initialization_function(entry);
 	Ref<GDExtension> first, second;
-	first.instantiate(); second.instantiate();
+	first.instantiate();
+	second.instantiate();
 	REQUIRE_EQ(first->open_library("libgodot://disposal-first", a), OK);
 	REQUIRE_EQ(second->open_library("libgodot://disposal-second", b), OK);
 	Object *object = memnew(Object);
@@ -2543,13 +2827,17 @@ TEST_CASE("device_exit::successor/preflight-capacity-refuses-without-publication
 
 // Isolated command: the real manager is already initialized by the engine.
 // Exit with the retained image intact after proving a non-destructive refusal.
+#ifdef TOOLS_ENABLED
 static int successor_deinitializations = 0;
-static void successor_deinitialize(void *, GDExtensionInitializationLevel) { successor_deinitializations++; }
+static void successor_deinitialize(void *, GDExtensionInitializationLevel) {
+	successor_deinitializations++;
+}
 static GDExtensionBool successor_entry(GDExtensionInterfaceGetProcAddress get, GDExtensionClassLibraryPtr library, GDExtensionInitialization *result) {
 	const GDExtensionBool accepted = entry(get, library, result);
 	result->deinitialize = successor_deinitialize;
 	return accepted;
 }
+#endif // TOOLS_ENABLED
 static void successor_manager_preflight_child() {
 #ifdef TOOLS_ENABLED
 	close_at_bootstrap = close_at_initialize = close_at_deinitialize = nested_levels = false;
@@ -2611,7 +2899,6 @@ TEST_CASE("device_exit::host-lifetime/cleanup-phase-rejects-unissued-authority")
 	owner = nullptr;
 }
 
-
 TEST_CASE("device_exit::entry/cleanup-capacity-and-detached-scope") {
 	close_at_bootstrap = close_at_initialize = close_at_deinitialize = nested_levels = false;
 	Ref<GDExtensionFunctionLoader> loader;
@@ -2647,7 +2934,7 @@ TEST_CASE("device_exit::entry/cleanup-capacity-and-detached-scope") {
 		CHECK_EQ(detached->get_error(), OK);
 		CHECK_EQ(Access::active_frames(*extension.ptr()), 1);
 	}
-	// The callback acknowledgement owns its own lease even after registration
+	// The callback acknowledgment owns its own lease even after registration
 	// storage retires; final close must not race its actual return.
 	CHECK_EQ(Access::private_refs(*extension.ptr()), baseline + 1);
 	CHECK_EQ(registry.begin_quiesce(record), ERR_BUSY);
@@ -2994,6 +3281,7 @@ TEST_CASE("device_exit::object/release-registration-requires-current-owner-entry
 
 class CohortScriptInstance : public PlaceHolderScriptInstance {
 	bool *destroyed;
+
 public:
 	CohortScriptInstance(Object *p_owner, bool *p_destroyed) : PlaceHolderScriptInstance(nullptr, Ref<Script>(), p_owner), destroyed(p_destroyed) {}
 	~CohortScriptInstance() { *destroyed = true; }
@@ -3947,11 +4235,12 @@ static void child() {
 		}
 		if (cleanup_negative) {
 			RefCountedReleaseTest::channel = { [](void *, RefCountedReleaseTest::Phase phase, const RefCountedReleaseTest::Observation &) {
-				if (phase == RefCountedReleaseTest::Phase::ADMITTED) {
-					std::fputs("CLEANUP_NEGATIVE_ADMITTED_BEFORE_MUTATION\n", stderr);
-					std::_Exit(97);
-				}
-			}, nullptr };
+												  if (phase == RefCountedReleaseTest::Phase::ADMITTED) {
+													  std::fputs("CLEANUP_NEGATIVE_ADMITTED_BEFORE_MUTATION\n", stderr);
+													  std::_Exit(97);
+												  }
+											  },
+				nullptr };
 		}
 		a.unref();
 		if (b->get_reference_count() != 1 || s.references != 2 || s.frees != 0) {

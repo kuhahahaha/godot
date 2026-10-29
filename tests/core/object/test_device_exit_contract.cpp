@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  test_device_exit_contract.cpp                                       */
+/*  test_device_exit_contract.cpp                                         */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -40,8 +40,8 @@ TEST_FORCE_LINK(test_device_exit_contract)
 #include "core/os/os.h"
 #include "tests/test_utils.h"
 
-#include <cstring>
 #include <cstdio>
+#include <cstring>
 #include <memory>
 #ifdef THREADS_ENABLED
 #include <atomic>
@@ -139,7 +139,7 @@ static void dynamic_child() {
 			}
 		}
 	}
-	GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 } };
+	GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 }, 0, 0, 0, 0, 0, 0, 0 };
 	Error copied = ERR_UNCONFIGURED;
 	Error released = ERR_UNCONFIGURED;
 	if (loader->view.handle_serial != 0 && loader->copy && loader->release) {
@@ -336,7 +336,7 @@ struct MetadataCapture {
 	GDExtensionInterfaceDeviceExitCloneLibraryViewV1 clone = nullptr;
 	GDExtensionDeviceExitLibraryCapability authority = {};
 	GDExtensionDeviceExitLibraryViewRef view = {};
-	GDExtensionDeviceExitLibrarySnapshot during_entry = { { 1, 48, 0 } };
+	GDExtensionDeviceExitLibrarySnapshot during_entry = { { 1, 48, 0 }, 0, 0, 0, 0, 0, 0, 0 };
 	int32_t boot_error = -1;
 	int32_t retain_error = -1;
 	int32_t copy_error = -1;
@@ -399,7 +399,7 @@ TEST_CASE("device_exit::foundation/bootstrap/retained-observation-after-wrapper-
 	CHECK_NE(clone.handle_serial, observations.view.handle_serial);
 	extension.unref();
 	loader.unref();
-	GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 } };
+	GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 }, 0, 0, 0, 0, 0, 0, 0 };
 	CHECK_EQ(observations.copy(observations.view, &snapshot), OK);
 	CHECK_EQ(snapshot.wrapper_association, 2);
 	CHECK_EQ(snapshot.loader_initialize_returned, 1);
@@ -460,7 +460,7 @@ static void exercise_registered_abi(GDExtensionClassLibraryPtr p_library) {
 	CHECK_EQ(std::memcmp(storage, unchanged, sizeof(storage)), 0);
 	struct SnapshotBuffer {
 		uint64_t before = 0x123456789;
-		GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 } };
+		GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 }, 0, 0, 0, 0, 0, 0, 0 };
 		uint64_t after = 0x987654321;
 	} buffer;
 	const GDExtensionDeviceExitAbi snapshot_invalid[] = {
@@ -602,7 +602,7 @@ TEST_CASE("device_exit::foundation/bootstrap/nested-owner-and-thread-scope") {
 		CHECK_EQ(observations.worker_view.handle_serial, 0);
 #endif
 		CHECK_EQ(observations.outer.release(&request, observations.outer.view), OK);
-		GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 } };
+		GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 }, 0, 0, 0, 0, 0, 0, 0 };
 		CHECK_EQ(observations.outer.copy(observations.outer_second_view, &snapshot), OK);
 		CHECK_EQ(snapshot.library_generation, observations.outer.during_entry.library_generation);
 		CHECK_EQ(observations.outer.release(&request, observations.outer_second_view), OK);
@@ -649,7 +649,7 @@ struct RegistryAccess {
 		CHECK_EQ(cloned, ERR_PARAMETER_RANGE_ERROR);
 		CHECK_EQ(refused.registry_instance, 0);
 		CHECK_EQ(refused.handle_serial, 0);
-		GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 } };
+		GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 }, 0, 0, 0, 0, 0, 0, 0 };
 		CHECK_EQ(p_api.copy(p_api.view, &snapshot), OK);
 		GDExtensionDeviceExitLibraryViewRef retry = {};
 		CHECK_EQ(p_api.retain(&request, p_api.authority, &retry), OK);
@@ -836,7 +836,7 @@ TEST_CASE("device_exit::foundation/isolated/finalizing-needs-engine-end-and-last
 	CHECK_EQ(registry->clone(&request, view, &clone), ERR_BUSY);
 	registry->detach(owner);
 	owner.reset();
-	GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 } };
+	GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 }, 0, 0, 0, 0, 0, 0, 0 };
 	CHECK_EQ(registry->copy(view, &snapshot), OK);
 	CHECK_EQ(snapshot.wrapper_association, 2);
 	CHECK_EQ(registry->release(&request, view), OK);
@@ -872,7 +872,7 @@ TEST_CASE("device_exit::foundation/isolated/exhaustion-and-failed-reservation-sl
 	CHECK_EQ(view.handle_serial, UINT64_MAX);
 	GDExtensionDeviceExitLibraryViewRef clone = {};
 	CHECK_EQ(registry->clone(&request, view, &clone), ERR_PARAMETER_RANGE_ERROR);
-	GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 } };
+	GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 }, 0, 0, 0, 0, 0, 0, 0 };
 	CHECK_EQ(registry->copy(view, &snapshot), OK);
 	CHECK_EQ(snapshot.library_generation, UINT64_MAX);
 	CHECK_EQ(registry->release(&request, view), OK);
@@ -907,7 +907,7 @@ TEST_CASE("device_exit::foundation/isolated/abi-validation-and-cross-registry") 
 	registry->attach(owner);
 	GDExtensionDeviceExitLibraryViewRef view = {};
 	REQUIRE_EQ(RegistryAccess::view(*registry, std::move(scope), view), OK);
-	GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 } };
+	GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 }, 0, 0, 0, 0, 0, 0, 0 };
 	CHECK_EQ(foreign->copy(view, &snapshot), ERR_INVALID_DATA);
 	for (int field = 0; field < 3; field++) {
 		GDExtensionDeviceExitAbi bad = request;
@@ -987,7 +987,7 @@ TEST_CASE("device_exit::foundation/isolated/clone-release-ordered-outcomes") {
 		if (clone_first) {
 			CHECK_EQ(clone_result, OK);
 			CHECK_NE(cloned.handle_serial, view.handle_serial);
-			GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 } };
+			GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 }, 0, 0, 0, 0, 0, 0, 0 };
 			CHECK_EQ(registry->copy(cloned, &snapshot), OK);
 			CHECK_EQ(snapshot.wrapper_association, 2);
 			CHECK_EQ(registry->release(&request, cloned), OK);
@@ -1022,7 +1022,7 @@ TEST_CASE("device_exit::foundation/isolated/view-transfer-and-concurrent-clones"
 					failures++;
 					continue;
 				}
-				GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 } };
+				GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 }, 0, 0, 0, 0, 0, 0, 0 };
 				if (registry->copy(cloned, &snapshot) != OK || snapshot.loader_kind != 2 || snapshot.wrapper_association != 1) {
 					failures++;
 				}
@@ -1056,12 +1056,19 @@ public:
 	bool open = false;
 	bool native_image_retained = true;
 	int closes = 0;
-	Error open_library(const String &) override { open = true; return OK; }
+	Error open_library(const String &) override {
+		open = true;
+		return OK;
+	}
 	Error initialize(GDExtensionInterfaceGetProcAddress p_get, const Ref<GDExtension> &p_extension, GDExtensionInitialization *r_initialization) override {
 		metadata_entry(p_get, p_extension.ptr(), r_initialization);
 		return initialize_result;
 	}
-	Error close_library() override { open = false; closes++; return OK; }
+	Error close_library() override {
+		open = false;
+		closes++;
+		return OK;
+	}
 	bool is_library_open() const override { return open; }
 	bool has_library_changed() const override { return false; }
 	bool library_exists() const override { return true; }
@@ -1086,7 +1093,7 @@ TEST_CASE("device_exit::foundation/observed-fields/custom-return-close-and-reope
 		CHECK_EQ(observations.during_entry.loader_initialize_returned, 0);
 		CHECK_EQ(observations.during_entry.wrapper_association, 1);
 		const auto first_view = observations.view;
-		GDExtensionDeviceExitLibrarySnapshot first = { { 1, 48, 0 } };
+		GDExtensionDeviceExitLibrarySnapshot first = { { 1, 48, 0 }, 0, 0, 0, 0, 0, 0, 0 };
 		CHECK_EQ(observations.copy(first_view, &first), OK);
 		CHECK_EQ(first.loader_initialize_returned, 1);
 		CHECK_EQ(first.loader_initialize_error, returned);
@@ -1102,12 +1109,12 @@ TEST_CASE("device_exit::foundation/observed-fields/custom-return-close-and-reope
 		loader->initialize_result = OK;
 		CHECK_EQ(extension->open_library("custom://observations", loader), OK);
 		CHECK_NE(observations.during_entry.library_generation, first.library_generation);
-		GDExtensionDeviceExitLibrarySnapshot historical = { { 1, 48, 0 } };
+		GDExtensionDeviceExitLibrarySnapshot historical = { { 1, 48, 0 }, 0, 0, 0, 0, 0, 0, 0 };
 		CHECK_EQ(observations.copy(first_view, &historical), OK);
 		CHECK_EQ(std::memcmp(&historical, &first, sizeof(first)), 0);
 		extension.unref();
 		CHECK_EQ(loader->closes, 2);
-		GDExtensionDeviceExitLibrarySnapshot latest = { { 1, 48, 0 } };
+		GDExtensionDeviceExitLibrarySnapshot latest = { { 1, 48, 0 }, 0, 0, 0, 0, 0, 0, 0 };
 		CHECK_EQ(observations.copy(observations.view, &latest), OK);
 		CHECK_EQ(latest.wrapper_association, 2);
 		CHECK_EQ(latest.loader_initialize_error, OK);
@@ -1137,7 +1144,7 @@ TEST_CASE("device_exit::foundation/observed-fields/entry-false-preserves-actual-
 		capture = nullptr;
 		return;
 	}
-	GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 } };
+	GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 }, 0, 0, 0, 0, 0, 0, 0 };
 	CHECK_EQ(observations.copy(observations.view, &snapshot), OK);
 	CHECK_EQ(snapshot.loader_initialize_returned, 1);
 	CHECK_EQ(snapshot.loader_initialize_error, FAILED);

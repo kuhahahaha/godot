@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  test_device_exit_library_close.cpp                                       */
+/*  test_device_exit_library_close.cpp                                    */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -268,7 +268,9 @@ static void dynamic_failure_child() {
 		std::_Exit(92);
 	}
 	GDExtensionDeviceExit::RecordRef record;
-	if (Access::retain_record(*extension.ptr(), record) != OK) { std::_Exit(90); }
+	if (Access::retain_record(*extension.ptr(), record) != OK) {
+		std::_Exit(90);
+	}
 	void *const handle = Access::handle(*loader.ptr());
 	Access::inject(*loader.ptr(), ERR_CANT_CREATE);
 	const Error first = extension->close_library();
@@ -360,7 +362,7 @@ public:
 		const GDExtensionDeviceExitAbi abi = { 1, 16, 0 };
 		GDExtensionDeviceExitLibraryCapability capability = {};
 		GDExtensionDeviceExitLibraryViewRef view = {};
-		GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 } };
+		GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 }, 0, 0, 0, 0, 0, 0, 0 };
 		if (bootstrap(&abi, extension.ptr(), &capability) != OK || retain(&abi, capability, &view) != OK) {
 			return FAILED;
 		}
@@ -393,7 +395,9 @@ static void dynamic_success_child() {
 	}
 	const uint64_t first = captured_generation;
 	GDExtensionDeviceExit::RecordRef first_record;
-	if (Access::retain_record(*extension.ptr(), first_record) != OK || !Access::os_facts(first_record, false, false, OK)) { std::_Exit(90); }
+	if (Access::retain_record(*extension.ptr(), first_record) != OK || !Access::os_facts(first_record, false, false, OK)) {
+		std::_Exit(90);
+	}
 	const Error closed = extension->close_library();
 	const bool absent = Access::handle(*loader.ptr()) == nullptr && !extension->is_library_open();
 	if (extension->open_library(path, loader) != OK) {
@@ -401,7 +405,9 @@ static void dynamic_success_child() {
 	}
 	const uint64_t second = captured_generation;
 	GDExtensionDeviceExit::RecordRef second_record;
-	if (Access::retain_record(*extension.ptr(), second_record) != OK || !Access::os_facts(second_record, false, false, OK)) { std::_Exit(90); }
+	if (Access::retain_record(*extension.ptr(), second_record) != OK || !Access::os_facts(second_record, false, false, OK)) {
+		std::_Exit(90);
+	}
 	const Error closed_again = extension->close_library();
 	const bool good = closed == OK && closed_again == OK && absent && first != 0 && second > first &&
 			Access::handle(*loader.ptr()) == nullptr && Access::attempts(*loader.ptr()) == 2 &&
@@ -445,9 +451,12 @@ TEST_CASE("device_exit::library-close/function-success-return") {
 
 TEST_CASE("device_exit::library-close/manager-real-dynamic-close-fact") {
 	const String image = DirAccess::create(DirAccess::ACCESS_FILESYSTEM)->get_current_dir().path_join("work/typed-lifecycle-abi-v1/native-dynamic/libtyped_dynamic.dylib");
-	if (!FileAccess::exists(image)) { return; }
+	if (!FileAccess::exists(image)) {
+		return;
+	}
 	const String path = TestUtils::get_temp_path("typed-manager-close-fact.gdextension");
-	Ref<ConfigFile> config; config.instantiate();
+	Ref<ConfigFile> config;
+	config.instantiate();
 	config->set_value("configuration", "entry_symbol", "typed_dynamic_entry");
 	config->set_value("configuration", "compatibility_minimum", "4.1");
 	config->set_value("configuration", "device_exit_guard_version", 1);
