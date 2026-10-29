@@ -1,0 +1,81 @@
+# T1 D-side original owner candidate — 2026-10-29
+
+Status: **candidate; not adopted or implemented**. Source observation is Godot `d12969fec1aa8e42e8fcfa58910726bf3582c7e0`; Godot/ANGE pair identity and GPU acceptance are not claimed. This document supplements, and does not replace, `IMPLEMENTATION_PLAN.md` Decision T1. B's binding-slot transaction, the issuer of original C05 source/map, and the A SDK adoption are separate unresolved interfaces.
+
+## Source evidence
+
+- `Registry::qualification_bridge_locked` ties a child to the original library, live main RD, session epoch and original CodeHold; new work checks qualified admission and render thread. `qualification_storage_create` and `qualification_native_unit_create` reserve original bridge children before driver effects. A native-unit failure after shader creation returns the real known prefix in the same child. `qualification_close` cannot release a bridge with children.
+- `QualificationPhysicalReturn` is an original child cell. `qualification_retire_step` checks ticket physical retirement, `dependent_children`, RD dependency edges, no active lists/callbacks and a nonblocking safe window before enqueue. `_qualification_enqueue` assigns frame slot/epoch/event; `_qualification_freed` is called **after** the actual driver-free call in the frame disposer. RID erasure or enqueue does not set `free_event`.
+- `Texture` and `UniformSet` currently lack a return cell. `sampler_owner` and `samplers_to_dispose_of` store only `RDD::SamplerID`; a new qualification-owned sampler must preserve its exact cell with the copied dispose record. The disposer order is uniform sets, shaders, samplers, textures. A set's existing `qualification_dependencies` currently cover shader and storage buffers only; `_qualification_pin_resources` and record preflight do not accept texture/sampler dependencies. Existing preflight also requires one set and rejects non-buffer reverse dependencies; sparse complete method maps need an authenticated extension, not ordinal reinterpretation.
+- `texture_create` calls `driver->texture_create`, publishes an RID, then `_texture_initialize`; initialization can acquire an asynchronous transfer worker and fail after driver effects while returning an empty RID. It cannot serve as a qualification create+upload transaction whose failure is assumed effect-free. `texture_update` uses graph texture-update commands, but a return value alone is not same-request native completion or physical staging return.
+
+## Proposed owner and typed boundary
+
+Extend the existing `QualificationBridge` child and its original RT transport, rather than creating a registry or granting authority from an RID. Keep all existing V1 structure sizes, enum values and function signatures unchanged. Add independently versioned, size-checked optional ABI entries through the existing device-session interface; absence returns existing native-unsupported. A/Godot-cpp must regenerate and ship the matching interface declarations and implement the same original bridge/RT request/observe/release adapters. Exact numeric tags and C layout are **not frozen** until A/B confirm transport capacity and adoption; unknown tags/bytes reject, reserved fields zero, old V1 clients remain unchanged.
+
+Proposed logical hunk (typed schemas, not existing ABI):
+
+```text
+QualificationMethodCreateRequestV2 {
+  abi; original prepared_ticket, library_generation, qualification_session_serial;
+  original record_generation, request_nonce, request_digest, unit_digest, attempt;
+  original B-admitted binding reservation/slot and C05 source/occurrence association;
+  preparation_generation, operation_serial, allocation_slot, allocation_generation;
+  kind = TEXTURE_2D | SAMPLER | UNIFORM_SET;
+  texture: format=RGBA32F, width=2, height=2, depth=1, layers=1,
+           mips=1, samples=1, usage=SAMPLING plus exact required upload usage,
+           base_layer=0, base_mip=0, explicit original source/version/view;
+  sampler: min=NEAREST, mag=NEAREST, mip=NEAREST, u/v/w=CLAMP_TO_EDGE,
+           explicit remaining sampler state, no anisotropy/compare;
+  set: original native-unit child, shader set, complete ordered (binding,type,
+       retained child/view) associations from the checked physical map;
+}
+QualificationMethodCreateReportV2 {
+  original child handle and operation identity; known_mask; possible_mask;
+  per-kind exact RID and original child serial; native_error; phase; revision;
+}
+QualificationMethodRetireRequestV2 { abi; original child handle; retire_operation; }
+QualificationMethodRetireReportV2 {
+  original child/operation identity; known/enqueued/freed/absent/unresolved masks;
+  per-kind original serial, frame_slot, frame_epoch and driver-free event;
+  dependency_set_serial, report_revision, status, reason, native_error/code;
+}
+```
+
+Before the first effect, the original same-bridge prepared ticket and B-admitted reserved binding/slot must be authenticated against the complete request/session/attempt/source association; scalar generations, caller-supplied source keys and bare RIDs are not authority. This requires an exact adopted B-to-D correlation hunk, which is currently absent. The same original Registry reserves bounded child/cell and return space before the first effect, owns the CodeHold and session, and accepts an already-admitted in-flight return after close without reopening admission. One child per individually owned resource is preferred to retain exact same-binding and shared-view parents; set dependencies refer to original cells, never to numeric IDs as authority. Duplicate operation identity is idempotent only if every typed field matches. A nonempty possible/unknown mask keeps the original child and prevents refund/acknowledgement; empty result is permitted only when absence of an effect is actually established. Prefixes after texture creation, upload, sampler or set failure remain attached exactly once; late success never publishes readiness after close.
+
+On RD, add `qualification_return` and use count to the existing Texture and UniformSet records. Replace the sampler's existing RID/dispose record with an owner record that carries driver ID, use count and return-cell pointer; preserve the existing regular-resource behavior for null cells. Extend existing set dependency extraction to original buffer, texture, sampler and shader cells and reject foreign/closed cells before create. Validate actual full set/reflection against the selected shader and original view/version/subresource; accepted read-only sharing follows the original C05 contract, and exclusive ranges/subresources must not overlap. `TextureDimensions` has no sampled descriptor.
+
+Use an empty real texture create followed by an explicitly tracked, bounded upload under the same prepared ticket: validate RGBA32F/sample/usage/filter support before effects, reserve exact bytes/segments, retain raw source bytes and original owner, and bind each actual graph append and staging/native completion/return to that ticket. Do not use ordinary `_texture_initialize` as proof, reinterpret bytes as a buffer resource, or change format. The exact texture-upload graph/staging observation and segment hunk remains required before adoption: current buffer upload plan cannot represent a texture image range. A failed append after a possible effect is Unknown and remains owned.
+
+At record preflight, extend the original request in a new version so the complete method sets/dependencies and original texture upload facts are authenticated against the same bridge, request, attempt and selected native units. Extend existing `_qualification_pin_resources`/unpin/reverse uses to those exact cells and set owner; no callback or new completion issuer. Cancel and close stop new upload/record, retain all already acquired cells and tickets through graph/native/staging return, then use the existing bounded retirement pump. Enqueue in dependency order: set before its texture/sampler and referenced shader; retain reverse dependency counts until actual set-driver-free. Use explicit dependency/fence ordering across frame slots, not an assumption based solely on iteration order. Mark each cell returned only after its own `driver->uniform_set_free`, `driver->sampler_free`, or `driver->texture_free` and any associated fallback/worker return, with the original frame epoch/event. A failed or unresolved native operation cannot produce a returned report.
+
+## Pre-effect reservation and cumulative capacity
+
+Reserve the original child, return cell, exact RID slots, disposal metadata, dependency/reverse-use storage and bounded upload/observation capacity before the first driver effect. Ordinary texture and sampler creation obtain the driver object before `make_rid`, so reserving only the bridge child cannot guarantee an observable and retireable prefix. Follow the original qualification storage reservation pattern and bind each actual driver effect immediately to its original child; any partial result remains reachable for cleanup. Initialization of a failed RID reservation and every rollback must respect the original RID owner rules.
+
+`QualificationBridge::CHILD_CAPACITY` is 128; existing acknowledged children remain in slots until bridge close, while ticket reverse uses can still reference their cells. Capacity is cumulative, not merely peak concurrency. Model and charge all 23 original occurrences, max32 admitted attempts, retries, known/unknown prefixes and acknowledged-but-referenced tombstones. Either prove a safe reclaim point after all reverse references, queued callbacks and frame users are gone, or return the original LIMIT before any new effect; never delete a cell merely because it was acknowledged. Exact quota arithmetic and safe reclaim/close behavior are an adoption gate, not a claim that 128 is sufficient.
+
+## Checked texture append and descriptor-pool constraints
+
+The qualification upload must use a dedicated checked, resumable nonwaiting path in the **existing** RD/graph/ticket chain; wrapping ordinary `texture_update` is insufficient. The ordinary path can append `draw_graph.add_texture_update` before a subsequent staging action fails; its returned `RecordHandle` is ignored. Its `FLUSH_AND_STALL_ALL` and `STALL_PREVIOUS` branches can wait. Before effects, reserve bounded segment/report capacity based on the actual region/mip/layer and row-pitch/alignment partition. Each checked append returns and retains its real graph handle, source byte interval, mip/layer/region, row pitch, staging block and original texture cell. A previously appended prefix survives every later allocation/action/append failure; classify actual unknown effects Unknown rather than zero. No blocking stall is performed on the RT maintenance path. Establish graph-to-native issue/completion and staging return on the same ticket and refuse Ready until the original observations discharge every segment.
+
+Every qualification-owned uniform set must explicitly use the non-linear descriptor pool. On Vulkan, `uniform_set_free` for a linear pool does not individually free its descriptor; it is reclaimed only by pool reset. Existing conditional prohibition applies only when qualification dependencies were detected, so the new set owner must enforce non-linear selection itself, then validate driver return semantics on each supported backend before treating a driver call as physical return. In particular Vulkan currently ignores the `VkResult` from `vkFreeDescriptorSets` and exposes a `void` driver method: a call return alone cannot attest successful descriptor return. The original driver path must expose a typed result or retain Unknown on failure/device loss; do not stamp success unconditionally. Distinguish an established native-owner return from a claim that the OS or GPU has released memory. Actual set-driver-free and reverse-dependency release precede parent return, with cross-frame ordering established from the original records rather than assumed.
+
+## RT partial-effect publication constraint
+
+Independent review identified an existing transport contract that the new typed arm must preserve: `qualification_rt_dispatch` requires an outer non-OK `native_error` result to have all-zero output, while `qualification_rt_release` keeps state 3 busy when there is no physically retired ticket. Returning a child/report together with an outer error would therefore invalidate publication and can strand the transport. As with existing native-unit create, once any child or possible effect is retained, return outer **OK** and publish the original child plus the typed report's `native_error`, phase and known/possible masks; outer non-OK with zero output is allowed only when absence of effects and retained child is established. A newly added RT kind must validate this report, preserve and expose Unknown, admit the already-owned return after close, and explicitly define observation/retry and release conditions for a non-ticket child. The current generic state-3 ticket rule cannot simply be reused for that case. Tests must force post-effect failure, outer-error/nonzero-output rejection, state-3 with no ticket, retry/close and actual physical return. This constraint is part of the candidate, not evidence that the current RT supports the new kind.
+
+## Original ticket settlement and transport limits
+
+A prepared ticket is initialized `physically_retired=true`, and the existing `live_upload_claim` scans buffer uploads only. The new texture path must, **before its first possible effect**, attach the exact original ticket's cell/pin and texture progress/writer claim and make it non-retired; otherwise retaining a child alone can still allow premature ticket settlement. Include attempted/no-graph prefix, cancellation, Unknown, earlier-frame returned/current-frame pending and later physical staging return in the same original settlement logic. The owner claim is discharged only when the relevant exact graph/native/staging observations and cancellation/failure obligations permit it. Do not publish Verified from the new claim.
+
+Current original RT supports one slot, kinds 1–9, request at most 312 bytes and result at most 200 bytes; the complete proposed typed hunk must prove it fits, or explicitly adopt bounded versioned transport/capacity changes and account for them. Its exact C layout, tags, allocation, same-ticket B source-slot association and texture segment/return mapping remain unissued and are blockers to adoption.
+
+## Adoption and verification gaps
+
+This is a design candidate, not an implemented or approved T1 decision. Before implementation, root/A/B must resolve exact versioned C struct layout, RT kinds/capacities and output retention protocol, the original C05 checked-set handoff, texture graph/staging completion, same-request ownership and the B slot transaction. Review must inspect source, allocation/partial-effect and close/cancel races, order across frames, same/foreign alias, unsupported format and zero-effect/unknown cases. Test positive and every fallible create/upload/set prefix; two concurrent uses, old-version replacement, last use and cancellation; physical driver-free and reverse dependencies; actual supported main-RD GPU four methods 4/3/14/2 = 23 occurrences and max32. Dummy/headless/source inspection is not GPU acceptance.
+
+## Independent review record
+
+Read-only reviewer `/root/t1_independent_review` inspected the candidate and relevant Godot source at `e23916aea9` (no production change in the reviewed files relative to the source pin above). The reviewer identified the six constraints on RT partial publication, checked nonwaiting texture append, descriptor-pool/driver return, same-request authentication, pre-effect RID reservation and cumulative child capacity; the candidate was revised for each. The follow-up review confirmed those six revisions and identified the ticket settlement/transport limit issue; that issue is now recorded above. The follow-up review did not re-review the subsequent ticket-settlement paragraph. Exact ABI, source-slot correlation and graph/staging transport remain unresolved; this is **not ready or adopted**. No GPU, engine build or runtime test was run as part of this review.
