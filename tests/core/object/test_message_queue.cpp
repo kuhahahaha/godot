@@ -96,7 +96,7 @@ TEST_CASE("[CallQueue] Statistics preserves queued payload ownership") {
 	CHECK_FALSE(queue.has_messages());
 	CHECK(owner.calls == 1);
 	CHECK(destructions == 0);
-	CHECK(ObjectID(owner.get_meta("queued_probe")) == id);
+	CHECK(owner.get_meta("queued_probe").operator ObjectID() == id);
 	owner.remove_meta("queued_probe");
 	CHECK(destructions == 1);
 	queue.statistics();
@@ -275,7 +275,7 @@ TEST_CASE("[CallQueue] Capacity diagnostics preserve accepted work") {
 	}
 	CHECK(queue.flush() == OK);
 	CHECK(counts.call == 1);
-	CHECK(ObjectID(owner.get_meta("queued_probe")) == id);
+	CHECK(owner.get_meta("queued_probe").operator ObjectID() == id);
 	CHECK(destructions == 0);
 	owner.remove_meta("queued_probe");
 	CHECK(destructions == 1);

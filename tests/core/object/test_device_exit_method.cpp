@@ -358,6 +358,7 @@ TEST_CASE("device_exit::object/registered-direct-predelete-and-free-after-quiesc
 	unregister_class(extension.ptr(), &name);
 	owner = nullptr;
 }
+#ifdef TOOLS_ENABLED
 TEST_CASE("device_exit::object/registered-direct-clear-after-quiesce") {
 	Ref<GDExtensionFunctionLoader> loader;
 	loader.instantiate();
@@ -472,6 +473,7 @@ static void clear_missing_owner_child() {
 	std::_Exit(99);
 }
 REGISTER_TEST_COMMAND("--device-exit-clear-missing-owner", clear_missing_owner_child);
+#endif // TOOLS_ENABLED
 
 TEST_CASE("device_exit::object/direct-instance-holder-survives-to-real-free-return") {
 	Ref<GDExtensionFunctionLoader> loader;
@@ -1415,7 +1417,7 @@ public:
 		const GDExtensionDeviceExitAbi abi = { 1, 16, 0 };
 		GDExtensionDeviceExitLibraryCapability authority = {};
 		GDExtensionDeviceExitLibraryViewRef view = {};
-		GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 } };
+		GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 }, 0, 0, 0, 0, 0, 0, 0 };
 		if (!bootstrap || !retain || !copy || !release || bootstrap(&abi, extension.ptr(), &authority) != OK || retain(&abi, authority, &view) != OK) {
 			std::_Exit(98);
 		}

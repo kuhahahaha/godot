@@ -510,10 +510,12 @@ static void control_shutdown() {
 		control_probe();
 	}
 }
+#ifdef TOOLS_ENABLED
 static void control_classes(GDExtensionTypePtr result) {
 	static_cast<PackedStringArray *>(result)->push_back("Node");
 	control_probe();
 }
+#endif // TOOLS_ENABLED
 static void control_level(void *, GDExtensionInitializationLevel) {}
 static GDExtensionBool control_entry(GDExtensionInterfaceGetProcAddress get, GDExtensionClassLibraryPtr library, GDExtensionInitialization *result) {
 	owner = static_cast<GDExtension *>(library);
@@ -2001,10 +2003,14 @@ TEST_CASE("device_exit::issuer/enrollment-capacity-refuses-without-publication")
 static void issuer_typed_fatal_child() {
 	using namespace GDExtensionDeviceExit;
 	bool init = false;
-	for (const String &arg : OS::get_singleton()->get_cmdline_args()) { init |= arg == "--issuer-init"; }
-	if (init) { Registry::get_singleton().terminate_initialize_blocked({}, ERR_BUSY); }
-	else { Registry::get_singleton().terminate_blocked({}, ERR_BUSY); }
-	std::_Exit(93);
+	for (const String &arg : OS::get_singleton()->get_cmdline_args()) {
+		init |= arg == "--issuer-init";
+	}
+	if (init) {
+		Registry::get_singleton().terminate_initialize_blocked({}, ERR_BUSY);
+	} else {
+		Registry::get_singleton().terminate_blocked({}, ERR_BUSY);
+	}
 }
 REGISTER_TEST_COMMAND("--device-exit-issuer-typed-fatal", issuer_typed_fatal_child);
 static void issuer_terminal_serial_child() {
@@ -2543,6 +2549,7 @@ TEST_CASE("device_exit::successor/preflight-capacity-refuses-without-publication
 
 // Isolated command: the real manager is already initialized by the engine.
 // Exit with the retained image intact after proving a non-destructive refusal.
+#ifdef TOOLS_ENABLED
 static int successor_deinitializations = 0;
 static void successor_deinitialize(void *, GDExtensionInitializationLevel) { successor_deinitializations++; }
 static GDExtensionBool successor_entry(GDExtensionInterfaceGetProcAddress get, GDExtensionClassLibraryPtr library, GDExtensionInitialization *result) {
@@ -2550,6 +2557,7 @@ static GDExtensionBool successor_entry(GDExtensionInterfaceGetProcAddress get, G
 	result->deinitialize = successor_deinitialize;
 	return accepted;
 }
+#endif // TOOLS_ENABLED
 static void successor_manager_preflight_child() {
 #ifdef TOOLS_ENABLED
 	close_at_bootstrap = close_at_initialize = close_at_deinitialize = nested_levels = false;

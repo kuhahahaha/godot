@@ -360,7 +360,7 @@ public:
 		const GDExtensionDeviceExitAbi abi = { 1, 16, 0 };
 		GDExtensionDeviceExitLibraryCapability capability = {};
 		GDExtensionDeviceExitLibraryViewRef view = {};
-		GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 } };
+		GDExtensionDeviceExitLibrarySnapshot snapshot = { { 1, 48, 0 }, 0, 0, 0, 0, 0, 0, 0 };
 		if (bootstrap(&abi, extension.ptr(), &capability) != OK || retain(&abi, capability, &view) != OK) {
 			return FAILED;
 		}
