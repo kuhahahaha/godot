@@ -30,6 +30,8 @@
 
 #include "tests/test_macros.h"
 
+#include <cstdlib>
+
 TEST_FORCE_LINK(test_shader_compile_policy)
 
 #include "core/crypto/crypto_core.h"
@@ -139,221 +141,226 @@ public:
 // This driver never initializes a device. Unexpected calls fail immediately;
 // the exercised shader boundary records native admission without making GPU claims.
 class PolicyDriver : public RenderingDeviceDriver {
+	[[noreturn]] static void unexpected_driver_call() {
+		CRASH_NOW();
+		std::abort();
+	}
+
 public:
 	PolicyFormat format;
 	int native_creates = 0;
 	bool native_accepts = false;
 	Error initialize(uint32_t p_device_index, uint32_t p_frame_count) override {
 		FAIL("Unexpected driver call: initialize");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	BufferID buffer_create(uint64_t p_size, BitField<BufferUsageBits> p_usage, MemoryAllocationType p_allocation_type, uint64_t p_frames_drawn) override {
 		FAIL("Unexpected driver call: buffer_create");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	bool buffer_set_texel_format(BufferID p_buffer, DataFormat p_format) override {
 		FAIL("Unexpected driver call: buffer_set_texel_format");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void buffer_free(BufferID p_buffer) override {
 		FAIL("Unexpected driver call: buffer_free");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	uint64_t buffer_get_allocation_size(BufferID p_buffer) override {
 		FAIL("Unexpected driver call: buffer_get_allocation_size");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	uint8_t *buffer_map(BufferID p_buffer) override {
 		FAIL("Unexpected driver call: buffer_map");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void buffer_unmap(BufferID p_buffer) override {
 		FAIL("Unexpected driver call: buffer_unmap");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	uint8_t *buffer_persistent_map_advance(BufferID p_buffer, uint64_t p_frames_drawn) override {
 		FAIL("Unexpected driver call: buffer_persistent_map_advance");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	uint64_t buffer_get_dynamic_offsets(Span<BufferID> p_buffers) override {
 		FAIL("Unexpected driver call: buffer_get_dynamic_offsets");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	uint64_t buffer_get_device_address(BufferID p_buffer) override {
 		FAIL("Unexpected driver call: buffer_get_device_address");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	TextureID texture_create(const TextureFormat &p_format, const TextureView &p_view) override {
 		FAIL("Unexpected driver call: texture_create");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	TextureID texture_create_from_extension(uint64_t p_native_texture, TextureType p_type, DataFormat p_format, uint32_t p_array_layers, bool p_depth_stencil, uint32_t p_mipmaps) override {
 		FAIL("Unexpected driver call: texture_create_from_extension");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	TextureID texture_create_shared(TextureID p_original_texture, const TextureView &p_view) override {
 		FAIL("Unexpected driver call: texture_create_shared");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	TextureID texture_create_shared_from_slice(TextureID p_original_texture, const TextureView &p_view, TextureSliceType p_slice_type, uint32_t p_layer, uint32_t p_layers, uint32_t p_mipmap, uint32_t p_mipmaps) override {
 		FAIL("Unexpected driver call: texture_create_shared_from_slice");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void texture_free(TextureID p_texture) override {
 		FAIL("Unexpected driver call: texture_free");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	uint64_t texture_get_allocation_size(TextureID p_texture) override {
 		FAIL("Unexpected driver call: texture_get_allocation_size");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void texture_get_copyable_layout(TextureID p_texture, const TextureSubresource &p_subresource, TextureCopyableLayout *r_layout) override {
 		FAIL("Unexpected driver call: texture_get_copyable_layout");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	Vector<uint8_t> texture_get_data(TextureID p_texture, uint32_t p_layer) override {
 		FAIL("Unexpected driver call: texture_get_data");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	BitField<TextureUsageBits> texture_get_usages_supported_by_format(DataFormat p_format, bool p_cpu_readable) override {
 		FAIL("Unexpected driver call: texture_get_usages_supported_by_format");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	bool texture_can_make_shared_with_format(TextureID p_texture, DataFormat p_format, bool &r_raw_reinterpretation) override {
 		FAIL("Unexpected driver call: texture_can_make_shared_with_format");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	SamplerID sampler_create(const SamplerState &p_state) override {
 		FAIL("Unexpected driver call: sampler_create");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void sampler_free(SamplerID p_sampler) override {
 		FAIL("Unexpected driver call: sampler_free");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	bool sampler_is_format_supported_for_filter(DataFormat p_format, SamplerFilter p_filter) override {
 		FAIL("Unexpected driver call: sampler_is_format_supported_for_filter");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	VertexFormatID vertex_format_create(Span<VertexAttribute> p_vertex_attribs, const VertexAttributeBindingsMap &p_vertex_bindings) override {
 		FAIL("Unexpected driver call: vertex_format_create");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void vertex_format_free(VertexFormatID p_vertex_format) override {
 		FAIL("Unexpected driver call: vertex_format_free");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_pipeline_barrier(CommandBufferID p_cmd_buffer, BitField<PipelineStageBits> p_src_stages, BitField<PipelineStageBits> p_dst_stages, VectorView<MemoryAccessBarrier> p_memory_barriers, VectorView<BufferBarrier> p_buffer_barriers, VectorView<TextureBarrier> p_texture_barriers, VectorView<AccelerationStructureBarrier> p_acceleration_structure_barriers) override {
 		FAIL("Unexpected driver call: command_pipeline_barrier");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	FenceID fence_create() override {
 		FAIL("Unexpected driver call: fence_create");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	Error fence_wait(FenceID p_fence) override {
 		FAIL("Unexpected driver call: fence_wait");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void fence_free(FenceID p_fence) override {
 		FAIL("Unexpected driver call: fence_free");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	SemaphoreID semaphore_create() override {
 		FAIL("Unexpected driver call: semaphore_create");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void semaphore_free(SemaphoreID p_semaphore) override {
 		FAIL("Unexpected driver call: semaphore_free");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	CommandQueueFamilyID command_queue_family_get(BitField<CommandQueueFamilyBits> p_cmd_queue_family_bits, RenderingContextDriver::SurfaceID p_surface = 0) override {
 		FAIL("Unexpected driver call: command_queue_family_get");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	CommandQueueID command_queue_create(CommandQueueFamilyID p_cmd_queue_family, bool p_identify_as_main_queue = false) override {
 		FAIL("Unexpected driver call: command_queue_create");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	Error command_queue_execute_and_present(CommandQueueID p_cmd_queue, VectorView<SemaphoreID> p_wait_semaphores, VectorView<CommandBufferID> p_cmd_buffers, VectorView<SemaphoreID> p_cmd_semaphores, FenceID p_cmd_fence, VectorView<SwapChainID> p_swap_chains) override {
 		FAIL("Unexpected driver call: command_queue_execute_and_present");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_queue_free(CommandQueueID p_cmd_queue) override {
 		FAIL("Unexpected driver call: command_queue_free");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	CommandPoolID command_pool_create(CommandQueueFamilyID p_cmd_queue_family, CommandBufferType p_cmd_buffer_type) override {
 		FAIL("Unexpected driver call: command_pool_create");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	bool command_pool_reset(CommandPoolID p_cmd_pool) override {
 		FAIL("Unexpected driver call: command_pool_reset");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_pool_free(CommandPoolID p_cmd_pool) override {
 		FAIL("Unexpected driver call: command_pool_free");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	CommandBufferID command_buffer_create(CommandPoolID p_cmd_pool) override {
 		FAIL("Unexpected driver call: command_buffer_create");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	bool command_buffer_begin(CommandBufferID p_cmd_buffer) override {
 		FAIL("Unexpected driver call: command_buffer_begin");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	bool command_buffer_begin_secondary(CommandBufferID p_cmd_buffer, RenderPassID p_render_pass, uint32_t p_subpass, FramebufferID p_framebuffer) override {
 		FAIL("Unexpected driver call: command_buffer_begin_secondary");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_buffer_end(CommandBufferID p_cmd_buffer) override {
 		FAIL("Unexpected driver call: command_buffer_end");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_buffer_execute_secondary(CommandBufferID p_cmd_buffer, VectorView<CommandBufferID> p_secondary_cmd_buffers) override {
 		FAIL("Unexpected driver call: command_buffer_execute_secondary");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	SwapChainID swap_chain_create(RenderingContextDriver::SurfaceID p_surface) override {
 		FAIL("Unexpected driver call: swap_chain_create");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	Error swap_chain_resize(CommandQueueID p_cmd_queue, SwapChainID p_swap_chain, uint32_t p_desired_framebuffer_count) override {
 		FAIL("Unexpected driver call: swap_chain_resize");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	FramebufferID swap_chain_acquire_framebuffer(CommandQueueID p_cmd_queue, SwapChainID p_swap_chain, bool &r_resize_required) override {
 		FAIL("Unexpected driver call: swap_chain_acquire_framebuffer");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	RenderPassID swap_chain_get_render_pass(SwapChainID p_swap_chain) override {
 		FAIL("Unexpected driver call: swap_chain_get_render_pass");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	DataFormat swap_chain_get_format(SwapChainID p_swap_chain) override {
 		FAIL("Unexpected driver call: swap_chain_get_format");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	ColorSpace swap_chain_get_color_space(SwapChainID p_swap_chain) override {
 		FAIL("Unexpected driver call: swap_chain_get_color_space");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	bool swap_chain_get_hdr_output_supported(SwapChainID p_swap_chain) override {
 		FAIL("Unexpected driver call: swap_chain_get_hdr_output_supported");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void swap_chain_free(SwapChainID p_swap_chain) override {
 		FAIL("Unexpected driver call: swap_chain_free");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	FramebufferID framebuffer_create(RenderPassID p_render_pass, VectorView<TextureID> p_attachments, uint32_t p_width, uint32_t p_height) override {
 		FAIL("Unexpected driver call: framebuffer_create");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void framebuffer_free(FramebufferID p_framebuffer) override {
 		FAIL("Unexpected driver call: framebuffer_free");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	ShaderID shader_create_from_container(const Ref<RenderingShaderContainer> &p_shader_container, const Vector<ImmutableSampler> &p_immutable_samplers) override {
 		native_creates++;
@@ -361,332 +368,332 @@ public:
 	}
 	void shader_free(ShaderID p_shader) override {
 		FAIL("Unexpected driver call: shader_free");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void shader_destroy_modules(ShaderID p_shader) override {
 		FAIL("Unexpected driver call: shader_destroy_modules");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	UniformSetID uniform_set_create(VectorView<BoundUniform> p_uniforms, ShaderID p_shader, uint32_t p_set_index, int p_linear_pool_index) override {
 		FAIL("Unexpected driver call: uniform_set_create");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void uniform_set_free(UniformSetID p_uniform_set) override {
 		FAIL("Unexpected driver call: uniform_set_free");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	uint32_t uniform_sets_get_dynamic_offsets(VectorView<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count) const override {
 		FAIL("Unexpected driver call: uniform_sets_get_dynamic_offsets");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_uniform_set_prepare_for_use(CommandBufferID p_cmd_buffer, UniformSetID p_uniform_set, ShaderID p_shader, uint32_t p_set_index) override {
 		FAIL("Unexpected driver call: command_uniform_set_prepare_for_use");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_clear_buffer(CommandBufferID p_cmd_buffer, BufferID p_buffer, uint64_t p_offset, uint64_t p_size) override {
 		FAIL("Unexpected driver call: command_clear_buffer");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_copy_buffer(CommandBufferID p_cmd_buffer, BufferID p_src_buffer, BufferID p_dst_buffer, VectorView<BufferCopyRegion> p_regions) override {
 		FAIL("Unexpected driver call: command_copy_buffer");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_copy_texture(CommandBufferID p_cmd_buffer, TextureID p_src_texture, TextureLayout p_src_texture_layout, TextureID p_dst_texture, TextureLayout p_dst_texture_layout, VectorView<TextureCopyRegion> p_regions) override {
 		FAIL("Unexpected driver call: command_copy_texture");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_resolve_texture(CommandBufferID p_cmd_buffer, TextureID p_src_texture, TextureLayout p_src_texture_layout, uint32_t p_src_layer, uint32_t p_src_mipmap, TextureID p_dst_texture, TextureLayout p_dst_texture_layout, uint32_t p_dst_layer, uint32_t p_dst_mipmap) override {
 		FAIL("Unexpected driver call: command_resolve_texture");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_clear_color_texture(CommandBufferID p_cmd_buffer, TextureID p_texture, TextureLayout p_texture_layout, const Color &p_color, const TextureSubresourceRange &p_subresources) override {
 		FAIL("Unexpected driver call: command_clear_color_texture");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_clear_depth_stencil_texture(CommandBufferID p_cmd_buffer, TextureID p_texture, TextureLayout p_texture_layout, float p_depth, uint8_t p_stencil, const TextureSubresourceRange &p_subresources) override {
 		FAIL("Unexpected driver call: command_clear_depth_stencil_texture");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_copy_buffer_to_texture(CommandBufferID p_cmd_buffer, BufferID p_src_buffer, TextureID p_dst_texture, TextureLayout p_dst_texture_layout, VectorView<BufferTextureCopyRegion> p_regions) override {
 		FAIL("Unexpected driver call: command_copy_buffer_to_texture");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_copy_texture_to_buffer(CommandBufferID p_cmd_buffer, TextureID p_src_texture, TextureLayout p_src_texture_layout, BufferID p_dst_buffer, VectorView<BufferTextureCopyRegion> p_regions) override {
 		FAIL("Unexpected driver call: command_copy_texture_to_buffer");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void pipeline_free(PipelineID p_pipeline) override {
 		FAIL("Unexpected driver call: pipeline_free");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_bind_push_constants(CommandBufferID p_cmd_buffer, ShaderID p_shader, uint32_t p_first_index, VectorView<uint32_t> p_data) override {
 		FAIL("Unexpected driver call: command_bind_push_constants");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	bool pipeline_cache_create(const Vector<uint8_t> &p_data) override {
 		FAIL("Unexpected driver call: pipeline_cache_create");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void pipeline_cache_free() override {
 		FAIL("Unexpected driver call: pipeline_cache_free");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	size_t pipeline_cache_query_size() override {
 		FAIL("Unexpected driver call: pipeline_cache_query_size");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	Vector<uint8_t> pipeline_cache_serialize() override {
 		FAIL("Unexpected driver call: pipeline_cache_serialize");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	RenderPassID render_pass_create(VectorView<Attachment> p_attachments, VectorView<Subpass> p_subpasses, VectorView<SubpassDependency> p_subpass_dependencies, uint32_t p_view_count, AttachmentReference p_fragment_density_map_attachment) override {
 		FAIL("Unexpected driver call: render_pass_create");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void render_pass_free(RenderPassID p_render_pass) override {
 		FAIL("Unexpected driver call: render_pass_free");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_begin_render_pass(CommandBufferID p_cmd_buffer, RenderPassID p_render_pass, FramebufferID p_framebuffer, CommandBufferType p_cmd_buffer_type, const Rect2i &p_rect, VectorView<RenderPassClearValue> p_clear_values) override {
 		FAIL("Unexpected driver call: command_begin_render_pass");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_end_render_pass(CommandBufferID p_cmd_buffer) override {
 		FAIL("Unexpected driver call: command_end_render_pass");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_next_render_subpass(CommandBufferID p_cmd_buffer, CommandBufferType p_cmd_buffer_type) override {
 		FAIL("Unexpected driver call: command_next_render_subpass");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_render_set_viewport(CommandBufferID p_cmd_buffer, VectorView<Rect2i> p_viewports) override {
 		FAIL("Unexpected driver call: command_render_set_viewport");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_render_set_scissor(CommandBufferID p_cmd_buffer, VectorView<Rect2i> p_scissors) override {
 		FAIL("Unexpected driver call: command_render_set_scissor");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_render_clear_attachments(CommandBufferID p_cmd_buffer, VectorView<AttachmentClear> p_attachment_clears, VectorView<Rect2i> p_rects) override {
 		FAIL("Unexpected driver call: command_render_clear_attachments");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_bind_render_pipeline(CommandBufferID p_cmd_buffer, PipelineID p_pipeline) override {
 		FAIL("Unexpected driver call: command_bind_render_pipeline");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_bind_render_uniform_sets(CommandBufferID p_cmd_buffer, VectorView<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count, uint32_t p_dynamic_offsets) override {
 		FAIL("Unexpected driver call: command_bind_render_uniform_sets");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_render_draw(CommandBufferID p_cmd_buffer, uint32_t p_vertex_count, uint32_t p_instance_count, uint32_t p_base_vertex, uint32_t p_first_instance) override {
 		FAIL("Unexpected driver call: command_render_draw");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_render_draw_indexed(CommandBufferID p_cmd_buffer, uint32_t p_index_count, uint32_t p_instance_count, uint32_t p_first_index, int32_t p_vertex_offset, uint32_t p_first_instance) override {
 		FAIL("Unexpected driver call: command_render_draw_indexed");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_render_draw_indexed_indirect(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, uint32_t p_draw_count, uint32_t p_stride) override {
 		FAIL("Unexpected driver call: command_render_draw_indexed_indirect");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_render_draw_indexed_indirect_count(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, BufferID p_count_buffer, uint64_t p_count_buffer_offset, uint32_t p_max_draw_count, uint32_t p_stride) override {
 		FAIL("Unexpected driver call: command_render_draw_indexed_indirect_count");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_render_draw_indirect(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, uint32_t p_draw_count, uint32_t p_stride) override {
 		FAIL("Unexpected driver call: command_render_draw_indirect");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_render_draw_indirect_count(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, BufferID p_count_buffer, uint64_t p_count_buffer_offset, uint32_t p_max_draw_count, uint32_t p_stride) override {
 		FAIL("Unexpected driver call: command_render_draw_indirect_count");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_render_bind_vertex_buffers(CommandBufferID p_cmd_buffer, uint32_t p_binding_count, const BufferID *p_buffers, const uint64_t *p_offsets, uint64_t p_dynamic_offsets) override {
 		FAIL("Unexpected driver call: command_render_bind_vertex_buffers");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_render_bind_index_buffer(CommandBufferID p_cmd_buffer, BufferID p_buffer, IndexBufferFormat p_format, uint64_t p_offset) override {
 		FAIL("Unexpected driver call: command_render_bind_index_buffer");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_render_set_blend_constants(CommandBufferID p_cmd_buffer, const Color &p_constants) override {
 		FAIL("Unexpected driver call: command_render_set_blend_constants");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_render_set_line_width(CommandBufferID p_cmd_buffer, float p_width) override {
 		FAIL("Unexpected driver call: command_render_set_line_width");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	PipelineID render_pipeline_create(ShaderID p_shader, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, PipelineRasterizationState p_rasterization_state, PipelineMultisampleState p_multisample_state, PipelineDepthStencilState p_depth_stencil_state, PipelineColorBlendState p_blend_state, VectorView<int32_t> p_color_attachments, BitField<PipelineDynamicStateFlags> p_dynamic_state, RenderPassID p_render_pass, uint32_t p_render_subpass, VectorView<PipelineSpecializationConstant> p_specialization_constants) override {
 		FAIL("Unexpected driver call: render_pipeline_create");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_bind_compute_pipeline(CommandBufferID p_cmd_buffer, PipelineID p_pipeline) override {
 		FAIL("Unexpected driver call: command_bind_compute_pipeline");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_bind_compute_uniform_sets(CommandBufferID p_cmd_buffer, VectorView<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count, uint32_t p_dynamic_offsets) override {
 		FAIL("Unexpected driver call: command_bind_compute_uniform_sets");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_compute_dispatch(CommandBufferID p_cmd_buffer, uint32_t p_x_groups, uint32_t p_y_groups, uint32_t p_z_groups) override {
 		FAIL("Unexpected driver call: command_compute_dispatch");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_compute_dispatch_indirect(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset) override {
 		FAIL("Unexpected driver call: command_compute_dispatch_indirect");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	PipelineID compute_pipeline_create(ShaderID p_shader, VectorView<PipelineSpecializationConstant> p_specialization_constants) override {
 		FAIL("Unexpected driver call: compute_pipeline_create");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	AccelerationStructureID blas_create(VectorView<AccelerationStructureGeometry> p_geometries, BitField<AccelerationStructureFlagBits> p_flags) override {
 		FAIL("Unexpected driver call: blas_create");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	AccelerationStructureID tlas_create(uint32_t p_max_instance_count, BitField<AccelerationStructureFlagBits> p_flags) override {
 		FAIL("Unexpected driver call: tlas_create");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void acceleration_structure_instance_write(uint8_t *r_driver_instance, const AccelerationStructureInstance &p_instance) override {
 		FAIL("Unexpected driver call: acceleration_structure_instance_write");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void acceleration_structure_free(AccelerationStructureID p_acceleration_structure) override {
 		FAIL("Unexpected driver call: acceleration_structure_free");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	uint32_t acceleration_structure_get_scratch_size_bytes(AccelerationStructureID p_acceleration_structure) override {
 		FAIL("Unexpected driver call: acceleration_structure_get_scratch_size_bytes");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	RaytracingPipelineID raytracing_pipeline_create(VectorView<PipelineShader> p_shaders, VectorView<uint32_t> p_raygen_shader_indices, VectorView<uint32_t> p_miss_shader_indices, VectorView<HitGroup> p_hit_groups, uint32_t p_max_trace_recursion_depth, ShaderID p_layout_defining_shader) override {
 		FAIL("Unexpected driver call: raytracing_pipeline_create");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void raytracing_pipeline_free(RaytracingPipelineID p_pipeline) override {
 		FAIL("Unexpected driver call: raytracing_pipeline_free");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	bool raytracing_pipeline_get_shader_group_handles(RaytracingPipelineID p_pipeline, uint32_t p_group_index_offset, VectorView<uint32_t> p_group_indices, uint8_t *r_data, uint32_t p_data_stride_bytes) override {
 		FAIL("Unexpected driver call: raytracing_pipeline_get_shader_group_handles");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_build_blas(CommandBufferID p_cmd_buffer, AccelerationStructureID p_acceleration_structure, BufferID p_scratch_buffer) override {
 		FAIL("Unexpected driver call: command_build_blas");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_build_tlas(CommandBufferID p_cmd_buffer, AccelerationStructureID p_acceleration_structure, BufferID p_scratch_buffer, BufferID p_instance_buffer, uint32_t p_instance_offset, uint32_t p_instance_count) override {
 		FAIL("Unexpected driver call: command_build_tlas");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_bind_raytracing_pipeline(CommandBufferID p_cmd_buffer, RaytracingPipelineID p_pipeline) override {
 		FAIL("Unexpected driver call: command_bind_raytracing_pipeline");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_bind_raytracing_uniform_set(CommandBufferID p_cmd_buffer, UniformSetID p_uniform_set, ShaderID p_shader, uint32_t p_set_index) override {
 		FAIL("Unexpected driver call: command_bind_raytracing_uniform_set");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_trace_rays(CommandBufferID p_cmd_buffer, const ShaderBindingTable &p_raygen_sbt, const ShaderBindingTable &p_miss_sbt, const ShaderBindingTable &p_hit_sbt, uint32_t p_width, uint32_t p_height, uint32_t p_depth) override {
 		FAIL("Unexpected driver call: command_trace_rays");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	QueryPoolID timestamp_query_pool_create(uint32_t p_query_count) override {
 		FAIL("Unexpected driver call: timestamp_query_pool_create");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void timestamp_query_pool_free(QueryPoolID p_pool_id) override {
 		FAIL("Unexpected driver call: timestamp_query_pool_free");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void timestamp_query_pool_get_results(QueryPoolID p_pool_id, uint32_t p_query_count, uint64_t *r_results) override {
 		FAIL("Unexpected driver call: timestamp_query_pool_get_results");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	uint64_t timestamp_query_result_to_time(uint64_t p_result) override {
 		FAIL("Unexpected driver call: timestamp_query_result_to_time");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_timestamp_query_pool_reset(CommandBufferID p_cmd_buffer, QueryPoolID p_pool_id, uint32_t p_query_count) override {
 		FAIL("Unexpected driver call: command_timestamp_query_pool_reset");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_timestamp_write(CommandBufferID p_cmd_buffer, QueryPoolID p_pool_id, uint32_t p_index) override {
 		FAIL("Unexpected driver call: command_timestamp_write");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_begin_label(CommandBufferID p_cmd_buffer, const char *p_label_name, const Color &p_color) override {
 		FAIL("Unexpected driver call: command_begin_label");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_end_label(CommandBufferID p_cmd_buffer) override {
 		FAIL("Unexpected driver call: command_end_label");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void command_insert_breadcrumb(CommandBufferID p_cmd_buffer, uint32_t p_data) override {
 		FAIL("Unexpected driver call: command_insert_breadcrumb");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void begin_segment(uint32_t p_frame_index, uint32_t p_frames_drawn) override {
 		FAIL("Unexpected driver call: begin_segment");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void end_segment() override {
 		FAIL("Unexpected driver call: end_segment");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	void set_object_name(ObjectType p_type, ID p_driver_id, const String &p_name) override {}
 	uint64_t get_resource_native_handle(DriverResource p_type, ID p_driver_id) override {
 		FAIL("Unexpected driver call: get_resource_native_handle");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	uint64_t get_total_memory_used() override {
 		FAIL("Unexpected driver call: get_total_memory_used");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	uint64_t get_lazily_memory_used() override {
 		FAIL("Unexpected driver call: get_lazily_memory_used");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	uint64_t limit_get(Limit p_limit) override {
 		FAIL("Unexpected driver call: limit_get");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	bool has_feature(Features p_feature) override {
 		FAIL("Unexpected driver call: has_feature");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	const MultiviewCapabilities &get_multiview_capabilities() override {
 		FAIL("Unexpected driver call: get_multiview_capabilities");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	const FragmentShadingRateCapabilities &get_fragment_shading_rate_capabilities() override {
 		FAIL("Unexpected driver call: get_fragment_shading_rate_capabilities");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	const FragmentDensityMapCapabilities &get_fragment_density_map_capabilities() override {
 		FAIL("Unexpected driver call: get_fragment_density_map_capabilities");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	String get_api_name() const override {
 		FAIL("Unexpected driver call: get_api_name");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	String get_api_version() const override {
 		FAIL("Unexpected driver call: get_api_version");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	String get_pipeline_cache_uuid() const override {
 		FAIL("Unexpected driver call: get_pipeline_cache_uuid");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	const Capabilities &get_capabilities() const override {
 		FAIL("Unexpected driver call: get_capabilities");
-		CRASH_NOW();
+		unexpected_driver_call();
 	}
 	const RenderingShaderContainerFormat &get_shader_container_format() const override { return format; }
 };

@@ -1,15 +1,42 @@
 /**************************************************************************/
-/*  test_rendering_device_transfer.cpp                                     */
+/*  test_rendering_device_transfer.cpp                                    */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
+#include "core/os/os.h"
 #include "servers/rendering/rendering_device.h"
 #include "tests/servers/rendering/transfer_test_driver_base.h"
 #include "tests/test_macros.h"
 
-#include <cstdio>
-#include <cstdlib>
 #include <atomic>
 #include <chrono>
+#include <cstdio>
+#include <cstdlib>
 #include <thread>
 
 TEST_FORCE_LINK(test_rendering_device_transfer)
@@ -144,7 +171,10 @@ public:
 		polls++;
 		return poll_result;
 	}
-	Error fence_wait(FenceID) override { CRASH_NOW_MSG("Legacy wait must not recycle a typed transfer fence."); }
+	Error fence_wait(FenceID) override {
+		CRASH_NOW_MSG("Legacy wait must not recycle a typed transfer fence.");
+		std::abort();
+	}
 	FencePollResult fence_wait_observed(FenceID, uint64_t p_serial) override {
 		CHECK(p_serial == 41);
 		waits++;
@@ -155,17 +185,37 @@ public:
 		recycles++;
 		return recycle_result;
 	}
-	bool command_pool_reset(CommandPoolID) override { resets++; return reset_result; }
+	bool command_pool_reset(CommandPoolID) override {
+		resets++;
+		return reset_result;
+	}
 	BufferID buffer_create(uint64_t, BitField<BufferUsageBits>, MemoryAllocationType, uint64_t) override { return allocation_fails ? BufferID() : BufferID(501); }
-	void buffer_free(BufferID p_buffer) override { CHECK(p_buffer.id != 0); frees++; }
+	void buffer_free(BufferID p_buffer) override {
+		CHECK(p_buffer.id != 0);
+		frees++;
+	}
 	void fence_free(FenceID) override { fence_frees++; }
 	void command_pool_free(CommandPoolID) override {
-		if (finalize_sentinel) { fprintf(stderr, "P2_DEPENDENT_FREE\n"); fflush(stderr); std::_Exit(87); }
+		if (finalize_sentinel) {
+			fprintf(stderr, "P2_DEPENDENT_FREE\n");
+			fflush(stderr);
+			std::_Exit(87);
+		}
 		pool_frees++;
 	}
-	FenceID fence_create() override { fence_creates++; return creation_failure == 1 ? FenceID() : FenceID(903); }
-	CommandPoolID command_pool_create(CommandQueueFamilyID, CommandBufferType) override { pool_creates++; return creation_failure == 2 ? CommandPoolID() : CommandPoolID(901); }
-	CommandBufferID command_buffer_create(CommandPoolID p_pool) override { CHECK(p_pool.id != 0); buffer_creates++; return creation_failure == 3 ? CommandBufferID() : CommandBufferID(902); }
+	FenceID fence_create() override {
+		fence_creates++;
+		return creation_failure == 1 ? FenceID() : FenceID(903);
+	}
+	CommandPoolID command_pool_create(CommandQueueFamilyID, CommandBufferType) override {
+		pool_creates++;
+		return creation_failure == 2 ? CommandPoolID() : CommandPoolID(901);
+	}
+	CommandBufferID command_buffer_create(CommandPoolID p_pool) override {
+		CHECK(p_pool.id != 0);
+		buffer_creates++;
+		return creation_failure == 3 ? CommandBufferID() : CommandBufferID(902);
+	}
 	TextureID texture_create(const TextureFormat &, const TextureView &) override { return TextureID(701); }
 	void texture_free(TextureID) override { texture_frees++; }
 	uint64_t texture_get_allocation_size(TextureID) override { return 4; }
@@ -176,13 +226,20 @@ public:
 	bool buffer_set_texel_format(BufferID, DataFormat) override { return true; }
 	void set_object_name(ObjectType, ID, const String &) override {}
 	uint64_t api_trait_get(ApiTrait p_trait) override {
-		if (p_trait == API_TRAIT_HONORS_PIPELINE_BARRIERS) { return 0; }
-		if (p_trait == API_TRAIT_SHADER_GROUP_HANDLE_SIZE || p_trait == API_TRAIT_SHADER_GROUP_HANDLE_ALIGNMENT || p_trait == API_TRAIT_SHADER_GROUP_BASE_ALIGNMENT) { return 4; }
+		if (p_trait == API_TRAIT_HONORS_PIPELINE_BARRIERS) {
+			return 0;
+		}
+		if (p_trait == API_TRAIT_SHADER_GROUP_HANDLE_SIZE || p_trait == API_TRAIT_SHADER_GROUP_HANDLE_ALIGNMENT || p_trait == API_TRAIT_SHADER_GROUP_BASE_ALIGNMENT) {
+			return 4;
+		}
 		return 0;
 	}
 	bool raytracing_pipeline_get_shader_group_handles(RaytracingPipelineID, uint32_t, VectorView<uint32_t>, uint8_t *, uint32_t) override { return true; }
 	void command_copy_buffer_to_texture(CommandBufferID, BufferID, TextureID, TextureLayout, VectorView<BufferTextureCopyRegion>) override { copies++; }
-	bool command_buffer_begin(CommandBufferID) override { begins++; return begin_result; }
+	bool command_buffer_begin(CommandBufferID) override {
+		begins++;
+		return begin_result;
+	}
 	void command_buffer_end(CommandBufferID) override {}
 	void command_copy_buffer(CommandBufferID, BufferID, BufferID, VectorView<BufferCopyRegion>) override { copies++; }
 	Error command_queue_execute_and_present(CommandQueueID, VectorView<SemaphoreID>, VectorView<CommandBufferID>, VectorView<SemaphoreID>, FenceID, VectorView<SwapChainID>) override {
@@ -343,7 +400,9 @@ TEST_CASE("[K03][P2] aggregate poisoned available worker refuses acquisition at 
 	CHECK(Access::available(f.rd) == 1);
 	auto *acquired = Access::acquire(f.rd, 4);
 	CHECK(acquired == nullptr);
-	if (acquired) { Access::release(f.rd, acquired); }
+	if (acquired) {
+		Access::release(f.rd, acquired);
+	}
 	CHECK(Access::size(f.rd) == 1);
 	CHECK(f.driver.begins == 0);
 	CHECK(f.driver.frees == 0);
@@ -372,7 +431,9 @@ TEST_CASE("[K03][P2] poisoned release synchronizes retirement with the pool wait
 		if (worker->thread_mutex.try_lock()) {
 			worker_unlocked = worker->poisoned;
 			worker->thread_mutex.unlock();
-			if (worker_unlocked) { break; }
+			if (worker_unlocked) {
+				break;
+			}
 		}
 		std::this_thread::yield();
 	}
@@ -404,7 +465,9 @@ TEST_CASE("[K03][P2] staging allocation failure releases lock and quarantines wo
 	CHECK(Access::available(f.rd) == 0);
 	bool unlocked = worker->thread_mutex.try_lock();
 	CHECK(unlocked);
-	if (unlocked) { worker->thread_mutex.unlock(); }
+	if (unlocked) {
+		worker->thread_mutex.unlock();
+	}
 	CHECK(f.driver.begins == 0);
 }
 
@@ -420,7 +483,9 @@ TEST_CASE("[K03][P2] buffer map failure releases worker without recording destin
 	CHECK(f.driver.copies == 0);
 	bool unlocked = worker->thread_mutex.try_lock();
 	CHECK(unlocked);
-	if (unlocked) { worker->thread_mutex.unlock(); }
+	if (unlocked) {
+		worker->thread_mutex.unlock();
+	}
 }
 
 TEST_CASE("[K03][P2] synchronous acquisition waits once and recycles exactly once") {
@@ -428,7 +493,9 @@ TEST_CASE("[K03][P2] synchronous acquisition waits once and recycles exactly onc
 	auto *worker = Access::add(f.rd);
 	auto *acquired = Access::acquire(f.rd, 4);
 	CHECK(acquired == worker);
-	if (acquired != nullptr) { Access::release(f.rd, acquired); }
+	if (acquired != nullptr) {
+		Access::release(f.rd, acquired);
+	}
 	CHECK(f.driver.waits == 1);
 	CHECK(f.driver.polls == 0);
 	CHECK(f.driver.recycles == 1);
@@ -471,7 +538,9 @@ TEST_CASE("[K03][P2] recording staging growth propagates its checked wait failur
 			CHECK(f.driver.waits == 1);
 			CHECK(f.driver.recycles == 1);
 			CHECK(f.driver.resets == 1);
-			if (acquired != nullptr) { Access::release(f.rd, acquired); }
+			if (acquired != nullptr) {
+				Access::release(f.rd, acquired);
+			}
 		} else {
 			CHECK(acquired == nullptr);
 			CHECK(worker->recording == false);
@@ -513,12 +582,24 @@ TEST_CASE("[K03][P2] ordinary buffer and SBT callers clean rejected acquisition 
 		uint8_t bytes[4] = {};
 		ERR_PRINT_OFF;
 		switch (caller) {
-			case 0: CHECK(f.rd.storage_buffer_create(4, bytes).is_null()); break;
-			case 1: CHECK(f.rd.texture_buffer_create(1, RDD::DATA_FORMAT_R32_SFLOAT, bytes).is_null()); break;
-			case 2: CHECK(f.rd.vertex_buffer_create(4, bytes, RenderingDevice::BUFFER_CREATION_AS_STORAGE_BIT).is_null()); break;
-			case 3: CHECK(f.rd.index_buffer_create(2, RDD::INDEX_BUFFER_FORMAT_UINT16, bytes).is_null()); break;
-			case 4: CHECK(f.rd.uniform_buffer_create(4, bytes).is_null()); break;
-			case 5: CHECK(Access::sbt(f.rd) != OK); break;
+			case 0:
+				CHECK(f.rd.storage_buffer_create(4, bytes).is_null());
+				break;
+			case 1:
+				CHECK(f.rd.texture_buffer_create(1, RDD::DATA_FORMAT_R32_SFLOAT, bytes).is_null());
+				break;
+			case 2:
+				CHECK(f.rd.vertex_buffer_create(4, bytes, RenderingDevice::BUFFER_CREATION_AS_STORAGE_BIT).is_null());
+				break;
+			case 3:
+				CHECK(f.rd.index_buffer_create(2, RDD::INDEX_BUFFER_FORMAT_UINT16, bytes).is_null());
+				break;
+			case 4:
+				CHECK(f.rd.uniform_buffer_create(4, bytes).is_null());
+				break;
+			case 5:
+				CHECK(Access::sbt(f.rd) != OK);
+				break;
 		}
 		ERR_PRINT_ON;
 		CHECK(f.driver.copies == 0);
@@ -540,7 +621,9 @@ TEST_CASE("[K03][P2] rejected buffer acquisition releases its resource tracker")
 			uint64_t before = Memory::get_mem_usage();
 			RID result = vertex ? f.rd.vertex_buffer_create(4, bytes, RenderingDevice::BUFFER_CREATION_AS_STORAGE_BIT) : f.rd.storage_buffer_create(4, bytes);
 			CHECK(result.is_null());
-			if (attempt == 1) { CHECK(Memory::get_mem_usage() == before); }
+			if (attempt == 1) {
+				CHECK(Memory::get_mem_usage() == before);
+			}
 		}
 		ERR_PRINT_ON;
 	}
@@ -552,7 +635,9 @@ TEST_CASE("[K03][P2] failed command begin never lends a worker for upload") {
 	f.driver.begin_result = false;
 	auto *acquired = Access::acquire(f.rd, 4);
 	CHECK(acquired == nullptr);
-	if (acquired) { Access::release(f.rd, acquired); }
+	if (acquired) {
+		Access::release(f.rd, acquired);
+	}
 	CHECK(worker->poisoned);
 	CHECK_FALSE(worker->recording);
 }
@@ -563,7 +648,9 @@ TEST_CASE("[K03][P2] native worker creation failure rolls back only unissued own
 		f.driver.creation_failure = failure;
 		auto *worker = Access::acquire(f.rd, 4);
 		CHECK(worker == nullptr);
-		if (worker) { Access::release(f.rd, worker); }
+		if (worker) {
+			Access::release(f.rd, worker);
+		}
 		CHECK(Access::size(f.rd) == 0);
 		CHECK(Access::available(f.rd) == 0);
 		CHECK(f.driver.begins == 0);
@@ -595,18 +682,29 @@ TEST_CASE("[K03][P2] public immediate texture creation propagates unresolved com
 }
 
 TEST_CASE("[K03][P2] destructive finalize child") {
-	const char *mode = std::getenv("GODOT_P2_FINALIZE_CHILD");
-	if (!mode) { return; }
+	if (!OS::get_singleton()->has_environment("GODOT_P2_FINALIZE_CHILD")) {
+		return;
+	}
+	const String mode = OS::get_singleton()->get_environment("GODOT_P2_FINALIZE_CHILD");
 	Fixture f;
 	auto *worker = Access::add(f.rd);
 	Access::initialize_graph(f.rd, &f.driver);
 	f.driver.finalize_sentinel = true;
-	if (String(mode) == "pending") { f.driver.wait_result.completed = false; }
-	if (String(mode) == "error") { f.driver.wait_result.native_error = true; f.driver.wait_result.native_code = -7; }
-	if (String(mode) == "poisoned") { worker->poisoned = true; }
-	fprintf(stderr, "P2_BEFORE_FINALIZE\n"); fflush(stderr);
+	if (mode == "pending") {
+		f.driver.wait_result.completed = false;
+	}
+	if (mode == "error") {
+		f.driver.wait_result.native_error = true;
+		f.driver.wait_result.native_code = -7;
+	}
+	if (mode == "poisoned") {
+		worker->poisoned = true;
+	}
+	fprintf(stderr, "P2_BEFORE_FINALIZE\n");
+	fflush(stderr);
 	f.rd.finalize();
-	fprintf(stderr, "P2_AFTER_FINALIZE\n"); fflush(stderr);
+	fprintf(stderr, "P2_AFTER_FINALIZE\n");
+	fflush(stderr);
 	std::_Exit(88);
 }
 } // namespace TestRenderingDeviceTransfer

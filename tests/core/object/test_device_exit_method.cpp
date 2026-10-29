@@ -635,7 +635,7 @@ TEST_CASE("device_exit::object/property-cohorts-and-notifications") {
 				PropertyInfo pi(Variant::INT, property);
 				const auto original_usage = pi.usage;
 				object->validate_property(pi);
-				CHECK_EQ(pi.usage, closed ? original_usage : decltype(original_usage)(PROPERTY_USAGE_READ_ONLY));
+				CHECK_EQ(pi.usage, closed ? original_usage : uint32_t(PROPERTY_USAGE_READ_ONLY));
 			} else if (route == 2) {
 				CHECK_EQ(object->property_can_revert(property), !closed);
 			} else if (route == 3) {

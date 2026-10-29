@@ -31,6 +31,7 @@
 #pragma once
 
 #include "core/extension/gdextension_qualification_physical.h"
+
 #include "modules/modules_enabled.gen.h"
 
 #include <atomic>
@@ -94,7 +95,7 @@ public:
 
 private:
 	friend class GDExtensionDeviceExit::Registry;
- friend struct GDExtensionDeviceExit::QualificationTicket;
+	friend struct GDExtensionDeviceExit::QualificationTicket;
 	friend class RenderingServerDefault;
 #ifdef TESTS_ENABLED
 	friend class TestExternalOutputAccess;
@@ -106,10 +107,10 @@ private:
 	friend class TestQualificationSerialAccess;
 	friend class TestQualificationFinalizeAccess;
 	friend class TestQualificationPhysicalAccess;
- friend class TestQualificationAckAccess;
- friend class TestQualificationStagingAccess;
- friend class TestQualificationTicketAccess;
- friend class TestQualificationRtAccess;
+	friend class TestQualificationAckAccess;
+	friend class TestQualificationStagingAccess;
+	friend class TestQualificationTicketAccess;
+	friend class TestQualificationRtAccess;
 #endif
 	static RenderingDevice *singleton;
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
@@ -225,30 +226,30 @@ private:
 
 	std::atomic<uint64_t> next_backing_serial = 1;
 	uint64_t _reserve_backing_serial();
- uint64_t next_qualification_object_serial = 1;
- uint64_t next_qualification_free_event = 1;
- uint64_t next_qualification_frame_epoch = 1;
- bool qualification_retiring = false;
- bool qualification_recording = false;
- RDG::RecordHandle _qualification_dispatch(ComputeListID p_list, uint32_t p_x, uint32_t p_y, uint32_t p_z);
- Error _qualification_maintenance();
- bool _qualification_resource_busy(RID p_rid);
- Error _qualification_pin_resources(GDExtensionDeviceExit::QualificationTicket *p_ticket, const LocalVector<RID> &p_resources);
- void _qualification_unpin_resources(GDExtensionDeviceExit::QualificationTicket *p_ticket);
- void _qualification_add_frame_ticket(GDExtensionDeviceExit::QualificationTicket *p_ticket);
- void _qualification_seal_tickets();
- void _qualification_issue_tickets(uint32_t p_slot, const RDD::QueueCallReport &p_report, Error p_error);
- void _qualification_issue_tickets_locked(uint32_t p_slot, const RDD::QueueCallReport &p_report, Error p_error);
- Error _qualification_retain_tickets(uint32_t p_frame);
- Error _qualification_poll_tickets(uint32_t p_frame);
- void _qualification_return_frame_tickets(uint32_t p_frame);
- std::atomic<bool> qualification_frame_advance_pending{false};
- Error _qualification_enqueue(GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
- void _qualification_freed(GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
- RID _qualification_storage_create(uint32_t p_bytes, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
+	uint64_t next_qualification_object_serial = 1;
+	uint64_t next_qualification_free_event = 1;
+	uint64_t next_qualification_frame_epoch = 1;
+	bool qualification_retiring = false;
+	bool qualification_recording = false;
+	RDG::RecordHandle _qualification_dispatch(ComputeListID p_list, uint32_t p_x, uint32_t p_y, uint32_t p_z);
+	Error _qualification_maintenance();
+	bool _qualification_resource_busy(RID p_rid);
+	Error _qualification_pin_resources(GDExtensionDeviceExit::QualificationTicket *p_ticket, const LocalVector<RID> &p_resources);
+	void _qualification_unpin_resources(GDExtensionDeviceExit::QualificationTicket *p_ticket);
+	void _qualification_add_frame_ticket(GDExtensionDeviceExit::QualificationTicket *p_ticket);
+	void _qualification_seal_tickets();
+	void _qualification_issue_tickets(uint32_t p_slot, const RDD::QueueCallReport &p_report, Error p_error);
+	void _qualification_issue_tickets_locked(uint32_t p_slot, const RDD::QueueCallReport &p_report, Error p_error);
+	Error _qualification_retain_tickets(uint32_t p_frame);
+	Error _qualification_poll_tickets(uint32_t p_frame);
+	void _qualification_return_frame_tickets(uint32_t p_frame);
+	std::atomic<bool> qualification_frame_advance_pending{ false };
+	Error _qualification_enqueue(GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
+	void _qualification_freed(GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
+	RID _qualification_storage_create(uint32_t p_bytes, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
 
 	struct Buffer {
-  uint32_t qualification_users = 0;
+		uint32_t qualification_users = 0;
 		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
 		uint64_t backing_serial = 0;
 		RDD::BufferID driver_id;
@@ -294,23 +295,23 @@ private:
 			bool mapping_sealed = false;
 			RDG::RecordMappingState mapping = RDG::RecordMappingState::Pending;
 			uint32_t command_slot = UINT32_MAX;
-			RDD::CommandBufferID command_buffer;
+			RDD::CommandBufferID command_buffer = {};
 			bool issue_attempted = false;
 			Error queue_error = OK;
-			RDD::QueueCallReport issue_report;
+			RDD::QueueCallReport issue_report = {};
 		};
 		PackedByteArray bytes;
 		LocalVector<CopyRecord> copies;
 		uint32_t completed_size = 0;
-  uint32_t issued_size = 0;
-  uint64_t request_serial = 0;
+		uint32_t issued_size = 0;
+		uint64_t request_serial = 0;
 		Error error = OK;
 		int64_t native_code = 0;
 		bool delivered = false;
 		bool qualification_owned = false;
 	};
 
- Error _buffer_get_data_async(RID, const Callable &, uint32_t, uint32_t, const Ref<BufferGetDataResult> &p_owned = {});
+	Error _buffer_get_data_async(RID, const Callable &, uint32_t, uint32_t, const Ref<BufferGetDataResult> &p_owned = {});
 
 	struct BufferGetDataRequest {
 		RID buffer;
@@ -324,11 +325,14 @@ private:
 	};
 
 	struct QualificationUploadProgress {
-  struct Segment {RDG::RecordHandle handle;uint32_t begin=0,end=0;};
-  LocalVector<Segment> segments;
-  uint32_t consumed=0,max_segments=0;
- };
- Error _buffer_update(Buffer *p_buffer, RID p_buffer_id, uint32_t p_offset, uint32_t p_size, const void *p_data, QualificationUploadProgress *p_progress = nullptr);
+		struct Segment {
+			RDG::RecordHandle handle;
+			uint32_t begin = 0, end = 0;
+		};
+		LocalVector<Segment> segments;
+		uint32_t consumed = 0, max_segments = 0;
+	};
+	Error _buffer_update(Buffer *p_buffer, RID p_buffer_id, uint32_t p_offset, uint32_t p_size, const void *p_data, QualificationUploadProgress *p_progress = nullptr);
 
 	enum class NativeAppendEffect : uint8_t {
 		NoNewEffect,
@@ -1289,8 +1293,8 @@ public:
 	RID shader_create_from_bytecode_with_samplers(const Vector<uint8_t> &p_shader_binary, RID p_placeholder = RID(), const Vector<PipelineImmutableSampler> &p_immutable_samplers = Vector<PipelineImmutableSampler>());
 
 private:
- RID _qualification_shader_create(const Vector<uint8_t> &, RID, const Vector<PipelineImmutableSampler> &, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID);
- RID _qualification_pipeline_create(RID, const Vector<PipelineSpecializationConstant> &, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID);
+	RID _qualification_shader_create(const Vector<uint8_t> &, RID, const Vector<PipelineImmutableSampler> &, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID);
+	RID _qualification_pipeline_create(RID, const Vector<PipelineSpecializationConstant> &, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID);
 	static const uint32_t MAX_UNIFORM_SETS = 16;
 	static const uint32_t MAX_PUSH_CONSTANT_SIZE = 128;
 
@@ -1303,7 +1307,7 @@ private:
 	// the above restriction is not too serious.
 
 	struct UniformSet {
-  uint32_t qualification_users = 0;
+		uint32_t qualification_users = 0;
 		LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> qualification_dependencies;
 		uint32_t format = 0;
 		RID shader_id;
@@ -1401,7 +1405,7 @@ private:
 	static void _save_pipeline_cache(void *p_data);
 
 	struct ComputePipeline {
-  uint32_t qualification_users = 0;
+		uint32_t qualification_users = 0;
 		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
 		RID shader;
 		RDD::ShaderID shader_driver_id;
@@ -1862,7 +1866,7 @@ private:
 		LocalVector<RDD::TextureBarrier> texture_barriers;
 		bool recording = false;
 		bool submitted = false;
-  bool qualification_observer_pending = false;
+		bool qualification_observer_pending = false;
 		bool poisoned = false;
 		RDD::QueueCallReport last_submission;
 		RDD::FencePollResult last_completion;
@@ -1990,9 +1994,9 @@ private:
 		bool fence_signaled = false;
 		bool primary_command_buffer_begun = true;
 		LocalVector<RenderingDeviceDriver::QueueCallReport> chain_reports;
-  // Owns source observer references transferred by the original hidden queue.
-  LocalVector<RDD::QueueCallReport> qualification_hidden_reports;
-  LocalVector<GDExtensionDeviceExit::QualificationTicket *> qualification_tickets;
+		// Owns source observer references transferred by the original hidden queue.
+		LocalVector<RDD::QueueCallReport> qualification_hidden_reports;
+		LocalVector<GDExtensionDeviceExit::QualificationTicket *> qualification_tickets;
 		RDD::QueueCallReport present_report;
 		bool present_attempted = false;
 		bool chain_prefix_poisoned = false;
