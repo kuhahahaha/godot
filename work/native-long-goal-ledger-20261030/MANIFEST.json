@@ -63,7 +63,9 @@
     "receipt_tree_cleanup_commit": "a0574e6941",
     "repair_receipt": "local-only work/ci-linux-double-sanitizer-lld-20261030/RECEIPT.md",
     "local_checks": "YAML parse and git diff --check pass",
-    "status": "NEW_PUBLIC_RUN_REQUIRED"
+    "status": "NEW_PUBLIC_RUN_REQUIRED",
+    "test_failure_repair_commit": "6237e0b4f5",
+    "test_failure_receipt": "local-only work/ci-message-queue-fix-20261030/RECEIPT.md"
   },
   "coverage_gaps": {
     "E06_selector": "no [Qualification][E06] doctest tags; selector matched 0",

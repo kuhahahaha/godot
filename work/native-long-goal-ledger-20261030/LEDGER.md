@@ -10,6 +10,8 @@ The remaining production seam is external owner input. E05 transport/account dat
 
 CI run `40930940598` completed with one failure in the Linux doubles GCC sanitizer job; the lld repair itself was not reached because the earlier tracked receipt files under ignored `work/` failed the static gitignore check. The workflow repair is integrated as `f6b0fc8152`, and the receipt-only follow-up is removed from the tracked tree by `a0574e6941` while retained locally. The workflow declares `linker: lld`, installs `lld` when selected, and keeps `use_static_cpp=no`; YAML parsing and `git diff --check` pass. A new public run is still required before claiming CI green.
 
+The completed public attempt then exposed a separate test contract failure in `tests/core/object/test_message_queue.cpp`: the capacity helper left a Message-sized tail, so the next operation returned `OK` instead of `ERR_OUT_OF_MEMORY`. The test-only repair is committed as `6237e0b4f5`; its patched translation unit compiles locally with rc0, and a new public run is required. The red CI receipt is local at `work/ci-message-queue-fix-20261030/RECEIPT.md`.
+
 E06/E09 selector audit: no matching doctest tags exist in the current source; zero-match runs are diagnostic only and do not prove issuer or recorder coverage.
 
 The same tests-enabled editor passed `[DeviceExit][SceneReady]*` with 2 cases / 52 assertions, preserving malformed/guarded scene-ready refusal behavior.
