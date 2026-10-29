@@ -7233,6 +7233,118 @@
     "work/vulkan-buffer-texel-format-inputs-20261030/MANIFEST.json": {
       "bytes": 3693,
       "sha256": "d40398ed6d605e2883de5f0009cdd9eff013459892c36a3976b37261c0f6d848"
+    },
+    "work/vulkan-texture-free-20261030/BINARY_HASHES.json": {
+      "bytes": 331,
+      "sha256": "f72bd61380f5d03022f677987f899c75bfa953aa174da2e2b36e5f101bec4741"
+    },
+    "work/vulkan-texture-free-20261030/COMMANDS.json": {
+      "bytes": 1686,
+      "sha256": "cfebc7fb7f35bf1978d25005556cc6e980300b748f9d90914a152abdf624af09"
+    },
+    "work/vulkan-texture-free-20261030/DEBUG_BUILD.log": {
+      "bytes": 2021,
+      "sha256": "a8076e3e4b7317da667461a22ee91c09a929dd5a41490b01da2b3721188e3bb7"
+    },
+    "work/vulkan-texture-free-20261030/DEBUG_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-texture-free-20261030/DIFF_CHECK_R1.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "work/vulkan-texture-free-20261030/DIFF_CHECK_R1.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-texture-free-20261030/INDEPENDENT_REVIEW_R1.md": {
+      "bytes": 351,
+      "sha256": "011d07d9c958d0ef8264875f9982fbcbe34467576d78ffabb005afd48ce0fc9e"
+    },
+    "work/vulkan-texture-free-20261030/K03_P2.log": {
+      "bytes": 302,
+      "sha256": "3df16e54bcba46b885f17d5fb169cc65f5aa1c9ff0ee358fafca00b7a3624ec2"
+    },
+    "work/vulkan-texture-free-20261030/K03_P2.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-texture-free-20261030/RECEIPT_R1.md": {
+      "bytes": 1059,
+      "sha256": "25cefb02c2a3e0c5333f2a5ea1dd0db5c631b5f25c2a487b71121a6f37e69ce1"
+    },
+    "work/vulkan-texture-free-20261030/RED_BUILD.log": {
+      "bytes": 2345,
+      "sha256": "2c00dad31654809c743edec06c39f1f16be692110aaf3f01011975bd18ad5a18"
+    },
+    "work/vulkan-texture-free-20261030/RED_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-texture-free-20261030/RED_TEXTURE_FREE.log": {
+      "bytes": 682,
+      "sha256": "893a11b33d7e17e72dedd6fee7de6ea5737e2a93a38b6c99bb973ad506fb9bfc"
+    },
+    "work/vulkan-texture-free-20261030/RED_TEXTURE_FREE.rc": {
+      "bytes": 4,
+      "sha256": "e726b440cc164001999e718b51780d80314709efe06e7857282377be9111127b"
+    },
+    "work/vulkan-texture-free-20261030/REGRESSION.log": {
+      "bytes": 302,
+      "sha256": "421ff48e45eee8aee5bb25c6ee7cb41538abfcd9acce6a5210682c323b1a4f48"
+    },
+    "work/vulkan-texture-free-20261030/REGRESSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-texture-free-20261030/RELEASE_BUILD.log": {
+      "bytes": 2245,
+      "sha256": "7283506ebb83209a676a9cd02eb69eb5af88bd027cab87572d7a13b99311a94c"
+    },
+    "work/vulkan-texture-free-20261030/RELEASE_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-texture-free-20261030/RELEASE_VERSION.log": {
+      "bytes": 36,
+      "sha256": "bb10c6f7ee09abcc144d99d2165199defd71e3895057c280839691446cd6fd23"
+    },
+    "work/vulkan-texture-free-20261030/RELEASE_VERSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-texture-free-20261030/SOURCE_MANIFEST.json": {
+      "bytes": 887,
+      "sha256": "d6b0646471edb404bed9876952e310902627c5b82ca8a29ae7983f32dc04c581"
+    },
+    "work/vulkan-texture-free-20261030/TEXTURE_FREE.log": {
+      "bytes": 294,
+      "sha256": "112150f0c45b4094dc1097de4cb50a76bda2e46aa22058cb691888e300ea4e67"
+    },
+    "work/vulkan-texture-free-20261030/TEXTURE_FREE.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-texture-free-20261030/UBSAN_BUILD.log": {
+      "bytes": 2505,
+      "sha256": "f74d8fbc86d42e0cbb259a005ef7397e27dda3b5cd46221d5b067fc5cba89c90"
+    },
+    "work/vulkan-texture-free-20261030/UBSAN_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-texture-free-20261030/UBSAN_REGRESSION.log": {
+      "bytes": 302,
+      "sha256": "421ff48e45eee8aee5bb25c6ee7cb41538abfcd9acce6a5210682c323b1a4f48"
+    },
+    "work/vulkan-texture-free-20261030/UBSAN_REGRESSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-texture-free-20261030/MANIFEST.json": {
+      "bytes": 3693,
+      "sha256": "92bc4a3eef023991f4d16edbc89d97ed1442a6fb5af02ff2add7430e7fff090c"
     }
   }
 }
