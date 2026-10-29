@@ -252,6 +252,14 @@ TEST_CASE("[QualificationNative][Vulkan] secondary command execution rejects mis
  ERR_PRINT_ON;
  CHECK(true);
 }
+TEST_CASE("[QualificationNative][Vulkan] render pass begin rejects missing clear values before command access") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ ERR_PRINT_OFF;
+ driver.command_begin_render_pass(RenderingDeviceDriver::CommandBufferID(),RenderingDeviceDriver::RenderPassID(),RenderingDeviceDriver::FramebufferID(),RenderingDeviceDriver::COMMAND_BUFFER_TYPE_PRIMARY,Rect2i(),VectorView<RenderingDeviceDriver::RenderPassClearValue>(nullptr,1));
+ ERR_PRINT_ON;
+ CHECK(true);
+}
 TEST_CASE("[QualificationNative][Vulkan] queue submit rejects missing wait view before queue access") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);

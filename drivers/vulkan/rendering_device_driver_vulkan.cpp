@@ -6356,6 +6356,7 @@ void RenderingDeviceDriverVulkan::render_pass_free(RenderPassID p_render_pass) {
 static_assert(ARRAYS_COMPATIBLE_FIELDWISE(RDD::RenderPassClearValue, VkClearValue));
 
 void RenderingDeviceDriverVulkan::command_begin_render_pass(CommandBufferID p_cmd_buffer, RenderPassID p_render_pass, FramebufferID p_framebuffer, CommandBufferType p_cmd_buffer_type, const Rect2i &p_rect, VectorView<RenderPassClearValue> p_clear_values) {
+	ERR_FAIL_COND(p_clear_values.size() > 0 && !p_clear_values.ptr());
 	CommandBufferInfo *command_buffer = (CommandBufferInfo *)(p_cmd_buffer.id);
 	RenderPassInfo *render_pass = (RenderPassInfo *)(p_render_pass.id);
 	Framebuffer *framebuffer = (Framebuffer *)(p_framebuffer.id);
