@@ -6561,6 +6561,118 @@
     "work/vulkan-buffer-allocation-getter-20261030/MANIFEST.json": {
       "bytes": 3689,
       "sha256": "11e30f407244157287493c850bac2e00050fe42d98ebed2c0858eafac752fa93"
+    },
+    "work/vulkan-buffer-device-address-getter-20261030/BINARY_HASHES.json": {
+      "bytes": 331,
+      "sha256": "e01b25bf364ec7e1381a23bc810b226f1c4d02f88621f922ee81302095aa2064"
+    },
+    "work/vulkan-buffer-device-address-getter-20261030/BUFFER_ADDRESS.log": {
+      "bytes": 294,
+      "sha256": "1716837be481d4c52db7369fc1f5ee896b4c22d9ef44dd8f4e95ee54e4d595b0"
+    },
+    "work/vulkan-buffer-device-address-getter-20261030/BUFFER_ADDRESS.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-buffer-device-address-getter-20261030/COMMANDS.json": {
+      "bytes": 1720,
+      "sha256": "906b2d19eec4032e8a58e19e7c33cd1683bbec8b4d1c652623b15081603c6bba"
+    },
+    "work/vulkan-buffer-device-address-getter-20261030/DEBUG_BUILD.log": {
+      "bytes": 2021,
+      "sha256": "f41b1e2d4894566af5431e6391d9813d5c6e0e95845e4d89c37ff60ef6ab408c"
+    },
+    "work/vulkan-buffer-device-address-getter-20261030/DEBUG_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-buffer-device-address-getter-20261030/DIFF_CHECK_R1.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "work/vulkan-buffer-device-address-getter-20261030/DIFF_CHECK_R1.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-buffer-device-address-getter-20261030/INDEPENDENT_REVIEW_R1.md": {
+      "bytes": 352,
+      "sha256": "b811779aac23a6f1463e45e830d6dea5f9ea318dcdf51791e7fe9fb2862adcab"
+    },
+    "work/vulkan-buffer-device-address-getter-20261030/K03_P2.log": {
+      "bytes": 302,
+      "sha256": "e40c2a2f3891ca3eabb76bbdbd54efd56c44210dd11068115b1f1131356707e8"
+    },
+    "work/vulkan-buffer-device-address-getter-20261030/K03_P2.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-buffer-device-address-getter-20261030/RECEIPT_R1.md": {
+      "bytes": 1099,
+      "sha256": "9556645086d74d088bb8a96afb5d576f64808609f6eaf9d5e6e6fedead1277f2"
+    },
+    "work/vulkan-buffer-device-address-getter-20261030/RED_BUFFER_ADDRESS.log": {
+      "bytes": 697,
+      "sha256": "b40f25a7b88497b5238e425eca7e8b7e1acc519b62fc94e05401c62e66aab780"
+    },
+    "work/vulkan-buffer-device-address-getter-20261030/RED_BUFFER_ADDRESS.rc": {
+      "bytes": 4,
+      "sha256": "e726b440cc164001999e718b51780d80314709efe06e7857282377be9111127b"
+    },
+    "work/vulkan-buffer-device-address-getter-20261030/RED_BUILD.log": {
+      "bytes": 2345,
+      "sha256": "251fb1b7ad3b8e650efa2f0a2b36979f0062b86fb8a9eded6363988e7c7faa27"
+    },
+    "work/vulkan-buffer-device-address-getter-20261030/RED_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-buffer-device-address-getter-20261030/REGRESSION.log": {
+      "bytes": 302,
+      "sha256": "6ed61058ad8709dd814f0c14ec9d2b13cff0841fb3af2191ba279292538f5142"
+    },
+    "work/vulkan-buffer-device-address-getter-20261030/REGRESSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-buffer-device-address-getter-20261030/RELEASE_BUILD.log": {
+      "bytes": 2245,
+      "sha256": "4e79d4fcdf2969026a686495951a009aa2f6533399b9a038932c6a638aad073d"
+    },
+    "work/vulkan-buffer-device-address-getter-20261030/RELEASE_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-buffer-device-address-getter-20261030/RELEASE_VERSION.log": {
+      "bytes": 36,
+      "sha256": "ae73e0b72a8a9091d4f903d89154cd9951062a1c3ffb5e5b44b05d8a5e184667"
+    },
+    "work/vulkan-buffer-device-address-getter-20261030/RELEASE_VERSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-buffer-device-address-getter-20261030/SOURCE_MANIFEST.json": {
+      "bytes": 897,
+      "sha256": "96f2cbdf64e3ed357b969bb14874872d7d7a5744c6afee5bb58d0da21290b5f5"
+    },
+    "work/vulkan-buffer-device-address-getter-20261030/UBSAN_BUILD.log": {
+      "bytes": 2505,
+      "sha256": "66496bb9dbd9b6abf46fadca6f023f03879bd75015bd164e9e0395fb0172e636"
+    },
+    "work/vulkan-buffer-device-address-getter-20261030/UBSAN_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-buffer-device-address-getter-20261030/UBSAN_REGRESSION.log": {
+      "bytes": 302,
+      "sha256": "6ed61058ad8709dd814f0c14ec9d2b13cff0841fb3af2191ba279292538f5142"
+    },
+    "work/vulkan-buffer-device-address-getter-20261030/UBSAN_REGRESSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-buffer-device-address-getter-20261030/MANIFEST.json": {
+      "bytes": 3701,
+      "sha256": "a2c5fa34272d305315b0c6c10a03644c34c07b10b2be8999a0d7e0a876d39687"
     }
   }
 }
