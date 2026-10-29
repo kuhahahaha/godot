@@ -2213,6 +2213,7 @@ void RenderingDeviceDriverVulkan::buffer_flush(BufferID p_buffer) {
 
 uint64_t RenderingDeviceDriverVulkan::buffer_get_device_address(BufferID p_buffer) {
 	const BufferInfo *buf_info = (const BufferInfo *)p_buffer.id;
+	ERR_FAIL_NULL_V(buf_info, 0);
 	VkBufferDeviceAddressInfo address_info = {};
 	address_info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
 	address_info.pNext = nullptr;
