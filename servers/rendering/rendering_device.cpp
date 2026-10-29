@@ -2036,7 +2036,11 @@ RID RenderingDevice::texture_create_shared(const TextureView &p_view, RID p_with
 		alias_format.usage_bits = TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_CAN_COPY_TO_BIT;
 
 		const RDD::TextureID fallback_texture = driver->texture_create(alias_format, tv);
-		ERR_FAIL_COND_V(!fallback_texture, RID());
+		if (!fallback_texture) {
+			driver->texture_free(texture.driver_id);
+			return RID();
+		}
+		const bool source_fallback_was_missing = src_texture->shared_fallback == nullptr;
 		_texture_check_shared_fallback(src_texture);
 		_texture_check_shared_fallback(&texture);
 		texture.shared_fallback->texture = fallback_texture;
@@ -2055,7 +2059,14 @@ RID RenderingDevice::texture_create_shared(const TextureView &p_view, RID p_with
 
 		if (raw_reintepretation && src_texture->shared_fallback->buffer.id == 0) {
 			// For shared textures of the same size, we create the buffer on the main texture if it doesn't have it already.
-			_texture_create_reinterpret_buffer(src_texture);
+			if (!_texture_create_reinterpret_buffer(src_texture)) {
+				_texture_free_shared_fallback(&texture);
+				driver->texture_free(texture.driver_id);
+				if (source_fallback_was_missing) {
+					_texture_free_shared_fallback(src_texture);
+				}
+				return RID();
+			}
 		}
 	}
 
@@ -2222,7 +2233,10 @@ RID RenderingDevice::texture_create_shared_from_slice(const TextureView &p_view,
 		slice_format.usage_bits = TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_CAN_COPY_TO_BIT;
 
 		const RDD::TextureID fallback_texture = driver->texture_create(slice_format, tv);
-		ERR_FAIL_COND_V(!fallback_texture, RID());
+		if (!fallback_texture) {
+			driver->texture_free(texture.driver_id);
+			return RID();
+		}
 		_texture_check_shared_fallback(src_texture);
 		_texture_check_shared_fallback(&texture);
 		texture.shared_fallback->texture = fallback_texture;
@@ -2241,7 +2255,11 @@ RID RenderingDevice::texture_create_shared_from_slice(const TextureView &p_view,
 
 		if (raw_reintepretation && src_texture->shared_fallback->buffer.id == 0) {
 			// For shared texture slices, we create the buffer on the slice if the source texture has no reinterpretation buffer.
-			_texture_create_reinterpret_buffer(&texture);
+			if (!_texture_create_reinterpret_buffer(&texture)) {
+				_texture_free_shared_fallback(&texture);
+				driver->texture_free(texture.driver_id);
+				return RID();
+			}
 		}
 	}
 
@@ -2820,18 +2838,27 @@ void RenderingDevice::_texture_copy_shared(RID p_src_texture_rid, Texture *p_src
 	}
 }
 
-void RenderingDevice::_texture_create_reinterpret_buffer(Texture *p_texture) {
+bool RenderingDevice::_texture_create_reinterpret_buffer(Texture *p_texture) {
+	ERR_FAIL_COND_V(!p_texture || !p_texture->shared_fallback, false);
+	if (p_texture->shared_fallback->buffer) {
+		return true;
+	}
 	uint64_t row_pitch_step = driver->api_trait_get(RDD::API_TRAIT_TEXTURE_DATA_ROW_PITCH_STEP);
 	uint64_t transfer_alignment = driver->api_trait_get(RDD::API_TRAIT_TEXTURE_TRANSFER_ALIGNMENT);
 	uint32_t pixel_bytes = get_image_format_pixel_size(p_texture->format);
 	uint32_t row_pitch = STEPIFY(p_texture->width * pixel_bytes, row_pitch_step);
 	uint64_t buffer_size = STEPIFY(pixel_bytes * row_pitch * p_texture->height * p_texture->depth, transfer_alignment);
-	p_texture->shared_fallback->buffer = driver->buffer_create(buffer_size, RDD::BUFFER_USAGE_TRANSFER_FROM_BIT | RDD::BUFFER_USAGE_TRANSFER_TO_BIT, RDD::MEMORY_ALLOCATION_TYPE_GPU, frames_drawn);
-	buffer_memory += driver->buffer_get_allocation_size(p_texture->shared_fallback->buffer);
+	const RDD::BufferID buffer = driver->buffer_create(buffer_size, RDD::BUFFER_USAGE_TRANSFER_FROM_BIT | RDD::BUFFER_USAGE_TRANSFER_TO_BIT, RDD::MEMORY_ALLOCATION_TYPE_GPU, frames_drawn);
+	if (!buffer) {
+		return false;
+	}
+	p_texture->shared_fallback->buffer = buffer;
+	buffer_memory += driver->buffer_get_allocation_size(buffer);
 
 	RDG::ResourceTracker *tracker = RDG::resource_tracker_create();
-	tracker->buffer_driver_id = p_texture->shared_fallback->buffer;
+	tracker->buffer_driver_id = buffer;
 	p_texture->shared_fallback->buffer_tracker = tracker;
+	return true;
 }
 
 uint32_t RenderingDevice::_texture_vrs_method_to_usage_bits() const {
