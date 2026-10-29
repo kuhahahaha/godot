@@ -115,6 +115,63 @@ public:
 		CHECK(written == 0);
 		memdelete(registry);
 	}
+	static void snapshot_after_overlap() {
+		using namespace GDExtensionDeviceExit;
+		// Seed CPU snapshots only. This does not issue a native ticket or
+		// establish GPU completion; the Metal control proves that separately.
+		auto *registry = memnew(Registry);
+		RenderingDevice device;
+		auto *previous = RenderingDevice::singleton;
+		RenderingDevice::singleton = &device; device.is_main_instance = true;
+		registry->instance = 71;
+		registry->records[0].owner_thread = Thread::get_caller_id();
+		registry->records[0].snapshot.library_generation = 1;
+		auto &native = registry->device_records[0];
+		native.object = &device; native.live = true; native.epoch = 1;
+		struct Holder : HolderRetirement { Holder() : HolderRetirement(RecordRef{}) {} ~Holder() = default; } holder;
+		holder.generation = 1;
+		auto *bridge = memnew(Registry::QualificationBridge);
+		bridge->serial = 11; bridge->epoch = 1; bridge->holder = &holder;
+		registry->qualification_bridges[0] = bridge;
+		auto *ticket = memnew(QualificationTicket);
+		ticket->serial = 23; ticket->bridge_serial = 11;
+		ticket->report.revision = 5; ticket->report.state = 8; ticket->report.owned_size = 16;
+		ticket->physically_retired.store(true);
+		ticket->result.instantiate(); ticket->result->delivered = true;
+		const uint32_t expected_bytes[] = { 7, 8, 9, 10 };
+		ticket->result->bytes.resize(sizeof(expected_bytes));
+		memcpy(ticket->result->bytes.ptrw(), expected_bytes, sizeof(expected_bytes));
+		GDExtensionQualificationFactV1 expected_facts[2] = {};
+		expected_facts[0].graph_kind = 1; expected_facts[0].graph_index = 17;
+		expected_facts[1].graph_kind = 2; expected_facts[1].graph_index = 29;
+		for (const auto &fact : expected_facts) ticket->facts.push_back(fact);
+		bridge->tickets[0] = ticket;
+		const GDExtensionQualificationBridgeRefV1 bridge_ref = {71, 11};
+		const GDExtensionQualificationTicketRefV1 ticket_ref = {71, 23};
+		GDExtensionQualificationFactV1 fact = {};
+		fact.graph_kind = 0x12345678;
+		const auto original_fact = fact;
+		CHECK(registry->qualification_facts(bridge_ref, ticket_ref, 5, 0, 1, &fact, &fact.graph_kind).native_error == ERR_INVALID_PARAMETER);
+		CHECK(memcmp(&fact, &original_fact, sizeof(fact)) == 0);
+		uint32_t written = 99;
+		CHECK(registry->qualification_facts(bridge_ref, ticket_ref, 5, 1, 1, &fact, &written).native_error == OK);
+		CHECK(written == 1); CHECK(memcmp(&fact, &expected_facts[1], sizeof(fact)) == 0);
+		CHECK(registry->qualification_facts(bridge_ref, ticket_ref, 5, 0, 1, &fact, &written).native_error == OK);
+		CHECK(written == 1); CHECK(memcmp(&fact, &expected_facts[0], sizeof(fact)) == 0);
+		uint32_t destination[] = { 0x12345678, 0x87654321, 0xdeadbeef, 0xa5a5a5a5 };
+		const auto original_first = destination[0];
+		CHECK(registry->qualification_copy(bridge_ref, ticket_ref, 5, destination, sizeof(destination), &destination[0]).native_error == ERR_INVALID_PARAMETER);
+		CHECK(destination[0] == original_first);
+		CHECK(registry->qualification_copy(bridge_ref, ticket_ref, 5, destination, sizeof(destination), &written).native_error == OK);
+		CHECK(written == sizeof(destination)); CHECK(memcmp(destination, expected_bytes, sizeof(destination)) == 0);
+		memset(destination, 0, sizeof(destination));
+		CHECK(registry->qualification_copy(bridge_ref, ticket_ref, 5, destination, sizeof(destination), &written).native_error == OK);
+		CHECK(written == sizeof(destination)); CHECK(memcmp(destination, expected_bytes, sizeof(destination)) == 0);
+		CHECK(ticket->report.revision == 5); CHECK(!ticket->acknowledged);
+		RenderingDevice::singleton = previous; device.is_main_instance = false;
+		registry->qualification_bridges[0] = nullptr;
+		memdelete(ticket); memdelete(bridge); memdelete(registry);
+	}
 
 	static void continuation_capacity() {
 		using namespace GDExtensionDeviceExit;
@@ -402,6 +459,7 @@ public:
 	}
 };
 TEST_CASE("[Qualification] overlapping snapshot outputs are rejected without writing destination") { TestQualificationTicketAccess::snapshot_output_overlap(); }
+TEST_CASE("[Qualification] same ticket snapshots remain readable after overlap refusal") { TestQualificationTicketAccess::snapshot_after_overlap(); }
 TEST_CASE("[Qualification] ticket keeps distinct native and completion identities until every source and frame returns") {TestQualificationTicketAccess::reduction(false);}
 
 TEST_CASE("[Qualification] sealing accepts an actual transitive graph path") { TestQualificationTicketAccess::transitive_graph_order(); }
