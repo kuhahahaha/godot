@@ -336,6 +336,14 @@ TEST_CASE("[QualificationNative][Vulkan] timestamp query rejects missing result 
  ERR_PRINT_ON;
  CHECK(true);
 }
+TEST_CASE("[QualificationNative][Vulkan] texture copyable-layout query rejects missing output before resource access") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ ERR_PRINT_OFF;
+ driver.texture_get_copyable_layout(RenderingDeviceDriver::TextureID(),RenderingDeviceDriver::TextureSubresource(),nullptr);
+ ERR_PRINT_ON;
+ CHECK(true);
+}
 TEST_CASE("[QualificationNative][Vulkan] queue submit rejects missing wait view before queue access") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);

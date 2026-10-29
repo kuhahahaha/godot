@@ -2723,6 +2723,7 @@ uint64_t RenderingDeviceDriverVulkan::texture_get_allocation_size(TextureID p_te
 }
 
 void RenderingDeviceDriverVulkan::texture_get_copyable_layout(TextureID p_texture, const TextureSubresource &p_subresource, TextureCopyableLayout *r_layout) {
+	ERR_FAIL_COND(!r_layout);
 	const TextureInfo *tex_info = (const TextureInfo *)p_texture.id;
 
 	uint32_t w = MAX(1u, tex_info->vk_create_info.extent.width >> p_subresource.mipmap);
