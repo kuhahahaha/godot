@@ -1,0 +1,73 @@
+Building for platform "ios", architecture "arm64", target "template_debug".
+INFO: Developer build, with debug optimization level and debug symbols (unless overridden).
+Compiling tests/core/object/test_device_exit_method.cpp ...
+Generating modules/modules_enabled.gen.h ...
+Compiling tests/core/object/test_device_exit_core_cycle.cpp ...
+In file included from tests/core/object/test_device_exit_method.cpp:31:
+In file included from ./core/extension/gdextension.h:33:
+In file included from ./core/extension/gdextension_interface.gen.h:42:
+In file included from /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS27.1.sdk/usr/include/c++/v1/cstddef:39:
+In file included from /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS27.1.sdk/usr/include/c++/v1/__config:15:
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS27.1.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: error: "The selected platform is no longer supported by libc++." [-Werror,-W#warnings,31]
+  204 |  #  warning "The selected platform is no longer supported by libc++."
+      |     ^
+Compiling tests/core/object/test_device_exit_entry.cpp ...
+Compiling tests/core/object/test_device_exit_contract.cpp ...
+In file included from tests/core/object/test_device_exit_core_cycle.cpp:2:
+In file included from ./core/config/engine.h:33:
+In file included from ./core/string/string_name.h:33:
+In file included from ./core/string/ustring.h:33:
+In file included from ./core/string/char_utils.h:33:
+In file included from ./core/typedefs.h:51:
+In file included from /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS27.1.sdk/usr/include/c++/v1/cstddef:39:
+In file included from /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS27.1.sdk/usr/include/c++/v1/__config:15:
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS27.1.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: error: "The selected platform is no longer supported by libc++." [-Werror,-W#warnings,31]
+  204 |  #  warning "The selected platform is no longer supported by libc++."
+      |     ^
+In file included from tests/core/object/test_device_exit_entry.cpp:31:
+In file included from ./core/config/engine.h:33:
+In file included from ./core/string/string_name.h:33:
+In file included from ./core/string/ustring.h:33:
+In file included from ./core/string/char_utils.h:33:
+In file included from ./core/typedefs.h:51:
+In file included from /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS27.1.sdk/usr/include/c++/v1/cstddef:39:
+In file included from /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS27.1.sdk/usr/include/c++/v1/__config:15:
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS27.1.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: error: "The selected platform is no longer supported by libc++." [-Werror,-W#warnings,31]
+  204 |  #  warning "The selected platform is no longer supported by libc++."
+      |     ^
+In file included from tests/core/object/test_device_exit_contract.cpp:31:
+In file included from ./tests/test_macros.h:34:
+In file included from ./core/variant/variant.h:33:
+In file included from ./core/core_string_names.h:33:
+In file included from ./core/string/string_name.h:33:
+In file included from ./core/string/ustring.h:33:
+In file included from ./core/string/char_utils.h:33:
+In file included from ./core/typedefs.h:51:
+In file included from /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS27.1.sdk/usr/include/c++/v1/cstddef:39:
+In file included from /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS27.1.sdk/usr/include/c++/v1/__config:15:
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS27.1.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: error: "The selected platform is no longer supported by libc++." [-Werror,-W#warnings,31]
+  204 |  #  warning "The selected platform is no longer supported by libc++."
+      |     ^
+1 error generated.
+scons: *** [bin/obj/tests/core/object/test_device_exit_core_cycle.ios.template_debug.dev.arm64.o] Error 1
+Compiling tests/core/object/test_device_exit_library_close.cpp ...
+In file included from tests/core/object/test_device_exit_library_close.cpp:31:
+In file included from ./core/config/engine.h:33:
+In file included from ./core/string/string_name.h:33:
+In file included from ./core/string/ustring.h:33:
+In file included from ./core/string/char_utils.h:33:
+In file included from ./core/typedefs.h:51:
+In file included from /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS27.1.sdk/usr/include/c++/v1/cstddef:39:
+In file included from /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS27.1.sdk/usr/include/c++/v1/__config:15:
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS27.1.sdk/usr/include/c++/v1/__configuration/availability.h:204:4: error: "The selected platform is no longer supported by libc++." [-Werror,-W#warnings,31]
+  204 |  #  warning "The selected platform is no longer supported by libc++."
+      |     ^
+1 error generated.
+scons: *** [bin/obj/tests/core/object/test_device_exit_contract.ios.template_debug.dev.arm64.o] Error 1
+1 error generated.
+scons: *** [bin/obj/tests/core/object/test_device_exit_method.ios.template_debug.dev.arm64.o] Error 1
+1 error generated.
+scons: *** [bin/obj/tests/core/object/test_device_exit_entry.ios.template_debug.dev.arm64.o] Error 1
+1 error generated.
+scons: *** [bin/obj/tests/core/object/test_device_exit_library_close.ios.template_debug.dev.arm64.o] Error 1
+INFO: Time elapsed: 00:00:02.43
