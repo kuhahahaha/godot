@@ -5957,6 +5957,7 @@ void RenderingDeviceDriverVulkan::command_clear_depth_stencil_texture(CommandBuf
 }
 
 void RenderingDeviceDriverVulkan::command_copy_buffer_to_texture(CommandBufferID p_cmd_buffer, BufferID p_src_buffer, TextureID p_dst_texture, TextureLayout p_dst_texture_layout, VectorView<BufferTextureCopyRegion> p_regions) {
+	ERR_FAIL_COND(p_regions.size() > 0 && !p_regions.ptr());
 	ERR_FAIL_INDEX(p_dst_texture_layout, TEXTURE_LAYOUT_MAX);
 
 	const TextureInfo *tex_info = (const TextureInfo *)p_dst_texture.id;
@@ -5987,6 +5988,7 @@ void RenderingDeviceDriverVulkan::command_copy_buffer_to_texture(CommandBufferID
 }
 
 void RenderingDeviceDriverVulkan::command_copy_texture_to_buffer(CommandBufferID p_cmd_buffer, TextureID p_src_texture, TextureLayout p_src_texture_layout, BufferID p_dst_buffer, VectorView<BufferTextureCopyRegion> p_regions) {
+	ERR_FAIL_COND(p_regions.size() > 0 && !p_regions.ptr());
 	ERR_FAIL_INDEX(p_src_texture_layout, TEXTURE_LAYOUT_MAX);
 
 	const TextureInfo *tex_info = (const TextureInfo *)p_src_texture.id;
