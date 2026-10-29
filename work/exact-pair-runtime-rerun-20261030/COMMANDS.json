@@ -1,0 +1,5 @@
+{
+  "editor": "/tmp/godot-ci-lld-fix-20261030/bin/godot.macos.editor.dev.arm64",
+  "dso": "/Users/macbookair/Documents/Work/ANGE-r4-20261030/bin/libange.macos.template_debug.arm64.dylib",
+  "command": "godot --path <fixture> --display-driver macos --rendering-driver metal --rendering-method mobile --render-thread safe --script res://probe.gd"
+}

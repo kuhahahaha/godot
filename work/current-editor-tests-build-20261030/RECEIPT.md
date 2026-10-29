@@ -14,3 +14,5 @@ Boundary selectors on the same tests-enabled editor:
 - `E05` `[Qualification][E05]*` rc 0
 - `QUAL_RT` `[QualificationRt]*` rc 0
 - `TYPED_ABI` `[DeviceExit][TypedABI]*` rc 0
+
+The superseded no-tests build diagnostic is retained in `DIAGNOSTIC_NO_TESTS.md`; it was a test-support configuration failure, not a native selector regression.

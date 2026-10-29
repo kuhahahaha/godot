@@ -55,5 +55,10 @@
       "rc": 0,
       "log": "TYPED_ABI.log"
     }
+  },
+  "superseded_diagnostic": {
+    "file": "DIAGNOSTIC_NO_TESTS.md",
+    "binary_sha256": "7156f3c09bfd99fc35014d92ba44b20f81b92d903330f809626022bb96a9211f",
+    "reason": "tests=yes was omitted; --test refused before test execution"
   }
 }
