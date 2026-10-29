@@ -34,3 +34,9 @@ SHA-256: CLI `0dcf53d4cde9ec5dd3ca0c004868544d66b26e8b37bad75f367ac08538a99831`;
 With the same isolated pair and linked engine assets, `ANGE_BINARY=<isolated bin>/ange ANGE_TEST_WATCHDOG_SECS=30 ANGE_LOADER_TEST_EXECUTABLE="$PWD/bin/ange_test_slow" ./bin/ange_test_slow '[test_runner][reset][census][guard]'` returned **0: 51 cases and 285 assertions passed**. CLI, server and both DSO SHA-256 values remained identical to the preceding matched-library control after the run. This verifies the selected census group only; it does not resolve particle inspection, schema, legacy golden, or qualification gates.
 
 `CLI_MATCHED_CENSUS_RUN.log` SHA-256: `91a97b136aecfc095b4669cda1ac3ef610c26fa694b001f67fd872d6f32cd1ea`. The main SConstruct defines the generated RmlUi library and its `bin/addons/rmlui` installation as the `rmlui-extension` target; the isolated test did not modify that shared installation.
+
+## Matched-library verb semantic group
+
+With the isolated pair, `ANGE_BINARY=<isolated bin>/ange ANGE_LOADER_TEST_EXECUTABLE="$PWD/bin/ange_test_slow" ./bin/ange_test_slow 'verb_semantic: every probe runs in isolation'` returned **42: 1 case, 1,984 assertions, 1,970 passed and 14 failed**. All 14 failed assertions reported `GDEXTENSION_CLOSE_FAILED error=044 route=5` and exit 78 after their scenario's `RESULT:PASS`; the log contains no `[RML-ABI]` occurrence. The affected dynamic sections were attach#5, destroy#31, let_from#69, play_sound#86, play_vfx#88, shatter#95/#96/#97, slice#98, spawn#99/#100/#101/#102 and spawn_grid#103. Do not count the scenario PASS as successful process close, or infer a specific unscheduled holder from this log alone. The pair's server identity is as recorded above and is not asserted identical to earlier typed-close censuses.
+
+`CLI_MATCHED_VERB_RUN.log` SHA-256: `456b167f92d2174bb588c59eb0f7583a44d0cc98b88e771b5c8ff8dafbaa2c94`. Remaining close and particle source failures continue independently of the census control.
