@@ -76,5 +76,10 @@
       "matched_cases": 0,
       "evidence_status": "diagnostic_only_zero_match"
     }
+  },
+  "scene_ready_selector": {
+    "selector": "[DeviceExit][SceneReady]*",
+    "rc": 0,
+    "log": "SCENE_READY.log"
   }
 }

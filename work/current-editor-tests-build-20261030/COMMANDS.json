@@ -15,5 +15,6 @@
   "issuer_record_selectors": [
     "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64 --headless --test --test-case='[Qualification][E06]*'",
     "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64 --headless --test --test-case='[Qualification][E09]*'"
-  ]
+  ],
+  "scene_ready_selector": "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64 --headless --test --test-case='[DeviceExit][SceneReady]*'"
 }
