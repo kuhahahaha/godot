@@ -7535,6 +7535,7 @@ void RenderingDeviceDriverVulkan::command_compute_dispatch_indirect(CommandBuffe
 // ----- PIPELINE -----
 
 RDD::PipelineID RenderingDeviceDriverVulkan::compute_pipeline_create(ShaderID p_shader, VectorView<PipelineSpecializationConstant> p_specialization_constants) {
+	ERR_FAIL_COND_V(p_specialization_constants.size() > 0 && !p_specialization_constants.ptr(), PipelineID());
 	const ShaderInfo *shader_info = (const ShaderInfo *)p_shader.id;
 
 	VkComputePipelineCreateInfo pipeline_create_info = {};

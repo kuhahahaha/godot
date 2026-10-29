@@ -312,6 +312,14 @@ TEST_CASE("[QualificationNative][Vulkan] render pipeline creation rejects missin
  ERR_PRINT_ON;
  CHECK_FALSE(bool(pipeline));
 }
+TEST_CASE("[QualificationNative][Vulkan] compute pipeline creation rejects missing specialization views before resource access") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ ERR_PRINT_OFF;
+ auto pipeline=driver.compute_pipeline_create(RenderingDeviceDriver::ShaderID(),VectorView<RenderingDeviceDriver::PipelineSpecializationConstant>(nullptr,1));
+ ERR_PRINT_ON;
+ CHECK_FALSE(bool(pipeline));
+}
 TEST_CASE("[QualificationNative][Vulkan] queue submit rejects missing wait view before queue access") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
