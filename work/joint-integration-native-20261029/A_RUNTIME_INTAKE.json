@@ -1,0 +1,15 @@
+{
+  "author_repository": "/Users/macbookair/Documents/Work/ANGE",
+  "author_commit": "bb778b6bbeecaa2182119e1c99da69f37d12a3bf",
+  "source_records": [
+    "work/host-late-bind-integration-20261029/runtime-receipt.json",
+    "work/host-late-bind-integration-20261029/runtime.log"
+  ],
+  "scope": "Read-only intake of author-committed runtime bytes; no root acceptance or E09 qualification. A keeps ownership of product/SDK/source provenance.",
+  "build_rc": 0,
+  "runtime_rc": 2,
+  "core_matches_frozen": true,
+  "first_error": "install_main_storage / host.storage_owner_transport / E05 / UNAVAILABLE(code13)",
+  "inputs_unchanged": true,
+  "actual_ange_dso_sha256": "0bad54500da5143733a8c1ce23e48657981e9b1dd607368cf093ea853dece23d"
+}

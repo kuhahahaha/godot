@@ -1,0 +1,18 @@
+{
+  "old_branch": "d/e06-policy-core",
+  "new_branch": "codex/particle-mainline",
+  "start_head": "3a08b7a795a55e9f78755725d294c5d198ba6be6",
+  "dirty_tracked_state_preserved": true,
+  "tracked_status_before_after": [
+    " M drivers/metal/SCsub",
+    " D work/skin-palette-commit-package/native-core-production/ACCEPTANCE_EVIDENCE_AUDIT_20261024.json",
+    " D work/skin-palette-commit-package/native-core-production/FR_core_interface.md",
+    " D work/skin-palette-commit-package/native-core-production/FR_core_interface_PLAN.md",
+    " D work/skin-palette-commit-package/native-core-production/code-holder/FR_library_close.md",
+    " M work/typed-lifecycle-abi-v1/gdextension_interface.h"
+  ],
+  "origin_sanitized": "github.com:AllenDang/godot.git",
+  "network_actions": false,
+  "force_or_reset": false,
+  "scope": "User-requested in-place local companion branch; no new worktree or remote publication."
+}

@@ -1,0 +1,12 @@
+{
+  "scope": "Own isolated index only; main index/worktree untouched; exact current integrated source blobs/modes match b364 HEAD. Historical dirty Metal patch retained but not applied because it is now committed.",
+  "base": "20a14abb7a0293961f1ba136f3319207c1e20342",
+  "source_head": "b364625644fc76121c2d53d9e3d8b6da5b67a15e",
+  "selected_changed_paths": 282,
+  "verified_live_target_paths": 282,
+  "commands": [
+    "git read-tree 20a14abb7a0293961f1ba136f3319207c1e20342",
+    "git apply --cached --check PRODUCTION_DELTA.patch",
+    "git apply --cached PRODUCTION_DELTA.patch"
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "command": [
+    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+    "--path",
+    "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/ange-current-pair-bqy0pt7o/project",
+    "--display-driver",
+    "macos",
+    "--rendering-driver",
+    "metal",
+    "--rendering-method",
+    "mobile",
+    "--render-thread",
+    "safe",
+    "--script",
+    "res://probe.gd"
+  ],
+  "environment_overrides": {
+    "ANGE_DEVMODE": "1"
+  },
+  "returncode": 2,
+  "timed_out": false,
+  "inputs_before": {
+    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64": "7e63110bf209811e2b390bea51322d36af01df63d9f1c7c516ad7ef42d8bf1d6",
+    "/Users/macbookair/Documents/Work/ANGE/bin/libange.macos.template_debug.arm64.dylib": "0bad54500da5143733a8c1ce23e48657981e9b1dd607368cf093ea853dece23d",
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/current-pair-runtime-20261028/runtime-vfx/ange.gdextension": "b3046a5fd963df99c8e2408a687602083946324c035674e79196d133fdbf15a9",
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/current-pair-runtime-20261028/runtime-vfx/pack/.ange_cache/asset_cache_selftest/v0.8.0/reference_blob_v1": "59fdb94737a1ed7bb9390fdb74d9e4e96c54a76e453f37de34d902cdcb89da17",
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/current-pair-runtime-20261028/runtime-vfx/pack/arena.bp": "0bc8dbd5817222d03b2b25d67b15d9c6526cbd479916c9c6263e673497b01baf",
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/current-pair-runtime-20261028/runtime-vfx/pack/arena.world": "bc110dbf399b199fca30884c11305af89fecb2956252cfd2dcffa0598a9bfe78",
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/current-pair-runtime-20261028/runtime-vfx/pack/emitter.vfx": "e995c374496152a509660df74bcda74a290af771421219cfcf51bc69bd6a36cc",
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/current-pair-runtime-20261028/runtime-vfx/pack/system.vfx": "2902d4b5cf81351fcca66041de3a28c706dee7eb93c8b8dbf637a4570d92ce9d",
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/current-pair-runtime-20261028/runtime-vfx/probe.gd": "8dddd34e2048e41fb511a4987c6cf25e3dd84d52acb222c49fa9c24bdaebf553",
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/current-pair-runtime-20261028/runtime-vfx/project.godot": "2564b0988d53b173aa95ed038ee0c601233d21d02dcbe62579922e8a42f9c8d0"
+  },
+  "inputs_after": {
+    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64": "7e63110bf209811e2b390bea51322d36af01df63d9f1c7c516ad7ef42d8bf1d6",
+    "/Users/macbookair/Documents/Work/ANGE/bin/libange.macos.template_debug.arm64.dylib": "0bad54500da5143733a8c1ce23e48657981e9b1dd607368cf093ea853dece23d",
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/current-pair-runtime-20261028/runtime-vfx/ange.gdextension": "b3046a5fd963df99c8e2408a687602083946324c035674e79196d133fdbf15a9",
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/current-pair-runtime-20261028/runtime-vfx/pack/.ange_cache/asset_cache_selftest/v0.8.0/reference_blob_v1": "59fdb94737a1ed7bb9390fdb74d9e4e96c54a76e453f37de34d902cdcb89da17",
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/current-pair-runtime-20261028/runtime-vfx/pack/arena.bp": "0bc8dbd5817222d03b2b25d67b15d9c6526cbd479916c9c6263e673497b01baf",
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/current-pair-runtime-20261028/runtime-vfx/pack/arena.world": "bc110dbf399b199fca30884c11305af89fecb2956252cfd2dcffa0598a9bfe78",
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/current-pair-runtime-20261028/runtime-vfx/pack/emitter.vfx": "e995c374496152a509660df74bcda74a290af771421219cfcf51bc69bd6a36cc",
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/current-pair-runtime-20261028/runtime-vfx/pack/system.vfx": "2902d4b5cf81351fcca66041de3a28c706dee7eb93c8b8dbf637a4570d92ce9d",
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/current-pair-runtime-20261028/runtime-vfx/probe.gd": "8dddd34e2048e41fb511a4987c6cf25e3dd84d52acb222c49fa9c24bdaebf553",
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/current-pair-runtime-20261028/runtime-vfx/project.godot": "2564b0988d53b173aa95ed038ee0c601233d21d02dcbe62579922e8a42f9c8d0"
+  },
+  "inputs_unchanged": true,
+  "runtime_log_sha256": "96cfa2bc417a53d72d387cb35b5f730f17a330f54b9bb8565caa46a087699675",
+  "temporary_bytes_deleted": 1354,
+  "child_reaped": true,
+  "scope": "existing guarded SceneReady and U01 VFX probe; no inferred owner or qualification"
+}

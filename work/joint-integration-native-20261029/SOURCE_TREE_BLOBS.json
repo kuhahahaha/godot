@@ -1,0 +1,1130 @@
+{
+  "SConstruct": {
+    "mode": "100644",
+    "oid": "d987420b894c51abe9beb1af3ed70b6bf8584c95"
+  },
+  "core/SCsub": {
+    "mode": "100644",
+    "oid": "efd4b5efcef6913373cf5bc0d2f2f0eaafc9befc"
+  },
+  "core/config/engine.cpp": {
+    "mode": "100644",
+    "oid": "50cb742ecafb7209aeaed5797cf3069f6677e856"
+  },
+  "core/config/engine_build_identity.h": {
+    "mode": "100644",
+    "oid": "1e90487f842ed882f89b25ff7b27b07de1a83a4b"
+  },
+  "core/engine_build_identity.py": {
+    "mode": "100644",
+    "oid": "b52dea6e87b790b91bc17d0f5d7e4a8a598c18b7"
+  },
+  "core/extension/gdextension.cpp": {
+    "mode": "100644",
+    "oid": "a5b1d500c7cc62a63f5cfa4bbf64156b28c22a45"
+  },
+  "core/extension/gdextension.h": {
+    "mode": "100644",
+    "oid": "fcf20b1ba119bc17e21c6cef7fed096dafc9a8bb"
+  },
+  "core/extension/gdextension_device_session.cpp": {
+    "mode": "100644",
+    "oid": "cfcbe9c8911e890855a7de46a082db8ea485e73c"
+  },
+  "core/extension/gdextension_function_loader.cpp": {
+    "mode": "100644",
+    "oid": "ae3f951ab383892e5e5a251a8f30bd46c2a5d4bb"
+  },
+  "core/extension/gdextension_function_loader.h": {
+    "mode": "100644",
+    "oid": "8460d9c66793cba6c3fc0749a702c63df365d3b7"
+  },
+  "core/extension/gdextension_guard_enrollment.cpp": {
+    "mode": "100644",
+    "oid": "3a52115e58a938022d435e1753d3f786d45a389c"
+  },
+  "core/extension/gdextension_interface.cpp": {
+    "mode": "100644",
+    "oid": "b71a81812db76a8a83f93749ddb8e9b019b3e827"
+  },
+  "core/extension/gdextension_interface.json": {
+    "mode": "100644",
+    "oid": "ccb88329c3b30ded5dc55668c9374d6e6ce697cd"
+  },
+  "core/extension/gdextension_library_exit_guard.cpp": {
+    "mode": "100644",
+    "oid": "137112d27318c0b24a10bba44421b12c6c057288"
+  },
+  "core/extension/gdextension_library_exit_guard.h": {
+    "mode": "100644",
+    "oid": "1f8162707c0742ca17072b07a13f2ea8458ec840"
+  },
+  "core/extension/gdextension_library_loader.cpp": {
+    "mode": "100644",
+    "oid": "26687f3e75319ac6786babac191b286b268cbca3"
+  },
+  "core/extension/gdextension_library_loader.h": {
+    "mode": "100644",
+    "oid": "ce7885a3d2538d3961445ecc44521a60484ccb8f"
+  },
+  "core/extension/gdextension_loader.h": {
+    "mode": "100644",
+    "oid": "65a890edc1b1b29edf964b21f3778eee0263f1db"
+  },
+  "core/extension/gdextension_manager.cpp": {
+    "mode": "100644",
+    "oid": "e317293945ca94d482a0550a71fdca721c2dc432"
+  },
+  "core/extension/gdextension_manager.h": {
+    "mode": "100644",
+    "oid": "cd62a34b2a986d59e3aef03ea154f027a38495c2"
+  },
+  "core/extension/gdextension_qualification.cpp": {
+    "mode": "100644",
+    "oid": "d4ac8407cfb7b9f1c217dca31149cd278a23cfb6"
+  },
+  "core/extension/gdextension_qualification_abi.cpp": {
+    "mode": "100644",
+    "oid": "2c68e4a59b637a7e4c95b7e08b8fb2b3febb522a"
+  },
+  "core/extension/gdextension_qualification_internal.h": {
+    "mode": "100644",
+    "oid": "ca3253ab6042392c95bcccc2bc690ace4561e329"
+  },
+  "core/extension/gdextension_qualification_physical.h": {
+    "mode": "100644",
+    "oid": "39502e4396c016a555893c1762444b002a0467e1"
+  },
+  "core/extension/gdextension_qualification_rd.cpp": {
+    "mode": "100644",
+    "oid": "6fc645ec93b27f2955f48b4792d4db3b163d21f0"
+  },
+  "core/extension/gdextension_qualification_rt.cpp": {
+    "mode": "100644",
+    "oid": "57d7315a09e32cd6f326be7bd23af00a0bfd1d5b"
+  },
+  "core/extension/gdextension_qualification_ticket.cpp": {
+    "mode": "100644",
+    "oid": "b1c76eb46ac78449a1583e594ae944ef2d549f67"
+  },
+  "core/extension/gdextension_scene_ready.cpp": {
+    "mode": "100644",
+    "oid": "2c63bf0a4e292fb402a5d6485bfc03905bcfe672"
+  },
+  "core/extension/gdextension_typed_lifecycle.cpp": {
+    "mode": "100644",
+    "oid": "0c56a14577f27e274d65d004836a15d25ace8a61"
+  },
+  "core/io/resource_loader.cpp": {
+    "mode": "100644",
+    "oid": "47c59802a4bc0f34da33ccfbe9379ecec71a3d42"
+  },
+  "core/object/class_db.cpp": {
+    "mode": "100644",
+    "oid": "0082ae7cfe9373ffd050f749a2760e901cc84731"
+  },
+  "core/object/make_virtuals.py": {
+    "mode": "100644",
+    "oid": "f8cb495321cd17d19eff63cb207bdcc81e4b5de8"
+  },
+  "core/object/message_queue.cpp": {
+    "mode": "100644",
+    "oid": "45f66d9bc76cb6f65ae4ff1ff64c2e4230c962eb"
+  },
+  "core/object/message_queue.h": {
+    "mode": "100644",
+    "oid": "db7ec42d782eae0a53681bcc5670cf57b08c4258"
+  },
+  "core/object/object.cpp": {
+    "mode": "100644",
+    "oid": "532da23aa81170e7c8a99d1fe0efba01722c300d"
+  },
+  "core/object/object.h": {
+    "mode": "100644",
+    "oid": "7d7abd606e5427681d4fcf304ca1c69cf4cf4ac0"
+  },
+  "core/object/ref_counted.cpp": {
+    "mode": "100644",
+    "oid": "df6d73728f92be3102ee16f830233915392fe4c1"
+  },
+  "core/object/ref_counted.h": {
+    "mode": "100644",
+    "oid": "b254657d59596aed8c41a041c75177a6549e137b"
+  },
+  "core/object/ref_counted_test_hooks.h": {
+    "mode": "100644",
+    "oid": "1cc3312c697e79fe665b4a41b1c7536aeccec6a4"
+  },
+  "core/os/memory.cpp": {
+    "mode": "100644",
+    "oid": "93df753920013a9fd5c9866de02cfc4d3800f1f9"
+  },
+  "core/os/memory_allocation_test_hooks.h": {
+    "mode": "100644",
+    "oid": "f58c28f266a08ead97db987cc5b9fa6736f5c63a"
+  },
+  "core/register_core_types.cpp": {
+    "mode": "100644",
+    "oid": "2fd6b40af291fd00e6c82ced116512fe3e90b3af"
+  },
+  "core/register_core_types.h": {
+    "mode": "100644",
+    "oid": "7644e4b842c95f30d2223b4006a96750c5657de3"
+  },
+  "core/templates/command_queue_mt.h": {
+    "mode": "100644",
+    "oid": "72c3f538a43c299bb65d69b545f25853dde3f852"
+  },
+  "doc/classes/AudioServer.xml": {
+    "mode": "100644",
+    "oid": "efdacaa819bdd3bf70e719b64e17ee4dc16f7610"
+  },
+  "doc/classes/RenderingDevice.xml": {
+    "mode": "100644",
+    "oid": "0c88ef7e11815802e834263e9eb0b151db5690e2"
+  },
+  "doc/classes/Viewport.xml": {
+    "mode": "100644",
+    "oid": "9ed993f25319c107573490bf12aa5cc4664d64eb"
+  },
+  "drivers/d3d12/rendering_device_driver_d3d12.cpp": {
+    "mode": "100644",
+    "oid": "0dfe0cf2de383e6510bcd418ca49f1c66877c7c7"
+  },
+  "drivers/d3d12/rendering_device_driver_d3d12.h": {
+    "mode": "100644",
+    "oid": "ac37c68894dc48d7b1cf515909667ba24a94e022"
+  },
+  "drivers/d3d12/rendering_shader_container_d3d12.cpp": {
+    "mode": "100644",
+    "oid": "70759623c1e526eaa61535d694df6ac597823731"
+  },
+  "drivers/d3d12/rendering_shader_container_d3d12.h": {
+    "mode": "100644",
+    "oid": "54b1db0b4519bedde06a384774ce2d23ccb389bc"
+  },
+  "drivers/gles3/storage/particles_storage.cpp": {
+    "mode": "100644",
+    "oid": "9db121254ccad7192eb6bfa18c0b13260ee27aeb"
+  },
+  "drivers/gles3/storage/particles_storage.h": {
+    "mode": "100644",
+    "oid": "169d7489d77b3461e9e0f2c30a523a34595be150"
+  },
+  "drivers/metal/SCsub": {
+    "mode": "100644",
+    "oid": "397d909c74c1c5c029aa74b46ffa6118e0b0e70f"
+  },
+  "drivers/metal/metal3_objects.cpp": {
+    "mode": "100644",
+    "oid": "3c2a7a8a2a225347decd16630dae982c9783af82"
+  },
+  "drivers/metal/metal3_objects.h": {
+    "mode": "100644",
+    "oid": "9ac8323aab258384ac8a55a34266a4035938ea08"
+  },
+  "drivers/metal/metal_objects_shared.cpp": {
+    "mode": "100644",
+    "oid": "06a589d6a4fa4971dd92c403384010672c8362fc"
+  },
+  "drivers/metal/metal_objects_shared.h": {
+    "mode": "100644",
+    "oid": "bab8b324c8c9252474aa9301eaf97dc0f7d23e82"
+  },
+  "drivers/metal/rendering_device_driver_metal.cpp": {
+    "mode": "100644",
+    "oid": "e16157431f1940bd5f8ade27b60fecc215bc6426"
+  },
+  "drivers/metal/rendering_device_driver_metal.h": {
+    "mode": "100644",
+    "oid": "bd9ce95327f815b94221baa8d2a85626ac83e92f"
+  },
+  "drivers/metal/rendering_device_driver_metal3.cpp": {
+    "mode": "100644",
+    "oid": "87156a2f1346652b4ee0910eda40f380c5ef17a1"
+  },
+  "drivers/metal/rendering_device_driver_metal3.h": {
+    "mode": "100644",
+    "oid": "b38fc08fd7b5b382526fd6e8c61021bcf7ecc68a"
+  },
+  "drivers/metal/rendering_shader_container_metal.cpp": {
+    "mode": "100644",
+    "oid": "4a7874599672923dd468ad27b43c98d8a876f08b"
+  },
+  "drivers/metal/rendering_shader_container_metal.h": {
+    "mode": "100644",
+    "oid": "3edc2fd7d91e3b8ef7fcc4d55a566772ab0ac59c"
+  },
+  "drivers/vulkan/rendering_device_driver_vulkan.cpp": {
+    "mode": "100644",
+    "oid": "b09652cbb408d646f4040dc19086f29fcb0a6796"
+  },
+  "drivers/vulkan/rendering_device_driver_vulkan.h": {
+    "mode": "100644",
+    "oid": "c217896197a312473b287478ff6bb39361415b5e"
+  },
+  "drivers/vulkan/rendering_shader_container_vulkan.h": {
+    "mode": "100644",
+    "oid": "5d28ddac3ea0d7508b999b0a900caa2e686fd1e8"
+  },
+  "drivers/vulkan/vulkan_fence_wait.h": {
+    "mode": "100644",
+    "oid": "d2dc2157eecc9a8a43352acf53a328b9fe860ef2"
+  },
+  "editor/doc/editor_help.cpp": {
+    "mode": "100644",
+    "oid": "5895f0bc0e2d0f80492d169fe395eb2581dec64f"
+  },
+  "editor/doc/editor_help.h": {
+    "mode": "100644",
+    "oid": "560bb8047d867e9f26ff063c6c3329b80f7e8ba7"
+  },
+  "editor/editor_node.cpp": {
+    "mode": "100644",
+    "oid": "386649ff3db48ed350508ee3269434d98ef213a0"
+  },
+  "editor/file_system/editor_file_system.cpp": {
+    "mode": "100644",
+    "oid": "3d59037ffe406c88a6c896488363a20cf559de51"
+  },
+  "main/SCsub": {
+    "mode": "100644",
+    "oid": "40644810d294de11721d844c9bd2dfdd28d0314a"
+  },
+  "main/main.cpp": {
+    "mode": "100644",
+    "oid": "9d8f63a35fd8a20fd58165e4cff81d2837921817"
+  },
+  "main/main.h": {
+    "mode": "100644",
+    "oid": "cb7bde1595fb25e4f93cfb75aa1e4040e0e3212f"
+  },
+  "modules/gdscript/gdscript.cpp": {
+    "mode": "100644",
+    "oid": "013879d87f3e65b92a5e9d5e754b802f2cde563a"
+  },
+  "modules/gdscript/gdscript.h": {
+    "mode": "100644",
+    "oid": "e5113ffe2761427c72e41ea1496e071916b925ff"
+  },
+  "modules/gdscript/gdscript_cache.cpp": {
+    "mode": "100644",
+    "oid": "fb567c1b6b568306c16cc2ca3153e4a3a9591dcc"
+  },
+  "modules/gdscript/gdscript_cache.h": {
+    "mode": "100644",
+    "oid": "4082dddaf957db77facb4603bdd0cf9ba54e8d48"
+  },
+  "modules/gdscript/gdscript_function.cpp": {
+    "mode": "100644",
+    "oid": "368a7937cb249e970e916de2fb4344436007c0f2"
+  },
+  "modules/gdscript/gdscript_function.h": {
+    "mode": "100644",
+    "oid": "57903c318d7b6868463a398d2bcfbbadfb87e993"
+  },
+  "modules/gdscript/register_types.cpp": {
+    "mode": "100644",
+    "oid": "6efc4f6fe95e2ad0b227e090232cf3730ed4bbd5"
+  },
+  "modules/gdscript/tests/active_reload_cache_test.h": {
+    "mode": "100644",
+    "oid": "5d85d4065e10a6b5d4255dc2892dd1d15d562bd8"
+  },
+  "modules/gdscript/tests/gdscript_test_runner_suite.h": {
+    "mode": "100644",
+    "oid": "c421b6be2a62896ecbe82204ceb91317e6d8120a"
+  },
+  "modules/gdscript/tests/script_lifecycle_test.h": {
+    "mode": "100644",
+    "oid": "c1068cd873f563564e3c61e6deeefde0e2a17fa4"
+  },
+  "modules/skinned_mesh_capture_tests/SCsub": {
+    "mode": "100644",
+    "oid": "429a0cfd7c11e5ee9d50ce81132d733188559828"
+  },
+  "modules/skinned_mesh_capture_tests/capture_lifecycle_model.cpp": {
+    "mode": "100644",
+    "oid": "40ca94e3cd8967a4166b2ca079d5bb56e2c5bec7"
+  },
+  "modules/skinned_mesh_capture_tests/capture_lifecycle_model.h": {
+    "mode": "100644",
+    "oid": "04429c4d4cb757dbec241fc33b813e9e637b74d7"
+  },
+  "modules/skinned_mesh_capture_tests/config.py": {
+    "mode": "100644",
+    "oid": "dbd3d0dbee08fcdf4382fbbef3bf3182855450f6"
+  },
+  "modules/skinned_mesh_capture_tests/register_types.cpp": {
+    "mode": "100644",
+    "oid": "ddbff38552e29c7d37284e1d7e48a80c9f067ae9"
+  },
+  "modules/skinned_mesh_capture_tests/register_types.h": {
+    "mode": "100644",
+    "oid": "a17c1a5dade13ff9dd83b5e257da405131087369"
+  },
+  "modules/skinned_mesh_capture_tests/render_capture_test_access.h": {
+    "mode": "100644",
+    "oid": "0911119578db3a09eac8ef0dcff01d8685bdbfe3"
+  },
+  "modules/skinned_mesh_capture_tests/render_capture_test_hooks.cpp": {
+    "mode": "100644",
+    "oid": "1f957e2ad34109737d65396c036aaf12b5a10e9c"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_capture.cpp": {
+    "mode": "100644",
+    "oid": "97df73a34ced462e0f53ac395c7dca42334af41d"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_capture.h": {
+    "mode": "100644",
+    "oid": "d9086bfb31e7069811ab9a78f5c0504af37b58d0"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_capture_codec.cpp": {
+    "mode": "100644",
+    "oid": "71425ab746c5654a8ece1d979559ae7445c798b4"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_capture_codec.h": {
+    "mode": "100644",
+    "oid": "ba0fafdbc012949e76b09425cb6691a6efeff329"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_capture_startup.cpp": {
+    "mode": "100644",
+    "oid": "1430a02f09b31c9a5c37aad3a967796307bbf6e1"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_capture_startup.h": {
+    "mode": "100644",
+    "oid": "884888818977951fcc400ceada8166af2e8873cd"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_capture_writer.cpp": {
+    "mode": "100644",
+    "oid": "04a235c729d4a4d0ab9951454c5891de00517269"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_capture_writer.h": {
+    "mode": "100644",
+    "oid": "de1f28b697cfde129c335827929797b731d6cd80"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_fixture.cpp": {
+    "mode": "100644",
+    "oid": "465396fb6101079ebee306fff902ebea7f0b44da"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_fixture.h": {
+    "mode": "100644",
+    "oid": "09e24341ee950eddd10eb7003c3c8046ec577795"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_frame.cpp": {
+    "mode": "100644",
+    "oid": "25be10254302c676bcb31819d936c933cb1cce12"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_frame.h": {
+    "mode": "100644",
+    "oid": "76f946a47e5c6ed1238fb9599f50e397df35edc1"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_gpu_payload.cpp": {
+    "mode": "100644",
+    "oid": "d157da0646ff7b6099ba7224a3baa7a7346e31e6"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_gpu_payload.h": {
+    "mode": "100644",
+    "oid": "cf0b4edd0a7de8720136be574c911eea2bf68859"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_image_collector.cpp": {
+    "mode": "100644",
+    "oid": "99f8ef885591c36fda324f21a3cd8fbc704c3b12"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_image_collector.h": {
+    "mode": "100644",
+    "oid": "1016324d81bb10b0519356fd753f3dc21285cfbd"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_kernels.h": {
+    "mode": "100644",
+    "oid": "668794eb345f5a0864f7d652faf0e095497fc416"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_native_session.cpp": {
+    "mode": "100644",
+    "oid": "b23a14c1bda4a4e7087c75d1c14a7846a4028957"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_native_session.h": {
+    "mode": "100644",
+    "oid": "23414cacec7cf418df547aa2e16501ffb2b0a6a8"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_native_source.cpp": {
+    "mode": "100644",
+    "oid": "1dd787f0718a85d117c773925f8f722ae7aa2e4a"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_native_source.h": {
+    "mode": "100644",
+    "oid": "5ae072cce3c447046f83192b96848ce630a3b847"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_observer.cpp": {
+    "mode": "100644",
+    "oid": "4449204f83af56a3081b3a9300b250fa45bb7a3c"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_observer.h": {
+    "mode": "100644",
+    "oid": "b0d11c1e9d971e6757f8c9206a287ec5da35fa27"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_phase_capture.cpp": {
+    "mode": "100644",
+    "oid": "5b35dd5ef6fad382757042e9328cf5bcd29909f6"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_phase_capture.h": {
+    "mode": "100644",
+    "oid": "ce6a56d494b7e7f73fd408c23e5e07e72e5711f5"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_phase_observer.cpp": {
+    "mode": "100644",
+    "oid": "f7b4cf7b90f318d761a38203326941bfb90f4962"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_phase_observer.h": {
+    "mode": "100644",
+    "oid": "636c095c0afcb7ba684e63650aa5d5e9c7e6cc0a"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_public_snapshot.cpp": {
+    "mode": "100644",
+    "oid": "4c2ac6685465efc8fefeb8030878734e94535f12"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_public_snapshot.h": {
+    "mode": "100644",
+    "oid": "9cc3764f9bea985738043831c7a5d7e50263b776"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_rd_pool.cpp": {
+    "mode": "100644",
+    "oid": "fbce2528658ca9be144bafee68b3cd236a793c22"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_rd_pool.h": {
+    "mode": "100644",
+    "oid": "2b55a0ddd65101acf5bbbd5bacfd9e9eb4899a7a"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_readback_collector.cpp": {
+    "mode": "100644",
+    "oid": "bd9de7dbe6ca82c50df58a0d7cd89efad5e1a079"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_readback_collector.h": {
+    "mode": "100644",
+    "oid": "a2d9d53a370365c738b928019ebfb4d3a3dfde6f"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_transport.cpp": {
+    "mode": "100644",
+    "oid": "b0b6bc6755892b821ff6b1746ac9c0ff64259af7"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_transport.h": {
+    "mode": "100644",
+    "oid": "e8cd96ba0475865a9b1960fcef542cd386a08ffe"
+  },
+  "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_write_census.h": {
+    "mode": "100644",
+    "oid": "a40ccb426a9f4e4946b7b1bdd9fb5fd589b9df91"
+  },
+  "modules/skinned_mesh_capture_tests/tests/test_capture_codec.h": {
+    "mode": "100644",
+    "oid": "7b9c654688a7d94cadd4b6f505f9dea82bd4c656"
+  },
+  "modules/skinned_mesh_capture_tests/tests/test_capture_observation.cpp": {
+    "mode": "100644",
+    "oid": "fe1e94cff4027689c2b6ff34c8e06c3f91f1db04"
+  },
+  "modules/skinned_mesh_capture_tests/tests/test_capture_startup.h": {
+    "mode": "100644",
+    "oid": "91328a9030202509cd4d49fe3f3a2e935bb77fbc"
+  },
+  "modules/skinned_mesh_capture_tests/tests/test_capture_writer.h": {
+    "mode": "100644",
+    "oid": "6c896ca8bb4bdd322e17da72eaa8d3a53b795a28"
+  },
+  "modules/skinned_mesh_capture_tests/tests/test_config.py": {
+    "mode": "100644",
+    "oid": "1735635d25b682d6a3ac002963963a1dfdcec2d0"
+  },
+  "modules/skinned_mesh_capture_tests/tests/test_cpu_oracle.h": {
+    "mode": "100644",
+    "oid": "494614179307412d906d0f9183c8ba6b1a73fd5b"
+  },
+  "modules/skinned_mesh_capture_tests/tests/test_draw_selection.h": {
+    "mode": "100644",
+    "oid": "4f4053c65f8c0d92c50634df73db2af72ea30f98"
+  },
+  "modules/skinned_mesh_capture_tests/tests/test_frame.cpp": {
+    "mode": "100644",
+    "oid": "3c1555685e3bfa8e2171eed64429437496373d13"
+  },
+  "modules/skinned_mesh_capture_tests/tests/test_gpu_payload.h": {
+    "mode": "100644",
+    "oid": "72b4ac87940c88d6a1c0037f0970da3d2c0470bd"
+  },
+  "modules/skinned_mesh_capture_tests/tests/test_image_collector.h": {
+    "mode": "100644",
+    "oid": "17a7fde96953a666b58ad230a08f050de9942d89"
+  },
+  "modules/skinned_mesh_capture_tests/tests/test_kernels.h": {
+    "mode": "100644",
+    "oid": "0e3ebdf94c7eadb6c56554a94b3c26e6dc4fbf5f"
+  },
+  "modules/skinned_mesh_capture_tests/tests/test_native_fixture.h": {
+    "mode": "100644",
+    "oid": "55dfb62023c6f980a2c14a92d8fa286df003a78b"
+  },
+  "modules/skinned_mesh_capture_tests/tests/test_native_session.h": {
+    "mode": "100644",
+    "oid": "948c29605a0bc5f826e05af87a79726911973221"
+  },
+  "modules/skinned_mesh_capture_tests/tests/test_native_source.h": {
+    "mode": "100644",
+    "oid": "5c03b352433a9405878c84681012d331f386a399"
+  },
+  "modules/skinned_mesh_capture_tests/tests/test_phase_observer.h": {
+    "mode": "100644",
+    "oid": "c1b961fda2cea3ef4589d783e15a45783af1140a"
+  },
+  "modules/skinned_mesh_capture_tests/tests/test_physical_registry.h": {
+    "mode": "100644",
+    "oid": "e9dc0eedbe9a50e6f626d825a27aa37ddd140f8b"
+  },
+  "modules/skinned_mesh_capture_tests/tests/test_public_snapshot.h": {
+    "mode": "100644",
+    "oid": "2378e367196d2c52456af5a529b0df100e23cc6c"
+  },
+  "modules/skinned_mesh_capture_tests/tests/test_rd_pool.h": {
+    "mode": "100644",
+    "oid": "11eaef5cf76ab9470af1b469fc725b1777ea6316"
+  },
+  "modules/skinned_mesh_capture_tests/tests/test_readback_collector.h": {
+    "mode": "100644",
+    "oid": "1e0fb6007c29d774ff74736a500233aa89bedef7"
+  },
+  "modules/skinned_mesh_capture_tests/tests/test_registration.h": {
+    "mode": "100644",
+    "oid": "a88c2cda08b6f5781338db05c2c82ba62cc27040"
+  },
+  "modules/skinned_mesh_capture_tests/tests/test_transport_queue.cpp": {
+    "mode": "100644",
+    "oid": "9e47b4999a00c476551489ace4c69fc91b464602"
+  },
+  "modules/skinned_mesh_capture_tests/tests/test_vulkan_fence_wait.h": {
+    "mode": "100644",
+    "oid": "095c545117f2bf14997ca3ddfc2692af1ab5f7f4"
+  },
+  "platform/android/java_godot_lib_jni.cpp": {
+    "mode": "100644",
+    "oid": "342425e077d98868619eceaed5a7ff51d2dfd96f"
+  },
+  "platform/macos/SCsub": {
+    "mode": "100644",
+    "oid": "98da106cc3da5ea6af4fa68522b33ecb055dd11a"
+  },
+  "platform/macos/detect.py": {
+    "mode": "100644",
+    "oid": "90e0f9ce8f98240ed33134968ec4a6cee2bc4880"
+  },
+  "platform/macos/os_macos.h": {
+    "mode": "100644",
+    "oid": "c8bf33cddd09f91ec80fed6bf045be56f8aa0f40"
+  },
+  "platform/macos/os_macos.mm": {
+    "mode": "100644",
+    "oid": "e0fc1c7b53d17256e949bf3e9376f482d1760f52"
+  },
+  "platform/web/web_main.cpp": {
+    "mode": "100644",
+    "oid": "ddb186c440ba739b9754bfba45a89d2fefd73d45"
+  },
+  "scene/3d/skeleton_3d.cpp": {
+    "mode": "100644",
+    "oid": "69fd846923b8548c684f779f3afa3a281df0ab63"
+  },
+  "scene/main/viewport.cpp": {
+    "mode": "100644",
+    "oid": "39296d0d0188fa602b76da6fea63a5fd47a12227"
+  },
+  "scene/main/viewport.h": {
+    "mode": "100644",
+    "oid": "3ac1936ee25735f848c8051bb18d759c665f10ad"
+  },
+  "scene/register_scene_types.cpp": {
+    "mode": "100644",
+    "oid": "eb68a41ffb9ea6c994b565e22c6b7bc6c26a59d4"
+  },
+  "scene/resources/curve.cpp": {
+    "mode": "100644",
+    "oid": "ba75bfa1fb75b523697015165037fd2b2f2c759b"
+  },
+  "scene/resources/curve.h": {
+    "mode": "100644",
+    "oid": "8a997f90255a017bb9b7e956a6f81d8f449d8b75"
+  },
+  "scene/resources/curve_texture.cpp": {
+    "mode": "100644",
+    "oid": "c01c17649b2bdb524504327e6d85a2af5feff5bd"
+  },
+  "scene/resources/curve_texture.h": {
+    "mode": "100644",
+    "oid": "dc18e66303d18563d84fa38f5b71d282c548d833"
+  },
+  "scene/resources/gradient.cpp": {
+    "mode": "100644",
+    "oid": "40c060ddabe4648592203792d5d46301dd005da6"
+  },
+  "scene/resources/gradient.h": {
+    "mode": "100644",
+    "oid": "7db4b57c93591da384121f0a71631a9afad89a6b"
+  },
+  "scene/resources/gradient_texture.cpp": {
+    "mode": "100644",
+    "oid": "a3f7d08cebfe35585e048b78cdfa8febb225700d"
+  },
+  "scene/resources/gradient_texture.h": {
+    "mode": "100644",
+    "oid": "8cc5af2c64f839148b98de36749ae6a44f3a882a"
+  },
+  "scene/resources/resource_snapshot_bridge.h": {
+    "mode": "100644",
+    "oid": "2219f4ddab4184d54f8c35ad36247467cc250d5f"
+  },
+  "scene/resources/resource_snapshot_native.cpp": {
+    "mode": "100644",
+    "oid": "b262916db6ef0424aa8525c10c78dddbd38835a4"
+  },
+  "scene/resources/resource_snapshot_native.h": {
+    "mode": "100644",
+    "oid": "fd91f31cbfc5e55abaf5634f30a6d3082d5d68ea"
+  },
+  "servers/audio/audio_server.cpp": {
+    "mode": "100644",
+    "oid": "2d51d3447e767cae3a682b050efe8da68ee38ce7"
+  },
+  "servers/audio/audio_server.h": {
+    "mode": "100644",
+    "oid": "7fc0d7be5a750dbcc28bb46611656b15103eebd0"
+  },
+  "servers/register_server_types.cpp": {
+    "mode": "100644",
+    "oid": "012f768520b54c60b685ce1317b8b60bfa5e1a57"
+  },
+  "servers/rendering/SCsub": {
+    "mode": "100644",
+    "oid": "e4ef2dd566396b109b04543d982eafb1debd5628"
+  },
+  "servers/rendering/dummy/storage/particles_storage.h": {
+    "mode": "100644",
+    "oid": "6ca884d8bf4c4b3355bcd2019ad0e9684b5bd763"
+  },
+  "servers/rendering/render_capture_test_hooks.h": {
+    "mode": "100644",
+    "oid": "6b0c96f3cfb1c2c6cec971a08ba9bf6f25bcbc32"
+  },
+  "servers/rendering/render_capture_test_tracking.cpp": {
+    "mode": "100644",
+    "oid": "249d112ff2f2be1d3953f9b952ff1092495b08ec"
+  },
+  "servers/rendering/render_capture_test_tracking.h": {
+    "mode": "100644",
+    "oid": "8f4ab7180307574f45502a690e2de0c9f8461191"
+  },
+  "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp": {
+    "mode": "100644",
+    "oid": "2cb15308f60de677b656af69c9394720a8b448ad"
+  },
+  "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h": {
+    "mode": "100644",
+    "oid": "64fe59313d94e4832e5ff1e4b821d126e4366d21"
+  },
+  "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.cpp": {
+    "mode": "100644",
+    "oid": "0c263ae4381a6287c06eec3c66f24a48ee93f505"
+  },
+  "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h": {
+    "mode": "100644",
+    "oid": "768ff528bc3f3ff812058dfc8d62b7b5b375ff1c"
+  },
+  "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp": {
+    "mode": "100644",
+    "oid": "b6f5cfaf5e01ce5609f3d131093f8cef3d4c25ec"
+  },
+  "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.h": {
+    "mode": "100644",
+    "oid": "27c0586761fc6fe4d374a35a0b421f4d3103829b"
+  },
+  "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.cpp": {
+    "mode": "100644",
+    "oid": "684e985f65422562c184e2ecf15020c170b6859a"
+  },
+  "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.h": {
+    "mode": "100644",
+    "oid": "fa51443cd3fded03e48e110c86a365abcedc25bd"
+  },
+  "servers/rendering/renderer_rd/renderer_scene_render_rd.cpp": {
+    "mode": "100644",
+    "oid": "82a9d8b7e09460b1d64487cc0dbd636c2b126ea3"
+  },
+  "servers/rendering/renderer_rd/shader_rd.cpp": {
+    "mode": "100644",
+    "oid": "4b87c6a33e2df07ecd9a143483241738b754e7a2"
+  },
+  "servers/rendering/renderer_rd/shader_rd.h": {
+    "mode": "100644",
+    "oid": "063adfd90da66ffaee57693edc9442b9fe951668"
+  },
+  "servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered.glsl": {
+    "mode": "100644",
+    "oid": "93a340d80c2d1a924843af2e992905a3ea16df2b"
+  },
+  "servers/rendering/renderer_rd/shaders/forward_mobile/scene_forward_mobile.glsl": {
+    "mode": "100644",
+    "oid": "272e213695e2cb1f79b22c57f07e1c3b3bf45f4b"
+  },
+  "servers/rendering/renderer_rd/storage_rd/material_storage.cpp": {
+    "mode": "100644",
+    "oid": "4261390ba4ed73d5870df65299f5d842756856fe"
+  },
+  "servers/rendering/renderer_rd/storage_rd/material_storage.h": {
+    "mode": "100644",
+    "oid": "48277ce9b6070910c46e22d31e6beec9216d066e"
+  },
+  "servers/rendering/renderer_rd/storage_rd/mesh_storage.cpp": {
+    "mode": "100644",
+    "oid": "3124c3293b8b2eece525fafd4945d48db4e09382"
+  },
+  "servers/rendering/renderer_rd/storage_rd/mesh_storage.h": {
+    "mode": "100644",
+    "oid": "035324d51f81eae3adfee4279ae5d95734166d1b"
+  },
+  "servers/rendering/renderer_rd/storage_rd/particles_storage.cpp": {
+    "mode": "100644",
+    "oid": "ac11d4bd0044ac8d5a2a7cbc0e0f1cf3c85dd4c9"
+  },
+  "servers/rendering/renderer_rd/storage_rd/particles_storage.h": {
+    "mode": "100644",
+    "oid": "021526a2cb543b6c1e40906460e189096f1eb9c9"
+  },
+  "servers/rendering/renderer_rd/storage_rd/render_data_rd.h": {
+    "mode": "100644",
+    "oid": "a1ad90dd4294a7aa594c4f6d71595b8ec28c5620"
+  },
+  "servers/rendering/renderer_scene_cull.cpp": {
+    "mode": "100644",
+    "oid": "2264f5710c2d176612f55eec752ea039a0fbf015"
+  },
+  "servers/rendering/renderer_scene_cull.h": {
+    "mode": "100644",
+    "oid": "65612aa7c707ada26785a5e1ed4438eb4f4cecdb"
+  },
+  "servers/rendering/renderer_scene_render.h": {
+    "mode": "100644",
+    "oid": "c8e24999b1c639da7b4fd519f76eba863b942455"
+  },
+  "servers/rendering/renderer_viewport.cpp": {
+    "mode": "100644",
+    "oid": "e5fcbe483a59bb40e360a2ae270047134b95a7af"
+  },
+  "servers/rendering/renderer_viewport.h": {
+    "mode": "100644",
+    "oid": "4c2d5d68b826b2d764c4b1699ceabd1067284363"
+  },
+  "servers/rendering/rendering_device.cpp": {
+    "mode": "100644",
+    "oid": "552c6d72794e286cdb1575a5b0fdcf1b3eaab674"
+  },
+  "servers/rendering/rendering_device.h": {
+    "mode": "100644",
+    "oid": "e53f5191015e2ef72b4321b0014b03597cefbcd5"
+  },
+  "servers/rendering/rendering_device_commons.h": {
+    "mode": "100644",
+    "oid": "d4ba0f629837153e5d30c76fc6eca87dd107a64d"
+  },
+  "servers/rendering/rendering_device_driver.cpp": {
+    "mode": "100644",
+    "oid": "dfc739f0cfe2b5dead16bc5ee11a6d48413c69a5"
+  },
+  "servers/rendering/rendering_device_driver.h": {
+    "mode": "100644",
+    "oid": "36135767de4e567faa43d0ca37d554cc5ec38705"
+  },
+  "servers/rendering/rendering_device_graph.cpp": {
+    "mode": "100644",
+    "oid": "4ae684fdb3f967def41084bd9e255068a44de263"
+  },
+  "servers/rendering/rendering_device_graph.h": {
+    "mode": "100644",
+    "oid": "a6f7a58487f2e35575fc7add9243eb873cb6edc8"
+  },
+  "servers/rendering/rendering_server.cpp": {
+    "mode": "100644",
+    "oid": "cadb955566e8faf70e3e05ac7f82af537c5b5b65"
+  },
+  "servers/rendering/rendering_server.h": {
+    "mode": "100644",
+    "oid": "4191145c4a3517023dd3150767b4df303ae84a82"
+  },
+  "servers/rendering/rendering_server_default.cpp": {
+    "mode": "100644",
+    "oid": "1a8493ee511ab819767387fabd455b7bbad8a3d9"
+  },
+  "servers/rendering/rendering_server_default.h": {
+    "mode": "100644",
+    "oid": "ab6ffb98c752157bb3ee7ffdc42062bdfb64f4a3"
+  },
+  "servers/rendering/rendering_server_types.h": {
+    "mode": "100644",
+    "oid": "2bc40f0c2235cb123361a52b418d6b85cd7daafe"
+  },
+  "servers/rendering/rendering_shader_container.cpp": {
+    "mode": "100644",
+    "oid": "403e7cbef534d4bb7674b98fd6ba44a71de42e9d"
+  },
+  "servers/rendering/rendering_shader_container.h": {
+    "mode": "100644",
+    "oid": "53a358c106fa35ec05bfda5be2700c5f57057b58"
+  },
+  "servers/rendering/shader_compile_test_bridge.cpp": {
+    "mode": "100644",
+    "oid": "4011f189768c21f34214b0b3ef7e3e75755038b3"
+  },
+  "servers/rendering/shader_compile_test_bridge.h": {
+    "mode": "100644",
+    "oid": "98b8686caede3ef458da89c59904fb7589ba1769"
+  },
+  "servers/rendering/storage/mesh_storage.cpp": {
+    "mode": "100644",
+    "oid": "cdae71230f8dd9c5de126804bc0dda6f2c7ffc71"
+  },
+  "servers/rendering/storage/mesh_storage.h": {
+    "mode": "100644",
+    "oid": "e919b9867d71b87f0cc855b6a2d6c6647efcff28"
+  },
+  "servers/rendering/storage/particles_storage.h": {
+    "mode": "100644",
+    "oid": "2b98dc4bff919b42be7a9c35cb97e638fb9c2f60"
+  },
+  "tests/core/object/device_exit_startup_fixture.h": {
+    "mode": "100644",
+    "oid": "849784e98910650ae388de79638e8f9ccdd4c22a"
+  },
+  "tests/core/object/fixtures/device_exit_dynamic_library.c": {
+    "mode": "100644",
+    "oid": "bf102797733d7a56bb243883f143f4caf7f70893"
+  },
+  "tests/core/object/test_device_exit_contract.cpp": {
+    "mode": "100644",
+    "oid": "cf726d409e367efab27b17848957153cd66a58b0"
+  },
+  "tests/core/object/test_device_exit_core_cycle.cpp": {
+    "mode": "100644",
+    "oid": "d06f6b279db61aee59b5155f4ca4434db87626d0"
+  },
+  "tests/core/object/test_device_exit_early_finalize.cpp": {
+    "mode": "100644",
+    "oid": "b90bbbaa07e9e53fcda402844e25e3faa2a2aab2"
+  },
+  "tests/core/object/test_device_exit_entry.cpp": {
+    "mode": "100644",
+    "oid": "6670e47a8c953bc235cd59aa8999b2c3d7d956d8"
+  },
+  "tests/core/object/test_device_exit_library_close.cpp": {
+    "mode": "100644",
+    "oid": "8a4a682793442badf386cd960b16781fe2ee4647"
+  },
+  "tests/core/object/test_device_exit_method.cpp": {
+    "mode": "100644",
+    "oid": "ae5451ab5a39b4dee740d9a1d71c9b3b0f863c5e"
+  },
+  "tests/core/object/test_device_exit_scene_ready.cpp": {
+    "mode": "100644",
+    "oid": "80f12f61ada8fb2a831dc659e1d0ff69f06be893"
+  },
+  "tests/core/object/test_device_exit_startup_fixture.cpp": {
+    "mode": "100644",
+    "oid": "02a2cfd4874ce3ce78ed389f9c24ba0f2bcaef40"
+  },
+  "tests/core/object/test_device_exit_typed_abi.cpp": {
+    "mode": "100644",
+    "oid": "03262942126e513c7241522310b144702a0dbb2a"
+  },
+  "tests/core/object/test_editor_help_shutdown.cpp": {
+    "mode": "100644",
+    "oid": "2f90afd291f3673ed7c3066304d045e915de04c1"
+  },
+  "tests/core/object/test_message_queue.cpp": {
+    "mode": "100644",
+    "oid": "d779c3a83ef8376e14edd10e2408f424a4099461"
+  },
+  "tests/core/object/test_object_lifetime.cpp": {
+    "mode": "100644",
+    "oid": "0931d1ead936af928e43ec4c0a0782258ac747f8"
+  },
+  "tests/core/templates/test_command_queue.cpp": {
+    "mode": "100644",
+    "oid": "2317efb7910b17ad717e48e8f6b7cba0f7119838"
+  },
+  "tests/core/templates/test_command_queue_bounded.cpp": {
+    "mode": "100644",
+    "oid": "9076c7fd07e5d62a155c55fd3bbbdbf0494acef0"
+  },
+  "tests/native/skinned_mesh_capture_tests/NATIVE_CAPTURE_INTERFACE.md": {
+    "mode": "100644",
+    "oid": "ce4ca2bc326d9fe00a86cf0dd5b5912e02e6c03e"
+  },
+  "tests/native/skinned_mesh_capture_tests/README.md": {
+    "mode": "100644",
+    "oid": "f91ad92b9fb0e8166904e376ea094f28c148ad3e"
+  },
+  "tests/native/skinned_mesh_capture_tests/native_hook_payload.schema.json": {
+    "mode": "100644",
+    "oid": "8030d45bc5e5881ae98d88088b9c2545d3b7ef71"
+  },
+  "tests/scene/test_owner_identity.cpp": {
+    "mode": "100644",
+    "oid": "44adae3de053be61b223ba8823d21de6a9af2f67"
+  },
+  "tests/scene/test_resource_snapshot_bridge.cpp": {
+    "mode": "100644",
+    "oid": "45452fcbf58b50d53f730bdeddf17a936500d3c5"
+  },
+  "tests/scene/test_texture_snapshot.cpp": {
+    "mode": "100644",
+    "oid": "c2dc0d27f93d033302f35f8bf44a0525cce625a7"
+  },
+  "tests/servers/rendering/fixtures/multimesh_rebuild/README.md": {
+    "mode": "100644",
+    "oid": "728a2b9f19f9ffc217d38e65fb53a25b6804fb5f"
+  },
+  "tests/servers/rendering/fixtures/multimesh_rebuild/cached_visible.gd": {
+    "mode": "100644",
+    "oid": "2cf19a75f9707780dff0f7f7e0d3454b89a031b6"
+  },
+  "tests/servers/rendering/fixtures/multimesh_rebuild/gles_visible.gd": {
+    "mode": "100644",
+    "oid": "1a7bdf6a63174f933110167b8f0249505ca57bea"
+  },
+  "tests/servers/rendering/fixtures/multimesh_rebuild/invalid_allocation.gd": {
+    "mode": "100644",
+    "oid": "727c4e734aad69db3b4cc9cbd19031ce0c9038c6"
+  },
+  "tests/servers/rendering/fixtures/multimesh_rebuild/matrix.gd": {
+    "mode": "100644",
+    "oid": "39fe9331e1b79055f92c1b71f2acd12bd782b887"
+  },
+  "tests/servers/rendering/fixtures/multimesh_rebuild/motion.gd": {
+    "mode": "100644",
+    "oid": "484a307611b40fa85fafdd72515232763cfc31a1"
+  },
+  "tests/servers/rendering/fixtures/multimesh_rebuild/project.godot": {
+    "mode": "100644",
+    "oid": "282716e7a24db019550b0b0a0660d1df2141ba36"
+  },
+  "tests/servers/rendering/test_external_output_contract.cpp": {
+    "mode": "100644",
+    "oid": "5c9b682eef731fc53f6c1d6d8008311c38138a88"
+  },
+  "tests/servers/rendering/test_mesh_storage_external.cpp": {
+    "mode": "100644",
+    "oid": "b0c512f01ae9e398aabed421071017e43497dfee"
+  },
+  "tests/servers/rendering/test_metal_completion.cpp": {
+    "mode": "100644",
+    "oid": "76237766dea11c5cd999ac07776a9e782e9d8924"
+  },
+  "tests/servers/rendering/test_multimesh_rebuild.cpp": {
+    "mode": "100644",
+    "oid": "0225bd105198086a6227e02e125376f75a08eeea"
+  },
+  "tests/servers/rendering/test_particles_readback.cpp": {
+    "mode": "100644",
+    "oid": "8edb8af8addf8ffcda3b188b75e768f09d09774d"
+  },
+  "tests/servers/rendering/test_particles_trail_failure.cpp": {
+    "mode": "100644",
+    "oid": "b1ba2940209677aaebbbd9b432675036f50ea23f"
+  },
+  "tests/servers/rendering/test_qualification_ack.cpp": {
+    "mode": "100644",
+    "oid": "a013f52d26f4ef1487ed51d9188f9c80263d2b7e"
+  },
+  "tests/servers/rendering/test_qualification_backing_serial.cpp": {
+    "mode": "100644",
+    "oid": "7c9c5f3a8fce3ef3c0761c104fa2ed04d33edaf1"
+  },
+  "tests/servers/rendering/test_qualification_finalize_tail.cpp": {
+    "mode": "100644",
+    "oid": "ad2883e1b06c6ba4f99e4f578774096873bcb6c0"
+  },
+  "tests/servers/rendering/test_qualification_frame.cpp": {
+    "mode": "100644",
+    "oid": "6e383e37b57717e7d82c6025c2d1f4356f58f33f"
+  },
+  "tests/servers/rendering/test_qualification_graph_order.cpp": {
+    "mode": "100644",
+    "oid": "7228c37413796fa6e97090968f95378dd14e2fc0"
+  },
+  "tests/servers/rendering/test_qualification_metal_calls.cpp": {
+    "mode": "100644",
+    "oid": "cc997febfd1d52226a47ea0be614caaef8c819c9"
+  },
+  "tests/servers/rendering/test_qualification_physical.cpp": {
+    "mode": "100644",
+    "oid": "9153335342cb1123c9a032c6eb4ea90269379b1d"
+  },
+  "tests/servers/rendering/test_qualification_rt.cpp": {
+    "mode": "100644",
+    "oid": "bf13e5fda7bbdb935d7676df4017854ad2e915ea"
+  },
+  "tests/servers/rendering/test_qualification_staging.cpp": {
+    "mode": "100644",
+    "oid": "b6ed057fdd87aa16758c3c549c14abe9662af2c4"
+  },
+  "tests/servers/rendering/test_qualification_ticket.cpp": {
+    "mode": "100644",
+    "oid": "f2f0f46feeaa15aedc8e335934df6c67ae25b8cc"
+  },
+  "tests/servers/rendering/test_qualification_vulkan_allocation.cpp": {
+    "mode": "100644",
+    "oid": "d267e15ab39ee34a9f3c7bbf84f2054493bd5790"
+  },
+  "tests/servers/rendering/test_render_capture_lifetime.cpp": {
+    "mode": "100644",
+    "oid": "aeb5b5b6716ccbe3d60671aeb9d8555cb241b386"
+  },
+  "tests/servers/rendering/test_rendering_device_driver_completion.cpp": {
+    "mode": "100644",
+    "oid": "3906393cd329570e3a90715342f8605de70ce83e"
+  },
+  "tests/servers/rendering/test_rendering_device_frame_wait.cpp": {
+    "mode": "100644",
+    "oid": "eb715811a173414d3e15bbe51478b3ca63529b24"
+  },
+  "tests/servers/rendering/test_rendering_device_graph_handles.cpp": {
+    "mode": "100644",
+    "oid": "6ead3f1d596e6977ab2eb39241170f421e68bc38"
+  },
+  "tests/servers/rendering/test_rendering_device_transfer.cpp": {
+    "mode": "100644",
+    "oid": "f10ce22724490ed134757bca0b3ad7f68f9ec949"
+  },
+  "tests/servers/rendering/test_shader_compile_policy.cpp": {
+    "mode": "100644",
+    "oid": "a3a539fea86139584b29e0bd0ed39af33ebd6c2a"
+  },
+  "tests/servers/rendering/test_viewport_camera_source.cpp": {
+    "mode": "100644",
+    "oid": "7ca12bdfb57a4e9614796e9e1f3c29d2bc9130e0"
+  },
+  "tests/servers/rendering/test_viewport_ordinary_history.cpp": {
+    "mode": "100644",
+    "oid": "a83b1f1e607c5c3f5d589809751f60e6a1fd17b9"
+  },
+  "tests/servers/rendering/test_vulkan_completion.cpp": {
+    "mode": "100644",
+    "oid": "421dd86e27f35f0ee1b26cd89079636de73a6915"
+  },
+  "tests/servers/rendering/transfer_test_driver_base.h": {
+    "mode": "100644",
+    "oid": "2c20cc97b25d7a2f114b7aac831fb9a23c26c825"
+  },
+  "tests/test_engine_build_identity.py": {
+    "mode": "100644",
+    "oid": "7851a39f2af1d8e07260f4e44739d50df0fd3d0e"
+  },
+  "tests/test_main.cpp": {
+    "mode": "100644",
+    "oid": "eabe126d7933ca90a75ae05439c869688dab64c6"
+  }
+}

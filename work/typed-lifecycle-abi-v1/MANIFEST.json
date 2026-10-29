@@ -9549,6 +9549,166 @@
     "work/qualification-readback-map-error-20261029/MANIFEST.json": {
       "bytes": 8794,
       "sha256": "9d34b9426838919ea0a4b1866640ac85506529c3506ebc6c42ede9db6d6e4c1c"
+    },
+    "work/joint-integration-native-20261029/ABI_ALIGNMENT.json": {
+      "bytes": 582,
+      "sha256": "af0704d621ffa690ea63474d2b99c5d5cd263075ddc21f0e9332ba3a55171770"
+    },
+    "work/joint-integration-native-20261029/A_OBSERVED_RUNTIME.log": {
+      "bytes": 507,
+      "sha256": "96cfa2bc417a53d72d387cb35b5f730f17a330f54b9bb8565caa46a087699675"
+    },
+    "work/joint-integration-native-20261029/A_OBSERVED_RUNTIME_RECEIPT.json": {
+      "bytes": 4433,
+      "sha256": "fceaa10d61370b667650e12ea062aaa6e5ce8fe87fff38eaa09ced7360449bb6"
+    },
+    "work/joint-integration-native-20261029/A_RUNTIME_INTAKE.json": {
+      "bytes": 735,
+      "sha256": "b09dd1193c1ebe47e26d71b3414ccdc31409b8d5bc8458e692748cf0809f9bb8"
+    },
+    "work/joint-integration-native-20261029/BRANCH_CREATION.json": {
+      "bytes": 910,
+      "sha256": "23913ad7bba4f57fdf6252e26a581eefe0042c0a8891ae806b63dd1cfb1266bc"
+    },
+    "work/joint-integration-native-20261029/COMMITS.json": {
+      "bytes": 78089,
+      "sha256": "83b6875e551ca50d5b2c4131d164aa5b6df1efb6f7ae387077f7dba9e9b3e741"
+    },
+    "work/joint-integration-native-20261029/CORE_CONTROLLED_IDENTITY.json": {
+      "bytes": 311,
+      "sha256": "e4ef85a827c1aa7631c26ac2a1b966b1668700a85e46492bf1db05fe1eb44fbc"
+    },
+    "work/joint-integration-native-20261029/CORE_IDENTITY.log": {
+      "bytes": 441,
+      "sha256": "2bee5956bdbe0691058a4902216dbe072d2ea2e39ef7e526fea84463d2a24e7e"
+    },
+    "work/joint-integration-native-20261029/CORE_IDENTITY.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/joint-integration-native-20261029/CORE_IDENTITY_COMMAND.json": {
+      "bytes": 304,
+      "sha256": "42c9439072f1fe655d8fa2e70f9f80b6c54b34e3180b955930067686ee85d8f2"
+    },
+    "work/joint-integration-native-20261029/CORE_VERSION.log": {
+      "bytes": 36,
+      "sha256": "27f9dfca8c363f98dfdc3fefb5f8c309f5c4e8ae376dad04b2af47881150fde2"
+    },
+    "work/joint-integration-native-20261029/CORE_VERSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/joint-integration-native-20261029/DYNAMIC_FIXTURE.md": {
+      "bytes": 1871,
+      "sha256": "5ab04a2587a79b27a1520eeb86b091510fb29682223cc27cb55616fe97e4ab9c"
+    },
+    "work/joint-integration-native-20261029/DYNAMIC_FIXTURE_BUILD.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "work/joint-integration-native-20261029/DYNAMIC_FIXTURE_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/joint-integration-native-20261029/DYNAMIC_FIXTURE_BUILD_COMMAND.json": {
+      "bytes": 401,
+      "sha256": "6e4fcd7bdceed4ea2070db2caa10535d4d5bf2c8ea63feb61235cd6a4ea680f8"
+    },
+    "work/joint-integration-native-20261029/DYNAMIC_FIXTURE_INPUTS.json": {
+      "bytes": 744,
+      "sha256": "e42f61be41db9abce0fce0675851060a1a82682c1a1786116e9cd7c79de8668c"
+    },
+    "work/joint-integration-native-20261029/DYNAMIC_FIXTURE_TEST.log": {
+      "bytes": 298,
+      "sha256": "46ce387e0d1ae6dd74ef964eb3994edae7575411c980f46a43a33482a2a87a47"
+    },
+    "work/joint-integration-native-20261029/DYNAMIC_FIXTURE_TEST.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/joint-integration-native-20261029/DYNAMIC_FIXTURE_TEST_COMMAND.json": {
+      "bytes": 533,
+      "sha256": "c469dac45157baa855ff58c196d9104121759fe699cc81ec0ee81c229f58c3fb"
+    },
+    "work/joint-integration-native-20261029/EXTENSION_API.log": {
+      "bytes": 125,
+      "sha256": "cd41e7009675519b6746aded0495782100dbab3bae077890a76c3ffc4bc233d4"
+    },
+    "work/joint-integration-native-20261029/EXTENSION_API.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/joint-integration-native-20261029/EXTENSION_API_COMMAND.json": {
+      "bytes": 308,
+      "sha256": "af58c61a58df0a432787e29832119ea7bf4e4c52a66c1f48ef9816b2b5135f2c"
+    },
+    "work/joint-integration-native-20261029/HANDOFF.md": {
+      "bytes": 5272,
+      "sha256": "348afa16cd2d7e563f590ef5365ae02da605fbdcfaa5a0508a3525b13ed19bb0"
+    },
+    "work/joint-integration-native-20261029/INPUTS.json": {
+      "bytes": 3966,
+      "sha256": "3ce130421ec5d06d596885eb14aacbdecbcb5b9b8dbd1b54c1dd069cd2eb6882"
+    },
+    "work/joint-integration-native-20261029/INTEGRATION_STATUS.md": {
+      "bytes": 3729,
+      "sha256": "55510480ccd2e978750e27b2dec42e612e93b00d6624965bff38c31a470599af"
+    },
+    "work/joint-integration-native-20261029/PATCH_REPLAY.json": {
+      "bytes": 590,
+      "sha256": "1a268bd93024b5b67f2245ab16fd60bcdbbb016390cc9fdf22c5c61b9386ecbc"
+    },
+    "work/joint-integration-native-20261029/PRODUCTION_DELTA.patch": {
+      "bytes": 3338647,
+      "sha256": "b0cb2d164fa708fc4bf523100e725df99dbfa4a7ed937c13de5a3e6488677e81"
+    },
+    "work/joint-integration-native-20261029/REQUIRED_DIRTY_METAL_BUILD.patch": {
+      "bytes": 634,
+      "sha256": "f1926b7c21c206da464a3a2644d26f0ec6587c22f09687409d31291e2181662d"
+    },
+    "work/joint-integration-native-20261029/SOURCE_PATHS.json": {
+      "bytes": 33303,
+      "sha256": "a50892688bf123177ec1dc5ce14d7a9a856c76671ad44e63c3fd4702d8d4c104"
+    },
+    "work/joint-integration-native-20261029/SOURCE_TREE_BLOBS.json": {
+      "bytes": 38992,
+      "sha256": "68df2a1ce9bda08ca29adf58ce1355cde361d1d7feb10ba33e194a9d9b5bfb79"
+    },
+    "work/joint-integration-native-20261029/api-dump/extension_api.json": {
+      "bytes": 6976848,
+      "sha256": "e13672bf1db16ecd497850064d929b40dfc5412ff67fe54b442d0b50a35c5503"
+    },
+    "work/joint-integration-native-20261029/artifacts/gdextension_interface.gen.h": {
+      "bytes": 211080,
+      "sha256": "056dbb83c84733f71061295cf8639a9143f98428d38a8816571d570a887bf2d7"
+    },
+    "work/joint-integration-native-20261029/artifacts/gdextension_interface.json": {
+      "bytes": 486113,
+      "sha256": "d6a9fade372d644b153bd79aa133639226db45c1b64c59f47678355593a9b6cd"
+    },
+    "work/joint-integration-native-20261029/artifacts/metal.SCsub.observed": {
+      "bytes": 2253,
+      "sha256": "983222a4213d3cfb110b398fe330d341752dfd4f218cd0faaf7c7d28c8a90315"
+    },
+    "work/joint-integration-native-20261029/artifacts/sdk-gdextension_interface.h": {
+      "bytes": 211077,
+      "sha256": "997a4812a4f7b8369606bb635e0436d55f79ad07ed565203919350be19dcfa0b"
+    },
+    "work/joint-integration-native-20261029/identity-runtime/probe.gd": {
+      "bytes": 698,
+      "sha256": "cce95c76ae45a6fa99e731c94aded1944da1930908d077df88e6f3be4d4f17a2"
+    },
+    "work/joint-integration-native-20261029/identity-runtime/project.godot": {
+      "bytes": 51,
+      "sha256": "94fd673c254b34d95f4092be7a5007db63dc495ce74dde3fccda404da761b48f"
+    },
+    "work/joint-integration-native-20261029/verify_checkpoint.py": {
+      "bytes": 2948,
+      "sha256": "898a44acb060dc54f6516f8260a64b5400d55f7bfdcb32a9bc6034b34b52b7d6"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/typed-lifecycle-abi-v1/PROGRESS.md": {
+      "bytes": 192376,
+      "sha256": "76d8dda58097041ac7a8b8fa6fed0a26db4989e452982474ea9a3bc9f3b4a4f8"
     }
   }
 }

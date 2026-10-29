@@ -1,0 +1,15 @@
+diff --git a/drivers/metal/SCsub b/drivers/metal/SCsub
+index 2508421e719f5c058261ee3bd3dfd37218a6ace0..397d909c74c1c5c029aa74b46ffa6118e0b0e70f 100644
+--- a/drivers/metal/SCsub
++++ b/drivers/metal/SCsub
+@@ -7,6 +7,10 @@ Import("env")
+ env.Prepend(CPPPATH=["#thirdparty/metal-cpp/"])
+ 
+ env_metal = env.Clone()
++# metal-cpp intentionally sends Objective-C messages through null C++ receivers.
++# Preserve that nil behavior: otherwise Clang can remove valid control-flow
++# paths whose empty SharedPtr destructor calls release() on nullptr.
++env_metal.Append(CXXFLAGS=["-fno-delete-null-pointer-checks"])
+ 
+ # Thirdparty source files
+ 
