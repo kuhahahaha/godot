@@ -32,6 +32,14 @@
     "receipt": "work/exact-pair-runtime-rerun-20261030/RECEIPT.md",
     "commit": "1ec9294a5a"
   },
+  "current_dso_diagnostic": {
+    "editor_sha256": "150c8f1234b6cfd45ad163ed82f8cb50ef6e76d7016ee4c918e56489f1a43162",
+    "dso_sha256": "187850139bba4c1e124af25629ef4901a958ef9188e86b7b126e99e6b50fd96b",
+    "build_rc": 0,
+    "runtime": "three controls rc2; identical host.storage_owner_transport/E05/UNAVAILABLE; semantic bundle error labels not reached",
+    "build_receipt": "work/dso-diagnostic-rebuild-current-20261030-r5/RECEIPT.json",
+    "runtime_receipt": "work/u01-vfx-diagnostic-r2-20261030/RECEIPT.json"
+  },
   "d_owner_seam": {
     "owner": "E05",
     "missing": [

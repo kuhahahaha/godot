@@ -4,6 +4,8 @@ The current tests-enabled editor is pinned to SHA `fb8693bd5c159a724793b17f23581
 
 The exact non-headless runtime pair is public editor SHA `150c8f1234b6cfd45ad163ed82f8cb50ef6e76d7016ee4c918e56489f1a43162` with stable DSO SHA `0e1750c7ef509096201c849116d28ae385bd429ee914e4adebbd8960f0284041`. All three fixtures load the extension and stop at `host.storage_owner_transport / E05 / UNAVAILABLE`; no world admission follows.
 
+A fresh current-tree Debug DSO build returned rc0 with SHA `187850139bba4c1e124af25629ef4901a958ef9188e86b7b126e99e6b50fd96b` (receipt `work/dso-diagnostic-rebuild-current-20261030-r5/RECEIPT.json`). Re-running the three fixed Metal controls with that DSO and the same editor again returned rc2 at the identical E05 boundary; the new semantic-bundle error labels were therefore not reached (receipt `work/u01-vfx-diagnostic-r2-20261030/RECEIPT.json`).
+
 The remaining production seam is external owner input. E05 transport/account data, E06 issuer, and R01/D completion/readback/disposal authority are absent. The native substrate work continues independently and does not promote these negative runtime results to issuer, completion, Ready, or G1 authority.
 
 CI run `40930940598` completed with one failure in the Linux doubles GCC sanitizer job; the lld repair itself was not reached because the earlier tracked receipt files under ignored `work/` failed the static gitignore check. The workflow repair is integrated as `f6b0fc8152`, and the receipt-only follow-up is removed from the tracked tree by `a0574e6941` while retained locally. The workflow declares `linker: lld`, installs `lld` when selected, and keeps `use_static_cpp=no`; YAML parsing and `git diff --check` pass. A new public run is still required before claiming CI green.
