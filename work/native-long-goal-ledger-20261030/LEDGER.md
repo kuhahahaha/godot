@@ -6,7 +6,7 @@ The exact non-headless runtime pair is public editor SHA `150c8f1234b6cfd45ad163
 
 The remaining production seam is external owner input. E05 transport/account data, E06 issuer, and R01/D completion/readback/disposal authority are absent. The native substrate work continues independently and does not promote these negative runtime results to issuer, completion, Ready, or G1 authority.
 
-CI run `40930940598` remains in progress only for the Linux doubles GCC sanitizer job; it is tracked separately from the local green evidence.
+CI run `40930940598` remains in progress only for the Linux doubles GCC sanitizer job; it is tracked separately from the local green evidence. The missing-tool repair is now integrated as `f6b0fc8152`: the workflow declares `linker: lld`, installs `lld` when selected, and keeps `use_static_cpp=no`. YAML parsing and `git diff --check` pass; a new public run is still required before claiming CI green.
 
 E06/E09 selector audit: no matching doctest tags exist in the current source; zero-match runs are diagnostic only and do not prove issuer or recorder coverage.
 

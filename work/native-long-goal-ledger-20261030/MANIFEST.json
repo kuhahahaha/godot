@@ -49,7 +49,13 @@
     "Ready",
     "G1"
   ],
-  "ci": "run 40930940598 attempt2; 19 completed successes, Linux doubles GCC ASAN/UBSAN still in_progress",
+  "ci": {
+    "previous_run": "40930940598 attempt2; 19 completed successes, Linux doubles GCC ASAN/UBSAN still in_progress",
+    "repair_commit": "f6b0fc8152",
+    "repair_receipt": "work/ci-linux-double-sanitizer-lld-20261030/RECEIPT.md",
+    "local_checks": "YAML parse and git diff --check pass",
+    "status": "NEW_PUBLIC_RUN_REQUIRED"
+  },
   "coverage_gaps": {
     "E06_selector": "no [Qualification][E06] doctest tags; selector matched 0",
     "E09_selector": "no [Qualification][E09] doctest tags; E09 appears only as ABI owner-kind constants",
