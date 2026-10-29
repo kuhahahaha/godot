@@ -1,0 +1,33 @@
+{
+  "scope": "Existing host sources/commands and exact completed native evidence for B intake; no new actual E09 run.",
+  "files": {
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-unit-correlation-20261029/probe.cpp": {
+      "bytes": 40764,
+      "sha256": "1e5b1a823f654d2d4b507ee4089d6d2696c6f76d5334c1569d89c5e830d62908"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-unit-correlation-20261029/runtime/probe.gd": {
+      "bytes": 333,
+      "sha256": "c5b613004558c54f60e9eb0b9c62327ef8f7dce8cf7ad9573cbee22bc45ad1e1"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-unit-correlation-20261029/runtime/probe.gdextension": {
+      "bytes": 198,
+      "sha256": "8233c16b21586c683e9c839c2cd8e4b975cd0bbe2a6d1dbf52dec2b7be097d30"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-unit-correlation-20261029/PROBE_BUILD_COMMAND.json": {
+      "bytes": 5822,
+      "sha256": "83663d6902d3c32168e770710c8eab98ddfdd40e9237e3cc71d5250568252068"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-unit-correlation-20261029/POSITIVE_COMMAND.json": {
+      "bytes": 359,
+      "sha256": "76602fa72b7dab23e917640c40a4011b4f9ac923ccc20a0af4d36d526ac8d034"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-unit-correlation-20261029/RECEIPT.md": {
+      "bytes": 2410,
+      "sha256": "ade5effeb6e6c553155cf2e86a58592a85f1b9a1e5c273ced243b851be8e7d12"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-unit-correlation-20261029/MANIFEST.json": {
+      "bytes": 8256,
+      "sha256": "197f6e3f370779b6dfec23833de8f04f0a1fb3d83d1d1dc138a3b0d6f7054d3b"
+    }
+  }
+}

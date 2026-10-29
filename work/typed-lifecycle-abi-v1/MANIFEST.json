@@ -9275,8 +9275,20 @@
       "sha256": "3d3632ea4c83b2ab9f8eca386c08208e48006501cb85b9cf4c43686c90ff369c"
     },
     "work/e09-native-mainchain-20261029/MANIFEST.json": {
-      "bytes": 828,
-      "sha256": "3f19f5955bf4b19538fb756d8573b431ac8000e712a80395b35e89511db3efc3"
+      "bytes": 1246,
+      "sha256": "0ad72564b2beae5be266773a80d25aa3e6da36fd062216b6b12e77b790f53fbc"
+    },
+    "work/e09-native-mainchain-20261029/NATIVE_HOST_FOR_B.md": {
+      "bytes": 8002,
+      "sha256": "62fdd1e0c1e033638c93f15ab54800cb616c7f4b63a1207132b3fc1a70c68ffa"
+    },
+    "work/e09-native-mainchain-20261029/B_INPUT_PINS.json": {
+      "bytes": 1731,
+      "sha256": "f021a3372217a46cba60c704a69c39d097b3c5605a105b6e74c1142f739a2d42"
+    },
+    "work/e09-native-mainchain-20261029/B_HANDOFF_REVIEW.md": {
+      "bytes": 770,
+      "sha256": "c1bfb125e95dd7d00f49aacb9e932b3e1a7e76c5816f81b4fa300601767edd47"
     }
   }
 }

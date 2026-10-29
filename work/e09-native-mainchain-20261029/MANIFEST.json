@@ -20,6 +20,18 @@
     "SOURCE_CENSUS.json": {
       "bytes": 3896,
       "sha256": "3d3632ea4c83b2ab9f8eca386c08208e48006501cb85b9cf4c43686c90ff369c"
+    },
+    "NATIVE_HOST_FOR_B.md": {
+      "bytes": 8002,
+      "sha256": "62fdd1e0c1e033638c93f15ab54800cb616c7f4b63a1207132b3fc1a70c68ffa"
+    },
+    "B_INPUT_PINS.json": {
+      "bytes": 1731,
+      "sha256": "f021a3372217a46cba60c704a69c39d097b3c5605a105b6e74c1142f739a2d42"
+    },
+    "B_HANDOFF_REVIEW.md": {
+      "bytes": 770,
+      "sha256": "c1bfb125e95dd7d00f49aacb9e932b3e1a7e76c5816f81b4fa300601767edd47"
     }
   }
 }
