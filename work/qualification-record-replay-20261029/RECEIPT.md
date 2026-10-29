@@ -1,0 +1,7 @@
+# Original qualification record replay
+
+Commit `9a0eb61bac` resolves an exact existing ordinary record request from its original Registry ticket under the original Registry mutex, before attempting RD admission for new work. Exact full request equality, original bridge/main-device/thread/epoch/holder admission, recording Busy, changed-request refusal and acknowledged-tombstone refusal remain required. New keys still lock RD and run resource/capacity preflight before issuance.
+
+A deterministic threaded test holds RD mutex on another thread. RED: 1 case / 11 assertions, 6 failures (all replay/error-class checks prematurely saw ERR_BUSY). GREEN: 1/11. Debug Qualification 22/369, RT4/378, K03/P2 22/350; UBSan Qualification22/369 without diagnostics; Release build/version rc0. Real non-headless Metal qrt_ticket safe control passes with exact ticket replay, facts, 16-byte readback (7,8,9,10), physical returns and clean unload.
+
+This proves a controlled RD-contention replay defect. The historical Metal run in qualification-snapshot-output/native-ticket stopped at record_repeat ERR_BUSY but did not log its reason, so it cannot be uniquely attributed to this source branch. No stress reliability, canonical ANGE E09/U08 owner, Ready or full G1 claim. Test Registry cells are fixture-enrolled and issue no production authority. Final source was linked before commit and reports base b009d24e0; hashes distinguish source and executable identities.

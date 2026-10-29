@@ -1,0 +1,128 @@
+{
+  "files": {
+    "BUILD_COMMANDS.json": {
+      "bytes": 938,
+      "sha256": "93202468eb49d6780876929668558ea1c4fab9122ad1c2d5c5d8cbfad0a2d5da"
+    },
+    "DEBUG_RUNS.json": {
+      "bytes": 704,
+      "sha256": "0ae1301bddb9ce20c6892c53505a20f55dfb98a37dad5b1fba4352ef51dba8a0"
+    },
+    "DIFF_CHECK.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "DIFF_CHECK.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "FOCUSED.log": {
+      "bytes": 298,
+      "sha256": "ddee2b5e859571b0feda72b64a42bd6ad708c05e68358cd98cf2378445bbd819"
+    },
+    "FOCUSED.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "GREEN_BUILD.log": {
+      "bytes": 2011,
+      "sha256": "1bb1de15e442fe576fa489fe430560f0e111b61ecc4558231473863b4f3efa13"
+    },
+    "GREEN_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "INDEPENDENT_REVIEW.md": {
+      "bytes": 953,
+      "sha256": "e0055ca4e9b01b4c490d584fca1c2e0a0797dd34116a3e09f71a5b3c88bc5f7e"
+    },
+    "K03.log": {
+      "bytes": 302,
+      "sha256": "43bc624086da88779d641afe96876e14086097cc7ecbe552069e25651caf4c62"
+    },
+    "K03.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "QUALIFICATION.log": {
+      "bytes": 302,
+      "sha256": "a39be3f98b55aea5f037c6a0444a6ea90a1f8ff85c637ea4036b301a17c91d12"
+    },
+    "QUALIFICATION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "RECEIPT.md": {
+      "bytes": 1455,
+      "sha256": "194dd5d6517245098fd8de167c4fc6f10dbb68bdf4dc6d4e90b6138777985f99"
+    },
+    "RED.log": {
+      "bytes": 1572,
+      "sha256": "87b6261c848d6143e02b2e4938c1c5f5c9376db2d6fcd775ab736f0e4a10b3cc"
+    },
+    "RED.rc": {
+      "bytes": 2,
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    "RED_BUILD.log": {
+      "bytes": 2334,
+      "sha256": "76f28e9158a570bb9a353ef800d108e491534f2b547add167fe4d1fba561131d"
+    },
+    "RED_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "RELEASE_BUILD.log": {
+      "bytes": 2085,
+      "sha256": "19744a962fb85a12e32ab02e0d461013c95ff2d25ac2a5e8e99a3d18dbe4153d"
+    },
+    "RELEASE_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "RELEASE_VERSION.log": {
+      "bytes": 36,
+      "sha256": "99c358b3d89faa6465f73c312a2227dd0ca656c3bf4cbd17068f717b2772e166"
+    },
+    "RELEASE_VERSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "RT.log": {
+      "bytes": 302,
+      "sha256": "46c0fc4d69034875981ce44527729e5fc1364a948c54607bbb2dcafad6214096"
+    },
+    "RT.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "SOURCE_MANIFEST.json": {
+      "bytes": 2892,
+      "sha256": "f73bd8aff6aaa9eab644895d48e22f7b83aa9088588a53a9f488a3cc62db98dd"
+    },
+    "UBSAN.log": {
+      "bytes": 302,
+      "sha256": "a39be3f98b55aea5f037c6a0444a6ea90a1f8ff85c637ea4036b301a17c91d12"
+    },
+    "UBSAN.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "UBSAN_BUILD.log": {
+      "bytes": 2338,
+      "sha256": "a170ef25ee2c34f72c781e06378aa88611e34a346d10dc104f3099124524bd22"
+    },
+    "UBSAN_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "native-ticket/qrt_ticket-safe.log": {
+      "bytes": 1335,
+      "sha256": "62d1bca04fbd5734638e56e9dc87df398b7813935cfb680fa1bdb16ec9999af5"
+    },
+    "native-ticket/results.json": {
+      "bytes": 1312,
+      "sha256": "2dc449f5ad7c05689e1c12fbabc8e780b39906c8a5efb53e6fd677b6c36d17ef"
+    }
+  }
+}

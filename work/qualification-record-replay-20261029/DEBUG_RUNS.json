@@ -1,0 +1,38 @@
+[
+  {
+    "command": [
+      "bin/godot.macos.editor.dev.arm64",
+      "--headless",
+      "--test",
+      "--test-case=[Qualification] exact record replay returns original ticket despite RD contention"
+    ],
+    "rc": 0
+  },
+  {
+    "command": [
+      "bin/godot.macos.editor.dev.arm64",
+      "--headless",
+      "--test",
+      "--test-case=[Qualification]*"
+    ],
+    "rc": 0
+  },
+  {
+    "command": [
+      "bin/godot.macos.editor.dev.arm64",
+      "--headless",
+      "--test",
+      "--test-case=[QualificationRt]*"
+    ],
+    "rc": 0
+  },
+  {
+    "command": [
+      "bin/godot.macos.editor.dev.arm64",
+      "--headless",
+      "--test",
+      "--test-case=[K03][P2]*"
+    ],
+    "rc": 0
+  }
+]
