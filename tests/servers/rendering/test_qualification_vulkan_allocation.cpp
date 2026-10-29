@@ -434,6 +434,16 @@ TEST_CASE("[QualificationNative][Vulkan] shared texture creation rejects invalid
  ERR_PRINT_ON;
  CHECK_FALSE(bool(texture));
 }
+TEST_CASE("[QualificationNative][Vulkan] shared texture slice creation rejects invalid owner before access") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ RenderingDeviceDriver::TextureView view;
+ view.format=RenderingDeviceDriver::DATA_FORMAT_R8_UNORM;
+ ERR_PRINT_OFF;
+ auto texture=driver.texture_create_shared_from_slice(RenderingDeviceDriver::TextureID(),view,RenderingDeviceDriver::TEXTURE_SLICE_2D,0,1,0,1);
+ ERR_PRINT_ON;
+ CHECK_FALSE(bool(texture));
+}
 TEST_CASE("[QualificationNative][Vulkan] buffer free rejects invalid resource before access") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
