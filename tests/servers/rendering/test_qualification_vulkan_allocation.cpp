@@ -268,6 +268,14 @@ TEST_CASE("[QualificationNative][Vulkan] pipeline barrier rejects missing views 
  ERR_PRINT_ON;
  CHECK(true);
 }
+TEST_CASE("[QualificationNative][Vulkan] framebuffer creation rejects missing attachment views before resource access") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ ERR_PRINT_OFF;
+ auto framebuffer=driver.framebuffer_create(RenderingDeviceDriver::RenderPassID(),VectorView<RenderingDeviceDriver::TextureID>(nullptr,1),1,1);
+ ERR_PRINT_ON;
+ CHECK_FALSE(bool(framebuffer));
+}
 TEST_CASE("[QualificationNative][Vulkan] queue submit rejects missing wait view before queue access") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);

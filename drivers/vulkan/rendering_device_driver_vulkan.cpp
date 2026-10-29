@@ -4927,6 +4927,7 @@ void RenderingDeviceDriverVulkan::swap_chain_free(SwapChainID p_swap_chain) {
 /*********************/
 
 RDD::FramebufferID RenderingDeviceDriverVulkan::framebuffer_create(RenderPassID p_render_pass, VectorView<TextureID> p_attachments, uint32_t p_width, uint32_t p_height) {
+	ERR_FAIL_COND_V(p_attachments.size() > 0 && !p_attachments.ptr(), FramebufferID());
 	RenderPassInfo *render_pass = (RenderPassInfo *)(p_render_pass.id);
 
 	uint32_t fragment_density_map_offsets_layers = 0;
