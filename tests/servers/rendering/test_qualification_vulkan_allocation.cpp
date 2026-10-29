@@ -260,6 +260,14 @@ TEST_CASE("[QualificationNative][Vulkan] queue submit rejects missing wait view 
  ERR_PRINT_ON;
  CHECK(result==ERR_INVALID_PARAMETER);
 }
+TEST_CASE("[QualificationNative][Vulkan] buffer copy rejects missing region view before command access") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ ERR_PRINT_OFF;
+ driver.command_copy_buffer(RenderingDeviceDriver::CommandBufferID(),RenderingDeviceDriver::BufferID(),RenderingDeviceDriver::BufferID(),VectorView<RenderingDeviceDriver::BufferCopyRegion>(nullptr,1));
+ ERR_PRINT_ON;
+ CHECK(true);
+}
 TEST_CASE("[QualificationNative][Vulkan] texture creation rejects an invalid shareable format") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);

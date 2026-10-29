@@ -5851,6 +5851,7 @@ void RenderingDeviceDriverVulkan::command_clear_buffer(CommandBufferID p_cmd_buf
 }
 
 void RenderingDeviceDriverVulkan::command_copy_buffer(CommandBufferID p_cmd_buffer, BufferID p_src_buffer, BufferID p_dst_buffer, VectorView<BufferCopyRegion> p_regions) {
+	ERR_FAIL_COND(p_regions.size() > 0 && !p_regions.ptr());
 	const CommandBufferInfo *command_buffer = (const CommandBufferInfo *)p_cmd_buffer.id;
 	const BufferInfo *src_buf_info = (const BufferInfo *)p_src_buffer.id;
 	const BufferInfo *dst_buf_info = (const BufferInfo *)p_dst_buffer.id;
