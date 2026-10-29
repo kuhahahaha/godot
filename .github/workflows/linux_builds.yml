@@ -48,8 +48,12 @@ jobs:
 
           - name: Editor with doubles and GCC sanitizers (target=editor, dev_build=yes, scu_build=yes, precision=double, use_asan=yes, use_ubsan=yes, linker=lld)
             cache-name: linux-editor-double-sanitizers-lld
+            linker: lld
             target: editor
             # Debug symbols disabled as they're huge on this build and we hit the 14 GB limit for runners.
+            # The sanitizer-sized editor binary still overflows mold's 32-bit
+            # PC-relative AccessKit Rust exception-table relocation even when
+            # libstdc++ is dynamically linked; use lld for this matrix.
             scons-flags: >-
               dev_build=yes
               scu_build=yes
@@ -57,9 +61,7 @@ jobs:
               precision=double
               use_asan=yes
               use_ubsan=yes
-              # mold cannot link the large GCC sanitizer image with AccessKit's
-              # Rust eh_frame relocation; lld preserves this matrix without the
-              # R_X86_64_PC32 range failure.
+              use_static_cpp=no
               linker=lld
             bin: ./bin/godot.linuxbsd.editor.dev.double.x86_64.san
             proj-test: true
@@ -132,6 +134,9 @@ jobs:
           sudo apt-get install libwayland-bin  # TODO: Figure out somehow how to embed this one.
           if [ "${{ matrix.proj-test }}" == "true" -o "${{ matrix.proj-export }}" == "true" ]; then
             sudo apt-get install mesa-vulkan-drivers
+          fi
+          if [ "${{ matrix.linker }}" == "lld" ]; then
+            sudo apt-get install lld
           fi
 
       - name: Free disk space on runner
