@@ -436,6 +436,29 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_native_unit_retire_rele
  for(auto *&child:bridge->units)if(child && !child->acknowledged && child->retire_serial==retire.handle_serial) {
   if(child->maintenance_error!=OK || child->report.state!=1 || child->report.return_status!=1 || child->report.reason || child->report.native_error || child->report.native_code || child->report.unresolved_mask || child->report.freed_mask!=child->backing.known_mask || child->backing.possible_mask)return result(ERR_BUSY,16);
   if(child->queued)return result(ERR_BUSY,19);
+  const auto &backing=child->backing;const auto &report=child->report;
+  const uint32_t known=backing.known_mask;
+  if(!child->retiring || (known!=1U && known!=3U) || !valid_abi(&backing.abi) || !valid_abi(&report.abi) ||
+    backing.unit.registry_instance!=instance || backing.unit.handle_serial!=child->serial ||
+    report.unit.registry_instance!=backing.unit.registry_instance || report.unit.handle_serial!=backing.unit.handle_serial ||
+    !backing.event_seq || !report.report_revision || !report.retire_operation || !child->dependency_serial ||
+    report.dependency_set_serial!=child->dependency_serial || report.enqueued_mask!=known || report.absent_mask)return result(ERR_BUSY,16);
+  MutexLock shader_lock(child->shader.mutex);MutexLock pipeline_lock(child->pipeline.mutex);
+  auto matches=[&](const QualificationPhysicalReturn &cell,uint64_t rid,uint64_t serial,uint64_t reported_rid,uint64_t reported_serial,uint32_t frame,uint64_t epoch,uint64_t event) {
+   return rid && serial && cell.bridge==bridge->serial && cell.child==child->serial && cell.rid==rid && cell.serial==serial &&
+     cell.use_closed.load() && cell.enqueued && cell.frame_slot!=UINT32_MAX && cell.frame_epoch && cell.free_event &&
+     cell.free_event==cell.reserved_event && cell.free_event>backing.event_seq && reported_rid==rid && reported_serial==serial &&
+     frame==cell.frame_slot && epoch==cell.frame_epoch && event==cell.free_event;
+  };
+  auto absent=[](const QualificationPhysicalReturn &cell,uint64_t rid,uint64_t serial,uint64_t reported_rid,uint64_t reported_serial,uint32_t frame,uint64_t epoch,uint64_t event) {
+   return !rid && !serial && !reported_rid && !reported_serial && !frame && !epoch && !event &&
+     !cell.rid && !cell.serial && !cell.enqueued && !cell.reserved_event && !cell.free_event;
+  };
+  if((known&1U)?!matches(child->shader,backing.shader_rid,backing.shader_serial,report.shader_rid,report.shader_serial,report.shader_frame_slot,report.shader_frame_epoch,report.shader_free_event_seq):
+     !absent(child->shader,backing.shader_rid,backing.shader_serial,report.shader_rid,report.shader_serial,report.shader_frame_slot,report.shader_frame_epoch,report.shader_free_event_seq))return result(ERR_BUSY,16);
+  if((known&2U)?!matches(child->pipeline,backing.pipeline_rid,backing.pipeline_serial,report.pipeline_rid,report.pipeline_serial,report.pipeline_frame_slot,report.pipeline_frame_epoch,report.pipeline_free_event_seq):
+     !absent(child->pipeline,backing.pipeline_rid,backing.pipeline_serial,report.pipeline_rid,report.pipeline_serial,report.pipeline_frame_slot,report.pipeline_frame_epoch,report.pipeline_free_event_seq))return result(ERR_BUSY,16);
+  if(known==3U && child->shader.free_event==child->pipeline.free_event)return result(ERR_BUSY,16);
   child->acknowledged=true;--bridge->children;--records[bridge->library].private_refs;return result(OK);
  }
  return result(ERR_DOES_NOT_EXIST,17);
