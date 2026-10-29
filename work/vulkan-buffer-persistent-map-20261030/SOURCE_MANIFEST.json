@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "status": "CURRENT_VULKAN_PERSISTENT_BUFFER_MAP_GUARD",
+  "godot_head_at_capture": "425221b06d0197abfd369a7d39033b6296e5485c",
+  "source": {
+    "drivers/vulkan/rendering_device_driver_vulkan.cpp": {
+      "bytes": 399045,
+      "sha256": "3de3c82fb456872503ac1ddefcbc42c2ec91f70c44d38cf785a3b5a8826f9cfd"
+    },
+    "tests/servers/rendering/test_qualification_vulkan_allocation.cpp": {
+      "bytes": 33799,
+      "sha256": "ed43a37b36617a5db6315cd29cea2a11796f3735f7a09f245033e2dfddd4f283"
+    }
+  },
+  "binary_sha256": {
+    "bin/godot.macos.editor.dev.arm64": "7ef21e2755a1cbf8325969c4491943e8b7c5844ee4fc980be3dda7a338ba026d",
+    "bin/godot.macos.editor.dev.arm64.san": "09d1e4154e5dc02212a10145faecd768f7e3eabfb9c7c25c0a0e60b15de78181",
+    "bin/godot.macos.template_release.arm64": "8b978eb39b5b8ffc59550bdc60b0eb4f18cc12778809d60aeeaa3ad419ab4e6d"
+  }
+}

@@ -6897,6 +6897,118 @@
     "work/vulkan-buffer-unmap-20261030/MANIFEST.json": {
       "bytes": 3693,
       "sha256": "42cf2c0368f689a15ea65927331618a872ae88aba20c78dabd18d74296c46eb7"
+    },
+    "work/vulkan-buffer-persistent-map-20261030/BINARY_HASHES.json": {
+      "bytes": 331,
+      "sha256": "b6d2203e1826f494404714226f0afb63f0e5cf812ded40223fc0fa3165b84f50"
+    },
+    "work/vulkan-buffer-persistent-map-20261030/BUFFER_PERSISTENT.log": {
+      "bytes": 294,
+      "sha256": "2f0a8b30089faa9518cad48d9f2c382d0ea43cc60e195f5d8eb554d202e04566"
+    },
+    "work/vulkan-buffer-persistent-map-20261030/BUFFER_PERSISTENT.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-buffer-persistent-map-20261030/COMMANDS.json": {
+      "bytes": 1730,
+      "sha256": "ceed5105e03b12ab8dc75497000c610530b43a95328d7fd658609d5b7e78a2ca"
+    },
+    "work/vulkan-buffer-persistent-map-20261030/DEBUG_BUILD.log": {
+      "bytes": 2021,
+      "sha256": "a43eea0791ceaf15020f4a973ff481934aa559700a542e90d42f89e4ec13b094"
+    },
+    "work/vulkan-buffer-persistent-map-20261030/DEBUG_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-buffer-persistent-map-20261030/DIFF_CHECK_R1.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "work/vulkan-buffer-persistent-map-20261030/DIFF_CHECK_R1.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-buffer-persistent-map-20261030/INDEPENDENT_REVIEW_R1.md": {
+      "bytes": 367,
+      "sha256": "da343d9463bd3b3669e544f63f86526a52e60137fc5057b41434039e320f3d0e"
+    },
+    "work/vulkan-buffer-persistent-map-20261030/K03_P2.log": {
+      "bytes": 302,
+      "sha256": "92b8610ce1ea3072c04c95636495bcea08ef5903be7996fe80c59d3aefdb2239"
+    },
+    "work/vulkan-buffer-persistent-map-20261030/K03_P2.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-buffer-persistent-map-20261030/RECEIPT_R1.md": {
+      "bytes": 1087,
+      "sha256": "10a0ffe9820b0316ab8cb4b8d5859865005edb33e974d4a8b5c73a2e029f7903"
+    },
+    "work/vulkan-buffer-persistent-map-20261030/RED_BUFFER_PERSISTENT.log": {
+      "bytes": 699,
+      "sha256": "e258ec1bcd6e66c243eab35230f3855411acd409243f5e7985000b716d74e981"
+    },
+    "work/vulkan-buffer-persistent-map-20261030/RED_BUFFER_PERSISTENT.rc": {
+      "bytes": 4,
+      "sha256": "e726b440cc164001999e718b51780d80314709efe06e7857282377be9111127b"
+    },
+    "work/vulkan-buffer-persistent-map-20261030/RED_BUILD.log": {
+      "bytes": 2345,
+      "sha256": "1e8878cd2dfcc81a68dc76cd0a6d501b38cf9a419d1e00b45305426b8c5ee6de"
+    },
+    "work/vulkan-buffer-persistent-map-20261030/RED_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-buffer-persistent-map-20261030/REGRESSION.log": {
+      "bytes": 302,
+      "sha256": "1ec9fa0792f62ae07ef5677e374c6b17bfc2117747ee16bfdc7305d5d71c0aeb"
+    },
+    "work/vulkan-buffer-persistent-map-20261030/REGRESSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-buffer-persistent-map-20261030/RELEASE_BUILD.log": {
+      "bytes": 2245,
+      "sha256": "9288568ccbbe2d716ddd0417b0f10bfeeb28395cf499bff9b4023d26fa8e5d27"
+    },
+    "work/vulkan-buffer-persistent-map-20261030/RELEASE_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-buffer-persistent-map-20261030/RELEASE_VERSION.log": {
+      "bytes": 36,
+      "sha256": "cb462cbd8498c377eae3ce131f5d46a9ce7404512a9e0df4614862a9a09895de"
+    },
+    "work/vulkan-buffer-persistent-map-20261030/RELEASE_VERSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-buffer-persistent-map-20261030/SOURCE_MANIFEST.json": {
+      "bytes": 890,
+      "sha256": "4c383285b986fea3389dd6761a50b84d04e4ba5abee31591cc13796843c74835"
+    },
+    "work/vulkan-buffer-persistent-map-20261030/UBSAN_BUILD.log": {
+      "bytes": 2505,
+      "sha256": "e0f711b9eae598c0dcc99b7391f303db1066266162d0d433f28922baf8d5202d"
+    },
+    "work/vulkan-buffer-persistent-map-20261030/UBSAN_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-buffer-persistent-map-20261030/UBSAN_REGRESSION.log": {
+      "bytes": 302,
+      "sha256": "1ec9fa0792f62ae07ef5677e374c6b17bfc2117747ee16bfdc7305d5d71c0aeb"
+    },
+    "work/vulkan-buffer-persistent-map-20261030/UBSAN_REGRESSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-buffer-persistent-map-20261030/MANIFEST.json": {
+      "bytes": 3713,
+      "sha256": "d07d015304539bb8437f4bf7feed6f6aa8d7511e2cd82c7860e05d03320fed4a"
     }
   }
 }
