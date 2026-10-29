@@ -1,0 +1,36 @@
+{
+  "package": "current-pair-ci-recheck-20261030",
+  "code_change": false,
+  "godot_head": "331ddf1d7fc763598834eb5497549681f1710b23",
+  "ange_head": "8e2f7d282e96e406b5311b23db74c16328dcc4cf",
+  "editor_sha256": "cfbce3ac09a77a2ad9ea496e73183193b9a63767df4b19e4972e6aa25658884c",
+  "current_dso_sha256": "38df3a53ee04aa6d977b313853a2bb3bd7efafe207a960920f80644535a4fcab",
+  "build_rc": 0,
+  "tests": {
+    "callqueue": {"rc": 0, "cases": 6, "assertions": 92},
+    "qualification": {"rc": 0, "cases": 102, "assertions": 1896},
+    "callqueue_capacity": {"rc": 0, "cases": 1, "assertions": 39}
+  },
+  "runtime": {
+    "u01_vfx_rc": 2,
+    "u01_no_vfx_rc": 2,
+    "u01_invalid_vfx_rc": 2,
+    "first_boundary": "host.storage_owner_transport/E05/UNAVAILABLE"
+  },
+  "public_ci": {
+    "run": 40930940598,
+    "head": "65c6a08ee6fb6b1408d9ab4fe41859d3f7a9b83d",
+    "job": "Linux Editor doubles GCC ASAN/UBSAN linker=lld",
+    "first_error": "tests/core/object/test_message_queue.cpp:265",
+    "new_public_run_required": true
+  },
+  "files": [
+    "RECEIPT.md", "INDEPENDENT_REVIEW.md", "COMMANDS.txt", "MANIFEST.json",
+    "BUILD_EDITOR.log", "BUILD_EDITOR.rc", "EDITOR_SHA256",
+    "CALLQUEUE.log", "CALLQUEUE.rc", "QUALIFICATION.log", "QUALIFICATION.rc",
+    "CALLQUEUE_CAPACITY.log", "CALLQUEUE_CAPACITY.rc",
+    "LATEST_DSO_U01_VFX.log", "LATEST_DSO_U01_VFX.rc",
+    "LATEST_DSO_U01_NO_VFX.log", "LATEST_DSO_U01_NO_VFX.rc",
+    "LATEST_DSO_U01_INVALID_VFX.log", "LATEST_DSO_U01_INVALID_VFX.rc"
+  ]
+}

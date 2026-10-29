@@ -1,0 +1,13 @@
+Failed call with 0 arguments. Message queue out of memory. 
+Failed set target ID: 5469372734. Message queue out of memory. 
+Failed notification: 12345 target ID: 5502927166. Message queue out of memory. 
+TOTAL PAGES: 1 (4096 bytes).
+BUFFER BYTES: 4080.
+TOTAL PAGES: 1 (4096 bytes).
+BUFFER BYTES: 4080.
+TOTAL PAGES: 1 (4096 bytes).
+BUFFER BYTES: 4080.
+===============================================================================
+[doctest] test cases:  1 |  1 passed | 0 failed | 1865 skipped
+[doctest] assertions: 39 | 39 passed | 0 failed |
+[doctest] Status: SUCCESS!
