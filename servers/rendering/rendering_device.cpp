@@ -2028,16 +2028,18 @@ RID RenderingDevice::texture_create_shared(const TextureView &p_view, RID p_with
 		RDD::TextureView regular_view = tv;
 		regular_view.format = src_texture->format;
 		texture.driver_id = driver->texture_create_shared(texture.driver_id, regular_view);
+		ERR_FAIL_COND_V(!texture.driver_id, RID());
 
 		// Create the independent texture for the alias.
 		RDD::TextureFormat alias_format = texture.texture_format();
 		alias_format.format = tv.format;
 		alias_format.usage_bits = TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_CAN_COPY_TO_BIT;
 
+		const RDD::TextureID fallback_texture = driver->texture_create(alias_format, tv);
+		ERR_FAIL_COND_V(!fallback_texture, RID());
 		_texture_check_shared_fallback(src_texture);
 		_texture_check_shared_fallback(&texture);
-
-		texture.shared_fallback->texture = driver->texture_create(alias_format, tv);
+		texture.shared_fallback->texture = fallback_texture;
 		texture.shared_fallback->raw_reinterpretation = raw_reintepretation;
 		texture_memory += driver->texture_get_allocation_size(texture.shared_fallback->texture);
 
@@ -2205,6 +2207,7 @@ RID RenderingDevice::texture_create_shared_from_slice(const TextureView &p_view,
 		RDD::TextureView regular_view = tv;
 		regular_view.format = src_texture->format;
 		texture.driver_id = driver->texture_create_shared_from_slice(src_texture->driver_id, regular_view, p_slice_type, p_layer, slice_layers, p_mipmap, p_mipmaps);
+		ERR_FAIL_COND_V(!texture.driver_id, RID());
 
 		// Create the independent texture for the slice.
 		RDD::TextureSubresourceRange slice_range = texture.barrier_range();
@@ -2218,10 +2221,11 @@ RID RenderingDevice::texture_create_shared_from_slice(const TextureView &p_view,
 		slice_format.format = tv.format;
 		slice_format.usage_bits = TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_CAN_COPY_TO_BIT;
 
+		const RDD::TextureID fallback_texture = driver->texture_create(slice_format, tv);
+		ERR_FAIL_COND_V(!fallback_texture, RID());
 		_texture_check_shared_fallback(src_texture);
 		_texture_check_shared_fallback(&texture);
-
-		texture.shared_fallback->texture = driver->texture_create(slice_format, tv);
+		texture.shared_fallback->texture = fallback_texture;
 		texture.shared_fallback->raw_reinterpretation = raw_reintepretation;
 		texture_memory += driver->texture_get_allocation_size(texture.shared_fallback->texture);
 

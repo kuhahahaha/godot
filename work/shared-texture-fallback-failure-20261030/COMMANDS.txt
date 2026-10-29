@@ -1,0 +1,13 @@
+GODOT_HEAD_BEFORE=c2a2a63d09dc1dbebe0ae049fc0d9e1bf5b57462
+ANGE_HEAD=8e2f7d282e96e406b5311b23db74c16328dcc4cf
+EDITOR_SHA256=6572725f75e93a6634819c552e1accbc064abf8be70947279e911f965deafc05
+DSO_SHA256=38df3a53ee04aa6d977b313853a2bb3bd7efafe207a960920f80644535a4fcab
+BUILD_RC=0
+QUALIFICATION_RC=0
+K03_RC=0
+RENDERING_DEVICE_RC=0
+R01_RC=0
+U01_VFX_RC=2
+U01_NO_VFX_RC=2
+U01_INVALID_VFX_RC=2
+RUNTIME_COMMAND=bin/godot.macos.editor.dev.arm64 --path <temporary-fixture> --display-driver macos --rendering-driver metal --rendering-method mobile --render-thread safe --script res://probe.gd
