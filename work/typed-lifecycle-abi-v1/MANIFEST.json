@@ -7965,6 +7965,70 @@
     "work/metal-provider-interface-census-20261029/MANIFEST.json": {
       "bytes": 425,
       "sha256": "c557d4189f6a70c8d7c552dccc8a8c02a1c4d2d951bf0373133513f430ac9525"
+    },
+    "work/metal-qrt-current-control-20261029/qrt_retirement-safe.log": {
+      "bytes": 1924,
+      "sha256": "521932913ca289cb17e5bf6c944e5546b1fadb326582291437f0b72e2cd1b23c"
+    },
+    "work/metal-qrt-current-control-20261029/qrt_cancel_prefix-safe.log": {
+      "bytes": 1565,
+      "sha256": "61df7e4a9dfa7b730e5019b9f43351b4d9ea1cf331116c18a1ba4587db3b3617"
+    },
+    "work/metal-qrt-current-control-20261029/RECEIPT.md": {
+      "bytes": 884,
+      "sha256": "60c6a6afc7bc919c2d8a0a70e8ab3de583c428af470037dd32c70263aa872073"
+    },
+    "work/metal-qrt-current-control-20261029/SOURCE_MANIFEST.json": {
+      "bytes": 10260,
+      "sha256": "cde65db6b12555be9d0f6d43fec575e3b29ce15f3b1249c6658e17a55d1976c0"
+    },
+    "work/metal-qrt-current-control-20261029/results.json": {
+      "bytes": 6606,
+      "sha256": "df299a917a96cf5806582379f5d2d3114dabcd3d43628d2247ff72364695f7d0"
+    },
+    "work/metal-qrt-current-control-20261029/qrt_retirement-separate.log": {
+      "bytes": 2298,
+      "sha256": "1e710a037792ce8a7ccaab92f292426dbe5b9438eca05219e7107bea9ba834e7"
+    },
+    "work/metal-qrt-current-control-20261029/qrt_cancel_empty-safe.log": {
+      "bytes": 1300,
+      "sha256": "5ad14a6324939505c880f6c95fb0c6fe45926841ed66f82a49ffaf17a7aad873"
+    },
+    "work/metal-qrt-current-control-20261029/SELF_REVIEW.md": {
+      "bytes": 425,
+      "sha256": "2d46d20690213ec84ffaaf19b7f327c1dd641823a60fe65e142a081b5f6dd647"
+    },
+    "work/metal-qrt-current-control-20261029/MANIFEST.json": {
+      "bytes": 1424,
+      "sha256": "c5c3e53078a2a9b8e60b4f22b06fad17410676b909f5f853dee652dcfcaadc33"
+    },
+    "work/metal-qrt-current-control-20261029/qrt_ticket-safe.log": {
+      "bytes": 1335,
+      "sha256": "2cd3fa797101e83de00ff656836671d323ee85be3baa619e4295bac6286863cb"
+    },
+    "work/metal-qrt-current-control-20261029/qrt_upload-safe.log": {
+      "bytes": 1741,
+      "sha256": "e8838e0f617ca1bbf21a2289c500f868053e3816fd037bd47aee8f11c513f6dc"
+    },
+    "work/metal-qrt-separate-ticket-20261029/RECEIPT.md": {
+      "bytes": 1040,
+      "sha256": "c5ba01866aaf27e3c9e38c2efe17ba33122ae1f5bb7046a3a5fdb631e76ea8a3"
+    },
+    "work/metal-qrt-separate-ticket-20261029/SOURCE_MANIFEST.json": {
+      "bytes": 10260,
+      "sha256": "cde65db6b12555be9d0f6d43fec575e3b29ce15f3b1249c6658e17a55d1976c0"
+    },
+    "work/metal-qrt-separate-ticket-20261029/SEPARATE_TICKET.log": {
+      "bytes": 1131,
+      "sha256": "e42d50a87ecb4b84d21bc084ca6d637b73794caeb040ef98b18540af09af1a95"
+    },
+    "work/metal-qrt-separate-ticket-20261029/MANIFEST.json": {
+      "bytes": 562,
+      "sha256": "f3e24328b0720a872fb05dfac78acdcc82665c5c4be4e41ae7b382883a736728"
+    },
+    "work/metal-qrt-separate-ticket-20261029/RUN.json": {
+      "bytes": 1217,
+      "sha256": "ea397bd1dc36be48dc7752eacb20f0cd5e235415578bad30cf7e7752c68eb1bc"
     }
   }
 }

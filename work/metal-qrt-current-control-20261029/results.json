@@ -1,0 +1,240 @@
+{
+  "binary": "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+  "sha256": "ee18c4d8326e3d720dbb842ef274931d6c8f1a7b2509e25e71272d3e2931dbc8",
+  "scope": "D native controls; separateRT only NoRecordedUse; no A grant or Verified",
+  "runs": [
+    {
+      "case": "qrt_retirement",
+      "mode": "safe",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-bridge-implementation-20261026/integration-preflight-20261026/native-fixtures/qrt_retirement",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "safe",
+        "--script",
+        "probe.gd"
+      ],
+      "rc": 0,
+      "log": "/Users/macbookair/Documents/Work/godot_ANGE/work/metal-qrt-current-control-20261029/qrt_retirement-safe.log",
+      "kinds": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "checks": {
+        "exit": true,
+        "actual_metal": true,
+        "kinds": true,
+        "main_loop": true,
+        "clean": true,
+        "unload": true,
+        "terminal_2": true,
+        "terminal_3": true,
+        "storage_return": true,
+        "unit_return": true,
+        "main_authority": true
+      }
+    },
+    {
+      "case": "qrt_ticket",
+      "mode": "safe",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-bridge-implementation-20261026/integration-preflight-20261026/native-fixtures/qrt_ticket",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "safe",
+        "--script",
+        "probe.gd"
+      ],
+      "rc": 0,
+      "log": "/Users/macbookair/Documents/Work/godot_ANGE/work/metal-qrt-current-control-20261029/qrt_ticket-safe.log",
+      "kinds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "checks": {
+        "exit": true,
+        "actual_metal": true,
+        "kinds": true,
+        "main_loop": true,
+        "clean": true,
+        "unload": true,
+        "terminal_2": true,
+        "terminal_3": true,
+        "exact_readback": true
+      }
+    },
+    {
+      "case": "qrt_upload",
+      "mode": "safe",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-bridge-implementation-20261026/integration-preflight-20261026/native-fixtures/qrt_upload",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "safe",
+        "--script",
+        "probe.gd"
+      ],
+      "rc": 0,
+      "log": "/Users/macbookair/Documents/Work/godot_ANGE/work/metal-qrt-current-control-20261029/qrt_upload-safe.log",
+      "kinds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        7,
+        8,
+        9
+      ],
+      "checks": {
+        "exit": true,
+        "actual_metal": true,
+        "kinds": true,
+        "main_loop": true,
+        "clean": true,
+        "unload": true,
+        "terminal_2": true,
+        "terminal_3": true,
+        "same_ticket_return": true
+      }
+    },
+    {
+      "case": "qrt_cancel_prefix",
+      "mode": "safe",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-bridge-implementation-20261026/integration-preflight-20261026/native-fixtures/qrt_cancel_prefix",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "safe",
+        "--script",
+        "probe.gd"
+      ],
+      "rc": 0,
+      "log": "/Users/macbookair/Documents/Work/godot_ANGE/work/metal-qrt-current-control-20261029/qrt_cancel_prefix-safe.log",
+      "kinds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        7,
+        8
+      ],
+      "checks": {
+        "exit": true,
+        "actual_metal": true,
+        "kinds": true,
+        "main_loop": true,
+        "clean": true,
+        "unload": true,
+        "terminal_2": true,
+        "terminal_3": true,
+        "same_ticket_return": true
+      }
+    },
+    {
+      "case": "qrt_cancel_empty",
+      "mode": "safe",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-bridge-implementation-20261026/integration-preflight-20261026/native-fixtures/qrt_cancel_empty",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "safe",
+        "--script",
+        "probe.gd"
+      ],
+      "rc": 0,
+      "log": "/Users/macbookair/Documents/Work/godot_ANGE/work/metal-qrt-current-control-20261029/qrt_cancel_empty-safe.log",
+      "kinds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        7
+      ],
+      "checks": {
+        "exit": true,
+        "actual_metal": true,
+        "kinds": true,
+        "main_loop": true,
+        "clean": true,
+        "unload": true,
+        "terminal_2": true,
+        "terminal_3": true,
+        "same_ticket_return": true
+      }
+    },
+    {
+      "case": "qrt_retirement",
+      "mode": "separate",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-bridge-implementation-20261026/integration-preflight-20261026/native-fixtures/qrt_retirement",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "separate",
+        "--script",
+        "probe.gd"
+      ],
+      "rc": 0,
+      "log": "/Users/macbookair/Documents/Work/godot_ANGE/work/metal-qrt-current-control-20261029/qrt_retirement-separate.log",
+      "kinds": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "checks": {
+        "exit": true,
+        "actual_metal": true,
+        "kinds": true,
+        "main_loop": true,
+        "clean": true,
+        "unload": true,
+        "terminal_2": true,
+        "terminal_3": true,
+        "storage_return": true,
+        "unit_return": true,
+        "main_authority": true
+      }
+    }
+  ]
+}

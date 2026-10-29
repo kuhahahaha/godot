@@ -1,0 +1,20 @@
+{
+  "files": {
+    "RECEIPT.md": {
+      "bytes": 1040,
+      "sha256": "c5ba01866aaf27e3c9e38c2efe17ba33122ae1f5bb7046a3a5fdb631e76ea8a3"
+    },
+    "RUN.json": {
+      "bytes": 1217,
+      "sha256": "ea397bd1dc36be48dc7752eacb20f0cd5e235415578bad30cf7e7752c68eb1bc"
+    },
+    "SEPARATE_TICKET.log": {
+      "bytes": 1131,
+      "sha256": "e42d50a87ecb4b84d21bc084ca6d637b73794caeb040ef98b18540af09af1a95"
+    },
+    "SOURCE_MANIFEST.json": {
+      "bytes": 10260,
+      "sha256": "cde65db6b12555be9d0f6d43fec575e3b29ce15f3b1249c6658e17a55d1976c0"
+    }
+  }
+}

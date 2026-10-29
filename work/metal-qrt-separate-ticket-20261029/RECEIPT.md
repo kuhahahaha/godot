@@ -1,0 +1,5 @@
+# Separate-thread ticket fixture limitation
+
+The existing qrt_ticket fixture ran with `--render-thread separate` on real Metal and returned 133. QRT storage and two native units returned first; the fixture then directly called `RenderingDevice::uniform_set_create` from its SceneReady callback and hit the original render-thread check. Its `_Exit(133)` terminates the fixture immediately: no ticket record, same-request readback, retirement acknowledgement or clean unload is observed. This is a fixture thread-affinity failure, not proof that QRT ticket execution itself fails.
+
+The current D E09 implementation explicitly requires the original main render thread before starting and before creating its sets; the original U08 separate-thread allocation remains unavailable. A valid separate-thread positive test must arrange set creation on the real render thread while preserving original owner, CodeHold and callback lifetime, then separately prove the ticket/physical return. Fixture capacities do not establish that production grant.
