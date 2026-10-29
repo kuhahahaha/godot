@@ -1,13 +1,21 @@
 {
   "schema_version": 1,
   "files": {
+    "CURRENT_TEST.log": {
+      "bytes": 294,
+      "sha256": "0f289c57676255c43e8e6240ebe1577db92d7ab47828db3d9089f47f6f2b6ef8"
+    },
+    "CURRENT_TEST.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
     "INDEPENDENT_REVIEW.md": {
-      "bytes": 1518,
-      "sha256": "9774c4287709c39aa4c78d8c27330e4bdc6cef9f0463e3286355a85a254d9fe9"
+      "bytes": 1596,
+      "sha256": "f98225c103059b287ab8b9779505e4a73e38fbaa11bce27f7f00386d1c310b1e"
     },
     "RECEIPT.md": {
-      "bytes": 2841,
-      "sha256": "bc50e113097688e452347b12deac74aa7a71145634d15248ba377d2ae26a3b80"
+      "bytes": 2984,
+      "sha256": "84f02abfd7509f1d586f4c8184625a079f28bdce43427ce84a936c31fb89e523"
     },
     "SOURCE_MANIFEST.md": {
       "bytes": 2015,

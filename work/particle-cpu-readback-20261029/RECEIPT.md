@@ -42,3 +42,5 @@ particle-to-E09 association. This patch therefore exposes a real CPU snapshot
 through Godot's RenderingServer without claiming ANGE qualification, dispatch
 admission, completion, GPU authority, or release. An external ANGE producer
 must consume this entry before those claims can be made.
+
+Current checkout recheck: `[ParticlesReadback]*` passed 2 cases / 5 assertions, rc0; log and rc are `CURRENT_TEST.log` and `CURRENT_TEST.rc`.

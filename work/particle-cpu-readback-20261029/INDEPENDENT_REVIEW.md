@@ -29,3 +29,5 @@ RenderingServer forwarding/binding, and the focused regression test.
 Debug affected-object build, Release affected-object build, and UBSan object
 check are sufficient for this scoped change. The full suite has unrelated
 failures recorded in `RECEIPT.md`.
+
+Current checkout recheck confirms the focused readback cases still pass 2/5.
