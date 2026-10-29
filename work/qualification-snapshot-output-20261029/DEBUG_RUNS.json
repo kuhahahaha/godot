@@ -1,0 +1,52 @@
+[
+  {
+    "name": "FOCUSED",
+    "command": [
+      "bin/godot.macos.editor.dev.arm64",
+      "--headless",
+      "--test",
+      "--test-case=[Qualification] overlapping snapshot outputs are rejected without writing destination"
+    ],
+    "rc": 0
+  },
+  {
+    "name": "QUALIFICATION",
+    "command": [
+      "bin/godot.macos.editor.dev.arm64",
+      "--headless",
+      "--test",
+      "--test-case=[Qualification]*"
+    ],
+    "rc": 0
+  },
+  {
+    "name": "RT",
+    "command": [
+      "bin/godot.macos.editor.dev.arm64",
+      "--headless",
+      "--test",
+      "--test-case=[QualificationRt]*"
+    ],
+    "rc": 0
+  },
+  {
+    "name": "PHYSICAL",
+    "command": [
+      "bin/godot.macos.editor.dev.arm64",
+      "--headless",
+      "--test",
+      "--test-case=[RenderingDevice][Qualification]*"
+    ],
+    "rc": 0
+  },
+  {
+    "name": "K03",
+    "command": [
+      "bin/godot.macos.editor.dev.arm64",
+      "--headless",
+      "--test",
+      "--test-case=[K03][P2]*"
+    ],
+    "rc": 0
+  }
+]

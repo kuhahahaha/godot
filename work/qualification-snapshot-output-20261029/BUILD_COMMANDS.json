@@ -1,0 +1,7 @@
+{
+  "cwd": "/Users/macbookair/Documents/Work/godot_ANGE",
+  "debug": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j4 platform=macos target=editor dev_build=yes tests=yes builtin_glslang=yes",
+  "ubsan": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j4 platform=macos target=editor dev_build=yes tests=yes use_ubsan=yes builtin_glslang=yes",
+  "release": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j4 platform=macos target=template_release dev_build=no tests=no builtin_glslang=yes",
+  "ubsan_run": "bin/godot.macos.editor.dev.arm64.san --headless --test --test-case='[Qualification]*'"
+}

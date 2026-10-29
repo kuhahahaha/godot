@@ -1,0 +1,16 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_qualification_ticket.cpp:328:
+TEST CASE:  [Qualification] overlapping snapshot outputs are rejected without writing destination
+
+tests/servers/rendering/test_qualification_ticket.cpp:24: ERROR: CHECK( memcmp(&fact, &original, sizeof(fact)) == 0 ) is NOT correct!
+  values: CHECK( -120 == 0 )
+
+tests/servers/rendering/test_qualification_ticket.cpp:30: ERROR: CHECK( memcmp(destination, original_bytes, sizeof(destination)) == 0 ) is NOT correct!
+  values: CHECK( -33 == 0 )
+
+===============================================================================
+[doctest] test cases: 1 | 0 passed | 1 failed | 1786 skipped
+[doctest] assertions: 8 | 6 passed | 2 failed |
+[doctest] Status: FAILURE!

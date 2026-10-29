@@ -1,0 +1,56 @@
+{
+  "commit": "ed4ccf580ebb706382e6fd5e55854e7b8c97d2b0",
+  "source_at_post_run_capture": {
+    "/Users/macbookair/Documents/Work/godot_ANGE/core/extension/gdextension_qualification_ticket.cpp": {
+      "bytes": 43391,
+      "sha256": "bb481b3c74a88b18743e923f6067944d8fa9175f0cbdad3e97cf2b9a8395eb6b"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/tests/servers/rendering/test_qualification_ticket.cpp": {
+      "bytes": 24304,
+      "sha256": "a77aa845009b4ece2255b9a9b6f588e8e5c1dc02cf2ac93109196b49e0f018e7"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/core/extension/gdextension_interface.json": {
+      "bytes": 486113,
+      "sha256": "d6a9fade372d644b153bd79aa133639226db45c1b64c59f47678355593a9b6cd"
+    },
+    "/Users/macbookair/Documents/Work/Dev/ANGEParticleDesign/docs/contracts/device-exit/OWNER_ADAPTER.md": {
+      "bytes": 194877,
+      "sha256": "291269f6ff92af5ee33703dd1ffb5c08ff33c7fb72fa0f7e6207ae5bbe22f554"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-bridge-implementation-20261026/integration-preflight-20261026/run_combined_qrt.py": {
+      "bytes": 4212,
+      "sha256": "bac472f6b7e7e14789c497efc33c2236092dd797dcc772ddfb784bd79f53d45b"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-bridge-implementation-20261026/integration-preflight-20261026/native-fixtures/qrt_ticket_probe.cpp": {
+      "bytes": 27084,
+      "sha256": "4452ca9d48c9f201343a4118ddcfc7d3e113f7c0e7a60e094ab5e766340e4061"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-bridge-implementation-20261026/integration-preflight-20261026/native-fixtures/qrt_ticket_probe.dylib": {
+      "bytes": 118344,
+      "sha256": "93567d48b3fd2d25fd7d37d6f8da97938004f90fa521fc4ba0a6eab14ef86878"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-bridge-implementation-20261026/integration-preflight-20261026/native-fixtures/ticket_containers/capture.bin": {
+      "bytes": 600,
+      "sha256": "602da96b2d48c732ddeddb2d1d00ec952be6a5d3fd4daabb0d097611157ec360"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-bridge-implementation-20261026/integration-preflight-20261026/native-fixtures/ticket_containers/body.bin": {
+      "bytes": 632,
+      "sha256": "c2011bc48390ecb634ff805a7c38e6a5555d4d790ef5f9610376c951d96b761f"
+    }
+  },
+  "binaries_at_capture": {
+    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64": {
+      "bytes": 301084736,
+      "sha256": "c5635d3363aa81b870194e1aa697a8325517eba66095c368b5939fba2f61162d"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64.san": {
+      "bytes": 919110112,
+      "sha256": "0358f1843da5648b427b843c1acf33bbd0ae6bef5a6a8d57ec81a2697fd7bdca"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.template_release.arm64": {
+      "bytes": 65769232,
+      "sha256": "72a04a68b7e5d4dd9f83c6fdfe3f8cdf27298f763beb27fc885e9dd27d19c49e"
+    }
+  },
+  "identity_note": "Binaries were linked from final source before the commit; version labels f0da042b8. Hashes distinguish exact artifacts from source commit labels."
+}

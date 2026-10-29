@@ -1,0 +1,45 @@
+{
+  "binary": "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+  "sha256": "c5635d3363aa81b870194e1aa697a8325517eba66095c368b5939fba2f61162d",
+  "scope": "D native controls; separateRT only NoRecordedUse; no A grant or Verified",
+  "runs": [
+    {
+      "case": "qrt_ticket",
+      "mode": "safe",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-bridge-implementation-20261026/integration-preflight-20261026/native-fixtures/qrt_ticket",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "safe",
+        "--script",
+        "probe.gd"
+      ],
+      "rc": 0,
+      "log": "/Users/macbookair/Documents/Work/godot_ANGE/work/qualification-snapshot-output-20261029/native-ticket-final/qrt_ticket-safe.log",
+      "kinds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "checks": {
+        "exit": true,
+        "actual_metal": true,
+        "kinds": true,
+        "main_loop": true,
+        "clean": true,
+        "unload": true,
+        "terminal_2": true,
+        "terminal_3": true,
+        "exact_readback": true
+      }
+    }
+  ]
+}
