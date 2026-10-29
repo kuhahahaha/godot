@@ -1,0 +1,52 @@
+{
+  "scope": "original native/GPU substrate only; no real ANGE request/two-stage Verified/Ready/G1 claim",
+  "runs": [
+    {
+      "case": "positive",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--disable-crash-handler",
+        "--path",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-same-request-20261029-r2/runtime",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "safe",
+        "--script",
+        "probe.gd"
+      ],
+      "env": {
+        "NUMERIC_CONTROL_INPUT": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-same-request-20261029-r2/input",
+        "NUMERIC_CONTROL_OUTPUT": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-same-request-20261029-r2/result_positive"
+      },
+      "rc": 81,
+      "timeout": false,
+      "checks": {
+        "exit": false,
+        "real_metal": true,
+        "actual_retained_unit": false,
+        "both_original_interfaces": false,
+        "qrt_original_returns": false,
+        "completion": false,
+        "actual_fact_fields": false,
+        "physical_unit_returns": false,
+        "physical_storage_returns": false,
+        "bridge_close": false,
+        "real_binding_terminal": true,
+        "sdk_user_levels": true,
+        "manager_close": false,
+        "image_finalizer_before_return": false,
+        "clean": true,
+        "owned_readback_present": false,
+        "original_exact_readback": false,
+        "request_issued": false
+      },
+      "qrt_returns": [],
+      "completion": null,
+      "facts": [],
+      "outputs": {}
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+{
+  "body.bin": {
+    "bytes": 5376,
+    "sha256": "64e9b63fa31b9954ce1722b6a9932c4bd038acd07fd9a56deb6c0016a82240b5"
+  },
+  "body.spv": {
+    "bytes": 38224,
+    "sha256": "b1aba4ba8363e7f87cb3490baa7864027c849e36c80fef3f1226b06e73c4d047"
+  },
+  "role5.bin": {
+    "bytes": 4,
+    "sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119"
+  },
+  "role4.bin": {
+    "bytes": 4,
+    "sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119"
+  },
+  "body.comp": {
+    "bytes": 19934,
+    "sha256": "6c9c4f7481bacb9ff5d3c74e05cb27c8b107b098fbefab8b9941aee135508546"
+  },
+  "role6.bin": {
+    "bytes": 104,
+    "sha256": "ce3da4016cd204562a553baa8511604065d39909a3552445f18ffef90e035f2a"
+  },
+  "role7.bin": {
+    "bytes": 104,
+    "sha256": "caecf420176a8768f1b0ab3c17ae87eb24a7633d573f599ffda747be3df64357"
+  },
+  "role3.bin": {
+    "bytes": 4,
+    "sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119"
+  },
+  "godot_capture.spv": {
+    "bytes": 6068,
+    "sha256": "4ac4011dc354a074eb23967f03102ce982a23177c53d9d7fc5c2283acc420bc0"
+  },
+  "role2.bin": {
+    "bytes": 4,
+    "sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119"
+  },
+  "role0.bin": {
+    "bytes": 4,
+    "sha256": "67abdd721024f0ff4e0b3f4c2fc13bc5bad42d0b7851d456d88d203d15aaa450"
+  },
+  "role1.bin": {
+    "bytes": 2064,
+    "sha256": "1d830c8af4ff60b1ec36350ea25d99c4247d5d040d8d2c9acbe28011ebb9039e"
+  },
+  "capture.bin": {
+    "bytes": 1960,
+    "sha256": "aa0e2e4718ca32c3f5dc179b58a714dd37c5cf1f2089afd60d2a2f9a01a317e5"
+  },
+  "capture.comp": {
+    "bytes": 3140,
+    "sha256": "4a6f75a4414fef00f0c30a1da3c443d8603484e082524efee396b549c4275a05"
+  },
+  "generate.gd": {
+    "bytes": 794,
+    "sha256": "368a51c7f8ca723e431163eefbaf15f189c4fbc20f83b6d1758b55c319c496b3"
+  },
+  "capture.spv": {
+    "bytes": 6048,
+    "sha256": "cb9efb9a5307f2ba3ea2f32cc4c79ab83004b1bd6facd24c8b7528d91ba5c07e"
+  },
+  "unit.json": {
+    "bytes": 1798,
+    "sha256": "9766ec7e38ac94057bcc332c968db25406a62a11a5be90dca9162c3f82c3c620"
+  },
+  "project.godot": {
+    "bytes": 154,
+    "sha256": "9debc43d2eba50bd57fcb0c3ac8b53251462aabedd48e1927688558137bc41d2"
+  },
+  "godot_body.spv": {
+    "bytes": 38244,
+    "sha256": "c4d3d845a093d5c4d40f9d0db0d8043292067c75655700aef1a72e1dfe007f06"
+  }
+}

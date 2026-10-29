@@ -1,0 +1,1 @@
+ld: warning: object file (/Users/macbookair/Documents/Work/ANGE/build/test.darwin.arm64/thirdparty/spirv-reflect/spirv_reflect.o) was built for newer 'macOS' version (27.0) than being linked (15.2)

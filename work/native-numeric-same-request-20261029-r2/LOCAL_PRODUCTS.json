@@ -1,0 +1,37 @@
+{
+  "scope": "Reproducible local products excluded from evidence commit; exact hashes retained; not deleted.",
+  "products": {
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-same-request-20261029-r2/export_unit": {
+      "bytes": 2753624,
+      "sha256": "28a41c2278acd95efdd6a64a30b0772daf15c86084e30deb879fd917eb648398"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-same-request-20261029-r2/runtime/probe.dylib": {
+      "bytes": 2552232,
+      "sha256": "ee454a4d0ea102b8bb3be90e8881d61bf9fa35f44603592ad6f6264133e9616c"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-same-request-20261029-r2/runtime/probe.dylib.dSYM/Contents/Info.plist": {
+      "bytes": 640,
+      "sha256": "fa342ccb5845338b14052dfc3921c589f8ac44efcca2ec4240dc328847bc82c3"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-same-request-20261029-r2/runtime/probe.dylib.dSYM/Contents/Resources/DWARF/probe.dylib": {
+      "bytes": 3729464,
+      "sha256": "4e911d4331cd8f9621049622578869f6a0d5eb0ab33d96607a711ed5f6b3e511"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-same-request-20261029-r2/runtime/probe.dylib.dSYM/Contents/Resources/Relocations/aarch64/probe.dylib.yml": {
+      "bytes": 194,
+      "sha256": "8f1ed59e0b472bdc086b7db7d60e3da7d813c91b90cd5cb1f7de621034353a3b"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-same-request-20261029-r2/export_unit.dSYM/Contents/Info.plist": {
+      "bytes": 640,
+      "sha256": "8c69f066183c0537a61069c773c9982eeaa594a73c1d5e3e3ba8386e12b3775d"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-same-request-20261029-r2/export_unit.dSYM/Contents/Resources/DWARF/export_unit": {
+      "bytes": 3287956,
+      "sha256": "5647e2a6d18e50650c4a06fb4032477ac9dc5a3ccc605c337800bb643404caf9"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-same-request-20261029-r2/export_unit.dSYM/Contents/Resources/Relocations/aarch64/export_unit.yml": {
+      "bytes": 186,
+      "sha256": "8b8e9a8b639d01020bb19bff4d09d95df60aee60bfaef0ea0bb522e6e860edbb"
+    }
+  }
+}

@@ -1,0 +1,4 @@
+[application]
+config/name="Original Numeric Same Request"
+[rendering]
+renderer/rendering_method="mobile"
