@@ -1,0 +1,6 @@
+[
+  "bin/godot.macos.editor.dev.arm64",
+  "--headless",
+  "--test",
+  "--test-case=[Qualification] frame poll failure retains original native code and pins"
+]

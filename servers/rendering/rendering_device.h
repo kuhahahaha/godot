@@ -2034,6 +2034,8 @@ private:
 	TightLocalVector<Frame> frames;
 	uint64_t frames_drawn = 0;
 	std::atomic<Error> frame_wait_error = OK;
+	std::atomic<int64_t> frame_wait_native_code = 0;
+	std::atomic<bool> frame_wait_native_code_valid = false;
 	std::atomic<Error> frame_issue_error = OK;
 	int failed_wait_frame = -1;
 	std::atomic<bool> frame_wait_draining = false;

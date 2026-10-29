@@ -1,0 +1,22 @@
+{
+  "source_commit": "local-uncommitted-poll-fix",
+  "files": {
+    "/Users/macbookair/Documents/Work/godot_ANGE/core/extension/gdextension_qualification_ticket.cpp": {
+      "bytes": 43730,
+      "sha256": "912fd091139e02e3a6de4e0d69a382bc1f245802705b1979086dbe618f6afb91"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/servers/rendering/rendering_device.cpp": {
+      "bytes": 528165,
+      "sha256": "1bd44799f5a36a68539a45aa9ea9858a745f43071e87028ae3c17872b246b4ae"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/servers/rendering/rendering_device.h": {
+      "bytes": 95526,
+      "sha256": "ab7bbcbaaf3c03fa8dd20e3d9bfb35bd3ffc280c2723b620964b54c2a85b17a2"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/tests/servers/rendering/test_qualification_ticket.cpp": {
+      "bytes": 39931,
+      "sha256": "81f8d083e74d41e2248744850d864038e8dc72088f8721fcc028febc2410e38b"
+    }
+  },
+  "scope": "Exact four-file source before local commit; other dirty tree preserved."
+}

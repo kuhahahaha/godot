@@ -9356,6 +9356,8 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 	if (frame_wait_draining) {
 		return ERR_BUSY;
 	}
+	frame_wait_native_code = 0;
+	frame_wait_native_code_valid = false;
 	thread_local PackedByteArray packed_byte_array;
  // Original Frame ownership covers every actual slot call, including slots
  // without the final fence. Qualification only polls; ordinary frame waits may
@@ -9366,7 +9368,7 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 			  continue;
 		  }
    const auto completion=p_nonblocking?driver->native_call_poll(call.serial):driver->native_call_wait(call.serial);
-   if(completion.native_error)return FAILED;
+   if(completion.native_error){frame_wait_native_code=completion.native_code;frame_wait_native_code_valid=true;return FAILED;}
    if(!completion.matches(call.completion_serial))return ERR_BUSY;
   }
  }
@@ -9387,7 +9389,7 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 		  continue;
 	  }
    const auto completion=p_nonblocking?driver->native_call_poll(call.serial):driver->native_call_wait(call.serial);
-   if(completion.native_error)return FAILED;
+   if(completion.native_error){frame_wait_native_code=completion.native_code;frame_wait_native_code_valid=true;return FAILED;}
    if(!completion.matches(call.completion_serial))return ERR_BUSY;
    if(call.frame_observer_owned) {const Error released=driver->native_call_release(call.serial);if(released!=OK)return released;}
    call.source_owner_returned=true; // Return this Frame's observer exactly once, preserving actual source identity.
@@ -9407,10 +9409,10 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
     if (request.result.is_null() || !request.result->qualification_owned) return ERR_BUSY;
    }
    const auto &reports=frames[p_frame].chain_reports;
-   if (reports.is_empty() || !reports[reports.size()-1].submission_serial) return ERR_UNAVAILABLE;
+   if (reports.is_empty() || !reports[reports.size()-1].submission_serial) { frame_wait_native_code_valid=true; return ERR_UNAVAILABLE; }
    const uint64_t serial=reports[reports.size()-1].submission_serial;
    const auto completion=driver->fence_poll(frames[p_frame].fence,serial);
-   if (completion.native_error) wait_error=FAILED;
+   if (completion.native_error) { frame_wait_native_code=completion.native_code; frame_wait_native_code_valid=true; wait_error=FAILED; }
    else if (!completion.matches(serial)) return ERR_BUSY;
    else wait_error=driver->fence_recycle(frames[p_frame].fence,serial);
   } else {
@@ -9425,6 +9427,7 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 		if (wait_error != OK) {
 			frames[p_frame].primary_command_buffer_begun = false;
 			frame_wait_error = wait_error;
+			if (!frame_wait_native_code_valid.load()) frame_wait_native_code_valid = true;
 			failed_wait_frame = p_frame;
 			return wait_error;
 		}

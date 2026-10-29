@@ -1,0 +1,32 @@
+{
+  "status": "PASS_INTERNAL_FRAME_POLL_RAW_CODE",
+  "source_commit": "pending-local-commit",
+  "red": {
+    "initial_attempt_rc": 1,
+    "initial_attempt_note": "early fixture setup used no recorded submission and returned ERR_INVALID_DATA; corrected test then targeted direct frame poll",
+    "native_poll_overwrite_red_rc": 1,
+    "native_poll_overwrite_failures": 2
+  },
+  "green": {
+    "poll_cases": 2,
+    "poll_assertions": 7,
+    "qualification_cases": 28,
+    "qualification_assertions": 476,
+    "frame_wait_cases": 17,
+    "frame_wait_assertions": 301,
+    "rt_cases": 4,
+    "rt_assertions": 378,
+    "physical_cases": 7,
+    "physical_assertions": 46,
+    "k03_cases": 22,
+    "k03_assertions": 350,
+    "device_exit_cases": 133,
+    "device_exit_assertions": 2619,
+    "ubsan_cases": 45,
+    "ubsan_assertions": 777
+  },
+  "release_build_rc": 0,
+  "release_version_rc": 0,
+  "scope": "Internal raw-code propagation for nonblocking native/fence poll errors; no real hardware fault injection, E09 issuer, Ready or G1 claim",
+  "goal": "active"
+}

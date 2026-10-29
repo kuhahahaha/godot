@@ -276,6 +276,74 @@ public:
 		device.frames.clear();
 		device.driver = nullptr;
 	}
+	static void frame_poll_error_retains_native_code() {
+		using namespace GDExtensionDeviceExit;
+		struct PollDriver : TransferTestDriverBase {
+			uint32_t polls = 0;
+			FencePollResult fence_poll(FenceID, uint64_t p_serial) override {
+				++polls;
+				FencePollResult result;
+				result.completed_serial = p_serial;
+				result.native_error = true;
+				result.native_code = -13;
+				return result;
+			}
+		} driver;
+		RenderingDevice device;
+		device.driver = &driver;
+		device.frames.resize(1);
+		device.frames[0].fence = RDD::FenceID(71);
+		device.frames[0].fence_signaled = true;
+		RDD::QueueCallReport report;
+		report.submission_serial = 99;
+		device.frames[0].chain_reports.push_back(report);
+		CHECK(device._stall_for_frame(0, true) == FAILED);
+		CHECK(driver.polls == 1);
+		CHECK(device.frame_wait_native_code.load() == -13);
+		device.frame_wait_error = OK;
+		device.failed_wait_frame = -1;
+		device.frames.clear();
+		device.driver = nullptr;
+	}
+	static void ticket_poll_error_retains_native_code() {
+		using namespace GDExtensionDeviceExit;
+		struct PollDriver : TransferTestDriverBase {
+			bool native_call_observation_supported() const override { return true; }
+			Error native_call_retain(uint64_t) override { return OK; }
+			FencePollResult native_call_poll(uint64_t p_serial) override {
+				FencePollResult result;
+				result.completed_serial = p_serial;
+				result.native_error = true;
+				result.native_code = -7;
+				return result;
+			}
+		} driver;
+		RenderingDevice device;
+		device.driver = &driver;
+		device.frames.resize(1);
+		device.frames[0].fence_signaled = true;
+		QualificationTicket ticket;
+		ticket.recorded = true;
+		ticket.frame_refs = 1;
+		ticket.report.revision = 1;
+		RDD::NativeCallFact source;
+		source.serial = source.completion_serial = 17;
+		source.issue = RDD::IssueFact::IssuedUnknown;
+		source.native_code = -7;
+		GDExtensionQualificationFactV1 fact = {};
+		fact.issue = uint32_t(source.issue);
+		fact.completion = 1;
+		ticket.facts.push_back(fact);
+		ticket.natives.push_back({ source, 0, 0, 0, 1, false, false });
+		device.frames[0].qualification_tickets.push_back(&ticket);
+		Registry::get_singleton().qualification_ticket_step(&ticket, &device);
+		CHECK(ticket.append_failed);
+		CHECK(ticket.report.native_error == FAILED);
+		CHECK(ticket.report.native_code == -7);
+		CHECK(ticket.facts[0].native_code == -7);
+		device.frames.clear();
+		device.driver = nullptr;
+	}
 
 	static void continuation_capacity() {
 		using namespace GDExtensionDeviceExit;
@@ -572,6 +640,8 @@ TEST_CASE("[Qualification] async map success and legacy failure preserve origina
 	TestQualificationTicketAccess::readback_map_error(2);
 	TestQualificationTicketAccess::readback_map_error(0, false);
 }
+TEST_CASE("[Qualification] frame poll failure retains original native code") { TestQualificationTicketAccess::frame_poll_error_retains_native_code(); }
+TEST_CASE("[Qualification] ticket poll failure retains original native code") { TestQualificationTicketAccess::ticket_poll_error_retains_native_code(); }
 TEST_CASE("[Qualification] ticket keeps distinct native and completion identities until every source and frame returns") {TestQualificationTicketAccess::reduction(false);}
 
 TEST_CASE("[Qualification] sealing accepts an actual transitive graph path") { TestQualificationTicketAccess::transitive_graph_order(); }

@@ -230,7 +230,7 @@ void Registry::qualification_ticket_step(QualificationTicket *ticket,RenderingDe
   bool member=false;for(auto *entry:rd->frames[index].qualification_tickets)if(entry==ticket){member=true;break;}
   if(!member || !rd->frames[index].fence_signaled)continue;
   const Error error=rd->_stall_for_frame(index,true);
-  if(error!=OK && error!=ERR_BUSY){MutexLock lock(mutex);ticket->append_failed=true;ticket->report.native_error=error;}
+  if(error!=OK && error!=ERR_BUSY){MutexLock lock(mutex);ticket->append_failed=true;ticket->report.native_error=error;if(rd->frame_wait_native_code_valid.load())ticket->report.native_code=rd->frame_wait_native_code.load();}
  }
  MutexLock lock(mutex);qualification_ticket_publish(ticket,rd);
 }

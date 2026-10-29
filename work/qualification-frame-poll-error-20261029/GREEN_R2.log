@@ -1,0 +1,19 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_qualification_ticket.cpp:601:
+TEST CASE:  [Qualification] frame poll failure retains original native code
+
+tests/servers/rendering/test_qualification_ticket.cpp:297: ERROR: CHECK( device._stall_for_frame(0, true) == FAILED ) is NOT correct!
+  values: CHECK( 2 == 1 )
+
+tests/servers/rendering/test_qualification_ticket.cpp:298: ERROR: CHECK( driver.polls == 1 ) is NOT correct!
+  values: CHECK( 0 == 1 )
+
+tests/servers/rendering/test_qualification_ticket.cpp:299: ERROR: CHECK( device.frame_wait_native_code.load() == -13 ) is NOT correct!
+  values: CHECK( 0 == -13 )
+
+===============================================================================
+[doctest] test cases: 1 | 0 passed | 1 failed | 1792 skipped
+[doctest] assertions: 3 | 0 passed | 3 failed |
+[doctest] Status: FAILURE!

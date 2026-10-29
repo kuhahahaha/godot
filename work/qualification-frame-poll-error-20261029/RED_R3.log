@@ -1,0 +1,19 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_qualification_ticket.cpp:618:
+TEST CASE:  [Qualification] frame poll failure retains original native code and pins
+
+tests/servers/rendering/test_qualification_ticket.cpp:312: ERROR: CHECK( driver.polls == 1 ) is NOT correct!
+  values: CHECK( 0 == 1 )
+
+tests/servers/rendering/test_qualification_ticket.cpp:314: ERROR: CHECK( ticket.report.native_error == FAILED ) is NOT correct!
+  values: CHECK( 2 == 1 )
+
+tests/servers/rendering/test_qualification_ticket.cpp:315: ERROR: CHECK( ticket.report.native_code == -13 ) is NOT correct!
+  values: CHECK( 0 == -13 )
+
+===============================================================================
+[doctest] test cases: 1 | 0 passed | 1 failed | 1792 skipped
+[doctest] assertions: 6 | 3 passed | 3 failed |
+[doctest] Status: FAILURE!

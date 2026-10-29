@@ -1,0 +1,18 @@
+ERROR: Parameter "buffer" is null.
+   at: _buffer_get_data_async (servers/rendering/rendering_device.cpp:1470)
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_qualification_ticket.cpp:614:
+TEST CASE:  [Qualification] frame poll failure retains original native code and pins
+
+tests/servers/rendering/test_qualification_ticket.cpp:310: ERROR: CHECK( ticket.report.native_error == FAILED ) is NOT correct!
+  values: CHECK( 2 == 1 )
+
+tests/servers/rendering/test_qualification_ticket.cpp:311: ERROR: CHECK( ticket.report.native_code == -13 ) is NOT correct!
+  values: CHECK( 0 == -13 )
+
+===============================================================================
+[doctest] test cases: 1 | 0 passed | 1 failed | 1792 skipped
+[doctest] assertions: 5 | 3 passed | 2 failed |
+[doctest] Status: FAILURE!
