@@ -1,0 +1,24 @@
+{
+  "package": "native-editor-dso-identity-20261030",
+  "exact_runtime_pair": {
+    "godot_source_head": "aea82acff39fea5727d6c764b2b706cc4252f867",
+    "godot_editor_sha256": "150c8f1234b6cfd45ad163ed82f8cb50ef6e76d7016ee4c918e56489f1a43162",
+    "ange_source_head": "fe3ea90af5bd31ad8a6d2c6bc503a76e7001d398",
+    "ange_dso_sha256": "0e1750c7ef509096201c849116d28ae385bd429ee914e4adebbd8960f0284041",
+    "runtime_receipt": "work/godot-ci-native-gpu-20261030/STABLE_RUNTIME_RECEIPT.md",
+    "runtime_result": "E05 host.storage_owner_transport / UNAVAILABLE; no world admission"
+  },
+  "current_native_transfer_editor": {
+    "godot_source_head": "6afa429e2096793f93689ce52aa47cab4e1b2da8",
+    "editor_sha256": "c6b4d0cf062de3593f1c98732c4adcd6b5f9dfcf41ecc5ffb439a3a40e53e174",
+    "rerun_receipt": "work/native-transfer-rerun-20261030/RECEIPT.md",
+    "dso_attached": false
+  },
+  "claims_not_made": [
+    "cross-source runtime equivalence",
+    "production particle issuer",
+    "same-request readback",
+    "Ready",
+    "G1"
+  ]
+}
