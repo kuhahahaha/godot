@@ -252,6 +252,14 @@ TEST_CASE("[QualificationNative][Vulkan] secondary command execution rejects mis
  ERR_PRINT_ON;
  CHECK(true);
 }
+TEST_CASE("[QualificationNative][Vulkan] queue submit rejects missing wait view before queue access") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ ERR_PRINT_OFF;
+ const Error result=driver.command_queue_execute_and_present(RenderingDeviceDriver::CommandQueueID(),VectorView<RenderingDeviceDriver::SemaphoreID>(nullptr,1),{}, {},RenderingDeviceDriver::FenceID(),{});
+ ERR_PRINT_ON;
+ CHECK(result==ERR_INVALID_PARAMETER);
+}
 TEST_CASE("[QualificationNative][Vulkan] texture creation rejects an invalid shareable format") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);

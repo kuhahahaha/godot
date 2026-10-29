@@ -3851,6 +3851,7 @@ RDD::CommandQueueID RenderingDeviceDriverVulkan::command_queue_create(CommandQue
 }
 
 Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueueID p_cmd_queue, VectorView<SemaphoreID> p_wait_semaphores, VectorView<CommandBufferID> p_cmd_buffers, VectorView<SemaphoreID> p_cmd_semaphores, FenceID p_cmd_fence, VectorView<SwapChainID> p_swap_chains) {
+	ERR_FAIL_COND_V((p_wait_semaphores.size() > 0 && !p_wait_semaphores.ptr()) || (p_cmd_buffers.size() > 0 && !p_cmd_buffers.ptr()) || (p_cmd_semaphores.size() > 0 && !p_cmd_semaphores.ptr()) || (p_swap_chains.size() > 0 && !p_swap_chains.ptr()), ERR_INVALID_PARAMETER);
 	reset_queue_call_report();
 	DEV_ASSERT(p_cmd_queue.id != 0);
 
