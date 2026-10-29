@@ -74,6 +74,121 @@ public:
   // through the original driver's disposal, then delete the original child.
   device._free_pending_resources(0);CHECK(child->physical.free_event!=0);memdelete(child);memdelete(bridge);
  }
+ static void retire_after_service_error(RenderingDevice &device,RenderingDeviceDriver &driver) {
+  using namespace GDExtensionDeviceExit;
+  auto *bridge=memnew(Registry::QualificationBridge);auto *child=memnew(Registry::QualificationBridge::Storage);
+  bridge->storage[0]=child;child->serial=31;child->retiring=true;child->physical.bridge=11;child->physical.child=31;
+  RID rid=device._qualification_storage_create(128,&child->physical);REQUIRE(rid.is_valid());child->physical.use_closed=true;
+  device.draw_graph.initialize(&driver,[](RenderingDeviceDriver *,VectorView<RenderingDeviceDriver::AttachmentLoadOp>,VectorView<RenderingDeviceDriver::AttachmentStoreOp>,void *){return RenderingDeviceDriver::RenderPassID();},1,RenderingDeviceDriver::CommandQueueFamilyID(1),0);device.draw_graph.begin();
+  auto &registry=Registry::get_singleton();registry.qualification_retire_step(bridge,&device,31,1);
+  REQUIRE(child->physical.enqueued);REQUIRE(child->physical.free_event==0);
+  // Model the original service's published non-BUSY maintenance error after
+  // enqueue; the actual buffer remains owned by the original dispose queue.
+  child->maintenance_error=ERR_CANT_ACQUIRE_RESOURCE;child->report.state=2;child->report.reason=5;child->report.native_error=ERR_CANT_ACQUIRE_RESOURCE;
+  registry.qualification_retire_step(bridge,&device,31,1);
+  CHECK(child->report.state==2);CHECK(child->report.return_status==0);CHECK(child->report.reason==5);CHECK(child->report.native_error==ERR_CANT_ACQUIRE_RESOURCE);
+  device._free_pending_resources(0);REQUIRE(child->physical.free_event!=0);
+  registry.qualification_retire_step(bridge,&device,31,1);
+  CHECK(child->report.event_seq==child->physical.free_event);CHECK(child->report.state==2);CHECK(child->report.return_status==0);CHECK(child->report.reason==5);CHECK(child->report.native_error==ERR_CANT_ACQUIRE_RESOURCE);
+  memdelete(child);memdelete(bridge);
+ }
+ static void unknown_does_not_enqueue(RenderingDevice &device,RenderingDeviceDriver &driver) {
+  using namespace GDExtensionDeviceExit;
+  auto *bridge=memnew(Registry::QualificationBridge);auto *child=memnew(Registry::QualificationBridge::Storage);
+  bridge->storage[0]=child;child->serial=31;child->retiring=true;child->physical.bridge=11;child->physical.child=31;child->physical.use_closed=true;
+  RID rid=device._qualification_storage_create(128,&child->physical);REQUIRE(rid.is_valid());
+  device.draw_graph.initialize(&driver,[](RenderingDeviceDriver *,VectorView<RenderingDeviceDriver::AttachmentLoadOp>,VectorView<RenderingDeviceDriver::AttachmentStoreOp>,void *){return RenderingDeviceDriver::RenderPassID();},1,RenderingDeviceDriver::CommandQueueFamilyID(1),0);device.draw_graph.begin();
+  child->maintenance_error=FAILED;child->report.state=2;child->report.reason=5;child->report.native_error=FAILED;
+  Registry::get_singleton().qualification_retire_step(bridge,&device,31,1);
+  CHECK(device.storage_buffer_owner.owns(rid));CHECK_FALSE(child->physical.enqueued);CHECK(child->report.state==2);CHECK(child->report.reason==5);
+  // Explicit fixture cleanup follows the assertion and is not an owner ack.
+  if(device.storage_buffer_owner.owns(rid))device._free_internal(rid);
+  device._free_pending_resources(0);memdelete(child);memdelete(bridge);
+ }
+ static void service_poll_error(RenderingDevice &device,RenderingDeviceDriver &driver) {
+  using namespace GDExtensionDeviceExit;
+  auto *registry=memnew(Registry);auto *previous=RenderingDevice::singleton;RenderingDevice::singleton=&device;
+  device.is_main_instance=true;device.render_thread_id=Thread::get_caller_id();registry->instance=71;
+  auto &record=registry->records[0];record.owner_thread=Thread::get_caller_id();record.snapshot.library_generation=1;record.guard_enrollment=GuardEnrollment::QUALIFIED;record.private_refs=3;
+  auto &d=registry->device_records[0];d.object=&device;d.live=true;d.epoch=1;d.execution_thread=Thread::get_caller_id();d.refs=1;
+  struct Holder:HolderRetirement{Holder():HolderRetirement(RecordRef{}){}~Holder()=default;} holder;holder.generation=1;
+  auto *bridge=memnew(Registry::QualificationBridge);bridge->serial=11;bridge->epoch=1;bridge->holder=&holder;bridge->children=2;registry->qualification_bridges[0]=bridge;
+  auto *child=memnew(Registry::QualificationBridge::Storage);bridge->storage[0]=child;child->serial=31;child->retire_serial=33;child->retiring=child->queued=true;child->physical.bridge=11;child->physical.child=31;child->physical.use_closed=true;
+  RID rid=device._qualification_storage_create(128,&child->physical);REQUIRE(rid.is_valid());
+  device.draw_graph.initialize(&driver,[](RenderingDeviceDriver *,VectorView<RenderingDeviceDriver::AttachmentLoadOp>,VectorView<RenderingDeviceDriver::AttachmentStoreOp>,void *){return RenderingDeviceDriver::RenderPassID();},1,RenderingDeviceDriver::CommandQueueFamilyID(1),0);device.draw_graph.begin();
+  RenderingDeviceDriver::QueueCallReport chain;RenderingDeviceDriver::NativeCallFact call;call.serial=call.completion_serial=51;chain.calls.push_back(call);device.frames[0].chain_reports.push_back(chain);
+  registry->qualification_service(11,31,1,1,5000);
+  CHECK_FALSE(child->queued);CHECK(child->physical.enqueued);CHECK(child->report.state==2);CHECK(child->report.reason==5);CHECK(child->report.native_error==FAILED);CHECK(device.frame_wait_native_code.load()==-21);
+  CHECK(registry->qualification_storage_retire_release({71,11},{71,33}).native_error==ERR_BUSY);
+  registry->qualification_retire_step(bridge,&device,31,1);CHECK(child->report.state==2);CHECK(child->report.reason==5);
+  device._free_pending_resources(0);REQUIRE(child->physical.free_event!=0);registry->qualification_retire_step(bridge,&device,31,1);
+  CHECK(child->report.state==2);CHECK(child->report.return_status==0);CHECK(child->report.native_error==FAILED);CHECK(registry->qualification_storage_retire_release({71,11},{71,33}).native_error==ERR_BUSY);
+  device.frames[0].chain_reports.clear();registry->qualification_bridges[0]=nullptr;RenderingDevice::singleton=previous;device.is_main_instance=false;memdelete(child);memdelete(bridge);memdelete(registry);
+ }
+ static void service_error_before_shader_enqueue(RenderingDevice &device,RenderingDeviceDriver &driver,bool earlier_error,bool saturated,bool close_before) {
+  using namespace GDExtensionDeviceExit;
+  auto *registry=memnew(Registry);auto *previous=RenderingDevice::singleton;RenderingDevice::singleton=&device;
+  device.is_main_instance=true;device.render_thread_id=Thread::get_caller_id();registry->instance=71;
+  auto &record=registry->records[0];record.owner_thread=Thread::get_caller_id();record.snapshot.library_generation=1;record.guard_enrollment=GuardEnrollment::QUALIFIED;record.private_refs=3;
+  auto &d=registry->device_records[0];d.object=&device;d.live=true;d.epoch=1;d.execution_thread=Thread::get_caller_id();d.refs=1;
+  struct Holder:HolderRetirement{Holder():HolderRetirement(RecordRef{}){}~Holder()=default;} holder;holder.generation=1;
+  auto *bridge=memnew(Registry::QualificationBridge);bridge->serial=11;bridge->epoch=1;bridge->holder=&holder;bridge->children=2;registry->qualification_bridges[0]=bridge;
+  auto *child=memnew(Registry::QualificationBridge::NativeUnit);bridge->units[0]=child;child->serial=31;child->retire_serial=33;child->retiring=child->queued=true;child->backing.known_mask=1;child->report.report_revision=saturated?UINT64_MAX:1;
+  if(earlier_error){child->maintenance_error=ERR_CANT_ACQUIRE_RESOURCE;child->report.state=2;child->report.reason=5;child->report.native_error=ERR_CANT_ACQUIRE_RESOURCE;}
+  child->shader.bridge=11;child->shader.child=31;child->shader.serial=43;child->shader.use_closed=true;
+  RenderingDevice::Shader shader;shader.driver_id=RenderingDeviceDriver::ShaderID(19);shader.qualification_return=&child->shader;
+  RID rid=device.shader_owner.make_rid(shader);child->shader.rid=rid.get_id();
+  device.draw_graph.initialize(&driver,[](RenderingDeviceDriver *,VectorView<RenderingDeviceDriver::AttachmentLoadOp>,VectorView<RenderingDeviceDriver::AttachmentStoreOp>,void *){return RenderingDeviceDriver::RenderPassID();},1,RenderingDeviceDriver::CommandQueueFamilyID(1),0);device.draw_graph.begin();
+  RenderingDeviceDriver::QueueCallReport chain;RenderingDeviceDriver::NativeCallFact call;call.serial=call.completion_serial=51;chain.calls.push_back(call);device.frames[0].chain_reports.push_back(chain);
+  const auto original=child->report;
+  if(close_before){CHECK(registry->qualification_close({71,11}).native_error==ERR_BUSY);CHECK(child->queued);CHECK(bridge->children==2);}
+  registry->qualification_service(11,31,2,1,5000);
+  CHECK(device.frame_wait_native_code.load()==-21);CHECK(child->maintenance_error==(earlier_error?ERR_CANT_ACQUIRE_RESOURCE:FAILED));
+  if(saturated){CHECK(memcmp(&original,&child->report,sizeof(original))==0);}else{CHECK(child->report.state==2);CHECK(child->report.native_error==(earlier_error?ERR_CANT_ACQUIRE_RESOURCE:FAILED));}
+  CHECK(device.shader_owner.owns(rid));CHECK_FALSE(child->shader.enqueued);CHECK(child->report.return_status==0);CHECK(registry->qualification_native_unit_retire_release({71,11},{71,33}).native_error==ERR_BUSY);CHECK(registry->qualification_close({71,11}).native_error==ERR_BUSY);
+  // The test fixture performs explicit cleanup after observing the service result.
+  if(device.shader_owner.owns(rid))device._free_internal(rid);
+  device._free_pending_resources(0);device.frames[0].chain_reports.clear();registry->qualification_bridges[0]=nullptr;RenderingDevice::singleton=previous;device.is_main_instance=false;memdelete(child);memdelete(bridge);memdelete(registry);
+ }
+ static void native_revision_exhausted(RenderingDevice &device,RenderingDeviceDriver &driver) {
+  using namespace GDExtensionDeviceExit;
+  auto *bridge=memnew(Registry::QualificationBridge);auto *child=memnew(Registry::QualificationBridge::NativeUnit);
+  bridge->units[0]=child;child->serial=31;child->retiring=true;child->backing.known_mask=1;child->report.report_revision=UINT64_MAX;child->report.reason=1;
+  child->shader.bridge=11;child->shader.child=31;child->shader.serial=43;child->shader.use_closed=true;
+  RenderingDevice::Shader shader;shader.driver_id=RenderingDeviceDriver::ShaderID(19);shader.qualification_return=&child->shader;
+  RID rid=device.shader_owner.make_rid(shader);child->shader.rid=rid.get_id();
+  device.draw_graph.initialize(&driver,[](RenderingDeviceDriver *,VectorView<RenderingDeviceDriver::AttachmentLoadOp>,VectorView<RenderingDeviceDriver::AttachmentStoreOp>,void *){return RenderingDeviceDriver::RenderPassID();},1,RenderingDeviceDriver::CommandQueueFamilyID(1),0);device.draw_graph.begin();
+  const auto original=child->report;Registry::get_singleton().qualification_retire_step(bridge,&device,31,2);
+  CHECK(device.shader_owner.owns(rid));CHECK_FALSE(child->shader.enqueued);CHECK(memcmp(&original,&child->report,sizeof(original))==0);
+  if(device.shader_owner.owns(rid))device._free_internal(rid);
+  device._free_pending_resources(0);memdelete(child);memdelete(bridge);
+ }
+ static void native_nonerror_unknown_can_settle(RenderingDevice &device,RenderingDeviceDriver &driver) {
+  using namespace GDExtensionDeviceExit;
+  auto *bridge=memnew(Registry::QualificationBridge);auto *child=memnew(Registry::QualificationBridge::NativeUnit);
+  bridge->units[0]=child;child->serial=31;child->retiring=true;child->backing.known_mask=1;
+  child->shader.rid=41;child->shader.serial=43;child->shader.enqueued=true;child->shader.frame_slot=0;child->shader.frame_epoch=71;child->shader.free_event=47;
+  child->report.report_revision=1;child->report.state=2;child->report.reason=5;
+  device.draw_graph.initialize(&driver,[](RenderingDeviceDriver *,VectorView<RenderingDeviceDriver::AttachmentLoadOp>,VectorView<RenderingDeviceDriver::AttachmentStoreOp>,void *){return RenderingDeviceDriver::RenderPassID();},1,RenderingDeviceDriver::CommandQueueFamilyID(1),0);device.draw_graph.begin();
+  Registry::get_singleton().qualification_retire_step(bridge,&device,31,2);
+  CHECK(child->report.state==1);CHECK(child->report.return_status==1);CHECK(child->report.native_error==OK);CHECK(child->report.shader_free_event_seq==47);CHECK(child->report.report_revision==2);
+  memdelete(child);memdelete(bridge);
+ }
+ static void native_retire_after_service_error(RenderingDevice &device,RenderingDeviceDriver &driver) {
+  using namespace GDExtensionDeviceExit;
+  auto *bridge=memnew(Registry::QualificationBridge);auto *child=memnew(Registry::QualificationBridge::NativeUnit);
+  bridge->units[0]=child;child->serial=31;child->retiring=true;child->backing.known_mask=1;
+  child->shader.rid=41;child->shader.serial=43;child->shader.enqueued=true;child->shader.frame_slot=0;child->shader.frame_epoch=71;
+  child->report.report_revision=1;child->maintenance_error=ERR_CANT_ACQUIRE_RESOURCE;child->report.state=2;child->report.reason=5;child->report.native_error=ERR_CANT_ACQUIRE_RESOURCE;
+  device.draw_graph.initialize(&driver,[](RenderingDeviceDriver *,VectorView<RenderingDeviceDriver::AttachmentLoadOp>,VectorView<RenderingDeviceDriver::AttachmentStoreOp>,void *){return RenderingDeviceDriver::RenderPassID();},1,RenderingDeviceDriver::CommandQueueFamilyID(1),0);device.draw_graph.begin();
+  auto &registry=Registry::get_singleton();registry.qualification_retire_step(bridge,&device,31,2);
+  CHECK(child->report.state==2);CHECK(child->report.return_status==0);CHECK(child->report.reason==5);CHECK(child->report.native_error==ERR_CANT_ACQUIRE_RESOURCE);
+  // Isolated report reducer control: actual driver disposal is covered by
+  // the storage fixture above, not asserted by this synthetic event.
+  child->shader.free_event=47;registry.qualification_retire_step(bridge,&device,31,2);
+  CHECK(child->report.freed_mask==1);CHECK(child->report.shader_free_event_seq==47);CHECK(child->report.state==2);CHECK(child->report.return_status==0);CHECK(child->report.reason==5);CHECK(child->report.native_error==ERR_CANT_ACQUIRE_RESOURCE);
+  memdelete(child);memdelete(bridge);
+ }
  static void attach(RenderingDevice &device, RenderingDeviceDriver &driver) { device.driver=&driver;device.frames.resize(1);device.frames[0].qualification_epoch=71;device.qualification_retiring=true; }
  static RID create(RenderingDevice &device,GDExtensionDeviceExit::QualificationPhysicalReturn &cell) { cell.bridge=11;cell.child=13;return device._qualification_storage_create(128,&cell); }
  static bool marked(RenderingDevice &device,RID rid,GDExtensionDeviceExit::QualificationPhysicalReturn &cell) { auto *b=device.storage_buffer_owner.get_or_null(rid);return b && b->qualification_return==&cell && cell.serial==b->backing_serial && cell.rid==rid.get_id(); }
@@ -94,7 +209,11 @@ class Driver : public TransferTestDriverBase {
 public:
  GDExtensionDeviceExit::QualificationPhysicalReturn *cell=nullptr;
  int creates=0,frees=0,sets_freed=0;
+ bool fail_poll=false;int polls=0;int shaders_freed=0;
  bool native_call_observation_supported() const override {return true;}
+ FencePollResult native_call_poll(uint64_t serial) override { FencePollResult result;if(fail_poll){++polls;result.completed_serial=serial;result.native_error=true;result.native_code=-21;}return result;}
+ bool shader_retire_ready_nonblocking(ShaderID) const override {return polls>0;}
+ void shader_free(ShaderID id) override {CHECK(id==ShaderID(19));++shaders_freed;}
  uint32_t qualification_native_call_bound(uint32_t slots) const override {return slots;}
  void uniform_set_free(UniformSetID id) override {CHECK(id==UniformSetID(23));CHECK(TestQualificationPhysicalAccess::dependents(*cell)==1);sets_freed++;}
  BufferID buffer_create(uint64_t size,BitField<BufferUsageBits>,MemoryAllocationType,uint64_t) override { CHECK(size==128);creates++;return BufferID(19); }
@@ -141,4 +260,57 @@ TEST_CASE("[RenderingDevice][Qualification] contended transfer lock refuses main
 TEST_CASE("[Qualification] retired E05 backing rejects same prepared upload and preserves RT release and bridge teardown") {
  RenderingDevice device;TestQualificationPhysical::Driver driver;TestQualificationPhysicalAccess::attach(device,driver);
  TestQualificationPhysicalAccess::retired_prepared_upload(device,driver);CHECK(driver.creates==1);CHECK(driver.frees==1);TestQualificationPhysicalAccess::detach(device);
+}
+
+TEST_CASE("[Qualification] storage retire retains unknown after maintenance failure and physical free") {
+ RenderingDevice device;TestQualificationPhysical::Driver driver;TestQualificationPhysicalAccess::attach(device,driver);
+ TestQualificationPhysicalAccess::retire_after_service_error(device,driver);CHECK(driver.creates==1);CHECK(driver.frees==1);TestQualificationPhysicalAccess::detach(device);
+}
+
+TEST_CASE("[Qualification] native unit retire reducer retains maintenance unknown on observed event") {
+ RenderingDevice device;TestQualificationPhysical::Driver driver;TestQualificationPhysicalAccess::attach(device,driver);
+ TestQualificationPhysicalAccess::native_retire_after_service_error(device,driver);TestQualificationPhysicalAccess::detach(device);
+}
+
+TEST_CASE("[Qualification] service native poll error remains unknown after storage free") {
+ RenderingDevice device;TestQualificationPhysical::Driver driver;driver.fail_poll=true;TestQualificationPhysicalAccess::attach(device,driver);
+ TestQualificationPhysicalAccess::service_poll_error(device,driver);CHECK(driver.creates==1);CHECK(driver.frees==1);TestQualificationPhysicalAccess::detach(device);
+}
+
+TEST_CASE("[Qualification] storage maintenance unknown prevents new retire enqueue") {
+ RenderingDevice device;TestQualificationPhysical::Driver driver;TestQualificationPhysicalAccess::attach(device,driver);
+ TestQualificationPhysicalAccess::unknown_does_not_enqueue(device,driver);CHECK(driver.creates==1);CHECK(driver.frees==1);TestQualificationPhysicalAccess::detach(device);
+}
+
+TEST_CASE("[Qualification] service poll error precedes new native shader retirement") {
+ RenderingDevice device;TestQualificationPhysical::Driver driver;driver.fail_poll=true;TestQualificationPhysicalAccess::attach(device,driver);
+ TestQualificationPhysicalAccess::service_error_before_shader_enqueue(device,driver,false,false,false);CHECK(driver.polls==1);CHECK(driver.shaders_freed==1);TestQualificationPhysicalAccess::detach(device);
+}
+
+TEST_CASE("[Qualification] service preserves first native retire maintenance error") {
+ RenderingDevice device;TestQualificationPhysical::Driver driver;driver.fail_poll=true;TestQualificationPhysicalAccess::attach(device,driver);
+ TestQualificationPhysicalAccess::service_error_before_shader_enqueue(device,driver,true,false,false);CHECK(driver.polls==1);CHECK(driver.shaders_freed==1);TestQualificationPhysicalAccess::detach(device);
+}
+
+TEST_CASE("[Qualification] native unit exhausted retire revision freezes report and prevents new enqueue") {
+ RenderingDevice device;TestQualificationPhysical::Driver driver;driver.polls=1;TestQualificationPhysicalAccess::attach(device,driver);
+ TestQualificationPhysicalAccess::native_revision_exhausted(device,driver);CHECK(driver.shaders_freed==1);TestQualificationPhysicalAccess::detach(device);
+}
+TEST_CASE("[Qualification] native unit unknown without maintenance error accepts original later event") {
+ RenderingDevice device;TestQualificationPhysical::Driver driver;TestQualificationPhysicalAccess::attach(device,driver);
+ TestQualificationPhysicalAccess::native_nonerror_unknown_can_settle(device,driver);TestQualificationPhysicalAccess::detach(device);
+}
+
+TEST_CASE("[Qualification] exhausted native report keeps service error private and close busy") {
+ RenderingDevice device;TestQualificationPhysical::Driver driver;driver.fail_poll=true;TestQualificationPhysicalAccess::attach(device,driver);
+ TestQualificationPhysicalAccess::service_error_before_shader_enqueue(device,driver,false,true,false);CHECK(driver.polls==1);CHECK(driver.shaders_freed==1);TestQualificationPhysicalAccess::detach(device);
+}
+TEST_CASE("[Qualification] queued native service retains maintenance error across close") {
+ RenderingDevice device;TestQualificationPhysical::Driver driver;driver.fail_poll=true;TestQualificationPhysicalAccess::attach(device,driver);
+ TestQualificationPhysicalAccess::service_error_before_shader_enqueue(device,driver,false,false,true);CHECK(driver.polls==1);CHECK(driver.shaders_freed==1);TestQualificationPhysicalAccess::detach(device);
+}
+
+TEST_CASE("[Qualification] queued native close retains preexisting maintenance error") {
+ RenderingDevice device;TestQualificationPhysical::Driver driver;driver.fail_poll=true;TestQualificationPhysicalAccess::attach(device,driver);
+ TestQualificationPhysicalAccess::service_error_before_shader_enqueue(device,driver,true,false,true);CHECK(driver.polls==1);CHECK(driver.shaders_freed==1);TestQualificationPhysicalAccess::detach(device);
 }

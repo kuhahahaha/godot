@@ -75,6 +75,7 @@ struct Registry::QualificationBridge {
   GDExtensionStorageRetireRequestV1 retirement = {};
   GDExtensionStorageRetireReportV1 report = {};
   QualificationPhysicalReturn physical;
+  Error maintenance_error = OK;
   bool creating = true, retiring = false, queued = false, acknowledged = false;
  };
  struct NativeUnit {
@@ -83,6 +84,7 @@ struct Registry::QualificationBridge {
   GDExtensionNativeUnitBackingV1 backing = {};
   GDExtensionNativeUnitRetireReportV1 report = {};
   QualificationPhysicalReturn shader, pipeline;
+  Error maintenance_error = OK;
   bool creating = true, retiring = false, queued = false, acknowledged = false;
  };
  QualificationTicket *tickets[CHILD_CAPACITY] = {};
