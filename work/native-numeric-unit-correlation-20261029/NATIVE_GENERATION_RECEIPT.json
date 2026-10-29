@@ -1,0 +1,139 @@
+{
+  "scope": "passive artifact provenance for this native substrate control; no operation/completion/U08 authority",
+  "recipe_digest": "573c63aac716020f66c7074bd4e33e397e68b8d3adc8d4e2f894b27002156e9a",
+  "unit_digest": "5f530f5b8314f642b4122121b99f35cab6341220f832c4407176753c712ed7d4",
+  "profile_digest": "d6f2e7229bec8bc17d56e7c561571f78830bc4113fd30bc0ae830a58ac3c0ce0",
+  "required_compile_flags": 1,
+  "core": {
+    "bytes": 301110608,
+    "sha256": "720900340909ef176290cb20da1f28b903bd1918e1e92ef5e5e54bbb0e0ba197"
+  },
+  "glslang": {
+    "path": "/opt/homebrew/Cellar/glslang/16.6.0/bin/glslang",
+    "bytes": 160448,
+    "sha256": "6d4f9f2ba82d0762fedbb9214447318342ebf10781c4f91d07cafab94989fb36"
+  },
+  "command": [
+    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+    "--disable-crash-handler",
+    "--path",
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-unit-correlation-20261029/input",
+    "--rendering-driver",
+    "metal",
+    "--rendering-method",
+    "mobile",
+    "--render-thread",
+    "safe",
+    "--script",
+    "generate.gd"
+  ],
+  "before": {
+    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64": {
+      "bytes": 301110608,
+      "sha256": "720900340909ef176290cb20da1f28b903bd1918e1e92ef5e5e54bbb0e0ba197"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-unit-correlation-20261029/input/generate.gd": {
+      "bytes": 794,
+      "sha256": "368a51c7f8ca723e431163eefbaf15f189c4fbc20f83b6d1758b55c319c496b3"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-unit-correlation-20261029/input/unit.json": {
+      "bytes": 1798,
+      "sha256": "b4c8c4942632d23683682c3aea611d608c65cd90362b5ad8c5dc8797a092d1af"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-unit-correlation-20261029/generate_native.py": {
+      "bytes": 3570,
+      "sha256": "4c545983b70f2dfa92051bca42c29c147b06a99ef0cecba86bf318c0e369df79"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-unit-correlation-20261029/input/capture.comp": {
+      "bytes": 3140,
+      "sha256": "4a6f75a4414fef00f0c30a1da3c443d8603484e082524efee396b549c4275a05"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-unit-correlation-20261029/input/capture.spv": {
+      "bytes": 6048,
+      "sha256": "cb9efb9a5307f2ba3ea2f32cc4c79ab83004b1bd6facd24c8b7528d91ba5c07e"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-unit-correlation-20261029/input/body.comp": {
+      "bytes": 19934,
+      "sha256": "6c9c4f7481bacb9ff5d3c74e05cb27c8b107b098fbefab8b9941aee135508546"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-unit-correlation-20261029/input/body.spv": {
+      "bytes": 38224,
+      "sha256": "b1aba4ba8363e7f87cb3490baa7864027c849e36c80fef3f1226b06e73c4d047"
+    }
+  },
+  "after": {
+    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64": {
+      "bytes": 301110608,
+      "sha256": "720900340909ef176290cb20da1f28b903bd1918e1e92ef5e5e54bbb0e0ba197"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-unit-correlation-20261029/input/generate.gd": {
+      "bytes": 794,
+      "sha256": "368a51c7f8ca723e431163eefbaf15f189c4fbc20f83b6d1758b55c319c496b3"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-unit-correlation-20261029/input/unit.json": {
+      "bytes": 1798,
+      "sha256": "b4c8c4942632d23683682c3aea611d608c65cd90362b5ad8c5dc8797a092d1af"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-unit-correlation-20261029/generate_native.py": {
+      "bytes": 3570,
+      "sha256": "4c545983b70f2dfa92051bca42c29c147b06a99ef0cecba86bf318c0e369df79"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-unit-correlation-20261029/input/capture.comp": {
+      "bytes": 3140,
+      "sha256": "4a6f75a4414fef00f0c30a1da3c443d8603484e082524efee396b549c4275a05"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-unit-correlation-20261029/input/capture.spv": {
+      "bytes": 6048,
+      "sha256": "cb9efb9a5307f2ba3ea2f32cc4c79ab83004b1bd6facd24c8b7528d91ba5c07e"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-unit-correlation-20261029/input/body.comp": {
+      "bytes": 19934,
+      "sha256": "6c9c4f7481bacb9ff5d3c74e05cb27c8b107b098fbefab8b9941aee135508546"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-unit-correlation-20261029/input/body.spv": {
+      "bytes": 38224,
+      "sha256": "b1aba4ba8363e7f87cb3490baa7864027c849e36c80fef3f1226b06e73c4d047"
+    }
+  },
+  "rc": 0,
+  "log": {
+    "bytes": 343,
+    "sha256": "fd8d07d682d947de2983325170ce7bb6dc93a1f93f839f6745b4005b2f39e8f2"
+  },
+  "physical": [
+    {
+      "index": 0,
+      "identity": "8c8cf2f527abda72997ace0137ef629e4734c440a9259383a8c01d0a29e50e7b",
+      "interface_digest": "fc393517260c281bd5b28fbfe1e26a7a0e23502b54d4dfb28e0406b99ff1218a",
+      "source": {
+        "bytes": 3140,
+        "sha256": "4a6f75a4414fef00f0c30a1da3c443d8603484e082524efee396b549c4275a05"
+      },
+      "spirv": {
+        "bytes": 6048,
+        "sha256": "cb9efb9a5307f2ba3ea2f32cc4c79ab83004b1bd6facd24c8b7528d91ba5c07e"
+      },
+      "container": {
+        "bytes": 1960,
+        "sha256": "aa0e2e4718ca32c3f5dc179b58a714dd37c5cf1f2089afd60d2a2f9a01a317e5"
+      }
+    },
+    {
+      "index": 1,
+      "identity": "486889ce180141f4148d41567664fbd4d2baf3d0467ea30425645cb25c69a0a9",
+      "interface_digest": "514050520bbeff76463b1690484e4bd7b0d3a71db54e1b5d8677339cd4a2c636",
+      "source": {
+        "bytes": 19934,
+        "sha256": "6c9c4f7481bacb9ff5d3c74e05cb27c8b107b098fbefab8b9941aee135508546"
+      },
+      "spirv": {
+        "bytes": 38224,
+        "sha256": "b1aba4ba8363e7f87cb3490baa7864027c849e36c80fef3f1226b06e73c4d047"
+      },
+      "container": {
+        "bytes": 5376,
+        "sha256": "64e9b63fa31b9954ce1722b6a9932c4bd038acd07fd9a56deb6c0016a82240b5"
+      }
+    }
+  ]
+}

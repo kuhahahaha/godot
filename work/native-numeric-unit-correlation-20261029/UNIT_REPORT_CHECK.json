@@ -1,0 +1,15 @@
+{
+  "scope": "Passive binary report correlation only; no owner/operation issuer",
+  "checks": [
+    {
+      "case": "positive",
+      "report_sha256": "b63a9c25c93263abc2d008ef9ef4bc96a3d4c0b0184556837506f29c5c9fe6d9",
+      "unit_digest": "5f530f5b8314f642b4122121b99f35cab6341220f832c4407176753c712ed7d4"
+    },
+    {
+      "case": "cancel_prefix",
+      "report_sha256": "1f3735aab1689104736318bc576c0a755ae956cc90ed13addc3b4c8355bb1342",
+      "unit_digest": "5f530f5b8314f642b4122121b99f35cab6341220f832c4407176753c712ed7d4"
+    }
+  ]
+}

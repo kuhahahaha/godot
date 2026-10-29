@@ -1,0 +1,14 @@
+[
+  "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+  "--disable-crash-handler",
+  "--path",
+  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-numeric-unit-correlation-20261029/input",
+  "--rendering-driver",
+  "metal",
+  "--rendering-method",
+  "mobile",
+  "--render-thread",
+  "safe",
+  "--script",
+  "generate.gd"
+]
