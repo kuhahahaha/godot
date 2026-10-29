@@ -276,6 +276,14 @@ TEST_CASE("[QualificationNative][Vulkan] framebuffer creation rejects missing at
  ERR_PRINT_ON;
  CHECK_FALSE(bool(framebuffer));
 }
+TEST_CASE("[QualificationNative][Vulkan] uniform set creation rejects missing binding views before resource access") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ ERR_PRINT_OFF;
+ auto uniform_set=driver.uniform_set_create(VectorView<RenderingDeviceDriver::BoundUniform>(nullptr,1),RenderingDeviceDriver::ShaderID(),0,-1);
+ ERR_PRINT_ON;
+ CHECK_FALSE(bool(uniform_set));
+}
 TEST_CASE("[QualificationNative][Vulkan] queue submit rejects missing wait view before queue access") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
