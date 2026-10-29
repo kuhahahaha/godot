@@ -311,6 +311,47 @@ public:
   if(!native && device.storage_buffer_owner.owns(rid))device._free_internal(rid);
   device._free_pending_resources(0);memdelete(storage);memdelete(unit);memdelete(bridge);
  }
+ static void pipeline_identity_precedes_shader_pending(RenderingDevice &device,RenderingDeviceDriver &driver) {
+  using namespace GDExtensionDeviceExit;
+  auto *bridge=memnew(Registry::QualificationBridge);auto *child=memnew(Registry::QualificationBridge::NativeUnit);
+  bridge->units[0]=child;child->serial=31;child->retiring=true;child->backing.known_mask=3;child->report.report_revision=1;
+  child->pipeline.rid=UINT64_MAX;child->pipeline.serial=47;child->pipeline.bridge=11;child->pipeline.child=31;child->pipeline.use_closed=true;
+  child->shader.serial=43;child->shader.bridge=11;child->shader.child=31;child->shader.use_closed=true;child->shader.dependent_children=1;
+  RenderingDevice::Shader shader;shader.driver_id=RenderingDeviceDriver::ShaderID(19);shader.qualification_return=&child->shader;
+  RID rid=device.shader_owner.make_rid(shader);REQUIRE(rid.is_valid());child->shader.rid=rid.get_id();
+  device.draw_graph.initialize(&driver,[](RenderingDeviceDriver *,VectorView<RenderingDeviceDriver::AttachmentLoadOp>,VectorView<RenderingDeviceDriver::AttachmentStoreOp>,void *){return RenderingDeviceDriver::RenderPassID();},1,RenderingDeviceDriver::CommandQueueFamilyID(1),0);device.draw_graph.begin();
+  Registry::get_singleton().qualification_retire_step(bridge,&device,31,2);
+  CHECK(child->report.state==2);CHECK(child->report.reason==6);CHECK(child->report.return_status==0);CHECK_FALSE(child->shader.enqueued);CHECK_FALSE(child->pipeline.enqueued);
+  // The missing pipeline is an intentionally invalid fixture identity, not a native child.
+  child->shader.dependent_children=0;if(device.shader_owner.owns(rid))device._free_internal(rid);device._free_pending_resources(0);memdelete(child);memdelete(bridge);
+ }
+ static void unknown_pipeline_keeps_shader(RenderingDevice &device,RenderingDeviceDriver &driver,int mode) {
+  const bool possible=mode==1;
+  using namespace GDExtensionDeviceExit;
+  auto *bridge=memnew(Registry::QualificationBridge);auto *child=memnew(Registry::QualificationBridge::NativeUnit);
+  bridge->units[0]=child;child->serial=31;child->retiring=true;child->backing.known_mask=possible?1:3;child->backing.possible_mask=possible?2:0;child->report.report_revision=1;
+  child->pipeline.rid=mode==0?UINT64_MAX:0;child->pipeline.serial=possible?0:47;child->pipeline.bridge=11;child->pipeline.child=31;child->pipeline.use_closed=true;
+  child->shader.serial=43;child->shader.bridge=11;child->shader.child=31;child->shader.use_closed=true;
+  RenderingDevice::Shader shader;shader.driver_id=RenderingDeviceDriver::ShaderID(19);shader.qualification_return=&child->shader;
+  RID rid=device.shader_owner.make_rid(shader);REQUIRE(rid.is_valid());child->shader.rid=rid.get_id();
+  device.draw_graph.initialize(&driver,[](RenderingDeviceDriver *,VectorView<RenderingDeviceDriver::AttachmentLoadOp>,VectorView<RenderingDeviceDriver::AttachmentStoreOp>,void *){return RenderingDeviceDriver::RenderPassID();},1,RenderingDeviceDriver::CommandQueueFamilyID(1),0);device.draw_graph.begin();
+  Registry::get_singleton().qualification_retire_step(bridge,&device,31,2);
+  CHECK(child->report.state==2);CHECK(child->report.reason==(possible?5:6));CHECK(child->report.return_status==0);
+  CHECK(device.shader_owner.owns(rid));CHECK_FALSE(child->shader.enqueued);CHECK(child->shader.free_event==0);CHECK(child->report.freed_mask==0);
+  // Independent fixture cleanup does not assert that the unknown pipeline returned.
+  if(device.shader_owner.owns(rid))device._free_internal(rid);device._free_pending_resources(0);memdelete(child);memdelete(bridge);
+ }
+ static void mismatched_pipeline_event_is_not_returned(RenderingDevice &device,RenderingDeviceDriver &driver) {
+  using namespace GDExtensionDeviceExit;
+  auto *bridge=memnew(Registry::QualificationBridge);auto *child=memnew(Registry::QualificationBridge::NativeUnit);
+  bridge->units[0]=child;child->serial=31;child->retiring=true;child->backing.known_mask=2;child->report.report_revision=1;
+  // A deliberately inconsistent fixture event is not evidence of a driver free.
+  child->pipeline.rid=0;child->pipeline.serial=47;child->pipeline.enqueued=true;child->pipeline.frame_slot=0;child->pipeline.frame_epoch=71;child->pipeline.free_event=59;
+  device.draw_graph.initialize(&driver,[](RenderingDeviceDriver *,VectorView<RenderingDeviceDriver::AttachmentLoadOp>,VectorView<RenderingDeviceDriver::AttachmentStoreOp>,void *){return RenderingDeviceDriver::RenderPassID();},1,RenderingDeviceDriver::CommandQueueFamilyID(1),0);device.draw_graph.begin();
+  Registry::get_singleton().qualification_retire_step(bridge,&device,31,2);
+  CHECK(child->report.state==2);CHECK(child->report.reason==6);CHECK(child->report.return_status==0);
+  memdelete(child);memdelete(bridge);
+ }
  static void native_nonerror_unknown_can_settle(RenderingDevice &device,RenderingDeviceDriver &driver) {
   using namespace GDExtensionDeviceExit;
   auto *bridge=memnew(Registry::QualificationBridge);auto *child=memnew(Registry::QualificationBridge::NativeUnit);
@@ -499,4 +540,21 @@ TEST_CASE("[Qualification] non-error Unknown remains well-formed while a depende
   RenderingDevice device;TestQualificationPhysical::Driver driver;driver.polls=1;TestQualificationPhysicalAccess::attach(device,driver);
   TestQualificationPhysicalAccess::unknown_while_dependent(device,driver,native,variant%3==2,variant<3?6:5);CHECK(native ? driver.shaders_freed==1 : driver.frees==1);TestQualificationPhysicalAccess::detach(device);
  }
+}
+
+TEST_CASE("[Qualification] unit pipeline identity failure is not masked by shader pending") {
+ RenderingDevice device;TestQualificationPhysical::Driver driver;driver.polls=1;TestQualificationPhysicalAccess::attach(device,driver);
+ TestQualificationPhysicalAccess::pipeline_identity_precedes_shader_pending(device,driver);CHECK(driver.shaders_freed==1);TestQualificationPhysicalAccess::detach(device);
+}
+
+TEST_CASE("[Qualification] unknown pipeline preserves its original shader") {
+ for(int mode=0;mode<3;++mode) {
+  RenderingDevice device;TestQualificationPhysical::Driver driver;driver.polls=1;TestQualificationPhysicalAccess::attach(device,driver);
+  TestQualificationPhysicalAccess::unknown_pipeline_keeps_shader(device,driver,mode);CHECK(driver.shaders_freed==1);TestQualificationPhysicalAccess::detach(device);
+ }
+}
+
+TEST_CASE("[Qualification] mismatched pipeline cell cannot publish Returned from an event") {
+ RenderingDevice device;TestQualificationPhysical::Driver driver;TestQualificationPhysicalAccess::attach(device,driver);
+ TestQualificationPhysicalAccess::mismatched_pipeline_event_is_not_returned(device,driver);TestQualificationPhysicalAccess::detach(device);
 }
