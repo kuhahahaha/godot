@@ -1574,8 +1574,15 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 
 bool RenderingDeviceDriverMetal::shader_retire_ready_nonblocking(ShaderID p_shader) const {
  if (!p_shader) return false;
- const auto *shader = dynamic_cast<const MDComputeShader *>(reinterpret_cast<MDShader *>(p_shader.id));
- return shader && shader->kernel && shader->kernel->retire_ready_nonblocking();
+ const auto *shader = reinterpret_cast<MDShader *>(p_shader.id);
+ if (const auto *compute_shader = dynamic_cast<const MDComputeShader *>(shader)) {
+  return compute_shader->kernel && compute_shader->kernel->retire_ready_nonblocking();
+ }
+ if (const auto *render_shader = dynamic_cast<const MDRenderShader *>(shader)) {
+  return render_shader->vert && render_shader->frag &&
+    render_shader->vert->retire_ready_nonblocking() && render_shader->frag->retire_ready_nonblocking();
+ }
+ return false;
 }
 
 void RenderingDeviceDriverMetal::shader_free(ShaderID p_shader) {
