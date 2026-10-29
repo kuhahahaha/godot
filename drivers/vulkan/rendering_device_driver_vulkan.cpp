@@ -2184,6 +2184,7 @@ uint64_t RenderingDeviceDriverVulkan::buffer_get_dynamic_offsets(Span<BufferID> 
 
 	for (const BufferID &buf : p_buffers) {
 		const BufferInfo *buf_info = (const BufferInfo *)buf.id;
+		ERR_FAIL_NULL_V(buf_info, 0);
 		if (!buf_info->is_dynamic()) {
 			continue;
 		}
@@ -2736,7 +2737,9 @@ uint64_t RenderingDeviceDriverVulkan::texture_get_allocation_size(TextureID p_te
 
 void RenderingDeviceDriverVulkan::texture_get_copyable_layout(TextureID p_texture, const TextureSubresource &p_subresource, TextureCopyableLayout *r_layout) {
 	ERR_FAIL_COND(!r_layout);
+	*r_layout = {};
 	const TextureInfo *tex_info = (const TextureInfo *)p_texture.id;
+	ERR_FAIL_NULL(tex_info);
 
 	uint32_t w = MAX(1u, tex_info->vk_create_info.extent.width >> p_subresource.mipmap);
 	uint32_t h = MAX(1u, tex_info->vk_create_info.extent.height >> p_subresource.mipmap);
@@ -2746,7 +2749,6 @@ void RenderingDeviceDriverVulkan::texture_get_copyable_layout(TextureID p_textur
 	get_compressed_image_format_block_dimensions(tex_info->rd_format, bw, bh);
 
 	uint32_t sbw = 0, sbh = 0;
-	*r_layout = {};
 	r_layout->size = get_image_format_required_size(tex_info->rd_format, w, h, d, 1, &sbw, &sbh);
 	r_layout->row_pitch = r_layout->size / ((sbh / bh) * d);
 }

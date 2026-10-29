@@ -344,6 +344,25 @@ TEST_CASE("[QualificationNative][Vulkan] texture copyable-layout query rejects m
  ERR_PRINT_ON;
  CHECK(true);
 }
+TEST_CASE("[QualificationNative][Vulkan] texture copyable-layout query rejects invalid resource before access") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ RenderingDeviceDriver::TextureCopyableLayout layout;
+ ERR_PRINT_OFF;
+ driver.texture_get_copyable_layout(RenderingDeviceDriver::TextureID(),RenderingDeviceDriver::TextureSubresource(),&layout);
+ ERR_PRINT_ON;
+ CHECK(layout.size==0);
+ CHECK(layout.row_pitch==0);
+}
+TEST_CASE("[QualificationNative][Vulkan] dynamic buffer-offset query rejects invalid resource before access") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ RenderingDeviceDriver::BufferID invalid;
+ ERR_PRINT_OFF;
+ auto offsets=driver.buffer_get_dynamic_offsets(Span<RenderingDeviceDriver::BufferID>(&invalid,1));
+ ERR_PRINT_ON;
+ CHECK(offsets==0);
+}
 TEST_CASE("[QualificationNative][Vulkan] texture allocation-size query rejects invalid resource before access") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
