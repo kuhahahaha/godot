@@ -276,7 +276,19 @@ def generate_scu_files(max_includes_per_scu):
     process_folder(["core/crypto"])
     process_folder(["core/debugger"])
     process_folder(["core/error"])
-    process_folder(["core/extension"])
+    # These lifecycle translation units intentionally keep private helpers in
+    # anonymous namespaces; isolate them to avoid collisions in unity builds.
+    process_folder(
+        ["core/extension"],
+        [
+            "gdextension_device_session",
+            "gdextension_guard_enrollment",
+            "gdextension_qualification",
+            "gdextension_qualification_rt",
+            "gdextension_qualification_ticket",
+            "gdextension_typed_lifecycle",
+        ],
+    )
     process_folder(["core/input"])
     process_folder(["core/io"])
     process_folder(["core/math"])

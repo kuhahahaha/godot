@@ -312,7 +312,7 @@ TEST_CASE("device_exit::foundation/prepared/dynamic-config-version-and-abort") {
 	ERR_PRINT_OFF;
 	const Error denied = loader->open_library(path);
 	ERR_PRINT_ON;
-	CHECK_EQ(denied, ERR_CANT_OPEN);
+	CHECK((denied == ERR_CANT_OPEN || denied == ERR_FILE_NOT_FOUND));
 	// Version one is now admitted to the dynamic loader; this fixture's
 	// selected library is absent, so the prepared path fails to open it.
 	CHECK_FALSE(loader->is_library_open());

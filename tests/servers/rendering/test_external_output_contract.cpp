@@ -202,6 +202,7 @@ public:
 		p_device.transfer_worker_pool.push_back(worker);
 		p_device.transfer_worker_pool_size = 1;
 		p_device.transfer_worker_operation_used_by_draw.resize(1);
+		p_device.transfer_worker_operation_used_by_draw[0] = 0;
 		auto *buffer = p_device.storage_buffer_owner.get_or_null(p_buffer);
 		buffer->transfer_worker_index = 0;
 		buffer->transfer_worker_operation = 9;

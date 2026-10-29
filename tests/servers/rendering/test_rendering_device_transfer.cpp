@@ -229,6 +229,9 @@ public:
 		if (p_trait == API_TRAIT_HONORS_PIPELINE_BARRIERS) {
 			return 0;
 		}
+		if (p_trait == API_TRAIT_TEXTURE_TRANSFER_ALIGNMENT || p_trait == API_TRAIT_TEXTURE_DATA_ROW_PITCH_STEP) {
+			return 1;
+		}
 		if (p_trait == API_TRAIT_SHADER_GROUP_HANDLE_SIZE || p_trait == API_TRAIT_SHADER_GROUP_HANDLE_ALIGNMENT || p_trait == API_TRAIT_SHADER_GROUP_BASE_ALIGNMENT) {
 			return 4;
 		}
