@@ -9815,8 +9815,8 @@
       "sha256": "348afa16cd2d7e563f590ef5365ae02da605fbdcfaa5a0508a3525b13ed19bb0"
     },
     "/Users/macbookair/Documents/Work/godot_ANGE/work/joint-integration-native-20261029/INPUTS.json": {
-      "bytes": 4270,
-      "sha256": "01b97c701880291e9cc11cdf202a46038a7e74697b320a1da3b480e63a70ecdc"
+      "bytes": 4300,
+      "sha256": "b7eb211fedecc7e5762a1ca5edd3ee597b18ee735e93eda6fcf98d7e153ecd00"
     },
     "/Users/macbookair/Documents/Work/godot_ANGE/work/joint-integration-native-20261029/INTEGRATION_STATUS.md": {
       "bytes": 4218,
@@ -9873,6 +9873,10 @@
     "/Users/macbookair/Documents/Work/godot_ANGE/work/joint-integration-native-20261029/verify_checkpoint.py": {
       "bytes": 2948,
       "sha256": "898a44acb060dc54f6516f8260a64b5400d55f7bfdcb32a9bc6034b34b52b7d6"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/joint-integration-native-20261029/MANIFEST.json": {
+      "bytes": 6159,
+      "sha256": "f9145548d481fc88c1bebb45665ca6d8a078803c6457c387a63bfbdac225cccb"
     }
   }
 }
