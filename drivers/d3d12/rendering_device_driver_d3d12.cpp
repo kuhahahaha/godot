@@ -2650,7 +2650,6 @@ Error RenderingDeviceDriverD3D12::command_queue_execute_and_present(CommandQueue
 		report.calls.push_back(present_fact);
 	}
 
-	NativeCallFact fact;
 	report.error = any_present_failed ? FAILED : OK;
 	record_queue_call_report(report);
 	return any_present_failed ? FAILED : OK;

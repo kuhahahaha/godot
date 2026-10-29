@@ -1,3 +1,33 @@
+/**************************************************************************/
+/*  rendering_device.cpp                                                  */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
 #include "core/extension/gdextension_library_exit_guard.h"
 /**************************************************************************/
 /*  rendering_device.cpp                                                  */
@@ -29,8 +59,9 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#include "rendering_device.h"
 #include "rendering_device.compat.inc"
+
+#include "rendering_device.h"
 
 #include "core/config/engine.h"
 #include "core/config/project_settings.h"
@@ -1137,12 +1168,20 @@ Error RenderingDevice::_buffer_update(Buffer *p_buffer, RID p_buffer_id, uint32_
 	if (_recording_error() != OK) {
 		return _recording_error();
 	}
- if(p_progress) {
-  if(!qualification_recording || p_progress->consumed>p_size || !p_progress->max_segments || p_progress->max_segments>4096)return ERR_INVALID_PARAMETER;
-  if(p_buffer->usage.has_flag(RDD::BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT))return ERR_UNAVAILABLE;
-  if(p_buffer->transfer_worker_index>=0)return ERR_BUSY;
-  if(p_progress->consumed==p_size)return OK;
- }
+	if (p_progress) {
+		if (!qualification_recording || p_progress->consumed > p_size || !p_progress->max_segments || p_progress->max_segments > 4096) {
+			return ERR_INVALID_PARAMETER;
+		}
+		if (p_buffer->usage.has_flag(RDD::BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT)) {
+			return ERR_UNAVAILABLE;
+		}
+		if (p_buffer->transfer_worker_index >= 0) {
+			return ERR_BUSY;
+		}
+		if (p_progress->consumed == p_size) {
+			return OK;
+		}
+	}
 	copy_bytes_count += p_size;
 
 	if (p_buffer->usage.has_flag(RDD::BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT)) {
@@ -1161,23 +1200,30 @@ Error RenderingDevice::_buffer_update(Buffer *p_buffer, RID p_buffer_id, uint32_
 
 	// Submitting may get chunked for various reasons, so convert this to a task.
 	size_t submit_from = p_progress ? p_progress->consumed : 0;
- size_t to_submit = p_size-submit_from;
+	size_t to_submit = p_size - submit_from;
 
 	thread_local LocalVector<RDG::RecordedBufferCopy> command_buffer_copies_vector;
 	command_buffer_copies_vector.clear();
- auto publish=[&]() -> Error {
-  if(command_buffer_copies_vector.is_empty())return OK;
-  if(p_progress && p_progress->segments.size()>=p_progress->max_segments)return ERR_PARAMETER_RANGE_ERROR;
-  if(_buffer_make_mutable(p_buffer,p_buffer_id))draw_graph.add_synchronization();
-  const auto handle=draw_graph.add_buffer_update(p_buffer->driver_id,p_buffer->draw_tracker,command_buffer_copies_vector);
-  if(p_progress) {
-   const auto &first=command_buffer_copies_vector[0].region;
-   const auto &last=command_buffer_copies_vector[command_buffer_copies_vector.size()-1].region;
-   p_progress->segments.push_back({handle,uint32_t(first.dst_offset-p_offset),uint32_t(last.dst_offset+last.size-p_offset)});
-   p_progress->consumed=last.dst_offset+last.size-p_offset;
-  }
-  command_buffer_copies_vector.clear();return OK;
- };
+	auto publish = [&]() -> Error {
+		if (command_buffer_copies_vector.is_empty()) {
+			return OK;
+		}
+		if (p_progress && p_progress->segments.size() >= p_progress->max_segments) {
+			return ERR_PARAMETER_RANGE_ERROR;
+		}
+		if (_buffer_make_mutable(p_buffer, p_buffer_id)) {
+			draw_graph.add_synchronization();
+		}
+		const auto handle = draw_graph.add_buffer_update(p_buffer->driver_id, p_buffer->draw_tracker, command_buffer_copies_vector);
+		if (p_progress) {
+			const auto &first = command_buffer_copies_vector[0].region;
+			const auto &last = command_buffer_copies_vector[command_buffer_copies_vector.size() - 1].region;
+			p_progress->segments.push_back({ handle, uint32_t(first.dst_offset - p_offset), uint32_t(last.dst_offset + last.size - p_offset) });
+			p_progress->consumed = last.dst_offset + last.size - p_offset;
+		}
+		command_buffer_copies_vector.clear();
+		return OK;
+	};
 
 	const uint8_t *src_data = reinterpret_cast<const uint8_t *>(p_data);
 	const uint32_t required_align = 32;
@@ -1191,16 +1237,25 @@ Error RenderingDevice::_buffer_update(Buffer *p_buffer, RID p_buffer_id, uint32_
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
 			RenderCaptureTestHooks::observe_buffer_write(p_buffer_id.get_id(), p_offset + submit_from, to_submit, false, uint64_t(get_instance_id()), p_buffer->driver_id.id, p_buffer->capture_test_allocation_serial, submit_from > 0);
 #endif
-   if(p_progress) {const Error publication=publish();if(publication!=OK)return publication;}
+			if (p_progress) {
+				const Error publication = publish();
+				if (publication != OK) {
+					return publication;
+				}
+			}
 			return err;
 		}
-  if(p_progress && required_action!=STAGING_REQUIRED_ACTION_NONE) {
-   const Error publication=publish();return publication!=OK ? publication : ERR_BUSY;
-  }
+		if (p_progress && required_action != STAGING_REQUIRED_ACTION_NONE) {
+			const Error publication = publish();
+			return publication != OK ? publication : ERR_BUSY;
+		}
 
-  if(!command_buffer_copies_vector.is_empty() && required_action==STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL) {
-   const Error publication=publish();if(publication!=OK)return publication;
-  }
+		if (!command_buffer_copies_vector.is_empty() && required_action == STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL) {
+			const Error publication = publish();
+			if (publication != OK) {
+				return publication;
+			}
+		}
 
 		const Error staging_error = _staging_buffer_execute_required_action(upload_staging_buffers, required_action);
 		if (staging_error != OK) {
@@ -1230,7 +1285,10 @@ Error RenderingDevice::_buffer_update(Buffer *p_buffer, RID p_buffer_id, uint32_
 		submit_from += block_write_amount;
 	}
 
- const Error publication=publish();if(publication!=OK)return publication;
+	const Error publication = publish();
+	if (publication != OK) {
+		return publication;
+	}
 
 	gpu_copy_count++;
 
@@ -1268,10 +1326,12 @@ Error RenderingDevice::driver_callback_add(RDD::DriverCallback p_callback, void 
 	ERR_FAIL_COND_V_MSG(raytracing_list.active, ERR_INVALID_PARAMETER,
 			"Driver callback is forbidden during creation of a raytracing list.");
 
- for(uint32_t i=0;i<p_resources.size();++i)if(p_resources[i].type==CALLBACK_RESOURCE_TYPE_BUFFER) {
-  auto *buffer=storage_buffer_owner.get_or_null(p_resources[i].rid);
-  ERR_FAIL_COND_V(buffer && buffer->qualification_return,ERR_UNAUTHORIZED);
- }
+	for (uint32_t i = 0; i < p_resources.size(); ++i) {
+		if (p_resources[i].type == CALLBACK_RESOURCE_TYPE_BUFFER) {
+			auto *buffer = storage_buffer_owner.get_or_null(p_resources[i].rid);
+			ERR_FAIL_COND_V(buffer && buffer->qualification_return, ERR_UNAUTHORIZED);
+		}
+	}
 
 	thread_local LocalVector<RDG::ResourceTracker *> trackers;
 	thread_local LocalVector<RDG::ResourceUsage> usages;
@@ -1460,73 +1520,120 @@ Vector<uint8_t> RenderingDevice::buffer_get_data(RID p_buffer, uint32_t p_offset
 }
 
 Error RenderingDevice::buffer_get_data_async(RID buffer, const Callable &callback, uint32_t offset, uint32_t size) {
- return _buffer_get_data_async(buffer,callback,offset,size);
+	return _buffer_get_data_async(buffer, callback, offset, size);
 }
 
 Error RenderingDevice::_buffer_get_data_async(RID p_buffer, const Callable &p_callback, uint32_t p_offset, uint32_t p_size, const Ref<BufferGetDataResult> &p_owned) {
- ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
- if(_recording_error()!=OK)return _recording_error();
- Buffer *buffer=_get_buffer_from_owner(p_buffer);
- ERR_FAIL_NULL_V(buffer,ERR_INVALID_PARAMETER);
- const bool core=p_owned.is_valid();
- ERR_FAIL_COND_V(buffer->qualification_return && !qualification_recording,ERR_UNAUTHORIZED);
- if(!p_size)p_size=buffer->size;
- ERR_FAIL_COND_V(p_offset>buffer->size || p_size>buffer->size-p_offset,ERR_INVALID_PARAMETER);
- ERR_FAIL_COND_V(core ? (!p_owned->qualification_owned || !qualification_recording || p_callback.is_valid() || p_owned->bytes.size()!=p_size || p_owned->issued_size>p_size || p_owned->delivered || p_owned->error!=OK) : !p_callback.is_valid(),ERR_INVALID_PARAMETER);
- // The public legacy route retains its worker submission behavior. Core ticket
- // admission must join a real worker before using it; never silently wait here.
- if(core && buffer->transfer_worker_index>=0)return ERR_BUSY;
- if(!core)_check_transfer_worker_buffer(buffer);
- BufferGetDataRequest request;request.buffer=p_buffer;request.callback=p_callback;
- request.frame_local_index=frames[frame].download_buffer_copy_regions.size();
- if(core)request.result=p_owned;
- else {request.result.instantiate();const Error error=request.result->bytes.resize(p_size);if(error!=OK)return error;}
- request.result_offset=request.result->issued_size;
- uint32_t submit_from=request.result->issued_size,to_submit=p_size-submit_from;
- auto publish=[&](bool final) {
-  if(!request.frame_local_count)return;
-  if(_buffer_make_mutable(buffer,p_buffer))draw_graph.add_synchronization();
-  for(uint32_t i=0;i<request.frame_local_count;++i) {
-   const uint32_t index=request.frame_local_index+i;
-   const auto destination=frames[frame].download_buffer_staging_buffers[index];
-   const auto region=frames[frame].download_buffer_copy_regions[index];
-   const auto handle=draw_graph.add_buffer_get_data(buffer->driver_id,buffer->draw_tracker,destination,region);
-   request.result->copies.push_back({handle,buffer->driver_id,destination,region});
-  }
-  request.final_segment=final;frames[frame].download_buffer_get_data_requests.push_back(request);
-  request.result->issued_size+=request.size;
- };
- while(to_submit) {
-  uint32_t offset=0,amount=0;StagingRequiredAction action;
-  Error error=_staging_buffer_allocate(download_staging_buffers,MIN(to_submit,download_staging_buffers.block_size),32,offset,amount,action);
-  if(error!=OK) {if(core)publish(false);request.result->error=error;return error;}
-  if(core && action!=STAGING_REQUIRED_ACTION_NONE) {
-   // Both exhausted-staging cases preserve this same result/copy set and return
-   // before the legacy blocking action. The next call resumes only its suffix.
-   publish(false);return ERR_BUSY;
-  }
-  const bool flush=request.frame_local_count>0 && action==STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL;
-  if(flush)publish(false);
-  error=_staging_buffer_execute_required_action(download_staging_buffers,action);
-  if(error!=OK) {request.result->error=error;return error;}
-  if(request.result->error!=OK)return request.result->error;
-  buffer=_get_buffer_from_owner(p_buffer);
-  if(!buffer){request.result->error=ERR_DOES_NOT_EXIST;return ERR_DOES_NOT_EXIST;}
-  if(flush) {
-   request.result_offset=request.result->issued_size;request.size=0;request.frame_local_count=0;
-   request.frame_local_index=frames[frame].download_buffer_copy_regions.size();
-  }
-  const RDD::BufferCopyRegion region{submit_from+p_offset,offset,amount};
-  frames[frame].download_buffer_staging_buffers.push_back(download_staging_buffers.blocks[download_staging_buffers.current].driver_id);
-  frames[frame].download_buffer_copy_regions.push_back(region);++request.frame_local_count;request.size+=amount;
-  download_staging_buffers.blocks.write[download_staging_buffers.current].fill_amount=offset+amount;
-  submit_from+=amount;to_submit-=amount;
- }
- publish(true);
+	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
+	if (_recording_error() != OK) {
+		return _recording_error();
+	}
+	Buffer *buffer = _get_buffer_from_owner(p_buffer);
+	ERR_FAIL_NULL_V(buffer, ERR_INVALID_PARAMETER);
+	const bool core = p_owned.is_valid();
+	ERR_FAIL_COND_V(buffer->qualification_return && !qualification_recording, ERR_UNAUTHORIZED);
+	if (!p_size) {
+		p_size = buffer->size;
+	}
+	ERR_FAIL_COND_V(p_offset > buffer->size || p_size > buffer->size - p_offset, ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(core ? (!p_owned->qualification_owned || !qualification_recording || p_callback.is_valid() || p_owned->bytes.size() != p_size || p_owned->issued_size > p_size || p_owned->delivered || p_owned->error != OK) : !p_callback.is_valid(), ERR_INVALID_PARAMETER);
+	// The public legacy route retains its worker submission behavior. Core ticket
+	// admission must join a real worker before using it; never silently wait here.
+	if (core && buffer->transfer_worker_index >= 0) {
+		return ERR_BUSY;
+	}
+	if (!core) {
+		_check_transfer_worker_buffer(buffer);
+	}
+	BufferGetDataRequest request;
+	request.buffer = p_buffer;
+	request.callback = p_callback;
+	request.frame_local_index = frames[frame].download_buffer_copy_regions.size();
+	if (core) {
+		request.result = p_owned;
+	} else {
+		request.result.instantiate();
+		const Error error = request.result->bytes.resize(p_size);
+		if (error != OK) {
+			return error;
+		}
+	}
+	request.result_offset = request.result->issued_size;
+	uint32_t submit_from = request.result->issued_size, to_submit = p_size - submit_from;
+	auto publish = [&](bool final) {
+		if (!request.frame_local_count) {
+			return;
+		}
+		if (_buffer_make_mutable(buffer, p_buffer)) {
+			draw_graph.add_synchronization();
+		}
+		for (uint32_t i = 0; i < request.frame_local_count; ++i) {
+			const uint32_t index = request.frame_local_index + i;
+			const auto destination = frames[frame].download_buffer_staging_buffers[index];
+			const auto region = frames[frame].download_buffer_copy_regions[index];
+			const auto handle = draw_graph.add_buffer_get_data(buffer->driver_id, buffer->draw_tracker, destination, region);
+			request.result->copies.push_back({ handle, buffer->driver_id, destination, region });
+		}
+		request.final_segment = final;
+		frames[frame].download_buffer_get_data_requests.push_back(request);
+		request.result->issued_size += request.size;
+	};
+	while (to_submit) {
+		uint32_t offset = 0, amount = 0;
+		StagingRequiredAction action;
+		Error error = _staging_buffer_allocate(download_staging_buffers, MIN(to_submit, download_staging_buffers.block_size), 32, offset, amount, action);
+		if (error != OK) {
+			if (core) {
+				publish(false);
+			}
+			request.result->error = error;
+			return error;
+		}
+		if (core && action != STAGING_REQUIRED_ACTION_NONE) {
+			// Both exhausted-staging cases preserve this same result/copy set and return
+			// before the legacy blocking action. The next call resumes only its suffix.
+			publish(false);
+			return ERR_BUSY;
+		}
+		const bool flush = request.frame_local_count > 0 && action == STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL;
+		if (flush) {
+			publish(false);
+		}
+		error = _staging_buffer_execute_required_action(download_staging_buffers, action);
+		if (error != OK) {
+			request.result->error = error;
+			return error;
+		}
+		if (request.result->error != OK) {
+			return request.result->error;
+		}
+		buffer = _get_buffer_from_owner(p_buffer);
+		if (!buffer) {
+			request.result->error = ERR_DOES_NOT_EXIST;
+			return ERR_DOES_NOT_EXIST;
+		}
+		if (flush) {
+			request.result_offset = request.result->issued_size;
+			request.size = 0;
+			request.frame_local_count = 0;
+			request.frame_local_index = frames[frame].download_buffer_copy_regions.size();
+		}
+		const RDD::BufferCopyRegion region{ submit_from + p_offset, offset, amount };
+		frames[frame].download_buffer_staging_buffers.push_back(download_staging_buffers.blocks[download_staging_buffers.current].driver_id);
+		frames[frame].download_buffer_copy_regions.push_back(region);
+		++request.frame_local_count;
+		request.size += amount;
+		download_staging_buffers.blocks.write[download_staging_buffers.current].fill_amount = offset + amount;
+		submit_from += amount;
+		to_submit -= amount;
+	}
+	publish(true);
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
- if(request.frame_local_count)RenderCaptureTestHooks::observe_readback_queued(p_buffer.get_id(),p_size);
+	if (request.frame_local_count) {
+		RenderCaptureTestHooks::observe_readback_queued(p_buffer.get_id(), p_size);
+	}
 #endif
- return OK;
+	return OK;
 }
 
 uint64_t RenderingDevice::buffer_get_device_address(RID p_buffer) {
@@ -1534,7 +1641,7 @@ uint64_t RenderingDevice::buffer_get_device_address(RID p_buffer) {
 
 	Buffer *buffer = _get_buffer_from_owner(p_buffer);
 	ERR_FAIL_NULL_V_MSG(buffer, 0, "Buffer argument is not a valid buffer of any type.");
- ERR_FAIL_COND_V(buffer->qualification_return,0);
+	ERR_FAIL_COND_V(buffer->qualification_return, 0);
 	ERR_FAIL_COND_V_MSG(!buffer->usage.has_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT), 0, "Buffer was not created with device address flag.");
 
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
@@ -1550,7 +1657,7 @@ uint8_t *RenderingDevice::buffer_persistent_map_advance(RID p_buffer) {
 
 	Buffer *buffer = _get_buffer_from_owner(p_buffer);
 	ERR_FAIL_NULL_V_MSG(buffer, nullptr, "Buffer argument is not a valid buffer of any type.");
- ERR_FAIL_COND_V(buffer->qualification_return,nullptr);
+	ERR_FAIL_COND_V(buffer->qualification_return, nullptr);
 	direct_copy_count++;
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
 	if (buffer->capture_test_allocation_serial && !capture_test_allocation_registry.mark_access_escaped(buffer->driver_id.id, buffer->capture_test_allocation_serial)) {
@@ -1565,17 +1672,19 @@ void RenderingDevice::buffer_flush(RID p_buffer) {
 
 	Buffer *buffer = _get_buffer_from_owner(p_buffer);
 	ERR_FAIL_NULL_MSG(buffer, "Buffer argument is not a valid buffer of any type.");
- ERR_FAIL_COND(buffer->qualification_return);
+	ERR_FAIL_COND(buffer->qualification_return);
 	driver->buffer_flush(buffer->driver_id);
 }
 
 uint64_t RenderingDevice::_reserve_backing_serial() {
- uint64_t serial=next_backing_serial.load(std::memory_order_relaxed);
- while (serial) {
-  const uint64_t next=serial==UINT64_MAX ? 0 : serial+1;
-  if (next_backing_serial.compare_exchange_weak(serial,next,std::memory_order_relaxed)) return serial;
- }
- return 0;
+	uint64_t serial = next_backing_serial.load(std::memory_order_relaxed);
+	while (serial) {
+		const uint64_t next = serial == UINT64_MAX ? 0 : serial + 1;
+		if (next_backing_serial.compare_exchange_weak(serial, next, std::memory_order_relaxed)) {
+			return serial;
+		}
+	}
+	return 0;
 }
 
 RID RenderingDevice::storage_buffer_create(uint32_t p_size_bytes, Span<uint8_t> p_data, BitField<StorageBufferUsage> p_usage, BitField<BufferCreationBits> p_creation_bits) {
@@ -4446,7 +4555,7 @@ RID RenderingDevice::shader_create_from_bytecode(const Vector<uint8_t> &p_shader
 }
 
 RID RenderingDevice::shader_create_from_bytecode_with_samplers(const Vector<uint8_t> &p_shader_binary, RID p_placeholder, const Vector<PipelineImmutableSampler> &p_immutable_samplers) {
- return _qualification_shader_create(p_shader_binary,p_placeholder,p_immutable_samplers,nullptr,RID());
+	return _qualification_shader_create(p_shader_binary, p_placeholder, p_immutable_samplers, nullptr, RID());
 }
 RID RenderingDevice::_qualification_shader_create(const Vector<uint8_t> &p_shader_binary, RID p_placeholder, const Vector<PipelineImmutableSampler> &p_immutable_samplers, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, RID p_reserved) {
 	_THREAD_SAFE_METHOD_
@@ -4485,10 +4594,10 @@ RID RenderingDevice::_qualification_shader_create(const Vector<uint8_t> &p_shade
 
 	RID id;
 	if (p_cell) {
-  CRASH_COND(!p_reserved.is_valid() || p_placeholder.is_valid() || !p_immutable_samplers.is_empty());
-  id=p_reserved;
-  shader_owner.initialize_rid(id,Shader());
- } else if (p_placeholder.is_null()) {
+		CRASH_COND(!p_reserved.is_valid() || p_placeholder.is_valid() || !p_immutable_samplers.is_empty());
+		id = p_reserved;
+		shader_owner.initialize_rid(id, Shader());
+	} else if (p_placeholder.is_null()) {
 		id = shader_owner.make_rid();
 	} else {
 		id = p_placeholder;
@@ -4496,7 +4605,7 @@ RID RenderingDevice::_qualification_shader_create(const Vector<uint8_t> &p_shade
 
 	Shader *shader = shader_owner.get_or_null(id);
 	ERR_FAIL_NULL_V(shader, RID());
- shader->qualification_return=p_cell;
+	shader->qualification_return = p_cell;
 
 	*((ShaderReflection *)shader) = shader_container->get_shader_reflection();
 	shader->name.clear();
@@ -4677,19 +4786,27 @@ RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniform
 	Shader *shader = shader_owner.get_or_null(p_shader);
 	ERR_FAIL_NULL_V(shader, RID());
 
- LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> qualification_dependencies;
- if(shader->qualification_return)qualification_dependencies.push_back(shader->qualification_return);
- for(uint32_t u=0;u<p_uniforms.size();++u)for(uint32_t i=0;i<p_uniforms[u].get_id_count();++i) {
-  const auto &uniform=p_uniforms[u];
-  auto *buffer=storage_buffer_owner.get_or_null(uniform.get_id(i));
-  if(buffer && buffer->qualification_return && !qualification_dependencies.has(buffer->qualification_return))qualification_dependencies.push_back(buffer->qualification_return);
- }
- if(!qualification_dependencies.is_empty()) {
-  ERR_FAIL_COND_V(render_thread_id!=Thread::get_caller_id() || p_linear_pool,RID());
-  ERR_FAIL_COND_V(qualification_dependencies.size()>128,RID());
-  const auto bridge=qualification_dependencies[0]->bridge;
-  for(auto *cell:qualification_dependencies)ERR_FAIL_COND_V(cell->bridge!=bridge || cell->use_closed.load() || cell->dependent_children.load()==UINT32_MAX,RID());
- }
+	LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> qualification_dependencies;
+	if (shader->qualification_return) {
+		qualification_dependencies.push_back(shader->qualification_return);
+	}
+	for (uint32_t u = 0; u < p_uniforms.size(); ++u) {
+		for (uint32_t i = 0; i < p_uniforms[u].get_id_count(); ++i) {
+			const auto &uniform = p_uniforms[u];
+			auto *buffer = storage_buffer_owner.get_or_null(uniform.get_id(i));
+			if (buffer && buffer->qualification_return && !qualification_dependencies.has(buffer->qualification_return)) {
+				qualification_dependencies.push_back(buffer->qualification_return);
+			}
+		}
+	}
+	if (!qualification_dependencies.is_empty()) {
+		ERR_FAIL_COND_V(render_thread_id != Thread::get_caller_id() || p_linear_pool, RID());
+		ERR_FAIL_COND_V(qualification_dependencies.size() > 128, RID());
+		const auto bridge = qualification_dependencies[0]->bridge;
+		for (auto *cell : qualification_dependencies) {
+			ERR_FAIL_COND_V(cell->bridge != bridge || cell->use_closed.load() || cell->dependent_children.load() == UINT32_MAX, RID());
+		}
+	}
 
 	ERR_FAIL_COND_V_MSG(p_shader_set >= (uint32_t)shader->uniform_sets.size() || shader->uniform_sets[p_shader_set].is_empty(), RID(),
 			"Desired set (" + itos(p_shader_set) + ") not used by shader.");
@@ -5085,17 +5202,25 @@ RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniform
 		}
 	}
 
- RID reserved_set;
- if(!qualification_dependencies.is_empty()) { reserved_set=uniform_set_owner.allocate_rid();ERR_FAIL_COND_V(reserved_set.is_null(),RID()); }
+	RID reserved_set;
+	if (!qualification_dependencies.is_empty()) {
+		reserved_set = uniform_set_owner.allocate_rid();
+		ERR_FAIL_COND_V(reserved_set.is_null(), RID());
+	}
 	RDD::UniformSetID driver_uniform_set = driver->uniform_set_create(driver_uniforms, shader->driver_id, p_shader_set, p_linear_pool ? frame : -1);
- if(!driver_uniform_set) {
-  if(reserved_set.is_valid()){uniform_set_owner.initialize_rid(reserved_set,UniformSet());uniform_set_owner.free(reserved_set);}
-  ERR_FAIL_V(RID());
- }
+	if (!driver_uniform_set) {
+		if (reserved_set.is_valid()) {
+			uniform_set_owner.initialize_rid(reserved_set, UniformSet());
+			uniform_set_owner.free(reserved_set);
+		}
+		ERR_FAIL_V(RID());
+	}
 
 	UniformSet uniform_set;
- uniform_set.qualification_dependencies=qualification_dependencies;
- for(auto *cell:qualification_dependencies)cell->dependent_children.fetch_add(1);
+	uniform_set.qualification_dependencies = qualification_dependencies;
+	for (auto *cell : qualification_dependencies) {
+		cell->dependent_children.fetch_add(1);
+	}
 	uniform_set.driver_id = driver_uniform_set;
 	uniform_set.format = shader->set_formats[p_shader_set];
 	uniform_set.attachable_textures = attachable_textures;
@@ -5108,8 +5233,12 @@ RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniform
 	uniform_set.shader_set = p_shader_set;
 	uniform_set.shader_id = p_shader;
 
- RID id=reserved_set;
- if(id.is_valid())uniform_set_owner.initialize_rid(id,uniform_set);else id=uniform_set_owner.make_rid(uniform_set);
+	RID id = reserved_set;
+	if (id.is_valid()) {
+		uniform_set_owner.initialize_rid(id, uniform_set);
+	} else {
+		id = uniform_set_owner.make_rid(uniform_set);
+	}
 #ifdef DEV_ENABLED
 	set_resource_name(id, "RID:" + itos(id.get_id()));
 #endif
@@ -5349,7 +5478,7 @@ bool RenderingDevice::render_pipeline_is_valid(RID p_pipeline) {
 }
 
 RID RenderingDevice::compute_pipeline_create(RID p_shader, const Vector<PipelineSpecializationConstant> &p_specialization_constants) {
- return _qualification_pipeline_create(p_shader,p_specialization_constants,nullptr,RID());
+	return _qualification_pipeline_create(p_shader, p_specialization_constants, nullptr, RID());
 }
 RID RenderingDevice::_qualification_pipeline_create(RID p_shader, const Vector<PipelineSpecializationConstant> &p_specialization_constants, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, RID p_reserved) {
 	Shader *shader;
@@ -5360,8 +5489,8 @@ RID RenderingDevice::_qualification_pipeline_create(RID p_shader, const Vector<P
 		// Needs a shader.
 		shader = shader_owner.get_or_null(p_shader);
 		ERR_FAIL_NULL_V(shader, RID());
-  ERR_FAIL_COND_V(shader->qualification_return && !p_cell,RID());
-  ERR_FAIL_COND_V(p_cell && (!shader->qualification_return || shader->qualification_return->bridge!=p_cell->bridge || shader->qualification_return->child!=p_cell->child),RID());
+		ERR_FAIL_COND_V(shader->qualification_return && !p_cell, RID());
+		ERR_FAIL_COND_V(p_cell && (!shader->qualification_return || shader->qualification_return->bridge != p_cell->bridge || shader->qualification_return->child != p_cell->child), RID());
 
 		ERR_FAIL_COND_V_MSG(shader->pipeline_type != PIPELINE_TYPE_COMPUTE, RID(),
 				"Non-compute shaders can't be used in compute pipelines");
@@ -5379,7 +5508,7 @@ RID RenderingDevice::_qualification_pipeline_create(RID p_shader, const Vector<P
 	}
 
 	ComputePipeline pipeline;
- pipeline.qualification_return=p_cell;
+	pipeline.qualification_return = p_cell;
 	pipeline.driver_id = driver->compute_pipeline_create(shader->driver_id, p_specialization_constants);
 	ERR_FAIL_COND_V(!pipeline.driver_id, RID());
 
@@ -5398,12 +5527,13 @@ RID RenderingDevice::_qualification_pipeline_create(RID p_shader, const Vector<P
 
 	// Create ID to associate with this pipeline.
 	RID id;
- if (p_cell) {
-  CRASH_COND(!p_reserved.is_valid());
-  id=p_reserved;compute_pipeline_owner.initialize_rid(id,pipeline);
- } else {
-  id=compute_pipeline_owner.make_rid(pipeline);
- }
+	if (p_cell) {
+		CRASH_COND(!p_reserved.is_valid());
+		id = p_reserved;
+		compute_pipeline_owner.initialize_rid(id, pipeline);
+	} else {
+		id = compute_pipeline_owner.make_rid(pipeline);
+	}
 	{
 		_THREAD_SAFE_METHOD_
 
@@ -5846,14 +5976,14 @@ Error RenderingDevice::screen_free(DisplayServerEnums::WindowID p_screen) {
 
 	HashMap<DisplayServerEnums::WindowID, RDD::SwapChainID>::ConstIterator it = screen_swap_chains.find(p_screen);
 	ERR_FAIL_COND_V_MSG(it == screen_swap_chains.end(), FAILED, "Screen was never created.");
- if (native_finalization_returned) {
-  // The actual RT finalizer already returned from this exact swapchain's
-  // driver free. Consume the retained original screen owner acknowledgement.
-  ERR_FAIL_COND_V_MSG(it->value, ERR_INVALID_DATA, "Finalized screen still has an unresolved native swapchain.");
-  screen_framebuffers.erase(p_screen);
-  screen_swap_chains.erase(p_screen);
-  return OK;
- }
+	if (native_finalization_returned) {
+		// The actual RT finalizer already returned from this exact swapchain's
+		// driver free. Consume the retained original screen owner acknowledgment.
+		ERR_FAIL_COND_V_MSG(it->value, ERR_INVALID_DATA, "Finalized screen still has an unresolved native swapchain.");
+		screen_framebuffers.erase(p_screen);
+		screen_swap_chains.erase(p_screen);
+		return OK;
+	}
 
 	// Flush everything so nothing can be using the swap chain before erasing it.
 	const Error wait_error = _flush_and_stall_for_all_frames();
@@ -6709,6 +6839,10 @@ RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_draw_indirect_reco
 	}
 
 	if (p_use_indices) {
+		if (p_capture) {
+			ERR_FAIL_COND_V_MSG(!draw_list.validation.index_array_count, result.failure(ERR_INVALID_PARAMETER),
+					"Draw command requested indices, but no index buffer was set.");
+		}
 #ifdef DEBUG_ENABLED
 		ERR_FAIL_COND_V_MSG(!draw_list.validation.index_array_count, result.failure(ERR_INVALID_PARAMETER),
 				"Draw command requested indices, but no index buffer was set.");
@@ -7315,7 +7449,7 @@ void RenderingDevice::compute_list_set_push_constant(ComputeListID p_list, const
 }
 
 void RenderingDevice::compute_list_dispatch(ComputeListID list, uint32_t x, uint32_t y, uint32_t z) {
- _qualification_dispatch(list,x,y,z);
+	_qualification_dispatch(list, x, y, z);
 }
 
 RDG::RecordHandle RenderingDevice::_qualification_dispatch(ComputeListID p_list, uint32_t p_x_groups, uint32_t p_y_groups, uint32_t p_z_groups) {
@@ -7358,12 +7492,12 @@ RDG::RecordHandle RenderingDevice::_qualification_dispatch(ComputeListID p_list,
 
 		if (compute_list.state.sets[i].pipeline_expected_format != compute_list.state.sets[i].uniform_set_format) {
 			if (compute_list.state.sets[i].uniform_set_format == 0) {
-				ERR_FAIL_V_MSG(RDG::RecordHandle(),"Uniforms were never supplied for set (" + itos(i) + ") at the time of drawing, which are required by the pipeline.");
+				ERR_FAIL_V_MSG(RDG::RecordHandle(), "Uniforms were never supplied for set (" + itos(i) + ") at the time of drawing, which are required by the pipeline.");
 			} else if (uniform_set_owner.owns(compute_list.state.sets[i].uniform_set)) {
 				UniformSet *us = uniform_set_owner.get_or_null(compute_list.state.sets[i].uniform_set);
-				ERR_FAIL_V_MSG(RDG::RecordHandle(),"Uniforms supplied for set (" + itos(i) + "):\n" + _shader_uniform_debug(us->shader_id, us->shader_set) + "\nare not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n" + _shader_uniform_debug(compute_list.state.pipeline_shader));
+				ERR_FAIL_V_MSG(RDG::RecordHandle(), "Uniforms supplied for set (" + itos(i) + "):\n" + _shader_uniform_debug(us->shader_id, us->shader_set) + "\nare not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n" + _shader_uniform_debug(compute_list.state.pipeline_shader));
 			} else {
-				ERR_FAIL_V_MSG(RDG::RecordHandle(),"Uniforms supplied for set (" + itos(i) + ", which was just freed) are not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n" + _shader_uniform_debug(compute_list.state.pipeline_shader));
+				ERR_FAIL_V_MSG(RDG::RecordHandle(), "Uniforms supplied for set (" + itos(i) + ", which was just freed) are not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n" + _shader_uniform_debug(compute_list.state.pipeline_shader));
 			}
 		}
 	}
@@ -7911,15 +8045,21 @@ void RenderingDevice::_submit_transfer_worker(TransferWorker *p_transfer_worker,
 		frames[frame].semaphores_to_wait_on.push_back(p_signal_semaphores[i]);
 	}
 
- if (!p_operations_locked) p_transfer_worker->operations_mutex.lock();
- p_transfer_worker->operations_submitted = p_transfer_worker->operations_counter;
- if (!p_operations_locked) p_transfer_worker->operations_mutex.unlock();
+	if (!p_operations_locked) {
+		p_transfer_worker->operations_mutex.lock();
+	}
+	p_transfer_worker->operations_submitted = p_transfer_worker->operations_counter;
+	if (!p_operations_locked) {
+		p_transfer_worker->operations_mutex.unlock();
+	}
 }
 
 bool RenderingDevice::_wait_for_transfer_worker(TransferWorker *p_transfer_worker, bool p_blocking) {
- // A frame joining this exact operation must retain its original completion
- // sources before the worker fence can recycle them or reuse its staging.
- if(p_transfer_worker->qualification_observer_pending)return false;
+	// A frame joining this exact operation must retain its original completion
+	// sources before the worker fence can recycle them or reuse its staging.
+	if (p_transfer_worker->qualification_observer_pending) {
+		return false;
+	}
 	if (p_transfer_worker->poisoned) {
 		return false;
 	}
@@ -7968,13 +8108,17 @@ bool RenderingDevice::_wait_for_transfer_worker(TransferWorker *p_transfer_worke
 void RenderingDevice::_flush_barriers_for_transfer_worker(TransferWorker *p_transfer_worker, bool p_barriers_locked) {
 	// Caller must have already acquired the mutex for the worker.
 	if (!p_transfer_worker->texture_barriers.is_empty()) {
-  if (!p_barriers_locked) transfer_worker_pool_texture_barriers_mutex.lock();
+		if (!p_barriers_locked) {
+			transfer_worker_pool_texture_barriers_mutex.lock();
+		}
 		for (uint32_t i = 0; i < p_transfer_worker->texture_barriers.size(); i++) {
 			transfer_worker_pool_texture_barriers.push_back(p_transfer_worker->texture_barriers[i]);
 		}
 
 		p_transfer_worker->texture_barriers.clear();
-  if (!p_barriers_locked) transfer_worker_pool_texture_barriers_mutex.unlock();
+		if (!p_barriers_locked) {
+			transfer_worker_pool_texture_barriers_mutex.unlock();
+		}
 	}
 }
 
@@ -8018,46 +8162,83 @@ void RenderingDevice::_check_transfer_worker_index_array(IndexArray *p_index_arr
 }
 
 Error RenderingDevice::_submit_transfer_workers(RDD::CommandBufferID p_draw_command_buffer, bool p_nonblocking) {
- if (p_nonblocking) {
-  // Acquire every original lock before ending or issuing any worker. Refusal
-  // has no native effect; no check-then-lock window can become a blocking wait.
-  struct Locks {
-   LocalVector<BinaryMutex *> held;
-   bool take(BinaryMutex &mutex) { if(!mutex.try_lock())return false;held.push_back(&mutex);return true; }
-   ~Locks() { for(uint32_t i=held.size();i>0;--i)held[i-1]->unlock(); }
-  } locks;
-  if(!locks.take(transfer_worker_pool_mutex) || !locks.take(transfer_worker_pool_texture_barriers_mutex))return ERR_BUSY;
-  for(uint32_t i=0;i<transfer_worker_pool_size;++i) { auto *worker=transfer_worker_pool[i];if(!locks.take(worker->thread_mutex) || !locks.take(worker->operations_mutex))return ERR_BUSY; }
-  for(uint32_t i=0;i<transfer_worker_pool_size;++i) {
-   auto *worker=transfer_worker_pool[i];
-   if(worker->operations_processed>=transfer_worker_operation_used_by_draw[worker->index])continue;
-   const bool qualified=!frames[frame].qualification_tickets.is_empty();
-   if(qualified)worker->qualification_observer_pending=true;
-   if(worker->recording) { _end_transfer_worker(worker);_submit_transfer_worker(worker,frames[frame].transfer_worker_semaphores[worker->index],true); }
-   if(qualified) {
-    // Both original worker locks still cover the operation -> submission join.
-    // Never read a later reused worker report as proof of this dependency.
-    // A failed worker may still have an actual native prefix. Join that exact
-    // report before retaining the worker as failed; never lose its callbacks.
-    const bool operation_covered=worker->operations_submitted>=transfer_worker_operation_used_by_draw[worker->index];
-    bool known=false;
-    for(const auto &report:frames[frame].qualification_hidden_reports)if(report.submission_serial==worker->last_submission.submission_serial && !report.calls.is_empty() && report.calls[0].serial==worker->last_submission.calls[0].serial){known=true;break;}
-    if(!known)frames[frame].qualification_hidden_reports.push_back(worker->last_submission);
-    _qualification_issue_tickets(UINT32_MAX,worker->last_submission,worker->last_submission.error);
-    const Error retained=_qualification_retain_tickets(frame);
-    if(retained!=OK)return retained;
-    if(!operation_covered || worker->last_submission.calls.is_empty())return FAILED;
-    worker->qualification_observer_pending=false;
-   }
-   _flush_barriers_for_transfer_worker(worker,true);
-   if(worker->poisoned)return worker->completion_error;
-  }
-  if(!transfer_worker_pool_texture_barriers.is_empty()) {
-   driver->command_pipeline_barrier(p_draw_command_buffer,RDD::PIPELINE_STAGE_COPY_BIT,RDD::PIPELINE_STAGE_ALL_COMMANDS_BIT,{},{},transfer_worker_pool_texture_barriers,{});
-   transfer_worker_pool_texture_barriers.clear();
-  }
-  return OK;
- }
+	if (p_nonblocking) {
+		// Acquire every original lock before ending or issuing any worker. Refusal
+		// has no native effect; no check-then-lock window can become a blocking wait.
+		struct Locks {
+			LocalVector<BinaryMutex *> held;
+			bool take(BinaryMutex &mutex) {
+				if (!mutex.try_lock()) {
+					return false;
+				}
+				held.push_back(&mutex);
+				return true;
+			}
+			~Locks() {
+				for (uint32_t i = held.size(); i > 0; --i) {
+					held[i - 1]->unlock();
+				}
+			}
+		} locks;
+		if (!locks.take(transfer_worker_pool_mutex) || !locks.take(transfer_worker_pool_texture_barriers_mutex)) {
+			return ERR_BUSY;
+		}
+		for (uint32_t i = 0; i < transfer_worker_pool_size; ++i) {
+			auto *worker = transfer_worker_pool[i];
+			if (!locks.take(worker->thread_mutex) || !locks.take(worker->operations_mutex)) {
+				return ERR_BUSY;
+			}
+		}
+		for (uint32_t i = 0; i < transfer_worker_pool_size; ++i) {
+			auto *worker = transfer_worker_pool[i];
+			if (worker->operations_processed >= transfer_worker_operation_used_by_draw[worker->index]) {
+				continue;
+			}
+			const bool qualified = !frames[frame].qualification_tickets.is_empty();
+			if (qualified) {
+				worker->qualification_observer_pending = true;
+			}
+			if (worker->recording) {
+				_end_transfer_worker(worker);
+				_submit_transfer_worker(worker, frames[frame].transfer_worker_semaphores[worker->index], true);
+			}
+			if (qualified) {
+				// Both original worker locks still cover the operation -> submission join.
+				// Never read a later reused worker report as proof of this dependency.
+				// A failed worker may still have an actual native prefix. Join that exact
+				// report before retaining the worker as failed; never lose its callbacks.
+				const bool operation_covered = worker->operations_submitted >= transfer_worker_operation_used_by_draw[worker->index];
+				bool known = false;
+				for (const auto &report : frames[frame].qualification_hidden_reports) {
+					if (report.submission_serial == worker->last_submission.submission_serial && !report.calls.is_empty() && report.calls[0].serial == worker->last_submission.calls[0].serial) {
+						known = true;
+						break;
+					}
+				}
+				if (!known) {
+					frames[frame].qualification_hidden_reports.push_back(worker->last_submission);
+				}
+				_qualification_issue_tickets(UINT32_MAX, worker->last_submission, worker->last_submission.error);
+				const Error retained = _qualification_retain_tickets(frame);
+				if (retained != OK) {
+					return retained;
+				}
+				if (!operation_covered || worker->last_submission.calls.is_empty()) {
+					return FAILED;
+				}
+				worker->qualification_observer_pending = false;
+			}
+			_flush_barriers_for_transfer_worker(worker, true);
+			if (worker->poisoned) {
+				return worker->completion_error;
+			}
+		}
+		if (!transfer_worker_pool_texture_barriers.is_empty()) {
+			driver->command_pipeline_barrier(p_draw_command_buffer, RDD::PIPELINE_STAGE_COPY_BIT, RDD::PIPELINE_STAGE_ALL_COMMANDS_BIT, {}, {}, transfer_worker_pool_texture_barriers, {});
+			transfer_worker_pool_texture_barriers.clear();
+		}
+		return OK;
+	}
 	MutexLock transfer_worker_lock(transfer_worker_pool_mutex);
 	for (uint32_t i = 0; i < transfer_worker_pool_size; i++) {
 		TransferWorker *worker = transfer_worker_pool[i];
@@ -8082,7 +8263,7 @@ Error RenderingDevice::_submit_transfer_workers(RDD::CommandBufferID p_draw_comm
 			}
 		}
 	}
- return OK;
+	return OK;
 }
 
 void RenderingDevice::_submit_transfer_barriers(RDD::CommandBufferID p_draw_command_buffer) {
@@ -8393,92 +8574,130 @@ bool RenderingDevice::_dependencies_make_mutable(RID p_id, RDG::ResourceTracker 
 /**************************/
 
 Error RenderingDevice::_qualification_maintenance() {
- if(render_thread_id!=Thread::get_caller_id() || !is_main_instance || !driver || native_finalization_returned)return ERR_UNAUTHORIZED;
- if(draw_list.active || compute_list.active || raytracing_list.active || frame_wait_draining)return ERR_BUSY;
- if(!_thread_safe_.try_lock())return ERR_BUSY;
- struct Unlock { Mutex &mutex; ~Unlock(){mutex.unlock();} } unlock{_thread_safe_};
- if(qualification_frame_advance_pending)return _begin_frame(false,true);
- if(draw_graph.has_driver_callbacks())return ERR_BUSY;
- const uint32_t next=(frame+1)%frames.size();
- Error error=_stall_for_frame(next,true);if(error!=OK)return error;
- for(const auto &shader:frames[next].shaders_to_dispose_of)if(!driver->shader_retire_ready_nonblocking(shader.driver_id))return ERR_BUSY;
- error=_end_frame(true);if(error!=OK)return error;
- error=_execute_frame(false);if(error!=OK)return error;
- frame=(frame+1)%frames.size();qualification_frame_advance_pending=true;
- return _begin_frame(false,true);
+	if (render_thread_id != Thread::get_caller_id() || !is_main_instance || !driver || native_finalization_returned) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (draw_list.active || compute_list.active || raytracing_list.active || frame_wait_draining) {
+		return ERR_BUSY;
+	}
+	if (!_thread_safe_.try_lock()) {
+		return ERR_BUSY;
+	}
+	struct Unlock {
+		Mutex &mutex;
+		~Unlock() { mutex.unlock(); }
+	} unlock{ _thread_safe_ };
+	if (qualification_frame_advance_pending) {
+		return _begin_frame(false, true);
+	}
+	if (draw_graph.has_driver_callbacks()) {
+		return ERR_BUSY;
+	}
+	const uint32_t next = (frame + 1) % frames.size();
+	Error error = _stall_for_frame(next, true);
+	if (error != OK) {
+		return error;
+	}
+	for (const auto &shader : frames[next].shaders_to_dispose_of) {
+		if (!driver->shader_retire_ready_nonblocking(shader.driver_id)) {
+			return ERR_BUSY;
+		}
+	}
+	error = _end_frame(true);
+	if (error != OK) {
+		return error;
+	}
+	error = _execute_frame(false);
+	if (error != OK) {
+		return error;
+	}
+	frame = (frame + 1) % frames.size();
+	qualification_frame_advance_pending = true;
+	return _begin_frame(false, true);
 }
 
 Error RenderingDevice::_qualification_enqueue(GDExtensionDeviceExit::QualificationPhysicalReturn *cell) {
- if (!cell) return OK;
- if (!qualification_retiring || !next_qualification_free_event || !frames[frame].qualification_epoch) return ERR_BUSY;
- MutexLock lock(cell->mutex);
- if (!cell->use_closed || cell->enqueued || cell->free_event) return ERR_BUSY;
- cell->reserved_event = next_qualification_free_event++;
- cell->frame_slot = frame;
- cell->frame_epoch = frames[frame].qualification_epoch;
- cell->enqueued = true;
- return OK;
+	if (!cell) {
+		return OK;
+	}
+	if (!qualification_retiring || !next_qualification_free_event || !frames[frame].qualification_epoch) {
+		return ERR_BUSY;
+	}
+	MutexLock lock(cell->mutex);
+	if (!cell->use_closed || cell->enqueued || cell->free_event) {
+		return ERR_BUSY;
+	}
+	cell->reserved_event = next_qualification_free_event++;
+	cell->frame_slot = frame;
+	cell->frame_epoch = frames[frame].qualification_epoch;
+	cell->enqueued = true;
+	return OK;
 }
 void RenderingDevice::_qualification_freed(GDExtensionDeviceExit::QualificationPhysicalReturn *cell) {
- if (!cell) return;
- MutexLock lock(cell->mutex);
- CRASH_COND(!cell->enqueued || !cell->reserved_event || cell->free_event);
- cell->free_event = cell->reserved_event;
+	if (!cell) {
+		return;
+	}
+	MutexLock lock(cell->mutex);
+	CRASH_COND(!cell->enqueued || !cell->reserved_event || cell->free_event);
+	cell->free_event = cell->reserved_event;
 }
 RID RenderingDevice::_qualification_storage_create(uint32_t bytes, GDExtensionDeviceExit::QualificationPhysicalReturn *cell) {
- ERR_FAIL_COND_V(!cell || !bytes || _recording_error()!=OK, RID());
+	ERR_FAIL_COND_V(!cell || !bytes || _recording_error() != OK, RID());
 #ifdef TESTS_ENABLED
- if(is_main_instance && !test_main_screen_prepared && OS::get_singleton()->has_environment("GODOT_K03_TEST_PREPARE_MAIN_SCREEN")) {
-  ERR_FAIL_COND_V_MSG(OS::get_singleton()->get_environment("GODOT_K03_TEST_PREPARE_MAIN_SCREEN")!="1",RID(),"Invalid TESTS-only main screen preparation opt-in.");
-  for(const auto &entry:frames) {ERR_FAIL_COND_V(!entry.qualification_tickets.is_empty(),RID());}
-  ERR_FAIL_COND_V(!frames[frame].swap_chains_to_present.is_empty(),RID());
-  // Ticket-preparation fixture only. Boot presentation has finished; reacquire
-  // through the original path before any backing or ticket effect. Resize,
-  // flush and acquire here are not nonwaiting qualification maintenance.
-  ERR_FAIL_COND_V(screen_prepare_for_drawing(DisplayServerEnums::MAIN_WINDOW_ID)!=OK,RID());
-  test_main_screen_epoch=frames[frame].qualification_epoch;
-  test_main_screen_prepared=true;
-  print_line(vformat("K03_TEST_MAIN_SCREEN_PREPARED phase=before_first_ticket frame_epoch=%d real_acquire=1 present_called=0",test_main_screen_epoch));
- }
+	if (is_main_instance && !test_main_screen_prepared && OS::get_singleton()->has_environment("GODOT_K03_TEST_PREPARE_MAIN_SCREEN")) {
+		ERR_FAIL_COND_V_MSG(OS::get_singleton()->get_environment("GODOT_K03_TEST_PREPARE_MAIN_SCREEN") != "1", RID(), "Invalid TESTS-only main screen preparation opt-in.");
+		for (const auto &entry : frames) {
+			ERR_FAIL_COND_V(!entry.qualification_tickets.is_empty(), RID());
+		}
+		ERR_FAIL_COND_V(!frames[frame].swap_chains_to_present.is_empty(), RID());
+		// Ticket-preparation fixture only. Boot presentation has finished; reacquire
+		// through the original path before any backing or ticket effect. Resize,
+		// flush and acquire here are not nonwaiting qualification maintenance.
+		ERR_FAIL_COND_V(screen_prepare_for_drawing(DisplayServerEnums::MAIN_WINDOW_ID) != OK, RID());
+		test_main_screen_epoch = frames[frame].qualification_epoch;
+		test_main_screen_prepared = true;
+		print_line(vformat("K03_TEST_MAIN_SCREEN_PREPARED phase=before_first_ticket frame_epoch=%d real_acquire=1 present_called=0", test_main_screen_epoch));
+	}
 #endif
- const uint64_t serial=_reserve_backing_serial();
- ERR_FAIL_COND_V(!serial,RID());
- const RID rid=storage_buffer_owner.allocate_rid();
- ERR_FAIL_COND_V(rid.is_null(),RID());
- Buffer buffer;
- buffer.backing_serial=serial;
- buffer.size=bytes;
- buffer.usage=RDD::BUFFER_USAGE_TRANSFER_FROM_BIT | RDD::BUFFER_USAGE_TRANSFER_TO_BIT | RDD::BUFFER_USAGE_STORAGE_BIT;
- buffer.qualification_return=cell;
- buffer.driver_id=driver->buffer_create(bytes,buffer.usage,RDD::MEMORY_ALLOCATION_TYPE_GPU,frames_drawn);
- if (!buffer.driver_id) {
-  // RID_Alloc cannot free an uninitialized reservation.
-  storage_buffer_owner.initialize_rid(rid,Buffer());
-  storage_buffer_owner.free(rid);
-  return RID();
- }
- buffer.draw_tracker=RDG::resource_tracker_create();
- buffer.draw_tracker->buffer_driver_id=buffer.driver_id;
- cell->rid=rid.get_id();cell->serial=buffer.backing_serial;
- storage_buffer_owner.initialize_rid(rid,buffer);
- buffer_memory+=bytes;
- return rid;
+	const uint64_t serial = _reserve_backing_serial();
+	ERR_FAIL_COND_V(!serial, RID());
+	const RID rid = storage_buffer_owner.allocate_rid();
+	ERR_FAIL_COND_V(rid.is_null(), RID());
+	Buffer buffer;
+	buffer.backing_serial = serial;
+	buffer.size = bytes;
+	buffer.usage = RDD::BUFFER_USAGE_TRANSFER_FROM_BIT | RDD::BUFFER_USAGE_TRANSFER_TO_BIT | RDD::BUFFER_USAGE_STORAGE_BIT;
+	buffer.qualification_return = cell;
+	buffer.driver_id = driver->buffer_create(bytes, buffer.usage, RDD::MEMORY_ALLOCATION_TYPE_GPU, frames_drawn);
+	if (!buffer.driver_id) {
+		// RID_Alloc cannot free an uninitialized reservation.
+		storage_buffer_owner.initialize_rid(rid, Buffer());
+		storage_buffer_owner.free(rid);
+		return RID();
+	}
+	buffer.draw_tracker = RDG::resource_tracker_create();
+	buffer.draw_tracker->buffer_driver_id = buffer.driver_id;
+	cell->rid = rid.get_id();
+	cell->serial = buffer.backing_serial;
+	storage_buffer_owner.initialize_rid(rid, buffer);
+	buffer_memory += bytes;
+	return rid;
 }
 
 void RenderingDevice::free_rid(RID p_rid) {
 	ERR_RENDER_THREAD_GUARD();
 
- auto *buffer = storage_buffer_owner.get_or_null(p_rid);
- auto *shader = shader_owner.get_or_null(p_rid);
- auto *pipeline = compute_pipeline_owner.get_or_null(p_rid);
- ERR_FAIL_COND_MSG(!qualification_retiring && ((buffer && buffer->qualification_return) || (shader && shader->qualification_return) || (pipeline && pipeline->qualification_return)), "Qualification resources require their original owner retirement acknowledgement.");
- ERR_FAIL_COND_MSG(_qualification_resource_busy(p_rid),"Qualification ticket still owns this resource or one of its dependents.");
+	auto *buffer = storage_buffer_owner.get_or_null(p_rid);
+	auto *shader = shader_owner.get_or_null(p_rid);
+	auto *pipeline = compute_pipeline_owner.get_or_null(p_rid);
+	ERR_FAIL_COND_MSG(!qualification_retiring && ((buffer && buffer->qualification_return) || (shader && shader->qualification_return) || (pipeline && pipeline->qualification_return)), "Qualification resources require their original owner retirement acknowledgment.");
+	ERR_FAIL_COND_MSG(_qualification_resource_busy(p_rid), "Qualification ticket still owns this resource or one of its dependents.");
 	_free_dependencies(p_rid); // Recursively erase dependencies first, to avoid potential API problems.
 	_free_internal(p_rid);
 }
 
 void RenderingDevice::_free_internal(RID p_id) {
- ERR_FAIL_COND(_qualification_resource_busy(p_id));
+	ERR_FAIL_COND(_qualification_resource_busy(p_id));
 #ifdef DEV_ENABLED
 	String resource_name;
 	if (resource_names.has(p_id)) {
@@ -8559,7 +8778,7 @@ void RenderingDevice::_free_internal(RID p_id) {
 	} else if (shader_owner.owns(p_id)) {
 		Shader *shader = shader_owner.get_or_null(p_id);
 		ERR_FAIL_COND(shader->qualification_return && !driver->shader_retire_ready_nonblocking(shader->driver_id));
-		ERR_FAIL_COND(_qualification_enqueue(shader->qualification_return)!=OK);
+		ERR_FAIL_COND(_qualification_enqueue(shader->qualification_return) != OK);
 		if (shader->driver_id) { // Not placeholder?
 			frames[frame].shaders_to_dispose_of.push_back(*shader);
 		}
@@ -8580,7 +8799,7 @@ void RenderingDevice::_free_internal(RID p_id) {
 		texture_buffer_owner.free(p_id);
 	} else if (storage_buffer_owner.owns(p_id)) {
 		Buffer *storage_buffer = storage_buffer_owner.get_or_null(p_id);
-		ERR_FAIL_COND(_qualification_enqueue(storage_buffer->qualification_return)!=OK);
+		ERR_FAIL_COND(_qualification_enqueue(storage_buffer->qualification_return) != OK);
 		_check_transfer_worker_buffer(storage_buffer);
 
 		RDG::resource_tracker_free(storage_buffer->draw_tracker);
@@ -8610,7 +8829,7 @@ void RenderingDevice::_free_internal(RID p_id) {
 		render_pipeline_owner.free(p_id);
 	} else if (compute_pipeline_owner.owns(p_id)) {
 		ComputePipeline *pipeline = compute_pipeline_owner.get_or_null(p_id);
-		ERR_FAIL_COND(_qualification_enqueue(pipeline->qualification_return)!=OK);
+		ERR_FAIL_COND(_qualification_enqueue(pipeline->qualification_return) != OK);
 		frames[frame].compute_pipelines_to_dispose_of.push_back(*pipeline);
 		compute_pipeline_owner.free(p_id);
 	} else if (acceleration_structure_owner.owns(p_id)) {
@@ -8764,11 +8983,11 @@ RenderingDevice::DriverWorkarounds RenderingDevice::get_driver_workarounds() con
 
 void RenderingDevice::swap_buffers(bool p_present) {
 	ERR_RENDER_THREAD_GUARD();
- if(qualification_frame_advance_pending) {
-  const Error error=_begin_frame(true);
-  ERR_FAIL_COND_MSG(error!=OK,"Failed to finish qualification frame advance.");
-  return;
- }
+	if (qualification_frame_advance_pending) {
+		const Error error = _begin_frame(true);
+		ERR_FAIL_COND_MSG(error != OK, "Failed to finish qualification frame advance.");
+		return;
+	}
 	ERR_FAIL_COND_MSG(frame_issue_error != OK, "Cannot advance a frame after a non-replayable rendering issue failure.");
 	ERR_FAIL_COND_MSG(frame_wait_draining, "Cannot advance a frame from its readback callback.");
 	if (frame_wait_error != OK) {
@@ -8894,7 +9113,10 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 		UniformSet *uniform_set = &frames[p_frame].uniform_sets_to_dispose_of.front()->get();
 
 		driver->uniform_set_free(uniform_set->driver_id);
-		for(auto *cell:uniform_set->qualification_dependencies) { CRASH_COND(!cell->dependent_children.load());cell->dependent_children.fetch_sub(1); }
+		for (auto *cell : uniform_set->qualification_dependencies) {
+			CRASH_COND(!cell->dependent_children.load());
+			cell->dependent_children.fetch_sub(1);
+		}
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
 		capture_test_resource_registry.observe_free(RenderCaptureTestResourceKind::UniformSet, uniform_set->driver_id.id);
 #endif
@@ -8996,7 +9218,9 @@ uint64_t RenderingDevice::get_memory_usage(MemoryType p_type) const {
 }
 
 Error RenderingDevice::_begin_frame(bool p_presented, bool p_nonblocking) {
-	if (!next_qualification_frame_epoch) return ERR_PARAMETER_RANGE_ERROR;
+	if (!next_qualification_frame_epoch) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
 	if (frame_issue_error != OK) {
 		return frame_issue_error;
 	}
@@ -9005,21 +9229,23 @@ Error RenderingDevice::_begin_frame(bool p_presented, bool p_nonblocking) {
 	}
 	GodotProfileZoneGroupedFirst(_profile_zone, "_stall_for_frame");
 	if (failed_wait_frame >= 0 && failed_wait_frame != frame) {
-		const Error previous_error = _stall_for_frame(failed_wait_frame,p_nonblocking);
+		const Error previous_error = _stall_for_frame(failed_wait_frame, p_nonblocking);
 		if (previous_error != OK) {
 			return previous_error;
 		}
 	}
 	// Before writing to this frame, wait for it to be finished.
-	const Error wait_error = _stall_for_frame(frame,p_nonblocking);
+	const Error wait_error = _stall_for_frame(frame, p_nonblocking);
 	if (wait_error != OK) {
 		return wait_error;
 	}
- if (p_nonblocking) {
-  for (const Shader &shader : frames[frame].shaders_to_dispose_of) {
-   if (!driver->shader_retire_ready_nonblocking(shader.driver_id)) return ERR_BUSY;
-  }
- }
+	if (p_nonblocking) {
+		for (const Shader &shader : frames[frame].shaders_to_dispose_of) {
+			if (!driver->shader_retire_ready_nonblocking(shader.driver_id)) {
+				return ERR_BUSY;
+			}
+		}
+	}
 	frames[frame].primary_command_buffer_begun = false;
 	frames[frame].present_attempted = false;
 	frames[frame].present_report = RDD::QueueCallReport();
@@ -9081,7 +9307,7 @@ Error RenderingDevice::_begin_frame(bool p_presented, bool p_nonblocking) {
 	frames[frame].index = Engine::get_singleton()->get_frames_drawn();
 	frame_wait_error = OK;
 	failed_wait_frame = -1;
- qualification_frame_advance_pending=false;
+	qualification_frame_advance_pending = false;
 	return OK;
 }
 
@@ -9139,15 +9365,24 @@ void RenderingDevice::_observe_buffer_readback_issue(uint32_t p_slot, RDD::Comma
 }
 
 Error RenderingDevice::_end_frame(bool p_nonblocking) {
- // The original RD mutex excludes a concurrent producer adding copy-queue work
- // between the bounded preparation and end_segment. The maintenance caller
- // already owns this recursive mutex; an ordinary frame must acquire it too.
- const bool qualification_frame=p_nonblocking || !frames[frame].qualification_tickets.is_empty();
- struct QualificationUnlock { Mutex *mutex=nullptr; ~QualificationUnlock(){if(mutex)mutex->unlock();} } qualification_unlock;
- if(qualification_frame) {
-  if(!_thread_safe_.try_lock())return ERR_BUSY;
-  qualification_unlock.mutex=&_thread_safe_;
- }
+	// The original RD mutex excludes a concurrent producer adding copy-queue work
+	// between the bounded preparation and end_segment. The maintenance caller
+	// already owns this recursive mutex; an ordinary frame must acquire it too.
+	const bool qualification_frame = p_nonblocking || !frames[frame].qualification_tickets.is_empty();
+	struct QualificationUnlock {
+		Mutex *mutex = nullptr;
+		~QualificationUnlock() {
+			if (mutex) {
+				mutex->unlock();
+			}
+		}
+	} qualification_unlock;
+	if (qualification_frame) {
+		if (!_thread_safe_.try_lock()) {
+			return ERR_BUSY;
+		}
+		qualification_unlock.mutex = &_thread_safe_;
+	}
 	if (frame_issue_error != OK) {
 		return frame_issue_error;
 	}
@@ -9172,29 +9407,37 @@ Error RenderingDevice::_end_frame(bool p_nonblocking) {
 		ERR_PRINT("Found open raytracing list at the end of the frame, this should never happen (further raytracing will likely not work).");
 	}
 
- if(qualification_frame) {
-  if(draw_list.active || compute_list.active || raytracing_list.active || frame_wait_draining || draw_graph.has_driver_callbacks())return ERR_BUSY;
-  RDD::QueueCallReport hidden;
-  const Error error=driver->qualification_prepare_segment(hidden);
-  if(!hidden.calls.is_empty()) {
-   frames[frame].qualification_hidden_reports.push_back(hidden);
-   _qualification_issue_tickets(UINT32_MAX,hidden,error);
-  }
-  if(error!=OK)return error;
- }
+	if (qualification_frame) {
+		if (draw_list.active || compute_list.active || raytracing_list.active || frame_wait_draining || draw_graph.has_driver_callbacks()) {
+			return ERR_BUSY;
+		}
+		RDD::QueueCallReport hidden;
+		const Error error = driver->qualification_prepare_segment(hidden);
+		if (!hidden.calls.is_empty()) {
+			frames[frame].qualification_hidden_reports.push_back(hidden);
+			_qualification_issue_tickets(UINT32_MAX, hidden, error);
+		}
+		if (error != OK) {
+			return error;
+		}
+	}
 
 	// The command buffer must be copied into a stack variable as the driver workarounds can change the command buffer in use.
 	RDD::CommandBufferID command_buffer = frames[frame].command_buffer;
 	GodotProfileZoneGroupedFirst(_profile_zone, "_submit_transfer_workers");
- const Error transfer_error=_submit_transfer_workers(command_buffer,qualification_frame);
- if(transfer_error!=OK)return transfer_error==ERR_BUSY ? transfer_error : _fail_frame_issue(transfer_error);
+	const Error transfer_error = _submit_transfer_workers(command_buffer, qualification_frame);
+	if (transfer_error != OK) {
+		return transfer_error == ERR_BUSY ? transfer_error : _fail_frame_issue(transfer_error);
+	}
 	GodotProfileZoneGrouped(_profile_zone, "_submit_transfer_barriers");
- if(!qualification_frame)_submit_transfer_barriers(command_buffer);
+	if (!qualification_frame) {
+		_submit_transfer_barriers(command_buffer);
+	}
 
 	GodotProfileZoneGrouped(_profile_zone, "draw_graph.end");
 	draw_graph.end(RENDER_GRAPH_REORDER == 1, RENDER_GRAPH_FULL_BARRIERS == 1, command_buffer, frames[frame].command_buffer_pool);
 	_seal_buffer_readback_records();
- _qualification_seal_tickets();
+	_qualification_seal_tickets();
 	if (draw_graph.recording_failed()) {
 		return _fail_frame_issue(FAILED);
 	}
@@ -9264,7 +9507,7 @@ bool RenderingDevice::execute_chained_cmds(bool p_present_swap_chain, RenderingD
 				signal_semaphore ? signal_semaphore : VectorView<RDD::SemaphoreID>(), signal_fence,
 				swap_chains, report);
 		_observe_buffer_readback_issue(i, command_buffer, queue_error, report);
-  _qualification_issue_tickets(i,report,queue_error);
+		_qualification_issue_tickets(i, report, queue_error);
 		frames[frame].chain_reports.push_back(report);
 		if (queue_error != OK || !report.issued || report.error != OK) {
 			_fail_frame_issue(queue_error != OK ? queue_error : (report.error != OK ? report.error : FAILED));
@@ -9359,65 +9602,107 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 	frame_wait_native_code = 0;
 	frame_wait_native_code_valid = false;
 	thread_local PackedByteArray packed_byte_array;
- // Original Frame ownership covers every actual slot call, including slots
- // without the final fence. Qualification only polls; ordinary frame waits may
- // use the original native wait, then recycle the same sources independently.
- if(driver->native_call_observation_supported()) {
-  for(auto &report:frames[p_frame].chain_reports)for(auto &call:report.calls) {
-		  if (call.presentation_only || call.source_owner_returned) {
-			  continue;
-		  }
-   const auto completion=p_nonblocking?driver->native_call_poll(call.serial):driver->native_call_wait(call.serial);
-   if(completion.native_error){frame_wait_native_code=completion.native_code;frame_wait_native_code_valid=true;return FAILED;}
-   if(!completion.matches(call.completion_serial))return ERR_BUSY;
-  }
- }
- const Error ticket_poll=_qualification_poll_tickets(p_frame);if(ticket_poll!=OK)return ticket_poll;
- if(driver->native_call_observation_supported()) {
-  for(auto &report:frames[p_frame].chain_reports)if(!report.submission_serial)for(auto &call:report.calls) {
-			  if (call.presentation_only || call.source_owner_returned) {
-				  continue;
-			  }
-   const Error recycled=p_nonblocking?driver->native_call_recycle(call.serial):driver->native_call_recycle_wait(call.serial);if(recycled!=OK)return recycled;
-   call.source_owner_returned=true;
-  }
- }
+	// Original Frame ownership covers every actual slot call, including slots
+	// without the final fence. Qualification only polls; ordinary frame waits may
+	// use the original native wait, then recycle the same sources independently.
+	if (driver->native_call_observation_supported()) {
+		for (auto &report : frames[p_frame].chain_reports) {
+			for (auto &call : report.calls) {
+				if (call.presentation_only || call.source_owner_returned) {
+					continue;
+				}
+				const auto completion = p_nonblocking ? driver->native_call_poll(call.serial) : driver->native_call_wait(call.serial);
+				if (completion.native_error) {
+					frame_wait_native_code = completion.native_code;
+					frame_wait_native_code_valid = true;
+					return FAILED;
+				}
+				if (!completion.matches(call.completion_serial)) {
+					return ERR_BUSY;
+				}
+			}
+		}
+	}
+	const Error ticket_poll = _qualification_poll_tickets(p_frame);
+	if (ticket_poll != OK) {
+		return ticket_poll;
+	}
+	if (driver->native_call_observation_supported()) {
+		for (auto &report : frames[p_frame].chain_reports) {
+			if (!report.submission_serial) {
+				for (auto &call : report.calls) {
+					if (call.presentation_only || call.source_owner_returned) {
+						continue;
+					}
+					const Error recycled = p_nonblocking ? driver->native_call_recycle(call.serial) : driver->native_call_recycle_wait(call.serial);
+					if (recycled != OK) {
+						return recycled;
+					}
+					call.source_owner_returned = true;
+				}
+			}
+		}
+	}
 
- for(auto &report:frames[p_frame].qualification_hidden_reports) {
-  for(auto &call:report.calls) {
-	  if (call.presentation_only || call.source_owner_returned) {
-		  continue;
-	  }
-   const auto completion=p_nonblocking?driver->native_call_poll(call.serial):driver->native_call_wait(call.serial);
-   if(completion.native_error){frame_wait_native_code=completion.native_code;frame_wait_native_code_valid=true;return FAILED;}
-   if(!completion.matches(call.completion_serial))return ERR_BUSY;
-   if(call.frame_observer_owned) {const Error released=driver->native_call_release(call.serial);if(released!=OK)return released;}
-   call.source_owner_returned=true; // Return this Frame's observer exactly once, preserving actual source identity.
-  }
- }
- frames[p_frame].qualification_hidden_reports.clear();
+	for (auto &report : frames[p_frame].qualification_hidden_reports) {
+		for (auto &call : report.calls) {
+			if (call.presentation_only || call.source_owner_returned) {
+				continue;
+			}
+			const auto completion = p_nonblocking ? driver->native_call_poll(call.serial) : driver->native_call_wait(call.serial);
+			if (completion.native_error) {
+				frame_wait_native_code = completion.native_code;
+				frame_wait_native_code_valid = true;
+				return FAILED;
+			}
+			if (!completion.matches(call.completion_serial)) {
+				return ERR_BUSY;
+			}
+			if (call.frame_observer_owned) {
+				const Error released = driver->native_call_release(call.serial);
+				if (released != OK) {
+					return released;
+				}
+			}
+			call.source_owner_returned = true; // Return this Frame's observer exactly once, preserving actual source identity.
+		}
+	}
+	frames[p_frame].qualification_hidden_reports.clear();
 
 	if (frames[p_frame].fence_signaled) {
 		GodotProfileZoneGroupedFirst(_profile_zone, "driver->fence_wait");
 
-  Error wait_error=OK;
-  if (p_nonblocking) {
-   // This continuation owns no extension Callable. An unrelated legacy
-   // callback remains for the ordinary frame path to deliver.
-   if (!frames[p_frame].download_texture_get_data_requests.is_empty()) return ERR_BUSY;
-   for (const auto &request : frames[p_frame].download_buffer_get_data_requests) {
-    if (request.result.is_null() || !request.result->qualification_owned) return ERR_BUSY;
-   }
-   const auto &reports=frames[p_frame].chain_reports;
-   if (reports.is_empty() || !reports[reports.size()-1].submission_serial) { frame_wait_native_code_valid=true; return ERR_UNAVAILABLE; }
-   const uint64_t serial=reports[reports.size()-1].submission_serial;
-   const auto completion=driver->fence_poll(frames[p_frame].fence,serial);
-   if (completion.native_error) { frame_wait_native_code=completion.native_code; frame_wait_native_code_valid=true; wait_error=FAILED; }
-   else if (!completion.matches(serial)) return ERR_BUSY;
-   else wait_error=driver->fence_recycle(frames[p_frame].fence,serial);
-  } else {
-   wait_error=driver->fence_wait(frames[p_frame].fence);
-  }
+		Error wait_error = OK;
+		if (p_nonblocking) {
+			// This continuation owns no extension Callable. An unrelated legacy
+			// callback remains for the ordinary frame path to deliver.
+			if (!frames[p_frame].download_texture_get_data_requests.is_empty()) {
+				return ERR_BUSY;
+			}
+			for (const auto &request : frames[p_frame].download_buffer_get_data_requests) {
+				if (request.result.is_null() || !request.result->qualification_owned) {
+					return ERR_BUSY;
+				}
+			}
+			const auto &reports = frames[p_frame].chain_reports;
+			if (reports.is_empty() || !reports[reports.size() - 1].submission_serial) {
+				frame_wait_native_code_valid = true;
+				return ERR_UNAVAILABLE;
+			}
+			const uint64_t serial = reports[reports.size() - 1].submission_serial;
+			const auto completion = driver->fence_poll(frames[p_frame].fence, serial);
+			if (completion.native_error) {
+				frame_wait_native_code = completion.native_code;
+				frame_wait_native_code_valid = true;
+				wait_error = FAILED;
+			} else if (!completion.matches(serial)) {
+				return ERR_BUSY;
+			} else {
+				wait_error = driver->fence_recycle(frames[p_frame].fence, serial);
+			}
+		} else {
+			wait_error = driver->fence_wait(frames[p_frame].fence);
+		}
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
 		RenderCaptureTestHooks::observe_driver_result(uint64_t(get_instance_id()), 2, frames[p_frame].fence.id, wait_error);
 		if (wait_error != OK) {
@@ -9427,7 +9712,9 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 		if (wait_error != OK) {
 			frames[p_frame].primary_command_buffer_begun = false;
 			frame_wait_error = wait_error;
-			if (!frame_wait_native_code_valid.load()) frame_wait_native_code_valid = true;
+			if (!frame_wait_native_code_valid.load()) {
+				frame_wait_native_code_valid = true;
+			}
 			failed_wait_frame = p_frame;
 			return wait_error;
 		}
@@ -9490,7 +9777,9 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
 				RenderCaptureTestHooks::observe_readback_completed(request.buffer.get_id(), result->bytes.size());
 #endif
-				if (!result->qualification_owned) request.callback.call(result->bytes);
+				if (!result->qualification_owned) {
+					request.callback.call(result->bytes);
+				}
 			}
 
 			frames[p_frame].download_buffer_staging_buffers.clear();
@@ -9551,14 +9840,14 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 			frames[p_frame].download_texture_mipmap_offsets.clear();
 			frames[p_frame].download_texture_get_data_requests.clear();
 		}
-  _qualification_return_frame_tickets(p_frame);
-  for (auto &report : frames[p_frame].chain_reports) {
-	  for (auto &call : report.calls) {
-		  if (!call.presentation_only) {
-			  call.source_owner_returned = true;
-		  }
-	  }
-  }
+		_qualification_return_frame_tickets(p_frame);
+		for (auto &report : frames[p_frame].chain_reports) {
+			for (auto &call : report.calls) {
+				if (!call.presentation_only) {
+					call.source_owner_returned = true;
+				}
+			}
+		}
 		frame_wait_draining = false;
 	}
 	return OK;
@@ -9632,7 +9921,7 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 
 	context = p_context;
 	driver = context->driver_create();
- driver->session_owner = this;
+	driver->session_owner = this;
 
 	print_verbose("Devices:");
 	int32_t device_index = Engine::get_singleton()->get_gpu_index();
@@ -9864,7 +10153,6 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 	}
 #endif
 
-
 	texture_upload_region_size_px = GLOBAL_GET("rendering/rendering_device/staging_buffer/texture_upload_region_size_px");
 	texture_upload_region_size_px = Math::nearest_power_of_2_templated(texture_upload_region_size_px);
 
@@ -10068,7 +10356,7 @@ uint64_t RenderingDevice::get_driver_resource(DriverResource p_resource, RID p_r
 		case DRIVER_RESOURCE_UNIFORM_SET: {
 			UniformSet *uniform_set = uniform_set_owner.get_or_null(p_rid);
 			ERR_FAIL_NULL_V(uniform_set, 0);
-			ERR_FAIL_COND_V(!uniform_set->qualification_dependencies.is_empty(),0);
+			ERR_FAIL_COND_V(!uniform_set->qualification_dependencies.is_empty(), 0);
 
 			driver_id = uniform_set->driver_id.id;
 		} break;
@@ -10086,7 +10374,7 @@ uint64_t RenderingDevice::get_driver_resource(DriverResource p_resource, RID p_r
 				buffer = storage_buffer_owner.get_or_null(p_rid);
 			}
 			ERR_FAIL_NULL_V(buffer, 0);
-			ERR_FAIL_COND_V(buffer->qualification_return,0);
+			ERR_FAIL_COND_V(buffer->qualification_return, 0);
 
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
 			if (buffer->capture_test_allocation_serial && !capture_test_allocation_registry.mark_access_escaped(buffer->driver_id.id, buffer->capture_test_allocation_serial)) {
@@ -10098,7 +10386,7 @@ uint64_t RenderingDevice::get_driver_resource(DriverResource p_resource, RID p_r
 		case DRIVER_RESOURCE_COMPUTE_PIPELINE: {
 			ComputePipeline *compute_pipeline = compute_pipeline_owner.get_or_null(p_rid);
 			ERR_FAIL_NULL_V(compute_pipeline, 0);
-   ERR_FAIL_COND_V(compute_pipeline->qualification_return,0);
+			ERR_FAIL_COND_V(compute_pipeline->qualification_return, 0);
 
 			driver_id = compute_pipeline->driver_id.id;
 		} break;
@@ -10192,15 +10480,15 @@ uint64_t RenderingDevice::limit_get(Limit p_limit) const {
 }
 
 void RenderingDevice::_finalize_on_rendering_server_thread() {
- finalize();
- // A void finalizer can return early after a failed invariant. Do not let the
- // actual RT exit and hand an unresolved/native-destroyed object to main.
- GDExtensionDeviceExit::require_close_success(native_finalization_returned ? OK : ERR_BUSY, GDExtensionDeviceExit::CloseRoute::LAST_REF);
+	finalize();
+	// A void finalizer can return early after a failed invariant. Do not let the
+	// actual RT exit and hand an unresolved/native-destroyed object to main.
+	GDExtensionDeviceExit::require_close_success(native_finalization_returned ? OK : ERR_BUSY, GDExtensionDeviceExit::CloseRoute::LAST_REF);
 }
 
 void RenderingDevice::finalize() {
 	ERR_RENDER_THREAD_GUARD();
- GDExtensionDeviceExit::Registry::get_singleton().device_closed(this);
+	GDExtensionDeviceExit::Registry::get_singleton().device_closed(this);
 
 	if (!frames.is_empty()) {
 		// Wait for all frames to have finished rendering.
@@ -10323,9 +10611,9 @@ void RenderingDevice::finalize() {
 	// Delete the swap chains created for the screens.
 	for (KeyValue<DisplayServerEnums::WindowID, RDD::SwapChainID> &it : screen_swap_chains) {
 		driver->swap_chain_free(it.value);
-  // Keep the original window key through DisplayServer's later close. Zero
-  // is written only after this driver's free returned, never on RID erasure.
-  it.value=RDD::SwapChainID();
+		// Keep the original window key through DisplayServer's later close. Zero
+		// is written only after this driver's free returned, never on RID erasure.
+		it.value = RDD::SwapChainID();
 	}
 
 	// Delete the command queues.
@@ -11225,7 +11513,7 @@ RenderingDevice::~RenderingDevice() {
 	if (!native_finalization_returned) {
 		finalize();
 	}
- GDExtensionDeviceExit::Registry::get_singleton().device_destroyed(this);
+	GDExtensionDeviceExit::Registry::get_singleton().device_destroyed(this);
 
 	if (singleton == this) {
 		singleton = nullptr;
@@ -11239,7 +11527,6 @@ RenderingDevice::RenderingDevice() {
 
 	render_thread_id = Thread::get_caller_id();
 }
-
 
 /*****************/
 /**** BINDERS ****/

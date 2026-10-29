@@ -540,6 +540,12 @@ void Curve::_bake() const {
 
 	_baked_cache.resize(_bake_resolution);
 
+	if (_points.is_empty()) {
+		_baked_cache.fill(0.0);
+		_baked_cache_dirty = false;
+		return;
+	}
+
 	for (int i = 1; i < _bake_resolution - 1; ++i) {
 		real_t x = get_domain_range() * i / static_cast<real_t>(_bake_resolution - 1) + _min_domain;
 		real_t y = sample(x);

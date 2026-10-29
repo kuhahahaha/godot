@@ -1,3 +1,33 @@
+/**************************************************************************/
+/*  resource_snapshot_native.cpp                                          */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
 #include "resource_snapshot_native.h"
 
 #include "core/extension/gdextension.h"
@@ -31,11 +61,11 @@ bool separate(const void *a, uint64_t as, const void *b, uint64_t bs) {
 	const auto x = uintptr_t(a), y = uintptr_t(b);
 	return x <= y ? as <= y - x : bs <= x - y;
 }
-struct Span {
+struct SnapshotSpan {
 	const void *data;
 	uint64_t bytes;
 };
-bool disjoint_spans(std::initializer_list<Span> spans) {
+bool disjoint_spans(std::initializer_list<SnapshotSpan> spans) {
 	for (auto a = spans.begin(); a != spans.end(); ++a) {
 		if (!a->bytes) {
 			continue;
@@ -123,7 +153,7 @@ uint32_t texture_view(void *source, TextureView &view) {
 
 AngeTextureSourceTupleV1 texture_source(const TextureView &view) {
 	return { view.wrapper_id, view.wrapper_revision, view.child_id, view.child_revision,
-			view.source_kind, view.width, view.native_mode, view.child_present };
+		view.source_kind, view.width, view.native_mode, view.child_present };
 }
 
 bool same_texture_source(const AngeTextureSourceTupleV1 &a, const AngeTextureSourceTupleV1 &b) {
@@ -135,9 +165,9 @@ bool same_texture_source(const AngeTextureSourceTupleV1 &a, const AngeTextureSou
 
 bool same_texture_plan(const AngeTextureSnapshotPlanV1 &a, const AngeTextureSnapshotPlanV1 &b) {
 	return same_texture_source(a.source, b.source) && a.output_format == b.output_format &&
-		a.real_bytes == b.real_bytes && a.point_count == b.point_count &&
-		a.bake_resolution == b.bake_resolution && a.output_bytes == b.output_bytes &&
-		a.scratch_bytes == b.scratch_bytes;
+			a.real_bytes == b.real_bytes && a.point_count == b.point_count &&
+			a.bake_resolution == b.bake_resolution && a.output_bytes == b.output_bytes &&
+			a.scratch_bytes == b.scratch_bytes;
 }
 
 uint32_t build_texture_plan(const TextureView &view, uint32_t output_format, AngeTextureSnapshotPlanV1 &plan) {
@@ -409,7 +439,7 @@ uint32_t ange_texture_snapshot_v1(void *source, const AngeTextureSnapshotPlanV1 
 			(current.output_format == ANGE_TEXTURE_FORMAT_RGBAF_V1 && uintptr_t(output) % alignof(float)) ||
 			(current.scratch_bytes && uintptr_t(scratch) % current.real_bytes) ||
 			!disjoint_spans({ { expected, sizeof(*expected) }, { out, sizeof(*out) },
-				{ output, current.output_bytes }, { scratch, current.scratch_bytes } })) {
+					{ output, current.output_bytes }, { scratch, current.scratch_bytes } })) {
 		out->status = current.output_bytes > output_capacity || current.scratch_bytes > scratch_capacity ? ANGE_TEXTURE_LIMIT_V1 : ANGE_TEXTURE_BAD_ARGUMENT_V1;
 		return out->status;
 	}

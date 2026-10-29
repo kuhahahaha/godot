@@ -150,7 +150,7 @@ TEST_CASE("[K03][MetalCompletion] empty recordings submit a native fence before 
 	driver.command_pool_free(pool);
 }
 
-TEST_CASE("[K03][MetalCompletion] no fence batches do not accumulate unowned records") {
+TEST_CASE("[K03][MetalCompletion] no-fence native calls recycle after completion") {
 	using RDD = RenderingDeviceDriver;
 	NS::SharedPtr<MTL::Device> available_device = NS::TransferPtr(MTL::CreateSystemDefaultDevice());
 	REQUIRE(available_device.get() != nullptr);
@@ -170,10 +170,20 @@ TEST_CASE("[K03][MetalCompletion] no fence batches do not accumulate unowned rec
 			driver.command_clear_buffer(command, buffer, 0, 4);
 			driver.command_buffer_end(command);
 			REQUIRE(driver.command_queue_execute_and_present(queue, {}, command, {}, {}, {}) == OK);
-			CHECK(TestMetalCompletionAccess::records(driver) == 0);
-			for (const auto &fact : driver.get_last_queue_call_report().calls) {
-				CHECK(fact.completion == RDD::CompletionCapability::NoCompletion);
+			const auto report = driver.get_last_queue_call_report();
+			REQUIRE(report.issued);
+			REQUIRE(report.submission_serial == 0);
+			REQUIRE_FALSE(report.calls.is_empty());
+			CHECK(TestMetalCompletionAccess::records(driver) == report.calls.size());
+			for (const auto &fact : report.calls) {
+				REQUIRE(fact.serial != 0);
+				CHECK(fact.completion == RDD::CompletionCapability::CommandBuffer);
+				CHECK(fact.completion_serial == fact.serial);
+				REQUIRE(driver.native_call_wait(fact.serial).matches(fact.serial));
+				CHECK(driver.native_call_recycle(fact.serial) == OK);
+				CHECK(driver.native_call_recycle(fact.serial) == ERR_DOES_NOT_EXIST);
 			}
+			CHECK(TestMetalCompletionAccess::records(driver) == 0);
 		}
 	}
 	// A final queue-ordered fence makes destruction of the shared buffer legitimate.
