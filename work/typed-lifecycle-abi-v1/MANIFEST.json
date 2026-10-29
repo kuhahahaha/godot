@@ -6337,6 +6337,118 @@
     "work/particle-cpu-readback-20261029/CURRENT_TEST.rc": {
       "bytes": 2,
       "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-texture-allocation-getter-20261030/BINARY_HASHES.json": {
+      "bytes": 331,
+      "sha256": "d0aa52f8869cc68d925e91ee4806551922a2f3d6ea1aec8719769e4044958bc7"
+    },
+    "work/vulkan-texture-allocation-getter-20261030/COMMANDS.json": {
+      "bytes": 1720,
+      "sha256": "c0468baa98b45e0776dd5ca0efbc31ba87d6c5da55daf3a0a2db123c571cda21"
+    },
+    "work/vulkan-texture-allocation-getter-20261030/DEBUG_BUILD.log": {
+      "bytes": 2021,
+      "sha256": "f2d79d1e803d2b7301cba99adccc4544fea8ccbc0f73c23a14b59f378fac166b"
+    },
+    "work/vulkan-texture-allocation-getter-20261030/DEBUG_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-texture-allocation-getter-20261030/DIFF_CHECK_R1.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "work/vulkan-texture-allocation-getter-20261030/DIFF_CHECK_R1.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-texture-allocation-getter-20261030/INDEPENDENT_REVIEW_R1.md": {
+      "bytes": 349,
+      "sha256": "98848db840d7f3e683c9a827eef8b22dfed6af9df8b820f7e02df921f93ba69e"
+    },
+    "work/vulkan-texture-allocation-getter-20261030/K03_P2.log": {
+      "bytes": 302,
+      "sha256": "c8466751302ff839380c14cc2056f47028057bbfe19191848bfc5f750b28dce8"
+    },
+    "work/vulkan-texture-allocation-getter-20261030/K03_P2.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-texture-allocation-getter-20261030/RECEIPT_R1.md": {
+      "bytes": 1086,
+      "sha256": "9bfcef0f2c53eeba01c9a9038bead0701f2c80990808831f4851d31eb54e04c6"
+    },
+    "work/vulkan-texture-allocation-getter-20261030/RED_BUILD.log": {
+      "bytes": 18925,
+      "sha256": "594f105f7c1d4167b09d8fe42e40efce72d9279d169f055856a388f06a2447be"
+    },
+    "work/vulkan-texture-allocation-getter-20261030/RED_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3"
+    },
+    "work/vulkan-texture-allocation-getter-20261030/RED_TEXTURE_SIZE.log": {
+      "bytes": 699,
+      "sha256": "feabb28ef31964c08465bd9ff0cdaccf98c497568acda56909f5485f9bd47e6e"
+    },
+    "work/vulkan-texture-allocation-getter-20261030/RED_TEXTURE_SIZE.rc": {
+      "bytes": 4,
+      "sha256": "e726b440cc164001999e718b51780d80314709efe06e7857282377be9111127b"
+    },
+    "work/vulkan-texture-allocation-getter-20261030/REGRESSION.log": {
+      "bytes": 302,
+      "sha256": "3516663b4af0f2bec28097b2a8cd0cce6bd3d1a19e01f5042e3d25275eb76afb"
+    },
+    "work/vulkan-texture-allocation-getter-20261030/REGRESSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-texture-allocation-getter-20261030/RELEASE_BUILD.log": {
+      "bytes": 147098,
+      "sha256": "81c230e02b462b0cbb07082e1624ae63bf9391ba08ea8b9ab6ad5f0d4e91ea0f"
+    },
+    "work/vulkan-texture-allocation-getter-20261030/RELEASE_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-texture-allocation-getter-20261030/RELEASE_VERSION.log": {
+      "bytes": 36,
+      "sha256": "3c70e32c327d91493a2995b8f4cb62b3bb3b94077db8e10b1d482f598fd76028"
+    },
+    "work/vulkan-texture-allocation-getter-20261030/RELEASE_VERSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-texture-allocation-getter-20261030/SOURCE_MANIFEST.json": {
+      "bytes": 894,
+      "sha256": "b864a0d02571e893984a2c4837c03e698ada3251fb56eda852937215c21662e2"
+    },
+    "work/vulkan-texture-allocation-getter-20261030/TEXTURE_SIZE.log": {
+      "bytes": 294,
+      "sha256": "3b19350de855a2d5b3967af998e60366c80bc832f8de5b55913a122a8ac2afbd"
+    },
+    "work/vulkan-texture-allocation-getter-20261030/TEXTURE_SIZE.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-texture-allocation-getter-20261030/UBSAN_BUILD.log": {
+      "bytes": 2505,
+      "sha256": "c2a5bb1a9812d2568c5fd59735e1efd3550427618b1de411b2eb9f9e74dabcf6"
+    },
+    "work/vulkan-texture-allocation-getter-20261030/UBSAN_BUILD.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-texture-allocation-getter-20261030/UBSAN_REGRESSION.log": {
+      "bytes": 302,
+      "sha256": "3516663b4af0f2bec28097b2a8cd0cce6bd3d1a19e01f5042e3d25275eb76afb"
+    },
+    "work/vulkan-texture-allocation-getter-20261030/UBSAN_REGRESSION.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-texture-allocation-getter-20261030/MANIFEST.json": {
+      "bytes": 3696,
+      "sha256": "c8020aae4cd40ab19ffe08ffd0958cf1218753d498076bb285b81c6bc63b42c9"
     }
   }
 }
