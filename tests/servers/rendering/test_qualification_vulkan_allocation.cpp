@@ -348,6 +348,8 @@ TEST_CASE("[QualificationNative][Vulkan] texture copyable-layout query rejects i
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
  RenderingDeviceDriver::TextureCopyableLayout layout;
+ layout.size=17;
+ layout.row_pitch=19;
  ERR_PRINT_OFF;
  driver.texture_get_copyable_layout(RenderingDeviceDriver::TextureID(),RenderingDeviceDriver::TextureSubresource(),&layout);
  ERR_PRINT_ON;
