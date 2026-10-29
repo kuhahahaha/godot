@@ -295,7 +295,7 @@ private:
 			bool mapping_sealed = false;
 			RDG::RecordMappingState mapping = RDG::RecordMappingState::Pending;
 			uint32_t command_slot = UINT32_MAX;
-			RDD::CommandBufferID command_buffer;
+			RDD::CommandBufferID command_buffer = {}; // NOLINT(readability-redundant-member-init)
 			bool issue_attempted = false;
 			Error queue_error = OK;
 			RDD::QueueCallReport issue_report = {};
