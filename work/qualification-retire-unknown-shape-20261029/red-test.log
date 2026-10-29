@@ -1,0 +1,60 @@
+WARNING: 1 RID of type "Shader" was leaked.
+     at: _free_rids (servers/rendering/rendering_device.cpp:10000)
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_qualification_physical.cpp:493:
+TEST CASE:  [Qualification] non-error Unknown remains well-formed while a dependent blocks retirement
+
+tests/servers/rendering/test_qualification_physical.cpp:303: ERROR: CHECK( storage->report.reason==6 ) is NOT correct!
+  values: CHECK( 4 == 6 )
+
+tests/servers/rendering/test_qualification_physical.cpp:302: ERROR: CHECK( unit->report.reason==6 ) is NOT correct!
+  values: CHECK( 4 == 6 )
+
+tests/servers/rendering/test_qualification_physical.cpp:305: ERROR: CHECK( unit->shader.enqueued ) is NOT correct!
+  values: CHECK( false )
+
+tests/servers/rendering/test_qualification_physical.cpp:307: ERROR: CHECK( unit->shader.free_event!=0 ) is NOT correct!
+  values: CHECK( 0 != 0 )
+
+tests/servers/rendering/test_qualification_physical.cpp:307: ERROR: CHECK( unit->report.state==1 ) is NOT correct!
+  values: CHECK( 2 == 1 )
+
+tests/servers/rendering/test_qualification_physical.cpp:307: ERROR: CHECK( unit->report.return_status==1 ) is NOT correct!
+  values: CHECK( 0 == 1 )
+
+tests/servers/rendering/test_qualification_physical.cpp:307: ERROR: CHECK( unit->report.reason==0 ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_qualification_physical.cpp:496: ERROR: CHECK( driver.frees==1 ) is NOT correct!
+  values: CHECK( 0 == 1 )
+
+tests/servers/rendering/test_qualification_physical.cpp:493: FATAL ERROR: test case CRASHED: SIGSEGV - Segmentation violation signal
+
+===============================================================================
+[doctest] test cases:  1 |  0 passed | 1 failed | 1816 skipped
+[doctest] assertions: 23 | 15 passed | 8 failed |
+[doctest] Status: FAILURE!
+
+================================================================
+handle_crash: Program crashed with signal 11
+Engine version: Godot Engine v4.7.2.stable.custom_build (93159e4c924aa4645b0f3f2371e45000a02bafa5)
+Dumping the backtrace. Please include this when reporting the bug on: https://github.com/godotengine/godot/issues
+Load address: 104f7c000
+
+[1] 19ddfc144 (libsystem_platform.dylib+4144) - _sigtramp + 56
+[2] 10b148a00 (main+61cca00) - RenderingDevice::_free_internal(RID) (in godot.macos.editor.dev.arm64) (/Users/macbookair/Documents/Work/godot_ANGE/servers/rendering/rendering_device.cpp:8560)
+[3] 10b10521c (main+618921c) - RenderingDevice::free_rid(RID) (in godot.macos.editor.dev.arm64) (/Users/macbookair/Documents/Work/godot_ANGE/servers/rendering/rendering_device.cpp:8478)
+[4] 10b154b30 (main+61d8b30) - void RenderingDevice::_free_rids<RID_Owner<RenderingDevice::Shader, true>>(RID_Owner<RenderingDevice::Shader, true>&, char const*) (in godot.macos.editor.dev.arm64) (/Users/macbookair/Documents/Work/godot_ANGE/servers/rendering/rendering_device.cpp:10004)
+[5] 10b152a3c (main+61d6a3c) - RenderingDevice::finalize() (in godot.macos.editor.dev.arm64) (/Users/macbookair/Documents/Work/godot_ANGE/servers/rendering/rendering_device.cpp:10231)
+[6] 10b172940 (main+61f6940) - RenderingDevice::~RenderingDevice() (in godot.macos.editor.dev.arm64) (/Users/macbookair/Documents/Work/godot_ANGE/servers/rendering/rendering_device.cpp:11227)
+[7] 10b173068 (main+61f7068) - RenderingDevice::~RenderingDevice() (in godot.macos.editor.dev.arm64) (/Users/macbookair/Documents/Work/godot_ANGE/servers/rendering/rendering_device.cpp:11222)
+[8] 106056bb8 (main+10dabb8) - DOCTEST_ANON_FUNC_46() (in godot.macos.editor.dev.arm64) (/Users/macbookair/Documents/Work/godot_ANGE/tests/servers/rendering/test_qualification_physical.cpp:494)
+[9] 1054743fc (main+4f83fc) - doctest::Context::run() (in godot.macos.editor.dev.arm64) (/Users/macbookair/Documents/Work/godot_ANGE/./thirdparty/doctest/doctest.h:7040)
+[10] 1053ce8f4 (main+4528f4) - test_main(int, char**) (in godot.macos.editor.dev.arm64) (/Users/macbookair/Documents/Work/godot_ANGE/tests/test_main.cpp:148)
+[11] 10530f864 (main+393864) - Main::test_entrypoint(int, char**, bool&) (in godot.macos.editor.dev.arm64) (/Users/macbookair/Documents/Work/godot_ANGE/main/main.cpp:1038)
+[12] 10530becc (main+38fecc) - main (in godot.macos.editor.dev.arm64) (/Users/macbookair/Documents/Work/godot_ANGE/platform/macos/godot_main_macos.mm:130)
+[13] 19da1be80 (dyld+31e80) - start + 6688
+-- END OF C++ BACKTRACE --
+================================================================

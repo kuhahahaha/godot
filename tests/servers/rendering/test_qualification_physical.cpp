@@ -283,6 +283,34 @@ public:
   if(device.shader_owner.owns(rid))device._free_internal(rid);
   device._free_pending_resources(0);memdelete(child);memdelete(bridge);
  }
+ static void unknown_while_dependent(RenderingDevice &device,RenderingDeviceDriver &driver,bool native,bool unresolved,uint32_t old_reason) {
+  using namespace GDExtensionDeviceExit;
+  auto *bridge=memnew(Registry::QualificationBridge);
+  auto *storage=memnew(Registry::QualificationBridge::Storage);
+  auto *unit=memnew(Registry::QualificationBridge::NativeUnit);
+  bridge->storage[0]=storage;bridge->units[0]=unit;storage->serial=unit->serial=31;storage->retiring=unit->retiring=true;
+  storage->physical.bridge=unit->shader.bridge=11;storage->physical.child=unit->shader.child=31;storage->physical.use_closed=unit->shader.use_closed=true;
+  RID rid;
+  if(native) {
+   unit->backing.known_mask=1;unit->backing.possible_mask=unresolved?2:0;unit->shader.serial=43;unit->report.report_revision=1;unit->report.state=2;unit->report.reason=old_reason;
+   RenderingDevice::Shader shader;shader.driver_id=RenderingDeviceDriver::ShaderID(19);shader.qualification_return=&unit->shader;rid=device.shader_owner.make_rid(shader);REQUIRE(rid.is_valid());unit->shader.rid=rid.get_id();unit->shader.dependent_children=1;
+  } else {
+   rid=device._qualification_storage_create(128,&storage->physical);REQUIRE(rid.is_valid());storage->report.state=2;storage->report.reason=old_reason;storage->physical.dependent_children=1;
+  }
+  device.draw_graph.initialize(&driver,[](RenderingDeviceDriver *,VectorView<RenderingDeviceDriver::AttachmentLoadOp>,VectorView<RenderingDeviceDriver::AttachmentStoreOp>,void *){return RenderingDeviceDriver::RenderPassID();},1,RenderingDeviceDriver::CommandQueueFamilyID(1),0);device.draw_graph.begin();
+  auto &registry=Registry::get_singleton();registry.qualification_retire_step(bridge,&device,31,native?2:1);
+  if(native) {CHECK(unit->report.state==2);CHECK(unit->report.reason==old_reason);CHECK(unit->report.return_status==0);CHECK_FALSE(unit->shader.enqueued);unit->shader.dependent_children=0;unit->backing.possible_mask=0;}
+  else {CHECK(storage->report.state==2);CHECK(storage->report.reason==old_reason);CHECK(storage->report.return_status==0);CHECK_FALSE(storage->physical.enqueued);storage->physical.dependent_children=0;}
+  registry.qualification_retire_step(bridge,&device,31,native?2:1);
+  if(native) CHECK(unit->shader.enqueued);else CHECK(storage->physical.enqueued);
+  device._free_pending_resources(0);registry.qualification_retire_step(bridge,&device,31,native?2:1);
+  if(native) {CHECK(unit->shader.free_event!=0);CHECK(unit->report.state==1);CHECK(unit->report.return_status==1);CHECK(unit->report.reason==0);}
+  else {CHECK(storage->physical.free_event!=0);CHECK(storage->report.state==1);CHECK(storage->report.return_status==1);CHECK(storage->report.reason==0);}
+  // Keep fixture-owned return cells alive until any failed-path RID is disposed.
+  if(native && device.shader_owner.owns(rid))device._free_internal(rid);
+  if(!native && device.storage_buffer_owner.owns(rid))device._free_internal(rid);
+  device._free_pending_resources(0);memdelete(storage);memdelete(unit);memdelete(bridge);
+ }
  static void native_nonerror_unknown_can_settle(RenderingDevice &device,RenderingDeviceDriver &driver) {
   using namespace GDExtensionDeviceExit;
   auto *bridge=memnew(Registry::QualificationBridge);auto *child=memnew(Registry::QualificationBridge::NativeUnit);
@@ -463,4 +491,12 @@ TEST_CASE("[Qualification] ticket observer return survives later RD contention w
 TEST_CASE("[Qualification] foreign bridge physical child cannot acquire ticket reverse use") {
  RenderingDevice device;TestQualificationPhysical::Driver driver;TestQualificationPhysicalAccess::attach(device,driver);
  TestQualificationPhysicalAccess::foreign_bridge_pin_is_rejected(device);CHECK(driver.creates==1);CHECK(driver.frees==1);TestQualificationPhysicalAccess::detach(device);
+}
+
+TEST_CASE("[Qualification] non-error Unknown remains well-formed while a dependent blocks retirement") {
+ for(int variant=0;variant<6;++variant) {
+  const bool native=variant%3!=0;
+  RenderingDevice device;TestQualificationPhysical::Driver driver;driver.polls=1;TestQualificationPhysicalAccess::attach(device,driver);
+  TestQualificationPhysicalAccess::unknown_while_dependent(device,driver,native,variant%3==2,variant<3?6:5);CHECK(native ? driver.shaders_freed==1 : driver.frees==1);TestQualificationPhysicalAccess::detach(device);
+ }
 }

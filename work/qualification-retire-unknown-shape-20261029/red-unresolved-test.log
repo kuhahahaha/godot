@@ -1,0 +1,13 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_qualification_physical.cpp:493:
+TEST CASE:  [Qualification] non-error Unknown remains well-formed while a dependent blocks retirement
+
+tests/servers/rendering/test_qualification_physical.cpp:302: ERROR: CHECK( unit->report.reason==6 ) is NOT correct!
+  values: CHECK( 5 == 6 )
+
+===============================================================================
+[doctest] test cases:  1 |  0 passed | 1 failed | 1816 skipped
+[doctest] assertions: 35 | 34 passed | 1 failed |
+[doctest] Status: FAILURE!

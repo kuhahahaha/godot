@@ -1,0 +1,54 @@
+{
+  "scope": "No-effect cancelled tickets on real Metal; not an end-to-end acceptance receipt",
+  "files": {
+    "probe.cpp": {
+      "bytes": 26048,
+      "sha256": "19d4f2eceffed4cfa0957b2799d2e50851ad7cf07bfeb8c54091756dd33be376"
+    },
+    "BUILD_COMMAND.json": {
+      "bytes": 1177,
+      "sha256": "cd7dfc5906fa63a1b3a079a9adde6ec574cc2edf73658d97a501bc84afbdb1ab"
+    },
+    "BUILD_RECEIPT.json": {
+      "bytes": 775,
+      "sha256": "ce0cd5df336fe67bf5c72ce9c9e873e7a4962f15d2d930ddc7a9340d5c4b7150"
+    },
+    "build.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "run_metal_ticket_capacity.py": {
+      "bytes": 2609,
+      "sha256": "04715850e2540f88ee2e30b5e0a0851e5b00ee2edf5014daad1587b4940b60bd"
+    },
+    "METAL_RECEIPT.json": {
+      "bytes": 2878,
+      "sha256": "a89497e7c2425567bf9512068bf09275d471cc399682ec8e30b298c88d0be844"
+    },
+    "metal.log": {
+      "bytes": 21316,
+      "sha256": "5c21670357f52041c962600c29ec6126724c1ee90fa67223b5e2a0a2f20e293f"
+    },
+    "runtime/probe.gd": {
+      "bytes": 333,
+      "sha256": "c5b613004558c54f60e9eb0b9c62327ef8f7dce8cf7ad9573cbee22bc45ad1e1"
+    },
+    "runtime/probe.gdextension": {
+      "bytes": 198,
+      "sha256": "8233c16b21586c683e9c839c2cd8e4b975cd0bbe2a6d1dbf52dec2b7be097d30"
+    },
+    "RECEIPT.md": {
+      "bytes": 3151,
+      "sha256": "ac45e2749a7bb3ec5f7a3002fa373e9e7bcacf2babca75cde8d38518e2fd10f6"
+    },
+    "METAL_RECEIPT_ORIGINAL.json": {
+      "bytes": 2878,
+      "sha256": "2ef3d98c3719cc45b15f2d84bdbf1a052c3fd93618267fa5eda8d100437c6121"
+    },
+    "metal-original.log": {
+      "bytes": 21316,
+      "sha256": "46673271d32e165cbc032561eaf878dde0e88b487abd6cb9cecb15db92c3e852"
+    }
+  },
+  "local_untracked_binary": "runtime/probe.dylib; measured in METAL_RECEIPT.json; excluded from Git"
+}

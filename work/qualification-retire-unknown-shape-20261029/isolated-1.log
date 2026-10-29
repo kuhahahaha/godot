@@ -1,0 +1,13 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/core/io/test_tcp_server.cpp:174:
+TEST CASE:  [TCPServer] When stopped shouldn't accept new connections
+
+tests/core/io/test_tcp_server.cpp:211: ERROR: CHECK_EQ( new_client->get_status(), StreamPeerTCP::STATUS_ERROR ) is NOT correct!
+  values: CHECK_EQ( 0, 3 )
+
+===============================================================================
+[doctest] test cases:  1 |  0 passed | 1 failed | 1816 skipped
+[doctest] assertions: 22 | 21 passed | 1 failed |
+[doctest] Status: FAILURE!

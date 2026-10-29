@@ -1,0 +1,106 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_metal_completion.cpp:127:
+TEST CASE:  [K03][MetalCompletion] no fence batches do not accumulate unowned records
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 3 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 4 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 5 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 6 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 7 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 8 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 9 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 10 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 11 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 12 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 13 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 14 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 15 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 16 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+===============================================================================
+[doctest] test cases:  1 |  0 passed |  1 failed | 1816 skipped
+[doctest] assertions: 71 | 39 passed | 32 failed |
+[doctest] Status: FAILURE!

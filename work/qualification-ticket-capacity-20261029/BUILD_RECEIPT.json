@@ -1,0 +1,12 @@
+{
+  "rc": 0,
+  "inputs_before": {
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/qualification-ticket-capacity-20261029/probe.cpp": "19d4f2eceffed4cfa0957b2799d2e50851ad7cf07bfeb8c54091756dd33be376",
+    "/Users/macbookair/Documents/Work/ANGE/godot-cpp/bin/libgodot-cpp.macos.template_debug.arm64.a": "f471e4acebc5df5e2c413dd309430ae9d1dd07e12c309bb7104e200f7536f2aa"
+  },
+  "inputs_after": {
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/qualification-ticket-capacity-20261029/probe.cpp": "19d4f2eceffed4cfa0957b2799d2e50851ad7cf07bfeb8c54091756dd33be376",
+    "/Users/macbookair/Documents/Work/ANGE/godot-cpp/bin/libgodot-cpp.macos.template_debug.arm64.a": "f471e4acebc5df5e2c413dd309430ae9d1dd07e12c309bb7104e200f7536f2aa"
+  },
+  "inputs_unchanged": true
+}

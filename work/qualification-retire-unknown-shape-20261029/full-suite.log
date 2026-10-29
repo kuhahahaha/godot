@@ -1,0 +1,169 @@
+SCRIPT ERROR: Parse Error: Expected closing ")" after function parameters.
+          at: GDScript::reload (/Users/macbookair/Library/Caches/godot_test/active_reload_cache_failure.gd:3)
+ERROR: Resumed function 'suspend()' after await, but script is gone. At script: gdscript://-9223371787763449140.gd:5
+   at: resume (modules/gdscript/gdscript_function.cpp:321)
+ERROR: Connection to remote host failed!
+   at: connect_to_host (core/io/stream_peer_uds.cpp:88)
+ERROR: Condition "callback_scope.get_error() != OK" is true. Returning: callback_scope.get_error()
+   at: initialize_library (core/extension/gdextension.cpp:1230)
+ERROR: Condition "callback_scope.get_error() != OK" is true. Returning: callback_scope.get_error()
+   at: initialize_library (core/extension/gdextension.cpp:1230)
+ERROR: Condition "callback_scope.get_error() != OK" is true. Returning: callback_scope.get_error()
+   at: initialize_library (core/extension/gdextension.cpp:1230)
+Failed call with 0 arguments. Message queue out of memory. 
+Failed set target ID: 4167309462702. Message queue out of memory. 
+Failed notification: 12345 target ID: 4167343017134. Message queue out of memory. 
+ERROR: Object '<Object#4169792490670>' was freed or unreferenced while a signal is being emitted from it. Try connecting to the signal using 'CONNECT_DEFERRED' flag, or use queue_free() to free the object (if this object is a Node) to avoid this error and potential crashes.
+   at: ~Object (core/object/object.cpp:3137)
+ERROR: Object '<Object#4169826045102>' was freed or unreferenced while a signal is being emitted from it. Try connecting to the signal using 'CONNECT_DEFERRED' flag, or use queue_free() to free the object (if this object is a Node) to avoid this error and potential crashes.
+   at: ~Object (core/object/object.cpp:3137)
+WARNING: OptimizedTranslation does not store the message texts to be translated.
+     at: get_message_list (core/string/optimized_translation.cpp:328)
+WARNING: OptimizedTranslation does not store the message texts to be translated.
+     at: get_message_count (core/string/optimized_translation.cpp:332)
+ERROR: Drawing is only allowed inside this node's `_draw()`, functions connected to its `draw` signal, or when it receives NOTIFICATION_DRAW.
+   at: draw_texture_rect_region (scene/main/canvas_item.cpp:1008)
+ERROR: Drawing is only allowed inside this node's `_draw()`, functions connected to its `draw` signal, or when it receives NOTIFICATION_DRAW.
+   at: draw_texture_rect (scene/main/canvas_item.cpp:1000)
+ERROR: Drawing is only allowed inside this node's `_draw()`, functions connected to its `draw` signal, or when it receives NOTIFICATION_DRAW.
+   at: draw_texture_rect_region (scene/main/canvas_item.cpp:1008)
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/core/io/test_tcp_server.cpp:174:
+TEST CASE:  [TCPServer] When stopped shouldn't accept new connections
+
+tests/core/io/test_tcp_server.cpp:211: ERROR: CHECK_EQ( new_client->get_status(), StreamPeerTCP::STATUS_ERROR ) is NOT correct!
+  values: CHECK_EQ( 0, 3 )
+
+TOTAL PAGES: 1 (4096 bytes).
+BUFFER BYTES: 48.
+TOTAL PAGES: 1 (4096 bytes).
+BUFFER BYTES: 48.
+TOTAL PAGES: 1 (4096 bytes).
+BUFFER BYTES: 0.
+TOTAL PAGES: 1 (4096 bytes).
+BUFFER BYTES: 4080.
+TOTAL PAGES: 1 (4096 bytes).
+BUFFER BYTES: 4080.
+TOTAL PAGES: 1 (4096 bytes).
+BUFFER BYTES: 4080.
+TOTAL PAGES: 1 (4096 bytes).
+BUFFER BYTES: 48.
+===============================================================================
+tests/servers/rendering/test_metal_completion.cpp:127:
+TEST CASE:  [K03][MetalCompletion] no fence batches do not accumulate unowned records
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 3 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 4 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 5 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 6 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 7 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 8 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 9 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 10 == 0 )
+
+tests/servUnicode parsing error, some characters were replaced with � (U+FFFD): Invalid UTF-8 leading byte (ff)
+ERROR: Attempted to save a foreign camera source token.
+   at: viewport_set_prev_camera_data (servers/rendering/renderer_viewport.cpp:1285)
+ERROR: Attempted to save a foreign camera source token.
+   at: viewport_set_prev_camera_data (servers/rendering/renderer_viewport.cpp:1285)
+ERROR: Attempted to save a foreign camera source token.
+   at: viewport_set_prev_camera_data (servers/rendering/renderer_viewport.cpp:1285)
+ers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 11 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 12 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 13 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 14 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 15 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:147: ERROR: CHECK( TestMetalCompletionAccess::records(driver) == 0 ) is NOT correct!
+  values: CHECK( 16 == 0 )
+
+tests/servers/rendering/test_metal_completion.cpp:149: ERROR: CHECK( fact.completion == RDD::CompletionCapability::None ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+===============================================================================
+tests/servers/rendering/test_particles_trail_failure.cpp:70:
+TEST CASE:  [ParticlesTrailGPU] real Vulkan allocation retry
+
+tests/servers/rendering/test_particles_trail_failure.cpp:72: MESSAGE: UNRUN: set GODOT_TEST_PARTICLES_TRAIL_GPU=1 to require a real Vulkan device.
+
+===============================================================================
+[doctest] test cases:   1814 |   1812 passed |  2 failed | 3 skipped
+[doctest] assertions: 434058 | 434025 passed | 33 failed |
+[doctest] Status: FAILURE!
