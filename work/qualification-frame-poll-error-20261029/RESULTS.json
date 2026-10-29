@@ -8,10 +8,10 @@
     "native_poll_overwrite_failures": 2
   },
   "green": {
-    "poll_cases": 2,
-    "poll_assertions": 7,
-    "qualification_cases": 28,
-    "qualification_assertions": 476,
+    "poll_cases": 3,
+    "poll_assertions": 9,
+    "qualification_cases": 29,
+    "qualification_assertions": 478,
     "frame_wait_cases": 17,
     "frame_wait_assertions": 301,
     "rt_cases": 4,
@@ -23,7 +23,8 @@
     "device_exit_cases": 133,
     "device_exit_assertions": 2619,
     "ubsan_cases": 45,
-    "ubsan_assertions": 777
+    "ubsan_assertions": 777,
+    "added_branch": "chain native_call_poll raw -21"
   },
   "release_build_rc": 0,
   "release_version_rc": 0,

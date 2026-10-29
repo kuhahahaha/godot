@@ -9707,8 +9707,8 @@
       "sha256": "898a44acb060dc54f6516f8260a64b5400d55f7bfdcb32a9bc6034b34b52b7d6"
     },
     "/Users/macbookair/Documents/Work/godot_ANGE/work/typed-lifecycle-abi-v1/PROGRESS.md": {
-      "bytes": 193483,
-      "sha256": "046424a1c77c3d798edd08766ac286b96f3043ecc9bbadb0f37e48c0a27c8845"
+      "bytes": 193836,
+      "sha256": "1a1f2510fa21ec770f44d39c05c170bf85334df93970493d2da6f4ae6aedb516"
     },
     "/Users/macbookair/Documents/Work/godot_ANGE/work/joint-integration-native-20261029/ABI_ALIGNMENT.json": {
       "bytes": 582,
@@ -10201,6 +10201,26 @@
     "work/qualification-frame-poll-error-20261029/UBSAN_R2_BUILD.rc": {
       "bytes": 2,
       "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/qualification-frame-poll-error-20261029/RESULTS.json": {
+      "bytes": 1113,
+      "sha256": "df5d9ac9b35ff94ba6f3b3b31d08a048f72b4569ebb2d9bf444a8d248f22394a"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/qualification-frame-poll-error-20261029/RECEIPT.md": {
+      "bytes": 1268,
+      "sha256": "ea2d0615d380a7736c12d8bb2d03cd05096a9d9faa2fba223181ac577eadd612"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/qualification-frame-poll-error-20261029/INDEPENDENT_REVIEW.md": {
+      "bytes": 904,
+      "sha256": "dfaa22a680ed5c992ee16578ef755450084f0a63b053cf39ae9e447f8cc042b6"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/qualification-frame-poll-error-20261029/SOURCE_MANIFEST.json": {
+      "bytes": 998,
+      "sha256": "2b47abf000408e6b8804244508d60c5a526a8873e92ebde7681ebe4e5dac4f57"
+    },
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/qualification-frame-poll-error-20261029/MANIFEST.json": {
+      "bytes": 11502,
+      "sha256": "ea681521086c50d65b254bc95bacf544f1e1b65ac83c7dc6fac43877954f039d"
     }
   }
 }

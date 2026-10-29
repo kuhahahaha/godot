@@ -344,6 +344,30 @@ public:
 		device.frames.clear();
 		device.driver = nullptr;
 	}
+	static void chain_poll_error_retains_native_code() {
+		struct PollDriver : TransferTestDriverBase {
+			bool native_call_observation_supported() const override { return true; }
+			FencePollResult native_call_poll(uint64_t p_serial) override {
+				FencePollResult result;
+				result.completed_serial = p_serial;
+				result.native_error = true;
+				result.native_code = -21;
+				return result;
+			}
+		} driver;
+		RenderingDevice device;
+		device.driver = &driver;
+		device.frames.resize(1);
+		RDD::QueueCallReport report;
+		RDD::NativeCallFact call;
+		call.serial = call.completion_serial = 31;
+		report.calls.push_back(call);
+		device.frames[0].chain_reports.push_back(report);
+		CHECK(device._stall_for_frame(0, true) == FAILED);
+		CHECK(device.frame_wait_native_code.load() == -21);
+		device.frames.clear();
+		device.driver = nullptr;
+	}
 
 	static void continuation_capacity() {
 		using namespace GDExtensionDeviceExit;
@@ -642,6 +666,7 @@ TEST_CASE("[Qualification] async map success and legacy failure preserve origina
 }
 TEST_CASE("[Qualification] frame poll failure retains original native code") { TestQualificationTicketAccess::frame_poll_error_retains_native_code(); }
 TEST_CASE("[Qualification] ticket poll failure retains original native code") { TestQualificationTicketAccess::ticket_poll_error_retains_native_code(); }
+TEST_CASE("[Qualification] chain poll failure retains original native code") { TestQualificationTicketAccess::chain_poll_error_retains_native_code(); }
 TEST_CASE("[Qualification] ticket keeps distinct native and completion identities until every source and frame returns") {TestQualificationTicketAccess::reduction(false);}
 
 TEST_CASE("[Qualification] sealing accepts an actual transitive graph path") { TestQualificationTicketAccess::transitive_graph_order(); }
