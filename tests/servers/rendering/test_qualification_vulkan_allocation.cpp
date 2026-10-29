@@ -292,6 +292,14 @@ TEST_CASE("[QualificationNative][Vulkan] render pass creation rejects missing to
  ERR_PRINT_ON;
  CHECK_FALSE(bool(render_pass));
 }
+TEST_CASE("[QualificationNative][Vulkan] dynamic uniform offset query rejects missing set views before resource access") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ ERR_PRINT_OFF;
+ auto offsets=driver.uniform_sets_get_dynamic_offsets(VectorView<RenderingDeviceDriver::UniformSetID>(nullptr,1),RenderingDeviceDriver::ShaderID(),0,1);
+ ERR_PRINT_ON;
+ CHECK(offsets==0);
+}
 TEST_CASE("[QualificationNative][Vulkan] queue submit rejects missing wait view before queue access") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);

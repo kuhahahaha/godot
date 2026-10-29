@@ -5747,6 +5747,7 @@ bool RenderingDeviceDriverVulkan::uniform_sets_have_linear_pools() const {
 }
 
 uint32_t RenderingDeviceDriverVulkan::uniform_sets_get_dynamic_offsets(VectorView<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count) const {
+	ERR_FAIL_COND_V(p_set_count > 0 && (!p_uniform_sets.ptr() || p_uniform_sets.size() < p_set_count), 0);
 	uint32_t mask = 0u;
 	uint32_t shift = 0u;
 #ifdef DEV_ENABLED
