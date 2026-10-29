@@ -1,0 +1,9 @@
+{
+  "runtime": "godot.macos.editor.dev.arm64 --path <k03-final-pair-no-vfx project> --display-driver macos --rendering-driver metal --rendering-method mobile --render-thread safe --script res://probe.gd",
+  "host_storage_boundary": "bin/ange_test_host_storage '[host_storage_boundary]'",
+  "e05_scene_transaction": "bin/ange_test_host_storage '[e05_scene_transaction]'",
+  "qualification": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case='*[Qualification]*' --exit --no-colors --no-intro",
+  "k03": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case='*[K03]*' --exit --no-colors --no-intro",
+  "p01": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case='*[P01]*' --exit --no-colors --no-intro",
+  "callqueue": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case='*[CallQueue]*' --exit --no-colors --no-intro"
+}

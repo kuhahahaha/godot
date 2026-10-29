@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "status": "D_SIDE_TEARDOWN_GREEN_E05_UPSTREAM_BLOCKED",
+  "godot_commit": "d9bf8cf575540554fb5111b6cc17bb208029c282",
+  "ange_commit": "8e2f7d282",
+  "editor_sha256": "cd07b546dc34220448cf8580405c6ef8745758bccbfd51146a50439613d0bd57",
+  "dso_sha256": "38df3a53ee04aa6d977b313853a2bb3bd7efafe207a960920f80644535a4fcab",
+  "runtime": {"rc":2,"first_boundary":"host.storage_owner_transport/E05/UNAVAILABLE"},
+  "teardown": {"failed_pair_retained":true,"provisional_storage_drained_before_pair_close":true,"destroy_root_refuses_pending":true},
+  "regressions": {
+    "host_storage_boundary": [0,7,352],
+    "e05_scene_transaction": [0,1,134],
+    "qualification": [0,102,1896],
+    "k03": [0,44,1153],
+    "p01": [0,91,9612],
+    "callqueue": [0,6,92]
+  },
+  "claims_not_made": ["owner transport","world admission","VFX","native submit","completion","readback","Ready","G1","GPU Ready"]
+}
