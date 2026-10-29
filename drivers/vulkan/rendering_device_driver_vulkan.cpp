@@ -2598,6 +2598,7 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create_shared(TextureID p_or
 	ERR_FAIL_INDEX_V(p_view.swizzle_b, TEXTURE_SWIZZLE_MAX, TextureID());
 	ERR_FAIL_INDEX_V(p_view.swizzle_a, TEXTURE_SWIZZLE_MAX, TextureID());
 	const TextureInfo *owner_tex_info = (const TextureInfo *)p_original_texture.id;
+	ERR_FAIL_NULL_V(owner_tex_info, TextureID());
 #ifdef DEBUG_ENABLED
 	ERR_FAIL_COND_V(!owner_tex_info->allocation.handle && !owner_tex_info->created_from_extension, TextureID());
 #endif
@@ -2660,6 +2661,7 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create_shared_from_slice(Tex
 	ERR_FAIL_INDEX_V(p_view.swizzle_b, TEXTURE_SWIZZLE_MAX, TextureID());
 	ERR_FAIL_INDEX_V(p_view.swizzle_a, TEXTURE_SWIZZLE_MAX, TextureID());
 	const TextureInfo *owner_tex_info = (const TextureInfo *)p_original_texture.id;
+	ERR_FAIL_NULL_V(owner_tex_info, TextureID());
 #ifdef DEBUG_ENABLED
 	ERR_FAIL_COND_V(!owner_tex_info->allocation.handle && !owner_tex_info->created_from_extension, TextureID());
 #endif
