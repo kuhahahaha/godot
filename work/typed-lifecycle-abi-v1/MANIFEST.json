@@ -9707,8 +9707,8 @@
       "sha256": "898a44acb060dc54f6516f8260a64b5400d55f7bfdcb32a9bc6034b34b52b7d6"
     },
     "/Users/macbookair/Documents/Work/godot_ANGE/work/typed-lifecycle-abi-v1/PROGRESS.md": {
-      "bytes": 193836,
-      "sha256": "1a1f2510fa21ec770f44d39c05c170bf85334df93970493d2da6f4ae6aedb516"
+      "bytes": 194142,
+      "sha256": "115c44e1795769ab414c0121a83bad92e0e92a50ac183c35aa31834c7faad41c"
     },
     "/Users/macbookair/Documents/Work/godot_ANGE/work/joint-integration-native-20261029/ABI_ALIGNMENT.json": {
       "bytes": 582,
@@ -9811,16 +9811,16 @@
       "sha256": "af58c61a58df0a432787e29832119ea7bf4e4c52a66c1f48ef9816b2b5135f2c"
     },
     "/Users/macbookair/Documents/Work/godot_ANGE/work/joint-integration-native-20261029/HANDOFF.md": {
-      "bytes": 5272,
-      "sha256": "348afa16cd2d7e563f590ef5365ae02da605fbdcfaa5a0508a3525b13ed19bb0"
+      "bytes": 5821,
+      "sha256": "03db53eb9177331f92c383f0336f646696d9d770633e267ab039d26a2a885337"
     },
     "/Users/macbookair/Documents/Work/godot_ANGE/work/joint-integration-native-20261029/INPUTS.json": {
-      "bytes": 4300,
-      "sha256": "b7eb211fedecc7e5762a1ca5edd3ee597b18ee735e93eda6fcf98d7e153ecd00"
+      "bytes": 4581,
+      "sha256": "3a3efa42e387c9458a776865870904f11cd79e9baf9b76d7e60a40cf2d1e7fa0"
     },
     "/Users/macbookair/Documents/Work/godot_ANGE/work/joint-integration-native-20261029/INTEGRATION_STATUS.md": {
-      "bytes": 4218,
-      "sha256": "0aa4f255425b96e736ea2f8a5764098ca61f48a99a1c76c9d3e7ffdb88c953a1"
+      "bytes": 4582,
+      "sha256": "bd7fe6fc830a0a545274f972dde9765ce804e88d5f21939aab8047c39f01858e"
     },
     "/Users/macbookair/Documents/Work/godot_ANGE/work/joint-integration-native-20261029/PATCH_REPLAY.json": {
       "bytes": 590,
@@ -9876,7 +9876,7 @@
     },
     "/Users/macbookair/Documents/Work/godot_ANGE/work/joint-integration-native-20261029/MANIFEST.json": {
       "bytes": 6159,
-      "sha256": "f9145548d481fc88c1bebb45665ca6d8a078803c6457c387a63bfbdac225cccb"
+      "sha256": "0d74d51be241ac5bc79910dc07dbe14e820f05b858e8781af2bd0239de23052f"
     },
     "work/qualification-frame-poll-error-20261029/BUILD_COMMAND.json": {
       "bytes": 180,

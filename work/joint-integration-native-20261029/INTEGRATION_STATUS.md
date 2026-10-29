@@ -18,6 +18,10 @@ The Metal flag applies only to `env_metal` and its third-party clone. metal-cpp 
 
 A's real non-headless Metal/mobile/safe pair exits rc2 at `install_main_storage`, with `host.storage_owner_transport`, E05, expected1/actual0; `U01_EXTENSION=1`. This is the first honest joint integration boundary. It is not an E09/Scope/Ready result. The original owner must still provide no-world U08 storage/account inputs before main pair/storage, native port, qualification context and observer can commit. U02 production holder→E06 request/wait/Prepared publication is also absent.
 
+## D poll-error increment
+
+Current public HEAD also includes D raw-code propagation commits `6a015c0031` and `c41778870c`: map, qualification native-call, chain and fence poll failures preserve their same-operation raw code. The focused package is independently reviewed and verified; it remains separate from the A E05 owner intake and does not claim E09/Ready.
+
 ## A E05 owner intake
 
 A current HEAD `6b4828dc49b3be13d7635dcc17185281858f246c` includes E05 fairness candidate `23ce4e557` and records Main-RD 20/1,787 and host 313/18,944 component assertions, all rc0. The limited review covers the frozen six-file candidate; the SConstruct dependency repair is separately identified. This is mixed-tree CPU/component evidence only. Product DSO must be rebuilt and the real pair rerun; the existing `host.storage_owner_transport/E05` boundary remains.

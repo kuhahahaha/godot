@@ -83,11 +83,17 @@
   "source_head_before_mainline": "3a08b7a795a55e9f78755725d294c5d198ba6be6",
   "mainline_commit": "b364625644",
   "mainline_delta_scope": "PRODUCTION_DELTA and SOURCE_PATHS now cover common-base..current codex/particle-mainline HEAD, including committed fixture and Metal SCsub. REQUIRED_DIRTY_METAL_BUILD.patch is retained as historical pre-commit provenance and is not applied by the current verifier.",
-  "public_branch_head": "ce5a594daae3adcf1cd7f7a580204d16bd4adb38",
+  "public_branch_head": "c41778870c247ee33eaed9570cf083681db8d80b",
   "ange_owner_intake": {
     "repository": "/Users/macbookair/Documents/Work/ANGE",
     "head": "6b4828dc49b3be13d7635dcc17185281858f246c",
     "e05_commit": "23ce4e557",
     "status": "component CPU evidence only; exact source pins in A_E05_INTAKE.json"
+  },
+  "d_native_increment": {
+    "map_error_commit": "114ca8dcc1",
+    "poll_error_commit": "6a015c0031",
+    "chain_poll_regression_commit": "c41778870c",
+    "scope": "Original asynchronous readback and nonblocking native/fence/chain poll raw-code transport; no E09/Ready/G1."
   }
 }

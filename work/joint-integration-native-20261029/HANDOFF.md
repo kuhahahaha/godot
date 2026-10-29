@@ -10,6 +10,10 @@ PRODUCTION_DELTA.patch is the exact282 changed source/build/test/API-doc paths o
 
 PATCH_REPLAY uses an own temporary index: read-tree base → apply/check exact committed source delta → apply/check required dirty Metal input → compare281 resulting live blob IDs/modes to SOURCE_TREE_BLOBS. It passed without changing the main index/worktree. It proves input bytes, not merge correctness on another base or all feature acceptance.
 
+## Current D native increment
+
+The public branch now includes `114ca8dcc1` (owned async map Error/native code), `6a015c0031` (frame/fence and qualification native poll raw code with source-valid pairing), and `c41778870c` (chain native-call poll regression). Evidence package `qualification-readback-map-error-20261029` records focused poll3/9 and Qualification29/478, prior FrameWait/RT/physical/K03/device-exit, UBSan45/777 and Release0. This is internal native error retention only; it does not grant hardware-loss acceptance, E09, Ready or G1.
+
 ## Actual native API and binary
 
 Artifacts freeze actual gdextension_interface.json and generated core header. The full generated C body from #pragma once onward equals the currently selected A SDK generated header byte-for-byte; the only header differences are filename/generated-comment preambles. ABI_ALIGNMENT records both hashes and retains a snapshot. Individual versioned protocols remain guarded exitV1, SceneInstallV2 and original main/session/qualification/QRT versions as declared; equality alone proves no runtime owner admission. SDK revision/archive/product integration remains A-owned.
