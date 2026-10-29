@@ -392,6 +392,14 @@ TEST_CASE("[QualificationNative][Vulkan] persistent buffer-map advance rejects i
  ERR_PRINT_ON;
  CHECK(mapped==nullptr);
 }
+TEST_CASE("[QualificationNative][Vulkan] buffer flush rejects invalid resource before access") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ ERR_PRINT_OFF;
+ driver.buffer_flush(RenderingDeviceDriver::BufferID());
+ ERR_PRINT_ON;
+ CHECK(true);
+}
 TEST_CASE("[QualificationNative][Vulkan] queue submit rejects missing wait view before queue access") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);

@@ -2195,6 +2195,7 @@ uint64_t RenderingDeviceDriverVulkan::buffer_get_dynamic_offsets(Span<BufferID> 
 
 void RenderingDeviceDriverVulkan::buffer_flush(BufferID p_buffer) {
 	BufferDynamicInfo *buf_info = (BufferDynamicInfo *)p_buffer.id;
+	ERR_FAIL_NULL(buf_info);
 
 	VkMemoryPropertyFlags mem_props_flags;
 	vmaGetAllocationMemoryProperties(allocator, buf_info->allocation.handle, &mem_props_flags);
