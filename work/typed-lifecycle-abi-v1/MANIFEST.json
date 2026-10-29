@@ -6183,16 +6183,16 @@
       "sha256": "1e003388883f6cec0bdc51c13e3d2c49a84ca946bbf5a8229fedc5ff442d4ee6"
     },
     "work/vulkan-copyable-layout-20261030/BINARY_HASHES.json": {
-      "bytes": 221,
-      "sha256": "a22f7e0e1abb169e8bce78b81ad6ab7d91d98237f018e235d63e181a1888571d"
+      "bytes": 331,
+      "sha256": "9d3af7eebdf1e6b1fd9eeb0f6a9d420e8284dd5dbf8c6d1c196df419ca5209b9"
     },
     "work/vulkan-copyable-layout-20261030/BUILD_BLOCKER.md": {
       "bytes": 765,
       "sha256": "8222390b2e1f310dbdcc8b8214087203b460e24d29cdeacb48ea4625f64259ed"
     },
     "work/vulkan-copyable-layout-20261030/COMMANDS.json": {
-      "bytes": 1674,
-      "sha256": "fa04dc74bea66feff233b8424c120583688f4f31c4ab580a8f48d719521ef83b"
+      "bytes": 1896,
+      "sha256": "98715ce72e95cbd317246535def47ffe366815fde3ae33713c58d64d2250b4b3"
     },
     "work/vulkan-copyable-layout-20261030/COPYABLE_LAYOUT.log": {
       "bytes": 294,
@@ -6219,8 +6219,8 @@
       "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
     },
     "work/vulkan-copyable-layout-20261030/INDEPENDENT_REVIEW_R1.md": {
-      "bytes": 538,
-      "sha256": "ac42e1b097b6b931362fff480b6a4e1c52bb43bdaa0a6e436ac265fa38559975"
+      "bytes": 615,
+      "sha256": "dd73a92362473c3bfd6469f7b2f82638e8f404d7f124a8f45bb3164a3c7ffd68"
     },
     "work/vulkan-copyable-layout-20261030/K03_P2.log": {
       "bytes": 302,
@@ -6231,8 +6231,8 @@
       "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
     },
     "work/vulkan-copyable-layout-20261030/RECEIPT_R1.md": {
-      "bytes": 1149,
-      "sha256": "16db3f2595facc975156a12e89bd0c5c366adf09948402e242fd98890f7871d1"
+      "bytes": 1265,
+      "sha256": "61232227844c760ff53496c2279597ba9fcb2b12b289c0d1369dda7c3b51221f"
     },
     "work/vulkan-copyable-layout-20261030/RED_BUILD.log": {
       "bytes": 2345,
@@ -6275,8 +6275,8 @@
       "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
     },
     "work/vulkan-copyable-layout-20261030/SOURCE_MANIFEST.json": {
-      "bytes": 779,
-      "sha256": "fb126cf66199d86985acebb7e1636cacf4c0df78093815c975ae5c4b1ef6d765"
+      "bytes": 891,
+      "sha256": "d14e6ce60b994c76cc6adf5dbfceb2d56094ba25418e9f6a7c2c884bf908dfeb"
     },
     "work/vulkan-copyable-layout-20261030/UBSAN_BUILD_R1.log": {
       "bytes": 1560,
@@ -6295,8 +6295,24 @@
       "sha256": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3"
     },
     "work/vulkan-copyable-layout-20261030/MANIFEST.json": {
-      "bytes": 3846,
-      "sha256": "e50d5ef0efc596cba62f1b8c4ddda5ba6cc364e67f4bb01286ce08279b0c660e"
+      "bytes": 4404,
+      "sha256": "b3e9a3c768a9e79588a33db408f5889bc68a4e359d0e1168b88c4dbecdd4c5ee"
+    },
+    "work/vulkan-copyable-layout-20261030/UBSAN_BUILD_R3.log": {
+      "bytes": 18607,
+      "sha256": "4466f9cec945f847d2c684332accd1994f66cf3a36dab04a87590b9840034439"
+    },
+    "work/vulkan-copyable-layout-20261030/UBSAN_BUILD_R3.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "work/vulkan-copyable-layout-20261030/UBSAN_REGRESSION_R3.log": {
+      "bytes": 302,
+      "sha256": "781f23788350517760ca46e2fbd7e89e944997e4d6e54fb72d143a36bd4413c1"
+    },
+    "work/vulkan-copyable-layout-20261030/UBSAN_REGRESSION_R3.rc": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
     }
   }
 }

@@ -15,8 +15,11 @@
     "red_copyable_layout_rc": 134,
     "regression": "47 cases / 167 assertions",
     "k03_p2": "22 cases / 350 assertions",
-    "ubsan_current_source": "BLOCKED_EXTERNAL_PARTICLES_STORAGE_INTERFACE",
+    "ubsan_current_source": "47 cases / 167 assertions",
     "release_build_rc": 0,
-    "release_version_rc": 0
-  }
+    "release_version_rc": 0,
+    "ubsan_diagnostics": false
+  },
+  "ubsan_build_r3": "same command after external particle interface stabilized",
+  "ubsan_regression_r3": "bin/godot.macos.editor.dev.arm64.san --headless --test --test-case='[QualificationNative][Vulkan]*'"
 }
