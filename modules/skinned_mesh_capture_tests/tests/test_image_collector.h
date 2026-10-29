@@ -100,12 +100,25 @@ TEST_CASE("[P01] Image rejected enqueue drains holders and forbids late callback
 	CHECK(collector.reject(0) == ERR_INVALID_PARAMETER);
 	CHECK(collector.poisoned());
 	PackedByteArray output;
-	CHECK(collector.copy(0, output) == ERR_UNAVAILABLE);
+	// A duplicate rejection poisons the collector, so no result may be
+	// certified from this instance.  The rejected-slot status is covered by a
+	// fresh collector below, before exercising the poisoned late callback.
+	CHECK(collector.copy(0, output) == ERR_INVALID_DATA);
 	CHECK_FALSE(collector.drained());
 	callback.call(pixels());
 	CHECK(collector.copy(0, output) == ERR_INVALID_DATA);
+	collector.close();
 	callback = Callable();
 	CHECK(collector.drained());
+
+	SkinnedMeshCaptureTestImageCollector rejected;
+	Callable rejected_callback;
+	REQUIRE(rejected.reserve(0, rejected_callback) == OK);
+	REQUIRE(rejected.reject(0) == OK);
+	CHECK(rejected.copy(0, output) == ERR_UNAVAILABLE);
+	rejected.close();
+	rejected_callback = Callable();
+	CHECK(rejected.drained());
 }
 TEST_CASE("[P01] Image callback survives collector and bounds reservations") {
 	Callable surviving;

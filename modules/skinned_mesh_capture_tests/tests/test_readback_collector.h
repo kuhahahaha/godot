@@ -44,8 +44,6 @@ TEST_CASE("[P01] Collector preserves exact identity copied bytes and late close 
 	const auto id = identity();
 	REQUIRE(collector.reserve(id, callback) == OK);
 	CHECK(collector.mark_enqueued(id) == OK);
-	CHECK(collector.mark_enqueued(id) == ERR_INVALID_PARAMETER);
-	CHECK(collector.poisoned());
 	CHECK(collector.cancel_unqueued(id) == ERR_INVALID_PARAMETER);
 	Callable duplicate;
 	CHECK(collector.reserve(id, duplicate) != OK);
@@ -76,6 +74,19 @@ TEST_CASE("[P01] Collector preserves exact identity copied bytes and late close 
 	CHECK(collector.poisoned());
 	retained = Callable();
 	CHECK(collector.drained());
+
+	SkinnedMeshCaptureTestReadbackCollector poisoned(1, 2, false);
+	Callable poisoned_callback;
+	REQUIRE(poisoned.reserve(identity(), poisoned_callback) == OK);
+	REQUIRE(poisoned.mark_enqueued(identity()) == OK);
+	CHECK(poisoned.mark_enqueued(identity()) == ERR_INVALID_PARAMETER);
+	CHECK(poisoned.poisoned());
+	PackedByteArray poisoned_output;
+	CHECK(poisoned.copy_completed(identity(), poisoned_output) == ERR_INVALID_DATA);
+	poisoned.close();
+	poisoned_callback.call(skinned_mesh_capture_test_initial_guarded_buffer());
+	poisoned_callback = Callable();
+	CHECK(poisoned.drained());
 }
 TEST_CASE("[P01] Collector callback survives owner and bounded pools reject overflow") {
 	Callable surviving;
