@@ -11,6 +11,43 @@ TEST_FORCE_LINK(test_qualification_ticket)
 // native dispatch; the actual Metal control remains separately required.
 class TestQualificationTicketAccess {
 public:
+	static void snapshot_output_overlap() {
+		using namespace GDExtensionDeviceExit;
+		auto *registry = memnew(Registry);
+		GDExtensionQualificationBridgeRefV1 bridge = {};
+		GDExtensionQualificationTicketRefV1 ticket = {};
+		GDExtensionQualificationFactV1 fact = {};
+		fact.graph_kind = 0x12345678;
+		const GDExtensionQualificationFactV1 original = fact;
+		auto result = registry->qualification_facts(bridge, ticket, 1, 0, 1, &fact, &fact.graph_kind);
+		CHECK(result.native_error == ERR_INVALID_PARAMETER);
+		CHECK(memcmp(&fact, &original, sizeof(fact)) == 0);
+
+		uint32_t destination[] = { 0x12345678, 0x87654321, 0xdeadbeef, 0xa5a5a5a5 };
+		const uint32_t original_bytes[] = { 0x12345678, 0x87654321, 0xdeadbeef, 0xa5a5a5a5 };
+		result = registry->qualification_copy(bridge, ticket, 1, destination, sizeof(destination), &destination[1]);
+		CHECK(result.native_error == ERR_INVALID_PARAMETER);
+		CHECK(memcmp(destination, original_bytes, sizeof(destination)) == 0);
+
+		uint32_t written = 99;
+		result = registry->qualification_facts(bridge, ticket, 1, 0, 1, &fact, &written);
+		CHECK(result.native_error != OK);
+		CHECK(written == 0);
+		written = 99;
+		result = registry->qualification_copy(bridge, ticket, 1, destination, sizeof(destination), &written);
+		CHECK(result.native_error != OK);
+		CHECK(written == 0);
+		written = 99;
+		result = registry->qualification_facts(bridge, ticket, 1, UINT32_MAX, 1, &fact, &written);
+		CHECK(result.native_error == ERR_INVALID_PARAMETER);
+		CHECK(written == 0);
+		written = 99;
+		result = registry->qualification_copy(bridge, ticket, 1, nullptr, sizeof(destination), &written);
+		CHECK(result.native_error == ERR_INVALID_PARAMETER);
+		CHECK(written == 0);
+		memdelete(registry);
+	}
+
 	static void continuation_capacity() {
 		using namespace GDExtensionDeviceExit;
 		struct Driver : TransferTestDriverBase {
@@ -296,6 +333,7 @@ public:
 		device.driver = nullptr;
 	}
 };
+TEST_CASE("[Qualification] overlapping snapshot outputs are rejected without writing destination") { TestQualificationTicketAccess::snapshot_output_overlap(); }
 TEST_CASE("[Qualification] ticket keeps distinct native and completion identities until every source and frame returns") {TestQualificationTicketAccess::reduction(false);}
 
 TEST_CASE("[Qualification] sealing accepts an actual transitive graph path") { TestQualificationTicketAccess::transitive_graph_order(); }
