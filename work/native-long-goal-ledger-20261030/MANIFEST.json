@@ -50,9 +50,10 @@
     "G1"
   ],
   "ci": {
-    "previous_run": "40930940598 attempt2; 19 completed successes, Linux doubles GCC ASAN/UBSAN still in_progress",
+    "previous_run": "40930940598 completed failure; Linux doubles GCC ASAN/UBSAN job was the only job failure, with static gitignore check tripping on tracked work/ receipts",
     "repair_commit": "f6b0fc8152",
-    "repair_receipt": "work/ci-linux-double-sanitizer-lld-20261030/RECEIPT.md",
+    "receipt_tree_cleanup_commit": "a0574e6941",
+    "repair_receipt": "local-only work/ci-linux-double-sanitizer-lld-20261030/RECEIPT.md",
     "local_checks": "YAML parse and git diff --check pass",
     "status": "NEW_PUBLIC_RUN_REQUIRED"
   },
