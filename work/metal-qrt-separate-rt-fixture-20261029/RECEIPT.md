@@ -1,0 +1,5 @@
+# Separate-render-thread fixture callback experiment
+
+The independent test fixture attempted to arrange the existing `qrt_ticket` uniform-set creation on the actual rendering thread using a custom extension Callable and kept its original CodeHold while waiting. On Metal separate mode it returned 183 after `callable_custom_create2` logged `UNSUPPORTED_ENTRY_CLASS`; no callback, ticket, readback, physical-retirement acknowledgement or clean unload was observed. The fixture registered SceneReady only, so this is an expected entry-class refusal, not evidence that the core queue or GPU ticket failed.
+
+The production QRT1 contract uses a core-owned scalar queue cell and explicitly supersedes extension Callables for main qualification. The experiment does not implement or propose a production callback, change entry classes, supply U08 owner policy, weaken G1, or establish separate-thread acceptance. The reproducible fixture binary was removed after its hash was recorded; rebuild command and source are included.
