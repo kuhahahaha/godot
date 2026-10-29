@@ -93,7 +93,20 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_rt_reserve(GDExtensionQ
   error=qualification_bridge_locked(ref,false,true,bridge,rd);if(error!=OK)return result(error,error==ERR_UNAUTHORIZED?15:16);
  }
  if(header.operation_serial<=cell->retired_operation)return result(ERR_DOES_NOT_EXIST,17);
- if(records[bridge->library].private_refs>=private_limit || qualification_serials.exhausted)return result(ERR_PARAMETER_RANGE_ERROR,19);
+ bool *cleanup_reserved=nullptr;uint64_t cleanup_child_serial=0;
+ if(header.kind==3) {
+  const auto q=pod<GDExtensionStorageRetireRequestV1>(cell->request.ptr());
+  for(auto *child:bridge->storage)if(child && child->serial==q.backing.handle_serial){cleanup_reserved=&child->cleanup_serial_reserved;cleanup_child_serial=child->serial;break;}
+ } else if(header.kind==5) {
+  const auto q=pod<GDExtensionNativeUnitRetireRequestV1>(cell->request.ptr());
+  for(auto *child:bridge->units)if(child && child->serial==q.unit.handle_serial){cleanup_reserved=&child->cleanup_serial_reserved;cleanup_child_serial=child->serial;break;}
+ }
+ const bool use_cleanup_reservation=cleanup_reserved && *cleanup_reserved;
+ const bool use_slot_credit=(header.kind==3 || header.kind==5) && bridge->cleanup_refs_reserved;
+ const bool use_shared_queue=bridge->cleanup_refs_reserved && (use_slot_credit || header.kind==8 || header.kind==9);
+ const uint32_t refs_needed=uint32_t(!use_slot_credit)+uint32_t(!use_shared_queue);
+ if(use_slot_credit && bridge->cleanup_slot_in_use)return result(ERR_BUSY,19);
+ if(private_limit<refs_needed || records[bridge->library].private_refs>private_limit-refs_needed || (use_cleanup_reservation ? (qualification_serials.exhausted || !qualification_cleanup_serial_reservations) : !qualification_serial_capacity(1)))return result(ERR_PARAMETER_RANGE_ERROR,19);
  if(header.payload_bytes)memcpy(cell->payload.ptrw(),payload,header.payload_bytes);
  if(header.kind==7) {
   const auto q=pod<GDExtensionQualificationUploadPrepareV1>(cell->request.ptr());bool seen[128]={};uint64_t segments=0;
@@ -102,8 +115,11 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_rt_reserve(GDExtensionQ
  QualificationTicket *ticket=nullptr;error=qualification_rt_ticket_locked(bridge,header,cell->request.ptr(),cell->payload.ptr(),ticket);if(error!=OK)return result(error,error==ERR_DOES_NOT_EXIST?17:16);
  if(ticket && ticket->accepted_rt_refs==UINT32_MAX)return result(ERR_PARAMETER_RANGE_ERROR,19);
  memset(cell->result.ptrw(),0,header.result_capacity);if(header.segment_capacity)memset(cell->segments.ptrw(),0,header.segment_capacity*sizeof(GDExtensionQualificationUploadSegmentV1));
- qualification_serials.take(cell->serial);cell->header=header;cell->ticket=ticket;cell->occupied=true;cell->ever_accepted=true;cell->active=false;cell->queued=false;cell->executing=false;cell->observed=false;cell->admission_consumed=false;cell->state=0;cell->call_result={};cell->result_bytes=cell->segment_count=0;
- if(ticket)++ticket->accepted_rt_refs;++bridge->children;++records[bridge->library].private_refs;
+ if(use_cleanup_reservation){--qualification_cleanup_serial_reservations;*cleanup_reserved=false;}
+ qualification_serials.take(cell->serial);cell->cleanup_child_serial=use_cleanup_reservation?cleanup_child_serial:0;cell->header=header;cell->ticket=ticket;cell->occupied=true;cell->ever_accepted=true;cell->active=false;cell->queued=false;cell->executing=false;cell->observed=false;cell->admission_consumed=false;cell->state=0;cell->call_result={};cell->result_bytes=cell->segment_count=0;cell->slot_ref_credit=use_slot_credit;cell->queue_ref_reserved=!use_shared_queue;
+ if(use_slot_credit)bridge->cleanup_slot_in_use=true;else ++records[bridge->library].private_refs;
+ if(cell->queue_ref_reserved)++records[bridge->library].private_refs;
+ if(ticket)++ticket->accepted_rt_refs;++bridge->children;
  *out={instance,cell->serial};return result(OK);
 }
 Error Registry::qualification_rt_schedule(GDExtensionQualificationBridgeRefV1 ref) {
@@ -112,19 +128,45 @@ Error Registry::qualification_rt_schedule(GDExtensionQualificationBridgeRefV1 re
   MutexLock lock(mutex);Error error=qualification_bridge_locked(ref,false,false,bridge,rd);if(error!=OK)return error;cell=bridge->rt;
   if(!cell || !cell->occupied)return ERR_DOES_NOT_EXIST;
   if(!cell->active || cell->state!=1 || cell->queued)return OK;
-  if(records[bridge->library].private_refs>=private_limit)return OK;
-  cell->queued=true;++bridge->children;++records[bridge->library].private_refs;
+  // Already accepted ticket work must drain after owner cancellation even
+  // when its slot consumed the last unreserved library reference.
+  const bool ticket_work=(cell->header.kind==8 || cell->header.kind==9) && cell->ticket;
+  const bool use_queue_credit=(cell->header.kind==3 || cell->header.kind==5 || ticket_work) && bridge->cleanup_refs_reserved;
+  if(use_queue_credit){if(!bridge->claim_cleanup_queue(cell->queued,cell->queue_ref_credit))return OK;}
+  else if(cell->queue_ref_reserved){cell->queued=true;++bridge->children;}
+  else {if(records[bridge->library].private_refs>=private_limit)return OK;cell->queued=true;++bridge->children;++records[bridge->library].private_refs;}
  }
  auto *server=Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
  if(server && server->_try_qualification_rt_dispatch(bridge->serial,cell->serial))return OK;
- MutexLock lock(mutex);CRASH_COND(!cell->queued);cell->queued=false;--bridge->children;--records[bridge->library].private_refs;return OK;
+ MutexLock lock(mutex);CRASH_COND(!cell->queued);
+ if(cell->queue_ref_credit)bridge->release_cleanup_queue(cell->queued,cell->queue_ref_credit);else {cell->queued=false;--bridge->children;if(!cell->queue_ref_reserved)--records[bridge->library].private_refs;}qualification_trim_cleanup_ref_credits_locked(bridge);return OK;
 }
 GDExtensionDeviceSessionResultV1 Registry::qualification_rt_activate(GDExtensionQualificationBridgeRefV1 ref,GDExtensionQualificationRtRefV1 rt_ref) {
  {
   MutexLock lock(mutex);QualificationBridge *bridge=nullptr;RenderingDevice *rd=nullptr;Error error=qualification_bridge_locked(ref,false,false,bridge,rd);if(error!=OK)return result(error,error==ERR_UNAUTHORIZED?15:17);
   auto *cell=bridge->rt;if(rt_ref.registry_instance!=instance || !cell || !cell->occupied || rt_ref.handle_serial!=cell->serial)return result(ERR_DOES_NOT_EXIST,17);
-  if(cell->active)return result(ERR_BUSY,16);
-  cell->active=true;cell->state=1;
+  if(cell->active) {
+   // A completed, observed cleanup admission error can be retried on this
+   // exact retained cell only while the original child proves no retirement
+   // effect occurred. No other operation or uncertain result is replayed.
+   if(!cell->cleanup_child_serial || cell->queued || cell->executing || !cell->observed || cell->state!=2 || cell->call_result.native_error==OK || qualification_cleanup_retire_matches_original_child_locked(bridge,cell->header.kind,cell->request.ptr())!=OK)return result(ERR_BUSY,16);
+   bool no_effect=false;
+   if(cell->header.kind==3)for(auto *child:bridge->storage)if(child && child->serial==cell->cleanup_child_serial) {
+    MutexLock physical_lock(child->physical.mutex);
+    no_effect=!child->creating && !child->retiring && !child->acknowledged && !child->physical.use_closed.load() && !child->physical.enqueued && !child->physical.free_event;
+    break;
+   }
+   if(cell->header.kind==5)for(auto *child:bridge->units)if(child && child->serial==cell->cleanup_child_serial) {
+    MutexLock shader_lock(child->shader.mutex);MutexLock pipeline_lock(child->pipeline.mutex);
+    no_effect=!child->creating && !child->retiring && !child->acknowledged && !child->shader.use_closed.load() && !child->pipeline.use_closed.load() && !child->shader.enqueued && !child->pipeline.enqueued && !child->shader.free_event && !child->pipeline.free_event;
+    break;
+   }
+   if(!no_effect)return result(ERR_BUSY,16);
+   memset(cell->result.ptrw(),0,cell->header.result_capacity);cell->result_bytes=0;cell->segment_count=0;cell->call_result={};cell->observed=false;cell->admission_consumed=false;
+  } else {
+   cell->active=true;
+  }
+  cell->state=1;
  }
  const Error error=qualification_rt_schedule(ref);return result(error,error==ERR_UNAUTHORIZED?15:error!=OK?17:0);
 }
@@ -153,9 +195,21 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_rt_release(GDExtensionQ
  if(cell->queued || cell->executing)return result(ERR_BUSY,19);
  if(cell->active && (!cell->observed || (cell->state!=2 && cell->state!=3)))return result(ERR_BUSY,16);
  if(cell->state==3 && (!cell->ticket || !cell->ticket->physically_retired.load()))return result(ERR_BUSY,16);
+ if(cell->cleanup_child_serial) {
+  bool *reserved=nullptr;bool acknowledged=false;
+  if(cell->header.kind==3)for(auto *child:bridge->storage)if(child && child->serial==cell->cleanup_child_serial){reserved=&child->cleanup_serial_reserved;acknowledged=child->acknowledged;break;}
+  if(cell->header.kind==5)for(auto *child:bridge->units)if(child && child->serial==cell->cleanup_child_serial){reserved=&child->cleanup_serial_reserved;acknowledged=child->acknowledged;break;}
+  if(!reserved || *reserved)return result(ERR_INVALID_DATA,16);
+  const bool delivered=cell->active && cell->observed && cell->state==2 && cell->call_result.native_error==OK;
+  if(!acknowledged && !delivered) {
+   // Keep the original ref occupied if releasing it would strand cleanup.
+   if(!qualification_serial_capacity(1))return result(ERR_BUSY,19);
+   ++qualification_cleanup_serial_reservations;*reserved=true;
+  }
+ }
  if(cell->ticket){CRASH_COND(!cell->ticket->accepted_rt_refs);--cell->ticket->accepted_rt_refs;cell->ticket=nullptr;}
- cell->retired_operation=cell->header.operation_serial;cell->occupied=false;cell->active=false;cell->observed=false;cell->state=0;
- --bridge->children;--records[bridge->library].private_refs;return result(OK);
+ cell->retired_operation=cell->header.operation_serial;cell->occupied=false;cell->active=false;cell->observed=false;cell->state=0;cell->cleanup_child_serial=0;
+ --bridge->children;if(cell->slot_ref_credit){CRASH_COND(!bridge->cleanup_slot_in_use);bridge->cleanup_slot_in_use=false;cell->slot_ref_credit=false;}else --records[bridge->library].private_refs;if(cell->queue_ref_reserved){--records[bridge->library].private_refs;cell->queue_ref_reserved=false;}qualification_trim_cleanup_ref_credits_locked(bridge);return result(OK);
 }
 void Registry::qualification_rt_dispatch(uint64_t bridge_serial,uint64_t serial) {
  QualificationBridge *bridge=nullptr;QualificationRtCell *cell=nullptr;RenderingDevice *rd=nullptr;Error admission=OK;
@@ -200,7 +254,8 @@ void Registry::qualification_rt_dispatch(uint64_t bridge_serial,uint64_t serial)
   // Whole API result publication and this command's last bridge access share
   // the original lock. Its later scalar queue-node destructor touches no cell,
   // extension callback, caller bytes, or DSO-owned object.
-  CRASH_COND(!cell->queued);cell->queued=false;--bridge->children;--records[bridge->library].private_refs;
+  CRASH_COND(!cell->queued);
+  if(cell->queue_ref_credit)bridge->release_cleanup_queue(cell->queued,cell->queue_ref_credit);else {cell->queued=false;--bridge->children;if(!cell->queue_ref_reserved)--records[bridge->library].private_refs;}qualification_trim_cleanup_ref_credits_locked(bridge);
  }
 }
 } // namespace GDExtensionDeviceExit

@@ -3,8 +3,32 @@ TEST_FORCE_LINK(test_qualification_vulkan_allocation)
 #if defined(VULKAN_ENABLED) && defined(MACOS_ENABLED)
 #include "drivers/vulkan/rendering_context_driver_vulkan.h"
 #include "drivers/vulkan/rendering_device_driver_vulkan.h"
+#include "core/os/os.h"
 class TestQualificationVulkanAllocationAccess {
 public:
+ struct DescriptorOutcome {uint32_t state;int32_t native_code;};
+ template<class D> static auto checked_descriptor_free(D &driver,RenderingDeviceDriver::UniformSetID set,int)->decltype(driver.qualification_uniform_set_free(set),DescriptorOutcome()) {
+  const auto result=driver.qualification_uniform_set_free(set);return {uint32_t(result.state),result.native_code};
+ }
+ template<class D> static DescriptorOutcome checked_descriptor_free(D &,RenderingDeviceDriver::UniformSetID,long){return {0,0};}
+ template<class D> static auto descriptor_fault(D &driver,bool enable,int)->decltype(driver.test_descriptor_free_error=VK_SUCCESS,bool()) {driver.test_descriptor_free_error=enable?VK_ERROR_DEVICE_LOST:VK_SUCCESS;return true;}
+ template<class D> static bool descriptor_fault(D &,bool,long){return false;}
+ template<class D> static auto descriptor_calls(D &driver,int)->decltype(driver.test_descriptor_free_calls,uint32_t()) {return driver.test_descriptor_free_calls;}
+ template<class D> static uint32_t descriptor_calls(D &,long){return 0;}
+ template<class D> static auto descriptor_unknowns(D &driver,int)->decltype(driver.qualification_unknown_descriptors,uint64_t()) {MutexLock lock(driver.descriptor_set_mutex);return driver.qualification_unknown_descriptors;}
+ template<class D> static uint64_t descriptor_unknowns(D &,long){return 0;}
+ static uint64_t set_descriptor_unknowns(RenderingDeviceDriverVulkan &driver,uint64_t value) {MutexLock lock(driver.descriptor_set_mutex);const auto previous=driver.qualification_unknown_descriptors;driver.qualification_unknown_descriptors=value;return previous;}
+ static uint32_t descriptor_pools(RenderingDeviceDriverVulkan &driver) {return driver.descriptor_set_pools.size();}
+ template<class D> static auto clear_injected_latch(D &driver,RenderingDeviceDriver::UniformSetID set,int)->decltype(((typename D::UniformSetInfo *)set.id)->qualification_return_unknown=false,void()) {MutexLock lock(driver.descriptor_set_mutex);auto *info=(typename D::UniformSetInfo *)set.id;if(info->qualification_return_unknown){CRASH_COND(!driver.qualification_unknown_descriptors);--driver.qualification_unknown_descriptors;info->qualification_return_unknown=false;}}
+ template<class D> static void clear_injected_latch(D &,RenderingDeviceDriver::UniformSetID,long){}
+ static RenderingDeviceDriver::UniformSetID descriptor_set(RenderingDeviceDriverVulkan &driver,VkDescriptorSetLayout &layout,int pool=-1) {
+  VkDescriptorSetLayoutCreateInfo create={};create.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+  if(vkCreateDescriptorSetLayout(driver.vk_device,&create,RenderingContextDriverVulkan::get_allocation_callbacks(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT),&layout)!=VK_SUCCESS)return {};
+  RenderingDeviceDriverVulkan::ShaderInfo shader;shader.vk_descriptor_set_layouts.push_back(layout);
+  return driver.uniform_set_create(VectorView<RenderingDeviceDriver::BoundUniform>(nullptr,0),RenderingDeviceDriver::ShaderID(&shader),0,pool);
+ }
+ static bool linear_enabled(RenderingDeviceDriverVulkan &driver,bool enabled) {bool previous=driver.linear_descriptor_pools_enabled;driver.linear_descriptor_pools_enabled=enabled;return previous;}
+ static void destroy_layout(RenderingDeviceDriverVulkan &driver,VkDescriptorSetLayout layout) {if(layout)vkDestroyDescriptorSetLayout(driver.vk_device,layout,RenderingContextDriverVulkan::get_allocation_callbacks(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT));}
  static void fail(RenderingDeviceDriverVulkan &driver,uint32_t stage){driver.test_buffer_fault_stage=stage;}
  static uint32_t rollback(RenderingDeviceDriverVulkan &driver){return driver.test_buffer_rollback_mask;}
  static uint32_t allocations(RenderingDeviceDriverVulkan &driver){VmaTotalStatistics stats;vmaCalculateStatistics(driver.allocator,&stats);return stats.total.statistics.allocationCount;}
@@ -17,6 +41,67 @@ public:
   driver.test_buffer_prefix=VK_NULL_HANDLE;driver.test_buffer_allocation_prefix=nullptr;driver.test_buffer_fault_stage=0;
  }
 };
+TEST_CASE("[QualificationNative][Vulkan] checked descriptor return preserves unknown without replay") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
+ RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ VkDescriptorSetLayout success_layout=VK_NULL_HANDLE;
+ auto success=TestQualificationVulkanAllocationAccess::descriptor_set(driver,success_layout);REQUIRE(bool(success));
+ auto returned=TestQualificationVulkanAllocationAccess::checked_descriptor_free(driver,success,0);
+ CHECK_MESSAGE(returned.state==1,"A real successful descriptor free must have a checked returned result.");CHECK(returned.native_code==VK_SUCCESS);
+ if(returned.state!=1)driver.uniform_set_free(success);
+ TestQualificationVulkanAllocationAccess::destroy_layout(driver,success_layout);
+ VkDescriptorSetLayout unknown_layout=VK_NULL_HANDLE;
+ auto unknown=TestQualificationVulkanAllocationAccess::descriptor_set(driver,unknown_layout);REQUIRE(bool(unknown));
+ const bool injectable=TestQualificationVulkanAllocationAccess::descriptor_fault(driver,true,0);CHECK(injectable);
+ const auto before=TestQualificationVulkanAllocationAccess::descriptor_calls(driver,0);
+ auto first=TestQualificationVulkanAllocationAccess::checked_descriptor_free(driver,unknown,0);
+ CHECK(first.state==2);CHECK(first.native_code==VK_ERROR_DEVICE_LOST);CHECK(TestQualificationVulkanAllocationAccess::descriptor_unknowns(driver,0)==1);bool retained=first.state!=1;
+ if(first.state==2){
+  const auto pools=TestQualificationVulkanAllocationAccess::descriptor_pools(driver);
+  retained=pools!=0;CHECK(retained);
+  if(retained){ERR_PRINT_OFF;driver.uniform_set_free(unknown);ERR_PRINT_ON;retained=TestQualificationVulkanAllocationAccess::descriptor_pools(driver)==pools;CHECK_MESSAGE(retained,"Legacy free must not replay an unknown checked return.");}
+  if(retained){auto repeated=TestQualificationVulkanAllocationAccess::checked_descriptor_free(driver,unknown,0);CHECK(repeated.state==2);CHECK(repeated.native_code==first.native_code);}
+ }
+ CHECK(TestQualificationVulkanAllocationAccess::descriptor_calls(driver,0)==before+1);
+ CHECK(TestQualificationVulkanAllocationAccess::descriptor_unknowns(driver,0)==1);
+ // The injected failure is before the actual Vulkan call. This test-only
+ // cleanup frees the actual set; production unknown returns are not retried.
+ TestQualificationVulkanAllocationAccess::descriptor_fault(driver,false,0);if(retained){TestQualificationVulkanAllocationAccess::clear_injected_latch(driver,unknown,0);driver.uniform_set_free(unknown);}TestQualificationVulkanAllocationAccess::destroy_layout(driver,unknown_layout);
+ CHECK(TestQualificationVulkanAllocationAccess::descriptor_unknowns(driver,0)==0);
+ const bool previous_linear=TestQualificationVulkanAllocationAccess::linear_enabled(driver,true);VkDescriptorSetLayout linear_layout=VK_NULL_HANDLE;
+ auto linear=TestQualificationVulkanAllocationAccess::descriptor_set(driver,linear_layout,0);CHECK(bool(linear));
+ if(linear){const auto calls=TestQualificationVulkanAllocationAccess::descriptor_calls(driver,0);auto unsupported=TestQualificationVulkanAllocationAccess::checked_descriptor_free(driver,linear,0);
+  CHECK(unsupported.state==0);CHECK(TestQualificationVulkanAllocationAccess::descriptor_calls(driver,0)==calls);driver.uniform_set_free(linear);driver.linear_uniform_set_pools_reset(0);}
+ TestQualificationVulkanAllocationAccess::linear_enabled(driver,previous_linear);TestQualificationVulkanAllocationAccess::destroy_layout(driver,linear_layout);
+ VkDescriptorSetLayout saturated_layout=VK_NULL_HANDLE;auto saturated=TestQualificationVulkanAllocationAccess::descriptor_set(driver,saturated_layout);CHECK(bool(saturated));
+ if(saturated){const auto previous=TestQualificationVulkanAllocationAccess::set_descriptor_unknowns(driver,UINT64_MAX);const auto calls=TestQualificationVulkanAllocationAccess::descriptor_calls(driver,0);
+  const auto refused=TestQualificationVulkanAllocationAccess::checked_descriptor_free(driver,saturated,0);CHECK(refused.state==0);CHECK(TestQualificationVulkanAllocationAccess::descriptor_calls(driver,0)==calls);
+  TestQualificationVulkanAllocationAccess::set_descriptor_unknowns(driver,previous);driver.uniform_set_free(saturated);}
+ TestQualificationVulkanAllocationAccess::destroy_layout(driver,saturated_layout);
+}
+TEST_CASE("[QualificationNative][Vulkan] independent unknown descriptors remain separately retained") {
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ VkDescriptorSetLayout layout_a=VK_NULL_HANDLE,layout_b=VK_NULL_HANDLE;
+ auto a=TestQualificationVulkanAllocationAccess::descriptor_set(driver,layout_a);auto b=TestQualificationVulkanAllocationAccess::descriptor_set(driver,layout_b);CHECK(bool(a));CHECK(bool(b));
+ if(a && b){
+  CHECK(TestQualificationVulkanAllocationAccess::descriptor_fault(driver,true,0));const auto before=TestQualificationVulkanAllocationAccess::descriptor_calls(driver,0);
+  auto first=TestQualificationVulkanAllocationAccess::checked_descriptor_free(driver,a,0);auto second=TestQualificationVulkanAllocationAccess::checked_descriptor_free(driver,b,0);
+  CHECK(first.state==2);CHECK(second.state==2);CHECK(TestQualificationVulkanAllocationAccess::descriptor_unknowns(driver,0)==2);
+  if(first.state==2){auto repeated=TestQualificationVulkanAllocationAccess::checked_descriptor_free(driver,a,0);CHECK(repeated.state==2);}CHECK(TestQualificationVulkanAllocationAccess::descriptor_calls(driver,0)==before+2);CHECK(TestQualificationVulkanAllocationAccess::descriptor_unknowns(driver,0)==2);
+  TestQualificationVulkanAllocationAccess::descriptor_fault(driver,false,0);
+  if(first.state!=1){TestQualificationVulkanAllocationAccess::clear_injected_latch(driver,a,0);driver.uniform_set_free(a);}CHECK(TestQualificationVulkanAllocationAccess::descriptor_unknowns(driver,0)==1);
+  if(second.state==2){auto retained=TestQualificationVulkanAllocationAccess::checked_descriptor_free(driver,b,0);CHECK(retained.state==2);}CHECK(TestQualificationVulkanAllocationAccess::descriptor_unknowns(driver,0)==1);
+  if(second.state!=1){TestQualificationVulkanAllocationAccess::clear_injected_latch(driver,b,0);driver.uniform_set_free(b);}CHECK(TestQualificationVulkanAllocationAccess::descriptor_unknowns(driver,0)==0);
+ }else{if(a)driver.uniform_set_free(a);if(b)driver.uniform_set_free(b);}
+ TestQualificationVulkanAllocationAccess::destroy_layout(driver,layout_a);TestQualificationVulkanAllocationAccess::destroy_layout(driver,layout_b);
+}
+TEST_CASE("[QualificationNative][Vulkan] unknown descriptor destruction probe") {
+ if(OS::get_singleton()->get_environment("GODOT_DESCRIPTOR_RETURN_DEATH_PROBE")!="1")return;
+ RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ VkDescriptorSetLayout layout=VK_NULL_HANDLE;auto set=TestQualificationVulkanAllocationAccess::descriptor_set(driver,layout);REQUIRE(bool(set));
+ REQUIRE(TestQualificationVulkanAllocationAccess::descriptor_fault(driver,true,0));auto unknown=TestQualificationVulkanAllocationAccess::checked_descriptor_free(driver,set,0);REQUIRE(unknown.state==2);
+ // Isolated subprocess intentionally reaches the original driver destructor.
+}
 TEST_CASE("[QualificationNative][Vulkan] failed manual buffer creation returns its actual native prefix") {
  RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
  RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);

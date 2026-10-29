@@ -227,6 +227,7 @@ private:
 	uint64_t _reserve_backing_serial();
  uint64_t next_qualification_object_serial = 1;
  uint64_t next_qualification_free_event = 1;
+ uint64_t qualification_free_event_reservations = 0;
  uint64_t next_qualification_frame_epoch = 1;
  bool qualification_retiring = false;
  bool qualification_recording = false;
@@ -244,6 +245,9 @@ private:
  void _qualification_return_frame_tickets(uint32_t p_frame);
  std::atomic<bool> qualification_frame_advance_pending{false};
  Error _qualification_enqueue(GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
+ bool _qualification_free_event_available(bool p_reserved) const;
+ bool _qualification_reserve_free_event(GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
+ void _qualification_release_free_event(GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
  void _qualification_freed(GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
  RID _qualification_storage_create(uint32_t p_bytes, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
 
@@ -294,10 +298,10 @@ private:
 			bool mapping_sealed = false;
 			RDG::RecordMappingState mapping = RDG::RecordMappingState::Pending;
 			uint32_t command_slot = UINT32_MAX;
-			RDD::CommandBufferID command_buffer;
+			RDD::CommandBufferID command_buffer = {};
 			bool issue_attempted = false;
 			Error queue_error = OK;
-			RDD::QueueCallReport issue_report;
+			RDD::QueueCallReport issue_report = {};
 		};
 		PackedByteArray bytes;
 		LocalVector<CopyRecord> copies;
@@ -493,6 +497,8 @@ public:
 		};
 
 		RDD::TextureID driver_id;
+		uint32_t qualification_users = 0;
+		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
 
 		TextureType type = TEXTURE_TYPE_MAX;
 		DataFormat format = DATA_FORMAT_MAX;
@@ -561,6 +567,7 @@ public:
 
 	uint32_t _texture_layer_count(Texture *p_texture) const;
 	uint32_t _texture_alignment(Texture *p_texture) const;
+	static uint32_t _normalize_staging_region_size(int64_t p_size);
 	Error _texture_initialize(RID p_texture, uint32_t p_layer, const Vector<uint8_t> &p_data, RDD::TextureLayout p_dst_layout, bool p_immediate_flush);
 	void _texture_check_shared_fallback(Texture *p_texture);
 	void _texture_update_shared_fallback(RID p_texture_rid, Texture *p_texture, bool p_for_writing);
@@ -609,6 +616,11 @@ public:
 		}
 	};
 
+private:
+	RID _texture_create_internal(const TextureFormat &p_format, const TextureView &p_view, const Vector<Vector<uint8_t>> &p_data, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, RID p_reserved);
+	RID _qualification_texture_create(const TextureFormat &p_format, const TextureView &p_view, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
+
+public:
 	RID texture_create(const TextureFormat &p_format, const TextureView &p_view, const Vector<Vector<uint8_t>> &p_data = Vector<Vector<uint8_t>>());
 	RID texture_create_shared(const TextureView &p_view, RID p_with_texture);
 	RID texture_create_from_extension(TextureType p_type, DataFormat p_format, TextureSamples p_samples, BitField<RenderingDevice::TextureUsageBits> p_usage, uint64_t p_image, uint64_t p_width, uint64_t p_height, uint64_t p_depth, uint64_t p_layers, uint64_t p_mipmaps = 1);
@@ -868,7 +880,14 @@ public:
 	/**** SAMPLER ****/
 	/*****************/
 private:
-	RID_Owner<RDD::SamplerID, true> sampler_owner;
+	struct Sampler {
+		RDD::SamplerID driver_id;
+		uint32_t qualification_users = 0;
+		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
+	};
+	RID_Owner<Sampler, true> sampler_owner;
+	RID _qualification_sampler_create(const SamplerState &p_state, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
+	RID _sampler_create_internal(const SamplerState &p_state, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
 
 public:
 	RID sampler_create(const SamplerState &p_state);
@@ -1957,7 +1976,7 @@ private:
 		List<Buffer> buffers_to_dispose_of;
 		List<Texture> textures_to_dispose_of;
 		List<Framebuffer> framebuffers_to_dispose_of;
-		List<RDD::SamplerID> samplers_to_dispose_of;
+		List<Sampler> samplers_to_dispose_of;
 		List<Shader> shaders_to_dispose_of;
 		List<UniformSet> uniform_sets_to_dispose_of;
 		List<RenderPipeline> render_pipelines_to_dispose_of;

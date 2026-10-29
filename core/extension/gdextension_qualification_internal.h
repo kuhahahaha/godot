@@ -33,7 +33,7 @@ struct QualificationTicket {
  LocalVector<QualificationPhysicalReturn *> physical_uses;
  RDG::RecordHandle capture,body;
  uint32_t frame_refs=0,readback_copies_joined=0,accepted_rt_refs=0;
- bool prepared=false,recorded=false,recording=false,queued=false,acknowledged=false;
+ bool prepared=false,recorded=false,recording=false,queued=false,acknowledged=false,queue_ref_credit=false;
  std::atomic<bool> admission_closed{false};
  bool stop_requested=false,continuation_pending=false;
  uint32_t ordering_path_length=0;
@@ -49,11 +49,11 @@ struct QualificationRtCell {
  GDExtensionQualificationRtRequestV1 header={};
  Vector<uint8_t> request,payload,result;
  Vector<GDExtensionQualificationUploadSegmentV1> segments;
- uint64_t serial=0,retired_operation=0;
+ uint64_t serial=0,retired_operation=0,cleanup_child_serial=0;
  QualificationTicket *ticket=nullptr;
  GDExtensionDeviceSessionResultV1 call_result={};
  uint32_t state=0,result_bytes=0,segment_count=0;
- bool ever_accepted=false,occupied=false,active=false,queued=false,executing=false,observed=false,admission_consumed=false;
+ bool ever_accepted=false,occupied=false,active=false,queued=false,executing=false,observed=false,admission_consumed=false,slot_ref_credit=false,queue_ref_credit=false,queue_ref_reserved=false;
 };
 
 // Storage belongs to the original Registry. Public numeric observations never
@@ -66,7 +66,18 @@ struct Registry::QualificationBridge {
  HolderRetirement *holder = nullptr;
  QualificationRtCell *rt=nullptr;
  bool closing = false;
+ bool cleanup_refs_reserved = false, cleanup_slot_in_use = false, cleanup_queue_in_use = false;
  uint32_t children = 0;
+ // Registry mutex is held by the caller. The credit remains a real retained
+ // library reference while it is transferred to the original queue work.
+ bool claim_cleanup_queue(bool &queued,bool &credit) {
+  if(!cleanup_refs_reserved || cleanup_queue_in_use || queued || credit)return false;
+  queued=true;credit=true;cleanup_queue_in_use=true;++children;return true;
+ }
+ void release_cleanup_queue(bool &queued,bool &credit) {
+  CRASH_COND(!queued || !credit || !cleanup_queue_in_use || !children);
+  queued=false;credit=false;cleanup_queue_in_use=false;--children;
+ }
  static constexpr uint32_t CHILD_CAPACITY = 128;
  struct Storage {
   uint64_t serial = 0, retire_serial = 0, dependency_serial = 0;
@@ -76,6 +87,19 @@ struct Registry::QualificationBridge {
   GDExtensionStorageRetireReportV1 report = {};
   QualificationPhysicalReturn physical;
   Error maintenance_error = OK;
+  bool creating = true, retiring = false, queued = false, acknowledged = false, cleanup_serial_reserved = false, queue_ref_credit = false;
+ };
+ // Original bridge child for a method texture. The producer and typed
+ // retire transaction must bind this cell before it can be admitted by wire.
+ struct Texture {
+  uint64_t serial = 0, rid = 0, object_serial = 0;
+  QualificationPhysicalReturn physical;
+  bool creating = true, retiring = false, queued = false, acknowledged = false;
+ };
+ // Original bridge sampler child; no typed producer is exposed yet.
+ struct Sampler {
+  uint64_t serial = 0, rid = 0, object_serial = 0;
+  QualificationPhysicalReturn physical;
   bool creating = true, retiring = false, queued = false, acknowledged = false;
  };
  struct NativeUnit {
@@ -85,10 +109,12 @@ struct Registry::QualificationBridge {
   GDExtensionNativeUnitRetireReportV1 report = {};
   QualificationPhysicalReturn shader, pipeline;
   Error maintenance_error = OK;
-  bool creating = true, retiring = false, queued = false, acknowledged = false;
+  bool creating = true, retiring = false, queued = false, acknowledged = false, cleanup_serial_reserved = false, queue_ref_credit = false;
  };
  QualificationTicket *tickets[CHILD_CAPACITY] = {};
  Storage *storage[CHILD_CAPACITY] = {};
+ Texture *textures[CHILD_CAPACITY] = {};
+ Sampler *samplers[CHILD_CAPACITY] = {};
  NativeUnit *units[CHILD_CAPACITY] = {};
 };
 }

@@ -188,19 +188,21 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record(GDExtensionQuali
   if(!rd->_thread_safe_.try_lock())return result(ERR_BUSY,19);rd_unlock.mutex=&rd->_thread_safe_;
   error=qualification_record_preflight(bridge,rd,*request,resources);if(error!=OK)return result(error,error==ERR_UNAVAILABLE?18:error==ERR_PARAMETER_RANGE_ERROR?19:2);
   uint32_t slot=0;for(;slot<QualificationBridge::CHILD_CAPACITY && bridge->tickets[slot];++slot){}
-  if(slot==QualificationBridge::CHILD_CAPACITY || records[bridge->library].private_refs>=private_limit || qualification_serials.exhausted || qualification_serials.next==UINT64_MAX)return result(ERR_PARAMETER_RANGE_ERROR,19);
+  const uint32_t refs_needed=bridge->cleanup_refs_reserved?1:3;
+  if(slot==QualificationBridge::CHILD_CAPACITY || private_limit<refs_needed || records[bridge->library].private_refs>private_limit-refs_needed || !qualification_serial_capacity(2))return result(ERR_PARAMETER_RANGE_ERROR,19);
   ticket=memnew(QualificationTicket);ticket->origin=*request;ticket->bridge_serial=bridge->serial;ticket->library=bridge->library;
   ticket->facts.reserve(QualificationTicket::FACT_CAPACITY);ticket->graphs.reserve(QualificationTicket::FACT_CAPACITY);ticket->natives.reserve(QualificationTicket::FACT_CAPACITY);ticket->resource_pins.reserve(128);ticket->physical_uses.reserve(128);
   ticket->result.instantiate();error=ticket->result->bytes.resize(request->readback_size);if(error!=OK){memdelete(ticket);return result(error,19);}
   ticket->result->qualification_owned=true;qualification_serials.take(ticket->serial);qualification_serials.take(ticket->result->request_serial);
   auto &r=ticket->report;r.abi={1,sizeof(GDExtensionDeviceExitAbi),0};r.revision=1;r.record_generation=request->record_generation;r.request_nonce=request->request_nonce;r.source_backing_serial=request->observed_backing_serial;r.source_offset=request->readback_offset;r.source_size=request->readback_size;memcpy(r.request_digest,request->request_digest,32);memcpy(r.unit_digest,request->unit_digest,32);
+  if(!bridge->cleanup_refs_reserved){records[bridge->library].private_refs+=2;bridge->cleanup_refs_reserved=true;}
   bridge->tickets[slot]=ticket;++bridge->children;++records[bridge->library].private_refs;
   if(rd->_recording_error()!=OK || rd->draw_list.active || rd->compute_list.active || rd->raytracing_list.active || rd->draw_graph.has_driver_callbacks()) {
    qualification_ticket_publish(ticket,rd);*out={instance,ticket->serial};*report=ticket->report;return result(OK);
   }
   error=rd->_qualification_pin_resources(ticket,resources);
   if(error!=OK) {
-   bridge->tickets[slot]=nullptr;--bridge->children;--records[bridge->library].private_refs;memdelete(ticket);return result(error,16);
+   bridge->tickets[slot]=nullptr;--bridge->children;--records[bridge->library].private_refs;memdelete(ticket);qualification_trim_cleanup_ref_credits_locked(bridge);return result(error,16);
   }
   ticket->recording=true;
  }
@@ -278,10 +280,14 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_release(GDExtensionQual
    if(!cell || forward_count(cell)!=1)return false;
    bool original=false;
    for(auto *child:bridge->storage)if(child && &child->physical==cell)original=true;
+   for(auto *child:bridge->textures)if(child && &child->physical==cell)original=true;
+   for(auto *child:bridge->samplers)if(child && &child->physical==cell)original=true;
    for(auto *child:bridge->units)if(child && (&child->shader==cell || &child->pipeline==cell))original=true;
    if(!original)return false;
   }
   for(auto *child:bridge->storage)if(child && !check_cell(&child->physical,child->serial))return false;
+  for(auto *child:bridge->textures)if(child && !check_cell(&child->physical,child->serial))return false;
+  for(auto *child:bridge->samplers)if(child && !check_cell(&child->physical,child->serial))return false;
   for(auto *child:bridge->units)if(child && (!check_cell(&child->shader,child->serial) || !check_cell(&child->pipeline,child->serial)))return false;
   return true;
  };
@@ -301,7 +307,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_release(GDExtensionQual
   for(auto *cell:ticket->physical_uses)CRASH_COND(!cell->uses.erase(ticket));
   ticket->physical_uses.clear();
  }
- ticket->result.unref();ticket->admission_closed=true;ticket->acknowledged=true;--bridge->children;--records[bridge->library].private_refs;return result(OK);
+ ticket->result.unref();ticket->admission_closed=true;ticket->acknowledged=true;--bridge->children;--records[bridge->library].private_refs;qualification_trim_cleanup_ref_credits_locked(bridge);return result(OK);
 }
 GDExtensionDeviceSessionResultV1 Registry::qualification_prepare_uploads(GDExtensionQualificationBridgeRefV1 ref,const GDExtensionQualificationUploadPrepareV1 *request,const GDExtensionQualificationUploadPlanV1 *plans,uint32_t plan_count,GDExtensionQualificationTicketRefV1 *out,GDExtensionQualificationReportV1 *report) {
  if(!aligned(request)||!aligned(out)||!aligned(report)||!aligned(plans)||!plan_count||plan_count>128||!separate(request,sizeof(*request),plans,sizeof(*plans)*plan_count)||!separate(request,sizeof(*request),out,sizeof(*out))||!separate(request,sizeof(*request),report,sizeof(*report))||!separate(plans,sizeof(*plans)*plan_count,out,sizeof(*out))||!separate(plans,sizeof(*plans)*plan_count,report,sizeof(*report))||!separate(out,sizeof(*out),report,sizeof(*report))||out->registry_instance||out->handle_serial)return result(ERR_INVALID_PARAMETER,2);
@@ -331,7 +337,8 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_prepare_uploads(GDExten
  error=qualification_native_capacity(*rd->driver,rd->draw_graph.qualification_command_count(),graph_bound,rd->transfer_worker_pool_max_size);
  if(error!=OK)return result(error,error==ERR_UNAVAILABLE?18:19);
  uint32_t slot=0;for(;slot<QualificationBridge::CHILD_CAPACITY && bridge->tickets[slot];++slot){}
- if(slot==QualificationBridge::CHILD_CAPACITY || records[bridge->library].private_refs>=private_limit || qualification_serials.exhausted || qualification_serials.next==UINT64_MAX)return result(ERR_PARAMETER_RANGE_ERROR,19);
+ const uint32_t refs_needed=bridge->cleanup_refs_reserved?1:3;
+ if(slot==QualificationBridge::CHILD_CAPACITY || private_limit<refs_needed || records[bridge->library].private_refs>private_limit-refs_needed || !qualification_serial_capacity(2))return result(ERR_PARAMETER_RANGE_ERROR,19);
  auto *ticket=memnew(QualificationTicket);ticket->prepared=true;ticket->preparation=*request;ticket->bridge_serial=bridge->serial;ticket->library=bridge->library;
  ticket->origin.record_generation=request->record_generation;ticket->origin.request_nonce=request->request_nonce;
  ticket->facts.reserve(QualificationTicket::FACT_CAPACITY);ticket->graphs.reserve(QualificationTicket::FACT_CAPACITY);ticket->natives.reserve(QualificationTicket::FACT_CAPACITY);ticket->resource_pins.reserve(128);ticket->physical_uses.reserve(128);ticket->uploads.resize(plan_count);
@@ -339,6 +346,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_prepare_uploads(GDExten
  ticket->result->qualification_owned=true;qualification_serials.take(ticket->serial);qualification_serials.take(ticket->result->request_serial);
  for(uint32_t i=0;i<plan_count;++i){auto &upload=ticket->uploads[i];upload.plan=plans[indices[i]];upload.progress.max_segments=(upload.plan.byte_size+31)/32;upload.progress.segments.reserve(upload.progress.max_segments);}
  auto &r=ticket->report;r.abi={1,sizeof(GDExtensionDeviceExitAbi),0};r.revision=1;r.record_generation=request->record_generation;r.request_nonce=request->request_nonce;memcpy(r.request_digest,request->request_digest,32);memcpy(r.unit_digest,request->unit_digest,32);
+ if(!bridge->cleanup_refs_reserved){records[bridge->library].private_refs+=2;bridge->cleanup_refs_reserved=true;}
  bridge->tickets[slot]=ticket;++bridge->children;++records[bridge->library].private_refs;ticket->physically_retired=true;
  *out={instance,ticket->serial};*report=r;return result(OK);
 }

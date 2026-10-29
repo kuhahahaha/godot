@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  gdextension_library_exit_guard.cpp                                  */
+/*  gdextension_library_exit_guard.cpp                                    */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -30,11 +30,11 @@
 
 #include "gdextension_library_exit_guard.h"
 
-#include "core/extension/gdextension.h"
 #include "core/crypto/crypto_core.h"
+#include "core/extension/gdextension.h"
 #include "core/io/marshalls.h"
-#include "core/templates/safe_refcount.h"
 #include "core/os/thread.h"
+#include "core/templates/safe_refcount.h"
 
 #include <cstddef>
 #include <cstdlib>
@@ -115,7 +115,9 @@ BindingLifetime::~BindingLifetime() {
 	}
 }
 void BindingLifetime::record_core_disposal() {
-	if (!storage) { return; }
+	if (!storage) {
+		return;
+	}
 	auto *registry = storage->reference.registry;
 	MutexLock lock(registry->mutex);
 	CRASH_COND(storage->pending || !storage->core_object || !storage->terminal_action || storage->generation != registry->records[storage->reference.slot].snapshot.library_generation);
@@ -135,7 +137,9 @@ void BindingLifetime::record_core_disposal() {
 }
 Error BindingLifetime::acquire_core(const RecordRef &p_reference) {
 	const Error result = acquire(p_reference);
-	if (result == OK && storage) { storage->core_owned = true; }
+	if (result == OK && storage) {
+		storage->core_owned = true;
+	}
 	return result;
 }
 Error BindingLifetime::acquire(const RecordRef &p_reference) {
@@ -190,10 +194,14 @@ void Registry::retire_binding_holder(HolderRetirement *p_holder) {
 			if (!outer && p_holder->core_disposal_returned && p_holder->core_disposal_thread == Thread::get_caller_id()) {
 				continue; // Exact core disposal receipt, never public release authority.
 			}
-			if (!outer) { stop_lifetime_entry(LifetimeFailure::UNREGISTERED); }
+			if (!outer) {
+				stop_lifetime_entry(LifetimeFailure::UNREGISTERED);
+			}
 			break;
 		}
-		if (frame->admitted && (!p_holder->core_disposal_returned || !p_holder->core_disposal_frame || frame->frame_id == p_holder->core_disposal_frame)) { outer = frame; }
+		if (frame->admitted && (!p_holder->core_disposal_returned || !p_holder->core_disposal_frame || frame->frame_id == p_holder->core_disposal_frame)) {
+			outer = frame;
+		}
 	}
 	{
 		MutexLock lock(mutex);
@@ -207,12 +215,16 @@ void Registry::retire_binding_holder(HolderRetirement *p_holder) {
 			// binding any action, while its original admitted frame is live.
 			const bool unpublished_reservation = p_holder->core_owned && !p_holder->terminal_action &&
 					outer && p_holder->acquired_thread == Thread::get_caller_id();
-			if (!unpublished_reservation) { stop_lifetime_entry(LifetimeFailure::UNREGISTERED); }
+			if (!unpublished_reservation) {
+				stop_lifetime_entry(LifetimeFailure::UNREGISTERED);
+			}
 		}
 		if (!core_disposal && (p_holder->acquired_thread != Thread::get_caller_id() || !outer)) {
 			// An unused object cleanup registration has no executable body to
 			// retire. Its original owner may cancel that reserved action.
-			if (!p_holder->cleanup || p_holder->acquired_thread != Thread::get_caller_id()) { stop_lifetime_entry(LifetimeFailure::UNREGISTERED); }
+			if (!p_holder->cleanup || p_holder->acquired_thread != Thread::get_caller_id()) {
+				stop_lifetime_entry(LifetimeFailure::UNREGISTERED);
+			}
 		}
 		p_holder->retired_thread = Thread::get_caller_id();
 		p_holder->retirement_attempt = record.exit_attempt;
@@ -296,7 +308,8 @@ const char *get_binding_entry_diagnostic() {
 #ifdef WINDOWS_ENABLED
 	(void)_write(2, message, static_cast<unsigned int>(length));
 #else
-	(void)write(2, message, length);
+	const auto written = write(2, message, length);
+	(void)written;
 #endif
 	std::_Exit(86);
 }
@@ -317,7 +330,8 @@ void require_close_success(Error p_error, CloseRoute p_route) {
 #ifdef WINDOWS_ENABLED
 	(void)_write(2, message, sizeof(message) - 1);
 #else
-	(void)write(2, message, sizeof(message) - 1);
+	const auto written = write(2, message, sizeof(message) - 1);
+	(void)written;
 #endif
 	std::_Exit(78);
 }
@@ -339,7 +353,8 @@ void require_level_dispatch_success(Error p_error, int32_t p_level, bool p_initi
 #ifdef WINDOWS_ENABLED
 	(void)_write(2, message, sizeof(message) - 1);
 #else
-	(void)write(2, message, sizeof(message) - 1);
+	const auto written = write(2, message, sizeof(message) - 1);
+	(void)written;
 #endif
 	std::_Exit(79);
 }
@@ -428,12 +443,16 @@ struct CleanupAction::Storage : HolderRetirement {
 	}
 };
 void BindingLifetime::bind_core_action(uint64_t p_object) {
-	if (!storage) { return; }
+	if (!storage) {
+		return;
+	}
 	auto *registry = storage->reference.registry;
 	MutexLock lock(registry->mutex);
 	CRASH_COND(!p_object || storage->pending || storage->source_action || !storage->core_owned);
 	for (auto *holder = registry->records[storage->reference.slot].holders; holder; holder = holder->record_next) {
-		if (!holder->cleanup) { continue; }
+		if (!holder->cleanup) {
+			continue;
+		}
 		auto *action = static_cast<CleanupAction::Storage *>(holder);
 		if (action->object_id == p_object) {
 			storage->source_object = storage->core_object = p_object;
@@ -444,7 +463,9 @@ void BindingLifetime::bind_core_action(uint64_t p_object) {
 	stop_lifetime_entry(LifetimeFailure::UNREGISTERED);
 }
 void CleanupAction::record_core_disposal() {
-	if (!storage) { return; }
+	if (!storage) {
+		return;
+	}
 	auto *registry = storage->reference.registry;
 	MutexLock lock(registry->mutex);
 	CRASH_COND(storage->pending || storage->generation != registry->records[storage->reference.slot].snapshot.library_generation);
@@ -455,7 +476,9 @@ void CleanupAction::record_core_disposal() {
 	storage->core_disposal_returned = true;
 	storage->core_disposal_thread = Thread::get_caller_id();
 	for (auto *frame = RegistrationContext::current; frame; frame = frame->previous) {
-		if (frame->admitted && frame->reference->registry == registry && frame->reference->slot == storage->reference.slot) { storage->core_disposal_frame = frame->frame_id; }
+		if (frame->admitted && frame->reference->registry == registry && frame->reference->slot == storage->reference.slot) {
+			storage->core_disposal_frame = frame->frame_id;
+		}
 	}
 }
 CleanupAction::~CleanupAction() {
@@ -470,7 +493,9 @@ CleanupPhase CleanupAction::get_phase() const {
 	return storage ? storage->phase : CleanupPhase::UNSCHEDULED;
 }
 bool CleanupAction::is_scheduled() const {
-	if (!storage) { return false; }
+	if (!storage) {
+		return false;
+	}
 	Registry *registry = storage->reference.registry;
 	MutexLock lock(registry->mutex);
 	return storage->scheduled_action != 0;
@@ -586,12 +611,16 @@ Error Registry::register_cleanup_action(const RecordRef &p_ref, uint64_t p_objec
 }
 
 Error Registry::mark_core_object_action(const RecordRef &p_ref, uint64_t p_object_id, CleanupAction &r_action) {
-	if (p_ref.registry != this || !r_action.storage || !p_object_id) { return ERR_INVALID_DATA; }
+	if (p_ref.registry != this || !r_action.storage || !p_object_id) {
+		return ERR_INVALID_DATA;
+	}
 	MutexLock lock(mutex);
 	auto *action = r_action.storage;
 	const auto &record = records[p_ref.slot];
 	if (action->reference.slot != p_ref.slot || action->object_id != p_object_id || action->action_id != p_object_id ||
-			action->generation != record.snapshot.library_generation || action->thread_id != record.owner_thread || action->pending || action->scheduled_action) { return ERR_INVALID_DATA; }
+			action->generation != record.snapshot.library_generation || action->thread_id != record.owner_thread || action->pending || action->scheduled_action) {
+		return ERR_INVALID_DATA;
+	}
 	action->core_object_action = true;
 	return OK;
 }
@@ -860,15 +889,25 @@ Error Registry::begin_close(const RecordRef &p_ref, CloseRoute p_route) {
 
 bool Registry::physical_can_close_locked(uint32_t p_slot) const {
 	const Record &record = records[p_slot];
-	for (const auto &ref : device_refs) { if (ref.serial && ref.library == p_slot) return false; }
+	for (const auto &ref : device_refs) {
+		if (ref.serial && ref.library == p_slot) {
+			return false;
+		}
+	}
 	for (uint32_t i = 0; i < 4; i++) {
 		if (record.cleanup_by_phase[i] || record.active_cleanup_by_phase[i] || record.retiring_cleanup_by_phase[i]) {
 			return false;
 		}
 	}
 	if (record.guard_enrollment == GuardEnrollment::QUALIFIED) {
-		if (!record.control_complete) { return false; }
-		for (const auto &level : record.levels) { if (level.initialized && !level.finalized) { return false; } }
+		if (!record.control_complete) {
+			return false;
+		}
+		for (const auto &level : record.levels) {
+			if (level.initialized && !level.finalized) {
+				return false;
+			}
+		}
 	}
 	return record.attached && record.quiescing && !record.close_started && record.active_callbacks == 0 &&
 			record.binding_holders == 0 && record.return_pending_holders == 0 && record.cleanup_reservations == 0 &&
@@ -1044,35 +1083,68 @@ CallbackScope::~CallbackScope() {
 		MutexLock lock(reference.registry->mutex);
 		reference.registry->records[reference.slot].active_callbacks--;
 	}
-	// The core-only reference outlives the DSO return acknowledgement.
+	// The core-only reference outlives the DSO return acknowledgment.
 	reference.reset();
 }
 
 LevelScope::LevelScope(const RecordRef &p_reference, GDExtension *p_owner, const GDExtensionInitialization &p_initialization, int32_t p_level, bool p_initializing) :
 		level(p_level), initializing(p_initializing), error(ERR_INVALID_DATA) {
 	Registry *registry = p_reference.registry;
-	if (!registry || level < 0 || level >= 4) { return; }
+	if (!registry || level < 0 || level >= 4) {
+		return;
+	}
 	MutexLock lock(registry->mutex);
 	auto &record = registry->records[p_reference.slot];
 	const auto &original = record.original_initialization;
 	if (!record.bootstrap_tuple_observed || record.original_owner != p_owner || original.initialize != p_initialization.initialize ||
 			original.deinitialize != p_initialization.deinitialize || original.userdata != p_initialization.userdata ||
-			original.minimum_initialization_level != p_initialization.minimum_initialization_level) { error = ERR_UNAUTHORIZED; return; }
+			original.minimum_initialization_level != p_initialization.minimum_initialization_level) {
+		error = ERR_UNAUTHORIZED;
+		return;
+	}
 	guarded = record.guard_enrollment == GuardEnrollment::QUALIFIED;
-	if (!record.attached || record.close_started || record.close_error != OK) { error = ERR_BUSY; return; }
+	if (!record.attached || record.close_started || record.close_error != OK) {
+		error = ERR_BUSY;
+		return;
+	}
 	auto &state = record.levels[level];
 	if (guarded) {
-		if (record.owner_thread != Thread::get_caller_id() || !(record.guard.level_bitmap & (1u << level))) { error = ERR_UNAUTHORIZED; return; }
-		if (initializing) {
-			if ((state.user_action.services | state.binding_action.services) & ~registry->live_services) { error = ERR_UNAVAILABLE; return; }
-			if (record.quiescing || state.initialized || state.initialize_frame) { error = ERR_BUSY; return; }
-		} else {
-			if (!record.preflight_accepted || !record.quiescing || !state.initialized || state.finalized || record.active_callbacks) { error = ERR_BUSY; return; }
-			for (int i = level + 1; i < 4; i++) { if (record.levels[i].initialized && !record.levels[i].finalized) { error = ERR_INVALID_DATA; return; } }
+		if (record.owner_thread != Thread::get_caller_id() || !(record.guard.level_bitmap & (1u << level))) {
+			error = ERR_UNAUTHORIZED;
+			return;
 		}
-	} else if (record.quiescing || record.guard_enrollment == GuardEnrollment::PENDING_BOOTSTRAP || record.guard_enrollment == GuardEnrollment::REVOKED) { error = ERR_BUSY; return; }
-	if ((!guarded && (record.private_refs >= registry->private_limit || registry->frame_serials.exhausted)) || record.active_callbacks >= UINT32_MAX - record.cleanup_reservations) { error = ERR_PARAMETER_RANGE_ERROR; return; }
-	if (!guarded) { record.private_refs++; }
+		if (initializing) {
+			if ((state.user_action.services | state.binding_action.services) & ~registry->live_services) {
+				error = ERR_UNAVAILABLE;
+				return;
+			}
+			if (record.quiescing || state.initialized || state.initialize_frame) {
+				error = ERR_BUSY;
+				return;
+			}
+		} else {
+			if (!record.preflight_accepted || !record.quiescing || !state.initialized || state.finalized || record.active_callbacks) {
+				error = ERR_BUSY;
+				return;
+			}
+			for (int i = level + 1; i < 4; i++) {
+				if (record.levels[i].initialized && !record.levels[i].finalized) {
+					error = ERR_INVALID_DATA;
+					return;
+				}
+			}
+		}
+	} else if (record.quiescing || record.guard_enrollment == GuardEnrollment::PENDING_BOOTSTRAP || record.guard_enrollment == GuardEnrollment::REVOKED) {
+		error = ERR_BUSY;
+		return;
+	}
+	if ((!guarded && (record.private_refs >= registry->private_limit || registry->frame_serials.exhausted)) || record.active_callbacks >= UINT32_MAX - record.cleanup_reservations) {
+		error = ERR_PARAMETER_RANGE_ERROR;
+		return;
+	}
+	if (!guarded) {
+		record.private_refs++;
+	}
 	record.active_callbacks++;
 	reference = RecordRef(registry, p_reference.slot);
 	context.enter(reference, initializing || !guarded);
@@ -1081,15 +1153,24 @@ LevelScope::LevelScope(const RecordRef &p_reference, GDExtension *p_owner, const
 		CRASH_COND(!reserved_frame);
 		context.frame_id = reserved_frame;
 		reserved_frame = 0;
-	} else { registry->frame_serials.take(context.frame_id); }
+	} else {
+		registry->frame_serials.take(context.frame_id);
+	}
 	context.level = level;
 	context.level_phase = initializing ? LevelPhase::INITIALIZE : LevelPhase::DEINITIALIZE;
-	if (initializing) { state.initialize_frame = context.frame_id; state.initialize_returned = false; }
-	else { state.deinitialize_frame = context.frame_id; state.deinitialize_returned = false; }
+	if (initializing) {
+		state.initialize_frame = context.frame_id;
+		state.initialize_returned = false;
+	} else {
+		state.deinitialize_frame = context.frame_id;
+		state.deinitialize_returned = false;
+	}
 	error = OK;
 }
 LevelScope::~LevelScope() {
-	if (error != OK) { return; }
+	if (error != OK) {
+		return;
+	}
 	Registry *registry = reference.registry;
 	// A void wrapper cannot quietly return a partially completed typed phase.
 	if (guarded && (!context.ack || (!initializing && context.terminal_stage != 3))) {
@@ -1115,7 +1196,9 @@ LevelScope::~LevelScope() {
 				state.user_action.terminator = state.binding_action.terminator = nullptr;
 				state.user_action.userdata = state.binding_action.userdata = nullptr;
 				bool complete = true;
-				for (const auto &other : record.levels) { complete &= !other.initialized || other.finalized; }
+				for (const auto &other : record.levels) {
+					complete &= !other.initialized || other.finalized;
+				}
 				if (complete) {
 					registry->clear_guard_control_locked(record);
 				}
@@ -1138,7 +1221,9 @@ BootstrapScope::BootstrapScope(RecordRef &&p_reference, GDExtension *p_expected)
 Error BootstrapScope::observe_tuple(const GDExtensionInitialization &p_initialization, Error p_error) {
 	MutexLock lock(reference.registry->mutex);
 	auto &record = reference.registry->records[reference.slot];
-	if (current != this || RegistrationContext::current != &context || record.original_owner != expected || record.owner_thread != Thread::get_caller_id()) { return ERR_UNAUTHORIZED; }
+	if (current != this || RegistrationContext::current != &context || record.original_owner != expected || record.owner_thread != Thread::get_caller_id()) {
+		return ERR_UNAUTHORIZED;
+	}
 	if (record.guard_enrollment == GuardEnrollment::PENDING_BOOTSTRAP) {
 		const auto &wanted = record.guard.expected_initialization;
 		if (p_error != OK || wanted.initialize != p_initialization.initialize || wanted.deinitialize != p_initialization.deinitialize ||
@@ -1148,7 +1233,9 @@ Error BootstrapScope::observe_tuple(const GDExtensionInitialization &p_initializ
 		}
 		record.guard_enrollment = GuardEnrollment::QUALIFIED;
 	}
-	if (p_error != OK) { return p_error; }
+	if (p_error != OK) {
+		return p_error;
+	}
 	record.original_initialization = p_initialization;
 	record.bootstrap_tuple_observed = true;
 	// Public guarded_qualified remains zero until the complete public census
@@ -1187,8 +1274,8 @@ Error Registry::begin_cycle(uint64_t &r_cycle) {
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
 	device_epochs = Sequence{};
- device_ref_serials = Sequence{};
- phase = Phase::RUNNING;
+	device_ref_serials = Sequence{};
+	phase = Phase::RUNNING;
 	engine_cycle_ended = false;
 	r_cycle = instance;
 	return OK;
@@ -1212,8 +1299,16 @@ void Registry::finish_engine_cycle(uint64_t p_cycle) {
 	try_finalize();
 }
 void Registry::try_finalize() {
- for (const auto &device : device_records) { if (device.epoch) return; }
- for (const auto &ref : device_refs) { if (ref.serial) return; }
+	for (const auto &device : device_records) {
+		if (device.epoch) {
+			return;
+		}
+	}
+	for (const auto &ref : device_refs) {
+		if (ref.serial) {
+			return;
+		}
+	}
 	if (phase != Phase::FINALIZING || !engine_cycle_ended) {
 		return;
 	}
@@ -1265,7 +1360,7 @@ Error Registry::reserve_open(uint32_t p_kind, RecordRef &r_wrapper, RecordRef &r
 			}
 		}
 		if (!owner_slot) {
-			std::strcpy(reservation_failure, "binding owner capacity exhausted");
+			std::memcpy(reservation_failure, "binding owner capacity exhausted", sizeof("binding owner capacity exhausted"));
 			return ERR_PARAMETER_RANGE_ERROR;
 		}
 	}
@@ -1277,7 +1372,7 @@ Error Registry::reserve_open(uint32_t p_kind, RecordRef &r_wrapper, RecordRef &r
 		}
 	}
 	if (slot == INVALID_SLOT || private_limit < 2 || generations.exhausted || serials.exhausted || frame_serials.exhausted) {
-		std::strcpy(reservation_failure, "library reservation capacity or issuer exhausted");
+		std::memcpy(reservation_failure, "library reservation capacity or issuer exhausted", sizeof("library reservation capacity or issuer exhausted"));
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
 	Record &record = records[slot];
@@ -1347,7 +1442,7 @@ void Registry::observe_initialize(const RecordRef &p_ref, Error p_error) {
 	record.snapshot.loader_initialize_returned = 1;
 	record.snapshot.loader_initialize_error = p_error;
 	if (p_error != OK) {
-		std::strcpy(record.failure_detail, "loader initialize returned an error");
+		std::memcpy(record.failure_detail, "loader initialize returned an error", sizeof("loader initialize returned an error"));
 	}
 }
 void Registry::detach(const RecordRef &p_ref) {
@@ -1507,7 +1602,7 @@ void register_typed_lifecycle_interfaces();
 
 void register_device_session_interfaces();
 void Registry::register_interfaces() {
- register_device_session_interfaces();
+	register_device_session_interfaces();
 	register_typed_lifecycle_interfaces();
 	GDExtension::register_interface_function("device_exit_bootstrap_library_v1", (GDExtensionInterfaceFunctionPtr)&bootstrap_library);
 	GDExtension::register_interface_function("device_exit_retain_library_view_v1", (GDExtensionInterfaceFunctionPtr)&retain_view);

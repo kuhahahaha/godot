@@ -706,9 +706,17 @@ private:
  bool qualification_accepted_call_locked(QualificationBridge *,uint32_t);
  Error qualification_rt_schedule(GDExtensionQualificationBridgeRefV1);
  Error qualification_cleanup_retire_matches_original_child_locked(QualificationBridge *,uint32_t,const void *);
+ void qualification_trim_cleanup_ref_credits_locked(QualificationBridge *);
  Error qualification_rt_ticket_locked(QualificationBridge *,const GDExtensionQualificationRtRequestV1 &,const uint8_t *,const uint8_t *,QualificationTicket *&);
 
  Sequence qualification_serials;
+ // Capacity owed to accepted storage/native-unit cleanup, protected under mutex.
+ uint64_t qualification_cleanup_serial_reservations = 0;
+ bool qualification_serial_capacity(uint64_t count) const {
+  if (!count || qualification_serials.exhausted || !qualification_serials.next) return false;
+  const uint64_t after_next = UINT64_MAX - qualification_serials.next;
+  return qualification_cleanup_serial_reservations <= after_next && count - 1 <= after_next - qualification_cleanup_serial_reservations;
+ }
  Error qualification_schedule(GDExtensionQualificationBridgeRefV1, uint64_t, uint32_t, const GDExtensionQualificationBudgetV1 &);
  void qualification_retire_step(QualificationBridge *, RenderingDevice *, uint64_t, uint32_t);
  void qualification_ticket_publish(QualificationTicket *, RenderingDevice *);

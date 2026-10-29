@@ -1,6 +1,9 @@
 #include "tests/test_macros.h"
 #include "core/extension/gdextension_qualification_internal.h"
 #include "core/os/thread.h"
+#include "core/os/semaphore.h"
+#include "core/object/callable_mp.h"
+#include "servers/rendering/rendering_server.h"
 #include <thread>
 TEST_FORCE_LINK(test_qualification_rt)
 
@@ -20,22 +23,92 @@ class TestQualificationRtAccess {
   GDExtensionQualificationBridgeRefV1 ref{71,11};
   Fixture() {
    RenderingDevice::singleton=&device;device.is_main_instance=true;device.render_thread_id=Thread::get_caller_id();
-   registry->instance=71;auto &record=registry->records[0];record.owner_thread=Thread::get_caller_id();record.snapshot.library_generation=1;record.guard_enrollment=GDExtensionDeviceExit::GuardEnrollment::QUALIFIED;record.private_refs=registry->private_limit-1;
+   registry->instance=71;auto &record=registry->records[0];record.owner_thread=Thread::get_caller_id();record.snapshot.library_generation=1;record.guard_enrollment=GDExtensionDeviceExit::GuardEnrollment::QUALIFIED;record.private_refs=registry->private_limit-2;
    auto &d=registry->device_records[0];d.object=&device;d.live=true;d.epoch=1;d.execution_thread=Thread::get_caller_id();
    holder.generation=1;bridge->serial=11;bridge->epoch=1;bridge->holder=&holder;registry->qualification_bridges[0]=bridge;
    RenderingDevice::Buffer b;b.size=64;b.backing_serial=17;buffer=device.storage_buffer_owner.make_rid(b);
   }
-  void dispatch() {
-   // The test returns one independent capacity pin, then accounts exactly the
-   // same queue pin that the real bounded scalar enqueue reserves.
-   --registry->records[0].private_refs;bridge->rt->queued=true;++bridge->children;++registry->records[0].private_refs;
-   registry->qualification_rt_dispatch(bridge->serial,bridge->rt->serial);
+  void queue() {
+   // Fixture-only queue enrollment: the private Registry is not the server's
+   // singleton. The original dispatch consumes the slot's retained queue pin.
+   bridge->rt->queued=true;++bridge->children;if(!bridge->rt->queue_ref_reserved)++registry->records[0].private_refs;
   }
+  void dispatch() {registry->qualification_rt_dispatch(bridge->serial,bridge->rt->serial);}
   ~Fixture(){RenderingDevice::singleton=previous;device.is_main_instance=false;device.storage_buffer_owner.free(buffer);registry->qualification_bridges[0]=nullptr;for(auto *ticket:bridge->tickets)if(ticket)memdelete(ticket);for(auto *child:bridge->storage)if(child)memdelete(child);for(auto *child:bridge->units)if(child)memdelete(child);if(bridge->rt)memdelete(bridge->rt);memdelete(bridge);memdelete(registry);}
  };
  static GDExtensionQualificationRtConfigV1 config(){return {{1,40,0},1,312,200,2,256};}
  static GDExtensionQualificationRtRequestV1 query(uint64_t operation){return {{1,56,0},1,0,operation,0,8,48,0,0};}
 public:
+ static void standalone_queue_capacity(bool saturate=false) {
+  using namespace GDExtensionDeviceExit;
+  REQUIRE(Thread::is_main_thread());REQUIRE(RenderingServer::get_singleton()!=nullptr);REQUIRE(RenderingServer::get_singleton()->is_on_render_thread());
+  auto &registry=Registry::get_singleton();uint32_t library=0,native=0,slot=0;Registry::DeviceRecord saved_device;
+  uint64_t saved_owner=0,saved_generation=0;GuardEnrollment saved_guard=GuardEnrollment::UNAVAILABLE;uint32_t saved_refs=0,saved_limit=0;RenderingDevice device;RenderingDevice *previous=nullptr;
+  struct Holder:HolderRetirement{Holder():HolderRetirement(RecordRef{}){}~Holder()=default;} holder;holder.generation=1;holder.qualification_children=1;
+  Registry::QualificationBridge *bridge=nullptr;
+  {
+   MutexLock lock(registry.mutex);bool isolated=true;
+   for(uint32_t i=0;i<Registry::RECORD_CAPACITY;++i)if(registry.records[i].occupied || registry.qualification_bridges[i]){isolated=false;break;}
+   REQUIRE(isolated);for(;native<Registry::RECORD_CAPACITY && registry.device_records[native].live;++native){}
+   REQUIRE(native<Registry::RECORD_CAPACITY);REQUIRE(registry.qualification_serial_capacity(4));
+   auto &r=registry.records[library];auto &d=registry.device_records[native];saved_device=d;saved_owner=r.owner_thread;saved_generation=r.snapshot.library_generation;saved_guard=r.guard_enrollment;saved_refs=r.private_refs;saved_limit=registry.private_limit;
+   previous=RenderingDevice::singleton;RenderingDevice::singleton=&device;device.is_main_instance=true;device.render_thread_id=Thread::get_caller_id();
+   r.owner_thread=Thread::get_caller_id();r.snapshot.library_generation=1;r.guard_enrollment=GuardEnrollment::QUALIFIED;r.private_refs=1;registry.private_limit=2;
+   d.object=&device;d.live=true;d.epoch=1;d.execution_thread=Thread::get_caller_id();d.refs=1;
+   bridge=memnew(Registry::QualificationBridge);registry.qualification_serials.take(bridge->serial);bridge->library=library;bridge->device=native;bridge->epoch=1;bridge->holder=&holder;registry.qualification_bridges[slot]=bridge;
+  }
+  RenderingDevice::Buffer buffer;buffer.size=64;buffer.backing_serial=17;RID rid=device.storage_buffer_owner.make_rid(buffer);
+  GDExtensionQualificationBridgeRefV1 ref{registry.instance,bridge->serial};auto c=config();CHECK(registry.qualification_rt_configure(ref,&c).native_error==OK);
+  auto header=query(1);uint64_t raw=rid.get_id();GDExtensionQualificationRtRefV1 rt={};
+  auto refused=registry.qualification_rt_reserve(ref,&header,&raw,nullptr,&rt);
+  CHECK_MESSAGE(refused.native_error==ERR_PARAMETER_RANGE_ERROR,"A standalone slot must not consume the last queue reference.");
+  if(refused.native_error==OK){CHECK(registry.qualification_rt_release(ref,rt).native_error==OK);rt={};++header.operation_serial;}
+  CHECK(registry.records[library].private_refs==1);{MutexLock lock(registry.mutex);registry.private_limit=3;}
+  auto accepted=registry.qualification_rt_reserve(ref,&header,&raw,nullptr,&rt);CHECK(accepted.native_error==OK);
+  if(accepted.native_error==OK){CHECK(registry.records[library].private_refs==3);CHECK(registry.qualification_rt_release(ref,rt).native_error==OK);CHECK(registry.records[library].private_refs==1);rt={};++header.operation_serial;accepted=registry.qualification_rt_reserve(ref,&header,&raw,nullptr,&rt);CHECK(accepted.native_error==OK);}
+  if(accepted.native_error==OK){
+   CHECK(registry.records[library].private_refs==3);CHECK(registry.qualification_rt_activate(ref,rt).native_error==OK);
+   GDExtensionQualificationRtObservationV1 observation={};GDExtensionQualificationBackingV1 backing={};
+   CHECK(registry.qualification_rt_observe(ref,rt,&observation,&backing,sizeof(backing),nullptr,0).native_error==OK);
+   CHECK_MESSAGE(observation.state==2,"A retained standalone slot must execute through the actual server at saturation.");
+   if(observation.state==2){CHECK(observation.call_result.native_error==OK);CHECK(backing.rid==raw);CHECK(backing.backing_serial==17);CHECK(registry.qualification_rt_release(ref,rt).native_error==OK);CHECK(registry.records[library].private_refs==1);}
+  }
+#ifdef THREADS_ENABLED
+  if(bridge->rt && !bridge->rt->occupied){
+   // Owner runs on a worker; the real RenderingServer enqueues to the main
+   // render thread. Drain that queue before removing the singleton fixture.
+   Semaphore queued,drained,retried,retry_drained;GDExtensionDeviceSessionResultV1 a_reserve={},a_activate={},a_pending={},a_release_pending={},a_close={},a_retry={},a_observe={},a_release={};
+   GDExtensionQualificationRtObservationV1 pending={},retry={},done={};GDExtensionQualificationBackingV1 pending_backing={},retry_backing={},done_backing={};GDExtensionQualificationRtRefV1 async_ref={};
+   struct Filler:Object{uint32_t calls=0;void run(){++calls;}} filler;const Callable fill_call=callable_mp(&filler,&Filler::run);bool queued_before_drain=false;uint32_t refs_before_drain=0;
+   ++header.operation_serial;
+   std::thread owner([&]{
+    {MutexLock lock(registry.mutex);registry.records[library].owner_thread=Thread::get_caller_id();}
+    a_reserve=registry.qualification_rt_reserve(ref,&header,&raw,nullptr,&async_ref);
+    if(a_reserve.native_error==OK){
+     if(saturate)for(uint32_t i=0;i<4096;++i)RenderingServer::get_singleton()->call_on_render_thread(fill_call);
+     a_activate=registry.qualification_rt_activate(ref,async_ref);
+     a_pending=registry.qualification_rt_observe(ref,async_ref,&pending,&pending_backing,sizeof(pending_backing),nullptr,0);
+     a_release_pending=registry.qualification_rt_release(ref,async_ref);a_close=registry.qualification_close(ref);
+     {MutexLock lock(registry.mutex);queued_before_drain=bridge->rt->queued;refs_before_drain=registry.records[library].private_refs;}
+    }
+    queued.post();drained.wait();
+    if(a_reserve.native_error==OK)a_retry=registry.qualification_rt_observe(ref,async_ref,&retry,&retry_backing,sizeof(retry_backing),nullptr,0);
+    retried.post();retry_drained.wait();
+    if(a_reserve.native_error==OK){a_observe=registry.qualification_rt_observe(ref,async_ref,&done,&done_backing,sizeof(done_backing),nullptr,0);a_release=registry.qualification_rt_release(ref,async_ref);}
+   });
+   queued.wait();RenderingServer::get_singleton()->sync();drained.post();retried.wait();RenderingServer::get_singleton()->sync();retry_drained.post();owner.join();
+   // The worker's final observe may itself enqueue after the first drain.
+   // It has now joined, so this second synchronous drain leaves no producer.
+   RenderingServer::get_singleton()->sync();
+   CHECK(a_reserve.native_error==OK);CHECK(a_activate.native_error==OK);CHECK(a_pending.native_error==OK);CHECK(pending.state==1);
+   CHECK(refs_before_drain==3);CHECK(queued_before_drain!=saturate);CHECK(filler.calls==(saturate?4096u:0u));CHECK(a_retry.native_error==OK);CHECK(retry.state==(saturate?1u:2u));
+   CHECK(a_release_pending.native_error==ERR_BUSY);CHECK(a_close.native_error==ERR_BUSY);
+   CHECK(a_observe.native_error==OK);CHECK(done.state==2);CHECK(done.call_result.native_error==OK);CHECK(done_backing.rid==raw);CHECK(a_release.native_error==OK);CHECK(registry.records[library].private_refs==1);
+  }
+#endif
+  {MutexLock lock(registry.mutex);auto &r=registry.records[library];registry.qualification_bridges[slot]=nullptr;r.owner_thread=saved_owner;r.snapshot.library_generation=saved_generation;r.guard_enrollment=saved_guard;r.private_refs=saved_refs;registry.private_limit=saved_limit;registry.device_records[native]=saved_device;RenderingDevice::singleton=previous;device.is_main_instance=false;}
+  if(bridge->rt)memdelete(bridge->rt);memdelete(bridge);device.storage_buffer_owner.free(rid);
+ }
  static void cleanup(bool malformed, bool duplicate) {
   for(uint32_t kind:{3u,5u}) {
    Fixture f;auto c=config();REQUIRE(f.registry->qualification_rt_configure(f.ref,&c).native_error==OK);
@@ -60,9 +133,9 @@ public:
    }
    GDExtensionQualificationRtRefV1 accepted{},same{};const void *request=kind==3?static_cast<const void*>(&sr):static_cast<const void*>(&nr);
    REQUIRE(f.registry->qualification_rt_reserve(f.ref,&h,request,nullptr,&accepted).native_error==OK);
-   CHECK(accepted.handle_serial!=0);CHECK(f.bridge->children==children+1);CHECK(f.registry->records[0].private_refs==refs+1);CHECK_FALSE(storage->retiring);CHECK_FALSE(unit->retiring);
+   CHECK(accepted.handle_serial!=0);CHECK(f.bridge->children==children+1);CHECK(f.registry->records[0].private_refs==refs+2);CHECK_FALSE(storage->retiring);CHECK_FALSE(unit->retiring);
    if(duplicate){
-    REQUIRE(f.registry->qualification_rt_reserve(f.ref,&h,request,nullptr,&same).native_error==OK);CHECK(same.handle_serial==accepted.handle_serial);CHECK(f.bridge->children==children+1);CHECK(f.registry->records[0].private_refs==refs+1);
+    REQUIRE(f.registry->qualification_rt_reserve(f.ref,&h,request,nullptr,&same).native_error==OK);CHECK(same.handle_serial==accepted.handle_serial);CHECK(f.bridge->children==children+1);CHECK(f.registry->records[0].private_refs==refs+2);
     auto other=h;other.operation_serial++;same={};CHECK(f.registry->qualification_rt_reserve(f.ref,&other,request,nullptr,&same).native_error==ERR_BUSY);CHECK(same.handle_serial==0);
     auto changed_sr=sr;changed_sr.retire_attempt++;auto changed_nr=nr;changed_nr.retire_operation++;same={};CHECK(f.registry->qualification_rt_reserve(f.ref,&h,kind==3?static_cast<const void*>(&changed_sr):static_cast<const void*>(&changed_nr),nullptr,&same).native_error==ERR_INVALID_DATA);CHECK(same.handle_serial==0);
    }
@@ -113,7 +186,7 @@ public:
   REQUIRE(f.registry->qualification_rt_reserve(f.ref,&header,&rid,nullptr,&repeat).native_error==OK);CHECK(repeat.handle_serial==first.handle_serial);CHECK(f.bridge->children==1);
   uint64_t changed=rid+1;repeat={};CHECK(f.registry->qualification_rt_reserve(f.ref,&header,&changed,nullptr,&repeat).native_error!=OK);CHECK(repeat.handle_serial==0);
   rid=0; // The accepted request is the original owned copy.
-  REQUIRE(f.registry->qualification_rt_activate(f.ref,first).native_error==OK);CHECK_FALSE(f.bridge->rt->queued);CHECK(f.bridge->rt->state==1);CHECK(f.registry->qualification_rt_activate(f.ref,first).native_error==ERR_BUSY);
+  f.queue();REQUIRE(f.registry->qualification_rt_activate(f.ref,first).native_error==OK);CHECK(f.bridge->rt->queued);CHECK(f.bridge->rt->state==1);CHECK(f.registry->qualification_rt_activate(f.ref,first).native_error==ERR_BUSY);
   GDExtensionQualificationRtObservationV1 observation={};GDExtensionQualificationBackingV1 backing={};
   REQUIRE(f.registry->qualification_rt_observe(f.ref,first,&observation,&backing,sizeof(backing),nullptr,0).native_error==OK);CHECK(observation.state==1);CHECK(observation.result_bytes==0);CHECK(backing.rid==0);CHECK(f.registry->qualification_rt_release(f.ref,first).native_error==ERR_BUSY);
   CHECK(f.registry->qualification_close(f.ref).native_error==ERR_BUSY);CHECK(f.bridge->closing);
@@ -143,7 +216,7 @@ public:
   payload[16]=99;CHECK(f.bridge->rt->payload[16]==9);
   if(cancel) {
    REQUIRE(f.registry->qualification_cancel(f.ref,child).native_error==OK);CHECK(ticket->stop_requested);CHECK(ticket->accepted_rt_refs==1);
-   REQUIRE(f.registry->qualification_rt_activate(f.ref,ref).native_error==OK);CHECK_FALSE(f.bridge->rt->queued);
+   f.queue();REQUIRE(f.registry->qualification_rt_activate(f.ref,ref).native_error==OK);CHECK(f.bridge->rt->queued);
    f.dispatch();GDExtensionQualificationRtObservationV1 observation={};GDExtensionQualificationUploadReportV1 returned={};GDExtensionQualificationUploadSegmentV1 segments[2]={};
    REQUIRE(f.registry->qualification_rt_observe(f.ref,ref,&observation,&returned,sizeof(returned),segments,2).native_error==OK);CHECK(observation.state==2);CHECK(observation.call_result.native_error==ERR_BUSY);CHECK(observation.call_result.reason==16);CHECK(returned.revision==0);CHECK(observation.segment_count==0);CHECK(ticket->graphs.is_empty());CHECK(ticket->accepted_rt_refs==1);
   }
@@ -152,6 +225,10 @@ public:
   CHECK(f.registry->qualification_release(f.ref,child).native_error==OK);CHECK(f.bridge->children==0);CHECK(f.registry->qualification_rt_release(f.ref,ref).reason==17);
  }
 };
+TEST_CASE("[QualificationRt] standalone accepted slot reserves its queue capacity") {TestQualificationRtAccess::standalone_queue_capacity();}
+#ifdef THREADS_ENABLED
+TEST_CASE("[QualificationRt] full rendering queue refuses then retries retained slot") {TestQualificationRtAccess::standalone_queue_capacity(true);}
+#endif
 TEST_CASE("[QualificationRt] fixed copied slot retries once across pressure close return and owner ack") {TestQualificationRtAccess::carrier();SUBCASE("cleanup_duplicate_and_possible_free"){TestQualificationRtAccess::cleanup(false,true);}}
 TEST_CASE("[QualificationRt] preactivation abort drops exactly the accepted original ticket pin") {TestQualificationRtAccess::same_ticket_pin(false);}
 TEST_CASE("[QualificationRt] accepted typed upload retains same ticket across owner cancel and returned refusal") {TestQualificationRtAccess::same_ticket_pin(true);}

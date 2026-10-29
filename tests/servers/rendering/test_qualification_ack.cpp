@@ -58,7 +58,7 @@ public:
     case 29:if(both)unit->pipeline.free_event=unit->pipeline.reserved_event=unit->report.pipeline_free_event_seq=unit->shader.free_event;else unit->report.retire_operation=0;break;
    }
    const auto refused=registry->qualification_native_unit_retire_release({71,11},{71,31});
-   CHECK(refused.native_error==ERR_BUSY);CHECK_FALSE(unit->acknowledged);CHECK(bridge->children==1);CHECK(record.private_refs==2);
+   CHECK(refused.native_error==(mode==24?ERR_DOES_NOT_EXIST:ERR_BUSY));CHECK_FALSE(unit->acknowledged);CHECK(bridge->children==1);CHECK(record.private_refs==2);
   }
   if(both) {
    // Pipeline-only is internally self-consistent but cannot be produced by
@@ -83,7 +83,7 @@ public:
   struct Holder:HolderRetirement{Holder():HolderRetirement(RecordRef{}){} ~Holder()=default;};Holder holder;holder.generation=1;
   auto *bridge=memnew(Registry::QualificationBridge);bridge->serial=11;bridge->epoch=1;bridge->holder=&holder;bridge->children=1;registry->qualification_bridges[0]=bridge;
   auto *storage=memnew(Registry::QualificationBridge::Storage);auto *unit=memnew(Registry::QualificationBridge::NativeUnit);
-  bridge->storage[0]=storage;bridge->units[0]=unit;storage->retire_serial=31;valid_native(unit,true);
+  bridge->storage[0]=storage;bridge->units[0]=unit;storage->retire_serial=31;storage->retiring=true;valid_native(unit,true);
   storage->report.state=unit->report.state=1;storage->report.return_status=unit->report.return_status=1;
   storage->physical.free_event=37;
   for(uint32_t mode=0;mode<5;++mode) {
@@ -107,7 +107,7 @@ public:
   struct Holder:HolderRetirement{Holder():HolderRetirement(RecordRef{}){} ~Holder()=default;};Holder holder;holder.generation=1;
   auto *bridge=memnew(Registry::QualificationBridge);bridge->serial=11;bridge->epoch=1;bridge->holder=&holder;bridge->children=2;registry->qualification_bridges[0]=bridge;
   auto *storage=memnew(Registry::QualificationBridge::Storage);auto *unit=memnew(Registry::QualificationBridge::NativeUnit);
-  bridge->storage[0]=storage;bridge->units[0]=unit;storage->serial=unit->serial=23;storage->retire_serial=unit->retire_serial=31;storage->queued=unit->queued=true;
+  bridge->storage[0]=storage;bridge->units[0]=unit;storage->serial=unit->serial=23;storage->retire_serial=unit->retire_serial=31;storage->retiring=unit->retiring=true;storage->queued=unit->queued=true;
   auto pending=native?registry->qualification_native_unit_retire_release({71,11},{71,31}):registry->qualification_storage_retire_release({71,11},{71,31});
   CHECK(pending.native_error==ERR_BUSY);CHECK(pending.reason==16);CHECK(bridge->children==2);CHECK(record.private_refs==3);
   std::atomic<bool> visible=false,ack_attempted=false;

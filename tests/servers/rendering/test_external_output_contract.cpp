@@ -174,6 +174,7 @@ public:
 		p_device.transfer_worker_pool.push_back(worker);
 		p_device.transfer_worker_pool_size = 1;
 		p_device.transfer_worker_operation_used_by_draw.resize(1);
+		p_device.transfer_worker_operation_used_by_draw[0] = 0;
 		auto *buffer = p_device.storage_buffer_owner.get_or_null(p_buffer);
 		buffer->transfer_worker_index = 0;
 		buffer->transfer_worker_operation = 9;
@@ -351,7 +352,6 @@ TEST_CASE("[B4] native_packet_join") {
 		// This lambda also exercises the pre-feature void APIs without making
 		// a missing return type a compiler error instead of a behavioral RED.
 		auto check = [](auto &graph, ExternalOutputGraphDriver &driver, bool begin_ok, bool render_pass_valid) {
-			using RDD = RenderingDeviceDriver;
 			RenderingDeviceGraph::ResourceTracker destination;
 			destination.buffer_driver_id = RDD::BufferID(72);
 			if constexpr (std::is_void_v<decltype(graph.add_buffer_copy(RDD::BufferID(71), nullptr, RDD::BufferID(72), &destination, RDD::BufferCopyRegion{ 0, 0, 32 }))> ||

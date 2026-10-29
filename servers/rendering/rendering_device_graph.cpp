@@ -136,11 +136,13 @@ bool RenderingDeviceGraph::_resolve_record_command_index(const RecordHandle &p_h
 }
 
 bool RenderingDeviceGraph::has_driver_callbacks() const {
- for(uint32_t i=0;i<command_count;++i) {
-  const auto *command=reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offsets[i]]);
-  if(command->type==RecordedCommand::TYPE_DRIVER_CALLBACK)return true;
- }
- return false;
+	for (uint32_t i = 0; i < command_count; ++i) {
+		const auto *command = reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offsets[i]]);
+		if (command->type == RecordedCommand::TYPE_DRIVER_CALLBACK) {
+			return true;
+		}
+	}
+	return false;
 }
 
 bool RenderingDeviceGraph::has_synchronization_edge(const RecordHandle &p_before, const RecordHandle &p_after) const {
@@ -2280,7 +2282,9 @@ void RenderingDeviceGraph::add_raytracing_list_end() {
 	command->type = RecordedCommand::TYPE_RAYTRACING_LIST;
 	command->self_stages = raytracing_instruction_list.stages;
 	command->instruction_data_size = instruction_data_size;
-	memcpy(command->instruction_data(), raytracing_instruction_list.data.ptr(), instruction_data_size);
+	if (instruction_data_size != 0) {
+		memcpy(command->instruction_data(), raytracing_instruction_list.data.ptr(), instruction_data_size);
+	}
 	_add_command_to_graph(raytracing_instruction_list.command_trackers.ptr(), raytracing_instruction_list.command_tracker_usages.ptr(), raytracing_instruction_list.command_trackers.size(), command_index, command);
 }
 
@@ -2394,7 +2398,9 @@ void RenderingDeviceGraph::add_compute_list_end() {
 	command->list_index = uint32_t(compute_instruction_list.index);
 	command->self_stages = compute_instruction_list.stages;
 	command->instruction_data_size = instruction_data_size;
-	memcpy(command->instruction_data(), compute_instruction_list.data.ptr(), instruction_data_size);
+	if (instruction_data_size != 0) {
+		memcpy(command->instruction_data(), compute_instruction_list.data.ptr(), instruction_data_size);
+	}
 	_add_command_to_graph(compute_instruction_list.command_trackers.ptr(), compute_instruction_list.command_tracker_usages.ptr(), compute_instruction_list.command_trackers.size(), command_index, command);
 }
 
@@ -2669,7 +2675,9 @@ void RenderingDeviceGraph::add_draw_list_end() {
 		clear_values[i] = draw_instruction_list.attachment_clear_values[i];
 	}
 
-	memcpy(command->instruction_data(), draw_instruction_list.data.ptr(), instruction_data_size);
+	if (instruction_data_size != 0) {
+		memcpy(command->instruction_data(), draw_instruction_list.data.ptr(), instruction_data_size);
+	}
 	_add_command_to_graph(draw_instruction_list.command_trackers.ptr(), draw_instruction_list.command_tracker_usages.ptr(), draw_instruction_list.command_trackers.size(), command_index, command);
 }
 

@@ -5436,6 +5436,7 @@ void RenderingDeviceDriverVulkan::_descriptor_set_pool_unreference(DescriptorSet
 }
 
 RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<BoundUniform> p_uniforms, ShaderID p_shader, uint32_t p_set_index, int p_linear_pool_index) {
+	MutexLock descriptor_lock(descriptor_set_mutex);
 	ERR_FAIL_COND_V(p_uniforms.size() > 0 && !p_uniforms.ptr(), UniformSetID());
 	if (!linear_descriptor_pools_enabled) {
 		p_linear_pool_index = -1;
@@ -5748,7 +5749,9 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 }
 
 void RenderingDeviceDriverVulkan::uniform_set_free(UniformSetID p_uniform_set) {
+	MutexLock descriptor_lock(descriptor_set_mutex);
 	UniformSetInfo *usi = (UniformSetInfo *)p_uniform_set.id;
+	ERR_FAIL_COND_MSG(usi->qualification_return_unknown, "Descriptor return is unknown and cannot be replayed.");
 
 	if (usi->vk_linear_descriptor_pool) {
 		// Nothing to do. All sets are freed at once using vkResetDescriptorPool.
@@ -5763,6 +5766,30 @@ void RenderingDeviceDriverVulkan::uniform_set_free(UniformSetID p_uniform_set) {
 	}
 
 	VersatileResource::free(resources_allocator, usi);
+}
+
+RenderingDeviceDriver::QualificationDescriptorReturn RenderingDeviceDriverVulkan::qualification_uniform_set_free(UniformSetID p_uniform_set) {
+	MutexLock descriptor_lock(descriptor_set_mutex);
+	UniformSetInfo *usi = (UniformSetInfo *)p_uniform_set.id;
+	if (!usi || usi->vk_linear_descriptor_pool || !usi->vk_descriptor_pool || !usi->vk_descriptor_set) return {};
+	if (usi->qualification_return_unknown) return {QualificationDescriptorReturnState::Unknown, int32_t(usi->qualification_return_error)};
+	if (qualification_unknown_descriptors == UINT64_MAX) return {};
+	VkResult result;
+#ifdef TESTS_ENABLED
+	++test_descriptor_free_calls;
+	if (test_descriptor_free_error != VK_SUCCESS) result = test_descriptor_free_error;
+	else
+#endif
+	result = vkFreeDescriptorSets(vk_device, usi->vk_descriptor_pool, 1, &usi->vk_descriptor_set);
+	if (result != VK_SUCCESS) {
+		usi->qualification_return_unknown = true;
+		usi->qualification_return_error = result;
+		++qualification_unknown_descriptors;
+		return {QualificationDescriptorReturnState::Unknown, int32_t(result)};
+	}
+	_descriptor_set_pool_unreference(usi->pool_sets_it, usi->vk_descriptor_pool, -1);
+	VersatileResource::free(resources_allocator, usi);
+	return {QualificationDescriptorReturnState::Returned, int32_t(result)};
 }
 
 bool RenderingDeviceDriverVulkan::uniform_sets_have_linear_pools() const {
@@ -5796,6 +5823,7 @@ uint32_t RenderingDeviceDriverVulkan::uniform_sets_get_dynamic_offsets(VectorVie
 }
 
 void RenderingDeviceDriverVulkan::linear_uniform_set_pools_reset(int p_linear_pool_index) {
+	MutexLock descriptor_lock(descriptor_set_mutex);
 	if (linear_descriptor_pools_enabled) {
 		DescriptorSetPools &pools_to_reset = linear_descriptor_set_pools[p_linear_pool_index];
 		DescriptorSetPools::Iterator curr_pool = pools_to_reset.begin();
@@ -8331,6 +8359,7 @@ RenderingDeviceDriverVulkan::RenderingDeviceDriverVulkan(RenderingContextDriverV
 }
 
 RenderingDeviceDriverVulkan::~RenderingDeviceDriverVulkan() {
+	{ MutexLock descriptor_lock(descriptor_set_mutex); CRASH_COND_MSG(qualification_unknown_descriptors != 0, "Vulkan descriptor returns remain unknown at driver destruction."); }
 	CRASH_COND_MSG(!native_calls.is_empty(), "Vulkan native completion sources or observers remain at driver destruction.");
 #if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
 	if (breadcrumb_buffer != BufferID()) {

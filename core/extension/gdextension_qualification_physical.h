@@ -31,6 +31,7 @@ class QualificationPhysicalReturn {
  uint64_t reserved_event = 0;
  uint64_t free_event = 0;
  uint32_t frame_slot = UINT32_MAX;
+ bool event_capacity_reserved = false;
  bool enqueued = false;
  std::atomic<bool> use_closed{false};
  std::atomic<uint32_t> dependent_children{0};
