@@ -1,0 +1,47 @@
+{
+  "binary": "/private/tmp/godot-snapshot-165-final-20261030/bin/godot.macos.editor.dev.arm64",
+  "sha256": "cdb55f2a2ee6d83e1dd4efed37e38ffd2dc996db90851cbab71fdf872eb69163",
+  "scope": "D native controls; separateRT only NoRecordedUse; no A grant or Verified",
+  "runs": [
+    {
+      "case": "qrt_upload",
+      "mode": "safe",
+      "command": [
+        "/private/tmp/godot-snapshot-165-final-20261030/bin/godot.macos.editor.dev.arm64",
+        "--path",
+        "/private/tmp/d23-qrt-native-ticket-20261030/fixture/qrt_upload",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "safe",
+        "--script",
+        "probe.gd"
+      ],
+      "rc": 0,
+      "log": "/private/tmp/k03-snapshot-165-qrt-20261030/qrt_upload/qrt_upload-safe.log",
+      "kinds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        7,
+        8,
+        9
+      ],
+      "checks": {
+        "exit": true,
+        "actual_metal": true,
+        "kinds": true,
+        "main_loop": true,
+        "clean": true,
+        "unload": true,
+        "terminal_2": true,
+        "terminal_3": true,
+        "same_ticket_return": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "source": "7a64a659b6aad1841a14a3e998a543198b3ef2f4",
+  "command": [
+    "/usr/bin/python3",
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-bridge-implementation-20261026/integration-preflight-20261026/run_combined_qrt.py",
+    "/private/tmp/godot-snapshot-165-final-20261030/bin/godot.macos.editor.dev.arm64",
+    "/private/tmp/k03-snapshot-165-qrt-20261030/qrt_ticket",
+    "--case",
+    "qrt_ticket",
+    "--runtime",
+    "/private/tmp/d23-qrt-native-ticket-20261030/fixture"
+  ],
+  "rc": 0,
+  "before": {
+    "/private/tmp/godot-snapshot-165-final-20261030/bin/godot.macos.editor.dev.arm64": "cdb55f2a2ee6d83e1dd4efed37e38ffd2dc996db90851cbab71fdf872eb69163",
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-bridge-implementation-20261026/integration-preflight-20261026/run_combined_qrt.py": "bac472f6b7e7e14789c497efc33c2236092dd797dcc772ddfb784bd79f53d45b",
+    "/private/tmp/d23-qrt-native-ticket-20261030/fixture/qrt_ticket_probe.dylib": "93567d48b3fd2d25fd7d37d6f8da97938004f90fa521fc4ba0a6eab14ef86878",
+    "/private/tmp/d23-qrt-native-ticket-20261030/fixture/qrt_ticket/probe.gdextension": "8bc1fc7da9f566be55c6233e7c0d7eda741ce3e327ca39ede97fa0e9cdbaaffb",
+    "/private/tmp/d23-qrt-native-ticket-20261030/fixture/qrt_ticket/probe.gd": "7c7e6dfa5a05fec89be669dc2f431b29f7529b8d3d14680ebc897e143a9b1cc2",
+    "/private/tmp/d23-qrt-native-ticket-20261030/fixture/qrt_ticket/project.godot": "16d01875dc64eeae2b830ac430e3aabe41c280a171d3fbb02c3e97e40b600e93",
+    "/private/tmp/d23-qrt-native-ticket-20261030/fixture/ticket_containers/capture.bin": "602da96b2d48c732ddeddb2d1d00ec952be6a5d3fd4daabb0d097611157ec360",
+    "/private/tmp/d23-qrt-native-ticket-20261030/fixture/ticket_containers/body.bin": "c2011bc48390ecb634ff805a7c38e6a5555d4d790ef5f9610376c951d96b761f",
+    "/private/tmp/d23-qrt-native-ticket-20261030/fixture/container/unit.bin": "c6522b301d85b662f6cacd07da7cb678af24ec31b2b43eddf978b08ecd13ff2b"
+  },
+  "after": {
+    "/private/tmp/godot-snapshot-165-final-20261030/bin/godot.macos.editor.dev.arm64": "cdb55f2a2ee6d83e1dd4efed37e38ffd2dc996db90851cbab71fdf872eb69163",
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-bridge-implementation-20261026/integration-preflight-20261026/run_combined_qrt.py": "bac472f6b7e7e14789c497efc33c2236092dd797dcc772ddfb784bd79f53d45b",
+    "/private/tmp/d23-qrt-native-ticket-20261030/fixture/qrt_ticket_probe.dylib": "93567d48b3fd2d25fd7d37d6f8da97938004f90fa521fc4ba0a6eab14ef86878",
+    "/private/tmp/d23-qrt-native-ticket-20261030/fixture/qrt_ticket/probe.gdextension": "8bc1fc7da9f566be55c6233e7c0d7eda741ce3e327ca39ede97fa0e9cdbaaffb",
+    "/private/tmp/d23-qrt-native-ticket-20261030/fixture/qrt_ticket/probe.gd": "7c7e6dfa5a05fec89be669dc2f431b29f7529b8d3d14680ebc897e143a9b1cc2",
+    "/private/tmp/d23-qrt-native-ticket-20261030/fixture/qrt_ticket/project.godot": "16d01875dc64eeae2b830ac430e3aabe41c280a171d3fbb02c3e97e40b600e93",
+    "/private/tmp/d23-qrt-native-ticket-20261030/fixture/ticket_containers/capture.bin": "602da96b2d48c732ddeddb2d1d00ec952be6a5d3fd4daabb0d097611157ec360",
+    "/private/tmp/d23-qrt-native-ticket-20261030/fixture/ticket_containers/body.bin": "c2011bc48390ecb634ff805a7c38e6a5555d4d790ef5f9610376c951d96b761f",
+    "/private/tmp/d23-qrt-native-ticket-20261030/fixture/container/unit.bin": "c6522b301d85b662f6cacd07da7cb678af24ec31b2b43eddf978b08ecd13ff2b"
+  }
+}
