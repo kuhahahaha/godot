@@ -1,0 +1,148 @@
+{
+  "binary_before": "e5ada005b56994f766339d6d57c930de7f33cac41073977380eadbbaca94829e",
+  "binary_after": "e5ada005b56994f766339d6d57c930de7f33cac41073977380eadbbaca94829e",
+  "runs": [
+    {
+      "name": "valid",
+      "env": {
+        "GODOT_TEST_RD_CASCADE_REENTRY": "valid"
+      },
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*parent disposal remains active through child invalidation*"
+      ],
+      "rc": 0,
+      "success": true,
+      "error_lines": []
+    },
+    {
+      "name": "race",
+      "env": {
+        "GODOT_TEST_RD_CASCADE_REENTRY": "race"
+      },
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*parent disposal remains active through child invalidation*"
+      ],
+      "rc": 0,
+      "success": true,
+      "error_lines": []
+    },
+    {
+      "name": "sibling",
+      "env": {},
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*child invalidation can retire a sibling*"
+      ],
+      "rc": 0,
+      "success": true,
+      "error_lines": []
+    },
+    {
+      "name": "framebuffer",
+      "env": {},
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*framebuffer invalidation is synchronous*"
+      ],
+      "rc": 0,
+      "success": true,
+      "error_lines": []
+    },
+    {
+      "name": "rendering",
+      "env": {},
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*[RenderingDevice]*"
+      ],
+      "rc": 0,
+      "success": true,
+      "error_lines": [],
+      "harness_correction": "Prior substring check matched the suffix of 240 passed; parsed case summary instead."
+    },
+    {
+      "name": "qualification",
+      "env": {},
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*[Qualification]*"
+      ],
+      "rc": 0,
+      "success": true,
+      "error_lines": [
+        "ERROR: Condition \"texture && texture->qualification_return\" is true. Returning: ERR_UNAUTHORIZED",
+        "ERROR: Condition \"texture && texture->qualification_return\" is true. Returning: ERR_UNAUTHORIZED"
+      ]
+    },
+    {
+      "name": "p01",
+      "env": {},
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=[P01]*"
+      ],
+      "rc": 0,
+      "success": true,
+      "error_lines": []
+    },
+    {
+      "name": "device_exit",
+      "env": {},
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*device_exit*"
+      ],
+      "rc": 0,
+      "success": true,
+      "error_lines": [
+        "ERROR: Condition \"callback_scope.get_error() != OK\" is true. Returning: callback_scope.get_error()",
+        "ERROR: Condition \"callback_scope.get_error() != OK\" is true. Returning: callback_scope.get_error()",
+        "ERROR: Condition \"callback_scope.get_error() != OK\" is true. Returning: callback_scope.get_error()"
+      ]
+    },
+    {
+      "name": "k03",
+      "env": {},
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*[K03]*"
+      ],
+      "rc": 0,
+      "success": true,
+      "error_lines": []
+    },
+    {
+      "name": "r01",
+      "env": {},
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*[R01][FrameWait]*"
+      ],
+      "rc": 0,
+      "success": true,
+      "error_lines": []
+    }
+  ]
+}

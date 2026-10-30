@@ -37,6 +37,10 @@
     {
       "path": "work/cb3-fd33-metal-pair-20261030/RECEIPT.md",
       "sha256": "9d85e0fbec0ce127578fa1cc8801a533f50c89e5953853dc13158793df43fbcd"
+    },
+    {
+      "path": "work/rd-cascade-reentry-20261030/RECEIPT.md",
+      "sha256": "0555a1d16e20b59430d918fb3fae037d4967a86373847ad82ca5c99e1b382d3f"
     }
   ]
 }
