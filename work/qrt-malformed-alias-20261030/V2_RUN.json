@@ -1,0 +1,42 @@
+{
+  "binary_before": "601cc72ec63d1f87c9f5e38e602fc126dffe4ed97a496024cbddb8d96dad0357",
+  "binary_after": "601cc72ec63d1f87c9f5e38e602fc126dffe4ed97a496024cbddb8d96dad0357",
+  "runs": [
+    {
+      "name": "focused",
+      "selector": "*malformed header does not overwrite aliased*",
+      "rc": 0,
+      "success": true
+    },
+    {
+      "name": "rt",
+      "selector": "*[QualificationRt]*",
+      "rc": 0,
+      "success": true
+    },
+    {
+      "name": "qualification",
+      "selector": "*[Qualification]*",
+      "rc": 0,
+      "success": true
+    },
+    {
+      "name": "p01",
+      "selector": "[P01]*",
+      "rc": 0,
+      "success": true
+    },
+    {
+      "name": "device-exit",
+      "selector": "*device_exit*",
+      "rc": 0,
+      "success": true
+    },
+    {
+      "name": "k03",
+      "selector": "*[K03]*",
+      "rc": 0,
+      "success": true
+    }
+  ]
+}

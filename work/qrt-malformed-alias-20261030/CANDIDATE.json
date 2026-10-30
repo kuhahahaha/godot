@@ -1,0 +1,13 @@
+{
+  "parent": "0fc9b8af00c43f267462556b224c25c169726bdb",
+  "tree": "c8ac219894b95ac118b333342d6c49951b65370b",
+  "commit": "5934c659cb185c99db59f9e4bcdd7a7e8f2bff28",
+  "ref": "refs/codex/qrt-alias-0fc-20261030",
+  "paths": [
+    "core/extension/gdextension_qualification_rt.cpp",
+    "tests/servers/rendering/test_qualification_rt.cpp"
+  ],
+  "scope": "private overlay built against e02118c7 existing objects; not a clean 0fc full build",
+  "status": "superseded: zero-length pointer aliases still corrupt inputs",
+  "successor": "cb3d43bb27bea7a130bd85fb8bff0f4d94d1d9b8"
+}

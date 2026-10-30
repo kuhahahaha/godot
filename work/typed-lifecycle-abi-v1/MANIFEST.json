@@ -926,10 +926,18 @@
   "work/p01-collector-drop-20261030/MODULE_RUN.json": "cd4f9825dd8c2d1913d2f9315d9feea23797004d5b6f9dfa5ce997d2b6620ce9",
   "work/e2-current-ange-metal-pair-20261030/RECEIPT.md": "d1bd157a30326a6f4a5fb7cc68825ee8faf7ce7c0379c7f4e2d67ab085685703",
   "work/e2-current-ange-metal-pair-20261030/RUN.json": "1789bffc6dacaf3131e69ae72433b5391368442d4aeee7349bf2b745720de8e5",
+  "work/qrt-malformed-alias-20261030/RECEIPT.md": "7281c2d4d0bd9eae01ceaea38b86c628988c1ebadb453afc16f49a4cfd24b55f",
+  "work/qrt-malformed-alias-20261030/CANDIDATE.json": "e5f3cc7acc70c38b507c3ad27a02acdb8c251fe8118ea44df59537b1f2aa08ba",
+  "work/qrt-malformed-alias-20261030/RUN.json": "9aabf69fa4b7eba54f1b400380e76eda589771c49a56cccb5d96d87534d280dd",
+  "work/qrt-malformed-alias-20261030/METAL_RUN.json": "cf17816db3fea2d1c1c9157f2a75eb4b7deee86be5b4dd0632ee98cf5cec2b26",
+  "work/qrt-malformed-alias-20261030/CANDIDATE_V2.json": "7a122ce896464c7e34d05be936139dac8bc8d0673e97a674b638b63d7660fd7f",
+  "work/qrt-malformed-alias-20261030/V2_RUN.json": "565f9525cc4425e25fe799dc226857804df28cf1704909f66096de8e9b3d8434",
+  "work/qrt-malformed-alias-20261030/V2_METAL_RUN.json": "7e9c693d0a62b32cadd0aa0582c1ac8d4da1d03ea2fd2270718fd68f2fbe0f29",
+  "work/qrt-malformed-alias-20261030/LOCAL_V2_RUN.json": "6d74a54569939180ca134d87c4c8dfa994e948aa1e8bcb1dc7323ec61b014bdd",
   "work/typed-lifecycle-abi-v1/CURRENT_PAIR_U01_VFX_R01_NEGATIVE_RECEIPT_20251025.md": "c6ab0496164e2741f157768a10ffcc6f0217b630a26d95d3d9762c2e22b79a47",
   "work/typed-lifecycle-abi-v1/PROGRESS.md": {
-    "bytes": 202445,
-    "sha256": "2514bd4bd6938c04bb080064329b38c4693d5c51684c0b4c660d81b306a14b63"
+    "bytes": 203051,
+    "sha256": "e89bc76e0388411edf54164ee0495b67338daf9f27d86e3c0d4b327fa57e64c3"
   },
   "work/typed-lifecycle-abi-v1/gdextension_interface.h": "07ee07f19e31fe5c22154edbba73ce3cb793b87524add5d9dc0c9468815c9a29",
   "work/typed-lifecycle-abi-v1/native-current-open-items-20261028/COMMAND_OUTPUT.json": "feccb44a82af5439c60b4fb8a6f7c8fc8923f9fd97e2bb169099294c67a185ef",
