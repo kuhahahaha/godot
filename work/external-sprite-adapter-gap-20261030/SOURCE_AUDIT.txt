@@ -1,0 +1,18 @@
+tests/servers/rendering/test_mesh_storage_external.cpp:10:	RendererRD::MeshStorage::ExternalSurfaceDescriptor descriptor;
+servers/rendering/renderer_rd/storage_rd/mesh_storage.cpp:537:Error MeshStorage::mesh_add_external_surface(RID p_mesh, const ExternalSurfaceDescriptor &p_surface, uint32_t &r_surface_index, uint64_t &r_generation) {
+servers/rendering/renderer_rd/storage_rd/mesh_storage.h:429:	struct ExternalSurfaceDescriptor {
+servers/rendering/renderer_rd/storage_rd/mesh_storage.h:447:	Error mesh_add_external_surface(RID p_mesh, const ExternalSurfaceDescriptor &p_surface, uint32_t &r_surface_index, uint64_t &r_generation);
+53:	struct PacketIdentity {
+83:		bool external_camera_admitted() const {
+187:	bool external_camera_admitted() const {
+188:		return packet_identity.external_camera_admitted();
+209:	PacketAdmissionStatus admit_surface_status(uint64_t p_generation, uint32_t p_required_capabilities = 0) const {
+229:		return admission_succeeded(admit_surface_status(p_generation, p_required_capabilities));
+servers/rendering/storage/texture_storage.h:71:	virtual void texture_external_initialize(RID p_texture, int p_width, int p_height, uint64_t p_external_buffer) = 0;
+servers/rendering/storage/texture_storage.h:79:	virtual void texture_external_update(RID p_proxy, int p_width, int p_height, uint64_t p_external_buffer) = 0;
+servers/rendering/renderer_rd/storage_rd/texture_storage.cpp:1291:void TextureStorage::texture_external_initialize(RID p_texture, int p_width, int p_height, uint64_t p_external_buffer) {
+servers/rendering/renderer_rd/storage_rd/texture_storage.cpp:1680:void TextureStorage::texture_external_update(RID p_texture, int p_width, int p_height, uint64_t p_external_buffer) {
+servers/rendering/rendering_device.h:100:	friend class TestExternalOutputAccess;
+core/extension/gdextension_special_compat_hashes.cpp:104:	mappings.insert("AnimatedSprite2D", {
+core/extension/gdextension_special_compat_hashes.cpp:108:	mappings.insert("AnimatedSprite3D", {
+core/extension/gdextension_special_compat_hashes.cpp:833:	mappings.insert("SpriteFrames", {
