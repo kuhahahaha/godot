@@ -222,6 +222,8 @@ func _run() -> void:
 	mm.mesh = mesh
 	var initial_count := 1536 if cached_hidden_first else 3
 	mm.instance_count = initial_count
+	# Keep all geometry bounds fixed while testing temporal uploads/visibility.
+	mm.custom_aabb = AABB(Vector3(-3, -1, -1), Vector3(initial_count + 25, 2, 2))
 	var instance := MultiMeshInstance3D.new()
 	instance.multimesh = mm
 	viewport.add_child(instance)
