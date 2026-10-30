@@ -521,7 +521,11 @@ uint32_t ange_texture_snapshot_v1(void *source, const AngeTextureSnapshotPlanV1 
 	} else {
 		const auto *texture = static_cast<const GradientTexture1D *>(view.wrapper);
 		Gradient *gradient = static_cast<Gradient *>(view.child);
-		if (!ResourceSnapshotAccess::finite_points(*gradient)) {
+		const auto mode = gradient->get_interpolation_mode();
+		const auto space = gradient->get_interpolation_color_space();
+		if (mode < Gradient::GRADIENT_INTERPOLATE_LINEAR || mode > Gradient::GRADIENT_INTERPOLATE_CUBIC ||
+				space < Gradient::GRADIENT_COLOR_SPACE_SRGB || space > Gradient::GRADIENT_COLOR_SPACE_OKLAB ||
+				!ResourceSnapshotAccess::finite_points(*gradient)) {
 			return fail(ANGE_TEXTURE_INVALID_SOURCE_V1);
 		}
 		for (uint32_t i = 0; i < view.width; ++i) {
