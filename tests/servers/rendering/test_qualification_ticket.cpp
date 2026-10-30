@@ -162,6 +162,18 @@ public:
 		CHECK(result.native_error == ERR_INVALID_PARAMETER);
 		CHECK(memcmp(destination, original_bytes, sizeof(destination)) == 0);
 
+		struct alignas(GDExtensionQualificationFactV1) {
+			uint32_t written = 0x76543210;
+			uint8_t rest[sizeof(GDExtensionQualificationFactV1) - sizeof(uint32_t)] = {};
+		} zero_capacity_fact;
+		const auto original_zero_capacity_fact = zero_capacity_fact;
+		result = registry->qualification_facts(bridge, ticket, 1, 0, 0, reinterpret_cast<GDExtensionQualificationFactV1 *>(&zero_capacity_fact), &zero_capacity_fact.written);
+		CHECK(result.native_error == ERR_INVALID_PARAMETER);
+		CHECK(memcmp(&zero_capacity_fact, &original_zero_capacity_fact, sizeof(zero_capacity_fact)) == 0);
+		result = registry->qualification_copy(bridge, ticket, 1, &destination[1], 0, &destination[1]);
+		CHECK(result.native_error == ERR_INVALID_PARAMETER);
+		CHECK(memcmp(destination, original_bytes, sizeof(destination)) == 0);
+
 		uint32_t written = 99;
 		result = registry->qualification_facts(bridge, ticket, 1, 0, 1, &fact, &written);
 		CHECK(result.native_error != OK);

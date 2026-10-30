@@ -1,7 +1,36 @@
-#include "gdextension.h"
-#include "gdextension_qualification_internal.h"
+/**************************************************************************/
+/*  gdextension_qualification_ticket.cpp                                  */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
 
 #include "core/crypto/crypto_core.h"
+#include "core/extension/gdextension.h"
+#include "core/extension/gdextension_qualification_internal.h"
 #include "core/os/os.h"
 #include "core/os/thread.h"
 #include "servers/rendering/rendering_server_default.h"
@@ -582,7 +611,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_facts(GDExtensionQualif
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
 	const uint64_t fact_bytes = uint64_t(capacity) * sizeof(*facts);
-	if (facts && (fact_bytes > SIZE_MAX || !separate(facts, size_t(fact_bytes), written, sizeof(*written)))) {
+	if (facts && (fact_bytes > SIZE_MAX || !separate(facts, 1, written, sizeof(*written)) || !separate(facts, size_t(fact_bytes), written, sizeof(*written)))) {
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
 	*written = 0;
@@ -615,7 +644,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_copy(GDExtensionQualifi
 	if (!aligned(written)) {
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
-	if (destination && !separate(destination, capacity, written, sizeof(*written))) {
+	if (destination && (!separate(destination, 1, written, sizeof(*written)) || !separate(destination, capacity, written, sizeof(*written)))) {
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
 	*written = 0;
