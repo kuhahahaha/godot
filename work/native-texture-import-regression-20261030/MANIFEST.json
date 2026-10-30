@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "kind": "native_texture_import_regression_coverage",
+  "status": "contract_covered_backend_fault_injection_gap",
+  "production_commit": "f4b839b4a08de55ac6062cbe5970464b36a60692",
+  "editor_sha256": "37743639ba01d06aa9b43c5c21582a8d4683ecfcd0ec3ab5b9cbf5e4600bb7e6",
+  "dso_sha256": "38df3a53ee04aa6d977b313853a2bb3bd7efafe207a960920f80644535a4fcab",
+  "build_rc": 0,
+  "contract_check_rc": 0,
+  "focused": {
+    "RenderingDevice": {"rc": 0, "cases": 12, "assertions": 214},
+    "Qualification": {"rc": 0, "cases": 102, "assertions": 1896},
+    "K03": {"rc": 0, "cases": 44, "assertions": 1153},
+    "R01": {"rc": 0, "cases": 16, "assertions": 293}
+  },
+  "current_pair": {
+    "runtime-vfx": {"rc": 2, "first_error": "host.storage_owner_transport/E05/UNAVAILABLE"},
+    "runtime-no-vfx": {"rc": 2, "first_error": "host.storage_owner_transport/E05/UNAVAILABLE"},
+    "runtime-invalid-vfx": {"rc": 2, "first_error": "host.storage_owner_transport/E05/UNAVAILABLE"}
+  },
+  "backend_fault_injection": "unavailable_current_texture_storage_harness",
+  "claims_not_made": ["synthetic_free_count", "native_owner", "completion", "readback", "Ready", "GPU_Ready"]
+}
