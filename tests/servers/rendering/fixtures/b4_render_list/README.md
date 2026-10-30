@@ -1,6 +1,6 @@
 # B4 render-list admission regression
 
-Build a `tests=yes` macOS arm64 editor including this fixture, then run:
+Build a `tests=yes` macOS arm64 editor including `tests/servers/rendering/test_b4_render_list.cpp`, then run:
 
 ```sh
 python3 tests/servers/rendering/fixtures/b4_render_list/run.py \
@@ -26,3 +26,11 @@ retired and empty input, and recovery. It does not establish an upstream
 product issuer, E12 material lease, cross-pass transaction, GPU draw or
 completion. All temporary geometry and list entries are released before
 returning to the renderer.
+
+Run this fixture **only** in the isolated empty project created by the runner,
+with no other scenes or workloads. It calls the renderer's global dirty-geometry
+update and modifies its scene state; it is not a general entry point for a
+running application. Failure before list swapping frees test geometry, and all
+normal assertion paths clear temporary list entries and restore saved lists
+before freeing test-owned objects. A process crash cannot provide that cleanup
+guarantee.

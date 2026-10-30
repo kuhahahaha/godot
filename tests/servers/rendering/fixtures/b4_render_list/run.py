@@ -25,6 +25,16 @@ REQUIRED = (
 )
 
 
+def invalid_markers(lines):
+    expected = {f"B4_LIST_{name}": "1" for name in REQUIRED}
+    expected.update({"B4_LIST_LOAD": "0", "B4_LIST_UNLOAD": "0"})
+    return {
+        name: matches
+        for name, value in expected.items()
+        if (matches := [line for line in lines if line.startswith(f"{name}=")]) != [f"{name}={value}"]
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -92,14 +102,13 @@ def main():
             output = result.stdout + result.stderr
             print(output, end="", flush=True)
             lines = output.splitlines()
-            markers = [f"B4_LIST_{name}=1" for name in REQUIRED] + ["B4_LIST_LOAD=0", "B4_LIST_UNLOAD=0"]
-            missing = [marker for marker in markers if lines.count(marker) != 1]
+            invalid = invalid_markers(lines)
             renderer = "Forward Mobile" if method == "mobile" else "Forward+"
             backend_present = any("Metal " in line and renderer in line for line in lines)
             diagnostics = [line for line in lines if "ERROR:" in line or "FATAL" in line or "leaked" in line.lower()]
-            if result.returncode or missing or not backend_present or diagnostics:
+            if result.returncode or invalid or not backend_present or diagnostics:
                 print(
-                    f"{method}: failed rc={result.returncode}, missing or duplicate markers={missing}, backend_present={backend_present}, diagnostics={diagnostics}",
+                    f"{method}: failed rc={result.returncode}, invalid markers={invalid}, backend_present={backend_present}, diagnostics={diagnostics}",
                     file=sys.stderr,
                     flush=True,
                 )
