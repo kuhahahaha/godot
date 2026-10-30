@@ -1,0 +1,60 @@
+{
+  "parent_head": "29c8ae165f53007c69d665f3d3661a287f70c93f",
+  "sha256": {
+    "servers/rendering/rendering_device.cpp": "4bc1f43505e836ff725978fd12b6058a2bba0a5075672b15527da0eaa943523a",
+    "tests/servers/rendering/test_qualification_physical.cpp": "95a3b8669ef1e7a32be908f90bb5447d8711b3440bae6ea9d2fe8727e319819b",
+    "bin/godot.macos.editor.dev.arm64": "4a444890c0913ca1887fc229babdc306890ae052f90009d913c5a55d433c1f5d"
+  },
+  "build": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2 target=editor dev_build=yes tests=yes",
+  "build_rc": 0,
+  "public_red": {
+    "rc": 1,
+    "cases": 1,
+    "assertions_passed": 3,
+    "assertions_failed": 2
+  },
+  "verified_serial": {
+    "focused": [
+      1,
+      5
+    ],
+    "qualification": [
+      103,
+      1901
+    ],
+    "rendering": [
+      13,
+      219
+    ],
+    "device_exit": [
+      133,
+      2619
+    ],
+    "k03": [
+      44,
+      1153
+    ]
+  },
+  "metal_old_qrt_ticket": {
+    "rc": 134,
+    "interpretation": "fixture explicitly exits 134 when QB1_CAPTURE_CONTAINER or QB1_BODY_CONTAINER is absent; no unit or ticket result",
+    "cause": "run omitted both required environment variables"
+  },
+  "debugger": "stopped before backtrace for shared-test coordination",
+  "review": "author self-review only",
+  "limits": [
+    "CPU controlled slot reuse; no concurrency stress claim",
+    "descriptor checked native return and full parent/device retention remain open",
+    "no production issuer, completion, Ready or G1 qualification claim"
+  ],
+  "source_commit": "d659d777d0bcace9ff57805399661f5f05f22780",
+  "binary_revision_note": "The editor was built before this source-only commit; source hashes are byte-identical to the committed files.",
+  "format_followup": {
+    "commit": "b047d513bb924afba868bb5ffae197ceaf65ff57",
+    "test_source_sha256": "599cb0fbd8cfb740e6ad8e92177907f14c2a01ce1375761d5ec2b367b384b2ba",
+    "binary_sha256": "01acde28f6babf737f63ec6fe99aefec143c9f574da8510ae7c15b5433bb500f",
+    "build_rc": 0,
+    "local_incremental_clang_format": "22.1.5",
+    "final_runtime": "pending shared-test window"
+  }
+}

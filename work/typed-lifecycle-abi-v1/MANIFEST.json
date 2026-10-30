@@ -919,10 +919,12 @@
   "work/sdk-unloadable-active-context-20261028-r3/sdk-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "work/sdk-unloadable-active-context-20261028-r3/sdk.log": "e39fd89351956a6835bb8df8846f3fb20a6f9b28d89e59836974d2a79ce510b9",
   "work/sdk-unloadable-active-context-20261028-r3/threads-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "work/uniform-set-invalidation-lifetime-20261030/RECEIPT.md": "80f6e0b11e01b3e1512d77c851a38a299ff71944a6fcc123383892c7a0db5f65",
+  "work/uniform-set-invalidation-lifetime-20261030/MANIFEST.json": "44582b350358e1b0b50e2c98f840064fd8dfc71c2e8b064853c7cb03d30f9bea",
   "work/typed-lifecycle-abi-v1/CURRENT_PAIR_U01_VFX_R01_NEGATIVE_RECEIPT_20251025.md": "c6ab0496164e2741f157768a10ffcc6f0217b630a26d95d3d9762c2e22b79a47",
   "work/typed-lifecycle-abi-v1/PROGRESS.md": {
-    "bytes": 200861,
-    "sha256": "39d3bff0a89d36529973e5b7208905cd969da15a172dfd0910569db45bc3a0b9"
+    "bytes": 201584,
+    "sha256": "38d1743e825972c9bd8427f96aabaf41aa98ec24f5572225d7e4e97c473e20d1"
   },
   "work/typed-lifecycle-abi-v1/gdextension_interface.h": "07ee07f19e31fe5c22154edbba73ce3cb793b87524add5d9dc0c9468815c9a29",
   "work/typed-lifecycle-abi-v1/native-current-open-items-20261028/COMMAND_OUTPUT.json": "feccb44a82af5439c60b4fb8a6f7c8fc8923f9fd97e2bb169099294c67a185ef",
