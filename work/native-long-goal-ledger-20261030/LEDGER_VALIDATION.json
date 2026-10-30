@@ -1,6 +1,11 @@
 {
   "errors": [],
-  "editor_sha": "fb8693bd5c159a724793b17f23581b1fdc2e1ba9875c0195834883ec79cc736a",
-  "expected_editor_sha": "fb8693bd5c159a724793b17f23581b1fdc2e1ba9875c0195834883ec79cc736a",
-  "status": "PASS"
+  "editor_sha": "37743639ba01d06aa9b43c5c21582a8d4683ecfcd0ec3ab5b9cbf5e4600bb7e6",
+  "expected_editor_sha": "37743639ba01d06aa9b43c5c21582a8d4683ecfcd0ec3ab5b9cbf5e4600bb7e6",
+  "status": "PASS",
+  "ledger_path": "work/native-long-goal-ledger-20261030/LEDGER.md",
+  "ledger_sha": "92c5628f3d00599765c6bc9d594ef224321559ae23461f575754564077f8d94d",
+  "expected_ledger_sha": "92c5628f3d00599765c6bc9d594ef224321559ae23461f575754564077f8d94d",
+  "actual_editor_sha": "37743639ba01d06aa9b43c5c21582a8d4683ecfcd0ec3ab5b9cbf5e4600bb7e6",
+  "editor_receipt_current": "work/current-editor-tests-recheck-20261030/RESULT.md"
 }

@@ -1,7 +1,7 @@
 {
   "package": "native-long-goal-ledger-20261030",
   "current_tests_enabled_editor": {
-    "sha256": "fb8693bd5c159a724793b17f23581b1fdc2e1ba9875c0195834883ec79cc736a",
+    "sha256": "37743639ba01d06aa9b43c5c21582a8d4683ecfcd0ec3ab5b9cbf5e4600bb7e6",
     "build_rc": 0,
     "selectors": {
       "K03_P2": "25/386 rc0",
@@ -20,9 +20,10 @@
       "R02_full": "9/115 rc0",
       "RenderingDevice_full": "12/214 rc0"
     },
-    "receipt": "work/current-editor-tests-build-20261030/RECEIPT.md",
-    "commit": "3f7b8e4430",
-    "source_commit": "84c9b2ee7d"
+    "receipt": "work/current-editor-tests-recheck-20261030/RESULT.md",
+    "commit": "f4b839b4a0",
+    "source_commit": "f4b839b4a08de55ac6062cbe5970464b36a60692",
+    "recheck_package": "work/current-editor-tests-recheck-20261030/"
   },
   "exact_runtime_pair": {
     "editor_sha256": "150c8f1234b6cfd45ad163ed82f8cb50ef6e76d7016ee4c918e56489f1a43162",

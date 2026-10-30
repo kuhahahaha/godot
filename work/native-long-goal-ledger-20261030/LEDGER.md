@@ -31,3 +31,25 @@ The same tests-enabled editor passed full `*[K03]*`: 44 cases / 1153 assertions,
 The same tests-enabled editor passed full `*[R02]*`: 9 cases / 115 assertions, rc0.
 
 The same tests-enabled editor passed full `*[RenderingDevice]*`: 12 cases / 214 assertions, rc0.
+
+The 2026-10-30 native source closure audit confirms `src/` and `tests/` are clean at Godot HEAD `3608b6d1a95057836a987f23ea00cbc1907e6d4f`; no additional uncommitted native source/test patch remains. This is source-state evidence only and does not close E05/U08, public CI, SceneReady, native/GPU, completion/readback, Ready, or G1.
+
+An initial independent ANGE Release observation produced a signed artifact (SHA `c7c52d79361ec11d52c464cf91f4a5276d8de49fb28e5deb7ab1783c1ede5e21`; codesign rc0), but its original build emitted no return code and a transient follow-up returned rc2 because the external worktree briefly lacked `godot-cpp/SConstruct`; this observation was not treated as a green build claim.
+
+The external ANGE template_release recheck later returned explicit rc0 and codesign rc0, with artifact SHA `3907b32111a59024c7f850cdd2a1272d5ab6a8c1a5ae4c2f3db89a38224d14dc`; receipt is `work/e05-e09-release-build-recheck-20261030/RESULT.md`. Build-before/after HEAD drifted during the run, so this closes only the observed Release process lane, not a frozen commit-only artifact; owner, native/GPU qualification, completion/readback, Ready and G1 remain unqualified.
+
+The shared ANGE line now integrates the typed E05 owner snapshot consumer and MainRD overload through commits `4246a6f4f`, `a1330f538`, `7e402ea37`, and `93684f435`. Owner Debug/UBSan tests pass 2 cases / 9 assertions and MainRD regression passes 14 cases / 1718 assertions. The consumer remains read-only; `HostAttachmentInstaller::require_storage_owner_inputs()` still returns `UNAVAILABLE` for `host.storage_owner_transport`, so no production issuer/native/GPU/Ready claim follows.
+
+Godot commit `5629a017f1bfa4f3562adaa792e984ddc19fd053` repairs the test-only P01 collector sequencing after intentional poison/reject operations. The tests-enabled editor build returned rc0 at SHA `cd07b546dc34220448cf8580405c6ef8745758bccbfd51146a50439613d0bd57`; P01 passed 91 cases / 9612 assertions and CallQueue passed 6 / 92. Production filename audit found zero `p01_probe`/`probe` paths outside test/work/build; detached external godot-cpp remains outside the Godot build input, so no ABI/GPU/Ready claim follows.
+
+The shared ANGE host runner exposed and then closed an E05 consumer ABI bug: `validate_storage_owner_budget()` incorrectly compared the budget prefix size to `sizeof(GDExtensionQualificationBudgetV1)`. Commits `9f9b4e4ad` and `c007389a2` align it with the frozen `GDExtensionDeviceExitAbi` prefix. Current `test-host-storage` builds rc0 and `[host_storage_boundary]` passes 7 cases / 352 assertions; `host.storage_owner_transport / E05 / UNAVAILABLE` remains the intentional production gate.
+
+The current Godot source line also carries an independently verified native texture-import cleanup: `f4b839b4a0` changes `texture_rd_initialize` to a bool contract across RD/GLES3/dummy backends, with fresh module-on Debug rc0 and RenderingDevice 12/214, Qualification 102/1896, K03 44/1153 and R01 16/293. Static contract coverage is green; live backend-fault injection is unavailable in the current harness. Receipts: `work/native-texture-import-failure-20261030/` and `work/native-texture-import-regression-20261030/`.
+
+The current mesh external-surface audit passes B4/K05 4/101 plus the same RenderingDevice/Qualification/K03/R01 controls, but `mesh_add_external_surface` has no production caller. The missing owner/generation/packet issuer remains upstream; no synthetic caller or GPU/Ready claim was added. Receipt: `work/mesh-external-surface-audit-20261030/`.
+
+ANGE C06 remains fail-closed at the original C04 resolver: the C06 finalizer and view preserve the sole authority chain, while `resolve_gpu_linked` lacks the authenticated linked payload/revocation resolver and no production GPU writer consumes the finalized mapping. Receipt: `work/c06-finalized-physical-mapping-consumer-gap-20261030/`.
+
+An intermediate validation detected that the old full-selector ledger was pinned to editor SHA `fb8693bd...` while the current executable had SHA `37743639...`; that drift is now resolved by the current-editor selector recheck below. No old result was reused across the boundary.
+
+The current tests-enabled editor recheck bound to SHA `37743639...` passes every ledger selector at rc0: K03/P2 25/386, QualificationNative Metal 2/51, QualificationNative Vulkan 65/251, MetalCompletion 6/386, ParticlesReadback 2/5, E05 18/417, QualificationRt 6/458, TypedABI 12/356, SceneReady 2/52, Qualification 102/1896, device_exit 133/2619, QualificationNative 67/302, K03 44/1153, R02 9/115, RenderingDevice 12/214. The old `fb8693...` binary boundary is retired for current selector claims; exact runtime pair evidence remains separately pinned and E05-negative.
