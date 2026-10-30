@@ -42,6 +42,11 @@ jobs:
         continue-on-error: true
       - name: Setup Python and SCons
         uses: ./.github/actions/godot-deps
+      - name: Run build generator regressions
+        shell: bash
+        run: |
+          python3 tests/test_force_link_builder.py
+          python3 tests/test_engine_build_identity.py
       - name: Build Linux editor
         uses: ./.github/actions/godot-build
         with:
