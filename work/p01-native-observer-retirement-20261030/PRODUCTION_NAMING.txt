@@ -1,0 +1,4 @@
+Production filename census (excluding tests/work/bin)
+Command: rg --files -g ...
+Result: no p01_probe/probe production path
+P01 fixture names remain under modules/skinned_mesh_capture_tests and tests only.

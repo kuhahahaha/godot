@@ -1,0 +1,42 @@
+P01 native observer / fixture / retirement audit
+Date: 2026-10-30
+Godot source HEAD: d0dbe361ae10a451fb2932b855bb362a3e14e0ff
+ANGE source HEAD at audit: 1d9aeef2561a037cf785d9d602a45e321eb7539f
+
+Scope
+- Confirm whether P01 physical allocation, write, readback, and retirement observations have a production entry independent of the E05 storage-owner transport.
+- Confirm close/retire order and failure cleanup in the existing native fixture.
+
+Findings
+1. `servers/rendering/render_capture_test_hooks.h:33-75` wraps every observer API in
+   `TESTS_ENABLED && MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED`; this is a test-only
+   instrumentation contract. It exposes allocation/free/dispose, readback queued/
+   completed, driver result, and retirement_pump, but no production Sprite or
+   ExternalOutput adapter and no owner/schema authority.
+2. `servers/rendering/SCsub:10-11` compiles the tracking implementation only when the
+   explicit test module is enabled. The module is not part of a normal production
+   renderer build.
+3. `servers/rendering/rendering_server_default.cpp:120-124` calls the retirement
+   pump only under the same test-module gate and before rasterizer end_frame. The
+   pump refuses off-render-thread calls (`modules/...native_session.cpp:459-463`)
+   and calls session maintain, then removes only terminal sessions
+   (`:464-479`).
+4. `SkinnedMeshCaptureTestNativeSession::maintain` keeps fail-closed ordering:
+   poisoned collector/transport/hook evidence closes the session; pair validation
+   and exact readback copies must finish before publication; close admission,
+   pending cancellation, collector close, image close, holder drain, pool release,
+   and physical retirement are ordered at `:312-440`. No timeout, parent verdict,
+   or synthetic owner supplies completion.
+5. The native observer/fixture classes (`modules/skinned_mesh_capture_tests/*`) are
+   test fixtures. `SkinnedMeshCaptureTestAllocationIdentity` and
+   `RenderCaptureTestAllocationRegistry` track numeric driver/RID identities only
+   for test evidence. They are not production GPU ownership or completion authority.
+6. A production typed Sprite/ExternalOutput packet adapter remains absent. The
+   source census finds `ExternalSurfaceDescriptor` and `RenderDataRD::PacketIdentity`
+   only as existing typed seams; no production caller connects them to a P01 packet,
+   material, sampler, or owner/generation contract.
+
+Conclusion
+No independent Godot production fix is safe in this slice. Adding a production
+observer or fabricating an owner would cross the E05 authority boundary. This package
+therefore records a no-code, source-backed gap audit and current pair evidence.

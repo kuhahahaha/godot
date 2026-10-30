@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "kind": "p01_native_observer_retirement_audit",
+  "status": "negative_e05_owner_boundary",
+  "code_change": false,
+  "godot_head": "d0dbe361ae10a451fb2932b855bb362a3e14e0ff",
+  "ange_head_at_audit": "1d9aeef2561a037cf785d9d602a45e321eb7539f",
+  "editor_sha256": "65b76f85b6c0b3d0c2b0ef38eb713643a4910680afed901689b0a076c87c4a6f",
+  "dso_sha256": "38df3a53ee04aa6d977b313853a2bb3bd7efafe207a960920f80644535a4fcab",
+  "builds": {
+    "module_off": 0,
+    "module_on": 0,
+    "asan": "unavailable_current_binary",
+    "module_off_p01_selector": {
+      "rc": 0,
+      "cases": 0,
+      "assertions": 0
+    }
+  },
+  "focused": {
+    "P01": {
+      "rc": 0,
+      "cases": 91,
+      "assertions": 9612
+    },
+    "RenderingDevice": {
+      "rc": 0,
+      "cases": 12,
+      "assertions": 214
+    },
+    "Qualification": {
+      "rc": 0,
+      "cases": 102,
+      "assertions": 1896
+    },
+    "K03": {
+      "rc": 0,
+      "cases": 44,
+      "assertions": 1153
+    },
+    "R01": {
+      "rc": 0,
+      "cases": 16,
+      "assertions": 293
+    },
+    "CallQueue": {
+      "rc": 0,
+      "cases": 6,
+      "assertions": 92
+    }
+  },
+  "runtime": {
+    "runtime-vfx": {
+      "rc": 2,
+      "first_error": "host.storage_owner_transport/E05/UNAVAILABLE"
+    },
+    "runtime-no-vfx": {
+      "rc": 2,
+      "first_error": "host.storage_owner_transport/E05/UNAVAILABLE"
+    },
+    "runtime-invalid-vfx": {
+      "rc": 2,
+      "first_error": "host.storage_owner_transport/E05/UNAVAILABLE"
+    }
+  },
+  "claims_not_made": [
+    "native_owner",
+    "operation",
+    "completion",
+    "same_request_readback",
+    "GPU_Ready",
+    "P01_Ready"
+  ],
+  "excluded_dirty_baseline": "All pre-existing unrelated dirty/deleted/untracked files in Godot and ANGE; only this evidence directory is staged."
+}
