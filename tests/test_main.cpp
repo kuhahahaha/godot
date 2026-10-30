@@ -31,6 +31,7 @@
 #include "test_main.h"
 
 #include "core/config/engine.h"
+#include "core/config/project_settings.h"
 #include "core/input/input.h"
 #include "core/input/input_map.h"
 #include "core/io/dir_access.h"
@@ -160,6 +161,8 @@ struct GodotTestCaseListener : public doctest::IReporter {
 #endif // PHYSICS_2D_DISABLED
 #ifndef PHYSICS_3D_DISABLED
 	PhysicsServer3D *physics_server_3d = nullptr;
+	Variant previous_physics_3d_thread_setting;
+	bool restore_physics_3d_thread_setting = false;
 #endif // PHYSICS_3D_DISABLED
 
 #ifndef NAVIGATION_2D_DISABLED
@@ -203,9 +206,21 @@ struct GodotTestCaseListener : public doctest::IReporter {
 			ThemeDB::get_singleton()->initialize_theme();
 
 #ifndef PHYSICS_3D_DISABLED
-			physics_server_3d = PhysicsServer3DManager::get_singleton()->new_default_server();
-			if (!physics_server_3d) {
-				physics_server_3d = memnew(PhysicsServer3DDummy);
+			if (name.contains("[PhysicsQueryRetirement]")) {
+				const String backend = OS::get_singleton()->get_environment("GODOT_TEST_PHYSICS_3D_BACKEND");
+				const String threaded = OS::get_singleton()->get_environment("GODOT_TEST_PHYSICS_3D_THREADED");
+				ERR_FAIL_COND_MSG((backend != "GodotPhysics3D" && backend != "Jolt Physics") || (threaded != "0" && threaded != "1"), "Physics query retirement tests require an explicit built-in backend and thread mode.");
+				ProjectSettings *settings = ProjectSettings::get_singleton();
+				previous_physics_3d_thread_setting = settings->get_setting("physics/3d/run_on_separate_thread");
+				restore_physics_3d_thread_setting = true;
+				settings->set_setting("physics/3d/run_on_separate_thread", threaded == "1");
+				physics_server_3d = PhysicsServer3DManager::get_singleton()->new_server(backend);
+				ERR_FAIL_NULL_MSG(physics_server_3d, "The requested built-in physics backend is unavailable.");
+			} else {
+				physics_server_3d = PhysicsServer3DManager::get_singleton()->new_default_server();
+				if (!physics_server_3d) {
+					physics_server_3d = memnew(PhysicsServer3DDummy);
+				}
 			}
 			physics_server_3d->init();
 #endif // PHYSICS_3D_DISABLED
@@ -321,6 +336,10 @@ struct GodotTestCaseListener : public doctest::IReporter {
 			physics_server_3d->finish();
 			memdelete(physics_server_3d);
 			physics_server_3d = nullptr;
+		}
+		if (restore_physics_3d_thread_setting) {
+			ProjectSettings::get_singleton()->set_setting("physics/3d/run_on_separate_thread", previous_physics_3d_thread_setting);
+			restore_physics_3d_thread_setting = false;
 		}
 #endif // PHYSICS_3D_DISABLED
 

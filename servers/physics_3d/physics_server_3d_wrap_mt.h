@@ -63,6 +63,10 @@
 class PhysicsServer3DWrapMT : public PhysicsServer3D {
 	GDSOFTCLASS(PhysicsServer3DWrapMT, PhysicsServer3D);
 
+#ifdef TESTS_ENABLED
+	friend class TestPhysicsQueryRetirementAccess;
+#endif
+
 	mutable PhysicsServer3D *physics_server_3d = nullptr;
 
 	mutable CommandQueueMT command_queue;
