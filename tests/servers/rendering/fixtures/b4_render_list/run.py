@@ -13,21 +13,37 @@ from pathlib import Path
 FIXTURE = Path(__file__).resolve().parent
 REPOSITORY = FIXTURE.parents[4]
 REQUIRED = (
-    "REAL_MATERIALS", "COLOR_ATOMIC", "SHADOW_APPEND", "RECOVERY", "ORDINARY",
-    "FIRST_MISMATCH", "RETIRED", "EMPTY", "ALL",
+    "REAL_MATERIALS",
+    "COLOR_ATOMIC",
+    "SHADOW_APPEND",
+    "RECOVERY",
+    "ORDINARY",
+    "FIRST_MISMATCH",
+    "RETIRED",
+    "EMPTY",
+    "ALL",
 )
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--engine", required=True, type=Path, help="tests=yes editor containing test_b4_render_list.cpp")
-    parser.add_argument("--generated-root", type=Path, default=REPOSITORY, help="root containing core/extension/gdextension_interface.gen.h")
+    parser.add_argument(
+        "--engine", required=True, type=Path, help="tests=yes editor containing test_b4_render_list.cpp"
+    )
+    parser.add_argument(
+        "--generated-root",
+        type=Path,
+        default=REPOSITORY,
+        help="root containing core/extension/gdextension_interface.gen.h",
+    )
     parser.add_argument("--compiler", default="clang")
     parser.add_argument("--timeout", type=int, default=90)
     args = parser.parse_args()
     engine = args.engine.resolve(strict=True)
     if sys.platform != "darwin" or platform.machine() != "arm64":
-        parser.error("this fixture currently supports macOS arm64; other platforms require their own tested driver/extension build")
+        parser.error(
+            "this fixture currently supports macOS arm64; other platforms require their own tested driver/extension build"
+        )
     header = args.generated_root / "core/extension/gdextension_interface.gen.h"
     if not header.is_file():
         parser.error(f"missing generated header: {header}")
@@ -36,13 +52,36 @@ def main():
         project = Path(temp)
         for name in ("project.godot", "probe.gd", "probe.gdextension"):
             shutil.copy2(FIXTURE / name, project / name)
-        compile_cmd = [args.compiler, "-dynamiclib", "-arch", "arm64", "-mmacosx-version-min=11.0", "-I", str(args.generated_root.resolve()), str(FIXTURE / "client.c"), "-o", str(project / "probe.dylib")]
+        compile_cmd = [
+            args.compiler,
+            "-dynamiclib",
+            "-arch",
+            "arm64",
+            "-mmacosx-version-min=11.0",
+            "-I",
+            str(args.generated_root.resolve()),
+            str(FIXTURE / "client.c"),
+            "-o",
+            str(project / "probe.dylib"),
+        ]
         print("compile:", compile_cmd, flush=True)
         if subprocess.run(compile_cmd, check=False).returncode:
             return 2
         failed = False
         for method in ("mobile", "forward_plus"):
-            command = [str(engine), "--path", str(project), "--rendering-driver", "metal", "--rendering-method", method, "--render-thread", "safe", "--script", "probe.gd"]
+            command = [
+                str(engine),
+                "--path",
+                str(project),
+                "--rendering-driver",
+                "metal",
+                "--rendering-method",
+                method,
+                "--render-thread",
+                "safe",
+                "--script",
+                "probe.gd",
+            ]
             print("run:", command, flush=True)
             try:
                 result = subprocess.run(command, capture_output=True, text=True, timeout=args.timeout, check=False)
@@ -59,7 +98,11 @@ def main():
             backend_present = any("Metal " in line and renderer in line for line in lines)
             diagnostics = [line for line in lines if "ERROR:" in line or "FATAL" in line or "leaked" in line.lower()]
             if result.returncode or missing or not backend_present or diagnostics:
-                print(f"{method}: failed rc={result.returncode}, missing or duplicate markers={missing}, backend_present={backend_present}, diagnostics={diagnostics}", file=sys.stderr, flush=True)
+                print(
+                    f"{method}: failed rc={result.returncode}, missing or duplicate markers={missing}, backend_present={backend_present}, diagnostics={diagnostics}",
+                    file=sys.stderr,
+                    flush=True,
+                )
                 failed = True
         return 1 if failed else 0
 
