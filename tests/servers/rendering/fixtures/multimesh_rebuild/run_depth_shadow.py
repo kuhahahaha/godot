@@ -22,6 +22,7 @@ def digest(path):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--build-receipt", required=True, type=Path)
+    ap.add_argument("--pack-editor-receipt", type=Path, help="package a main scene for a release template")
     ap.add_argument("--renderer", required=True, choices=["mobile", "forward_plus"])
     ap.add_argument("--control", choices=["normal", "omit-depth", "omit-shadow"], default="normal")
     ap.add_argument("--output", required=True, type=Path)
@@ -50,6 +51,15 @@ def main():
         "[rendering]\nshader_compiler/shader_cache/enabled=false\n"
     )
     (project / ".godot/global_script_class_cache.cfg").write_text("list=[]\n")
+    executable = binary
+    package_inputs = []
+    package_record = None
+    if a.pack_editor_receipt:
+        from pack_native_fixture import prepare_packed_scene
+
+        executable, package_inputs, package_record = prepare_packed_scene(
+            project, script, binary, a.pack_editor_receipt, out
+        )
     stages = [
         "depth_all",
         "depth_visible_0",
@@ -91,6 +101,7 @@ def main():
         expected_path,
         Path(__file__).resolve(),
     ]
+    inputs.extend(package_inputs)
     before = {str(path): digest(path) for path in inputs}
     cmd = [
         str(binary),
@@ -107,6 +118,18 @@ def main():
         "--script",
         "res://" + fixture.name,
     ]
+    if package_record:
+        cmd = [
+            str(executable),
+            "--rendering-driver",
+            "metal",
+            "--rendering-method",
+            a.renderer,
+            "--render-thread",
+            "safe",
+            "--audio-driver",
+            "Dummy",
+        ]
     if a.control != "normal":
         cmd += ["--", "--omit-multimesh-" + ("depth" if a.control == "omit-depth" else "shadow")]
     env = os.environ.copy()
@@ -189,6 +212,7 @@ def main():
         "precision": receipt["precision"],
         "control": a.control,
         "build_receipt": str(a.build_receipt.resolve()),
+        "package": package_record,
         "host_rc": rc,
         "inputs_before": before,
         "inputs_after": after,
