@@ -2358,7 +2358,7 @@ void MaterialStorage::shader_set_default_texture_parameter(RID p_shader, const S
 		}
 	}
 	if (shader->data) {
-		shader->data->set_default_texture_parameter(p_name, p_texture, p_index);
+		shader->data->set_default_texture_parameter(p_name, valid_texture ? p_texture : RID(), p_index);
 	}
 
 	for (Material *material : shader->owners) {
