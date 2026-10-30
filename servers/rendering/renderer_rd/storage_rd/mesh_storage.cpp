@@ -1955,7 +1955,7 @@ void MeshStorage::_multimesh_rebuild_command_buffer(MultiMesh *multimesh) {
 	const uint64_t byte_count = uint64_t(mesh->surface_count) * sizeof(uint32_t) * INDIRECT_MULTIMESH_COMMAND_STRIDE;
 	ERR_FAIL_COND(byte_count > UINT32_MAX);
 	Vector<uint8_t> bytes;
-	bytes.resize_initialized(byte_count);
+	ERR_FAIL_COND(bytes.resize_initialized(byte_count) != OK);
 	const uint32_t visible = multimesh->visible_instances < 0 ? uint32_t(multimesh->instances) : uint32_t(multimesh->visible_instances);
 	for (uint32_t i = 0; i < mesh->surface_count; i++) {
 		uint32_t offset = i * sizeof(uint32_t) * INDIRECT_MULTIMESH_COMMAND_STRIDE;
