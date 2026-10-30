@@ -200,13 +200,16 @@ class CoreBuildIdentityTests(unittest.TestCase):
 
     def test_actual_linker_strip_flag_is_closed_flag(self):
         output = self.root / "godot"
-        for flag in ["-S", "-x"]:
+        variants = []
+        for flag in ["-S", "-x", "-s"]:
             inputs, arguments = identity.resolve_link_inputs(
                 ["ld", flag, "-o", str(output), str(self.obj)],
                 [self.obj], output, self.root,
             )
             self.assertEqual(inputs, [("Object", self.obj.resolve())])
             self.assertIn(flag, arguments)
+            variants.append(identity.derive_stamps(self.snapshot(arguments=arguments)))
+        self.assertEqual(len(set(variants)), 3)
 
     def test_unimplemented_search_and_hidden_file_options_fail_before_publication(self):
         for token in ["-search_dylibs_first", "-static", "-Z", "-weak-lFoo", "-order_file", "-lazy_library", "-unknown_future_option"]:
