@@ -254,6 +254,38 @@ public:
 		CHECK(device.frames[0].framebuffers_to_dispose_of.size() == 1);
 		CHECK(device.resource_frees_in_progress.is_empty());
 	}
+	static void cascade_refused_pipeline_enqueue(RenderingDevice &device) {
+		GDExtensionDeviceExit::QualificationPhysicalReturn cell;
+		RenderingDevice::Shader shader{};
+		RID parent = device.shader_owner.make_rid(shader);
+		RenderingDevice::ComputePipeline pipeline{};
+		pipeline.shader = parent;
+		pipeline.qualification_return = &cell;
+		RID child = device.compute_pipeline_owner.make_rid(pipeline);
+		device.render_thread_id = Thread::get_caller_id();
+		device._add_dependency(child, parent);
+		ERR_PRINT_OFF;
+		device.free_rid(parent);
+		ERR_PRINT_ON;
+		CHECK(device.shader_owner.owns(parent));
+		CHECK(device.compute_pipeline_owner.owns(child));
+		const HashSet<RID> *children = device.dependency_map.getptr(parent);
+		CHECK((children && children->has(child)));
+		CHECK_FALSE(cell.enqueued);
+		CHECK(device.resource_frees_in_progress.is_empty());
+		// Close this synthetic cell to exercise a subsequent queue admission.
+		// No native return or owner acknowledgement is asserted here.
+		cell.use_closed.store(true);
+		if (device.shader_owner.owns(parent)) {
+			device.free_rid(parent);
+		} else {
+			device.free_rid(child);
+		}
+		CHECK_FALSE(device.shader_owner.owns(parent));
+		CHECK_FALSE(device.compute_pipeline_owner.owns(child));
+		CHECK(cell.enqueued);
+		CHECK(cell.free_event == 0);
+	}
 	struct BusyDependentState {
 		RenderingDevice *device = nullptr;
 		RID parent;
@@ -3872,6 +3904,13 @@ TEST_CASE("[RenderingDevice] late busy dependent preserves parent and edge until
 	Driver driver;
 	TestQualificationPhysicalAccess::attach(device, driver);
 	TestQualificationPhysicalAccess::cascade_late_busy_retry(device);
+	TestQualificationPhysicalAccess::detach(device);
+}
+TEST_CASE("[RenderingDevice] refused pipeline enqueue preserves shader parent and edge") {
+	RenderingDevice device;
+	Driver driver;
+	TestQualificationPhysicalAccess::attach(device, driver);
+	TestQualificationPhysicalAccess::cascade_refused_pipeline_enqueue(device);
 	TestQualificationPhysicalAccess::detach(device);
 }
 TEST_CASE("[RenderingDevice] busy dependent preserves its parent until retry") {

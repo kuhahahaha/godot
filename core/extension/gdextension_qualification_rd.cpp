@@ -77,6 +77,16 @@ bool RenderingDevice::_qualification_resource_busy(RID rid) {
 	if (pipeline && pipeline->qualification_users) {
 		return true;
 	}
+	if (pipeline && pipeline->qualification_return) {
+		auto *cell = pipeline->qualification_return;
+		if (!qualification_retiring || !cell->use_closed.load() || !_qualification_free_event_available(cell->event_capacity_reserved) || uint32_t(frame) >= frames.size() || !frames[frame].qualification_epoch) {
+			return true;
+		}
+		MutexLock lock(cell->mutex);
+		if (cell->enqueued || cell->reserved_event || cell->free_event) {
+			return true;
+		}
+	}
 	const auto *dependencies = dependency_map.getptr(rid);
 	if (dependencies) {
 		for (RID child : *dependencies) {
