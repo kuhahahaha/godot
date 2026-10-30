@@ -15,8 +15,47 @@
 #include "drivers/metal/rendering_device_driver_metal3.h"
 #endif
 TEST_FORCE_LINK(test_qualification_physical)
+extern thread_local void (*test_uniform_set_after_rid_free)(RenderingDevice *);
 class TestQualificationPhysicalAccess {
 public:
+ struct InvalidationState {
+  RID old_rid;
+  RID replacement;
+  int callbacks = 0;
+  bool old_valid_during_callback = true;
+  RenderingDevice *device = nullptr;
+ };
+ inline static thread_local InvalidationState *invalidation_state = nullptr;
+ static void replace_freed_uniform_set(RenderingDevice *device) {
+  test_uniform_set_after_rid_free = nullptr;
+  RenderingDevice::UniformSet replacement;
+  invalidation_state->replacement = device->uniform_set_owner.make_rid(replacement);
+ }
+ static void original_invalidation(void *userdata) {
+  auto *state = static_cast<InvalidationState *>(userdata);
+  ++state->callbacks;
+  state->old_valid_during_callback = state->device->uniform_set_owner.owns(state->old_rid);
+ }
+ static void invalidation_after_slot_reuse(RenderingDevice &device) {
+  InvalidationState state;
+  state.device = &device;
+  RenderingDevice::UniformSet original;
+  original.invalidated_callback = original_invalidation;
+  original.invalidated_callback_userdata = &state;
+  state.old_rid = device.uniform_set_owner.make_rid(original);
+  device.render_thread_id = Thread::get_caller_id();
+  invalidation_state = &state;
+  test_uniform_set_after_rid_free = replace_freed_uniform_set;
+  device.free_rid(state.old_rid);
+  test_uniform_set_after_rid_free = nullptr;
+  invalidation_state = nullptr;
+  CHECK(state.replacement.is_valid());
+  CHECK(uint32_t(state.replacement.get_id()) == uint32_t(state.old_rid.get_id()));
+  CHECK(state.callbacks == 1);
+  CHECK_FALSE(state.old_valid_during_callback);
+  CHECK(device.uniform_set_owner.owns(state.replacement));
+  device.uniform_set_owner.free(state.replacement);
+ }
  template <typename D> static auto create_qualified_sampler(D &device, const RenderingDevice::SamplerState &state, GDExtensionDeviceExit::QualificationPhysicalReturn *cell, int) -> decltype(device._qualification_sampler_create(state, cell)) {
   return device._qualification_sampler_create(state, cell);
  }
@@ -1270,6 +1309,13 @@ public:
  BufferID buffer_create(uint64_t size,BitField<BufferUsageBits>,MemoryAllocationType,uint64_t) override { CHECK(size==128);creates++;return fail_buffer_create?BufferID():BufferID(19); }
  void buffer_free(BufferID id) override { CHECK(id==BufferID(19));if(cell)CHECK(TestQualificationPhysicalAccess::event(*cell)==0);frees++; }
 };
+TEST_CASE("[RenderingDevice][Qualification] invalidation retains original callback when uniform set slot is reused") {
+ RenderingDevice device;
+ Driver driver;
+ TestQualificationPhysicalAccess::attach(device, driver);
+ TestQualificationPhysicalAccess::invalidation_after_slot_reuse(device);
+ TestQualificationPhysicalAccess::detach(device);
+}
 TEST_CASE("[RenderingDevice][Qualification] buffer return follows exact physical free and survives RID erase") {
  RenderingDevice device;Driver driver;GDExtensionDeviceExit::QualificationPhysicalReturn cell;driver.cell=&cell;
  TestQualificationPhysicalAccess::attach(device,driver);

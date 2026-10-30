@@ -8696,6 +8696,10 @@ void RenderingDevice::free_rid(RID p_rid) {
 	_free_internal(p_rid);
 }
 
+#ifdef TESTS_ENABLED
+thread_local void (*test_uniform_set_after_rid_free)(RenderingDevice *) = nullptr;
+#endif
+
 void RenderingDevice::_free_internal(RID p_id) {
  ERR_FAIL_COND(_qualification_resource_busy(p_id));
  auto *qualified_texture = texture_owner.get_or_null(p_id);
@@ -8821,11 +8825,19 @@ void RenderingDevice::_free_internal(RID p_id) {
 		storage_buffer_owner.free(p_id);
 	} else if (uniform_set_owner.owns(p_id)) {
 		UniformSet *uniform_set = uniform_set_owner.get_or_null(p_id);
+		// The RID owner destroys the set before the synchronous callback.
+		InvalidationCallback invalidated_callback = uniform_set->invalidated_callback;
+		void *invalidated_callback_userdata = uniform_set->invalidated_callback_userdata;
 		frames[frame].uniform_sets_to_dispose_of.push_back(*uniform_set);
 		uniform_set_owner.free(p_id);
+#ifdef TESTS_ENABLED
+		if (test_uniform_set_after_rid_free) {
+			test_uniform_set_after_rid_free(this);
+		}
+#endif
 
-		if (uniform_set->invalidated_callback != nullptr) {
-			uniform_set->invalidated_callback(uniform_set->invalidated_callback_userdata);
+		if (invalidated_callback != nullptr) {
+			invalidated_callback(invalidated_callback_userdata);
 		}
 	} else if (render_pipeline_owner.owns(p_id)) {
 		RenderPipeline *pipeline = render_pipeline_owner.get_or_null(p_id);
