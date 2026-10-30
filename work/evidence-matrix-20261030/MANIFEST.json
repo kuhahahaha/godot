@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "kind": "godot_native_evidence_matrix",
+  "status": "audited_no_production_change",
+  "matrix": "MATRIX.json",
+  "independent_review": "INDEPENDENT_REVIEW.md",
+  "commands": "COMMANDS.txt",
+  "canonical_current_pair": {
+    "godot_head": "db19d4c868fc7ac360885fd401d5e1a1f61b58b3",
+    "editor_sha256": "37743639ba01d06aa9b43c5c21582a8d4683ecfcd0ec3ab5b9cbf5e4600bb7e6",
+    "dso_sha256": "38df3a53ee04aa6d977b313853a2bb3bd7efafe207a960920f80644535a4fcab",
+    "first_boundary": "host.storage_owner_transport/E05/UNAVAILABLE",
+    "runtime_rc": {"vfx": 2, "no_vfx": 2, "invalid_vfx": 2}
+  },
+  "claims_not_made": ["native_owner", "same_request_completion", "readback", "Ready", "GPU_Ready", "Sprite_packet_authority"]
+}
