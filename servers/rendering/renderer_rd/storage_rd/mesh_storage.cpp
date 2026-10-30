@@ -2103,11 +2103,12 @@ void MeshStorage::_multimesh_update_motion_vectors_data_cache(MultiMesh *multime
 			uint8_t *data = (uint8_t *)multimesh->data_cache.ptrw();
 			uint32_t current_ofs = multimesh->motion_vectors_current_offset * multimesh->stride_cache * sizeof(float);
 			uint32_t previous_ofs = multimesh->motion_vectors_previous_offset * multimesh->stride_cache * sizeof(float);
-			uint32_t visible_instances = multimesh->visible_instances >= 0 ? multimesh->visible_instances : multimesh->instances;
-			uint32_t visible_region_count = visible_instances == 0 ? 0 : Math::division_round_up(visible_instances, (uint32_t)MULTIMESH_DIRTY_REGION_SIZE);
+			// Hidden edits must also survive CPU cache flips. Visibility only
+			// limits GPU uploads, not the instance data retained by the cache.
+			uint32_t region_count = Math::division_round_up((uint32_t)multimesh->instances, (uint32_t)MULTIMESH_DIRTY_REGION_SIZE);
 			uint32_t region_size = multimesh->stride_cache * MULTIMESH_DIRTY_REGION_SIZE * sizeof(float);
 			uint32_t size = multimesh->stride_cache * (uint32_t)multimesh->instances * (uint32_t)sizeof(float);
-			for (uint32_t i = 0; i < visible_region_count; i++) {
+			for (uint32_t i = 0; i < region_count; i++) {
 				if (multimesh->previous_data_cache_dirty_regions[i]) {
 					uint32_t offset = i * region_size;
 					memcpy(data + current_ofs + offset, data + previous_ofs + offset, MIN(region_size, size - offset));
