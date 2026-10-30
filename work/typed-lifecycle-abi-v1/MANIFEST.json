@@ -919,12 +919,17 @@
   "work/sdk-unloadable-active-context-20261028-r3/sdk-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "work/sdk-unloadable-active-context-20261028-r3/sdk.log": "e39fd89351956a6835bb8df8846f3fb20a6f9b28d89e59836974d2a79ce510b9",
   "work/sdk-unloadable-active-context-20261028-r3/threads-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "work/uniform-set-invalidation-lifetime-20261030/RECEIPT.md": "80f6e0b11e01b3e1512d77c851a38a299ff71944a6fcc123383892c7a0db5f65",
-  "work/uniform-set-invalidation-lifetime-20261030/MANIFEST.json": "44582b350358e1b0b50e2c98f840064fd8dfc71c2e8b064853c7cb03d30f9bea",
+  "work/uniform-set-invalidation-lifetime-20261030/RECEIPT.md": "978a340348ba4aff5bb9c25ac5c2d0a4b96539adccade3d597c7243323c90ee0",
+  "work/uniform-set-invalidation-lifetime-20261030/MANIFEST.json": "b98c995221c7c9b3536d580c43ab270ca34d451a9e782746e7e9bc1dbd661473",
+  "work/p01-collector-drop-20261030/RECEIPT.md": "ed3d26d9fa8c7ef12604c8a23b46178818805eb1d73e1826ed7731f6422824e8",
+  "work/p01-collector-drop-20261030/MANIFEST.json": "0cea7d7ae5e1d3d695ca199aba573b65341346858505f915f98e6b4fe69e9caa",
+  "work/p01-collector-drop-20261030/MODULE_RUN.json": "cd4f9825dd8c2d1913d2f9315d9feea23797004d5b6f9dfa5ce997d2b6620ce9",
+  "work/e2-current-ange-metal-pair-20261030/RECEIPT.md": "d1bd157a30326a6f4a5fb7cc68825ee8faf7ce7c0379c7f4e2d67ab085685703",
+  "work/e2-current-ange-metal-pair-20261030/RUN.json": "1789bffc6dacaf3131e69ae72433b5391368442d4aeee7349bf2b745720de8e5",
   "work/typed-lifecycle-abi-v1/CURRENT_PAIR_U01_VFX_R01_NEGATIVE_RECEIPT_20251025.md": "c6ab0496164e2741f157768a10ffcc6f0217b630a26d95d3d9762c2e22b79a47",
   "work/typed-lifecycle-abi-v1/PROGRESS.md": {
-    "bytes": 201584,
-    "sha256": "38d1743e825972c9bd8427f96aabaf41aa98ec24f5572225d7e4e97c473e20d1"
+    "bytes": 202445,
+    "sha256": "2514bd4bd6938c04bb080064329b38c4693d5c51684c0b4c660d81b306a14b63"
   },
   "work/typed-lifecycle-abi-v1/gdextension_interface.h": "07ee07f19e31fe5c22154edbba73ce3cb793b87524add5d9dc0c9468815c9a29",
   "work/typed-lifecycle-abi-v1/native-current-open-items-20261028/COMMAND_OUTPUT.json": "feccb44a82af5439c60b4fb8a6f7c8fc8923f9fd97e2bb169099294c67a185ef",

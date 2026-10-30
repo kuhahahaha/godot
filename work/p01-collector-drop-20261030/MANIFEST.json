@@ -1,0 +1,45 @@
+{
+  "scope": "private linked overlay; no full module-on build or hardware fault",
+  "source_sha256": {
+    "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_image_collector.cpp": "3dbdae4adf84447789dd17e8f7cd246861368e4cda55cebc8e6defdd52b78ebf",
+    "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_readback_collector.cpp": "cec03a322eba929a6512cdeba427e09d8fe0cf4f999536bac2c3b310184e905a",
+    "modules/skinned_mesh_capture_tests/tests/test_image_collector.h": "8c4bca9ad32c0d573bb9f9dfba1ebd7ab57aa331bc61b8ad90a65030d25dcbdc",
+    "modules/skinned_mesh_capture_tests/tests/test_readback_collector.h": "a913630cdcbe0521f3b3b7f0893a6089b5c560436160a17dd8db1b287538ca0d",
+    "tests/servers/rendering/test_rendering_device_frame_wait.cpp": "5fcd6c159ebe69127639bc8c1fb421c480838868184d0dd22a7f89571fcaa7fc"
+  },
+  "overlay_binary_sha256": "2a44ab97c099ea5f178032474153bc049ec8e40613704230e702c7b97730b5aa",
+  "inputs_before_after_stable": true,
+  "red": {
+    "image_drop": "3 cases, 9/15 assertions, rc1",
+    "image_map": "1 case, 7/9, rc1",
+    "buffer_drop": "1 case, 4/7, rc1",
+    "buffer_map": "1 case, 7/10, rc1"
+  },
+  "green": {
+    "p01": "19/357",
+    "image_map": "1/9",
+    "buffer_map": "1/10",
+    "frame_wait": "16/293",
+    "k03": "44/1153"
+  },
+  "review": "author self-review only",
+  "limits": [
+    "mock driver map failure; not real device failure",
+    "private overlay removes module compile guards only in the test translation unit and keeps module-disabled RD class layout",
+    "production native/GPU acceptance pending"
+  ],
+  "source_commit": "3fdda09c2c",
+  "module_build": {
+    "command": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j2 target=editor dev_build=yes tests=yes module_skinned_mesh_capture_tests_enabled=yes",
+    "rc": 0,
+    "binary_sha256": "f9b2ee5a7601adb6fa05522ce0198e231102df8b83ed2a9f0544eed1bed5a24c",
+    "p01": "97/9657",
+    "image_map": "1/9",
+    "buffer_map": "1/10",
+    "frame_wait": "16/293",
+    "qualification": "103/1901",
+    "device_exit": "133/2619",
+    "k03": "44/1153",
+    "scope": "headless CPU/mock driver controls; no hardware fault"
+  }
+}

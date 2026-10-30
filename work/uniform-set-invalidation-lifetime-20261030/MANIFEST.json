@@ -55,6 +55,12 @@
     "binary_sha256": "01acde28f6babf737f63ec6fe99aefec143c9f574da8510ae7c15b5433bb500f",
     "build_rc": 0,
     "local_incremental_clang_format": "22.1.5",
-    "final_runtime": "pending shared-test window"
+    "final_runtime": {
+      "focused": "1/5 rc0",
+      "qualification": "103/1901 rc0",
+      "device_exit": "133/2619 rc0",
+      "metal_qrt_ticket": "rc0; runner checks all true; fixture scope"
+    },
+    "pinned_incremental_clang_format": "21.1.7, no diff relative to 29c8ae165f"
   }
 }
