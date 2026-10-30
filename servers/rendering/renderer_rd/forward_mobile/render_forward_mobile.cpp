@@ -3190,6 +3190,9 @@ void RenderForwardMobile::_geometry_instance_update(RenderGeometryInstance *p_ge
 
 	if (ginstance->data->dirty_dependencies) {
 		ginstance->data->dependency_tracker.update_begin();
+		if (ginstance->data->base_type == RSE::INSTANCE_MULTIMESH) {
+			RSG::utilities->base_update_dependency(ginstance->data->base, &ginstance->data->dependency_tracker);
+		}
 	}
 
 	//add geometry for drawing

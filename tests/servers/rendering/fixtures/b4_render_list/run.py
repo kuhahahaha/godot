@@ -21,6 +21,7 @@ REQUIRED = (
     "FIRST_MISMATCH",
     "RETIRED",
     "EMPTY",
+    "MULTIMESH_DEPENDENCY",
     "ALL",
 )
 

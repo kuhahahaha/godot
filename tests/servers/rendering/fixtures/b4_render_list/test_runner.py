@@ -17,6 +17,7 @@ class TestMarkers(unittest.TestCase):
             "B4_LIST_FIRST_MISMATCH=1",
             "B4_LIST_RETIRED=1",
             "B4_LIST_EMPTY=1",
+            "B4_LIST_MULTIMESH_DEPENDENCY=1",
             "B4_LIST_ALL=1",
             "B4_LIST_LOAD=0",
             "B4_LIST_UNLOAD=0",
@@ -24,6 +25,12 @@ class TestMarkers(unittest.TestCase):
 
     def test_valid_markers(self):
         self.assertEqual(invalid_markers(self.lines), {})
+
+    def test_multimesh_marker_is_mandatory_and_unique(self):
+        self.lines.remove("B4_LIST_MULTIMESH_DEPENDENCY=1")
+        self.assertEqual(set(invalid_markers(self.lines)), {"B4_LIST_MULTIMESH_DEPENDENCY"})
+        self.lines.extend(["B4_LIST_MULTIMESH_DEPENDENCY=1", "B4_LIST_MULTIMESH_DEPENDENCY=0"])
+        self.assertEqual(set(invalid_markers(self.lines)), {"B4_LIST_MULTIMESH_DEPENDENCY"})
 
     def test_conflicting_markers_are_not_accepted(self):
         self.lines.extend(["B4_LIST_COLOR_ATOMIC=0", "B4_LIST_LOAD=1"])

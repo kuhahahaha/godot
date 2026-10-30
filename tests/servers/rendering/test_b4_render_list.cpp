@@ -42,6 +42,7 @@ TEST_FORCE_LINK(test_b4_render_list)
 #include "scene/resources/shader.h"
 #include "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h"
 #include "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.h"
+#include "servers/rendering/renderer_rd/storage_rd/mesh_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/render_data_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/render_scene_data_rd.h"
 
@@ -52,6 +53,87 @@ TEST_FORCE_LINK(test_b4_render_list)
 namespace RendererSceneRenderImplementation {
 class TestB4RenderListAccess {
 public:
+	template <typename R>
+	static bool run_multimesh_dependencies(R *r, RID mesh) {
+		constexpr bool mobile = std::is_same_v<R, RenderForwardMobile>;
+		using Instance = std::conditional_t<mobile, RenderForwardMobile::GeometryInstanceForwardMobile, RenderForwardClustered::GeometryInstanceForwardClustered>;
+		RendererRD::MeshStorage *storage = RendererRD::MeshStorage::get_singleton();
+		if (!r || !storage) {
+			return false;
+		}
+		RID multimesh = storage->multimesh_allocate();
+		if (!multimesh.is_valid()) {
+			return false;
+		}
+		storage->multimesh_initialize(multimesh);
+		struct Cleanup {
+			R *renderer;
+			RendererRD::MeshStorage *storage;
+			RID multimesh;
+			Instance *instance = nullptr;
+			~Cleanup() {
+				if (instance) {
+					renderer->geometry_instance_free(instance);
+				}
+				storage->multimesh_free(multimesh);
+			}
+		} cleanup{ r, storage, multimesh };
+		storage->multimesh_allocate_data(multimesh, 3, RSE::MULTIMESH_TRANSFORM_3D, false, false, false);
+		storage->multimesh_set_mesh(multimesh, mesh);
+		if (!storage->multimesh_get_buffer_rd_rid(multimesh).is_valid()) {
+			return false;
+		}
+		Instance *instance = static_cast<Instance *>(r->geometry_instance_create(multimesh));
+		if (!instance) {
+			return false;
+		}
+		cleanup.instance = instance;
+		// SceneCull uses this public setter to start initial dependency collection.
+		instance->set_surface_materials(Vector<RID>());
+		r->_update_dirty_geometry_instances();
+		auto observe = [&](uint32_t p_step, bool p_passed) {
+			if (!p_passed) {
+				std::printf("B4_MM_DEPENDENCY_CHECK step=%u count=%u dirty=%d cache=%d\n", p_step, uint32_t(instance->instance_count), int(instance->data->dirty_dependencies), int(instance->surface_caches != nullptr));
+			}
+			return p_passed;
+		};
+		bool ok = observe(1, instance->instance_count == 3 && instance->surface_caches && !instance->data->dirty_dependencies);
+		storage->multimesh_set_visible_instances(multimesh, 1);
+		ok &= observe(2, instance->instance_count == 1);
+		storage->multimesh_set_visible_instances(multimesh, 0);
+		ok &= observe(3, instance->instance_count == 0);
+		storage->multimesh_set_visible_instances(multimesh, -1);
+		ok &= observe(4, instance->instance_count == 3);
+		storage->multimesh_allocate_data(multimesh, 5, RSE::MULTIMESH_TRANSFORM_3D, false, false, false);
+		ok &= observe(5, instance->data->dirty_dependencies && instance->surface_caches == nullptr);
+		r->_update_dirty_geometry_instances();
+		ok &= observe(6, instance->instance_count == 5 && instance->surface_caches && !instance->data->dirty_dependencies);
+		// Empty buffer and empty mesh must retain the owner subscription, so
+		// subsequent normal allocations and mesh restoration refresh the cache.
+		storage->multimesh_allocate_data(multimesh, 0, RSE::MULTIMESH_TRANSFORM_3D, false, false, false);
+		ok &= observe(7, instance->data->dirty_dependencies && instance->surface_caches == nullptr);
+		r->_update_dirty_geometry_instances();
+		ok &= observe(8, instance->instance_count == 0 && instance->surface_caches == nullptr);
+		storage->multimesh_allocate_data(multimesh, 3, RSE::MULTIMESH_TRANSFORM_3D, false, false, false);
+		ok &= observe(9, instance->data->dirty_dependencies);
+		r->_update_dirty_geometry_instances();
+		ok &= observe(10, instance->instance_count == 3 && instance->surface_caches);
+		storage->multimesh_set_mesh(multimesh, RID());
+		ok &= observe(11, instance->data->dirty_dependencies && instance->surface_caches == nullptr);
+		r->_update_dirty_geometry_instances();
+		ok &= observe(12, instance->surface_caches == nullptr);
+		storage->multimesh_set_mesh(multimesh, mesh);
+		ok &= observe(13, instance->data->dirty_dependencies);
+		r->_update_dirty_geometry_instances();
+		ok &= observe(14, instance->instance_count == 3 && instance->surface_caches && !instance->data->dirty_dependencies);
+		// Retaining the original mesh dependency still invalidates the cache.
+		const RID material = storage->mesh_surface_get_material(mesh, 0);
+		storage->mesh_surface_set_material(mesh, 0, material);
+		ok &= observe(15, instance->data->dirty_dependencies && instance->surface_caches == nullptr);
+		r->_update_dirty_geometry_instances();
+		ok &= observe(16, instance->instance_count == 3 && instance->surface_caches && !instance->data->dirty_dependencies);
+		return ok;
+	}
 	template <typename R>
 	static bool run(R *r, RID mesh) {
 		constexpr bool mobile = std::is_same_v<R, RenderForwardMobile>;
@@ -234,7 +316,7 @@ public:
 #ifdef _WIN32
 #define B4_FIXTURE_EXPORT __declspec(dllexport)
 #else
-#define B4_FIXTURE_EXPORT __attribute__((visibility("default")))
+#define B4_FIXTURE_EXPORT __attribute__((used, visibility("default")))
 #endif
 extern "C" B4_FIXTURE_EXPORT int b4_render_list_fixture_run() {
 	using namespace RendererSceneRenderImplementation;
@@ -270,6 +352,9 @@ extern "C" B4_FIXTURE_EXPORT int b4_render_list_fixture_run() {
 		return ERR_UNAVAILABLE;
 	}
 	bool ok = is_mobile ? TestB4RenderListAccess::run(RenderForwardMobile::get_singleton(), mesh->get_rid()) : TestB4RenderListAccess::run(RenderForwardClustered::get_singleton(), mesh->get_rid());
+	bool multimesh_ok = is_mobile ? TestB4RenderListAccess::run_multimesh_dependencies(RenderForwardMobile::get_singleton(), mesh->get_rid()) : TestB4RenderListAccess::run_multimesh_dependencies(RenderForwardClustered::get_singleton(), mesh->get_rid());
+	std::printf("B4_LIST_MULTIMESH_DEPENDENCY=%d\n", multimesh_ok);
+	ok &= multimesh_ok;
 	std::printf("B4_LIST_ALL=%d\n", ok);
 	std::fflush(stdout);
 	return OK; // Runner asserts observations and verifies clean extension unload on red.
