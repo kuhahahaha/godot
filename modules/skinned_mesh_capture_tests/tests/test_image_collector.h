@@ -33,6 +33,10 @@
 
 #include "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_image_collector.h"
 
+#ifdef THREADS_ENABLED
+#include <thread>
+#endif
+
 namespace TestImageCollector {
 static PackedByteArray pixels() {
 	PackedByteArray bytes;
@@ -40,6 +44,50 @@ static PackedByteArray pixels() {
 	bytes.fill(37);
 	return bytes;
 }
+TEST_CASE("[P01] Image undelivered callback rejects only after its last holder") {
+	SkinnedMeshCaptureTestImageCollector collector;
+	Callable callback;
+	REQUIRE(collector.reserve(0, callback) == OK);
+	Callable retained = callback;
+	collector.close();
+	callback = Callable();
+	PackedByteArray output;
+	CHECK(collector.copy(0, output) == ERR_BUSY);
+	CHECK_FALSE(collector.drained());
+	retained = Callable();
+	CHECK(collector.copy(0, output) == ERR_UNAVAILABLE);
+	CHECK(collector.drained());
+	CHECK_FALSE(collector.poisoned());
+}
+
+TEST_CASE("[P01] Image undelivered callback rejects before collector close") {
+	SkinnedMeshCaptureTestImageCollector collector;
+	Callable callback;
+	REQUIRE(collector.reserve(0, callback) == OK);
+	callback = Callable();
+	PackedByteArray output;
+	CHECK(collector.copy(0, output) == ERR_UNAVAILABLE);
+	CHECK_FALSE(collector.drained());
+	collector.close();
+	CHECK(collector.drained());
+	CHECK_FALSE(collector.poisoned());
+}
+
+#ifdef THREADS_ENABLED
+TEST_CASE("[P01] Image undelivered callback release races safely with close") {
+	SkinnedMeshCaptureTestImageCollector collector;
+	Callable callback;
+	REQUIRE(collector.reserve(0, callback) == OK);
+	std::thread closer([&collector]() { collector.close(); });
+	callback = Callable();
+	closer.join();
+	PackedByteArray output;
+	CHECK(collector.copy(0, output) == ERR_UNAVAILABLE);
+	CHECK(collector.drained());
+	CHECK_FALSE(collector.poisoned());
+}
+#endif
+
 TEST_CASE("[P01] Image callback close waits for receipt and final copied holder") {
 	SkinnedMeshCaptureTestImageCollector collector;
 	CHECK_FALSE(collector.drained());

@@ -63,6 +63,12 @@ public:
 	Callback(std::shared_ptr<State> p_state, const SkinnedMeshCaptureTestReadbackIdentity &p_identity) : state(p_state), identity(p_identity) {}
 	~Callback() {
 		std::lock_guard<std::mutex> lock(state->mutex);
+		State::Entry &entry = state->entries[identity.slot * 2 + uint32_t(identity.consumer)];
+		if (entry.reserved && entry.identity == identity && !entry.completed && !entry.canceled) {
+			entry.canceled = true;
+			--state->pending;
+			state->poisoned = true;
+		}
 		--state->holders;
 	}
 	uint32_t hash() const override { return uint32_t(identity.token ^ (identity.token >> 32)); }

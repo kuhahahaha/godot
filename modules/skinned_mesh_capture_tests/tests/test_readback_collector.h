@@ -38,6 +38,23 @@ namespace TestSkinnedMeshCaptureTestReadbackCollector {
 static SkinnedMeshCaptureTestReadbackIdentity identity(uint32_t p_slot = 0, bool p_consumer = false) {
 	return { 1, 2, 3 + p_slot * 2 + uint64_t(p_consumer), 40 + p_slot * 2 + uint64_t(p_consumer), 5, 6, 7, 8, 9, p_slot, p_consumer };
 }
+TEST_CASE("[P01] Collector undelivered readback fails after its last holder") {
+	SkinnedMeshCaptureTestReadbackCollector collector(1, 2, false);
+	const auto id = identity();
+	Callable callback;
+	REQUIRE(collector.reserve(id, callback) == OK);
+	REQUIRE(collector.mark_enqueued(id) == OK);
+	Callable retained = callback;
+	collector.close();
+	callback = Callable();
+	PackedByteArray output;
+	CHECK(collector.copy_completed(id, output) == ERR_BUSY);
+	CHECK_FALSE(collector.drained());
+	retained = Callable();
+	CHECK(collector.copy_completed(id, output) == ERR_INVALID_DATA);
+	CHECK(collector.poisoned());
+	CHECK(collector.drained());
+}
 TEST_CASE("[P01] Collector preserves exact identity copied bytes and late close completion") {
 	SkinnedMeshCaptureTestReadbackCollector collector(1, 2, false);
 	Callable callback;
@@ -300,7 +317,7 @@ TEST_CASE("[P01] Evidence") {
 	}
 }
 
-TEST_CASE("[P01] Raw holder drain survives cancellation and missing receipt") {
+TEST_CASE("[P01] Raw holder drain fails closed after cancellation or missing receipt") {
 	using namespace TestSkinnedMeshCaptureTestReadbackCollector;
 	for (bool cancel : { false, true }) {
 		SkinnedMeshCaptureTestReadbackCollector collector(1, 2, false);
@@ -315,7 +332,10 @@ TEST_CASE("[P01] Raw holder drain survives cancellation and missing receipt") {
 		callback = Callable();
 		CHECK_FALSE(collector.drained());
 		retained = Callable();
-		CHECK(collector.drained() == cancel);
+		CHECK(collector.drained());
+		CHECK(collector.poisoned());
+		PackedByteArray output;
+		CHECK(collector.copy_completed(identity(), output) == ERR_INVALID_DATA);
 	}
 }
 
