@@ -33,6 +33,10 @@
     {
       "path": "work/framebuffer-invalidation-20261030/RECEIPT.md",
       "sha256": "dffbf033d8f28c91100b2d8639ea107d7131cbbf562bcd736afb5fb8e04f3ec7"
+    },
+    {
+      "path": "work/cb3-fd33-metal-pair-20261030/RECEIPT.md",
+      "sha256": "9d85e0fbec0ce127578fa1cc8801a533f50c89e5953853dc13158793df43fbcd"
     }
   ]
 }
