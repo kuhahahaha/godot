@@ -13,12 +13,66 @@ jobs:
     name: 📊 Static checks
     uses: ./.github/workflows/static_checks.yml
 
+  # This development fork gets one targeted Linux build per push. PRs and
+  # workflow_dispatch retain the complete upstream matrix below.
+  fork-development-smoke:
+    name: 🐧 Fork Linux sanitizer smoke
+    if: ${{ github.repository == 'kuhahahaha/godot' && github.ref_name == 'codex/particle-mainline' && github.event_name == 'push' }}
+    needs: static-checks
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    env:
+      ASAN_OPTIONS: color=always:print_suppressions=1:suppressions=${{ github.workspace }}/misc/error_suppressions/asan.txt
+      UBSAN_OPTIONS: color=always:print_suppressions=1:suppressions=${{ github.workspace }}/misc/error_suppressions/ubsan.txt
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwayland-bin lld
+      - name: Free runner disk space
+        run: sudo rm -rf /usr/local/lib/android
+      - name: Restore Godot build cache
+        uses: ./.github/actions/godot-cache-restore
+        with:
+          cache-name: linux-fork-particle-sanitizer
+        continue-on-error: true
+      - name: Setup Python and SCons
+        uses: ./.github/actions/godot-deps
+      - name: Build Linux editor
+        uses: ./.github/actions/godot-build
+        with:
+          platform: linuxbsd
+          target: editor
+          scons-flags: >-
+            dev_mode=yes module_text_server_fb_enabled=yes dev_build=yes
+            scu_build=yes debug_symbols=no precision=double tests=yes
+            use_asan=yes use_ubsan=yes use_static_cpp=no linker=lld accesskit=no
+            module_skinned_mesh_capture_tests_enabled=yes
+      - name: Run focused native regressions
+        shell: bash
+        run: |
+          ./bin/godot.linuxbsd.editor.dev.double.x86_64.san --headless --test --test-case='*[CallQueue]*' | tee callqueue.log
+          ./bin/godot.linuxbsd.editor.dev.double.x86_64.san --headless --test --test-case='*[Qualification]*' | tee qualification.log
+          ./bin/godot.linuxbsd.editor.dev.double.x86_64.san --headless --test --test-case='*[R01]*' | tee r01.log
+          for log in callqueue.log qualification.log r01.log; do
+            grep -Eq 'test cases: *[1-9][0-9]* *\|' "$log"
+          done
+      - name: Save Godot build cache
+        uses: ./.github/actions/godot-cache-save
+        with:
+          cache-name: linux-fork-particle-sanitizer
+        continue-on-error: true
+
   # Second stage: Run all the builds and some of the tests.
 
   android-build:
     name: 🤖 Android
     needs: static-checks
-    if: needs.static-checks.outputs.sources-changed == 'true' || github.event_name != 'pull_request'
+    if: ${{ (github.repository != 'kuhahahaha/godot' || github.ref_name != 'codex/particle-mainline' || github.event_name != 'push') && (needs.static-checks.outputs.sources-changed == 'true' || github.event_name != 'pull_request') }}
     uses: ./.github/workflows/android_builds.yml
     secrets:
       SERVICE_ACCOUNT_KEY: ${{ secrets.SERVICE_ACCOUNT_KEY }}
@@ -26,13 +80,13 @@ jobs:
   ios-build:
     name: 🍏 iOS
     needs: static-checks
-    if: needs.static-checks.outputs.sources-changed == 'true' || github.event_name != 'pull_request'
+    if: ${{ (github.repository != 'kuhahahaha/godot' || github.ref_name != 'codex/particle-mainline' || github.event_name != 'push') && (needs.static-checks.outputs.sources-changed == 'true' || github.event_name != 'pull_request') }}
     uses: ./.github/workflows/ios_builds.yml
 
   linux-build:
     name: 🐧 Linux
     needs: static-checks
-    if: needs.static-checks.outputs.sources-changed == 'true' || github.event_name != 'pull_request'
+    if: ${{ (github.repository != 'kuhahahaha/godot' || github.ref_name != 'codex/particle-mainline' || github.event_name != 'push') && (needs.static-checks.outputs.sources-changed == 'true' || github.event_name != 'pull_request') }}
     uses: ./.github/workflows/linux_builds.yml
     with:
       changed-files: ${{ needs.static-checks.outputs.changed-files }}
@@ -40,17 +94,17 @@ jobs:
   macos-build:
     name: 🍎 macOS
     needs: static-checks
-    if: needs.static-checks.outputs.sources-changed == 'true' || github.event_name != 'pull_request'
+    if: ${{ (github.repository != 'kuhahahaha/godot' || github.ref_name != 'codex/particle-mainline' || github.event_name != 'push') && (needs.static-checks.outputs.sources-changed == 'true' || github.event_name != 'pull_request') }}
     uses: ./.github/workflows/macos_builds.yml
 
   windows-build:
     name: 🏁 Windows
     needs: static-checks
-    if: needs.static-checks.outputs.sources-changed == 'true' || github.event_name != 'pull_request'
+    if: ${{ (github.repository != 'kuhahahaha/godot' || github.ref_name != 'codex/particle-mainline' || github.event_name != 'push') && (needs.static-checks.outputs.sources-changed == 'true' || github.event_name != 'pull_request') }}
     uses: ./.github/workflows/windows_builds.yml
 
   web-build:
     name: 🌐 Web
     needs: static-checks
-    if: needs.static-checks.outputs.sources-changed == 'true' || github.event_name != 'pull_request'
+    if: ${{ (github.repository != 'kuhahahaha/godot' || github.ref_name != 'codex/particle-mainline' || github.event_name != 'push') && (needs.static-checks.outputs.sources-changed == 'true' || github.event_name != 'pull_request') }}
     uses: ./.github/workflows/web_builds.yml
