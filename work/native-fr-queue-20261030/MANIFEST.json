@@ -8,7 +8,7 @@
     },
     {
       "path": "work/qualification-zero-snapshot-20261030/RECEIPT.md",
-      "sha256": "7e97a2ed042b1914e1e3a3988615c2f11c407e0b7f31ac61d304efabceafeedf"
+      "sha256": "cb6508e23a84a7b187b23d2d9101e8a13c9419c8f8ef5aa2f17be4a85a1c3c75"
     },
     {
       "path": "work/cb3-ac0285-metal-pair-20261030/RECEIPT.md",
@@ -68,11 +68,19 @@
     },
     {
       "path": "work/rd-retirement-cell-scope-20261030/RECEIPT.md",
-      "sha256": "b00643a77ce6a4b471c7fb0c1551748585ef29359d4dff7fa3ae2bee2d4e7e3b"
+      "sha256": "1827e7968bed20c11ec09d4d3a742428feae9417c00df09a0ca1e91211b767fc"
     },
     {
       "path": "work/d23-fd33-metal-pair-20261030/RECEIPT.md",
       "sha256": "d18ad10563c0007001cfaffa11fde510caa018bf10028e91c9a59ae3433db72a"
+    },
+    {
+      "path": "work/d23-native-readback-20261030/RECEIPT.md",
+      "sha256": "5cda86ef68af3bf32285c4d58ee4f12af9225718e60cb308b4428152f3ab71c5"
+    },
+    {
+      "path": "work/d23-qrt-native-ticket-20261030/RECEIPT.md",
+      "sha256": "e2b3e029fbb06227627d3e4ade883f2b6ecab12f45c2563a05ba7ac243812529"
     }
   ],
   "codex_goal_status_at_capture": "blocked"
