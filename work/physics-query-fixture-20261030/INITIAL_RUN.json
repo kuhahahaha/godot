@@ -1,0 +1,98 @@
+{
+  "binary_before": "897542170cf46ffed56854b489c475a9c9abeb52eee1786ef59601bfd2781ba3",
+  "binary_after": "897542170cf46ffed56854b489c475a9c9abeb52eee1786ef59601bfd2781ba3",
+  "runs": [
+    {
+      "name": "list",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*[PhysicsQueryRetirement]*",
+        "--list-test-cases"
+      ],
+      "rc": 0,
+      "success": true,
+      "backend": null,
+      "threaded": null
+    },
+    {
+      "name": "missing-config",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*[PhysicsQueryRetirement]*"
+      ],
+      "rc": 1,
+      "success": true,
+      "backend": null,
+      "threaded": null
+    },
+    {
+      "name": "scene-control",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*[SceneTree][Camera3D] Getters and setters*"
+      ],
+      "rc": 0,
+      "success": true,
+      "backend": null,
+      "threaded": null
+    },
+    {
+      "name": "godot-0",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*[PhysicsQueryRetirement]*"
+      ],
+      "rc": 0,
+      "success": true,
+      "backend": "GodotPhysics3D",
+      "threaded": "0"
+    },
+    {
+      "name": "godot-1",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*[PhysicsQueryRetirement]*"
+      ],
+      "rc": 0,
+      "success": true,
+      "backend": "GodotPhysics3D",
+      "threaded": "1"
+    },
+    {
+      "name": "jolt-0",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*[PhysicsQueryRetirement]*"
+      ],
+      "rc": 0,
+      "success": true,
+      "backend": "Jolt Physics",
+      "threaded": "0"
+    },
+    {
+      "name": "jolt-1",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*[PhysicsQueryRetirement]*"
+      ],
+      "rc": 0,
+      "success": true,
+      "backend": "Jolt Physics",
+      "threaded": "1"
+    }
+  ]
+}
