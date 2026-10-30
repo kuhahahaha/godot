@@ -1,0 +1,343 @@
+ M drivers/gles3/storage/texture_storage.cpp
+ M drivers/gles3/storage/texture_storage.h
+ M servers/rendering/dummy/storage/texture_storage.h
+ M servers/rendering/renderer_rd/storage_rd/texture_storage.cpp
+ M servers/rendering/renderer_rd/storage_rd/texture_storage.h
+ M servers/rendering/storage/texture_storage.h
+ D work/d-native-lane-receipt-20261024/ACCELERATION_DEFERRED_MEMORY_AUDIT_20251025.md
+ D work/d-native-lane-receipt-20261024/ALLOCATION_IDENTITY_OWNER_CAPACITY_BLOCKER_20251025.md
+ D work/d-native-lane-receipt-20261024/ALLOCATION_IDENTITY_OWNER_CAPACITY_RECEIPT_20251025.md
+ D work/d-native-lane-receipt-20261024/BLAS_DEPENDENCY_INVALIDATION_AUDIT_20251025.md
+ D work/d-native-lane-receipt-20261024/CANCEL_UNRECORDED_RESULT_BLOCKER.md
+ D work/d-native-lane-receipt-20261024/CODEC_FRAME_TERMINAL_BLOCKER.md
+ D work/d-native-lane-receipt-20261024/COLLECTOR_CLEANUP_SEAM_CHECK.json
+ D work/d-native-lane-receipt-20261024/COLLECTOR_CLEANUP_SEAM_REVIEW.md
+ D work/d-native-lane-receipt-20261024/COLLECTOR_WRITER_FAILURE_DELTA_BLOCKER.md
+ D work/d-native-lane-receipt-20261024/DELIVERY_HOLDER_ERROR_BLOCKER.md
+ D work/d-native-lane-receipt-20261024/DUPLICATE_CANCEL_FIX_CHECK.json
+ D work/d-native-lane-receipt-20261024/DUPLICATE_CANCEL_FIX_REVIEW.md
+ D work/d-native-lane-receipt-20261024/DUPLICATE_REJECTION_ENQUEUE_FIX_REVIEW.md
+ D work/d-native-lane-receipt-20261024/DYNAMIC_PERSISTENT_MAP_FAILURE_BLOCKER_20251025.md
+ D work/d-native-lane-receipt-20261024/D_FINAL_QUALIFICATION_HANDOFF.md
+ D work/d-native-lane-receipt-20261024/FENCE_PRESENTATION_FINALIZATION_AUDIT_20251025.md
+ D work/d-native-lane-receipt-20261024/FINAL_NATIVE_SLICE_SCAN_20261024.json
+ D work/d-native-lane-receipt-20261024/FINAL_NATIVE_SLICE_SCAN_20261024.md
+ D work/d-native-lane-receipt-20261024/FRAME_DEFERRED_DISPOSAL_AUDIT_20251025.md
+ D work/d-native-lane-receipt-20261024/FR_NATIVE_COVERAGE_MATRIX_20261024.json
+ D work/d-native-lane-receipt-20261024/FR_NATIVE_COVERAGE_MATRIX_20261024.md
+ D work/d-native-lane-receipt-20261024/FR_NATIVE_QUALIFICATION_GAPS_20261024.json
+ D work/d-native-lane-receipt-20261024/FR_NATIVE_QUALIFICATION_GAPS_20261024.md
+ D work/d-native-lane-receipt-20261024/FR_NATIVE_QUALIFICATION_GAPS_INDEPENDENT_REVIEW.md
+ D work/d-native-lane-receipt-20261024/IMAGE_COLLECTOR_CLOSE_DRAIN_CHECK.json
+ D work/d-native-lane-receipt-20261024/IMAGE_COLLECTOR_CLOSE_DRAIN_REVIEW.md
+ D work/d-native-lane-receipt-20261024/IMAGE_COPY_ERROR_RESULT_CHECK.json
+ D work/d-native-lane-receipt-20261024/IMAGE_COPY_ERROR_RESULT_REVIEW.md
+ D work/d-native-lane-receipt-20261024/IMAGE_DUPLICATE_REJECT_FIX_CHECK.json
+ D work/d-native-lane-receipt-20261024/IMAGE_DUPLICATE_REJECT_FIX_REVIEW.md
+ D work/d-native-lane-receipt-20261024/IMAGE_METADATA_ERROR_BOUNDARY_CHECK.json
+ D work/d-native-lane-receipt-20261024/IMAGE_METADATA_ERROR_BOUNDARY_REVIEW.md
+ D work/d-native-lane-receipt-20261024/IMAGE_REJECT_ERROR_PROPAGATION_CHECK.json
+ D work/d-native-lane-receipt-20261024/IMAGE_REJECT_ERROR_PROPAGATION_REVIEW.md
+ D work/d-native-lane-receipt-20261024/IMAGE_RESOURCE_ROLLBACK_FIX_CHECK.json
+ D work/d-native-lane-receipt-20261024/IMAGE_RESOURCE_ROLLBACK_FIX_REVIEW.md
+ D work/d-native-lane-receipt-20261024/ISOLATED_NATIVE_CLEANUP_PATCH_PLAN_20251025.md
+ D work/d-native-lane-receipt-20261024/ISOLATION_OWNER_CHECK_20251025.md
+ D work/d-native-lane-receipt-20261024/NATIVE_CLEANUP_RETIREMENT_SLICE_AUDIT_20261025.md
+ D work/d-native-lane-receipt-20261024/NATIVE_HANDLE_ESCAPE_AUDIT_20251025.md
+ D work/d-native-lane-receipt-20261024/NATIVE_QUEUE_CALLBACK_LIMITED_RECEIPT.json
+ D work/d-native-lane-receipt-20261024/NATIVE_QUEUE_CALLBACK_LIMITED_RECEIPT.md
+ D work/d-native-lane-receipt-20261024/NATIVE_SESSION_FAILURE_CLEANUP_BLOCKER.md
+ D work/d-native-lane-receipt-20261024/NATIVE_SOURCE_DRAW_SELECTION_BLOCKER.md
+ D work/d-native-lane-receipt-20261024/NEW_INPUT_ADMISSION_REVIEW_20261024.json
+ D work/d-native-lane-receipt-20261024/NEW_INPUT_ADMISSION_REVIEW_20261024.md
+ D work/d-native-lane-receipt-20261024/PHASE_OBSERVER_STATE_BLOCKER.md
+ D work/d-native-lane-receipt-20261024/PUBLICATION_ERROR_RESULT_CHECK.json
+ D work/d-native-lane-receipt-20261024/PUBLICATION_ERROR_RESULT_REVIEW.md
+ D work/d-native-lane-receipt-20261024/PUBLISH_STATUS_SNAPSHOT_BLOCKER.md
+ D work/d-native-lane-receipt-20261024/QUALIFICATION_STATUS_INDEX_20261024.json
+ D work/d-native-lane-receipt-20261024/QUALIFICATION_STATUS_INDEX_20261024.md
+ D work/d-native-lane-receipt-20261024/QUALIFICATION_STATUS_INDEX_INDEPENDENT_REVIEW.md
+ D work/d-native-lane-receipt-20261024/QUEUE_MEMORY_VISIBILITY_DELTA_BLOCKER.md
+ D work/d-native-lane-receipt-20261024/QUEUE_MEMORY_VISIBILITY_INDEPENDENT_REVIEW.md
+ D work/d-native-lane-receipt-20261024/QUEUE_RELEASE_SEAM_BLOCKER.md
+ D work/d-native-lane-receipt-20261024/QUEUE_REPORT_ADMISSION_AUDIT_20251025.md
+ D work/d-native-lane-receipt-20261024/QUEUE_STATS_STALE_TOKEN_DELTA_BLOCKER.md
+ D work/d-native-lane-receipt-20261024/RDPOOL_PARTIAL_ENQUEUE_RETIREMENT_BLOCKER.md
+ D work/d-native-lane-receipt-20261024/READBACK_CANCEL_ERROR_PROPAGATION_CHECK.json
+ D work/d-native-lane-receipt-20261024/READBACK_CANCEL_ERROR_PROPAGATION_REVIEW.md
+ D work/d-native-lane-receipt-20261024/READBACK_COPY_ERROR_RESULT_CHECK.json
+ D work/d-native-lane-receipt-20261024/READBACK_COPY_ERROR_RESULT_REVIEW.md
+ D work/d-native-lane-receipt-20261024/READBACK_MARK_ENQUEUED_FAILURE_BLOCKER.md
+ D work/d-native-lane-receipt-20261024/READBACK_TOKEN_OVERFLOW_FIX_CHECK.json
+ D work/d-native-lane-receipt-20261024/READBACK_TOKEN_OVERFLOW_FIX_REVIEW.md
+ D work/d-native-lane-receipt-20261024/RECEIPT.json
+ D work/d-native-lane-receipt-20261024/RECEIPT.md
+ D work/d-native-lane-receipt-20261024/RECEIVE_PUBLICATION_STATE_BLOCKER.md
+ D work/d-native-lane-receipt-20261024/REINTERPRET_BUFFER_CREATE_FAILURE_BLOCKER_20251025.md
+ D work/d-native-lane-receipt-20261024/RENDERER_CLEANUP_SEAM_BLOCKER.md
+ D work/d-native-lane-receipt-20261024/RESOURCE_OBSERVE_FREE_PROPAGATION_BLOCKER.md
+ D work/d-native-lane-receipt-20261024/RESOURCE_RETIREMENT_BLOCKER.md
+ D work/d-native-lane-receipt-20261024/RESOURCE_RETIREMENT_ISOLATED_BLOCKER.md
+ D work/d-native-lane-receipt-20261024/RESOURCE_RETIREMENT_PATCH_BLOCKER.md
+ D work/d-native-lane-receipt-20261024/RETIREMENT_ERROR_RESULT_BLOCKER.md
+ D work/d-native-lane-receipt-20261024/ROUND2_BLOCKER.md
+ D work/d-native-lane-receipt-20261024/SBT_SCRATCH_CLEANUP_AUDIT_20251025.md
+ D work/d-native-lane-receipt-20261024/SECOND_ERROR_CLEANUP_SLICE_BLOCKER.md
+ D work/d-native-lane-receipt-20261024/SERVICE_RETIREMENT_REGISTRY_BLOCKER.md
+ D work/d-native-lane-receipt-20261024/SHARED_TEXTURE_FALLBACK_CREATE_FAILURE_BLOCKER_20251025.md
+ D work/d-native-lane-receipt-20261024/STATUS_PAYLOAD_DUPLICATION_BLOCKER.md
+ D work/d-native-lane-receipt-20261024/SYNC_READBACK_MAP_FAILURE_BLOCKER_20251025.md
+ D work/d-native-lane-receipt-20261024/TEXTURE_READBACK_MAP_FAILURE_BLOCKER_20251025.md
+ D work/d-native-lane-receipt-20261024/THREE_DUPLICATE_FIX_REGRESSION.md
+ D work/d-native-lane-receipt-20261024/THREE_SURFACE_QUALITY_INDEPENDENT_REVIEW.md
+ D work/d-native-lane-receipt-20261024/THREE_SURFACE_QUALITY_SCAN_20261024.json
+ D work/d-native-lane-receipt-20261024/THREE_SURFACE_QUALITY_SCAN_20261024.md
+ D work/d-native-lane-receipt-20261024/TLAS_BUILD_PARTIAL_MUTATION_BLOCKER_20251025.md
+ D work/d-native-lane-receipt-20261024/TLAS_BUILD_ROLLBACK_DESIGN_20251025.md
+ D work/d-native-lane-receipt-20261024/TLAS_INSTANCE_BUFFER_AUDIT_20251025.md
+ D work/d-native-lane-receipt-20261024/TYPED_CLOSE_RETIREMENT_DELTA_BLOCKER.md
+ D work/d-native-lane-receipt-20261024/TYPED_IDENTITY_LATE_CALLBACK_DELTA_BLOCKER.md
+ D work/d-native-lane-receipt-20261024/U02_CALLER_AND_P2_GROWTH_CONTINUATION_20251025.md
+ D work/d-native-lane-receipt-20261024/VFX_ROLLBACK_CLOSE_FAILED_030_ROOT_CAUSE_BLOCKER_20251025.md
+ D work/d-native-lane-receipt-20261024/WRITE_CENSUS_TEXTURE_IDENTITY_BLOCKER.md
+ D work/d-native-lane-receipt-20261024/resource-retirement-error-propagation.patch
+ D work/e15-e16-retirement-audit-20261024/E15_E16_NATIVE_FOLLOWUP.json
+ D work/e25-gate-min-payload-20261024/E25_GATE_BLOCKER_MANIFEST.json
+ D work/e25-gate-min-payload-20261024/SHA256
+ M work/joint-integration-native-20261029/ANGE_SLOW_RECHECK_20261029.md
+ M work/joint-integration-native-20261029/LONG_GOAL_AUDIT_20261029.md
+ M work/joint-integration-native-20261029/MANIFEST.json
+ D work/k03-typed-close-20261024/DEFERRED_RETIREMENT_AUDIT.json
+ D work/k03-typed-close-20261024/FOCUSED_NATIVE_CHECK.json
+ D work/k03-typed-close-20261024/REVIEW.md
+ M work/native-long-goal-ledger-20261030/LEDGER.md
+ D work/p2-transfer-successor/FINAL_REVIEW.md
+ D work/skin-palette-commit-package/CANONICAL_ACCEPTANCE_26_20261024.json
+ D work/skin-palette-commit-package/CANONICAL_ACCEPTANCE_RECONCILIATION_20261024.json
+ D work/skin-palette-commit-package/native-core-production/ACCEPTANCE_EVIDENCE_AUDIT_20261024.json
+ D work/skin-palette-commit-package/native-core-production/FR_core_interface.md
+ D work/skin-palette-commit-package/native-core-production/FR_core_interface_PLAN.md
+ D work/skin-palette-commit-package/native-core-production/code-holder/FR_library_close.md
+ M work/typed-lifecycle-abi-v1/MANIFEST.json
+ M work/typed-lifecycle-abi-v1/PROGRESS.md
+ M work/typed-lifecycle-abi-v1/gdextension_interface.h
+ D work/viewport-ordinary-history-fix/README.md
+ D work/viewport-ordinary-history-fix/identity.json
+ D work/viewport-ordinary-history-fix/production.patch
+ D work/viewport-ordinary-history-fix/regression.txt
+ D work/viewport-ordinary-history-fix/visible.txt
+ D work/viewport-unregistered-capture-fix/README.md
+ D work/viewport-unregistered-capture-fix/identity.json
+ D work/viewport-unregistered-capture-fix/production.patch
+ D work/viewport-unregistered-capture-fix/registration.log
+ D work/viewport-unregistered-capture-fix/visible.log
+?? --out/
+?? tools/
+?? work/b4-indexed144-native-consumer-20261028-r1/POST_PIN_COMBINED.rc
+?? work/b4-indexed144-native-consumer-20261028-r1/POST_PIN_COMBINED_COMMAND.json
+?? work/b4-indexed144-native-consumer-20261028-r1/QUALIFICATION_FIX_BUILD.rc
+?? work/b4-indexed144-native-consumer-20261028-r1/QUALIFICATION_FIX_BUILD_R2.rc
+?? work/b4-indexed144-native-consumer-20261028-r1/QUALIFICATION_FIX_BUILD_R2_COMMAND.json
+?? work/b4-indexed144-native-consumer-20261028-r1/QUALIFICATION_FIX_LINK.rc
+?? work/b4-indexed144-native-consumer-20261028-r1/QUALIFICATION_FIX_LINK_COMMAND.json
+?? work/b4-indexed144-native-consumer-20261028-r1/QUALIFICATION_FIX_LINK_R2.rc
+?? work/b4-indexed144-native-consumer-20261028-r1/QUALIFICATION_FIX_LINK_R3.rc
+?? work/b4-indexed144-native-consumer-20261028-r1/QUALIFICATION_FIX_LINK_R4.rc
+?? work/b4-indexed144-native-consumer-20261028-r1/QUALIFICATION_FIX_RUN.rc
+?? work/b4-indexed144-native-consumer-20261028-r1/QUALIFICATION_FIX_RUN_R2.rc
+?? work/b4-indexed144-native-consumer-20261028-r1/godot-indexed144
+?? work/b4-indexed144-native-consumer-20261028-r1/render-runtime/probe.dylib
+?? work/b4-native-capture-332b11af-20261027/
+?? work/b4-native-multimesh-d46585a4-20261027/
+?? work/canonical-dso-runtime-red-20261028/
+?? work/ci-linux-double-sanitizer-lld-20261030/
+?? work/ci-message-queue-fix-20261030/
+?? work/core-helper-review-revision.md
+?? work/core-helper-review.md
+?? work/current-editor-build-20261030/
+?? work/current-editor-rebuild-20261028.rc
+?? work/current-pair-post-rebuild-20261030/
+?? work/current-pair-runtime-20261028/runtime-invalid-vfx/
+?? work/current-pair-runtime-20261028/runtime-no-vfx/
+?? work/current-pair-runtime-20261028/runtime-vfx/
+?? work/current-pair-runtime-current-dso-20261028/
+?? work/current-pair-runtime-new-dso-20261028/
+?? work/current-pair-runtime-public-r4-20261030/
+?? work/d-binding-rollback-receipt.md
+?? work/d-current-pair-baseline-20261030/
+?? work/descriptor-return-native-20261029/
+?? work/e05-capacity-native-20261029/
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_AGGREGATE_DRYRUN.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_AGGREGATE_DRYRUN_R2.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_ARCHIVE_CHECK.json
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_ARCHIVE_CHECK_R5.json
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_ARCHIVE_CHECK_R6.json
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_ARCHIVE_CHECK_R7.json
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_ARCHIVE_CHECK_R8.json
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_ARCHIVE_CHECK_R9.json
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_BUILD.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_BUILD_COMMAND.json
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_BUILD_R10.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_BUILD_R11.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_BUILD_R12.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_BUILD_R13.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_BUILD_R14.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_BUILD_R2.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_BUILD_R3.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_BUILD_R4.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_BUILD_R5.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_BUILD_R6.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_BUILD_R9.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_EDITOR_VARIANT_DRYRUN.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_HASH_R10.txt
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_HASH_R11.txt
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_HASH_R12.txt
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_HASH_R13.txt
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_HASH_R14.txt
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_HASH_R9.txt
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_HOST_BUILD.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_HOST_BUILD_R2.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_HOST_BUILD_R3.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_HOST_BUILD_R4.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_HOST_BUILD_R5.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_HOST_BUILD_R6.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_HOST_BUILD_R7.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_HOST_RUN.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_HOST_RUN_COMMAND.json
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_HOST_RUN_COMMAND_R2.json
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_HOST_RUN_R10.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_HOST_RUN_R2.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_HOST_RUN_R5.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_HOST_RUN_R6.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_HOST_RUN_R7.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_HOST_RUN_R8.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_HOST_RUN_R9.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_IDENTITY_TESTS.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_IDENTITY_TESTS_DIRECT.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_NOOP_R7.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_NOOP_R8.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_RUNTIME_INPUTS.json
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_RUNTIME_INPUTS_R6.json
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_TEMPLATE_ARCHIVE_CHECK_R1.json
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_TEMPLATE_BUILD_R1.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_TEMPLATE_DRYRUN.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_TEMPLATE_HOST_BUILD_R1.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_TEMPLATE_HOST_BUILD_R2.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_TEMPLATE_HOST_RUN_R1.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_TEMPLATE_HOST_UNAVAILABLE.json
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_TEMPLATE_IDENTITY_HOST_BUILD.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_TEMPLATE_IDENTITY_HOST_RUN.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_TEMPLATE_VARIANT_DRYRUN.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_VARIANT_DRYRUN.rc
+?? work/e06-loaded-core-identity-20261028-r1/STATIC_VARIANT_IDENTITY_TESTS.rc
+?? work/e06-loaded-core-identity-20261028-r1/fixed-inputs/godot.882d69ab.arm64
+?? work/e06-loaded-core-identity-20261028-r1/fixed-inputs/godot.controlled.exe.arm64
+?? work/e06-loaded-core-identity-20261028-r1/fixed-inputs/relocated-core
+?? work/e06-loaded-core-identity-20261028-r1/static-host
+?? work/e06-loaded-core-identity-20261028-r1/static-runtime/
+?? work/e06-loaded-core-identity-20261028-r1/static-template-debug-identity-host/
+?? work/e06-loaded-core-identity-20261028-r1/static-template-host
+?? work/e06-loaded-core-identity-20261028-r1/static-template-host.pck
+?? work/e06-loaded-core-identity-20261028-r1/static-template-identity-host
+?? work/e06-loaded-core-identity-20261028-r1/static_host.mm
+?? work/e06-loaded-core-identity-20261028-r1/static_template_host.mm
+?? work/e06-loaded-core-identity-20261028-r1/static_template_identity_host.cpp
+?? work/e06-loaded-core-shared-20261028-r1/NONBUILTIN_BUILD_CURRENT.rc
+?? work/e06-loaded-core-shared-20261028-r1/NONBUILTIN_DRYRUN.rc
+?? work/e06-loaded-core-shared-20261028-r1/SHARED_BUILD_CURRENT.rc
+?? work/e06-loaded-core-shared-20261028-r1/SHARED_BUILD_CURRENT_R2.rc
+?? work/e06-loaded-core-shared-20261028-r1/SHARED_CURRENT_ARCHIVE_CHECK.json
+?? work/e06-loaded-core-shared-20261028-r1/SHARED_CURRENT_ARCHIVE_CHECK_R2.json
+?? work/e06-loaded-core-shared-20261028-r1/SHARED_CURRENT_RUNTIME_INPUTS.json
+?? work/e06-loaded-core-shared-20261028-r1/SHARED_CURRENT_RUNTIME_INPUTS_R2.json
+?? work/e06-loaded-core-shared-20261028-r1/SHARED_CURRENT_core_R2.rc
+?? work/e06-loaded-core-shared-20261028-r1/SHARED_CURRENT_early_help_R2.rc
+?? work/e06-loaded-core-shared-20261028-r1/SHARED_CURRENT_start_R2.rc
+?? work/e06-loaded-core-shared-20261028-r1/SHARED_IDENTITY_TESTS.rc
+?? work/e06-loaded-core-shared-20261028-r1/SHARED_IDENTITY_TESTS_R2.rc
+?? work/e06-loaded-core-shared-20261028-r1/SHARED_NOOP_CURRENT.rc
+?? work/e06-loaded-core-shared-20261028-r1/SHARED_RESTORED_NOOP_R4.rc
+?? work/e06-loaded-core-shared-20261028-r1/SHARED_RESTORED_core.rc
+?? work/e06-loaded-core-shared-20261028-r1/SHARED_RESTORED_early_help.rc
+?? work/e06-loaded-core-shared-20261028-r1/SHARED_RESTORED_start.rc
+?? work/e06-loaded-core-shared-20261028-r1/SHARED_RESTORE_BUILTIN_R3.rc
+?? work/e06-loaded-core-shared-20261028-r1/fixed-core-only-fix/libgodot.core-only-fix.arm64.dylib
+?? work/e06-loaded-core-shared-20261028-r1/fixed-inputs/libgodot.controlled.shared.arm64.dylib
+?? work/e06-loaded-core-shared-20261028-r1/loaded_module_probe
+?? work/e06-loaded-core-shared-20261028-r1/pending_guard.dylib
+?? work/e22-native-snapshot-20261026/
+?? work/godot-ci-native-gpu-20261030/
+?? work/godot-native-transfer-recheck-20261030/
+?? work/joint-integration-native-20261029/B_CANONICAL_LIFECYCLE_COMPATIBILITY_20261030.json
+?? work/joint-integration-native-20261029/B_CANONICAL_LIFECYCLE_COMPATIBILITY_AUDIT_20261030.md
+?? work/joint-integration-native-20261029/artifacts/godot-macos-editor-7e63110bf209811e
+?? work/joint-integration-native-20261029/regenerated-fixture-runtime/
+?? work/k03-cfada-u01-20261026/
+?? work/k03-current-u01-20261026/
+?? work/k03-debugging-skill-read.txt
+?? work/k03-e05-cleanup-20261026/
+?? work/k03-library-quiesce-20261026/
+?? work/k03-native-close-review.md
+?? work/k03-native-integration-20261026/
+?? work/k03-no-effect-pin-20261026/
+?? work/k03-rt-close-interleaving-20261026/
+?? work/k03-separate-rt-cancel-20261026/
+?? work/k03-separate-rt-compute-20261026/
+?? work/k03-upload-revision-20261026/
+?? work/k03-vulkan-fence-loss-20261026/
+?? work/k03-vulkan-native-observation-20261026/
+?? work/k03-vulkan-qualification-20261026/
+?? work/native-abi-shape-20261026/
+?? work/native-bridge-implementation-20261026/
+?? work/native-buffer-span-20261028-r1/godot-span
+?? work/native-buffer-span-20261028-r1/original_rendering_device.cpp
+?? work/native-clear-contract-20261028-r1/fixed-inputs/
+?? work/native-clear-contract-20261028-r1/godot-clear
+?? work/native-clear-contract-20261028-r1/original_rendering_device.cpp
+?? work/native-compute-indirect-span-20261028-r1/godot-span
+?? work/native-k02-root-integration-20261027/
+?? work/native-main-60193dc-build-20261027/
+?? work/native-numeric-late-return-20261028-r1/runtime/probe.dylib
+?? work/native-numeric-same-request-20261028-r1/export_unit
+?? work/native-numeric-same-request-20261028-r1/runtime/probe.dylib
+?? work/native-numeric-same-request-20261029-r2/export_unit
+?? work/native-numeric-same-request-20261029-r2/runtime/probe.dylib
+?? work/native-numeric-unit-correlation-20261029/runtime/probe.dylib
+?? work/native-owner-finalize-20261026/
+?? work/native-range-current-metal-20261028-r1/runtime/probe.dylib
+?? work/native-range-integration-20261028-r1/fixed-inputs/
+?? work/native-source-closure-audit-20261030/
+?? work/p01-dirty-diff.txt
+?? work/p01-dirty-observer-provenance.txt
+?? work/p01-dirty-provenance.txt
+?? work/p01-provenance-latest.txt
+?? work/pck-platform-audit-20261030/fixture/.godot/
+?? work/pck-platform-audit-20261030/fixture/ange.gdextension.uid
+?? work/pck-platform-audit-20261030/fixture/bench-audit.pck
+?? work/pck-platform-audit-20261030/fixture/probe.gd.uid
+?? work/phs1-native-20261026/
+?? work/public-ci-reconcile-20261029/
+?? work/qualification-owner-capacity-20261029/runtime/probe.dylib
+?? work/qualification-ticket-capacity-20261029/runtime/probe.dylib
+?? work/r01-admission-debug-20261028-r1/
+?? work/r01-async-readback-20261026/
+?? work/r01-frame-wait-20261026/
+?? work/r01-native-issue-20261026/
+?? work/runtime-holder-audit-20261029/
+?? work/scene-install-v2-20261026/
+?? work/scene-install-v2-delivery-20261027/
+?? work/staging-region-bounds-20261029/
+?? work/t1-texture-original-owner-20261029/
+?? work/tcp-stop-local-20261029/
+?? work/texture-base-format-20261029/
+?? work/typed-lifecycle-abi-v1/CURRENT_FIXED_PAIR_RUNTIME_RECEIPT_20251025.md
+?? work/typed-lifecycle-abi-v1/NEW_PAIR_RUNTIME_RECEIPT_20251025.md
+?? work/typed-lifecycle-abi-v1/R01_R02_NATIVE_FOCUSED_RECEIPT_20251025.md
+?? work/typed-lifecycle-abi-v1/R01_R02_PRODUCTION_SEAM_MANIFEST_20251025.md
+?? work/typed-lifecycle-abi-v1/R02_OWNER_ADAPTER_MINIMUM_20251025.md
+?? work/typed-lifecycle-abi-v1/R02_PRODUCTION_APPEND_AUDIT_20251025.md
+?? work/typed-lifecycle-abi-v1/R02_PRODUCTION_APPEND_AUDIT_FREEZE_20251025.md
+?? work/typed-lifecycle-abi-v1/U01_RUNTIME_OWNER_SEAM_BLOCKER_20251025.md
+?? work/typed-lifecycle-abi-v1/native-dynamic/
+?? work/u01-vfx-diagnostic-r2-20261030/
+?? work/vulkan-descriptor-return-20261029/
