@@ -4,8 +4,8 @@
   "expected_editor_sha": "37743639ba01d06aa9b43c5c21582a8d4683ecfcd0ec3ab5b9cbf5e4600bb7e6",
   "status": "PASS",
   "ledger_path": "work/native-long-goal-ledger-20261030/LEDGER.md",
-  "ledger_sha": "109f557933c9c0947d94103cfaa3c005097fd57eb693cdc1f2860f751c4a94b9",
-  "expected_ledger_sha": "109f557933c9c0947d94103cfaa3c005097fd57eb693cdc1f2860f751c4a94b9",
+  "ledger_sha": "7cff543ef8c7554403ea76a19f95adc3b0501212682c09f22a034af29ffe35cc",
+  "expected_ledger_sha": "7cff543ef8c7554403ea76a19f95adc3b0501212682c09f22a034af29ffe35cc",
   "actual_editor_sha": "37743639ba01d06aa9b43c5c21582a8d4683ecfcd0ec3ab5b9cbf5e4600bb7e6",
   "editor_receipt_current": "work/current-editor-tests-recheck-20261030/RESULT.md"
 }
