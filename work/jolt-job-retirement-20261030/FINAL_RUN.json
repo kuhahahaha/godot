@@ -1,0 +1,106 @@
+{
+  "binary_before": "58ef98c1fe6cc8430138d9860ff5503cf049a27b21711099d7600c6734db6c8a",
+  "binary_after": "58ef98c1fe6cc8430138d9860ff5503cf049a27b21711099d7600c6734db6c8a",
+  "runs": [
+    {
+      "name": "valid",
+      "env": {
+        "GODOT_TEST_JOLT_JOB_RETIREMENT": "valid"
+      },
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*[JoltJobSystem] shutdown retains a worker*"
+      ],
+      "rc": 0,
+      "success": true
+    },
+    {
+      "name": "race",
+      "env": {
+        "GODOT_TEST_JOLT_JOB_RETIREMENT": "race"
+      },
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*[JoltJobSystem] shutdown retains a worker*"
+      ],
+      "rc": 0,
+      "success": true
+    },
+    {
+      "name": "owners",
+      "env": {},
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*[JoltJobSystem] completed jobs remain*"
+      ],
+      "rc": 0,
+      "success": true
+    },
+    {
+      "name": "godot-0",
+      "env": {
+        "GODOT_TEST_PHYSICS_3D_BACKEND": "GodotPhysics3D",
+        "GODOT_TEST_PHYSICS_3D_THREADED": "0"
+      },
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*[PhysicsQueryRetirement]*"
+      ],
+      "rc": 0,
+      "success": true
+    },
+    {
+      "name": "godot-1",
+      "env": {
+        "GODOT_TEST_PHYSICS_3D_BACKEND": "GodotPhysics3D",
+        "GODOT_TEST_PHYSICS_3D_THREADED": "1"
+      },
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*[PhysicsQueryRetirement]*"
+      ],
+      "rc": 0,
+      "success": true
+    },
+    {
+      "name": "jolt-0",
+      "env": {
+        "GODOT_TEST_PHYSICS_3D_BACKEND": "Jolt Physics",
+        "GODOT_TEST_PHYSICS_3D_THREADED": "0"
+      },
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*[PhysicsQueryRetirement]*"
+      ],
+      "rc": 0,
+      "success": true
+    },
+    {
+      "name": "jolt-1",
+      "env": {
+        "GODOT_TEST_PHYSICS_3D_BACKEND": "Jolt Physics",
+        "GODOT_TEST_PHYSICS_3D_THREADED": "1"
+      },
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*[PhysicsQueryRetirement]*"
+      ],
+      "rc": 0,
+      "success": true
+    }
+  ]
+}

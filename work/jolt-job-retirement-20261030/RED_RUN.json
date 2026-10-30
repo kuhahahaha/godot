@@ -1,0 +1,28 @@
+{
+  "binary_before": "54ff9e22de4123b06fc6b08079780206dcbbf0bcc66ccd2cc72b90ae2cfee2f7",
+  "binary_after": "54ff9e22de4123b06fc6b08079780206dcbbf0bcc66ccd2cc72b90ae2cfee2f7",
+  "runs": [
+    {
+      "mode": "valid",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*[JoltJobSystem] shutdown retains a worker*"
+      ],
+      "rc": 0,
+      "matched": true
+    },
+    {
+      "mode": "race",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*[JoltJobSystem] shutdown retains a worker*"
+      ],
+      "rc": 86,
+      "matched": true
+    }
+  ]
+}
