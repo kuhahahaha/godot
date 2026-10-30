@@ -1,3 +1,33 @@
+/**************************************************************************/
+/*  test_qualification_physical.cpp                                       */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
 #include "core/crypto/crypto_core.h"
 #include "core/extension/gdextension_qualification_internal.h"
 #include "core/object/callable_mp.h"
@@ -426,7 +456,7 @@ public:
 				}
 				CHECK(ticket.resource_pins.is_empty());
 				CHECK(cell->uses.size() == 1);
-				// Fixture cleanup is not a ticket acknowledgement receipt.
+				// Fixture cleanup is not a ticket acknowledgment receipt.
 				cell->uses.clear();
 				ticket.physical_uses.clear();
 			}
@@ -4452,7 +4482,7 @@ TEST_CASE("[Qualification][T1] Metal original sampler owner physically returns a
 }
 #endif
 
-TEST_CASE("[Qualification][T1] texture ticket acknowledgement preserves the neighboring original use") {
+TEST_CASE("[Qualification][T1] texture ticket acknowledgment preserves the neighboring original use") {
 	RenderingDevice device;
 	TestQualificationPhysical::Driver driver;
 	TestQualificationPhysicalAccess::attach(device, driver);
@@ -4460,7 +4490,7 @@ TEST_CASE("[Qualification][T1] texture ticket acknowledgement preserves the neig
 	TestQualificationPhysicalAccess::detach(device);
 }
 
-TEST_CASE("[Qualification][T1] sampler ticket acknowledgement preserves the neighboring original use") {
+TEST_CASE("[Qualification][T1] sampler ticket acknowledgment preserves the neighboring original use") {
 	RenderingDevice device;
 	TestQualificationPhysical::Driver driver;
 	TestQualificationPhysicalAccess::attach(device, driver);

@@ -8933,7 +8933,7 @@ void RenderingDevice::free_rid(RID p_rid) {
 	auto *pipeline = compute_pipeline_owner.get_or_null(p_rid);
 	auto *texture = texture_owner.get_or_null(p_rid);
 	auto *sampler = sampler_owner.get_or_null(p_rid);
-	ERR_FAIL_COND_MSG(!qualification_retiring && ((buffer && buffer->qualification_return) || (shader && shader->qualification_return) || (pipeline && pipeline->qualification_return) || (texture && texture->qualification_return) || (sampler && sampler->qualification_return)), "Qualification resources require their original owner retirement acknowledgement.");
+	ERR_FAIL_COND_MSG(!qualification_retiring && ((buffer && buffer->qualification_return) || (shader && shader->qualification_return) || (pipeline && pipeline->qualification_return) || (texture && texture->qualification_return) || (sampler && sampler->qualification_return)), "Qualification resources require their original owner retirement acknowledgment.");
 	ERR_FAIL_COND_MSG(texture && texture->qualification_return && texture->transfer_worker_index >= 0, "Qualification texture has an unsettled transfer worker.");
 	ERR_FAIL_COND_MSG(_qualification_resource_busy(p_rid), "Qualification ticket still owns this resource or one of its dependents.");
 	if (!_free_dependencies(p_rid)) { // Recursively erase dependencies first, to avoid potential API problems.
