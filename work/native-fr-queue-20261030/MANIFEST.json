@@ -57,6 +57,10 @@
     {
       "path": "work/rd-pipeline-enqueue-refusal-20261030/RECEIPT.md",
       "sha256": "1bec72c52587161d63afa2bd942c5d475018896c7b06019d892e7ba49cfb4b38"
+    },
+    {
+      "path": "work/rd-pipeline-8283-20261030/RECEIPT.md",
+      "sha256": "d5a226734bdf8abd2071011e0c07b57e6793a7fb3666dd84e2d51bb63b98ee75"
     }
   ],
   "codex_goal_status_at_capture": "blocked"
