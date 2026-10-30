@@ -1,0 +1,12 @@
+{
+  "parent": "cb3d43bb27bea7a130bd85fb8bff0f4d94d1d9b8",
+  "commit": "ebc124a490d525c5f1bb42dc6af763347acba712",
+  "tree": "c3d3d1d67be78102c429305292de2fe6cd196247",
+  "ref": "refs/codex/qualification-zero-snapshot-cb3-20261030",
+  "prior_candidate": "a289a6a46f3de6261186091525df5034e535e8fe",
+  "paths": [
+    "core/extension/gdextension_qualification_ticket.cpp",
+    "tests/servers/rendering/test_qualification_ticket.cpp"
+  ],
+  "pushed": false
+}

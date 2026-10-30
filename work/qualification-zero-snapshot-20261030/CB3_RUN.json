@@ -1,0 +1,91 @@
+{
+  "before": {
+    "head": "ebc124a490d525c5f1bb42dc6af763347acba712",
+    "status": "",
+    "binary": "cef8ef5095af3283b5d055fcb469d9d364509cc5c9d2a1c31afb41541e588792"
+  },
+  "after": {
+    "head": "ebc124a490d525c5f1bb42dc6af763347acba712",
+    "status": "",
+    "binary": "cef8ef5095af3283b5d055fcb469d9d364509cc5c9d2a1c31afb41541e588792"
+  },
+  "runs": [
+    {
+      "name": "focused",
+      "command": [
+        "/private/tmp/godot-snapshot-ebc-incremental-20261030/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*overlapping snapshot outputs are rejected*"
+      ],
+      "rc": 0,
+      "success": true
+    },
+    {
+      "name": "qrt",
+      "command": [
+        "/private/tmp/godot-snapshot-ebc-incremental-20261030/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*[QualificationRt]*"
+      ],
+      "rc": 0,
+      "success": true
+    },
+    {
+      "name": "qualification",
+      "command": [
+        "/private/tmp/godot-snapshot-ebc-incremental-20261030/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*[Qualification]*"
+      ],
+      "rc": 0,
+      "success": true,
+      "expected_error_lines": [
+        "ERROR: Condition \"texture && texture->qualification_return\" is true. Returning: ERR_UNAUTHORIZED",
+        "ERROR: Condition \"texture && texture->qualification_return\" is true. Returning: ERR_UNAUTHORIZED"
+      ]
+    },
+    {
+      "name": "p01",
+      "command": [
+        "/private/tmp/godot-snapshot-ebc-incremental-20261030/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=[P01]*"
+      ],
+      "rc": 0,
+      "success": true,
+      "error_lines": []
+    },
+    {
+      "name": "device_exit",
+      "command": [
+        "/private/tmp/godot-snapshot-ebc-incremental-20261030/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*device_exit*"
+      ],
+      "rc": 0,
+      "success": true,
+      "error_lines": [
+        "ERROR: Condition \"callback_scope.get_error() != OK\" is true. Returning: callback_scope.get_error()",
+        "ERROR: Condition \"callback_scope.get_error() != OK\" is true. Returning: callback_scope.get_error()",
+        "ERROR: Condition \"callback_scope.get_error() != OK\" is true. Returning: callback_scope.get_error()"
+      ]
+    },
+    {
+      "name": "k03",
+      "command": [
+        "/private/tmp/godot-snapshot-ebc-incremental-20261030/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*[K03]*"
+      ],
+      "rc": 0,
+      "success": true,
+      "error_lines": []
+    }
+  ]
+}
