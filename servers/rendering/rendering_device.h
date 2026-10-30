@@ -164,10 +164,11 @@ public:
 private:
 	HashMap<RID, HashSet<RID>> dependency_map; // IDs to IDs that depend on it.
 	HashMap<RID, HashSet<RID>> reverse_dependency_map; // Same as above, but in reverse.
+	HashSet<RID> resource_frees_in_progress; // Accessed only on the render thread.
 
 	void _add_dependency(RID p_id, RID p_depends_on);
 	void _remove_dependency(RID p_id, RID p_depends_on);
-	void _free_dependencies(RID p_id);
+	bool _free_dependencies(RID p_id);
 
 private:
 	/***************************/

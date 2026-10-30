@@ -1,6 +1,7 @@
 #include "core/crypto/crypto_core.h"
 #include "core/extension/gdextension_qualification_internal.h"
 #include "core/object/callable_mp.h"
+#include "core/os/os.h"
 #include "core/os/semaphore.h"
 #include "core/os/thread.h"
 #include "servers/rendering/rendering_device.h"
@@ -10,6 +11,8 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdio>
+#include <cstdlib>
 #include <thread>
 #if defined(METAL_ENABLED) && defined(MACOS_ENABLED)
 #include "drivers/metal/rendering_context_driver_metal.h"
@@ -99,6 +102,82 @@ public:
 		if (state.replacement.is_valid()) {
 			device.framebuffer_owner.free(state.replacement);
 		}
+	}
+	struct CascadeInvalidationState {
+		RenderingDevice *device = nullptr;
+		RID parent;
+		int callbacks = 0;
+		bool reenter = false;
+	};
+	static void cascade_invalidation(void *userdata) {
+		auto *state = static_cast<CascadeInvalidationState *>(userdata);
+		state->callbacks++;
+		if (state->reenter) {
+			state->device->free_rid(state->parent);
+			if (!state->device->texture_owner.owns(state->parent)) {
+				std::fputs("RD_CASCADE_PARENT_FREED_BEFORE_OUTER_RETURN\n", stderr);
+				std::fflush(stderr);
+				std::_Exit(86);
+			}
+		}
+	}
+	static void cascade_reentry(RenderingDevice &device, bool reenter) {
+		CascadeInvalidationState state;
+		state.device = &device;
+		state.reenter = reenter;
+		RenderingDevice::Texture texture{};
+		state.parent = device.texture_owner.make_rid(texture);
+		RenderingDevice::Framebuffer framebuffer{};
+		framebuffer.invalidated_callback = cascade_invalidation;
+		framebuffer.invalidated_callback_userdata = &state;
+		RID child = device.framebuffer_owner.make_rid(framebuffer);
+		device.render_thread_id = Thread::get_caller_id();
+		device._add_dependency(child, state.parent);
+		device.free_rid(state.parent);
+		CHECK(state.callbacks == 1);
+		CHECK_FALSE(device.texture_owner.owns(state.parent));
+		CHECK_FALSE(device.framebuffer_owner.owns(child));
+		CHECK(device.frames[0].textures_to_dispose_of.size() == 1);
+		CHECK(device.frames[0].framebuffers_to_dispose_of.size() == 1);
+		CHECK(device.resource_frees_in_progress.is_empty());
+	}
+	struct SiblingInvalidationState {
+		RenderingDevice *device = nullptr;
+		RID first;
+		RID second;
+		int callbacks = 0;
+	};
+	static void sibling_invalidation(void *userdata) {
+		auto *state = static_cast<SiblingInvalidationState *>(userdata);
+		state->callbacks++;
+		if (state->callbacks == 1) {
+			RID sibling = state->device->framebuffer_is_valid(state->first) ? state->first : state->second;
+			if (state->device->framebuffer_is_valid(sibling)) {
+				state->device->free_rid(sibling);
+			}
+		}
+	}
+	static void cascade_sibling_reentry(RenderingDevice &device) {
+		SiblingInvalidationState state;
+		state.device = &device;
+		RenderingDevice::Texture texture{};
+		RID parent = device.texture_owner.make_rid(texture);
+		RenderingDevice::Framebuffer framebuffer{};
+		framebuffer.invalidated_callback = sibling_invalidation;
+		framebuffer.invalidated_callback_userdata = &state;
+		state.first = device.framebuffer_owner.make_rid(framebuffer);
+		state.second = device.framebuffer_owner.make_rid(framebuffer);
+		device.render_thread_id = Thread::get_caller_id();
+		device._add_dependency(state.first, parent);
+		device._add_dependency(state.second, parent);
+		device.free_rid(parent);
+		CHECK(state.callbacks == 2);
+		CHECK_FALSE(device.texture_owner.owns(parent));
+		CHECK_FALSE(device.framebuffer_owner.owns(state.first));
+		CHECK_FALSE(device.framebuffer_owner.owns(state.second));
+		CHECK(device.frames[0].textures_to_dispose_of.size() == 1);
+		CHECK(device.frames[0].framebuffers_to_dispose_of.size() == 2);
+		CHECK(device.resource_frees_in_progress.is_empty());
 	}
 	template <typename D>
 	static auto create_qualified_sampler(D &device, const RenderingDevice::SamplerState &state, GDExtensionDeviceExit::QualificationPhysicalReturn *cell, int) -> decltype(device._qualification_sampler_create(state, cell)) {
@@ -3653,6 +3732,21 @@ TEST_CASE("[RenderingDevice] framebuffer invalidation is synchronous and reentry
 	Driver driver;
 	TestQualificationPhysicalAccess::attach(device, driver);
 	TestQualificationPhysicalAccess::framebuffer_invalidation_once(device);
+	TestQualificationPhysicalAccess::detach(device);
+}
+TEST_CASE("[RenderingDevice] parent disposal remains active through child invalidation") {
+	RenderingDevice device;
+	Driver driver;
+	TestQualificationPhysicalAccess::attach(device, driver);
+	const bool reenter = OS::get_singleton()->get_environment("GODOT_TEST_RD_CASCADE_REENTRY") == "race";
+	TestQualificationPhysicalAccess::cascade_reentry(device, reenter);
+	TestQualificationPhysicalAccess::detach(device);
+}
+TEST_CASE("[RenderingDevice] child invalidation can retire a sibling during parent disposal") {
+	RenderingDevice device;
+	Driver driver;
+	TestQualificationPhysicalAccess::attach(device, driver);
+	TestQualificationPhysicalAccess::cascade_sibling_reentry(device);
 	TestQualificationPhysicalAccess::detach(device);
 }
 TEST_CASE("[RenderingDevice][Qualification] buffer return follows exact physical free and survives RID erase") {

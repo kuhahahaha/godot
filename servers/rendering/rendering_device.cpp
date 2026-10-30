@@ -226,21 +226,28 @@ void RenderingDevice::_remove_dependency(RID p_id, RID p_depends_on) {
 	}
 }
 
-void RenderingDevice::_free_dependencies(RID p_id) {
+bool RenderingDevice::_free_dependencies(RID p_id) {
 	_THREAD_SAFE_METHOD_
 
 	// Direct dependencies must be freed.
-
-	HashMap<RID, HashSet<RID>>::Iterator E = dependency_map.find(p_id);
-	if (E) {
-		while (E->value.size()) {
-			free_rid(*E->value.begin());
+	while (true) {
+		HashMap<RID, HashSet<RID>>::Iterator E = dependency_map.find(p_id);
+		if (!E) {
+			break;
 		}
-		dependency_map.remove(E);
+		if (E->value.is_empty()) {
+			dependency_map.remove(E);
+			break;
+		}
+		const RID dependent = *E->value.begin();
+		free_rid(dependent);
+		// A synchronous invalidation callback can mutate the dependency map.
+		E = dependency_map.find(p_id);
+		ERR_FAIL_COND_V_MSG(E && E->value.has(dependent), false, "A dependent resource could not be freed.");
 	}
 
 	// Reverse dependencies must be unreferenced.
-	E = reverse_dependency_map.find(p_id);
+	HashMap<RID, HashSet<RID>>::Iterator E = reverse_dependency_map.find(p_id);
 
 	if (E) {
 		for (const RID &F : E->value) {
@@ -252,6 +259,7 @@ void RenderingDevice::_free_dependencies(RID p_id) {
 
 		reverse_dependency_map.remove(E);
 	}
+	return true;
 }
 
 /*******************************/
@@ -8906,6 +8914,15 @@ RID RenderingDevice::_qualification_storage_create(uint32_t bytes, GDExtensionDe
 
 void RenderingDevice::free_rid(RID p_rid) {
 	ERR_RENDER_THREAD_GUARD();
+	if (resource_frees_in_progress.has(p_rid)) {
+		return;
+	}
+	resource_frees_in_progress.insert(p_rid);
+	struct ResourceFreeScope {
+		HashSet<RID> &in_progress;
+		RID rid;
+		~ResourceFreeScope() { in_progress.erase(rid); }
+	} free_scope{ resource_frees_in_progress, p_rid };
 
 	auto *buffer = storage_buffer_owner.get_or_null(p_rid);
 	auto *shader = shader_owner.get_or_null(p_rid);
@@ -8915,7 +8932,9 @@ void RenderingDevice::free_rid(RID p_rid) {
 	ERR_FAIL_COND_MSG(!qualification_retiring && ((buffer && buffer->qualification_return) || (shader && shader->qualification_return) || (pipeline && pipeline->qualification_return) || (texture && texture->qualification_return) || (sampler && sampler->qualification_return)), "Qualification resources require their original owner retirement acknowledgement.");
 	ERR_FAIL_COND_MSG(texture && texture->qualification_return && texture->transfer_worker_index >= 0, "Qualification texture has an unsettled transfer worker.");
 	ERR_FAIL_COND_MSG(_qualification_resource_busy(p_rid), "Qualification ticket still owns this resource or one of its dependents.");
-	_free_dependencies(p_rid); // Recursively erase dependencies first, to avoid potential API problems.
+	if (!_free_dependencies(p_rid)) { // Recursively erase dependencies first, to avoid potential API problems.
+		return;
+	}
 	_free_internal(p_rid);
 }
 
