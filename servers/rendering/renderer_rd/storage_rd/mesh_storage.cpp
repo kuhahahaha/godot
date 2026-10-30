@@ -1832,15 +1832,38 @@ bool MeshStorage::_multimesh_enable_motion_vectors(MultiMesh *multimesh) {
 	if (multimesh->motion_vectors_enabled || multimesh->instances == 0) {
 		return true;
 	}
+	auto fail_replacement = [&]() {
+		_multimesh_invalidate_gpu_resources(multimesh);
+		multimesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MULTIMESH);
+		ERR_PRINT("MultiMesh motion-buffer replacement failed; drawing is disabled.");
+		return false;
+	};
 	uint32_t new_buffer_size;
-	ERR_FAIL_COND_V(_multimesh_buffer_size(multimesh->instances, multimesh->xform_format, multimesh->uses_colors, multimesh->uses_custom_data, true, new_buffer_size) != OK, false);
+	if (_multimesh_buffer_size(multimesh->instances, multimesh->xform_format, multimesh->uses_colors, multimesh->uses_custom_data, true, new_buffer_size) != OK) {
+		return fail_replacement();
+	}
 	const uint32_t buffer_size = new_buffer_size / 2;
-	ERR_FAIL_COND_V(!multimesh->buffer.is_valid(), false);
+	if (!multimesh->buffer.is_valid()) {
+		return fail_replacement();
+	}
 
 	Vector<float> doubled_cache;
 	if (!multimesh->data_cache.is_empty()) {
-		ERR_FAIL_COND_V(multimesh->data_cache.size() * sizeof(float) != buffer_size, false);
-		ERR_FAIL_COND_V(doubled_cache.resize(new_buffer_size / sizeof(float)) != OK, false);
+		if (multimesh->data_cache.size() * sizeof(float) != buffer_size) {
+			return fail_replacement();
+		}
+		Error resize_error;
+#ifdef TESTS_ENABLED
+		if (test_fail_motion_cache_resize) {
+			resize_error = ERR_OUT_OF_MEMORY;
+		} else
+#endif
+		{
+			resize_error = doubled_cache.resize(new_buffer_size / sizeof(float));
+		}
+		if (resize_error != OK) {
+			return fail_replacement();
+		}
 		memcpy(doubled_cache.ptrw(), multimesh->data_cache.ptr(), buffer_size);
 		memcpy(reinterpret_cast<uint8_t *>(doubled_cache.ptrw()) + buffer_size, multimesh->data_cache.ptr(), buffer_size);
 	}
@@ -1860,10 +1883,7 @@ bool MeshStorage::_multimesh_enable_motion_vectors(MultiMesh *multimesh) {
 		if (new_buffer.is_valid()) {
 			RD::get_singleton()->free_rid(new_buffer);
 		}
-		_multimesh_invalidate_gpu_resources(multimesh);
-		multimesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MULTIMESH);
-		ERR_PRINT("MultiMesh motion-buffer replacement failed; drawing is disabled.");
-		return false;
+		return fail_replacement();
 	}
 
 	RD::get_singleton()->free_rid(multimesh->buffer);
