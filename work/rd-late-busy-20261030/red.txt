@@ -1,0 +1,16 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_qualification_physical.cpp:1552:
+TEST CASE:  [RenderingDevice] late busy dependent preserves parent and edge until retry
+
+tests/servers/rendering/test_qualification_physical.cpp:209: ERROR: CHECK( device.texture_owner.owns(parent) ) is NOT correct!
+  values: CHECK( false )
+
+tests/servers/rendering/test_qualification_physical.cpp:213: ERROR: CHECK( (children && children->has(state.child)) ) is NOT correct!
+  values: CHECK( false )
+
+===============================================================================
+[doctest] test cases:  1 | 0 passed | 1 failed | 1972 skipped
+[doctest] assertions: 11 | 9 passed | 2 failed |
+[doctest] Status: FAILURE!

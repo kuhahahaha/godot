@@ -1,0 +1,104 @@
+{
+  "binary_before": "6fda90467e9a0ffab599d15e567f5054bda64b232994bcc8dbfcd1cbb79ba36a",
+  "runs": [
+    {
+      "name": "focused",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*late busy dependent preserves parent and edge until retry*"
+      ],
+      "rc": 0,
+      "summary": [
+        "[doctest] test cases:  1 |  1 passed | 0 failed | 1972 skipped",
+        "[doctest] assertions: 11 | 11 passed | 0 failed |"
+      ]
+    },
+    {
+      "name": "rendering",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=[RenderingDevice]*"
+      ],
+      "rc": 0,
+      "summary": [
+        "[doctest] test cases:  18 |  18 passed | 0 failed | 1955 skipped",
+        "[doctest] assertions: 263 | 263 passed | 0 failed |"
+      ]
+    },
+    {
+      "name": "qualification",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=[Qualification]*"
+      ],
+      "rc": 0,
+      "summary": [
+        "[doctest] test cases:   91 |   91 passed | 0 failed | 1882 skipped",
+        "[doctest] assertions: 1833 | 1833 passed | 0 failed |"
+      ]
+    },
+    {
+      "name": "p01",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=[P01]*"
+      ],
+      "rc": 0,
+      "summary": [
+        "[doctest] test cases:   97 |   97 passed | 0 failed | 1876 skipped",
+        "[doctest] assertions: 9657 | 9657 passed | 0 failed |"
+      ]
+    },
+    {
+      "name": "device_exit",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*device_exit*"
+      ],
+      "rc": 0,
+      "summary": [
+        "[doctest] test cases:  133 |  133 passed | 0 failed | 1840 skipped",
+        "[doctest] assertions: 2619 | 2619 passed | 0 failed |"
+      ]
+    },
+    {
+      "name": "k03",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=[K03]*"
+      ],
+      "rc": 0,
+      "summary": [
+        "[doctest] test cases:   44 |   44 passed | 0 failed | 1929 skipped",
+        "[doctest] assertions: 1153 | 1153 passed | 0 failed |"
+      ]
+    },
+    {
+      "name": "framewait",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=[R01][FrameWait]*"
+      ],
+      "rc": 0,
+      "summary": [
+        "[doctest] test cases:  16 |  16 passed | 0 failed | 1957 skipped",
+        "[doctest] assertions: 293 | 293 passed | 0 failed |"
+      ]
+    }
+  ],
+  "binary_after": "6fda90467e9a0ffab599d15e567f5054bda64b232994bcc8dbfcd1cbb79ba36a"
+}

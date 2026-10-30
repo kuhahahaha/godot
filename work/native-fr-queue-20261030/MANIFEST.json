@@ -44,7 +44,11 @@
     },
     {
       "path": "work/gdscript-c4-cancel-lock-20261030/RECEIPT.md",
-      "sha256": "e9afef7fb98a19fdbc99fb7c3feae81455375e4f5b4f443ed4fb66d8a5c25aab"
+      "sha256": "0d624201abfc0cdff8403b8fbb6c4bbe02ccdfb95452974f4fe02218d969d5b9"
+    },
+    {
+      "path": "work/rd-late-busy-20261030/RECEIPT.md",
+      "sha256": "dcedbc325f51fbf3a15f0b5f9ca346d74966d1a2f8c95f72b7f169053a7e1067"
     }
   ]
 }
