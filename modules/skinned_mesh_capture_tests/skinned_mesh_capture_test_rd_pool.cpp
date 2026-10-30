@@ -387,10 +387,10 @@ Error SkinnedMeshCaptureTestRDPool::physical_retirement_status() {
 	}
 	for (uint32_t i = 0; i < resource_count; i++) {
 		const auto status = RenderCaptureTestAccess::capture_test_resource_registry(device).status(resource_tokens[i]);
-		if (status == RenderCaptureTestResourceRegistry::Status::Unknown) {
+		if (status == RenderCaptureTestResourceRegistry::ResourceStatus::Unknown) {
 			return ERR_INVALID_DATA;
 		}
-		if (status == RenderCaptureTestResourceRegistry::Status::Live) {
+		if (status == RenderCaptureTestResourceRegistry::ResourceStatus::Live) {
 			return ERR_BUSY;
 		}
 	}

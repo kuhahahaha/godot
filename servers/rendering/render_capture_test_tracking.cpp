@@ -224,14 +224,14 @@ bool RenderCaptureTestResourceRegistry::observe_free(RenderCaptureTestResourceKi
 	// Other engine resources were never enrolled in this narrow pool registry.
 	return true;
 }
-RenderCaptureTestResourceRegistry::Status RenderCaptureTestResourceRegistry::status(uint64_t p_token) const {
+RenderCaptureTestResourceRegistry::ResourceStatus RenderCaptureTestResourceRegistry::status(uint64_t p_token) const {
 	std::lock_guard<std::mutex> lock(mutex);
 	for (const auto &entry : entries) {
 		if (p_token && entry.token == p_token) {
-			return entry.released ? Status::Released : Status::Live;
+			return entry.released ? ResourceStatus::Released : ResourceStatus::Live;
 		}
 	}
-	return Status::Unknown;
+	return ResourceStatus::Unknown;
 }
 bool RenderCaptureTestResourceRegistry::acknowledge(uint64_t p_token) {
 	std::lock_guard<std::mutex> lock(mutex);

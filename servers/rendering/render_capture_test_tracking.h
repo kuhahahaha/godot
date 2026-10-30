@@ -87,12 +87,12 @@ class RenderCaptureTestResourceRegistry {
 	mutable std::mutex mutex;
 
 public:
-	enum class Status { Unknown,
+	enum class ResourceStatus { Unknown,
 		Live,
 		Released };
 	uint64_t track(RenderCaptureTestResourceKind p_kind, uint64_t p_driver);
 	bool observe_free(RenderCaptureTestResourceKind p_kind, uint64_t p_driver);
-	Status status(uint64_t p_token) const;
+	ResourceStatus status(uint64_t p_token) const;
 	bool acknowledge(uint64_t p_token);
 };
 

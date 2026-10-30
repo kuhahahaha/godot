@@ -183,17 +183,17 @@ TEST_CASE("[P01] Pool native retirement requires each actual free and preserves 
 	CHECK(registry.track(RenderCaptureTestResourceKind::Shader, 11) == 0);
 	CHECK_FALSE(registry.acknowledge(shader));
 	registry.observe_free(RenderCaptureTestResourceKind::ComputePipeline, 11);
-	CHECK(registry.status(shader) == RenderCaptureTestResourceRegistry::Status::Live);
-	CHECK(registry.status(pipeline) == RenderCaptureTestResourceRegistry::Status::Released);
+	CHECK(registry.status(shader) == RenderCaptureTestResourceRegistry::ResourceStatus::Live);
+	CHECK(registry.status(pipeline) == RenderCaptureTestResourceRegistry::ResourceStatus::Released);
 	CHECK_FALSE(registry.observe_free(RenderCaptureTestResourceKind::ComputePipeline, 11));
 	registry.observe_free(RenderCaptureTestResourceKind::Shader, 11);
 	const auto reused = registry.track(RenderCaptureTestResourceKind::Shader, 11);
 	CHECK(reused != shader);
 	CHECK(reused != 0);
 	CHECK(registry.acknowledge(shader));
-	CHECK(registry.status(reused) == RenderCaptureTestResourceRegistry::Status::Live);
-	CHECK(registry.status(set) == RenderCaptureTestResourceRegistry::Status::Live);
-	CHECK(registry.status(shader) == RenderCaptureTestResourceRegistry::Status::Unknown);
+	CHECK(registry.status(reused) == RenderCaptureTestResourceRegistry::ResourceStatus::Live);
+	CHECK(registry.status(set) == RenderCaptureTestResourceRegistry::ResourceStatus::Live);
+	CHECK(registry.status(shader) == RenderCaptureTestResourceRegistry::ResourceStatus::Unknown);
 }
 TEST_CASE("[P01] Pool resource exhaustion retains released evidence until acknowledgment") {
 	RenderCaptureTestResourceRegistry registry;
@@ -205,12 +205,12 @@ TEST_CASE("[P01] Pool resource exhaustion retains released evidence until acknow
 	CHECK(registry.track(RenderCaptureTestResourceKind::Shader, 200) == 0);
 	CHECK(registry.observe_free(RenderCaptureTestResourceKind::UniformSet, 1));
 	CHECK(registry.track(RenderCaptureTestResourceKind::Shader, 200) == 0);
-	CHECK(registry.status(tokens[0]) == RenderCaptureTestResourceRegistry::Status::Released);
+	CHECK(registry.status(tokens[0]) == RenderCaptureTestResourceRegistry::ResourceStatus::Released);
 	CHECK(registry.acknowledge(tokens[0]));
 	const auto next = registry.track(RenderCaptureTestResourceKind::Shader, 200);
 	CHECK(next > tokens.back());
 	CHECK_FALSE(registry.acknowledge(tokens[0]));
-	CHECK(registry.status(next) == RenderCaptureTestResourceRegistry::Status::Live);
+	CHECK(registry.status(next) == RenderCaptureTestResourceRegistry::ResourceStatus::Live);
 }
 
 TEST_CASE("[P01] Image texture retirement cannot be satisfied by a shader with the same driver id") {
@@ -221,7 +221,7 @@ TEST_CASE("[P01] Image texture retirement cannot be satisfied by a shader with t
 	REQUIRE(texture != 0);
 	REQUIRE(shader != 0);
 	CHECK(registry.observe_free(RenderCaptureTestResourceKind::Shader, 77));
-	CHECK(registry.status(texture) == RenderCaptureTestResourceRegistry::Status::Live);
+	CHECK(registry.status(texture) == RenderCaptureTestResourceRegistry::ResourceStatus::Live);
 	CHECK(registry.observe_free(texture_kind, 77));
-	CHECK(registry.status(texture) == RenderCaptureTestResourceRegistry::Status::Released);
+	CHECK(registry.status(texture) == RenderCaptureTestResourceRegistry::ResourceStatus::Released);
 }
