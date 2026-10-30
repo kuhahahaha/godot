@@ -52,6 +52,31 @@ TEST_FORCE_LINK(test_qualification_physical)
 extern thread_local void (*test_uniform_set_after_rid_free)(RenderingDevice *);
 class TestQualificationPhysicalAccess {
 public:
+	// These tests use synthetic cells; this helper scopes only the cell already
+	// attached to the fixture RID and does not assert a production owner event.
+	static void free_qualified_fixture(RenderingDevice &device, RID rid) {
+		auto *buffer = device.storage_buffer_owner.get_or_null(rid);
+		auto *shader = device.shader_owner.get_or_null(rid);
+		auto *pipeline = device.compute_pipeline_owner.get_or_null(rid);
+		auto *texture = device.texture_owner.get_or_null(rid);
+		auto *sampler = device.sampler_owner.get_or_null(rid);
+		GDExtensionDeviceExit::QualificationPhysicalReturn *cell = nullptr;
+		if (buffer && buffer->qualification_return) {
+			cell = buffer->qualification_return;
+		} else if (shader && shader->qualification_return) {
+			cell = shader->qualification_return;
+		} else if (pipeline && pipeline->qualification_return) {
+			cell = pipeline->qualification_return;
+		} else if (texture && texture->qualification_return) {
+			cell = texture->qualification_return;
+		} else if (sampler && sampler->qualification_return) {
+			cell = sampler->qualification_return;
+		}
+		auto *previous = device.qualification_retiring_cell;
+		device.qualification_retiring_cell = cell;
+		device.free_rid(rid);
+		device.qualification_retiring_cell = previous;
+	}
 	struct InvalidationState {
 		RID old_rid;
 		RID replacement;
@@ -262,6 +287,8 @@ public:
 		pipeline.shader = parent;
 		pipeline.qualification_return = &cell;
 		RID child = device.compute_pipeline_owner.make_rid(pipeline);
+		cell.rid = child.get_id();
+		device.qualification_retiring_cell = &cell;
 		device.render_thread_id = Thread::get_caller_id();
 		device._add_dependency(child, parent);
 		ERR_PRINT_OFF;
@@ -285,6 +312,235 @@ public:
 		CHECK_FALSE(device.compute_pipeline_owner.owns(child));
 		CHECK(cell.enqueued);
 		CHECK(cell.free_event == 0);
+	}
+	static void pipeline_owner_and_enqueue_guard(RenderingDevice &device, int mode) {
+		GDExtensionDeviceExit::QualificationPhysicalReturn cell;
+		GDExtensionDeviceExit::QualificationPhysicalReturn other_cell;
+		GDExtensionDeviceExit::QualificationTicket ticket;
+		cell.use_closed.store(true);
+		if (mode == 1) {
+			cell.uses.push_back(&ticket); // Synthetic unretired ticket only.
+		} else if (mode == 2) {
+			cell.dependent_children.store(1);
+		} else if (mode == 3) {
+			cell.enqueued = true;
+		} else if (mode == 4) {
+			device.frames[0].qualification_epoch = 0;
+		} else if (mode == 5) {
+			device.next_qualification_free_event = 0;
+		} else if (mode == 6) {
+			cell.reserved_event = 42;
+		}
+		RenderingDevice::Shader shader{};
+		RID parent = device.shader_owner.make_rid(shader);
+		RenderingDevice::ComputePipeline pipeline{};
+		pipeline.shader = parent;
+		pipeline.qualification_return = &cell;
+		RID child = device.compute_pipeline_owner.make_rid(pipeline);
+		cell.rid = child.get_id();
+		device.qualification_retiring_cell = mode <= 2 ? &other_cell : &cell;
+		device.render_thread_id = Thread::get_caller_id();
+		device._add_dependency(child, parent);
+		ERR_PRINT_OFF;
+		device.free_rid(parent);
+		ERR_PRINT_ON;
+		CHECK(device.shader_owner.owns(parent));
+		CHECK(device.compute_pipeline_owner.owns(child));
+		const HashSet<RID> *children = device.dependency_map.getptr(parent);
+		CHECK((children && children->has(child)));
+		CHECK(cell.enqueued == (mode == 3));
+		CHECK(device.resource_frees_in_progress.is_empty());
+		// Synthetic fixture cleanup does not attest to any native return.
+		cell.uses.clear();
+		cell.dependent_children.store(0);
+		if (device.compute_pipeline_owner.owns(child)) {
+			device.compute_pipeline_owner.get_or_null(child)->qualification_return = nullptr;
+		}
+		if (device.shader_owner.owns(parent)) {
+			device.free_rid(parent);
+		} else if (device.compute_pipeline_owner.owns(child)) {
+			device.free_rid(child);
+		}
+	}
+	static void pipeline_direct_owner_guard(RenderingDevice &device, int mode) {
+		using namespace GDExtensionDeviceExit;
+		auto *bridge = memnew(Registry::QualificationBridge);
+		auto *unit = memnew(Registry::QualificationBridge::NativeUnit);
+		QualificationTicket ticket;
+		bridge->units[0] = unit;
+		unit->serial = 31;
+		unit->retiring = true;
+		unit->backing.known_mask = 3;
+		unit->report.report_revision = 1;
+		unit->pipeline.use_closed.store(true);
+		unit->shader.use_closed.store(true);
+		if (mode == 1) {
+			unit->pipeline.uses.push_back(&ticket);
+		} else {
+			unit->pipeline.dependent_children.store(1);
+		}
+		RenderingDevice::Shader shader{};
+		shader.qualification_return = &unit->shader;
+		RID parent = device.shader_owner.make_rid(shader);
+		RenderingDevice::ComputePipeline pipeline{};
+		pipeline.shader = parent;
+		pipeline.qualification_return = &unit->pipeline;
+		RID child = device.compute_pipeline_owner.make_rid(pipeline);
+		unit->shader.rid = parent.get_id();
+		unit->pipeline.rid = child.get_id();
+		device.render_thread_id = Thread::get_caller_id();
+		device._add_dependency(child, parent);
+		device.qualification_retiring = false;
+		device.draw_graph.initialize(device.driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+		device.draw_graph.begin();
+		Registry::get_singleton().qualification_retire_step(bridge, &device, 31, 2);
+		CHECK(device.shader_owner.owns(parent));
+		CHECK(device.compute_pipeline_owner.owns(child));
+		CHECK_FALSE(unit->shader.enqueued);
+		CHECK_FALSE(unit->pipeline.enqueued);
+		CHECK(unit->report.reason == 4);
+		CHECK(unit->report.report_revision == 2);
+		unit->pipeline.uses.clear();
+		unit->pipeline.dependent_children.store(0);
+		Registry::get_singleton().qualification_retire_step(bridge, &device, 31, 2);
+		CHECK_FALSE(device.compute_pipeline_owner.owns(child));
+		CHECK(unit->pipeline.enqueued);
+		CHECK(unit->pipeline.free_event == 0);
+		CHECK(device.shader_owner.owns(parent));
+		CHECK_FALSE(device.qualification_retiring);
+		CHECK(device.qualification_retiring_cell == nullptr);
+		if (device.shader_owner.owns(parent)) {
+			device.shader_owner.get_or_null(parent)->qualification_return = nullptr;
+		}
+		if (device.compute_pipeline_owner.owns(child)) {
+			device.compute_pipeline_owner.get_or_null(child)->qualification_return = nullptr;
+		}
+		if (device.shader_owner.owns(parent)) {
+			device.free_rid(parent);
+		} else if (device.compute_pipeline_owner.owns(child)) {
+			device.free_rid(child);
+		}
+		device.frames[0].compute_pipelines_to_dispose_of.clear();
+		memdelete(unit);
+		memdelete(bridge);
+	}
+	static void pipeline_scoped_target(RenderingDevice &device, bool wrong_rid) {
+		GDExtensionDeviceExit::QualificationPhysicalReturn cell;
+		GDExtensionDeviceExit::QualificationPhysicalReturn other;
+		cell.use_closed.store(true);
+		RenderingDevice::ComputePipeline pipeline{};
+		pipeline.qualification_return = &cell;
+		RID rid = device.compute_pipeline_owner.make_rid(pipeline);
+		cell.rid = wrong_rid ? 0 : rid.get_id();
+		device.render_thread_id = Thread::get_caller_id();
+		device.qualification_retiring_cell = wrong_rid ? &cell : &other;
+		ERR_PRINT_OFF;
+		device.free_rid(rid);
+		ERR_PRINT_ON;
+		CHECK(device.compute_pipeline_owner.owns(rid));
+		CHECK_FALSE(cell.enqueued);
+		cell.rid = rid.get_id();
+		device.qualification_retiring_cell = &cell;
+		device.free_rid(rid);
+		CHECK_FALSE(device.compute_pipeline_owner.owns(rid));
+		CHECK(cell.enqueued);
+		CHECK(cell.free_event == 0);
+		device.qualification_retiring_cell = nullptr;
+		device.frames[0].compute_pipelines_to_dispose_of.clear();
+	}
+	static void pipeline_scope_restore(RenderingDevice &device) {
+		using namespace GDExtensionDeviceExit;
+		QualificationPhysicalReturn outer;
+		auto *bridge = memnew(Registry::QualificationBridge);
+		auto *unit = memnew(Registry::QualificationBridge::NativeUnit);
+		bridge->units[0] = unit;
+		unit->serial = 31;
+		unit->retiring = true;
+		unit->backing.known_mask = 2;
+		unit->report.report_revision = 1;
+		unit->pipeline.use_closed.store(true);
+		RenderingDevice::ComputePipeline pipeline{};
+		pipeline.qualification_return = &unit->pipeline;
+		RID rid = device.compute_pipeline_owner.make_rid(pipeline);
+		unit->pipeline.rid = rid.get_id();
+		device.render_thread_id = Thread::get_caller_id();
+		device.qualification_retiring = true;
+		device.qualification_retiring_cell = &outer;
+		device.draw_graph.initialize(device.driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+		device.draw_graph.begin();
+		Registry::get_singleton().qualification_retire_step(bridge, &device, 31, 2);
+		CHECK_FALSE(device.compute_pipeline_owner.owns(rid));
+		CHECK(unit->pipeline.enqueued);
+		CHECK(unit->pipeline.free_event == 0);
+		CHECK(device.qualification_retiring);
+		CHECK(device.qualification_retiring_cell == &outer);
+		device.qualification_retiring_cell = nullptr;
+		device.frames[0].compute_pipelines_to_dispose_of.clear();
+		memdelete(unit);
+		memdelete(bridge);
+	}
+	template <typename D>
+	static void owner_driver_reentry(RenderingDevice &device, D &driver) {
+		using namespace GDExtensionDeviceExit;
+		auto *bridge = memnew(Registry::QualificationBridge);
+		auto *unit = memnew(Registry::QualificationBridge::NativeUnit);
+		QualificationPhysicalReturn foreign_cell;
+		QualificationTicket pending;
+		bridge->units[0] = unit;
+		unit->serial = 31;
+		unit->retiring = true;
+		unit->backing.known_mask = 1;
+		unit->report.report_revision = 1;
+		unit->shader.use_closed.store(true);
+		RenderingDevice::Shader shader{};
+		shader.driver_id = RenderingDeviceDriver::ShaderID(19);
+		shader.qualification_return = &unit->shader;
+		RID original = device.shader_owner.make_rid(shader);
+		unit->shader.rid = original.get_id();
+		RenderingDevice::Shader foreign_parent_shader{};
+		RID foreign_parent = device.shader_owner.make_rid(foreign_parent_shader);
+		RenderingDevice::ComputePipeline pipeline{};
+		pipeline.shader = foreign_parent;
+		pipeline.qualification_return = &foreign_cell;
+		RID foreign = device.compute_pipeline_owner.make_rid(pipeline);
+		foreign_cell.rid = foreign.get_id();
+		foreign_cell.use_closed.store(true);
+		foreign_cell.uses.push_back(&pending);
+		device.render_thread_id = Thread::get_caller_id();
+		device._add_dependency(foreign, foreign_parent);
+		device.qualification_retiring = false;
+		device.qualification_retiring_cell = nullptr;
+		driver.polls = 1;
+		driver.reentry_device = &device;
+		driver.reentry_target = foreign;
+		device.draw_graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+		device.draw_graph.begin();
+		ERR_PRINT_OFF;
+		Registry::get_singleton().qualification_retire_step(bridge, &device, 31, 2);
+		ERR_PRINT_ON;
+		CHECK(driver.reentry_checks == 2);
+		CHECK_FALSE(device.shader_owner.owns(original));
+		CHECK(unit->shader.enqueued);
+		CHECK(unit->shader.free_event == 0);
+		CHECK(device.compute_pipeline_owner.owns(foreign));
+		CHECK_FALSE(foreign_cell.enqueued);
+		const HashSet<RID> *children = device.dependency_map.getptr(foreign_parent);
+		CHECK((children && children->has(foreign)));
+		CHECK_FALSE(device.qualification_retiring);
+		CHECK(device.qualification_retiring_cell == nullptr);
+		// Release only synthetic fixture state; no physical completion is inferred.
+		driver.reentry_device = nullptr;
+		foreign_cell.uses.clear();
+		if (device.compute_pipeline_owner.owns(foreign)) {
+			device.compute_pipeline_owner.get_or_null(foreign)->qualification_return = nullptr;
+		}
+		if (device.shader_owner.owns(foreign_parent)) {
+			device.free_rid(foreign_parent);
+		}
+		device.frames[0].shaders_to_dispose_of.clear();
+		device.frames[0].compute_pipelines_to_dispose_of.clear();
+		memdelete(unit);
+		memdelete(bridge);
 	}
 	struct BusyDependentState {
 		RenderingDevice *device = nullptr;
@@ -477,7 +733,7 @@ public:
 				CHECK(ticket.resource_pins.size() == 1);
 				device.qualification_retiring = true;
 				ERR_PRINT_OFF;
-				device.free_rid(rid);
+				free_qualified_fixture(device, rid);
 				ERR_PRINT_ON;
 				CHECK(device.sampler_owner.owns(rid));
 				CHECK_FALSE(cell->enqueued);
@@ -494,7 +750,7 @@ public:
 			}
 			cell->use_closed = true;
 			device.qualification_retiring = true;
-			device.free_rid(rid);
+			free_qualified_fixture(device, rid);
 			device._free_pending_resources(0);
 			CHECK(cell->free_event != 0);
 		}
@@ -522,13 +778,13 @@ public:
 		device.render_thread_id = Thread::get_caller_id();
 		device.qualification_retiring = false;
 		ERR_PRINT_OFF;
-		device.free_rid(rid);
+		free_qualified_fixture(device, rid);
 		ERR_PRINT_ON;
 		CHECK(device.sampler_owner.owns(rid));
 		CHECK_FALSE(cell.enqueued);
 		cell.use_closed = true;
 		device.qualification_retiring = true;
-		device.free_rid(rid);
+		free_qualified_fixture(device, rid);
 		CHECK_FALSE(device.sampler_owner.owns(rid));
 		CHECK(cell.enqueued);
 		CHECK(cell.free_event == 0);
@@ -571,7 +827,7 @@ public:
 		CHECK(device.storage_buffer_owner.owns(parent));
 		CHECK(device.sampler_owner.owns(rid));
 		CHECK_FALSE(cell.enqueued);
-		device.free_rid(rid);
+		free_qualified_fixture(device, rid);
 		device.free_rid(parent);
 		device._free_pending_resources(0);
 		CHECK(cell.free_event != 0);
@@ -602,7 +858,7 @@ public:
 			MutexLock rd_lock(device._thread_safe_);
 			device._qualification_unpin_resources(&ticket);
 		}
-		device.free_rid(rid);
+		free_qualified_fixture(device, rid);
 		CHECK_FALSE(device.sampler_owner.owns(rid));
 		device._free_pending_resources(0);
 	}
@@ -623,7 +879,7 @@ public:
 			cell.use_closed = true;
 			device.qualification_retiring = true;
 			device.render_thread_id = Thread::get_caller_id();
-			device.free_rid(rid);
+			free_qualified_fixture(device, rid);
 			device._free_pending_resources(0);
 		}
 	}
@@ -657,13 +913,13 @@ public:
 		device.render_thread_id = Thread::get_caller_id();
 		device.qualification_retiring = false;
 		ERR_PRINT_OFF;
-		device.free_rid(rid);
+		free_qualified_fixture(device, rid);
 		ERR_PRINT_ON;
 		CHECK(device.texture_owner.owns(rid));
 		CHECK_FALSE(cell.enqueued);
 		cell.use_closed = true;
 		device.qualification_retiring = true;
-		device.free_rid(rid);
+		free_qualified_fixture(device, rid);
 		CHECK_FALSE(device.texture_owner.owns(rid));
 		CHECK(cell.enqueued);
 		CHECK(cell.free_event == 0);
@@ -706,7 +962,7 @@ public:
 		CHECK_FALSE(cell.enqueued);
 		cell.use_closed = true;
 		device.qualification_retiring = true;
-		device.free_rid(rid);
+		free_qualified_fixture(device, rid);
 		device._free_pending_resources(0);
 		CHECK(cell.free_event != 0);
 	}
@@ -759,7 +1015,7 @@ public:
 		device.storage_buffer_owner.free(normal_rid);
 		cell.use_closed = true;
 		device.qualification_retiring = true;
-		device.free_rid(rid);
+		free_qualified_fixture(device, rid);
 		device._free_pending_resources(0);
 		CHECK(cell.free_event != 0);
 	}
@@ -789,7 +1045,7 @@ public:
 		cell.use_closed = true;
 		device.qualification_retiring = true;
 		ERR_PRINT_OFF;
-		device.free_rid(rid);
+		free_qualified_fixture(device, rid);
 		ERR_PRINT_ON;
 		CHECK(device.texture_owner.owns(rid));
 		CHECK(device.storage_buffer_owner.owns(dependent));
@@ -797,7 +1053,7 @@ public:
 		CHECK(cell.free_event == 0);
 		texture = device.texture_owner.get_or_null(rid);
 		texture->transfer_worker_index = -1;
-		device.free_rid(rid);
+		free_qualified_fixture(device, rid);
 		device._free_pending_resources(0);
 		CHECK(cell.free_event != 0);
 	}
@@ -916,7 +1172,7 @@ public:
 				CHECK(cell.uses.size() == 1);
 				device.qualification_retiring = true;
 				ERR_PRINT_OFF;
-				device.free_rid(rid);
+				free_qualified_fixture(device, rid);
 				ERR_PRINT_ON;
 				CHECK(device.texture_owner.owns(rid));
 				CHECK_FALSE(cell.enqueued);
@@ -933,7 +1189,7 @@ public:
 			}
 			cell.use_closed = true;
 			device.qualification_retiring = true;
-			device.free_rid(rid);
+			free_qualified_fixture(device, rid);
 			device._free_pending_resources(0);
 			CHECK(cell.free_event != 0);
 		}
@@ -986,7 +1242,7 @@ public:
 		CHECK(ticket.physical_uses.is_empty());
 		cell.use_closed = true;
 		device.qualification_retiring = true;
-		device.free_rid(rid);
+		free_qualified_fixture(device, rid);
 		device._free_pending_resources(0);
 		CHECK(cell.free_event != 0);
 	}
@@ -1023,7 +1279,7 @@ public:
 		}
 		CHECK(ticket.resource_pins.is_empty());
 		CHECK(ticket.physical_uses.is_empty());
-		device.free_rid(rid);
+		free_qualified_fixture(device, rid);
 		device._free_pending_resources(0);
 	}
 	template <typename B>
@@ -1192,7 +1448,7 @@ public:
 		CHECK(device.storage_buffer_owner.owns(parent));
 		CHECK_FALSE(cell.enqueued);
 		if (device.texture_owner.owns(rid)) {
-			device.free_rid(rid);
+			free_qualified_fixture(device, rid);
 		}
 		if (device.storage_buffer_owner.owns(parent)) {
 			device.free_rid(parent);
@@ -3720,9 +3976,9 @@ public:
 		CHECK(device.qualification_free_event_reservations == 3);
 		buffer.use_closed = texture.use_closed = sampler.use_closed = true;
 		device.qualification_retiring = true;
-		device.free_rid(sampler_rid);
-		device.free_rid(buffer_rid);
-		device.free_rid(texture_rid);
+		free_qualified_fixture(device, sampler_rid);
+		free_qualified_fixture(device, buffer_rid);
+		free_qualified_fixture(device, texture_rid);
 		device._free_pending_resources(0);
 		CHECK(buffer.free_event != 0);
 		CHECK(texture.free_event != 0);
@@ -3776,6 +4032,9 @@ public:
 	bool fail_buffer_create = false;
 	std::atomic<bool> *release_start = nullptr, *release_locked = nullptr;
 	int polls = 0;
+	RenderingDevice *reentry_device = nullptr;
+	RID reentry_target;
+	mutable int reentry_checks = 0;
 	int shaders_freed = 0;
 	int release_one = 0, release_two = 0;
 	Error native_call_release(uint64_t serial) override {
@@ -3846,7 +4105,12 @@ public:
 		}
 		return result;
 	}
-	bool shader_retire_ready_nonblocking(ShaderID) const override { return polls > 0; }
+	bool shader_retire_ready_nonblocking(ShaderID) const override {
+		if (reentry_device && ++reentry_checks == 2) {
+			reentry_device->free_rid(reentry_target);
+		}
+		return polls > 0;
+	}
 	void shader_free(ShaderID id) override {
 		CHECK(id == ShaderID(19));
 		++shaders_freed;
@@ -3911,6 +4175,61 @@ TEST_CASE("[RenderingDevice] refused pipeline enqueue preserves shader parent an
 	Driver driver;
 	TestQualificationPhysicalAccess::attach(device, driver);
 	TestQualificationPhysicalAccess::cascade_refused_pipeline_enqueue(device);
+	TestQualificationPhysicalAccess::detach(device);
+}
+TEST_CASE("[RenderingDevice] pipeline enqueue guards reject closed-cell blocked states") {
+	for (int mode = 3; mode <= 6; mode++) {
+		RenderingDevice device;
+		Driver driver;
+		TestQualificationPhysicalAccess::attach(device, driver);
+		TestQualificationPhysicalAccess::pipeline_owner_and_enqueue_guard(device, mode);
+		TestQualificationPhysicalAccess::detach(device);
+	}
+}
+TEST_CASE("[RenderingDevice] pipeline pending owner use preserves parent") {
+	RenderingDevice device;
+	Driver driver;
+	TestQualificationPhysicalAccess::attach(device, driver);
+	TestQualificationPhysicalAccess::pipeline_owner_and_enqueue_guard(device, 1);
+	TestQualificationPhysicalAccess::detach(device);
+}
+TEST_CASE("[RenderingDevice] pipeline native dependent preserves parent") {
+	RenderingDevice device;
+	Driver driver;
+	TestQualificationPhysicalAccess::attach(device, driver);
+	TestQualificationPhysicalAccess::pipeline_owner_and_enqueue_guard(device, 2);
+	TestQualificationPhysicalAccess::detach(device);
+}
+TEST_CASE("[RenderingDevice] native unit retirement respects pending pipeline owner conditions") {
+	for (int mode = 1; mode <= 2; mode++) {
+		RenderingDevice device;
+		Driver driver;
+		TestQualificationPhysicalAccess::attach(device, driver);
+		TestQualificationPhysicalAccess::pipeline_direct_owner_guard(device, mode);
+		TestQualificationPhysicalAccess::detach(device);
+	}
+}
+TEST_CASE("[RenderingDevice] qualification retirement is scoped to the original pipeline cell and RID") {
+	for (int mode = 0; mode < 2; mode++) {
+		RenderingDevice device;
+		Driver driver;
+		TestQualificationPhysicalAccess::attach(device, driver);
+		TestQualificationPhysicalAccess::pipeline_scoped_target(device, mode != 0);
+		TestQualificationPhysicalAccess::detach(device);
+	}
+}
+TEST_CASE("[RenderingDevice] native unit retirement restores an outer retirement scope") {
+	RenderingDevice device;
+	Driver driver;
+	TestQualificationPhysicalAccess::attach(device, driver);
+	TestQualificationPhysicalAccess::pipeline_scope_restore(device);
+	TestQualificationPhysicalAccess::detach(device);
+}
+TEST_CASE("[RenderingDevice] original owner scope rejects a foreign pipeline on driver reentry") {
+	RenderingDevice device;
+	Driver driver;
+	TestQualificationPhysicalAccess::attach(device, driver);
+	TestQualificationPhysicalAccess::owner_driver_reentry(device, driver);
 	TestQualificationPhysicalAccess::detach(device);
 }
 TEST_CASE("[RenderingDevice] busy dependent preserves its parent until retry") {

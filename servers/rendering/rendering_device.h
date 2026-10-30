@@ -232,6 +232,7 @@ private:
 	uint64_t qualification_free_event_reservations = 0;
 	uint64_t next_qualification_frame_epoch = 1;
 	bool qualification_retiring = false;
+	GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_retiring_cell = nullptr;
 	bool qualification_recording = false;
 	RDG::RecordHandle _qualification_dispatch(ComputeListID p_list, uint32_t p_x, uint32_t p_y, uint32_t p_z);
 	Error _qualification_maintenance();
