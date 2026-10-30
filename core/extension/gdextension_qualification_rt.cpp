@@ -189,11 +189,16 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_rt_reserve(GDExtensionQ
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
 	const auto header = *input;
+	// Also check each supplied pointer itself when a malformed header declares
+	// an empty span. Do not infer any additional caller allocation beyond it.
+	if (!disjoint(request, 1, out, sizeof(*out)) || !disjoint(request, header.request_bytes, out, sizeof(*out)) || (payload && (!disjoint(payload, 1, out, sizeof(*out)) || header.payload_bytes > SIZE_MAX || !disjoint(payload, size_t(header.payload_bytes), out, sizeof(*out))))) {
+		return result(ERR_INVALID_PARAMETER, 2);
+	}
 	if (!abi(header.abi, sizeof(header)) || header.flags || header.reserved || !header.operation_serial || header.kind < 1 || header.kind > 9 || header.request_bytes != request_sizes[header.kind] || header.result_capacity != result_sizes[header.kind] || header.segment_capacity > MAX_SEGMENTS || (header.kind == 8 ? !header.segment_capacity : header.segment_capacity != 0) || header.payload_bytes > MAX_PAYLOAD || ((header.payload_bytes != 0) != (payload != nullptr))) {
 		*out = {};
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
-	if (!disjoint(request, header.request_bytes, out, sizeof(*out)) || !disjoint(request, header.request_bytes, input, sizeof(*input)) || (header.payload_bytes && (!disjoint(payload, header.payload_bytes, out, sizeof(*out)) || !disjoint(payload, header.payload_bytes, input, sizeof(*input)) || !disjoint(payload, header.payload_bytes, request, header.request_bytes)))) {
+	if (!disjoint(request, header.request_bytes, input, sizeof(*input)) || (header.payload_bytes && (!disjoint(payload, header.payload_bytes, input, sizeof(*input)) || !disjoint(payload, header.payload_bytes, request, header.request_bytes)))) {
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
 	*out = {};
