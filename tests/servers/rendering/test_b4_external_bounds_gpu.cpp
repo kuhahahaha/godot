@@ -90,6 +90,9 @@ struct Resources {
 	RID index;
 	RID index_array;
 
+	Resources(RenderingDevice &p_rd, Storage &p_materials, RendererRD::MeshStorage &p_meshes) :
+			rd(p_rd), materials(p_materials), meshes(p_meshes) {}
+
 	~Resources() {
 		if (ordinary_mesh.is_valid()) {
 			meshes.mesh_free(ordinary_mesh);

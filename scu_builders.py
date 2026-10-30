@@ -449,7 +449,16 @@ def generate_scu_files(max_includes_per_scu):
             "/servers",
             "/servers/rendering",
         ],
-        ["test_macros", "test_main", "test_particles_trail_failure"],
+        [
+            "test_macros",
+            "test_main",
+            "test_particles_trail_failure",
+            # Vulkan's Linux headers introduce X11 names (e.g. Window).
+            # Keep these backend fixtures out of unrelated GUI test units.
+            "test_b4_external_bounds_gpu",
+            "test_b4_material_gpu",
+            "test_multimesh_rebuild",
+        ],
     )
 
     # Finally change back the path to the calling folder

@@ -123,6 +123,9 @@ struct Resources {
 	RID index;
 	RID index_array;
 
+	Resources(RenderingDevice &p_rd, RendererRD::TextureStorage &p_textures, Storage &p_materials, RendererRD::MeshStorage *p_meshes = nullptr) :
+			rd(p_rd), textures(p_textures), materials(p_materials), meshes(p_meshes) {}
+
 	~Resources() {
 		if (ordinary_mesh.is_valid()) {
 			meshes->mesh_free(ordinary_mesh);

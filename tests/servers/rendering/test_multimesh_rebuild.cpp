@@ -156,6 +156,9 @@ struct Resources {
 	RendererRD::MeshStorage &storage;
 	RID mesh;
 	RID multimesh;
+	explicit Resources(RendererRD::MeshStorage &p_storage) :
+			storage(p_storage) {}
+
 	~Resources() {
 		if (multimesh.is_valid()) {
 			storage.multimesh_free(multimesh);
