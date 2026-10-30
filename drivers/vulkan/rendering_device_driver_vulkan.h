@@ -58,19 +58,21 @@ class FileAccess;
 class RenderingDeviceDriverVulkan : public RenderingDeviceDriver {
 #ifdef TESTS_ENABLED
 	friend class TestVulkanCompletionAccess;
- uint32_t test_fence_fault_phase = 0;
- VkResult test_fence_fault_result = VK_SUCCESS;
- bool test_submit_fault_applied = false;
- std::atomic<uint64_t> test_native_recycle_cv_waiting{ 0 };
- friend class TestQualificationVulkanAllocationAccess;
- uint32_t test_buffer_fault_stage = 0;
- uint32_t test_buffer_rollback_mask = 0;
- VkBuffer test_buffer_prefix = VK_NULL_HANDLE;
- VmaAllocation test_buffer_allocation_prefix = nullptr;
- uint32_t test_texture_fault_stage = 0;
- uint32_t test_texture_rollback_mask = 0;
- VkImage test_texture_prefix = VK_NULL_HANDLE;
- VmaAllocation test_texture_allocation_prefix = nullptr;
+	uint32_t test_fence_fault_phase = 0;
+	VkResult test_fence_fault_result = VK_SUCCESS;
+	bool test_submit_fault_applied = false;
+	std::atomic<uint64_t> test_native_recycle_cv_waiting{ 0 };
+	friend class TestQualificationVulkanAllocationAccess;
+	uint32_t test_buffer_fault_stage = 0;
+	uint32_t test_buffer_rollback_mask = 0;
+	VkBuffer test_buffer_prefix = VK_NULL_HANDLE;
+	VmaAllocation test_buffer_allocation_prefix = nullptr;
+	uint32_t test_texture_fault_stage = 0;
+	VkResult test_descriptor_free_error = VK_SUCCESS;
+	uint32_t test_descriptor_free_calls = 0;
+	uint32_t test_texture_rollback_mask = 0;
+	VkImage test_texture_prefix = VK_NULL_HANDLE;
+	VmaAllocation test_texture_allocation_prefix = nullptr;
 #endif
 	/*****************/
 	/**** GENERIC ****/
@@ -593,6 +595,8 @@ private:
 
 	using DescriptorSetPools = RBMap<DescriptorSetPoolKey, HashMap<VkDescriptorPool, uint32_t>>;
 	DescriptorSetPools descriptor_set_pools;
+	Mutex descriptor_set_mutex;
+	uint64_t qualification_unknown_descriptors = 0;
 	uint32_t max_descriptor_sets_per_pool = 0;
 
 	HashMap<int, DescriptorSetPools> linear_descriptor_set_pools;
@@ -608,6 +612,8 @@ private:
 		VkDescriptorSet vk_descriptor_set = VK_NULL_HANDLE;
 		VkDescriptorPool vk_descriptor_pool = VK_NULL_HANDLE;
 		VkDescriptorPool vk_linear_descriptor_pool = VK_NULL_HANDLE;
+		bool qualification_return_unknown = false;
+		VkResult qualification_return_error = VK_SUCCESS;
 		DescriptorSetPools::Iterator pool_sets_it;
 		TightLocalVector<BufferInfo const *, uint32_t> dynamic_buffers;
 	};
@@ -618,6 +624,7 @@ public:
 	virtual UniformSetID uniform_set_create(VectorView<BoundUniform> p_uniforms, ShaderID p_shader, uint32_t p_set_index, int p_linear_pool_index) override final;
 	virtual void linear_uniform_set_pools_reset(int p_linear_pool_index) override final;
 	virtual void uniform_set_free(UniformSetID p_uniform_set) override final;
+	QualificationDescriptorReturn qualification_uniform_set_free(UniformSetID p_uniform_set) override;
 	virtual bool uniform_sets_have_linear_pools() const override final;
 	virtual uint32_t uniform_sets_get_dynamic_offsets(VectorView<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count) const override final;
 

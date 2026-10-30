@@ -81,35 +81,6 @@ public:
 		return p_rd._acquire_transfer_worker(p_size, 1, offset);
 	}
 	static void release(RenderingDevice &p_rd, Worker *p_worker) { p_rd._release_transfer_worker(p_worker); }
-	static uint32_t normalized_region_size(uint32_t p_size) {
-		return RenderingDevice::_normalize_staging_region_size(p_size);
-	}
-	struct StagingProbe {
-		Error error;
-		uint32_t offset;
-		uint32_t size;
-		uint64_t frame_used;
-		uint32_t fill_amount;
-		bool used;
-	};
-	static StagingProbe staging_probe(RenderingDevice &p_rd, uint32_t p_amount, uint64_t p_frame_used) {
-		auto &staging = p_rd.upload_staging_buffers;
-		staging.blocks.resize(1);
-		staging.block_size = staging.max_size = 64;
-		staging.blocks.write[0].frame_used = p_frame_used;
-		staging.blocks.write[0].fill_amount = 0;
-		p_rd.frames.resize(2);
-		p_rd.frames_drawn = 10;
-		uint32_t offset = 777;
-		uint32_t size = 888;
-		RenderingDevice::StagingRequiredAction action = RenderingDevice::STAGING_REQUIRED_ACTION_NONE;
-		Error error = p_rd._staging_buffer_allocate(staging, p_amount, 1, offset, size, action, false);
-		StagingProbe result{ error, offset, size, staging.blocks[0].frame_used, staging.blocks[0].fill_amount, staging.used };
-		staging.blocks.clear();
-		staging.used = false;
-		p_rd.frames.clear();
-		return result;
-	}
 	static Error sbt(RenderingDevice &p_rd) {
 		Buffer buffer;
 		return p_rd._raytracing_pipeline_create_sbt_buffer(RenderingDeviceDriver::RaytracingPipelineID(801), 1, 1, buffer);
@@ -144,6 +115,41 @@ public:
 		p_rd.draw_graph.initialize(p_driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 1);
 	}
 	static uint32_t texture_count(RenderingDevice &p_rd) { return p_rd.texture_owner.get_owned_list().size(); }
+	struct StagingProbe {
+		Error error;
+		uint32_t offset;
+		uint32_t size;
+		uint64_t frame_used;
+		uint32_t fill_amount;
+		bool used;
+	};
+	static StagingProbe staging_probe(RenderingDevice &p_rd, uint32_t p_amount, uint64_t p_frame_used) {
+		auto &staging = p_rd.upload_staging_buffers;
+		staging.blocks.resize(1);
+		staging.block_size = staging.max_size = 64;
+		staging.blocks.write[0].frame_used = p_frame_used;
+		staging.blocks.write[0].fill_amount = 0;
+		p_rd.frames.resize(2);
+		p_rd.frames_drawn = 10;
+		uint32_t offset = 777, size = 888;
+		RenderingDevice::StagingRequiredAction action = RenderingDevice::STAGING_REQUIRED_ACTION_NONE;
+		Error error = p_rd._staging_buffer_allocate(staging, p_amount, 1, offset, size, action, false);
+		StagingProbe result{ error, offset, size, staging.blocks[0].frame_used, staging.blocks[0].fill_amount, staging.used };
+		staging.blocks.clear();
+		staging.used = false;
+		p_rd.frames.clear();
+		return result;
+	}
+	static uint32_t normalized_region_size(int64_t p_size) {
+		return RenderingDevice::_normalize_staging_region_size(p_size);
+	}
+	static void cleanup_created_texture(RenderingDevice &p_rd, RID p_rid) {
+		p_rd.frames.resize(1);
+		p_rd.render_thread_id = Thread::get_caller_id();
+		p_rd.free_rid(p_rid);
+		p_rd._free_pending_resources(0);
+		p_rd.frames.clear();
+	}
 	static void detach(RenderingDevice &p_rd) {
 		for (RID rid : p_rd.texture_owner.get_owned_list()) {
 			p_rd.texture_owner.free(rid);
@@ -182,6 +188,9 @@ public:
 	int fence_frees = 0;
 	int pool_frees = 0;
 	int texture_frees = 0;
+	int texture_usage_queries = 0;
+	int texture_creates = 0;
+	bool reject_texture_format = false;
 	bool finalize_sentinel = false;
 	bool begin_result = true;
 	int creation_failure = 0;
@@ -245,10 +254,16 @@ public:
 		buffer_creates++;
 		return creation_failure == 3 ? CommandBufferID() : CommandBufferID(902);
 	}
-	TextureID texture_create(const TextureFormat &, const TextureView &) override { return TextureID(701); }
+	TextureID texture_create(const TextureFormat &, const TextureView &) override {
+		texture_creates++;
+		return TextureID(701);
+	}
 	void texture_free(TextureID) override { texture_frees++; }
 	uint64_t texture_get_allocation_size(TextureID) override { return 4; }
-	BitField<TextureUsageBits> texture_get_usages_supported_by_format(DataFormat, bool) override { return TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_VRS_ATTACHMENT_BIT; }
+	BitField<TextureUsageBits> texture_get_usages_supported_by_format(DataFormat, bool) override {
+		texture_usage_queries++;
+		return reject_texture_format ? BitField<TextureUsageBits>() : BitField<TextureUsageBits>(TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_VRS_ATTACHMENT_BIT);
+	}
 	uint64_t limit_get(Limit) override { return 4096; }
 	uint8_t *buffer_map(BufferID) override { return map_fails ? nullptr : data; }
 	void buffer_unmap(BufferID) override {}
@@ -287,23 +302,29 @@ struct Fixture {
 	~Fixture() { Access::detach(rd); }
 };
 
-TEST_CASE("[K03][P2] staging rejects oversized requests and normalizes region sizes") {
-	CHECK(Access::normalized_region_size(0) == 1);
-	CHECK(Access::normalized_region_size(1) == 1);
-	CHECK(Access::normalized_region_size(63) == 64);
-	CHECK(Access::normalized_region_size(UINT32_MAX) == 1);
+TEST_CASE("[K03][P2] non-segmented staging rejects regions larger than its block before effects") {
+	Fixture f;
 	for (uint64_t frame_used : { uint64_t(0), uint64_t(10) }) {
-		Fixture f;
 		auto oversized = Access::staging_probe(f.rd, 65, frame_used);
 		CHECK(oversized.error == ERR_INVALID_PARAMETER);
 		CHECK(oversized.frame_used == frame_used);
 		CHECK(oversized.fill_amount == 0);
 		CHECK_FALSE(oversized.used);
-		auto exact = Access::staging_probe(f.rd, 64, 0);
-		CHECK(exact.error == OK);
-		CHECK(exact.offset == 0);
-		CHECK(exact.size == 64);
 	}
+	auto exact = Access::staging_probe(f.rd, 64, 0);
+	CHECK(exact.error == OK);
+	CHECK(exact.offset == 0);
+	CHECK(exact.size == 64);
+}
+
+TEST_CASE("[K03][P2] zero texture staging region normalizes before transfer loops") {
+	CHECK(Access::normalized_region_size(0) == 1);
+	CHECK(Access::normalized_region_size(-2) == 1);
+	CHECK(Access::normalized_region_size(INT64_MIN) == 1);
+	CHECK(Access::normalized_region_size(1) == 1);
+	CHECK(Access::normalized_region_size(63) == 64);
+	CHECK(Access::normalized_region_size(UINT32_MAX) == 1);
+	CHECK(Access::normalized_region_size(int64_t(UINT32_MAX) + 1) == 1);
 }
 
 TEST_CASE("[K03][P2] transfer recycle Busy retains original work and permits later completion") {
@@ -710,6 +731,64 @@ TEST_CASE("[K03][P2] native worker creation failure rolls back only unissued own
 		CHECK(f.driver.fence_frees == (failure > 1 ? 1 : 0));
 		CHECK(f.driver.pool_frees == (failure > 2 ? 1 : 0));
 	}
+}
+
+TEST_CASE("[K03][P2] texture creation rejects invalid base format before backend queries") {
+	Fixture f;
+	f.driver.reject_texture_format = true;
+	RenderingDevice::TextureFormat format;
+	format.format = RDD::DATA_FORMAT_MAX;
+	format.width = format.height = format.depth = format.array_layers = format.mipmaps = 1;
+	format.usage_bits = RDD::TEXTURE_USAGE_SAMPLING_BIT;
+	ERR_PRINT_OFF;
+	RID invalid = f.rd.texture_create(format, RenderingDevice::TextureView());
+	ERR_PRINT_ON;
+	CHECK(invalid.is_null());
+	CHECK(f.driver.texture_usage_queries == 0);
+	CHECK(Access::texture_count(f.rd) == 0);
+	Vector<uint8_t> bytes;
+	bytes.resize(4);
+	Vector<Vector<uint8_t>> data;
+	data.push_back(bytes);
+	ERR_PRINT_OFF;
+	invalid = f.rd.texture_create(format, RenderingDevice::TextureView(), data);
+	format.usage_bits = RDD::TEXTURE_USAGE_VRS_ATTACHMENT_BIT;
+	RID invalid_vrs = f.rd.texture_create(format, RenderingDevice::TextureView());
+	ERR_PRINT_ON;
+	CHECK(invalid.is_null());
+	CHECK(invalid_vrs.is_null());
+	CHECK(f.driver.texture_usage_queries == 0);
+	CHECK(f.driver.texture_creates == 0);
+	format.usage_bits = RDD::TEXTURE_USAGE_SAMPLING_BIT;
+	// Check malformed enum storage without converting it to an invalid C++ enum.
+	const uint32_t malformed = UINT32_MAX;
+	static_assert(sizeof(format.format) == sizeof(malformed));
+	memcpy(&format.format, &malformed, sizeof(malformed));
+	ERR_PRINT_OFF;
+	invalid = f.rd.texture_create(format, RenderingDevice::TextureView());
+	ERR_PRINT_ON;
+	CHECK(invalid.is_null());
+	CHECK(f.driver.texture_usage_queries == 0);
+	CHECK(Access::texture_count(f.rd) == 0);
+	// A valid format still reaches the ordinary backend capability refusal.
+	format.format = RDD::DATA_FORMAT_R8G8B8A8_UNORM;
+	ERR_PRINT_OFF;
+	RID unsupported = f.rd.texture_create(format, RenderingDevice::TextureView());
+	ERR_PRINT_ON;
+	CHECK(unsupported.is_null());
+	CHECK(f.driver.texture_usage_queries == 1);
+	CHECK(Access::texture_count(f.rd) == 0);
+	f.driver.reject_texture_format = false;
+	format.format = RDD::DATA_FORMAT_R32G32B32A32_SFLOAT;
+	RID valid = f.rd.texture_create(format, RenderingDevice::TextureView());
+	CHECK(valid.is_valid());
+	CHECK(f.driver.texture_creates == 1);
+	CHECK(Access::texture_count(f.rd) == 1);
+	if (valid.is_valid()) {
+		Access::cleanup_created_texture(f.rd, valid);
+	}
+	CHECK(f.driver.texture_frees == 1);
+	CHECK(Access::texture_count(f.rd) == 0);
 }
 
 TEST_CASE("[K03][P2] public immediate texture creation propagates unresolved completion") {

@@ -1,657 +1,1037 @@
 #include "tests/test_macros.h"
 TEST_FORCE_LINK(test_qualification_vulkan_allocation)
 #if defined(VULKAN_ENABLED) && defined(MACOS_ENABLED)
+#include "core/os/os.h"
 #include "drivers/vulkan/rendering_context_driver_vulkan.h"
 #include "drivers/vulkan/rendering_device_driver_vulkan.h"
 class TestQualificationVulkanAllocationAccess {
 public:
- static void fail(RenderingDeviceDriverVulkan &driver,uint32_t stage){driver.test_buffer_fault_stage=stage;}
- static uint32_t rollback(RenderingDeviceDriverVulkan &driver){return driver.test_buffer_rollback_mask;}
- static uint32_t allocations(RenderingDeviceDriverVulkan &driver){VmaTotalStatistics stats;vmaCalculateStatistics(driver.allocator,&stats);return stats.total.statistics.allocationCount;}
- static void texture_fail(RenderingDeviceDriverVulkan &driver,uint32_t stage){driver.test_texture_fault_stage=stage;}
- static uint32_t texture_rollback(RenderingDeviceDriverVulkan &driver){return driver.test_texture_rollback_mask;}
- static void texture_reset(RenderingDeviceDriverVulkan &driver){driver.test_texture_fault_stage=0;driver.test_texture_rollback_mask=0;driver.test_texture_prefix=VK_NULL_HANDLE;driver.test_texture_allocation_prefix=nullptr;}
- static void clean_red_prefix(RenderingDeviceDriverVulkan &driver) {
-  if(driver.test_buffer_prefix && !(driver.test_buffer_rollback_mask&1))vkDestroyBuffer(driver.vk_device,driver.test_buffer_prefix,RenderingContextDriverVulkan::get_allocation_callbacks(VK_OBJECT_TYPE_BUFFER));
-  if(driver.test_buffer_allocation_prefix && !(driver.test_buffer_rollback_mask&2))vmaFreeMemory(driver.allocator,driver.test_buffer_allocation_prefix);
-  driver.test_buffer_prefix=VK_NULL_HANDLE;driver.test_buffer_allocation_prefix=nullptr;driver.test_buffer_fault_stage=0;
- }
+	struct DescriptorOutcome {
+		uint32_t state;
+		int32_t native_code;
+	};
+	template <class D>
+	static auto checked_descriptor_free(D &driver, RenderingDeviceDriver::UniformSetID set, int) -> decltype(driver.qualification_uniform_set_free(set), DescriptorOutcome()) {
+		const auto result = driver.qualification_uniform_set_free(set);
+		return { uint32_t(result.state), result.native_code };
+	}
+	template <class D>
+	static DescriptorOutcome checked_descriptor_free(D &, RenderingDeviceDriver::UniformSetID, long) { return { 0, 0 }; }
+	template <class D>
+	static auto descriptor_fault(D &driver, bool enable, int) -> decltype(driver.test_descriptor_free_error = VK_SUCCESS, bool()) {
+		driver.test_descriptor_free_error = enable ? VK_ERROR_DEVICE_LOST : VK_SUCCESS;
+		return true;
+	}
+	template <class D>
+	static bool descriptor_fault(D &, bool, long) { return false; }
+	template <class D>
+	static auto descriptor_calls(D &driver, int) -> decltype(driver.test_descriptor_free_calls, uint32_t()) { return driver.test_descriptor_free_calls; }
+	template <class D>
+	static uint32_t descriptor_calls(D &, long) { return 0; }
+	template <class D>
+	static auto descriptor_unknowns(D &driver, int) -> decltype(driver.qualification_unknown_descriptors, uint64_t()) {
+		MutexLock lock(driver.descriptor_set_mutex);
+		return driver.qualification_unknown_descriptors;
+	}
+	template <class D>
+	static uint64_t descriptor_unknowns(D &, long) { return 0; }
+	static uint64_t set_descriptor_unknowns(RenderingDeviceDriverVulkan &driver, uint64_t value) {
+		MutexLock lock(driver.descriptor_set_mutex);
+		const auto previous = driver.qualification_unknown_descriptors;
+		driver.qualification_unknown_descriptors = value;
+		return previous;
+	}
+	static uint32_t descriptor_pools(RenderingDeviceDriverVulkan &driver) { return driver.descriptor_set_pools.size(); }
+	template <class D>
+	static auto clear_injected_latch(D &driver, RenderingDeviceDriver::UniformSetID set, int) -> decltype(((typename D::UniformSetInfo *)set.id)->qualification_return_unknown = false, void()) {
+		MutexLock lock(driver.descriptor_set_mutex);
+		auto *info = (typename D::UniformSetInfo *)set.id;
+		if (info->qualification_return_unknown) {
+			CRASH_COND(!driver.qualification_unknown_descriptors);
+			--driver.qualification_unknown_descriptors;
+			info->qualification_return_unknown = false;
+		}
+	}
+	template <class D>
+	static void clear_injected_latch(D &, RenderingDeviceDriver::UniformSetID, long) {}
+	static RenderingDeviceDriver::UniformSetID descriptor_set(RenderingDeviceDriverVulkan &driver, VkDescriptorSetLayout &layout, int pool = -1) {
+		VkDescriptorSetLayoutCreateInfo create = {};
+		create.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		if (vkCreateDescriptorSetLayout(driver.vk_device, &create, RenderingContextDriverVulkan::get_allocation_callbacks(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT), &layout) != VK_SUCCESS) {
+			return {};
+		}
+		RenderingDeviceDriverVulkan::ShaderInfo shader;
+		shader.vk_descriptor_set_layouts.push_back(layout);
+		return driver.uniform_set_create(VectorView<RenderingDeviceDriver::BoundUniform>(nullptr, 0), RenderingDeviceDriver::ShaderID(&shader), 0, pool);
+	}
+	static bool linear_enabled(RenderingDeviceDriverVulkan &driver, bool enabled) {
+		bool previous = driver.linear_descriptor_pools_enabled;
+		driver.linear_descriptor_pools_enabled = enabled;
+		return previous;
+	}
+	static void destroy_layout(RenderingDeviceDriverVulkan &driver, VkDescriptorSetLayout layout) {
+		if (layout) {
+			vkDestroyDescriptorSetLayout(driver.vk_device, layout, RenderingContextDriverVulkan::get_allocation_callbacks(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT));
+		}
+	}
+	static void fail(RenderingDeviceDriverVulkan &driver, uint32_t stage) { driver.test_buffer_fault_stage = stage; }
+	static uint32_t rollback(RenderingDeviceDriverVulkan &driver) { return driver.test_buffer_rollback_mask; }
+	static uint32_t allocations(RenderingDeviceDriverVulkan &driver) {
+		VmaTotalStatistics stats;
+		vmaCalculateStatistics(driver.allocator, &stats);
+		return stats.total.statistics.allocationCount;
+	}
+	static void texture_fail(RenderingDeviceDriverVulkan &driver, uint32_t stage) { driver.test_texture_fault_stage = stage; }
+	static uint32_t texture_rollback(RenderingDeviceDriverVulkan &driver) { return driver.test_texture_rollback_mask; }
+	static void texture_reset(RenderingDeviceDriverVulkan &driver) {
+		driver.test_texture_fault_stage = 0;
+		driver.test_texture_rollback_mask = 0;
+		driver.test_texture_prefix = VK_NULL_HANDLE;
+		driver.test_texture_allocation_prefix = nullptr;
+	}
+	static void clean_red_prefix(RenderingDeviceDriverVulkan &driver) {
+		if (driver.test_buffer_prefix && !(driver.test_buffer_rollback_mask & 1)) {
+			vkDestroyBuffer(driver.vk_device, driver.test_buffer_prefix, RenderingContextDriverVulkan::get_allocation_callbacks(VK_OBJECT_TYPE_BUFFER));
+		}
+		if (driver.test_buffer_allocation_prefix && !(driver.test_buffer_rollback_mask & 2)) {
+			vmaFreeMemory(driver.allocator, driver.test_buffer_allocation_prefix);
+		}
+		driver.test_buffer_prefix = VK_NULL_HANDLE;
+		driver.test_buffer_allocation_prefix = nullptr;
+		driver.test_buffer_fault_stage = 0;
+	}
 };
+TEST_CASE("[QualificationNative][Vulkan] checked descriptor return preserves unknown without replay") {
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	VkDescriptorSetLayout success_layout = VK_NULL_HANDLE;
+	auto success = TestQualificationVulkanAllocationAccess::descriptor_set(driver, success_layout);
+	REQUIRE(bool(success));
+	auto returned = TestQualificationVulkanAllocationAccess::checked_descriptor_free(driver, success, 0);
+	CHECK_MESSAGE(returned.state == 1, "A real successful descriptor free must have a checked returned result.");
+	CHECK(returned.native_code == VK_SUCCESS);
+	if (returned.state != 1) {
+		driver.uniform_set_free(success);
+	}
+	TestQualificationVulkanAllocationAccess::destroy_layout(driver, success_layout);
+	VkDescriptorSetLayout unknown_layout = VK_NULL_HANDLE;
+	auto unknown = TestQualificationVulkanAllocationAccess::descriptor_set(driver, unknown_layout);
+	REQUIRE(bool(unknown));
+	const bool injectable = TestQualificationVulkanAllocationAccess::descriptor_fault(driver, true, 0);
+	CHECK(injectable);
+	const auto before = TestQualificationVulkanAllocationAccess::descriptor_calls(driver, 0);
+	auto first = TestQualificationVulkanAllocationAccess::checked_descriptor_free(driver, unknown, 0);
+	CHECK(first.state == 2);
+	CHECK(first.native_code == VK_ERROR_DEVICE_LOST);
+	CHECK(TestQualificationVulkanAllocationAccess::descriptor_unknowns(driver, 0) == 1);
+	bool retained = first.state != 1;
+	if (first.state == 2) {
+		const auto pools = TestQualificationVulkanAllocationAccess::descriptor_pools(driver);
+		retained = pools != 0;
+		CHECK(retained);
+		if (retained) {
+			ERR_PRINT_OFF;
+			driver.uniform_set_free(unknown);
+			ERR_PRINT_ON;
+			retained = TestQualificationVulkanAllocationAccess::descriptor_pools(driver) == pools;
+			CHECK_MESSAGE(retained, "Legacy free must not replay an unknown checked return.");
+		}
+		if (retained) {
+			auto repeated = TestQualificationVulkanAllocationAccess::checked_descriptor_free(driver, unknown, 0);
+			CHECK(repeated.state == 2);
+			CHECK(repeated.native_code == first.native_code);
+		}
+	}
+	CHECK(TestQualificationVulkanAllocationAccess::descriptor_calls(driver, 0) == before + 1);
+	CHECK(TestQualificationVulkanAllocationAccess::descriptor_unknowns(driver, 0) == 1);
+	// The injected failure is before the actual Vulkan call. This test-only
+	// cleanup frees the actual set; production unknown returns are not retried.
+	TestQualificationVulkanAllocationAccess::descriptor_fault(driver, false, 0);
+	if (retained) {
+		TestQualificationVulkanAllocationAccess::clear_injected_latch(driver, unknown, 0);
+		driver.uniform_set_free(unknown);
+	}
+	TestQualificationVulkanAllocationAccess::destroy_layout(driver, unknown_layout);
+	CHECK(TestQualificationVulkanAllocationAccess::descriptor_unknowns(driver, 0) == 0);
+	const bool previous_linear = TestQualificationVulkanAllocationAccess::linear_enabled(driver, true);
+	VkDescriptorSetLayout linear_layout = VK_NULL_HANDLE;
+	auto linear = TestQualificationVulkanAllocationAccess::descriptor_set(driver, linear_layout, 0);
+	CHECK(bool(linear));
+	if (linear) {
+		const auto calls = TestQualificationVulkanAllocationAccess::descriptor_calls(driver, 0);
+		auto unsupported = TestQualificationVulkanAllocationAccess::checked_descriptor_free(driver, linear, 0);
+		CHECK(unsupported.state == 0);
+		CHECK(TestQualificationVulkanAllocationAccess::descriptor_calls(driver, 0) == calls);
+		driver.uniform_set_free(linear);
+		driver.linear_uniform_set_pools_reset(0);
+	}
+	TestQualificationVulkanAllocationAccess::linear_enabled(driver, previous_linear);
+	TestQualificationVulkanAllocationAccess::destroy_layout(driver, linear_layout);
+	VkDescriptorSetLayout saturated_layout = VK_NULL_HANDLE;
+	auto saturated = TestQualificationVulkanAllocationAccess::descriptor_set(driver, saturated_layout);
+	CHECK(bool(saturated));
+	if (saturated) {
+		const auto previous = TestQualificationVulkanAllocationAccess::set_descriptor_unknowns(driver, UINT64_MAX);
+		const auto calls = TestQualificationVulkanAllocationAccess::descriptor_calls(driver, 0);
+		const auto refused = TestQualificationVulkanAllocationAccess::checked_descriptor_free(driver, saturated, 0);
+		CHECK(refused.state == 0);
+		CHECK(TestQualificationVulkanAllocationAccess::descriptor_calls(driver, 0) == calls);
+		TestQualificationVulkanAllocationAccess::set_descriptor_unknowns(driver, previous);
+		driver.uniform_set_free(saturated);
+	}
+	TestQualificationVulkanAllocationAccess::destroy_layout(driver, saturated_layout);
+}
+TEST_CASE("[QualificationNative][Vulkan] independent unknown descriptors remain separately retained") {
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	VkDescriptorSetLayout layout_a = VK_NULL_HANDLE, layout_b = VK_NULL_HANDLE;
+	auto a = TestQualificationVulkanAllocationAccess::descriptor_set(driver, layout_a);
+	auto b = TestQualificationVulkanAllocationAccess::descriptor_set(driver, layout_b);
+	CHECK(bool(a));
+	CHECK(bool(b));
+	if (a && b) {
+		CHECK(TestQualificationVulkanAllocationAccess::descriptor_fault(driver, true, 0));
+		const auto before = TestQualificationVulkanAllocationAccess::descriptor_calls(driver, 0);
+		auto first = TestQualificationVulkanAllocationAccess::checked_descriptor_free(driver, a, 0);
+		auto second = TestQualificationVulkanAllocationAccess::checked_descriptor_free(driver, b, 0);
+		CHECK(first.state == 2);
+		CHECK(second.state == 2);
+		CHECK(TestQualificationVulkanAllocationAccess::descriptor_unknowns(driver, 0) == 2);
+		if (first.state == 2) {
+			auto repeated = TestQualificationVulkanAllocationAccess::checked_descriptor_free(driver, a, 0);
+			CHECK(repeated.state == 2);
+		}
+		CHECK(TestQualificationVulkanAllocationAccess::descriptor_calls(driver, 0) == before + 2);
+		CHECK(TestQualificationVulkanAllocationAccess::descriptor_unknowns(driver, 0) == 2);
+		TestQualificationVulkanAllocationAccess::descriptor_fault(driver, false, 0);
+		if (first.state != 1) {
+			TestQualificationVulkanAllocationAccess::clear_injected_latch(driver, a, 0);
+			driver.uniform_set_free(a);
+		}
+		CHECK(TestQualificationVulkanAllocationAccess::descriptor_unknowns(driver, 0) == 1);
+		if (second.state == 2) {
+			auto retained = TestQualificationVulkanAllocationAccess::checked_descriptor_free(driver, b, 0);
+			CHECK(retained.state == 2);
+		}
+		CHECK(TestQualificationVulkanAllocationAccess::descriptor_unknowns(driver, 0) == 1);
+		if (second.state != 1) {
+			TestQualificationVulkanAllocationAccess::clear_injected_latch(driver, b, 0);
+			driver.uniform_set_free(b);
+		}
+		CHECK(TestQualificationVulkanAllocationAccess::descriptor_unknowns(driver, 0) == 0);
+	} else {
+		if (a) {
+			driver.uniform_set_free(a);
+		}
+		if (b) {
+			driver.uniform_set_free(b);
+		}
+	}
+	TestQualificationVulkanAllocationAccess::destroy_layout(driver, layout_a);
+	TestQualificationVulkanAllocationAccess::destroy_layout(driver, layout_b);
+}
+TEST_CASE("[QualificationNative][Vulkan] unknown descriptor destruction probe") {
+	if (OS::get_singleton()->get_environment("GODOT_DESCRIPTOR_RETURN_DEATH_PROBE") != "1") {
+		return;
+	}
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+	auto set = TestQualificationVulkanAllocationAccess::descriptor_set(driver, layout);
+	REQUIRE(bool(set));
+	REQUIRE(TestQualificationVulkanAllocationAccess::descriptor_fault(driver, true, 0));
+	auto unknown = TestQualificationVulkanAllocationAccess::checked_descriptor_free(driver, set, 0);
+	REQUIRE(unknown.state == 2);
+	// Isolated subprocess intentionally reaches the original driver destructor.
+}
 TEST_CASE("[QualificationNative][Vulkan] failed manual buffer creation returns its actual native prefix") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- for(uint32_t stage=1;stage<=2;++stage) {
-  const uint32_t before=TestQualificationVulkanAllocationAccess::allocations(driver);TestQualificationVulkanAllocationAccess::fail(driver,stage);
-  ERR_PRINT_OFF;
-  auto buffer=driver.buffer_create(1048576,RenderingDeviceDriver::BUFFER_USAGE_STORAGE_BIT,RenderingDeviceDriver::MEMORY_ALLOCATION_TYPE_GPU,0);
-  ERR_PRINT_ON;
-  CHECK_FALSE(bool(buffer));CHECK(TestQualificationVulkanAllocationAccess::rollback(driver)==(stage==1?1:3));
-  CHECK(TestQualificationVulkanAllocationAccess::allocations(driver)==before);
-  // RED may leave native objects; restore test isolation only after recording
-  // the actual production failure. This is not counted as driver rollback.
-  TestQualificationVulkanAllocationAccess::clean_red_prefix(driver);
- }
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	for (uint32_t stage = 1; stage <= 2; ++stage) {
+		const uint32_t before = TestQualificationVulkanAllocationAccess::allocations(driver);
+		TestQualificationVulkanAllocationAccess::fail(driver, stage);
+		ERR_PRINT_OFF;
+		auto buffer = driver.buffer_create(1048576, RenderingDeviceDriver::BUFFER_USAGE_STORAGE_BIT, RenderingDeviceDriver::MEMORY_ALLOCATION_TYPE_GPU, 0);
+		ERR_PRINT_ON;
+		CHECK_FALSE(bool(buffer));
+		CHECK(TestQualificationVulkanAllocationAccess::rollback(driver) == (stage == 1 ? 1 : 3));
+		CHECK(TestQualificationVulkanAllocationAccess::allocations(driver) == before);
+		// RED may leave native objects; restore test isolation only after recording
+		// the actual production failure. This is not counted as driver rollback.
+		TestQualificationVulkanAllocationAccess::clean_red_prefix(driver);
+	}
 }
 TEST_CASE("[QualificationNative][Vulkan] failed extra-tracking texture creation rolls back image and memory") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- RenderingDeviceDriver::TextureFormat format;
- format.format=RDD::DATA_FORMAT_R8_UNORM;format.width=format.height=format.depth=format.array_layers=format.mipmaps=1;
- format.samples=RDD::TEXTURE_SAMPLES_1;
- format.usage_bits=RDD::TEXTURE_USAGE_SAMPLING_BIT;
- RenderingDeviceDriver::TextureView view;
- view.format = format.format;
- for(uint32_t stage=1;stage<=3;++stage) {
-  const uint32_t before=TestQualificationVulkanAllocationAccess::allocations(driver);TestQualificationVulkanAllocationAccess::texture_fail(driver,stage);
-  ERR_PRINT_OFF;
-  auto texture=driver.texture_create(format,view);
-  ERR_PRINT_ON;
-  CHECK_FALSE(bool(texture));CHECK(TestQualificationVulkanAllocationAccess::texture_rollback(driver)==(stage==1?1:3));
-  CHECK(TestQualificationVulkanAllocationAccess::allocations(driver)==before);
-  TestQualificationVulkanAllocationAccess::texture_reset(driver);
- }
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	RenderingDeviceDriver::TextureFormat format;
+	format.format = RDD::DATA_FORMAT_R8_UNORM;
+	format.width = format.height = format.depth = format.array_layers = format.mipmaps = 1;
+	format.samples = RDD::TEXTURE_SAMPLES_1;
+	format.usage_bits = RDD::TEXTURE_USAGE_SAMPLING_BIT;
+	RenderingDeviceDriver::TextureView view;
+	view.format = format.format;
+	for (uint32_t stage = 1; stage <= 3; ++stage) {
+		const uint32_t before = TestQualificationVulkanAllocationAccess::allocations(driver);
+		TestQualificationVulkanAllocationAccess::texture_fail(driver, stage);
+		ERR_PRINT_OFF;
+		auto texture = driver.texture_create(format, view);
+		ERR_PRINT_ON;
+		CHECK_FALSE(bool(texture));
+		CHECK(TestQualificationVulkanAllocationAccess::texture_rollback(driver) == (stage == 1 ? 1 : 3));
+		CHECK(TestQualificationVulkanAllocationAccess::allocations(driver) == before);
+		TestQualificationVulkanAllocationAccess::texture_reset(driver);
+	}
 }
 TEST_CASE("[QualificationNative][Vulkan] texture creation rejects an invalid direct view format") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- RenderingDeviceDriver::TextureFormat format;
- format.format=RDD::DATA_FORMAT_R8_UNORM;format.width=format.height=format.depth=format.array_layers=format.mipmaps=1;
- format.samples=RDD::TEXTURE_SAMPLES_1;
- format.usage_bits=RDD::TEXTURE_USAGE_SAMPLING_BIT;
- RenderingDeviceDriver::TextureView invalid_view;
- const uint32_t before=TestQualificationVulkanAllocationAccess::allocations(driver);
- ERR_PRINT_OFF;
- auto texture=driver.texture_create(format,invalid_view);
- ERR_PRINT_ON;
- CHECK_FALSE(bool(texture));
- CHECK(TestQualificationVulkanAllocationAccess::allocations(driver)==before);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	RenderingDeviceDriver::TextureFormat format;
+	format.format = RDD::DATA_FORMAT_R8_UNORM;
+	format.width = format.height = format.depth = format.array_layers = format.mipmaps = 1;
+	format.samples = RDD::TEXTURE_SAMPLES_1;
+	format.usage_bits = RDD::TEXTURE_USAGE_SAMPLING_BIT;
+	RenderingDeviceDriver::TextureView invalid_view;
+	const uint32_t before = TestQualificationVulkanAllocationAccess::allocations(driver);
+	ERR_PRINT_OFF;
+	auto texture = driver.texture_create(format, invalid_view);
+	ERR_PRINT_ON;
+	CHECK_FALSE(bool(texture));
+	CHECK(TestQualificationVulkanAllocationAccess::allocations(driver) == before);
 }
 TEST_CASE("[QualificationNative][Vulkan] texture creation rejects invalid view swizzles") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- RenderingDeviceDriver::TextureFormat format;
- format.format=RDD::DATA_FORMAT_R8_UNORM;format.width=format.height=format.depth=format.array_layers=format.mipmaps=1;
- format.samples=RDD::TEXTURE_SAMPLES_1;
- format.usage_bits=RDD::TEXTURE_USAGE_SAMPLING_BIT;
- const uint32_t before=TestQualificationVulkanAllocationAccess::allocations(driver);
- for (uint32_t channel = 0; channel < 4; channel++) {
-  RenderingDeviceDriver::TextureView view;
-  view.format=format.format;
-  switch (channel) {
-   case 0: view.swizzle_r=static_cast<RenderingDeviceDriver::TextureSwizzle>(RDD::TEXTURE_SWIZZLE_MAX); break;
-   case 1: view.swizzle_g=static_cast<RenderingDeviceDriver::TextureSwizzle>(RDD::TEXTURE_SWIZZLE_MAX); break;
-   case 2: view.swizzle_b=static_cast<RenderingDeviceDriver::TextureSwizzle>(RDD::TEXTURE_SWIZZLE_MAX); break;
-   case 3: view.swizzle_a=static_cast<RenderingDeviceDriver::TextureSwizzle>(RDD::TEXTURE_SWIZZLE_MAX); break;
-  }
-  ERR_PRINT_OFF;
-  auto texture=driver.texture_create(format,view);
-  ERR_PRINT_ON;
-  CHECK_FALSE(bool(texture));
-  if (texture) {
-   driver.texture_free(texture);
-  }
- }
- CHECK(TestQualificationVulkanAllocationAccess::allocations(driver)==before);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	RenderingDeviceDriver::TextureFormat format;
+	format.format = RDD::DATA_FORMAT_R8_UNORM;
+	format.width = format.height = format.depth = format.array_layers = format.mipmaps = 1;
+	format.samples = RDD::TEXTURE_SAMPLES_1;
+	format.usage_bits = RDD::TEXTURE_USAGE_SAMPLING_BIT;
+	const uint32_t before = TestQualificationVulkanAllocationAccess::allocations(driver);
+	for (uint32_t channel = 0; channel < 4; channel++) {
+		RenderingDeviceDriver::TextureView view;
+		view.format = format.format;
+		switch (channel) {
+			case 0:
+				view.swizzle_r = static_cast<RenderingDeviceDriver::TextureSwizzle>(RDD::TEXTURE_SWIZZLE_MAX);
+				break;
+			case 1:
+				view.swizzle_g = static_cast<RenderingDeviceDriver::TextureSwizzle>(RDD::TEXTURE_SWIZZLE_MAX);
+				break;
+			case 2:
+				view.swizzle_b = static_cast<RenderingDeviceDriver::TextureSwizzle>(RDD::TEXTURE_SWIZZLE_MAX);
+				break;
+			case 3:
+				view.swizzle_a = static_cast<RenderingDeviceDriver::TextureSwizzle>(RDD::TEXTURE_SWIZZLE_MAX);
+				break;
+		}
+		ERR_PRINT_OFF;
+		auto texture = driver.texture_create(format, view);
+		ERR_PRINT_ON;
+		CHECK_FALSE(bool(texture));
+		if (texture) {
+			driver.texture_free(texture);
+		}
+	}
+	CHECK(TestQualificationVulkanAllocationAccess::allocations(driver) == before);
 }
 TEST_CASE("[QualificationNative][Vulkan] direct format queries reject an invalid format") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- auto usages=driver.texture_get_usages_supported_by_format(RDD::DATA_FORMAT_MAX,false);
- bool filter_supported=driver.sampler_is_format_supported_for_filter(RDD::DATA_FORMAT_MAX,RDD::SAMPLER_FILTER_LINEAR);
- bool raw_reinterpretation=true;
- bool can_share=driver.texture_can_make_shared_with_format(RenderingDeviceDriver::TextureID(),RDD::DATA_FORMAT_MAX,raw_reinterpretation);
- auto extension=driver.texture_create_from_extension(0,RDD::TEXTURE_TYPE_2D,RDD::DATA_FORMAT_MAX,1,false,1);
- ERR_PRINT_ON;
- CHECK(usages==0);
- CHECK_FALSE(filter_supported);
- CHECK_FALSE(can_share);
- CHECK_FALSE(raw_reinterpretation);
- CHECK_FALSE(bool(extension));
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	auto usages = driver.texture_get_usages_supported_by_format(RDD::DATA_FORMAT_MAX, false);
+	bool filter_supported = driver.sampler_is_format_supported_for_filter(RDD::DATA_FORMAT_MAX, RDD::SAMPLER_FILTER_LINEAR);
+	bool raw_reinterpretation = true;
+	bool can_share = driver.texture_can_make_shared_with_format(RenderingDeviceDriver::TextureID(), RDD::DATA_FORMAT_MAX, raw_reinterpretation);
+	auto extension = driver.texture_create_from_extension(0, RDD::TEXTURE_TYPE_2D, RDD::DATA_FORMAT_MAX, 1, false, 1);
+	ERR_PRINT_ON;
+	CHECK(usages == 0);
+	CHECK_FALSE(filter_supported);
+	CHECK_FALSE(can_share);
+	CHECK_FALSE(raw_reinterpretation);
+	CHECK_FALSE(bool(extension));
 }
 TEST_CASE("[QualificationNative][Vulkan] vertex format creation rejects an invalid format") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- RenderingDeviceDriver::VertexAttribute attributes[1];
- RenderingDeviceDriver::VertexAttributeBindingsMap bindings;
- ERR_PRINT_OFF;
- auto vertex_format=driver.vertex_format_create(Span<RenderingDeviceDriver::VertexAttribute>(attributes,1),bindings);
- ERR_PRINT_ON;
- CHECK_FALSE(bool(vertex_format));
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	RenderingDeviceDriver::VertexAttribute attributes[1];
+	RenderingDeviceDriver::VertexAttributeBindingsMap bindings;
+	ERR_PRINT_OFF;
+	auto vertex_format = driver.vertex_format_create(Span<RenderingDeviceDriver::VertexAttribute>(attributes, 1), bindings);
+	ERR_PRINT_ON;
+	CHECK_FALSE(bool(vertex_format));
 }
 TEST_CASE("[QualificationNative][Vulkan] direct buffer format rejects invalid input") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- bool result=driver.buffer_set_texel_format(RenderingDeviceDriver::BufferID(),RDD::DATA_FORMAT_MAX);
- ERR_PRINT_ON;
- CHECK_FALSE(result);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	bool result = driver.buffer_set_texel_format(RenderingDeviceDriver::BufferID(), RDD::DATA_FORMAT_MAX);
+	ERR_PRINT_ON;
+	CHECK_FALSE(result);
 }
 TEST_CASE("[QualificationNative][Vulkan] sampler creation rejects invalid filter") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- RenderingDeviceDriver::SamplerState state;
- state.mag_filter=static_cast<RenderingDeviceDriver::SamplerFilter>(2);
- ERR_PRINT_OFF;
- auto sampler=driver.sampler_create(state);
- ERR_PRINT_ON;
- CHECK_FALSE(bool(sampler));
- if (sampler) {
-  driver.sampler_free(sampler);
- }
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	RenderingDeviceDriver::SamplerState state;
+	state.mag_filter = static_cast<RenderingDeviceDriver::SamplerFilter>(2);
+	ERR_PRINT_OFF;
+	auto sampler = driver.sampler_create(state);
+	ERR_PRINT_ON;
+	CHECK_FALSE(bool(sampler));
+	if (sampler) {
+		driver.sampler_free(sampler);
+	}
 }
 TEST_CASE("[QualificationNative][Vulkan] sampler creation rejects invalid repeat mode") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- RenderingDeviceDriver::SamplerState state;
- state.repeat_u=RDD::SAMPLER_REPEAT_MODE_MAX;
- ERR_PRINT_OFF;
- auto sampler=driver.sampler_create(state);
- ERR_PRINT_ON;
- CHECK_FALSE(bool(sampler));
- if (sampler) {
-  driver.sampler_free(sampler);
- }
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	RenderingDeviceDriver::SamplerState state;
+	state.repeat_u = RDD::SAMPLER_REPEAT_MODE_MAX;
+	ERR_PRINT_OFF;
+	auto sampler = driver.sampler_create(state);
+	ERR_PRINT_ON;
+	CHECK_FALSE(bool(sampler));
+	if (sampler) {
+		driver.sampler_free(sampler);
+	}
 }
 TEST_CASE("[QualificationNative][Vulkan] sampler creation rejects invalid compare op") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- RenderingDeviceDriver::SamplerState state;
- state.enable_compare=true;
- state.compare_op=RDD::COMPARE_OP_MAX;
- ERR_PRINT_OFF;
- auto sampler=driver.sampler_create(state);
- ERR_PRINT_ON;
- CHECK_FALSE(bool(sampler));
- if (sampler) {
-  driver.sampler_free(sampler);
- }
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	RenderingDeviceDriver::SamplerState state;
+	state.enable_compare = true;
+	state.compare_op = RDD::COMPARE_OP_MAX;
+	ERR_PRINT_OFF;
+	auto sampler = driver.sampler_create(state);
+	ERR_PRINT_ON;
+	CHECK_FALSE(bool(sampler));
+	if (sampler) {
+		driver.sampler_free(sampler);
+	}
 }
 TEST_CASE("[QualificationNative][Vulkan] sampler creation rejects invalid border color") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- RenderingDeviceDriver::SamplerState state;
- state.border_color=RDD::SAMPLER_BORDER_COLOR_MAX;
- ERR_PRINT_OFF;
- auto sampler=driver.sampler_create(state);
- ERR_PRINT_ON;
- CHECK_FALSE(bool(sampler));
- if (sampler) {
-  driver.sampler_free(sampler);
- }
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	RenderingDeviceDriver::SamplerState state;
+	state.border_color = RDD::SAMPLER_BORDER_COLOR_MAX;
+	ERR_PRINT_OFF;
+	auto sampler = driver.sampler_create(state);
+	ERR_PRINT_ON;
+	CHECK_FALSE(bool(sampler));
+	if (sampler) {
+		driver.sampler_free(sampler);
+	}
 }
 TEST_CASE("[QualificationNative][Vulkan] index binding rejects invalid format before command access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- driver.command_render_bind_index_buffer(RenderingDeviceDriver::CommandBufferID(),RenderingDeviceDriver::BufferID(),static_cast<RenderingDeviceDriver::IndexBufferFormat>(2),0);
- ERR_PRINT_ON;
- CHECK(true);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	driver.command_render_bind_index_buffer(RenderingDeviceDriver::CommandBufferID(), RenderingDeviceDriver::BufferID(), static_cast<RenderingDeviceDriver::IndexBufferFormat>(2), 0);
+	ERR_PRINT_ON;
+	CHECK(true);
 }
 TEST_CASE("[QualificationNative][Vulkan] vertex binding rejects missing arrays before command access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- driver.command_render_bind_vertex_buffers(RenderingDeviceDriver::CommandBufferID(),1,nullptr,nullptr,0);
- ERR_PRINT_ON;
- CHECK(true);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	driver.command_render_bind_vertex_buffers(RenderingDeviceDriver::CommandBufferID(), 1, nullptr, nullptr, 0);
+	ERR_PRINT_ON;
+	CHECK(true);
 }
 TEST_CASE("[QualificationNative][Vulkan] attachment clear rejects missing views before command access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- driver.command_render_clear_attachments(RenderingDeviceDriver::CommandBufferID(),VectorView<RenderingDeviceDriver::AttachmentClear>(nullptr,1),{});
- ERR_PRINT_ON;
- CHECK(true);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	driver.command_render_clear_attachments(RenderingDeviceDriver::CommandBufferID(), VectorView<RenderingDeviceDriver::AttachmentClear>(nullptr, 1), {});
+	ERR_PRINT_ON;
+	CHECK(true);
 }
 TEST_CASE("[QualificationNative][Vulkan] viewport binding rejects missing view before command access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- driver.command_render_set_viewport(RenderingDeviceDriver::CommandBufferID(),VectorView<Rect2i>(nullptr,1));
- ERR_PRINT_ON;
- CHECK(true);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	driver.command_render_set_viewport(RenderingDeviceDriver::CommandBufferID(), VectorView<Rect2i>(nullptr, 1));
+	ERR_PRINT_ON;
+	CHECK(true);
 }
 TEST_CASE("[QualificationNative][Vulkan] scissor binding rejects missing view before command access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- driver.command_render_set_scissor(RenderingDeviceDriver::CommandBufferID(),VectorView<Rect2i>(nullptr,1));
- ERR_PRINT_ON;
- CHECK(true);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	driver.command_render_set_scissor(RenderingDeviceDriver::CommandBufferID(), VectorView<Rect2i>(nullptr, 1));
+	ERR_PRINT_ON;
+	CHECK(true);
 }
 TEST_CASE("[QualificationNative][Vulkan] push constants reject missing data before command access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- driver.command_bind_push_constants(RenderingDeviceDriver::CommandBufferID(),RenderingDeviceDriver::ShaderID(),0,VectorView<uint32_t>(nullptr,1));
- ERR_PRINT_ON;
- CHECK(true);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	driver.command_bind_push_constants(RenderingDeviceDriver::CommandBufferID(), RenderingDeviceDriver::ShaderID(), 0, VectorView<uint32_t>(nullptr, 1));
+	ERR_PRINT_ON;
+	CHECK(true);
 }
 TEST_CASE("[QualificationNative][Vulkan] render uniform binding rejects missing sets before command access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- driver.command_bind_render_uniform_sets(RenderingDeviceDriver::CommandBufferID(),VectorView<RenderingDeviceDriver::UniformSetID>(nullptr,1),RenderingDeviceDriver::ShaderID(),0,1,0);
- ERR_PRINT_ON;
- CHECK(true);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	driver.command_bind_render_uniform_sets(RenderingDeviceDriver::CommandBufferID(), VectorView<RenderingDeviceDriver::UniformSetID>(nullptr, 1), RenderingDeviceDriver::ShaderID(), 0, 1, 0);
+	ERR_PRINT_ON;
+	CHECK(true);
 }
 TEST_CASE("[QualificationNative][Vulkan] compute uniform binding rejects missing sets before command access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- driver.command_bind_compute_uniform_sets(RenderingDeviceDriver::CommandBufferID(),VectorView<RenderingDeviceDriver::UniformSetID>(nullptr,1),RenderingDeviceDriver::ShaderID(),0,1,0);
- ERR_PRINT_ON;
- CHECK(true);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	driver.command_bind_compute_uniform_sets(RenderingDeviceDriver::CommandBufferID(), VectorView<RenderingDeviceDriver::UniformSetID>(nullptr, 1), RenderingDeviceDriver::ShaderID(), 0, 1, 0);
+	ERR_PRINT_ON;
+	CHECK(true);
 }
 TEST_CASE("[QualificationNative][Vulkan] secondary command execution rejects missing view before command access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- driver.command_buffer_execute_secondary(RenderingDeviceDriver::CommandBufferID(),VectorView<RenderingDeviceDriver::CommandBufferID>(nullptr,1));
- ERR_PRINT_ON;
- CHECK(true);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	driver.command_buffer_execute_secondary(RenderingDeviceDriver::CommandBufferID(), VectorView<RenderingDeviceDriver::CommandBufferID>(nullptr, 1));
+	ERR_PRINT_ON;
+	CHECK(true);
 }
 TEST_CASE("[QualificationNative][Vulkan] render pass begin rejects missing clear values before command access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- driver.command_begin_render_pass(RenderingDeviceDriver::CommandBufferID(),RenderingDeviceDriver::RenderPassID(),RenderingDeviceDriver::FramebufferID(),RenderingDeviceDriver::COMMAND_BUFFER_TYPE_PRIMARY,Rect2i(),VectorView<RenderingDeviceDriver::RenderPassClearValue>(nullptr,1));
- ERR_PRINT_ON;
- CHECK(true);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	driver.command_begin_render_pass(RenderingDeviceDriver::CommandBufferID(), RenderingDeviceDriver::RenderPassID(), RenderingDeviceDriver::FramebufferID(), RenderingDeviceDriver::COMMAND_BUFFER_TYPE_PRIMARY, Rect2i(), VectorView<RenderingDeviceDriver::RenderPassClearValue>(nullptr, 1));
+	ERR_PRINT_ON;
+	CHECK(true);
 }
 TEST_CASE("[QualificationNative][Vulkan] pipeline barrier rejects missing views before command access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- driver.command_pipeline_barrier(RenderingDeviceDriver::CommandBufferID(),{}, {},VectorView<RenderingDeviceDriver::MemoryAccessBarrier>(nullptr,1),{}, {},{});
- ERR_PRINT_ON;
- CHECK(true);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	driver.command_pipeline_barrier(RenderingDeviceDriver::CommandBufferID(), {}, {}, VectorView<RenderingDeviceDriver::MemoryAccessBarrier>(nullptr, 1), {}, {}, {});
+	ERR_PRINT_ON;
+	CHECK(true);
 }
 TEST_CASE("[QualificationNative][Vulkan] framebuffer creation rejects missing attachment views before resource access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- auto framebuffer=driver.framebuffer_create(RenderingDeviceDriver::RenderPassID(),VectorView<RenderingDeviceDriver::TextureID>(nullptr,1),1,1);
- ERR_PRINT_ON;
- CHECK_FALSE(bool(framebuffer));
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	auto framebuffer = driver.framebuffer_create(RenderingDeviceDriver::RenderPassID(), VectorView<RenderingDeviceDriver::TextureID>(nullptr, 1), 1, 1);
+	ERR_PRINT_ON;
+	CHECK_FALSE(bool(framebuffer));
 }
 TEST_CASE("[QualificationNative][Vulkan] uniform set creation rejects missing binding views before resource access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- auto uniform_set=driver.uniform_set_create(VectorView<RenderingDeviceDriver::BoundUniform>(nullptr,1),RenderingDeviceDriver::ShaderID(),0,-1);
- ERR_PRINT_ON;
- CHECK_FALSE(bool(uniform_set));
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	auto uniform_set = driver.uniform_set_create(VectorView<RenderingDeviceDriver::BoundUniform>(nullptr, 1), RenderingDeviceDriver::ShaderID(), 0, -1);
+	ERR_PRINT_ON;
+	CHECK_FALSE(bool(uniform_set));
 }
 TEST_CASE("[QualificationNative][Vulkan] render pass creation rejects missing top-level views before resource access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- auto render_pass=driver.render_pass_create(VectorView<RenderingDeviceDriver::Attachment>(nullptr,1),{}, {},1,RenderingDeviceDriver::AttachmentReference());
- ERR_PRINT_ON;
- CHECK_FALSE(bool(render_pass));
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	auto render_pass = driver.render_pass_create(VectorView<RenderingDeviceDriver::Attachment>(nullptr, 1), {}, {}, 1, RenderingDeviceDriver::AttachmentReference());
+	ERR_PRINT_ON;
+	CHECK_FALSE(bool(render_pass));
 }
 TEST_CASE("[QualificationNative][Vulkan] dynamic uniform offset query rejects missing set views before resource access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- auto offsets=driver.uniform_sets_get_dynamic_offsets(VectorView<RenderingDeviceDriver::UniformSetID>(nullptr,1),RenderingDeviceDriver::ShaderID(),0,1);
- ERR_PRINT_ON;
- CHECK(offsets==0);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	auto offsets = driver.uniform_sets_get_dynamic_offsets(VectorView<RenderingDeviceDriver::UniformSetID>(nullptr, 1), RenderingDeviceDriver::ShaderID(), 0, 1);
+	ERR_PRINT_ON;
+	CHECK(offsets == 0);
 }
 TEST_CASE("[QualificationNative][Vulkan] render pipeline creation rejects missing view inputs before resource access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- RenderingDeviceDriver::PipelineRasterizationState rasterization;
- RenderingDeviceDriver::PipelineMultisampleState multisample;
- RenderingDeviceDriver::PipelineDepthStencilState depth_stencil;
- RenderingDeviceDriver::PipelineColorBlendState blend;
- ERR_PRINT_OFF;
- auto pipeline=driver.render_pipeline_create(RenderingDeviceDriver::ShaderID(),RenderingDeviceDriver::VertexFormatID(),RenderingDeviceDriver::RENDER_PRIMITIVE_TRIANGLES,rasterization,multisample,depth_stencil,blend,VectorView<int32_t>(nullptr,1),{},RenderingDeviceDriver::RenderPassID(),0,{});
- ERR_PRINT_ON;
- CHECK_FALSE(bool(pipeline));
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	RenderingDeviceDriver::PipelineRasterizationState rasterization;
+	RenderingDeviceDriver::PipelineMultisampleState multisample;
+	RenderingDeviceDriver::PipelineDepthStencilState depth_stencil;
+	RenderingDeviceDriver::PipelineColorBlendState blend;
+	ERR_PRINT_OFF;
+	auto pipeline = driver.render_pipeline_create(RenderingDeviceDriver::ShaderID(), RenderingDeviceDriver::VertexFormatID(), RenderingDeviceDriver::RENDER_PRIMITIVE_TRIANGLES, rasterization, multisample, depth_stencil, blend, VectorView<int32_t>(nullptr, 1), {}, RenderingDeviceDriver::RenderPassID(), 0, {});
+	ERR_PRINT_ON;
+	CHECK_FALSE(bool(pipeline));
 }
 TEST_CASE("[QualificationNative][Vulkan] compute pipeline creation rejects missing specialization views before resource access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- auto pipeline=driver.compute_pipeline_create(RenderingDeviceDriver::ShaderID(),VectorView<RenderingDeviceDriver::PipelineSpecializationConstant>(nullptr,1));
- ERR_PRINT_ON;
- CHECK_FALSE(bool(pipeline));
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	auto pipeline = driver.compute_pipeline_create(RenderingDeviceDriver::ShaderID(), VectorView<RenderingDeviceDriver::PipelineSpecializationConstant>(nullptr, 1));
+	ERR_PRINT_ON;
+	CHECK_FALSE(bool(pipeline));
 }
 TEST_CASE("[QualificationNative][Vulkan] BLAS creation rejects missing geometry views before feature access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- auto blas=driver.blas_create(VectorView<RenderingDeviceDriver::AccelerationStructureGeometry>(nullptr,1),{});
- ERR_PRINT_ON;
- CHECK_FALSE(bool(blas));
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	auto blas = driver.blas_create(VectorView<RenderingDeviceDriver::AccelerationStructureGeometry>(nullptr, 1), {});
+	ERR_PRINT_ON;
+	CHECK_FALSE(bool(blas));
 }
 TEST_CASE("[QualificationNative][Vulkan] timestamp query rejects missing result output before native access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- driver.timestamp_query_pool_get_results(RenderingDeviceDriver::QueryPoolID(),1,nullptr);
- ERR_PRINT_ON;
- CHECK(true);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	driver.timestamp_query_pool_get_results(RenderingDeviceDriver::QueryPoolID(), 1, nullptr);
+	ERR_PRINT_ON;
+	CHECK(true);
 }
 TEST_CASE("[QualificationNative][Vulkan] texture copyable-layout query rejects missing output before resource access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- driver.texture_get_copyable_layout(RenderingDeviceDriver::TextureID(),RenderingDeviceDriver::TextureSubresource(),nullptr);
- ERR_PRINT_ON;
- CHECK(true);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	driver.texture_get_copyable_layout(RenderingDeviceDriver::TextureID(), RenderingDeviceDriver::TextureSubresource(), nullptr);
+	ERR_PRINT_ON;
+	CHECK(true);
 }
 TEST_CASE("[QualificationNative][Vulkan] texture copyable-layout query rejects invalid resource before access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- RenderingDeviceDriver::TextureCopyableLayout layout;
- layout.size=17;
- layout.row_pitch=19;
- ERR_PRINT_OFF;
- driver.texture_get_copyable_layout(RenderingDeviceDriver::TextureID(),RenderingDeviceDriver::TextureSubresource(),&layout);
- ERR_PRINT_ON;
- CHECK(layout.size==0);
- CHECK(layout.row_pitch==0);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	RenderingDeviceDriver::TextureCopyableLayout layout;
+	layout.size = 17;
+	layout.row_pitch = 19;
+	ERR_PRINT_OFF;
+	driver.texture_get_copyable_layout(RenderingDeviceDriver::TextureID(), RenderingDeviceDriver::TextureSubresource(), &layout);
+	ERR_PRINT_ON;
+	CHECK(layout.size == 0);
+	CHECK(layout.row_pitch == 0);
 }
 TEST_CASE("[QualificationNative][Vulkan] dynamic buffer-offset query rejects invalid resource before access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- RenderingDeviceDriver::BufferID invalid;
- ERR_PRINT_OFF;
- auto offsets=driver.buffer_get_dynamic_offsets(Span<RenderingDeviceDriver::BufferID>(&invalid,1));
- ERR_PRINT_ON;
- CHECK(offsets==0);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	RenderingDeviceDriver::BufferID invalid;
+	ERR_PRINT_OFF;
+	auto offsets = driver.buffer_get_dynamic_offsets(Span<RenderingDeviceDriver::BufferID>(&invalid, 1));
+	ERR_PRINT_ON;
+	CHECK(offsets == 0);
 }
 TEST_CASE("[QualificationNative][Vulkan] texture allocation-size query rejects invalid resource before access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- auto size=driver.texture_get_allocation_size(RenderingDeviceDriver::TextureID());
- ERR_PRINT_ON;
- CHECK(size==0);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	auto size = driver.texture_get_allocation_size(RenderingDeviceDriver::TextureID());
+	ERR_PRINT_ON;
+	CHECK(size == 0);
 }
 TEST_CASE("[QualificationNative][Vulkan] buffer allocation-size query rejects invalid resource before access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- auto size=driver.buffer_get_allocation_size(RenderingDeviceDriver::BufferID());
- ERR_PRINT_ON;
- CHECK(size==0);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	auto size = driver.buffer_get_allocation_size(RenderingDeviceDriver::BufferID());
+	ERR_PRINT_ON;
+	CHECK(size == 0);
 }
 TEST_CASE("[QualificationNative][Vulkan] buffer device-address query rejects invalid resource before access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- auto address=driver.buffer_get_device_address(RenderingDeviceDriver::BufferID());
- ERR_PRINT_ON;
- CHECK(address==0);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	auto address = driver.buffer_get_device_address(RenderingDeviceDriver::BufferID());
+	ERR_PRINT_ON;
+	CHECK(address == 0);
 }
 TEST_CASE("[QualificationNative][Vulkan] buffer map rejects invalid resource before access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- auto mapped=driver.buffer_map(RenderingDeviceDriver::BufferID());
- ERR_PRINT_ON;
- CHECK(mapped==nullptr);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	auto mapped = driver.buffer_map(RenderingDeviceDriver::BufferID());
+	ERR_PRINT_ON;
+	CHECK(mapped == nullptr);
 }
 TEST_CASE("[QualificationNative][Vulkan] buffer unmap rejects invalid resource before access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- driver.buffer_unmap(RenderingDeviceDriver::BufferID());
- ERR_PRINT_ON;
- CHECK(true);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	driver.buffer_unmap(RenderingDeviceDriver::BufferID());
+	ERR_PRINT_ON;
+	CHECK(true);
 }
 TEST_CASE("[QualificationNative][Vulkan] persistent buffer-map advance rejects invalid resource before access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- auto mapped=driver.buffer_persistent_map_advance(RenderingDeviceDriver::BufferID(),0);
- ERR_PRINT_ON;
- CHECK(mapped==nullptr);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	auto mapped = driver.buffer_persistent_map_advance(RenderingDeviceDriver::BufferID(), 0);
+	ERR_PRINT_ON;
+	CHECK(mapped == nullptr);
 }
 TEST_CASE("[QualificationNative][Vulkan] buffer flush rejects invalid resource before access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- driver.buffer_flush(RenderingDeviceDriver::BufferID());
- ERR_PRINT_ON;
- CHECK(true);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	driver.buffer_flush(RenderingDeviceDriver::BufferID());
+	ERR_PRINT_ON;
+	CHECK(true);
 }
 TEST_CASE("[QualificationNative][Vulkan] buffer texel-format assignment rejects invalid resource before access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- auto result=driver.buffer_set_texel_format(RenderingDeviceDriver::BufferID(),RenderingDeviceDriver::DATA_FORMAT_R8_UNORM);
- ERR_PRINT_ON;
- CHECK_FALSE(result);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	auto result = driver.buffer_set_texel_format(RenderingDeviceDriver::BufferID(), RenderingDeviceDriver::DATA_FORMAT_R8_UNORM);
+	ERR_PRINT_ON;
+	CHECK_FALSE(result);
 }
 TEST_CASE("[QualificationNative][Vulkan] texture free rejects invalid resource before access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- driver.texture_free(RenderingDeviceDriver::TextureID());
- ERR_PRINT_ON;
- CHECK(true);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	driver.texture_free(RenderingDeviceDriver::TextureID());
+	ERR_PRINT_ON;
+	CHECK(true);
 }
 TEST_CASE("[QualificationNative][Vulkan] texture data query rejects invalid resource before access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- auto data=driver.texture_get_data(RenderingDeviceDriver::TextureID(),0);
- ERR_PRINT_ON;
- CHECK(data.is_empty());
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	auto data = driver.texture_get_data(RenderingDeviceDriver::TextureID(), 0);
+	ERR_PRINT_ON;
+	CHECK(data.is_empty());
 }
 TEST_CASE("[QualificationNative][Vulkan] shared texture creation rejects invalid owner before access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- RenderingDeviceDriver::TextureView view;
- view.format=RenderingDeviceDriver::DATA_FORMAT_R8_UNORM;
- ERR_PRINT_OFF;
- auto texture=driver.texture_create_shared(RenderingDeviceDriver::TextureID(),view);
- ERR_PRINT_ON;
- CHECK_FALSE(bool(texture));
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	RenderingDeviceDriver::TextureView view;
+	view.format = RenderingDeviceDriver::DATA_FORMAT_R8_UNORM;
+	ERR_PRINT_OFF;
+	auto texture = driver.texture_create_shared(RenderingDeviceDriver::TextureID(), view);
+	ERR_PRINT_ON;
+	CHECK_FALSE(bool(texture));
 }
 TEST_CASE("[QualificationNative][Vulkan] shared texture slice creation rejects invalid owner before access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- RenderingDeviceDriver::TextureView view;
- view.format=RenderingDeviceDriver::DATA_FORMAT_R8_UNORM;
- ERR_PRINT_OFF;
- auto texture=driver.texture_create_shared_from_slice(RenderingDeviceDriver::TextureID(),view,RenderingDeviceDriver::TEXTURE_SLICE_2D,0,1,0,1);
- ERR_PRINT_ON;
- CHECK_FALSE(bool(texture));
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	RenderingDeviceDriver::TextureView view;
+	view.format = RenderingDeviceDriver::DATA_FORMAT_R8_UNORM;
+	ERR_PRINT_OFF;
+	auto texture = driver.texture_create_shared_from_slice(RenderingDeviceDriver::TextureID(), view, RenderingDeviceDriver::TEXTURE_SLICE_2D, 0, 1, 0, 1);
+	ERR_PRINT_ON;
+	CHECK_FALSE(bool(texture));
 }
 TEST_CASE("[QualificationNative][Vulkan] buffer free rejects invalid resource before access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- driver.buffer_free(RenderingDeviceDriver::BufferID());
- ERR_PRINT_ON;
- CHECK(true);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	driver.buffer_free(RenderingDeviceDriver::BufferID());
+	ERR_PRINT_ON;
+	CHECK(true);
 }
 TEST_CASE("[QualificationNative][Vulkan] queue submit rejects missing wait view before queue access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- const Error result=driver.command_queue_execute_and_present(RenderingDeviceDriver::CommandQueueID(),VectorView<RenderingDeviceDriver::SemaphoreID>(nullptr,1),{}, {},RenderingDeviceDriver::FenceID(),{});
- ERR_PRINT_ON;
- CHECK(result==ERR_INVALID_PARAMETER);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	const Error result = driver.command_queue_execute_and_present(RenderingDeviceDriver::CommandQueueID(), VectorView<RenderingDeviceDriver::SemaphoreID>(nullptr, 1), {}, {}, RenderingDeviceDriver::FenceID(), {});
+	ERR_PRINT_ON;
+	CHECK(result == ERR_INVALID_PARAMETER);
 }
 TEST_CASE("[QualificationNative][Vulkan] buffer copy rejects missing region view before command access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- driver.command_copy_buffer(RenderingDeviceDriver::CommandBufferID(),RenderingDeviceDriver::BufferID(),RenderingDeviceDriver::BufferID(),VectorView<RenderingDeviceDriver::BufferCopyRegion>(nullptr,1));
- ERR_PRINT_ON;
- CHECK(true);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	driver.command_copy_buffer(RenderingDeviceDriver::CommandBufferID(), RenderingDeviceDriver::BufferID(), RenderingDeviceDriver::BufferID(), VectorView<RenderingDeviceDriver::BufferCopyRegion>(nullptr, 1));
+	ERR_PRINT_ON;
+	CHECK(true);
 }
 TEST_CASE("[QualificationNative][Vulkan] texture copy rejects missing region view before command access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- driver.command_copy_texture(RenderingDeviceDriver::CommandBufferID(),RenderingDeviceDriver::TextureID(),RenderingDeviceDriver::TEXTURE_LAYOUT_UNDEFINED,RenderingDeviceDriver::TextureID(),RenderingDeviceDriver::TEXTURE_LAYOUT_UNDEFINED,VectorView<RenderingDeviceDriver::TextureCopyRegion>(nullptr,1));
- ERR_PRINT_ON;
- CHECK(true);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	driver.command_copy_texture(RenderingDeviceDriver::CommandBufferID(), RenderingDeviceDriver::TextureID(), RenderingDeviceDriver::TEXTURE_LAYOUT_UNDEFINED, RenderingDeviceDriver::TextureID(), RenderingDeviceDriver::TEXTURE_LAYOUT_UNDEFINED, VectorView<RenderingDeviceDriver::TextureCopyRegion>(nullptr, 1));
+	ERR_PRINT_ON;
+	CHECK(true);
 }
 TEST_CASE("[QualificationNative][Vulkan] buffer-to-texture copy rejects missing region view before command access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- driver.command_copy_buffer_to_texture(RenderingDeviceDriver::CommandBufferID(),RenderingDeviceDriver::BufferID(),RenderingDeviceDriver::TextureID(),RenderingDeviceDriver::TEXTURE_LAYOUT_UNDEFINED,VectorView<RenderingDeviceDriver::BufferTextureCopyRegion>(nullptr,1));
- ERR_PRINT_ON;
- CHECK(true);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	driver.command_copy_buffer_to_texture(RenderingDeviceDriver::CommandBufferID(), RenderingDeviceDriver::BufferID(), RenderingDeviceDriver::TextureID(), RenderingDeviceDriver::TEXTURE_LAYOUT_UNDEFINED, VectorView<RenderingDeviceDriver::BufferTextureCopyRegion>(nullptr, 1));
+	ERR_PRINT_ON;
+	CHECK(true);
 }
 TEST_CASE("[QualificationNative][Vulkan] texture-to-buffer copy rejects missing region view before command access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- driver.command_copy_texture_to_buffer(RenderingDeviceDriver::CommandBufferID(),RenderingDeviceDriver::TextureID(),RenderingDeviceDriver::TEXTURE_LAYOUT_UNDEFINED,RenderingDeviceDriver::BufferID(),VectorView<RenderingDeviceDriver::BufferTextureCopyRegion>(nullptr,1));
- ERR_PRINT_ON;
- CHECK(true);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	driver.command_copy_texture_to_buffer(RenderingDeviceDriver::CommandBufferID(), RenderingDeviceDriver::TextureID(), RenderingDeviceDriver::TEXTURE_LAYOUT_UNDEFINED, RenderingDeviceDriver::BufferID(), VectorView<RenderingDeviceDriver::BufferTextureCopyRegion>(nullptr, 1));
+	ERR_PRINT_ON;
+	CHECK(true);
 }
 TEST_CASE("[QualificationNative][Vulkan] texture creation rejects an invalid shareable format") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- RenderingDeviceDriver::TextureFormat format;
- format.format=RDD::DATA_FORMAT_R8_UNORM;format.width=format.height=format.depth=format.array_layers=format.mipmaps=1;
- format.samples=RDD::TEXTURE_SAMPLES_1;
- format.usage_bits=RDD::TEXTURE_USAGE_SAMPLING_BIT;
- format.shareable_formats.push_back(RDD::DATA_FORMAT_MAX);
- RenderingDeviceDriver::TextureView view;view.format=format.format;
- ERR_PRINT_OFF;
- auto texture=driver.texture_create(format,view);
- ERR_PRINT_ON;
- CHECK_FALSE(bool(texture));
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	RenderingDeviceDriver::TextureFormat format;
+	format.format = RDD::DATA_FORMAT_R8_UNORM;
+	format.width = format.height = format.depth = format.array_layers = format.mipmaps = 1;
+	format.samples = RDD::TEXTURE_SAMPLES_1;
+	format.usage_bits = RDD::TEXTURE_USAGE_SAMPLING_BIT;
+	format.shareable_formats.push_back(RDD::DATA_FORMAT_MAX);
+	RenderingDeviceDriver::TextureView view;
+	view.format = format.format;
+	ERR_PRINT_OFF;
+	auto texture = driver.texture_create(format, view);
+	ERR_PRINT_ON;
+	CHECK_FALSE(bool(texture));
 }
 TEST_CASE("[QualificationNative][Vulkan] texture creation rejects an invalid base format") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- RenderingDeviceDriver::TextureFormat format;
- format.format=RDD::DATA_FORMAT_MAX;format.width=format.height=format.depth=format.array_layers=format.mipmaps=1;
- format.samples=RDD::TEXTURE_SAMPLES_1;
- format.usage_bits=RDD::TEXTURE_USAGE_SAMPLING_BIT;
- RenderingDeviceDriver::TextureView view;view.format=RDD::DATA_FORMAT_R8_UNORM;
- ERR_PRINT_OFF;
- auto texture=driver.texture_create(format,view);
- ERR_PRINT_ON;
- CHECK_FALSE(bool(texture));
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	RenderingDeviceDriver::TextureFormat format;
+	format.format = RDD::DATA_FORMAT_MAX;
+	format.width = format.height = format.depth = format.array_layers = format.mipmaps = 1;
+	format.samples = RDD::TEXTURE_SAMPLES_1;
+	format.usage_bits = RDD::TEXTURE_USAGE_SAMPLING_BIT;
+	RenderingDeviceDriver::TextureView view;
+	view.format = RDD::DATA_FORMAT_R8_UNORM;
+	ERR_PRINT_OFF;
+	auto texture = driver.texture_create(format, view);
+	ERR_PRINT_ON;
+	CHECK_FALSE(bool(texture));
 }
 TEST_CASE("[QualificationNative][Vulkan] render pass creation rejects an invalid attachment format") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- RenderingDeviceDriver::Attachment attachment;
- ERR_PRINT_OFF;
- auto render_pass=driver.render_pass_create(VectorView<RenderingDeviceDriver::Attachment>(attachment),{}, {},1,RenderingDeviceDriver::AttachmentReference());
- ERR_PRINT_ON;
- CHECK_FALSE(bool(render_pass));
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	RenderingDeviceDriver::Attachment attachment;
+	ERR_PRINT_OFF;
+	auto render_pass = driver.render_pass_create(VectorView<RenderingDeviceDriver::Attachment>(attachment), {}, {}, 1, RenderingDeviceDriver::AttachmentReference());
+	ERR_PRINT_ON;
+	CHECK_FALSE(bool(render_pass));
 }
 TEST_CASE("[QualificationNative][Vulkan] render pass creation rejects an invalid attachment layout") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- RenderingDeviceDriver::Attachment attachment;
- attachment.format=RDD::DATA_FORMAT_R8_UNORM;
- attachment.initial_layout=static_cast<RenderingDeviceDriver::TextureLayout>(RDD::TEXTURE_LAYOUT_MAX);
- ERR_PRINT_OFF;
- auto render_pass=driver.render_pass_create(VectorView<RenderingDeviceDriver::Attachment>(attachment),{}, {},1,RenderingDeviceDriver::AttachmentReference());
- ERR_PRINT_ON;
- CHECK_FALSE(bool(render_pass));
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	RenderingDeviceDriver::Attachment attachment;
+	attachment.format = RDD::DATA_FORMAT_R8_UNORM;
+	attachment.initial_layout = static_cast<RenderingDeviceDriver::TextureLayout>(RDD::TEXTURE_LAYOUT_MAX);
+	ERR_PRINT_OFF;
+	auto render_pass = driver.render_pass_create(VectorView<RenderingDeviceDriver::Attachment>(attachment), {}, {}, 1, RenderingDeviceDriver::AttachmentReference());
+	ERR_PRINT_ON;
+	CHECK_FALSE(bool(render_pass));
 }
 TEST_CASE("[QualificationNative][Vulkan] texture creation rejects an invalid sample count") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- RenderingDeviceDriver::TextureFormat format;
- format.format=RDD::DATA_FORMAT_R8_UNORM;format.width=format.height=format.depth=format.array_layers=format.mipmaps=1;
- format.samples=RDD::TEXTURE_SAMPLES_MAX;
- format.usage_bits=RDD::TEXTURE_USAGE_SAMPLING_BIT;
- RenderingDeviceDriver::TextureView view;view.format=format.format;
- const uint32_t before=TestQualificationVulkanAllocationAccess::allocations(driver);
- ERR_PRINT_OFF;
- auto texture=driver.texture_create(format,view);
- ERR_PRINT_ON;
- CHECK_FALSE(bool(texture));
- CHECK(TestQualificationVulkanAllocationAccess::allocations(driver)==before);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	RenderingDeviceDriver::TextureFormat format;
+	format.format = RDD::DATA_FORMAT_R8_UNORM;
+	format.width = format.height = format.depth = format.array_layers = format.mipmaps = 1;
+	format.samples = RDD::TEXTURE_SAMPLES_MAX;
+	format.usage_bits = RDD::TEXTURE_USAGE_SAMPLING_BIT;
+	RenderingDeviceDriver::TextureView view;
+	view.format = format.format;
+	const uint32_t before = TestQualificationVulkanAllocationAccess::allocations(driver);
+	ERR_PRINT_OFF;
+	auto texture = driver.texture_create(format, view);
+	ERR_PRINT_ON;
+	CHECK_FALSE(bool(texture));
+	CHECK(TestQualificationVulkanAllocationAccess::allocations(driver) == before);
 }
 TEST_CASE("[QualificationNative][Vulkan] texture creation rejects an invalid texture type") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- RenderingDeviceDriver::TextureFormat format;
- format.format=RDD::DATA_FORMAT_R8_UNORM;format.width=format.height=format.depth=format.array_layers=format.mipmaps=1;
- format.samples=RDD::TEXTURE_SAMPLES_1;
- format.texture_type=RDD::TEXTURE_TYPE_MAX;
- format.usage_bits=RDD::TEXTURE_USAGE_SAMPLING_BIT;
- RenderingDeviceDriver::TextureView view;view.format=format.format;
- const uint32_t before=TestQualificationVulkanAllocationAccess::allocations(driver);
- ERR_PRINT_OFF;
- auto texture=driver.texture_create(format,view);
- ERR_PRINT_ON;
- CHECK_FALSE(bool(texture));
- CHECK(TestQualificationVulkanAllocationAccess::allocations(driver)==before);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	RenderingDeviceDriver::TextureFormat format;
+	format.format = RDD::DATA_FORMAT_R8_UNORM;
+	format.width = format.height = format.depth = format.array_layers = format.mipmaps = 1;
+	format.samples = RDD::TEXTURE_SAMPLES_1;
+	format.texture_type = RDD::TEXTURE_TYPE_MAX;
+	format.usage_bits = RDD::TEXTURE_USAGE_SAMPLING_BIT;
+	RenderingDeviceDriver::TextureView view;
+	view.format = format.format;
+	const uint32_t before = TestQualificationVulkanAllocationAccess::allocations(driver);
+	ERR_PRINT_OFF;
+	auto texture = driver.texture_create(format, view);
+	ERR_PRINT_ON;
+	CHECK_FALSE(bool(texture));
+	CHECK(TestQualificationVulkanAllocationAccess::allocations(driver) == before);
 }
 TEST_CASE("[QualificationNative][Vulkan] texture layout commands reject invalid layouts before resource access") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- const auto invalid_layout=static_cast<RenderingDeviceDriver::TextureLayout>(RDD::TEXTURE_LAYOUT_MAX);
- RenderingDeviceDriver::TextureBarrier barrier;
- barrier.prev_layout=invalid_layout;
- ERR_PRINT_OFF;
- driver.command_pipeline_barrier(RenderingDeviceDriver::CommandBufferID(),{}, {}, {}, {}, VectorView<RenderingDeviceDriver::TextureBarrier>(barrier),{});
- driver.command_copy_texture(RenderingDeviceDriver::CommandBufferID(),{},invalid_layout,{},RDD::TEXTURE_LAYOUT_UNDEFINED,{});
- driver.command_resolve_texture(RenderingDeviceDriver::CommandBufferID(),{},invalid_layout,0,0,{},RDD::TEXTURE_LAYOUT_UNDEFINED,0,0);
- driver.command_clear_color_texture(RenderingDeviceDriver::CommandBufferID(),{},invalid_layout,Color(),{});
- driver.command_clear_depth_stencil_texture(RenderingDeviceDriver::CommandBufferID(),{},invalid_layout,0.0f,0,{});
- driver.command_copy_buffer_to_texture(RenderingDeviceDriver::CommandBufferID(),{}, {},invalid_layout,{});
- driver.command_copy_texture_to_buffer(RenderingDeviceDriver::CommandBufferID(),{},invalid_layout,{},{});
- ERR_PRINT_ON;
- CHECK(true);
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	const auto invalid_layout = static_cast<RenderingDeviceDriver::TextureLayout>(RDD::TEXTURE_LAYOUT_MAX);
+	RenderingDeviceDriver::TextureBarrier barrier;
+	barrier.prev_layout = invalid_layout;
+	ERR_PRINT_OFF;
+	driver.command_pipeline_barrier(RenderingDeviceDriver::CommandBufferID(), {}, {}, {}, {}, VectorView<RenderingDeviceDriver::TextureBarrier>(barrier), {});
+	driver.command_copy_texture(RenderingDeviceDriver::CommandBufferID(), {}, invalid_layout, {}, RDD::TEXTURE_LAYOUT_UNDEFINED, {});
+	driver.command_resolve_texture(RenderingDeviceDriver::CommandBufferID(), {}, invalid_layout, 0, 0, {}, RDD::TEXTURE_LAYOUT_UNDEFINED, 0, 0);
+	driver.command_clear_color_texture(RenderingDeviceDriver::CommandBufferID(), {}, invalid_layout, Color(), {});
+	driver.command_clear_depth_stencil_texture(RenderingDeviceDriver::CommandBufferID(), {}, invalid_layout, 0.0f, 0, {});
+	driver.command_copy_buffer_to_texture(RenderingDeviceDriver::CommandBufferID(), {}, {}, invalid_layout, {});
+	driver.command_copy_texture_to_buffer(RenderingDeviceDriver::CommandBufferID(), {}, invalid_layout, {}, {});
+	ERR_PRINT_ON;
+	CHECK(true);
 }
 TEST_CASE("[QualificationNative][Vulkan] render pass creation rejects invalid view counts") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- ERR_PRINT_OFF;
- auto zero_views=driver.render_pass_create({}, {}, {},0,RenderingDeviceDriver::AttachmentReference());
- auto too_many_views=driver.render_pass_create({}, {}, {},32,RenderingDeviceDriver::AttachmentReference());
- ERR_PRINT_ON;
- CHECK_FALSE(bool(zero_views));
- CHECK_FALSE(bool(too_many_views));
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	ERR_PRINT_OFF;
+	auto zero_views = driver.render_pass_create({}, {}, {}, 0, RenderingDeviceDriver::AttachmentReference());
+	auto too_many_views = driver.render_pass_create({}, {}, {}, 32, RenderingDeviceDriver::AttachmentReference());
+	ERR_PRINT_ON;
+	CHECK_FALSE(bool(zero_views));
+	CHECK_FALSE(bool(too_many_views));
 }
 TEST_CASE("[QualificationNative][Vulkan] BLAS creation rejects an invalid vertex format") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- RenderingDeviceDriver::AccelerationStructureGeometry geometry;
- geometry.vertex_format=RDD::DATA_FORMAT_MAX;
- ERR_PRINT_OFF;
- auto blas=driver.blas_create(VectorView<RenderingDeviceDriver::AccelerationStructureGeometry>(geometry),{});
- ERR_PRINT_ON;
- CHECK_FALSE(bool(blas));
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	RenderingDeviceDriver::AccelerationStructureGeometry geometry;
+	geometry.vertex_format = RDD::DATA_FORMAT_MAX;
+	ERR_PRINT_OFF;
+	auto blas = driver.blas_create(VectorView<RenderingDeviceDriver::AccelerationStructureGeometry>(geometry), {});
+	ERR_PRINT_ON;
+	CHECK_FALSE(bool(blas));
 }
 TEST_CASE("[QualificationNative][Vulkan] render pass creation rejects an invalid sample count") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- RenderingDeviceDriver::Attachment attachment;
- attachment.format=RDD::DATA_FORMAT_R8_UNORM;
- attachment.samples=RDD::TEXTURE_SAMPLES_MAX;
- ERR_PRINT_OFF;
- auto render_pass=driver.render_pass_create(VectorView<RenderingDeviceDriver::Attachment>(attachment),{}, {},1,RenderingDeviceDriver::AttachmentReference());
- ERR_PRINT_ON;
- CHECK_FALSE(bool(render_pass));
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	RenderingDeviceDriver::Attachment attachment;
+	attachment.format = RDD::DATA_FORMAT_R8_UNORM;
+	attachment.samples = RDD::TEXTURE_SAMPLES_MAX;
+	ERR_PRINT_OFF;
+	auto render_pass = driver.render_pass_create(VectorView<RenderingDeviceDriver::Attachment>(attachment), {}, {}, 1, RenderingDeviceDriver::AttachmentReference());
+	ERR_PRINT_ON;
+	CHECK_FALSE(bool(render_pass));
 }
 TEST_CASE("[QualificationNative][Vulkan] render pipeline creation rejects invalid primitive and sample count") {
- RenderingContextDriverVulkan context;REQUIRE(context.initialize()==OK);
- RenderingDeviceDriverVulkan driver(&context);REQUIRE(driver.initialize(0,2)==OK);
- RenderingDeviceDriver::PipelineRasterizationState rasterization;
- RenderingDeviceDriver::PipelineMultisampleState multisample;
- RenderingDeviceDriver::PipelineDepthStencilState depth_stencil;
- RenderingDeviceDriver::PipelineColorBlendState blend;
- ERR_PRINT_OFF;
- auto invalid_primitive=driver.render_pipeline_create(RenderingDeviceDriver::ShaderID(),RenderingDeviceDriver::VertexFormatID(),static_cast<RenderingDeviceDriver::RenderPrimitive>(RDD::RENDER_PRIMITIVE_MAX),rasterization,multisample,depth_stencil,blend,{}, {},RenderingDeviceDriver::RenderPassID(),0,{});
- multisample.sample_count=RDD::TEXTURE_SAMPLES_MAX;
- auto invalid_sample=driver.render_pipeline_create(RenderingDeviceDriver::ShaderID(),RenderingDeviceDriver::VertexFormatID(),RDD::RENDER_PRIMITIVE_TRIANGLES,rasterization,multisample,depth_stencil,blend,{}, {},RenderingDeviceDriver::RenderPassID(),0,{});
- ERR_PRINT_ON;
- CHECK_FALSE(bool(invalid_primitive));
- CHECK_FALSE(bool(invalid_sample));
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	RenderingDeviceDriver::PipelineRasterizationState rasterization;
+	RenderingDeviceDriver::PipelineMultisampleState multisample;
+	RenderingDeviceDriver::PipelineDepthStencilState depth_stencil;
+	RenderingDeviceDriver::PipelineColorBlendState blend;
+	ERR_PRINT_OFF;
+	auto invalid_primitive = driver.render_pipeline_create(RenderingDeviceDriver::ShaderID(), RenderingDeviceDriver::VertexFormatID(), static_cast<RenderingDeviceDriver::RenderPrimitive>(RDD::RENDER_PRIMITIVE_MAX), rasterization, multisample, depth_stencil, blend, {}, {}, RenderingDeviceDriver::RenderPassID(), 0, {});
+	multisample.sample_count = RDD::TEXTURE_SAMPLES_MAX;
+	auto invalid_sample = driver.render_pipeline_create(RenderingDeviceDriver::ShaderID(), RenderingDeviceDriver::VertexFormatID(), RDD::RENDER_PRIMITIVE_TRIANGLES, rasterization, multisample, depth_stencil, blend, {}, {}, RenderingDeviceDriver::RenderPassID(), 0, {});
+	ERR_PRINT_ON;
+	CHECK_FALSE(bool(invalid_primitive));
+	CHECK_FALSE(bool(invalid_sample));
 }
 #endif

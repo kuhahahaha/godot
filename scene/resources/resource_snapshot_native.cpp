@@ -61,11 +61,11 @@ bool separate(const void *a, uint64_t as, const void *b, uint64_t bs) {
 	const auto x = uintptr_t(a), y = uintptr_t(b);
 	return x <= y ? as <= y - x : bs <= x - y;
 }
-struct SnapshotSpan {
+struct SnapshotMemorySpan {
 	const void *data;
 	uint64_t bytes;
 };
-bool disjoint_spans(std::initializer_list<SnapshotSpan> spans) {
+bool disjoint_spans(std::initializer_list<SnapshotMemorySpan> spans) {
 	for (auto a = spans.begin(); a != spans.end(); ++a) {
 		if (!a->bytes) {
 			continue;

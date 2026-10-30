@@ -41,6 +41,34 @@ bool RenderingDevice::_qualification_resource_busy(RID rid) {
 	if (buffer && buffer->qualification_users) {
 		return true;
 	}
+	const auto *texture = texture_owner.get_or_null(rid);
+	if (texture && texture->qualification_users) {
+		return true;
+	}
+	const auto *sampler = sampler_owner.get_or_null(rid);
+	if (sampler && sampler->qualification_users) {
+		return true;
+	}
+	if (texture && texture->qualification_return) {
+		auto *cell = texture->qualification_return;
+		if (!qualification_retiring || !cell->use_closed.load() || texture->transfer_worker_index >= 0 || !_qualification_free_event_available(cell->event_capacity_reserved) || uint32_t(frame) >= frames.size() || !frames[frame].qualification_epoch) {
+			return true;
+		}
+		MutexLock lock(cell->mutex);
+		if (cell->enqueued || cell->reserved_event || cell->free_event) {
+			return true;
+		}
+	}
+	if (sampler && sampler->qualification_return) {
+		auto *cell = sampler->qualification_return;
+		if (!qualification_retiring || !cell->use_closed.load() || !_qualification_free_event_available(cell->event_capacity_reserved) || uint32_t(frame) >= frames.size() || !frames[frame].qualification_epoch) {
+			return true;
+		}
+		MutexLock lock(cell->mutex);
+		if (cell->enqueued || cell->reserved_event || cell->free_event) {
+			return true;
+		}
+	}
 	const auto *set = uniform_set_owner.get_or_null(rid);
 	if (set && set->qualification_users) {
 		return true;
@@ -52,6 +80,16 @@ bool RenderingDevice::_qualification_resource_busy(RID rid) {
 	const auto *dependencies = dependency_map.getptr(rid);
 	if (dependencies) {
 		for (RID child : *dependencies) {
+			// A qualified texture is returned by its original owner. Do not let a
+			// parent recursively consume it or exhaust an unreserved event sequence.
+			const auto *child_texture = texture_owner.get_or_null(child);
+			if (child_texture && child_texture->qualification_return) {
+				return true;
+			}
+			const auto *child_sampler = sampler_owner.get_or_null(child);
+			if (child_sampler && child_sampler->qualification_return) {
+				return true;
+			}
 			if (_qualification_resource_busy(child)) {
 				return true;
 			}
@@ -63,7 +101,8 @@ Error RenderingDevice::_qualification_pin_resources(QualificationTicket *ticket,
 	// Production callers hold Registry::mutex and the original RD lock. Release
 	// relies on that shared write discipline for both sides of the reverse edge.
 	uint32_t added = 0;
-	for (RID rid : resources) {
+	for (uint32_t resource_index = 0; resource_index < resources.size(); ++resource_index) {
+		RID rid = resources[resource_index];
 		bool already = false;
 		for (RID held : ticket->resource_pins) {
 			if (held == rid) {
@@ -71,10 +110,24 @@ Error RenderingDevice::_qualification_pin_resources(QualificationTicket *ticket,
 				break;
 			}
 		}
-		if (already) {
+		auto *texture = texture_owner.get_or_null(rid);
+		auto *sampler = sampler_owner.get_or_null(rid);
+		// New admissions revalidate existing texture/sampler pins and count each
+		// new child only once within the incoming batch.
+		const bool typed_child = texture || sampler;
+		bool duplicate = false;
+		if (typed_child && !already) {
+			for (uint32_t prior = 0; prior < resource_index; ++prior) {
+				if (resources[prior] == rid) {
+					duplicate = true;
+					break;
+				}
+			}
+		}
+		if (already && !typed_child) {
 			continue;
 		}
-		if (ticket->resource_pins.size() + (++added) > 128) {
+		if (!already && !duplicate && ticket->resource_pins.size() + (++added) > 128) {
 			return ERR_PARAMETER_RANGE_ERROR;
 		}
 		Buffer *buffer = storage_buffer_owner.get_or_null(rid);
@@ -84,19 +137,60 @@ Error RenderingDevice::_qualification_pin_resources(QualificationTicket *ticket,
 		auto *set = uniform_set_owner.get_or_null(rid);
 		auto *pipeline = compute_pipeline_owner.get_or_null(rid);
 		auto *shader = shader_owner.get_or_null(rid);
+		if (texture && !texture->qualification_return) {
+			return ERR_UNAUTHORIZED;
+		}
+		if (sampler && !sampler->qualification_return) {
+			return ERR_UNAUTHORIZED;
+		}
 		auto *physical = buffer ? buffer->qualification_return : pipeline ? pipeline->qualification_return
 				: shader												  ? shader->qualification_return
+				: texture												  ? texture->qualification_return
+				: sampler												  ? sampler->qualification_return
 																		  : nullptr;
+		if (typed_child) {
+			// The caller holds Registry and RD locks: authenticate the pointer against
+			// the original bridge child before reading it or admitting any resource.
+			bool original = false;
+			auto &registry = Registry::get_singleton();
+			for (auto *bridge : registry.qualification_bridges) {
+				if (bridge && bridge->serial == ticket->bridge_serial) {
+					auto match = [&](const auto *child) { return child && &child->physical == physical && !child->creating && !child->retiring && !child->acknowledged && child->serial && child->rid == rid.get_id() && child->object_serial && child->object_serial == child->physical.serial && child->physical.rid == child->rid && child->physical.bridge == bridge->serial && child->physical.child == child->serial; };
+					if (texture) {
+						for (auto *child : bridge->textures) {
+							if (match(child)) {
+								original = true;
+								break;
+							}
+						}
+					}
+					if (sampler) {
+						for (auto *child : bridge->samplers) {
+							if (match(child)) {
+								original = true;
+								break;
+							}
+						}
+					}
+					break;
+				}
+			}
+			if (!original) {
+				return ERR_UNAUTHORIZED;
+			}
+		}
 		if (physical && (physical->bridge != ticket->bridge_serial || physical->use_closed.load())) {
 			return ERR_UNAUTHORIZED;
 		}
 		uint32_t *count = buffer ? &buffer->qualification_users : set ? &set->qualification_users
 				: pipeline											  ? &pipeline->qualification_users
+				: texture											  ? &texture->qualification_users
+				: sampler											  ? &sampler->qualification_users
 																	  : nullptr;
-		if (count && *count == UINT32_MAX) {
+		if (!already && !duplicate && count && *count == UINT32_MAX) {
 			return ERR_PARAMETER_RANGE_ERROR;
 		}
-		if (!buffer && !set && !pipeline && !shader) {
+		if (!buffer && !set && !pipeline && !shader && !texture && !sampler) {
 			return ERR_INVALID_DATA;
 		}
 	}
@@ -118,8 +212,12 @@ Error RenderingDevice::_qualification_pin_resources(QualificationTicket *ticket,
 		auto *set = uniform_set_owner.get_or_null(rid);
 		auto *pipeline = compute_pipeline_owner.get_or_null(rid);
 		auto *shader = shader_owner.get_or_null(rid);
+		auto *texture = texture_owner.get_or_null(rid);
+		auto *sampler = sampler_owner.get_or_null(rid);
 		uint32_t *count = buffer ? &buffer->qualification_users : set ? &set->qualification_users
 				: pipeline											  ? &pipeline->qualification_users
+				: texture											  ? &texture->qualification_users
+				: sampler											  ? &sampler->qualification_users
 																	  : nullptr;
 		if (count) {
 			++*count;
@@ -127,6 +225,8 @@ Error RenderingDevice::_qualification_pin_resources(QualificationTicket *ticket,
 		ticket->resource_pins.push_back(rid);
 		auto *physical = buffer ? buffer->qualification_return : pipeline ? pipeline->qualification_return
 				: shader												  ? shader->qualification_return
+				: texture												  ? texture->qualification_return
+				: sampler												  ? sampler->qualification_return
 																		  : nullptr;
 		if (physical) {
 			bool known = false;
@@ -157,8 +257,12 @@ void RenderingDevice::_qualification_unpin_resources(QualificationTicket *ticket
 		}
 		auto *set = uniform_set_owner.get_or_null(rid);
 		auto *pipeline = compute_pipeline_owner.get_or_null(rid);
+		auto *texture = texture_owner.get_or_null(rid);
+		auto *sampler = sampler_owner.get_or_null(rid);
 		uint32_t *count = buffer ? &buffer->qualification_users : set ? &set->qualification_users
 				: pipeline											  ? &pipeline->qualification_users
+				: texture											  ? &texture->qualification_users
+				: sampler											  ? &sampler->qualification_users
 																	  : nullptr;
 		if (count) {
 			CRASH_COND(!*count);
@@ -166,7 +270,7 @@ void RenderingDevice::_qualification_unpin_resources(QualificationTicket *ticket
 		}
 	}
 	// A prepared zero-effect ticket can admit again. Keep only live count pins
-	// in this set; physical reverse references remain until ticket acknowledgment.
+	// in this set; physical reverse references remain until ticket acknowledgement.
 	ticket->resource_pins.clear();
 	ticket->resources_returned = true;
 }

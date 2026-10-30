@@ -49,88 +49,169 @@
 /**************************************************************************/
 
 #include "rendering_device_driver_metal.h"
+
 #include "core/extension/gdextension_library_exit_guard.h"
 
 thread_local LocalVector<RenderingDeviceDriverMetal::CompletionRecord *> *RenderingDeviceDriverMetal::active_completion_records = nullptr;
 thread_local uint64_t RenderingDeviceDriverMetal::active_native_serial = 0;
 thread_local uint32_t RenderingDeviceDriverMetal::active_native_serial_count = 0;
 uint64_t RenderingDeviceDriverMetal::reserve_native_call_serials(uint32_t count) {
- if(!count)return 0;
- uint64_t current=next_native_call_serial.load();
- while(current) {
-  if(uint64_t(count-1)>UINT64_MAX-current)return 0;
-  const uint64_t next=current+count;
-  if(next_native_call_serial.compare_exchange_weak(current,next))return current;
- }
- return 0;
+	if (!count) {
+		return 0;
+	}
+	uint64_t current = next_native_call_serial.load();
+	while (current) {
+		if (uint64_t(count - 1) > UINT64_MAX - current) {
+			return 0;
+		}
+		const uint64_t next = current + count;
+		if (next_native_call_serial.compare_exchange_weak(current, next)) {
+			return current;
+		}
+	}
+	return 0;
 }
 RenderingDeviceDriver::FencePollResult RenderingDeviceDriverMetal::native_call_poll(uint64_t serial) {
- FencePollResult out;
- if(!serial || !completion_records_mutex.try_lock())return out;
- for(auto *record:completion_records)if(record->serial==serial) {
-  out.completed_serial=record->serial;
-  if(record->completed.load()) {out.completed=!record->failed.load();out.native_error=record->failed.load();out.native_code=record->native_code.load();}
-  break;
- }
- completion_records_mutex.unlock();return out;
+	FencePollResult out;
+	if (!serial || !completion_records_mutex.try_lock()) {
+		return out;
+	}
+	for (auto *record : completion_records) {
+		if (record->serial == serial) {
+			out.completed_serial = record->serial;
+			if (record->completed.load()) {
+				out.completed = !record->failed.load();
+				out.native_error = record->failed.load();
+				out.native_code = record->native_code.load();
+			}
+			break;
+		}
+	}
+	completion_records_mutex.unlock();
+	return out;
 }
 RenderingDeviceDriver::FencePollResult RenderingDeviceDriverMetal::native_call_wait(uint64_t serial) {
- NS::SharedPtr<MTL::CommandBuffer> command;
- {MutexLock lock(completion_records_mutex);for(auto *record:completion_records)if(record->serial==serial){command=record->command_buffer;break;}}
- if(!command)return {};
- command->waitUntilCompleted();
- FencePollResult out;MutexLock lock(completion_records_mutex);
- for(auto *record:completion_records)if(record->serial==serial) {
-  out.completed_serial=serial;out.native_error=record->failed.load();out.completed=record->completed.load()&&!out.native_error;out.native_code=record->native_code.load();break;
- }
- return out;
+	NS::SharedPtr<MTL::CommandBuffer> command;
+	{
+		MutexLock lock(completion_records_mutex);
+		for (auto *record : completion_records) {
+			if (record->serial == serial) {
+				command = record->command_buffer;
+				break;
+			}
+		}
+	}
+	if (!command) {
+		return {};
+	}
+	command->waitUntilCompleted();
+	FencePollResult out;
+	MutexLock lock(completion_records_mutex);
+	for (auto *record : completion_records) {
+		if (record->serial == serial) {
+			out.completed_serial = serial;
+			out.native_error = record->failed.load();
+			out.completed = record->completed.load() && !out.native_error;
+			out.native_code = record->native_code.load();
+			break;
+		}
+	}
+	return out;
 }
 Error RenderingDeviceDriverMetal::native_call_recycle(uint64_t serial) {
- if(!serial)return ERR_INVALID_PARAMETER;
- if(!completion_records_mutex.try_lock())return ERR_BUSY;
- for(uint32_t i=0;i<completion_records.size();++i) {
-  auto *record=completion_records[i];if(record->serial!=serial)continue;
-  if(!record->completed.load() || record->failed.load()) {completion_records_mutex.unlock();return ERR_BUSY;}
-  // The original fence owns these pointers until its checked recycle. Calls
-  // without a fence are retired by the original frame's successful observation.
-  if(!record->fence_owned.load()) {record->retired.store(true);if(!record->observers){completion_records.remove_at(i);memdelete(record);}}
-  completion_records_mutex.unlock();return OK;
- }
- completion_records_mutex.unlock();return ERR_DOES_NOT_EXIST;
+	if (!serial) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (!completion_records_mutex.try_lock()) {
+		return ERR_BUSY;
+	}
+	for (uint32_t i = 0; i < completion_records.size(); ++i) {
+		auto *record = completion_records[i];
+		if (record->serial != serial) {
+			continue;
+		}
+		if (!record->completed.load() || record->failed.load()) {
+			completion_records_mutex.unlock();
+			return ERR_BUSY;
+		}
+		// The original fence owns these pointers until its checked recycle. Calls
+		// without a fence are retired by the original frame's successful observation.
+		if (!record->fence_owned.load()) {
+			record->retired.store(true);
+			if (!record->observers) {
+				completion_records.remove_at(i);
+				memdelete(record);
+			}
+		}
+		completion_records_mutex.unlock();
+		return OK;
+	}
+	completion_records_mutex.unlock();
+	return ERR_DOES_NOT_EXIST;
 }
-
 
 Error RenderingDeviceDriverMetal::native_call_retain(uint64_t serial) {
- if(!serial)return ERR_INVALID_PARAMETER;
- if(!completion_records_mutex.try_lock())return ERR_BUSY;
- for(auto *record:completion_records)if(record->serial==serial) {
-  if(record->observers==UINT32_MAX){completion_records_mutex.unlock();return ERR_PARAMETER_RANGE_ERROR;}
-  ++record->observers;completion_records_mutex.unlock();return OK;
- }
- completion_records_mutex.unlock();return ERR_DOES_NOT_EXIST;
+	if (!serial) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (!completion_records_mutex.try_lock()) {
+		return ERR_BUSY;
+	}
+	for (auto *record : completion_records) {
+		if (record->serial == serial) {
+			if (record->observers == UINT32_MAX) {
+				completion_records_mutex.unlock();
+				return ERR_PARAMETER_RANGE_ERROR;
+			}
+			++record->observers;
+			completion_records_mutex.unlock();
+			return OK;
+		}
+	}
+	completion_records_mutex.unlock();
+	return ERR_DOES_NOT_EXIST;
 }
 Error RenderingDeviceDriverMetal::native_call_release(uint64_t serial) {
- if(!serial)return ERR_INVALID_PARAMETER;
- if(!completion_records_mutex.try_lock())return ERR_BUSY;
- for(uint32_t i=0;i<completion_records.size();++i) {
-  auto *record=completion_records[i];if(record->serial!=serial)continue;
-  if(!record->observers){completion_records_mutex.unlock();return ERR_DOES_NOT_EXIST;}
-  --record->observers;
-  if(!record->observers && record->retired.load()) {completion_records.remove_at(i);memdelete(record);}
-  completion_records_mutex.unlock();return OK;
- }
- completion_records_mutex.unlock();return ERR_DOES_NOT_EXIST;
+	if (!serial) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (!completion_records_mutex.try_lock()) {
+		return ERR_BUSY;
+	}
+	for (uint32_t i = 0; i < completion_records.size(); ++i) {
+		auto *record = completion_records[i];
+		if (record->serial != serial) {
+			continue;
+		}
+		if (!record->observers) {
+			completion_records_mutex.unlock();
+			return ERR_DOES_NOT_EXIST;
+		}
+		--record->observers;
+		if (!record->observers && record->retired.load()) {
+			completion_records.remove_at(i);
+			memdelete(record);
+		}
+		completion_records_mutex.unlock();
+		return OK;
+	}
+	completion_records_mutex.unlock();
+	return ERR_DOES_NOT_EXIST;
 }
 
 RenderingDeviceDriverMetal::CompletionRecord *RenderingDeviceDriverMetal::register_completion_record(MTL::CommandBuffer *p_command_buffer, uint64_t p_serial, bool p_collection_locked) {
- const uint64_t serial=active_completion_records ? (active_native_serial_count ? (--active_native_serial_count,active_native_serial++) : 0) : reserve_native_call_serials(1);
- if(!serial)return nullptr;
+	const uint64_t serial = active_completion_records ? (active_native_serial_count ? (--active_native_serial_count, active_native_serial++) : 0) : reserve_native_call_serials(1);
+	if (!serial) {
+		return nullptr;
+	}
 
-	uint64_t registry=0,epoch=0;
-	session_loss_identity(registry,epoch);
-	p_command_buffer->addCompletedHandler([registry,epoch](MTL::CommandBuffer *completed) {
-		NS::Error *error=completed->error();
-		if(error && error->code()==MTL::CommandBufferErrorDeviceRemoved) notify_session_device_lost(registry,epoch);
+	uint64_t registry = 0, epoch = 0;
+	session_loss_identity(registry, epoch);
+	p_command_buffer->addCompletedHandler([registry, epoch](MTL::CommandBuffer *completed) {
+		NS::Error *error = completed->error();
+		if (error && error->code() == MTL::CommandBufferErrorDeviceRemoved) {
+			notify_session_device_lost(registry, epoch);
+		}
 	});
 	CompletionRecord *record = memnew(CompletionRecord);
 	record->serial = serial;
@@ -141,12 +222,16 @@ RenderingDeviceDriverMetal::CompletionRecord *RenderingDeviceDriverMetal::regist
 		record->failed.store(status != MTL::CommandBufferStatusCompleted);
 		record->completed.store(true);
 	});
- if(!p_collection_locked)completion_records_mutex.lock();
+	if (!p_collection_locked) {
+		completion_records_mutex.lock();
+	}
 	completion_records.push_back(record);
 	if (active_completion_records != nullptr) {
 		active_completion_records->push_back(record);
 	}
- if(!p_collection_locked)completion_records_mutex.unlock();
+	if (!p_collection_locked) {
+		completion_records_mutex.unlock();
+	}
 	return record;
 }
 
@@ -177,8 +262,10 @@ void RenderingDeviceDriverMetal::retire_completion_records(const LocalVector<Com
 		if (!record->completed.load() || record->retired.exchange(true)) {
 			continue;
 		}
-  record->fence_owned.store(false);
-  if(record->observers)continue;
+		record->fence_owned.store(false);
+		if (record->observers) {
+			continue;
+		}
 		for (uint32_t i = 0; i < completion_records.size(); i++) {
 			if (completion_records[i] == record) {
 				completion_records.remove_at(i);
@@ -189,12 +276,13 @@ void RenderingDeviceDriverMetal::retire_completion_records(const LocalVector<Com
 	}
 }
 
-
 void RenderingDeviceDriverMetal::drain_completion_records() {
 	LocalVector<CompletionRecord *> records;
 	{
 		MutexLock lock(completion_records_mutex);
-  for(auto *record:completion_records)GDExtensionDeviceExit::require_close_success(record->observers ? ERR_BUSY : OK,GDExtensionDeviceExit::CloseRoute::LAST_REF);
+		for (auto *record : completion_records) {
+			GDExtensionDeviceExit::require_close_success(record->observers ? ERR_BUSY : OK, GDExtensionDeviceExit::CloseRoute::LAST_REF);
+		}
 		records = std::move(completion_records);
 	}
 	// Wait outside the collection lock and before the derived driver releases
@@ -1573,9 +1661,18 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 }
 
 bool RenderingDeviceDriverMetal::shader_retire_ready_nonblocking(ShaderID p_shader) const {
- if (!p_shader) return false;
- const auto *shader = dynamic_cast<const MDComputeShader *>(reinterpret_cast<MDShader *>(p_shader.id));
- return shader && shader->kernel && shader->kernel->retire_ready_nonblocking();
+	if (!p_shader) {
+		return false;
+	}
+	const auto *shader = reinterpret_cast<MDShader *>(p_shader.id);
+	if (const auto *compute_shader = dynamic_cast<const MDComputeShader *>(shader)) {
+		return compute_shader->kernel && compute_shader->kernel->retire_ready_nonblocking();
+	}
+	if (const auto *render_shader = dynamic_cast<const MDRenderShader *>(shader)) {
+		return render_shader->vert && render_shader->frag &&
+				render_shader->vert->retire_ready_nonblocking() && render_shader->frag->retire_ready_nonblocking();
+	}
+	return false;
 }
 
 void RenderingDeviceDriverMetal::shader_free(ShaderID p_shader) {
@@ -2838,7 +2935,9 @@ uint64_t RenderingDeviceDriverMetal::get_resource_native_handle(DriverResource p
 
 void RenderingDeviceDriverMetal::_copy_queue_copy_to_buffer(Span<uint8_t> p_src_data, MTL::Buffer *p_dst_buffer, uint64_t p_dst_offset) {
 	MutexLock lock(copy_queue_mutex);
- if(copy_queue_completion_record)_copy_queue_flush();
+	if (copy_queue_completion_record) {
+		_copy_queue_flush();
+	}
 	if (_copy_queue_buffer_available() < p_src_data.size()) {
 		_copy_queue_flush();
 	}
@@ -2853,54 +2952,91 @@ void RenderingDeviceDriverMetal::_copy_queue_copy_to_buffer(Span<uint8_t> p_src_
 }
 
 Error RenderingDeviceDriverMetal::qualification_prepare_segment(QueueCallReport &report) {
- report={};
- if(!copy_queue_mutex.try_lock())return ERR_BUSY;
- struct Unlock {Mutex &mutex;~Unlock(){mutex.unlock();}} copy_unlock{copy_queue_mutex};
- if(!copy_queue_blit_encoder && !copy_queue_completion_record)return OK;
- if(!completion_records_mutex.try_lock())return ERR_BUSY;
- Unlock completion_unlock{completion_records_mutex};
- if(!copy_queue_completion_record) {
-  // Reserve the exact callback identity and transfer one observer to the Frame
-  // before this original queue commits. Refusal is still zero native effects.
-  auto *record=register_completion_record(copy_queue_command_buffer.get(),0,true);
-  if(!record)return ERR_PARAMETER_RANGE_ERROR;
-  record->observers=1;
-  copy_queue_completion_record=record;
-  NativeCallFact fact;fact.frame_observer_owned=true;fact.queue_index=2;fact.serial=record->serial;fact.issue=IssueFact::IssuedUnknown;
-  fact.completion=CompletionCapability::CommandBuffer;fact.completion_serial=record->serial;
-  report.calls.push_back(fact);report.issued=true;
-  copy_queue_blit_encoder.get()->endEncoding();copy_queue_blit_encoder.reset();
-  copy_queue_command_buffer.get()->commit();
-  return ERR_BUSY;
- }
- auto *record=copy_queue_completion_record;
- if(!record->completed.load())return ERR_BUSY;
- if(record->failed.load())return FAILED;
- // Original staging bytes cannot be reused before this actual callback.
- // Frame/ticket observers keep the same source alive after owner retirement.
- record->retired.store(true);
- copy_queue_completion_record=nullptr;copy_queue_command_buffer.reset();copy_queue_buffer_offset=0;
- if(!record->observers) {
-  for(uint32_t i=0;i<completion_records.size();++i)if(completion_records[i]==record){completion_records.remove_at(i);break;}
-  memdelete(record);
- }
- return OK;
+	report = {};
+	if (!copy_queue_mutex.try_lock()) {
+		return ERR_BUSY;
+	}
+	struct Unlock {
+		Mutex &mutex;
+		~Unlock() { mutex.unlock(); }
+	} copy_unlock{ copy_queue_mutex };
+	if (!copy_queue_blit_encoder && !copy_queue_completion_record) {
+		return OK;
+	}
+	if (!completion_records_mutex.try_lock()) {
+		return ERR_BUSY;
+	}
+	Unlock completion_unlock{ completion_records_mutex };
+	if (!copy_queue_completion_record) {
+		// Reserve the exact callback identity and transfer one observer to the Frame
+		// before this original queue commits. Refusal is still zero native effects.
+		auto *record = register_completion_record(copy_queue_command_buffer.get(), 0, true);
+		if (!record) {
+			return ERR_PARAMETER_RANGE_ERROR;
+		}
+		record->observers = 1;
+		copy_queue_completion_record = record;
+		NativeCallFact fact;
+		fact.frame_observer_owned = true;
+		fact.queue_index = 2;
+		fact.serial = record->serial;
+		fact.issue = IssueFact::IssuedUnknown;
+		fact.completion = CompletionCapability::CommandBuffer;
+		fact.completion_serial = record->serial;
+		report.calls.push_back(fact);
+		report.issued = true;
+		copy_queue_blit_encoder.get()->endEncoding();
+		copy_queue_blit_encoder.reset();
+		copy_queue_command_buffer.get()->commit();
+		return ERR_BUSY;
+	}
+	auto *record = copy_queue_completion_record;
+	if (!record->completed.load()) {
+		return ERR_BUSY;
+	}
+	if (record->failed.load()) {
+		return FAILED;
+	}
+	// Original staging bytes cannot be reused before this actual callback.
+	// Frame/ticket observers keep the same source alive after owner retirement.
+	record->retired.store(true);
+	copy_queue_completion_record = nullptr;
+	copy_queue_command_buffer.reset();
+	copy_queue_buffer_offset = 0;
+	if (!record->observers) {
+		for (uint32_t i = 0; i < completion_records.size(); ++i) {
+			if (completion_records[i] == record) {
+				completion_records.remove_at(i);
+				break;
+			}
+		}
+		memdelete(record);
+	}
+	return OK;
 }
 
 void RenderingDeviceDriverMetal::_copy_queue_flush() {
- if(!copy_queue_blit_encoder && !copy_queue_completion_record)return;
- if(copy_queue_blit_encoder) {
-  copy_queue_blit_encoder.get()->endEncoding();copy_queue_blit_encoder.reset();
-  copy_queue_command_buffer.get()->commit();
- }
- copy_queue_command_buffer.get()->waitUntilCompleted();
- NS::Error *copy_error=copy_queue_command_buffer.get()->error();
- if(copy_error && copy_error->code()==MTL::CommandBufferErrorDeviceRemoved)notify_session_device_lost();
- if(copy_queue_completion_record) {
-  LocalVector<CompletionRecord *> records;records.push_back(copy_queue_completion_record);
-  retire_completion_records(records);copy_queue_completion_record=nullptr;
- }
- copy_queue_command_buffer.reset();copy_queue_buffer_offset=0;
+	if (!copy_queue_blit_encoder && !copy_queue_completion_record) {
+		return;
+	}
+	if (copy_queue_blit_encoder) {
+		copy_queue_blit_encoder.get()->endEncoding();
+		copy_queue_blit_encoder.reset();
+		copy_queue_command_buffer.get()->commit();
+	}
+	copy_queue_command_buffer.get()->waitUntilCompleted();
+	NS::Error *copy_error = copy_queue_command_buffer.get()->error();
+	if (copy_error && copy_error->code() == MTL::CommandBufferErrorDeviceRemoved) {
+		notify_session_device_lost();
+	}
+	if (copy_queue_completion_record) {
+		LocalVector<CompletionRecord *> records;
+		records.push_back(copy_queue_completion_record);
+		retire_completion_records(records);
+		copy_queue_completion_record = nullptr;
+	}
+	copy_queue_command_buffer.reset();
+	copy_queue_buffer_offset = 0;
 }
 
 Error RenderingDeviceDriverMetal::_copy_queue_initialize() {

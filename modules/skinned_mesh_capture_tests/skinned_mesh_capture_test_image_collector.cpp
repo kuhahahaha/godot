@@ -50,6 +50,10 @@ public:
 	Callback(std::shared_ptr<State> p_state, uint32_t p_slot) : state(p_state), slot(p_slot) {}
 	~Callback() {
 		std::lock_guard<std::mutex> lock(state->mutex);
+		auto &entry = state->entries[slot];
+		if (entry.reserved && !entry.complete && !entry.rejected) {
+			entry.rejected = true;
+		}
 		--state->holders;
 	}
 	uint32_t hash() const override { return slot; }

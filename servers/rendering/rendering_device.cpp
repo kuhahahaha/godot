@@ -959,9 +959,9 @@ Error RenderingDevice::_staging_buffer_allocate(StagingBuffers &p_staging_buffer
 	if (_recording_error() != OK) {
 		return _recording_error();
 	}
-	// A single staging allocation must fit in one block. Reject it before
-	// selecting or marking a block so an oversized request cannot mutate the
-	// allocator before a caller copies into the backing allocation.
+	// A single staging allocation request must fit in one staging block. Reject it
+	// before selecting or marking a block so callers cannot write past the
+	// backing allocation when a configured region is larger than the block.
 	if (p_amount > p_staging_buffers.block_size) {
 		return ERR_INVALID_PARAMETER;
 	}
@@ -1336,6 +1336,9 @@ Error RenderingDevice::driver_callback_add(RDD::DriverCallback p_callback, void 
 		if (p_resources[i].type == CALLBACK_RESOURCE_TYPE_BUFFER) {
 			auto *buffer = storage_buffer_owner.get_or_null(p_resources[i].rid);
 			ERR_FAIL_COND_V(buffer && buffer->qualification_return, ERR_UNAUTHORIZED);
+		} else if (p_resources[i].type == CALLBACK_RESOURCE_TYPE_TEXTURE) {
+			auto *texture = texture_owner.get_or_null(p_resources[i].rid);
+			ERR_FAIL_COND_V(texture && texture->qualification_return, ERR_UNAUTHORIZED);
 		}
 	}
 
@@ -1505,7 +1508,13 @@ Vector<uint8_t> RenderingDevice::buffer_get_data(RID p_buffer, uint32_t p_offset
 	}
 
 	uint8_t *buffer_mem = driver->buffer_map(tmp_buffer);
-	ERR_FAIL_NULL_V(buffer_mem, Vector<uint8_t>());
+	if (buffer_mem == nullptr) {
+		// Mapping can fail after the temporary transfer buffer has been issued
+		// and waited. Do not strand that allocation when the caller receives the
+		// fail-closed empty result.
+		driver->buffer_free(tmp_buffer);
+		ERR_FAIL_V(Vector<uint8_t>());
+	}
 
 	Vector<uint8_t> buffer_data;
 	{
@@ -1822,7 +1831,38 @@ RID RenderingDevice::texture_buffer_create(uint32_t p_size_elements, DataFormat 
 /*****************/
 
 RID RenderingDevice::texture_create(const TextureFormat &p_format, const TextureView &p_view, const Vector<Vector<uint8_t>> &p_data) {
+	return _texture_create_internal(p_format, p_view, p_data, nullptr, RID());
+}
+
+RID RenderingDevice::_qualification_texture_create(const TextureFormat &p_format, const TextureView &p_view, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell) {
+	ERR_FAIL_COND_V(!p_cell || !p_cell->bridge || !p_cell->child || !p_cell->serial || p_cell->rid || p_cell->use_closed || p_cell->enqueued || p_cell->free_event, RID());
+	// VRS can implicitly initialize image data. This entry reserves an empty
+	// texture only; checked upload is a separate original ticket operation.
+	ERR_FAIL_COND_V(p_format.usage_bits & TEXTURE_USAGE_VRS_ATTACHMENT_BIT, RID());
+	ERR_FAIL_COND_V(!_qualification_reserve_free_event(p_cell), RID());
+	RID reserved = texture_owner.allocate_rid();
+	if (reserved.is_null()) {
+		_qualification_release_free_event(p_cell);
+		return RID();
+	}
+	RID created = _texture_create_internal(p_format, p_view, {}, p_cell, reserved);
+	if (created.is_null()) {
+		if (texture_owner.owns(reserved)) {
+			texture_owner.initialize_rid(reserved, Texture());
+			texture_owner.free(reserved);
+		}
+		_qualification_release_free_event(p_cell);
+	}
+	return created;
+}
+
+RID RenderingDevice::_texture_create_internal(const TextureFormat &p_format, const TextureView &p_view, const Vector<Vector<uint8_t>> &p_data, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, RID p_reserved) {
 	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
+	// Check the stored enum representation before copying or reading it.
+	static_assert(sizeof(p_format.format) == sizeof(uint32_t));
+	uint32_t format_value = 0;
+	memcpy(&format_value, &p_format.format, sizeof(format_value));
+	ERR_FAIL_UNSIGNED_INDEX_V(format_value, DATA_FORMAT_MAX, RID());
 	// Some adjustments will happen.
 	TextureFormat format = p_format;
 
@@ -2022,7 +2062,14 @@ RID RenderingDevice::texture_create(const TextureFormat &p_format, const Texture
 
 	texture_memory += driver->texture_get_allocation_size(texture.driver_id);
 
-	RID id = texture_owner.make_rid(texture);
+	RID id = p_reserved;
+	if (id.is_valid()) {
+		texture.qualification_return = p_cell;
+		p_cell->rid = id.get_id();
+		texture_owner.initialize_rid(id, texture);
+	} else {
+		id = texture_owner.make_rid(texture);
+	}
 #ifdef DEV_ENABLED
 	set_resource_name(id, "RID:" + itos(id.get_id()));
 #endif
@@ -2030,10 +2077,32 @@ RID RenderingDevice::texture_create(const TextureFormat &p_format, const Texture
 	if (data.size()) {
 		const bool use_general_in_copy_queues = driver->api_trait_get(RDD::API_TRAIT_USE_GENERAL_IN_COPY_QUEUES);
 		const RDD::TextureLayout dst_layout = use_general_in_copy_queues ? RDD::TEXTURE_LAYOUT_GENERAL : RDD::TEXTURE_LAYOUT_COPY_DST_OPTIMAL;
+		auto dispose_failed_texture = [&]() {
+			Texture *failed_texture = texture_owner.get_or_null(id);
+			if (!failed_texture) {
+				return;
+			}
+			// An earlier layer may have issued a transfer. Keep the driver object
+			// alive until the normal frame retirement path has drained that worker.
+			_check_transfer_worker_texture(failed_texture);
+			if (p_cell) {
+				// Creation never returned this qualification cell to its caller. Do
+				// not publish a physical return for a failed create.
+				failed_texture->qualification_return = nullptr;
+				p_cell->rid = 0;
+			}
+			frames[frame].textures_to_dispose_of.push_back(*failed_texture);
+			texture_owner.free(id);
+		};
 		for (uint32_t i = 0; i < format.array_layers; i++) {
-			if (_texture_initialize(id, i, data[i], dst_layout, immediate_flush) != OK) {
-				// Earlier layers or an issued upload may still reference the texture.
-				// Retain its owner until completion-gated finalization can free it.
+			const Error initialize_error = _texture_initialize(id, i, data[i], dst_layout, immediate_flush);
+			if (initialize_error != OK) {
+				// ERR_BUSY can mean an issued transfer is still unresolved. Keep
+				// that owner for the existing shutdown/fence recovery path; freeing
+				// it here would race the unresolved worker.
+				if (initialize_error != ERR_BUSY) {
+					dispose_failed_texture();
+				}
 				return RID();
 			}
 		}
@@ -2050,11 +2119,13 @@ RID RenderingDevice::texture_create_shared(const TextureView &p_view, RID p_with
 	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	Texture *src_texture = texture_owner.get_or_null(p_with_texture);
 	ERR_FAIL_NULL_V(src_texture, RID());
+	ERR_FAIL_COND_V(src_texture->qualification_return, RID());
 
 	if (src_texture->owner.is_valid()) { // Ahh this is a share. The RenderingDeviceDriver needs the actual owner.
 		p_with_texture = src_texture->owner;
 		src_texture = texture_owner.get_or_null(src_texture->owner);
 		ERR_FAIL_NULL_V(src_texture, RID()); // This is a bug.
+		ERR_FAIL_COND_V(src_texture->qualification_return, RID());
 	}
 
 	// Create view.
@@ -2088,16 +2159,22 @@ RID RenderingDevice::texture_create_shared(const TextureView &p_view, RID p_with
 		RDD::TextureView regular_view = tv;
 		regular_view.format = src_texture->format;
 		texture.driver_id = driver->texture_create_shared(texture.driver_id, regular_view);
+		ERR_FAIL_COND_V(!texture.driver_id, RID());
 
 		// Create the independent texture for the alias.
 		RDD::TextureFormat alias_format = texture.texture_format();
 		alias_format.format = tv.format;
 		alias_format.usage_bits = TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_CAN_COPY_TO_BIT;
 
+		const RDD::TextureID fallback_texture = driver->texture_create(alias_format, tv);
+		if (!fallback_texture) {
+			driver->texture_free(texture.driver_id);
+			return RID();
+		}
+		const bool source_fallback_was_missing = src_texture->shared_fallback == nullptr;
 		_texture_check_shared_fallback(src_texture);
 		_texture_check_shared_fallback(&texture);
-
-		texture.shared_fallback->texture = driver->texture_create(alias_format, tv);
+		texture.shared_fallback->texture = fallback_texture;
 		texture.shared_fallback->raw_reinterpretation = raw_reintepretation;
 		texture_memory += driver->texture_get_allocation_size(texture.shared_fallback->texture);
 
@@ -2113,7 +2190,14 @@ RID RenderingDevice::texture_create_shared(const TextureView &p_view, RID p_with
 
 		if (raw_reintepretation && src_texture->shared_fallback->buffer.id == 0) {
 			// For shared textures of the same size, we create the buffer on the main texture if it doesn't have it already.
-			_texture_create_reinterpret_buffer(src_texture);
+			if (!_texture_create_reinterpret_buffer(src_texture)) {
+				_texture_free_shared_fallback(&texture);
+				driver->texture_free(texture.driver_id);
+				if (source_fallback_was_missing) {
+					_texture_free_shared_fallback(src_texture);
+				}
+				return RID();
+			}
 		}
 	}
 
@@ -2180,11 +2264,13 @@ RID RenderingDevice::texture_create_shared_from_slice(const TextureView &p_view,
 	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	Texture *src_texture = texture_owner.get_or_null(p_with_texture);
 	ERR_FAIL_NULL_V(src_texture, RID());
+	ERR_FAIL_COND_V(src_texture->qualification_return, RID());
 
 	if (src_texture->owner.is_valid()) { // // Ahh this is a share. The RenderingDeviceDriver needs the actual owner.
 		p_with_texture = src_texture->owner;
 		src_texture = texture_owner.get_or_null(src_texture->owner);
 		ERR_FAIL_NULL_V(src_texture, RID()); // This is a bug.
+		ERR_FAIL_COND_V(src_texture->qualification_return, RID());
 	}
 
 	ERR_FAIL_COND_V_MSG(p_slice_type == TEXTURE_SLICE_CUBEMAP && (src_texture->type != TEXTURE_TYPE_CUBE && src_texture->type != TEXTURE_TYPE_CUBE_ARRAY), RID(),
@@ -2263,6 +2349,7 @@ RID RenderingDevice::texture_create_shared_from_slice(const TextureView &p_view,
 		RDD::TextureView regular_view = tv;
 		regular_view.format = src_texture->format;
 		texture.driver_id = driver->texture_create_shared_from_slice(src_texture->driver_id, regular_view, p_slice_type, p_layer, slice_layers, p_mipmap, p_mipmaps);
+		ERR_FAIL_COND_V(!texture.driver_id, RID());
 
 		// Create the independent texture for the slice.
 		RDD::TextureSubresourceRange slice_range = texture.barrier_range();
@@ -2276,10 +2363,14 @@ RID RenderingDevice::texture_create_shared_from_slice(const TextureView &p_view,
 		slice_format.format = tv.format;
 		slice_format.usage_bits = TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_CAN_COPY_TO_BIT;
 
+		const RDD::TextureID fallback_texture = driver->texture_create(slice_format, tv);
+		if (!fallback_texture) {
+			driver->texture_free(texture.driver_id);
+			return RID();
+		}
 		_texture_check_shared_fallback(src_texture);
 		_texture_check_shared_fallback(&texture);
-
-		texture.shared_fallback->texture = driver->texture_create(slice_format, tv);
+		texture.shared_fallback->texture = fallback_texture;
 		texture.shared_fallback->raw_reinterpretation = raw_reintepretation;
 		texture_memory += driver->texture_get_allocation_size(texture.shared_fallback->texture);
 
@@ -2295,7 +2386,11 @@ RID RenderingDevice::texture_create_shared_from_slice(const TextureView &p_view,
 
 		if (raw_reintepretation && src_texture->shared_fallback->buffer.id == 0) {
 			// For shared texture slices, we create the buffer on the slice if the source texture has no reinterpretation buffer.
-			_texture_create_reinterpret_buffer(&texture);
+			if (!_texture_create_reinterpret_buffer(&texture)) {
+				_texture_free_shared_fallback(&texture);
+				driver->texture_free(texture.driver_id);
+				return RID();
+			}
 		}
 	}
 
@@ -2391,11 +2486,11 @@ uint32_t RenderingDevice::_texture_alignment(Texture *p_texture) const {
 	return least_common_multiple(alignment, driver->api_trait_get(RDD::API_TRAIT_TEXTURE_TRANSFER_ALIGNMENT));
 }
 
-uint32_t RenderingDevice::_normalize_staging_region_size(uint32_t p_size) {
-	if (p_size == 0) {
+uint32_t RenderingDevice::_normalize_staging_region_size(int64_t p_size) {
+	if (p_size <= 0 || uint64_t(p_size) > UINT32_MAX) {
 		return 1;
 	}
-	const uint32_t normalized = Math::nearest_power_of_2_templated(p_size);
+	const uint32_t normalized = Math::nearest_power_of_2_templated(uint32_t(p_size));
 	return normalized == 0 ? 1 : normalized;
 }
 
@@ -2565,11 +2660,13 @@ Error RenderingDevice::texture_update(RID p_texture, uint32_t p_layer, const Vec
 
 	Texture *texture = texture_owner.get_or_null(p_texture);
 	ERR_FAIL_NULL_V(texture, ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(texture->qualification_return, ERR_UNAUTHORIZED);
 
 	if (texture->owner != RID()) {
 		p_texture = texture->owner;
 		texture = texture_owner.get_or_null(texture->owner);
 		ERR_FAIL_NULL_V(texture, ERR_BUG); // This is a bug.
+		ERR_FAIL_COND_V(texture->qualification_return, ERR_UNAUTHORIZED);
 	}
 
 	ERR_FAIL_COND_V_MSG(texture->bound, ERR_CANT_ACQUIRE_RESOURCE,
@@ -2872,18 +2969,27 @@ void RenderingDevice::_texture_copy_shared(RID p_src_texture_rid, Texture *p_src
 	}
 }
 
-void RenderingDevice::_texture_create_reinterpret_buffer(Texture *p_texture) {
+bool RenderingDevice::_texture_create_reinterpret_buffer(Texture *p_texture) {
+	ERR_FAIL_COND_V(!p_texture || !p_texture->shared_fallback, false);
+	if (p_texture->shared_fallback->buffer) {
+		return true;
+	}
 	uint64_t row_pitch_step = driver->api_trait_get(RDD::API_TRAIT_TEXTURE_DATA_ROW_PITCH_STEP);
 	uint64_t transfer_alignment = driver->api_trait_get(RDD::API_TRAIT_TEXTURE_TRANSFER_ALIGNMENT);
 	uint32_t pixel_bytes = get_image_format_pixel_size(p_texture->format);
 	uint32_t row_pitch = STEPIFY(p_texture->width * pixel_bytes, row_pitch_step);
 	uint64_t buffer_size = STEPIFY(pixel_bytes * row_pitch * p_texture->height * p_texture->depth, transfer_alignment);
-	p_texture->shared_fallback->buffer = driver->buffer_create(buffer_size, RDD::BUFFER_USAGE_TRANSFER_FROM_BIT | RDD::BUFFER_USAGE_TRANSFER_TO_BIT, RDD::MEMORY_ALLOCATION_TYPE_GPU, frames_drawn);
-	buffer_memory += driver->buffer_get_allocation_size(p_texture->shared_fallback->buffer);
+	const RDD::BufferID buffer = driver->buffer_create(buffer_size, RDD::BUFFER_USAGE_TRANSFER_FROM_BIT | RDD::BUFFER_USAGE_TRANSFER_TO_BIT, RDD::MEMORY_ALLOCATION_TYPE_GPU, frames_drawn);
+	if (!buffer) {
+		return false;
+	}
+	p_texture->shared_fallback->buffer = buffer;
+	buffer_memory += driver->buffer_get_allocation_size(buffer);
 
 	RDG::ResourceTracker *tracker = RDG::resource_tracker_create();
-	tracker->buffer_driver_id = p_texture->shared_fallback->buffer;
+	tracker->buffer_driver_id = buffer;
 	p_texture->shared_fallback->buffer_tracker = tracker;
+	return true;
 }
 
 uint32_t RenderingDevice::_texture_vrs_method_to_usage_bits() const {
@@ -2988,6 +3094,7 @@ Vector<uint8_t> RenderingDevice::texture_get_data(RID p_texture, uint32_t p_laye
 
 	Texture *tex = texture_owner.get_or_null(p_texture);
 	ERR_FAIL_NULL_V(tex, Vector<uint8_t>());
+	ERR_FAIL_COND_V(tex->qualification_return, Vector<uint8_t>());
 
 	ERR_FAIL_COND_V_MSG(tex->bound, Vector<uint8_t>(),
 			"Texture can't be retrieved while a draw list that uses it as part of a framebuffer is being created. Ensure the draw list is finalized (and that the color/depth texture using it is not set to `RenderingDevice.FINAL_ACTION_CONTINUE`) to retrieve this texture.");
@@ -3056,7 +3163,12 @@ Vector<uint8_t> RenderingDevice::texture_get_data(RID p_texture, uint32_t p_laye
 		}
 
 		const uint8_t *read_ptr = driver->buffer_map(tmp_buffer);
-		ERR_FAIL_NULL_V(read_ptr, Vector<uint8_t>());
+		if (read_ptr == nullptr) {
+			// The temporary readback buffer is no longer referenced by the draw
+			// graph after the blocking stall, so release it on map failure too.
+			driver->buffer_free(tmp_buffer);
+			ERR_FAIL_V(Vector<uint8_t>());
+		}
 
 		uint32_t block_w = 0;
 		uint32_t block_h = 0;
@@ -3116,6 +3228,7 @@ Error RenderingDevice::texture_get_data_async(RID p_texture, uint32_t p_layer, c
 
 	Texture *tex = texture_owner.get_or_null(p_texture);
 	ERR_FAIL_NULL_V(tex, ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(tex->qualification_return, ERR_UNAUTHORIZED);
 
 	ERR_FAIL_COND_V_MSG(tex->bound, ERR_INVALID_PARAMETER, "Texture can't be retrieved while a draw list that uses it as part of a framebuffer is being created. Ensure the draw list is finalized (and that the color/depth texture using it is not set to `RenderingDevice.FINAL_ACTION_CONTINUE`) to retrieve this texture.");
 	ERR_FAIL_COND_V_MSG(!(tex->usage_flags & TEXTURE_USAGE_CAN_COPY_FROM_BIT), ERR_INVALID_PARAMETER, "Texture requires the `RenderingDevice.TEXTURE_USAGE_CAN_COPY_FROM_BIT` to be set to be retrieved.");
@@ -3289,6 +3402,7 @@ Error RenderingDevice::texture_copy(RID p_from_texture, RID p_to_texture, const 
 
 	Texture *src_tex = texture_owner.get_or_null(p_from_texture);
 	ERR_FAIL_NULL_V(src_tex, ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(src_tex->qualification_return, ERR_UNAUTHORIZED);
 
 	ERR_FAIL_COND_V_MSG(src_tex->bound, ERR_INVALID_PARAMETER,
 			"Source texture can't be copied while a draw list that uses it as part of a framebuffer is being created. Ensure the draw list is finalized (and that the color/depth texture using it is not set to `RenderingDevice.FINAL_ACTION_CONTINUE`) to copy this texture.");
@@ -3310,6 +3424,7 @@ Error RenderingDevice::texture_copy(RID p_from_texture, RID p_to_texture, const 
 
 	Texture *dst_tex = texture_owner.get_or_null(p_to_texture);
 	ERR_FAIL_NULL_V(dst_tex, ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(dst_tex->qualification_return, ERR_UNAUTHORIZED);
 
 	ERR_FAIL_COND_V_MSG(dst_tex->bound, ERR_INVALID_PARAMETER,
 			"Destination texture can't be copied while a draw list that uses it as part of a framebuffer is being created. Ensure the draw list is finalized (and that the color/depth texture using it is not set to `RenderingDevice.FINAL_ACTION_CONTINUE`) to copy this texture.");
@@ -3373,6 +3488,7 @@ Error RenderingDevice::texture_resolve_multisample(RID p_from_texture, RID p_to_
 
 	Texture *src_tex = texture_owner.get_or_null(p_from_texture);
 	ERR_FAIL_NULL_V(src_tex, ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(src_tex->qualification_return, ERR_UNAUTHORIZED);
 
 	ERR_FAIL_COND_V_MSG(src_tex->bound, ERR_INVALID_PARAMETER,
 			"Source texture can't be copied while a draw list that uses it as part of a framebuffer is being created. Ensure the draw list is finalized (and that the color/depth texture using it is not set to `RenderingDevice.FINAL_ACTION_CONTINUE`) to copy this texture.");
@@ -3384,6 +3500,7 @@ Error RenderingDevice::texture_resolve_multisample(RID p_from_texture, RID p_to_
 
 	Texture *dst_tex = texture_owner.get_or_null(p_to_texture);
 	ERR_FAIL_NULL_V(dst_tex, ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(dst_tex->qualification_return, ERR_UNAUTHORIZED);
 
 	ERR_FAIL_COND_V_MSG(dst_tex->bound, ERR_INVALID_PARAMETER,
 			"Destination texture can't be copied while a draw list that uses it as part of a framebuffer is being created. Ensure the draw list is finalized (and that the color/depth texture using it is not set to `RenderingDevice.FINAL_ACTION_CONTINUE`) to copy this texture.");
@@ -3426,6 +3543,7 @@ void RenderingDevice::texture_set_discardable(RID p_texture, bool p_discardable)
 
 	Texture *texture = texture_owner.get_or_null(p_texture);
 	ERR_FAIL_NULL(texture);
+	ERR_FAIL_COND(texture->qualification_return);
 
 	texture->is_discardable = p_discardable;
 
@@ -3455,6 +3573,7 @@ Error RenderingDevice::texture_clear(RID p_texture, const Color &p_color, uint32
 
 	Texture *src_tex = texture_owner.get_or_null(p_texture);
 	ERR_FAIL_NULL_V(src_tex, ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(src_tex->qualification_return, ERR_UNAUTHORIZED);
 
 	ERR_FAIL_COND_V_MSG(src_tex->bound, ERR_INVALID_PARAMETER,
 			"Source texture can't be cleared while a draw list that uses it as part of a framebuffer is being created. Ensure the draw list is finalized (and that the color/depth texture using it is not set to `RenderingDevice.FINAL_ACTION_CONTINUE`) to clear this texture.");
@@ -3964,6 +4083,12 @@ RID RenderingDevice::framebuffer_create_empty(const Size2i &p_size, TextureSampl
 RID RenderingDevice::framebuffer_create(const Vector<RID> &p_texture_attachments, FramebufferFormatID p_format_check, uint32_t p_view_count) {
 	_THREAD_SAFE_METHOD_
 
+	// Preflight the entire attachment list before touching any prior worker.
+	for (RID attachment : p_texture_attachments) {
+		const Texture *texture = texture_owner.get_or_null(attachment);
+		ERR_FAIL_COND_V(texture && texture->qualification_return, RID());
+	}
+
 	FramebufferPass pass;
 
 	for (int i = 0; i < p_texture_attachments.size(); i++) {
@@ -3998,6 +4123,12 @@ RID RenderingDevice::framebuffer_create(const Vector<RID> &p_texture_attachments
 
 RID RenderingDevice::framebuffer_create_multipass(const Vector<RID> &p_texture_attachments, const Vector<FramebufferPass> &p_passes, FramebufferFormatID p_format_check, uint32_t p_view_count) {
 	_THREAD_SAFE_METHOD_
+
+	// Preflight the entire attachment list before touching any prior worker.
+	for (RID attachment : p_texture_attachments) {
+		const Texture *texture = texture_owner.get_or_null(attachment);
+		ERR_FAIL_COND_V(texture && texture->qualification_return, RID());
+	}
 
 	Vector<AttachmentFormat> attachments;
 	LocalVector<RDD::TextureID> textures;
@@ -4126,7 +4257,17 @@ void RenderingDevice::framebuffer_set_invalidation_callback(RID p_framebuffer, I
 /*****************/
 
 RID RenderingDevice::sampler_create(const SamplerState &p_state) {
+	return _sampler_create_internal(p_state, nullptr);
+}
+
+RID RenderingDevice::_qualification_sampler_create(const SamplerState &p_state, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell) {
+	ERR_FAIL_COND_V(!p_cell || !p_cell->bridge || !p_cell->child || !p_cell->serial || p_cell->rid || p_cell->use_closed || p_cell->enqueued || p_cell->free_event, RID());
+	return _sampler_create_internal(p_state, p_cell);
+}
+
+RID RenderingDevice::_sampler_create_internal(const SamplerState &p_state, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell) {
 	_THREAD_SAFE_METHOD_
+	ERR_FAIL_COND_V(p_cell && _recording_error() != OK, RID());
 
 	ERR_FAIL_INDEX_V(p_state.repeat_u, SAMPLER_REPEAT_MODE_MAX, RID());
 	ERR_FAIL_INDEX_V(p_state.repeat_v, SAMPLER_REPEAT_MODE_MAX, RID());
@@ -4134,10 +4275,34 @@ RID RenderingDevice::sampler_create(const SamplerState &p_state) {
 	ERR_FAIL_INDEX_V(p_state.compare_op, COMPARE_OP_MAX, RID());
 	ERR_FAIL_INDEX_V(p_state.border_color, SAMPLER_BORDER_COLOR_MAX, RID());
 
-	RDD::SamplerID sampler = driver->sampler_create(p_state);
-	ERR_FAIL_COND_V(!sampler, RID());
+	RID reserved;
+	if (p_cell) {
+		ERR_FAIL_COND_V(!_qualification_reserve_free_event(p_cell), RID());
+		reserved = sampler_owner.allocate_rid();
+		if (reserved.is_null()) {
+			_qualification_release_free_event(p_cell);
+			return RID();
+		}
+	}
+	Sampler sampler;
+	sampler.driver_id = driver->sampler_create(p_state);
+	if (!sampler.driver_id) {
+		if (reserved.is_valid()) {
+			sampler_owner.initialize_rid(reserved, Sampler());
+			sampler_owner.free(reserved);
+			_qualification_release_free_event(p_cell);
+		}
+		return RID();
+	}
 
-	RID id = sampler_owner.make_rid(sampler);
+	RID id = reserved;
+	if (p_cell) {
+		sampler.qualification_return = p_cell;
+		p_cell->rid = id.get_id();
+		sampler_owner.initialize_rid(id, sampler);
+	} else {
+		id = sampler_owner.make_rid(sampler);
+	}
 #ifdef DEV_ENABLED
 	set_resource_name(id, "RID:" + itos(id.get_id()));
 #endif
@@ -4594,8 +4759,10 @@ RID RenderingDevice::_qualification_shader_create(const Vector<uint8_t> &p_shade
 		driver_sampler.binding = source_sampler.binding;
 
 		for (uint32_t j = 0; j < source_sampler.get_id_count(); j++) {
-			RDD::SamplerID *sampler_driver_id = sampler_owner.get_or_null(source_sampler.get_id(j));
-			driver_sampler.ids.push_back(*sampler_driver_id);
+			Sampler *sampler = sampler_owner.get_or_null(source_sampler.get_id(j));
+			ERR_FAIL_NULL_V(sampler, RID());
+			ERR_FAIL_COND_V(sampler->qualification_return, RID());
+			driver_sampler.ids.push_back(sampler->driver_id);
 		}
 
 		driver_immutable_samplers.append(driver_sampler);
@@ -4807,6 +4974,10 @@ RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniform
 	for (uint32_t u = 0; u < p_uniforms.size(); ++u) {
 		for (uint32_t i = 0; i < p_uniforms[u].get_id_count(); ++i) {
 			const auto &uniform = p_uniforms[u];
+			auto *texture = texture_owner.get_or_null(uniform.get_id(i));
+			ERR_FAIL_COND_V(texture && texture->qualification_return, RID());
+			auto *sampler = sampler_owner.get_or_null(uniform.get_id(i));
+			ERR_FAIL_COND_V(sampler && sampler->qualification_return, RID());
 			auto *buffer = storage_buffer_owner.get_or_null(uniform.get_id(i));
 			if (buffer && buffer->qualification_return && !qualification_dependencies.has(buffer->qualification_return)) {
 				qualification_dependencies.push_back(buffer->qualification_return);
@@ -4881,10 +5052,10 @@ RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniform
 				}
 
 				for (uint32_t j = 0; j < uniform.get_id_count(); j++) {
-					RDD::SamplerID *sampler_driver_id = sampler_owner.get_or_null(uniform.get_id(j));
-					ERR_FAIL_NULL_V_MSG(sampler_driver_id, RID(), "Sampler (binding: " + itos(uniform.binding) + ", index " + itos(j) + ") is not a valid sampler.");
+					Sampler *sampler = sampler_owner.get_or_null(uniform.get_id(j));
+					ERR_FAIL_NULL_V_MSG(sampler, RID(), "Sampler (binding: " + itos(uniform.binding) + ", index " + itos(j) + ") is not a valid sampler.");
 
-					driver_uniform.ids.push_back(*sampler_driver_id);
+					driver_uniform.ids.push_back(sampler->driver_id);
 				}
 			} break;
 			case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE: {
@@ -4897,8 +5068,8 @@ RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniform
 				}
 
 				for (uint32_t j = 0; j < uniform.get_id_count(); j += 2) {
-					RDD::SamplerID *sampler_driver_id = sampler_owner.get_or_null(uniform.get_id(j + 0));
-					ERR_FAIL_NULL_V_MSG(sampler_driver_id, RID(), "SamplerBuffer (binding: " + itos(uniform.binding) + ", index " + itos(j + 1) + ") is not a valid sampler.");
+					Sampler *sampler = sampler_owner.get_or_null(uniform.get_id(j + 0));
+					ERR_FAIL_NULL_V_MSG(sampler, RID(), "SamplerBuffer (binding: " + itos(uniform.binding) + ", index " + itos(j + 1) + ") is not a valid sampler.");
 
 					RID texture_id = uniform.get_id(j + 1);
 					Texture *texture = texture_owner.get_or_null(texture_id);
@@ -4935,7 +5106,7 @@ RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniform
 
 					DEV_ASSERT(!texture->owner.is_valid() || texture_owner.get_or_null(texture->owner));
 
-					driver_uniform.ids.push_back(*sampler_driver_id);
+					driver_uniform.ids.push_back(sampler->driver_id);
 					driver_uniform.ids.push_back(driver_id);
 					_check_transfer_worker_texture(texture);
 				}
@@ -5082,8 +5253,8 @@ RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniform
 				}
 
 				for (uint32_t j = 0; j < uniform.get_id_count(); j += 2) {
-					RDD::SamplerID *sampler_driver_id = sampler_owner.get_or_null(uniform.get_id(j + 0));
-					ERR_FAIL_NULL_V_MSG(sampler_driver_id, RID(), "SamplerBuffer (binding: " + itos(uniform.binding) + ", index " + itos(j + 1) + ") is not a valid sampler.");
+					Sampler *sampler = sampler_owner.get_or_null(uniform.get_id(j + 0));
+					ERR_FAIL_NULL_V_MSG(sampler, RID(), "SamplerBuffer (binding: " + itos(uniform.binding) + ", index " + itos(j + 1) + ") is not a valid sampler.");
 
 					RID buffer_id = uniform.get_id(j + 1);
 					Buffer *buffer = texture_buffer_owner.get_or_null(buffer_id);
@@ -5096,7 +5267,7 @@ RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniform
 						untracked_usage[buffer_id] = RDG::RESOURCE_USAGE_TEXTURE_BUFFER_READ;
 					}
 
-					driver_uniform.ids.push_back(*sampler_driver_id);
+					driver_uniform.ids.push_back(sampler->driver_id);
 					driver_uniform.ids.push_back(buffer->driver_id);
 					_check_transfer_worker_buffer(buffer);
 				}
@@ -8630,16 +8801,45 @@ Error RenderingDevice::_qualification_maintenance() {
 	return _begin_frame(false, true);
 }
 
+bool RenderingDevice::_qualification_free_event_available(bool p_reserved) const {
+	if (!next_qualification_free_event) {
+		return false;
+	}
+	return p_reserved ? qualification_free_event_reservations != 0 : qualification_free_event_reservations <= UINT64_MAX - next_qualification_free_event;
+}
+
+bool RenderingDevice::_qualification_reserve_free_event(GDExtensionDeviceExit::QualificationPhysicalReturn *cell) {
+	if (!cell || cell->event_capacity_reserved || !_qualification_free_event_available(false)) {
+		return false;
+	}
+	++qualification_free_event_reservations;
+	cell->event_capacity_reserved = true;
+	return true;
+}
+
+void RenderingDevice::_qualification_release_free_event(GDExtensionDeviceExit::QualificationPhysicalReturn *cell) {
+	CRASH_COND(!cell || !cell->event_capacity_reserved || !qualification_free_event_reservations);
+	--qualification_free_event_reservations;
+	cell->event_capacity_reserved = false;
+}
+
 Error RenderingDevice::_qualification_enqueue(GDExtensionDeviceExit::QualificationPhysicalReturn *cell) {
 	if (!cell) {
 		return OK;
 	}
-	if (!qualification_retiring || !next_qualification_free_event || !frames[frame].qualification_epoch) {
+	if (!qualification_retiring || !frames[frame].qualification_epoch) {
 		return ERR_BUSY;
 	}
 	MutexLock lock(cell->mutex);
 	if (!cell->use_closed || cell->enqueued || cell->free_event) {
 		return ERR_BUSY;
+	}
+	if (!_qualification_free_event_available(cell->event_capacity_reserved)) {
+		return ERR_BUSY;
+	}
+	if (cell->event_capacity_reserved) {
+		--qualification_free_event_reservations;
+		cell->event_capacity_reserved = false;
 	}
 	cell->reserved_event = next_qualification_free_event++;
 	cell->frame_slot = frame;
@@ -8656,7 +8856,7 @@ void RenderingDevice::_qualification_freed(GDExtensionDeviceExit::QualificationP
 	cell->free_event = cell->reserved_event;
 }
 RID RenderingDevice::_qualification_storage_create(uint32_t bytes, GDExtensionDeviceExit::QualificationPhysicalReturn *cell) {
-	ERR_FAIL_COND_V(!cell || !bytes || _recording_error() != OK, RID());
+	ERR_FAIL_COND_V(!cell || cell->event_capacity_reserved || !bytes || _recording_error() != OK, RID());
 #ifdef TESTS_ENABLED
 	if (is_main_instance && !test_main_screen_prepared && OS::get_singleton()->has_environment("GODOT_K03_TEST_PREPARE_MAIN_SCREEN")) {
 		ERR_FAIL_COND_V_MSG(OS::get_singleton()->get_environment("GODOT_K03_TEST_PREPARE_MAIN_SCREEN") != "1", RID(), "Invalid TESTS-only main screen preparation opt-in.");
@@ -8677,6 +8877,11 @@ RID RenderingDevice::_qualification_storage_create(uint32_t bytes, GDExtensionDe
 	ERR_FAIL_COND_V(!serial, RID());
 	const RID rid = storage_buffer_owner.allocate_rid();
 	ERR_FAIL_COND_V(rid.is_null(), RID());
+	if (!_qualification_reserve_free_event(cell)) {
+		storage_buffer_owner.initialize_rid(rid, Buffer());
+		storage_buffer_owner.free(rid);
+		return RID();
+	}
 	Buffer buffer;
 	buffer.backing_serial = serial;
 	buffer.size = bytes;
@@ -8684,6 +8889,7 @@ RID RenderingDevice::_qualification_storage_create(uint32_t bytes, GDExtensionDe
 	buffer.qualification_return = cell;
 	buffer.driver_id = driver->buffer_create(bytes, buffer.usage, RDD::MEMORY_ALLOCATION_TYPE_GPU, frames_drawn);
 	if (!buffer.driver_id) {
+		_qualification_release_free_event(cell);
 		// RID_Alloc cannot free an uninitialized reservation.
 		storage_buffer_owner.initialize_rid(rid, Buffer());
 		storage_buffer_owner.free(rid);
@@ -8704,14 +8910,23 @@ void RenderingDevice::free_rid(RID p_rid) {
 	auto *buffer = storage_buffer_owner.get_or_null(p_rid);
 	auto *shader = shader_owner.get_or_null(p_rid);
 	auto *pipeline = compute_pipeline_owner.get_or_null(p_rid);
-	ERR_FAIL_COND_MSG(!qualification_retiring && ((buffer && buffer->qualification_return) || (shader && shader->qualification_return) || (pipeline && pipeline->qualification_return)), "Qualification resources require their original owner retirement acknowledgment.");
+	auto *texture = texture_owner.get_or_null(p_rid);
+	auto *sampler = sampler_owner.get_or_null(p_rid);
+	ERR_FAIL_COND_MSG(!qualification_retiring && ((buffer && buffer->qualification_return) || (shader && shader->qualification_return) || (pipeline && pipeline->qualification_return) || (texture && texture->qualification_return) || (sampler && sampler->qualification_return)), "Qualification resources require their original owner retirement acknowledgement.");
+	ERR_FAIL_COND_MSG(texture && texture->qualification_return && texture->transfer_worker_index >= 0, "Qualification texture has an unsettled transfer worker.");
 	ERR_FAIL_COND_MSG(_qualification_resource_busy(p_rid), "Qualification ticket still owns this resource or one of its dependents.");
 	_free_dependencies(p_rid); // Recursively erase dependencies first, to avoid potential API problems.
 	_free_internal(p_rid);
 }
 
+#ifdef TESTS_ENABLED
+thread_local void (*test_uniform_set_after_rid_free)(RenderingDevice *) = nullptr;
+#endif
+
 void RenderingDevice::_free_internal(RID p_id) {
 	ERR_FAIL_COND(_qualification_resource_busy(p_id));
+	auto *qualified_texture = texture_owner.get_or_null(p_id);
+	ERR_FAIL_COND(qualified_texture && qualified_texture->qualification_return && qualified_texture->transfer_worker_index >= 0);
 #ifdef DEV_ENABLED
 	String resource_name;
 	if (resource_names.has(p_id)) {
@@ -8723,6 +8938,7 @@ void RenderingDevice::_free_internal(RID p_id) {
 	// Push everything so it's disposed of next time this frame index is processed (means, it's safe to do it).
 	if (texture_owner.owns(p_id)) {
 		Texture *texture = texture_owner.get_or_null(p_id);
+		ERR_FAIL_COND(_qualification_enqueue(texture->qualification_return) != OK);
 		_check_transfer_worker_texture(texture);
 
 		RDG::ResourceTracker *draw_tracker = texture->draw_tracker;
@@ -8758,8 +8974,9 @@ void RenderingDevice::_free_internal(RID p_id) {
 
 		framebuffer_owner.free(p_id);
 	} else if (sampler_owner.owns(p_id)) {
-		RDD::SamplerID sampler_driver_id = *sampler_owner.get_or_null(p_id);
-		frames[frame].samplers_to_dispose_of.push_back(sampler_driver_id);
+		Sampler *sampler = sampler_owner.get_or_null(p_id);
+		ERR_FAIL_COND(_qualification_enqueue(sampler->qualification_return) != OK);
+		frames[frame].samplers_to_dispose_of.push_back(*sampler);
 		sampler_owner.free(p_id);
 	} else if (vertex_buffer_owner.owns(p_id)) {
 		Buffer *vertex_buffer = vertex_buffer_owner.get_or_null(p_id);
@@ -8831,11 +9048,19 @@ void RenderingDevice::_free_internal(RID p_id) {
 		storage_buffer_owner.free(p_id);
 	} else if (uniform_set_owner.owns(p_id)) {
 		UniformSet *uniform_set = uniform_set_owner.get_or_null(p_id);
+		// The RID owner destroys the set before the synchronous callback.
+		InvalidationCallback invalidated_callback = uniform_set->invalidated_callback;
+		void *invalidated_callback_userdata = uniform_set->invalidated_callback_userdata;
 		frames[frame].uniform_sets_to_dispose_of.push_back(*uniform_set);
 		uniform_set_owner.free(p_id);
+#ifdef TESTS_ENABLED
+		if (test_uniform_set_after_rid_free) {
+			test_uniform_set_after_rid_free(this);
+		}
+#endif
 
-		if (uniform_set->invalidated_callback != nullptr) {
-			uniform_set->invalidated_callback(uniform_set->invalidated_callback_userdata);
+		if (invalidated_callback != nullptr) {
+			invalidated_callback(invalidated_callback_userdata);
 		}
 	} else if (render_pipeline_owner.owns(p_id)) {
 		RenderPipeline *pipeline = render_pipeline_owner.get_or_null(p_id);
@@ -8888,8 +9113,8 @@ void RenderingDevice::set_resource_name(RID p_id, const String &p_name) {
 		//Framebuffer *framebuffer = framebuffer_owner.get_or_null(p_id);
 		// Not implemented for now as the relationship between Framebuffer and RenderPass is very complex.
 	} else if (sampler_owner.owns(p_id)) {
-		RDD::SamplerID sampler_driver_id = *sampler_owner.get_or_null(p_id);
-		driver->set_object_name(RDD::OBJECT_TYPE_SAMPLER, sampler_driver_id, p_name);
+		Sampler *sampler = sampler_owner.get_or_null(p_id);
+		driver->set_object_name(RDD::OBJECT_TYPE_SAMPLER, sampler->driver_id, p_name);
 	} else if (vertex_buffer_owner.owns(p_id)) {
 		Buffer *vertex_buffer = vertex_buffer_owner.get_or_null(p_id);
 		driver->set_object_name(RDD::OBJECT_TYPE_BUFFER, vertex_buffer->driver_id, p_name);
@@ -9153,9 +9378,10 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 
 	// Samplers.
 	while (frames[p_frame].samplers_to_dispose_of.front()) {
-		RDD::SamplerID sampler = frames[p_frame].samplers_to_dispose_of.front()->get();
+		Sampler &sampler = frames[p_frame].samplers_to_dispose_of.front()->get();
 
-		driver->sampler_free(sampler);
+		driver->sampler_free(sampler.driver_id);
+		_qualification_freed(sampler.qualification_return);
 
 		frames[p_frame].samplers_to_dispose_of.pop_front();
 	}
@@ -9178,6 +9404,7 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 
 		texture_memory -= driver->texture_get_allocation_size(texture->driver_id);
 		driver->texture_free(texture->driver_id);
+		_qualification_freed(texture->qualification_return);
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
 		capture_test_resource_registry.observe_free(RenderCaptureTestResourceKind::Texture, texture->driver_id.id);
 #endif
@@ -9818,6 +10045,7 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 				uint32_t block_size = get_compressed_image_format_block_byte_size(request.format);
 				uint32_t pixel_size = get_image_format_pixel_size(request.format);
 				uint32_t region_size = texture_download_region_size_px;
+				bool map_failed = false;
 
 				for (uint32_t j = 0; j < request.frame_local_count; j++) {
 					uint32_t local_index = request.frame_local_index + j;
@@ -9828,6 +10056,11 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 					uint32_t region_h = MIN(region_size, h - region.texture_offset.y);
 
 					uint8_t *buffer_data = driver->buffer_map(frames[p_frame].download_texture_staging_buffers[local_index]);
+					if (buffer_data == nullptr) {
+						map_failed = true;
+						ERR_PRINT("Failed to map an asynchronous texture readback staging buffer.");
+						break;
+					}
 					const uint8_t *read_ptr = buffer_data + region.buffer_offset;
 					uint8_t *write_ptr = packed_byte_array.ptrw() + frames[p_frame].download_texture_mipmap_offsets[local_index];
 					uint32_t unit_size = pixel_size;
@@ -9845,7 +10078,11 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 					driver->buffer_unmap(frames[p_frame].download_texture_staging_buffers[local_index]);
 				}
 
-				request.callback.call(packed_byte_array);
+				// A map failure has no result payload. Keep the callback success-only,
+				// matching async buffer readback, and never expose partially copied data.
+				if (!map_failed) {
+					request.callback.call(packed_byte_array);
+				}
 			}
 
 			GodotProfileZoneGrouped(_profile_zone, "clear buffers");
@@ -10167,11 +10404,9 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 	}
 #endif
 
-	texture_upload_region_size_px = GLOBAL_GET("rendering/rendering_device/staging_buffer/texture_upload_region_size_px");
-	texture_upload_region_size_px = _normalize_staging_region_size(texture_upload_region_size_px);
+	texture_upload_region_size_px = _normalize_staging_region_size(int64_t(GLOBAL_GET("rendering/rendering_device/staging_buffer/texture_upload_region_size_px")));
 
-	texture_download_region_size_px = GLOBAL_GET("rendering/rendering_device/staging_buffer/texture_download_region_size_px");
-	texture_download_region_size_px = _normalize_staging_region_size(texture_download_region_size_px);
+	texture_download_region_size_px = _normalize_staging_region_size(int64_t(GLOBAL_GET("rendering/rendering_device/staging_buffer/texture_download_region_size_px")));
 
 	// Ensure current staging block is valid and at least one per frame exists.
 	upload_staging_buffers.current = 0;
@@ -10358,14 +10593,16 @@ uint64_t RenderingDevice::get_driver_resource(DriverResource p_resource, RID p_r
 		case DRIVER_RESOURCE_TEXTURE_DATA_FORMAT: {
 			Texture *tex = texture_owner.get_or_null(p_rid);
 			ERR_FAIL_NULL_V(tex, 0);
+			ERR_FAIL_COND_V(tex->qualification_return, 0);
 
 			driver_id = tex->driver_id.id;
 		} break;
 		case DRIVER_RESOURCE_SAMPLER: {
-			RDD::SamplerID *sampler_driver_id = sampler_owner.get_or_null(p_rid);
-			ERR_FAIL_NULL_V(sampler_driver_id, 0);
+			Sampler *sampler = sampler_owner.get_or_null(p_rid);
+			ERR_FAIL_NULL_V(sampler, 0);
+			ERR_FAIL_COND_V(sampler->qualification_return, 0);
 
-			driver_id = (*sampler_driver_id).id;
+			driver_id = sampler->driver_id.id;
 		} break;
 		case DRIVER_RESOURCE_UNIFORM_SET: {
 			UniformSet *uniform_set = uniform_set_owner.get_or_null(p_rid);

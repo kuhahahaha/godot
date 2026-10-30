@@ -1949,10 +1949,12 @@ static_assert(ENUM_MEMBERS_EQUAL(RDD::BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_
 static_assert(ENUM_MEMBERS_EQUAL(RDD::BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR));
 
 RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitField<BufferUsageBits> p_usage, MemoryAllocationType p_allocation_type, uint64_t p_frames_drawn) {
- bool extra_tracking=Engine::get_singleton()->is_extra_gpu_memory_tracking_enabled();
+	bool extra_tracking = Engine::get_singleton()->is_extra_gpu_memory_tracking_enabled();
 #ifdef TESTS_ENABLED
- extra_tracking=extra_tracking || test_buffer_fault_stage;
- test_buffer_rollback_mask=0;test_buffer_prefix=VK_NULL_HANDLE;test_buffer_allocation_prefix=nullptr;
+	extra_tracking = extra_tracking || test_buffer_fault_stage;
+	test_buffer_rollback_mask = 0;
+	test_buffer_prefix = VK_NULL_HANDLE;
+	test_buffer_allocation_prefix = nullptr;
 #endif
 	uint32_t alignment = 16u; // 16 bytes is reasonable.
 	if (p_usage.has_flag(BUFFER_USAGE_UNIFORM_BIT)) {
@@ -2025,22 +2027,22 @@ RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitFie
 	VkBuffer vk_buffer = VK_NULL_HANDLE;
 	VmaAllocation allocation = nullptr;
 	VmaAllocationInfo alloc_info = {};
- auto rollback=[&]() {
-  if(extra_tracking) {
-   vkDestroyBuffer(vk_device,vk_buffer,VKC::get_allocation_callbacks(VK_OBJECT_TYPE_BUFFER));
+	auto rollback = [&]() {
+		if (extra_tracking) {
+			vkDestroyBuffer(vk_device, vk_buffer, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_BUFFER));
 #ifdef TESTS_ENABLED
-   test_buffer_rollback_mask|=1;
+			test_buffer_rollback_mask |= 1;
 #endif
-   if(allocation) {
-    vmaFreeMemory(allocator,allocation);
+			if (allocation) {
+				vmaFreeMemory(allocator, allocation);
 #ifdef TESTS_ENABLED
-    test_buffer_rollback_mask|=2;
+				test_buffer_rollback_mask |= 2;
 #endif
-   }
-  } else {
-   vmaDestroyBuffer(allocator,vk_buffer,allocation);
-  }
- };
+			}
+		} else {
+			vmaDestroyBuffer(allocator, vk_buffer, allocation);
+		}
+	};
 
 	if (!extra_tracking) {
 		alloc_create_info.preferredFlags &= ~vma_flags_to_remove;
@@ -2051,25 +2053,25 @@ RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitFie
 		VkResult err = vkCreateBuffer(vk_device, &create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_BUFFER), &vk_buffer);
 		ERR_FAIL_COND_V_MSG(err, BufferID(), vformat("Can't create buffer of size: %d (VkResult error %d).", p_size, err));
 #ifdef TESTS_ENABLED
-  test_buffer_prefix=vk_buffer;
-  err=test_buffer_fault_stage==1 ? VK_ERROR_OUT_OF_DEVICE_MEMORY : vmaAllocateMemoryForBuffer(allocator,vk_buffer,&alloc_create_info,&allocation,&alloc_info);
-  test_buffer_allocation_prefix=allocation;
+		test_buffer_prefix = vk_buffer;
+		err = test_buffer_fault_stage == 1 ? VK_ERROR_OUT_OF_DEVICE_MEMORY : vmaAllocateMemoryForBuffer(allocator, vk_buffer, &alloc_create_info, &allocation, &alloc_info);
+		test_buffer_allocation_prefix = allocation;
 #else
 		err = vmaAllocateMemoryForBuffer(allocator, vk_buffer, &alloc_create_info, &allocation, &alloc_info);
 #endif
-  if(err!=VK_SUCCESS) {
-   rollback();
-   ERR_FAIL_V_MSG(BufferID(),vformat("Can't allocate memory for buffer of size: %d (VkResult error %d).",p_size,err));
-  }
+		if (err != VK_SUCCESS) {
+			rollback();
+			ERR_FAIL_V_MSG(BufferID(), vformat("Can't allocate memory for buffer of size: %d (VkResult error %d).", p_size, err));
+		}
 #ifdef TESTS_ENABLED
-  err=test_buffer_fault_stage==2 ? VK_ERROR_OUT_OF_DEVICE_MEMORY : vmaBindBufferMemory2(allocator,allocation,0,vk_buffer,nullptr);
+		err = test_buffer_fault_stage == 2 ? VK_ERROR_OUT_OF_DEVICE_MEMORY : vmaBindBufferMemory2(allocator, allocation, 0, vk_buffer, nullptr);
 #else
 		err = vmaBindBufferMemory2(allocator, allocation, 0, vk_buffer, nullptr);
 #endif
-  if(err!=VK_SUCCESS) {
-   rollback();
-   ERR_FAIL_V_MSG(BufferID(),vformat("Can't bind memory to buffer of size: %d (VkResult error %d).",p_size,err));
-  }
+		if (err != VK_SUCCESS) {
+			rollback();
+			ERR_FAIL_V_MSG(BufferID(), vformat("Can't bind memory to buffer of size: %d (VkResult error %d).", p_size, err));
+		}
 	}
 
 	// Bookkeep.
@@ -2077,10 +2079,10 @@ RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitFie
 	if (p_usage.has_flag(BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT)) {
 		void *persistent_ptr = nullptr;
 		VkResult err = vmaMapMemory(allocator, allocation, &persistent_ptr);
-  if(err!=VK_SUCCESS) {
-   rollback();
-   ERR_FAIL_V_MSG(BufferID(),vformat("Couldn't map Vulkan buffer memory (VkResult error %d).",err));
-  }
+		if (err != VK_SUCCESS) {
+			rollback();
+			ERR_FAIL_V_MSG(BufferID(), vformat("Couldn't map Vulkan buffer memory (VkResult error %d).", err));
+		}
 
 		BufferDynamicInfo *dyn_buffer = VersatileResource::allocate<BufferDynamicInfo>(resources_allocator);
 		buf_info = dyn_buffer;
@@ -5436,6 +5438,7 @@ void RenderingDeviceDriverVulkan::_descriptor_set_pool_unreference(DescriptorSet
 }
 
 RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<BoundUniform> p_uniforms, ShaderID p_shader, uint32_t p_set_index, int p_linear_pool_index) {
+	MutexLock descriptor_lock(descriptor_set_mutex);
 	ERR_FAIL_COND_V(p_uniforms.size() > 0 && !p_uniforms.ptr(), UniformSetID());
 	if (!linear_descriptor_pools_enabled) {
 		p_linear_pool_index = -1;
@@ -5748,7 +5751,9 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 }
 
 void RenderingDeviceDriverVulkan::uniform_set_free(UniformSetID p_uniform_set) {
+	MutexLock descriptor_lock(descriptor_set_mutex);
 	UniformSetInfo *usi = (UniformSetInfo *)p_uniform_set.id;
+	ERR_FAIL_COND_MSG(usi->qualification_return_unknown, "Descriptor return is unknown and cannot be replayed.");
 
 	if (usi->vk_linear_descriptor_pool) {
 		// Nothing to do. All sets are freed at once using vkResetDescriptorPool.
@@ -5763,6 +5768,37 @@ void RenderingDeviceDriverVulkan::uniform_set_free(UniformSetID p_uniform_set) {
 	}
 
 	VersatileResource::free(resources_allocator, usi);
+}
+
+RenderingDeviceDriver::QualificationDescriptorReturn RenderingDeviceDriverVulkan::qualification_uniform_set_free(UniformSetID p_uniform_set) {
+	MutexLock descriptor_lock(descriptor_set_mutex);
+	UniformSetInfo *usi = (UniformSetInfo *)p_uniform_set.id;
+	if (!usi || usi->vk_linear_descriptor_pool || !usi->vk_descriptor_pool || !usi->vk_descriptor_set) {
+		return {};
+	}
+	if (usi->qualification_return_unknown) {
+		return { QualificationDescriptorReturnState::Unknown, int32_t(usi->qualification_return_error) };
+	}
+	if (qualification_unknown_descriptors == UINT64_MAX) {
+		return {};
+	}
+	VkResult result;
+#ifdef TESTS_ENABLED
+	++test_descriptor_free_calls;
+	if (test_descriptor_free_error != VK_SUCCESS) {
+		result = test_descriptor_free_error;
+	} else
+#endif
+		result = vkFreeDescriptorSets(vk_device, usi->vk_descriptor_pool, 1, &usi->vk_descriptor_set);
+	if (result != VK_SUCCESS) {
+		usi->qualification_return_unknown = true;
+		usi->qualification_return_error = result;
+		++qualification_unknown_descriptors;
+		return { QualificationDescriptorReturnState::Unknown, int32_t(result) };
+	}
+	_descriptor_set_pool_unreference(usi->pool_sets_it, usi->vk_descriptor_pool, -1);
+	VersatileResource::free(resources_allocator, usi);
+	return { QualificationDescriptorReturnState::Returned, int32_t(result) };
 }
 
 bool RenderingDeviceDriverVulkan::uniform_sets_have_linear_pools() const {
@@ -5796,6 +5832,7 @@ uint32_t RenderingDeviceDriverVulkan::uniform_sets_get_dynamic_offsets(VectorVie
 }
 
 void RenderingDeviceDriverVulkan::linear_uniform_set_pools_reset(int p_linear_pool_index) {
+	MutexLock descriptor_lock(descriptor_set_mutex);
 	if (linear_descriptor_pools_enabled) {
 		DescriptorSetPools &pools_to_reset = linear_descriptor_set_pools[p_linear_pool_index];
 		DescriptorSetPools::Iterator curr_pool = pools_to_reset.begin();
@@ -7776,7 +7813,7 @@ void RenderingDeviceDriverVulkan::command_insert_breadcrumb(CommandBufferID p_cm
 }
 
 void RenderingDeviceDriverVulkan::on_device_lost() const {
- notify_session_device_lost();
+	notify_session_device_lost();
 	if (device_functions.GetDeviceFaultInfoEXT == nullptr) {
 		_err_print_error(FUNCTION_STR, __FILE__, __LINE__, "VK_EXT_device_fault not available.");
 		return;
@@ -8331,6 +8368,10 @@ RenderingDeviceDriverVulkan::RenderingDeviceDriverVulkan(RenderingContextDriverV
 }
 
 RenderingDeviceDriverVulkan::~RenderingDeviceDriverVulkan() {
+	{
+		MutexLock descriptor_lock(descriptor_set_mutex);
+		CRASH_COND_MSG(qualification_unknown_descriptors != 0, "Vulkan descriptor returns remain unknown at driver destruction.");
+	}
 	CRASH_COND_MSG(!native_calls.is_empty(), "Vulkan native completion sources or observers remain at driver destruction.");
 #if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
 	if (breadcrumb_buffer != BufferID()) {

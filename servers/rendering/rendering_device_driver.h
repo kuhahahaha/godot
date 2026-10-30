@@ -657,6 +657,16 @@ public:
 	virtual UniformSetID uniform_set_create(VectorView<BoundUniform> p_uniforms, ShaderID p_shader, uint32_t p_set_index, int p_linear_pool_index) = 0;
 	virtual void linear_uniform_set_pools_reset(int p_linear_pool_index) {}
 	virtual void uniform_set_free(UniformSetID p_uniform_set) = 0;
+	// An internal owner must retain an unknown descriptor and must not replay
+	// its return. This is not a GPU-completion or external authority receipt.
+	enum class QualificationDescriptorReturnState : uint32_t { Unavailable = 0,
+		Returned = 1,
+		Unknown = 2 };
+	struct QualificationDescriptorReturn {
+		QualificationDescriptorReturnState state = QualificationDescriptorReturnState::Unavailable;
+		int32_t native_code = 0;
+	};
+	virtual QualificationDescriptorReturn qualification_uniform_set_free(UniformSetID) { return {}; }
 	virtual bool uniform_sets_have_linear_pools() const { return false; }
 	virtual uint32_t uniform_sets_get_dynamic_offsets(VectorView<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count) const = 0;
 

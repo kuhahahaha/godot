@@ -35,6 +35,10 @@ TEST_FORCE_LINK(test_rendering_device_frame_wait)
 #include "core/object/callable_mp.h"
 #include "servers/rendering/rendering_device.h"
 #include "tests/servers/rendering/transfer_test_driver_base.h"
+#ifdef MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED
+#include "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_image_collector.h"
+#include "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_readback_collector.h"
+#endif
 
 class TestFrameWaitAccess {
 public:
@@ -500,6 +504,61 @@ TEST_CASE("[R01][FrameWait] texture wait error retains its exact callback batch"
 	CHECK(received[0] == 1);
 	CHECK(received[3] == 4);
 }
+
+#ifdef MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED
+TEST_CASE("[P01][R01] Image collector rejects a texture map failure after RD releases its callback") {
+	Driver driver;
+	driver.result = OK;
+	driver.map_failure = true;
+	RenderingDevice device;
+	SkinnedMeshCaptureTestImageCollector collector;
+	Callable callback;
+	REQUIRE(collector.reserve(0, callback) == OK);
+	TestFrameWaitAccess::attach(device, driver, callable_mp_static(receive));
+	TestFrameWaitAccess::use_texture_request(device, callback);
+	callback = Callable();
+	collector.close();
+	CHECK_FALSE(collector.drained());
+	ERR_PRINT_OFF;
+	CHECK(device._stall_for_frame(0) == OK);
+	ERR_PRINT_ON;
+	CHECK(driver.maps == 1);
+	CHECK(driver.unmaps == 0);
+	CHECK(TestFrameWaitAccess::pending_texture(device) == 0);
+	PackedByteArray output;
+	CHECK(collector.copy(0, output) == ERR_UNAVAILABLE);
+	CHECK(collector.drained());
+	CHECK_FALSE(collector.poisoned());
+	TestFrameWaitAccess::detach(device);
+}
+
+TEST_CASE("[P01][R01] Readback collector rejects a buffer map failure after RD releases its callback") {
+	Driver driver;
+	driver.result = OK;
+	driver.map_failure = true;
+	RenderingDevice device;
+	SkinnedMeshCaptureTestReadbackCollector collector(1, 2, false);
+	const SkinnedMeshCaptureTestReadbackIdentity id{ 1, 2, 3, 40, 5, 6, 7, 8, 9, 0, false };
+	Callable callback;
+	REQUIRE(collector.reserve(id, callback) == OK);
+	REQUIRE(collector.mark_enqueued(id) == OK);
+	TestFrameWaitAccess::attach(device, driver, callback);
+	callback = Callable();
+	collector.close();
+	CHECK_FALSE(collector.drained());
+	ERR_PRINT_OFF;
+	CHECK(device._stall_for_frame(0) == OK);
+	ERR_PRINT_ON;
+	CHECK(driver.maps == 1);
+	CHECK(driver.unmaps == 0);
+	CHECK(TestFrameWaitAccess::pending(device) == 0);
+	PackedByteArray output;
+	CHECK(collector.copy_completed(id, output) == ERR_INVALID_DATA);
+	CHECK(collector.poisoned());
+	CHECK(collector.drained());
+	TestFrameWaitAccess::detach(device);
+}
+#endif
 
 TEST_CASE("[R01][FrameWait] segmented result retains prefix until one exact final callback") {
 	Driver driver;
