@@ -46,6 +46,9 @@ class LightStorage;
 class MaterialStorage;
 
 class TextureStorage : public RendererTextureStorage {
+#ifdef TESTS_ENABLED
+	friend class TestB4TextureCleanupAccess;
+#endif
 public:
 	const int SAMPLERS_BINDING_FIRST_INDEX = 4;
 
