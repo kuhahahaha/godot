@@ -284,6 +284,41 @@ TEST_CASE("[String] Concatenation") {
 	CHECK(s == "Have a Nice Day");
 }
 
+TEST_CASE("[String][UTF32Append] empty spans retain normal text and termination") {
+	const Span<char32_t> empty_span;
+	CHECK(empty_span.ptr() == nullptr);
+	CHECK(empty_span.size() == 0);
+
+	String text = U"前";
+	const String original = text;
+	const int size_before = text.size();
+	text.append_utf32_unchecked(empty_span);
+	CHECK(text == U"前");
+	CHECK(text.size() == size_before);
+	CHECK(text.ptr()[text.length()] == 0);
+	text += String();
+	CHECK(text == U"前");
+	CHECK(text.size() == size_before);
+
+	const char32_t unused = U'x';
+	text.append_utf32_unchecked(Span<char32_t>(&unused, 0));
+	CHECK(text == U"前");
+	const char32_t suffix[] = { U'中', U'\U0001f642' };
+	text.append_utf32_unchecked(Span<char32_t>(suffix, 2));
+	CHECK(text == U"前中\U0001f642");
+	CHECK(text.length() == 3);
+	CHECK(text.ptr()[text.length()] == 0);
+	CHECK(original == U"前");
+
+	String empty;
+	empty.append_utf32_unchecked(empty_span);
+	CHECK(empty.is_empty());
+	CHECK(empty.length() == 0);
+	CHECK(empty.size() == 1);
+	REQUIRE(empty.ptr() != nullptr);
+	CHECK(empty.ptr()[0] == 0);
+}
+
 TEST_CASE("[String] Testing size and length of string") {
 	// todo: expand this test to do more tests on size() as it is complicated under the hood.
 	CHECK(String("Mellon").size() == 7);
