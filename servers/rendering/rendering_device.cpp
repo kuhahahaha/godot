@@ -8966,13 +8966,14 @@ void RenderingDevice::_free_internal(RID p_id) {
 		texture_owner.free(p_id);
 	} else if (framebuffer_owner.owns(p_id)) {
 		Framebuffer *framebuffer = framebuffer_owner.get_or_null(p_id);
+		InvalidationCallback invalidated_callback = framebuffer->invalidated_callback;
+		void *invalidated_callback_userdata = framebuffer->invalidated_callback_userdata;
 		frames[frame].framebuffers_to_dispose_of.push_back(*framebuffer);
-
-		if (framebuffer->invalidated_callback != nullptr) {
-			framebuffer->invalidated_callback(framebuffer->invalidated_callback_userdata);
-		}
-
 		framebuffer_owner.free(p_id);
+
+		if (invalidated_callback != nullptr) {
+			invalidated_callback(invalidated_callback_userdata);
+		}
 	} else if (sampler_owner.owns(p_id)) {
 		Sampler *sampler = sampler_owner.get_or_null(p_id);
 		ERR_FAIL_COND(_qualification_enqueue(sampler->qualification_return) != OK);

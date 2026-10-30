@@ -57,6 +57,49 @@ public:
 		CHECK(device.uniform_set_owner.owns(state.replacement));
 		device.uniform_set_owner.free(state.replacement);
 	}
+	struct FramebufferInvalidationState {
+		RenderingDevice *device = nullptr;
+		RID rid;
+		RID replacement;
+		int callbacks = 0;
+		bool valid_during_callback = true;
+		Thread::ID callback_thread = Thread::UNASSIGNED_ID;
+	};
+	static void framebuffer_invalidation_reenter(void *userdata) {
+		auto *state = static_cast<FramebufferInvalidationState *>(userdata);
+		state->callbacks++;
+		state->callback_thread = Thread::get_caller_id();
+		state->valid_during_callback = state->device->framebuffer_is_valid(state->rid);
+		if (state->callbacks == 1 && state->valid_during_callback) {
+			state->device->free_rid(state->rid);
+		} else if (state->callbacks == 1) {
+			RenderingDevice::Framebuffer replacement{};
+			state->replacement = state->device->framebuffer_owner.make_rid(replacement);
+		}
+	}
+	static void framebuffer_invalidation_once(RenderingDevice &device) {
+		FramebufferInvalidationState state;
+		state.device = &device;
+		RenderingDevice::Framebuffer framebuffer{};
+		framebuffer.invalidated_callback = framebuffer_invalidation_reenter;
+		framebuffer.invalidated_callback_userdata = &state;
+		state.rid = device.framebuffer_owner.make_rid(framebuffer);
+		device.render_thread_id = Thread::get_caller_id();
+		ERR_PRINT_OFF;
+		device.free_rid(state.rid);
+		ERR_PRINT_ON;
+		CHECK(state.callbacks == 1);
+		CHECK_FALSE(state.valid_during_callback);
+		CHECK(state.callback_thread == Thread::get_caller_id());
+		CHECK_FALSE(device.framebuffer_owner.owns(state.rid));
+		CHECK(device.frames[0].framebuffers_to_dispose_of.size() == 1);
+		CHECK(state.replacement.is_valid());
+		CHECK(uint32_t(state.replacement.get_id()) == uint32_t(state.rid.get_id()));
+		CHECK(device.framebuffer_owner.owns(state.replacement));
+		if (state.replacement.is_valid()) {
+			device.framebuffer_owner.free(state.replacement);
+		}
+	}
 	template <typename D>
 	static auto create_qualified_sampler(D &device, const RenderingDevice::SamplerState &state, GDExtensionDeviceExit::QualificationPhysicalReturn *cell, int) -> decltype(device._qualification_sampler_create(state, cell)) {
 		return device._qualification_sampler_create(state, cell);
@@ -3603,6 +3646,13 @@ TEST_CASE("[RenderingDevice][Qualification] invalidation retains original callba
 	Driver driver;
 	TestQualificationPhysicalAccess::attach(device, driver);
 	TestQualificationPhysicalAccess::invalidation_after_slot_reuse(device);
+	TestQualificationPhysicalAccess::detach(device);
+}
+TEST_CASE("[RenderingDevice] framebuffer invalidation is synchronous and reentry does not duplicate disposal") {
+	RenderingDevice device;
+	Driver driver;
+	TestQualificationPhysicalAccess::attach(device, driver);
+	TestQualificationPhysicalAccess::framebuffer_invalidation_once(device);
 	TestQualificationPhysicalAccess::detach(device);
 }
 TEST_CASE("[RenderingDevice][Qualification] buffer return follows exact physical free and survives RID erase") {
