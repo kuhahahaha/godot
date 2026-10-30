@@ -72,6 +72,21 @@ public:
 		CHECK(result.native_error == ERR_INVALID_PARAMETER);
 		CHECK(memcmp(&valid_alias, &original_valid_alias, sizeof(valid_alias)) == 0);
 
+		Shared zero_request;
+		const Shared original_zero_request = zero_request;
+		header = query(3);
+		header.request_bytes = 0;
+		result = f.registry->qualification_rt_reserve(f.ref, &header, &zero_request.output, nullptr, &zero_request.output);
+		CHECK(result.native_error == ERR_INVALID_PARAMETER);
+		CHECK(memcmp(&zero_request, &original_zero_request, sizeof(zero_request)) == 0);
+
+		Shared zero_payload;
+		const Shared original_zero_payload = zero_payload;
+		header = query(4);
+		result = f.registry->qualification_rt_reserve(f.ref, &header, &input, &zero_payload.output, &zero_payload.output);
+		CHECK(result.native_error == ERR_INVALID_PARAMETER);
+		CHECK(memcmp(&zero_payload, &original_zero_payload, sizeof(zero_payload)) == 0);
+
 		GDExtensionQualificationRtRefV1 separate{ 7, 9 };
 		header.abi.abi_version = 2;
 		result = f.registry->qualification_rt_reserve(f.ref, &header, &input, nullptr, &separate);

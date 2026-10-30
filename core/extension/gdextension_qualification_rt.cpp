@@ -72,9 +72,9 @@ Error Registry::qualification_rt_ticket_locked(QualificationBridge *bridge,const
 GDExtensionDeviceSessionResultV1 Registry::qualification_rt_reserve(GDExtensionQualificationBridgeRefV1 ref,const GDExtensionQualificationRtRequestV1 *input,const void *request,const void *payload,GDExtensionQualificationRtRefV1 *out) {
  if(!aligned(input)||!aligned(out)||!request||uintptr_t(request)%8||!disjoint(input,sizeof(*input),out,sizeof(*out)))return result(ERR_INVALID_PARAMETER,2);
  const auto header=*input;
- // Never clear an output that overlaps an input, even when the header itself
- // is malformed. A non-representable payload span is unsafe to classify.
- if (!disjoint(request, header.request_bytes, out, sizeof(*out)) || (payload && (header.payload_bytes > SIZE_MAX || !disjoint(payload, size_t(header.payload_bytes), out, sizeof(*out))))) {
+ // Also check each supplied pointer itself when a malformed header declares
+ // an empty span. Do not infer any additional caller allocation beyond it.
+ if (!disjoint(request, 1, out, sizeof(*out)) || !disjoint(request, header.request_bytes, out, sizeof(*out)) || (payload && (!disjoint(payload, 1, out, sizeof(*out)) || header.payload_bytes > SIZE_MAX || !disjoint(payload, size_t(header.payload_bytes), out, sizeof(*out))))) {
 	 return result(ERR_INVALID_PARAMETER, 2);
  }
  if(!abi(header.abi,sizeof(header))||header.flags||header.reserved||!header.operation_serial||header.kind<1||header.kind>9||header.request_bytes!=request_sizes[header.kind]||header.result_capacity!=result_sizes[header.kind]||header.segment_capacity>MAX_SEGMENTS||(header.kind==8?!header.segment_capacity:header.segment_capacity!=0)||header.payload_bytes>MAX_PAYLOAD||((header.payload_bytes!=0)!=(payload!=nullptr))) {*out={};return result(ERR_INVALID_PARAMETER,2);}
