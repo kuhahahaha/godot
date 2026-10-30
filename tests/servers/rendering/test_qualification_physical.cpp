@@ -179,6 +179,51 @@ public:
 		CHECK(device.frames[0].framebuffers_to_dispose_of.size() == 2);
 		CHECK(device.resource_frees_in_progress.is_empty());
 	}
+	struct LateBusyState {
+		RenderingDevice *device = nullptr;
+		RID child;
+		int callbacks = 0;
+	};
+	static void mark_parent_busy(void *userdata) {
+		auto *state = static_cast<LateBusyState *>(userdata);
+		state->callbacks++;
+		state->device->texture_owner.get_or_null(state->child)->qualification_users = 1;
+	}
+	static void cascade_late_busy_retry(RenderingDevice &device) {
+		LateBusyState state;
+		state.device = &device;
+		RenderingDevice::Texture texture{};
+		RID parent = device.texture_owner.make_rid(texture);
+		state.child = device.texture_owner.make_rid(texture);
+		RenderingDevice::Framebuffer framebuffer{};
+		framebuffer.invalidated_callback = mark_parent_busy;
+		framebuffer.invalidated_callback_userdata = &state;
+		RID grandchild = device.framebuffer_owner.make_rid(framebuffer);
+		device.render_thread_id = Thread::get_caller_id();
+		device._add_dependency(state.child, parent);
+		device._add_dependency(grandchild, state.child);
+		ERR_PRINT_OFF;
+		device.free_rid(parent);
+		ERR_PRINT_ON;
+		CHECK(state.callbacks == 1);
+		CHECK(device.texture_owner.owns(parent));
+		CHECK(device.texture_owner.owns(state.child));
+		CHECK_FALSE(device.framebuffer_owner.owns(grandchild));
+		const HashSet<RID> *children = device.dependency_map.getptr(parent);
+		CHECK((children && children->has(state.child)));
+		CHECK(device.resource_frees_in_progress.is_empty());
+		device.texture_owner.get_or_null(state.child)->qualification_users = 0;
+		if (device.texture_owner.owns(parent)) {
+			device.free_rid(parent);
+		} else {
+			device.free_rid(state.child);
+		}
+		CHECK_FALSE(device.texture_owner.owns(parent));
+		CHECK_FALSE(device.texture_owner.owns(state.child));
+		CHECK(device.frames[0].textures_to_dispose_of.size() == 2);
+		CHECK(device.frames[0].framebuffers_to_dispose_of.size() == 1);
+		CHECK(device.resource_frees_in_progress.is_empty());
+	}
 	struct BusyDependentState {
 		RenderingDevice *device = nullptr;
 		RID parent;
@@ -3790,6 +3835,13 @@ TEST_CASE("[RenderingDevice] child invalidation can retire a sibling during pare
 	Driver driver;
 	TestQualificationPhysicalAccess::attach(device, driver);
 	TestQualificationPhysicalAccess::cascade_sibling_reentry(device);
+	TestQualificationPhysicalAccess::detach(device);
+}
+TEST_CASE("[RenderingDevice] late busy dependent preserves parent and edge until retry") {
+	RenderingDevice device;
+	Driver driver;
+	TestQualificationPhysicalAccess::attach(device, driver);
+	TestQualificationPhysicalAccess::cascade_late_busy_retry(device);
 	TestQualificationPhysicalAccess::detach(device);
 }
 TEST_CASE("[RenderingDevice] busy dependent preserves its parent until retry") {

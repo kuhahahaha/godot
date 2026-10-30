@@ -246,6 +246,10 @@ bool RenderingDevice::_free_dependencies(RID p_id) {
 		ERR_FAIL_COND_V_MSG(E && E->value.has(dependent), false, "A dependent resource could not be freed.");
 	}
 
+	// A dependent's synchronous invalidation callback can acquire this resource
+	// after the initial busy check. Preserve its parent edges if that happened.
+	ERR_FAIL_COND_V_MSG(_qualification_resource_busy(p_id), false, "The resource became busy during dependent cleanup.");
+
 	// Reverse dependencies must be unreferenced.
 	HashMap<RID, HashSet<RID>>::Iterator E = reverse_dependency_map.find(p_id);
 
