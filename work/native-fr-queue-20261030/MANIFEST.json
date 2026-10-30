@@ -52,7 +52,11 @@
     },
     {
       "path": "work/rd-cascade-61d-integration-20261030/RECEIPT.md",
-      "sha256": "09bf9a077ffc3a62cc839d3251b7eaa517afee293d25167ca339d0c6d2e64f83"
+      "sha256": "64f154f9805905ef1206fa760e0d75a5315c03a09e5300209015ba6eb1cc6354"
+    },
+    {
+      "path": "work/rd-pipeline-enqueue-refusal-20261030/RECEIPT.md",
+      "sha256": "395c2e774e2b85dad1f146ed17df96b17850dd61bf263a1ecbd2acc809b64207"
     }
   ],
   "codex_goal_status_at_capture": "blocked"
