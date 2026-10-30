@@ -1,0 +1,16 @@
+# Source audit
+rg -n "mesh_add_external_surface\\(" servers tests
+rg -n "validate_external_indexed_surface_buffers|_mesh_surface_clear|external_generation" servers/rendering/renderer_rd/storage_rd/mesh_storage.cpp servers/rendering/rendering_device.cpp
+
+# Focused suites
+bin/godot.macos.editor.dev.arm64 --headless --test --test-case='*[B4][K05]*' --exit --no-colors --no-intro
+bin/godot.macos.editor.dev.arm64 --headless --test --test-case='*[RenderingDevice]*' --exit --no-colors --no-intro
+bin/godot.macos.editor.dev.arm64 --headless --test --test-case='*[Qualification]*' --exit --no-colors --no-intro
+bin/godot.macos.editor.dev.arm64 --headless --test --test-case='*[K03]*' --exit --no-colors --no-intro
+bin/godot.macos.editor.dev.arm64 --headless --test --test-case='*[R01]*' --exit --no-colors --no-intro
+
+# Current pair (expected E05 fail-closed)
+DSO=/Users/macbookair/Documents/Work/ANGE/work/godot-native-chain-long-20261030/libange.macos.template_debug.arm64.dylib
+bin/godot.macos.editor.dev.arm64 --path /tmp/godot-current-pair-latest-dso-20261030-r2/runtime-vfx --display-driver macos --rendering-driver metal --rendering-method mobile --render-thread safe --script res://probe.gd
+bin/godot.macos.editor.dev.arm64 --path /tmp/godot-current-pair-latest-dso-20261030-r2/runtime-no-vfx --display-driver macos --rendering-driver metal --rendering-method mobile --render-thread safe --script res://probe.gd
+bin/godot.macos.editor.dev.arm64 --path /tmp/godot-current-pair-latest-dso-20261030-r2/runtime-invalid-vfx --display-driver macos --rendering-driver metal --rendering-method mobile --render-thread safe --script res://probe.gd
