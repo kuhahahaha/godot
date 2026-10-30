@@ -1,0 +1,29 @@
+{
+  "package": "texture-create-failure-cleanup-20261030",
+  "code_change": "servers/rendering/rendering_device.cpp",
+  "godot_head_before": "d29e803da6c841f4f3233d7e31c1d3911bbcbcee",
+  "ange_head": "8e2f7d282e96e406b5311b23db74c16328dcc4cf",
+  "editor_sha256": "ea64062cec33e44a660c49e7ed168e3c01252c5becbad023ccad8118da08fdc3",
+  "dso_sha256": "38df3a53ee04aa6d977b313853a2bb3bd7efafe207a960920f80644535a4fcab",
+  "build_rc": 0,
+  "tests": {
+    "rendering_device": {"rc": 0, "cases": 12, "assertions": 214},
+    "qualification": {"rc": 0, "cases": 102, "assertions": 1896},
+    "k03": {"rc": 0, "cases": 44, "assertions": 1153},
+    "r01": {"rc": 0, "cases": 16, "assertions": 293}
+  },
+  "runtime": {
+    "u01_vfx_rc": 2,
+    "u01_no_vfx_rc": 2,
+    "u01_invalid_vfx_rc": 2,
+    "first_boundary": "host.storage_owner_transport/E05/UNAVAILABLE"
+  },
+  "files": [
+    "RECEIPT.md", "INDEPENDENT_REVIEW.md", "COMMANDS.txt", "MANIFEST.json",
+    "BUILD_EDITOR.log", "BUILD_EDITOR.rc", "EDITOR_SHA256", "DSO_SHA256",
+    "RENDERING_DEVICE.log", "RENDERING_DEVICE.rc", "QUALIFICATION.log", "QUALIFICATION.rc",
+    "K03.log", "K03.rc", "R01.log", "R01.rc",
+    "U01_VFX.log", "U01_VFX.rc", "U01_NO_VFX.log", "U01_NO_VFX.rc",
+    "U01_INVALID_VFX.log", "U01_INVALID_VFX.rc"
+  ]
+}

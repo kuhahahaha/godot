@@ -1740,8 +1740,10 @@ RID RenderingDevice::_qualification_texture_create(const TextureFormat &p_format
 	}
 	RID created = _texture_create_internal(p_format, p_view, {}, p_cell, reserved);
 	if (created.is_null()) {
-		texture_owner.initialize_rid(reserved, Texture());
-		texture_owner.free(reserved);
+		if (texture_owner.owns(reserved)) {
+			texture_owner.initialize_rid(reserved, Texture());
+			texture_owner.free(reserved);
+		}
 		_qualification_release_free_event(p_cell);
 	}
 	return created;
@@ -1968,10 +1970,32 @@ RID RenderingDevice::_texture_create_internal(const TextureFormat &p_format, con
 	if (data.size()) {
 		const bool use_general_in_copy_queues = driver->api_trait_get(RDD::API_TRAIT_USE_GENERAL_IN_COPY_QUEUES);
 		const RDD::TextureLayout dst_layout = use_general_in_copy_queues ? RDD::TEXTURE_LAYOUT_GENERAL : RDD::TEXTURE_LAYOUT_COPY_DST_OPTIMAL;
+		auto dispose_failed_texture = [&]() {
+			Texture *failed_texture = texture_owner.get_or_null(id);
+			if (!failed_texture) {
+				return;
+			}
+			// An earlier layer may have issued a transfer. Keep the driver object
+			// alive until the normal frame retirement path has drained that worker.
+			_check_transfer_worker_texture(failed_texture);
+			if (p_cell) {
+				// Creation never returned this qualification cell to its caller. Do
+				// not publish a physical return for a failed create.
+				failed_texture->qualification_return = nullptr;
+				p_cell->rid = 0;
+			}
+			frames[frame].textures_to_dispose_of.push_back(*failed_texture);
+			texture_owner.free(id);
+		};
 		for (uint32_t i = 0; i < format.array_layers; i++) {
-			if (_texture_initialize(id, i, data[i], dst_layout, immediate_flush) != OK) {
-				// Earlier layers or an issued upload may still reference the texture.
-				// Retain its owner until completion-gated finalization can free it.
+			const Error initialize_error = _texture_initialize(id, i, data[i], dst_layout, immediate_flush);
+			if (initialize_error != OK) {
+				// ERR_BUSY can mean an issued transfer is still unresolved. Keep
+				// that owner for the existing shutdown/fence recovery path; freeing
+				// it here would race the unresolved worker.
+				if (initialize_error != ERR_BUSY) {
+					dispose_failed_texture();
+				}
 				return RID();
 			}
 		}
