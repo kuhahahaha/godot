@@ -1,0 +1,13 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+./modules/gdscript/tests/script_lifecycle_test.h:179:
+TEST CASE:  [Modules][GDScript][Cancellation] instance teardown releases captured values outside language lock
+
+./modules/gdscript/tests/script_lifecycle_test.h:222: ERROR: CHECK( language_available ) is NOT correct!
+  values: CHECK( false )
+
+===============================================================================
+[doctest] test cases: 1 | 0 passed | 1 failed | 1973 skipped
+[doctest] assertions: 8 | 7 passed | 1 failed |
+[doctest] Status: FAILURE!

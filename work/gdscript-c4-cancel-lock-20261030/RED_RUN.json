@@ -1,0 +1,28 @@
+{
+  "binary_before": "386ef5936ca9ae47ba863f9543302f0d087e83d14f9d1ed54f414a2cbb2e25e9",
+  "binary_after": "386ef5936ca9ae47ba863f9543302f0d087e83d14f9d1ed54f414a2cbb2e25e9",
+  "runs": [
+    {
+      "name": "script_cancel",
+      "command": [
+        "/private/tmp/godot-gdscript-c4-20261030/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*script cancellation releases captured values outside language lock*"
+      ],
+      "rc": 1,
+      "expected_red": true
+    },
+    {
+      "name": "instance_teardown",
+      "command": [
+        "/private/tmp/godot-gdscript-c4-20261030/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*instance teardown releases captured values outside language lock*"
+      ],
+      "rc": 1,
+      "expected_red": true
+    }
+  ]
+}

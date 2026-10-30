@@ -8,7 +8,7 @@
     },
     {
       "path": "work/qualification-zero-snapshot-20261030/RECEIPT.md",
-      "sha256": "3e0f65586544adb1b6d8783f6f591aaa2781d6b40d14a33bb3189a1e910a6337"
+      "sha256": "026ad60fd288f2b4b0f074d76d00b68d25268825cbe0f9acb43200f91b00e48d"
     },
     {
       "path": "work/cb3-ac0285-metal-pair-20261030/RECEIPT.md",
@@ -41,6 +41,10 @@
     {
       "path": "work/rd-cascade-reentry-20261030/RECEIPT.md",
       "sha256": "a8323d4707bce031452ced3c6a40f793c9c02b6556a4fc8bdfeba6039be920e1"
+    },
+    {
+      "path": "work/gdscript-c4-cancel-lock-20261030/RECEIPT.md",
+      "sha256": "e9afef7fb98a19fdbc99fb7c3feae81455375e4f5b4f443ed4fb66d8a5c25aab"
     }
   ]
 }
