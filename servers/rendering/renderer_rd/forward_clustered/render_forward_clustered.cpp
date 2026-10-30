@@ -967,6 +967,19 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 		}
 	}
 
+	// External admission is shared by this fill. Validate the entire batch
+	// before appending anything so a late mismatch cannot leave a partial list.
+	if (p_render_data->packet_identity.external) {
+		for (int i = 0; i < (int)p_render_data->instances->size(); i++) {
+			GeometryInstanceForwardClustered *inst = static_cast<GeometryInstanceForwardClustered *>((*p_render_data->instances)[i]);
+			for (GeometryInstanceSurfaceDataCache *surf = inst->surface_caches; surf; surf = surf->next) {
+				if (!RenderDataRD::admission_succeeded(p_render_data->admit_surface_status(surf->material_generation))) {
+					return;
+				}
+			}
+		}
+	}
+
 	//fill list
 
 	for (int i = 0; i < (int)p_render_data->instances->size(); i++) {
