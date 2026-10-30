@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "kind": "pipeline_shader_retirement_current_audit",
+  "status": "no_reproducible_red_no_code_change",
+  "godot_head": "ce0ed2848882248396ac861ff84700ea1821727e",
+  "editor_sha256": "37743639ba01d06aa9b43c5c21582a8d4683ecfcd0ec3ab5b9cbf5e4600bb7e6",
+  "dso_sha256": "38df3a53ee04aa6d977b313853a2bb3bd7efafe207a960920f80644535a4fcab",
+  "focused": {"QualificationNative_Metal":[0,2,51],"MetalCompletion":[0,6,386],"UnknownPipeline":[0,1,30],"ShaderRetire":[0,14,311]},
+  "pair": {"runtime-vfx":[2,"host.storage_owner_transport/E05/UNAVAILABLE"],"runtime-no-vfx":[2,"host.storage_owner_transport/E05/UNAVAILABLE"],"runtime-invalid-vfx":[2,"host.storage_owner_transport/E05/UNAVAILABLE"]},
+  "claims_not_made": ["owner","submit","completion","readback","Ready","GPU_Ready"]
+}
