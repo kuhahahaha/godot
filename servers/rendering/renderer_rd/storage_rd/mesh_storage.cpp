@@ -2114,6 +2114,11 @@ void MeshStorage::_multimesh_update_motion_vectors_data_cache(MultiMesh *multime
 				}
 			}
 		}
+		if (!multimesh->buffer_set) {
+			// A fresh allocation has no prior instance transforms. Use the first
+			// cached upload for both frames until a nonempty upload is published.
+			multimesh->motion_vectors_previous_offset = multimesh->motion_vectors_current_offset;
+		}
 	}
 }
 
@@ -2622,13 +2627,16 @@ void MeshStorage::_update_dirty_multimeshes() {
 			uint32_t total_dirty_regions = multimesh->data_cache_dirty_region_count + multimesh->previous_data_cache_dirty_region_count;
 			if (total_dirty_regions != 0) {
 				Error upload_error = OK;
+				bool uploaded = false;
 				uint32_t data_cache_dirty_region_count = Math::division_round_up(multimesh->instances, (int)MULTIMESH_DIRTY_REGION_SIZE);
 				uint32_t visible_region_count = visible_instances == 0 ? 0 : Math::division_round_up(visible_instances, (uint32_t)MULTIMESH_DIRTY_REGION_SIZE);
 
 				uint32_t region_size = multimesh->stride_cache * MULTIMESH_DIRTY_REGION_SIZE * sizeof(float);
 				if (total_dirty_regions > 32 || total_dirty_regions > visible_region_count / 2) {
 					//if there too many dirty regions, or represent the majority of regions, just copy all, else transfer cost piles up too much
-					upload_error = RD::get_singleton()->buffer_update(multimesh->buffer, buffer_offset * sizeof(float), _multimesh_dirty_upload_size(visible_region_count, region_size, multimesh->instances * (uint32_t)multimesh->stride_cache * (uint32_t)sizeof(float)), data);
+					const uint32_t upload_size = _multimesh_dirty_upload_size(visible_region_count, region_size, multimesh->instances * (uint32_t)multimesh->stride_cache * (uint32_t)sizeof(float));
+					upload_error = RD::get_singleton()->buffer_update(multimesh->buffer, buffer_offset * sizeof(float), upload_size, data);
+					uploaded = upload_size > 0;
 				} else {
 					//not that many regions? update them all
 					for (uint32_t i = 0; i < visible_region_count; i++) {
@@ -2640,6 +2648,7 @@ void MeshStorage::_update_dirty_multimeshes() {
 							if (upload_error != OK) {
 								break;
 							}
+							uploaded = true;
 						}
 					}
 				}
@@ -2649,6 +2658,9 @@ void MeshStorage::_update_dirty_multimeshes() {
 					multimesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MULTIMESH);
 					ERR_PRINT("MultiMesh dirty-region upload failed; drawing is disabled.");
 				} else {
+					if (uploaded) {
+						multimesh->buffer_set = true;
+					}
 					memcpy(multimesh->previous_data_cache_dirty_regions, multimesh->data_cache_dirty_regions, data_cache_dirty_region_count * sizeof(bool));
 					memset(multimesh->data_cache_dirty_regions, 0, data_cache_dirty_region_count * sizeof(bool));
 

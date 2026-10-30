@@ -16,7 +16,7 @@ class VelocityObserver extends CompositorEffect:
 
 	func _render_callback(_callback_type: int, render_data: RenderData) -> void:
 		var buffers := render_data.get_render_scene_buffers() as RenderSceneBuffersRD
-		velocity = buffers.get_velocity_texture()
+		velocity = buffers.get_velocity_texture() if needs_motion_vectors else RID()
 		size = buffers.get_internal_size()
 		callbacks += 1
 
@@ -26,6 +26,10 @@ var checks := 0
 var failures := 0
 var output := ""
 var omit_move := false
+var cached_transform := false
+var cached_hidden_first := false
+var cached_start_hidden := false
+var cached_late_motion := false
 
 func _initialize() -> void:
 	call_deferred("_run")
@@ -39,6 +43,14 @@ func _buffer(count: int, x: float) -> PackedFloat32Array:
 		data[i * 12 + 10] = 1.0
 		data[i * 12 + 3] = x if i == 0 else 20.0 + i
 	return data
+
+func _upload(mm: MultiMesh, count: int, x: float) -> void:
+	if cached_transform:
+		for i in range(count):
+			var offset := x if i == 0 else 20.0 + i
+			mm.set_instance_transform(i, Transform3D(Basis.IDENTITY, Vector3(offset, 0, 0)))
+	else:
+		mm.buffer = _buffer(count, x)
 
 func _read_velocity() -> void:
 	var rd := RenderingServer.get_rendering_device()
@@ -163,8 +175,12 @@ func _run() -> void:
 		quit(77)
 		return
 	omit_move = OS.get_cmdline_user_args().has("--omit-second-move")
+	cached_hidden_first = OS.get_cmdline_user_args().has("--cached-hidden-first")
+	cached_start_hidden = OS.get_cmdline_user_args().has("--cached-start-hidden")
+	cached_late_motion = OS.get_cmdline_user_args().has("--cached-late-motion")
+	cached_transform = OS.get_cmdline_user_args().has("--cached-transform") or cached_hidden_first or cached_start_hidden or cached_late_motion
 	output = OS.get_environment("GODOT_TEST_K02_MOTION_OUT")
-	print("K02_MOTION_RUNTIME ", JSON.stringify({"omit_second_move": omit_move, "cache_enabled": ProjectSettings.get_setting("rendering/shader_compiler/shader_cache/enabled"), "editor_hint": Engine.is_editor_hint(), "renderer": RenderingServer.get_current_rendering_method()}))
+	print("K02_MOTION_RUNTIME ", JSON.stringify({"omit_second_move": omit_move, "cached_transform": cached_transform, "cached_hidden_first": cached_hidden_first, "cached_start_hidden": cached_start_hidden, "cached_late_motion": cached_late_motion, "cache_enabled": ProjectSettings.get_setting("rendering/shader_compiler/shader_cache/enabled"), "editor_hint": Engine.is_editor_hint(), "renderer": RenderingServer.get_current_rendering_method()}))
 	var viewport := SubViewport.new()
 	viewport.size = Vector2i(64, 64)
 	viewport.own_world_3d = true
@@ -179,6 +195,7 @@ func _run() -> void:
 	var world := WorldEnvironment.new()
 	world.environment = environment
 	observer = VelocityObserver.new()
+	observer.needs_motion_vectors = not cached_late_motion
 	var compositor := Compositor.new()
 	compositor.compositor_effects = [observer]
 	world.compositor = compositor
@@ -203,21 +220,46 @@ func _run() -> void:
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.mesh = mesh
-	mm.instance_count = 3
-	mm.buffer = _buffer(3, -1.0)
+	var initial_count := 1536 if cached_hidden_first else 3
+	mm.instance_count = initial_count
 	var instance := MultiMeshInstance3D.new()
 	instance.multimesh = mm
 	viewport.add_child(instance)
-	await _stage("initial", viewport, 24, Vector2.ZERO)
-	mm.buffer = _buffer(3, 0.0)
+	if cached_hidden_first or cached_start_hidden or cached_late_motion:
+		if cached_hidden_first:
+			# Only region2 is dirty while regions0/1 are visible: no upload.
+			mm.visible_instance_count = 1024
+			mm.set_instance_transform(1024, Transform3D(Basis.IDENTITY, Vector3(20, 0, 0)))
+		elif cached_start_hidden:
+			mm.visible_instance_count = 0
+			_upload(mm, initial_count, -1.0)
+		else:
+			# Establish an older cached position before motion is enabled.
+			_upload(mm, initial_count, -2.0)
+		var callbacks := observer.callbacks
+		viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+		for i in range(12):
+			await RenderingServer.frame_post_draw
+			if observer.callbacks > callbacks:
+				break
+		if observer.callbacks <= callbacks:
+			failures += 1
+			print("K02_MOTION_FRAME_INVALID cached_prelude")
+		if cached_start_hidden:
+			mm.visible_instance_count = -1
+		observer.needs_motion_vectors = true
+	_upload(mm, initial_count, -1.0)
+	await _stage("initial", viewport, 24, Vector2(-0.125 if cached_late_motion else 0.0, 0.0))
+	_upload(mm, initial_count, 0.0)
 	await _stage("move_1", viewport, 32, Vector2(-0.125, 0.0))
 	if not omit_move:
-		mm.buffer = _buffer(3, 1.0)
+		_upload(mm, initial_count, 1.0)
 	await _stage("move_2", viewport, 40, Vector2(-0.125, 0.0))
 	mm.instance_count = 5
-	mm.buffer = _buffer(5, 1.0)
+	mm.visible_instance_count = -1
+	_upload(mm, 5, 1.0)
 	await _stage("resize", viewport, 40, Vector2.ZERO)
-	mm.buffer = _buffer(5, 2.0)
+	_upload(mm, 5, 2.0)
 	await _stage("move_after_resize", viewport, 48, Vector2(-0.125, 0.0))
 	for i in range(3):
 		await RenderingServer.frame_post_draw

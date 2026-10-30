@@ -21,6 +21,11 @@ def main():
     ap.add_argument("--build-receipt", type=Path, required=True)
     ap.add_argument("--pack-editor-receipt", type=Path)
     ap.add_argument("--omit-second-move", action="store_true")
+    update = ap.add_mutually_exclusive_group()
+    update.add_argument("--cached-transform", action="store_true")
+    update.add_argument("--cached-hidden-first", action="store_true")
+    update.add_argument("--cached-start-hidden", action="store_true")
+    update.add_argument("--cached-late-motion", action="store_true")
     ap.add_argument("--output", type=Path, required=True)
     a = ap.parse_args()
     receipt = json.loads(a.build_receipt.read_text())
@@ -56,7 +61,7 @@ def main():
             project, script, binary, a.pack_editor_receipt, out
         )
     stages = [
-        ("initial", 24, 0.0),
+        ("initial", 24, -0.125 if a.cached_late_motion else 0.0),
         ("move_1", 32, -0.125),
         ("move_2", 40, -0.125),
         ("resize", 40, 0.0),
@@ -100,8 +105,19 @@ def main():
     ]
     if package_record is None:
         cmd += ["--path", str(project), "--script", "res://" + script.name]
+    user_args = []
     if a.omit_second_move:
-        cmd += ["--", "--omit-second-move"]
+        user_args.append("--omit-second-move")
+    if a.cached_transform:
+        user_args.append("--cached-transform")
+    if a.cached_hidden_first:
+        user_args.append("--cached-hidden-first")
+    if a.cached_start_hidden:
+        user_args.append("--cached-start-hidden")
+    if a.cached_late_motion:
+        user_args.append("--cached-late-motion")
+    if user_args:
+        cmd += ["--", *user_args]
     env = os.environ.copy()
     env["GODOT_TEST_K02_MOTION_OUT"] = str(out / "observed")
     try:
@@ -185,6 +201,13 @@ def main():
         == [
             {
                 "omit_second_move": a.omit_second_move,
+                "cached_transform": a.cached_transform
+                or a.cached_hidden_first
+                or a.cached_start_hidden
+                or a.cached_late_motion,
+                "cached_hidden_first": a.cached_hidden_first,
+                "cached_start_hidden": a.cached_start_hidden,
+                "cached_late_motion": a.cached_late_motion,
                 "cache_enabled": False,
                 "editor_hint": False,
                 "renderer": "forward_plus",
@@ -204,6 +227,13 @@ def main():
         "host_rc": rc,
         "engine_commit": receipt["commit"],
         "precision": receipt["precision"],
+        "cached_transform": a.cached_transform
+        or a.cached_hidden_first
+        or a.cached_start_hidden
+        or a.cached_late_motion,
+        "cached_hidden_first": a.cached_hidden_first,
+        "cached_start_hidden": a.cached_start_hidden,
+        "cached_late_motion": a.cached_late_motion,
         "package": package_record,
         "inputs_before": before,
         "inputs_after": after,
