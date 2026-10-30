@@ -31,8 +31,8 @@
 #include "mesh_storage.h"
 
 #include "core/io/marshalls.h"
-
 #include "servers/rendering/render_capture_test_hooks.h"
+#include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_viewport.h"
 #include "servers/rendering/rendering_server.h"
 #include "servers/rendering/rendering_server_types.h"
@@ -541,7 +541,9 @@ Error MeshStorage::mesh_add_external_surface(RID p_mesh, const ExternalSurfaceDe
 	ERR_FAIL_COND_V(p_surface.vertex_count == 0 || p_surface.index_count == 0, ERR_INVALID_PARAMETER);
 	ERR_FAIL_COND_V(p_surface.primitive != RSE::PRIMITIVE_TRIANGLES || mesh->blend_shape_count != 0 || !mesh->instances.is_empty(), ERR_INVALID_PARAMETER);
 	ERR_FAIL_COND_V(p_surface.current_vertex_buffer.is_null() || p_surface.previous_vertex_buffer.is_null() || p_surface.index_buffer.is_null() || p_surface.index_array.is_null(), ERR_INVALID_PARAMETER);
-	ERR_FAIL_COND_V(p_surface.material.is_null(), ERR_INVALID_PARAMETER);
+	RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
+	ERR_FAIL_COND_V(!material_storage || !material_storage->owns_material(p_surface.material), ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(material_storage->material_get_generation(p_surface.material) == 0, ERR_INVALID_PARAMETER);
 	ERR_FAIL_COND_V(p_surface.generation == 0 || p_surface.current_allocation_generation == 0 || p_surface.previous_allocation_generation == 0, ERR_INVALID_PARAMETER);
 	ERR_FAIL_COND_V(p_surface.current_allocation_generation == p_surface.previous_allocation_generation, ERR_INVALID_PARAMETER);
 	ERR_FAIL_COND_V(p_surface.vertex_buffer_size < uint64_t(p_surface.vertex_count) * 144 || p_surface.previous_vertex_buffer_size < uint64_t(p_surface.vertex_count) * 144, ERR_INVALID_PARAMETER);
@@ -818,7 +820,12 @@ void MeshStorage::mesh_surface_set_material(RID p_mesh, int p_surface, RID p_mat
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL(mesh);
 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_surface, mesh->surface_count);
-	mesh->surfaces[p_surface]->material = p_material;
+	Mesh::Surface *surface = mesh->surfaces[p_surface];
+	if (surface->external) {
+		ERR_FAIL_COND_MSG(surface->material != p_material, "Indexed144 external material changes require a replacement output generation.");
+		return;
+	}
+	surface->material = p_material;
 
 	mesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MATERIAL);
 	mesh->material_cache.clear();
@@ -1982,7 +1989,6 @@ void MeshStorage::_multimesh_set_mesh(RID p_multimesh, RID p_mesh) {
 }
 
 void MeshStorage::_multimesh_refresh_mesh(MultiMesh *multimesh) {
-
 	_multimesh_rebuild_command_buffer(multimesh);
 
 	if (multimesh->instances == 0) {

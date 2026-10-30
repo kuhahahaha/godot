@@ -2211,6 +2211,19 @@ void MaterialStorage::shader_set_code(RID p_shader, const String &p_code) {
 
 	MutexLock lock(*shader->mutex);
 
+	// A source change invalidates every material using this shader. Refuse
+	// before changing the source if a new material generation cannot be issued.
+	for (Material *material : shader->owners) {
+		ERR_FAIL_COND_MSG(material->generation == UINT64_MAX, "Cannot update shader source after its material generation is exhausted.");
+	}
+	// Advance every owner before any callback can reenter another owner.
+	for (Material *material : shader->owners) {
+		++material->generation;
+		if (material->data) {
+			material->data->generation = material->generation;
+		}
+	}
+
 	shader->code = p_code;
 	String mode_string = ShaderLanguage::get_shader_type(p_code);
 
@@ -2259,6 +2272,7 @@ void MaterialStorage::shader_set_code(RID p_shader, const String &p_code) {
 			if (shader->data) {
 				material->data = material_get_data_request_function(new_type)(shader->data);
 				material->data->self = material->self;
+				material->data->generation = material->generation;
 				material->data->set_next_pass(material->next_pass);
 				material->data->set_render_priority(material->priority);
 			}
@@ -2281,6 +2295,9 @@ void MaterialStorage::shader_set_code(RID p_shader, const String &p_code) {
 
 	for (Material *E : shader->owners) {
 		Material *material = E;
+		if (material->data) {
+			material->data->generation = material->generation;
+		}
 		material->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MATERIAL);
 		_material_queue_update(material, true, true);
 	}
@@ -2314,7 +2331,19 @@ void MaterialStorage::shader_set_default_texture_parameter(RID p_shader, const S
 	Shader *shader = shader_owner.get_or_null(p_shader);
 	ERR_FAIL_NULL(shader);
 
-	if (p_texture.is_valid() && TextureStorage::get_singleton()->owns_texture(p_texture)) {
+	const bool valid_texture = p_texture.is_valid() && TextureStorage::get_singleton()->owns_texture(p_texture);
+	MutexLock lock(*shader->mutex);
+	for (Material *material : shader->owners) {
+		ERR_FAIL_COND_MSG(material->generation == UINT64_MAX, "Cannot update shader textures after its material generation is exhausted.");
+	}
+	for (Material *material : shader->owners) {
+		++material->generation;
+		if (material->data) {
+			material->data->generation = material->generation;
+		}
+	}
+
+	if (valid_texture) {
 		if (!shader->default_texture_parameter.has(p_name)) {
 			shader->default_texture_parameter[p_name] = HashMap<int, RID>();
 		}
@@ -2332,13 +2361,8 @@ void MaterialStorage::shader_set_default_texture_parameter(RID p_shader, const S
 		shader->data->set_default_texture_parameter(p_name, p_texture, p_index);
 	}
 
-	{
-		MutexLock lock(*shader->mutex);
-
-		for (Material *E : shader->owners) {
-			Material *material = E;
-			_material_queue_update(material, false, true);
-		}
+	for (Material *material : shader->owners) {
+		_material_queue_update(material, false, true);
 	}
 }
 
