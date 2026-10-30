@@ -540,6 +540,17 @@ Error MeshStorage::mesh_add_external_surface(RID p_mesh, const ExternalSurfaceDe
 	ERR_FAIL_COND_V(mesh->surface_count == RSE::MAX_MESH_SURFACES, ERR_OUT_OF_MEMORY);
 	ERR_FAIL_COND_V(p_surface.vertex_count == 0 || p_surface.index_count == 0, ERR_INVALID_PARAMETER);
 	ERR_FAIL_COND_V(p_surface.primitive != RSE::PRIMITIVE_TRIANGLES || mesh->blend_shape_count != 0 || !mesh->instances.is_empty(), ERR_INVALID_PARAMETER);
+	const auto is_valid_aabb = [](const AABB &p_aabb) {
+		return p_aabb.is_finite() && p_aabb.get_end().is_finite() && p_aabb.size.x >= 0 && p_aabb.size.y >= 0 && p_aabb.size.z >= 0;
+	};
+	ERR_FAIL_COND_V(!is_valid_aabb(p_surface.aabb), ERR_INVALID_PARAMETER);
+	AABB combined_aabb = p_surface.aabb;
+	if (mesh->surface_count > 0) {
+		ERR_FAIL_COND_V(!is_valid_aabb(mesh->aabb), ERR_INVALID_PARAMETER);
+		combined_aabb = mesh->aabb;
+		combined_aabb.merge_with(p_surface.aabb);
+		ERR_FAIL_COND_V(!is_valid_aabb(combined_aabb), ERR_INVALID_PARAMETER);
+	}
 	ERR_FAIL_COND_V(p_surface.current_vertex_buffer.is_null() || p_surface.previous_vertex_buffer.is_null() || p_surface.index_buffer.is_null() || p_surface.index_array.is_null(), ERR_INVALID_PARAMETER);
 	RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
 	ERR_FAIL_COND_V(!material_storage || !material_storage->owns_material(p_surface.material), ERR_INVALID_PARAMETER);
@@ -578,11 +589,7 @@ Error MeshStorage::mesh_add_external_surface(RID p_mesh, const ExternalSurfaceDe
 		return ERR_OUT_OF_MEMORY;
 	}
 	mesh->surfaces = new_surfaces;
-	if (mesh->surface_count == 0) {
-		mesh->aabb = p_surface.aabb;
-	} else {
-		mesh->aabb.merge_with(p_surface.aabb);
-	}
+	mesh->aabb = combined_aabb;
 	mesh->skeleton_aabb_version = 0;
 	mesh->surfaces[mesh->surface_count] = surface;
 	r_surface_index = mesh->surface_count++;
