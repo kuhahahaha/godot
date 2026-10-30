@@ -1,0 +1,144 @@
+{
+  "source_commit": "970514604e78d8c41399480d09b864a9d6ab4afd",
+  "binary_before": "84efe7ef8e00616c48bdc3dc8896188c4a44a35b27fcb719e74599747cfe2bb6",
+  "runs": [
+    {
+      "name": "parent_control",
+      "command": [
+        "/private/tmp/godot-rd-cascade-integration-20261030/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*parent disposal remains active through child invalidation*"
+      ],
+      "environment": {},
+      "rc": 0,
+      "summary": [
+        "[doctest] test cases: 1 | 1 passed | 0 failed | 1969 skipped",
+        "[doctest] assertions: 6 | 6 passed | 0 failed |"
+      ]
+    },
+    {
+      "name": "parent_reentry",
+      "command": [
+        "/private/tmp/godot-rd-cascade-integration-20261030/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*parent disposal remains active through child invalidation*"
+      ],
+      "environment": {
+        "GODOT_TEST_RD_CASCADE_REENTRY": "race"
+      },
+      "rc": 0,
+      "summary": [
+        "[doctest] test cases: 1 | 1 passed | 0 failed | 1969 skipped",
+        "[doctest] assertions: 6 | 6 passed | 0 failed |"
+      ]
+    },
+    {
+      "name": "late_busy",
+      "command": [
+        "/private/tmp/godot-rd-cascade-integration-20261030/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*late busy dependent preserves parent and edge until retry*"
+      ],
+      "environment": {},
+      "rc": 0,
+      "summary": [
+        "[doctest] test cases:  1 |  1 passed | 0 failed | 1969 skipped",
+        "[doctest] assertions: 11 | 11 passed | 0 failed |"
+      ]
+    },
+    {
+      "name": "rendering",
+      "command": [
+        "/private/tmp/godot-rd-cascade-integration-20261030/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=[RenderingDevice]*"
+      ],
+      "environment": {},
+      "rc": 0,
+      "summary": [
+        "[doctest] test cases:  18 |  18 passed | 0 failed | 1952 skipped",
+        "[doctest] assertions: 263 | 263 passed | 0 failed |"
+      ]
+    },
+    {
+      "name": "qualification",
+      "command": [
+        "/private/tmp/godot-rd-cascade-integration-20261030/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*Qualification*"
+      ],
+      "environment": {},
+      "rc": 0,
+      "summary": [
+        "[doctest] test cases:  178 |  178 passed | 0 failed | 1792 skipped",
+        "[doctest] assertions: 2716 | 2716 passed | 0 failed |"
+      ]
+    },
+    {
+      "name": "p01",
+      "command": [
+        "/private/tmp/godot-rd-cascade-integration-20261030/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=[P01]*"
+      ],
+      "environment": {},
+      "rc": 0,
+      "summary": [
+        "[doctest] test cases:   97 |   97 passed | 0 failed | 1873 skipped",
+        "[doctest] assertions: 9657 | 9657 passed | 0 failed |"
+      ]
+    },
+    {
+      "name": "device_exit",
+      "command": [
+        "/private/tmp/godot-rd-cascade-integration-20261030/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*device_exit*"
+      ],
+      "environment": {},
+      "rc": 0,
+      "summary": [
+        "[doctest] test cases:  133 |  133 passed | 0 failed | 1837 skipped",
+        "[doctest] assertions: 2601 | 2601 passed | 0 failed |"
+      ]
+    },
+    {
+      "name": "k03",
+      "command": [
+        "/private/tmp/godot-rd-cascade-integration-20261030/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=[K03]*"
+      ],
+      "environment": {},
+      "rc": 0,
+      "summary": [
+        "[doctest] test cases:   44 |   44 passed | 0 failed | 1926 skipped",
+        "[doctest] assertions: 1153 | 1153 passed | 0 failed |"
+      ]
+    },
+    {
+      "name": "framewait",
+      "command": [
+        "/private/tmp/godot-rd-cascade-integration-20261030/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=[R01][FrameWait]*"
+      ],
+      "environment": {},
+      "rc": 0,
+      "summary": [
+        "[doctest] test cases:  16 |  16 passed | 0 failed | 1954 skipped",
+        "[doctest] assertions: 293 | 293 passed | 0 failed |"
+      ]
+    }
+  ],
+  "binary_after": "84efe7ef8e00616c48bdc3dc8896188c4a44a35b27fcb719e74599747cfe2bb6"
+}

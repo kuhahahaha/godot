@@ -1,6 +1,6 @@
 {
   "scope": "all authorized Godot-side original FR work",
-  "status": "active",
+  "status": "work_in_progress",
   "receipts": [
     {
       "path": "work/qrt-malformed-alias-20261030/RECEIPT.md",
@@ -49,6 +49,11 @@
     {
       "path": "work/rd-late-busy-20261030/RECEIPT.md",
       "sha256": "dcedbc325f51fbf3a15f0b5f9ca346d74966d1a2f8c95f72b7f169053a7e1067"
+    },
+    {
+      "path": "work/rd-cascade-61d-integration-20261030/RECEIPT.md",
+      "sha256": "09bf9a077ffc3a62cc839d3251b7eaa517afee293d25167ca339d0c6d2e64f83"
     }
-  ]
+  ],
+  "codex_goal_status_at_capture": "blocked"
 }
