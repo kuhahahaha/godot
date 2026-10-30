@@ -1,0 +1,22 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_qualification_physical.cpp:4314:
+TEST CASE:  [RenderingDevice][Qualification] unknown descriptor return retains ordinary parent storage
+
+tests/servers/rendering/test_qualification_physical.cpp:4333: ERROR: CHECK( driver.checked_calls == 1 ) is NOT correct!
+  values: CHECK( 0 == 1 )
+
+tests/servers/rendering/test_qualification_physical.cpp:4334: ERROR: CHECK( driver.sets_freed == 0 ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_qualification_physical.cpp:4335: ERROR: CHECK( driver.frees == 0 ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_qualification_physical.cpp:4336: ERROR: CHECK( TestQualificationPhysicalAccess::dependents(cell) == 1 ) is NOT correct!
+  values: CHECK( 0 == 1 )
+
+===============================================================================
+[doctest] test cases: 1 | 0 passed | 1 failed | 1979 skipped
+[doctest] assertions: 8 | 4 passed | 4 failed |
+[doctest] Status: FAILURE!
