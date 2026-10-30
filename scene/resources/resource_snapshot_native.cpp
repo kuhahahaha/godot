@@ -43,6 +43,16 @@
 #include <initializer_list>
 #include <limits>
 
+// Internal access under the caller-retained wrapper; never acquire a child Ref.
+class ResourceSnapshotAccess {
+public:
+	static Curve *child(const CurveTexture &p_texture) { return p_texture._curve.ptr(); }
+	static Gradient *child(const GradientTexture1D &p_texture) { return p_texture.gradient.ptr(); }
+	static void fill(const Curve &p_curve, real_t *p_values, int p_count) { p_curve._fill_baked_values(p_values, p_count); }
+	static real_t sample(const Curve &p_curve, real_t p_offset, const real_t *p_values, int p_count) { return p_curve._sample_baked_values(p_offset, p_values, p_count); }
+	static bool finite_points(const Gradient &p_gradient);
+};
+
 namespace {
 template <class T>
 bool aligned(const T *p) {
@@ -118,9 +128,9 @@ uint32_t texture_view(void *source, TextureView &view) {
 		view.source_kind = ANGE_TEXTURE_SOURCE_CURVE_V1;
 		view.width = uint32_t(curve_texture->get_width());
 		view.native_mode = curve_texture->get_texture_mode() == CurveTexture::TEXTURE_MODE_RGB ? ANGE_TEXTURE_CURVE_RGB_V1 : ANGE_TEXTURE_CURVE_RED_V1;
-		const Ref<Curve> child = curve_texture->get_curve();
-		if (child.is_valid()) {
-			view.child = child.ptr();
+		Curve *child = ResourceSnapshotAccess::child(*curve_texture);
+		if (child) {
+			view.child = child;
 			view.child_id = uint64_t(child->get_instance_id());
 			view.child_revision = child->get_content_revision();
 			view.child_present = 1;
@@ -132,9 +142,9 @@ uint32_t texture_view(void *source, TextureView &view) {
 		view.source_kind = ANGE_TEXTURE_SOURCE_GRADIENT_1D_V1;
 		view.width = uint32_t(gradient_texture->get_width());
 		view.native_mode = gradient_texture->is_using_hdr() ? ANGE_TEXTURE_GRADIENT_HDR_V1 : ANGE_TEXTURE_GRADIENT_LDR_V1;
-		const Ref<Gradient> child = gradient_texture->get_gradient();
-		if (child.is_valid()) {
-			view.child = child.ptr();
+		Gradient *child = ResourceSnapshotAccess::child(*gradient_texture);
+		if (child) {
+			view.child = child;
 			view.child_id = uint64_t(child->get_instance_id());
 			view.child_revision = child->get_content_revision();
 			view.child_present = 1;
@@ -142,7 +152,7 @@ uint32_t texture_view(void *source, TextureView &view) {
 	} else {
 		return ANGE_TEXTURE_WRONG_TYPE_V1;
 	}
-	if (!view.child_present) {
+	if (!view.child_present && view.source_kind == ANGE_TEXTURE_SOURCE_GRADIENT_1D_V1) {
 		return ANGE_TEXTURE_INVALID_SOURCE_V1;
 	}
 	if (!view.wrapper_id || view.wrapper_revision == UINT64_MAX || (view.child_present && (!view.child_id || view.child_revision == UINT64_MAX))) {
@@ -186,7 +196,10 @@ uint32_t build_texture_plan(const TextureView &view, uint32_t output_format, Ang
 				return ANGE_TEXTURE_LIMIT_V1;
 			}
 			plan.point_count = curve->get_point_count();
-			plan.bake_resolution = std::min(view.width, 1000u);
+			plan.bake_resolution = curve->get_bake_resolution();
+			if (plan.bake_resolution < 1 || plan.bake_resolution > 1000) {
+				return ANGE_TEXTURE_LIMIT_V1;
+			}
 			plan.scratch_bytes = uint64_t(plan.bake_resolution) * sizeof(real_t);
 		}
 		plan.real_bytes = sizeof(real_t);
@@ -217,10 +230,15 @@ bool valid_float(float value) {
 }
 
 bool finite_curve_points(const Curve &curve) {
+	if (!std::isfinite(curve.get_min_value()) || !std::isfinite(curve.get_max_value()) ||
+			!std::isfinite(curve.get_min_domain()) || !std::isfinite(curve.get_max_domain()) ||
+			!std::isfinite(curve.get_domain_range()) || curve.get_domain_range() <= 0) {
+		return false;
+	}
 	for (uint32_t i = 0; i < uint32_t(curve.get_point_count()); ++i) {
 		const auto point = curve.get_point(i);
-		if (!finite_f32(point.position.x) || !finite_f32(point.position.y) ||
-				!finite_f32(point.left_tangent) || !finite_f32(point.right_tangent) ||
+		if (!std::isfinite(point.position.x) || !std::isfinite(point.position.y) ||
+				!std::isfinite(point.left_tangent) || !std::isfinite(point.right_tangent) ||
 				point.left_mode < Curve::TANGENT_FREE || point.left_mode >= Curve::TANGENT_MODE_COUNT ||
 				point.right_mode < Curve::TANGENT_FREE || point.right_mode >= Curve::TANGENT_MODE_COUNT ||
 				(i && point.position.x < curve.get_point(i - 1).position.x)) {
@@ -233,17 +251,14 @@ bool finite_curve_points(const Curve &curve) {
 
 // Raw finite validation precedes Gradient's first sorting accessor. A NaN
 // offset must never reach the native sort comparator; no duplicate array.
-class ResourceSnapshotAccess {
-public:
-	static bool finite_points(const Gradient &g) {
-		for (const auto &p : g.points) {
-			if (!finite_f32(p.offset) || !finite_color(p.color)) {
-				return false;
-			}
+bool ResourceSnapshotAccess::finite_points(const Gradient &g) {
+	for (const auto &p : g.points) {
+		if (!finite_f32(p.offset) || !finite_color(p.color)) {
+			return false;
 		}
-		return true;
 	}
-};
+	return true;
+}
 
 AngeCaptureStatusV1 ange_resource_content_revision_v1(void *source, uint64_t *revision) {
 	if (!aligned(revision)) {
@@ -394,7 +409,7 @@ AngeCaptureStatusV1 ange_gradient_snapshot_v1(void *source, const double *x, uin
 }
 
 uint32_t ange_texture_snapshot_plan_v1(void *source, uint32_t output_format, AngeTextureSnapshotPlanV1 *out) {
-	if (!aligned(out)) {
+	if (!aligned(out) || !disjoint_spans({ { out, sizeof(*out) } })) {
 		return ANGE_TEXTURE_BAD_ARGUMENT_V1;
 	}
 	*out = {};
@@ -403,60 +418,90 @@ uint32_t ange_texture_snapshot_plan_v1(void *source, uint32_t output_format, Ang
 	if (status != ANGE_TEXTURE_OK_V1) {
 		return status;
 	}
-	return build_texture_plan(view, output_format, *out);
+	AngeTextureSnapshotPlanV1 plan;
+	const uint32_t plan_status = build_texture_plan(view, output_format, plan);
+	if (plan_status == ANGE_TEXTURE_OK_V1) {
+		*out = plan;
+	}
+	return plan_status;
 }
 
 uint32_t ange_texture_snapshot_v1(void *source, const AngeTextureSnapshotPlanV1 *expected,
 		uint8_t *output, uint64_t output_capacity, void *scratch, uint64_t scratch_capacity,
 		AngeTextureSnapshotResultV1 *out) {
-	if (!aligned(expected) || !aligned(out)) {
+	// Validate caller storage before reading a plan or clearing any result.
+	// The output is a byte span; RGBAF is packed with memcpy and needs no alignment.
+	if (!aligned(expected) || !aligned(out) ||
+			(scratch_capacity && uintptr_t(scratch) % alignof(real_t)) ||
+			!disjoint_spans({ { expected, sizeof(*expected) }, { out, sizeof(*out) },
+					{ output, output_capacity }, { scratch, scratch_capacity } })) {
 		return ANGE_TEXTURE_BAD_ARGUMENT_V1;
 	}
 	*out = {};
-	TextureView view;
-	const uint32_t source_status = texture_view(source, view);
-	if (source_status != ANGE_TEXTURE_OK_V1) {
-		out->status = source_status;
-		return source_status;
-	}
-	AngeTextureSnapshotPlanV1 current;
-	const uint32_t plan_status = build_texture_plan(view, expected->output_format, current);
-	out->source = current.source;
-	if (plan_status != ANGE_TEXTURE_OK_V1) {
-		out->status = plan_status;
-		return plan_status;
-	}
-	if (!same_texture_source(expected->source, current.source)) {
-		out->status = ANGE_TEXTURE_STALE_SOURCE_V1;
-		return out->status;
-	}
-	if (!same_texture_plan(*expected, current)) {
-		out->status = ANGE_TEXTURE_BAD_ARGUMENT_V1;
-		return out->status;
-	}
-	if (current.output_bytes > output_capacity || (current.output_bytes && !output) ||
-			current.scratch_bytes > scratch_capacity || (current.scratch_bytes && !scratch) ||
-			(current.output_format == ANGE_TEXTURE_FORMAT_RGBAF_V1 && uintptr_t(output) % alignof(float)) ||
-			(current.scratch_bytes && uintptr_t(scratch) % current.real_bytes) ||
-			!disjoint_spans({ { expected, sizeof(*expected) }, { out, sizeof(*out) },
-					{ output, current.output_bytes }, { scratch, current.scratch_bytes } })) {
-		out->status = current.output_bytes > output_capacity || current.scratch_bytes > scratch_capacity ? ANGE_TEXTURE_LIMIT_V1 : ANGE_TEXTURE_BAD_ARGUMENT_V1;
-		return out->status;
-	}
-
+	out->status = ANGE_TEXTURE_BAD_ARGUMENT_V1;
 	const auto fail = [&](uint32_t status) {
+		if (status != ANGE_TEXTURE_OK_V1) {
+			*out = {};
+		}
 		out->status = status;
 		return status;
 	};
+	TextureView view;
+	const uint32_t source_status = texture_view(source, view);
+	if (source_status != ANGE_TEXTURE_OK_V1) {
+		return fail(source_status);
+	}
+	AngeTextureSnapshotPlanV1 current;
+	const uint32_t plan_status = build_texture_plan(view, expected->output_format, current);
+	if (plan_status != ANGE_TEXTURE_OK_V1) {
+		return fail(plan_status);
+	}
+	if (!same_texture_source(expected->source, current.source)) {
+		return fail(ANGE_TEXTURE_STALE_SOURCE_V1);
+	}
+	if (!same_texture_plan(*expected, current)) {
+		return fail(ANGE_TEXTURE_BAD_ARGUMENT_V1);
+	}
+	if (current.output_bytes > output_capacity || (current.output_bytes && !output) ||
+			current.scratch_bytes > scratch_capacity || (current.scratch_bytes && !scratch)) {
+		return fail(current.output_bytes > output_capacity || current.scratch_bytes > scratch_capacity ? ANGE_TEXTURE_LIMIT_V1 : ANGE_TEXTURE_BAD_ARGUMENT_V1);
+	}
+
 	if (view.source_kind == ANGE_TEXTURE_SOURCE_CURVE_V1) {
 		const auto *texture = static_cast<const CurveTexture *>(view.wrapper);
 		const auto *curve = static_cast<const Curve *>(view.child);
-		if (!curve || !finite_curve_points(*curve)) {
-			return fail(ANGE_TEXTURE_INVALID_SOURCE_V1);
+		real_t *baked = static_cast<real_t *>(scratch);
+		if (curve) {
+			if (!finite_curve_points(*curve)) {
+				return fail(ANGE_TEXTURE_INVALID_SOURCE_V1);
+			}
+			// Check the exact native bake positions and floor-to-int conversion
+			// before invoking shared helpers; invalid inputs must not log callbacks.
+			for (uint32_t i = 1; i + 1 < current.bake_resolution; ++i) {
+				const real_t x = curve->get_domain_range() * i / static_cast<real_t>(current.bake_resolution - 1) + curve->get_min_domain();
+				if (!std::isfinite(x)) {
+					return fail(ANGE_TEXTURE_INVALID_SOURCE_V1);
+				}
+			}
+			if (current.bake_resolution > 1) {
+				for (uint32_t i = 0; i < view.width; ++i) {
+					const real_t offset = i / static_cast<float>(view.width);
+					const real_t fi = (offset - curve->get_min_domain()) / curve->get_domain_range() * (current.bake_resolution - 1);
+					if (!std::isfinite(fi) || double(Math::floor(fi)) < std::numeric_limits<int>::min() || double(Math::floor(fi)) > std::numeric_limits<int>::max()) {
+						return fail(ANGE_TEXTURE_INVALID_SOURCE_V1);
+					}
+				}
+			}
+			ResourceSnapshotAccess::fill(*curve, baked, current.bake_resolution);
+			for (uint32_t i = 0; i < current.bake_resolution; ++i) {
+				if (!std::isfinite(baked[i])) {
+					return fail(ANGE_TEXTURE_INVALID_SOURCE_V1);
+				}
+			}
 		}
 		for (uint32_t i = 0; i < view.width; ++i) {
-			float value = 0;
-			value = float(curve->sample_baked(real_t(i) / real_t(view.width)));
+			const real_t offset = i / static_cast<float>(view.width);
+			const float value = curve ? float(ResourceSnapshotAccess::sample(*curve, offset, baked, current.bake_resolution)) : 0.0f;
 			if (!valid_float(value)) {
 				return fail(ANGE_TEXTURE_INVALID_SOURCE_V1);
 			}

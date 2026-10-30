@@ -35,6 +35,7 @@
 
 class GradientTexture1D : public Texture2D {
 	GDCLASS(GradientTexture1D, Texture2D);
+	friend class ResourceSnapshotAccess;
 
 private:
 	Ref<Gradient> gradient;

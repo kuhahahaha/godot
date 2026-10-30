@@ -289,29 +289,40 @@ Curve::Point Curve::get_point(int p_index) const {
 }
 
 void Curve::update_auto_tangents(int p_index) {
-	_advance_content_revision();
+	bool changed = false;
 	Point &p = _points[p_index];
 
 	if (p_index > 0) {
 		if (p.left_mode == TANGENT_LINEAR) {
 			Vector2 v = (_points[p_index - 1].position - p.position).normalized();
-			p.left_tangent = v.y / v.x;
+			const real_t tangent = v.y / v.x;
+			changed |= p.left_tangent != tangent;
+			p.left_tangent = tangent;
 		}
 		if (_points[p_index - 1].right_mode == TANGENT_LINEAR) {
 			Vector2 v = (_points[p_index - 1].position - p.position).normalized();
-			_points[p_index - 1].right_tangent = v.y / v.x;
+			const real_t tangent = v.y / v.x;
+			changed |= _points[p_index - 1].right_tangent != tangent;
+			_points[p_index - 1].right_tangent = tangent;
 		}
 	}
 
 	if ((uint32_t)p_index + 1 < _points.size()) {
 		if (p.right_mode == TANGENT_LINEAR) {
 			Vector2 v = (_points[p_index + 1].position - p.position).normalized();
-			p.right_tangent = v.y / v.x;
+			const real_t tangent = v.y / v.x;
+			changed |= p.right_tangent != tangent;
+			p.right_tangent = tangent;
 		}
 		if (_points[p_index + 1].left_mode == TANGENT_LINEAR) {
 			Vector2 v = (_points[p_index + 1].position - p.position).normalized();
-			_points[p_index + 1].left_tangent = v.y / v.x;
+			const real_t tangent = v.y / v.x;
+			changed |= _points[p_index + 1].left_tangent != tangent;
+			_points[p_index + 1].left_tangent = tangent;
 		}
+	}
+	if (changed) {
+		_note_content_mutated();
 	}
 }
 
@@ -331,26 +342,31 @@ Array Curve::get_limits() const {
 }
 
 void Curve::set_limits(const Array &p_input) {
-	_advance_content_revision();
 	if (p_input.size() != 4) {
 		WARN_PRINT_ED(vformat(R"(Could not find Curve limit values when deserializing "%s". Resetting limits to default values.)", this->get_path()));
+		if (_min_value != 0 || _max_value != 1 || _min_domain != 0 || _max_domain != 1) {
+			_note_content_mutated();
+		}
 		_min_value = 0;
 		_max_value = 1;
 		_min_domain = 0;
 		_max_domain = 1;
-		_baked_cache_dirty = true;
 		return;
 	}
 
-	// Do not use setters because we don't want to enforce their logical constraints during deserialization.
-	_min_value = p_input[0];
-	_max_value = p_input[1];
-	_min_domain = p_input[2];
-	_max_domain = p_input[3];
-	// This setter is used by resource deserialization and intentionally bypasses
-	// the public range/domain setters. Keep the baked cache coherent without
-	// emitting editor notifications during load.
-	_baked_cache_dirty = true;
+	// Deserialization intentionally bypasses the public setters' constraints
+	// and notifications. Invalidate the native cache using the same revision.
+	const real_t min_value = p_input[0];
+	const real_t max_value = p_input[1];
+	const real_t min_domain = p_input[2];
+	const real_t max_domain = p_input[3];
+	if (_min_value != min_value || _max_value != max_value || _min_domain != min_domain || _max_domain != max_domain) {
+		_note_content_mutated();
+	}
+	_min_value = min_value;
+	_max_value = max_value;
+	_min_domain = min_domain;
+	_max_domain = max_domain;
 }
 
 void Curve::set_min_value(real_t p_min) {
@@ -463,9 +479,13 @@ bool Curve::_filter_property(const String &p_name, int p_index) const {
 	return true;
 }
 
-void Curve::mark_dirty() {
+void Curve::_note_content_mutated() {
 	_advance_content_revision();
 	_baked_cache_dirty = true;
+}
+
+void Curve::mark_dirty() {
+	_note_content_mutated();
 	emit_changed();
 }
 
@@ -535,36 +555,41 @@ void Curve::bake() {
 	_bake();
 }
 
-void Curve::_bake() const {
-	_baked_cache.clear();
-
-	_baked_cache.resize(_bake_resolution);
-
+void Curve::_fill_baked_values(real_t *p_values, int p_count) const {
+	for (int i = 0; i < p_count; ++i) {
+		p_values[i] = 0;
+	}
 	if (_points.is_empty()) {
-		_baked_cache.fill(0.0);
-		_baked_cache_dirty = false;
 		return;
 	}
 
-	for (int i = 1; i < _bake_resolution - 1; ++i) {
-		real_t x = get_domain_range() * i / static_cast<real_t>(_bake_resolution - 1) + _min_domain;
+	for (int i = 1; i < p_count - 1; ++i) {
+		real_t x = get_domain_range() * i / static_cast<real_t>(p_count - 1) + _min_domain;
 		real_t y = sample(x);
-		_baked_cache.write[i] = y;
+		p_values[i] = y;
 	}
 
-	if (_points.size() != 0) {
-		_baked_cache.write[0] = _points[0].position.y;
-		_baked_cache.write[_baked_cache.size() - 1] = _points[_points.size() - 1].position.y;
-	}
+	// Keep the native write order: at resolution one the last endpoint wins.
+	p_values[0] = _points[0].position.y;
+	p_values[p_count - 1] = _points[_points.size() - 1].position.y;
+}
 
+void Curve::_bake() const {
+	_baked_cache_dirty = true;
+	_baked_cache.clear();
+	ERR_FAIL_COND(_baked_cache.resize(_bake_resolution) != OK);
+	_fill_baked_values(_baked_cache.ptrw(), _bake_resolution);
 	_baked_cache_dirty = false;
 }
 
 void Curve::set_bake_resolution(int p_resolution) {
 	ERR_FAIL_COND(p_resolution < 1);
 	ERR_FAIL_COND(p_resolution > 1000);
+	if (_bake_resolution == p_resolution) {
+		return;
+	}
 	_bake_resolution = p_resolution;
-	_baked_cache_dirty = true;
+	_note_content_mutated();
 }
 
 real_t Curve::sample_baked(real_t p_offset) const {
@@ -576,33 +601,37 @@ real_t Curve::sample_baked(real_t p_offset) const {
 		_bake();
 	}
 
+	return _sample_baked_values(p_offset, _baked_cache.ptr(), _baked_cache.size());
+}
+
+real_t Curve::_sample_baked_values(real_t p_offset, const real_t *p_values, int p_count) const {
 	// Special cases if the cache is too small.
-	if (_baked_cache.is_empty()) {
+	if (p_count == 0) {
 		if (_points.is_empty()) {
 			return 0;
 		}
 		return _points[0].position.y;
-	} else if (_baked_cache.size() == 1) {
-		return _baked_cache[0];
+	} else if (p_count == 1) {
+		return p_values[0];
 	}
 
 	// Get interpolation index.
-	real_t fi = (p_offset - _min_domain) / get_domain_range() * (_baked_cache.size() - 1);
+	real_t fi = (p_offset - _min_domain) / get_domain_range() * (p_count - 1);
 	int i = Math::floor(fi);
 	if (i < 0) {
 		i = 0;
 		fi = 0;
-	} else if (i >= _baked_cache.size()) {
-		i = _baked_cache.size() - 1;
+	} else if (i >= p_count) {
+		i = p_count - 1;
 		fi = 0;
 	}
 
 	// Sample.
-	if (i + 1 < _baked_cache.size()) {
+	if (i + 1 < p_count) {
 		real_t t = fi - i;
-		return Math::lerp(_baked_cache[i], _baked_cache[i + 1], t);
+		return Math::lerp(p_values[i], p_values[i + 1], t);
 	} else {
-		return _baked_cache[_baked_cache.size() - 1];
+		return p_values[p_count - 1];
 	}
 }
 

@@ -29,6 +29,7 @@ TEST_CASE("[ResourceSnapshot] Curve revision observes blocked-signal mutations a
 	changed([&] { curve->set_limits(limits); });
 	changed([&] { curve->set_point_count(3); });
 	changed([&] { curve->remove_point(2); });
+	changed([&] { curve->set_bake_resolution(8); });
 	const auto before = curve->get_content_revision();
 	curve->set_bake_resolution(8);
 	curve->bake();
@@ -444,6 +445,6 @@ TEST_CASE("[ResourceSnapshot] texture plan and capture use real CurveTexture and
 	missing_curve.instantiate();
 	missing_curve->set_width(32);
 	AngeTextureSnapshotPlanV1 missing_plan = {};
-	CHECK(ange_texture_snapshot_plan_v1(missing_curve.ptr(), ANGE_TEXTURE_FORMAT_RGBAF_V1, &missing_plan) == ANGE_TEXTURE_INVALID_SOURCE_V1);
+	CHECK(ange_texture_snapshot_plan_v1(missing_curve.ptr(), ANGE_TEXTURE_FORMAT_RGBAF_V1, &missing_plan) == ANGE_TEXTURE_OK_V1);
 	CHECK(ange_texture_snapshot_plan_v1(curve.ptr(), ANGE_TEXTURE_FORMAT_RGBAF_V1, &missing_plan) == ANGE_TEXTURE_WRONG_TYPE_V1);
 }
