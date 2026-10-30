@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  test_vulkan_fence_wait.h                                              */
+/*  test_vulkan_fence_wait.cpp                                            */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -28,10 +28,11 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
 #ifdef VULKAN_ENABLED
 #include "drivers/vulkan/vulkan_fence_wait.h"
 #include "tests/test_macros.h"
+
+TEST_FORCE_LINK(test_capture_vulkan_fence_wait)
 TEST_CASE("[P01] Vulkan native query errors cannot reset a fence or become successful waits") {
 	for (VkResult query : { VK_ERROR_DEVICE_LOST, VK_ERROR_OUT_OF_HOST_MEMORY, VK_ERROR_OUT_OF_DEVICE_MEMORY }) {
 		int queries = 0, waits = 0, resets = 0;

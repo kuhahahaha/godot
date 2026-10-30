@@ -58,7 +58,8 @@ jobs:
           ./bin/godot.linuxbsd.editor.dev.double.x86_64.san --headless --test --test-case='*[CallQueue]*' | tee callqueue.log
           ./bin/godot.linuxbsd.editor.dev.double.x86_64.san --headless --test --test-case='*[Qualification]*' | tee qualification.log
           ./bin/godot.linuxbsd.editor.dev.double.x86_64.san --headless --test --test-case='*[R01]*' | tee r01.log
-          for log in callqueue.log qualification.log r01.log; do
+          ./bin/godot.linuxbsd.editor.dev.double.x86_64.san --headless --test --test-case='*[P01] Vulkan*' | tee vulkan-fence.log
+          for log in callqueue.log qualification.log r01.log vulkan-fence.log; do
             grep -Eq 'test cases: *[1-9][0-9]* *\|' "$log"
           done
       - name: Save Godot build cache
