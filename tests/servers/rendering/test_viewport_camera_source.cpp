@@ -230,6 +230,18 @@ TEST_CASE("[B4][D-Next-7] packet admission propagates typed diagnostics") {
 	CHECK(render_data.admit_camera_status() == AdmissionStatus::RETIRED);
 }
 
+TEST_CASE("[B4] exhausted material generation cannot admit an external packet") {
+	using Status = RenderDataRD::PacketAdmissionStatus;
+	RenderDataRD data;
+	CHECK(data.admit_surface_status(UINT64_MAX) == Status::ORDINARY_MESH);
+	data.packet_identity.external = true;
+	data.packet_identity.material_generation = UINT64_MAX - 1;
+	CHECK(data.admit_surface_status(UINT64_MAX - 1) == Status::ADMITTED);
+	data.packet_identity.material_generation = UINT64_MAX;
+	CHECK(data.admit_surface_status(UINT64_MAX) == Status::MATERIAL_GENERATION_MISMATCH);
+	CHECK(data.packet_identity.retired);
+}
+
 TEST_CASE("[B4][D-Next-8] retired status wins over ordinary Mesh compatibility") {
 	using AdmissionStatus = RenderDataRD::PacketAdmissionStatus;
 	RenderDataRD render_data;

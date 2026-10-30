@@ -75,7 +75,7 @@ public:
 			return !retired && has_previous_camera_source() && previous_view_id == p_view_id && previous_view_epoch == p_view_epoch && previous_camera_capture_ordinal == p_capture_ordinal;
 		}
 		bool material_admitted(uint64_t p_generation, uint32_t p_required_capabilities) const {
-			return external && !retired && material_generation == p_generation && p_generation != 0 && (material_capabilities & p_required_capabilities) == p_required_capabilities;
+			return external && !retired && material_generation == p_generation && p_generation != 0 && p_generation != UINT64_MAX && (material_capabilities & p_required_capabilities) == p_required_capabilities;
 		}
 		bool surface_admitted(uint64_t p_generation, uint32_t p_required_capabilities = 0) const {
 			return !retired && (!external || material_admitted(p_generation, p_required_capabilities));
