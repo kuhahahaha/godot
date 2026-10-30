@@ -81,6 +81,10 @@
     {
       "path": "work/d23-qrt-native-ticket-20261030/RECEIPT.md",
       "sha256": "e2b3e029fbb06227627d3e4ade883f2b6ecab12f45c2563a05ba7ac243812529"
+    },
+    {
+      "path": "work/descriptor-return-165-red-20261030/RECEIPT.md",
+      "sha256": "054c843315f888bc7d6a192b9e93f4607dc2d4ad9f2434753880d7c8bd1f8489"
     }
   ],
   "codex_goal_status_at_capture": "blocked"

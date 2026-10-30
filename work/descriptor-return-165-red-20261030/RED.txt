@@ -1,0 +1,28 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_qualification_physical.cpp:4279:
+TEST CASE:  [RenderingDevice][Qualification] unknown descriptor return keeps its original dependent and is not replayed
+
+tests/servers/rendering/test_qualification_physical.cpp:4297: ERROR: CHECK( driver.checked_calls == 1 ) is NOT correct!
+  values: CHECK( 0 == 1 )
+
+tests/servers/rendering/test_qualification_physical.cpp:4298: ERROR: CHECK( driver.sets_freed == 0 ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_qualification_physical.cpp:4299: ERROR: CHECK( TestQualificationPhysicalAccess::dependents(cell) == 1 ) is NOT correct!
+  values: CHECK( 0 == 1 )
+
+tests/servers/rendering/test_qualification_physical.cpp:4301: ERROR: CHECK( driver.checked_calls == 1 ) is NOT correct!
+  values: CHECK( 0 == 1 )
+
+tests/servers/rendering/test_qualification_physical.cpp:4302: ERROR: CHECK( driver.sets_freed == 0 ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_qualification_physical.cpp:4303: ERROR: CHECK( TestQualificationPhysicalAccess::dependents(cell) == 1 ) is NOT correct!
+  values: CHECK( 0 == 1 )
+
+===============================================================================
+[doctest] test cases: 1 | 0 passed | 1 failed | 1978 skipped
+[doctest] assertions: 8 | 2 passed | 6 failed |
+[doctest] Status: FAILURE!
