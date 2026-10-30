@@ -5,8 +5,12 @@ extends SceneTree
 # initial clear step too; these locations are fixed before rendering.
 const CENTERS: Array[int] = [24, 32, 40, 48, 56]
 const TOLERANCE := 1.0 / 255.0
+const WITNESS_COLORS: Array[Color] = [Color.MAGENTA, Color.CYAN, Color.YELLOW, Color.RED, Color.GREEN, Color.BLUE]
 var checks := 0
 var failures := 0
+var witness_checks := 0
+var witness_failures := 0
+var witness_rect: ColorRect
 var profile := "normal"
 
 func _initialize() -> void:
@@ -15,6 +19,47 @@ func _initialize() -> void:
 func _wait_frames(count: int) -> void:
 	for i in range(count):
 		await RenderingServer.frame_post_draw
+
+func _make_witness(viewport: SubViewport) -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 128
+	viewport.add_child(layer)
+	witness_rect = ColorRect.new()
+	witness_rect.position = Vector2(2, 88)
+	witness_rect.size = Vector2(4, 4)
+	witness_rect.color = Color.BLACK
+	witness_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(witness_rect)
+
+func _witness_image(stage: String, viewport: SubViewport, ordinal: int) -> Image:
+	var expected: Color = WITNESS_COLORS[ordinal]
+	witness_rect.color = expected
+	var image: Image
+	var polls := 0
+	var fresh := false
+	for attempt in range(12):
+		await RenderingServer.frame_post_draw
+		polls += 1
+		image = viewport.get_texture().get_image()
+		if image != null and image.get_size() == Vector2i(96, 96):
+			var actual := image.get_pixel(4, 90)
+			fresh = absf(actual.r - expected.r) <= TOLERANCE and absf(actual.g - expected.g) <= TOLERANCE and absf(actual.b - expected.b) <= TOLERANCE
+			if fresh:
+				break
+	print("K02_SIMULATION_WITNESS_FRAME ", JSON.stringify({"stage": stage, "ordinal": ordinal, "frame_polls": polls, "fresh": fresh}))
+	if image == null or image.get_size() != Vector2i(96, 96):
+		witness_failures += 1
+		return null
+	for y in range(-1, 2):
+		for x in range(-1, 2):
+			var point := Vector2i(4 + x, 90 + y)
+			var actual := image.get_pixelv(point)
+			var passed := absf(actual.r - expected.r) <= TOLERANCE and absf(actual.g - expected.g) <= TOLERANCE and absf(actual.b - expected.b) <= TOLERANCE
+			witness_checks += 1
+			if not passed:
+				witness_failures += 1
+			print("K02_SIMULATION_WITNESS ", JSON.stringify({"stage": stage, "ordinal": ordinal, "xy": [point.x, point.y], "actual": [actual.r, actual.g, actual.b], "pass": passed}))
+	return image
 
 func _quad(color: Color) -> QuadMesh:
 	var material := StandardMaterial3D.new()
@@ -42,8 +87,8 @@ func _sample(stage: String, label: String, image: Image, center: Vector2i, expec
 				failures += 1
 			print("K02_SIMULATION_SAMPLE ", JSON.stringify({"stage": stage, "label": label, "xy": [point.x, point.y], "expected": [expected.r, expected.g, expected.b], "actual": [actual.r, actual.g, actual.b], "pass": ok}))
 
-func _stage(stage: String, viewport: SubViewport, center_x: int) -> void:
-	var image := viewport.get_texture().get_image()
+func _stage(stage: String, viewport: SubViewport, center_x: int, ordinal: int) -> void:
+	var image: Image = await _witness_image(stage, viewport, ordinal)
 	if image == null or image.get_size() != Vector2i(96, 96):
 		failures += 1
 		print("K02_SIMULATION_IMAGE_INVALID ", stage)
@@ -70,15 +115,18 @@ func _run() -> void:
 	for candidate in ["fractional", "preprocess", "zero-velocity", "omit-second-request"]:
 		if OS.get_cmdline_user_args().has("--" + candidate):
 			profile = candidate
+	print("K02_SIMULATION_HOST ", JSON.stringify({"editor_feature": OS.has_feature("editor"), "release_feature": OS.has_feature("template_release"), "double_precision": OS.has_feature("double"), "editor_hint": Engine.is_editor_hint(), "cache_enabled": ProjectSettings.get_setting("rendering/shader_compiler/shader_cache/enabled")}))
 	print("K02_SIMULATION_RUNTIME ", JSON.stringify({"profile": profile, "main_rd": true, "editor_hint": Engine.is_editor_hint(), "cache_enabled": ProjectSettings.get_setting("rendering/shader_compiler/shader_cache/enabled")}))
 	var viewport := SubViewport.new()
 	viewport.size = Vector2i(96, 96)
 	viewport.own_world_3d = true
 	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	viewport.msaa_3d = Viewport.MSAA_DISABLED
+	viewport.msaa_2d = Viewport.MSAA_DISABLED
 	viewport.screen_space_aa = Viewport.SCREEN_SPACE_AA_DISABLED
 	viewport.use_taa = false
 	root.add_child(viewport)
+	_make_witness(viewport)
 	var environment := Environment.new()
 	environment.background_mode = Environment.BG_COLOR
 	environment.background_color = Color.BLACK
@@ -145,20 +193,22 @@ func _run() -> void:
 	var initial := 24 if profile == "zero-velocity" else 40 if profile == "preprocess" else 32
 	var displacement := 0 if profile == "zero-velocity" else 8
 	await _wait_frames(8)
-	_stage("initial", viewport, initial)
+	await _stage("initial", viewport, initial, 0)
 	await _wait_frames(3)
-	_stage("paused_hold", viewport, initial)
+	await _stage("paused_hold", viewport, initial, 1)
 	particles.request_particles_process(0.25, 0.0)
 	await _wait_frames(3)
-	_stage("requested_1", viewport, initial + displacement)
+	await _stage("requested_1", viewport, initial + displacement, 2)
 	mm.instance_count = 5
 	_set_transforms(mm, 5)
 	if profile != "omit-second-request":
 		particles.request_particles_process(0.25, 0.0)
 	await _wait_frames(3)
-	_stage("requested_2_resize", viewport, initial + 2 * displacement)
+	await _stage("requested_2_resize", viewport, initial + 2 * displacement, 3)
 	viewport.queue_free()
 	await process_frame
 	await RenderingServer.frame_post_draw
-	print("K02_SIMULATION_RESULT ", JSON.stringify({"profile": profile, "stages": 4, "checks": checks, "failures": failures, "pass": failures == 0, "scope": "ordinary_planar_native_simulation_pixels"}))
-	quit(0 if failures == 0 else 1)
+	var passed := failures == 0 and witness_failures == 0 and witness_checks == 36
+	print("K02_SIMULATION_WITNESS_RESULT ", JSON.stringify({"stages": 4, "checks": witness_checks, "failures": witness_failures, "pass": witness_failures == 0 and witness_checks == 36}))
+	print("K02_SIMULATION_RESULT ", JSON.stringify({"profile": profile, "stages": 4, "checks": checks, "failures": failures, "pass": passed, "scope": "ordinary_planar_native_simulation_pixels"}))
+	quit(0 if passed else 1)
