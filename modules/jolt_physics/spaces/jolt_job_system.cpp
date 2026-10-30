@@ -39,12 +39,19 @@
 
 void JoltJobSystem::Job::_execute(void *p_user_data) {
 	Job *job = static_cast<Job *>(p_user_data);
+	JoltJobSystem *owner = static_cast<JoltJobSystem *>(job->GetJobSystem());
 
 #ifdef DEBUG_ENABLED
 	const uint64_t time_start = Time::get_singleton()->get_ticks_usec();
 #endif
 
 	job->Execute();
+
+#ifdef TESTS_ENABLED
+	if (test_after_execute) {
+		test_after_execute(test_userdata);
+	}
+#endif
 
 #ifdef DEBUG_ENABLED
 	const uint64_t time_end = Time::get_singleton()->get_ticks_usec();
@@ -56,6 +63,12 @@ void JoltJobSystem::Job::_execute(void *p_user_data) {
 #endif
 
 	job->Release();
+#ifdef TESTS_ENABLED
+	if (test_after_release) {
+		test_after_release(test_userdata);
+	}
+#endif
+	owner->pending_task_operations.fetch_sub(1, std::memory_order_release);
 }
 
 JoltJobSystem::Job::Job(const char *p_name, JPH::ColorArg p_color, JPH::JobSystem *p_job_system, const JPH::JobSystem::JobFunction &p_job_function, JPH::uint32 p_dependency_count) :
@@ -68,34 +81,36 @@ JoltJobSystem::Job::Job(const char *p_name, JPH::ColorArg p_color, JPH::JobSyste
 }
 
 JoltJobSystem::Job::~Job() {
+	while (task_publishing.load(std::memory_order_acquire)) {
+		OS::get_singleton()->delay_usec(100);
+	}
 	if (task_id != -1) {
 		WorkerThreadPool::get_singleton()->wait_for_task_completion(task_id);
 	}
 }
 
-void JoltJobSystem::Job::push_completed(Job *p_job) {
-	Job *prev_head = nullptr;
-
-	do {
-		prev_head = completed_head.load(std::memory_order_relaxed);
-		p_job->completed_next = prev_head;
-	} while (!completed_head.compare_exchange_weak(prev_head, p_job, std::memory_order_release, std::memory_order_relaxed));
+void JoltJobSystem::_push_completed(Job *p_job) {
+	completed_lock.lock();
+	p_job->completed_next = completed_head;
+	completed_head = p_job;
+	completed_lock.unlock();
 }
 
-JoltJobSystem::Job *JoltJobSystem::Job::pop_completed() {
-	Job *prev_head = nullptr;
-
-	do {
-		prev_head = completed_head.load(std::memory_order_relaxed);
-		if (prev_head == nullptr) {
-			return nullptr;
-		}
-	} while (!completed_head.compare_exchange_weak(prev_head, prev_head->completed_next, std::memory_order_acquire, std::memory_order_relaxed));
-
-	return prev_head;
+JoltJobSystem::Job *JoltJobSystem::_pop_completed() {
+	completed_lock.lock();
+	Job *job = completed_head;
+	if (job) {
+		completed_head = job->completed_next;
+	}
+	completed_lock.unlock();
+	return job;
 }
 
 void JoltJobSystem::Job::queue() {
+	JoltJobSystem *owner = static_cast<JoltJobSystem *>(GetJobSystem());
+	// Shutdown waits for both task publication and the worker's final release.
+	owner->pending_task_operations.fetch_add(2, std::memory_order_relaxed);
+	task_publishing.store(true, std::memory_order_release);
 	AddRef();
 
 	// Ideally we would use Jolt's actual job name here, but I'd rather not incur the overhead of a memory allocation or
@@ -103,6 +118,8 @@ void JoltJobSystem::Job::queue() {
 	static const String task_name("Jolt Physics");
 
 	task_id = WorkerThreadPool::get_singleton()->add_native_task(&_execute, this, true, task_name);
+	task_publishing.store(false, std::memory_order_release);
+	owner->pending_task_operations.fetch_sub(1, std::memory_order_release);
 }
 
 int JoltJobSystem::GetMaxConcurrency() const {
@@ -148,11 +165,11 @@ void JoltJobSystem::QueueJobs(JPH::JobSystem::Job **p_jobs, JPH::uint p_job_coun
 }
 
 void JoltJobSystem::FreeJob(JPH::JobSystem::Job *p_job) {
-	Job::push_completed(static_cast<Job *>(p_job));
+	_push_completed(static_cast<Job *>(p_job));
 }
 
 void JoltJobSystem::_reclaim_jobs() {
-	while (Job *job = Job::pop_completed()) {
+	while (Job *job = _pop_completed()) {
 		jobs.DestructObject(job);
 	}
 }
@@ -161,6 +178,27 @@ JoltJobSystem::JoltJobSystem() :
 		JPH::JobSystemWithBarrier(JPH::cMaxPhysicsBarriers),
 		thread_count(MAX(1, WorkerThreadPool::get_singleton()->get_thread_count())) {
 	jobs.Init(JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsJobs);
+}
+
+JoltJobSystem::~JoltJobSystem() {
+	// The physics owner has stopped submitting jobs and released its barriers
+	// and handles. A barrier may finish before the worker drops its queue reference.
+	if (pending_task_operations.load(std::memory_order_acquire) != 0) {
+#ifdef TESTS_ENABLED
+		if (test_before_shutdown_wait) {
+			test_before_shutdown_wait(test_userdata);
+		}
+#endif
+		while (pending_task_operations.load(std::memory_order_acquire) != 0) {
+			OS::get_singleton()->delay_usec(100);
+		}
+	}
+	_reclaim_jobs();
+#ifdef TESTS_ENABLED
+	if (test_before_destroy) {
+		test_before_destroy(test_userdata);
+	}
+#endif
 }
 
 void JoltJobSystem::pre_step() {
