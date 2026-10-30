@@ -1,0 +1,97 @@
+{
+  "binary_before": "2de1f174b17f0e5b804cca26eb608dc7cc36b2e533950d1f8a9ecd159daae9b2",
+  "binary_after": "2de1f174b17f0e5b804cca26eb608dc7cc36b2e533950d1f8a9ecd159daae9b2",
+  "runs": [
+    {
+      "name": "focused",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*framebuffer invalidation is synchronous*"
+      ],
+      "rc": 0,
+      "success": true,
+      "error_lines": []
+    },
+    {
+      "name": "rendering",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*[RenderingDevice]*"
+      ],
+      "rc": 0,
+      "success": true,
+      "error_lines": []
+    },
+    {
+      "name": "qualification",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*[Qualification]*"
+      ],
+      "rc": 0,
+      "success": true,
+      "error_lines": [
+        "ERROR: Condition \"texture && texture->qualification_return\" is true. Returning: ERR_UNAUTHORIZED",
+        "ERROR: Condition \"texture && texture->qualification_return\" is true. Returning: ERR_UNAUTHORIZED"
+      ]
+    },
+    {
+      "name": "p01",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=[P01]*"
+      ],
+      "rc": 0,
+      "success": true,
+      "error_lines": []
+    },
+    {
+      "name": "device_exit",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*device_exit*"
+      ],
+      "rc": 0,
+      "success": true,
+      "error_lines": [
+        "ERROR: Condition \"callback_scope.get_error() != OK\" is true. Returning: callback_scope.get_error()",
+        "ERROR: Condition \"callback_scope.get_error() != OK\" is true. Returning: callback_scope.get_error()",
+        "ERROR: Condition \"callback_scope.get_error() != OK\" is true. Returning: callback_scope.get_error()"
+      ]
+    },
+    {
+      "name": "k03",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*[K03]*"
+      ],
+      "rc": 0,
+      "success": true,
+      "error_lines": []
+    },
+    {
+      "name": "r01",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
+        "--headless",
+        "--test",
+        "--test-case=*[R01][FrameWait]*"
+      ],
+      "rc": 0,
+      "success": true,
+      "error_lines": []
+    }
+  ]
+}

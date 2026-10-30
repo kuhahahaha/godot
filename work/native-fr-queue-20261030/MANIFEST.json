@@ -29,6 +29,10 @@
     {
       "path": "work/jolt-job-retirement-20261030/RECEIPT.md",
       "sha256": "348f442f82dd37bba1f3897bbc63041dc0e79037c80067eb9617de2d942a1d77"
+    },
+    {
+      "path": "work/framebuffer-invalidation-20261030/RECEIPT.md",
+      "sha256": "dffbf033d8f28c91100b2d8639ea107d7131cbbf562bcd736afb5fb8e04f3ec7"
     }
   ]
 }

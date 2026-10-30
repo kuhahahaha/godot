@@ -1,0 +1,19 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_qualification_physical.cpp:1352:
+TEST CASE:  [RenderingDevice] framebuffer invalidation is synchronous and reentry does not duplicate disposal
+
+tests/servers/rendering/test_qualification_physical.cpp:86: ERROR: CHECK( state.callbacks == 1 ) is NOT correct!
+  values: CHECK( 2 == 1 )
+
+tests/servers/rendering/test_qualification_physical.cpp:87: ERROR: CHECK_FALSE( state.valid_during_callback ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_qualification_physical.cpp:90: ERROR: CHECK( device.frames[0].framebuffers_to_dispose_of.size() == 1 ) is NOT correct!
+  values: CHECK( 2 == 1 )
+
+===============================================================================
+[doctest] test cases: 1 | 0 passed | 1 failed | 1968 skipped
+[doctest] assertions: 5 | 2 passed | 3 failed |
+[doctest] Status: FAILURE!
