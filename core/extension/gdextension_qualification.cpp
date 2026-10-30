@@ -28,10 +28,9 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
+#include "core/crypto/crypto_core.h"
 #include "core/extension/gdextension.h"
 #include "core/extension/gdextension_qualification_internal.h"
-
-#include "core/crypto/crypto_core.h"
 #include "core/object/object.h"
 #include "core/os/os.h"
 #include "core/os/thread.h"
