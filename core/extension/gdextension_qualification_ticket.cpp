@@ -246,7 +246,9 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_observe(GDExtensionQual
 GDExtensionDeviceSessionResultV1 Registry::qualification_facts(GDExtensionQualificationBridgeRefV1 ref,GDExtensionQualificationTicketRefV1 ticket_ref,uint64_t revision,uint32_t first,uint32_t capacity,GDExtensionQualificationFactV1 *facts,uint32_t *written) {
  if(!aligned(written))return result(ERR_INVALID_PARAMETER,2);
  const uint64_t fact_bytes=uint64_t(capacity)*sizeof(*facts);
- if(facts && (fact_bytes>SIZE_MAX || !separate(facts,size_t(fact_bytes),written,sizeof(*written))))return result(ERR_INVALID_PARAMETER,2);
+ if (facts && (fact_bytes > SIZE_MAX || !separate(facts, 1, written, sizeof(*written)) || !separate(facts, size_t(fact_bytes), written, sizeof(*written)))) {
+	 return result(ERR_INVALID_PARAMETER, 2);
+ }
  *written=0;
  if(!aligned(facts)||!capacity||capacity>64||first>UINT32_MAX-capacity)return result(ERR_INVALID_PARAMETER,2);
  MutexLock lock(mutex);QualificationBridge *bridge=nullptr;RenderingDevice *rd=nullptr;QualificationTicket *ticket=nullptr;Error error=qualification_bridge_locked(ref,false,false,bridge,rd);if(error!=OK)return result(error,17);error=qualification_ticket_locked(bridge,ticket_ref,ticket);if(error!=OK)return result(error,17);
@@ -255,7 +257,9 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_facts(GDExtensionQualif
 }
 GDExtensionDeviceSessionResultV1 Registry::qualification_copy(GDExtensionQualificationBridgeRefV1 ref,GDExtensionQualificationTicketRefV1 ticket_ref,uint64_t revision,void *destination,uint32_t capacity,uint32_t *written) {
  if(!aligned(written))return result(ERR_INVALID_PARAMETER,2);
- if(destination && !separate(destination,capacity,written,sizeof(*written)))return result(ERR_INVALID_PARAMETER,2);
+ if (destination && (!separate(destination, 1, written, sizeof(*written)) || !separate(destination, capacity, written, sizeof(*written)))) {
+	 return result(ERR_INVALID_PARAMETER, 2);
+ }
  *written=0;
  if(!destination||!capacity||capacity>16384)return result(ERR_INVALID_PARAMETER,2);
  MutexLock lock(mutex);QualificationBridge *bridge=nullptr;RenderingDevice *rd=nullptr;QualificationTicket *ticket=nullptr;Error error=qualification_bridge_locked(ref,false,false,bridge,rd);if(error!=OK)return result(error,17);error=qualification_ticket_locked(bridge,ticket_ref,ticket);if(error!=OK)return result(error,17);
