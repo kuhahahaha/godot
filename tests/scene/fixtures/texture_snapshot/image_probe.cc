@@ -1,3 +1,33 @@
+/**************************************************************************/
+/*  image_probe.cc                                                        */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
 // Standalone godot-cpp fixture, compiled by run_image_probe.py.
 #include "resource_snapshot_bridge.h"
 
@@ -89,7 +119,7 @@ public:
 						AngeTextureSnapshotPlanV1 plan = {};
 						const uint32_t planned = plan_fn(texture->_owner, ANGE_TEXTURE_FORMAT_RGBAF_V1, &plan);
 						check(planned == 0, "plan");
-						check(plan.bake_resolution == uint32_t(resolution) && plan.scratch_bytes == uint64_t(resolution) * plan.real_bytes, "actual scratch size");
+						check(plan.real_bytes == sizeof(godot::real_t) && plan.bake_resolution == uint32_t(resolution) && plan.scratch_bytes == uint64_t(resolution) * plan.real_bytes, "actual scratch size");
 						std::vector<uint8_t> pixels(size_t(width) * 16, 0xa5);
 						alignas(8) std::array<uint8_t, 8000> scratch = {};
 						AngeTextureSnapshotResultV1 result = {};
@@ -118,13 +148,13 @@ public:
 		AngeTextureSnapshotResultV1 result = {};
 		std::vector<uint8_t> old_pixels(512), fresh(512, 0xa5);
 		alignas(8) std::array<uint8_t, 8000> scratch = {};
-		check(plan_fn(texture->_owner, ANGE_TEXTURE_FORMAT_RGBAF_V1, &old_plan) == 0, "old plan");
+		check(plan_fn(texture->_owner, ANGE_TEXTURE_FORMAT_RGBAF_V1, &old_plan) == 0 && old_plan.real_bytes == sizeof(godot::real_t) && old_plan.bake_resolution == 8 && old_plan.scratch_bytes == 8 * sizeof(godot::real_t), "old plan");
 		check(complete(snapshot_fn(texture->_owner, &old_plan, old_pixels.data(), old_pixels.size(), scratch.data(), scratch.size(), &result), result, old_plan), "old capture");
 		const auto retained = old_pixels;
 		curve->set_bake_resolution(2);
-		check(plan_fn(texture->_owner, ANGE_TEXTURE_FORMAT_RGBAF_V1, &new_plan) == 0, "new plan");
+		check(plan_fn(texture->_owner, ANGE_TEXTURE_FORMAT_RGBAF_V1, &new_plan) == 0 && new_plan.real_bytes == sizeof(godot::real_t) && new_plan.bake_resolution == 2 && new_plan.scratch_bytes == 2 * sizeof(godot::real_t), "new plan");
 		const uint32_t stale = snapshot_fn(texture->_owner, &old_plan, fresh.data(), fresh.size(), scratch.data(), scratch.size(), &result);
-		check(stale == ANGE_TEXTURE_STALE_SOURCE_V1 && result.initialized_pixels == 0, "old plan stale");
+		check(stale == ANGE_TEXTURE_STALE_SOURCE_V1 && result.status == ANGE_TEXTURE_STALE_SOURCE_V1 && result.initialized_pixels == 0, "old plan stale");
 		for (uint8_t b : fresh) {
 			check(b == 0xa5, "stale output unchanged");
 		}

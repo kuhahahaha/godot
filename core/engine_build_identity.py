@@ -4,6 +4,7 @@ Schema1 canonical byte grammar uses C01 BE scalars, counted UTF8 strings and
 raw32 digests. Paths in input records are diagnostic only. Actual command order,
 input order/duplicates and semantic command strings remain significant.
 """
+
 import hashlib
 import json
 import pathlib
@@ -56,8 +57,9 @@ def _content(path):
     return {"bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}
 
 
-def make_snapshot(*, platform, architecture, target_kind, inputs, arguments, options,
-                  tools, configuration, recipes, builtin_glslang):
+def make_snapshot(
+    *, platform, architecture, target_kind, inputs, arguments, options, tools, configuration, recipes, builtin_glslang
+):
     if not builtin_glslang:
         raise ValueError("nonbuiltin runtime compiler identity is unavailable")
     if target_kind not in TARGET_KINDS or not platform or not architecture:
@@ -69,12 +71,24 @@ def make_snapshot(*, platform, architecture, target_kind, inputs, arguments, opt
         records.append(dict(kind=kind, ordinal=ordinal, **_content(path)))
     if not records:
         raise ValueError("missing original link inputs")
-    return {"schema": 1, "role": "Core", "platform": platform, "architecture": architecture,
-            "target_kind": target_kind, "compiler_route": "BuiltinGlslangV1", "inputs": records,
-            "arguments": list(arguments), "options": {key: _option(options[key]) for key in sorted(options)},
-            "tools": [{"role": role, "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()} for role, data in tools],
-            "configuration": list(configuration),
-            "recipes": [{"role": role, "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()} for role, data in recipes]}
+    return {
+        "schema": 1,
+        "role": "Core",
+        "platform": platform,
+        "architecture": architecture,
+        "target_kind": target_kind,
+        "compiler_route": "BuiltinGlslangV1",
+        "inputs": records,
+        "arguments": list(arguments),
+        "options": {key: _option(options[key]) for key in sorted(options)},
+        "tools": [
+            {"role": role, "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()} for role, data in tools
+        ],
+        "configuration": list(configuration),
+        "recipes": [
+            {"role": role, "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()} for role, data in recipes
+        ],
+    }
 
 
 def encode_snapshot(snapshot):
@@ -84,7 +98,12 @@ def encode_snapshot(snapshot):
     out += _u32(TARGET_KINDS[snapshot["target_kind"]]) + _u32(1)
     out += _u32(len(snapshot["inputs"]))
     for record in snapshot["inputs"]:
-        out += _u32(INPUT_KINDS[record["kind"]]) + _u32(record["ordinal"]) + _u64(record["bytes"]) + bytes.fromhex(record["sha256"])
+        out += (
+            _u32(INPUT_KINDS[record["kind"]])
+            + _u32(record["ordinal"])
+            + _u64(record["bytes"])
+            + bytes.fromhex(record["sha256"])
+        )
     out += _u32(len(snapshot["arguments"])) + b"".join(_argument_bytes(arg) for arg in snapshot["arguments"])
     out += _u32(len(snapshot["options"]))
     for key in sorted(snapshot["options"]):
@@ -108,9 +127,15 @@ def derive_stamps(snapshot):
 
 
 def selection_record(snapshot, core, compiler):
-    return {"schema": 1, "core_stamp": core.hex(), "compiler_route": "BuiltinGlslangV1",
-            "compiler_stamp": compiler.hex(), "platform": snapshot["platform"],
-            "architecture": snapshot["architecture"], "target_kind": snapshot["target_kind"]}
+    return {
+        "schema": 1,
+        "core_stamp": core.hex(),
+        "compiler_route": "BuiltinGlslangV1",
+        "compiler_stamp": compiler.hex(),
+        "platform": snapshot["platform"],
+        "architecture": snapshot["architecture"],
+        "target_kind": snapshot["target_kind"],
+    }
 
 
 def validate_graph(inputs, stamp_object, final_target):
@@ -121,13 +146,17 @@ def validate_graph(inputs, stamp_object, final_target):
 
 def render_source(selection):
     # Stable hand-written extern header; ordinary Engine.o never includes values.
-    fields = [str(selection["schema"])] + [json.dumps(selection[key]) for key in
-              ["core_stamp", "compiler_route", "compiler_stamp", "platform", "architecture", "target_kind"]]
-    return ('// Generated from original ordinary core link inputs.\n'
-            '#include "core/config/engine_build_identity.h"\n\n'
-            'const EngineBuildIdentity &get_engine_build_identity() {\n'
-            '    static const EngineBuildIdentity identity = { ' + ", ".join(fields) + ' };\n'
-            '    return identity;\n}\n')
+    fields = [str(selection["schema"])] + [
+        json.dumps(selection[key])
+        for key in ["core_stamp", "compiler_route", "compiler_stamp", "platform", "architecture", "target_kind"]
+    ]
+    return (
+        "// Generated from original ordinary core link inputs.\n"
+        '#include "core/config/engine_build_identity.h"\n\n'
+        "const EngineBuildIdentity &get_engine_build_identity() {\n"
+        "    static const EngineBuildIdentity identity = { " + ", ".join(fields) + " };\n"
+        "    return identity;\n}\n"
+    )
 
 
 def _resolve_library(name, directories):
@@ -148,11 +177,35 @@ def resolve_link_inputs(command, ordinary_sources, final_target, sdk):
     unsupported_search = {"-search_dylibs_first", "-static", "-Z"}
     if unsupported_search.intersection(command):
         raise ValueError("unsupported original native library search mode")
-    flag_only = {"-demangle", "-dynamic", "-dylib", "-no_deduplicate", "-dead_strip", "-pie", "-no_pie",
-                 "-export_dynamic", "-ObjC", "-all_load", "-headerpad_max_install_names", "-search_paths_first", "-S", "-x", "-s",
-                 "-O0", "-O1", "-O2", "-O3", "-no_uuid"}
-    scalar_options = {"-arch": 1, "-platform_version": 3, "-stack_size": 1,
-                      "-compatibility_version": 1, "-current_version": 1}
+    flag_only = {
+        "-demangle",
+        "-dynamic",
+        "-dylib",
+        "-no_deduplicate",
+        "-dead_strip",
+        "-pie",
+        "-no_pie",
+        "-export_dynamic",
+        "-ObjC",
+        "-all_load",
+        "-headerpad_max_install_names",
+        "-search_paths_first",
+        "-S",
+        "-x",
+        "-s",
+        "-O0",
+        "-O1",
+        "-O2",
+        "-O3",
+        "-no_uuid",
+    }
+    scalar_options = {
+        "-arch": 1,
+        "-platform_version": 3,
+        "-stack_size": 1,
+        "-compatibility_version": 1,
+        "-current_version": 1,
+    }
     directories = []
     frameworks = []
     for index, token in enumerate(command):
@@ -195,12 +248,12 @@ def resolve_link_inputs(command, ordinary_sources, final_target, sdk):
             count = scalar_options[token]
             if index + count >= len(command):
                 raise ValueError("missing native scalar option operands")
-            arguments += command[index:index + count + 1]
+            arguments += command[index : index + count + 1]
             index += count
         elif token == "-mllvm":
             if index + 1 == len(command) or command[index + 1] != "-enable-linkonceodr-outlining":
                 raise ValueError("unsupported native LLVM option input closure")
-            arguments += command[index:index + 2]
+            arguments += command[index : index + 2]
             index += 1
         elif token in ("-install_name", "-rpath", "-L", "-F"):
             if index + 1 == len(command):
@@ -236,7 +289,13 @@ def resolve_link_inputs(command, ordinary_sources, final_target, sdk):
             arguments.append(add(_resolve_library(token[2:], directories)))
         elif pathlib.Path(token).resolve() in ordinary or pathlib.Path(token).suffix in (".o", ".a", ".dylib", ".tbd"):
             arguments.append(add(token))
-        elif (token.startswith("@") and command[index - 1] not in ("-rpath", "-install_name")) or "-filelist" in token or "-force_load" in token or "-sectcreate" in token or token in ("-T", "-dylib_file"):
+        elif (
+            (token.startswith("@") and command[index - 1] not in ("-rpath", "-install_name"))
+            or "-filelist" in token
+            or "-force_load" in token
+            or "-sectcreate" in token
+            or token in ("-T", "-dylib_file")
+        ):
             # No silent omissions for response/script/indirect inputs. Their
             # complete expansion is an explicit unsupported build branch.
             raise ValueError("unexpanded original indirect link input: " + token)
@@ -278,6 +337,7 @@ def _argument_bytes(value):
 def execution_environment(env):
     from SCons.Action import get_default_ENV
     from SCons.Util import sanitize_shell_env
+
     if env.get("SHELL_ENV_GENERATORS"):
         raise ValueError("controlled identity does not support dynamic shell environment generators")
     return sanitize_shell_env(get_default_ENV(env))
@@ -287,6 +347,7 @@ def _tool_paths(env, actual_linker, process_env):
     import shlex
     import shutil
     import subprocess
+
     tools = []
     for role, variable in (("c_compiler", "CC"), ("cpp_compiler", "CXX"), ("link_driver", "LINK")):
         tokens = shlex.split(env.subst("$" + variable))
@@ -297,8 +358,9 @@ def _tool_paths(env, actual_linker, process_env):
             raise ValueError("missing actual compiler/link driver")
         tools.append((role, pathlib.Path(executable)))
         if pathlib.Path(executable).resolve().parent == pathlib.Path("/usr/bin"):
-            selected = subprocess.check_output(["/usr/bin/xcrun", "--find", pathlib.Path(executable).name],
-                                               text=True, env=process_env).strip()
+            selected = subprocess.check_output(
+                ["/usr/bin/xcrun", "--find", pathlib.Path(executable).name], text=True, env=process_env
+            ).strip()
             tools.append((role + ".selected", pathlib.Path(selected)))
     tools.append(("linker", pathlib.Path(actual_linker)))
     return tools
@@ -306,6 +368,7 @@ def _tool_paths(env, actual_linker, process_env):
 
 def _tool_inputs(env, actual_linker, process_env):
     import subprocess
+
     tools, configuration = [], []
     for role, path in _tool_paths(env, actual_linker, process_env):
         tools.append((role, path.read_bytes()))
@@ -324,14 +387,43 @@ def _tool_inputs(env, actual_linker, process_env):
 
 
 DIAGNOSTIC_OPTIONS = {
-    "verbose", "progress", "compiledb", "compiledb_file", "compiledb_gen_only", "generate_bundle",
-    "bundle_sign_identity", "cache_path", "cache_limit", "cache_compress", "cache_verbose", "use_cache",
-    "separate_debug_symbols", "num_jobs", "extra_suffix", "object_prefix", "vsproj", "vsproj_name",
-    "vsproj_gen_only", "ninja", "ninja_file", "ninja_auto_run", "import_env_vars",
+    "verbose",
+    "progress",
+    "compiledb",
+    "compiledb_file",
+    "compiledb_gen_only",
+    "generate_bundle",
+    "bundle_sign_identity",
+    "cache_path",
+    "cache_limit",
+    "cache_compress",
+    "cache_verbose",
+    "use_cache",
+    "separate_debug_symbols",
+    "num_jobs",
+    "extra_suffix",
+    "object_prefix",
+    "vsproj",
+    "vsproj_name",
+    "vsproj_gen_only",
+    "ninja",
+    "ninja_file",
+    "ninja_auto_run",
+    "import_env_vars",
 }
 SELECTED_PATH_OPTIONS = {
-    "CC", "CXX", "LINK", "MACOS_SDK_PATH", "vulkan_sdk_path", "accesskit_sdk_path", "angle_libs",
-    "profiler_path", "custom_modules", "SWIFT_FRONTEND", "c_compiler_launcher", "cpp_compiler_launcher",
+    "CC",
+    "CXX",
+    "LINK",
+    "MACOS_SDK_PATH",
+    "vulkan_sdk_path",
+    "accesskit_sdk_path",
+    "angle_libs",
+    "profiler_path",
+    "custom_modules",
+    "SWIFT_FRONTEND",
+    "c_compiler_launcher",
+    "cpp_compiler_launcher",
 }
 
 
@@ -362,7 +454,9 @@ def install_macos(env, program):
 
     final = program[0]
     ordinary = list(final.sources)
-    kind = {"executable": "Executable", "shared_library": "SharedLibrary", "static_library": "StaticLibrary"}[env["library_type"]]
+    kind = {"executable": "Executable", "shared_library": "SharedLibrary", "static_library": "StaticLibrary"}[
+        env["library_type"]
+    ]
     if kind == "StaticLibrary" and env.get("builtin_glslang") and env.get("module_glslang_enabled"):
         # The normal macOS target archives platform objects only. Build one
         # original aggregate archive from that platform archive plus the
@@ -370,6 +464,7 @@ def install_macos(env, program):
         # target-specific generated nodes so it cannot overwrite the fixed
         # executable/shared stamp or direct-selection records.
         import subprocess
+
         flattened = env.Flatten(env.get("LIBS", []))
         archive_inputs = [program[0]]
         for item in flattened:
@@ -390,35 +485,73 @@ def install_macos(env, program):
         options, option_files = collect_options(env["CONTROLLED_BUILD_OPTION_KEYS"], env)
         sdk = pathlib.Path(env.subst("$MACOS_SDK_PATH"))
         settings = sdk / "SDKSettings.json"
-        recipes = [env.File("#core/engine_build_identity.py"), env.File("#core/SCsub"),
-                   env.File("#platform/macos/SCsub"), env.File("#platform/macos/detect.py"), env.File("#SConstruct"), env.File("#methods.py")]
+        recipes = [
+            env.File("#core/engine_build_identity.py"),
+            env.File("#core/SCsub"),
+            env.File("#platform/macos/SCsub"),
+            env.File("#platform/macos/detect.py"),
+            env.File("#SConstruct"),
+            env.File("#methods.py"),
+        ]
         recipe_paths = [(node.path, node.abspath) for node in recipes]
-        values = {"arguments": arguments, "options": options, "platform": env["platform"],
-                  "architecture": env["arch"], "target_kind": kind, "builtin_glslang": True}
+        values = {
+            "arguments": arguments,
+            "options": options,
+            "platform": env["platform"],
+            "architecture": env["arch"],
+            "target_kind": kind,
+            "builtin_glslang": True,
+        }
         tools, tool_configuration = _tool_inputs(env, libtool, process_env)
         record = env.File("#core/engine_build_identity.static" + variant + ".gen.json")
         direct = env.File("#core/engine_build_selection.static" + variant + ".gen.json")
+
         def generate(target, source, env):
             configuration = list(tool_configuration)
             configuration.append(("sdk.settings.sha256", _content(settings)["sha256"]))
-            snapshot = make_snapshot(**values, inputs=[("StaticArchive", path) for path in input_paths],
-                                     tools=tools, configuration=configuration,
-                                     recipes=[(role, pathlib.Path(path).read_bytes()) for role, path in recipe_paths])
+            snapshot = make_snapshot(
+                **values,
+                inputs=[("StaticArchive", path) for path in input_paths],
+                tools=tools,
+                configuration=configuration,
+                recipes=[(role, pathlib.Path(path).read_bytes()) for role, path in recipe_paths],
+            )
             core, compiler = derive_stamps(snapshot)
             selection = selection_record(snapshot, core, compiler)
             pathlib.Path(target[0].abspath).write_text(render_source(selection), encoding="utf8")
-            pathlib.Path(target[1].abspath).write_text(json.dumps({"snapshot": snapshot, "selection": selection,
-                                                                     "diagnostic_inputs": input_paths,
-                                                                     "diagnostic_tools": [(role, str(path)) for role, path in _tool_paths(env, libtool, process_env)],
-                                                                     "diagnostic_recipes": recipe_paths}, indent=2) + "\n", encoding="utf8")
+            pathlib.Path(target[1].abspath).write_text(
+                json.dumps(
+                    {
+                        "snapshot": snapshot,
+                        "selection": selection,
+                        "diagnostic_inputs": input_paths,
+                        "diagnostic_tools": [
+                            (role, str(path)) for role, path in _tool_paths(env, libtool, process_env)
+                        ],
+                        "diagnostic_recipes": recipe_paths,
+                    },
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf8",
+            )
             pathlib.Path(target[2].abspath).write_text(json.dumps(selection, indent=2) + "\n", encoding="utf8")
             return 0
-        deps = [env.File(path) for path in input_paths] + recipes + [env.File(str(settings)), env.Value(json.dumps(values, sort_keys=True)), env.File(libtool)]
+
+        deps = (
+            [env.File(path) for path in input_paths]
+            + recipes
+            + [env.File(str(settings)), env.Value(json.dumps(values, sort_keys=True)), env.File(libtool)]
+        )
         deps += [env.File(str(path)) for path in option_files]
         deps += [env.File(str(path)) for _, path in _tool_paths(env, libtool, process_env)]
         env.Command([generated, record, direct], deps, env.Run(generate))
+
         def aggregate_action(target, source, env):
-            return subprocess.run([libtool, "-static", "-D", "-o", target[0].abspath] + [node.abspath for node in source], env=process_env).returncode
+            return subprocess.run(
+                [libtool, "-static", "-D", "-o", target[0].abspath] + [node.abspath for node in source], env=process_env
+            ).returncode
+
         aggregate = env.Command(final_path, archive_inputs + [stamp], env.Run(aggregate_action))
         env["_CONTROLLED_FINAL_PROGRAM"] = aggregate
         return record
@@ -428,13 +561,26 @@ def install_macos(env, program):
         generated = env.File("#core/engine_build_identity.gen.cpp")
         record = env.File("#core/engine_build_identity.gen.json")
         direct = env.File("#core/engine_build_selection.gen.json")
+
         def unavailable(target, source, env):
-            selection = {"schema": 0, "core_stamp": "", "compiler_stamp": "", "compiler_route": "Unavailable",
-                         "platform": "macos", "architecture": env["arch"], "target_kind": kind}
+            selection = {
+                "schema": 0,
+                "core_stamp": "",
+                "compiler_stamp": "",
+                "compiler_route": "Unavailable",
+                "platform": "macos",
+                "architecture": env["arch"],
+                "target_kind": kind,
+            }
             pathlib.Path(target[0].abspath).write_text(render_source(selection), encoding="utf8")
-            pathlib.Path(target[1].abspath).write_text(json.dumps({"status": "unavailable", "reason": reason}, indent=2) + "\n", encoding="utf8")
-            pathlib.Path(target[2].abspath).write_text(json.dumps({"schema": 0, "status": "unavailable", "reason": reason}) + "\n", encoding="utf8")
+            pathlib.Path(target[1].abspath).write_text(
+                json.dumps({"status": "unavailable", "reason": reason}, indent=2) + "\n", encoding="utf8"
+            )
+            pathlib.Path(target[2].abspath).write_text(
+                json.dumps({"schema": 0, "status": "unavailable", "reason": reason}) + "\n", encoding="utf8"
+            )
             return 0
+
         env.Command([generated, record, direct], env.Value(reason + env["arch"]), env.Run(unavailable))
         builder = env.SharedObject if kind == "SharedLibrary" else env.Object
         stamp = builder(generated)
@@ -454,43 +600,79 @@ def install_macos(env, program):
     validate_graph([path for _, path in inputs], stamp[0].abspath, final.abspath)
     options, option_files = collect_options(env["CONTROLLED_BUILD_OPTION_KEYS"], env)
     settings = sdk / "SDKSettings.json"
-    recipes = [env.File("#core/engine_build_identity.py"), env.File("#core/SCsub"),
-               env.File("#platform/macos/SCsub"), env.File("#platform/macos/detect.py"), env.File("#SConstruct"), env.File("#methods.py")]
+    recipes = [
+        env.File("#core/engine_build_identity.py"),
+        env.File("#core/SCsub"),
+        env.File("#platform/macos/SCsub"),
+        env.File("#platform/macos/detect.py"),
+        env.File("#SConstruct"),
+        env.File("#methods.py"),
+    ]
     # Only immutable path strings enter action closures. Capturing a mutable
     # SCons Node would make action signatures depend on graph/cache state.
     recipe_paths = [(node.path, node.abspath) for node in recipes]
     # Value dependency captures configuration changes even when input bytes match.
-    values = {"arguments": arguments, "options": options, "platform": env["platform"], "architecture": env["arch"],
-              "target_kind": kind, "builtin_glslang": bool(env.get("builtin_glslang") and env.get("module_glslang_enabled"))}
+    values = {
+        "arguments": arguments,
+        "options": options,
+        "platform": env["platform"],
+        "architecture": env["arch"],
+        "target_kind": kind,
+        "builtin_glslang": bool(env.get("builtin_glslang") and env.get("module_glslang_enabled")),
+    }
 
-    diagnostic_graph = {"original_sources": [node.abspath for node in ordinary],
-                        "stamp_object": stamp[0].abspath, "final_target": final.abspath,
-                        "native_link_command_before_stamp": command}
+    diagnostic_graph = {
+        "original_sources": [node.abspath for node in ordinary],
+        "stamp_object": stamp[0].abspath,
+        "final_target": final.abspath,
+        "native_link_command_before_stamp": command,
+    }
 
     def generate(target, source, env):
         tools, configuration = _tool_inputs(env, command[0], process_env)
         configuration.append(("sdk.settings.sha256", _content(settings)["sha256"]))
-        snapshot = make_snapshot(**values, inputs=inputs, tools=tools, configuration=configuration,
-                                 recipes=[(role, pathlib.Path(path).read_bytes()) for role, path in recipe_paths])
+        snapshot = make_snapshot(
+            **values,
+            inputs=inputs,
+            tools=tools,
+            configuration=configuration,
+            recipes=[(role, pathlib.Path(path).read_bytes()) for role, path in recipe_paths],
+        )
         core, compiler = derive_stamps(snapshot)
         selection = selection_record(snapshot, core, compiler)
         pathlib.Path(target[0].abspath).write_text(render_source(selection), encoding="utf8")
-        pathlib.Path(target[1].abspath).write_text(json.dumps({"snapshot": snapshot, "selection": selection,
-                                                             "diagnostic_inputs": [str(path) for _, path in inputs],
-                                                             "diagnostic_tools": [(role, str(path)) for role, path in _tool_paths(env, command[0], process_env)],
-                                                             "diagnostic_recipes": recipe_paths,
-                                                             "diagnostic_graph": diagnostic_graph}, indent=2) + "\n", encoding="utf8")
+        pathlib.Path(target[1].abspath).write_text(
+            json.dumps(
+                {
+                    "snapshot": snapshot,
+                    "selection": selection,
+                    "diagnostic_inputs": [str(path) for _, path in inputs],
+                    "diagnostic_tools": [(role, str(path)) for role, path in _tool_paths(env, command[0], process_env)],
+                    "diagnostic_recipes": recipe_paths,
+                    "diagnostic_graph": diagnostic_graph,
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf8",
+        )
         pathlib.Path(target[2].abspath).write_text(json.dumps(selection, indent=2) + "\n", encoding="utf8")
         return 0
 
     record = env.File("#core/engine_build_identity.gen.json")
     direct = env.File("#core/engine_build_selection.gen.json")
-    deps = [env.File(str(path)) for _, path in inputs] + recipes + [env.File(str(settings)), env.Value(json.dumps(values, sort_keys=True))]
+    deps = (
+        [env.File(str(path)) for _, path in inputs]
+        + recipes
+        + [env.File(str(settings)), env.Value(json.dumps(values, sort_keys=True))]
+    )
     # Actual construction ENV and actual CC/CXX/driver/ld selections also
     # invalidate generation; never discover them in the Python host ENV.
     deps += [env.File(str(path)) for path in option_files]
     deps += [env.File(str(path)) for _, path in _tool_paths(env, command[0], process_env)]
-    env.Command([generated, record, direct], deps, Action(generate, "Generating actual core controlled-build identity ..."))
+    env.Command(
+        [generated, record, direct], deps, Action(generate, "Generating actual core controlled-build identity ...")
+    )
     final.add_source(stamp)
     final.get_executor().add_sources(stamp)
     return record
@@ -504,9 +686,13 @@ def attach_final_receipt(env, program, record):
 
     def receipt(target, source, env):
         metadata = json.loads(pathlib.Path(record_path).read_text(encoding="utf8"))
-        value = {"schema": 1, "selection": metadata.get("selection"),
-                 "status": metadata.get("status", "available"),
-                 "reason": metadata.get("reason"), "artifact": _content(target[0].abspath)}
+        value = {
+            "schema": 1,
+            "selection": metadata.get("selection"),
+            "status": metadata.get("status", "available"),
+            "reason": metadata.get("reason"),
+            "artifact": _content(target[0].abspath),
+        }
         pathlib.Path(output).write_text(json.dumps(value, indent=2) + "\n", encoding="utf8")
         return 0
 
@@ -527,10 +713,24 @@ def expand_link_driver(command, ordinary_sources, process_env):
 
     ordinary = {pathlib.Path(path).resolve() for path in ordinary_sources}
     substituted, originals = [command[0]], []
-    semantic_options = {"-o", "-install_name", "-rpath", "-L", "-F", "-isysroot", "--sysroot", "-syslibroot", "-framework", "-weak_framework"}
+    semantic_options = {
+        "-o",
+        "-install_name",
+        "-rpath",
+        "-L",
+        "-F",
+        "-isysroot",
+        "--sysroot",
+        "-syslibroot",
+        "-framework",
+        "-weak_framework",
+    }
     for index, token in enumerate(command[1:], 1):
         semantic = command[index - 1] in semantic_options
-        if not semantic and (pathlib.Path(token).resolve() in ordinary or (not token.startswith("-") and pathlib.Path(token).suffix in (".o", ".a", ".dylib", ".tbd"))):
+        if not semantic and (
+            pathlib.Path(token).resolve() in ordinary
+            or (not token.startswith("-") and pathlib.Path(token).suffix in (".o", ".a", ".dylib", ".tbd"))
+        ):
             originals.append(token)
             substituted.append("/dev/null")
         else:

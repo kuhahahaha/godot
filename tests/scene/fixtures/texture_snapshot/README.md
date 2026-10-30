@@ -8,6 +8,7 @@ This is an ordinary resource/image fixture, independent of ANGE transactions.
 python3 tests/scene/fixtures/texture_snapshot/run_image_probe.py \
   --godot /absolute/fixed/editor \
   --sdk /absolute/godot-cpp \
+  --precision single \
   --engine-receipt /absolute/stable-build-receipt.json \
   --output /absolute/new-results-directory
 ```
@@ -46,9 +47,15 @@ result status and full pixel count are checked for successful captures.
 The runner preserves exact commands, compiler output, compile dependency
 list, SDK header hashes before/after compilation, engine/extension/input
 hashes, raw runtime logs, expected counts and host exit/timeout results.
-Nonzero checks, renderer mismatch, errors or leak diagnostics fail.
+Nonzero failures, incorrect check counts, renderer mismatch, errors or leak
+diagnostics fail.
 This does not qualify E20/U08, original source-map ownership, production
 ANGE consumers, GPU scheduling performance, Ready or G1. The CPU tests
 separately measure allocator entries and verify cache isolation, callback
-traces, stale recovery and numeric/ABI behavior. A double-real engine requires
-its own build/runtime validation.
+traces, stale recovery and numeric/ABI behavior. Use `--precision double` with a double-real Editor and a matching SDK built
+from that Editor's dumped double API. The runner then selects the double
+archive and compilation define; each plan must report the matching real width.
+Double mode also requires `--sdk-receipt` and `--api-receipt` from the actual
+SDK build and engine API dump. Their successful statuses and exact archive,
+API, precision and engine hashes must agree. Single mode pins the supplied
+external SDK without claiming a rebuild of that archive.

@@ -3297,8 +3297,7 @@ void RenderForwardMobile::_geometry_instance_update(RenderGeometryInstance *p_ge
 			ginstance->base_flags |= INSTANCE_DATA_FLAG_MULTIMESH_INDIRECT;
 		}
 
-		ginstance->transforms_uniform_set = mesh_storage->_multimesh_get_buffer_rd_rid(ginstance->data->base).is_valid() ?
-				mesh_storage->multimesh_get_3d_uniform_set(ginstance->data->base, scene_shader.default_shader_rd, TRANSFORMS_UNIFORM_SET) : RID();
+		ginstance->transforms_uniform_set = mesh_storage->_multimesh_get_buffer_rd_rid(ginstance->data->base).is_valid() ? mesh_storage->multimesh_get_3d_uniform_set(ginstance->data->base, scene_shader.default_shader_rd, TRANSFORMS_UNIFORM_SET) : RID();
 
 	} else if (ginstance->data->base_type == RSE::INSTANCE_PARTICLES) {
 		ginstance->base_flags |= INSTANCE_DATA_FLAG_PARTICLES;

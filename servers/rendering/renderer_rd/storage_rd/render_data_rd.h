@@ -99,7 +99,7 @@ public:
 		}
 	};
 
-	// Internal retirement acknowledgement for a packet's native references.
+	// Internal retirement acknowledgment for a packet's native references.
 	// This is an identity receipt only; it does not claim GPU completion.
 	struct NativeRetirementReceipt {
 		uint64_t view_id = 0;
