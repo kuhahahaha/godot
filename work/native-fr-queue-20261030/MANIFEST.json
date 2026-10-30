@@ -61,6 +61,10 @@
     {
       "path": "work/rd-pipeline-8283-20261030/RECEIPT.md",
       "sha256": "5e864353a0abd60cd6ccf3c833486fc755ff70bd1e2f06f230aa706c9298752f"
+    },
+    {
+      "path": "work/rd-pipeline-review-20261030/RECEIPT.md",
+      "sha256": "a12427189b198fa5a46f8f567f3764495faba2ae4ff240901d5405f74e32b8ce"
     }
   ],
   "codex_goal_status_at_capture": "blocked"
