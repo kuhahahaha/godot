@@ -1,0 +1,19 @@
+{
+  "package": "evidence-matrix-validation-20261030",
+  "generated_at": "2026-10-30T09:06:53.023854+08:00",
+  "status": "PASS",
+  "errors": [],
+  "missing_packages": [],
+  "matrix": "work/evidence-matrix-20261030/MATRIX.json",
+  "current_editor_sha": "37743639ba01d06aa9b43c5c21582a8d4683ecfcd0ec3ab5b9cbf5e4600bb7e6",
+  "expected_editor_sha": "37743639ba01d06aa9b43c5c21582a8d4683ecfcd0ec3ab5b9cbf5e4600bb7e6",
+  "current_dso_sha": "38df3a53ee04aa6d977b313853a2bb3bd7efafe207a960920f80644535a4fcab",
+  "expected_dso_sha": "38df3a53ee04aa6d977b313853a2bb3bd7efafe207a960920f80644535a4fcab",
+  "evidence_rows": 12,
+  "pair_results": {
+    "runtime-vfx": 2,
+    "runtime-no-vfx": 2,
+    "runtime-invalid-vfx": 2
+  },
+  "policy": "Validation checks identity and package reachability only; it does not promote owner/completion/readback/Ready/GPU claims."
+}
