@@ -74,5 +74,6 @@
     "E06_selector": "no [Qualification][E06] doctest tags; selector matched 0",
     "E09_selector": "no [Qualification][E09] doctest tags; E09 appears only as ABI owner-kind constants",
     "source_audit": "work/current-editor-tests-build-20261030/ZERO_MATCH_SOURCE_AUDIT.md"
-  }
+  },
+  "completion_audit": "work/native-long-goal-ledger-20261030/COMPLETION_AUDIT.md"
 }
