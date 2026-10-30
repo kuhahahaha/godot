@@ -1,0 +1,34 @@
+{
+  "package": "current-pair-performance-baseline-20261030",
+  "code_change": false,
+  "godot_head": "870846d0512dc83a20f16c187c39c0f710401d4f",
+  "ange_head": "8e2f7d282e96e406b5311b23db74c16328dcc4cf",
+  "editor_sha256": "b39543b6c5b8d96e3acabae8b3212710cc60ffc0248fa4f8261eab9491bb1be9",
+  "dso_sha256": "38df3a53ee04aa6d977b313853a2bb3bd7efafe207a960920f80644535a4fcab",
+  "pck_sha256": "35dbfdafebb916de15ca67004da811ee0aa05ebaf0e8b7bf3787f038cd0f0645",
+  "measurements": {
+    "source_vfx": {"rc": 2, "real_s": 1.06, "max_rss": 345964544, "peak_footprint": 455361832},
+    "pck_run": {"rc": 1, "real_s": 0.63, "max_rss": 304594944, "peak_footprint": 442991864},
+    "import": {"rc": 0, "real_s": 48.07, "max_rss": 1123696640, "peak_footprint": 984893096},
+    "pack": {"rc": 0, "real_s": 48.44, "max_rss": 1113210880, "peak_footprint": 933283448}
+  },
+  "tests": {
+    "rendering_device": {"rc": 0, "cases": 12, "assertions": 214, "real_s": 0.31, "max_rss": 173735936},
+    "qualification": {"rc": 0, "cases": 102, "assertions": 1896, "real_s": 0.42, "max_rss": 182566912},
+    "k03": {"rc": 0, "cases": 44, "assertions": 1153, "real_s": 3.55, "max_rss": 189005824},
+    "r01": {"rc": 0, "cases": 16, "assertions": 293, "real_s": 0.31, "max_rss": 173441024},
+    "retire_unknown": {"rc": 0, "cases": 1, "assertions": 30, "real_s": 0.30, "max_rss": 173326336},
+    "retire_identity": {"rc": 0, "cases": 1, "assertions": 8, "real_s": 0.30, "max_rss": 173228032}
+  },
+  "first_boundary": "host.storage_owner_transport/E05/UNAVAILABLE",
+  "files": [
+    "RECEIPT.md", "INDEPENDENT_REVIEW.md", "COMMANDS.txt", "MANIFEST.json",
+    "SOURCE_VFX.log", "SOURCE_VFX.rc", "SOURCE_VFX.time", "PCK_RUN.log", "PCK_RUN.rc", "PCK_RUN.time",
+    "IMPORT.log", "IMPORT.rc", "IMPORT.time", "PACK.log", "PACK.rc", "PACK.time", "bench-audit.pck",
+    "RENDERING_DEVICE.log", "RENDERING_DEVICE.rc", "RENDERING_DEVICE.time",
+    "QUALIFICATION.log", "QUALIFICATION.rc", "QUALIFICATION.time",
+    "K03.log", "K03.rc", "K03.time", "R01.log", "R01.rc", "R01.time",
+    "RETIRE_UNKNOWN.log", "RETIRE_UNKNOWN.rc", "RETIRE_UNKNOWN.time",
+    "RETIRE_IDENTITY.log", "RETIRE_IDENTITY.rc", "RETIRE_IDENTITY.time"
+  ]
+}
