@@ -1,0 +1,34 @@
+{
+  "scope": "all authorized Godot-side original FR work",
+  "status": "active",
+  "receipts": [
+    {
+      "path": "work/qrt-malformed-alias-20261030/RECEIPT.md",
+      "sha256": "0f7ecfc9bb0f2fbecc4eb212d6915e5892fc8d7bf1d99e813f765bd751369c19"
+    },
+    {
+      "path": "work/qualification-zero-snapshot-20261030/RECEIPT.md",
+      "sha256": "3e0f65586544adb1b6d8783f6f591aaa2781d6b40d14a33bb3189a1e910a6337"
+    },
+    {
+      "path": "work/cb3-ac0285-metal-pair-20261030/RECEIPT.md",
+      "sha256": "520a87f32663ab81c6f17c70af3fe8449a9573d3454861288859a21c15383117"
+    },
+    {
+      "path": "work/p01-collector-drop-20261030/RECEIPT.md",
+      "sha256": "ed3d26d9fa8c7ef12604c8a23b46178818805eb1d73e1826ed7731f6422824e8"
+    },
+    {
+      "path": "work/uniform-set-invalidation-lifetime-20261030/RECEIPT.md",
+      "sha256": "978a340348ba4aff5bb9c25ac5c2d0a4b96539adccade3d597c7243323c90ee0"
+    },
+    {
+      "path": "work/physics-query-fixture-20261030/RECEIPT.md",
+      "sha256": "b602dd0686748b63ba85fb79a8af1a42851b178c2dca5790e952c7786a3934fa"
+    },
+    {
+      "path": "work/jolt-job-retirement-20261030/RECEIPT.md",
+      "sha256": "348f442f82dd37bba1f3897bbc63041dc0e79037c80067eb9617de2d942a1d77"
+    }
+  ]
+}
