@@ -301,7 +301,7 @@ public:
 		CHECK_FALSE(cell.enqueued);
 		CHECK(device.resource_frees_in_progress.is_empty());
 		// Close this synthetic cell to exercise a subsequent queue admission.
-		// No native return or owner acknowledgement is asserted here.
+		// No native return or owner acknowledgment is asserted here.
 		cell.use_closed.store(true);
 		if (device.shader_owner.owns(parent)) {
 			device.free_rid(parent);

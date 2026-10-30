@@ -280,7 +280,7 @@ void RenderingDevice::_qualification_unpin_resources(QualificationTicket *ticket
 		}
 	}
 	// A prepared zero-effect ticket can admit again. Keep only live count pins
-	// in this set; physical reverse references remain until ticket acknowledgement.
+	// in this set; physical reverse references remain until ticket acknowledgment.
 	ticket->resource_pins.clear();
 	ticket->resources_returned = true;
 }
