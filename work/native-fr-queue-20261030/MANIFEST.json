@@ -69,6 +69,10 @@
     {
       "path": "work/rd-retirement-cell-scope-20261030/RECEIPT.md",
       "sha256": "b00643a77ce6a4b471c7fb0c1551748585ef29359d4dff7fa3ae2bee2d4e7e3b"
+    },
+    {
+      "path": "work/d23-fd33-metal-pair-20261030/RECEIPT.md",
+      "sha256": "d18ad10563c0007001cfaffa11fde510caa018bf10028e91c9a59ae3433db72a"
     }
   ],
   "codex_goal_status_at_capture": "blocked"
