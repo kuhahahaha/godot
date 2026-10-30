@@ -49,7 +49,7 @@ jobs:
           target: editor
           scons-flags: >-
             dev_mode=yes module_text_server_fb_enabled=yes dev_build=yes
-            scu_build=yes debug_symbols=no precision=double tests=yes
+            scu_build=yes scu_limit=8 debug_symbols=no precision=double tests=yes
             use_asan=yes use_ubsan=yes use_static_cpp=no linker=lld accesskit=no
             module_skinned_mesh_capture_tests_enabled=yes
       - name: Run focused native regressions
@@ -59,7 +59,10 @@ jobs:
           ./bin/godot.linuxbsd.editor.dev.double.x86_64.san --headless --test --test-case='*[Qualification]*' | tee qualification.log
           ./bin/godot.linuxbsd.editor.dev.double.x86_64.san --headless --test --test-case='*[R01]*' | tee r01.log
           ./bin/godot.linuxbsd.editor.dev.double.x86_64.san --headless --test --test-case='*[P01] Vulkan*' | tee vulkan-fence.log
-          for log in callqueue.log qualification.log r01.log vulkan-fence.log; do
+          ./bin/godot.linuxbsd.editor.dev.double.x86_64.san --headless --test --test-case='*[E22TextureSnapshot]*' | tee e22-texture.log
+          ./bin/godot.linuxbsd.editor.dev.double.x86_64.san --headless --test --test-case='*[ResourceSnapshot]*' | tee resource-snapshot.log
+          ./bin/godot.linuxbsd.editor.dev.double.x86_64.san --headless --test --test-case='*[String]*' | tee string.log
+          for log in callqueue.log qualification.log r01.log vulkan-fence.log e22-texture.log resource-snapshot.log string.log; do
             grep -Eq 'test cases: *[1-9][0-9]* *\|' "$log"
           done
       - name: Save Godot build cache
