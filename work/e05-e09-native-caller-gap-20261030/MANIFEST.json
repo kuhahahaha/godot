@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "kind": "e05_e09_native_caller_gap",
+  "status": "blocked_at_upstream_owner_transport",
+  "godot_head": "86074c0f8d66c782ce9d1b8f57138506e866e703",
+  "ange_head": "1d9aeef2561a037cf785d9d602a45e321eb7539f",
+  "editor_sha256": "37743639ba01d06aa9b43c5c21582a8d4683ecfcd0ec3ab5b9cbf5e4600bb7e6",
+  "dso_sha256": "38df3a53ee04aa6d977b313853a2bb3bd7efafe207a960920f80644535a4fcab",
+  "focused": {
+    "RenderingDevice": {"rc": 0, "cases": 12, "assertions": 214},
+    "Qualification": {"rc": 0, "cases": 102, "assertions": 1896},
+    "K03": {"rc": 0, "cases": 44, "assertions": 1153},
+    "R01": {"rc": 0, "cases": 16, "assertions": 293}
+  },
+  "current_pair": {
+    "runtime-vfx": {"rc": 2, "first_error": "host.storage_owner_transport/E05/UNAVAILABLE"},
+    "runtime-no-vfx": {"rc": 2, "first_error": "host.storage_owner_transport/E05/UNAVAILABLE"},
+    "runtime-invalid-vfx": {"rc": 2, "first_error": "host.storage_owner_transport/E05/UNAVAILABLE"}
+  },
+  "first_missing_input": "authenticated E05 owner transport/source declaration consumed by read_storage_owner_inputs",
+  "claims_not_made": ["native_submit", "same_request_completion", "readback", "release", "Ready", "GPU_Ready"],
+  "excluded_dirty_baseline": "Pre-existing unrelated Godot and ANGE dirty/deleted/untracked files captured in EXCLUDED_DIRTY_BASELINE.txt."
+}
