@@ -39,6 +39,46 @@ class TestQualificationRtAccess {
  static GDExtensionQualificationRtConfigV1 config(){return {{1,40,0},1,312,200,2,256};}
  static GDExtensionQualificationRtRequestV1 query(uint64_t operation){return {{1,56,0},1,0,operation,0,8,48,0,0};}
 public:
+	static void malformed_header_output_alias() {
+		Fixture f;
+		struct Shared {
+			uint64_t prefix = UINT64_C(0x1111222233334444);
+			GDExtensionQualificationRtRefV1 output{ UINT64_C(0x5555666677778888), UINT64_C(0x9999aaaabbbbcccc) };
+			uint64_t suffix = UINT64_C(0xddddeeeeffff0000);
+		};
+		static_assert(alignof(Shared) >= 8);
+		Shared request;
+		const Shared original_request = request;
+		auto header = query(1);
+		header.abi.abi_version = 2;
+		header.request_bytes = sizeof(request);
+		auto result = f.registry->qualification_rt_reserve(f.ref, &header, &request, nullptr, &request.output);
+		CHECK(result.native_error == ERR_INVALID_PARAMETER);
+		CHECK(memcmp(&request, &original_request, sizeof(request)) == 0);
+
+		Shared payload;
+		const Shared original_payload = payload;
+		uint64_t input = 7;
+		header.request_bytes = sizeof(input);
+		header.payload_bytes = sizeof(payload);
+		result = f.registry->qualification_rt_reserve(f.ref, &header, &input, &payload, &payload.output);
+		CHECK(result.native_error == ERR_INVALID_PARAMETER);
+		CHECK(memcmp(&payload, &original_payload, sizeof(payload)) == 0);
+
+		Shared valid_alias;
+		const Shared original_valid_alias = valid_alias;
+		header = query(2);
+		result = f.registry->qualification_rt_reserve(f.ref, &header, &valid_alias.output, nullptr, &valid_alias.output);
+		CHECK(result.native_error == ERR_INVALID_PARAMETER);
+		CHECK(memcmp(&valid_alias, &original_valid_alias, sizeof(valid_alias)) == 0);
+
+		GDExtensionQualificationRtRefV1 separate{ 7, 9 };
+		header.abi.abi_version = 2;
+		result = f.registry->qualification_rt_reserve(f.ref, &header, &input, nullptr, &separate);
+		CHECK(result.native_error == ERR_INVALID_PARAMETER);
+		CHECK(separate.registry_instance == 0);
+		CHECK(separate.handle_serial == 0);
+	}
  static void standalone_queue_capacity(bool saturate=false) {
   using namespace GDExtensionDeviceExit;
   REQUIRE(Thread::is_main_thread());REQUIRE(RenderingServer::get_singleton()!=nullptr);REQUIRE(RenderingServer::get_singleton()->is_on_render_thread());
@@ -229,6 +269,9 @@ TEST_CASE("[QualificationRt] standalone accepted slot reserves its queue capacit
 #ifdef THREADS_ENABLED
 TEST_CASE("[QualificationRt] full rendering queue refuses then retries retained slot") {TestQualificationRtAccess::standalone_queue_capacity(true);}
 #endif
+TEST_CASE("[QualificationRt] malformed header does not overwrite aliased request or payload") {
+	TestQualificationRtAccess::malformed_header_output_alias();
+}
 TEST_CASE("[QualificationRt] fixed copied slot retries once across pressure close return and owner ack") {TestQualificationRtAccess::carrier();SUBCASE("cleanup_duplicate_and_possible_free"){TestQualificationRtAccess::cleanup(false,true);}}
 TEST_CASE("[QualificationRt] preactivation abort drops exactly the accepted original ticket pin") {TestQualificationRtAccess::same_ticket_pin(false);}
 TEST_CASE("[QualificationRt] accepted typed upload retains same ticket across owner cancel and returned refusal") {TestQualificationRtAccess::same_ticket_pin(true);}
