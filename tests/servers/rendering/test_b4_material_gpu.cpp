@@ -44,6 +44,14 @@
 TEST_FORCE_LINK(test_b4_material_gpu)
 
 #ifdef VULKAN_ENABLED
+// RID ownership here records logical removal, not physical GPU retirement.
+class TestB4RenderingDeviceAccess {
+public:
+	static bool owns_vertex_buffer(const RenderingDevice &p_device, RID p_rid) { return p_device.vertex_buffer_owner.owns(p_rid); }
+	static bool owns_index_buffer(const RenderingDevice &p_device, RID p_rid) { return p_device.index_buffer_owner.owns(p_rid); }
+	static bool owns_index_array(const RenderingDevice &p_device, RID p_rid) { return p_device.index_array_owner.owns(p_rid); }
+};
+
 namespace RendererRD {
 class TestB4TextureCleanupAccess {
 public:
@@ -392,6 +400,10 @@ TEST_CASE("[B4][MaterialGPU] fixture releases resources on early return" * docte
 		B4_CHECK_OR_RETURN(mesh.is_valid() && ordinary_mesh.is_valid());
 		B4_CHECK_OR_RETURN(current.is_valid() && previous.is_valid() && index.is_valid() && index_array.is_valid());
 		B4_CHECK_OR_RETURN(rd.validate_external_indexed_surface_buffers(current, previous, index, index_array, 3, 3));
+		B4_CHECK_OR_RETURN(TestB4RenderingDeviceAccess::owns_vertex_buffer(rd, current));
+		B4_CHECK_OR_RETURN(TestB4RenderingDeviceAccess::owns_vertex_buffer(rd, previous));
+		B4_CHECK_OR_RETURN(TestB4RenderingDeviceAccess::owns_index_buffer(rd, index));
+		B4_CHECK_OR_RETURN(TestB4RenderingDeviceAccess::owns_index_array(rd, index_array));
 		created = true;
 		return; // Exercise the same destructor path as a failed precondition.
 	};
@@ -404,10 +416,10 @@ TEST_CASE("[B4][MaterialGPU] fixture releases resources on early return" * docte
 	CHECK_FALSE(textures.owns_texture(reserved_texture));
 	CHECK_FALSE(meshes.owns_mesh(mesh));
 	CHECK_FALSE(meshes.owns_mesh(ordinary_mesh));
-	ERR_PRINT_OFF;
-	const bool buffers_remain = rd.validate_external_indexed_surface_buffers(current, previous, index, index_array, 3, 3);
-	ERR_PRINT_ON;
-	CHECK_FALSE(buffers_remain);
+	CHECK_FALSE(TestB4RenderingDeviceAccess::owns_vertex_buffer(rd, current));
+	CHECK_FALSE(TestB4RenderingDeviceAccess::owns_vertex_buffer(rd, previous));
+	CHECK_FALSE(TestB4RenderingDeviceAccess::owns_index_buffer(rd, index));
+	CHECK_FALSE(TestB4RenderingDeviceAccess::owns_index_array(rd, index_array));
 }
 
 } // namespace TestB4MaterialGPU

@@ -75,6 +75,9 @@ class RDPipelineShader;
 class RDHitGroup;
 
 class RenderingDevice : public RenderingDeviceCommons {
+#ifdef TESTS_ENABLED
+	friend class TestB4RenderingDeviceAccess;
+#endif
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
 	friend class RenderCaptureTestAccess;
 #endif
