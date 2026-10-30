@@ -1,0 +1,35 @@
+{
+  "command": [
+    "/private/tmp/b4-material-overlay-20261030/godot-consistency-red",
+    "--path",
+    "/private/tmp/b4-material-red-20261030",
+    "--rendering-driver",
+    "metal",
+    "--rendering-method",
+    "mobile",
+    "--render-thread",
+    "safe",
+    "--script",
+    "probe.gd"
+  ],
+  "host_rc": 0,
+  "checks": {
+    "host_exit": true,
+    "invalid_texture_consistent": false,
+    "unload": true
+  },
+  "inputs_before": {
+    "/private/tmp/b4-material-overlay-20261030/godot-consistency-red": "ea8e0a283e1910a958978c33def4b09efd0a459a06dec784b063c909b70d57f4",
+    "/private/tmp/b4-material-red-20261030/project.godot": "687db46d34386880bd2eb966e5b50d3338a90bc0e1cbca9903f556917fbeb102",
+    "/private/tmp/b4-material-red-20261030/probe.gdextension": "6e7b0dd0c1b1be848bb7d7144318e1cdb5b2ab719b6f76653e78711e9bd388e5",
+    "/private/tmp/b4-material-red-20261030/probe.dylib": "42d5397ba935664d7228528d3cf0d414d685ad7735c6752a916eef0486ede1c0",
+    "/private/tmp/b4-material-red-20261030/probe.gd": "d925426018b617d0b9608baebc6e245833171b42059e967bf03fe059f57d5c03"
+  },
+  "inputs_after": {
+    "/private/tmp/b4-material-overlay-20261030/godot-consistency-red": "ea8e0a283e1910a958978c33def4b09efd0a459a06dec784b063c909b70d57f4",
+    "/private/tmp/b4-material-red-20261030/project.godot": "687db46d34386880bd2eb966e5b50d3338a90bc0e1cbca9903f556917fbeb102",
+    "/private/tmp/b4-material-red-20261030/probe.gdextension": "6e7b0dd0c1b1be848bb7d7144318e1cdb5b2ab719b6f76653e78711e9bd388e5",
+    "/private/tmp/b4-material-red-20261030/probe.dylib": "42d5397ba935664d7228528d3cf0d414d685ad7735c6752a916eef0486ede1c0",
+    "/private/tmp/b4-material-red-20261030/probe.gd": "d925426018b617d0b9608baebc6e245833171b42059e967bf03fe059f57d5c03"
+  }
+}

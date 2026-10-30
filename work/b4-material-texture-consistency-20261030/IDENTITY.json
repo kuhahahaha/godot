@@ -1,0 +1,17 @@
+{
+  "public_parent": "7a64a659b6aad1841a14a3e998a543198b3ef2f4",
+  "candidate_parent": "176337861800bfe4e11a44abdbf637e5beecefc9",
+  "local_candidate": "01f1ada49f650511af54f861b0d899b8a0b5eb22",
+  "decoded_patch_sha256": "244696dd2bd097c803a9c1157cca2b66d3832290983befd360d2f0be63de88c5",
+  "decoded_fixture_sha256": "4ed0d4b03bf3c65c8c184a5e774c6713b88dcc6db898c4f8bfbe1187303c74b4",
+  "red_host": {
+    "path": "/private/tmp/b4-material-overlay-20261030/godot-consistency-red",
+    "sha256": "ea8e0a283e1910a958978c33def4b09efd0a459a06dec784b063c909b70d57f4"
+  },
+  "green_host": {
+    "path": "/private/tmp/b4-material-overlay-20261030/godot-consistency-green",
+    "sha256": "0953f402592b7ee00c3187c5ef055d3de37ec6a1742f016f1e628aa3fb21c2b0"
+  },
+  "source_sha256": "ee11d0654c2b93bc93b6c18703b8b685b141adf824aac97a8dac20b9929337f6",
+  "scope": "controlled incremental overlay; no complete candidate build or product qualification"
+}
