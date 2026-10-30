@@ -1,0 +1,11 @@
+{
+  "parent": "0fc9b8af00c43f267462556b224c25c169726bdb",
+  "tree": "74fc2107c92293fdf7b2a0296abe9b910a645688",
+  "commit": "a289a6a46f3de6261186091525df5034e535e8fe",
+  "ref": "refs/codex/qualification-zero-snapshot-0fc-20261030",
+  "paths": [
+    "core/extension/gdextension_qualification_ticket.cpp",
+    "tests/servers/rendering/test_qualification_ticket.cpp"
+  ],
+  "pushed": false
+}

@@ -1,0 +1,42 @@
+{
+  "binary_before": "76018947bdd76c156cbcaf08efae961e5d4e75569aadc2388694ed9ac84ffb71",
+  "binary_after": "76018947bdd76c156cbcaf08efae961e5d4e75569aadc2388694ed9ac84ffb71",
+  "runs": [
+    {
+      "name": "focused",
+      "selector": "*overlapping snapshot outputs are rejected*",
+      "rc": 0,
+      "success": true
+    },
+    {
+      "name": "qualification",
+      "selector": "*[Qualification]*",
+      "rc": 0,
+      "success": true
+    },
+    {
+      "name": "rt",
+      "selector": "*[QualificationRt]*",
+      "rc": 0,
+      "success": true
+    },
+    {
+      "name": "p01",
+      "selector": "[P01]*",
+      "rc": 0,
+      "success": true
+    },
+    {
+      "name": "device_exit",
+      "selector": "*device_exit*",
+      "rc": 0,
+      "success": true
+    },
+    {
+      "name": "k03",
+      "selector": "*[K03]*",
+      "rc": 0,
+      "success": true
+    }
+  ]
+}
