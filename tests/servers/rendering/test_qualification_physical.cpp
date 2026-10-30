@@ -179,6 +179,49 @@ public:
 		CHECK(device.frames[0].framebuffers_to_dispose_of.size() == 2);
 		CHECK(device.resource_frees_in_progress.is_empty());
 	}
+	struct BusyDependentState {
+		RenderingDevice *device = nullptr;
+		RID parent;
+		RID dependent;
+		int callbacks = 0;
+	};
+	static void add_busy_dependent(void *userdata) {
+		auto *state = static_cast<BusyDependentState *>(userdata);
+		state->callbacks++;
+		state->device->texture_owner.get_or_null(state->dependent)->qualification_users = 1;
+		state->device->_add_dependency(state->dependent, state->parent);
+	}
+	static void cascade_busy_dependent_retry(RenderingDevice &device) {
+		BusyDependentState state;
+		state.device = &device;
+		RenderingDevice::Texture texture{};
+		state.parent = device.texture_owner.make_rid(texture);
+		state.dependent = device.texture_owner.make_rid(texture);
+		RenderingDevice::Framebuffer framebuffer{};
+		framebuffer.invalidated_callback = add_busy_dependent;
+		framebuffer.invalidated_callback_userdata = &state;
+		RID first = device.framebuffer_owner.make_rid(framebuffer);
+		device.render_thread_id = Thread::get_caller_id();
+		device._add_dependency(first, state.parent);
+		ERR_PRINT_OFF;
+		device.free_rid(state.parent);
+		ERR_PRINT_ON;
+		CHECK(state.callbacks == 1);
+		CHECK(device.texture_owner.owns(state.parent));
+		CHECK(device.texture_owner.owns(state.dependent));
+		CHECK_FALSE(device.framebuffer_owner.owns(first));
+		const HashSet<RID> *children = device.dependency_map.getptr(state.parent);
+		CHECK(children != nullptr);
+		CHECK((children && children->has(state.dependent)));
+		CHECK(device.resource_frees_in_progress.is_empty());
+		device.texture_owner.get_or_null(state.dependent)->qualification_users = 0;
+		device.free_rid(state.parent);
+		CHECK_FALSE(device.texture_owner.owns(state.parent));
+		CHECK_FALSE(device.texture_owner.owns(state.dependent));
+		CHECK(device.frames[0].textures_to_dispose_of.size() == 2);
+		CHECK(device.frames[0].framebuffers_to_dispose_of.size() == 1);
+		CHECK(device.resource_frees_in_progress.is_empty());
+	}
 	template <typename D>
 	static auto create_qualified_sampler(D &device, const RenderingDevice::SamplerState &state, GDExtensionDeviceExit::QualificationPhysicalReturn *cell, int) -> decltype(device._qualification_sampler_create(state, cell)) {
 		return device._qualification_sampler_create(state, cell);
@@ -3747,6 +3790,13 @@ TEST_CASE("[RenderingDevice] child invalidation can retire a sibling during pare
 	Driver driver;
 	TestQualificationPhysicalAccess::attach(device, driver);
 	TestQualificationPhysicalAccess::cascade_sibling_reentry(device);
+	TestQualificationPhysicalAccess::detach(device);
+}
+TEST_CASE("[RenderingDevice] busy dependent preserves its parent until retry") {
+	RenderingDevice device;
+	Driver driver;
+	TestQualificationPhysicalAccess::attach(device, driver);
+	TestQualificationPhysicalAccess::cascade_busy_dependent_retry(device);
 	TestQualificationPhysicalAccess::detach(device);
 }
 TEST_CASE("[RenderingDevice][Qualification] buffer return follows exact physical free and survives RID erase") {
