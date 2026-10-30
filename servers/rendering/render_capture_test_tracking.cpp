@@ -214,7 +214,7 @@ bool RenderCaptureTestResourceRegistry::observe_free(RenderCaptureTestResourceKi
 			if (entry.released) {
 				// A second free for the same still-retained token is stale or
 				// duplicate evidence. Keep the released record for retirement
-				// acknowledgement, but fail closed for this observation.
+				// acknowledgment, but fail closed for this observation.
 				return false;
 			}
 			entry.released = true;

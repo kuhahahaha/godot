@@ -28,8 +28,9 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#include "servers/rendering/render_capture_test_hooks.h"
 #pragma once
+
+#include "servers/rendering/render_capture_test_hooks.h"
 #include "servers/rendering/render_capture_test_tracking.h"
 #include "tests/test_macros.h"
 
