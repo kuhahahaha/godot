@@ -1,0 +1,72 @@
+{
+  "inputs_before": {
+    "/private/tmp/b4-material-overlay-20261030/godot-green-v2": "f8164151e8ec5b762770b75fe5b084da5a9227ed5c6d7bdd7572f23fbc29817d",
+    "/private/tmp/b4-material-render-20261030/project.godot": "687db46d34386880bd2eb966e5b50d3338a90bc0e1cbca9903f556917fbeb102",
+    "/private/tmp/b4-material-render-20261030/probe.gdextension": "6e7b0dd0c1b1be848bb7d7144318e1cdb5b2ab719b6f76653e78711e9bd388e5",
+    "/private/tmp/b4-material-render-20261030/probe.dylib": "42d5397ba935664d7228528d3cf0d414d685ad7735c6752a916eef0486ede1c0",
+    "/private/tmp/b4-material-render-20261030/probe.gd": "c4c1ef39c3cc2b2499b37e6ad59b85c69861f488c6f5cd840e71fbd89f1b7251"
+  },
+  "inputs_after": {
+    "/private/tmp/b4-material-overlay-20261030/godot-green-v2": "f8164151e8ec5b762770b75fe5b084da5a9227ed5c6d7bdd7572f23fbc29817d",
+    "/private/tmp/b4-material-render-20261030/project.godot": "687db46d34386880bd2eb966e5b50d3338a90bc0e1cbca9903f556917fbeb102",
+    "/private/tmp/b4-material-render-20261030/probe.gdextension": "6e7b0dd0c1b1be848bb7d7144318e1cdb5b2ab719b6f76653e78711e9bd388e5",
+    "/private/tmp/b4-material-render-20261030/probe.dylib": "42d5397ba935664d7228528d3cf0d414d685ad7735c6752a916eef0486ede1c0",
+    "/private/tmp/b4-material-render-20261030/probe.gd": "c4c1ef39c3cc2b2499b37e6ad59b85c69861f488c6f5cd840e71fbd89f1b7251"
+  },
+  "runs": [
+    {
+      "mode": "mobile",
+      "command": [
+        "/private/tmp/b4-material-overlay-20261030/godot-green-v2",
+        "--path",
+        "/private/tmp/b4-material-render-20261030",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "safe",
+        "--script",
+        "probe.gd"
+      ],
+      "rc": 0,
+      "markers": [
+        "Metal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M3 Pro (Apple9)",
+        "B4_DEFAULT_TEXTURE_GENERATION_ADVANCED=1",
+        "B4_SHADER_GENERATION_ADVANCED=1",
+        "B4_UNINITIALIZED_MATERIAL_REJECTED=1",
+        "B4_FOREIGN_MATERIAL_REJECTED=1",
+        "K05_NATIVE_LOAD=0",
+        "K05_NATIVE_COMPARE covered=1976 different=0 max_error=0.0",
+        "K05_NATIVE_UNLOAD=0"
+      ]
+    },
+    {
+      "mode": "forward_plus",
+      "command": [
+        "/private/tmp/b4-material-overlay-20261030/godot-green-v2",
+        "--path",
+        "/private/tmp/b4-material-render-20261030",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "forward_plus",
+        "--render-thread",
+        "safe",
+        "--script",
+        "probe.gd"
+      ],
+      "rc": 0,
+      "markers": [
+        "Metal 4.0 - Forward+ - Using Device #0: Apple - Apple M3 Pro (Apple9)",
+        "B4_DEFAULT_TEXTURE_GENERATION_ADVANCED=1",
+        "B4_SHADER_GENERATION_ADVANCED=1",
+        "B4_UNINITIALIZED_MATERIAL_REJECTED=1",
+        "B4_FOREIGN_MATERIAL_REJECTED=1",
+        "K05_NATIVE_LOAD=0",
+        "K05_NATIVE_COMPARE covered=1976 different=0 max_error=0.0",
+        "K05_NATIVE_UNLOAD=0"
+      ]
+    }
+  ]
+}

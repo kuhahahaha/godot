@@ -1,0 +1,618 @@
+ld: warning: object file (/opt/homebrew/Cellar/molten-vk/1.4.2/Frameworks/MoltenVK.xcframework/macos-arm64/libMoltenVK.a[2](libMoltenVK.a-arm64-prelink.o)) was built for newer 'macOS' version (12.0) than being linked (11.0)
+Undefined symbols for architecture arm64:
+  "get_engine_build_identity()", referenced from:
+      Engine::get_version_info() const in libcore.macos.editor.dev.arm64.a[245](engine.macos.editor.dev.arm64.o)
+  "skinned_mesh_capture_test_phase_end()", referenced from:
+      TestSkinnedMeshCaptureTestPhaseObserver::DOCTEST_ANON_FUNC_563() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestPhaseObserver::DOCTEST_ANON_FUNC_563() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestPhaseObserver::DOCTEST_ANON_FUNC_565() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestPhaseObserver::DOCTEST_ANON_FUNC_565() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestPhaseObserver::DOCTEST_ANON_FUNC_565() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_569() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "skinned_mesh_capture_test_hook_begin(unsigned long long, unsigned long long)", referenced from:
+      DOCTEST_ANON_FUNC_504() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_545() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestWriteCensus::DOCTEST_ANON_FUNC_583() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestWriteCensus::DOCTEST_ANON_FUNC_583() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestWriteCensusTestAccess::check_scanner() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestWriteCensusTestAccess::check_scanner() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestWriteCensusTestAccess::check_scanner() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      ...
+  "skinned_mesh_capture_test_hook_reset()", referenced from:
+      DOCTEST_ANON_FUNC_504() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_504() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_541() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_545() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_545() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_549() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_551() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      ...
+  "skinned_mesh_capture_test_hook_events()", referenced from:
+      DOCTEST_ANON_FUNC_504() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_504() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_504() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_504() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_504() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestWriteCensus::DOCTEST_ANON_FUNC_583() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestWriteCensus::DOCTEST_ANON_FUNC_583() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestWriteCensus::DOCTEST_ANON_FUNC_583() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      ...
+  "skinned_mesh_capture_test_phase_begin(unsigned long long)", referenced from:
+      TestSkinnedMeshCaptureTestPhaseObserver::DOCTEST_ANON_FUNC_563() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestPhaseObserver::DOCTEST_ANON_FUNC_563() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestPhaseObserver::DOCTEST_ANON_FUNC_565() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestPhaseObserver::DOCTEST_ANON_FUNC_565() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestPhaseObserver::DOCTEST_ANON_FUNC_565() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_569() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "skinned_mesh_capture_test_phase_events()", referenced from:
+      TestSkinnedMeshCaptureTestPhaseObserver::DOCTEST_ANON_FUNC_563() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestPhaseObserver::DOCTEST_ANON_FUNC_563() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestPhaseObserver::DOCTEST_ANON_FUNC_565() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "skinned_mesh_capture_test_hook_snapshot()", referenced from:
+      TestSkinnedMeshCaptureTestProbe::DOCTEST_ANON_FUNC_2() in libtests.macos.editor.dev.arm64.a[191](test_render_capture_lifetime.macos.editor.dev.arm64.o)
+  "skinned_mesh_capture_test_phase_poisoned()", referenced from:
+      TestSkinnedMeshCaptureTestPhaseObserver::DOCTEST_ANON_FUNC_563() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestPhaseObserver::DOCTEST_ANON_FUNC_563() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestPhaseObserver::DOCTEST_ANON_FUNC_565() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestPhaseObserver::DOCTEST_ANON_FUNC_565() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestPhaseObserver::DOCTEST_ANON_FUNC_565() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestPhaseObserver::DOCTEST_ANON_FUNC_565() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "skinned_mesh_capture_test_hook_is_poisoned()", referenced from:
+      DOCTEST_ANON_FUNC_545() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestWriteCensus::DOCTEST_ANON_FUNC_583() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestWriteCensus::DOCTEST_ANON_FUNC_583() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestWriteCensus::DOCTEST_ANON_FUNC_583() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestWriteCensus::DOCTEST_ANON_FUNC_583() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestWriteCensusTestAccess::check_scanner() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestWriteCensusTestAccess::check_scanner() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestWriteCensusTestAccess::check_scanner() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestWriteCensusTestAccess::check_scanner() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestWriteCensusTestAccess::check_scanner() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      ...
+  "initialize_skinned_mesh_capture_tests_module(ModuleInitializationLevel)", referenced from:
+      initialize_modules(ModuleInitializationLevel) in libmodules.macos.editor.dev.arm64.a[2](register_module_types.gen.macos.editor.dev.arm64.o)
+  "skinned_mesh_capture_test_encode_gpu_payload(SkinnedMeshCaptureTestPublicSnapshot const&, Vector<unsigned char>&)", referenced from:
+      TestSkinnedMeshCaptureTestGpuPayload::DOCTEST_ANON_FUNC_506() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestGpuPayload::DOCTEST_ANON_FUNC_506() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestGpuPayload::DOCTEST_ANON_FUNC_506() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestGpuPayload::DOCTEST_ANON_FUNC_506() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestGpuPayload::DOCTEST_ANON_FUNC_506() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestGpuPayload::DOCTEST_ANON_FUNC_506() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "skinned_mesh_capture_test_observe_draw_record(unsigned long long, unsigned long long, unsigned long long)", referenced from:
+      DOCTEST_ANON_FUNC_504() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "skinned_mesh_capture_test_write_census_events()", referenced from:
+      TestSkinnedMeshCaptureTestWriteCensus::DOCTEST_ANON_FUNC_583() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestWriteCensusTestAccess::check_scanner() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestWriteCensusTestAccess::check_scanner() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestWriteCensusTestAccess::check_scanner() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestWriteCensusTestAccess::check_scanner() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestWriteCensusTestAccess::check_scanner() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestWriteCensusTestAccess::check_scanner() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestWriteCensusTestAccess::check_scanner() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      ...
+  "skinned_mesh_capture_test_phase_capture_cancel(unsigned long long)", referenced from:
+      DOCTEST_ANON_FUNC_569() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_571() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "skinned_mesh_capture_test_phase_capture_window(unsigned long long&, bool&)", referenced from:
+      DOCTEST_ANON_FUNC_567() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "uninitialize_skinned_mesh_capture_tests_module(ModuleInitializationLevel)", referenced from:
+      uninitialize_modules(ModuleInitializationLevel) in libmodules.macos.editor.dev.arm64.a[2](register_module_types.gen.macos.editor.dev.arm64.o)
+  "skinned_mesh_capture_test_parse_capture_startup(std::__1::vector<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>>, std::__1::allocator<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>>>> const&, SkinnedMeshCaptureTestCaptureStartup&)", referenced from:
+      DOCTEST_ANON_FUNC_492() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_492() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_492() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_492() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_492() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "skinned_mesh_capture_test_phase_capture_enqueue(SkinnedMeshCaptureTestPhaseCaptureRequest const&)", referenced from:
+      DOCTEST_ANON_FUNC_569() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_569() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_569() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_569() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_569() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_571() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_571() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_571() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      ...
+  "skinned_mesh_capture_test_phase_capture_results()", referenced from:
+      DOCTEST_ANON_FUNC_569() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_569() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "skinned_mesh_capture_test_decode_public_snapshot(Dictionary const&, SkinnedMeshCaptureTestPublicSnapshot&)", referenced from:
+      TestSkinnedMeshCaptureTestPublicSnapshot::DOCTEST_ANON_FUNC_591() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestPublicSnapshot::DOCTEST_ANON_FUNC_591() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestPublicSnapshot::DOCTEST_ANON_FUNC_591() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestPublicSnapshot::DOCTEST_ANON_FUNC_591() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestPublicSnapshot::DOCTEST_ANON_FUNC_591()::$_0::operator()(Dictionary const&) const in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "skinned_mesh_capture_test_initial_guarded_buffer()", referenced from:
+      TestSkinnedMeshCaptureTestGpuPayload::DOCTEST_ANON_FUNC_506() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestGpuPayload::DOCTEST_ANON_FUNC_506() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_601() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_601() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_603() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_603() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_605() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      ...
+  "RenderCaptureTestHooks::observe_draw(RID, unsigned int, RID, unsigned long long, unsigned int, unsigned int)", referenced from:
+      void RendererSceneRenderImplementation::RenderForwardClustered::_render_list_template<(RendererSceneRenderImplementation::RenderForwardClustered::PassMode)0, 0u>(long long, long long, RendererSceneRenderImplementation::RenderForwardClustered::RenderListParameters*, unsigned int, unsigned int) in libservers.macos.editor.dev.arm64.a[104](render_forward_clustered.macos.editor.dev.arm64.o)
+      void RendererSceneRenderImplementation::RenderForwardClustered::_render_list_template<(RendererSceneRenderImplementation::RenderForwardClustered::PassMode)0, 1u>(long long, long long, RendererSceneRenderImplementation::RenderForwardClustered::RenderListParameters*, unsigned int, unsigned int) in libservers.macos.editor.dev.arm64.a[104](render_forward_clustered.macos.editor.dev.arm64.o)
+      void RendererSceneRenderImplementation::RenderForwardClustered::_render_list_template<(RendererSceneRenderImplementation::RenderForwardClustered::PassMode)0, 5u>(long long, long long, RendererSceneRenderImplementation::RenderForwardClustered::RenderListParameters*, unsigned int, unsigned int) in libservers.macos.editor.dev.arm64.a[104](render_forward_clustered.macos.editor.dev.arm64.o)
+      void RendererSceneRenderImplementation::RenderForwardClustered::_render_list_template<(RendererSceneRenderImplementation::RenderForwardClustered::PassMode)0, 9u>(long long, long long, RendererSceneRenderImplementation::RenderForwardClustered::RenderListParameters*, unsigned int, unsigned int) in libservers.macos.editor.dev.arm64.a[104](render_forward_clustered.macos.editor.dev.arm64.o)
+      void RendererSceneRenderImplementation::RenderForwardClustered::_render_list_template<(RendererSceneRenderImplementation::RenderForwardClustered::PassMode)0, 2u>(long long, long long, RendererSceneRenderImplementation::RenderForwardClustered::RenderListParameters*, unsigned int, unsigned int) in libservers.macos.editor.dev.arm64.a[104](render_forward_clustered.macos.editor.dev.arm64.o)
+      void RendererSceneRenderImplementation::RenderForwardClustered::_render_list_template<(RendererSceneRenderImplementation::RenderForwardClustered::PassMode)0, 6u>(long long, long long, RendererSceneRenderImplementation::RenderForwardClustered::RenderListParameters*, unsigned int, unsigned int) in libservers.macos.editor.dev.arm64.a[104](render_forward_clustered.macos.editor.dev.arm64.o)
+      void RendererSceneRenderImplementation::RenderForwardClustered::_render_list_template<(RendererSceneRenderImplementation::RenderForwardClustered::PassMode)0, 10u>(long long, long long, RendererSceneRenderImplementation::RenderForwardClustered::RenderListParameters*, unsigned int, unsigned int) in libservers.macos.editor.dev.arm64.a[104](render_forward_clustered.macos.editor.dev.arm64.o)
+      ...
+  "RenderCaptureTestHooks::observe_phase(unsigned long long, bool)", referenced from:
+      TestSkinnedMeshCaptureTestPhaseObserver::DOCTEST_ANON_FUNC_563() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestPhaseObserver::DOCTEST_ANON_FUNC_563() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestPhaseObserver::DOCTEST_ANON_FUNC_563() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestPhaseObserver::DOCTEST_ANON_FUNC_563() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestPhaseObserver::DOCTEST_ANON_FUNC_563() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestPhaseObserver::DOCTEST_ANON_FUNC_563() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestPhaseObserver::DOCTEST_ANON_FUNC_565() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestPhaseObserver::DOCTEST_ANON_FUNC_565() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestPhaseObserver::DOCTEST_ANON_FUNC_565() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestPhaseObserver::DOCTEST_ANON_FUNC_565() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestPhaseObserver::DOCTEST_ANON_FUNC_565() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      ...
+  "RenderCaptureTestHooks::retirement_pump()", referenced from:
+      RenderingServerDefault::_draw(bool, double) in libservers.macos.editor.dev.arm64.a[55](rendering_server_default.macos.editor.dev.arm64.o)
+  "RenderCaptureTestHooks::ViewportDrawScope::ViewportDrawScope(unsigned long long)", referenced from:
+      RendererViewport::_draw_viewport(RendererViewport::Viewport*) in libservers.macos.editor.dev.arm64.a[46](renderer_viewport.macos.editor.dev.arm64.o)
+  "RenderCaptureTestHooks::ViewportDrawScope::~ViewportDrawScope()", referenced from:
+      RendererViewport::_draw_viewport(RendererViewport::Viewport*) in libservers.macos.editor.dev.arm64.a[46](renderer_viewport.macos.editor.dev.arm64.o)
+  "RenderCaptureTestHooks::draw_record_count()", referenced from:
+      void RendererSceneRenderImplementation::RenderForwardClustered::_render_list_template<(RendererSceneRenderImplementation::RenderForwardClustered::PassMode)0, 0u>(long long, long long, RendererSceneRenderImplementation::RenderForwardClustered::RenderListParameters*, unsigned int, unsigned int) in libservers.macos.editor.dev.arm64.a[104](render_forward_clustered.macos.editor.dev.arm64.o)
+      void RendererSceneRenderImplementation::RenderForwardClustered::_render_list_template<(RendererSceneRenderImplementation::RenderForwardClustered::PassMode)0, 1u>(long long, long long, RendererSceneRenderImplementation::RenderForwardClustered::RenderListParameters*, unsigned int, unsigned int) in libservers.macos.editor.dev.arm64.a[104](render_forward_clustered.macos.editor.dev.arm64.o)
+      void RendererSceneRenderImplementation::RenderForwardClustered::_render_list_template<(RendererSceneRenderImplementation::RenderForwardClustered::PassMode)0, 5u>(long long, long long, RendererSceneRenderImplementation::RenderForwardClustered::RenderListParameters*, unsigned int, unsigned int) in libservers.macos.editor.dev.arm64.a[104](render_forward_clustered.macos.editor.dev.arm64.o)
+      void RendererSceneRenderImplementation::RenderForwardClustered::_render_list_template<(RendererSceneRenderImplementation::RenderForwardClustered::PassMode)0, 9u>(long long, long long, RendererSceneRenderImplementation::RenderForwardClustered::RenderListParameters*, unsigned int, unsigned int) in libservers.macos.editor.dev.arm64.a[104](render_forward_clustered.macos.editor.dev.arm64.o)
+      void RendererSceneRenderImplementation::RenderForwardClustered::_render_list_template<(RendererSceneRenderImplementation::RenderForwardClustered::PassMode)0, 2u>(long long, long long, RendererSceneRenderImplementation::RenderForwardClustered::RenderListParameters*, unsigned int, unsigned int) in libservers.macos.editor.dev.arm64.a[104](render_forward_clustered.macos.editor.dev.arm64.o)
+      void RendererSceneRenderImplementation::RenderForwardClustered::_render_list_template<(RendererSceneRenderImplementation::RenderForwardClustered::PassMode)0, 6u>(long long, long long, RendererSceneRenderImplementation::RenderForwardClustered::RenderListParameters*, unsigned int, unsigned int) in libservers.macos.editor.dev.arm64.a[104](render_forward_clustered.macos.editor.dev.arm64.o)
+      void RendererSceneRenderImplementation::RenderForwardClustered::_render_list_template<(RendererSceneRenderImplementation::RenderForwardClustered::PassMode)0, 10u>(long long, long long, RendererSceneRenderImplementation::RenderForwardClustered::RenderListParameters*, unsigned int, unsigned int) in libservers.macos.editor.dev.arm64.a[104](render_forward_clustered.macos.editor.dev.arm64.o)
+      ...
+  "RenderCaptureTestHooks::observe_buffer_copy(unsigned long long, unsigned long long, unsigned int, unsigned int, unsigned int, unsigned long long, unsigned long long, unsigned long long)", referenced from:
+      DOCTEST_ANON_FUNC_504() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_504() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_504() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_504()::$_0::operator()() const in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestWriteCensusTestAccess::check_scanner() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestRDPoolTestAccess::check_buffer_qualification() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestRDPoolTestAccess::check_buffer_qualification()::'lambda'()::operator()() const in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      ...
+  "RenderCaptureTestHooks::observe_buffer_free(unsigned long long, unsigned long long, unsigned long long, unsigned long long)", referenced from:
+      RenderingDevice::_free_internal(RID) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+      RenderingDevice::_free_internal(RID) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+  "RenderCaptureTestHooks::write_census_active()", referenced from:
+      RenderingDevice::driver_callback_add(void (*)(RenderingDeviceDriver*, RenderingDeviceDriver::CommandBufferID, void*), void*, VectorView<RenderingDevice::CallbackResource>) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+      RenderingDevice::_capture_test_record_buffer_usage(unsigned long long, RenderingDeviceGraph::ResourceUsage, unsigned int) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+      RenderingDevice::draw_list_draw(long long, bool, unsigned int, unsigned int) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+      RenderingDevice::_capture_test_record_writable_set(RID, unsigned int) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+      RenderingDevice::_draw_list_draw_indirect_recorded(long long, bool, RID, unsigned int, unsigned int, unsigned int, bool) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+      RenderingDevice::raytracing_list_trace_rays(long long, unsigned int, RID, unsigned int, unsigned int, unsigned int) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+      RenderingDevice::_qualification_dispatch(long long, unsigned int, unsigned int, unsigned int) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+      ...
+  "RenderCaptureTestHooks::write_census_poison()", referenced from:
+      RenderingDevice::driver_callback_add(void (*)(RenderingDeviceDriver*, RenderingDeviceDriver::CommandBufferID, void*), void*, VectorView<RenderingDevice::CallbackResource>) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+      RenderingDevice::_capture_test_record_buffer_usage(unsigned long long, RenderingDeviceGraph::ResourceUsage, unsigned int) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+      RenderingDevice::_capture_test_record_buffer_usage(unsigned long long, RenderingDeviceGraph::ResourceUsage, unsigned int) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+      RenderingDevice::_capture_test_record_writable_set(RID, unsigned int) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+      RenderingDevice::_capture_test_record_writable_set(RID, unsigned int) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+      RenderingDevice::_capture_test_record_writable_uses(Vector<RenderingDeviceGraph::ResourceTracker*> const&, Vector<RenderingDeviceGraph::ResourceUsage> const&, unsigned int) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+      RenderingDevice::_capture_test_record_writable_uses(Vector<RenderingDeviceGraph::ResourceTracker*> const&, Vector<RenderingDeviceGraph::ResourceUsage> const&, unsigned int) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+      RenderingDevice::_capture_test_record_writable_uses(Vector<RenderingDeviceGraph::ResourceTracker*> const&, Vector<RenderingDeviceGraph::ResourceUsage> const&, unsigned int) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+      ...
+  "RenderCaptureTestHooks::write_census_record(unsigned long long, unsigned long long, unsigned long long, unsigned int, unsigned int)", referenced from:
+      TestSkinnedMeshCaptureTestWriteCensus::DOCTEST_ANON_FUNC_583() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestWriteCensus::DOCTEST_ANON_FUNC_583() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestWriteCensus::DOCTEST_ANON_FUNC_583() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestWriteCensus::DOCTEST_ANON_FUNC_583() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestWriteCensus::DOCTEST_ANON_FUNC_583() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      RenderingDevice::_capture_test_record_buffer_usage(unsigned long long, RenderingDeviceGraph::ResourceUsage, unsigned int) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+  "RenderCaptureTestHooks::observe_buffer_clear(unsigned long long, unsigned int, unsigned int, unsigned long long, unsigned long long, unsigned long long)", referenced from:
+      RenderingDevice::buffer_clear(RID, unsigned int, unsigned int) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+  "RenderCaptureTestHooks::observe_buffer_write(unsigned long long, unsigned int, unsigned int, bool, unsigned long long, unsigned long long, unsigned long long, bool)", referenced from:
+      TestSkinnedMeshCaptureTestProbe::DOCTEST_ANON_FUNC_2() in libtests.macos.editor.dev.arm64.a[191](test_render_capture_lifetime.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestProbe::DOCTEST_ANON_FUNC_2() in libtests.macos.editor.dev.arm64.a[191](test_render_capture_lifetime.macos.editor.dev.arm64.o)
+      RenderingDevice::_buffer_update(RenderingDevice::Buffer*, RID, unsigned int, unsigned int, void const*, RenderingDevice::QualificationUploadProgress*) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+      RenderingDevice::_buffer_update(RenderingDevice::Buffer*, RID, unsigned int, unsigned int, void const*, RenderingDevice::QualificationUploadProgress*) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+      RenderingDevice::_buffer_update(RenderingDevice::Buffer*, RID, unsigned int, unsigned int, void const*, RenderingDevice::QualificationUploadProgress*) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+  "RenderCaptureTestHooks::observe_driver_result(unsigned long long, unsigned int, unsigned long long, int)", referenced from:
+      RenderingDevice::_submit_transfer_worker(RenderingDevice::TransferWorker*, VectorView<RenderingDeviceDriver::SemaphoreID>, bool) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+      RenderingDevice::screen_prepare_for_drawing(int) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+      RenderingDevice::_stall_for_frame(unsigned int, bool) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+      RenderingDevice::_execute_frame(bool) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+      RenderingDevice::execute_chained_cmds(bool, RenderingDeviceDriver::FenceID, RenderingDeviceDriver::SemaphoreID) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+  "RenderCaptureTestHooks::observe_texture_write(unsigned long long, unsigned long long, unsigned int, unsigned int)", referenced from:
+      RenderingDevice::_capture_test_record_writable_uses(Vector<RenderingDeviceGraph::ResourceTracker*> const&, Vector<RenderingDeviceGraph::ResourceUsage> const&, unsigned int) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+  "RenderCaptureTestHooks::observe_buffer_dispose(unsigned long long, unsigned long long, unsigned long long)", referenced from:
+      RenderingDevice::_free_pending_resources(int) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+  "RenderCaptureTestHooks::observe_readback_queued(unsigned long long, unsigned int)", referenced from:
+      TestSkinnedMeshCaptureTestProbe::DOCTEST_ANON_FUNC_2() in libtests.macos.editor.dev.arm64.a[191](test_render_capture_lifetime.macos.editor.dev.arm64.o)
+      RenderingDevice::buffer_get_data(RID, unsigned int, unsigned int) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+      RenderingDevice::_buffer_get_data_async(RID, Callable const&, unsigned int, unsigned int, Ref<RenderingDevice::BufferGetDataResult> const&) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+  "RenderCaptureTestHooks::observe_skeleton_setter(unsigned long long, unsigned long long)", referenced from:
+      RendererRD::MeshStorage::skeleton_bone_set_transform(RID, int, Transform3D const&) in libservers.macos.editor.dev.arm64.a[111](mesh_storage.macos.editor.dev.arm64.o)
+  "RenderCaptureTestHooks::observe_skeleton_signal(unsigned long long, bool)", referenced from:
+      Skeleton3D::_notification(int) in libscene.macos.editor.dev.arm64.a[119](skeleton_3d.macos.editor.dev.arm64.o)
+      Skeleton3D::_notification(int) in libscene.macos.editor.dev.arm64.a[119](skeleton_3d.macos.editor.dev.arm64.o)
+  "RenderCaptureTestHooks::observe_skeleton_upload(unsigned long long, unsigned long long, unsigned int, int)", referenced from:
+      RendererRD::MeshStorage::_update_dirty_skeletons() in libservers.macos.editor.dev.arm64.a[111](mesh_storage.macos.editor.dev.arm64.o)
+  "RenderCaptureTestHooks::observe_skeleton_version(unsigned long long, unsigned long long)", referenced from:
+      RendererRD::MeshStorage::_update_dirty_skeletons() in libservers.macos.editor.dev.arm64.a[111](mesh_storage.macos.editor.dev.arm64.o)
+  "RenderCaptureTestHooks::observe_buffer_allocation(unsigned long long, unsigned long long, unsigned long long, unsigned long long)", referenced from:
+      RenderingDevice::storage_buffer_create(unsigned int, Span<unsigned char>, BitField<RenderingDevice::StorageBufferUsage>, BitField<RenderingDevice::BufferCreationBits>) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+      RenderingDevice::vertex_buffer_create(unsigned int, Span<unsigned char>, BitField<RenderingDevice::BufferCreationBits>) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+  "RenderCaptureTestHooks::observe_readback_completed(unsigned long long, unsigned int)", referenced from:
+      TestSkinnedMeshCaptureTestProbe::DOCTEST_ANON_FUNC_2() in libtests.macos.editor.dev.arm64.a[191](test_render_capture_lifetime.macos.editor.dev.arm64.o)
+      RenderingDevice::buffer_get_data(RID, unsigned int, unsigned int) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+      RenderingDevice::_stall_for_frame(unsigned int, bool) in libservers.macos.editor.dev.arm64.a[48](rendering_device.macos.editor.dev.arm64.o)
+  "RenderCaptureTestHooks::observe_skeleton_palette_request(unsigned long long, unsigned long long, unsigned int)", referenced from:
+      Skeleton3D::_notification(int) in libscene.macos.editor.dev.arm64.a[119](skeleton_3d.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestRDPool::initialize(bool)", referenced from:
+      TestSkinnedMeshCaptureTestRDPool::DOCTEST_ANON_FUNC_593() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestRDPool::DOCTEST_ANON_FUNC_593() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestRDPool::record_image(unsigned int, RID, RID&)", referenced from:
+      TestSkinnedMeshCaptureTestRDPool::DOCTEST_ANON_FUNC_593() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestRDPool::record_native(unsigned int, RID, unsigned int)", referenced from:
+      TestSkinnedMeshCaptureTestRDPool::DOCTEST_ANON_FUNC_593() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestRDPool::record_public(unsigned int, SkinnedMeshCaptureTestPublicSnapshot const&)", referenced from:
+      TestSkinnedMeshCaptureTestRDPool::DOCTEST_ANON_FUNC_593() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestRDPool::enqueue_readback(SkinnedMeshCaptureTestReadbackIdentity const&, SkinnedMeshCaptureTestReadbackCollector&)", referenced from:
+      TestSkinnedMeshCaptureTestRDPool::DOCTEST_ANON_FUNC_593() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestRDPool::physical_retirement_status()", referenced from:
+      TestSkinnedMeshCaptureTestRDPool::DOCTEST_ANON_FUNC_593() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestRDPool::release()", referenced from:
+      TestSkinnedMeshCaptureTestRDPool::DOCTEST_ANON_FUNC_593() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestRDPool::DOCTEST_ANON_FUNC_593() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestCapture::dispose_physical()", referenced from:
+      DOCTEST_ANON_FUNC_539() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_539() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_539() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestCapture::seal()", referenced from:
+      DOCTEST_ANON_FUNC_539() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_539() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestCapture::begin(unsigned long long)", referenced from:
+      DOCTEST_ANON_FUNC_539() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_539() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_539() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_539() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestCapture::append(SkinnedMeshCaptureTestCaptureEvent const&)", referenced from:
+      DOCTEST_ANON_FUNC_539() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_539() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_539() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_539() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestFixture::advance_action(int)", referenced from:
+      TestSkinnedMeshCaptureTestNativeFixture::DOCTEST_ANON_FUNC_531() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_539() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestNativeFixture::DOCTEST_ANON_FUNC_533()::$_0::operator()() const in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestFixture::close_registry()", referenced from:
+      TestSkinnedMeshCaptureTestNativeFixture::DOCTEST_ANON_FUNC_527() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestNativeFixture::DOCTEST_ANON_FUNC_529() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestNativeFixture::DOCTEST_ANON_FUNC_529() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestFixture::build_fixed_scene(StringName const&)", referenced from:
+      SkinnedMeshCaptureTestFixtureTestAccess::prepare(SkinnedMeshCaptureTestFixture*, StringName const&) in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestFixture::submit_public_snapshot(Dictionary const&)", referenced from:
+      TestSkinnedMeshCaptureTestNativeFixture::DOCTEST_ANON_FUNC_531() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_539() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestNativeFixture::DOCTEST_ANON_FUNC_533()::$_0::operator()() const in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestFixture::begin(StringName, StringName)", referenced from:
+      TestSkinnedMeshCaptureTestNativeFixture::DOCTEST_ANON_FUNC_529() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestNativeFixture::DOCTEST_ANON_FUNC_529() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestNativeFixture::DOCTEST_ANON_FUNC_531() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestNativeFixture::DOCTEST_ANON_FUNC_531() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestNativeFixture::DOCTEST_ANON_FUNC_531() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestNativeFixture::DOCTEST_ANON_FUNC_531() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestNativeFixture::DOCTEST_ANON_FUNC_531() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      ...
+  "SkinnedMeshCaptureTestFixture::close(bool)", referenced from:
+      TestSkinnedMeshCaptureTestNativeFixture::DOCTEST_ANON_FUNC_527() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestNativeFixture::DOCTEST_ANON_FUNC_531() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestNativeFixture::DOCTEST_ANON_FUNC_531() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestNativeFixture::DOCTEST_ANON_FUNC_531() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestNativeFixture::DOCTEST_ANON_FUNC_535() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_539() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_539() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      ...
+  "SkinnedMeshCaptureTestFixture::SkinnedMeshCaptureTestFixture()", referenced from:
+      TestSkinnedMeshCaptureTestNativeFixture::DOCTEST_ANON_FUNC_527() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestNativeFixture::DOCTEST_ANON_FUNC_529() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestNativeFixture::DOCTEST_ANON_FUNC_529() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestNativeFixture::DOCTEST_ANON_FUNC_529() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestNativeFixture::DOCTEST_ANON_FUNC_533() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestNativeFixture::DOCTEST_ANON_FUNC_535() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_537() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      ...
+  "SkinnedMeshCaptureTestCaptureCodec::blob(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&, unsigned char const*, unsigned long, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>>&)", referenced from:
+      DOCTEST_ANON_FUNC_488() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_490() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestCaptureCodec::seal(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>>&)", referenced from:
+      DOCTEST_ANON_FUNC_484() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_486() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_488() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_490() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestCaptureCodec::event(SkinnedMeshCaptureTestHookEvent const&, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>>&)", referenced from:
+      DOCTEST_ANON_FUNC_484() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_484() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_486() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestCaptureCodec::start(SkinnedMeshCaptureTestCaptureIdentity const&, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>>&)", referenced from:
+      DOCTEST_ANON_FUNC_484() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_486() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_486() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_488() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_490() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestNativeSource::observe_draw(RID, unsigned int, RID, unsigned long long, unsigned int, unsigned int)", referenced from:
+      DOCTEST_ANON_FUNC_500() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestNativeSource::capture_current(RID, RID, RID, SkinnedMeshCaptureTestRDPool&, unsigned int, SkinnedMeshCaptureTestNativeSourceObservation&)", referenced from:
+      TestSkinnedMeshCaptureTestNativeSource::DOCTEST_ANON_FUNC_561() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestNativeSource::capture_selected(RID, RID, RID, unsigned long long, bool, SkinnedMeshCaptureTestRDPool&, unsigned int, SkinnedMeshCaptureTestNativeSourceObservation&)", referenced from:
+      DOCTEST_ANON_FUNC_500() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestNativeSource::draw_observations()", referenced from:
+      DOCTEST_ANON_FUNC_500() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestNativeSource::draw_record_count()", referenced from:
+      DOCTEST_ANON_FUNC_500() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestNativeSource::select_matching_draw(std::__1::vector<SkinnedMeshCaptureTestDrawObservation, std::__1::allocator<SkinnedMeshCaptureTestDrawObservation>> const&, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long, unsigned long long&)", referenced from:
+      SkinnedMeshCaptureTestDrawSelectionTestAccess::check_selection() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestDrawSelectionTestAccess::check_selection() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestDrawSelectionTestAccess::check_selection() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestDrawSelectionTestAccess::check_selection() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestDrawSelectionTestAccess::check_selection() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestCaptureWriter::close()", referenced from:
+      DOCTEST_ANON_FUNC_494() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_496() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestCaptureWriter::start(int)", referenced from:
+      DOCTEST_ANON_FUNC_494() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_496() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_496() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestCaptureWriter::publish(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&)", referenced from:
+      DOCTEST_ANON_FUNC_494() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_494() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_494() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_496() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestCaptureWriter::~SkinnedMeshCaptureTestCaptureWriter()", referenced from:
+      DOCTEST_ANON_FUNC_494() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_496() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_496() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestNativeSession::prepare_delivery(std::__1::vector<SkinnedMeshCaptureTestSessionRequest, std::__1::allocator<SkinnedMeshCaptureTestSessionRequest>> const&, Callable&)", referenced from:
+      SkinnedMeshCaptureTestNativeSessionTestAccess::prepare(SkinnedMeshCaptureTestNativeSession&, std::__1::vector<SkinnedMeshCaptureTestSessionRequest, std::__1::allocator<SkinnedMeshCaptureTestSessionRequest>> const&, Callable&) in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestNativeSession::service_retirement()", referenced from:
+      SkinnedMeshCaptureTestNativeSessionTestAccess::remove_terminal() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestNativeSession::close()", referenced from:
+      DOCTEST_ANON_FUNC_541() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_549() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_551() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_553() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_555() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_557() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestNativeSession::phase(unsigned long long, bool)", referenced from:
+      SkinnedMeshCaptureTestNativeSessionTestAccess::phase(SkinnedMeshCaptureTestNativeSession&, unsigned long long, bool) in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestNativeSession::create(unsigned long long, unsigned long long, bool, bool)", referenced from:
+      DOCTEST_ANON_FUNC_541() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_541() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_545() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_547() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_549() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_551() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_553() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      ...
+  "SkinnedMeshCaptureTestNativeSession::enqueue(SkinnedMeshCaptureTestSessionRequest const&)", referenced from:
+      DOCTEST_ANON_FUNC_541() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_541() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_541() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_541() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_545() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestNativeSession::maintain()", referenced from:
+      SkinnedMeshCaptureTestNativeSessionTestAccess::maintain(SkinnedMeshCaptureTestNativeSession&) in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestImageCollector::close()", referenced from:
+      TestImageCollector::DOCTEST_ANON_FUNC_508() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_510() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_514() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_516() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_518() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_518() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_520() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      ...
+  "SkinnedMeshCaptureTestImageCollector::reject(unsigned int)", referenced from:
+      TestImageCollector::DOCTEST_ANON_FUNC_518() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_518() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_518() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestImageCollector::reserve(unsigned int, Callable&)", referenced from:
+      TestImageCollector::DOCTEST_ANON_FUNC_508() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_510() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_512() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_514() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_514() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_516() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_518() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_518() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      ...
+  "SkinnedMeshCaptureTestImageCollector::SkinnedMeshCaptureTestImageCollector()", referenced from:
+      TestImageCollector::DOCTEST_ANON_FUNC_508() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_510() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_512() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_514() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_516() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_518() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_518() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      ...
+  "SkinnedMeshCaptureTestRecordingScope::SkinnedMeshCaptureTestRecordingScope()", referenced from:
+      DOCTEST_ANON_FUNC_504() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_504() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestRDPoolTestAccess::check_buffer_qualification() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestRDPoolTestAccess::check_buffer_qualification() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestRecordingScope::~SkinnedMeshCaptureTestRecordingScope()", referenced from:
+      DOCTEST_ANON_FUNC_504() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_504() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestRDPoolTestAccess::check_buffer_qualification() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestRDPoolTestAccess::check_buffer_qualification() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestReadbackCollector::mark_enqueued(SkinnedMeshCaptureTestReadbackIdentity const&)", referenced from:
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_599() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_601() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_601() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_601() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_607() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_607() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_607() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      ...
+  "SkinnedMeshCaptureTestReadbackCollector::cancel_unqueued(SkinnedMeshCaptureTestReadbackIdentity const&)", referenced from:
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_601() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_601() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_605() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_605() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_615() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestReadbackCollector::close()", referenced from:
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_599() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_601() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_601() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_603() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_603() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_605() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_607() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      ...
+  "SkinnedMeshCaptureTestReadbackCollector::reserve(SkinnedMeshCaptureTestReadbackIdentity const&, Callable&)", referenced from:
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_599() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_601() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_601() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_601() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_603() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_603() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_603() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      ...
+  "SkinnedMeshCaptureTestReadbackCollector::SkinnedMeshCaptureTestReadbackCollector(unsigned long long, unsigned long long, bool)", referenced from:
+      TestSkinnedMeshCaptureTestRDPool::DOCTEST_ANON_FUNC_593() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_599() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_601() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_601() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_603() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_603() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_605() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      ...
+  "ForceLink::force_link_test_capture_frame()", referenced from:
+      TestSkinnedMeshCaptureTestProbeRegistration::$_14::operator()() const in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "ForceLink::force_link_test_capture_transport_queue()", referenced from:
+      TestSkinnedMeshCaptureTestProbeRegistration::$_14::operator()() const in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "ForceLink::force_link_test_skinned_mesh_capture_test_probe_fixture()", referenced from:
+      TestSkinnedMeshCaptureTestProbeRegistration::$_14::operator()() const in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestRDPool::qualify_buffer(RID) const", referenced from:
+      SkinnedMeshCaptureTestRDPoolTestAccess::check_buffer_qualification() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestRDPoolTestAccess::check_buffer_qualification() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestRDPoolTestAccess::check_buffer_qualification() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestRDPool::record_boundary(RID, unsigned long long, unsigned long long&, unsigned long long&) const", referenced from:
+      SkinnedMeshCaptureTestRDPoolTestAccess::check_buffer_qualification() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestRDPoolTestAccess::check_buffer_qualification() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestRDPoolTestAccess::check_buffer_qualification() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestRDPoolTestAccess::check_buffer_qualification() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestRDPool::qualify_readback(SkinnedMeshCaptureTestReadbackIdentity const&) const", referenced from:
+      SkinnedMeshCaptureTestRDPoolTestAccess::check_buffer_qualification() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestRDPoolTestAccess::check_buffer_qualification() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestRDPoolTestAccess::check_buffer_qualification() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestRDPoolTestAccess::check_buffer_qualification() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestRDPool::qualify_collector(unsigned int, SkinnedMeshCaptureTestReadbackCollector const&) const", referenced from:
+      SkinnedMeshCaptureTestRDPoolTestAccess::check_buffer_qualification() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestRDPoolTestAccess::check_buffer_qualification() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestRDPoolTestAccess::check_buffer_qualification() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestRDPool::resolve_readback_identity(unsigned int, bool, unsigned long long, unsigned long long, unsigned long long, SkinnedMeshCaptureTestReadbackIdentity&) const", referenced from:
+      SkinnedMeshCaptureTestRDPoolTestAccess::check_buffer_qualification() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestRDPoolTestAccess::check_buffer_qualification() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestRDPoolTestAccess::check_buffer_qualification() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestRDPoolTestAccess::check_buffer_qualification() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestCapture::is_poisoned() const", referenced from:
+      DOCTEST_ANON_FUNC_539() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_539() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_539() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestFixture::take_result() const", referenced from:
+      TestSkinnedMeshCaptureTestNativeFixture::DOCTEST_ANON_FUNC_527() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestNativeFixture::DOCTEST_ANON_FUNC_533() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestNativeFixture::DOCTEST_ANON_FUNC_533() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestNativeFixture::DOCTEST_ANON_FUNC_535() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_539() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_539() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_539() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_539() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_539() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_539() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_539() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      ...
+  "SkinnedMeshCaptureTestFixture::action_complete(SkinnedMeshCaptureTestSessionStatus const&) const", referenced from:
+      SkinnedMeshCaptureTestFixtureTestAccess::check_recording_gate(SkinnedMeshCaptureTestFixture*) in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestFixtureTestAccess::check_recording_gate(SkinnedMeshCaptureTestFixture*) in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestFixtureTestAccess::check_recording_gate(SkinnedMeshCaptureTestFixture*) in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      SkinnedMeshCaptureTestFixtureTestAccess::check_recording_gate(SkinnedMeshCaptureTestFixture*) in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestCaptureWriter::failed() const", referenced from:
+      DOCTEST_ANON_FUNC_494() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_496() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestNativeSession::status() const", referenced from:
+      DOCTEST_ANON_FUNC_541() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_545() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_545() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_545() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_547() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_547() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_547() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      ...
+  "SkinnedMeshCaptureTestImageCollector::copy(unsigned int, Vector<unsigned char>&) const", referenced from:
+      TestImageCollector::DOCTEST_ANON_FUNC_508() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_508() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_510() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_512() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_514() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_514() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_514() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      ...
+  "SkinnedMeshCaptureTestImageCollector::drained() const", referenced from:
+      TestImageCollector::DOCTEST_ANON_FUNC_508() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_508() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_510() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_510() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_512() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_514() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_514() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_514() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_514() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      ...
+  "SkinnedMeshCaptureTestImageCollector::poisoned() const", referenced from:
+      TestImageCollector::DOCTEST_ANON_FUNC_508() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_510() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_512() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestImageCollector::DOCTEST_ANON_FUNC_518() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestRenderingDeviceFrameWait::DOCTEST_ANON_FUNC_18() in libtests.macos.editor.dev.arm64.a[204](test_rendering_device_frame_wait.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestReadbackIdentity::operator==(SkinnedMeshCaptureTestReadbackIdentity const&) const", referenced from:
+      decltype((void)(SkinnedMeshCaptureTestReadbackIdentity const& doctest::detail::declval<SkinnedMeshCaptureTestReadbackIdentity const&>()() == doctest::detail::declval<SkinnedMeshCaptureTestReadbackIdentity const&>()), doctest::detail::Result{}) doctest::detail::Expression_lhs<SkinnedMeshCaptureTestReadbackIdentity const&>::operator==<SkinnedMeshCaptureTestReadbackIdentity const&>(SkinnedMeshCaptureTestReadbackIdentity const&) in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+  "SkinnedMeshCaptureTestReadbackCollector::validate_pair(SkinnedMeshCaptureTestReadbackIdentity const&, SkinnedMeshCaptureTestReadbackIdentity const&) const", referenced from:
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_609() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_609() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_609() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_609() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_611() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_611() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_613() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_613() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_613() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_613() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      ...
+  "SkinnedMeshCaptureTestReadbackCollector::copy_completed(SkinnedMeshCaptureTestReadbackIdentity const&, Vector<unsigned char>&) const", referenced from:
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_599() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_599() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_601() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_601() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_601() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_601() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_605() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      ...
+  "SkinnedMeshCaptureTestReadbackCollector::drained() const", referenced from:
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_599() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_599() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_601() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_601() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_601() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_601() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_601() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      ...
+  "SkinnedMeshCaptureTestReadbackCollector::poisoned() const", referenced from:
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_599() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_601() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_601() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_605() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_605() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      TestSkinnedMeshCaptureTestReadbackCollector::DOCTEST_ANON_FUNC_607() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      DOCTEST_ANON_FUNC_611() in libtests.macos.editor.dev.arm64.a[3](test_main.macos.editor.dev.arm64.o)
+      ...
+ld: symbol(s) not found for architecture arm64
+clang++: error: linker command failed with exit code 1 (use -v to see invocation)

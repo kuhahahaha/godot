@@ -1,0 +1,62 @@
+{
+  "inputs_before": {
+    "/private/tmp/b4-material-overlay-20261030/godot-green-v2": "f8164151e8ec5b762770b75fe5b084da5a9227ed5c6d7bdd7572f23fbc29817d",
+    "/private/tmp/b4-material-sampling-20261030/project.godot": "687db46d34386880bd2eb966e5b50d3338a90bc0e1cbca9903f556917fbeb102",
+    "/private/tmp/b4-material-sampling-20261030/probe.gdextension": "6e7b0dd0c1b1be848bb7d7144318e1cdb5b2ab719b6f76653e78711e9bd388e5",
+    "/private/tmp/b4-material-sampling-20261030/probe.dylib": "42d5397ba935664d7228528d3cf0d414d685ad7735c6752a916eef0486ede1c0",
+    "/private/tmp/b4-material-sampling-20261030/probe.gd": "f8841fad3cffa48deb3abc2168afa53599b74d07ea16671b1265cef6c4dd4563"
+  },
+  "inputs_after": {
+    "/private/tmp/b4-material-overlay-20261030/godot-green-v2": "f8164151e8ec5b762770b75fe5b084da5a9227ed5c6d7bdd7572f23fbc29817d",
+    "/private/tmp/b4-material-sampling-20261030/project.godot": "687db46d34386880bd2eb966e5b50d3338a90bc0e1cbca9903f556917fbeb102",
+    "/private/tmp/b4-material-sampling-20261030/probe.gdextension": "6e7b0dd0c1b1be848bb7d7144318e1cdb5b2ab719b6f76653e78711e9bd388e5",
+    "/private/tmp/b4-material-sampling-20261030/probe.dylib": "42d5397ba935664d7228528d3cf0d414d685ad7735c6752a916eef0486ede1c0",
+    "/private/tmp/b4-material-sampling-20261030/probe.gd": "f8841fad3cffa48deb3abc2168afa53599b74d07ea16671b1265cef6c4dd4563"
+  },
+  "runs": [
+    {
+      "mode": "mobile",
+      "command": [
+        "/private/tmp/b4-material-overlay-20261030/godot-green-v2",
+        "--path",
+        "/private/tmp/b4-material-sampling-20261030",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "safe",
+        "--script",
+        "probe.gd"
+      ],
+      "rc": 0,
+      "markers": [
+        "Metal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M3 Pro (Apple9)",
+        "B4_DEFAULT_TEXTURE_PIXELS black=(0.0, 0.0, 0.0, 1.0) white=(1.0, 1.0, 1.0, 1.0) external_black=(0.0, 0.0, 0.0, 1.0) external_white=(1.0, 1.0, 1.0, 1.0) changed=true",
+        "B4_SAMPLE_UNLOAD=0"
+      ]
+    },
+    {
+      "mode": "forward_plus",
+      "command": [
+        "/private/tmp/b4-material-overlay-20261030/godot-green-v2",
+        "--path",
+        "/private/tmp/b4-material-sampling-20261030",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "forward_plus",
+        "--render-thread",
+        "safe",
+        "--script",
+        "probe.gd"
+      ],
+      "rc": 0,
+      "markers": [
+        "Metal 4.0 - Forward+ - Using Device #0: Apple - Apple M3 Pro (Apple9)",
+        "B4_DEFAULT_TEXTURE_PIXELS black=(0.0, 0.0, 0.0, 1.0) white=(1.0, 1.0, 1.0, 1.0) external_black=(0.0, 0.0, 0.0, 1.0) external_white=(1.0, 1.0, 1.0, 1.0) changed=true",
+        "B4_SAMPLE_UNLOAD=0"
+      ]
+    }
+  ]
+}

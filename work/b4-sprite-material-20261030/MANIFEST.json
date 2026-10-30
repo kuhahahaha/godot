@@ -1,0 +1,124 @@
+{
+  "files": {
+    "CANDIDATE.patch.b64": {
+      "sha256": "201f543f3e31b95b86fe2e5fcc5bbe8181155f2ddd5a634e43e6d9654e564a1f",
+      "bytes": 8547
+    },
+    "COMPILE_V2.json": {
+      "sha256": "2f902a29fbdf9f47046e808d43fc1bd6d7a6d6386d357f2f3f3a760ec48e01af",
+      "bytes": 4869
+    },
+    "FIRST_LINK_FAILURE.txt": {
+      "sha256": "3a1b1d02817083d3fcd90c9079151dc25668f3c50193153c8d6ae9f27fdc450b",
+      "bytes": 81822
+    },
+    "FIXTURE_V2_COMPILE2.json": {
+      "sha256": "6b16c94eed2a498ac33383a8a7af0d536e91542e09f6d1d1738faf1bfce86f45",
+      "bytes": 2056
+    },
+    "FIXTURE_V2_COMPILE2.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "GREEN_V2.txt": {
+      "sha256": "fe17ec9e3f6a4af2532af89f5bf8abf1a492997e5d3ac0a85d47af47c39d8452",
+      "bytes": 3107
+    },
+    "GREEN_V2_LINK.json": {
+      "sha256": "85bfb2611c270418364ff4d81543cdd5eff345067902977ca2523817f98a2e88",
+      "bytes": 44364
+    },
+    "GREEN_V2_LINK.txt": {
+      "sha256": "a6baf3a303a199da55db5392f07b943b5bfbdc59473c3ad7ce5f2e48e23eace3",
+      "bytes": 224
+    },
+    "IDENTITY.json": {
+      "sha256": "23dc189f57ad8005b89ab23441945976396d47dd61a9f07b54f826dc7e289a38",
+      "bytes": 2014
+    },
+    "OLD_HOST_LOAD_FAILURE.txt": {
+      "sha256": "34ae1bb7c79dcb1cba26cb7aa9ea4d077ba8c8d104568bec1215cc7f837eb536",
+      "bytes": 348
+    },
+    "PREK.txt": {
+      "sha256": "29d43710a5c4ee6e83e85451deb75248024430edec304255cad727e551aa6a74",
+      "bytes": 1760
+    },
+    "RECEIPT.md": {
+      "sha256": "ba30a0df8c5e487b4c7cb77a046354a3827b85eda77c70b87532c4c76118b9af",
+      "bytes": 5507
+    },
+    "RED_V2.txt": {
+      "sha256": "b4c9cd68c4793d384316a938ad51c0f1fb77f50d3f9bba7e4ea028149dd7743c",
+      "bytes": 1784
+    },
+    "RED_V2_LINK.json": {
+      "sha256": "17f8c54a494461eb152aa02f376e72f884113efc48899cde0912e7c5848a61f3",
+      "bytes": 43556
+    },
+    "RED_V2_LINK.txt": {
+      "sha256": "a6baf3a303a199da55db5392f07b943b5bfbdc59473c3ad7ce5f2e48e23eace3",
+      "bytes": 224
+    },
+    "SAMPLE.json": {
+      "sha256": "8c911defe1ae153994fa7282a90fb512af31a13a903241d949083d6856a66828",
+      "bytes": 2820
+    },
+    "SAMPLE_forward_plus.txt": {
+      "sha256": "55e21e20c770c69ec6d360288d962ecc2feb8b80b9371ad20538fcb7997f546b",
+      "bytes": 2895
+    },
+    "SAMPLE_mobile.txt": {
+      "sha256": "4070eee4c3fa6971dea74bd36e955811f4a92a26a8f028ea1b5394bbdd8efa98",
+      "bytes": 2901
+    },
+    "V2_RENDER.json": {
+      "sha256": "abc9888e1d803f67d121dbbf387ba38b46bae822977e478176576694127ddf05",
+      "bytes": 3016
+    },
+    "V2_RENDER_forward_plus.txt": {
+      "sha256": "ed138fe6fa80a8c0d6fda7353d72af987a5709de80dd04db6e33c9431548b17b",
+      "bytes": 2807
+    },
+    "V2_RENDER_mobile.txt": {
+      "sha256": "16010373ef267bd24236787b2ba4c68821bfaec99af29f46a502e53fb5100ffc",
+      "bytes": 2813
+    },
+    "V2_TESTS.json": {
+      "sha256": "339b92288afbfe3901639f00013d6d5a1f98fdf31d9b4727aa7ae12207c8d988",
+      "bytes": 2440
+    },
+    "V2_b4.txt": {
+      "sha256": "8ee262c1e0b0206fc4cc228faf746af49dc503e3ce4be0bf7460f60c83dca652",
+      "bytes": 722
+    },
+    "V2_rd.txt": {
+      "sha256": "ab3bfc2768f4124667463c3a70328d4ffd8c0b60f1e50a518713fce12cc4510a",
+      "bytes": 302
+    },
+    "V2_shader.txt": {
+      "sha256": "c0728597f31c5260c3441d677915a57a1cb03522006769650ab81cd6599f2089",
+      "bytes": 410
+    },
+    "foreign_material_fixture.cpp.b64": {
+      "sha256": "9ada06d02d96598066cbb6334574662d3fa06b952e9f75114cd9b5d5688c6a25",
+      "bytes": 18018
+    },
+    "material_probe.gd": {
+      "sha256": "d925426018b617d0b9608baebc6e245833171b42059e967bf03fe059f57d5c03",
+      "bytes": 1816
+    },
+    "material_storage_compile_v2.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "mesh_storage_compile_v2.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "sampling_probe.gd": {
+      "sha256": "f8841fad3cffa48deb3abc2168afa53599b74d07ea16671b1265cef6c4dd4563",
+      "bytes": 2132
+    }
+  }
+}
