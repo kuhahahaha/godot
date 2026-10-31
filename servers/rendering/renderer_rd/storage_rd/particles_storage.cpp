@@ -830,7 +830,7 @@ bool ParticlesStorage::_particles_get_history_size(double p_trail_lifetime, int 
 		return false;
 	}
 	const double history_size = p_trail_lifetime * double(p_fixed_fps);
-	if (!Math::is_finite(history_size) || history_size > double(UINT32_MAX)) {
+	if (!Math::is_finite(history_size) || history_size > double(INT_MAX)) {
 		return false;
 	}
 	r_size = MAX(uint32_t(1), uint32_t(history_size));

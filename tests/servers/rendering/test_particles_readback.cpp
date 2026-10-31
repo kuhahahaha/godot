@@ -178,8 +178,10 @@ TEST_CASE("[ParticlesReadback] data size includes trails and user data with a bo
 	uint32_t history_size = 0;
 	CHECK(RendererRD::TestParticlesReadbackAccess::history_size(0.3, 60, history_size));
 	CHECK(history_size == 18);
-	CHECK(RendererRD::TestParticlesReadbackAccess::history_size(double(UINT32_MAX) / double(INT32_MAX), INT32_MAX, history_size));
-	CHECK(history_size == UINT32_MAX);
+	CHECK(RendererRD::TestParticlesReadbackAccess::history_size(double(INT32_MAX), 1, history_size));
+	CHECK(history_size == INT32_MAX);
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::history_size(double(INT32_MAX) + 1.0, 1, history_size));
+	CHECK(history_size == 0);
 	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::history_size(10.0, -1, history_size));
 	CHECK(history_size == 0);
 	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::history_size(Math::NaN, 60, history_size));
