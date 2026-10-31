@@ -1286,7 +1286,10 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 	if (sub_emitter && sub_emitter->emission_storage_buffer.is_valid()) {
 		//	print_line("updating subemitter buffer");
 		int32_t zero[4] = { 0, sub_emitter->amount, 0, 0 };
-		RD::get_singleton()->buffer_update(sub_emitter->emission_storage_buffer, 0, sizeof(uint32_t) * 4, zero);
+		if (RD::get_singleton()->buffer_update(sub_emitter->emission_storage_buffer, 0, sizeof(uint32_t) * 4, zero) != OK) {
+			ERR_PRINT("Failed to reset particle sub-emitter buffer.");
+			return false;
+		}
 		push_constant.can_emit = true;
 
 		if (sub_emitter->emitting) {
@@ -1304,7 +1307,10 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 	}
 
 	if (p_particles->emission_buffer && p_particles->emission_buffer->particle_count) {
-		RD::get_singleton()->buffer_update(p_particles->emission_storage_buffer, 0, sizeof(uint32_t) * 4 + sizeof(ParticleEmissionBuffer::Data) * p_particles->emission_buffer->particle_count, p_particles->emission_buffer);
+		if (RD::get_singleton()->buffer_update(p_particles->emission_storage_buffer, 0, sizeof(uint32_t) * 4 + sizeof(ParticleEmissionBuffer::Data) * p_particles->emission_buffer->particle_count, p_particles->emission_buffer) != OK) {
+			ERR_PRINT("Failed to update particle emission buffer.");
+			return false;
+		}
 		p_particles->emission_buffer->particle_count = 0;
 	}
 
@@ -1324,7 +1330,10 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 		p_particles->trail_params[0] = p_particles->frame_history[0];
 	}
 
-	RD::get_singleton()->buffer_update(p_particles->frame_params_buffer, 0, sizeof(ParticlesFrameParams) * p_particles->trail_params.size(), p_particles->trail_params.ptr());
+	if (RD::get_singleton()->buffer_update(p_particles->frame_params_buffer, 0, sizeof(ParticlesFrameParams) * p_particles->trail_params.size(), p_particles->trail_params.ptr()) != OK) {
+		ERR_PRINT("Failed to update particle frame parameters buffer.");
+		return false;
+	}
 
 	ParticleProcessMaterialData *m = static_cast<ParticleProcessMaterialData *>(material_storage->material_get_data(p_particles->process_material, MaterialStorage::SHADER_TYPE_PARTICLES));
 	if (!m) {
@@ -1734,7 +1743,10 @@ void ParticlesStorage::update_particles() {
 					RendererRD::MaterialStorage::store_transform(particles->trail_bind_poses[i], &particles_shader.pose_update_buffer[i * 16]);
 				}
 
-				RD::get_singleton()->buffer_update(particles->trail_bind_pose_buffer, 0, particles->trail_bind_poses.size() * 16 * sizeof(float), particles_shader.pose_update_buffer.ptr());
+				if (RD::get_singleton()->buffer_update(particles->trail_bind_pose_buffer, 0, particles->trail_bind_poses.size() * 16 * sizeof(float), particles_shader.pose_update_buffer.ptr()) != OK) {
+					ERR_PRINT("Failed to update particle trail bind pose buffer.");
+					continue;
+				}
 			}
 		}
 
