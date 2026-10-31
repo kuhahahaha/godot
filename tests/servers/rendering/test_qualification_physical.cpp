@@ -2031,7 +2031,7 @@ public:
 		device.is_main_instance = false;
 		memdelete(registry);
 	}
-	static void qrt_create_error_has_same_delivery_before_and_after_driver(RenderingDevice &device, RenderingDeviceDriver &driver, bool &fail_create, int &creates, bool post_driver) {
+	static void qrt_create_error_has_same_delivery_before_and_after_driver(RenderingDevice &device, RenderingDeviceDriver &driver, bool &fail_create, int &creates, bool post_driver, bool retire_existing = false) {
 		using namespace GDExtensionDeviceExit;
 		auto *registry = memnew(Registry);
 		auto *previous = RenderingDevice::singleton;
@@ -2064,10 +2064,15 @@ public:
 		const GDExtensionQualificationBridgeRefV1 ref{ 71, 11 };
 		device.draw_graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
 		device.draw_graph.begin();
+		GDExtensionStorageBackingV1 existing_backing = {};
+		if (retire_existing) {
+			const GDExtensionStorageCreateRequestV1 existing_create{ { 1, 16, 0 }, 128, 4, 1, 42, 1, 0 };
+			REQUIRE(registry->qualification_storage_create(ref, &existing_create, &existing_backing).native_error == OK);
+		}
 		const GDExtensionQualificationRtConfigV1 config{ { 1, 40, 0 }, 1, 312, 200, 1, 256 };
 		REQUIRE(registry->qualification_rt_configure(ref, &config).native_error == OK);
 		const GDExtensionStorageCreateRequestV1 create{ { 1, 16, 0 }, 128, 3, 1, 41, 1, 0 };
-		const GDExtensionQualificationRtRequestV1 header{ { 1, 56, 0 }, 2, 0, 1, 0, sizeof(create), sizeof(GDExtensionStorageBackingV1), 0, 0 };
+		const GDExtensionQualificationRtRequestV1 header{ { 1, 56, 0 }, 2, 0, retire_existing ? UINT64_MAX - 1 : 1, 0, sizeof(create), sizeof(GDExtensionStorageBackingV1), 0, 0 };
 		GDExtensionQualificationRtRefV1 rt = {};
 		REQUIRE(registry->qualification_rt_reserve(ref, &header, &create, nullptr, &rt).native_error == OK);
 		const int before = creates;
@@ -2085,7 +2090,7 @@ public:
 		alignas(8) uint8_t bytes[sizeof(GDExtensionStorageBackingV1)] = {};
 		REQUIRE(registry->qualification_rt_observe(ref, rt, &observed, bytes, sizeof(bytes), nullptr, 0).native_error == OK);
 		CHECK(observed.kind == 2);
-		CHECK(observed.operation_serial == 1);
+		CHECK(observed.operation_serial == header.operation_serial);
 		CHECK(observed.state == 2);
 		CHECK(observed.result_bytes == sizeof(bytes));
 		CHECK(observed.call_result.native_error == FAILED);
@@ -2094,10 +2099,42 @@ public:
 			CHECK(byte == 0);
 		}
 		CHECK(creates == before + (post_driver ? 1 : 0));
-		CHECK(bridge->storage[0] == nullptr);
+		CHECK(bridge->storage[retire_existing ? 1 : 0] == nullptr);
 		REQUIRE(registry->qualification_rt_release(ref, rt).native_error == OK);
 		GDExtensionQualificationRtRefV1 stale = {};
 		CHECK(registry->qualification_rt_reserve(ref, &header, &create, nullptr, &stale).native_error == ERR_DOES_NOT_EXIST);
+		if (retire_existing) {
+			const GDExtensionStorageRetireRequestV1 retire{ { 1, 16, 0 }, existing_backing.backing, existing_backing.rid, existing_backing.backing_serial, 4, 1, 42, 2, 0 };
+			const GDExtensionQualificationRtRequestV1 retire_header{ { 1, 56, 0 }, 3, 0, UINT64_MAX, 0, sizeof(retire), sizeof(GDExtensionStorageRetireRefV1) + sizeof(GDExtensionStorageRetireReportV1), 0, 0 };
+			GDExtensionQualificationRtRefV1 retire_rt = {};
+			REQUIRE(registry->qualification_rt_reserve(ref, &retire_header, &retire, nullptr, &retire_rt).native_error == OK);
+			bridge->rt->active = true;
+			bridge->rt->state = 1;
+			bridge->rt->queued = true;
+			++bridge->children;
+			++record.private_refs;
+			registry->qualification_rt_dispatch(bridge->serial, retire_rt.handle_serial);
+			alignas(8) uint8_t retire_bytes[sizeof(GDExtensionStorageRetireRefV1) + sizeof(GDExtensionStorageRetireReportV1)] = {};
+			GDExtensionQualificationRtObservationV1 retire_observed = {};
+			REQUIRE(registry->qualification_rt_observe(ref, retire_rt, &retire_observed, retire_bytes, sizeof(retire_bytes), nullptr, 0).native_error == OK);
+			CHECK(retire_observed.operation_serial == UINT64_MAX);
+			CHECK(retire_observed.state == 2);
+			CHECK(retire_observed.call_result.native_error == OK);
+			GDExtensionStorageRetireRefV1 retired = {};
+			memcpy(&retired, retire_bytes, sizeof(retired));
+			REQUIRE(retired.registry_instance == 71);
+			REQUIRE(retired.handle_serial != 0);
+			REQUIRE(registry->qualification_rt_release(ref, retire_rt).native_error == OK);
+			device._free_pending_resources(0);
+			auto *child = bridge->storage[0];
+			REQUIRE(child != nullptr);
+			registry->qualification_retire_step(bridge, &device, child->serial, 1);
+			const GDExtensionQualificationBudgetV1 budget{ { 1, 16, 0 }, 1, 1000, 0 };
+			GDExtensionStorageRetireReportV1 report = {};
+			REQUIRE(registry->qualification_storage_retire_observe(ref, retired, &budget, &report).native_error == OK);
+			CHECK(report.state == 1);
+			REQUIRE(registry->qualification_storage_retire_release(ref, retired).native_error == OK);
+		}
 		REQUIRE(registry->qualification_close(ref).native_error == OK);
 		RenderingDevice::singleton = previous;
 		device.is_main_instance = false;
@@ -4422,6 +4459,18 @@ TEST_CASE("[Qualification][E05] QRT create error bytes do not identify driver at
 		TestQualificationPhysicalAccess::qrt_create_error_has_same_delivery_before_and_after_driver(device, driver, driver.fail_buffer_create, driver.creates, post_driver);
 		CHECK(driver.creates == (post_driver ? 1 : 0));
 		CHECK(driver.frees == 0);
+		TestQualificationPhysicalAccess::detach(device);
+	}
+}
+
+TEST_CASE("[Qualification][E05] failed create at caller limit leaves final serial for existing retirement") {
+	for (bool post_driver : { false, true }) {
+		RenderingDevice device;
+		TestQualificationPhysical::Driver driver;
+		TestQualificationPhysicalAccess::attach(device, driver);
+		TestQualificationPhysicalAccess::qrt_create_error_has_same_delivery_before_and_after_driver(device, driver, driver.fail_buffer_create, driver.creates, post_driver, true);
+		CHECK(driver.creates == (post_driver ? 2 : 1));
+		CHECK(driver.frees == 1);
 		TestQualificationPhysicalAccess::detach(device);
 	}
 }
