@@ -745,7 +745,11 @@ bool ParticlesStorage::_particles_get_data_size(uint64_t p_amount, uint64_t p_us
 		return false;
 	}
 	r_size = total_amount * particle_data_size;
-	return r_size <= UINT32_MAX;
+	if (r_size > UINT32_MAX) {
+		r_size = 0;
+		return false;
+	}
+	return true;
 }
 
 bool ParticlesStorage::_particles_get_data_size(const Particles *p_particles, uint64_t &r_size) {
@@ -780,7 +784,11 @@ bool ParticlesStorage::_particles_get_emission_data_size(uint64_t p_amount, uint
 		return false;
 	}
 	r_size = sizeof(uint32_t) * 4 + p_amount * sizeof(ParticleEmissionBuffer::Data);
-	return r_size <= UINT32_MAX;
+	if (r_size > UINT32_MAX) {
+		r_size = 0;
+		return false;
+	}
+	return true;
 }
 
 bool ParticlesStorage::_particles_get_trail_bind_pose_data_size(uint64_t p_count, uint64_t &r_size) {
@@ -789,7 +797,11 @@ bool ParticlesStorage::_particles_get_trail_bind_pose_data_size(uint64_t p_count
 		return false;
 	}
 	r_size = p_count * 16 * sizeof(float);
-	return r_size <= UINT32_MAX;
+	if (r_size > UINT32_MAX) {
+		r_size = 0;
+		return false;
+	}
+	return true;
 }
 
 bool ParticlesStorage::_particles_get_frame_params_data_size(uint64_t p_count, uint64_t &r_size) {
@@ -798,7 +810,11 @@ bool ParticlesStorage::_particles_get_frame_params_data_size(uint64_t p_count, u
 		return false;
 	}
 	r_size = p_count * sizeof(ParticlesFrameParams);
-	return r_size <= UINT32_MAX;
+	if (r_size > UINT32_MAX) {
+		r_size = 0;
+		return false;
+	}
+	return true;
 }
 
 bool ParticlesStorage::_particles_get_trail_history_index(uint64_t p_index, uint64_t p_history_size, uint64_t p_trail_size, uint64_t &r_index) {

@@ -100,6 +100,8 @@ TEST_CASE("[ParticlesReadback] data size includes trails and user data with a bo
 
 	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::raw_data_size(UINT32_MAX, 0, UINT32_MAX, size));
 	CHECK(size == 0);
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::raw_data_size(1U << 26, 0, 1, size));
+	CHECK(size == 0);
 
 	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::instance_data_size(UINT64_MAX, 3, false, size));
 	CHECK(size == 0);
@@ -145,6 +147,8 @@ TEST_CASE("[ParticlesReadback] data size includes trails and user data with a bo
 	CHECK(size == RendererRD::TestParticlesReadbackAccess::emission_entry_size() * 2 + sizeof(uint32_t) * 4);
 	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::emission_data_size(UINT64_MAX, size));
 	CHECK(size == 0);
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::emission_data_size(1U << 26, size));
+	CHECK(size == 0);
 
 	CHECK(RendererRD::TestParticlesReadbackAccess::trail_bind_pose_data_size(2, size));
 	CHECK(size == 2 * 16 * sizeof(float));
@@ -152,12 +156,16 @@ TEST_CASE("[ParticlesReadback] data size includes trails and user data with a bo
 	CHECK(size == 0);
 	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::trail_bind_pose_data_size(UINT64_MAX, size));
 	CHECK(size == 0);
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::trail_bind_pose_data_size(1U << 26, size));
+	CHECK(size == 0);
 
 	CHECK(RendererRD::TestParticlesReadbackAccess::frame_params_data_size(2, size));
 	CHECK(size == 2 * RendererRD::TestParticlesReadbackAccess::frame_params_entry_size());
 	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::frame_params_data_size(0, size));
 	CHECK(size == 0);
 	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::frame_params_data_size(UINT64_MAX, size));
+	CHECK(size == 0);
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::frame_params_data_size(1U << 26, size));
 	CHECK(size == 0);
 
 	uint64_t history_index = 0;
