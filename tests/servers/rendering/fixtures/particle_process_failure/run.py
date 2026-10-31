@@ -19,7 +19,7 @@ def harness(source):
     start = source.index(marker, process_start)
     end = source.index('\n}\n', start)
     body = source[start:end]
-    body = body.replace('\treturn;', '\treturn false;').replace('return fail_process();', 'return false;')
+    body = body.replace('\treturn;', '\treturn false;').replace('return fail_process();', 'return false;').replace('_particles_commit_process_state(p_particles, sub_emitter, sub_emitter_was_emitting, true);', 'p_particles->force_sub_emit = false;')
     body += '\n\treturn true;\n'
     return r'''
 #include <cstdio>

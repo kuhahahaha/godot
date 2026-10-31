@@ -890,6 +890,26 @@ void ParticlesStorage::particles_set_canvas_sdf_collision(RID p_particles, bool 
 	particles->sdf_collision_texture = p_texture;
 }
 
+void ParticlesStorage::_particles_commit_process_state(Particles *p_particles, Particles *p_sub_emitter, bool p_sub_emitter_was_emitting, bool p_success) {
+	if (!p_success) {
+		return;
+	}
+	p_particles->force_sub_emit = false;
+	if (p_particles->emission_buffer && p_particles->emission_buffer->particle_count) {
+		p_particles->emission_buffer->particle_count = 0;
+	}
+	p_particles->clear = false;
+	if (p_sub_emitter && p_sub_emitter->emission_storage_buffer.is_valid()) {
+		if (p_sub_emitter_was_emitting) {
+			p_sub_emitter->emitting = false;
+			p_sub_emitter->clear = true;
+		}
+		p_sub_emitter->inactive = false;
+		p_sub_emitter->inactive_time = 0;
+		p_sub_emitter->force_sub_emit = true;
+	}
+}
+
 bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta) {
 	TextureStorage *texture_storage = TextureStorage::get_singleton();
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
@@ -1418,21 +1438,7 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 	// Commit CPU-side work items only after every required GPU update and the
 	// compute list recording succeeded. Until this point a retry must observe
 	// the original emission, clear, and sub-emitter state unchanged.
-	p_particles->force_sub_emit = false;
-	if (p_particles->emission_buffer && p_particles->emission_buffer->particle_count) {
-		p_particles->emission_buffer->particle_count = 0;
-	}
-	p_particles->clear = false;
-	if (sub_emitter && sub_emitter->emission_storage_buffer.is_valid()) {
-		if (sub_emitter_was_emitting) {
-			sub_emitter->emitting = false;
-			sub_emitter->clear = true; //will need to clear if it was emitting, sorry
-		}
-		// Make sure the sub emitter processes particles too.
-		sub_emitter->inactive = false;
-		sub_emitter->inactive_time = 0;
-		sub_emitter->force_sub_emit = true;
-	}
+	_particles_commit_process_state(p_particles, sub_emitter, sub_emitter_was_emitting, true);
 	return true;
 }
 
