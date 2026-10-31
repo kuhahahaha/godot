@@ -12,7 +12,7 @@ def main():
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--renderer", choices=["mobile", "forward_plus"], required=True)
     parser.add_argument(
-        "--dimension", choices=["2d", "3d", "motion_retry", "motion_control", "uniform_retry"], required=True
+        "--dimension", choices=["2d", "3d", "motion_retry", "motion_control", "uniform_retry", "late_retry"], required=True
     )
     parser.add_argument("--log", type=Path, required=True)
     args = parser.parse_args()
@@ -50,6 +50,24 @@ def main():
     red = re.findall(r"^PARTICLE_BUFFER_FAILURE_RECOVERED (\d+)$", output, re.MULTILINE)
     ready = re.findall(r"^PARTICLE_BUFFER_MOTION_READY (\d+)$", output, re.MULTILINE)
     errors = re.findall(r"^ERROR: (.*)$", output, re.MULTILINE)
+    if args.dimension == "late_retry":
+        recovered = re.findall(r"^PARTICLE_LATE_RECOVERED (\d+)$", output, re.MULTILINE)
+        passed = (
+            result.returncode == 0
+            and "Metal 4.0" in output
+            and "Using Device #0: Apple" in output
+            and ("Forward Mobile" if args.renderer == "mobile" else "Forward+") in output
+            and output.count("PARTICLE_LATE_FAILURE_BEFORE") == 1
+            and output.count("PARTICLE_LATE_FAILURE_AFTER") == 1
+            and len(recovered) == 1
+            and int(recovered[0]) > 0
+            and errors == ["Test-only particle simulation rejection after clear."]
+            and "SCRIPT ERROR" not in output
+        )
+        print(
+            f"renderer={args.renderer} dimension=late_retry rc={result.returncode} recovered_red={recovered} errors={errors} pass={passed}"
+        )
+        return 0 if passed else 1
     if args.dimension == "uniform_retry":
         recovered = re.findall(r"^PARTICLE_UNIFORM_RECOVERED (\d+)$", output, re.MULTILINE)
         passed = (

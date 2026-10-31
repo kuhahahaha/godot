@@ -1483,6 +1483,14 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 
 	p_particles->clear = false;
 
+#ifdef TESTS_ENABLED
+	if (OS::get_singleton()->get_environment("GODOT_TEST_PARTICLES_REJECT_AFTER_CLEAR_ONCE") == "1") {
+		OS::get_singleton()->unset_environment("GODOT_TEST_PARTICLES_REJECT_AFTER_CLEAR_ONCE");
+		ERR_PRINT("Test-only particle simulation rejection after clear.");
+		return false;
+	}
+#endif
+
 	if (p_particles->trail_params.size() > 1) {
 		//fill the trail params
 		for (uint32_t i = 0; i < p_particles->trail_params.size(); i++) {
@@ -1994,6 +2002,7 @@ void ParticlesStorage::update_particles() {
 			}
 			particles->speed_scale = tmp_scale;
 			if (!pre_process_ok) {
+				particles->clear = true;
 				continue;
 			}
 		}
@@ -2012,19 +2021,23 @@ void ParticlesStorage::update_particles() {
 			}
 			todo = particles->frame_remainder + delta * time_scale;
 
+			bool process_ok = true;
 			while (todo >= frame_time || particles->clear) {
 				if (!_particles_process(particles, frame_time)) {
+					process_ok = false;
 					break;
 				}
 				todo -= frame_time;
 			}
-			if (particles->clear) {
+			if (!process_ok) {
+				particles->clear = true;
 				continue;
 			}
 
 			particles->frame_remainder = todo;
 		} else {
 			if (!_particles_process(particles, RendererCompositorRD::get_singleton()->get_frame_delta_time() * time_scale)) {
+				particles->clear = true;
 				continue;
 			}
 		}
@@ -2047,6 +2060,11 @@ void ParticlesStorage::update_particles() {
 		particles->instance_motion_vectors_last_change = frame;
 
 		// Copy particles to instance buffer.
+#ifdef TESTS_ENABLED
+		if (OS::get_singleton()->get_environment("GODOT_TEST_PARTICLES_REPORT_COPY") == "1") {
+			ERR_PRINT("Test-only particle instance copy reached.");
+		}
+#endif
 		if (particles->draw_order != RSE::PARTICLES_DRAW_ORDER_VIEW_DEPTH && particles->transform_align != RSE::PARTICLES_TRANSFORM_ALIGN_Z_BILLBOARD && particles->transform_align != RSE::PARTICLES_TRANSFORM_ALIGN_Z_BILLBOARD_Y_TO_VELOCITY && particles->transform_align != RSE::PARTICLES_TRANSFORM_ALIGN_LOCAL_BILLBOARD) {
 			//does not need view dependent operation, do copy here
 			ParticlesShader::CopyPushConstant copy_push_constant;

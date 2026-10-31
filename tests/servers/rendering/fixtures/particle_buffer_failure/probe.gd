@@ -23,6 +23,9 @@ func _run() -> void:
 	if dimensions == "uniform_retry":
 		await _run_3d(false, false, true)
 		return
+	if dimensions == "late_retry":
+		await _run_3d(false, false, false, true)
+		return
 	if dimensions != "2d":
 		quit(78)
 		return
@@ -65,7 +68,7 @@ func _run() -> void:
 	print("PARTICLE_BUFFER_FAILURE_RECOVERED ", red)
 	quit(0 if red > 0 else 1)
 
-func _run_3d(motion_retry := false, motion_control := false, uniform_retry := false) -> void:
+func _run_3d(motion_retry := false, motion_control := false, uniform_retry := false, late_retry := false) -> void:
 	var viewport := SubViewport.new()
 	viewport.size = Vector2i(32, 32)
 	viewport.own_world_3d = true
@@ -102,6 +105,33 @@ func _run_3d(motion_retry := false, motion_control := false, uniform_retry := fa
 	particles.fixed_fps = 30
 	particles.visibility_aabb = AABB(Vector3(-2, -2, -2), Vector3(4, 4, 4))
 	viewport.add_child(particles)
+	if late_retry:
+		particles.amount = 1
+		particles.lifetime = 60.0
+		particles.one_shot = true
+		particles.explosiveness = 1.0
+		particles.preprocess = 0.3
+		particles.use_fixed_seed = true
+		particles.seed = 7
+		OS.set_environment("GODOT_TEST_PARTICLES_REJECT_AFTER_CLEAR_ONCE", "1")
+		OS.set_environment("GODOT_TEST_PARTICLES_REPORT_COPY", "1")
+		print("PARTICLE_LATE_FAILURE_BEFORE")
+		await RenderingServer.frame_post_draw
+		OS.unset_environment("GODOT_TEST_PARTICLES_REPORT_COPY")
+		print("PARTICLE_LATE_FAILURE_AFTER")
+		particles.restart()
+		for i in range(8):
+			await RenderingServer.frame_post_draw
+		var output := viewport.get_texture().get_image()
+		var red := 0
+		for y in range(32):
+			for x in range(32):
+				var color := output.get_pixel(x, y)
+				if color.r > 0.8 and color.g < 0.2 and color.b < 0.2:
+					red += 1
+		print("PARTICLE_LATE_RECOVERED ", red)
+		quit(0 if red > 0 else 1)
+		return
 	if uniform_retry:
 		particles.amount = 1
 		particles.lifetime = 60.0

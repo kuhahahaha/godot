@@ -5,3 +5,5 @@ Run `run.py` with the built macOS Editor, `--renderer mobile` or `forward_plus`,
 This checks the oversized-size rejection path and visible recovery. It does not inject an actual device allocation failure after a valid particle buffer has been created.
 
 `--dimension motion_retry` is a separate test-build-only control on Forward+: it renders a normal 3D particle, enables TAA to request motion-vector instance-buffer rebuilding, injects one instance-buffer rejection after the main buffer already exists, and requires the same node to become visible again. This is a controlled rejection before the RD allocation call, not a physical device OOM.
+
+`--dimension late_retry` injects one test-build-only simulation failure after the internal `clear` flag has been reset. The fixture requires that the failed frame does not reach instance copying, then explicitly restarts the same particle node and checks visible recovery. The restart is part of the fixture; this test does not establish automatic recovery without a caller request.
