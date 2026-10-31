@@ -48,6 +48,12 @@ public:
 		particles.trail_bind_poses.resize(p_trail_count);
 		return ParticlesStorage::_particles_get_data_size(&particles, r_size);
 	}
+	static bool raw_data_size(uint64_t p_amount, uint64_t p_userdata_count, uint64_t p_trail_count, uint64_t &r_size) {
+		return ParticlesStorage::_particles_get_data_size(p_amount, p_userdata_count, p_trail_count, r_size);
+	}
+	static bool instance_data_size(uint64_t p_total_amount, uint32_t p_xform_size, bool p_motion_vectors, uint64_t &r_size) {
+		return ParticlesStorage::_particles_get_instance_data_size(p_total_amount, p_xform_size, p_motion_vectors, r_size);
+	}
 };
 } // namespace RendererRD
 
@@ -61,6 +67,17 @@ TEST_CASE("[ParticlesReadback] data size includes trails and user data with a bo
 
 	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::data_size(UINT32_MAX, UINT32_MAX, 0, size));
 	CHECK(size == 0);
+
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::raw_data_size(UINT32_MAX, 0, UINT32_MAX, size));
+	CHECK(size == 0);
+
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::instance_data_size(UINT64_MAX, 3, false, size));
+	CHECK(size == 0);
+
+	CHECK(RendererRD::TestParticlesReadbackAccess::instance_data_size(2, 3, false, size));
+	CHECK(size == 2 * 5 * 4 * sizeof(float));
+	CHECK(RendererRD::TestParticlesReadbackAccess::instance_data_size(2, 3, true, size));
+	CHECK(size == 2 * 2 * 5 * 4 * sizeof(float));
 }
 
 TEST_CASE("[ParticlesReadback] invalid particle RID returns an empty CPU snapshot") {

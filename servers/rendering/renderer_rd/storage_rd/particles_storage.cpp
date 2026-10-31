@@ -716,22 +716,55 @@ void ParticlesStorage::particles_request_process(RID p_particles) {
 	}
 }
 
-bool ParticlesStorage::_particles_get_data_size(const Particles *p_particles, uint64_t &r_size) {
-	if (p_particles == nullptr || p_particles->amount <= 0) {
+bool ParticlesStorage::_particles_get_data_size(uint64_t p_amount, uint64_t p_userdata_count, uint64_t p_trail_count, uint64_t &r_size) {
+	if (p_amount == 0) {
 		r_size = 0;
 		return false;
 	}
 
-	uint64_t total_amount = uint64_t(p_particles->amount);
-	if (p_particles->trails_enabled && p_particles->trail_bind_poses.size() > 1) {
-		total_amount *= uint64_t(p_particles->trail_bind_poses.size());
+	uint64_t total_amount = p_amount;
+	if (p_trail_count > 1) {
+		if (total_amount > UINT64_MAX / p_trail_count) {
+			r_size = 0;
+			return false;
+		}
+		total_amount *= p_trail_count;
 	}
-	const uint64_t particle_data_size = sizeof(ParticleData) + sizeof(float) * 4 * uint64_t(p_particles->userdata_count);
+	if (p_userdata_count > (UINT64_MAX - sizeof(ParticleData)) / (sizeof(float) * 4)) {
+		r_size = 0;
+		return false;
+	}
+	const uint64_t particle_data_size = sizeof(ParticleData) + sizeof(float) * 4 * p_userdata_count;
 	if (particle_data_size != 0 && total_amount > UINT64_MAX / particle_data_size) {
 		r_size = 0;
 		return false;
 	}
 	r_size = total_amount * particle_data_size;
+	return r_size <= UINT32_MAX;
+}
+
+bool ParticlesStorage::_particles_get_data_size(const Particles *p_particles, uint64_t &r_size) {
+	if (p_particles == nullptr || p_particles->amount <= 0) {
+		r_size = 0;
+		return false;
+	}
+	return _particles_get_data_size(uint64_t(p_particles->amount), uint64_t(p_particles->userdata_count), p_particles->trails_enabled ? uint64_t(p_particles->trail_bind_poses.size()) : 1, r_size);
+}
+
+bool ParticlesStorage::_particles_get_instance_data_size(uint64_t p_total_amount, uint32_t p_xform_size, bool p_motion_vectors, uint64_t &r_size) {
+	uint64_t words_per_instance = uint64_t(p_xform_size) + 2;
+	if (p_total_amount > UINT64_MAX / (words_per_instance * sizeof(float) * 4)) {
+		r_size = 0;
+		return false;
+	}
+	r_size = p_total_amount * words_per_instance * sizeof(float) * 4;
+	if (p_motion_vectors) {
+		if (r_size > UINT64_MAX / 2) {
+			r_size = 0;
+			return false;
+		}
+		r_size *= 2;
+	}
 	return r_size <= UINT32_MAX;
 }
 
@@ -1522,15 +1555,23 @@ void ParticlesStorage::_particles_update_buffers(Particles *particles) {
 	}
 
 	if (particles->amount > 0) {
-		int total_amount = particles->amount;
-		if (particles->trails_enabled && particles->trail_bind_poses.size() > 1) {
-			total_amount *= particles->trail_bind_poses.size();
+		uint64_t particle_data_size = 0;
+		const uint64_t trail_count = particles->trails_enabled ? uint64_t(particles->trail_bind_poses.size()) : 1;
+		if (!_particles_get_data_size(uint64_t(particles->amount), uint64_t(userdata_count), trail_count, particle_data_size)) {
+			ERR_PRINT("Particle buffer size exceeds the rendering device buffer size limit.");
+			return;
 		}
+		const uint64_t total_amount = particle_data_size / (sizeof(ParticleData) + sizeof(float) * 4 * uint64_t(userdata_count));
 
 		uint32_t xform_size = particles->mode == RSE::PARTICLES_MODE_2D ? 2 : 3;
+		uint64_t particle_instance_buffer_size = 0;
+		if (!_particles_get_instance_data_size(total_amount, xform_size, uses_motion_vectors, particle_instance_buffer_size)) {
+			ERR_PRINT("Particle instance buffer size exceeds the rendering device buffer size limit.");
+			return;
+		}
 		bool particle_buffer_created = false;
 		if (particles->particle_buffer.is_null()) {
-			particles->particle_buffer = RD::get_singleton()->storage_buffer_create((sizeof(ParticleData) + userdata_count * sizeof(float) * 4) * total_amount);
+			particles->particle_buffer = RD::get_singleton()->storage_buffer_create(uint32_t(particle_data_size));
 			if (particles->particle_buffer.is_null()) {
 				return;
 			}
@@ -1540,15 +1581,13 @@ void ParticlesStorage::_particles_update_buffers(Particles *particles) {
 		}
 
 		PackedByteArray data;
-		uint32_t particle_instance_buffer_size = total_amount * (xform_size + 1 + 1) * sizeof(float) * 4;
 		if (uses_motion_vectors) {
-			particle_instance_buffer_size *= 2;
 			particles->instance_motion_vectors_enabled = true;
 		}
 
-		data.resize_initialized(particle_instance_buffer_size);
+		data.resize_initialized(uint32_t(particle_instance_buffer_size));
 
-		particles->particle_instance_buffer = RD::get_singleton()->storage_buffer_create(particle_instance_buffer_size, data);
+		particles->particle_instance_buffer = RD::get_singleton()->storage_buffer_create(uint32_t(particle_instance_buffer_size), data);
 		if (particles->particle_instance_buffer.is_null()) {
 			if (particle_buffer_created) {
 				RD::get_singleton()->free_rid(particles->particle_buffer);
