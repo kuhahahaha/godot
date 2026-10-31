@@ -1574,7 +1574,15 @@ void ParticlesStorage::particles_set_view_axis(RID p_particles, const Vector3 &p
 	bool do_sort = particles->draw_order == RSE::PARTICLES_DRAW_ORDER_VIEW_DEPTH;
 
 	//copy to sort buffer
-	if (do_sort && particles->particles_sort_buffer == RID()) {
+	if (do_sort && (particles->particles_sort_buffer.is_null() || !RD::get_singleton()->uniform_set_is_valid(particles->particles_sort_uniform_set))) {
+		if (RD::get_singleton()->uniform_set_is_valid(particles->particles_sort_uniform_set)) {
+			RD::get_singleton()->free_rid(particles->particles_sort_uniform_set);
+		}
+		particles->particles_sort_uniform_set = RID();
+		if (particles->particles_sort_buffer.is_valid()) {
+			RD::get_singleton()->free_rid(particles->particles_sort_buffer);
+			particles->particles_sort_buffer = RID();
+		}
 		uint64_t sort_buffer_size = 0;
 		if (!_particles_get_sort_data_size(uint64_t(particles->amount), sort_buffer_size)) {
 			ERR_PRINT("Particle sort buffer size exceeds the rendering device buffer size limit.");
