@@ -30,6 +30,7 @@
 
 #include "particles_storage.h"
 
+#include "core/os/os.h"
 #include "servers/rendering/renderer_rd/effects/sort_effects.h"
 #include "servers/rendering/renderer_rd/renderer_compositor_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
@@ -1703,6 +1704,7 @@ void ParticlesStorage::_particles_update_buffers(Particles *particles) {
 		}
 
 		particles->particles_transforms_buffer_uniform_set = RID();
+		particles->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_PARTICLES_INSTANCES);
 		only_instances_changed = true;
 	} else if (!particles->particle_buffer.is_null() && !particles->particle_instance_buffer.is_null() && !particles->particles_copy_uniform_set.is_null()) {
 		// No operation is required when all buffers and the copy uniform already exist.
@@ -1736,12 +1738,16 @@ void ParticlesStorage::_particles_update_buffers(Particles *particles) {
 		}
 
 		PackedByteArray data;
-		if (uses_motion_vectors) {
-			particles->instance_motion_vectors_enabled = true;
-		}
-
 		data.resize_initialized(uint32_t(particle_instance_buffer_size));
 
+		// Test a rejected instance allocation after the particle data buffer already exists.
+#ifdef TESTS_ENABLED
+		if (!particle_buffer_created && OS::get_singleton()->get_environment("GODOT_TEST_PARTICLES_REJECT_INSTANCE_ONCE") == "1") {
+			OS::get_singleton()->unset_environment("GODOT_TEST_PARTICLES_REJECT_INSTANCE_ONCE");
+			ERR_PRINT("Test-only particle instance buffer allocation rejection.");
+			return;
+		}
+#endif
 		particles->particle_instance_buffer = RD::get_singleton()->storage_buffer_create(uint32_t(particle_instance_buffer_size), data);
 		if (particles->particle_instance_buffer.is_null()) {
 			if (particle_buffer_created) {
@@ -1785,6 +1791,9 @@ void ParticlesStorage::_particles_update_buffers(Particles *particles) {
 		particles->instance_motion_vectors_current_offset = 0;
 		particles->instance_motion_vectors_previous_offset = 0;
 		particles->instance_motion_vectors_last_change = -1;
+		if (uses_motion_vectors) {
+			particles->instance_motion_vectors_enabled = true;
+		}
 
 		if (only_instances_changed) {
 			// Notify the renderer the instances uniform must be retrieved again, as it's the only element that has been changed because motion vectors were enabled.

@@ -14,6 +14,12 @@ func _run() -> void:
 	if dimensions == "3d":
 		await _run_3d()
 		return
+	if dimensions == "motion_retry":
+		await _run_3d(true)
+		return
+	if dimensions == "motion_control":
+		await _run_3d(false, true)
+		return
 	if dimensions != "2d":
 		quit(78)
 		return
@@ -56,7 +62,7 @@ func _run() -> void:
 	print("PARTICLE_BUFFER_FAILURE_RECOVERED ", red)
 	quit(0 if red > 0 else 1)
 
-func _run_3d() -> void:
+func _run_3d(motion_retry := false, motion_control := false) -> void:
 	var viewport := SubViewport.new()
 	viewport.size = Vector2i(32, 32)
 	viewport.own_world_3d = true
@@ -93,6 +99,42 @@ func _run_3d() -> void:
 	particles.fixed_fps = 30
 	particles.visibility_aabb = AABB(Vector3(-2, -2, -2), Vector3(4, 4, 4))
 	viewport.add_child(particles)
+	if motion_retry or motion_control:
+		particles.amount = 1
+		particles.lifetime = 60.0
+		particles.one_shot = true
+		particles.explosiveness = 1.0
+		particles.preprocess = 0.3
+		particles.use_fixed_seed = true
+		particles.seed = 7
+		for i in range(8):
+			await RenderingServer.frame_post_draw
+		var initial := viewport.get_texture().get_image()
+		var initial_red := 0
+		for y in range(32):
+			for x in range(32):
+				var color := initial.get_pixel(x, y)
+				if color.r > 0.8 and color.g < 0.2 and color.b < 0.2:
+					initial_red += 1
+		print("PARTICLE_BUFFER_MOTION_READY ", initial_red)
+		viewport.use_taa = true
+		if motion_retry:
+			OS.set_environment("GODOT_TEST_PARTICLES_REJECT_INSTANCE_ONCE", "1")
+		print("PARTICLE_BUFFER_FAILURE_BEFORE")
+		await RenderingServer.frame_post_draw
+		print("PARTICLE_BUFFER_FAILURE_AFTER")
+		for i in range(8):
+			await RenderingServer.frame_post_draw
+		var output := viewport.get_texture().get_image()
+		var red := 0
+		for y in range(32):
+			for x in range(32):
+				var color := output.get_pixel(x, y)
+				if color.r > 0.8 and color.g < 0.2 and color.b < 0.2:
+					red += 1
+		print("PARTICLE_BUFFER_FAILURE_RECOVERED ", red)
+		quit(0 if red > 0 else 1)
+		return
 	print("PARTICLE_BUFFER_FAILURE_BEFORE")
 	await RenderingServer.frame_post_draw
 	print("PARTICLE_BUFFER_FAILURE_AFTER")

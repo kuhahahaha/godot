@@ -2628,7 +2628,7 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 
 		pipeline_key.primitive_type = surf->primitive;
 		RID xforms_uniform_set = surf->owner->transforms_uniform_set;
-		if ((inst->flags_cache & INSTANCE_DATA_FLAG_PARTICLES) && xforms_uniform_set.is_null()) {
+		if ((inst->flags_cache & INSTANCE_DATA_FLAG_PARTICLES) && !RD::get_singleton()->uniform_set_is_valid(xforms_uniform_set)) {
 			continue;
 		}
 
@@ -3625,6 +3625,7 @@ void RenderForwardMobile::_geometry_instance_dependency_changed(Dependency::Depe
 		case Dependency::DEPENDENCY_CHANGED_MATERIAL:
 		case Dependency::DEPENDENCY_CHANGED_MESH:
 		case Dependency::DEPENDENCY_CHANGED_PARTICLES:
+		case Dependency::DEPENDENCY_CHANGED_PARTICLES_INSTANCES:
 		case Dependency::DEPENDENCY_CHANGED_MULTIMESH:
 		case Dependency::DEPENDENCY_CHANGED_SKELETON_DATA: {
 			static_cast<RenderGeometryInstance *>(p_tracker->userdata)->_mark_dirty();

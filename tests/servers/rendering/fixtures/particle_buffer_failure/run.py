@@ -11,9 +11,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--renderer", choices=["mobile", "forward_plus"], required=True)
-    parser.add_argument("--dimension", choices=["2d", "3d"], required=True)
+    parser.add_argument("--dimension", choices=["2d", "3d", "motion_retry", "motion_control"], required=True)
     parser.add_argument("--log", type=Path, required=True)
     args = parser.parse_args()
+    if args.dimension in {"motion_retry", "motion_control"} and args.renderer != "forward_plus":
+        parser.error("motion profiles require forward_plus")
     project = Path(__file__).resolve().parent
     command = [
         str(args.binary.resolve()),
@@ -44,9 +46,16 @@ def main():
         return 1
     args.log.write_text(output)
     red = re.findall(r"^PARTICLE_BUFFER_FAILURE_RECOVERED (\d+)$", output, re.MULTILINE)
+    ready = re.findall(r"^PARTICLE_BUFFER_MOTION_READY (\d+)$", output, re.MULTILINE)
     errors = re.findall(r"^ERROR: (.*)$", output, re.MULTILINE)
     expected_renderer = "Forward Mobile" if args.renderer == "mobile" else "Forward+"
-    expected_error = "Particle buffer size exceeds the rendering device buffer size limit."
+    motion_retry = args.dimension == "motion_retry"
+    motion_control = args.dimension == "motion_control"
+    expected_error = (
+        "Test-only particle instance buffer allocation rejection."
+        if motion_retry
+        else "Particle buffer size exceeds the rendering device buffer size limit."
+    )
     passed = (
         result.returncode == 0
         and "Metal 4.0" in output
@@ -54,13 +63,16 @@ def main():
         and expected_renderer in output
         and output.count("PARTICLE_BUFFER_FAILURE_BEFORE") == 1
         and output.count("PARTICLE_BUFFER_FAILURE_AFTER") == 1
+        and (not (motion_retry or motion_control) or (len(ready) == 1 and int(ready[0]) > 0))
+        and ((motion_retry or motion_control) or len(ready) == 0)
         and len(red) == 1
         and int(red[0]) > 0
-        and len(errors) > 0
-        and all(error == expected_error for error in errors)
+        and len(errors) == (1 if motion_retry else 0 if motion_control else 2)
+        and (motion_control or all(error == expected_error for error in errors))
         and "Failed to create particle material uniform set." not in output
         and 'Parameter "uniform_set" is null.' not in output
         and "SCRIPT ERROR" not in output
+        and "WARNING:" not in output
     )
     print(
         f"renderer={args.renderer} dimension={args.dimension} rc={result.returncode} recovered_red={red} expected_errors={len(errors)} pass={passed}"

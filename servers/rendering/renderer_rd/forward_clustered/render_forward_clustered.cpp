@@ -420,7 +420,7 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 		pipeline_key.primitive_type = surf->primitive;
 
 		RID xforms_uniform_set = surf->owner->transforms_uniform_set;
-		if ((surf->owner->base_flags & INSTANCE_DATA_FLAG_PARTICLES) && xforms_uniform_set.is_null()) {
+		if ((surf->owner->base_flags & INSTANCE_DATA_FLAG_PARTICLES) && !RD::get_singleton()->uniform_set_is_valid(xforms_uniform_set)) {
 			continue;
 		}
 
