@@ -132,11 +132,13 @@ void GPUParticles3D::set_pre_process_time(double p_time) {
 }
 
 void GPUParticles3D::set_explosiveness_ratio(real_t p_ratio) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_ratio), "Particles explosiveness ratio must be finite.");
 	explosiveness_ratio = p_ratio;
 	RS::get_singleton()->particles_set_explosiveness_ratio(particles, explosiveness_ratio);
 }
 
 void GPUParticles3D::set_randomness_ratio(real_t p_ratio) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_ratio), "Particles randomness ratio must be finite.");
 	randomness_ratio = p_ratio;
 	RS::get_singleton()->particles_set_randomness_ratio(particles, randomness_ratio);
 }
@@ -772,6 +774,7 @@ void GPUParticles3D::convert_from_particles(Node *p_particles) {
 }
 
 void GPUParticles3D::set_amount_ratio(float p_ratio) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_ratio), "Particles amount ratio must be finite.");
 	amount_ratio = p_ratio;
 	RS::get_singleton()->particles_set_amount_ratio(particles, p_ratio);
 }
