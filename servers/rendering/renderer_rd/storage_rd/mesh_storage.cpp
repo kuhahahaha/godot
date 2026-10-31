@@ -1807,6 +1807,14 @@ void MeshStorage::_multimesh_allocate_data(RID p_multimesh, int p_instances, RSE
 	multimesh->motion_vectors_enabled = false;
 
 	if (multimesh->instances) {
+#ifdef TESTS_ENABLED
+		if (test_fail_multimesh_buffer_create) {
+			_multimesh_invalidate_gpu_resources(multimesh);
+			multimesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MULTIMESH);
+			ERR_PRINT("MultiMesh instance buffer creation failed; drawing is disabled.");
+			return;
+		}
+#endif
 		multimesh->buffer = RD::get_singleton()->storage_buffer_create(buffer_size);
 	}
 
@@ -1920,6 +1928,13 @@ void MeshStorage::_multimesh_rebuild_command_buffer(MultiMesh *multimesh) {
 	}
 	const uint64_t byte_count = uint64_t(mesh->surface_count) * sizeof(uint32_t) * INDIRECT_MULTIMESH_COMMAND_STRIDE;
 	ERR_FAIL_COND(byte_count > UINT32_MAX);
+#ifdef TESTS_ENABLED
+	if (test_fail_multimesh_command_create) {
+		multimesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MULTIMESH);
+		ERR_PRINT("MultiMesh indirect command creation failed; drawing is disabled.");
+		return;
+	}
+#endif
 	Vector<uint8_t> bytes;
 	bytes.resize_initialized(byte_count);
 	const uint32_t visible = multimesh->visible_instances < 0 ? uint32_t(multimesh->instances) : uint32_t(multimesh->visible_instances);
@@ -2520,7 +2535,11 @@ void MeshStorage::_multimesh_set_visible_instances(RID p_multimesh, int p_visibl
 			const uint32_t visible = p_visible < 0 ? uint32_t(multimesh->instances) : uint32_t(p_visible);
 			for (uint32_t i = 0; i < mesh->surface_count; i++) {
 				const uint32_t offset = i * sizeof(uint32_t) * INDIRECT_MULTIMESH_COMMAND_STRIDE + sizeof(uint32_t);
-				if (RD::get_singleton()->buffer_update(multimesh->command_buffer, offset, sizeof(visible), &visible) != OK) {
+				bool command_update_failed = false;
+#ifdef TESTS_ENABLED
+				command_update_failed = test_fail_multimesh_command_update;
+#endif
+				if (command_update_failed || RD::get_singleton()->buffer_update(multimesh->command_buffer, offset, sizeof(visible), &visible) != OK) {
 					_multimesh_invalidate_command_buffer(multimesh);
 					multimesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MULTIMESH);
 					ERR_PRINT("MultiMesh indirect command update failed; drawing is disabled.");
