@@ -470,6 +470,8 @@ Error RenderingDevice::_qualification_poll_tickets(uint32_t index) {
 			auto &fact = ticket->facts[member.fact];
 			const auto old = fact;
 			if (completion.native_error) {
+				frame_wait_native_code = completion.native_code;
+				frame_wait_native_code_valid = true;
 				fact.issue = uint32_t(member.source.issue);
 				ticket->report.native_error = FAILED;
 				ticket->report.native_code = completion.native_code;

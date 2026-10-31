@@ -409,9 +409,11 @@ public:
 	static void ticket_poll_error_retains_native_code() {
 		using namespace GDExtensionDeviceExit;
 		struct PollDriver : TransferTestDriverBase {
+			int polls = 0;
 			bool native_call_observation_supported() const override { return true; }
 			Error native_call_retain(uint64_t) override { return OK; }
 			FencePollResult native_call_poll(uint64_t p_serial) override {
+				++polls;
 				FencePollResult result;
 				result.completed_serial = p_serial;
 				result.native_error = true;
@@ -421,8 +423,13 @@ public:
 		} driver;
 		RenderingDevice device;
 		device.driver = &driver;
-		device.frames.resize(1);
+		device.frames.resize(2);
+		device.frame = 1;
 		device.frames[0].fence_signaled = true;
+		RenderingDevice::BufferGetDataRequest request;
+		request.result.instantiate();
+		request.result->bytes.resize(4);
+		device.frames[0].download_buffer_get_data_requests.push_back(request);
 		QualificationTicket ticket;
 		ticket.recorded = true;
 		ticket.frame_refs = 1;
@@ -437,7 +444,13 @@ public:
 		ticket.facts.push_back(fact);
 		ticket.natives.push_back({ source, 0, 0, 0, 1, false, false });
 		device.frames[0].qualification_tickets.push_back(&ticket);
-		Registry::get_singleton().qualification_ticket_step(&ticket, &device);
+		CHECK(device._stall_for_frame(0, true) == FAILED);
+		CHECK(request.result->error == FAILED);
+		CHECK(device.frame_issue_error == FAILED);
+		CHECK(device.frame_wait_native_code_valid);
+		CHECK(device.frame_wait_native_code == -7);
+		CHECK(device._stall_for_frame(0, true) == FAILED);
+		CHECK(driver.polls == 1);
 		CHECK(ticket.append_failed);
 		CHECK(ticket.report.native_error == FAILED);
 		CHECK(ticket.report.native_code == -7);

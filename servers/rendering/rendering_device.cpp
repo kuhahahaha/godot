@@ -9897,7 +9897,13 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 	}
 	const Error ticket_poll = _qualification_poll_tickets(p_frame);
 	if (ticket_poll != OK) {
-		return ticket_poll;
+		if (ticket_poll == ERR_BUSY) {
+			return ERR_BUSY;
+		}
+		if (!frame_wait_native_code_valid.load()) {
+			frame_wait_native_code_valid = true;
+		}
+		return _fail_frame_wait_source(p_frame, ticket_poll);
 	}
 	if (driver->native_call_observation_supported()) {
 		for (auto &report : frames[p_frame].chain_reports) {
