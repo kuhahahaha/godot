@@ -1683,6 +1683,10 @@ void ParticlesStorage::particles_set_view_axis(RID p_particles, const Vector3 &p
 	copy_push_constant.pad2 = uint32_t(0);
 
 	if (do_sort) {
+		if (!RD::get_singleton()->compute_pipeline_is_valid(particles_shader.copy_pipelines[particles->userdata_count][ParticlesShader::COPY_MODE_FILL_SORT_BUFFER].get_rid())) {
+			ERR_PRINT("Particle sort copy pipeline is invalid.");
+			return;
+		}
 		RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 
 		RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, particles_shader.copy_pipelines[particles->userdata_count][ParticlesShader::COPY_MODE_FILL_SORT_BUFFER].get_rid());
@@ -1704,8 +1708,12 @@ void ParticlesStorage::particles_set_view_axis(RID p_particles, const Vector3 &p
 	}
 	copy_push_constant.total_particles = total_copy_particles;
 
-	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 	uint32_t copy_mode = do_sort ? ParticlesShader::COPY_MODE_FILL_INSTANCES_WITH_SORT_BUFFER : ParticlesShader::COPY_MODE_FILL_INSTANCES;
+	if (!RD::get_singleton()->compute_pipeline_is_valid(particles_shader.copy_pipelines[particles->userdata_count][copy_mode].get_rid())) {
+		ERR_PRINT("Particle instance copy pipeline is invalid.");
+		return;
+	}
+	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 	copy_push_constant.copy_mode_2d = particles->mode == RSE::PARTICLES_MODE_2D ? 1 : 0;
 	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, particles_shader.copy_pipelines[particles->userdata_count][copy_mode].get_rid());
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, particles->particles_copy_uniform_set, 0);
@@ -2192,6 +2200,10 @@ void ParticlesStorage::update_particles() {
 			copy_push_constant.lifetime_reverse = particles->draw_order == RSE::PARTICLES_DRAW_ORDER_REVERSE_LIFETIME;
 			copy_push_constant.motion_vectors_current_offset = particles->instance_motion_vectors_current_offset;
 
+			if (!RD::get_singleton()->compute_pipeline_is_valid(particles_shader.copy_pipelines[particles->userdata_count][ParticlesShader::COPY_MODE_FILL_INSTANCES].get_rid())) {
+				ERR_PRINT("Particle instance copy pipeline is invalid.");
+				continue;
+			}
 			RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 			copy_push_constant.copy_mode_2d = particles->mode == RSE::PARTICLES_MODE_2D ? 1 : 0;
 			RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, particles_shader.copy_pipelines[particles->userdata_count][ParticlesShader::COPY_MODE_FILL_INSTANCES].get_rid());
