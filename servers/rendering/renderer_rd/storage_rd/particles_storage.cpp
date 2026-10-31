@@ -1909,6 +1909,10 @@ void ParticlesStorage::update_particles() {
 
 			if (uint32_t(trail_steps) != particles->trail_params.size() || particles->frame_params_buffer.is_null()) {
 				particles->trail_params.resize(trail_steps);
+				if (RD::get_singleton()->uniform_set_is_valid(particles->particles_material_uniform_set)) {
+					RD::get_singleton()->free_rid(particles->particles_material_uniform_set);
+				}
+				particles->particles_material_uniform_set = RID();
 				if (particles->frame_params_buffer.is_valid()) {
 					RD::get_singleton()->free_rid(particles->frame_params_buffer);
 				}
@@ -1925,12 +1929,20 @@ void ParticlesStorage::update_particles() {
 			}
 
 			if (particles->trail_bind_poses.size() > 1 && particles->trail_bind_pose_buffer.is_null()) {
+				if (RD::get_singleton()->uniform_set_is_valid(particles->trail_bind_pose_uniform_set)) {
+					RD::get_singleton()->free_rid(particles->trail_bind_pose_uniform_set);
+				}
+				particles->trail_bind_pose_uniform_set = RID();
 				uint64_t trail_bind_pose_buffer_size = 0;
 				if (!_particles_get_trail_bind_pose_data_size(uint64_t(particles->trail_bind_poses.size()), trail_bind_pose_buffer_size)) {
 					ERR_PRINT("Particle trail bind pose buffer size exceeds the supported allocation size.");
 					return;
 				}
 				particles->trail_bind_pose_buffer = RD::get_singleton()->storage_buffer_create(uint32_t(trail_bind_pose_buffer_size));
+				if (particles->trail_bind_pose_buffer.is_null()) {
+					ERR_PRINT("Failed to create particle trail bind pose buffer.");
+					return;
+				}
 				particles->trail_bind_poses_dirty = true;
 			}
 
