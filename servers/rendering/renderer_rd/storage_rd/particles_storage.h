@@ -280,7 +280,7 @@ private:
 		}
 	};
 
-	void _particles_process(Particles *p_particles, double p_delta);
+	bool _particles_process(Particles *p_particles, double p_delta);
 	static bool _particles_get_data_size(uint64_t p_amount, uint64_t p_userdata_count, uint64_t p_trail_count, uint64_t &r_size);
 	static bool _particles_get_data_size(const Particles *p_particles, uint64_t &r_size);
 	static bool _particles_get_total_amount(uint64_t p_amount, uint64_t p_trail_count, uint32_t &r_total_amount);
