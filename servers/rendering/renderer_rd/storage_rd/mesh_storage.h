@@ -75,10 +75,6 @@ public:
 private:
 #ifdef TESTS_ENABLED
 	friend class TestMultimeshRebuildAccess;
-	inline static bool test_fail_motion_cache_resize = false;
-	inline static bool test_fail_multimesh_buffer_create = false;
-	inline static bool test_fail_multimesh_command_create = false;
-	inline static bool test_fail_multimesh_command_update = false;
 	friend class TestMeshStorageExternalAccess;
 #endif
 	static MeshStorage *singleton;
@@ -318,7 +314,7 @@ private:
 	void _multimesh_restore_command_buffer(MultiMesh *p_multimesh);
 	static uint32_t _multimesh_dirty_upload_size(uint32_t p_regions, uint32_t p_region_bytes, uint32_t p_buffer_bytes);
 	_FORCE_INLINE_ void _multimesh_make_local(MultiMesh *multimesh) const;
-	bool _multimesh_enable_motion_vectors(MultiMesh *multimesh);
+	_FORCE_INLINE_ bool _multimesh_enable_motion_vectors(MultiMesh *multimesh);
 	_FORCE_INLINE_ void _multimesh_update_motion_vectors_data_cache(MultiMesh *multimesh);
 	_FORCE_INLINE_ bool _multimesh_uses_motion_vectors(MultiMesh *multimesh);
 	_FORCE_INLINE_ void _multimesh_mark_dirty(MultiMesh *multimesh, int p_index, bool p_aabb);
