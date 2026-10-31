@@ -1723,7 +1723,7 @@ bool ParticlesStorage::_particles_update_buffers(Particles *particles) {
 		particles->particles_transforms_buffer_uniform_set = RID();
 		particles->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_PARTICLES_INSTANCES);
 		only_instances_changed = true;
-	} else if (!particles->particle_buffer.is_null() && !particles->particle_instance_buffer.is_null() && !particles->particles_copy_uniform_set.is_null()) {
+	} else if (!particles->particle_buffer.is_null() && !particles->particle_instance_buffer.is_null() && RD::get_singleton()->uniform_set_is_valid(particles->particles_copy_uniform_set)) {
 		// No operation is required when all buffers and the copy uniform already exist.
 		return true;
 	}
@@ -1756,6 +1756,14 @@ bool ParticlesStorage::_particles_update_buffers(Particles *particles) {
 
 		PackedByteArray data;
 		data.resize_initialized(uint32_t(particle_instance_buffer_size));
+
+		// A stale or externally invalidated copy uniform can leave the old instance
+		// buffer allocated while forcing this path to rebuild it. Release that RID
+		// before replacing it so a failed rebuild cannot leak the previous buffer.
+		if (particles->particle_instance_buffer.is_valid()) {
+			RD::get_singleton()->free_rid(particles->particle_instance_buffer);
+			particles->particle_instance_buffer = RID();
+		}
 
 		// Test a rejected instance allocation after the particle data buffer already exists.
 		particles->particle_instance_buffer = RD::get_singleton()->storage_buffer_create(uint32_t(particle_instance_buffer_size), data);
