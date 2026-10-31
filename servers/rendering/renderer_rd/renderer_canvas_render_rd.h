@@ -42,6 +42,7 @@
 #include "servers/rendering/shader_compiler.h"
 
 class RendererCanvasRenderRD : public RendererCanvasRender {
+	friend class TestParticlesCanvasTrailAccess;
 	enum {
 		BASE_UNIFORM_SET = 0,
 		MATERIAL_UNIFORM_SET = 1,
@@ -77,12 +78,12 @@ class RendererCanvasRenderRD : public RendererCanvasRender {
 	};
 
 	enum {
-		BATCH_FLAGS_INSTANCING_MASK = 0x7F,
-		BATCH_FLAGS_INSTANCING_HAS_COLORS = (1 << 7),
-		BATCH_FLAGS_INSTANCING_HAS_CUSTOM_DATA = (1 << 8),
+		BATCH_FLAGS_INSTANCING_MASK = 0xFF,
+		BATCH_FLAGS_INSTANCING_HAS_COLORS = (1 << 8),
+		BATCH_FLAGS_INSTANCING_HAS_CUSTOM_DATA = (1 << 9),
 
-		BATCH_FLAGS_DEFAULT_NORMAL_MAP_USED = (1 << 9),
-		BATCH_FLAGS_DEFAULT_SPECULAR_MAP_USED = (1 << 10),
+		BATCH_FLAGS_DEFAULT_NORMAL_MAP_USED = (1 << 10),
+		BATCH_FLAGS_DEFAULT_SPECULAR_MAP_USED = (1 << 11),
 	};
 
 	enum {

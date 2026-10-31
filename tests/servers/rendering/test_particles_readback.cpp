@@ -29,10 +29,31 @@
 /**************************************************************************/
 
 #include "servers/rendering/dummy/storage/particles_storage.h"
+#include "servers/rendering/renderer_rd/renderer_canvas_render_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "tests/test_macros.h"
 
 TEST_FORCE_LINK(test_particles_readback)
+
+class TestParticlesCanvasTrailAccess {
+public:
+	static uint32_t trail_mask() {
+		return RendererCanvasRenderRD::BATCH_FLAGS_INSTANCING_MASK;
+	}
+	static uint32_t colors_flag() {
+		return RendererCanvasRenderRD::BATCH_FLAGS_INSTANCING_HAS_COLORS;
+	}
+	static uint32_t custom_data_flag() {
+		return RendererCanvasRenderRD::BATCH_FLAGS_INSTANCING_HAS_CUSTOM_DATA;
+	}
+};
+
+TEST_CASE("[ParticlesReadback] Canvas trail count fits the advertised 128 sections") {
+	constexpr uint32_t bind_pose_count = 128 + 1;
+	CHECK((bind_pose_count & TestParticlesCanvasTrailAccess::trail_mask()) == bind_pose_count);
+	CHECK((TestParticlesCanvasTrailAccess::trail_mask() & TestParticlesCanvasTrailAccess::colors_flag()) == 0);
+	CHECK((TestParticlesCanvasTrailAccess::trail_mask() & TestParticlesCanvasTrailAccess::custom_data_flag()) == 0);
+}
 
 namespace RendererRD {
 class TestParticlesReadbackAccess {
