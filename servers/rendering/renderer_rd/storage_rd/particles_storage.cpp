@@ -1567,7 +1567,7 @@ void ParticlesStorage::particles_set_view_axis(RID p_particles, const Vector3 &p
 		return;
 	}
 
-	if (particles->particle_buffer.is_null() || particles->trail_bind_pose_uniform_set.is_null() || !RD::get_singleton()->uniform_set_is_valid(particles->trail_bind_pose_uniform_set)) {
+	if (particles->particle_buffer.is_null() || particles->particles_copy_uniform_set.is_null() || !RD::get_singleton()->uniform_set_is_valid(particles->particles_copy_uniform_set) || particles->trail_bind_pose_uniform_set.is_null() || !RD::get_singleton()->uniform_set_is_valid(particles->trail_bind_pose_uniform_set)) {
 		return; //particles have not processed yet
 	}
 
