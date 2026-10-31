@@ -158,7 +158,7 @@ public:
 		return packet_identity.previous_camera_source_matches(p_view_id, p_view_epoch, p_capture_ordinal);
 	}
 	NativeRetirementReceipt issue_native_retirement_receipt() const {
-		if (native_retirement_receipt_issued || native_retirement_acknowledged_state || !packet_identity.external || !packet_identity.has_camera_source() || !previous_camera_source_admitted() || packet_identity.material_generation == 0) {
+		if (native_retirement_receipt_issued || native_retirement_acknowledged_state || !packet_identity.external || !packet_identity.has_camera_source() || !previous_camera_source_admitted() || packet_identity.material_generation == 0 || packet_identity.material_generation == UINT64_MAX) {
 			return NativeRetirementReceipt();
 		}
 		native_retirement_receipt.view_id = packet_identity.view_id;

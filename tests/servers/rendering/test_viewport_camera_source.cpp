@@ -522,6 +522,17 @@ TEST_CASE("[B4][E18] native retirement receipt binds the exact packet identity")
 	CHECK(retired_before_ack.native_retirement_acknowledged());
 }
 
+TEST_CASE("[B4][E18] saturated material generation cannot issue native retirement receipt") {
+	RenderDataRD render_data;
+	render_data.packet_identity.external = true;
+	CHECK(render_data.set_camera_source(41, 3, 9));
+	CHECK(render_data.set_previous_camera_source(41, 3, 8));
+	render_data.packet_identity.material_generation = UINT64_MAX;
+	CHECK_FALSE(render_data.packet_identity.material_admitted(UINT64_MAX, 0));
+	CHECK_FALSE(render_data.issue_native_retirement_receipt().is_valid());
+	CHECK_FALSE(render_data.native_retirement_receipt_issued);
+}
+
 TEST_CASE("[B4][E19] camera history advances only after color adoption") {
 	CHECK(RSG::viewport != nullptr);
 	if (!RSG::viewport) {
