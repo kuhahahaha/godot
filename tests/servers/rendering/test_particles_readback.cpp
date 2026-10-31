@@ -75,6 +75,9 @@ public:
 	static uint64_t frame_params_entry_size() {
 		return sizeof(ParticlesStorage::ParticlesFrameParams);
 	}
+	static bool trail_history_index(uint64_t p_index, uint64_t p_history_size, uint64_t p_trail_size, uint64_t &r_index) {
+		return ParticlesStorage::_particles_get_trail_history_index(p_index, p_history_size, p_trail_size, r_index);
+	}
 };
 } // namespace RendererRD
 
@@ -137,6 +140,20 @@ TEST_CASE("[ParticlesReadback] data size includes trails and user data with a bo
 	CHECK(size == 0);
 	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::frame_params_data_size(UINT64_MAX, size));
 	CHECK(size == 0);
+
+	uint64_t history_index = 0;
+	CHECK(RendererRD::TestParticlesReadbackAccess::trail_history_index(1, 4, 2, history_index));
+	CHECK(history_index == 2);
+	CHECK(RendererRD::TestParticlesReadbackAccess::trail_history_index(1, UINT64_MAX, 2, history_index));
+	CHECK(history_index == UINT64_MAX / 2);
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::trail_history_index(2, 4, 2, history_index));
+	CHECK(history_index == 0);
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::trail_history_index(0, 0, 2, history_index));
+	CHECK(history_index == 0);
+	CHECK(RendererRD::TestParticlesReadbackAccess::trail_history_index(0, UINT64_MAX, 2, history_index));
+	CHECK(history_index == 0);
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::trail_history_index(0, 4, 0, history_index));
+	CHECK(history_index == 0);
 }
 
 TEST_CASE("[ParticlesReadback] invalid particle RID returns an empty CPU snapshot") {

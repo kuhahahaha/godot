@@ -801,6 +801,15 @@ bool ParticlesStorage::_particles_get_frame_params_data_size(uint64_t p_count, u
 	return r_size <= UINT32_MAX;
 }
 
+bool ParticlesStorage::_particles_get_trail_history_index(uint64_t p_index, uint64_t p_history_size, uint64_t p_trail_size, uint64_t &r_index) {
+	r_index = 0;
+	if (p_history_size == 0 || p_trail_size == 0 || p_index >= p_trail_size || p_index > UINT64_MAX / p_history_size) {
+		return false;
+	}
+	r_index = (p_index * p_history_size) / p_trail_size;
+	return true;
+}
+
 bool ParticlesStorage::_particles_get_sort_data_size(uint64_t p_amount, uint64_t &r_size) {
 	if (p_amount == 0) {
 		r_size = 0;
@@ -1406,12 +1415,16 @@ void ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 	if (p_particles->trail_params.size() > 1) {
 		//fill the trail params
 		for (uint32_t i = 0; i < p_particles->trail_params.size(); i++) {
-			uint32_t src_idx = i * p_particles->frame_history.size() / p_particles->trail_params.size();
+			uint64_t src_idx = 0;
+			if (!_particles_get_trail_history_index(i, p_particles->frame_history.size(), p_particles->trail_params.size(), src_idx)) {
+				ERR_PRINT("Particle trail history index exceeds the supported range.");
+				return;
+			}
 			if (p_particles->speed_scale <= 0.0) {
 				// Stop trails.
 				src_idx = 0;
 			}
-			p_particles->trail_params[i] = p_particles->frame_history[src_idx];
+			p_particles->trail_params[i] = p_particles->frame_history[uint32_t(src_idx)];
 		}
 	} else {
 		p_particles->trail_params[0] = p_particles->frame_history[0];
