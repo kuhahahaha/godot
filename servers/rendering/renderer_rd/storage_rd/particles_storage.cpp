@@ -623,6 +623,9 @@ bool ParticlesStorage::_particles_ensure_unused_trail_buffer(Particles *particle
 
 bool ParticlesStorage::_particles_ensure_trail_uniform(Particles *particles, RID p_shader) {
 	if (particles->trail_bind_pose_uniform_set.is_null() || !RD::get_singleton()->uniform_set_is_valid(particles->trail_bind_pose_uniform_set)) {
+		// Drop an invalid handle before a replacement attempt so a failed create
+		// cannot leave stale state that looks like an existing uniform set.
+		particles->trail_bind_pose_uniform_set = RID();
 		Vector<RD::Uniform> uniforms;
 		{
 			RD::Uniform u;
