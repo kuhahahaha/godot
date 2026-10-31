@@ -1536,6 +1536,14 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 	}
 
 	ERR_FAIL_NULL_V(m, false);
+	if (!RD::get_singleton()->compute_pipeline_is_valid(m->shader_data->pipeline.get_rid())) {
+		ERR_PRINT("Particle process pipeline is invalid.");
+		return false;
+	}
+	if (!RD::get_singleton()->uniform_set_is_valid(particles_shader.base_uniform_set)) {
+		ERR_PRINT("Particle base uniform set is invalid.");
+		return false;
+	}
 
 	p_particles->has_collision_cache = m->shader_data->uses_collision;
 
