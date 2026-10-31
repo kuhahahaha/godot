@@ -9991,6 +9991,9 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 		}
 #endif
 		if (wait_error != OK) {
+			if (p_nonblocking && frame_wait_native_code_valid.load() && wait_error == FAILED) {
+				return _fail_frame_wait_source(p_frame, wait_error);
+			}
 			frames[p_frame].primary_command_buffer_begun = false;
 			frame_wait_error = wait_error;
 			if (!frame_wait_native_code_valid.load()) {

@@ -385,24 +385,34 @@ public:
 				++polls;
 				FencePollResult result;
 				result.completed_serial = p_serial;
-				result.native_error = true;
-				result.native_code = -13;
+				result.native_error = polls == 1;
+				result.completed = polls > 1;
+				result.native_code = result.native_error ? -13 : 0;
 				return result;
 			}
+			Error fence_recycle(FenceID, uint64_t) override { return OK; }
 		} driver;
 		RenderingDevice device;
 		device.driver = &driver;
-		device.frames.resize(1);
+		device.frames.resize(2);
+		device.frame = 1;
 		device.frames[0].fence = RDD::FenceID(71);
 		device.frames[0].fence_signaled = true;
+		RenderingDevice::BufferGetDataRequest request;
+		request.result.instantiate();
+		request.result->bytes.resize(4);
+		request.result->qualification_owned = true;
+		device.frames[0].download_buffer_get_data_requests.push_back(request);
 		RDD::QueueCallReport report;
 		report.submission_serial = 99;
 		device.frames[0].chain_reports.push_back(report);
 		CHECK(device._stall_for_frame(0, true) == FAILED);
 		CHECK(driver.polls == 1);
 		CHECK(device.frame_wait_native_code.load() == -13);
-		device.frame_wait_error = OK;
-		device.failed_wait_frame = -1;
+		CHECK(request.result->error == FAILED);
+		CHECK(request.result->native_code == -13);
+		CHECK(device._stall_for_frame(0, true) == FAILED);
+		CHECK(driver.polls == 1);
 		device.frames.clear();
 		device.driver = nullptr;
 	}
