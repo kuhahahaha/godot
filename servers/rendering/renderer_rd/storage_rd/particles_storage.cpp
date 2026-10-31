@@ -1062,6 +1062,7 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
 
 	if (p_particles->particles_material_uniform_set.is_null() || !RD::get_singleton()->uniform_set_is_valid(p_particles->particles_material_uniform_set)) {
+		p_particles->particles_material_uniform_set = RID();
 		thread_local LocalVector<RD::Uniform> uniforms;
 		uniforms.clear();
 
