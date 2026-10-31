@@ -347,6 +347,7 @@ void ParticlesStorage::_particles_free_data(Particles *particles) {
 void ParticlesStorage::particles_set_amount(RID p_particles, int p_amount) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(!_particles_amount_is_valid(p_amount), "Particle amount must be non-negative.");
 
 	if (particles->amount == p_amount) {
 		return;
@@ -971,6 +972,10 @@ bool ParticlesStorage::_particles_get_total_amount(const Particles *p_particles,
 	}
 	r_total_amount = uint32_t(total_amount);
 	return true;
+}
+
+bool ParticlesStorage::_particles_amount_is_valid(int p_amount) {
+	return p_amount >= 0;
 }
 
 bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta) {

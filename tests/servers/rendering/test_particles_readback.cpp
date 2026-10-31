@@ -11,6 +11,9 @@ TEST_FORCE_LINK(test_particles_readback)
 namespace RendererRD {
 class TestParticlesReadbackAccess {
 public:
+	static bool amount_is_valid(int p_amount) {
+		return ParticlesStorage::_particles_amount_is_valid(p_amount);
+	}
 	static bool buffer_size(uint64_t p_count, uint64_t p_element_size, uint64_t p_header_size, uint32_t &r_size) {
 		return ParticlesStorage::_particles_get_buffer_size(p_count, p_element_size, p_header_size, r_size);
 	}
@@ -66,4 +69,10 @@ TEST_CASE("[ParticlesReadback] particle buffer sizes reject uint32 overflow") {
 	CHECK(size == 80);
 	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::buffer_size(UINT64_MAX, 16, 16, size));
 	CHECK(size == 0);
+}
+
+TEST_CASE("[ParticlesReadback] negative particle amounts fail closed") {
+	CHECK(RendererRD::TestParticlesReadbackAccess::amount_is_valid(0));
+	CHECK(RendererRD::TestParticlesReadbackAccess::amount_is_valid(INT32_MAX));
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::amount_is_valid(-1));
 }
