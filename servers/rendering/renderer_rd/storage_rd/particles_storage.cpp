@@ -1860,7 +1860,7 @@ void ParticlesStorage::update_particles() {
 		particles->dirty = false;
 
 		const bool buffers_ready = _particles_update_buffers(particles);
-		if (!buffers_ready || particles->particle_buffer.is_null() || particles->particle_instance_buffer.is_null() || particles->particles_copy_uniform_set.is_null()) {
+		if (!buffers_ready || particles->particle_buffer.is_null() || particles->particle_instance_buffer.is_null() || particles->particles_copy_uniform_set.is_null() || !RD::get_singleton()->uniform_set_is_valid(particles->particles_copy_uniform_set)) {
 			continue;
 		}
 
