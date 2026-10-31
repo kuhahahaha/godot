@@ -123,6 +123,8 @@ private:
 		test_buffer_update_fault_hits = 0;
 	}
 	uint32_t test_get_buffer_update_fault_hits() const { return test_buffer_update_fault_hits; }
+	void test_reset_compute_dispatch_count() { test_compute_dispatch_count = 0; }
+	uint32_t test_get_compute_dispatch_count() const { return test_compute_dispatch_count; }
 #endif
 	static RenderingDevice *singleton;
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
@@ -150,6 +152,7 @@ private:
 	RID test_buffer_update_fault_buffer;
 	uint32_t test_buffer_update_fault_count = 0;
 	uint32_t test_buffer_update_fault_hits = 0;
+	uint32_t test_compute_dispatch_count = 0;
 #endif
 	void _finalize_on_rendering_server_thread();
 

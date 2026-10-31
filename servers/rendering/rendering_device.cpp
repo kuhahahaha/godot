@@ -7640,6 +7640,11 @@ RDG::RecordHandle RenderingDevice::_qualification_dispatch(ComputeListID p_list,
 		draw_graph.add_compute_list_bind_uniform_sets(compute_list.state.pipeline_shader_driver_id, valid_descriptor_ids, first_set_index, valid_set_count);
 	}
 	const RDG::RecordHandle recorded = draw_graph.add_compute_list_dispatch(p_x_groups, p_y_groups, p_z_groups);
+#ifdef TESTS_ENABLED
+	if (recorded.is_valid()) {
+		test_compute_dispatch_count++;
+	}
+#endif
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
 	if (RenderCaptureTestHooks::write_census_active()) {
 		for (uint32_t i = 0; i < compute_list.state.set_count; i++) {
