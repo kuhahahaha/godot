@@ -1500,6 +1500,12 @@ void ParticlesStorage::particles_set_view_axis(RID p_particles, const Vector3 &p
 		return; //particles have not processed yet
 	}
 
+	uint32_t total_amount = 0;
+	if (!_particles_get_total_amount(particles, total_amount)) {
+		ERR_PRINT("Particle amount exceeds the rendering device limit.");
+		return;
+	}
+
 	bool do_sort = particles->draw_order == RSE::PARTICLES_DRAW_ORDER_VIEW_DEPTH;
 
 	//copy to sort buffer
@@ -1559,7 +1565,7 @@ void ParticlesStorage::particles_set_view_axis(RID p_particles, const Vector3 &p
 	copy_push_constant.motion_vectors_current_offset = particles->instance_motion_vectors_current_offset;
 
 	copy_push_constant.frame_remainder = particles->interpolate ? particles->frame_remainder : 0.0;
-	copy_push_constant.total_particles = particles->amount;
+	copy_push_constant.total_particles = total_amount;
 	copy_push_constant.copy_mode_2d = false;
 
 	Vector3 axis = -p_axis; // cameras look to z negative
@@ -1596,10 +1602,6 @@ void ParticlesStorage::particles_set_view_axis(RID p_particles, const Vector3 &p
 		if (!sort_effects->sort_buffer(particles->particles_sort_uniform_set, particles->amount)) {
 				return;
 		}
-	}
-
-	if (particles->trails_enabled && particles->trail_bind_poses.size() > 1) {
-		copy_push_constant.total_particles *= particles->trail_bind_poses.size();
 	}
 
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
