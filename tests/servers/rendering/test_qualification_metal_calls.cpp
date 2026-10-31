@@ -84,6 +84,35 @@ TEST_CASE("[QualificationNative][Metal] failed dedicated heap buffer creation re
 	allocator.free_buffer(valid);
 }
 
+TEST_CASE("[QualificationNative][Metal] failed shared heap buffer creation returns pooled allocations") {
+	RenderingContextDriverMetal context;
+	REQUIRE(context.initialize() == OK);
+	MetalHeapAllocator allocator(context.get_metal_device());
+	const MTL::ResourceOptions options[] = {
+		MTL::ResourceStorageModeShared,
+		MTL::ResourceStorageModeShared | MTL::ResourceCPUCacheModeWriteCombined,
+	};
+	for (MTL::ResourceOptions option : options) {
+		MetalAllocatorStats before;
+		allocator.get_stats(before);
+		allocator.test_fail_buffer_after_allocation = true;
+		auto failed = allocator.new_buffer(128, option);
+		CHECK_FALSE(bool(failed.buffer));
+		CHECK_FALSE(failed.allocation.is_valid());
+		CHECK_FALSE(allocator.test_fail_buffer_after_allocation);
+		MetalAllocatorStats after;
+		allocator.get_stats(after);
+		for (uint32_t i = 0; i < 3; ++i) {
+			CHECK(after.pools[i].allocation_count == before.pools[i].allocation_count);
+			CHECK(after.pools[i].used_bytes == before.pools[i].used_bytes);
+			CHECK(after.pools[i].dedicated_count == before.pools[i].dedicated_count);
+		}
+		auto valid = allocator.new_buffer(128, option);
+		REQUIRE(bool(valid.buffer));
+		allocator.free_buffer(valid);
+	}
+}
+
 class TestQualificationMetalCallAccess {
 public:
 	static Mutex &mutex(RenderingDeviceDriverMetal &driver) { return driver.completion_records_mutex; }
