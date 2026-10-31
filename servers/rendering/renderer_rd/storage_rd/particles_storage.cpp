@@ -1566,9 +1566,12 @@ void ParticlesStorage::particles_set_view_axis(RID p_particles, const Vector3 &p
 		sort_effects->sort_buffer(particles->particles_sort_uniform_set, particles->amount);
 	}
 
-	if (particles->trails_enabled && particles->trail_bind_poses.size() > 1) {
-		copy_push_constant.total_particles *= particles->trail_bind_poses.size();
+	uint32_t total_copy_particles = 0;
+	if (!_particles_get_total_amount(uint64_t(particles->amount), particles->trails_enabled ? uint64_t(particles->trail_bind_poses.size()) : 1, total_copy_particles)) {
+		ERR_PRINT("Particle copy amount exceeds the supported dispatch size.");
+		return;
 	}
+	copy_push_constant.total_particles = total_copy_particles;
 
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 	uint32_t copy_mode = do_sort ? ParticlesShader::COPY_MODE_FILL_INSTANCES_WITH_SORT_BUFFER : ParticlesShader::COPY_MODE_FILL_INSTANCES;
