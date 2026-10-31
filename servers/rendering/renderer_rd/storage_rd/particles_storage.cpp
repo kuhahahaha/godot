@@ -885,7 +885,7 @@ void ParticlesStorage::particles_set_canvas_sdf_collision(RID p_particles, bool 
 	particles->sdf_collision_texture = p_texture;
 }
 
-void ParticlesStorage::_particles_process(Particles *p_particles, double p_delta) {
+bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta) {
 	TextureStorage *texture_storage = TextureStorage::get_singleton();
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
 
@@ -918,7 +918,7 @@ void ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 				_particles_ensure_unused_emission_buffer(p_particles);
 				if (p_particles->unused_emission_storage_buffer.is_null()) {
 					ERR_PRINT("Failed to create particle fallback emission buffer.");
-					return;
+					return false;
 				}
 				u.append_id(p_particles->unused_emission_storage_buffer);
 			}
@@ -935,14 +935,14 @@ void ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 				}
 				if (sub_emitter->emission_storage_buffer.is_null()) {
 					ERR_PRINT("Failed to create sub-emitter emission buffer.");
-					return;
+					return false;
 				}
 				u.append_id(sub_emitter->emission_storage_buffer);
 			} else {
 				_particles_ensure_unused_emission_buffer(p_particles);
 				if (p_particles->unused_emission_storage_buffer.is_null()) {
 					ERR_PRINT("Failed to create particle fallback emission buffer.");
-					return;
+					return false;
 				}
 				u.append_id(p_particles->unused_emission_storage_buffer);
 			}
@@ -952,7 +952,7 @@ void ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 		p_particles->particles_material_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, particles_shader.default_shader_rd, 1);
 		if (p_particles->particles_material_uniform_set.is_null()) {
 			ERR_PRINT("Failed to create particle material uniform set.");
-			return;
+			return false;
 		}
 	}
 
@@ -1249,7 +1249,7 @@ void ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 			p_particles->collision_textures_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, particles_shader.default_shader_rd, 2);
 			if (p_particles->collision_textures_uniform_set.is_null()) {
 				ERR_PRINT("Failed to create particle collision texture uniform set.");
-				return;
+				return false;
 			}
 			p_particles->collision_3d_textures_used = collision_3d_textures_used;
 			for (uint32_t i = 0; i < ParticlesFrameParams::MAX_3D_TEXTURES; i++) {
@@ -1326,19 +1326,19 @@ void ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 		m = static_cast<ParticleProcessMaterialData *>(material_storage->material_get_data(particles_shader.default_material, MaterialStorage::SHADER_TYPE_PARTICLES));
 	}
 
-	ERR_FAIL_NULL(m);
+	ERR_FAIL_NULL_V(m, false);
 	if (!RD::get_singleton()->compute_pipeline_is_valid(m->shader_data->pipeline.get_rid())) {
 		ERR_PRINT("Particle process pipeline is invalid.");
-		return;
+		return false;
 	}
 	if (!RD::get_singleton()->uniform_set_is_valid(particles_shader.base_uniform_set)) {
 		ERR_PRINT("Particle base uniform set is invalid.");
-		return;
+		return false;
 	}
 	const bool custom_uniforms_required = m->shader_data->ubo_size > 0 || !m->shader_data->texture_uniforms.is_empty();
 	if (custom_uniforms_required && !RD::get_singleton()->uniform_set_is_valid(m->uniform_set)) {
 		ERR_PRINT("Particle custom material uniform set is invalid.");
-		return;
+		return false;
 	}
 
 	p_particles->has_collision_cache = m->shader_data->uses_collision;
@@ -1347,7 +1347,7 @@ void ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 	if (compute_list == RD::INVALID_ID) {
 		ERR_PRINT("Particle process compute list could not be opened.");
-		return;
+		return false;
 	}
 	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, m->shader_data->pipeline.get_rid());
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, particles_shader.base_uniform_set, BASE_UNIFORM_SET);
@@ -1375,6 +1375,7 @@ void ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 	}
 
 	RD::get_singleton()->compute_list_end();
+	return true;
 }
 
 void ParticlesStorage::particles_set_view_axis(RID p_particles, const Vector3 &p_axis, const Vector3 &p_up_axis) {
@@ -1483,7 +1484,7 @@ void ParticlesStorage::particles_set_view_axis(RID p_particles, const Vector3 &p
 
 		RD::get_singleton()->compute_list_end();
 		if (!sort_effects->sort_buffer(particles->particles_sort_uniform_set, particles->amount)) {
-			return;
+				return;
 		}
 	}
 
@@ -1607,7 +1608,7 @@ void ParticlesStorage::_particles_update_buffers(Particles *particles) {
 					RD::get_singleton()->free_rid(particles->particle_buffer);
 					particles->particle_buffer = RID();
 				}
-				return;
+			return;
 			}
 		}
 
@@ -1736,6 +1737,7 @@ void ParticlesStorage::update_particles() {
 		todo = todo > particles->request_process_time ? todo : particles->request_process_time;
 		todo = todo > particles->request_process_time_residual ? todo : particles->request_process_time_residual;
 
+		bool process_ok = true;
 		if (todo > 0.0) {
 			real_t frame_time;
 			if (fixed_fps > 0) {
@@ -1750,26 +1752,38 @@ void ParticlesStorage::update_particles() {
 			if (particles->clear) {
 				todo = particles->pre_process_time;
 				while (todo > 0.0) {
-					_particles_process(particles, frame_time > todo ? todo : frame_time);
+					if (!_particles_process(particles, frame_time > todo ? todo : frame_time)) {
+						process_ok = false;
+						break;
+					}
 					todo -= frame_time;
 				}
 			}
-			if (particles->request_process_time > 0.0) {
+			if (process_ok && particles->request_process_time > 0.0) {
 				todo = particles->request_process_time;
 				while (todo > 0.0) {
-					_particles_process(particles, frame_time > todo ? todo : frame_time);
+					if (!_particles_process(particles, frame_time > todo ? todo : frame_time)) {
+						process_ok = false;
+						break;
+					}
 					todo -= frame_time;
 				}
 			}
-			if (particles->request_process_time_residual > 0.0) {
+			if (process_ok && particles->request_process_time_residual > 0.0) {
 				particles->emitting = false;
 				todo = particles->request_process_time_residual;
 				while (todo > 0.0) {
-					_particles_process(particles, frame_time > todo ? todo : frame_time);
+					if (!_particles_process(particles, frame_time > todo ? todo : frame_time)) {
+						process_ok = false;
+						break;
+					}
 					todo -= frame_time;
 				}
 			}
 			particles->speed_scale = tmp_scale;
+			if (!process_ok) {
+				continue;
+			}
 		}
 
 		particles->request_process_time = 0.0;
@@ -1787,13 +1801,21 @@ void ParticlesStorage::update_particles() {
 			todo = particles->frame_remainder + delta * time_scale;
 
 			while (todo >= frame_time || particles->clear) {
-				_particles_process(particles, frame_time);
+				if (!_particles_process(particles, frame_time)) {
+					process_ok = false;
+					break;
+				}
 				todo -= frame_time;
 			}
 
+			if (!process_ok) {
+				continue;
+			}
 			particles->frame_remainder = todo;
 		} else {
-			_particles_process(particles, RendererCompositorRD::get_singleton()->get_frame_delta_time() * time_scale);
+			if (!_particles_process(particles, RendererCompositorRD::get_singleton()->get_frame_delta_time() * time_scale)) {
+				continue;
+			}
 		}
 		// Ensure that memory is initialized (the code above should ensure that _particles_process is always called at least once upon clearing).
 		DEV_ASSERT(!particles->clear);

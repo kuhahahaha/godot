@@ -280,7 +280,7 @@ private:
 		}
 	};
 
-	void _particles_process(Particles *p_particles, double p_delta);
+	bool _particles_process(Particles *p_particles, double p_delta);
 	static bool _particles_get_data_size(const Particles *p_particles, uint64_t &r_size);
 	void _particles_allocate_emission_buffer(Particles *particles);
 	void _particles_ensure_unused_emission_buffer(Particles *particles);
