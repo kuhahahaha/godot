@@ -32,7 +32,7 @@ struct TextureList { bool empty = true; bool is_empty() const { return empty; } 
 struct Pipeline { RID get_rid() const { return {1}; } };
 struct Shader { Pipeline pipeline; unsigned ubo_size = 0; TextureList texture_uniforms; bool uses_collision = false; };
 struct Material { Shader *shader_data; RID uniform_set; int used = 0; void set_as_used() { used++; } };
-struct Particles { struct Emission { int particle_count = 0; }; bool has_collision_cache = false; RID particles_material_uniform_set{3}; RID collision_textures_uniform_set{4}; bool trails_enabled = false; std::vector<int> trail_bind_poses; unsigned amount = 4; bool force_sub_emit = false; bool clear = false; bool emitting = false; bool inactive = false; double inactive_time = 0; RID emission_storage_buffer{1}; Emission *emission_buffer = nullptr; };
+struct Particles { struct Emission { int particle_count = 0; }; bool has_collision_cache = false; RID particles_material_uniform_set{3}; RID collision_textures_uniform_set{4}; bool trails_enabled = false; std::vector<int> trail_bind_poses; unsigned amount = 4; bool force_sub_emit = false; bool clear = false; bool emitting = false; bool inactive = false; double inactive_time = 0; double speed_scale = 1.0; double trail_params_speed_scale = 1.0; RID emission_storage_buffer{1}; Emission *emission_buffer = nullptr; };
 struct ParticlesShader { struct PushConstant { bool trail_pass = false; }; RID base_uniform_set{2}; };
 struct RD {
     using ComputeListID = long long;
