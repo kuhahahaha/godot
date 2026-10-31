@@ -1540,9 +1540,16 @@ void ParticlesStorage::particles_set_view_axis(RID p_particles, const Vector3 &p
 	if (do_sort && particles->particles_sort_buffer == RID()) {
 		uint32_t size = particles->amount;
 		if (size & 1) {
+			if (size == UINT32_MAX) {
+				ERR_PRINT("Particle sort buffer exceeds the rendering device buffer size limit.");
+				return;
+			}
 			size++; //make multiple of 16
 		}
-		size *= sizeof(float) * 2;
+		if (!_particles_get_buffer_size(size, sizeof(float) * 2, 0, size)) {
+			ERR_PRINT("Particle sort buffer exceeds the rendering device buffer size limit.");
+			return;
+		}
 		particles->particles_sort_buffer = RD::get_singleton()->storage_buffer_create(size);
 		if (particles->particles_sort_buffer.is_null()) {
 			ERR_PRINT("Failed to create particle sort buffer.");
@@ -1893,15 +1900,25 @@ void ParticlesStorage::update_particles() {
 			}
 
 			if (particles->trail_bind_pose_buffer.is_valid() && particles->trail_bind_poses_dirty) {
-				if (particles_shader.pose_update_buffer.size() < uint32_t(particles->trail_bind_poses.size()) * 16) {
-					particles_shader.pose_update_buffer.resize(particles->trail_bind_poses.size() * 16);
+			uint32_t trail_bind_pose_elements = 0;
+			if (!_particles_get_buffer_size(uint64_t(particles->trail_bind_poses.size()), 16, 0, trail_bind_pose_elements)) {
+				ERR_PRINT("Particle trail bind pose staging buffer exceeds the rendering device buffer size limit.");
+				continue;
+			}
+			if (particles_shader.pose_update_buffer.size() < trail_bind_pose_elements) {
+				particles_shader.pose_update_buffer.resize(trail_bind_pose_elements);
 				}
 
 				for (int i = 0; i < particles->trail_bind_poses.size(); i++) {
 					RendererRD::MaterialStorage::store_transform(particles->trail_bind_poses[i], &particles_shader.pose_update_buffer[i * 16]);
 				}
 
-				if (RD::get_singleton()->buffer_update(particles->trail_bind_pose_buffer, 0, particles->trail_bind_poses.size() * 16 * sizeof(float), particles_shader.pose_update_buffer.ptr()) != OK) {
+			uint32_t trail_bind_pose_upload_size = 0;
+			if (!_particles_get_buffer_size(uint64_t(particles->trail_bind_poses.size()), sizeof(float) * 16, 0, trail_bind_pose_upload_size)) {
+				ERR_PRINT("Particle trail bind pose upload exceeds the rendering device buffer size limit.");
+				continue;
+			}
+			if (RD::get_singleton()->buffer_update(particles->trail_bind_pose_buffer, 0, trail_bind_pose_upload_size, particles_shader.pose_update_buffer.ptr()) != OK) {
 					ERR_PRINT("Failed to update particle trail bind pose buffer.");
 					continue;
 				}
