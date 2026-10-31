@@ -17,14 +17,22 @@ def main():
     project = Path(__file__).resolve().parent
     command = [
         str(args.binary.resolve()),
-        "--display-driver", "macos",
-        "--rendering-driver", "metal",
-        "--rendering-method", args.renderer,
-        "--render-thread", "safe",
-        "--audio-driver", "Dummy",
-        "--path", str(project),
-        "--script", "res://probe.gd",
-        "--", args.dimension,
+        "--display-driver",
+        "macos",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        args.renderer,
+        "--render-thread",
+        "safe",
+        "--audio-driver",
+        "Dummy",
+        "--path",
+        str(project),
+        "--script",
+        "res://probe.gd",
+        "--",
+        args.dimension,
     ]
     try:
         result = subprocess.run(command, capture_output=True, text=True, timeout=20)
@@ -54,7 +62,9 @@ def main():
         and 'Parameter "uniform_set" is null.' not in output
         and "SCRIPT ERROR" not in output
     )
-    print(f"renderer={args.renderer} dimension={args.dimension} rc={result.returncode} recovered_red={red} expected_errors={len(errors)} pass={passed}")
+    print(
+        f"renderer={args.renderer} dimension={args.dimension} rc={result.returncode} recovered_red={red} expected_errors={len(errors)} pass={passed}"
+    )
     return 0 if passed else 1
 
 
