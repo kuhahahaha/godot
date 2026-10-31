@@ -783,6 +783,15 @@ bool ParticlesStorage::_particles_get_emission_data_size(uint64_t p_amount, uint
 	return r_size <= UINT32_MAX;
 }
 
+bool ParticlesStorage::_particles_get_trail_bind_pose_data_size(uint64_t p_count, uint64_t &r_size) {
+	r_size = 0;
+	if (p_count == 0 || p_count > UINT64_MAX / (16 * sizeof(float))) {
+		return false;
+	}
+	r_size = p_count * 16 * sizeof(float);
+	return r_size <= UINT32_MAX;
+}
+
 bool ParticlesStorage::_particles_get_sort_data_size(uint64_t p_amount, uint64_t &r_size) {
 	if (p_amount == 0) {
 		r_size = 0;
@@ -1773,7 +1782,12 @@ void ParticlesStorage::update_particles() {
 			}
 
 			if (particles->trail_bind_poses.size() > 1 && particles->trail_bind_pose_buffer.is_null()) {
-				particles->trail_bind_pose_buffer = RD::get_singleton()->storage_buffer_create(sizeof(float) * 16 * particles->trail_bind_poses.size());
+				uint64_t trail_bind_pose_buffer_size = 0;
+				if (!_particles_get_trail_bind_pose_data_size(uint64_t(particles->trail_bind_poses.size()), trail_bind_pose_buffer_size)) {
+					ERR_PRINT("Particle trail bind pose buffer size exceeds the supported allocation size.");
+					return;
+				}
+				particles->trail_bind_pose_buffer = RD::get_singleton()->storage_buffer_create(uint32_t(trail_bind_pose_buffer_size));
 				particles->trail_bind_poses_dirty = true;
 			}
 

@@ -66,6 +66,9 @@ public:
 	static uint64_t emission_entry_size() {
 		return sizeof(ParticlesStorage::ParticleEmissionBuffer::Data);
 	}
+	static bool trail_bind_pose_data_size(uint64_t p_count, uint64_t &r_size) {
+		return ParticlesStorage::_particles_get_trail_bind_pose_data_size(p_count, r_size);
+	}
 };
 } // namespace RendererRD
 
@@ -113,6 +116,13 @@ TEST_CASE("[ParticlesReadback] data size includes trails and user data with a bo
 	CHECK(RendererRD::TestParticlesReadbackAccess::emission_data_size(2, size));
 	CHECK(size == RendererRD::TestParticlesReadbackAccess::emission_entry_size() * 2 + sizeof(uint32_t) * 4);
 	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::emission_data_size(UINT64_MAX, size));
+	CHECK(size == 0);
+
+	CHECK(RendererRD::TestParticlesReadbackAccess::trail_bind_pose_data_size(2, size));
+	CHECK(size == 2 * 16 * sizeof(float));
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::trail_bind_pose_data_size(0, size));
+	CHECK(size == 0);
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::trail_bind_pose_data_size(UINT64_MAX, size));
 	CHECK(size == 0);
 }
 
