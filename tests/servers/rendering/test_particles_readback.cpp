@@ -69,6 +69,12 @@ public:
 	static bool trail_bind_pose_data_size(uint64_t p_count, uint64_t &r_size) {
 		return ParticlesStorage::_particles_get_trail_bind_pose_data_size(p_count, r_size);
 	}
+	static bool frame_params_data_size(uint64_t p_count, uint64_t &r_size) {
+		return ParticlesStorage::_particles_get_frame_params_data_size(p_count, r_size);
+	}
+	static uint64_t frame_params_entry_size() {
+		return sizeof(ParticlesStorage::ParticlesFrameParams);
+	}
 };
 } // namespace RendererRD
 
@@ -123,6 +129,13 @@ TEST_CASE("[ParticlesReadback] data size includes trails and user data with a bo
 	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::trail_bind_pose_data_size(0, size));
 	CHECK(size == 0);
 	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::trail_bind_pose_data_size(UINT64_MAX, size));
+	CHECK(size == 0);
+
+	CHECK(RendererRD::TestParticlesReadbackAccess::frame_params_data_size(2, size));
+	CHECK(size == 2 * RendererRD::TestParticlesReadbackAccess::frame_params_entry_size());
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::frame_params_data_size(0, size));
+	CHECK(size == 0);
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::frame_params_data_size(UINT64_MAX, size));
 	CHECK(size == 0);
 }
 

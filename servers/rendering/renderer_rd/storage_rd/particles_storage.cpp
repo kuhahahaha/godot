@@ -792,6 +792,15 @@ bool ParticlesStorage::_particles_get_trail_bind_pose_data_size(uint64_t p_count
 	return r_size <= UINT32_MAX;
 }
 
+bool ParticlesStorage::_particles_get_frame_params_data_size(uint64_t p_count, uint64_t &r_size) {
+	r_size = 0;
+	if (p_count == 0 || p_count > UINT64_MAX / sizeof(ParticlesFrameParams)) {
+		return false;
+	}
+	r_size = p_count * sizeof(ParticlesFrameParams);
+	return r_size <= UINT32_MAX;
+}
+
 bool ParticlesStorage::_particles_get_sort_data_size(uint64_t p_amount, uint64_t &r_size) {
 	if (p_amount == 0) {
 		r_size = 0;
@@ -1403,7 +1412,12 @@ void ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 		p_particles->trail_params[0] = p_particles->frame_history[0];
 	}
 
-	RD::get_singleton()->buffer_update(p_particles->frame_params_buffer, 0, sizeof(ParticlesFrameParams) * p_particles->trail_params.size(), p_particles->trail_params.ptr());
+	uint64_t frame_params_size = 0;
+	if (!_particles_get_frame_params_data_size(uint64_t(p_particles->trail_params.size()), frame_params_size)) {
+		ERR_PRINT("Particle frame parameters buffer size exceeds the supported update size.");
+		return;
+	}
+	RD::get_singleton()->buffer_update(p_particles->frame_params_buffer, 0, uint32_t(frame_params_size), p_particles->trail_params.ptr());
 
 	ParticleProcessMaterialData *m = static_cast<ParticleProcessMaterialData *>(material_storage->material_get_data(p_particles->process_material, MaterialStorage::SHADER_TYPE_PARTICLES));
 	if (!m) {
@@ -1774,7 +1788,12 @@ void ParticlesStorage::update_particles() {
 				if (particles->frame_params_buffer.is_valid()) {
 					RD::get_singleton()->free_rid(particles->frame_params_buffer);
 				}
-				particles->frame_params_buffer = RD::get_singleton()->storage_buffer_create(sizeof(ParticlesFrameParams) * trail_steps);
+				uint64_t frame_params_size = 0;
+				if (!_particles_get_frame_params_data_size(uint64_t(trail_steps), frame_params_size)) {
+					ERR_PRINT("Particle frame parameters buffer size exceeds the supported allocation size.");
+					return;
+				}
+				particles->frame_params_buffer = RD::get_singleton()->storage_buffer_create(uint32_t(frame_params_size));
 				if (particles->frame_params_buffer.is_null()) {
 					ERR_PRINT("Failed to create particle frame parameters buffer.");
 					return;
