@@ -751,6 +751,24 @@ bool ParticlesStorage::_particles_get_data_size(const Particles *p_particles, ui
 	return _particles_get_data_size(uint64_t(p_particles->amount), uint64_t(p_particles->userdata_count), p_particles->trails_enabled ? uint64_t(p_particles->trail_bind_poses.size()) : 1, r_size);
 }
 
+bool ParticlesStorage::_particles_get_total_amount(uint64_t p_amount, uint64_t p_trail_count, uint32_t &r_total_amount) {
+	r_total_amount = 0;
+	if (p_amount == 0) {
+		return false;
+	}
+
+	const uint64_t effective_trail_count = MAX(uint64_t(1), p_trail_count);
+	if (p_amount > UINT64_MAX / effective_trail_count) {
+		return false;
+	}
+	const uint64_t total_amount = p_amount * effective_trail_count;
+	if (total_amount > UINT32_MAX) {
+		return false;
+	}
+	r_total_amount = uint32_t(total_amount);
+	return true;
+}
+
 bool ParticlesStorage::_particles_get_sort_data_size(uint64_t p_amount, uint64_t &r_size) {
 	if (p_amount == 0) {
 		r_size = 0;
@@ -1304,10 +1322,10 @@ void ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 
 	ParticlesShader::PushConstant push_constant;
 
-	int process_amount = p_particles->amount;
-
-	if (p_particles->trails_enabled && p_particles->trail_bind_poses.size() > 1) {
-		process_amount *= p_particles->trail_bind_poses.size();
+	uint32_t process_amount = 0;
+	if (!_particles_get_total_amount(uint64_t(p_particles->amount), p_particles->trails_enabled ? uint64_t(p_particles->trail_bind_poses.size()) : 1, process_amount)) {
+		ERR_PRINT("Particle process amount exceeds the supported dispatch size.");
+		return;
 	}
 	push_constant.clear = p_particles->clear;
 	push_constant.total_particles = p_particles->amount;
@@ -1828,9 +1846,10 @@ void ParticlesStorage::update_particles() {
 		// Ensure that memory is initialized (the code above should ensure that _particles_process is always called at least once upon clearing).
 		DEV_ASSERT(!particles->clear);
 
-		int total_amount = particles->amount;
-		if (particles->trails_enabled && particles->trail_bind_poses.size() > 1) {
-			total_amount *= particles->trail_bind_poses.size();
+		uint32_t total_amount = 0;
+		if (!_particles_get_total_amount(uint64_t(particles->amount), particles->trails_enabled ? uint64_t(particles->trail_bind_poses.size()) : 1, total_amount)) {
+			ERR_PRINT("Particle instance amount exceeds the supported dispatch size.");
+			return;
 		}
 
 		// Swap offsets for motion vectors. Motion vectors can only be used when the draw order keeps the indices consistent across frames.
