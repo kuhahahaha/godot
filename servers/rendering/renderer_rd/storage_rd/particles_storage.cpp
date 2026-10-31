@@ -1915,6 +1915,7 @@ void ParticlesStorage::update_particles() {
 				particles->particles_material_uniform_set = RID();
 				if (particles->frame_params_buffer.is_valid()) {
 					RD::get_singleton()->free_rid(particles->frame_params_buffer);
+					particles->frame_params_buffer = RID();
 				}
 				uint64_t frame_params_size = 0;
 				if (!_particles_get_frame_params_data_size(uint64_t(trail_steps), frame_params_size)) {
