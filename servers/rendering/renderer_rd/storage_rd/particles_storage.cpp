@@ -1327,11 +1327,28 @@ void ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 	}
 
 	ERR_FAIL_NULL(m);
+	if (!RD::get_singleton()->compute_pipeline_is_valid(m->shader_data->pipeline.get_rid())) {
+		ERR_PRINT("Particle process pipeline is invalid.");
+		return;
+	}
+	if (!RD::get_singleton()->uniform_set_is_valid(particles_shader.base_uniform_set)) {
+		ERR_PRINT("Particle base uniform set is invalid.");
+		return;
+	}
+	const bool custom_uniforms_required = m->shader_data->ubo_size > 0 || !m->shader_data->texture_uniforms.is_empty();
+	if (custom_uniforms_required && !RD::get_singleton()->uniform_set_is_valid(m->uniform_set)) {
+		ERR_PRINT("Particle custom material uniform set is invalid.");
+		return;
+	}
 
 	p_particles->has_collision_cache = m->shader_data->uses_collision;
 
 	//todo should maybe compute all particle systems together?
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
+	if (compute_list == RD::INVALID_ID) {
+		ERR_PRINT("Particle process compute list could not be opened.");
+		return;
+	}
 	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, m->shader_data->pipeline.get_rid());
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, particles_shader.base_uniform_set, BASE_UNIFORM_SET);
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, p_particles->particles_material_uniform_set, MATERIAL_UNIFORM_SET);
