@@ -11,6 +11,9 @@ TEST_FORCE_LINK(test_particles_readback)
 namespace RendererRD {
 class TestParticlesReadbackAccess {
 public:
+	static bool buffer_size(uint64_t p_count, uint64_t p_element_size, uint64_t p_header_size, uint32_t &r_size) {
+		return ParticlesStorage::_particles_get_buffer_size(p_count, p_element_size, p_header_size, r_size);
+	}
 	static bool total_amount(uint32_t p_amount, uint32_t p_trail_count, uint32_t &r_total) {
 		ParticlesStorage::Particles particles;
 		particles.amount = p_amount;
@@ -55,4 +58,12 @@ TEST_CASE("[ParticlesReadback] process amount rejects trail multiplication overf
 	CHECK(RendererRD::TestParticlesReadbackAccess::total_amount(4, 3, total));
 	CHECK(total == 12);
 	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::total_amount(UINT32_MAX, 3, total));
+}
+
+TEST_CASE("[ParticlesReadback] particle buffer sizes reject uint32 overflow") {
+	uint32_t size = 0;
+	CHECK(RendererRD::TestParticlesReadbackAccess::buffer_size(4, 16, 16, size));
+	CHECK(size == 80);
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::buffer_size(UINT64_MAX, 16, 16, size));
+	CHECK(size == 0);
 }

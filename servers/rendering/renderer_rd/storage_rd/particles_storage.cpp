@@ -574,7 +574,12 @@ void ParticlesStorage::particles_set_seed(RID p_particles, uint32_t p_seed) {
 void ParticlesStorage::_particles_allocate_emission_buffer(Particles *particles) {
 	ERR_FAIL_COND(particles->emission_buffer != nullptr);
 
-	particles->emission_buffer_data.resize(sizeof(ParticleEmissionBuffer::Data) * particles->amount + sizeof(uint32_t) * 4);
+	uint32_t emission_buffer_size = 0;
+	if (!_particles_get_buffer_size(uint64_t(particles->amount), sizeof(ParticleEmissionBuffer::Data), sizeof(uint32_t) * 4, emission_buffer_size)) {
+		ERR_PRINT("Particle emission buffer exceeds the rendering device buffer size limit.");
+		return;
+	}
+	particles->emission_buffer_data.resize(emission_buffer_size);
 	memset(particles->emission_buffer_data.ptrw(), 0, particles->emission_buffer_data.size());
 	ParticleEmissionBuffer *emission_buffer = reinterpret_cast<ParticleEmissionBuffer *>(particles->emission_buffer_data.ptrw());
 	emission_buffer->particle_max = particles->amount;
@@ -738,6 +743,19 @@ bool ParticlesStorage::_particles_get_data_size(const Particles *p_particles, ui
 	}
 	r_size = total_amount * particle_data_size;
 	return r_size <= UINT32_MAX;
+}
+
+bool ParticlesStorage::_particles_get_buffer_size(uint64_t p_count, uint64_t p_element_size, uint64_t p_header_size, uint32_t &r_size) {
+	r_size = 0;
+	if (p_element_size != 0 && p_count > (UINT64_MAX - p_header_size) / p_element_size) {
+		return false;
+	}
+	const uint64_t size = p_header_size + p_count * p_element_size;
+	if (size > UINT32_MAX) {
+		return false;
+	}
+	r_size = uint32_t(size);
+	return true;
 }
 
 AABB ParticlesStorage::particles_get_current_aabb(RID p_particles) {
@@ -1398,7 +1416,12 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 	}
 
 	if (p_particles->emission_buffer && p_particles->emission_buffer->particle_count) {
-		if (RD::get_singleton()->buffer_update(p_particles->emission_storage_buffer, 0, sizeof(uint32_t) * 4 + sizeof(ParticleEmissionBuffer::Data) * p_particles->emission_buffer->particle_count, p_particles->emission_buffer) != OK) {
+		uint32_t emission_upload_size = 0;
+		if (!_particles_get_buffer_size(uint64_t(p_particles->emission_buffer->particle_count), sizeof(ParticleEmissionBuffer::Data), sizeof(uint32_t) * 4, emission_upload_size)) {
+			ERR_PRINT("Particle emission upload exceeds the rendering device buffer size limit.");
+			return fail_process();
+		}
+		if (RD::get_singleton()->buffer_update(p_particles->emission_storage_buffer, 0, emission_upload_size, p_particles->emission_buffer) != OK) {
 			ERR_PRINT("Failed to update particle emission buffer.");
 			return fail_process();
 		}
@@ -1418,7 +1441,12 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 		p_particles->trail_params[0] = p_particles->frame_history[0];
 	}
 
-	if (RD::get_singleton()->buffer_update(p_particles->frame_params_buffer, 0, sizeof(ParticlesFrameParams) * p_particles->trail_params.size(), p_particles->trail_params.ptr()) != OK) {
+	uint32_t frame_params_upload_size = 0;
+	if (!_particles_get_buffer_size(uint64_t(p_particles->trail_params.size()), sizeof(ParticlesFrameParams), 0, frame_params_upload_size)) {
+		ERR_PRINT("Particle frame parameters upload exceeds the rendering device buffer size limit.");
+		return fail_process();
+	}
+	if (RD::get_singleton()->buffer_update(p_particles->frame_params_buffer, 0, frame_params_upload_size, p_particles->trail_params.ptr()) != OK) {
 		ERR_PRINT("Failed to update particle frame parameters buffer.");
 		return fail_process();
 	}
@@ -1667,7 +1695,12 @@ void ParticlesStorage::_particles_update_buffers(Particles *particles) {
 		uint32_t xform_size = particles->mode == RSE::PARTICLES_MODE_2D ? 2 : 3;
 		bool particle_buffer_created = false;
 		if (particles->particle_buffer.is_null()) {
-			particles->particle_buffer = RD::get_singleton()->storage_buffer_create((sizeof(ParticleData) + userdata_count * sizeof(float) * 4) * total_amount);
+			uint32_t particle_buffer_size = 0;
+			if (!_particles_get_buffer_size(total_amount, sizeof(ParticleData) + uint64_t(userdata_count) * sizeof(float) * 4, 0, particle_buffer_size)) {
+				ERR_PRINT("Particle buffer exceeds the rendering device buffer size limit.");
+				return;
+			}
+			particles->particle_buffer = RD::get_singleton()->storage_buffer_create(particle_buffer_size);
 			if (particles->particle_buffer.is_null()) {
 				return;
 			}
@@ -1677,8 +1710,24 @@ void ParticlesStorage::_particles_update_buffers(Particles *particles) {
 		}
 
 		PackedByteArray data;
-		uint32_t particle_instance_buffer_size = total_amount * (xform_size + 1 + 1) * sizeof(float) * 4;
+		uint32_t particle_instance_buffer_size = 0;
+		if (!_particles_get_buffer_size(total_amount, uint64_t(xform_size + 1 + 1) * sizeof(float) * 4, 0, particle_instance_buffer_size)) {
+			ERR_PRINT("Particle instance buffer exceeds the rendering device buffer size limit.");
+			if (particle_buffer_created) {
+				RD::get_singleton()->free_rid(particles->particle_buffer);
+				particles->particle_buffer = RID();
+			}
+			return;
+		}
 		if (uses_motion_vectors) {
+			if (particle_instance_buffer_size > UINT32_MAX / 2) {
+				ERR_PRINT("Particle motion vector buffer exceeds the rendering device buffer size limit.");
+				if (particle_buffer_created) {
+					RD::get_singleton()->free_rid(particles->particle_buffer);
+					particles->particle_buffer = RID();
+				}
+				return;
+			}
 			particle_instance_buffer_size *= 2;
 			particles->instance_motion_vectors_enabled = true;
 		}
@@ -1817,7 +1866,12 @@ void ParticlesStorage::update_particles() {
 				if (particles->frame_params_buffer.is_valid()) {
 					RD::get_singleton()->free_rid(particles->frame_params_buffer);
 				}
-				particles->frame_params_buffer = RD::get_singleton()->storage_buffer_create(sizeof(ParticlesFrameParams) * trail_steps);
+				uint32_t frame_params_size = 0;
+				if (!_particles_get_buffer_size(uint64_t(trail_steps), sizeof(ParticlesFrameParams), 0, frame_params_size)) {
+					ERR_PRINT("Particle frame parameters buffer exceeds the rendering device buffer size limit.");
+					return;
+				}
+				particles->frame_params_buffer = RD::get_singleton()->storage_buffer_create(frame_params_size);
 				if (particles->frame_params_buffer.is_null()) {
 					ERR_PRINT("Failed to create particle frame parameters buffer.");
 					return;
@@ -1825,7 +1879,12 @@ void ParticlesStorage::update_particles() {
 			}
 
 			if (particles->trail_bind_poses.size() > 1 && particles->trail_bind_pose_buffer.is_null()) {
-				particles->trail_bind_pose_buffer = RD::get_singleton()->storage_buffer_create(sizeof(float) * 16 * particles->trail_bind_poses.size());
+				uint32_t trail_bind_pose_size = 0;
+				if (!_particles_get_buffer_size(uint64_t(particles->trail_bind_poses.size()), sizeof(float) * 16, 0, trail_bind_pose_size)) {
+					ERR_PRINT("Particle trail bind pose buffer exceeds the rendering device buffer size limit.");
+					return;
+				}
+				particles->trail_bind_pose_buffer = RD::get_singleton()->storage_buffer_create(trail_bind_pose_size);
 				particles->trail_bind_poses_dirty = true;
 			}
 
