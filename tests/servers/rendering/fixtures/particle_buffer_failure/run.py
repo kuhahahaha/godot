@@ -12,7 +12,9 @@ def main():
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--renderer", choices=["mobile", "forward_plus"], required=True)
     parser.add_argument(
-        "--dimension", choices=["2d", "3d", "motion_retry", "motion_control", "uniform_retry", "late_retry"], required=True
+        "--dimension",
+        choices=["2d", "3d", "motion_retry", "motion_control", "uniform_retry", "late_retry"],
+        required=True,
     )
     parser.add_argument("--log", type=Path, required=True)
     args = parser.parse_args()
