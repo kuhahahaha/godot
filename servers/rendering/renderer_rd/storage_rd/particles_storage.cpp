@@ -1392,6 +1392,7 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 			if (uniform_set_valid) {
 				RD::get_singleton()->free_rid(p_particles->collision_textures_uniform_set);
 			}
+			p_particles->collision_textures_uniform_set = RID();
 
 			thread_local LocalVector<RD::Uniform> uniforms;
 			uniforms.clear();
