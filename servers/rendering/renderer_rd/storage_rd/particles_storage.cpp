@@ -724,7 +724,12 @@ bool ParticlesStorage::_particles_get_data_size(const Particles *p_particles, ui
 
 	uint64_t total_amount = uint64_t(p_particles->amount);
 	if (p_particles->trails_enabled && p_particles->trail_bind_poses.size() > 1) {
-		total_amount *= uint64_t(p_particles->trail_bind_poses.size());
+		const uint64_t trail_count = uint64_t(p_particles->trail_bind_poses.size());
+		if (total_amount > UINT64_MAX / trail_count) {
+			r_size = 0;
+			return false;
+		}
+		total_amount *= trail_count;
 	}
 	const uint64_t particle_data_size = sizeof(ParticleData) + sizeof(float) * 4 * uint64_t(p_particles->userdata_count);
 	if (particle_data_size != 0 && total_amount > UINT64_MAX / particle_data_size) {
