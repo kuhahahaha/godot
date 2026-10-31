@@ -1,0 +1,9 @@
+[application]
+config/name="ParticleBufferFailure"
+
+[display]
+window/size/viewport_width=32
+window/size/viewport_height=32
+
+[rendering]
+shader_compiler/shader_cache/enabled=false

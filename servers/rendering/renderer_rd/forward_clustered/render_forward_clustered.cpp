@@ -420,6 +420,9 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 		pipeline_key.primitive_type = surf->primitive;
 
 		RID xforms_uniform_set = surf->owner->transforms_uniform_set;
+		if ((surf->owner->base_flags & INSTANCE_DATA_FLAG_PARTICLES) && xforms_uniform_set.is_null()) {
+			continue;
+		}
 
 		SceneShaderForwardClustered::ShaderSpecialization pipeline_specialization = p_params->base_specialization;
 		pipeline_specialization.multimesh = bool(surf->owner->base_flags & INSTANCE_DATA_FLAG_MULTIMESH);

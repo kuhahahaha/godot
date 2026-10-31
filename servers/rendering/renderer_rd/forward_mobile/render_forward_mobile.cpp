@@ -2628,6 +2628,9 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 
 		pipeline_key.primitive_type = surf->primitive;
 		RID xforms_uniform_set = surf->owner->transforms_uniform_set;
+		if ((inst->flags_cache & INSTANCE_DATA_FLAG_PARTICLES) && xforms_uniform_set.is_null()) {
+			continue;
+		}
 
 		switch (p_pass_mode) {
 			case PASS_MODE_COLOR:

@@ -1704,8 +1704,8 @@ void ParticlesStorage::_particles_update_buffers(Particles *particles) {
 
 		particles->particles_transforms_buffer_uniform_set = RID();
 		only_instances_changed = true;
-	} else if (!particles->particle_buffer.is_null()) {
-		// No operation is required because a buffer already exists, return early.
+	} else if (!particles->particle_buffer.is_null() && !particles->particle_instance_buffer.is_null() && !particles->particles_copy_uniform_set.is_null()) {
+		// No operation is required when all buffers and the copy uniform already exist.
 		return;
 	}
 
@@ -1809,6 +1809,9 @@ void ParticlesStorage::update_particles() {
 		particles->dirty = false;
 
 		_particles_update_buffers(particles);
+		if (particles->particle_buffer.is_null() || particles->particle_instance_buffer.is_null() || particles->particles_copy_uniform_set.is_null()) {
+			continue;
+		}
 
 		if (particles->restart_request) {
 			particles->prev_ticks = 0;

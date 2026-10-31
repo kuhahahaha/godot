@@ -570,6 +570,9 @@ public:
 		ERR_FAIL_NULL_V(particles, RID());
 		if (particles->particles_transforms_buffer_uniform_set.is_null() || !RD::get_singleton()->uniform_set_is_valid(particles->particles_transforms_buffer_uniform_set)) {
 			_particles_update_buffers(particles);
+			if (particles->particle_instance_buffer.is_null()) {
+				return RID();
+			}
 			Vector<RD::Uniform> uniforms;
 
 			{
