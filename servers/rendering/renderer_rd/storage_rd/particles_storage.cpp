@@ -1966,36 +1966,33 @@ void ParticlesStorage::update_particles() {
 			float tmp_scale = particles->speed_scale;
 			// We need this otherwise the speed scale of the particle system influences the TODO.
 			particles->speed_scale = 1.0;
-			if (particles->clear) {
-				todo = particles->pre_process_time;
-				while (todo > 0.0) {
-					if (!_particles_process(particles, frame_time > todo ? todo : frame_time)) {
-						process_ok = false;
-						break;
+			auto process_time = [&](float p_time) -> bool {
+				while (p_time > 0.0f) {
+					const float step = frame_time > p_time ? p_time : frame_time;
+					const float next_time = p_time - frame_time;
+					// Very large finite values can become infinity when converted to float,
+					// or be too coarse for a frame-sized decrement to change them. Either
+					// case would otherwise keep this loop running forever.
+					if (!(next_time < p_time)) {
+						ERR_PRINT("Particle process time is too large to make progress.");
+						return false;
 					}
-					todo -= frame_time;
+					if (!_particles_process(particles, step)) {
+						return false;
+					}
+					p_time = next_time;
 				}
+				return true;
+			};
+			if (particles->clear) {
+				process_ok = process_time(particles->pre_process_time);
 			}
 			if (process_ok && particles->request_process_time > 0.0) {
-				todo = particles->request_process_time;
-				while (todo > 0.0) {
-					if (!_particles_process(particles, frame_time > todo ? todo : frame_time)) {
-						process_ok = false;
-						break;
-					}
-					todo -= frame_time;
-				}
+				process_ok = process_time(particles->request_process_time);
 			}
 			if (process_ok && particles->request_process_time_residual > 0.0) {
 				particles->emitting = false;
-				todo = particles->request_process_time_residual;
-				while (todo > 0.0) {
-					if (!_particles_process(particles, frame_time > todo ? todo : frame_time)) {
-						process_ok = false;
-						break;
-					}
-					todo -= frame_time;
-				}
+				process_ok = process_time(particles->request_process_time_residual);
 			}
 			particles->speed_scale = tmp_scale;
 			if (!process_ok) {
