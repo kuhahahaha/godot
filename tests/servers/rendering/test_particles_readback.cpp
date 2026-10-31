@@ -5,6 +5,7 @@
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/dummy/storage/particles_storage.h"
 #include "tests/test_macros.h"
+#include <cfloat>
 
 TEST_FORCE_LINK(test_particles_readback)
 
@@ -13,6 +14,12 @@ class TestParticlesReadbackAccess {
 public:
 	static bool amount_is_valid(int p_amount) {
 		return ParticlesStorage::_particles_amount_is_valid(p_amount);
+	}
+	static bool lifetime_is_valid(double p_lifetime) {
+		return ParticlesStorage::_particles_lifetime_is_valid(p_lifetime);
+	}
+	static bool trail_lifetime_is_valid(double p_lifetime) {
+		return ParticlesStorage::_particles_trail_lifetime_is_valid(p_lifetime);
 	}
 	static bool buffer_size(uint64_t p_count, uint64_t p_element_size, uint64_t p_header_size, uint32_t &r_size) {
 		return ParticlesStorage::_particles_get_buffer_size(p_count, p_element_size, p_header_size, r_size);
@@ -75,4 +82,21 @@ TEST_CASE("[ParticlesReadback] negative particle amounts fail closed") {
 	CHECK(RendererRD::TestParticlesReadbackAccess::amount_is_valid(0));
 	CHECK(RendererRD::TestParticlesReadbackAccess::amount_is_valid(INT32_MAX));
 	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::amount_is_valid(-1));
+}
+
+TEST_CASE("[ParticlesReadback] particle lifetimes reject non-finite and non-positive values") {
+	CHECK(RendererRD::TestParticlesReadbackAccess::lifetime_is_valid(0.01));
+	CHECK(RendererRD::TestParticlesReadbackAccess::lifetime_is_valid(DBL_MAX));
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::lifetime_is_valid(0.0));
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::lifetime_is_valid(-1.0));
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::lifetime_is_valid(NAN));
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::lifetime_is_valid(INFINITY));
+}
+
+TEST_CASE("[ParticlesReadback] trail lifetimes reject non-finite and too-small values") {
+	CHECK(RendererRD::TestParticlesReadbackAccess::trail_lifetime_is_valid(0.01));
+	CHECK(RendererRD::TestParticlesReadbackAccess::trail_lifetime_is_valid(10.0));
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::trail_lifetime_is_valid(0.0));
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::trail_lifetime_is_valid(NAN));
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::trail_lifetime_is_valid(INFINITY));
 }

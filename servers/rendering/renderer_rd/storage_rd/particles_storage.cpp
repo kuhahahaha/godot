@@ -375,6 +375,7 @@ void ParticlesStorage::particles_set_amount_ratio(RID p_particles, float p_amoun
 void ParticlesStorage::particles_set_lifetime(RID p_particles, double p_lifetime) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(!_particles_lifetime_is_valid(p_lifetime), "Particle lifetime must be finite and greater than zero.");
 	particles->lifetime = p_lifetime;
 }
 
@@ -462,7 +463,7 @@ void ParticlesStorage::particles_set_fractional_delta(RID p_particles, bool p_en
 void ParticlesStorage::particles_set_trails(RID p_particles, bool p_enable, double p_length) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
-	ERR_FAIL_COND(p_length < 0.01 - CMP_EPSILON);
+	ERR_FAIL_COND_MSG(!_particles_trail_lifetime_is_valid(p_length), "Particle trail lifetime must be finite and at least 0.01 seconds.");
 	p_length = MIN(10.0, p_length);
 
 	particles->trails_enabled = p_enable;
@@ -976,6 +977,14 @@ bool ParticlesStorage::_particles_get_total_amount(const Particles *p_particles,
 
 bool ParticlesStorage::_particles_amount_is_valid(int p_amount) {
 	return p_amount >= 0;
+}
+
+bool ParticlesStorage::_particles_lifetime_is_valid(double p_lifetime) {
+	return Math::is_finite(p_lifetime) && p_lifetime > 0.0;
+}
+
+bool ParticlesStorage::_particles_trail_lifetime_is_valid(double p_lifetime) {
+	return Math::is_finite(p_lifetime) && p_lifetime >= 0.01 - CMP_EPSILON;
 }
 
 bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta) {

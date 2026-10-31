@@ -286,6 +286,8 @@ private:
 	static void _particles_restore_process_history(Particles *p_particles, const ParticlesFrameParams &p_previous_first, const ParticlesFrameParams &p_previous_last, double p_previous_trail_speed_scale);
 	static bool _particles_get_total_amount(const Particles *p_particles, uint32_t &r_total_amount);
 	static bool _particles_amount_is_valid(int p_amount);
+	static bool _particles_lifetime_is_valid(double p_lifetime);
+	static bool _particles_trail_lifetime_is_valid(double p_lifetime);
 	static bool _particles_get_buffer_size(uint64_t p_count, uint64_t p_element_size, uint64_t p_header_size, uint32_t &r_size);
 	bool _particles_process(Particles *p_particles, double p_delta);
 	static bool _particles_get_data_size(const Particles *p_particles, uint64_t &r_size);
