@@ -52,7 +52,18 @@ SortEffects::~SortEffects() {
 	shader.version_free(shader_version);
 }
 
-void SortEffects::sort_buffer(RID p_uniform_set, int p_size) {
+bool SortEffects::sort_buffer(RID p_uniform_set, int p_size) {
+	if (p_size <= 0) {
+		return false;
+	}
+	if (!RD::get_singleton()->uniform_set_is_valid(p_uniform_set)) {
+		ERR_PRINT("Particle sort uniform set is invalid.");
+		return false;
+	}
+	if (!RD::get_singleton()->compute_pipeline_is_valid(pipelines[SORT_MODE_BLOCK])) {
+		ERR_PRINT("Particle sort block pipeline is invalid.");
+		return false;
+	}
 	PushConstant push_constant;
 	push_constant.total_elements = p_size;
 
@@ -62,9 +73,17 @@ void SortEffects::sort_buffer(RID p_uniform_set, int p_size) {
 
 	if (numThreadGroups > 1) {
 		done = false;
+		if (!RD::get_singleton()->compute_pipeline_is_valid(pipelines[SORT_MODE_STEP]) || !RD::get_singleton()->compute_pipeline_is_valid(pipelines[SORT_MODE_INNER])) {
+			ERR_PRINT("Particle sort merge pipeline is invalid.");
+			return false;
+		}
 	}
 
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
+	if (compute_list == RD::INVALID_ID) {
+		ERR_PRINT("Particle sort compute list could not be opened.");
+		return false;
+	}
 
 	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipelines[SORT_MODE_BLOCK]);
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, p_uniform_set, 1);
@@ -119,4 +138,5 @@ void SortEffects::sort_buffer(RID p_uniform_set, int p_size) {
 	}
 
 	RD::get_singleton()->compute_list_end();
+	return true;
 }

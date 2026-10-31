@@ -1192,9 +1192,9 @@ void ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 			}
 		}
 
-		bool different = false;
-		if (collision_3d_textures_used == p_particles->collision_3d_textures_used) {
-			for (int i = 0; i < ParticlesFrameParams::MAX_3D_TEXTURES; i++) {
+		bool different = collision_3d_textures_used != p_particles->collision_3d_textures_used;
+		if (!different) {
+			for (uint32_t i = 0; i < collision_3d_textures_used; i++) {
 				if (p_particles->collision_3d_textures[i] != collision_3d_textures[i]) {
 					different = true;
 					break;
@@ -1250,6 +1250,10 @@ void ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 			if (p_particles->collision_textures_uniform_set.is_null()) {
 				ERR_PRINT("Failed to create particle collision texture uniform set.");
 				return;
+			}
+			p_particles->collision_3d_textures_used = collision_3d_textures_used;
+			for (uint32_t i = 0; i < ParticlesFrameParams::MAX_3D_TEXTURES; i++) {
+				p_particles->collision_3d_textures[i] = i < collision_3d_textures_used ? collision_3d_textures[i] : RID();
 			}
 			p_particles->collision_heightmap_texture = collision_heightmap_texture;
 		}
@@ -1461,7 +1465,9 @@ void ParticlesStorage::particles_set_view_axis(RID p_particles, const Vector3 &p
 		RD::get_singleton()->compute_list_dispatch_threads(compute_list, particles->amount, 1, 1);
 
 		RD::get_singleton()->compute_list_end();
-		sort_effects->sort_buffer(particles->particles_sort_uniform_set, particles->amount);
+		if (!sort_effects->sort_buffer(particles->particles_sort_uniform_set, particles->amount)) {
+			return;
+		}
 	}
 
 	if (particles->trails_enabled && particles->trail_bind_poses.size() > 1) {
