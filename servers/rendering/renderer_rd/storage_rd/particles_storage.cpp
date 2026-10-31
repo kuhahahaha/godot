@@ -778,6 +778,17 @@ bool ParticlesStorage::_particles_get_total_amount(uint64_t p_amount, uint64_t p
 	return true;
 }
 
+bool ParticlesStorage::_particles_get_draw_amount(uint64_t p_amount, bool p_trails_enabled, uint64_t p_trail_count, uint32_t &r_total_amount, uint32_t &r_trail_divisor) {
+	r_total_amount = 0;
+	r_trail_divisor = 1;
+	const uint64_t trail_divisor = p_trails_enabled && p_trail_count > 1 ? p_trail_count : 1;
+	if (trail_divisor > UINT32_MAX || !_particles_get_total_amount(p_amount, trail_divisor, r_total_amount)) {
+		return false;
+	}
+	r_trail_divisor = uint32_t(trail_divisor);
+	return true;
+}
+
 bool ParticlesStorage::_particles_get_emission_data_size(uint64_t p_amount, uint64_t &r_size) {
 	r_size = 0;
 	if (p_amount == 0 || p_amount > (UINT64_MAX - sizeof(uint32_t) * 4) / sizeof(ParticleEmissionBuffer::Data)) {

@@ -284,6 +284,7 @@ private:
 	static bool _particles_get_data_size(uint64_t p_amount, uint64_t p_userdata_count, uint64_t p_trail_count, uint64_t &r_size);
 	static bool _particles_get_data_size(const Particles *p_particles, uint64_t &r_size);
 	static bool _particles_get_total_amount(uint64_t p_amount, uint64_t p_trail_count, uint32_t &r_total_amount);
+	static bool _particles_get_draw_amount(uint64_t p_amount, bool p_trails_enabled, uint64_t p_trail_count, uint32_t &r_total_amount, uint32_t &r_trail_divisor);
 	static bool _particles_get_emission_data_size(uint64_t p_amount, uint64_t &r_size);
 	static bool _particles_get_trail_bind_pose_data_size(uint64_t p_count, uint64_t &r_size);
 	static bool _particles_get_frame_params_data_size(uint64_t p_count, uint64_t &r_size);
@@ -539,16 +540,15 @@ public:
 	}
 
 	_FORCE_INLINE_ uint32_t particles_get_amount(RID p_particles, uint32_t &r_trail_divisor) {
+		r_trail_divisor = 1;
 		Particles *particles = particles_owner.get_or_null(p_particles);
 		ERR_FAIL_NULL_V(particles, 0);
 
-		if (particles->trails_enabled && particles->trail_bind_poses.size() > 1) {
-			r_trail_divisor = particles->trail_bind_poses.size();
-		} else {
-			r_trail_divisor = 1;
+		uint32_t total_amount = 0;
+		if (!_particles_get_draw_amount(uint64_t(particles->amount), particles->trails_enabled, particles->trail_bind_poses.size(), total_amount, r_trail_divisor)) {
+			return 0;
 		}
-
-		return particles->amount * r_trail_divisor;
+		return total_amount;
 	}
 
 	_FORCE_INLINE_ bool particles_has_collision(RID p_particles) {
