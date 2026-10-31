@@ -543,7 +543,11 @@ public:
 			r_trail_divisor = 1;
 		}
 
-		return particles->amount * r_trail_divisor;
+		uint32_t total_amount = 0;
+		if (!_particles_get_total_amount(particles, total_amount)) {
+			return 0;
+		}
+		return total_amount;
 	}
 
 	_FORCE_INLINE_ bool particles_has_collision(RID p_particles) {
