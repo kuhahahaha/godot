@@ -274,6 +274,10 @@ private:
 		bool trails_enabled = false;
 		LocalVector<ParticlesFrameParams> frame_history;
 		LocalVector<ParticlesFrameParams> trail_params;
+		// Reused transaction snapshots for _particles_process failure rollback.
+		// Keeping capacity on the particle avoids allocating on every frame.
+		LocalVector<ParticlesFrameParams> process_previous_frame_history;
+		LocalVector<ParticlesFrameParams> process_previous_trail_params;
 
 		Particles() :
 				update_list(this) {
