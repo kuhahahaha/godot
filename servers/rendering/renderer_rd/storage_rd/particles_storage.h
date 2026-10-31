@@ -284,6 +284,7 @@ private:
 	static bool _particles_get_data_size(uint64_t p_amount, uint64_t p_userdata_count, uint64_t p_trail_count, uint64_t &r_size);
 	static bool _particles_get_data_size(const Particles *p_particles, uint64_t &r_size);
 	static bool _particles_get_total_amount(uint64_t p_amount, uint64_t p_trail_count, uint32_t &r_total_amount);
+	static bool _particles_get_emission_data_size(uint64_t p_amount, uint64_t &r_size);
 	static bool _particles_get_instance_data_size(uint64_t p_total_amount, uint32_t p_xform_size, bool p_motion_vectors, uint64_t &r_size);
 	static bool _particles_get_sort_data_size(uint64_t p_amount, uint64_t &r_size);
 	void _particles_allocate_emission_buffer(Particles *particles);

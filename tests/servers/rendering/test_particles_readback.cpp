@@ -60,6 +60,12 @@ public:
 	static bool total_amount(uint64_t p_amount, uint64_t p_trail_count, uint32_t &r_total_amount) {
 		return ParticlesStorage::_particles_get_total_amount(p_amount, p_trail_count, r_total_amount);
 	}
+	static bool emission_data_size(uint64_t p_amount, uint64_t &r_size) {
+		return ParticlesStorage::_particles_get_emission_data_size(p_amount, r_size);
+	}
+	static uint64_t emission_entry_size() {
+		return sizeof(ParticlesStorage::ParticleEmissionBuffer::Data);
+	}
 };
 } // namespace RendererRD
 
@@ -103,6 +109,11 @@ TEST_CASE("[ParticlesReadback] data size includes trails and user data with a bo
 	CHECK(total_amount == 0);
 	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::total_amount(UINT64_MAX, 2, total_amount));
 	CHECK(total_amount == 0);
+
+	CHECK(RendererRD::TestParticlesReadbackAccess::emission_data_size(2, size));
+	CHECK(size == RendererRD::TestParticlesReadbackAccess::emission_entry_size() * 2 + sizeof(uint32_t) * 4);
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::emission_data_size(UINT64_MAX, size));
+	CHECK(size == 0);
 }
 
 TEST_CASE("[ParticlesReadback] invalid particle RID returns an empty CPU snapshot") {

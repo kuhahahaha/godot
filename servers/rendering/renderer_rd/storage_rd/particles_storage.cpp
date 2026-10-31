@@ -574,7 +574,12 @@ void ParticlesStorage::particles_set_seed(RID p_particles, uint32_t p_seed) {
 void ParticlesStorage::_particles_allocate_emission_buffer(Particles *particles) {
 	ERR_FAIL_COND(particles->emission_buffer != nullptr);
 
-	particles->emission_buffer_data.resize(sizeof(ParticleEmissionBuffer::Data) * particles->amount + sizeof(uint32_t) * 4);
+	uint64_t emission_buffer_size = 0;
+	if (!_particles_get_emission_data_size(uint64_t(particles->amount), emission_buffer_size)) {
+		ERR_PRINT("Particle emission buffer size exceeds the supported allocation size.");
+		return;
+	}
+	particles->emission_buffer_data.resize(emission_buffer_size);
 	memset(particles->emission_buffer_data.ptrw(), 0, particles->emission_buffer_data.size());
 	ParticleEmissionBuffer *emission_buffer = reinterpret_cast<ParticleEmissionBuffer *>(particles->emission_buffer_data.ptrw());
 	emission_buffer->particle_max = particles->amount;
@@ -767,6 +772,15 @@ bool ParticlesStorage::_particles_get_total_amount(uint64_t p_amount, uint64_t p
 	}
 	r_total_amount = uint32_t(total_amount);
 	return true;
+}
+
+bool ParticlesStorage::_particles_get_emission_data_size(uint64_t p_amount, uint64_t &r_size) {
+	r_size = 0;
+	if (p_amount == 0 || p_amount > (UINT64_MAX - sizeof(uint32_t) * 4) / sizeof(ParticleEmissionBuffer::Data)) {
+		return false;
+	}
+	r_size = sizeof(uint32_t) * 4 + p_amount * sizeof(ParticleEmissionBuffer::Data);
+	return r_size <= UINT32_MAX;
 }
 
 bool ParticlesStorage::_particles_get_sort_data_size(uint64_t p_amount, uint64_t &r_size) {
