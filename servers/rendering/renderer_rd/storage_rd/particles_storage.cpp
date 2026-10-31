@@ -782,7 +782,7 @@ bool ParticlesStorage::_particles_get_draw_amount(uint64_t p_amount, bool p_trai
 	r_total_amount = 0;
 	r_trail_divisor = 1;
 	const uint64_t trail_divisor = p_trails_enabled && p_trail_count > 1 ? p_trail_count : 1;
-	if (trail_divisor > UINT32_MAX || !_particles_get_total_amount(p_amount, trail_divisor, r_total_amount)) {
+	if (trail_divisor > 0xFF || !_particles_get_total_amount(p_amount, trail_divisor, r_total_amount)) {
 		return false;
 	}
 	r_trail_divisor = uint32_t(trail_divisor);

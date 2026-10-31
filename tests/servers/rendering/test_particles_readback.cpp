@@ -177,6 +177,12 @@ TEST_CASE("[ParticlesReadback] data size includes trails and user data with a bo
 	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::draw_amount(UINT32_MAX, true, 2, total_amount, trail_divisor));
 	CHECK(total_amount == 0);
 	CHECK(trail_divisor == 1);
+	CHECK(RendererRD::TestParticlesReadbackAccess::draw_amount(1, true, 255, total_amount, trail_divisor));
+	CHECK(total_amount == 255);
+	CHECK(trail_divisor == 255);
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::draw_amount(1, true, 256, total_amount, trail_divisor));
+	CHECK(total_amount == 0);
+	CHECK(trail_divisor == 1);
 
 	CHECK(RendererRD::TestParticlesReadbackAccess::emission_data_size(2, size));
 	CHECK(size == RendererRD::TestParticlesReadbackAccess::emission_entry_size() * 2 + sizeof(uint32_t) * 4);
