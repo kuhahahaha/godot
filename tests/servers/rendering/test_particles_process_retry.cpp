@@ -28,7 +28,9 @@ public:
 		particles.trail_params[0].frame = 99;
 		particles.trail_params[1].frame = 98;
 
-		ParticlesStorage::_particles_restore_process_history(&particles, previous_first, previous_last);
+		particles.speed_scale = -1.0;
+		particles.trail_params_speed_scale = 1.0;
+		ParticlesStorage::_particles_restore_process_history(&particles, previous_first, previous_last, particles.trail_params_speed_scale);
 
 		CHECK(particles.frame_history[0].frame == 10);
 		CHECK(particles.frame_history[1].frame == 20);
