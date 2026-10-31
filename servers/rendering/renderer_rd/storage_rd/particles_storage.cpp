@@ -368,6 +368,7 @@ void ParticlesStorage::particles_set_amount(RID p_particles, int p_amount) {
 void ParticlesStorage::particles_set_amount_ratio(RID p_particles, float p_amount_ratio) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(!_particles_ratio_is_valid(p_amount_ratio), "Particle amount ratio must be finite.");
 
 	particles->amount_ratio = p_amount_ratio;
 }
@@ -403,11 +404,13 @@ void ParticlesStorage::particles_request_process_time(RID p_particles, real_t p_
 void ParticlesStorage::particles_set_explosiveness_ratio(RID p_particles, real_t p_ratio) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(!_particles_ratio_is_valid(p_ratio), "Particle explosiveness ratio must be finite.");
 	particles->explosiveness = p_ratio;
 }
 void ParticlesStorage::particles_set_randomness_ratio(RID p_particles, real_t p_ratio) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(!_particles_ratio_is_valid(p_ratio), "Particle randomness ratio must be finite.");
 	particles->randomness = p_ratio;
 }
 
@@ -996,6 +999,10 @@ bool ParticlesStorage::_particles_process_time_is_valid(double p_time) {
 
 bool ParticlesStorage::_particles_speed_scale_is_valid(double p_scale) {
 	return Math::is_finite(p_scale);
+}
+
+bool ParticlesStorage::_particles_ratio_is_valid(double p_ratio) {
+	return Math::is_finite(p_ratio);
 }
 
 bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta) {

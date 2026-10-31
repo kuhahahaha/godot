@@ -27,6 +27,9 @@ public:
 	static bool speed_scale_is_valid(double p_scale) {
 		return ParticlesStorage::_particles_speed_scale_is_valid(p_scale);
 	}
+	static bool ratio_is_valid(double p_ratio) {
+		return ParticlesStorage::_particles_ratio_is_valid(p_ratio);
+	}
 	static bool buffer_size(uint64_t p_count, uint64_t p_element_size, uint64_t p_header_size, uint32_t &r_size) {
 		return ParticlesStorage::_particles_get_buffer_size(p_count, p_element_size, p_header_size, r_size);
 	}
@@ -123,4 +126,14 @@ TEST_CASE("[ParticlesReadback] speed scales reject non-finite values") {
 	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::speed_scale_is_valid(NAN));
 	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::speed_scale_is_valid(INFINITY));
 	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::speed_scale_is_valid(-INFINITY));
+}
+
+TEST_CASE("[ParticlesReadback] particle ratios reject non-finite values") {
+	CHECK(RendererRD::TestParticlesReadbackAccess::ratio_is_valid(-1.0));
+	CHECK(RendererRD::TestParticlesReadbackAccess::ratio_is_valid(0.0));
+	CHECK(RendererRD::TestParticlesReadbackAccess::ratio_is_valid(1.0));
+	CHECK(RendererRD::TestParticlesReadbackAccess::ratio_is_valid(DBL_MAX));
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::ratio_is_valid(NAN));
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::ratio_is_valid(INFINITY));
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::ratio_is_valid(-INFINITY));
 }
