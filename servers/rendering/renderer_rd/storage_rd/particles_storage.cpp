@@ -1891,7 +1891,7 @@ void ParticlesStorage::update_particles() {
 				uint32_t checked_history_size = 0;
 				if (!_particles_get_history_size(particles->trail_lifetime, fixed_fps, checked_history_size)) {
 					ERR_PRINT("Particle trail history size exceeds the supported range.");
-					return;
+					continue;
 				}
 				history_size = checked_history_size;
 				trail_steps = particles->trail_bind_poses.size();
@@ -1919,12 +1919,12 @@ void ParticlesStorage::update_particles() {
 				uint64_t frame_params_size = 0;
 				if (!_particles_get_frame_params_data_size(uint64_t(trail_steps), frame_params_size)) {
 					ERR_PRINT("Particle frame parameters buffer size exceeds the supported allocation size.");
-					return;
+					continue;
 				}
 				particles->frame_params_buffer = RD::get_singleton()->storage_buffer_create(uint32_t(frame_params_size));
 				if (particles->frame_params_buffer.is_null()) {
 					ERR_PRINT("Failed to create particle frame parameters buffer.");
-					return;
+					continue;
 				}
 			}
 
@@ -1936,25 +1936,25 @@ void ParticlesStorage::update_particles() {
 				uint64_t trail_bind_pose_buffer_size = 0;
 				if (!_particles_get_trail_bind_pose_data_size(uint64_t(particles->trail_bind_poses.size()), trail_bind_pose_buffer_size)) {
 					ERR_PRINT("Particle trail bind pose buffer size exceeds the supported allocation size.");
-					return;
+					continue;
 				}
 				particles->trail_bind_pose_buffer = RD::get_singleton()->storage_buffer_create(uint32_t(trail_bind_pose_buffer_size));
 				if (particles->trail_bind_pose_buffer.is_null()) {
 					ERR_PRINT("Failed to create particle trail bind pose buffer.");
-					return;
+					continue;
 				}
 				particles->trail_bind_poses_dirty = true;
 			}
 
 			if (!_particles_ensure_trail_uniform(particles, particles_shader.copy_shader.version_get_shader(particles_shader.copy_shader_version, 0))) {
-				return;
+				continue;
 			}
 
 			if (particles->trail_bind_pose_buffer.is_valid() && particles->trail_bind_poses_dirty) {
 				uint64_t trail_bind_pose_buffer_size = 0;
 				if (!_particles_get_trail_bind_pose_data_size(uint64_t(particles->trail_bind_poses.size()), trail_bind_pose_buffer_size)) {
 					ERR_PRINT("Particle trail bind pose update size exceeds the supported update size.");
-					return;
+					continue;
 				}
 				const uint64_t trail_bind_pose_float_count = trail_bind_pose_buffer_size / sizeof(float);
 				if (particles_shader.pose_update_buffer.size() < trail_bind_pose_float_count) {
@@ -2063,7 +2063,7 @@ void ParticlesStorage::update_particles() {
 		uint32_t total_amount = 0;
 		if (!_particles_get_total_amount(uint64_t(particles->amount), particles->trails_enabled ? uint64_t(particles->trail_bind_poses.size()) : 1, total_amount)) {
 			ERR_PRINT("Particle instance amount exceeds the supported dispatch size.");
-			return;
+			continue;
 		}
 
 		// Swap offsets for motion vectors. Motion vectors can only be used when the draw order keeps the indices consistent across frames.
@@ -2145,7 +2145,7 @@ void ParticlesStorage::update_particles() {
 			copy_push_constant.order_by_lifetime = (particles->draw_order == RSE::PARTICLES_DRAW_ORDER_LIFETIME || particles->draw_order == RSE::PARTICLES_DRAW_ORDER_REVERSE_LIFETIME);
 			if (!_particles_get_lifetime_split(uint64_t(particles->amount), particles->phase, copy_push_constant.lifetime_split)) {
 				ERR_PRINT("Particle lifetime split exceeds the supported range.");
-				return;
+				continue;
 			}
 			copy_push_constant.lifetime_reverse = particles->draw_order == RSE::PARTICLES_DRAW_ORDER_REVERSE_LIFETIME;
 			copy_push_constant.motion_vectors_current_offset = particles->instance_motion_vectors_current_offset;
