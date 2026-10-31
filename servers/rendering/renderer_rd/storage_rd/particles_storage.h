@@ -51,6 +51,7 @@ private:
 #ifdef TESTS_ENABLED
 	friend class TestParticlesTrailAccess;
 	friend class TestParticlesReadbackAccess;
+	friend class TestParticlesProcessRetryAccess;
 #endif
 	static ParticlesStorage *singleton;
 

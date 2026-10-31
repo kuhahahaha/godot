@@ -13,13 +13,13 @@ def harness(source):
     process_start = source.find('bool ParticlesStorage::_particles_process')
     if process_start < 0:
         process_start = source.index('void ParticlesStorage::_particles_process')
-    marker = '\tERR_FAIL_NULL_V(m, false);'
+    marker = '\tif (!RD::get_singleton()->compute_pipeline_is_valid'
     if marker not in source[process_start:]:
         marker = '\tERR_FAIL_NULL(m);'
     start = source.index(marker, process_start)
     end = source.index('\n}\n', start)
     body = source[start:end]
-    body = body.replace('\treturn;', '\treturn false;')
+    body = body.replace('\treturn;', '\treturn false;').replace('return fail_process();', 'return false;')
     body += '\n\treturn true;\n'
     return r'''
 #include <cstdio>
@@ -32,7 +32,7 @@ struct TextureList { bool empty = true; bool is_empty() const { return empty; } 
 struct Pipeline { RID get_rid() const { return {1}; } };
 struct Shader { Pipeline pipeline; unsigned ubo_size = 0; TextureList texture_uniforms; bool uses_collision = false; };
 struct Material { Shader *shader_data; RID uniform_set; int used = 0; void set_as_used() { used++; } };
-struct Particles { bool has_collision_cache = false; RID particles_material_uniform_set{3}; RID collision_textures_uniform_set{4}; bool trails_enabled = false; std::vector<int> trail_bind_poses; unsigned amount = 4; };
+struct Particles { struct Emission { int particle_count = 0; }; bool has_collision_cache = false; RID particles_material_uniform_set{3}; RID collision_textures_uniform_set{4}; bool trails_enabled = false; std::vector<int> trail_bind_poses; unsigned amount = 4; bool force_sub_emit = false; bool clear = false; bool emitting = false; bool inactive = false; double inactive_time = 0; RID emission_storage_buffer{1}; Emission *emission_buffer = nullptr; };
 struct ParticlesShader { struct PushConstant { bool trail_pass = false; }; RID base_uniform_set{2}; };
 struct RD {
     using ComputeListID = long long;
@@ -55,6 +55,9 @@ bool process(Material *m, Particles *p_particles) {
     ParticlesShader::PushConstant push_constant;
     constexpr int BASE_UNIFORM_SET = 0, MATERIAL_UNIFORM_SET = 1, COLLISION_TEXTURTES_UNIFORM_SET = 2;
     unsigned process_amount = 4;
+    Particles sub_emitter_storage;
+    Particles *sub_emitter = nullptr;
+    bool sub_emitter_was_emitting = false;
 ''' + body + r'''
 }
 struct Case { const char *name; unsigned ubo; bool texture; int uniform; bool active; bool trails; bool success; int expected_begin; };

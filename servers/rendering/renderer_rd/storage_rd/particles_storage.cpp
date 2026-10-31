@@ -961,6 +961,39 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 		}
 	}
 
+	const double previous_phase = p_particles->phase;
+	const uint32_t previous_cycle_number = p_particles->cycle_number;
+	const uint32_t previous_frame_counter = p_particles->frame_counter;
+	const LocalVector<ParticlesFrameParams> previous_frame_history = p_particles->frame_history;
+	const LocalVector<ParticlesFrameParams> previous_trail_params = p_particles->trail_params;
+	const bool previous_clear = p_particles->clear;
+	const bool previous_force_sub_emit = p_particles->force_sub_emit;
+	const bool previous_emitting = p_particles->emitting;
+	const bool previous_has_collision_cache = p_particles->has_collision_cache;
+	const uint32_t previous_collision_3d_textures_used = p_particles->collision_3d_textures_used;
+	const RID previous_collision_heightmap_texture = p_particles->collision_heightmap_texture;
+	RID previous_collision_3d_textures[ParticlesFrameParams::MAX_3D_TEXTURES];
+	for (uint32_t i = 0; i < ParticlesFrameParams::MAX_3D_TEXTURES; i++) {
+		previous_collision_3d_textures[i] = p_particles->collision_3d_textures[i];
+	}
+	auto fail_process = [&]() -> bool {
+		p_particles->phase = previous_phase;
+		p_particles->cycle_number = previous_cycle_number;
+		p_particles->frame_counter = previous_frame_counter;
+		p_particles->frame_history = previous_frame_history;
+		p_particles->trail_params = previous_trail_params;
+		p_particles->clear = previous_clear;
+		p_particles->force_sub_emit = previous_force_sub_emit;
+		p_particles->emitting = previous_emitting;
+		p_particles->has_collision_cache = previous_has_collision_cache;
+		p_particles->collision_3d_textures_used = previous_collision_3d_textures_used;
+		p_particles->collision_heightmap_texture = previous_collision_heightmap_texture;
+		for (uint32_t i = 0; i < ParticlesFrameParams::MAX_3D_TEXTURES; i++) {
+			p_particles->collision_3d_textures[i] = previous_collision_3d_textures[i];
+		}
+		return false;
+	};
+
 	double new_phase = Math::fmod((double)(p_particles->phase + (p_delta / p_particles->lifetime)), 1.0);
 
 	//move back history (if there is any)
@@ -1254,7 +1287,7 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 			p_particles->collision_textures_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, particles_shader.default_shader_rd, 2);
 			if (p_particles->collision_textures_uniform_set.is_null()) {
 				ERR_PRINT("Failed to create particle collision texture uniform set.");
-				return false;
+				return fail_process();
 			}
 			p_particles->collision_3d_textures_used = collision_3d_textures_used;
 			for (uint32_t i = 0; i < ParticlesFrameParams::MAX_3D_TEXTURES; i++) {
@@ -1279,28 +1312,21 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 	push_constant.sub_emitter_mode = !p_particles->emitting && p_particles->emission_buffer && (p_particles->emission_buffer->particle_count > 0 || p_particles->force_sub_emit);
 	push_constant.trail_pass = false;
 
-	p_particles->force_sub_emit = false; //reset
-
 	Particles *sub_emitter = particles_owner.get_or_null(p_particles->sub_emitter);
+	const bool sub_emitter_was_emitting = sub_emitter && sub_emitter->emission_storage_buffer.is_valid() && sub_emitter->emitting;
 
 	if (sub_emitter && sub_emitter->emission_storage_buffer.is_valid()) {
 		//	print_line("updating subemitter buffer");
 		int32_t zero[4] = { 0, sub_emitter->amount, 0, 0 };
 		if (RD::get_singleton()->buffer_update(sub_emitter->emission_storage_buffer, 0, sizeof(uint32_t) * 4, zero) != OK) {
 			ERR_PRINT("Failed to reset particle sub-emitter buffer.");
-			return false;
+			return fail_process();
 		}
 		push_constant.can_emit = true;
 
-		if (sub_emitter->emitting) {
-			sub_emitter->emitting = false;
-			sub_emitter->clear = true; //will need to clear if it was emitting, sorry
-		}
-		//make sure the sub emitter processes particles too
-		sub_emitter->inactive = false;
-		sub_emitter->inactive_time = 0;
-
-		sub_emitter->force_sub_emit = true;
+		// The sub-emitter state is committed only after all frame resources and
+		// the compute list have been prepared successfully. A failed upload must
+		// leave the same request pending for the next retry.
 
 	} else {
 		push_constant.can_emit = false;
@@ -1309,12 +1335,9 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 	if (p_particles->emission_buffer && p_particles->emission_buffer->particle_count) {
 		if (RD::get_singleton()->buffer_update(p_particles->emission_storage_buffer, 0, sizeof(uint32_t) * 4 + sizeof(ParticleEmissionBuffer::Data) * p_particles->emission_buffer->particle_count, p_particles->emission_buffer) != OK) {
 			ERR_PRINT("Failed to update particle emission buffer.");
-			return false;
+			return fail_process();
 		}
-		p_particles->emission_buffer->particle_count = 0;
 	}
-
-	p_particles->clear = false;
 
 	if (p_particles->trail_params.size() > 1) {
 		//fill the trail params
@@ -1332,7 +1355,7 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 
 	if (RD::get_singleton()->buffer_update(p_particles->frame_params_buffer, 0, sizeof(ParticlesFrameParams) * p_particles->trail_params.size(), p_particles->trail_params.ptr()) != OK) {
 		ERR_PRINT("Failed to update particle frame parameters buffer.");
-		return false;
+		return fail_process();
 	}
 
 	ParticleProcessMaterialData *m = static_cast<ParticleProcessMaterialData *>(material_storage->material_get_data(p_particles->process_material, MaterialStorage::SHADER_TYPE_PARTICLES));
@@ -1340,19 +1363,21 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 		m = static_cast<ParticleProcessMaterialData *>(material_storage->material_get_data(particles_shader.default_material, MaterialStorage::SHADER_TYPE_PARTICLES));
 	}
 
-	ERR_FAIL_NULL_V(m, false);
+	if (!m) {
+		return fail_process();
+	}
 	if (!RD::get_singleton()->compute_pipeline_is_valid(m->shader_data->pipeline.get_rid())) {
 		ERR_PRINT("Particle process pipeline is invalid.");
-		return false;
+		return fail_process();
 	}
 	if (!RD::get_singleton()->uniform_set_is_valid(particles_shader.base_uniform_set)) {
 		ERR_PRINT("Particle base uniform set is invalid.");
-		return false;
+		return fail_process();
 	}
 	const bool custom_uniforms_required = m->shader_data->ubo_size > 0 || !m->shader_data->texture_uniforms.is_empty();
 	if (custom_uniforms_required && !RD::get_singleton()->uniform_set_is_valid(m->uniform_set)) {
 		ERR_PRINT("Particle custom material uniform set is invalid.");
-		return false;
+		return fail_process();
 	}
 
 	p_particles->has_collision_cache = m->shader_data->uses_collision;
@@ -1361,7 +1386,7 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 	if (compute_list == RD::INVALID_ID) {
 		ERR_PRINT("Particle process compute list could not be opened.");
-		return false;
+		return fail_process();
 	}
 	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, m->shader_data->pipeline.get_rid());
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, particles_shader.base_uniform_set, BASE_UNIFORM_SET);
@@ -1389,6 +1414,25 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 	}
 
 	RD::get_singleton()->compute_list_end();
+
+	// Commit CPU-side work items only after every required GPU update and the
+	// compute list recording succeeded. Until this point a retry must observe
+	// the original emission, clear, and sub-emitter state unchanged.
+	p_particles->force_sub_emit = false;
+	if (p_particles->emission_buffer && p_particles->emission_buffer->particle_count) {
+		p_particles->emission_buffer->particle_count = 0;
+	}
+	p_particles->clear = false;
+	if (sub_emitter && sub_emitter->emission_storage_buffer.is_valid()) {
+		if (sub_emitter_was_emitting) {
+			sub_emitter->emitting = false;
+			sub_emitter->clear = true; //will need to clear if it was emitting, sorry
+		}
+		// Make sure the sub emitter processes particles too.
+		sub_emitter->inactive = false;
+		sub_emitter->inactive_time = 0;
+		sub_emitter->force_sub_emit = true;
+	}
 	return true;
 }
 
