@@ -751,6 +751,20 @@ bool ParticlesStorage::_particles_get_data_size(const Particles *p_particles, ui
 	return _particles_get_data_size(uint64_t(p_particles->amount), uint64_t(p_particles->userdata_count), p_particles->trails_enabled ? uint64_t(p_particles->trail_bind_poses.size()) : 1, r_size);
 }
 
+bool ParticlesStorage::_particles_get_sort_data_size(uint64_t p_amount, uint64_t &r_size) {
+	if (p_amount == 0) {
+		r_size = 0;
+		return false;
+	}
+	const uint64_t even_amount = p_amount + (p_amount & 1);
+	if (even_amount < p_amount || even_amount > UINT64_MAX / (sizeof(float) * 2)) {
+		r_size = 0;
+		return false;
+	}
+	r_size = even_amount * sizeof(float) * 2;
+	return r_size <= UINT32_MAX;
+}
+
 bool ParticlesStorage::_particles_get_instance_data_size(uint64_t p_total_amount, uint32_t p_xform_size, bool p_motion_vectors, uint64_t &r_size) {
 	uint64_t words_per_instance = uint64_t(p_xform_size) + 2;
 	if (p_total_amount > UINT64_MAX / (words_per_instance * sizeof(float) * 4)) {
@@ -1405,12 +1419,12 @@ void ParticlesStorage::particles_set_view_axis(RID p_particles, const Vector3 &p
 
 	//copy to sort buffer
 	if (do_sort && particles->particles_sort_buffer == RID()) {
-		uint32_t size = particles->amount;
-		if (size & 1) {
-			size++; //make multiple of 16
+		uint64_t sort_buffer_size = 0;
+		if (!_particles_get_sort_data_size(uint64_t(particles->amount), sort_buffer_size)) {
+			ERR_PRINT("Particle sort buffer size exceeds the rendering device buffer size limit.");
+			return;
 		}
-		size *= sizeof(float) * 2;
-		particles->particles_sort_buffer = RD::get_singleton()->storage_buffer_create(size);
+		particles->particles_sort_buffer = RD::get_singleton()->storage_buffer_create(uint32_t(sort_buffer_size));
 		if (particles->particles_sort_buffer.is_null()) {
 			ERR_PRINT("Failed to create particle sort buffer.");
 			return;
