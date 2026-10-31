@@ -81,6 +81,9 @@ public:
 	static bool lifetime_split(uint64_t p_amount, double p_phase, uint32_t &r_split) {
 		return ParticlesStorage::_particles_get_lifetime_split(p_amount, p_phase, r_split);
 	}
+	static bool history_size(double p_trail_lifetime, int p_fixed_fps, uint32_t &r_size) {
+		return ParticlesStorage::_particles_get_history_size(p_trail_lifetime, p_fixed_fps, r_size);
+	}
 };
 } // namespace RendererRD
 
@@ -171,6 +174,16 @@ TEST_CASE("[ParticlesReadback] data size includes trails and user data with a bo
 	CHECK(lifetime_split == 0);
 	CHECK(RendererRD::TestParticlesReadbackAccess::lifetime_split(4, 1e300, lifetime_split));
 	CHECK(lifetime_split == 0);
+
+	uint32_t history_size = 0;
+	CHECK(RendererRD::TestParticlesReadbackAccess::history_size(0.3, 60, history_size));
+	CHECK(history_size == 18);
+	CHECK(RendererRD::TestParticlesReadbackAccess::history_size(double(UINT32_MAX) / double(INT32_MAX), INT32_MAX, history_size));
+	CHECK(history_size == UINT32_MAX);
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::history_size(10.0, -1, history_size));
+	CHECK(history_size == 0);
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::history_size(Math::NaN, 60, history_size));
+	CHECK(history_size == 0);
 }
 
 TEST_CASE("[ParticlesReadback] invalid particle RID returns an empty CPU snapshot") {

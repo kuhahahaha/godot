@@ -824,6 +824,19 @@ bool ParticlesStorage::_particles_get_lifetime_split(uint64_t p_amount, double p
 	return true;
 }
 
+bool ParticlesStorage::_particles_get_history_size(double p_trail_lifetime, int p_fixed_fps, uint32_t &r_size) {
+	r_size = 0;
+	if (!Math::is_finite(p_trail_lifetime) || p_trail_lifetime < 0.0 || p_fixed_fps <= 0) {
+		return false;
+	}
+	const double history_size = p_trail_lifetime * double(p_fixed_fps);
+	if (!Math::is_finite(history_size) || history_size > double(UINT32_MAX)) {
+		return false;
+	}
+	r_size = MAX(uint32_t(1), uint32_t(history_size));
+	return true;
+}
+
 bool ParticlesStorage::_particles_get_sort_data_size(uint64_t p_amount, uint64_t &r_size) {
 	if (p_amount == 0) {
 		r_size = 0;
@@ -1807,7 +1820,12 @@ void ParticlesStorage::update_particles() {
 			int history_size = 1;
 			int trail_steps = 1;
 			if (particles->trails_enabled && particles->trail_bind_poses.size() > 1) {
-				history_size = MAX(1, int(particles->trail_lifetime * fixed_fps));
+				uint32_t checked_history_size = 0;
+				if (!_particles_get_history_size(particles->trail_lifetime, fixed_fps, checked_history_size)) {
+					ERR_PRINT("Particle trail history size exceeds the supported range.");
+					return;
+				}
+				history_size = checked_history_size;
 				trail_steps = particles->trail_bind_poses.size();
 			}
 
