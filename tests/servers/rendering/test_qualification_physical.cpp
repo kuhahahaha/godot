@@ -2031,6 +2031,78 @@ public:
 		device.is_main_instance = false;
 		memdelete(registry);
 	}
+	static void qrt_create_error_has_same_delivery_before_and_after_driver(RenderingDevice &device, RenderingDeviceDriver &driver, bool &fail_create, int &creates, bool post_driver) {
+		using namespace GDExtensionDeviceExit;
+		auto *registry = memnew(Registry);
+		auto *previous = RenderingDevice::singleton;
+		RenderingDevice::singleton = &device;
+		device.is_main_instance = true;
+		device.render_thread_id = Thread::get_caller_id();
+		registry->instance = 71;
+		auto &record = registry->records[0];
+		record.owner_thread = Thread::get_caller_id();
+		record.snapshot.library_generation = 1;
+		record.guard_enrollment = GuardEnrollment::QUALIFIED;
+		record.private_refs = 1;
+		auto &d = registry->device_records[0];
+		d.object = &device;
+		d.live = true;
+		d.epoch = 1;
+		d.execution_thread = Thread::get_caller_id();
+		d.refs = 1;
+		struct Holder : HolderRetirement {
+			Holder() : HolderRetirement(RecordRef{}) {}
+			~Holder() = default;
+		} holder;
+		holder.generation = 1;
+		holder.qualification_children = 1;
+		auto *bridge = memnew(Registry::QualificationBridge);
+		bridge->serial = 11;
+		bridge->epoch = 1;
+		bridge->holder = &holder;
+		registry->qualification_bridges[0] = bridge;
+		const GDExtensionQualificationBridgeRefV1 ref{ 71, 11 };
+		device.draw_graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+		device.draw_graph.begin();
+		const GDExtensionQualificationRtConfigV1 config{ { 1, 40, 0 }, 1, 312, 200, 1, 256 };
+		REQUIRE(registry->qualification_rt_configure(ref, &config).native_error == OK);
+		const GDExtensionStorageCreateRequestV1 create{ { 1, 16, 0 }, 128, 3, 1, 41, 1, 0 };
+		const GDExtensionQualificationRtRequestV1 header{ { 1, 56, 0 }, 2, 0, 1, 0, sizeof(create), sizeof(GDExtensionStorageBackingV1), 0, 0 };
+		GDExtensionQualificationRtRefV1 rt = {};
+		REQUIRE(registry->qualification_rt_reserve(ref, &header, &create, nullptr, &rt).native_error == OK);
+		const int before = creates;
+		fail_create = post_driver;
+		device.frame_wait_error = post_driver ? OK : FAILED;
+		bridge->rt->active = true;
+		bridge->rt->state = 1;
+		bridge->rt->queued = true;
+		++bridge->children;
+		++record.private_refs;
+		registry->qualification_rt_dispatch(bridge->serial, rt.handle_serial);
+		device.frame_wait_error = OK;
+		fail_create = false;
+		GDExtensionQualificationRtObservationV1 observed = {};
+		alignas(8) uint8_t bytes[sizeof(GDExtensionStorageBackingV1)] = {};
+		REQUIRE(registry->qualification_rt_observe(ref, rt, &observed, bytes, sizeof(bytes), nullptr, 0).native_error == OK);
+		CHECK(observed.kind == 2);
+		CHECK(observed.operation_serial == 1);
+		CHECK(observed.state == 2);
+		CHECK(observed.result_bytes == sizeof(bytes));
+		CHECK(observed.call_result.native_error == FAILED);
+		CHECK(observed.call_result.reason == 16);
+		for (uint8_t byte : bytes) {
+			CHECK(byte == 0);
+		}
+		CHECK(creates == before + (post_driver ? 1 : 0));
+		CHECK(bridge->storage[0] == nullptr);
+		REQUIRE(registry->qualification_rt_release(ref, rt).native_error == OK);
+		GDExtensionQualificationRtRefV1 stale = {};
+		CHECK(registry->qualification_rt_reserve(ref, &header, &create, nullptr, &stale).native_error == ERR_DOES_NOT_EXIST);
+		REQUIRE(registry->qualification_close(ref).native_error == OK);
+		RenderingDevice::singleton = previous;
+		device.is_main_instance = false;
+		memdelete(registry);
+	}
 	static void qrt_last_serial_delivers_original_retire(RenderingDevice &device, RenderingDeviceDriver &driver, bool fail_first = false) {
 		using namespace GDExtensionDeviceExit;
 		auto *registry = memnew(Registry);
@@ -4340,6 +4412,18 @@ TEST_CASE("[Qualification][E05] failed storage creation releases reserved event 
 	CHECK(driver.creates == 2);
 	CHECK(driver.frees == 1);
 	TestQualificationPhysicalAccess::detach(device);
+}
+
+TEST_CASE("[Qualification][E05] QRT create error bytes do not identify driver attempt") {
+	for (bool post_driver : { false, true }) {
+		RenderingDevice device;
+		TestQualificationPhysical::Driver driver;
+		TestQualificationPhysicalAccess::attach(device, driver);
+		TestQualificationPhysicalAccess::qrt_create_error_has_same_delivery_before_and_after_driver(device, driver, driver.fail_buffer_create, driver.creates, post_driver);
+		CHECK(driver.creates == (post_driver ? 1 : 0));
+		CHECK(driver.frees == 0);
+		TestQualificationPhysicalAccess::detach(device);
+	}
 }
 
 TEST_CASE("[Qualification][E05] event capacity protects previously accepted resource kinds") {
