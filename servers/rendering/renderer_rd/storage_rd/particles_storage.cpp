@@ -1815,15 +1815,21 @@ void ParticlesStorage::update_particles() {
 			}
 
 			if (particles->trail_bind_pose_buffer.is_valid() && particles->trail_bind_poses_dirty) {
-				if (particles_shader.pose_update_buffer.size() < uint32_t(particles->trail_bind_poses.size()) * 16) {
-					particles_shader.pose_update_buffer.resize(particles->trail_bind_poses.size() * 16);
+				uint64_t trail_bind_pose_buffer_size = 0;
+				if (!_particles_get_trail_bind_pose_data_size(uint64_t(particles->trail_bind_poses.size()), trail_bind_pose_buffer_size)) {
+					ERR_PRINT("Particle trail bind pose update size exceeds the supported update size.");
+					return;
+				}
+				const uint64_t trail_bind_pose_float_count = trail_bind_pose_buffer_size / sizeof(float);
+				if (particles_shader.pose_update_buffer.size() < trail_bind_pose_float_count) {
+					particles_shader.pose_update_buffer.resize(trail_bind_pose_float_count);
 				}
 
 				for (int i = 0; i < particles->trail_bind_poses.size(); i++) {
 					RendererRD::MaterialStorage::store_transform(particles->trail_bind_poses[i], &particles_shader.pose_update_buffer[i * 16]);
 				}
 
-				RD::get_singleton()->buffer_update(particles->trail_bind_pose_buffer, 0, particles->trail_bind_poses.size() * 16 * sizeof(float), particles_shader.pose_update_buffer.ptr());
+				RD::get_singleton()->buffer_update(particles->trail_bind_pose_buffer, 0, uint32_t(trail_bind_pose_buffer_size), particles_shader.pose_update_buffer.ptr());
 			}
 		}
 
