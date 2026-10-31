@@ -569,6 +569,7 @@ public:
 		Particles *particles = particles_owner.get_or_null(p_particles);
 		ERR_FAIL_NULL_V(particles, RID());
 		if (particles->particles_transforms_buffer_uniform_set.is_null() || !RD::get_singleton()->uniform_set_is_valid(particles->particles_transforms_buffer_uniform_set)) {
+			particles->particles_transforms_buffer_uniform_set = RID();
 			if (!_particles_update_buffers(particles) || particles->particle_instance_buffer.is_null()) {
 				return RID();
 			}
