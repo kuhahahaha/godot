@@ -32,6 +32,9 @@ TEST_CASE("[ParticlesReadback] data size includes trails and user data with a bo
 
 	CHECK(RendererRD::TestParticlesReadbackAccess::data_size(2, 3, 4, size));
 	CHECK(size == 8 * RendererRD::TestParticlesReadbackAccess::particle_data_size(3));
+
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::data_size(UINT32_MAX, UINT32_MAX, 0, size));
+	CHECK(size == 0);
 }
 
 TEST_CASE("[ParticlesReadback] invalid particle RID returns an empty CPU snapshot") {

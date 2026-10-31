@@ -739,14 +739,15 @@ AABB ParticlesStorage::particles_get_current_aabb(RID p_particles) {
 	const Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL_V(particles, AABB());
 
-	int total_amount = particles->amount;
-	if (particles->trails_enabled && particles->trail_bind_poses.size() > 1) {
-		total_amount *= particles->trail_bind_poses.size();
+	uint64_t expected_size = 0;
+	if (!_particles_get_data_size(particles, expected_size)) {
+		ERR_PRINT("Particle current AABB exceeds the rendering device buffer size limit.");
+		return AABB();
 	}
-
-	uint32_t particle_data_size = sizeof(ParticleData) + sizeof(float) * 4 * particles->userdata_count;
+	const uint64_t particle_data_size = sizeof(ParticleData) + sizeof(float) * 4 * uint64_t(particles->userdata_count);
 	Vector<uint8_t> buffer = RD::get_singleton()->buffer_get_data(particles->particle_buffer);
-	ERR_FAIL_COND_V(buffer.size() != (int)(total_amount * particle_data_size), AABB());
+	ERR_FAIL_COND_V(uint64_t(buffer.size()) != expected_size, AABB());
+	const uint64_t total_amount = particle_data_size == 0 ? 0 : expected_size / particle_data_size;
 
 	Transform3D inv = particles->emission_transform.affine_inverse();
 
@@ -756,7 +757,7 @@ AABB ParticlesStorage::particles_get_current_aabb(RID p_particles) {
 
 		const uint8_t *data_ptr = (const uint8_t *)buffer.ptr();
 
-		for (int i = 0; i < total_amount; i++) {
+		for (uint64_t i = 0; i < total_amount; i++) {
 			const ParticleData &particle_data = *(const ParticleData *)&data_ptr[particle_data_size * i];
 			if (particle_data.active) {
 				Vector3 pos = Vector3(particle_data.xform[12], particle_data.xform[13], particle_data.xform[14]);
@@ -800,7 +801,7 @@ Vector<uint8_t> ParticlesStorage::particles_get_current_data(RID p_particles) co
 	}
 
 	Vector<uint8_t> buffer = RD::get_singleton()->buffer_get_data(particles->particle_buffer);
-	if (buffer.size() != int(expected_size)) {
+	if (uint64_t(buffer.size()) != expected_size) {
 		ERR_PRINT("Particle CPU readback returned an unexpected buffer size.");
 		return Vector<uint8_t>();
 	}
