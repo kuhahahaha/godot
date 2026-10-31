@@ -984,8 +984,10 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 	const double previous_phase = p_particles->phase;
 	const uint32_t previous_cycle_number = p_particles->cycle_number;
 	const uint32_t previous_frame_counter = p_particles->frame_counter;
-	const LocalVector<ParticlesFrameParams> previous_frame_history = p_particles->frame_history;
-	const LocalVector<ParticlesFrameParams> previous_trail_params = p_particles->trail_params;
+	LocalVector<ParticlesFrameParams> previous_frame_history;
+	previous_frame_history = p_particles->frame_history;
+	LocalVector<ParticlesFrameParams> previous_trail_params;
+	previous_trail_params = p_particles->trail_params;
 	const bool previous_clear = p_particles->clear;
 	const bool previous_force_sub_emit = p_particles->force_sub_emit;
 	const bool previous_emitting = p_particles->emitting;
