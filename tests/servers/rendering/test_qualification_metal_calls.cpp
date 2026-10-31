@@ -1,10 +1,35 @@
 #include "tests/test_macros.h"
 TEST_FORCE_LINK(test_qualification_metal_calls)
 #if defined(METAL_ENABLED) && defined(MACOS_ENABLED)
+#include "drivers/metal/metal3_objects.h"
+#include "drivers/metal/metal_allocator.h"
 #include "drivers/metal/rendering_context_driver_metal.h"
 #include "drivers/metal/rendering_device_driver_metal3.h"
-#include "drivers/metal/metal3_objects.h"
+
 #include <thread>
+TEST_CASE("[QualificationNative][Metal] failed heap buffer creation returns its allocation") {
+	RenderingContextDriverMetal context;
+	REQUIRE(context.initialize() == OK);
+	MetalHeapAllocator allocator(context.get_metal_device());
+	MetalAllocatorStats before;
+	allocator.get_stats(before);
+	allocator.test_fail_buffer_after_allocation = true;
+	auto failed = allocator.new_buffer(128, MTL::ResourceStorageModePrivate);
+	CHECK_FALSE(bool(failed.buffer));
+	CHECK_FALSE(failed.allocation.is_valid());
+	CHECK_FALSE(allocator.test_fail_buffer_after_allocation);
+	MetalAllocatorStats after;
+	allocator.get_stats(after);
+	for (uint32_t i = 0; i < 3; ++i) {
+		CHECK(after.pools[i].allocation_count == before.pools[i].allocation_count);
+		CHECK(after.pools[i].used_bytes == before.pools[i].used_bytes);
+		CHECK(after.pools[i].dedicated_count == before.pools[i].dedicated_count);
+	}
+	auto valid = allocator.new_buffer(128, MTL::ResourceStorageModePrivate);
+	REQUIRE(bool(valid.buffer));
+	allocator.free_buffer(valid);
+}
+
 class TestQualificationMetalCallAccess {
 public:
  static Mutex &mutex(RenderingDeviceDriverMetal &driver){return driver.completion_records_mutex;}

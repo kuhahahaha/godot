@@ -305,13 +305,27 @@ MetalBuffer MetalHeapAllocator::new_buffer(NS::UInteger p_length, MTL::ResourceO
 		if (!_dedicated_allocate(pool_index, sa.size, result.allocation, heap)) {
 			return result;
 		}
-		result.buffer = NS::TransferPtr(heap->newBuffer(p_length, heap_options, 0));
+#ifdef TESTS_ENABLED
+		const bool fail_after_allocation = test_fail_buffer_after_allocation;
+		test_fail_buffer_after_allocation = false;
+		if (!fail_after_allocation)
+#endif
+		{
+			result.buffer = NS::TransferPtr(heap->newBuffer(p_length, heap_options, 0));
+		}
 	} else {
 		uint64_t offset = 0;
 		if (!_pool_allocate(pool_index, sa.size, sa.align, result.allocation, heap, offset)) {
 			return result;
 		}
-		result.buffer = NS::TransferPtr(heap->newBuffer(p_length, heap_options, offset));
+#ifdef TESTS_ENABLED
+		const bool fail_after_allocation = test_fail_buffer_after_allocation;
+		test_fail_buffer_after_allocation = false;
+		if (!fail_after_allocation)
+#endif
+		{
+			result.buffer = NS::TransferPtr(heap->newBuffer(p_length, heap_options, offset));
+		}
 	}
 	if (!result.buffer) {
 		_free_allocation(result.allocation);
