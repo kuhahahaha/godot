@@ -2089,6 +2089,7 @@ public:
 private:
 	void _free_pending_resources(int p_frame);
 	Error _fail_frame_issue(Error p_error);
+	Error _fail_frame_wait_source(uint32_t p_frame, Error p_error);
 	void _seal_buffer_readback_records();
 	void _observe_buffer_readback_issue(uint32_t p_slot, RDD::CommandBufferID p_command_buffer, Error p_error, const RDD::QueueCallReport &p_report);
 

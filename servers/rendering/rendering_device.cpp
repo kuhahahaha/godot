@@ -9580,12 +9580,16 @@ Error RenderingDevice::_begin_frame(bool p_presented, bool p_nonblocking) {
 }
 
 Error RenderingDevice::_fail_frame_issue(Error p_error) {
+	return _fail_frame_wait_source(frame, p_error);
+}
+
+Error RenderingDevice::_fail_frame_wait_source(uint32_t p_frame, Error p_error) {
 	CRASH_COND(p_error == OK);
 	Error expected = OK;
 	frame_issue_error.compare_exchange_strong(expected, p_error);
 	const Error error = frame_issue_error.load();
-	frames[frame].chain_prefix_poisoned = true;
-	for (const BufferGetDataRequest &request : frames[frame].download_buffer_get_data_requests) {
+	frames[p_frame].chain_prefix_poisoned = true;
+	for (const BufferGetDataRequest &request : frames[p_frame].download_buffer_get_data_requests) {
 		if (request.result.is_valid() && request.result->error == OK) {
 			request.result->error = error;
 		}
@@ -9883,7 +9887,7 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 				if (completion.native_error) {
 					frame_wait_native_code = completion.native_code;
 					frame_wait_native_code_valid = true;
-					return FAILED;
+					return _fail_frame_wait_source(p_frame, FAILED);
 				}
 				if (!completion.matches(call.completion_serial)) {
 					return ERR_BUSY;
@@ -9921,7 +9925,7 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 			if (completion.native_error) {
 				frame_wait_native_code = completion.native_code;
 				frame_wait_native_code_valid = true;
-				return FAILED;
+				return _fail_frame_wait_source(p_frame, FAILED);
 			}
 			if (!completion.matches(call.completion_serial)) {
 				return ERR_BUSY;

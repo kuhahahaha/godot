@@ -52,6 +52,18 @@ public:
 		device.frames[0].chain_reports.push_back(report);
 	}
 	static bool native_source_returned(RenderingDevice &device) { return device.frames[0].chain_reports[0].calls[0].source_owner_returned; }
+	static void move_native_source_to_hidden(RenderingDevice &device) {
+		device.frames[0].qualification_hidden_reports.push_back(device.frames[0].chain_reports[0]);
+		device.frames[0].chain_reports.clear();
+	}
+	static bool hidden_source_returned(RenderingDevice &device) { return device.frames[0].qualification_hidden_reports[0].calls[0].source_owner_returned; }
+	static int64_t native_wait_code(const RenderingDevice &device) { return device.frame_wait_native_code; }
+	static bool native_wait_code_valid(const RenderingDevice &device) { return device.frame_wait_native_code_valid; }
+	static void select_other_frame(RenderingDevice &device) {
+		device.frames.resize(2);
+		device.frame = 1;
+	}
+	static Error readback_error(const RenderingDevice &device) { return device.frames[0].download_buffer_get_data_requests[0].result->error; }
 
 	static void attach(RenderingDevice &device, RenderingDeviceDriver &driver, const Callable &callback) {
 		device.driver = &driver;
@@ -355,6 +367,72 @@ TEST_CASE("[R01][FrameWait] failed fence preserves requests and retry delivers o
 	REQUIRE(received.size() == 4);
 	CHECK(received[0] == 1);
 	CHECK(received[3] == 4);
+}
+
+TEST_CASE("[R01][FrameWait] native source error cannot later deliver its original readback") {
+	class NativeErrorDriver : public Driver {
+	public:
+		int polls = 0;
+		bool native_call_observation_supported() const override { return true; }
+		FencePollResult native_call_poll(uint64_t serial) override {
+			CHECK(serial == 17);
+			FencePollResult observed;
+			observed.completed_serial = serial;
+			if (++polls == 1) {
+				observed.native_error = true;
+				observed.native_code = -731;
+			} else {
+				observed.completed = true;
+			}
+			return observed;
+		}
+		FencePollResult native_call_wait(uint64_t serial) override { return native_call_poll(serial); }
+	} driver;
+	driver.result = OK;
+	RenderingDevice device;
+	callbacks = 0;
+	TestFrameWaitAccess::attach(device, driver, callable_mp_static(receive));
+	TestFrameWaitAccess::attach_native_source(device, driver);
+	TestFrameWaitAccess::select_other_frame(device);
+	CHECK(device._stall_for_frame(0, true) == FAILED);
+	CHECK(TestFrameWaitAccess::native_wait_code_valid(device));
+	CHECK(TestFrameWaitAccess::native_wait_code(device) == -731);
+	CHECK(TestFrameWaitAccess::readback_error(device) == FAILED);
+	CHECK(device._stall_for_frame(0, true) == FAILED);
+	CHECK(driver.polls == 1);
+	CHECK(driver.maps == 0);
+	CHECK(callbacks == 0);
+	CHECK(TestFrameWaitAccess::pending(device) == 1);
+	CHECK_FALSE(TestFrameWaitAccess::native_source_returned(device));
+	TestFrameWaitAccess::detach(device);
+}
+
+TEST_CASE("[R01][FrameWait] hidden native source error retains its original frame") {
+	class HiddenErrorDriver : public Driver {
+	public:
+		int polls = 0;
+		bool native_call_observation_supported() const override { return true; }
+		FencePollResult native_call_poll(uint64_t serial) override {
+			CHECK(serial == 17);
+			++polls;
+			FencePollResult observed;
+			observed.native_error = true;
+			observed.native_code = -731;
+			return observed;
+		}
+		FencePollResult native_call_wait(uint64_t serial) override { return native_call_poll(serial); }
+	} driver;
+	RenderingDevice device;
+	TestFrameWaitAccess::attach_native_source(device, driver);
+	TestFrameWaitAccess::move_native_source_to_hidden(device);
+	TestFrameWaitAccess::select_other_frame(device);
+	CHECK(device._stall_for_frame(0, true) == FAILED);
+	CHECK(TestFrameWaitAccess::native_wait_code_valid(device));
+	CHECK(TestFrameWaitAccess::native_wait_code(device) == -731);
+	CHECK(device._stall_for_frame(0, true) == FAILED);
+	CHECK(driver.polls == 1);
+	CHECK_FALSE(TestFrameWaitAccess::hidden_source_returned(device));
+	TestFrameWaitAccess::detach(device);
 }
 
 TEST_CASE("[R01][FrameWait] failed wait stops frame reset and flush") {
