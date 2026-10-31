@@ -810,6 +810,20 @@ bool ParticlesStorage::_particles_get_trail_history_index(uint64_t p_index, uint
 	return true;
 }
 
+bool ParticlesStorage::_particles_get_lifetime_split(uint64_t p_amount, double p_phase, uint32_t &r_split) {
+	r_split = 0;
+	if (p_amount == 0 || p_amount > UINT32_MAX || !Math::is_finite(p_phase) || p_phase < 0.0) {
+		return false;
+	}
+	const double scaled_phase = double(p_amount) * p_phase;
+	if (!Math::is_finite(scaled_phase)) {
+		return false;
+	}
+	const uint64_t phase_index = MIN(uint64_t(scaled_phase), p_amount - 1);
+	r_split = uint32_t((phase_index + 1) % p_amount);
+	return true;
+}
+
 bool ParticlesStorage::_particles_get_sort_data_size(uint64_t p_amount, uint64_t &r_size) {
 	if (p_amount == 0) {
 		r_size = 0;
@@ -1542,7 +1556,10 @@ void ParticlesStorage::particles_set_view_axis(RID p_particles, const Vector3 &p
 	}
 
 	copy_push_constant.order_by_lifetime = (particles->draw_order == RSE::PARTICLES_DRAW_ORDER_LIFETIME || particles->draw_order == RSE::PARTICLES_DRAW_ORDER_REVERSE_LIFETIME);
-	copy_push_constant.lifetime_split = (MIN(int(particles->amount * particles->phase), particles->amount - 1) + 1) % particles->amount;
+	if (!_particles_get_lifetime_split(uint64_t(particles->amount), particles->phase, copy_push_constant.lifetime_split)) {
+		ERR_PRINT("Particle lifetime split exceeds the supported range.");
+		return;
+	}
 	copy_push_constant.lifetime_reverse = particles->draw_order == RSE::PARTICLES_DRAW_ORDER_REVERSE_LIFETIME;
 	copy_push_constant.motion_vectors_current_offset = particles->instance_motion_vectors_current_offset;
 
@@ -1998,7 +2015,10 @@ void ParticlesStorage::update_particles() {
 			}
 
 			copy_push_constant.order_by_lifetime = (particles->draw_order == RSE::PARTICLES_DRAW_ORDER_LIFETIME || particles->draw_order == RSE::PARTICLES_DRAW_ORDER_REVERSE_LIFETIME);
-			copy_push_constant.lifetime_split = (MIN(int(particles->amount * particles->phase), particles->amount - 1) + 1) % particles->amount;
+			if (!_particles_get_lifetime_split(uint64_t(particles->amount), particles->phase, copy_push_constant.lifetime_split)) {
+				ERR_PRINT("Particle lifetime split exceeds the supported range.");
+				return;
+			}
 			copy_push_constant.lifetime_reverse = particles->draw_order == RSE::PARTICLES_DRAW_ORDER_REVERSE_LIFETIME;
 			copy_push_constant.motion_vectors_current_offset = particles->instance_motion_vectors_current_offset;
 
