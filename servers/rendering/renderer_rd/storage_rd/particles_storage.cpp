@@ -1392,7 +1392,12 @@ void ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 	}
 
 	if (p_particles->emission_buffer && p_particles->emission_buffer->particle_count) {
-		RD::get_singleton()->buffer_update(p_particles->emission_storage_buffer, 0, sizeof(uint32_t) * 4 + sizeof(ParticleEmissionBuffer::Data) * p_particles->emission_buffer->particle_count, p_particles->emission_buffer);
+		uint64_t emission_buffer_size = 0;
+		if (!_particles_get_emission_data_size(uint64_t(p_particles->emission_buffer->particle_count), emission_buffer_size)) {
+			ERR_PRINT("Particle emission update size exceeds the supported update size.");
+			return;
+		}
+		RD::get_singleton()->buffer_update(p_particles->emission_storage_buffer, 0, uint32_t(emission_buffer_size), p_particles->emission_buffer);
 		p_particles->emission_buffer->particle_count = 0;
 	}
 
