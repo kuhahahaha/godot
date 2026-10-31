@@ -1691,7 +1691,7 @@ void ParticlesStorage::particles_set_view_axis(RID p_particles, const Vector3 &p
 	RD::get_singleton()->compute_list_end();
 }
 
-void ParticlesStorage::_particles_update_buffers(Particles *particles) {
+bool ParticlesStorage::_particles_update_buffers(Particles *particles) {
 	uint32_t userdata_count = 0;
 
 	if (particles->process_material.is_valid()) {
@@ -1725,7 +1725,7 @@ void ParticlesStorage::_particles_update_buffers(Particles *particles) {
 		only_instances_changed = true;
 	} else if (!particles->particle_buffer.is_null() && !particles->particle_instance_buffer.is_null() && !particles->particles_copy_uniform_set.is_null()) {
 		// No operation is required when all buffers and the copy uniform already exist.
-		return;
+		return true;
 	}
 
 	if (particles->amount > 0) {
@@ -1733,7 +1733,7 @@ void ParticlesStorage::_particles_update_buffers(Particles *particles) {
 		const uint64_t trail_count = particles->trails_enabled ? uint64_t(particles->trail_bind_poses.size()) : 1;
 		if (!_particles_get_data_size(uint64_t(particles->amount), uint64_t(userdata_count), trail_count, particle_data_size)) {
 			ERR_PRINT("Particle buffer size exceeds the rendering device buffer size limit.");
-			return;
+			return false;
 		}
 		const uint64_t total_amount = particle_data_size / (sizeof(ParticleData) + sizeof(float) * 4 * uint64_t(userdata_count));
 
@@ -1741,13 +1741,13 @@ void ParticlesStorage::_particles_update_buffers(Particles *particles) {
 		uint64_t particle_instance_buffer_size = 0;
 		if (!_particles_get_instance_data_size(total_amount, xform_size, uses_motion_vectors, particle_instance_buffer_size)) {
 			ERR_PRINT("Particle instance buffer size exceeds the rendering device buffer size limit.");
-			return;
+			return false;
 		}
 		bool particle_buffer_created = false;
 		if (particles->particle_buffer.is_null()) {
 			particles->particle_buffer = RD::get_singleton()->storage_buffer_create(uint32_t(particle_data_size));
 			if (particles->particle_buffer.is_null()) {
-				return;
+				return false;
 			}
 			particles->userdata_count = userdata_count;
 			particles->restart_request = true;
@@ -1758,20 +1758,23 @@ void ParticlesStorage::_particles_update_buffers(Particles *particles) {
 		data.resize_initialized(uint32_t(particle_instance_buffer_size));
 
 		// Test a rejected instance allocation after the particle data buffer already exists.
+		particles->particle_instance_buffer = RD::get_singleton()->storage_buffer_create(uint32_t(particle_instance_buffer_size), data);
 #ifdef TESTS_ENABLED
 		if (!particle_buffer_created && OS::get_singleton()->get_environment("GODOT_TEST_PARTICLES_REJECT_INSTANCE_ONCE") == "1") {
 			OS::get_singleton()->unset_environment("GODOT_TEST_PARTICLES_REJECT_INSTANCE_ONCE");
+			if (particles->particle_instance_buffer.is_valid()) {
+				RD::get_singleton()->free_rid(particles->particle_instance_buffer);
+			}
+			particles->particle_instance_buffer = RID();
 			ERR_PRINT("Test-only particle instance buffer allocation rejection.");
-			return;
 		}
 #endif
-		particles->particle_instance_buffer = RD::get_singleton()->storage_buffer_create(uint32_t(particle_instance_buffer_size), data);
 		if (particles->particle_instance_buffer.is_null()) {
 			if (particle_buffer_created) {
 				RD::get_singleton()->free_rid(particles->particle_buffer);
 				particles->particle_buffer = RID();
 			}
-			return;
+			return false;
 		}
 
 		{
@@ -1801,7 +1804,7 @@ void ParticlesStorage::_particles_update_buffers(Particles *particles) {
 					RD::get_singleton()->free_rid(particles->particle_buffer);
 					particles->particle_buffer = RID();
 				}
-				return;
+				return false;
 			}
 		}
 
@@ -1817,6 +1820,7 @@ void ParticlesStorage::_particles_update_buffers(Particles *particles) {
 			particles->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_PARTICLES_INSTANCES);
 		}
 	}
+	return true;
 }
 void ParticlesStorage::update_particles() {
 	if (!particle_update_list.first()) {
@@ -1834,8 +1838,8 @@ void ParticlesStorage::update_particles() {
 		particles->update_list.remove_from_list();
 		particles->dirty = false;
 
-		_particles_update_buffers(particles);
-		if (particles->particle_buffer.is_null() || particles->particle_instance_buffer.is_null() || particles->particles_copy_uniform_set.is_null()) {
+		const bool buffers_ready = _particles_update_buffers(particles);
+		if (!buffers_ready || particles->particle_buffer.is_null() || particles->particle_instance_buffer.is_null() || particles->particles_copy_uniform_set.is_null()) {
 			continue;
 		}
 

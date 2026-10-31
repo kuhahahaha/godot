@@ -298,7 +298,7 @@ private:
 	static bool _particles_ensure_unused_trail_buffer(Particles *particles);
 	static bool _particles_ensure_trail_uniform(Particles *particles, RID p_shader);
 	void _particles_free_data(Particles *particles);
-	void _particles_update_buffers(Particles *particles);
+	bool _particles_update_buffers(Particles *particles);
 
 	struct ParticlesShader {
 		struct PushConstant {
