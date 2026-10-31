@@ -910,6 +910,34 @@ void ParticlesStorage::_particles_commit_process_state(Particles *p_particles, P
 	}
 }
 
+void ParticlesStorage::_particles_restore_process_history(Particles *p_particles, const ParticlesFrameParams &p_previous_first, const ParticlesFrameParams &p_previous_last) {
+	if (p_particles->frame_history.is_empty()) {
+		return;
+	}
+	p_particles->frame_history[0] = p_previous_first;
+	if (p_particles->frame_history.size() > 1) {
+		for (uint32_t i = 1; i + 1 < p_particles->frame_history.size(); i++) {
+			p_particles->frame_history[i] = p_particles->frame_history[i + 1];
+		}
+		p_particles->frame_history[p_particles->frame_history.size() - 1] = p_previous_last;
+	}
+
+	if (p_particles->trail_params.is_empty()) {
+		return;
+	}
+	if (p_particles->trail_params.size() > 1) {
+		for (uint32_t i = 0; i < p_particles->trail_params.size(); i++) {
+			uint32_t src_idx = i * p_particles->frame_history.size() / p_particles->trail_params.size();
+			if (p_particles->speed_scale <= 0.0) {
+				src_idx = 0;
+			}
+			p_particles->trail_params[i] = p_particles->frame_history[src_idx];
+		}
+	} else {
+		p_particles->trail_params[0] = p_particles->frame_history[0];
+	}
+}
+
 bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta) {
 	TextureStorage *texture_storage = TextureStorage::get_singleton();
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
@@ -984,10 +1012,8 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 	const double previous_phase = p_particles->phase;
 	const uint32_t previous_cycle_number = p_particles->cycle_number;
 	const uint32_t previous_frame_counter = p_particles->frame_counter;
-	p_particles->process_previous_frame_history = p_particles->frame_history;
-	p_particles->process_previous_trail_params = p_particles->trail_params;
-	const LocalVector<ParticlesFrameParams> &previous_frame_history = p_particles->process_previous_frame_history;
-	const LocalVector<ParticlesFrameParams> &previous_trail_params = p_particles->process_previous_trail_params;
+	const ParticlesFrameParams previous_frame_history_first = p_particles->frame_history.is_empty() ? ParticlesFrameParams() : p_particles->frame_history[0];
+	const ParticlesFrameParams previous_frame_history_last = p_particles->frame_history.size() < 2 ? previous_frame_history_first : p_particles->frame_history[p_particles->frame_history.size() - 1];
 	const bool previous_clear = p_particles->clear;
 	const bool previous_force_sub_emit = p_particles->force_sub_emit;
 	const bool previous_emitting = p_particles->emitting;
@@ -1002,8 +1028,7 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 		p_particles->phase = previous_phase;
 		p_particles->cycle_number = previous_cycle_number;
 		p_particles->frame_counter = previous_frame_counter;
-		p_particles->frame_history = previous_frame_history;
-		p_particles->trail_params = previous_trail_params;
+		_particles_restore_process_history(p_particles, previous_frame_history_first, previous_frame_history_last);
 		p_particles->clear = previous_clear;
 		p_particles->force_sub_emit = previous_force_sub_emit;
 		p_particles->emitting = previous_emitting;
