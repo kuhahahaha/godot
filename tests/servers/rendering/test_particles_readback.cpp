@@ -169,6 +169,8 @@ TEST_CASE("[ParticlesReadback] data size includes trails and user data with a bo
 	CHECK(lifetime_split == 0);
 	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::lifetime_split(4, Math::NaN, lifetime_split));
 	CHECK(lifetime_split == 0);
+	CHECK(RendererRD::TestParticlesReadbackAccess::lifetime_split(4, 1e300, lifetime_split));
+	CHECK(lifetime_split == 0);
 }
 
 TEST_CASE("[ParticlesReadback] invalid particle RID returns an empty CPU snapshot") {

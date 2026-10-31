@@ -819,7 +819,7 @@ bool ParticlesStorage::_particles_get_lifetime_split(uint64_t p_amount, double p
 	if (!Math::is_finite(scaled_phase)) {
 		return false;
 	}
-	const uint64_t phase_index = MIN(uint64_t(scaled_phase), p_amount - 1);
+	const uint64_t phase_index = scaled_phase >= double(p_amount - 1) ? p_amount - 1 : uint64_t(scaled_phase);
 	r_split = uint32_t((phase_index + 1) % p_amount);
 	return true;
 }
