@@ -284,6 +284,7 @@ private:
 
 	static void _particles_commit_process_state(Particles *p_particles, Particles *p_sub_emitter, bool p_sub_emitter_was_emitting, bool p_success);
 	static void _particles_restore_process_history(Particles *p_particles, const ParticlesFrameParams &p_previous_first, const ParticlesFrameParams &p_previous_last, double p_previous_trail_speed_scale);
+	static bool _particles_get_total_amount(const Particles *p_particles, uint32_t &r_total_amount);
 	bool _particles_process(Particles *p_particles, double p_delta);
 	static bool _particles_get_data_size(const Particles *p_particles, uint64_t &r_size);
 	void _particles_allocate_emission_buffer(Particles *particles);

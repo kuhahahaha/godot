@@ -11,6 +11,13 @@ TEST_FORCE_LINK(test_particles_readback)
 namespace RendererRD {
 class TestParticlesReadbackAccess {
 public:
+	static bool total_amount(uint32_t p_amount, uint32_t p_trail_count, uint32_t &r_total) {
+		ParticlesStorage::Particles particles;
+		particles.amount = p_amount;
+		particles.trails_enabled = p_trail_count > 1;
+		particles.trail_bind_poses.resize(p_trail_count);
+		return ParticlesStorage::_particles_get_total_amount(&particles, r_total);
+	}
 	static uint64_t particle_data_size(uint32_t p_userdata_count) {
 		return sizeof(ParticlesStorage::ParticleData) + 4 * sizeof(float) * p_userdata_count;
 	}
@@ -41,4 +48,11 @@ TEST_CASE("[ParticlesReadback] invalid particle RID returns an empty CPU snapsho
 	// The compatibility storage has no GPU buffer and must fail closed.
 	RendererDummy::ParticlesStorage storage;
 	CHECK(storage.particles_get_current_data(RID()).is_empty());
+}
+
+TEST_CASE("[ParticlesReadback] process amount rejects trail multiplication overflow") {
+	uint32_t total = 0;
+	CHECK(RendererRD::TestParticlesReadbackAccess::total_amount(4, 3, total));
+	CHECK(total == 12);
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::total_amount(UINT32_MAX, 3, total));
 }

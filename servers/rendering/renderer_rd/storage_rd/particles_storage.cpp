@@ -938,6 +938,23 @@ void ParticlesStorage::_particles_restore_process_history(Particles *p_particles
 	}
 }
 
+bool ParticlesStorage::_particles_get_total_amount(const Particles *p_particles, uint32_t &r_total_amount) {
+	if (p_particles == nullptr || p_particles->amount <= 0) {
+		r_total_amount = 0;
+		return false;
+	}
+	uint64_t total_amount = uint64_t(p_particles->amount);
+	if (p_particles->trails_enabled && p_particles->trail_bind_poses.size() > 1) {
+		total_amount *= uint64_t(p_particles->trail_bind_poses.size());
+	}
+	if (total_amount > UINT32_MAX) {
+		r_total_amount = 0;
+		return false;
+	}
+	r_total_amount = uint32_t(total_amount);
+	return true;
+}
+
 bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta) {
 	TextureStorage *texture_storage = TextureStorage::get_singleton();
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
@@ -1347,10 +1364,10 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 
 	ParticlesShader::PushConstant push_constant;
 
-	int process_amount = p_particles->amount;
-
-	if (p_particles->trails_enabled && p_particles->trail_bind_poses.size() > 1) {
-		process_amount *= p_particles->trail_bind_poses.size();
+	uint32_t process_amount = 0;
+	if (!_particles_get_total_amount(p_particles, process_amount)) {
+		ERR_PRINT("Particle process amount exceeds the rendering device limit.");
+		return fail_process();
 	}
 	push_constant.clear = p_particles->clear;
 	push_constant.total_particles = p_particles->amount;
@@ -1639,9 +1656,10 @@ void ParticlesStorage::_particles_update_buffers(Particles *particles) {
 	}
 
 	if (particles->amount > 0) {
-		int total_amount = particles->amount;
-		if (particles->trails_enabled && particles->trail_bind_poses.size() > 1) {
-			total_amount *= particles->trail_bind_poses.size();
+		uint32_t total_amount = 0;
+		if (!_particles_get_total_amount(particles, total_amount)) {
+			ERR_PRINT("Particle amount exceeds the rendering device limit.");
+			return;
 		}
 
 		uint32_t xform_size = particles->mode == RSE::PARTICLES_MODE_2D ? 2 : 3;
@@ -1916,9 +1934,10 @@ void ParticlesStorage::update_particles() {
 		// Ensure that memory is initialized (the code above should ensure that _particles_process is always called at least once upon clearing).
 		DEV_ASSERT(!particles->clear);
 
-		int total_amount = particles->amount;
-		if (particles->trails_enabled && particles->trail_bind_poses.size() > 1) {
-			total_amount *= particles->trail_bind_poses.size();
+		uint32_t total_amount = 0;
+		if (!_particles_get_total_amount(particles, total_amount)) {
+			ERR_PRINT("Particle amount exceeds the rendering device limit.");
+			continue;
 		}
 
 		// Swap offsets for motion vectors. Motion vectors can only be used when the draw order keeps the indices consistent across frames.
