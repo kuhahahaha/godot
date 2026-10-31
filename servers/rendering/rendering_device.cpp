@@ -1270,6 +1270,13 @@ Error RenderingDevice::buffer_update(RID p_buffer, uint32_t p_offset, uint32_t p
 	ERR_FAIL_COND_V_MSG(uint64_t(p_offset) + p_size > buffer->size, ERR_INVALID_PARAMETER, "Attempted to write buffer (" + itos((uint64_t(p_offset) + p_size) - buffer->size) + " bytes) past the end.");
 
 	ERR_FAIL_COND_V(buffer->qualification_return, ERR_UNAUTHORIZED);
+#ifdef TESTS_ENABLED
+	if (test_buffer_update_fault_count > 0 && test_buffer_update_fault_buffer == p_buffer) {
+		test_buffer_update_fault_count--;
+		test_buffer_update_fault_hits++;
+		return ERR_CANT_CREATE;
+	}
+#endif
 	return _buffer_update(buffer, p_buffer, p_offset, p_size, p_data);
 }
 

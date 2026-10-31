@@ -33,6 +33,12 @@
 #include "core/extension/gdextension_qualification_physical.h"
 #include "modules/modules_enabled.gen.h"
 
+#ifdef TESTS_ENABLED
+namespace RendererRD {
+class TestParticlesProcessRetryAccess;
+}
+#endif
+
 #include <atomic>
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
 #include "servers/rendering/render_capture_test_tracking.h"
@@ -110,6 +116,13 @@ private:
  friend class TestQualificationStagingAccess;
  friend class TestQualificationTicketAccess;
  friend class TestQualificationRtAccess;
+	friend class RendererRD::TestParticlesProcessRetryAccess;
+	void test_arm_buffer_update_fault(RID p_buffer, uint32_t p_count) {
+		test_buffer_update_fault_buffer = p_buffer;
+		test_buffer_update_fault_count = p_count;
+		test_buffer_update_fault_hits = 0;
+	}
+	uint32_t test_get_buffer_update_fault_hits() const { return test_buffer_update_fault_hits; }
 #endif
 	static RenderingDevice *singleton;
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
@@ -129,6 +142,15 @@ private:
 	uint64_t test_main_screen_epoch = 0;
 #endif
 	bool native_finalization_returned = false;
+
+#ifdef TESTS_ENABLED
+	// Test-only synchronous upload fault injection. The hook is armed only for
+	// an exact buffer RID and is consumed at the public buffer_update boundary,
+	// before staging or command recording can mutate device state.
+	RID test_buffer_update_fault_buffer;
+	uint32_t test_buffer_update_fault_count = 0;
+	uint32_t test_buffer_update_fault_hits = 0;
+#endif
 	void _finalize_on_rendering_server_thread();
 
 protected:
