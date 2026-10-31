@@ -288,6 +288,8 @@ private:
 	static bool _particles_amount_is_valid(int p_amount);
 	static bool _particles_lifetime_is_valid(double p_lifetime);
 	static bool _particles_trail_lifetime_is_valid(double p_lifetime);
+	static bool _particles_process_time_is_valid(double p_time);
+	static bool _particles_speed_scale_is_valid(double p_scale);
 	static bool _particles_get_buffer_size(uint64_t p_count, uint64_t p_element_size, uint64_t p_header_size, uint32_t &r_size);
 	bool _particles_process(Particles *p_particles, double p_delta);
 	static bool _particles_get_data_size(const Particles *p_particles, uint64_t &r_size);

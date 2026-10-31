@@ -388,12 +388,14 @@ void ParticlesStorage::particles_set_one_shot(RID p_particles, bool p_one_shot) 
 void ParticlesStorage::particles_set_pre_process_time(RID p_particles, double p_time) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(!_particles_process_time_is_valid(p_time), "Particle pre-process time must be finite.");
 	particles->pre_process_time = p_time;
 }
 
 void ParticlesStorage::particles_request_process_time(RID p_particles, real_t p_request_process_time, real_t p_request_process_time_residual) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(!_particles_process_time_is_valid(p_request_process_time) || !_particles_process_time_is_valid(p_request_process_time_residual), "Particle process times must be finite.");
 	particles->request_process_time = p_request_process_time;
 	particles->request_process_time_residual = p_request_process_time_residual;
 }
@@ -419,6 +421,7 @@ void ParticlesStorage::particles_set_custom_aabb(RID p_particles, const AABB &p_
 void ParticlesStorage::particles_set_speed_scale(RID p_particles, double p_scale) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(!_particles_speed_scale_is_valid(p_scale), "Particle speed scale must be finite.");
 
 	particles->speed_scale = p_scale;
 }
@@ -985,6 +988,14 @@ bool ParticlesStorage::_particles_lifetime_is_valid(double p_lifetime) {
 
 bool ParticlesStorage::_particles_trail_lifetime_is_valid(double p_lifetime) {
 	return Math::is_finite(p_lifetime) && p_lifetime >= 0.01 - CMP_EPSILON;
+}
+
+bool ParticlesStorage::_particles_process_time_is_valid(double p_time) {
+	return Math::is_finite(p_time);
+}
+
+bool ParticlesStorage::_particles_speed_scale_is_valid(double p_scale) {
+	return Math::is_finite(p_scale);
 }
 
 bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta) {
