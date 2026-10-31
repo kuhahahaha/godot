@@ -108,6 +108,10 @@ TEST_CASE("[ParticlesReadback] data size includes trails and user data with a bo
 	CHECK(size == 2 * 5 * 4 * sizeof(float));
 	CHECK(RendererRD::TestParticlesReadbackAccess::instance_data_size(2, 3, true, size));
 	CHECK(size == 2 * 2 * 5 * 4 * sizeof(float));
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::instance_data_size(1U << 26, 2, false, size));
+	CHECK(size == 0);
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::instance_data_size(1U << 25, 2, true, size));
+	CHECK(size == 0);
 
 	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::sort_data_size(0, size));
 	CHECK(size == 0);

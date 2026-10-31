@@ -869,7 +869,11 @@ bool ParticlesStorage::_particles_get_instance_data_size(uint64_t p_total_amount
 		}
 		r_size *= 2;
 	}
-	return r_size <= UINT32_MAX;
+	if (r_size > UINT32_MAX) {
+		r_size = 0;
+		return false;
+	}
+	return true;
 }
 
 AABB ParticlesStorage::particles_get_current_aabb(RID p_particles) {
