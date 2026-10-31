@@ -449,6 +449,9 @@ public:
 		CHECK(device.frame_issue_error == FAILED);
 		CHECK(device.frame_wait_native_code_valid);
 		CHECK(device.frame_wait_native_code == -7);
+		CHECK(request.result->native_code == -7);
+		Registry::get_singleton().qualification_ticket_publish(&ticket, &device);
+		CHECK(ticket.report.native_code == -7);
 		CHECK(device._stall_for_frame(0, true) == FAILED);
 		CHECK(driver.polls == 1);
 		CHECK(ticket.append_failed);

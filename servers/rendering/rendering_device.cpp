@@ -9592,6 +9592,9 @@ Error RenderingDevice::_fail_frame_wait_source(uint32_t p_frame, Error p_error) 
 	for (const BufferGetDataRequest &request : frames[p_frame].download_buffer_get_data_requests) {
 		if (request.result.is_valid() && request.result->error == OK) {
 			request.result->error = error;
+			if (frame_wait_native_code_valid.load()) {
+				request.result->native_code = frame_wait_native_code.load();
+			}
 		}
 	}
 	return error;
