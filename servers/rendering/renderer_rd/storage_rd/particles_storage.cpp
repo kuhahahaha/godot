@@ -848,7 +848,11 @@ bool ParticlesStorage::_particles_get_sort_data_size(uint64_t p_amount, uint64_t
 		return false;
 	}
 	r_size = even_amount * sizeof(float) * 2;
-	return r_size <= UINT32_MAX;
+	if (r_size > UINT32_MAX) {
+		r_size = 0;
+		return false;
+	}
+	return true;
 }
 
 bool ParticlesStorage::_particles_get_instance_data_size(uint64_t p_total_amount, uint32_t p_xform_size, bool p_motion_vectors, uint64_t &r_size) {

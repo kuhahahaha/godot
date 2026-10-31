@@ -113,7 +113,16 @@ TEST_CASE("[ParticlesReadback] data size includes trails and user data with a bo
 	CHECK(size == 0);
 	CHECK(RendererRD::TestParticlesReadbackAccess::sort_data_size(2, size));
 	CHECK(size == 2 * 2 * sizeof(float));
+	CHECK(RendererRD::TestParticlesReadbackAccess::sort_data_size(3, size));
+	CHECK(size == 4 * 2 * sizeof(float));
+	const uint64_t max_sort_amount = (UINT32_MAX / (sizeof(float) * 2)) & ~uint64_t(1);
+	CHECK(RendererRD::TestParticlesReadbackAccess::sort_data_size(max_sort_amount, size));
+	CHECK(size == max_sort_amount * 2 * sizeof(float));
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::sort_data_size(max_sort_amount + 1, size));
+	CHECK(size == 0);
 	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::sort_data_size(UINT32_MAX, size));
+	CHECK(size == 0);
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::sort_data_size(UINT64_MAX, size));
 	CHECK(size == 0);
 
 	uint32_t total_amount = 0;

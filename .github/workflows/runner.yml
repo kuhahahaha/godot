@@ -67,7 +67,8 @@ jobs:
           ./bin/godot.linuxbsd.editor.dev.double.x86_64.san --headless --test --test-case='*[E22TextureSnapshot]*' | tee e22-texture.log
           ./bin/godot.linuxbsd.editor.dev.double.x86_64.san --headless --test --test-case='*[ResourceSnapshot]*' | tee resource-snapshot.log
           ./bin/godot.linuxbsd.editor.dev.double.x86_64.san --headless --test --test-case='*[String]*' | tee string.log
-          for log in callqueue.log qualification.log r01.log vulkan-fence.log e22-texture.log resource-snapshot.log string.log; do
+          ./bin/godot.linuxbsd.editor.dev.double.x86_64.san --headless --test --test-case='*[ParticlesReadback]*' | tee particles-readback.log
+          for log in callqueue.log qualification.log r01.log vulkan-fence.log e22-texture.log resource-snapshot.log string.log particles-readback.log; do
             grep -Eq 'test cases: *[1-9][0-9]* *\|' "$log"
           done
       - name: Save Godot build cache
