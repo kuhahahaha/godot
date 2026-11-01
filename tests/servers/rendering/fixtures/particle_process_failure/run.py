@@ -103,6 +103,81 @@ int main() {
 '''
 
 
+def inactivity_harness(source):
+    update_start = source.index('void ParticlesStorage::update_particles()')
+    # Extract the retry snapshot and failure handler along with the complete
+    # inactivity transition, so this verifies production state ownership.
+    start = source.index('\n', source.index('\t\tconst bool retry_candidate = ', update_start))
+    end = source.index('\n\t\t_particles_update_buffers(particles);', start)
+    retry = source[start:end]
+    start = source.index('\t\tif (particles->inactive && !particles->emitting)', end)
+    end = source.index('\t\t// TODO: Should use display refresh rate', start)
+    inactivity = source[start:end]
+    prefix = harness(source).split('struct Case {', 1)[0]
+    return prefix + r'''
+struct Node {
+    bool listed = false;
+    bool in_list() { return listed; }
+    void remove_from_list() { listed = false; }
+};
+struct RetryParticles : Particles {
+    bool dirty = false, retry_pending = false, frame_delta_committed = false, pre_process_pending = false;
+    unsigned frame_delta_committed_frame = ~0U;
+    double lifetime = 1, phase = 0, prev_phase = 0, frame_remainder = 0, pre_process_time_remaining = 0;
+    int prev_ticks = 0;
+    Node update_list;
+};
+struct RendererCompositorRD {
+    static RendererCompositorRD *get_singleton() { static RendererCompositorRD value; return &value; }
+    double get_frame_delta_time() { return 1.0 / 60.0; }
+};
+bool update(Material *material, RetryParticles *particles) {
+    struct { void add(Node *node) { node->listed = true; } } retry_list;
+    bool retrying = false;
+    particles->update_list.listed = false;
+    for (int once = 0; once < 1; once++) {
+''' + retry + inactivity + r'''
+        if (!process(material, particles)) {
+            queue_retry();
+            continue;
+        }
+        return true;
+    }
+    return false;
+}
+int main() {
+    RD *rd = RD::get_singleton();
+    Shader shader;
+    Material material{&shader, {}};
+    int failures = 0;
+    for (bool waking : {false, true}) {
+        *rd = RD();
+        RetryParticles particles;
+        particles.inactive = waking;
+        particles.emitting = waking;
+        // One frame remains below the cutoff; replaying its delta crosses it.
+        particles.inactive_time = 1.18;
+        rd->list_available = false;
+        bool failed = !update(&material, &particles);
+        bool restored = particles.inactive == waking && particles.inactive_time == 1.18 &&
+                particles.dirty && particles.retry_pending && particles.update_list.in_list() && rd->dispatches == 0;
+        rd->list_available = true;
+        bool recovered = update(&material, &particles);
+        bool committed = !particles.inactive && !particles.dirty && !particles.retry_pending &&
+                !particles.update_list.in_list() && rd->dispatches == 1 &&
+                particles.inactive_time == (waking ? 0.0 : 1.18 + 1.0 / 60.0);
+        if (!failed || !restored || !recovered || !committed) {
+            failures++;
+            std::fprintf(stderr, "inactivity retry waking=%d: failed=%d restored=%d recovered=%d committed=%d inactive=%d time=%.8f dispatches=%d\n",
+                    waking, failed, restored, recovered, committed, particles.inactive, particles.inactive_time, rd->dispatches);
+        }
+    }
+    std::printf("particle inactivity retry harness: %d/2 cases passed\n", 2 - failures);
+    return failures ? 1 : 0;
+}
+'''
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--source-ref')
@@ -112,7 +187,13 @@ def main():
         cpp, binary = Path(temp) / 'test.cpp', Path(temp) / 'test'
         cpp.write_text(harness(source))
         subprocess.run(['c++', '-std=c++17', '-Wall', '-Wextra', str(cpp), '-o', str(binary)], check=True)
-        return subprocess.run([str(binary)]).returncode
+        result = subprocess.run([str(binary)]).returncode
+        # Historical source revisions may predate deferred retries entirely.
+        if 'auto queue_retry = [&]()' in source:
+            cpp.write_text(inactivity_harness(source))
+            subprocess.run(['c++', '-std=c++17', '-Wall', '-Wextra', str(cpp), '-o', str(binary)], check=True)
+            result |= subprocess.run([str(binary)]).returncode
+        return result
 
 
 if __name__ == '__main__':

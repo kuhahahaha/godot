@@ -225,6 +225,11 @@ private:
 		RID particles_sort_uniform_set;
 
 		bool dirty = false;
+		bool retry_pending = false;
+		bool frame_delta_committed = false;
+		uint32_t frame_delta_committed_frame = UINT32_MAX;
+		real_t pre_process_time_remaining = 0.0;
+		bool pre_process_pending = false;
 		SelfList<Particles> update_list;
 
 		RID sub_emitter;
