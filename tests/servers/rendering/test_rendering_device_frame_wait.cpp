@@ -3,6 +3,7 @@
 TEST_FORCE_LINK(test_rendering_device_frame_wait)
 
 #include "core/object/callable_mp.h"
+#include "core/os/thread.h"
 #include "servers/rendering/rendering_device.h"
 #include "tests/servers/rendering/transfer_test_driver_base.h"
 #ifdef MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED
@@ -12,6 +13,101 @@ TEST_FORCE_LINK(test_rendering_device_frame_wait)
 
 class TestFrameWaitAccess {
 public:
+	static void busy_ordinary_advance_retries_same_slot() {
+		// Feed original RD frame paths distinct observations; this fixture does
+		// not certify a native dispatch or replace the separate Metal witness.
+		struct BusyDriver : TransferTestDriverBase {
+			LocalVector<uint64_t> waited, recycled;
+			bool ready = false;
+			uint32_t begins = 0, resets = 0, submissions = 0;
+			bool native_call_observation_supported() const override { return true; }
+			FencePollResult native_call_wait(uint64_t serial) override {
+				waited.push_back(serial);
+				FencePollResult result;
+				if (ready) {
+					result.completed = true;
+					result.completed_serial = serial;
+				}
+				return result;
+			}
+			Error native_call_recycle_wait(uint64_t serial) override {
+				recycled.push_back(serial);
+				return OK;
+			}
+			Error fence_wait(FenceID) override { return OK; }
+			bool command_pool_reset(CommandPoolID) override {
+				++resets;
+				return true;
+			}
+			bool command_buffer_begin(CommandBufferID) override { return true; }
+			void begin_segment(uint32_t, uint32_t) override { ++begins; }
+			void command_buffer_end(CommandBufferID) override {}
+			void end_segment() override {}
+			Error command_queue_execute_and_present(CommandQueueID, VectorView<SemaphoreID>, VectorView<CommandBufferID>, VectorView<SemaphoreID>, FenceID, VectorView<SwapChainID>) override {
+				++submissions;
+				QueueCallReport report;
+				report.issued = true;
+				record_queue_call_report(report);
+				return OK;
+			}
+		} driver;
+		RenderingDevice device;
+		device.driver = &driver;
+		device.render_thread_id = Thread::get_caller_id();
+		device.frames.resize(2);
+		device.draw_graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 2, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+		for (uint32_t i = 0; i < 2; ++i) {
+			auto &frame = device.frames[i];
+			frame.fence_signaled = frame.primary_command_buffer_begun = true;
+			frame.command_buffer = RenderingDeviceDriver::CommandBufferID(31 + i);
+			frame.fence = RenderingDeviceDriver::FenceID(41 + i);
+			RenderingDeviceDriver::QueueCallReport report;
+			RenderingDeviceDriver::NativeCallFact fact;
+			fact.serial = fact.completion_serial = 17 + i;
+			report.calls.push_back(fact);
+			frame.chain_reports.push_back(report);
+		}
+		ERR_PRINT_OFF;
+		device.swap_buffers(false);
+		ERR_PRINT_ON;
+		CHECK(device.frame == 1);
+		CHECK(device.frame_wait_error == OK); // Early native Busy has no fence error.
+		CHECK(device.qualification_frame_advance_pending);
+		CHECK(device.buffer_clear(RID(), 0, 4) == ERR_BUSY);
+		ERR_PRINT_OFF;
+		device.swap_buffers(false);
+		ERR_PRINT_ON;
+		CHECK(device.frame == 1);
+		REQUIRE(driver.waited.size() == 2);
+		CHECK(driver.waited[0] == 18);
+		CHECK(driver.waited[1] == 18);
+		CHECK_FALSE(device.frames[1].chain_reports[0].calls[0].source_owner_returned);
+		CHECK(device.get_frames_drawn() == 0);
+		CHECK(driver.recycled.is_empty());
+		driver.ready = true;
+		device.swap_buffers(false);
+		CHECK(device.frame == 1);
+		CHECK_FALSE(device.qualification_frame_advance_pending);
+		CHECK(device._recording_error() == OK);
+		CHECK(device.frames[1].chain_reports[0].calls[0].source_owner_returned);
+		CHECK(device.get_frames_drawn() == 1);
+		CHECK(driver.begins == 1);
+		CHECK(driver.resets == 1);
+		CHECK(driver.submissions == 0);
+		REQUIRE(driver.recycled.size() == 1);
+		CHECK(driver.recycled[0] == 18);
+		device.swap_buffers(false);
+		CHECK(device.frame == 0);
+		CHECK_FALSE(device.qualification_frame_advance_pending);
+		CHECK(device.get_frames_drawn() == 2);
+		CHECK(driver.begins == 2);
+		CHECK(driver.resets == 2);
+		CHECK(driver.submissions == 1);
+		REQUIRE(driver.recycled.size() == 2);
+		CHECK(driver.recycled[1] == 17);
+		device.frames.clear();
+		device.driver = nullptr;
+	}
 	static void attach_native_source(RenderingDevice &device, RenderingDeviceDriver &driver) {
 		device.driver = &driver;
 		device.frames.resize(1);
@@ -782,4 +878,8 @@ TEST_CASE("[R01][FrameWait] native pool reset and primary begin failure close ad
 	}
 }
 
+}
+
+TEST_CASE("[R01][FrameWait] ordinary advance retries an early native wait before rotating again") {
+	TestFrameWaitAccess::busy_ordinary_advance_retries_same_slot();
 }

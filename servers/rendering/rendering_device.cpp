@@ -9182,6 +9182,9 @@ void RenderingDevice::swap_buffers(bool p_present) {
 
 	// Advance to the next frame and begin recording again.
 	frame = (frame + 1) % frames.size();
+	// Early native/ticket polling can refuse before fence recovery records an
+	// error. Retain this exact slot and suspend recording until begin succeeds.
+	qualification_frame_advance_pending = true;
 
 	GodotProfileZoneGrouped(_profile_zone, "_begin_frame");
 	const Error begin_error = _begin_frame(true);
@@ -9405,6 +9408,13 @@ Error RenderingDevice::_begin_frame(bool p_presented, bool p_nonblocking) {
 	// Before writing to this frame, wait for it to be finished.
 	const Error wait_error = _stall_for_frame(frame,p_nonblocking);
 	if (wait_error != OK) {
+#ifdef TESTS_ENABLED
+		static thread_local uint32_t begin_wait_traces = 0;
+		if (begin_wait_traces < 16 && OS::get_singleton()->has_environment("GODOT_QUALIFICATION_CAPACITY_TRACE")) {
+			++begin_wait_traces;
+			print_line(vformat("QFRAME begin_wait frame=%d error=%d nonblocking=%d pending=%d wait_error=%d failed_frame=%d native_code_valid=%d native_code=%d", frame, int(wait_error), int(p_nonblocking), int(qualification_frame_advance_pending.load()), int(frame_wait_error.load()), failed_wait_frame, int(frame_wait_native_code_valid.load()), frame_wait_native_code.load()));
+		}
+#endif
 		return wait_error;
 	}
  if (p_nonblocking) {

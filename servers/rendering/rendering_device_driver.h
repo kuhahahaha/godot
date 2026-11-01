@@ -554,6 +554,14 @@ public:
  // No fallback may invoke end_segment's legacy wait on a qualification pass.
  virtual Error qualification_prepare_segment(QueueCallReport &r_report) { r_report={};return ERR_UNAVAILABLE; }
  virtual uint32_t qualification_native_call_bound(uint32_t p_slots) const { return 0; }
+ // Original RD profile: main slots may wait and signal; transfer-worker
+ // submissions never wait. Backends without a tighter proof keep their old bound.
+ virtual uint32_t qualification_native_call_bound_for_profile(uint32_t p_main_slots, uint32_t p_worker_slots, uint32_t p_frames) const {
+	 if (!p_frames || p_frames > p_main_slots || p_worker_slots > UINT32_MAX - p_main_slots) {
+		 return 0;
+	 }
+	 return qualification_native_call_bound(p_main_slots + p_worker_slots);
+ }
 
  virtual bool native_call_observation_supported() const { return false; }
  virtual FencePollResult native_call_poll(uint64_t p_native_serial) { return {}; }

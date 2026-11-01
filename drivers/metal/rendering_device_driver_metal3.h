@@ -89,6 +89,7 @@ protected:
 
 public:
  uint32_t qualification_native_call_bound(uint32_t p_slots) const override;
+ uint32_t qualification_native_call_bound_for_profile(uint32_t p_main_slots, uint32_t p_worker_slots, uint32_t p_frames) const override;
 	Error initialize(uint32_t p_device_index, uint32_t p_frame_count) override;
 
 	FenceID fence_create() override;

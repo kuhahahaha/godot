@@ -49,6 +49,13 @@ TEST_CASE("[K03][MetalCompletion] native batches retire through typed and legacy
 	REQUIRE(bool(buffer));
 	for (bool barriers : { false, true }) {
 		TestMetalCompletionAccess::mode(driver, barriers);
+		CHECK(driver.qualification_native_call_bound(1740) == 0);
+		CHECK(driver.qualification_native_call_bound_for_profile(145, 1595, 145) == 3770);
+		CHECK(driver.qualification_native_call_bound_for_profile(145, 1758, 145) == 4096);
+		CHECK(driver.qualification_native_call_bound_for_profile(145, 1759, 145) == 0);
+		CHECK(driver.qualification_native_call_bound_for_profile(0, 0, 0) == 0);
+		CHECK(driver.qualification_native_call_bound_for_profile(UINT32_MAX, 1, 1) == 0);
+		const auto signal = driver.semaphore_create();
 		const auto command = driver.command_buffer_create(pool);
 		const auto fence = driver.fence_create();
 		REQUIRE(bool(fence));
@@ -56,10 +63,11 @@ TEST_CASE("[K03][MetalCompletion] native batches retire through typed and legacy
 			REQUIRE(driver.command_buffer_begin(command));
 			driver.command_clear_buffer(command, buffer, 0, 4);
 			driver.command_buffer_end(command);
-			REQUIRE(driver.command_queue_execute_and_present(queue, {}, command, {}, fence, {}) == OK);
+			REQUIRE(driver.command_queue_execute_and_present(queue, {}, command, signal, fence, {}) == OK);
 			const auto report = driver.get_last_queue_call_report();
 			REQUIRE(report.issued);
 			REQUIRE(report.submission_serial != 0);
+			CHECK(report.calls.size() == (barriers ? 2 : 1)); // Actual waitless worker call shape.
 			CHECK(TestMetalCompletionAccess::records(driver) > 0);
 			if (attempt == 0) {
 				const auto wrong = driver.fence_poll(fence, report.submission_serial + 1);
@@ -85,6 +93,7 @@ TEST_CASE("[K03][MetalCompletion] native batches retire through typed and legacy
 		// Drain a baseline wrap without allowing it to masquerade as serial0.
 		TestMetalCompletionAccess::drain(driver);
 		driver.fence_free(fence);
+		driver.semaphore_free(signal);
 	}
 	driver.buffer_free(buffer);
 	driver.command_pool_free(pool);

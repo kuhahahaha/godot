@@ -700,6 +700,49 @@ public:
 		device.driver = nullptr;
 	}
 
+	static void continuation_profile_capacity() {
+		using namespace GDExtensionDeviceExit;
+		struct Driver : TransferTestDriverBase {
+			mutable uint32_t calls = 0, main_slots = 0, worker_slots = 0, frames = 0;
+			uint32_t bound = 3952;
+			uint32_t qualification_native_call_bound_for_profile(uint32_t main, uint32_t workers, uint32_t frame_count) const override {
+				++calls;
+				main_slots = main;
+				worker_slots = workers;
+				frames = frame_count;
+				return bound;
+			}
+		} driver;
+		RenderingDevice device;
+		device.driver = &driver;
+		struct Cleanup {
+			RenderingDevice &device;
+			~Cleanup() { device.driver = nullptr; }
+		} cleanup{ device };
+		device.transfer_worker_pool_max_size = 11;
+		QualificationTicket ticket;
+		ticket.preparation.expected_result_bytes = 2080;
+		const uint32_t plan_bytes[] = { 4, 2064, 4, 4, 4, 4, 4, 12, 4, 4, 24 };
+		ticket.uploads.resize(11);
+		for (uint32_t i = 0; i < 11; ++i) {
+			ticket.uploads[i].plan.byte_size = plan_bytes[i];
+		} // The original R12 eleven plans require 75 admitted segments.
+		auto &registry = Registry::get_singleton();
+		CHECK(registry.qualification_typed_upload_capacity(&ticket, &device, 0) == OK);
+		CHECK(driver.main_slots == 145);
+		CHECK(driver.worker_slots == 1595);
+		CHECK(driver.frames == 145);
+		driver.bound = 3953; // G144 + native3953 exceeds the unchanged 4096 store.
+		CHECK(registry.qualification_typed_upload_capacity(&ticket, &device, 0) == ERR_PARAMETER_RANGE_ERROR);
+		driver.bound = 0;
+		CHECK(registry.qualification_typed_upload_capacity(&ticket, &device, 0) == ERR_UNAVAILABLE);
+		const uint32_t calls = driver.calls;
+		device.transfer_worker_pool_max_size = UINT32_MAX;
+		CHECK(registry.qualification_typed_upload_capacity(&ticket, &device, 0) == ERR_PARAMETER_RANGE_ERROR);
+		CHECK(driver.calls == calls);
+		CHECK(device.draw_graph.qualification_command_count() == 0);
+		CHECK(ticket.facts.is_empty());
+	}
 	static void continuation_capacity() {
 		using namespace GDExtensionDeviceExit;
 		struct Driver : TransferTestDriverBase {
@@ -1065,4 +1108,8 @@ TEST_CASE("[Qualification][MultiReadback] Body proof excludes pending sources fr
 
 TEST_CASE("[Qualification][MultiReadback] V2 empty domain keeps a real guarded group and V1 retains its original nonempty rule") {
 	TestQualificationTicketAccess::empty_range_dispatch();
+}
+
+TEST_CASE("[Qualification] continuation capacity preserves main and waitless worker profiles") {
+	TestQualificationTicketAccess::continuation_profile_capacity();
 }

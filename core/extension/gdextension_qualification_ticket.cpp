@@ -54,7 +54,16 @@ Error qualification_native_capacity(RenderingDeviceDriver &driver, uint32_t curr
 	if (arithmetic != OK) {
 		return arithmetic;
 	}
-	const uint32_t native_bound = driver.qualification_native_call_bound(slots);
+	// Worker submissions have no wait semaphores at the original RD callsite.
+	// Keep every worker in every frame; expose that call shape to the backend.
+	const uint32_t frame_bound = uint32_t(graph_bound + 1);
+	const uint32_t main_slots = current_commands + frame_bound;
+	const uint32_t native_bound = driver.qualification_native_call_bound_for_profile(main_slots, slots - main_slots, frame_bound);
+#ifdef TESTS_ENABLED
+	if (OS::get_singleton()->has_environment("GODOT_QUALIFICATION_CAPACITY_TRACE")) {
+		print_line(vformat("QCAP native current=%d graphs=%d workers=%d frames=%d main_slots=%d worker_slots=%d total_slots=%d generic_bound=%d profile_bound=%d capacity=%d", current_commands, graph_bound, workers, frame_bound, main_slots, slots - uint32_t(main_slots), slots, driver.qualification_native_call_bound(slots), native_bound, capacity));
+	}
+#endif
 	if (!native_bound) return ERR_UNAVAILABLE;
 	if (native_bound > capacity - graph_bound) return ERR_PARAMETER_RANGE_ERROR;
 	return OK;
@@ -665,6 +674,11 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_prepare_uploads(GDExten
 		return result(ERR_UNAVAILABLE, 18);
 	for (uint32_t i = 0; i < plan_count; ++i) {
 		error = qualification_upload_destination(bridge, rd, plans[i]);
+#ifdef TESTS_ENABLED
+		if (OS::get_singleton()->has_environment("GODOT_QUALIFICATION_CAPACITY_TRACE")) {
+			print_line(vformat("QCAP destination plan=%d role=%d bytes=%d native_error=%d", i, plans[i].role, plans[i].byte_size, int(error)));
+		}
+#endif
 		if (error != OK)
 			return result(error, error == ERR_UNAVAILABLE ? 18 : 2);
 	}

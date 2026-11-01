@@ -224,6 +224,25 @@ uint32_t RenderingDeviceDriverMetal::qualification_native_call_bound(uint32_t sl
  for(const auto *command:command_buffers)count+=command->pending_completion_records.size();
  return count>4096 ? 0 : uint32_t(count);
 }
+uint32_t RenderingDeviceDriverMetal::qualification_native_call_bound_for_profile(uint32_t p_main_slots, uint32_t p_worker_slots, uint32_t p_frames) const {
+	if (!p_frames || p_frames > p_main_slots || p_worker_slots > UINT32_MAX - p_main_slots) {
+		return 0;
+	}
+	// _submit_transfer_worker passes no waits: _execute_and_present_common can
+	// commit its work and a signal command, but never a wait command. Main slots
+	// retain all three. Also reserve a hidden copy-queue source for every frame,
+	// and all already committed wrapper sources. No worker or prefix is omitted.
+	uint64_t count = uint64_t(p_main_slots) * 3 + uint64_t(p_worker_slots) * 2 + p_frames;
+	for (const auto *command : command_buffers) {
+		count += command->pending_completion_records.size();
+	}
+#ifdef TESTS_ENABLED
+	if (OS::get_singleton()->has_environment("GODOT_QUALIFICATION_CAPACITY_TRACE")) {
+		print_line(vformat("QCAP backend=MTL3 sync_mode=%d main_slots=%d worker_slots=%d frames=%d pending=%d raw_profile_bound=%d", int(sync_mode), p_main_slots, p_worker_slots, p_frames, count - uint64_t(p_main_slots) * 3 - uint64_t(p_worker_slots) * 2 - p_frames, count));
+	}
+#endif
+	return count > 4096 ? 0 : uint32_t(count);
+}
 Error RenderingDeviceDriverMetal::_execute_and_present_common(CommandQueueID queue,VectorView<SemaphoreID> waits,VectorView<CommandBufferID> commands,VectorView<SemaphoreID> signals,FenceID fence_id,VectorView<SwapChainID> swaps,bool barriers) {
  QueueCallReport report;report.present_attempted=swaps.size()>0;
  if(commands.size()==0) {record_queue_call_report(report);return OK;}
