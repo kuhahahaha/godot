@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  gdextension_qualification_child_history.h                                  */
+/*  gdextension_qualification_child_history.h                             */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */

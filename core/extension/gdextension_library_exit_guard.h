@@ -736,72 +736,86 @@ private:
 	Error scene_install_plan_locked(const Record &, GDExtensionSceneInstallPlanV2 &, SceneReadyFailureReason &) const;
 	bool scene_install_plan_matches_locked(const Record &, SceneReadyFailureReason * = nullptr) const;
 
- // Caller holds mutex. Admission is separate from retained identity reads.
- Error validate_host_producer_binding_locked(InitializationLevelContextRef, LibraryCodeHoldRef, const void *, uint32_t &);
- Error producer_view_locked(GDExtensionProducerRegistrationRefV1, uint32_t &);
- Error producer_view_capacity_locked(uint32_t &);
- void issue_producer_view_locked(uint32_t, uint32_t, GDExtensionProducerRegistrationRefV1 &);
- Error copy_producer_identity_locked(const Record &, ProducerRegistrationIdentity &);
- Error producer_registration_locked(const ProducerRegistrationRef &, Record *&);
- Error admit_producer_source_locked(const ProducerRegistrationRef &, Record *&);
+	// Caller holds mutex. Admission is separate from retained identity reads.
+	Error validate_host_producer_binding_locked(InitializationLevelContextRef, LibraryCodeHoldRef, const void *, uint32_t &);
+	Error producer_view_locked(GDExtensionProducerRegistrationRefV1, uint32_t &);
+	Error producer_view_capacity_locked(uint32_t &);
+	void issue_producer_view_locked(uint32_t, uint32_t, GDExtensionProducerRegistrationRefV1 &);
+	Error copy_producer_identity_locked(const Record &, ProducerRegistrationIdentity &);
+	Error producer_registration_locked(const ProducerRegistrationRef &, Record *&);
+	Error admit_producer_source_locked(const ProducerRegistrationRef &, Record *&);
 
- void reclaim(uint32_t p_slot);
- void try_finalize();
+	void reclaim(uint32_t p_slot);
+	void try_finalize();
 
- // Internal substrate only; guarded qualification still requires the complete
- // original owner, level, service and control enrollment contract.
- bool physical_can_close_locked(uint32_t p_slot) const;
- Error preflight_exit(const RecordRef &p_ref, CloseRoute p_route);
+	// Internal substrate only; guarded qualification still requires the complete
+	// original owner, level, service and control enrollment contract.
+	bool physical_can_close_locked(uint32_t p_slot) const;
+	Error preflight_exit(const RecordRef &p_ref, CloseRoute p_route);
 
- public:
- private:
+public:
+private:
 #ifdef TESTS_ENABLED
 	friend class ::TestQualificationPhysicalAccess;
 	friend class ::TestQualificationAckAccess;
 	friend class ::TestQualificationTicketAccess;
 	friend class ::TestQualificationRtAccess;
 #endif
- friend class ::RenderingDevice;
- friend class ::RenderingDeviceDriver;
- struct DeviceRecord { Object *object=nullptr; uint64_t epoch=0, session=0, thread=0, execution_thread=0; bool execution_migrated=false; bool live=false; uint32_t refs=0; Sequence sessions; };
- struct DeviceRef { uint64_t serial=0; uint32_t device=0, library=0; bool session=false; bool qualification_main=false; };
- DeviceRecord device_records[RECORD_CAPACITY];
- DeviceRef device_refs[VIEW_CAPACITY];
- Sequence device_epochs, device_ref_serials;
- struct QualificationBridge;
- QualificationBridge *qualification_bridges[RECORD_CAPACITY] = {};
- static thread_local QualificationBridge *active_qualification_bridge;
- static thread_local uint64_t active_qualification_serial;
- bool qualification_accepted_call_locked(QualificationBridge *,uint32_t);
- Error qualification_rt_schedule(GDExtensionQualificationBridgeRefV1);
- Error qualification_cleanup_retire_matches_original_child_locked(QualificationBridge *,uint32_t,const void *);
- void qualification_trim_cleanup_ref_credits_locked(QualificationBridge *);
- Error qualification_rt_ticket_locked(QualificationBridge *,const GDExtensionQualificationRtRequestV1 &,const uint8_t *,const uint8_t *,QualificationTicket *&);
+	friend class ::RenderingDevice;
+	friend class ::RenderingDeviceDriver;
+	struct DeviceRecord {
+		Object *object = nullptr;
+		uint64_t epoch = 0, session = 0, thread = 0, execution_thread = 0;
+		bool execution_migrated = false;
+		bool live = false;
+		uint32_t refs = 0;
+		Sequence sessions;
+	};
+	struct DeviceRef {
+		uint64_t serial = 0;
+		uint32_t device = 0, library = 0;
+		bool session = false;
+		bool qualification_main = false;
+	};
+	DeviceRecord device_records[RECORD_CAPACITY];
+	DeviceRef device_refs[VIEW_CAPACITY];
+	Sequence device_epochs, device_ref_serials;
+	struct QualificationBridge;
+	QualificationBridge *qualification_bridges[RECORD_CAPACITY] = {};
+	static thread_local QualificationBridge *active_qualification_bridge;
+	static thread_local uint64_t active_qualification_serial;
+	bool qualification_accepted_call_locked(QualificationBridge *, uint32_t);
+	Error qualification_rt_schedule(GDExtensionQualificationBridgeRefV1);
+	Error qualification_cleanup_retire_matches_original_child_locked(QualificationBridge *, uint32_t, const void *);
+	void qualification_trim_cleanup_ref_credits_locked(QualificationBridge *);
+	Error qualification_rt_ticket_locked(QualificationBridge *, const GDExtensionQualificationRtRequestV1 &, const uint8_t *, const uint8_t *, QualificationTicket *&);
 
- Sequence qualification_serials;
- // Capacity owed to accepted storage/native-unit cleanup, protected under mutex.
- uint64_t qualification_cleanup_serial_reservations = 0;
- bool qualification_serial_capacity(uint64_t count) const {
-  if (!count || qualification_serials.exhausted || !qualification_serials.next) return false;
-  const uint64_t after_next = UINT64_MAX - qualification_serials.next;
-  return qualification_cleanup_serial_reservations <= after_next && count - 1 <= after_next - qualification_cleanup_serial_reservations;
- }
- Error qualification_schedule(GDExtensionQualificationBridgeRefV1, uint64_t, uint32_t, const GDExtensionQualificationBudgetV1 &);
- Error qualification_resource_reserve_locked(QualificationBridge *, RenderingDevice *, QualificationResource *, uint32_t, const GDExtensionQualificationSourceV1 &);
- Error qualification_resource_locked(QualificationBridge *, GDExtensionQualificationResourceRefV1, uint32_t, QualificationResource *&);
- void qualification_resource_retire_step(QualificationBridge *, RenderingDevice *, QualificationResource *);
- Error qualification_typed_upload_capacity(QualificationTicket *, RenderingDevice *, uint32_t);
- void qualification_add_upload_graph(QualificationTicket *, RenderingDevice *, uint64_t, uint64_t, uint32_t, uint32_t, uint32_t, uint64_t, uint64_t, uint64_t);
- Error qualification_typed_dependencies(QualificationBridge *, RenderingDevice *, QualificationTicket *, const GDExtensionQualificationRecordV2 &, const LocalVector<RID> &);
- Error qualification_rt_resource_refs_locked(QualificationBridge *, const GDExtensionQualificationRtRequestV1 &, const uint8_t *, const uint8_t *, LocalVector<QualificationResource *> &);
- void qualification_retire_step(QualificationBridge *, RenderingDevice *, uint64_t, uint32_t);
- void qualification_ticket_publish(QualificationTicket *, RenderingDevice *);
- void qualification_ticket_step(QualificationTicket *, RenderingDevice *);
- Error qualification_upload_destination(QualificationBridge *,RenderingDevice *,const GDExtensionQualificationUploadPlanV1 &);
- Error qualification_record_preflight(QualificationBridge *, RenderingDevice *, const GDExtensionQualificationRecordV1 &, LocalVector<RID> &,uint64_t p_capture_set1=0,uint64_t p_body_set1=0,bool p_allow_empty=false);
- void qualification_record_append(QualificationTicket *, RenderingDevice *);
- Error qualification_ticket_locked(QualificationBridge *, GDExtensionQualificationTicketRefV1, QualificationTicket *&);
- Error qualification_bridge_locked(GDExtensionQualificationBridgeRefV1, bool, bool, QualificationBridge *&, RenderingDevice *&,uint32_t=0);
+	Sequence qualification_serials;
+	// Capacity owed to accepted storage/native-unit cleanup, protected under mutex.
+	uint64_t qualification_cleanup_serial_reservations = 0;
+	bool qualification_serial_capacity(uint64_t count) const {
+		if (!count || qualification_serials.exhausted || !qualification_serials.next) {
+			return false;
+		}
+		const uint64_t after_next = UINT64_MAX - qualification_serials.next;
+		return qualification_cleanup_serial_reservations <= after_next && count - 1 <= after_next - qualification_cleanup_serial_reservations;
+	}
+	Error qualification_schedule(GDExtensionQualificationBridgeRefV1, uint64_t, uint32_t, const GDExtensionQualificationBudgetV1 &);
+	Error qualification_resource_reserve_locked(QualificationBridge *, RenderingDevice *, QualificationResource *, uint32_t, const GDExtensionQualificationSourceV1 &);
+	Error qualification_resource_locked(QualificationBridge *, GDExtensionQualificationResourceRefV1, uint32_t, QualificationResource *&);
+	void qualification_resource_retire_step(QualificationBridge *, RenderingDevice *, QualificationResource *);
+	Error qualification_typed_upload_capacity(QualificationTicket *, RenderingDevice *, uint32_t);
+	void qualification_add_upload_graph(QualificationTicket *, RenderingDevice *, uint64_t, uint64_t, uint32_t, uint32_t, uint32_t, uint64_t, uint64_t, uint64_t);
+	Error qualification_typed_dependencies(QualificationBridge *, RenderingDevice *, QualificationTicket *, const GDExtensionQualificationRecordV2 &, const LocalVector<RID> &);
+	Error qualification_rt_resource_refs_locked(QualificationBridge *, const GDExtensionQualificationRtRequestV1 &, const uint8_t *, const uint8_t *, LocalVector<QualificationResource *> &);
+	void qualification_retire_step(QualificationBridge *, RenderingDevice *, uint64_t, uint32_t);
+	void qualification_ticket_publish(QualificationTicket *, RenderingDevice *);
+	void qualification_ticket_step(QualificationTicket *, RenderingDevice *);
+	Error qualification_upload_destination(QualificationBridge *, RenderingDevice *, const GDExtensionQualificationUploadPlanV1 &);
+	Error qualification_record_preflight(QualificationBridge *, RenderingDevice *, const GDExtensionQualificationRecordV1 &, LocalVector<RID> &, uint64_t p_capture_set1 = 0, uint64_t p_body_set1 = 0, bool p_allow_empty = false);
+	void qualification_record_append(QualificationTicket *, RenderingDevice *);
+	Error qualification_ticket_locked(QualificationBridge *, GDExtensionQualificationTicketRefV1, QualificationTicket *&);
+	Error qualification_bridge_locked(GDExtensionQualificationBridgeRefV1, bool, bool, QualificationBridge *&, RenderingDevice *&, uint32_t = 0);
 
 	Error device_created(Object *);
 	Error device_execution_moved(Object *, uint64_t, uint64_t);
@@ -827,45 +841,45 @@ public:
 	GDExtensionDeviceSessionResultV1 resolve_device_session(GDExtensionDeviceRegistryContextRef, uint64_t, uint64_t, GDExtensionOriginalDeviceSessionRef *);
 	GDExtensionDeviceSessionResultV1 release_device_reference(uint64_t, uint64_t, bool);
 
- GDExtensionDeviceSessionResultV1 qualification_open(const GDExtensionDeviceExitAbi *, GDExtensionDeviceExitSceneReadyContextRef, GDExtensionDeviceRegistryContextRef, GDExtensionOriginalDeviceSessionRef, GDExtensionDeviceExitLibraryCodeHoldRef, GDExtensionQualificationBridgeRefV1 *);
- GDExtensionDeviceSessionResultV1 qualification_backing(GDExtensionQualificationBridgeRefV1, uint64_t, GDExtensionQualificationBackingV1 *);
- GDExtensionDeviceSessionResultV1 qualification_record(GDExtensionQualificationBridgeRefV1,const GDExtensionQualificationRecordV1 *,GDExtensionQualificationTicketRefV1 *,GDExtensionQualificationReportV1 *);
- GDExtensionDeviceSessionResultV1 qualification_observe(GDExtensionQualificationBridgeRefV1,GDExtensionQualificationTicketRefV1,const GDExtensionQualificationBudgetV1 *,GDExtensionQualificationReportV1 *);
- GDExtensionDeviceSessionResultV1 qualification_facts(GDExtensionQualificationBridgeRefV1,GDExtensionQualificationTicketRefV1,uint64_t,uint32_t,uint32_t,GDExtensionQualificationFactV1 *,uint32_t *);
- GDExtensionDeviceSessionResultV1 qualification_copy(GDExtensionQualificationBridgeRefV1,GDExtensionQualificationTicketRefV1,uint64_t,void *,uint32_t,uint32_t *);
- GDExtensionDeviceSessionResultV1 qualification_release(GDExtensionQualificationBridgeRefV1,GDExtensionQualificationTicketRefV1);
- GDExtensionDeviceSessionResultV1 qualification_prepare_uploads(GDExtensionQualificationBridgeRefV1,const GDExtensionQualificationUploadPrepareV1 *,const GDExtensionQualificationUploadPlanV1 *,uint32_t,GDExtensionQualificationTicketRefV1 *,GDExtensionQualificationReportV1 *,bool p_multi_readback=false);
- GDExtensionDeviceSessionResultV1 qualification_upload(GDExtensionQualificationBridgeRefV1,GDExtensionQualificationTicketRefV1,const GDExtensionQualificationUploadRequestV1 *,const void *,uint32_t,GDExtensionQualificationUploadSegmentV1 *,uint32_t,GDExtensionQualificationUploadReportV1 *);
- GDExtensionDeviceSessionResultV1 qualification_texture_create(GDExtensionQualificationBridgeRefV1, const GDExtensionQualificationTextureCreateV1 *, GDExtensionQualificationResourceBackingV1 *);
- GDExtensionDeviceSessionResultV1 qualification_sampler_create(GDExtensionQualificationBridgeRefV1, const GDExtensionQualificationSamplerCreateV1 *, GDExtensionQualificationResourceBackingV1 *);
- GDExtensionDeviceSessionResultV1 qualification_set_create(GDExtensionQualificationBridgeRefV1, const GDExtensionQualificationSetCreateV1 *, const GDExtensionQualificationUniformBindingV1 *, uint32_t, GDExtensionQualificationResourceBackingV1 *);
- GDExtensionDeviceSessionResultV1 qualification_texture_upload(GDExtensionQualificationBridgeRefV1, const GDExtensionQualificationTextureUploadV1 *, const void *, uint32_t, GDExtensionQualificationUploadSegmentV1 *, uint32_t, GDExtensionQualificationUploadReportV1 *);
- GDExtensionDeviceSessionResultV1 qualification_resource_retire(GDExtensionQualificationBridgeRefV1, const GDExtensionQualificationResourceRetireV1 *, GDExtensionQualificationResourceRetireReportV1 *);
- GDExtensionDeviceSessionResultV1 qualification_resource_retire_observe(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationResourceRefV1, const GDExtensionQualificationBudgetV1 *, GDExtensionQualificationResourceRetireReportV1 *);
- GDExtensionDeviceSessionResultV1 qualification_resource_retire_release(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationResourceRefV1, uint64_t);
- GDExtensionDeviceSessionResultV1 qualification_prepare_uploads_v2(GDExtensionQualificationBridgeRefV1,const GDExtensionQualificationUploadPrepareV1 *,const GDExtensionQualificationUploadPlanV1 *,uint32_t,GDExtensionQualificationTicketRefV1 *,GDExtensionQualificationReportV2 *);
- GDExtensionDeviceSessionResultV1 qualification_record_prepared_v2(GDExtensionQualificationBridgeRefV1,GDExtensionQualificationTicketRefV1,const GDExtensionQualificationRecordV2 *,GDExtensionQualificationReportV2 *);
- GDExtensionDeviceSessionResultV1 qualification_observe_v2(GDExtensionQualificationBridgeRefV1,GDExtensionQualificationTicketRefV1,const GDExtensionQualificationBudgetV1 *,GDExtensionQualificationReportV2 *);
- void qualification_report_v2(const QualificationTicket *,GDExtensionQualificationReportV2 &) const;
- GDExtensionDeviceSessionResultV1 qualification_record_prepared(GDExtensionQualificationBridgeRefV1,GDExtensionQualificationTicketRefV1,const GDExtensionQualificationRecordV1 *,GDExtensionQualificationReportV1 *);
- GDExtensionDeviceSessionResultV1 qualification_cancel(GDExtensionQualificationBridgeRefV1,GDExtensionQualificationTicketRefV1);
- GDExtensionDeviceSessionResultV1 qualification_rt_configure(GDExtensionQualificationBridgeRefV1,const GDExtensionQualificationRtConfigV1 *);
- GDExtensionDeviceSessionResultV1 qualification_rt_reserve(GDExtensionQualificationBridgeRefV1,const GDExtensionQualificationRtRequestV1 *,const void *,const void *,GDExtensionQualificationRtRefV1 *);
- GDExtensionDeviceSessionResultV1 qualification_rt_activate(GDExtensionQualificationBridgeRefV1,GDExtensionQualificationRtRefV1);
- GDExtensionDeviceSessionResultV1 qualification_rt_observe(GDExtensionQualificationBridgeRefV1,GDExtensionQualificationRtRefV1,GDExtensionQualificationRtObservationV1 *,void *,uint32_t,GDExtensionQualificationUploadSegmentV1 *,uint32_t);
- GDExtensionDeviceSessionResultV1 qualification_rt_release(GDExtensionQualificationBridgeRefV1,GDExtensionQualificationRtRefV1);
- void qualification_rt_dispatch(uint64_t,uint64_t);
+	GDExtensionDeviceSessionResultV1 qualification_open(const GDExtensionDeviceExitAbi *, GDExtensionDeviceExitSceneReadyContextRef, GDExtensionDeviceRegistryContextRef, GDExtensionOriginalDeviceSessionRef, GDExtensionDeviceExitLibraryCodeHoldRef, GDExtensionQualificationBridgeRefV1 *);
+	GDExtensionDeviceSessionResultV1 qualification_backing(GDExtensionQualificationBridgeRefV1, uint64_t, GDExtensionQualificationBackingV1 *);
+	GDExtensionDeviceSessionResultV1 qualification_record(GDExtensionQualificationBridgeRefV1, const GDExtensionQualificationRecordV1 *, GDExtensionQualificationTicketRefV1 *, GDExtensionQualificationReportV1 *);
+	GDExtensionDeviceSessionResultV1 qualification_observe(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationTicketRefV1, const GDExtensionQualificationBudgetV1 *, GDExtensionQualificationReportV1 *);
+	GDExtensionDeviceSessionResultV1 qualification_facts(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationTicketRefV1, uint64_t, uint32_t, uint32_t, GDExtensionQualificationFactV1 *, uint32_t *);
+	GDExtensionDeviceSessionResultV1 qualification_copy(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationTicketRefV1, uint64_t, void *, uint32_t, uint32_t *);
+	GDExtensionDeviceSessionResultV1 qualification_release(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationTicketRefV1);
+	GDExtensionDeviceSessionResultV1 qualification_prepare_uploads(GDExtensionQualificationBridgeRefV1, const GDExtensionQualificationUploadPrepareV1 *, const GDExtensionQualificationUploadPlanV1 *, uint32_t, GDExtensionQualificationTicketRefV1 *, GDExtensionQualificationReportV1 *, bool p_multi_readback = false);
+	GDExtensionDeviceSessionResultV1 qualification_upload(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationTicketRefV1, const GDExtensionQualificationUploadRequestV1 *, const void *, uint32_t, GDExtensionQualificationUploadSegmentV1 *, uint32_t, GDExtensionQualificationUploadReportV1 *);
+	GDExtensionDeviceSessionResultV1 qualification_texture_create(GDExtensionQualificationBridgeRefV1, const GDExtensionQualificationTextureCreateV1 *, GDExtensionQualificationResourceBackingV1 *);
+	GDExtensionDeviceSessionResultV1 qualification_sampler_create(GDExtensionQualificationBridgeRefV1, const GDExtensionQualificationSamplerCreateV1 *, GDExtensionQualificationResourceBackingV1 *);
+	GDExtensionDeviceSessionResultV1 qualification_set_create(GDExtensionQualificationBridgeRefV1, const GDExtensionQualificationSetCreateV1 *, const GDExtensionQualificationUniformBindingV1 *, uint32_t, GDExtensionQualificationResourceBackingV1 *);
+	GDExtensionDeviceSessionResultV1 qualification_texture_upload(GDExtensionQualificationBridgeRefV1, const GDExtensionQualificationTextureUploadV1 *, const void *, uint32_t, GDExtensionQualificationUploadSegmentV1 *, uint32_t, GDExtensionQualificationUploadReportV1 *);
+	GDExtensionDeviceSessionResultV1 qualification_resource_retire(GDExtensionQualificationBridgeRefV1, const GDExtensionQualificationResourceRetireV1 *, GDExtensionQualificationResourceRetireReportV1 *);
+	GDExtensionDeviceSessionResultV1 qualification_resource_retire_observe(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationResourceRefV1, const GDExtensionQualificationBudgetV1 *, GDExtensionQualificationResourceRetireReportV1 *);
+	GDExtensionDeviceSessionResultV1 qualification_resource_retire_release(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationResourceRefV1, uint64_t);
+	GDExtensionDeviceSessionResultV1 qualification_prepare_uploads_v2(GDExtensionQualificationBridgeRefV1, const GDExtensionQualificationUploadPrepareV1 *, const GDExtensionQualificationUploadPlanV1 *, uint32_t, GDExtensionQualificationTicketRefV1 *, GDExtensionQualificationReportV2 *);
+	GDExtensionDeviceSessionResultV1 qualification_record_prepared_v2(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationTicketRefV1, const GDExtensionQualificationRecordV2 *, GDExtensionQualificationReportV2 *);
+	GDExtensionDeviceSessionResultV1 qualification_observe_v2(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationTicketRefV1, const GDExtensionQualificationBudgetV1 *, GDExtensionQualificationReportV2 *);
+	void qualification_report_v2(const QualificationTicket *, GDExtensionQualificationReportV2 &) const;
+	GDExtensionDeviceSessionResultV1 qualification_record_prepared(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationTicketRefV1, const GDExtensionQualificationRecordV1 *, GDExtensionQualificationReportV1 *);
+	GDExtensionDeviceSessionResultV1 qualification_cancel(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationTicketRefV1);
+	GDExtensionDeviceSessionResultV1 qualification_rt_configure(GDExtensionQualificationBridgeRefV1, const GDExtensionQualificationRtConfigV1 *);
+	GDExtensionDeviceSessionResultV1 qualification_rt_reserve(GDExtensionQualificationBridgeRefV1, const GDExtensionQualificationRtRequestV1 *, const void *, const void *, GDExtensionQualificationRtRefV1 *);
+	GDExtensionDeviceSessionResultV1 qualification_rt_activate(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationRtRefV1);
+	GDExtensionDeviceSessionResultV1 qualification_rt_observe(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationRtRefV1, GDExtensionQualificationRtObservationV1 *, void *, uint32_t, GDExtensionQualificationUploadSegmentV1 *, uint32_t);
+	GDExtensionDeviceSessionResultV1 qualification_rt_release(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationRtRefV1);
+	void qualification_rt_dispatch(uint64_t, uint64_t);
 
- GDExtensionDeviceSessionResultV1 qualification_close(GDExtensionQualificationBridgeRefV1);
- GDExtensionDeviceSessionResultV1 qualification_storage_create(GDExtensionQualificationBridgeRefV1, const GDExtensionStorageCreateRequestV1 *, GDExtensionStorageBackingV1 *);
- GDExtensionDeviceSessionResultV1 qualification_native_unit_create(GDExtensionQualificationBridgeRefV1, const GDExtensionNativeUnitCreateRequestV1 *, const void *, uint64_t, GDExtensionNativeUnitBackingV1 *);
- GDExtensionDeviceSessionResultV1 qualification_storage_retire(GDExtensionQualificationBridgeRefV1,const GDExtensionStorageRetireRequestV1 *,GDExtensionStorageRetireRefV1 *,GDExtensionStorageRetireReportV1 *);
- GDExtensionDeviceSessionResultV1 qualification_storage_retire_observe(GDExtensionQualificationBridgeRefV1,GDExtensionStorageRetireRefV1,const GDExtensionQualificationBudgetV1 *,GDExtensionStorageRetireReportV1 *);
- GDExtensionDeviceSessionResultV1 qualification_storage_retire_release(GDExtensionQualificationBridgeRefV1,GDExtensionStorageRetireRefV1);
- GDExtensionDeviceSessionResultV1 qualification_native_unit_retire(GDExtensionQualificationBridgeRefV1,const GDExtensionNativeUnitRetireRequestV1 *,GDExtensionNativeUnitRetireRefV1 *,GDExtensionNativeUnitRetireReportV1 *);
- GDExtensionDeviceSessionResultV1 qualification_native_unit_retire_observe(GDExtensionQualificationBridgeRefV1,GDExtensionNativeUnitRetireRefV1,const GDExtensionQualificationBudgetV1 *,GDExtensionNativeUnitRetireReportV1 *);
- GDExtensionDeviceSessionResultV1 qualification_native_unit_retire_release(GDExtensionQualificationBridgeRefV1,GDExtensionNativeUnitRetireRefV1);
- void qualification_service(uint64_t, uint64_t, uint32_t, uint32_t, uint32_t);
+	GDExtensionDeviceSessionResultV1 qualification_close(GDExtensionQualificationBridgeRefV1);
+	GDExtensionDeviceSessionResultV1 qualification_storage_create(GDExtensionQualificationBridgeRefV1, const GDExtensionStorageCreateRequestV1 *, GDExtensionStorageBackingV1 *);
+	GDExtensionDeviceSessionResultV1 qualification_native_unit_create(GDExtensionQualificationBridgeRefV1, const GDExtensionNativeUnitCreateRequestV1 *, const void *, uint64_t, GDExtensionNativeUnitBackingV1 *);
+	GDExtensionDeviceSessionResultV1 qualification_storage_retire(GDExtensionQualificationBridgeRefV1, const GDExtensionStorageRetireRequestV1 *, GDExtensionStorageRetireRefV1 *, GDExtensionStorageRetireReportV1 *);
+	GDExtensionDeviceSessionResultV1 qualification_storage_retire_observe(GDExtensionQualificationBridgeRefV1, GDExtensionStorageRetireRefV1, const GDExtensionQualificationBudgetV1 *, GDExtensionStorageRetireReportV1 *);
+	GDExtensionDeviceSessionResultV1 qualification_storage_retire_release(GDExtensionQualificationBridgeRefV1, GDExtensionStorageRetireRefV1);
+	GDExtensionDeviceSessionResultV1 qualification_native_unit_retire(GDExtensionQualificationBridgeRefV1, const GDExtensionNativeUnitRetireRequestV1 *, GDExtensionNativeUnitRetireRefV1 *, GDExtensionNativeUnitRetireReportV1 *);
+	GDExtensionDeviceSessionResultV1 qualification_native_unit_retire_observe(GDExtensionQualificationBridgeRefV1, GDExtensionNativeUnitRetireRefV1, const GDExtensionQualificationBudgetV1 *, GDExtensionNativeUnitRetireReportV1 *);
+	GDExtensionDeviceSessionResultV1 qualification_native_unit_retire_release(GDExtensionQualificationBridgeRefV1, GDExtensionNativeUnitRetireRefV1);
+	void qualification_service(uint64_t, uint64_t, uint32_t, uint32_t, uint32_t);
 
 	static Registry &get_singleton();
 	// Called only by the core Object registration path with an original owner

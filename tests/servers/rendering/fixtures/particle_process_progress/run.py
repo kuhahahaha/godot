@@ -1,33 +1,41 @@
 #!/usr/bin/env python3
 """Run the production update loops with bounded, recording particle dispatches."""
+
 import argparse
-from pathlib import Path
 import subprocess
 import tempfile
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[5]
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--source-ref')
+    parser.add_argument("--source-ref")
     args = parser.parse_args()
-    source_path = 'servers/rendering/renderer_rd/storage_rd/particles_storage.cpp'
-    source = subprocess.check_output(['git', 'show', args.source_ref + ':' + source_path], cwd=ROOT, text=True) if args.source_ref else (ROOT / source_path).read_text()
-    start = source.index('\t\tfloat todo = ', source.index('void ParticlesStorage::update_particles()'))
-    end = source.index('\t\t// Ensure that memory is initialized', start)
+    source_path = "servers/rendering/renderer_rd/storage_rd/particles_storage.cpp"
+    source = (
+        subprocess.check_output(["git", "show", args.source_ref + ":" + source_path], cwd=ROOT, text=True)
+        if args.source_ref
+        else (ROOT / source_path).read_text()
+    )
+    start = source.index("\t\tfloat todo = ", source.index("void ParticlesStorage::update_particles()"))
+    end = source.index("\t\t// Ensure that memory is initialized", start)
     body = source[start:end]
     # Include the input validation immediately before the loop, when present.
-    marker = '\t\t// Validate process times before comparisons'
+    marker = "\t\t// Validate process times before comparisons"
     if marker in source:
-        body = source[source.index(marker):end]
-    retry_start = source.index('\t\tconst bool retry_candidate = ', source.index('void ParticlesStorage::update_particles()'))
-    retry_candidate_end = source.index('\n', retry_start)
-    retry_recheck_start = source.index('\t\tbool retrying = ', retry_candidate_end)
-    retry_recheck_end = source.index('\n', retry_recheck_start)
+        body = source[source.index(marker) : end]
+    retry_start = source.index(
+        "\t\tconst bool retry_candidate = ", source.index("void ParticlesStorage::update_particles()")
+    )
+    retry_candidate_end = source.index("\n", retry_start)
+    retry_recheck_start = source.index("\t\tbool retrying = ", retry_candidate_end)
+    retry_recheck_end = source.index("\n", retry_recheck_start)
     retry_candidate_logic = source[retry_start:retry_candidate_end]
     retry_recheck_logic = source[retry_recheck_start:retry_recheck_end]
-    harness = r'''
+    harness = (
+        r"""
 #include <cfloat>
 #include <cmath>
 #include <cstdio>
@@ -70,7 +78,9 @@ bool _particles_process(Particles *particles, double delta) {
 bool update(Particles *particles, int fixed_fps = 60, bool advance_frame = true) {
     if (advance_frame) current_frame++;
     unsigned frame = current_frame;
-''' + retry_candidate_logic + r'''
+"""
+        + retry_candidate_logic
+        + r"""
     particles->retry_pending = false;
     particles->dirty = false;
     if (simulate_resource_rebuild) {
@@ -78,7 +88,9 @@ bool update(Particles *particles, int fixed_fps = 60, bool advance_frame = true)
         particles->frame_delta_committed = false;
         particles->frame_delta_committed_frame = UINT32_MAX;
     }
-''' + retry_recheck_logic + r'''
+"""
+        + retry_recheck_logic
+        + r"""
     if (particles->restart_request) {
         particles->restart_request = false;
         particles->clear = true;
@@ -88,10 +100,14 @@ bool update(Particles *particles, int fixed_fps = 60, bool advance_frame = true)
         retrying = false;
     }
     for (int once = 0; once < 1; once++) {
-''' + '        auto queue_retry = [&]() { particles->dirty = true; particles->retry_pending = true; };\n        if (fail_preflight) { queue_retry(); return false; }\n' + body + r'''
+"""
+        + "        auto queue_retry = [&]() { particles->dirty = true; particles->retry_pending = true; };\n        if (fail_preflight) { queue_retry(); return false; }\n"
+        + body
+        + r"""
         particles->frame_delta_committed = false;
         particles->frame_delta_committed_frame = UINT32_MAX;
-''' + r'''
+"""
+        + r"""
         return true;
     }
     return false;
@@ -199,17 +215,20 @@ int main() {
     std::printf("particle process progress harness: %d/%d checks passed\n", checks - failures, checks);
     return failures ? 1 : 0;
 }
-'''
-    harness = '#include <initializer_list>\n' + harness
-    with tempfile.TemporaryDirectory(prefix='particle-process-progress-') as temp:
-        cpp, binary = Path(temp) / 'test.cpp', Path(temp) / 'test'
+"""
+    )
+    harness = "#include <initializer_list>\n" + harness
+    with tempfile.TemporaryDirectory(prefix="particle-process-progress-") as temp:
+        cpp, binary = Path(temp) / "test.cpp", Path(temp) / "test"
         cpp.write_text(harness)
         result = 0
-        for precision in ([], ['-DREAL_T_IS_DOUBLE']):
-            subprocess.run(['c++', '-std=c++17', '-Wall', '-Wextra', *precision, str(cpp), '-o', str(binary)], check=True)
+        for precision in ([], ["-DREAL_T_IS_DOUBLE"]):
+            subprocess.run(
+                ["c++", "-std=c++17", "-Wall", "-Wextra", *precision, str(cpp), "-o", str(binary)], check=True
+            )
             result |= subprocess.run([str(binary)], timeout=10).returncode
         return result
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     raise SystemExit(main())

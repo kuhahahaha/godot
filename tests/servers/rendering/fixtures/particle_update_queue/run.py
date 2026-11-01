@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 """Check particle update failures stay local to the current node."""
+
+from __future__ import annotations
+
 import re
 import subprocess
 import sys
@@ -11,7 +14,11 @@ SOURCE = ROOT / "servers/rendering/renderer_rd/storage_rd/particles_storage.cpp"
 
 def read_source(ref: str | None) -> str:
     if ref:
-        return subprocess.check_output(["git", "show", f"{ref}:servers/rendering/renderer_rd/storage_rd/particles_storage.cpp"], cwd=ROOT, text=True)
+        return subprocess.check_output(
+            ["git", "show", f"{ref}:servers/rendering/renderer_rd/storage_rd/particles_storage.cpp"],
+            cwd=ROOT,
+            text=True,
+        )
     return SOURCE.read_text()
 
 
@@ -35,7 +42,9 @@ def main() -> int:
     if body.count("\t\t\t\t\treturn;") > 0:
         failures.append("per-node preparation still contains a return")
 
-    upload = body[body.index("if (particles->trail_bind_pose_buffer.is_valid() && particles->trail_bind_poses_dirty)"):]
+    upload = body[
+        body.index("if (particles->trail_bind_pose_buffer.is_valid() && particles->trail_bind_poses_dirty)") :
+    ]
     if "buffer_update" not in upload or "particles->trail_bind_poses_dirty = false;" not in upload:
         failures.append("successful trail bind pose upload does not clear dirty state")
 

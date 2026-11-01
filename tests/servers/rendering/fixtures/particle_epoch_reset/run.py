@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Verify resource teardown invalidates all particle simulation epoch state."""
-from pathlib import Path
+
 import re
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[5]
 SOURCE = ROOT / "servers/rendering/renderer_rd/storage_rd/particles_storage.cpp"
@@ -17,7 +18,7 @@ def function_body(source: str, signature: str) -> str:
         elif source[i] == "}":
             depth -= 1
             if depth == 0:
-                return source[brace:i + 1]
+                return source[brace : i + 1]
     raise ValueError(signature)
 
 

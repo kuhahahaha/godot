@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Check RD particle storage setters reject invalid enum/count inputs."""
+
 import argparse
 import subprocess
 import tempfile
@@ -19,7 +20,7 @@ def body(source: str, signature: str) -> str:
         elif source[i] == "}":
             depth -= 1
             if depth == 0:
-                return source[brace:i + 1]
+                return source[brace : i + 1]
     raise ValueError(signature)
 
 
@@ -27,10 +28,19 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source-ref")
     args = parser.parse_args()
-    source = subprocess.check_output(["git", "show", args.source_ref + ":" + SOURCE], cwd=ROOT, text=True) if args.source_ref else (ROOT / SOURCE).read_text()
+    source = (
+        subprocess.check_output(["git", "show", args.source_ref + ":" + SOURCE], cwd=ROOT, text=True)
+        if args.source_ref
+        else (ROOT / SOURCE).read_text()
+    )
 
     enums = (ROOT / "servers/rendering/rendering_server_enums.h").read_text()
-    enum_names = ["ParticlesTransformAlign", "ParticlesTransformAlignCustomSrc", "ParticlesTransformAlignAxis", "ParticlesDrawOrder"]
+    enum_names = [
+        "ParticlesTransformAlign",
+        "ParticlesTransformAlignCustomSrc",
+        "ParticlesTransformAlignAxis",
+        "ParticlesDrawOrder",
+    ]
     enum_defs = "\n".join("enum " + name + " " + body(enums, "enum " + name + " {") + ";" for name in enum_names)
     methods = [
         ("transform_align", "ParticlesTransformAlign", "p_transform_align"),
@@ -39,15 +49,28 @@ def main() -> int:
         ("draw_order", "ParticlesDrawOrder", "p_order"),
         ("draw_passes", "int", "p_passes"),
     ]
-    functions = "\n".join("void particles_set_" + name + "(int p_particles, " + ("RSE::" + typ if typ != "int" else typ) + " " + param + ") " + body(source, "void ParticlesStorage::particles_set_" + name + "(") for name, typ, param in methods)
-    harness = r"""
+    functions = "\n".join(
+        "void particles_set_"
+        + name
+        + "(int p_particles, "
+        + ("RSE::" + typ if typ != "int" else typ)
+        + " "
+        + param
+        + ") "
+        + body(source, "void ParticlesStorage::particles_set_" + name + "(")
+        for name, typ, param in methods
+    )
+    harness = (
+        r"""
 #include <cstdio>
 #include <vector>
 #define ERR_FAIL_NULL(p) if (!(p)) return
 #define ERR_FAIL_INDEX(i, max) if ((i) < 0 || (i) >= (max)) return
 #define ERR_FAIL_COND(cond) if (cond) return
 namespace RSE {
-""" + enum_defs + r"""
+"""
+        + enum_defs
+        + r"""
 }
 struct Particles {
     RSE::ParticlesTransformAlign transform_align = RSE::PARTICLES_TRANSFORM_ALIGN_DISABLED;
@@ -57,7 +80,9 @@ struct Particles {
     std::vector<int> draw_passes;
 };
 struct Owner { Particles value; Particles *get_or_null(int id) { return id == 1 ? &value : nullptr; } } particles_owner;
-""" + functions + r"""
+"""
+        + functions
+        + r"""
 int main() {
     int checks = 0, failures = 0;
     auto check = [&](bool result) { checks++; if (!result) failures++; };
@@ -88,6 +113,7 @@ int main() {
     return failures ? 1 : 0;
 }
 """
+    )
     with tempfile.TemporaryDirectory(prefix="particle-setter-bounds-") as temp:
         cpp, binary = Path(temp) / "test.cpp", Path(temp) / "test"
         cpp.write_text(harness)

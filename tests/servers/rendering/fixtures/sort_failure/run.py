@@ -6,10 +6,11 @@ The harness compiles the production method body against a tiny fake rendering
  RIDs observable. This exercises scheduling/fail-closed behavior only; it is
  not a GPU shader or rendering validation.
 """
+
 from __future__ import annotations
+
 import argparse
 import pathlib
-import re
 import subprocess
 import tempfile
 
@@ -18,7 +19,7 @@ SOURCE = ROOT / "servers/rendering/renderer_rd/effects/sort_effects.cpp"
 
 
 def method_body(source: str) -> tuple[str, bool]:
-    marker = "SortEffects::sort_buffer(";
+    marker = "SortEffects::sort_buffer("
     start = source.index(marker)
     sig_start = source.rfind("\n", 0, start) + 1
     brace = source.index("{", start)
@@ -43,7 +44,7 @@ def generated_source(source: str) -> str:
     body, returns_bool = method_body(source)
     if not returns_bool:
         body += "\nreturn true;\n"
-    return f'''#include <array>
+    return f"""#include <array>
 #define ERR_PRINT(message) do {{ (void)sizeof(message); }} while (0)
 #include <cstdint>
 #include <cstdio>
@@ -140,7 +141,7 @@ int main() {{
     std::puts("sort behavior harness: all cases passed");
     return 0;
 }}
-'''
+"""
 
 
 def main() -> int:
@@ -150,12 +151,16 @@ def main() -> int:
     args = parser.parse_args()
     source = SOURCE.read_text()
     if args.source_ref:
-        source = subprocess.check_output(["git", "show", f"{args.source_ref}:{SOURCE.relative_to(ROOT)}"], cwd=ROOT, text=True)
+        source = subprocess.check_output(
+            ["git", "show", f"{args.source_ref}:{SOURCE.relative_to(ROOT)}"], cwd=ROOT, text=True
+        )
     with tempfile.TemporaryDirectory(prefix="godot-sort-harness-") as td:
         src = pathlib.Path(td) / "harness.cpp"
         exe = pathlib.Path(td) / "harness"
         src.write_text(generated_source(source))
-        compile_result = subprocess.run(["c++", "-std=c++17", "-O0", "-Wall", "-Wextra", str(src), "-o", str(exe)], text=True, capture_output=True)
+        compile_result = subprocess.run(
+            ["c++", "-std=c++17", "-O0", "-Wall", "-Wextra", str(src), "-o", str(exe)], text=True, capture_output=True
+        )
         if compile_result.returncode:
             print(compile_result.stdout, end="")
             print(compile_result.stderr, end="")

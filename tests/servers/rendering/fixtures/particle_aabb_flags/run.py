@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Execute the production AABB reducer on CPU snapshots with shader flag bits."""
+
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 import subprocess
 import tempfile
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[5]
 SOURCE = "servers/rendering/renderer_rd/storage_rd/particles_storage.cpp"
@@ -21,7 +22,7 @@ def read_source(path: str, ref: str | None) -> str:
 
 def function(source: str, name: str) -> str:
     start = source.index(name)
-    return source[start:source.index("\n}\n", start) + 2].replace("ParticlesStorage::", "")
+    return source[start : source.index("\n}\n", start) + 2].replace("ParticlesStorage::", "")
 
 
 def main() -> int:
@@ -32,10 +33,11 @@ def main() -> int:
     header = read_source(HEADER, args.source_ref)
     shader = read_source(SHADER, args.source_ref)
     struct_start = header.index("\tstruct ParticleData {")
-    particle_data = header[struct_start:header.index("\n\t};", struct_start) + 4]
+    particle_data = header[struct_start : header.index("\n\t};", struct_start) + 4]
     # Use the rendering shader's flag constants to build realistic snapshots.
     shader_flags = "\n".join(line for line in shader.splitlines() if line.startswith("#define PARTICLE_FLAG_"))
-    harness = r'''
+    harness = (
+        r"""
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
@@ -76,7 +78,11 @@ struct AABB {
     void grow_by(real_t v) { position = position-Vector3(v,v,v); size = size+Vector3(2*v,2*v,2*v); }
     float get_longest_axis_size() const { return std::max({size.x,size.y,size.z}); }
 };
-''' + shader_flags + "\n" + particle_data + r'''
+"""
+        + shader_flags
+        + "\n"
+        + particle_data
+        + r"""
 struct Particles {
     int amount = 1;
     unsigned userdata_count = 0;
@@ -96,7 +102,11 @@ struct MeshStorage {
     static MeshStorage *get_singleton() { static MeshStorage value; return &value; }
     AABB mesh_get_aabb(RID, RID) { return {{}, {2,1,1}}; }
 };
-''' + function(source, "bool ParticlesStorage::_particles_get_data_size") + "\n" + function(source, "AABB ParticlesStorage::particles_get_current_aabb") + r'''
+"""
+        + function(source, "bool ParticlesStorage::_particles_get_data_size")
+        + "\n"
+        + function(source, "AABB ParticlesStorage::particles_get_current_aabb")
+        + r"""
 struct Sample { uint32_t flags; Vector3 position; };
 AABB capture(std::initializer_list<Sample> samples, unsigned userdata = 0, bool trails = false, bool global = false, bool mesh = false) {
     Particles &p = particles_owner.value;
@@ -147,7 +157,8 @@ int main() {
     std::printf("particle AABB flags (%s): %d/%d checks passed\n", sizeof(real_t) == sizeof(double) ? "double" : "float", checks-failures, checks);
     return failures ? 1 : 0;
 }
-'''
+"""
+    )
     result = 0
     with tempfile.TemporaryDirectory(prefix="particle-aabb-flags-") as temp:
         cpp = Path(temp) / "test.cpp"

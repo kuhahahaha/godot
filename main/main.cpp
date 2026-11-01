@@ -115,8 +115,8 @@
 
 #ifdef TESTS_ENABLED
 #include "servers/rendering/dummy/rasterizer_dummy.h"
-#include "tests/test_main.h"
 #include "tests/core/object/device_exit_startup_fixture.h"
+#include "tests/test_main.h"
 #endif
 
 #ifdef TOOLS_ENABLED

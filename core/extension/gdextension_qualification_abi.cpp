@@ -38,15 +38,15 @@ static_assert(sizeof(GDExtensionDeviceExitSceneReadyContextRef) == 16);
 static_assert(alignof(GDExtensionDeviceExitSceneReadyContextRef) == 8);
 static_assert(GDEXTENSION_DEVICE_EXIT_ENTRY_SCENE_READY_V1 == 2048);
 static_assert(std::is_same_v<GDExtensionDeviceExitSceneReadyCallbackV1,
-        int32_t (*)(void*, GDExtensionDeviceExitSceneReadyContextRef)>);
+		int32_t (*)(void *, GDExtensionDeviceExitSceneReadyContextRef)>);
 static_assert(std::is_same_v<GDExtensionInterfaceDeviceExitRegisterSceneReadyV1,
-        int32_t (*)(const GDExtensionDeviceExitAbi*, GDExtensionDeviceExitInitializationLevelContextRef, GDExtensionDeviceExitSceneReadyCallbackV1, void*)>);
+		int32_t (*)(const GDExtensionDeviceExitAbi *, GDExtensionDeviceExitInitializationLevelContextRef, GDExtensionDeviceExitSceneReadyCallbackV1, void *)>);
 static_assert(std::is_same_v<GDExtensionInterfaceDeviceExitSceneReadyScheduleObjectCleanupV1,
-        int32_t (*)(const GDExtensionDeviceExitAbi*, GDExtensionDeviceExitSceneReadyContextRef, uint32_t, uint64_t)>);
+		int32_t (*)(const GDExtensionDeviceExitAbi *, GDExtensionDeviceExitSceneReadyContextRef, uint32_t, uint64_t)>);
 static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionBindSceneReadyV1,
-        GDExtensionDeviceSessionResultV1 (*)(const GDExtensionDeviceExitAbi*, GDExtensionDeviceExitSceneReadyContextRef, GDExtensionObjectPtr, GDExtensionDeviceRegistryContextRef*, GDExtensionOriginalDeviceSessionRef*)>);
+		GDExtensionDeviceSessionResultV1 (*)(const GDExtensionDeviceExitAbi *, GDExtensionDeviceExitSceneReadyContextRef, GDExtensionObjectPtr, GDExtensionDeviceRegistryContextRef *, GDExtensionOriginalDeviceSessionRef *)>);
 static_assert(std::is_same_v<GDExtensionInterfaceDeviceExitSceneReadyAbortV1,
-        int32_t (*)(const GDExtensionDeviceExitAbi*, GDExtensionDeviceExitSceneReadyContextRef, int32_t, uint32_t, uint64_t)>);
+		int32_t (*)(const GDExtensionDeviceExitAbi *, GDExtensionDeviceExitSceneReadyContextRef, int32_t, uint32_t, uint64_t)>);
 
 static_assert(sizeof(GDExtensionQualificationBridgeRefV1) == 16);
 static_assert(alignof(GDExtensionQualificationBridgeRefV1) == 8);
@@ -398,45 +398,45 @@ static_assert(offsetof(GDExtensionNativeUnitRetireReportV1, native_code) == 152)
 static_assert(offsetof(GDExtensionNativeUnitRetireReportV1, retire_operation) == 160);
 
 static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionBindMainSceneReadyV1,
-        GDExtensionDeviceSessionResultV1 (*)(const GDExtensionDeviceExitAbi*, GDExtensionDeviceExitSceneReadyContextRef, GDExtensionDeviceRegistryContextRef*, GDExtensionOriginalDeviceSessionRef*, uint64_t*)>);
+		GDExtensionDeviceSessionResultV1 (*)(const GDExtensionDeviceExitAbi *, GDExtensionDeviceExitSceneReadyContextRef, GDExtensionDeviceRegistryContextRef *, GDExtensionOriginalDeviceSessionRef *, uint64_t *)>);
 static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationOpenV1,
-        GDExtensionDeviceSessionResultV1 (*)(const GDExtensionDeviceExitAbi*, GDExtensionDeviceExitSceneReadyContextRef, GDExtensionDeviceRegistryContextRef, GDExtensionOriginalDeviceSessionRef, GDExtensionDeviceExitLibraryCodeHoldRef, GDExtensionQualificationBridgeRefV1*)>);
+		GDExtensionDeviceSessionResultV1 (*)(const GDExtensionDeviceExitAbi *, GDExtensionDeviceExitSceneReadyContextRef, GDExtensionDeviceRegistryContextRef, GDExtensionOriginalDeviceSessionRef, GDExtensionDeviceExitLibraryCodeHoldRef, GDExtensionQualificationBridgeRefV1 *)>);
 static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationBackingV1,
-        GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, uint64_t, GDExtensionQualificationBackingV1*)>);
+		GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, uint64_t, GDExtensionQualificationBackingV1 *)>);
 static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationRecordV1,
-        GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, const GDExtensionQualificationRecordV1*, GDExtensionQualificationTicketRefV1*, GDExtensionQualificationReportV1*)>);
+		GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, const GDExtensionQualificationRecordV1 *, GDExtensionQualificationTicketRefV1 *, GDExtensionQualificationReportV1 *)>);
 static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationObserveV1,
-        GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationTicketRefV1, const GDExtensionQualificationBudgetV1*, GDExtensionQualificationReportV1*)>);
+		GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationTicketRefV1, const GDExtensionQualificationBudgetV1 *, GDExtensionQualificationReportV1 *)>);
 static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationFactsV1,
-        GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationTicketRefV1, uint64_t, uint32_t, uint32_t, GDExtensionQualificationFactV1*, uint32_t*)>);
+		GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationTicketRefV1, uint64_t, uint32_t, uint32_t, GDExtensionQualificationFactV1 *, uint32_t *)>);
 static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationCopyV1,
-        GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationTicketRefV1, uint64_t, void*, uint32_t, uint32_t*)>);
+		GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationTicketRefV1, uint64_t, void *, uint32_t, uint32_t *)>);
 static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationReleaseV1,
-        GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationTicketRefV1)>);
+		GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationTicketRefV1)>);
 static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationCloseV1,
-        GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1)>);
+		GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1)>);
 static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationStorageCreateV1,
-        GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, const GDExtensionStorageCreateRequestV1*, GDExtensionStorageBackingV1*)>);
+		GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, const GDExtensionStorageCreateRequestV1 *, GDExtensionStorageBackingV1 *)>);
 static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationStorageRetireV1,
-        GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, const GDExtensionStorageRetireRequestV1*, GDExtensionStorageRetireRefV1*, GDExtensionStorageRetireReportV1*)>);
+		GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, const GDExtensionStorageRetireRequestV1 *, GDExtensionStorageRetireRefV1 *, GDExtensionStorageRetireReportV1 *)>);
 static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationStorageRetireObserveV1,
-        GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, GDExtensionStorageRetireRefV1, const GDExtensionQualificationBudgetV1*, GDExtensionStorageRetireReportV1*)>);
+		GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, GDExtensionStorageRetireRefV1, const GDExtensionQualificationBudgetV1 *, GDExtensionStorageRetireReportV1 *)>);
 static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationStorageRetireReleaseV1,
-        GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, GDExtensionStorageRetireRefV1)>);
+		GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, GDExtensionStorageRetireRefV1)>);
 static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationPrepareUploadsV1,
-        GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, const GDExtensionQualificationUploadPrepareV1*, const GDExtensionQualificationUploadPlanV1*, uint32_t, GDExtensionQualificationTicketRefV1*, GDExtensionQualificationReportV1*)>);
+		GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, const GDExtensionQualificationUploadPrepareV1 *, const GDExtensionQualificationUploadPlanV1 *, uint32_t, GDExtensionQualificationTicketRefV1 *, GDExtensionQualificationReportV1 *)>);
 static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationUploadV1,
-        GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationTicketRefV1, const GDExtensionQualificationUploadRequestV1*, const void*, uint32_t, GDExtensionQualificationUploadSegmentV1*, uint32_t, GDExtensionQualificationUploadReportV1*)>);
+		GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationTicketRefV1, const GDExtensionQualificationUploadRequestV1 *, const void *, uint32_t, GDExtensionQualificationUploadSegmentV1 *, uint32_t, GDExtensionQualificationUploadReportV1 *)>);
 static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationRecordPreparedV1,
-        GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationTicketRefV1, const GDExtensionQualificationRecordV1*, GDExtensionQualificationReportV1*)>);
+		GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationTicketRefV1, const GDExtensionQualificationRecordV1 *, GDExtensionQualificationReportV1 *)>);
 static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationNativeUnitCreateV1,
-        GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, const GDExtensionNativeUnitCreateRequestV1*, const void*, uint64_t, GDExtensionNativeUnitBackingV1*)>);
+		GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, const GDExtensionNativeUnitCreateRequestV1 *, const void *, uint64_t, GDExtensionNativeUnitBackingV1 *)>);
 static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationNativeUnitRetireV1,
-        GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, const GDExtensionNativeUnitRetireRequestV1*, GDExtensionNativeUnitRetireRefV1*, GDExtensionNativeUnitRetireReportV1*)>);
+		GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, const GDExtensionNativeUnitRetireRequestV1 *, GDExtensionNativeUnitRetireRefV1 *, GDExtensionNativeUnitRetireReportV1 *)>);
 static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationNativeUnitRetireObserveV1,
-        GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, GDExtensionNativeUnitRetireRefV1, const GDExtensionQualificationBudgetV1*, GDExtensionNativeUnitRetireReportV1*)>);
+		GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, GDExtensionNativeUnitRetireRefV1, const GDExtensionQualificationBudgetV1 *, GDExtensionNativeUnitRetireReportV1 *)>);
 static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationNativeUnitRetireReleaseV1,
-        GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, GDExtensionNativeUnitRetireRefV1)>);
+		GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, GDExtensionNativeUnitRetireRefV1)>);
 static_assert(GDEXTENSION_DEVICE_SESSION_REASON_WRONG_PHASE_V1 == 14);
 static_assert(GDEXTENSION_DEVICE_SESSION_REASON_WRONG_THREAD_V1 == 15);
 static_assert(GDEXTENSION_DEVICE_SESSION_REASON_NOT_ADMITTED_V1 == 16);
@@ -445,65 +445,65 @@ static_assert(GDEXTENSION_DEVICE_SESSION_REASON_NATIVE_UNSUPPORTED_V1 == 18);
 static_assert(GDEXTENSION_DEVICE_SESSION_REASON_CAPACITY_V1 == 19);
 
 // U1-OC1 adds one proc and symbolic domains; original uint32_t POD members stay.
-static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_DOMAIN_COUNT_V1==0);
-static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_FAULT_PLANE_V1==1);
-static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_INPUT_GATE_V1==2);
-static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_INSTANCE_GATE_V1==3);
-static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_MAPPING_V1==4);
-static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_OUTPUT_GATE_V1==5);
-static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_RAW_INPUT_V1==6);
-static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_RAW_OUTPUT_V1==7);
+static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_DOMAIN_COUNT_V1 == 0);
+static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_FAULT_PLANE_V1 == 1);
+static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_INPUT_GATE_V1 == 2);
+static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_INSTANCE_GATE_V1 == 3);
+static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_MAPPING_V1 == 4);
+static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_OUTPUT_GATE_V1 == 5);
+static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_RAW_INPUT_V1 == 6);
+static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_RAW_OUTPUT_V1 == 7);
 static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_COUNT_V1 == 19);
-static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_OWNER_INVALID_V1==0);
-static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_OWNER_E05_V1==1);
-static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_OWNER_E09_V1==2);
-static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_OWNER_E22_V1==3);
-static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_OWNER_E23_V1==4);
-static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_OWNER_E24_V1==5);
-static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationCancelV1,GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1,GDExtensionQualificationTicketRefV1)>);
+static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_OWNER_INVALID_V1 == 0);
+static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_OWNER_E05_V1 == 1);
+static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_OWNER_E09_V1 == 2);
+static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_OWNER_E22_V1 == 3);
+static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_OWNER_E23_V1 == 4);
+static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_OWNER_E24_V1 == 5);
+static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationCancelV1, GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationTicketRefV1)>);
 
 // QRT1 fixed carrier; original PODs and ticket payload prefix remain unchanged.
-static_assert(sizeof(GDExtensionQualificationRtConfigV1)==40 && alignof(GDExtensionQualificationRtConfigV1)==8);
+static_assert(sizeof(GDExtensionQualificationRtConfigV1) == 40 && alignof(GDExtensionQualificationRtConfigV1) == 8);
 static_assert(std::is_standard_layout_v<GDExtensionQualificationRtConfigV1> && std::is_trivially_copyable_v<GDExtensionQualificationRtConfigV1>);
-static_assert(offsetof(GDExtensionQualificationRtConfigV1,abi)==0);
-static_assert(offsetof(GDExtensionQualificationRtConfigV1,slot_count)==16);
-static_assert(offsetof(GDExtensionQualificationRtConfigV1,max_request_bytes)==20);
-static_assert(offsetof(GDExtensionQualificationRtConfigV1,max_result_bytes)==24);
-static_assert(offsetof(GDExtensionQualificationRtConfigV1,max_segment_count)==28);
-static_assert(offsetof(GDExtensionQualificationRtConfigV1,max_payload_bytes)==32);
-static_assert(sizeof(GDExtensionQualificationRtRequestV1)==56 && alignof(GDExtensionQualificationRtRequestV1)==8);
+static_assert(offsetof(GDExtensionQualificationRtConfigV1, abi) == 0);
+static_assert(offsetof(GDExtensionQualificationRtConfigV1, slot_count) == 16);
+static_assert(offsetof(GDExtensionQualificationRtConfigV1, max_request_bytes) == 20);
+static_assert(offsetof(GDExtensionQualificationRtConfigV1, max_result_bytes) == 24);
+static_assert(offsetof(GDExtensionQualificationRtConfigV1, max_segment_count) == 28);
+static_assert(offsetof(GDExtensionQualificationRtConfigV1, max_payload_bytes) == 32);
+static_assert(sizeof(GDExtensionQualificationRtRequestV1) == 56 && alignof(GDExtensionQualificationRtRequestV1) == 8);
 static_assert(std::is_standard_layout_v<GDExtensionQualificationRtRequestV1> && std::is_trivially_copyable_v<GDExtensionQualificationRtRequestV1>);
-static_assert(offsetof(GDExtensionQualificationRtRequestV1,abi)==0);
-static_assert(offsetof(GDExtensionQualificationRtRequestV1,kind)==16);
-static_assert(offsetof(GDExtensionQualificationRtRequestV1,flags)==20);
-static_assert(offsetof(GDExtensionQualificationRtRequestV1,operation_serial)==24);
-static_assert(offsetof(GDExtensionQualificationRtRequestV1,payload_bytes)==32);
-static_assert(offsetof(GDExtensionQualificationRtRequestV1,request_bytes)==40);
-static_assert(offsetof(GDExtensionQualificationRtRequestV1,result_capacity)==44);
-static_assert(offsetof(GDExtensionQualificationRtRequestV1,segment_capacity)==48);
-static_assert(offsetof(GDExtensionQualificationRtRequestV1,reserved)==52);
-static_assert(sizeof(GDExtensionQualificationRtRefV1)==16 && alignof(GDExtensionQualificationRtRefV1)==8);
+static_assert(offsetof(GDExtensionQualificationRtRequestV1, abi) == 0);
+static_assert(offsetof(GDExtensionQualificationRtRequestV1, kind) == 16);
+static_assert(offsetof(GDExtensionQualificationRtRequestV1, flags) == 20);
+static_assert(offsetof(GDExtensionQualificationRtRequestV1, operation_serial) == 24);
+static_assert(offsetof(GDExtensionQualificationRtRequestV1, payload_bytes) == 32);
+static_assert(offsetof(GDExtensionQualificationRtRequestV1, request_bytes) == 40);
+static_assert(offsetof(GDExtensionQualificationRtRequestV1, result_capacity) == 44);
+static_assert(offsetof(GDExtensionQualificationRtRequestV1, segment_capacity) == 48);
+static_assert(offsetof(GDExtensionQualificationRtRequestV1, reserved) == 52);
+static_assert(sizeof(GDExtensionQualificationRtRefV1) == 16 && alignof(GDExtensionQualificationRtRefV1) == 8);
 static_assert(std::is_standard_layout_v<GDExtensionQualificationRtRefV1> && std::is_trivially_copyable_v<GDExtensionQualificationRtRefV1>);
-static_assert(offsetof(GDExtensionQualificationRtRefV1,registry_instance)==0);
-static_assert(offsetof(GDExtensionQualificationRtRefV1,handle_serial)==8);
-static_assert(sizeof(GDExtensionQualificationRtObservationV1)==72 && alignof(GDExtensionQualificationRtObservationV1)==8);
+static_assert(offsetof(GDExtensionQualificationRtRefV1, registry_instance) == 0);
+static_assert(offsetof(GDExtensionQualificationRtRefV1, handle_serial) == 8);
+static_assert(sizeof(GDExtensionQualificationRtObservationV1) == 72 && alignof(GDExtensionQualificationRtObservationV1) == 8);
 static_assert(std::is_standard_layout_v<GDExtensionQualificationRtObservationV1> && std::is_trivially_copyable_v<GDExtensionQualificationRtObservationV1>);
-static_assert(offsetof(GDExtensionQualificationRtObservationV1,abi)==0);
-static_assert(offsetof(GDExtensionQualificationRtObservationV1,kind)==16);
-static_assert(offsetof(GDExtensionQualificationRtObservationV1,state)==20);
-static_assert(offsetof(GDExtensionQualificationRtObservationV1,operation_serial)==24);
-static_assert(offsetof(GDExtensionQualificationRtObservationV1,slot_generation)==32);
-static_assert(offsetof(GDExtensionQualificationRtObservationV1,result_bytes)==40);
-static_assert(offsetof(GDExtensionQualificationRtObservationV1,segment_count)==44);
-static_assert(offsetof(GDExtensionQualificationRtObservationV1,call_result)==48);
-static_assert(sizeof(GDExtensionStorageRetireRefV1)+sizeof(GDExtensionStorageRetireReportV1)==136);
-static_assert(sizeof(GDExtensionNativeUnitRetireRefV1)+sizeof(GDExtensionNativeUnitRetireReportV1)==184);
-static_assert(sizeof(GDExtensionQualificationTicketRefV1)+sizeof(GDExtensionQualificationReportV1)==200);
-static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationRtConfigureV1,GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1,const GDExtensionQualificationRtConfigV1 *)>);
-static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationRtReserveV1,GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1,const GDExtensionQualificationRtRequestV1 *,const void *,const void *,GDExtensionQualificationRtRefV1 *)>);
-static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationRtActivateV1,GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1,GDExtensionQualificationRtRefV1)>);
-static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationRtObserveV1,GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1,GDExtensionQualificationRtRefV1,GDExtensionQualificationRtObservationV1 *,void *,uint32_t,GDExtensionQualificationUploadSegmentV1 *,uint32_t)>);
-static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationRtReleaseV1,GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1,GDExtensionQualificationRtRefV1)>);
+static_assert(offsetof(GDExtensionQualificationRtObservationV1, abi) == 0);
+static_assert(offsetof(GDExtensionQualificationRtObservationV1, kind) == 16);
+static_assert(offsetof(GDExtensionQualificationRtObservationV1, state) == 20);
+static_assert(offsetof(GDExtensionQualificationRtObservationV1, operation_serial) == 24);
+static_assert(offsetof(GDExtensionQualificationRtObservationV1, slot_generation) == 32);
+static_assert(offsetof(GDExtensionQualificationRtObservationV1, result_bytes) == 40);
+static_assert(offsetof(GDExtensionQualificationRtObservationV1, segment_count) == 44);
+static_assert(offsetof(GDExtensionQualificationRtObservationV1, call_result) == 48);
+static_assert(sizeof(GDExtensionStorageRetireRefV1) + sizeof(GDExtensionStorageRetireReportV1) == 136);
+static_assert(sizeof(GDExtensionNativeUnitRetireRefV1) + sizeof(GDExtensionNativeUnitRetireReportV1) == 184);
+static_assert(sizeof(GDExtensionQualificationTicketRefV1) + sizeof(GDExtensionQualificationReportV1) == 200);
+static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationRtConfigureV1, GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, const GDExtensionQualificationRtConfigV1 *)>);
+static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationRtReserveV1, GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, const GDExtensionQualificationRtRequestV1 *, const void *, const void *, GDExtensionQualificationRtRefV1 *)>);
+static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationRtActivateV1, GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationRtRefV1)>);
+static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationRtObserveV1, GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationRtRefV1, GDExtensionQualificationRtObservationV1 *, void *, uint32_t, GDExtensionQualificationUploadSegmentV1 *, uint32_t)>);
+static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationRtReleaseV1, GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationRtRefV1)>);
 
 // Scene installation V2 preserves the original platform-native Abi record.
 static_assert(sizeof(GDExtensionSceneInstallRequirementsV2) == 32, "GDExtensionSceneInstallRequirementsV2 size");

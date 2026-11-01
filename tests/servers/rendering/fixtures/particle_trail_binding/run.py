@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Compile production trail setup against a recording resource mock (not GPU QA)."""
+
 import argparse
-from pathlib import Path
 import subprocess
 import tempfile
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[5]
 SOURCE = "servers/rendering/renderer_rd/storage_rd/particles_storage.cpp"
@@ -18,13 +19,21 @@ def main():
     def function(name):
         start = source.index(name)
         start = source.index("{", start) + 1
-        return source[start:source.index("\n}\n", start)]
+        return source[start : source.index("\n}\n", start)]
 
     setter = function("void ParticlesStorage::particles_set_trail_bind_poses")
     uniform = function("bool ParticlesStorage::_particles_ensure_trail_uniform")
-    start = source.index("\t\t\tif (particles->trail_bind_poses.size() > 1 && particles->trail_bind_pose_buffer.is_null())", source.index("void ParticlesStorage::update_particles"))
-    allocation = source[start:source.index("\n\t\t\tif (particles->trail_bind_pose_buffer.is_valid() && particles->trail_bind_poses_dirty)", start)]
-    harness = r'''
+    start = source.index(
+        "\t\t\tif (particles->trail_bind_poses.size() > 1 && particles->trail_bind_pose_buffer.is_null())",
+        source.index("void ParticlesStorage::update_particles"),
+    )
+    allocation = source[
+        start : source.index(
+            "\n\t\t\tif (particles->trail_bind_pose_buffer.is_valid() && particles->trail_bind_poses_dirty)", start
+        )
+    ]
+    harness = (
+        r"""
 #include <cstdio>
 #include <cstdint>
 #include <map>
@@ -59,18 +68,24 @@ void _particles_free_data(Particles *p) { p->frees++; p->trail_bind_pose_buffer 
 bool _particles_get_buffer_size(uint64_t count, uint64_t size, uint64_t header, uint32_t &out) { out = count * size + header; return true; }
 bool _particles_ensure_unused_trail_buffer(Particles *p) { if (p->unused_trail_storage_buffer.is_null()) p->unused_trail_storage_buffer = RD::get_singleton()->storage_buffer_create(64); return p->unused_trail_storage_buffer.is_valid(); }
 bool _particles_ensure_trail_uniform(Particles *particles, RID p_shader) {
-''' + uniform + r'''
+"""
+        + uniform
+        + r"""
 }
 void set_poses(Particles *p, const Vector<Transform3D> &p_bind_poses) {
     particles_owner.value = p;
     RID p_particles;
-''' + setter + r'''
+"""
+        + setter
+        + r"""
 }
 bool prepare(Particles *particles) {
     bool retry = false;
     auto queue_retry = [&]() { retry = true; };
     for (int once = 0; once < 1; once++) {
-''' + allocation + r'''
+"""
+        + allocation
+        + r"""
     }
     return !retry;
 }
@@ -102,7 +117,8 @@ int main() {
     std::printf("particle trail binding: %d/%d checks passed\n", checks - failures, checks);
     return failures ? 1 : 0;
 }
-'''
+"""
+    )
     with tempfile.TemporaryDirectory(prefix="particle-trail-binding-") as temp:
         cpp, binary = Path(temp) / "test.cpp", Path(temp) / "test"
         cpp.write_text(harness)

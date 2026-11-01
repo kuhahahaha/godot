@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Execute production heightfield sizing for thin and degenerate extents."""
+
 from __future__ import annotations
 
 import argparse
 import subprocess
 import tempfile
 from pathlib import Path
-
 
 ROOT = Path(__file__).resolve().parents[5]
 SOURCE_PATH = ROOT / "servers/rendering/renderer_rd/storage_rd/particles_storage.cpp"
@@ -31,7 +31,8 @@ def main() -> int:
     start = source.index("\t\tconst int resolutions", start)
     end = source.index("\n\t\tRD::TextureFormat tf;", start)
     body = source[start:end]
-    harness = r'''
+    harness = (
+        r"""
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
@@ -49,7 +50,9 @@ struct ParticlesCollision { Vector3 extents; int heightfield_resolution; };
 Size2i get_size(real_t x, real_t z, int resolution = 2) {
     ParticlesCollision collision{{x, 0, z}, resolution};
     const ParticlesCollision *particles_collision = &collision;
-''' + body + r'''
+"""
+        + body
+        + r"""
     return size;
 }
 int main() {
@@ -83,7 +86,8 @@ int main() {
     std::printf("particle heightfield size (%s): %d/%d checks passed\n", sizeof(real_t) == sizeof(double) ? "double" : "float", checks - failures, checks);
     return failures ? 1 : 0;
 }
-'''
+"""
+    )
     result = 0
     with tempfile.TemporaryDirectory(prefix="particle-heightfield-size-") as temp:
         cpp = Path(temp) / "test.cpp"

@@ -116,9 +116,9 @@ public:
 
 private:
 	friend class GDExtensionDeviceExit::Registry;
- friend struct GDExtensionDeviceExit::QualificationTicket;
- friend struct GDExtensionDeviceExit::QualificationResource;
- friend class RenderingServerDefault;
+	friend struct GDExtensionDeviceExit::QualificationTicket;
+	friend struct GDExtensionDeviceExit::QualificationResource;
+	friend class RenderingServerDefault;
 #ifdef TESTS_ENABLED
 	friend class TestExternalOutputAccess;
 	friend class TestIndexed144DeviceAccess;
@@ -129,11 +129,11 @@ private:
 	friend class TestQualificationSerialAccess;
 	friend class TestQualificationFinalizeAccess;
 	friend class TestQualificationPhysicalAccess;
- friend class TestQualificationAckAccess;
- friend class TestQualificationStagingAccess;
- friend class TestQualificationTicketAccess;
- friend class TestRecordSourceAccess;
- friend class TestQualificationRtAccess;
+	friend class TestQualificationAckAccess;
+	friend class TestQualificationStagingAccess;
+	friend class TestQualificationTicketAccess;
+	friend class TestRecordSourceAccess;
+	friend class TestQualificationRtAccess;
 	friend class RendererRD::TestParticlesProcessRetryAccess;
 	void test_arm_buffer_update_fault(RID p_buffer, uint32_t p_count) {
 		test_buffer_update_fault_buffer = p_buffer;
@@ -281,34 +281,34 @@ private:
 
 	std::atomic<uint64_t> next_backing_serial = 1;
 	uint64_t _reserve_backing_serial();
- uint64_t next_qualification_object_serial = 1;
- uint64_t next_qualification_free_event = 1;
- uint64_t qualification_free_event_reservations = 0;
- uint64_t next_qualification_frame_epoch = 1;
- bool qualification_retiring = false;
- GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_retiring_cell = nullptr;
- bool qualification_recording = false;
- GDExtensionDeviceExit::CheckedRecordAppend _record_source_dispatch(ComputeListID, uint32_t, uint32_t, uint32_t);
- GDExtensionDeviceExit::CheckedRecordAppend _record_source_buffer_copy(RID, RID, uint32_t, uint32_t, uint32_t);
- RDG::RecordHandle _qualification_dispatch(ComputeListID p_list, uint32_t p_x, uint32_t p_y, uint32_t p_z);
- Error _qualification_maintenance();
- bool _qualification_resource_busy(RID p_rid);
- Error _qualification_pin_resources(GDExtensionDeviceExit::QualificationTicket *p_ticket, const LocalVector<RID> &p_resources);
- void _qualification_unpin_resources(GDExtensionDeviceExit::QualificationTicket *p_ticket);
- void _qualification_add_frame_ticket(GDExtensionDeviceExit::QualificationTicket *p_ticket);
- void _qualification_seal_tickets();
- void _qualification_issue_tickets(uint32_t p_slot, const RDD::QueueCallReport &p_report, Error p_error);
- void _qualification_issue_tickets_locked(uint32_t p_slot, const RDD::QueueCallReport &p_report, Error p_error);
- Error _qualification_retain_tickets(uint32_t p_frame);
- Error _qualification_poll_tickets(uint32_t p_frame);
- void _qualification_return_frame_tickets(uint32_t p_frame);
- std::atomic<bool> qualification_frame_advance_pending{false};
- Error _qualification_enqueue(GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
- bool _qualification_free_event_available(bool p_reserved) const;
- bool _qualification_reserve_free_event(GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
- void _qualification_release_free_event(GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
- void _qualification_freed(GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
- RID _qualification_storage_create(uint32_t p_bytes, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
+	uint64_t next_qualification_object_serial = 1;
+	uint64_t next_qualification_free_event = 1;
+	uint64_t qualification_free_event_reservations = 0;
+	uint64_t next_qualification_frame_epoch = 1;
+	bool qualification_retiring = false;
+	GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_retiring_cell = nullptr;
+	bool qualification_recording = false;
+	GDExtensionDeviceExit::CheckedRecordAppend _record_source_dispatch(ComputeListID, uint32_t, uint32_t, uint32_t);
+	GDExtensionDeviceExit::CheckedRecordAppend _record_source_buffer_copy(RID, RID, uint32_t, uint32_t, uint32_t);
+	RDG::RecordHandle _qualification_dispatch(ComputeListID p_list, uint32_t p_x, uint32_t p_y, uint32_t p_z);
+	Error _qualification_maintenance();
+	bool _qualification_resource_busy(RID p_rid);
+	Error _qualification_pin_resources(GDExtensionDeviceExit::QualificationTicket *p_ticket, const LocalVector<RID> &p_resources);
+	void _qualification_unpin_resources(GDExtensionDeviceExit::QualificationTicket *p_ticket);
+	void _qualification_add_frame_ticket(GDExtensionDeviceExit::QualificationTicket *p_ticket);
+	void _qualification_seal_tickets();
+	void _qualification_issue_tickets(uint32_t p_slot, const RDD::QueueCallReport &p_report, Error p_error);
+	void _qualification_issue_tickets_locked(uint32_t p_slot, const RDD::QueueCallReport &p_report, Error p_error);
+	Error _qualification_retain_tickets(uint32_t p_frame);
+	Error _qualification_poll_tickets(uint32_t p_frame);
+	void _qualification_return_frame_tickets(uint32_t p_frame);
+	std::atomic<bool> qualification_frame_advance_pending{ false };
+	Error _qualification_enqueue(GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
+	bool _qualification_free_event_available(bool p_reserved) const;
+	bool _qualification_reserve_free_event(GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
+	void _qualification_release_free_event(GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
+	void _qualification_freed(GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
+	RID _qualification_storage_create(uint32_t p_bytes, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
 
 	struct Buffer {
 		uint32_t qualification_users = 0;
@@ -365,17 +365,17 @@ private:
 		PackedByteArray bytes;
 		LocalVector<CopyRecord> copies;
 		uint32_t completed_size = 0;
-  uint32_t issued_size = 0;
-  uint64_t request_serial = 0;
-  // Captured from the original buffer at the first actual copy append.
-  // Continuations must retain this same request/backing/range association.
-  uint64_t source_backing_serial = 0;
-  uint32_t source_offset = 0;
-  uint32_t source_size = 0;
-  Error error = OK;
-  int64_t native_code = 0;
-  bool delivered = false;
-  bool qualification_owned = false;
+		uint32_t issued_size = 0;
+		uint64_t request_serial = 0;
+		// Captured from the original buffer at the first actual copy append.
+		// Continuations must retain this same request/backing/range association.
+		uint64_t source_backing_serial = 0;
+		uint32_t source_offset = 0;
+		uint32_t source_size = 0;
+		Error error = OK;
+		int64_t native_code = 0;
+		bool delivered = false;
+		bool qualification_owned = false;
 	};
 
 	Error _buffer_get_data_async(RID, const Callable &, uint32_t, uint32_t, const Ref<BufferGetDataResult> &p_owned = {});

@@ -72,41 +72,59 @@ uint64_t RenderingDeviceDriverMetal::reserve_native_call_serials(uint32_t count)
 	return 0;
 }
 RenderingDeviceDriver::FencePollResult RenderingDeviceDriverMetal::native_call_poll(uint64_t serial) {
- FencePollResult out;
- if(!serial || !completion_records_mutex.try_lock())return out;
- for(auto *record:completion_records)if(record->serial==serial) {
-  out.completed_serial=record->serial;
-  if (record->completed.load()) {
-	  out.completed = !record->failed.load();
-	  out.native_error = record->failed.load();
-	  out.native_code = record->native_code.load();
-	  // The exact registered command's completion callback is an authoritative
-	  // acceptance resolution for Metal's void commit, unlike a quiet tail fence.
-	  if (out.completed) {
-		  out.resolved_issue = IssueFact::KnownAccepted;
-	  }
-  }
-  break;
- }
- completion_records_mutex.unlock();return out;
+	FencePollResult out;
+	if (!serial || !completion_records_mutex.try_lock()) {
+		return out;
+	}
+	for (auto *record : completion_records) {
+		if (record->serial == serial) {
+			out.completed_serial = record->serial;
+			if (record->completed.load()) {
+				out.completed = !record->failed.load();
+				out.native_error = record->failed.load();
+				out.native_code = record->native_code.load();
+				// The exact registered command's completion callback is an authoritative
+				// acceptance resolution for Metal's void commit, unlike a quiet tail fence.
+				if (out.completed) {
+					out.resolved_issue = IssueFact::KnownAccepted;
+				}
+			}
+			break;
+		}
+	}
+	completion_records_mutex.unlock();
+	return out;
 }
 RenderingDeviceDriver::FencePollResult RenderingDeviceDriverMetal::native_call_wait(uint64_t serial) {
- NS::SharedPtr<MTL::CommandBuffer> command;
- {MutexLock lock(completion_records_mutex);for(auto *record:completion_records)if(record->serial==serial){command=record->command_buffer;break;}}
- if(!command)return {};
- command->waitUntilCompleted();
- FencePollResult out;MutexLock lock(completion_records_mutex);
- for(auto *record:completion_records)if(record->serial==serial) {
-		 out.completed_serial = serial;
-		 out.native_error = record->failed.load();
-		 out.completed = record->completed.load() && !out.native_error;
-		 out.native_code = record->native_code.load();
-		 if (out.completed) {
-			 out.resolved_issue = IssueFact::KnownAccepted;
-		 }
-		 break;
- }
- return out;
+	NS::SharedPtr<MTL::CommandBuffer> command;
+	{
+		MutexLock lock(completion_records_mutex);
+		for (auto *record : completion_records) {
+			if (record->serial == serial) {
+				command = record->command_buffer;
+				break;
+			}
+		}
+	}
+	if (!command) {
+		return {};
+	}
+	command->waitUntilCompleted();
+	FencePollResult out;
+	MutexLock lock(completion_records_mutex);
+	for (auto *record : completion_records) {
+		if (record->serial == serial) {
+			out.completed_serial = serial;
+			out.native_error = record->failed.load();
+			out.completed = record->completed.load() && !out.native_error;
+			out.native_code = record->native_code.load();
+			if (out.completed) {
+				out.resolved_issue = IssueFact::KnownAccepted;
+			}
+			break;
+		}
+	}
+	return out;
 }
 Error RenderingDeviceDriverMetal::native_call_recycle(uint64_t serial) {
 	if (!serial) {

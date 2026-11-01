@@ -1536,80 +1536,125 @@ Error RenderingDevice::buffer_get_data_async(RID buffer, const Callable &callbac
 }
 
 Error RenderingDevice::_buffer_get_data_async(RID p_buffer, const Callable &p_callback, uint32_t p_offset, uint32_t p_size, const Ref<BufferGetDataResult> &p_owned) {
- ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
- if(_recording_error()!=OK)return _recording_error();
- Buffer *buffer=_get_buffer_from_owner(p_buffer);
- ERR_FAIL_NULL_V(buffer,ERR_INVALID_PARAMETER);
- const bool core=p_owned.is_valid();
- ERR_FAIL_COND_V(buffer->qualification_return && !qualification_recording,ERR_UNAUTHORIZED);
- if(!p_size)p_size=buffer->size;
- ERR_FAIL_COND_V(p_offset>buffer->size || p_size>buffer->size-p_offset,ERR_INVALID_PARAMETER);
- ERR_FAIL_COND_V(core ? (!p_owned->qualification_owned || !qualification_recording || p_callback.is_valid() || p_owned->bytes.size()!=p_size || p_owned->issued_size>p_size || p_owned->delivered || p_owned->error!=OK) : !p_callback.is_valid(),ERR_INVALID_PARAMETER);
- if (core) {
-	 if (!p_owned->request_serial || !buffer->backing_serial) {
-		 return ERR_INVALID_DATA;
-	 }
-	 if (!p_owned->source_backing_serial) {
-		 if (p_owned->issued_size || !p_owned->copies.is_empty()) {
-			 return ERR_INVALID_DATA;
-		 }
-		 p_owned->source_backing_serial = buffer->backing_serial;
-		 p_owned->source_offset = p_offset;
-		 p_owned->source_size = p_size;
-	 } else if (p_owned->source_backing_serial != buffer->backing_serial || p_owned->source_offset != p_offset || p_owned->source_size != p_size) {
-		 return ERR_INVALID_DATA;
-	 }
- }
- // The public legacy route retains its worker submission behavior. Core ticket
- // admission must join a real worker before using it; never silently wait here.
- if(core && buffer->transfer_worker_index>=0)return ERR_BUSY;
- if(!core)_check_transfer_worker_buffer(buffer);
- BufferGetDataRequest request;request.buffer=p_buffer;request.callback=p_callback;
- request.frame_local_index=frames[frame].download_buffer_copy_regions.size();
- if(core)request.result=p_owned;
- else {request.result.instantiate();const Error error=request.result->bytes.resize(p_size);if(error!=OK)return error;}
- request.result_offset=request.result->issued_size;
- uint32_t submit_from=request.result->issued_size,to_submit=p_size-submit_from;
- auto publish=[&](bool final) {
-  if(!request.frame_local_count)return;
-  if(_buffer_make_mutable(buffer,p_buffer))draw_graph.add_synchronization();
-  for(uint32_t i=0;i<request.frame_local_count;++i) {
-   const uint32_t index=request.frame_local_index+i;
-   const auto destination=frames[frame].download_buffer_staging_buffers[index];
-   const auto region=frames[frame].download_buffer_copy_regions[index];
-   const auto handle=draw_graph.add_buffer_get_data(buffer->driver_id,buffer->draw_tracker,destination,region);
-   request.result->copies.push_back({handle,buffer->driver_id,destination,region});
-  }
-  request.final_segment=final;frames[frame].download_buffer_get_data_requests.push_back(request);
-  request.result->issued_size+=request.size;
- };
- while(to_submit) {
-  uint32_t offset=0,amount=0;StagingRequiredAction action;
-  Error error=_staging_buffer_allocate(download_staging_buffers,MIN(to_submit,download_staging_buffers.block_size),32,offset,amount,action);
-  if(error!=OK) {if(core)publish(false);request.result->error=error;return error;}
-  if(core && action!=STAGING_REQUIRED_ACTION_NONE) {
-   // Both exhausted-staging cases preserve this same result/copy set and return
-   // before the legacy blocking action. The next call resumes only its suffix.
-   publish(false);return ERR_BUSY;
-  }
-  const bool flush=request.frame_local_count>0 && action==STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL;
-  if(flush)publish(false);
-  error=_staging_buffer_execute_required_action(download_staging_buffers,action);
-  if(error!=OK) {request.result->error=error;return error;}
-  if(request.result->error!=OK)return request.result->error;
-  buffer=_get_buffer_from_owner(p_buffer);
-  if(!buffer){request.result->error=ERR_DOES_NOT_EXIST;return ERR_DOES_NOT_EXIST;}
-  if(flush) {
-   request.result_offset=request.result->issued_size;request.size=0;request.frame_local_count=0;
-   request.frame_local_index=frames[frame].download_buffer_copy_regions.size();
-  }
-  const RDD::BufferCopyRegion region{submit_from+p_offset,offset,amount};
-  frames[frame].download_buffer_staging_buffers.push_back(download_staging_buffers.blocks[download_staging_buffers.current].driver_id);
-  frames[frame].download_buffer_copy_regions.push_back(region);++request.frame_local_count;request.size+=amount;
-  download_staging_buffers.blocks.write[download_staging_buffers.current].fill_amount=offset+amount;
-  submit_from+=amount;to_submit-=amount;
- }
- publish(true);
+	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
+	if (_recording_error() != OK) {
+		return _recording_error();
+	}
+	Buffer *buffer = _get_buffer_from_owner(p_buffer);
+	ERR_FAIL_NULL_V(buffer, ERR_INVALID_PARAMETER);
+	const bool core = p_owned.is_valid();
+	ERR_FAIL_COND_V(buffer->qualification_return && !qualification_recording, ERR_UNAUTHORIZED);
+	if (!p_size) {
+		p_size = buffer->size;
+	}
+	ERR_FAIL_COND_V(p_offset > buffer->size || p_size > buffer->size - p_offset, ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(core ? (!p_owned->qualification_owned || !qualification_recording || p_callback.is_valid() || p_owned->bytes.size() != p_size || p_owned->issued_size > p_size || p_owned->delivered || p_owned->error != OK) : !p_callback.is_valid(), ERR_INVALID_PARAMETER);
+	if (core) {
+		if (!p_owned->request_serial || !buffer->backing_serial) {
+			return ERR_INVALID_DATA;
+		}
+		if (!p_owned->source_backing_serial) {
+			if (p_owned->issued_size || !p_owned->copies.is_empty()) {
+				return ERR_INVALID_DATA;
+			}
+			p_owned->source_backing_serial = buffer->backing_serial;
+			p_owned->source_offset = p_offset;
+			p_owned->source_size = p_size;
+		} else if (p_owned->source_backing_serial != buffer->backing_serial || p_owned->source_offset != p_offset || p_owned->source_size != p_size) {
+			return ERR_INVALID_DATA;
+		}
+	}
+	// The public legacy route retains its worker submission behavior. Core ticket
+	// admission must join a real worker before using it; never silently wait here.
+	if (core && buffer->transfer_worker_index >= 0) {
+		return ERR_BUSY;
+	}
+	if (!core) {
+		_check_transfer_worker_buffer(buffer);
+	}
+	BufferGetDataRequest request;
+	request.buffer = p_buffer;
+	request.callback = p_callback;
+	request.frame_local_index = frames[frame].download_buffer_copy_regions.size();
+	if (core) {
+		request.result = p_owned;
+	} else {
+		request.result.instantiate();
+		const Error error = request.result->bytes.resize(p_size);
+		if (error != OK) {
+			return error;
+		}
+	}
+	request.result_offset = request.result->issued_size;
+	uint32_t submit_from = request.result->issued_size, to_submit = p_size - submit_from;
+	auto publish = [&](bool final) {
+		if (!request.frame_local_count) {
+			return;
+		}
+		if (_buffer_make_mutable(buffer, p_buffer)) {
+			draw_graph.add_synchronization();
+		}
+		for (uint32_t i = 0; i < request.frame_local_count; ++i) {
+			const uint32_t index = request.frame_local_index + i;
+			const auto destination = frames[frame].download_buffer_staging_buffers[index];
+			const auto region = frames[frame].download_buffer_copy_regions[index];
+			const auto handle = draw_graph.add_buffer_get_data(buffer->driver_id, buffer->draw_tracker, destination, region);
+			request.result->copies.push_back({ handle, buffer->driver_id, destination, region });
+		}
+		request.final_segment = final;
+		frames[frame].download_buffer_get_data_requests.push_back(request);
+		request.result->issued_size += request.size;
+	};
+	while (to_submit) {
+		uint32_t offset = 0, amount = 0;
+		StagingRequiredAction action;
+		Error error = _staging_buffer_allocate(download_staging_buffers, MIN(to_submit, download_staging_buffers.block_size), 32, offset, amount, action);
+		if (error != OK) {
+			if (core) {
+				publish(false);
+			}
+			request.result->error = error;
+			return error;
+		}
+		if (core && action != STAGING_REQUIRED_ACTION_NONE) {
+			// Both exhausted-staging cases preserve this same result/copy set and return
+			// before the legacy blocking action. The next call resumes only its suffix.
+			publish(false);
+			return ERR_BUSY;
+		}
+		const bool flush = request.frame_local_count > 0 && action == STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL;
+		if (flush) {
+			publish(false);
+		}
+		error = _staging_buffer_execute_required_action(download_staging_buffers, action);
+		if (error != OK) {
+			request.result->error = error;
+			return error;
+		}
+		if (request.result->error != OK) {
+			return request.result->error;
+		}
+		buffer = _get_buffer_from_owner(p_buffer);
+		if (!buffer) {
+			request.result->error = ERR_DOES_NOT_EXIST;
+			return ERR_DOES_NOT_EXIST;
+		}
+		if (flush) {
+			request.result_offset = request.result->issued_size;
+			request.size = 0;
+			request.frame_local_count = 0;
+			request.frame_local_index = frames[frame].download_buffer_copy_regions.size();
+		}
+		const RDD::BufferCopyRegion region{ submit_from + p_offset, offset, amount };
+		frames[frame].download_buffer_staging_buffers.push_back(download_staging_buffers.blocks[download_staging_buffers.current].driver_id);
+		frames[frame].download_buffer_copy_regions.push_back(region);
+		++request.frame_local_count;
+		request.size += amount;
+		download_staging_buffers.blocks.write[download_staging_buffers.current].fill_amount = offset + amount;
+		submit_from += amount;
+		to_submit -= amount;
+	}
+	publish(true);
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
 	if (request.frame_local_count) {
 		RenderCaptureTestHooks::observe_readback_queued(p_buffer.get_id(), p_size);
@@ -5011,29 +5056,37 @@ RID RenderingDevice::_uniform_set_create_qualification(const VectorView<RD::Unif
 	Shader *shader = shader_owner.get_or_null(p_shader);
 	ERR_FAIL_NULL_V(shader, RID());
 
- LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> qualification_dependencies;
- if(shader->qualification_return)qualification_dependencies.push_back(shader->qualification_return);
- for(uint32_t u=0;u<p_uniforms.size();++u)for(uint32_t i=0;i<p_uniforms[u].get_id_count();++i) {
-  const auto &uniform=p_uniforms[u];
-  auto *texture=texture_owner.get_or_null(uniform.get_id(i));
-  ERR_FAIL_COND_V(texture && texture->qualification_return && (!p_children || !p_children->has(texture->qualification_return)), RID());
-  if (texture && texture->qualification_return && !qualification_dependencies.has(texture->qualification_return)) {
-	  qualification_dependencies.push_back(texture->qualification_return);
-  }
-  auto *sampler=sampler_owner.get_or_null(uniform.get_id(i));
-  ERR_FAIL_COND_V(sampler && sampler->qualification_return && (!p_children || !p_children->has(sampler->qualification_return)), RID());
-  if (sampler && sampler->qualification_return && !qualification_dependencies.has(sampler->qualification_return)) {
-	  qualification_dependencies.push_back(sampler->qualification_return);
-  }
-  auto *buffer=storage_buffer_owner.get_or_null(uniform.get_id(i));
-  if(buffer && buffer->qualification_return && !qualification_dependencies.has(buffer->qualification_return))qualification_dependencies.push_back(buffer->qualification_return);
- }
- if(!qualification_dependencies.is_empty()) {
-  ERR_FAIL_COND_V(render_thread_id!=Thread::get_caller_id() || p_linear_pool,RID());
-  ERR_FAIL_COND_V(qualification_dependencies.size()>128,RID());
-  const auto bridge=qualification_dependencies[0]->bridge;
-  for(auto *cell:qualification_dependencies)ERR_FAIL_COND_V(cell->bridge!=bridge || cell->use_closed.load() || cell->dependent_children.load()==UINT32_MAX,RID());
- }
+	LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> qualification_dependencies;
+	if (shader->qualification_return) {
+		qualification_dependencies.push_back(shader->qualification_return);
+	}
+	for (uint32_t u = 0; u < p_uniforms.size(); ++u) {
+		for (uint32_t i = 0; i < p_uniforms[u].get_id_count(); ++i) {
+			const auto &uniform = p_uniforms[u];
+			auto *texture = texture_owner.get_or_null(uniform.get_id(i));
+			ERR_FAIL_COND_V(texture && texture->qualification_return && (!p_children || !p_children->has(texture->qualification_return)), RID());
+			if (texture && texture->qualification_return && !qualification_dependencies.has(texture->qualification_return)) {
+				qualification_dependencies.push_back(texture->qualification_return);
+			}
+			auto *sampler = sampler_owner.get_or_null(uniform.get_id(i));
+			ERR_FAIL_COND_V(sampler && sampler->qualification_return && (!p_children || !p_children->has(sampler->qualification_return)), RID());
+			if (sampler && sampler->qualification_return && !qualification_dependencies.has(sampler->qualification_return)) {
+				qualification_dependencies.push_back(sampler->qualification_return);
+			}
+			auto *buffer = storage_buffer_owner.get_or_null(uniform.get_id(i));
+			if (buffer && buffer->qualification_return && !qualification_dependencies.has(buffer->qualification_return)) {
+				qualification_dependencies.push_back(buffer->qualification_return);
+			}
+		}
+	}
+	if (!qualification_dependencies.is_empty()) {
+		ERR_FAIL_COND_V(render_thread_id != Thread::get_caller_id() || p_linear_pool, RID());
+		ERR_FAIL_COND_V(qualification_dependencies.size() > 128, RID());
+		const auto bridge = qualification_dependencies[0]->bridge;
+		for (auto *cell : qualification_dependencies) {
+			ERR_FAIL_COND_V(cell->bridge != bridge || cell->use_closed.load() || cell->dependent_children.load() == UINT32_MAX, RID());
+		}
+	}
 
 	ERR_FAIL_COND_V_MSG(p_shader_set >= (uint32_t)shader->uniform_sets.size() || shader->uniform_sets[p_shader_set].is_empty(), RID(),
 			"Desired set (" + itos(p_shader_set) + ") not used by shader.");
@@ -5444,9 +5497,11 @@ RID RenderingDevice::_uniform_set_create_qualification(const VectorView<RD::Unif
 	}
 
 	UniformSet uniform_set;
- uniform_set.qualification_dependencies=qualification_dependencies;
- uniform_set.qualification_return = p_cell;
- for(auto *cell:qualification_dependencies)cell->dependent_children.fetch_add(1);
+	uniform_set.qualification_dependencies = qualification_dependencies;
+	uniform_set.qualification_return = p_cell;
+	for (auto *cell : qualification_dependencies) {
+		cell->dependent_children.fetch_add(1);
+	}
 	uniform_set.driver_id = driver_uniform_set;
 	uniform_set.format = shader->set_formats[p_shader_set];
 	uniform_set.attachable_textures = attachable_textures;
@@ -5459,11 +5514,15 @@ RID RenderingDevice::_uniform_set_create_qualification(const VectorView<RD::Unif
 	uniform_set.shader_set = p_shader_set;
 	uniform_set.shader_id = p_shader;
 
- RID id=reserved_set;
- if(id.is_valid())uniform_set_owner.initialize_rid(id,uniform_set);else id=uniform_set_owner.make_rid(uniform_set);
- if (p_cell) {
-	 p_cell->rid = id.get_id();
- }
+	RID id = reserved_set;
+	if (id.is_valid()) {
+		uniform_set_owner.initialize_rid(id, uniform_set);
+	} else {
+		id = uniform_set_owner.make_rid(uniform_set);
+	}
+	if (p_cell) {
+		p_cell->rid = id.get_id();
+	}
 #ifdef DEV_ENABLED
 	set_resource_name(id, "RID:" + itos(id.get_id()));
 #endif
@@ -9457,7 +9516,10 @@ Error RenderingDevice::_free_pending_resources(int p_frame) {
 			// pin. Poisoning stops frame reuse/finalization and prevents replay.
 			return _fail_frame_wait_source(p_frame, uniform_set->qualification_disposal_error);
 		}
-		for(auto *cell:uniform_set->qualification_dependencies) { CRASH_COND(!cell->dependent_children.load());cell->dependent_children.fetch_sub(1); }
+		for (auto *cell : uniform_set->qualification_dependencies) {
+			CRASH_COND(!cell->dependent_children.load());
+			cell->dependent_children.fetch_sub(1);
+		}
 		_qualification_freed(uniform_set->qualification_return);
 #if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
 		capture_test_resource_registry.observe_free(RenderCaptureTestResourceKind::UniformSet, uniform_set->driver_id.id);

@@ -134,11 +134,15 @@ RenderingDeviceDriver::~RenderingDeviceDriver() {}
 #include "core/extension/gdextension_library_exit_guard.h"
 #include "servers/rendering/rendering_device.h"
 void RenderingDeviceDriver::notify_session_device_lost() const {
- GDExtensionDeviceExit::Registry::get_singleton().device_lost(session_owner);
+	GDExtensionDeviceExit::Registry::get_singleton().device_lost(session_owner);
 }
 
-void RenderingDeviceDriver::session_loss_identity(uint64_t& registry,uint64_t& epoch) const { GDExtensionDeviceExit::Registry::get_singleton().device_loss_identity(session_owner,registry,epoch); }
-void RenderingDeviceDriver::notify_session_device_lost(uint64_t registry,uint64_t epoch) { GDExtensionDeviceExit::Registry::get_singleton().device_lost(registry,epoch); }
+void RenderingDeviceDriver::session_loss_identity(uint64_t &registry, uint64_t &epoch) const {
+	GDExtensionDeviceExit::Registry::get_singleton().device_loss_identity(session_owner, registry, epoch);
+}
+void RenderingDeviceDriver::notify_session_device_lost(uint64_t registry, uint64_t epoch) {
+	GDExtensionDeviceExit::Registry::get_singleton().device_lost(registry, epoch);
+}
 
 thread_local RenderingDeviceDriver::NativeFactWriteRange *RenderingDeviceDriver::active_native_fact_range = nullptr;
 Error RenderingDeviceDriver::command_queue_execute_recorded(CommandQueueID queue, VectorView<SemaphoreID> waits, VectorView<CommandBufferID> commands, VectorView<SemaphoreID> signals, FenceID fence, NativeFactWriteRange &range) {

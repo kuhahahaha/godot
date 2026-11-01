@@ -615,19 +615,35 @@ void GDExtension::_register_extension_class_internal(GDExtensionClassLibraryPtr 
 	GDExtensionDeviceExit::CallbackScope registration(self->library_exit_ref);
 	ERR_FAIL_COND(registration.get_error() != OK);
 	uint64_t entry_classes = (1u << 5) | (1u << 7); // construction and destruction
-	if (p_extension_funcs->set_func || p_extension_funcs->get_func || p_extension_funcs->get_property_list_func || p_extension_funcs->free_property_list_func || p_extension_funcs->property_can_revert_func || p_extension_funcs->property_get_revert_func || p_extension_funcs->validate_property_func || p_extension_funcs->to_string_func) { entry_classes |= 1u << 2; }
-	if (p_extension_funcs->notification_func) { entry_classes |= 1u << 3; }
-	if (p_extension_funcs->get_virtual_func || p_extension_funcs->get_virtual_call_data_func || p_extension_funcs->call_virtual_with_data_func) { entry_classes |= 1u << 4; }
-	if (p_extension_funcs->reference_func || p_extension_funcs->unreference_func) { entry_classes |= 1u << 9; }
+	if (p_extension_funcs->set_func || p_extension_funcs->get_func || p_extension_funcs->get_property_list_func || p_extension_funcs->free_property_list_func || p_extension_funcs->property_can_revert_func || p_extension_funcs->property_get_revert_func || p_extension_funcs->validate_property_func || p_extension_funcs->to_string_func) {
+		entry_classes |= 1u << 2;
+	}
+	if (p_extension_funcs->notification_func) {
+		entry_classes |= 1u << 3;
+	}
+	if (p_extension_funcs->get_virtual_func || p_extension_funcs->get_virtual_call_data_func || p_extension_funcs->call_virtual_with_data_func) {
+		entry_classes |= 1u << 4;
+	}
+	if (p_extension_funcs->reference_func || p_extension_funcs->unreference_func) {
+		entry_classes |= 1u << 9;
+	}
 #ifndef DISABLE_DEPRECATED
 	if (p_deprecated_funcs) {
-		if (p_deprecated_funcs->notification_func) { entry_classes |= 1u << 3; }
-		if (p_deprecated_funcs->free_property_list_func || p_deprecated_funcs->get_rid_func) { entry_classes |= 1u << 2; }
-		if (p_deprecated_funcs->get_virtual_func || p_deprecated_funcs->get_virtual_call_data_func) { entry_classes |= 1u << 4; }
+		if (p_deprecated_funcs->notification_func) {
+			entry_classes |= 1u << 3;
+		}
+		if (p_deprecated_funcs->free_property_list_func || p_deprecated_funcs->get_rid_func) {
+			entry_classes |= 1u << 2;
+		}
+		if (p_deprecated_funcs->get_virtual_func || p_deprecated_funcs->get_virtual_call_data_func) {
+			entry_classes |= 1u << 4;
+		}
 	}
 #endif
 	const StringName &registered_parent = *reinterpret_cast<const StringName *>(p_parent_class_name);
-	if (registered_parent == StringName("MainLoop") || ClassDB::is_parent_class(registered_parent, "MainLoop")) { entry_classes |= 1u << 1; }
+	if (registered_parent == StringName("MainLoop") || ClassDB::is_parent_class(registered_parent, "MainLoop")) {
+		entry_classes |= 1u << 1;
+	}
 	ERR_FAIL_COND_MSG(GDExtensionDeviceExit::Registry::get_singleton().check_entry_classes(self->library_exit_ref, entry_classes) != OK, "UNSUPPORTED_ENTRY_CLASS");
 	GDExtensionDeviceExit::RecordRef class_reference;
 	ERR_FAIL_COND(GDExtensionDeviceExit::Registry::get_singleton().retain_private(self->library_exit_ref, class_reference) != OK);
@@ -949,7 +965,9 @@ void GDExtension::_unregister_extension_class(GDExtensionClassLibraryPtr p_libra
 #ifdef TOOLS_ENABLED
 	if (self->scene_ready_aborting) {
 		ERR_FAIL_COND_MSG(ext->gdextension.children.size(), vformat("Attempt to unregister class '%s' while other extension classes inherit from it.", class_name));
-		if (ext->gdextension.parent) { ext->gdextension.parent->children.erase(&ext->gdextension); }
+		if (ext->gdextension.parent) {
+			ext->gdextension.parent->children.erase(&ext->gdextension);
+		}
 	}
 	if (ext->is_reloading || self->scene_ready_aborting) {
 		self->_clear_extension(ext);
@@ -1137,9 +1155,14 @@ Error GDExtension::preflight_exit(GDExtensionDeviceExit::CloseRoute p_route) {
 	// this build. Refuse them before sealing or touching the image.
 	auto &registry = GDExtensionDeviceExit::Registry::get_singleton();
 	if (registry.guard_qualified(library_exit_ref)) {
-		if (shutdown_callback && !shutdown_callback_dispatched) { return ERR_UNAVAILABLE; } // Control census not activated.
+		if (shutdown_callback && !shutdown_callback_dispatched) {
+			return ERR_UNAVAILABLE;
+		} // Control census not activated.
 		const Error result = registry.guarded_preflight(library_exit_ref, p_route);
-		if (result == OK || result == ERR_BUSY) { library_exit_route = p_route; library_exit_route_selected = true; }
+		if (result == OK || result == ERR_BUSY) {
+			library_exit_route = p_route;
+			library_exit_route_selected = true;
+		}
 		return result;
 	}
 	if (level_initialized >= 0 || shutdown_callback) {
@@ -1148,7 +1171,10 @@ Error GDExtension::preflight_exit(GDExtensionDeviceExit::CloseRoute p_route) {
 	// An active bootstrap/ordinary frame seals normal admission and returns
 	// Busy; the same attempt can be retried after that frame returns.
 	const Error result = registry.preflight_exit(library_exit_ref, p_route);
-	if (result == OK || result == ERR_BUSY) { library_exit_route = p_route; library_exit_route_selected = true; }
+	if (result == OK || result == ERR_BUSY) {
+		library_exit_route = p_route;
+		library_exit_route_selected = true;
+	}
 	return result;
 }
 
@@ -1254,7 +1280,9 @@ Error GDExtension::deinitialize_library(InitializationLevel p_level) {
 }
 
 Error GDExtension::abort_scene_ready_load(Error original_error) {
-	if (original_error <= OK || original_error >= ERR_MAX) { return ERR_INVALID_PARAMETER; }
+	if (original_error <= OK || original_error >= ERR_MAX) {
+		return ERR_INVALID_PARAMETER;
+	}
 	using namespace GDExtensionDeviceExit;
 	require_close_success(preflight_exit(CloseRoute::INIT_ABORT), CloseRoute::INIT_ABORT);
 #ifdef TOOLS_ENABLED
@@ -1277,7 +1305,9 @@ Error GDExtension::abort_scene_ready_load(Error original_error) {
 		for (KeyValue<StringName, GDExtensionMethodBind *> &method : entry.value.methods) {
 			method.value->valid = false;
 			method.value->is_reloading = false;
-			if (invalid_methods.find(method.value) == -1) { invalid_methods.push_back(method.value); }
+			if (invalid_methods.find(method.value) == -1) {
+				invalid_methods.push_back(method.value);
+			}
 		}
 		entry.value.methods.clear();
 		entry.value.instance_state.clear(); // Variant destruction stays before close and under original guards.
@@ -1448,17 +1478,23 @@ void GDExtension::_clear_extension(Extension *p_extension) {
 	// Clear all objects of any GDExtension data. It will become its native parent class
 	// until the reload can reset the object with the new GDExtension data.
 	Vector<ObjectID> instances;
-	for (const ObjectID &obj_id : p_extension->instances) { instances.push_back(obj_id); }
+	for (const ObjectID &obj_id : p_extension->instances) {
+		instances.push_back(obj_id);
+	}
 	for (const ObjectID &obj_id : instances) {
 		Object *obj = ObjectDB::get_instance(obj_id);
 		if (!obj) {
 			continue;
 		}
 
-		if (obj->_get_extension() == &p_extension->gdextension) { obj->clear_internal_extension(); }
+		if (obj->_get_extension() == &p_extension->gdextension) {
+			obj->clear_internal_extension();
+		}
 	}
 
-	if (p_extension->gdextension.gdtype) { p_extension->gdextension.destroy_gdtype(); }
+	if (p_extension->gdextension.gdtype) {
+		p_extension->gdextension.destroy_gdtype();
+	}
 }
 
 void GDExtension::track_instance_binding(Object *p_object) {

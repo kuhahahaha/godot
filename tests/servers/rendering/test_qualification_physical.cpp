@@ -4330,7 +4330,8 @@ public:
 		} };
 		driver.cell = &parent;
 		driver.checked = mode != 3;
-		driver.outcome = mode == 1 ? RenderingDeviceDriver::QualificationDescriptorReturnState::Unknown : mode == 2 ? RenderingDeviceDriver::QualificationDescriptorReturnState::Unavailable : RenderingDeviceDriver::QualificationDescriptorReturnState::Returned;
+		driver.outcome = mode == 1 ? RenderingDeviceDriver::QualificationDescriptorReturnState::Unknown : mode == 2 ? RenderingDeviceDriver::QualificationDescriptorReturnState::Unavailable
+																													: RenderingDeviceDriver::QualificationDescriptorReturnState::Returned;
 		GDExtensionQualificationResourceRetireV1 request{ { 1, 16, 0 }, { 71, child.serial }, child.rid, child.object_serial, 1 };
 		GDExtensionQualificationResourceRetireReportV1 report{};
 		if (qualified) {
@@ -4346,7 +4347,8 @@ public:
 		GDExtensionStorageRetireReportV1 parent_report{};
 		REQUIRE(registry->qualification_storage_retire(ref, &retire_parent, &parent_retire, &parent_report).native_error == OK);
 		const uint32_t retained_refs = record.private_refs;
-		const Error expected = mode == 1 ? FAILED : mode == 2 ? ERR_UNAVAILABLE : OK;
+		const Error expected = mode == 1 ? FAILED : mode == 2 ? ERR_UNAVAILABLE
+															  : OK;
 		CHECK(device._free_pending_resources(0) == expected);
 		CHECK(driver.checked_calls == (driver.checked ? 1 : 0));
 		CHECK(driver.sets_freed == (mode == 3 ? 1 : 0));

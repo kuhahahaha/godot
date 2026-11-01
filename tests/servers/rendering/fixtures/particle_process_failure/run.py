@@ -1,27 +1,37 @@
 #!/usr/bin/env python3
 """Exercise the production particle dispatch tail against a recording fake RD."""
+
 import argparse
-from pathlib import Path
 import subprocess
 import tempfile
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[5]
-SOURCE = 'servers/rendering/renderer_rd/storage_rd/particles_storage.cpp'
+SOURCE = "servers/rendering/renderer_rd/storage_rd/particles_storage.cpp"
 
 
 def harness(source):
-    process_start = source.find('bool ParticlesStorage::_particles_process')
+    process_start = source.find("bool ParticlesStorage::_particles_process")
     if process_start < 0:
-        process_start = source.index('void ParticlesStorage::_particles_process')
-    marker = '\tif (!RD::get_singleton()->compute_pipeline_is_valid'
+        process_start = source.index("void ParticlesStorage::_particles_process")
+    marker = "\tif (!RD::get_singleton()->compute_pipeline_is_valid"
     if marker not in source[process_start:]:
-        marker = '\tERR_FAIL_NULL(m);'
+        marker = "\tERR_FAIL_NULL(m);"
     start = source.index(marker, process_start)
-    end = source.index('\n}\n', start)
+    end = source.index("\n}\n", start)
     body = source[start:end]
-    body = body.replace('\treturn;', '\treturn false;').replace('return fail_process();', 'return false;').replace('_particles_commit_process_state(p_particles, sub_emitter, sub_emitter_was_emitting, true);', 'p_particles->force_sub_emit = false;')
-    body += '\n\treturn true;\n'
-    return r'''
+    body = (
+        body
+        .replace("\treturn;", "\treturn false;")
+        .replace("return fail_process();", "return false;")
+        .replace(
+            "_particles_commit_process_state(p_particles, sub_emitter, sub_emitter_was_emitting, true);",
+            "p_particles->force_sub_emit = false;",
+        )
+    )
+    body += "\n\treturn true;\n"
+    return (
+        r"""
 #include <cstdio>
 #include <vector>
 #define ERR_PRINT(message) ((void)0)
@@ -58,7 +68,9 @@ bool process(Material *m, Particles *p_particles) {
     Particles sub_emitter_storage;
     Particles *sub_emitter = nullptr;
     bool sub_emitter_was_emitting = false;
-''' + body + r'''
+"""
+        + body
+        + r"""
 }
 struct Case { const char *name; unsigned ubo; bool texture; int uniform; bool active; bool trails; bool success; int expected_begin; };
 int main() {
@@ -100,21 +112,24 @@ int main() {
     std::printf("particle process dispatch harness: %d/%zu cases passed\n", int(sizeof(cases)/sizeof(cases[0]))-failures, sizeof(cases)/sizeof(cases[0]));
     return failures ? 1 : 0;
 }
-'''
+"""
+    )
 
 
 def inactivity_harness(source):
-    update_start = source.index('void ParticlesStorage::update_particles()')
+    update_start = source.index("void ParticlesStorage::update_particles()")
     # Extract the retry snapshot and failure handler along with the complete
     # inactivity transition, so this verifies production state ownership.
-    start = source.index('\n', source.index('\t\tconst bool retry_candidate = ', update_start))
-    end = source.index('\n\t\t_particles_update_buffers(particles);', start)
+    start = source.index("\n", source.index("\t\tconst bool retry_candidate = ", update_start))
+    end = source.index("\n\t\t_particles_update_buffers(particles);", start)
     retry = source[start:end]
-    start = source.index('\t\tif (particles->inactive && !particles->emitting)', end)
-    end = source.index('\t\t// TODO: Should use display refresh rate', start)
+    start = source.index("\t\tif (particles->inactive && !particles->emitting)", end)
+    end = source.index("\t\t// TODO: Should use display refresh rate", start)
     inactivity = source[start:end]
-    prefix = harness(source).split('struct Case {', 1)[0]
-    return prefix + r'''
+    prefix = harness(source).split("struct Case {", 1)[0]
+    return (
+        prefix
+        + r"""
 struct Node {
     bool listed = false;
     bool in_list() { return listed; }
@@ -136,7 +151,10 @@ bool update(Material *material, RetryParticles *particles) {
     bool retrying = false;
     particles->update_list.listed = false;
     for (int once = 0; once < 1; once++) {
-''' + retry + inactivity + r'''
+"""
+        + retry
+        + inactivity
+        + r"""
         if (!process(material, particles)) {
             queue_retry();
             continue;
@@ -175,26 +193,31 @@ int main() {
     std::printf("particle inactivity retry harness: %d/2 cases passed\n", 2 - failures);
     return failures ? 1 : 0;
 }
-'''
+"""
+    )
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--source-ref')
+    parser.add_argument("--source-ref")
     args = parser.parse_args()
-    source = subprocess.check_output(['git', 'show', args.source_ref + ':' + SOURCE], cwd=ROOT, text=True) if args.source_ref else (ROOT / SOURCE).read_text()
-    with tempfile.TemporaryDirectory(prefix='particle-process-dispatch-') as temp:
-        cpp, binary = Path(temp) / 'test.cpp', Path(temp) / 'test'
+    source = (
+        subprocess.check_output(["git", "show", args.source_ref + ":" + SOURCE], cwd=ROOT, text=True)
+        if args.source_ref
+        else (ROOT / SOURCE).read_text()
+    )
+    with tempfile.TemporaryDirectory(prefix="particle-process-dispatch-") as temp:
+        cpp, binary = Path(temp) / "test.cpp", Path(temp) / "test"
         cpp.write_text(harness(source))
-        subprocess.run(['c++', '-std=c++17', '-Wall', '-Wextra', str(cpp), '-o', str(binary)], check=True)
+        subprocess.run(["c++", "-std=c++17", "-Wall", "-Wextra", str(cpp), "-o", str(binary)], check=True)
         result = subprocess.run([str(binary)]).returncode
         # Historical source revisions may predate deferred retries entirely.
-        if 'auto queue_retry = [&]()' in source:
+        if "auto queue_retry = [&]()" in source:
             cpp.write_text(inactivity_harness(source))
-            subprocess.run(['c++', '-std=c++17', '-Wall', '-Wextra', str(cpp), '-o', str(binary)], check=True)
+            subprocess.run(["c++", "-std=c++17", "-Wall", "-Wextra", str(cpp), "-o", str(binary)], check=True)
             result |= subprocess.run([str(binary)]).returncode
         return result
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     raise SystemExit(main())

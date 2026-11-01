@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Exercise production particle buffer rebuilds with injected allocation failures."""
+
 import argparse
-from pathlib import Path
 import subprocess
 import tempfile
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[5]
 SOURCE = "servers/rendering/renderer_rd/storage_rd/particles_storage.cpp"
@@ -13,12 +14,17 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--source-ref")
     args = parser.parse_args()
-    source = subprocess.check_output(["git", "show", args.source_ref + ":" + SOURCE], cwd=ROOT, text=True) if args.source_ref else (ROOT / SOURCE).read_text()
+    source = (
+        subprocess.check_output(["git", "show", args.source_ref + ":" + SOURCE], cwd=ROOT, text=True)
+        if args.source_ref
+        else (ROOT / SOURCE).read_text()
+    )
     start = source.index("void ParticlesStorage::_particles_update_buffers")
     start = source.index("\tbool uses_motion_vectors =", start)
     end = source.index("\n}\n", start)
     body = source[start:end]
-    harness = r'''
+    harness = (
+        r"""
 #include <cstdint>
 #include <cstdio>
 #include <set>
@@ -61,7 +67,9 @@ bool _particles_get_total_amount(Particles *p, uint32_t &amount) { amount = p->a
 bool _particles_get_buffer_size(uint64_t n, uint64_t size, uint64_t header, uint32_t &out) { uint64_t total = n * size + header; if (total > UINT32_MAX) return false; out = uint32_t(total); return true; }
 void _particles_free_data(Particles *p) { auto rd = RD::get_singleton(); rd->free_rid(p->particle_buffer); rd->free_rid(p->particle_instance_buffer); rd->free_rid(p->particles_copy_uniform_set); p->particle_buffer = {}; p->particle_instance_buffer = {}; p->particles_copy_uniform_set = {}; }
 void update(Particles *particles, unsigned userdata_count = 0) {
-''' + body + r'''
+"""
+        + body
+        + r"""
 }
 int main() {
     int checks = 0, failures = 0;
@@ -116,7 +124,8 @@ int main() {
     std::printf("particle buffer retry: %d/%d checks passed\n", checks - failures, checks);
     return failures ? 1 : 0;
 }
-'''
+"""
+    )
     with tempfile.TemporaryDirectory(prefix="particle-buffer-retry-") as temp:
         cpp, binary = Path(temp) / "test.cpp", Path(temp) / "test"
         cpp.write_text(harness)

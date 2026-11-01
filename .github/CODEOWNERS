@@ -80,7 +80,8 @@
 
 # Modules
 
-# Fork-maintained capture test module
+# Fork-maintained capture and particle test modules
+/modules/particles_runtime_tests/              @kuhahahaha
 /modules/skinned_mesh_capture_tests/           @kuhahahaha
 
 ## Audio (+ video)

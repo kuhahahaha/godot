@@ -1,21 +1,25 @@
 #!/usr/bin/env python3
 """Exercise the production update queue around a failed buffer preparation."""
-from pathlib import Path
+
 import subprocess
 import tempfile
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[5]
 
 
 def main():
     source = (ROOT / "servers/rendering/renderer_rd/storage_rd/particles_storage.cpp").read_text()
-    start = source.index("\tSelfList<Particles>::List retry_list;", source.index("void ParticlesStorage::update_particles()"))
+    start = source.index(
+        "\tSelfList<Particles>::List retry_list;", source.index("void ParticlesStorage::update_particles()")
+    )
     end = source.index("\n\t\tif (particles->restart_request)", start)
     prefix = source[start:end]
     start = source.index("\t// Retry failed systems on the next update", end)
     end = source.index("\n}\n", start)
     tail = source[start:end]
-    harness = r'''
+    harness = (
+        r"""
 #include <cstdio>
 #include <cstdlib>
 template<class T> struct SelfList {
@@ -64,10 +68,14 @@ struct Storage {
     }
     void update_particles() {
         unsigned frame = 0;
-''' + prefix + r'''
+"""
+        + prefix
+        + r"""
         particles->completed++;
     }
-''' + tail + r'''
+"""
+        + tail
+        + r"""
     }
 };
 int main() {
@@ -89,7 +97,8 @@ int main() {
     std::printf("particle deferred retry: %d/2 checks passed\n", int(first_pass) + int(second_pass));
     return first_pass && second_pass ? 0 : 1;
 }
-'''
+"""
+    )
     with tempfile.TemporaryDirectory(prefix="particle-deferred-retry-") as temp:
         cpp, binary = Path(temp) / "test.cpp", Path(temp) / "test"
         cpp.write_text(harness)

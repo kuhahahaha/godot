@@ -548,28 +548,31 @@ public:
 	// expose these facts fails closed instead of laundering completion through
 	// the legacy blocking wait/Error API.
 	virtual FencePollResult fence_poll(FenceID p_fence, uint64_t p_expected_submission_serial);
- // Exact original native-call observations, independent of a later tail fence.
- // Backends without this original mapping refuse qualification before append.
- // Transfer original hidden-copy observation ownership into the current Frame.
- // No fallback may invoke end_segment's legacy wait on a qualification pass.
- virtual Error qualification_prepare_segment(QueueCallReport &r_report) { r_report={};return ERR_UNAVAILABLE; }
- virtual uint32_t qualification_native_call_bound(uint32_t p_slots) const { return 0; }
- // Original RD profile: main slots may wait and signal; transfer-worker
- // submissions never wait. Backends without a tighter proof keep their old bound.
- virtual uint32_t qualification_native_call_bound_for_profile(uint32_t p_main_slots, uint32_t p_worker_slots, uint32_t p_frames) const {
-	 if (!p_frames || p_frames > p_main_slots || p_worker_slots > UINT32_MAX - p_main_slots) {
-		 return 0;
-	 }
-	 return qualification_native_call_bound(p_main_slots + p_worker_slots);
- }
+	// Exact original native-call observations, independent of a later tail fence.
+	// Backends without this original mapping refuse qualification before append.
+	// Transfer original hidden-copy observation ownership into the current Frame.
+	// No fallback may invoke end_segment's legacy wait on a qualification pass.
+	virtual Error qualification_prepare_segment(QueueCallReport &r_report) {
+		r_report = {};
+		return ERR_UNAVAILABLE;
+	}
+	virtual uint32_t qualification_native_call_bound(uint32_t p_slots) const { return 0; }
+	// Original RD profile: main slots may wait and signal; transfer-worker
+	// submissions never wait. Backends without a tighter proof keep their old bound.
+	virtual uint32_t qualification_native_call_bound_for_profile(uint32_t p_main_slots, uint32_t p_worker_slots, uint32_t p_frames) const {
+		if (!p_frames || p_frames > p_main_slots || p_worker_slots > UINT32_MAX - p_main_slots) {
+			return 0;
+		}
+		return qualification_native_call_bound(p_main_slots + p_worker_slots);
+	}
 
- virtual bool native_call_observation_supported() const { return false; }
- virtual FencePollResult native_call_poll(uint64_t p_native_serial) { return {}; }
- virtual FencePollResult native_call_wait(uint64_t p_native_serial) { return {}; }
- virtual Error native_call_recycle(uint64_t p_native_serial) { return ERR_UNAVAILABLE; }
- virtual Error native_call_recycle_wait(uint64_t p_native_serial) { return native_call_recycle(p_native_serial); }
- virtual Error native_call_retain(uint64_t p_native_serial) { return ERR_UNAVAILABLE; }
- virtual Error native_call_release(uint64_t p_native_serial) { return ERR_UNAVAILABLE; }
+	virtual bool native_call_observation_supported() const { return false; }
+	virtual FencePollResult native_call_poll(uint64_t p_native_serial) { return {}; }
+	virtual FencePollResult native_call_wait(uint64_t p_native_serial) { return {}; }
+	virtual Error native_call_recycle(uint64_t p_native_serial) { return ERR_UNAVAILABLE; }
+	virtual Error native_call_recycle_wait(uint64_t p_native_serial) { return native_call_recycle(p_native_serial); }
+	virtual Error native_call_retain(uint64_t p_native_serial) { return ERR_UNAVAILABLE; }
+	virtual Error native_call_release(uint64_t p_native_serial) { return ERR_UNAVAILABLE; }
 	// Blocking observation only; recycling remains a separate, checked step.
 	virtual FencePollResult fence_wait_observed(FenceID p_fence, uint64_t p_expected_submission_serial);
 	virtual Error fence_recycle(FenceID p_fence, uint64_t p_completed_serial);
