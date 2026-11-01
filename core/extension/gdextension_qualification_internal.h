@@ -1,3 +1,33 @@
+/**************************************************************************/
+/*  gdextension_qualification_internal.h                                  */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
 #pragma once
 
 #include "core/extension/gdextension_library_exit_guard.h"
@@ -146,20 +176,20 @@ struct QualificationTicket {
 
 // Common storage of the existing bridge children. No new registry or authority.
 struct QualificationResource {
- uint64_t serial=0,rid=0,object_serial=0,retire_serial=0,dependency_serial=0;
- uint32_t kind=0,accepted_rt_refs=0;
- GDExtensionQualificationSourceV1 source={};
- GDExtensionQualificationResourceBackingV1 backing={};
- GDExtensionQualificationResourceRetireV1 retirement={};
- GDExtensionQualificationResourceRetireReportV1 report={};
- QualificationPhysicalReturn physical;
- Error maintenance_error=OK;
- bool creating=true,retiring=false,queued=false,acknowledged=false,cleanup_serial_reserved=false,queue_ref_credit=false;
- uint64_t upload_ticket=0,last_upload_revision=0;
- GDExtensionQualificationTextureUploadV1 upload_origin={};
- RenderingDevice::QualificationUploadProgress upload;
- GDExtensionQualificationUploadReportV1 upload_report={};
- bool upload_attempted=false,upload_failed=false;
+	uint64_t serial = 0, rid = 0, object_serial = 0, retire_serial = 0, dependency_serial = 0;
+	uint32_t kind = 0, accepted_rt_refs = 0;
+	GDExtensionQualificationSourceV1 source = {};
+	GDExtensionQualificationResourceBackingV1 backing = {};
+	GDExtensionQualificationResourceRetireV1 retirement = {};
+	GDExtensionQualificationResourceRetireReportV1 report = {};
+	QualificationPhysicalReturn physical;
+	Error maintenance_error = OK;
+	bool creating = true, retiring = false, queued = false, acknowledged = false, cleanup_serial_reserved = false, queue_ref_credit = false;
+	uint64_t upload_ticket = 0, last_upload_revision = 0;
+	GDExtensionQualificationTextureUploadV1 upload_origin = {};
+	RenderingDevice::QualificationUploadProgress upload;
+	GDExtensionQualificationUploadReportV1 upload_report = {};
+	bool upload_attempted = false, upload_failed = false;
 };
 
 // Fixed transport storage owned by this same bridge. It carries API calls,
@@ -212,9 +242,16 @@ struct Registry::QualificationBridge {
  };
  // Original bridge child for a method texture. The producer and typed
  // retire transaction must bind this cell before it can be admitted by wire.
- struct Texture:QualificationResource {GDExtensionQualificationTextureCreateV1 origin={};};
- struct Sampler:QualificationResource {GDExtensionQualificationSamplerCreateV1 origin={};};
- struct UniformSet:QualificationResource {GDExtensionQualificationSetCreateV1 origin={};LocalVector<GDExtensionQualificationUniformBindingV1> bindings;};
+ struct Texture : QualificationResource {
+	 GDExtensionQualificationTextureCreateV1 origin = {};
+ };
+ struct Sampler : QualificationResource {
+	 GDExtensionQualificationSamplerCreateV1 origin = {};
+ };
+ struct UniformSet : QualificationResource {
+	 GDExtensionQualificationSetCreateV1 origin = {};
+	 LocalVector<GDExtensionQualificationUniformBindingV1> bindings;
+ };
  struct NativeUnit {
   uint64_t serial = 0, retire_serial = 0, dependency_serial = 0;
   GDExtensionNativeUnitCreateRequestV1 origin = {};

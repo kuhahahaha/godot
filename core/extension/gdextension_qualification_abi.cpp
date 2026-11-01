@@ -1,5 +1,36 @@
+/**************************************************************************/
+/*  gdextension_qualification_abi.cpp                                     */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
 // Adopted PHS1/QB1/MQS1/U1/NUR1 C ABI shape only. No proc availability or native proof is asserted.
-#include "gdextension_interface.gen.h"
+#include "core/extension/gdextension_interface.gen.h"
+
 #include <cstddef>
 #include <type_traits>
 
@@ -525,104 +556,104 @@ static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationRecor
 static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationObserveV2, GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationTicketRefV1, const GDExtensionQualificationBudgetV1 *, GDExtensionQualificationReportV2 *)>);
 
 // Additive original bridge typed resources. Every field is checked against the generated C ABI.
-static_assert(sizeof(GDExtensionQualificationSourceV1)==48 && alignof(GDExtensionQualificationSourceV1)==8);
+static_assert(sizeof(GDExtensionQualificationSourceV1) == 48 && alignof(GDExtensionQualificationSourceV1) == 8);
 static_assert(std::is_trivially_copyable_v<GDExtensionQualificationSourceV1> && std::is_standard_layout_v<GDExtensionQualificationSourceV1>);
-static_assert(offsetof(GDExtensionQualificationSourceV1,session_serial)==0);
-static_assert(offsetof(GDExtensionQualificationSourceV1,generation)==8);
-static_assert(offsetof(GDExtensionQualificationSourceV1,digest)==16);
-static_assert(sizeof(GDExtensionQualificationResourceRefV1)==16 && alignof(GDExtensionQualificationResourceRefV1)==8);
+static_assert(offsetof(GDExtensionQualificationSourceV1, session_serial) == 0);
+static_assert(offsetof(GDExtensionQualificationSourceV1, generation) == 8);
+static_assert(offsetof(GDExtensionQualificationSourceV1, digest) == 16);
+static_assert(sizeof(GDExtensionQualificationResourceRefV1) == 16 && alignof(GDExtensionQualificationResourceRefV1) == 8);
 static_assert(std::is_trivially_copyable_v<GDExtensionQualificationResourceRefV1> && std::is_standard_layout_v<GDExtensionQualificationResourceRefV1>);
-static_assert(offsetof(GDExtensionQualificationResourceRefV1,registry_instance)==0);
-static_assert(offsetof(GDExtensionQualificationResourceRefV1,handle_serial)==8);
-static_assert(sizeof(GDExtensionQualificationResourceBackingV1)==112 && alignof(GDExtensionQualificationResourceBackingV1)==8);
+static_assert(offsetof(GDExtensionQualificationResourceRefV1, registry_instance) == 0);
+static_assert(offsetof(GDExtensionQualificationResourceRefV1, handle_serial) == 8);
+static_assert(sizeof(GDExtensionQualificationResourceBackingV1) == 112 && alignof(GDExtensionQualificationResourceBackingV1) == 8);
 static_assert(std::is_trivially_copyable_v<GDExtensionQualificationResourceBackingV1> && std::is_standard_layout_v<GDExtensionQualificationResourceBackingV1>);
-static_assert(offsetof(GDExtensionQualificationResourceBackingV1,abi)==0);
-static_assert(offsetof(GDExtensionQualificationResourceBackingV1,resource)==16);
-static_assert(offsetof(GDExtensionQualificationResourceBackingV1,source)==32);
-static_assert(offsetof(GDExtensionQualificationResourceBackingV1,rid)==80);
-static_assert(offsetof(GDExtensionQualificationResourceBackingV1,object_serial)==88);
-static_assert(offsetof(GDExtensionQualificationResourceBackingV1,byte_size)==96);
-static_assert(offsetof(GDExtensionQualificationResourceBackingV1,kind)==104);
-static_assert(offsetof(GDExtensionQualificationResourceBackingV1,state)==108);
-static_assert(sizeof(GDExtensionQualificationTextureCreateV1)==104 && alignof(GDExtensionQualificationTextureCreateV1)==8);
+static_assert(offsetof(GDExtensionQualificationResourceBackingV1, abi) == 0);
+static_assert(offsetof(GDExtensionQualificationResourceBackingV1, resource) == 16);
+static_assert(offsetof(GDExtensionQualificationResourceBackingV1, source) == 32);
+static_assert(offsetof(GDExtensionQualificationResourceBackingV1, rid) == 80);
+static_assert(offsetof(GDExtensionQualificationResourceBackingV1, object_serial) == 88);
+static_assert(offsetof(GDExtensionQualificationResourceBackingV1, byte_size) == 96);
+static_assert(offsetof(GDExtensionQualificationResourceBackingV1, kind) == 104);
+static_assert(offsetof(GDExtensionQualificationResourceBackingV1, state) == 108);
+static_assert(sizeof(GDExtensionQualificationTextureCreateV1) == 104 && alignof(GDExtensionQualificationTextureCreateV1) == 8);
 static_assert(std::is_trivially_copyable_v<GDExtensionQualificationTextureCreateV1> && std::is_standard_layout_v<GDExtensionQualificationTextureCreateV1>);
-static_assert(offsetof(GDExtensionQualificationTextureCreateV1,abi)==0);
-static_assert(offsetof(GDExtensionQualificationTextureCreateV1,source)==16);
-static_assert(offsetof(GDExtensionQualificationTextureCreateV1,library_generation)==64);
-static_assert(offsetof(GDExtensionQualificationTextureCreateV1,create_attempt)==72);
-static_assert(offsetof(GDExtensionQualificationTextureCreateV1,width)==80);
-static_assert(offsetof(GDExtensionQualificationTextureCreateV1,height)==84);
-static_assert(offsetof(GDExtensionQualificationTextureCreateV1,depth)==88);
-static_assert(offsetof(GDExtensionQualificationTextureCreateV1,texture_type)==92);
-static_assert(offsetof(GDExtensionQualificationTextureCreateV1,format)==96);
-static_assert(offsetof(GDExtensionQualificationTextureCreateV1,usage)==100);
-static_assert(sizeof(GDExtensionQualificationSamplerCreateV1)==104 && alignof(GDExtensionQualificationSamplerCreateV1)==8);
+static_assert(offsetof(GDExtensionQualificationTextureCreateV1, abi) == 0);
+static_assert(offsetof(GDExtensionQualificationTextureCreateV1, source) == 16);
+static_assert(offsetof(GDExtensionQualificationTextureCreateV1, library_generation) == 64);
+static_assert(offsetof(GDExtensionQualificationTextureCreateV1, create_attempt) == 72);
+static_assert(offsetof(GDExtensionQualificationTextureCreateV1, width) == 80);
+static_assert(offsetof(GDExtensionQualificationTextureCreateV1, height) == 84);
+static_assert(offsetof(GDExtensionQualificationTextureCreateV1, depth) == 88);
+static_assert(offsetof(GDExtensionQualificationTextureCreateV1, texture_type) == 92);
+static_assert(offsetof(GDExtensionQualificationTextureCreateV1, format) == 96);
+static_assert(offsetof(GDExtensionQualificationTextureCreateV1, usage) == 100);
+static_assert(sizeof(GDExtensionQualificationSamplerCreateV1) == 104 && alignof(GDExtensionQualificationSamplerCreateV1) == 8);
 static_assert(std::is_trivially_copyable_v<GDExtensionQualificationSamplerCreateV1> && std::is_standard_layout_v<GDExtensionQualificationSamplerCreateV1>);
-static_assert(offsetof(GDExtensionQualificationSamplerCreateV1,abi)==0);
-static_assert(offsetof(GDExtensionQualificationSamplerCreateV1,source)==16);
-static_assert(offsetof(GDExtensionQualificationSamplerCreateV1,library_generation)==64);
-static_assert(offsetof(GDExtensionQualificationSamplerCreateV1,create_attempt)==72);
-static_assert(offsetof(GDExtensionQualificationSamplerCreateV1,mag_filter)==80);
-static_assert(offsetof(GDExtensionQualificationSamplerCreateV1,min_filter)==84);
-static_assert(offsetof(GDExtensionQualificationSamplerCreateV1,mip_filter)==88);
-static_assert(offsetof(GDExtensionQualificationSamplerCreateV1,repeat_u)==92);
-static_assert(offsetof(GDExtensionQualificationSamplerCreateV1,repeat_v)==96);
-static_assert(offsetof(GDExtensionQualificationSamplerCreateV1,repeat_w)==100);
-static_assert(sizeof(GDExtensionQualificationSetCreateV1)==136 && alignof(GDExtensionQualificationSetCreateV1)==8);
+static_assert(offsetof(GDExtensionQualificationSamplerCreateV1, abi) == 0);
+static_assert(offsetof(GDExtensionQualificationSamplerCreateV1, source) == 16);
+static_assert(offsetof(GDExtensionQualificationSamplerCreateV1, library_generation) == 64);
+static_assert(offsetof(GDExtensionQualificationSamplerCreateV1, create_attempt) == 72);
+static_assert(offsetof(GDExtensionQualificationSamplerCreateV1, mag_filter) == 80);
+static_assert(offsetof(GDExtensionQualificationSamplerCreateV1, min_filter) == 84);
+static_assert(offsetof(GDExtensionQualificationSamplerCreateV1, mip_filter) == 88);
+static_assert(offsetof(GDExtensionQualificationSamplerCreateV1, repeat_u) == 92);
+static_assert(offsetof(GDExtensionQualificationSamplerCreateV1, repeat_v) == 96);
+static_assert(offsetof(GDExtensionQualificationSamplerCreateV1, repeat_w) == 100);
+static_assert(sizeof(GDExtensionQualificationSetCreateV1) == 136 && alignof(GDExtensionQualificationSetCreateV1) == 8);
 static_assert(std::is_trivially_copyable_v<GDExtensionQualificationSetCreateV1> && std::is_standard_layout_v<GDExtensionQualificationSetCreateV1>);
-static_assert(offsetof(GDExtensionQualificationSetCreateV1,abi)==0);
-static_assert(offsetof(GDExtensionQualificationSetCreateV1,source)==16);
-static_assert(offsetof(GDExtensionQualificationSetCreateV1,library_generation)==64);
-static_assert(offsetof(GDExtensionQualificationSetCreateV1,create_attempt)==72);
-static_assert(offsetof(GDExtensionQualificationSetCreateV1,ticket)==80);
-static_assert(offsetof(GDExtensionQualificationSetCreateV1,unit)==96);
-static_assert(offsetof(GDExtensionQualificationSetCreateV1,shader_rid)==112);
-static_assert(offsetof(GDExtensionQualificationSetCreateV1,shader_serial)==120);
-static_assert(offsetof(GDExtensionQualificationSetCreateV1,shader_set)==128);
-static_assert(offsetof(GDExtensionQualificationSetCreateV1,binding_count)==132);
-static_assert(sizeof(GDExtensionQualificationUniformBindingV1)==72 && alignof(GDExtensionQualificationUniformBindingV1)==8);
+static_assert(offsetof(GDExtensionQualificationSetCreateV1, abi) == 0);
+static_assert(offsetof(GDExtensionQualificationSetCreateV1, source) == 16);
+static_assert(offsetof(GDExtensionQualificationSetCreateV1, library_generation) == 64);
+static_assert(offsetof(GDExtensionQualificationSetCreateV1, create_attempt) == 72);
+static_assert(offsetof(GDExtensionQualificationSetCreateV1, ticket) == 80);
+static_assert(offsetof(GDExtensionQualificationSetCreateV1, unit) == 96);
+static_assert(offsetof(GDExtensionQualificationSetCreateV1, shader_rid) == 112);
+static_assert(offsetof(GDExtensionQualificationSetCreateV1, shader_serial) == 120);
+static_assert(offsetof(GDExtensionQualificationSetCreateV1, shader_set) == 128);
+static_assert(offsetof(GDExtensionQualificationSetCreateV1, binding_count) == 132);
+static_assert(sizeof(GDExtensionQualificationUniformBindingV1) == 72 && alignof(GDExtensionQualificationUniformBindingV1) == 8);
 static_assert(std::is_trivially_copyable_v<GDExtensionQualificationUniformBindingV1> && std::is_standard_layout_v<GDExtensionQualificationUniformBindingV1>);
-static_assert(offsetof(GDExtensionQualificationUniformBindingV1,binding)==0);
-static_assert(offsetof(GDExtensionQualificationUniformBindingV1,type)==4);
-static_assert(offsetof(GDExtensionQualificationUniformBindingV1,resource)==8);
-static_assert(offsetof(GDExtensionQualificationUniformBindingV1,rid)==24);
-static_assert(offsetof(GDExtensionQualificationUniformBindingV1,object_serial)==32);
-static_assert(offsetof(GDExtensionQualificationUniformBindingV1,secondary)==40);
-static_assert(offsetof(GDExtensionQualificationUniformBindingV1,secondary_rid)==56);
-static_assert(offsetof(GDExtensionQualificationUniformBindingV1,secondary_serial)==64);
-static_assert(sizeof(GDExtensionQualificationTextureUploadV1)==120 && alignof(GDExtensionQualificationTextureUploadV1)==8);
+static_assert(offsetof(GDExtensionQualificationUniformBindingV1, binding) == 0);
+static_assert(offsetof(GDExtensionQualificationUniformBindingV1, type) == 4);
+static_assert(offsetof(GDExtensionQualificationUniformBindingV1, resource) == 8);
+static_assert(offsetof(GDExtensionQualificationUniformBindingV1, rid) == 24);
+static_assert(offsetof(GDExtensionQualificationUniformBindingV1, object_serial) == 32);
+static_assert(offsetof(GDExtensionQualificationUniformBindingV1, secondary) == 40);
+static_assert(offsetof(GDExtensionQualificationUniformBindingV1, secondary_rid) == 56);
+static_assert(offsetof(GDExtensionQualificationUniformBindingV1, secondary_serial) == 64);
+static_assert(sizeof(GDExtensionQualificationTextureUploadV1) == 120 && alignof(GDExtensionQualificationTextureUploadV1) == 8);
 static_assert(std::is_trivially_copyable_v<GDExtensionQualificationTextureUploadV1> && std::is_standard_layout_v<GDExtensionQualificationTextureUploadV1>);
-static_assert(offsetof(GDExtensionQualificationTextureUploadV1,abi)==0);
-static_assert(offsetof(GDExtensionQualificationTextureUploadV1,ticket)==16);
-static_assert(offsetof(GDExtensionQualificationTextureUploadV1,texture)==32);
-static_assert(offsetof(GDExtensionQualificationTextureUploadV1,record_generation)==48);
-static_assert(offsetof(GDExtensionQualificationTextureUploadV1,parent_serial)==56);
-static_assert(offsetof(GDExtensionQualificationTextureUploadV1,object_serial)==64);
-static_assert(offsetof(GDExtensionQualificationTextureUploadV1,expected_revision)==72);
-static_assert(offsetof(GDExtensionQualificationTextureUploadV1,byte_size)==80);
-static_assert(offsetof(GDExtensionQualificationTextureUploadV1,payload_digest)==88);
-static_assert(sizeof(GDExtensionQualificationResourceRetireV1)==56 && alignof(GDExtensionQualificationResourceRetireV1)==8);
+static_assert(offsetof(GDExtensionQualificationTextureUploadV1, abi) == 0);
+static_assert(offsetof(GDExtensionQualificationTextureUploadV1, ticket) == 16);
+static_assert(offsetof(GDExtensionQualificationTextureUploadV1, texture) == 32);
+static_assert(offsetof(GDExtensionQualificationTextureUploadV1, record_generation) == 48);
+static_assert(offsetof(GDExtensionQualificationTextureUploadV1, parent_serial) == 56);
+static_assert(offsetof(GDExtensionQualificationTextureUploadV1, object_serial) == 64);
+static_assert(offsetof(GDExtensionQualificationTextureUploadV1, expected_revision) == 72);
+static_assert(offsetof(GDExtensionQualificationTextureUploadV1, byte_size) == 80);
+static_assert(offsetof(GDExtensionQualificationTextureUploadV1, payload_digest) == 88);
+static_assert(sizeof(GDExtensionQualificationResourceRetireV1) == 56 && alignof(GDExtensionQualificationResourceRetireV1) == 8);
 static_assert(std::is_trivially_copyable_v<GDExtensionQualificationResourceRetireV1> && std::is_standard_layout_v<GDExtensionQualificationResourceRetireV1>);
-static_assert(offsetof(GDExtensionQualificationResourceRetireV1,abi)==0);
-static_assert(offsetof(GDExtensionQualificationResourceRetireV1,resource)==16);
-static_assert(offsetof(GDExtensionQualificationResourceRetireV1,rid)==32);
-static_assert(offsetof(GDExtensionQualificationResourceRetireV1,object_serial)==40);
-static_assert(offsetof(GDExtensionQualificationResourceRetireV1,retire_operation)==48);
-static_assert(sizeof(GDExtensionQualificationResourceRetireReportV1)==120 && alignof(GDExtensionQualificationResourceRetireReportV1)==8);
+static_assert(offsetof(GDExtensionQualificationResourceRetireV1, abi) == 0);
+static_assert(offsetof(GDExtensionQualificationResourceRetireV1, resource) == 16);
+static_assert(offsetof(GDExtensionQualificationResourceRetireV1, rid) == 32);
+static_assert(offsetof(GDExtensionQualificationResourceRetireV1, object_serial) == 40);
+static_assert(offsetof(GDExtensionQualificationResourceRetireV1, retire_operation) == 48);
+static_assert(sizeof(GDExtensionQualificationResourceRetireReportV1) == 120 && alignof(GDExtensionQualificationResourceRetireReportV1) == 8);
 static_assert(std::is_trivially_copyable_v<GDExtensionQualificationResourceRetireReportV1> && std::is_standard_layout_v<GDExtensionQualificationResourceRetireReportV1>);
-static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1,abi)==0);
-static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1,resource)==16);
-static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1,rid)==32);
-static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1,object_serial)==40);
-static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1,retire_operation)==48);
-static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1,revision)==56);
-static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1,frame_epoch)==64);
-static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1,event_seq)==72);
-static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1,dependency_serial)==80);
-static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1,state)==88);
-static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1,return_status)==92);
-static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1,frame_slot)==96);
-static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1,reason)==100);
-static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1,native_error)==104);
-static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1,kind)==108);
-static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1,native_code)==112);
+static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1, abi) == 0);
+static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1, resource) == 16);
+static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1, rid) == 32);
+static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1, object_serial) == 40);
+static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1, retire_operation) == 48);
+static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1, revision) == 56);
+static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1, frame_epoch) == 64);
+static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1, event_seq) == 72);
+static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1, dependency_serial) == 80);
+static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1, state) == 88);
+static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1, return_status) == 92);
+static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1, frame_slot) == 96);
+static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1, reason) == 100);
+static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1, native_error) == 104);
+static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1, kind) == 108);
+static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1, native_code) == 112);

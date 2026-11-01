@@ -1,11 +1,41 @@
-#include "gdextension_qualification_internal.h"
-#include "gdextension.h"
+/**************************************************************************/
+/*  gdextension_qualification.cpp                                         */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
 #include "core/crypto/crypto_core.h"
+#include "core/extension/gdextension.h"
+#include "core/extension/gdextension_qualification_internal.h"
+#include "core/object/object.h"
 #include "core/os/os.h"
+#include "core/os/thread.h"
 #include "servers/rendering/rendering_server_default.h"
 #include "servers/rendering/rendering_shader_container.h"
-#include "core/os/thread.h"
-#include "core/object/object.h"
 
 namespace GDExtensionDeviceExit {
 namespace {
@@ -81,7 +111,11 @@ void Registry::qualification_trim_cleanup_ref_credits_locked(QualificationBridge
  for(auto *child:bridge->storage)if(child && !child->acknowledged)return;
  for(auto *child:bridge->textures)if(child && !child->acknowledged)return;
  for(auto *child:bridge->samplers)if(child && !child->acknowledged)return;
- for(auto *child:bridge->sets)if(child && !child->acknowledged)return;
+ for (auto *child : bridge->sets) {
+	 if (child && !child->acknowledged) {
+		 return;
+	 }
+ }
  for(auto *child:bridge->units)if(child && !child->acknowledged)return;
  auto &refs=records[bridge->library].private_refs;CRASH_COND(refs<2);refs-=2;bridge->cleanup_refs_reserved=false;
 }
@@ -99,7 +133,12 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_close(GDExtensionQualif
  for(auto *child:bridge->storage)if(child){CRASH_COND(!child->acknowledged);memdelete(child);}
  for(auto *child:bridge->textures)if(child){CRASH_COND(!child->acknowledged);memdelete(child);}
  for(auto *child:bridge->samplers)if(child){CRASH_COND(!child->acknowledged);memdelete(child);}
- for(auto *child:bridge->sets)if(child){CRASH_COND(!child->acknowledged);memdelete(child);}
+ for (auto *child : bridge->sets) {
+	 if (child) {
+		 CRASH_COND(!child->acknowledged);
+		 memdelete(child);
+	 }
+ }
  for(auto *child:bridge->units)if(child){CRASH_COND(!child->acknowledged);memdelete(child);}
  for(auto *ticket:bridge->tickets)if(ticket){CRASH_COND(!ticket->acknowledged || ticket->frame_refs);memdelete(ticket);}
  if(bridge->rt){CRASH_COND(bridge->rt->occupied || bridge->rt->queued);memdelete(bridge->rt);}
@@ -254,7 +293,17 @@ void Registry::qualification_retire_step(QualificationBridge *bridge,RenderingDe
   rd->qualification_retiring=false;
   return cell.enqueued ? 0 : 5;
  };
- if(kind==4){QualificationResource *child=nullptr;{MutexLock lock(mutex);if(qualification_resource_locked(bridge,{instance,serial},0,child)!=OK)return;}qualification_resource_retire_step(bridge,rd,child);return;}
+ if (kind == 4) {
+	 QualificationResource *child = nullptr;
+	 {
+		 MutexLock lock(mutex);
+		 if (qualification_resource_locked(bridge, { instance, serial }, 0, child) != OK) {
+			 return;
+		 }
+	 }
+	 qualification_resource_retire_step(bridge, rd, child);
+	 return;
+ }
  if(kind==1) {
   QualificationBridge::Storage *child=nullptr;for(auto *entry:bridge->storage)if(entry && entry->serial==serial){child=entry;break;}
   if(!child || !child->retiring)return;
@@ -311,7 +360,16 @@ Error Registry::qualification_schedule(GDExtensionQualificationBridgeRefV1 ref,u
   if(kind==1)for(auto *child:bridge->storage)if(child && child->serial==serial && child->retiring){if(child->report.state==1)return OK;queued=&child->queued;queue_credit=&child->queue_ref_credit;break;}
   if(kind==2)for(auto *child:bridge->units)if(child && child->serial==serial && child->retiring){if(child->report.state==1)return OK;queued=&child->queued;queue_credit=&child->queue_ref_credit;break;}
   if(kind==3)for(auto *ticket:bridge->tickets)if(ticket && !ticket->acknowledged && ticket->serial==serial){if(ticket->physically_retired.load() && !ticket->continuation_pending)return OK;queued=&ticket->queued;queue_credit=&ticket->queue_ref_credit;break;}
-  if(kind==4){QualificationResource *child=nullptr;if(qualification_resource_locked(bridge,{instance,serial},0,child)==OK && child->retiring){if(child->report.state==1)return OK;queued=&child->queued;queue_credit=&child->queue_ref_credit;}}
+  if (kind == 4) {
+	  QualificationResource *child = nullptr;
+	  if (qualification_resource_locked(bridge, { instance, serial }, 0, child) == OK && child->retiring) {
+		  if (child->report.state == 1) {
+			  return OK;
+		  }
+		  queued = &child->queued;
+		  queue_credit = &child->queue_ref_credit;
+	  }
+  }
   if(!queued)return ERR_DOES_NOT_EXIST;
   if(*queued)return OK;
   const bool use_queue_credit=queue_credit && bridge->cleanup_refs_reserved;
@@ -335,7 +393,13 @@ void Registry::qualification_service(uint64_t bridge_serial,uint64_t serial,uint
   if(kind==1)for(auto *child:bridge->storage)if(child && child->serial==serial){queued=&child->queued;queue_credit=&child->queue_ref_credit;break;}
   if(kind==2)for(auto *child:bridge->units)if(child && child->serial==serial){queued=&child->queued;queue_credit=&child->queue_ref_credit;break;}
   if(kind==3)for(auto *ticket:bridge->tickets)if(ticket && ticket->serial==serial){queued=&ticket->queued;queue_credit=&ticket->queue_ref_credit;break;}
-  if(kind==4){QualificationResource *child=nullptr;if(qualification_resource_locked(bridge,{instance,serial},0,child)==OK){queued=&child->queued;queue_credit=&child->queue_ref_credit;}}
+  if (kind == 4) {
+	  QualificationResource *child = nullptr;
+	  if (qualification_resource_locked(bridge, { instance, serial }, 0, child) == OK) {
+		  queued = &child->queued;
+		  queue_credit = &child->queue_ref_credit;
+	  }
+  }
   CRASH_COND(!queued || !*queued);
   admitted=qualification_bridge_locked({instance,bridge_serial},true,false,bridge,rd);
  }
@@ -348,8 +412,13 @@ void Registry::qualification_service(uint64_t bridge_serial,uint64_t serial,uint
    bool returned=false;
    { MutexLock lock(mutex);
     if(kind==3)for(auto *ticket:bridge->tickets)if(ticket && ticket->serial==serial)returned=ticket->physically_retired.load() && !ticket->continuation_pending;
-    if(kind==4){QualificationResource *child=nullptr;if(qualification_resource_locked(bridge,{instance,serial},0,child)==OK)returned=child->report.state==1;}
-    if(kind==1)for(auto *child:bridge->storage)if(child && child->serial==serial)returned=child->report.state==1;
+	if (kind == 4) {
+		QualificationResource *child = nullptr;
+		if (qualification_resource_locked(bridge, { instance, serial }, 0, child) == OK) {
+			returned = child->report.state == 1;
+		}
+	}
+	if(kind==1)for(auto *child:bridge->storage)if(child && child->serial==serial)returned=child->report.state==1;
     if(kind==2)for(auto *child:bridge->units)if(child && child->serial==serial)returned=child->report.state==1;
    }
    if(returned)break;
@@ -361,8 +430,19 @@ void Registry::qualification_service(uint64_t bridge_serial,uint64_t serial,uint
     if(kind==1)for(auto *child:bridge->storage)if(child && child->serial==serial && child->report.state!=1 && child->maintenance_error==OK) {
      child->maintenance_error=error;child->report.state=2;child->report.return_status=0;child->report.reason=5;child->report.native_error=error;
     }
-    if(kind==4){QualificationResource *child=nullptr;if(qualification_resource_locked(bridge,{instance,serial},0,child)==OK && child->report.state!=1 && child->maintenance_error==OK){child->maintenance_error=error;child->report.state=2;child->report.native_error=error;child->report.reason=5;if(child->report.revision!=UINT64_MAX)++child->report.revision;}}
-    if(kind==2)for(auto *child:bridge->units)if(child && child->serial==serial && child->report.state!=1 && child->maintenance_error==OK) {
+	if (kind == 4) {
+		QualificationResource *child = nullptr;
+		if (qualification_resource_locked(bridge, { instance, serial }, 0, child) == OK && child->report.state != 1 && child->maintenance_error == OK) {
+			child->maintenance_error = error;
+			child->report.state = 2;
+			child->report.native_error = error;
+			child->report.reason = 5;
+			if (child->report.revision != UINT64_MAX) {
+				++child->report.revision;
+			}
+		}
+	}
+	if(kind==2)for(auto *child:bridge->units)if(child && child->serial==serial && child->report.state!=1 && child->maintenance_error==OK) {
      child->maintenance_error=error;
      if(child->report.report_revision!=UINT64_MAX) {child->report.state=2;child->report.return_status=0;child->report.reason=5;child->report.native_error=error;++child->report.report_revision;}
     }
@@ -389,7 +469,22 @@ void Registry::qualification_service(uint64_t bridge_serial,uint64_t serial,uint
 Error Registry::qualification_cleanup_retire_matches_original_child_locked(QualificationBridge *bridge,uint32_t kind,const void *bytes) {
  // Read only under the original Registry lock. This authenticates existing
  // cleanup ownership; it neither reserves a retirement nor changes a child.
- if(kind==16){GDExtensionQualificationResourceRetireV1 q;memcpy(&q,bytes,sizeof(q));QualificationResource *child=nullptr;Error e=qualification_resource_locked(bridge,q.resource,0,child);if(e!=OK||child->creating)return ERR_DOES_NOT_EXIST;if(q.rid!=child->rid||q.object_serial!=child->object_serial)return ERR_INVALID_DATA;if(child->retiring && memcmp(&child->retirement,&q,sizeof(q)))return ERR_INVALID_DATA;return OK;}
+ if (kind == 16) {
+	 GDExtensionQualificationResourceRetireV1 q;
+	 memcpy(&q, bytes, sizeof(q));
+	 QualificationResource *child = nullptr;
+	 Error e = qualification_resource_locked(bridge, q.resource, 0, child);
+	 if (e != OK || child->creating) {
+		 return ERR_DOES_NOT_EXIST;
+	 }
+	 if (q.rid != child->rid || q.object_serial != child->object_serial) {
+		 return ERR_INVALID_DATA;
+	 }
+	 if (child->retiring && memcmp(&child->retirement, &q, sizeof(q))) {
+		 return ERR_INVALID_DATA;
+	 }
+	 return OK;
+ }
  if(kind==3) {
   GDExtensionStorageRetireRequestV1 request;memcpy(&request,bytes,sizeof(request));
   QualificationBridge::Storage *child=nullptr;
@@ -554,36 +649,36 @@ static GDExtensionDeviceSessionResultV1 rt_observe(GDExtensionQualificationBridg
 static GDExtensionDeviceSessionResultV1 rt_release(GDExtensionQualificationBridgeRefV1 b,GDExtensionQualificationRtRefV1 r){return Registry::get_singleton().qualification_rt_release(b,r);}
 void register_qualification_typed_interfaces();
 void register_qualification_interfaces() {
- register_qualification_typed_interfaces();
- GDExtension::register_interface_function("device_session_qualification_rt_configure_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&rt_configure));
- GDExtension::register_interface_function("device_session_qualification_rt_reserve_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&rt_reserve));
- GDExtension::register_interface_function("device_session_qualification_rt_activate_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&rt_activate));
- GDExtension::register_interface_function("device_session_qualification_rt_observe_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&rt_observe));
- GDExtension::register_interface_function("device_session_qualification_rt_release_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&rt_release));
+	register_qualification_typed_interfaces();
+	GDExtension::register_interface_function("device_session_qualification_rt_configure_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&rt_configure));
+	GDExtension::register_interface_function("device_session_qualification_rt_reserve_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&rt_reserve));
+	GDExtension::register_interface_function("device_session_qualification_rt_activate_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&rt_activate));
+	GDExtension::register_interface_function("device_session_qualification_rt_observe_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&rt_observe));
+	GDExtension::register_interface_function("device_session_qualification_rt_release_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&rt_release));
 
- GDExtension::register_interface_function("device_session_qualification_record_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&record));
- GDExtension::register_interface_function("device_session_qualification_observe_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&observe));
- GDExtension::register_interface_function("device_session_qualification_facts_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&facts));
- GDExtension::register_interface_function("device_session_qualification_copy_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&copy));
- GDExtension::register_interface_function("device_session_qualification_release_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&release));
- GDExtension::register_interface_function("device_session_qualification_prepare_uploads_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&prepare_uploads));
- GDExtension::register_interface_function("device_session_qualification_prepare_uploads_v2", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&prepare_uploads_v2));
- GDExtension::register_interface_function("device_session_qualification_record_prepared_v2", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&record_prepared_v2));
- GDExtension::register_interface_function("device_session_qualification_observe_v2", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&observe_v2));
- GDExtension::register_interface_function("device_session_qualification_upload_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&upload));
- GDExtension::register_interface_function("device_session_qualification_record_prepared_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&record_prepared));
- GDExtension::register_interface_function("device_session_qualification_cancel_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&cancel));
+	GDExtension::register_interface_function("device_session_qualification_record_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&record));
+	GDExtension::register_interface_function("device_session_qualification_observe_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&observe));
+	GDExtension::register_interface_function("device_session_qualification_facts_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&facts));
+	GDExtension::register_interface_function("device_session_qualification_copy_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&copy));
+	GDExtension::register_interface_function("device_session_qualification_release_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&release));
+	GDExtension::register_interface_function("device_session_qualification_prepare_uploads_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&prepare_uploads));
+	GDExtension::register_interface_function("device_session_qualification_prepare_uploads_v2", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&prepare_uploads_v2));
+	GDExtension::register_interface_function("device_session_qualification_record_prepared_v2", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&record_prepared_v2));
+	GDExtension::register_interface_function("device_session_qualification_observe_v2", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&observe_v2));
+	GDExtension::register_interface_function("device_session_qualification_upload_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&upload));
+	GDExtension::register_interface_function("device_session_qualification_record_prepared_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&record_prepared));
+	GDExtension::register_interface_function("device_session_qualification_cancel_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&cancel));
 
- GDExtension::register_interface_function("device_session_qualification_storage_create_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&storage_create));
- GDExtension::register_interface_function("device_session_qualification_storage_retire_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&storage_retire));
- GDExtension::register_interface_function("device_session_qualification_storage_retire_observe_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&storage_retire_observe));
- GDExtension::register_interface_function("device_session_qualification_storage_retire_release_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&storage_retire_release));
- GDExtension::register_interface_function("device_session_qualification_native_unit_create_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&native_unit_create));
- GDExtension::register_interface_function("device_session_qualification_native_unit_retire_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&native_unit_retire));
- GDExtension::register_interface_function("device_session_qualification_native_unit_retire_observe_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&native_unit_retire_observe));
- GDExtension::register_interface_function("device_session_qualification_native_unit_retire_release_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&native_unit_retire_release));
- GDExtension::register_interface_function("device_session_qualification_open_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&open));
- GDExtension::register_interface_function("device_session_qualification_backing_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&backing));
- GDExtension::register_interface_function("device_session_qualification_close_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&close));
+	GDExtension::register_interface_function("device_session_qualification_storage_create_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&storage_create));
+	GDExtension::register_interface_function("device_session_qualification_storage_retire_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&storage_retire));
+	GDExtension::register_interface_function("device_session_qualification_storage_retire_observe_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&storage_retire_observe));
+	GDExtension::register_interface_function("device_session_qualification_storage_retire_release_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&storage_retire_release));
+	GDExtension::register_interface_function("device_session_qualification_native_unit_create_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&native_unit_create));
+	GDExtension::register_interface_function("device_session_qualification_native_unit_retire_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&native_unit_retire));
+	GDExtension::register_interface_function("device_session_qualification_native_unit_retire_observe_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&native_unit_retire_observe));
+	GDExtension::register_interface_function("device_session_qualification_native_unit_retire_release_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&native_unit_retire_release));
+	GDExtension::register_interface_function("device_session_qualification_open_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&open));
+	GDExtension::register_interface_function("device_session_qualification_backing_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&backing));
+	GDExtension::register_interface_function("device_session_qualification_close_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&close));
 }
 }
