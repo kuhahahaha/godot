@@ -108,7 +108,7 @@ public:
 	static bool sort_data_size(uint64_t p_amount, uint64_t &r_size) {
 		return ParticlesStorage::_particles_get_sort_data_size(p_amount, r_size);
 	}
-	static bool total_amount(uint64_t p_amount, uint64_t p_trail_count, uint32_t &r_total_amount) {
+	static bool raw_total_amount(uint64_t p_amount, uint64_t p_trail_count, uint32_t &r_total_amount) {
 		return ParticlesStorage::_particles_get_total_amount(p_amount, p_trail_count, r_total_amount);
 	}
 	static bool draw_amount(uint64_t p_amount, bool p_trails_enabled, uint64_t p_trail_count, uint32_t &r_total_amount, uint32_t &r_trail_divisor) {
@@ -186,15 +186,15 @@ TEST_CASE("[ParticlesReadback] data size includes trails and user data with a bo
 	CHECK(size == 0);
 
 	uint32_t total_amount = 0;
-	CHECK(RendererRD::TestParticlesReadbackAccess::total_amount(2, 4, total_amount));
+	CHECK(RendererRD::TestParticlesReadbackAccess::raw_total_amount(2, 4, total_amount));
 	CHECK(total_amount == 8);
-	CHECK(RendererRD::TestParticlesReadbackAccess::total_amount(2, 0, total_amount));
+	CHECK(RendererRD::TestParticlesReadbackAccess::raw_total_amount(2, 0, total_amount));
 	CHECK(total_amount == 2);
-	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::total_amount(0, 4, total_amount));
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::raw_total_amount(0, 4, total_amount));
 	CHECK(total_amount == 0);
-	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::total_amount(UINT32_MAX, 2, total_amount));
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::raw_total_amount(UINT32_MAX, 2, total_amount));
 	CHECK(total_amount == 0);
-	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::total_amount(UINT64_MAX, 2, total_amount));
+	CHECK_FALSE(RendererRD::TestParticlesReadbackAccess::raw_total_amount(UINT64_MAX, 2, total_amount));
 	CHECK(total_amount == 0);
 
 	uint32_t trail_divisor = 0;

@@ -362,6 +362,7 @@ public:
 	int waits = 0;
 	int maps = 0;
 	int unmaps = 0;
+	int buffers_freed = 0;
 	int resets = 0;
 	bool map_failure = false;
 	bool reset_result = true;
@@ -383,6 +384,10 @@ public:
 		return map_failure ? nullptr : bytes;
 	}
 	void buffer_unmap(BufferID) override { unmaps++; }
+	void buffer_free(BufferID p_buffer) override {
+		CHECK(p_buffer == BufferID(61));
+		buffers_freed++;
+	}
 	bool command_pool_reset(CommandPoolID) override {
 		resets++;
 		return reset_result;
@@ -544,6 +549,7 @@ TEST_CASE("[R01][FrameWait] failed wait stops frame reset and flush") {
 	CHECK(TestFrameWaitAccess::signaled(device));
 	CHECK(TestFrameWaitAccess::pending(device) == 1);
 	CHECK(TestFrameWaitAccess::disposal_pending(device));
+	CHECK(driver.buffers_freed == 0);
 	TestFrameWaitAccess::detach(device);
 }
 
@@ -1001,7 +1007,10 @@ TEST_CASE("[R01][FrameWait] native pool reset and primary begin failure close ad
 		CHECK(callbacks == 0);
 		CHECK(device.get_frames_drawn() == count);
 		CHECK(TestFrameWaitAccess::pending(device) == 1);
-		CHECK(TestFrameWaitAccess::disposal_pending(device));
+		// Buffer61 was never submitted and is safe to dispose before a new
+		// command epoch. A later reset/begin failure cannot undo that return.
+		CHECK_FALSE(TestFrameWaitAccess::disposal_pending(device));
+		CHECK(driver.buffers_freed == 1);
 		TestFrameWaitAccess::detach(device);
 	}
 }

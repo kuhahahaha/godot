@@ -3331,6 +3331,50 @@ public:
 		memdelete(child);
 		memdelete(bridge);
 	}
+	static void matching_native_source_allows_storage_return(RenderingDevice &device, RenderingDeviceDriver &driver, bool &matching, const int &recycles) {
+		using namespace GDExtensionDeviceExit;
+		auto *bridge = memnew(Registry::QualificationBridge);
+		auto *child = memnew(Registry::QualificationBridge::Storage);
+		bridge->storage[0] = child;
+		child->serial = 31;
+		child->retiring = true;
+		child->physical.bridge = 11;
+		child->physical.child = 31;
+		RID rid = device._qualification_storage_create(128, &child->physical);
+		REQUIRE(rid.is_valid());
+		child->physical.use_closed = true;
+		device.draw_graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+		device.draw_graph.begin();
+		Registry::get_singleton().qualification_retire_step(bridge, &device, 31, 1);
+		REQUIRE(child->physical.enqueued);
+		RenderingDeviceDriver::QueueCallReport chain;
+		RenderingDeviceDriver::NativeCallFact call;
+		call.serial = call.completion_serial = 51;
+		call.issue = RenderingDeviceDriver::IssueFact::KnownAccepted;
+		call.completion = RenderingDeviceDriver::CompletionCapability::CommandBuffer;
+		chain.calls.push_back(call);
+		device.frames[0].chain_reports.push_back(chain);
+		CHECK(device._stall_for_frame(0, true) == ERR_BUSY);
+		CHECK(recycles == 0);
+		CHECK_FALSE(device.frames[0].chain_reports[0].calls[0].source_owner_returned);
+		CHECK(child->physical.free_event == 0);
+		matching = true;
+		CHECK(device._stall_for_frame(0, true) == OK);
+		CHECK(recycles == 1);
+		CHECK(device.frames[0].chain_reports[0].calls[0].source_owner_returned);
+		CHECK(device._free_pending_resources(0) == OK);
+		CHECK(child->physical.free_event != 0);
+		const uint64_t event = child->physical.free_event;
+		CHECK(device._stall_for_frame(0, true) == OK);
+		CHECK(device._free_pending_resources(0) == OK);
+		CHECK(recycles == 1);
+		CHECK(child->physical.free_event == event);
+		CHECK(device.frames[0].buffers_to_dispose_of.is_empty());
+		device.frames[0].chain_reports.clear();
+		device.draw_graph.finalize();
+		memdelete(child);
+		memdelete(bridge);
+	}
 	static void service_poll_error(RenderingDevice &device, RenderingDeviceDriver &driver) {
 		using namespace GDExtensionDeviceExit;
 		auto *registry = memnew(Registry);
@@ -3389,13 +3433,25 @@ public:
 		registry->qualification_retire_step(bridge, &device, 31, 1);
 		CHECK(child->report.state == 2);
 		CHECK(child->report.reason == 5);
-		device._free_pending_resources(0);
-		REQUIRE(child->physical.free_event != 0);
+		// call51 belongs to this same original frame and failed without a
+		// matching completion. A retire enqueue is not physical-return proof.
+		const uint64_t retained_epoch = device.frames[0].qualification_epoch;
+		CHECK(device._free_pending_resources(0) == FAILED);
+		CHECK(device._free_pending_resources(0) == FAILED);
+		CHECK(device._begin_frame(false, true) == FAILED);
+		CHECK(device.frames[0].qualification_epoch == retained_epoch);
+		CHECK(device.frames[0].uniform_sets_to_dispose_of.is_empty());
+		CHECK(device.frames[0].buffers_to_dispose_of.size() == 1);
+		CHECK_FALSE(device.frames[0].chain_reports[0].calls[0].source_owner_returned);
+		CHECK(child->physical.free_event == 0);
 		registry->qualification_retire_step(bridge, &device, 31, 1);
 		CHECK(child->report.state == 2);
 		CHECK(child->report.return_status == 0);
 		CHECK(child->report.native_error == FAILED);
 		CHECK(registry->qualification_storage_retire_release({ 71, 11 }, { 71, 33 }).native_error == ERR_BUSY);
+		// These deterministic IDs own no native allocation. Drop only test
+		// metadata, without clearing poison, invoking a free, or forging ACK.
+		device.frames[0].buffers_to_dispose_of.clear();
 		device.frames[0].chain_reports.clear();
 		registry->qualification_bridges[0] = nullptr;
 		RenderingDevice::singleton = previous;
@@ -3483,11 +3539,20 @@ public:
 		CHECK(child->report.return_status == 0);
 		CHECK(registry->qualification_native_unit_retire_release({ 71, 11 }, { 71, 33 }).native_error == ERR_BUSY);
 		CHECK(registry->qualification_close({ 71, 11 }).native_error == ERR_BUSY);
-		// The test fixture performs explicit cleanup after observing the service result.
-		if (device.shader_owner.owns(rid)) {
-			device._free_internal(rid);
-		}
-		device._free_pending_resources(0);
+		// Same-frame native poll failure never established completion. Refused
+		// disposal must not turn fixture teardown into a successful native free.
+		const uint64_t retained_epoch = device.frames[0].qualification_epoch;
+		CHECK(device._free_pending_resources(0) == FAILED);
+		CHECK(device._free_pending_resources(0) == FAILED);
+		CHECK(device._begin_frame(false, true) == FAILED);
+		CHECK(device.frames[0].qualification_epoch == retained_epoch);
+		CHECK(device.shader_owner.owns(rid));
+		CHECK_FALSE(child->shader.enqueued);
+		CHECK(child->shader.free_event == 0);
+		CHECK_FALSE(device.frames[0].chain_reports[0].calls[0].source_owner_returned);
+		// Synthetic driver ID19 owns no native allocation. Remove only fixture
+		// metadata after the retention assertions; do not forge an owner ACK.
+		device.shader_owner.free(rid);
 		device.frames[0].chain_reports.clear();
 		registry->qualification_bridges[0] = nullptr;
 		RenderingDevice::singleton = previous;
@@ -5467,7 +5532,24 @@ public:
 				CHECK_FALSE(device.reverse_dependency_map.has(RID::from_uint64(set.rid)));
 				auto *remaining = device.dependency_map.getptr(shader_rid);
 				CHECK((!remaining || remaining->is_empty()));
+				// These shader/pipeline handles were seeded above, not allocated by
+				// the native-unit producer. Even synthetic dependency teardown must
+				// satisfy the original qualified owner's closed-use retirement scope.
+				struct FixtureRetirementScope {
+					RenderingDevice &device;
+					bool previous_retiring;
+					QualificationPhysicalReturn *previous_cell;
+					~FixtureRetirementScope() {
+						device.qualification_retiring = previous_retiring;
+						device.qualification_retiring_cell = previous_cell;
+					}
+				} retirement_scope{ device, device.qualification_retiring, device.qualification_retiring_cell };
+				device.qualification_retiring = true;
+				unit->pipeline.use_closed = true;
+				device.qualification_retiring_cell = &unit->pipeline;
 				CHECK(device._free_dependencies(pipeline_rid));
+				unit->shader.use_closed = true;
+				device.qualification_retiring_cell = &unit->shader;
 				CHECK(device._free_dependencies(shader_rid));
 				device.compute_pipeline_owner.free(pipeline_rid);
 				device.shader_owner.free(shader_rid);
@@ -6210,14 +6292,44 @@ TEST_CASE("[Qualification] native unit retire reducer retains maintenance unknow
 	TestQualificationPhysicalAccess::detach(device);
 }
 
-TEST_CASE("[Qualification] service native poll error remains unknown after storage free") {
+TEST_CASE("[Qualification] matching original native source permits pending storage return exactly once") {
+	class CompletedDriver : public TestQualificationPhysical::Driver {
+	public:
+		bool matching = false;
+		int recycles = 0;
+		FencePollResult native_call_poll(uint64_t serial) override {
+			CHECK(serial == 51);
+			++polls;
+			FencePollResult result;
+			result.completed = true;
+			result.completed_serial = matching ? serial : serial + 1;
+			return result;
+		}
+		Error native_call_recycle(uint64_t serial) override {
+			CHECK(serial == 51);
+			++recycles;
+			return OK;
+		}
+	} driver;
+	RenderingDevice device;
+	TestQualificationPhysicalAccess::attach(device, driver);
+	TestQualificationPhysicalAccess::matching_native_source_allows_storage_return(device, driver, driver.matching, driver.recycles);
+	CHECK(driver.polls == 2);
+	CHECK(driver.recycles == 1);
+	CHECK(driver.creates == 1);
+	CHECK(driver.frees == 1);
+	TestQualificationPhysicalAccess::detach(device);
+}
+
+TEST_CASE("[Qualification] service native poll error retains the original pending storage") {
 	RenderingDevice device;
 	TestQualificationPhysical::Driver driver;
 	driver.fail_poll = true;
 	TestQualificationPhysicalAccess::attach(device, driver);
 	TestQualificationPhysicalAccess::service_poll_error(device, driver);
+	CHECK(driver.polls == 1);
 	CHECK(driver.creates == 1);
-	CHECK(driver.frees == 1);
+	CHECK(driver.frees == 0);
 	TestQualificationPhysicalAccess::detach(device);
 }
 
@@ -6238,7 +6350,7 @@ TEST_CASE("[Qualification] service poll error precedes new native shader retirem
 	TestQualificationPhysicalAccess::attach(device, driver);
 	TestQualificationPhysicalAccess::service_error_before_shader_enqueue(device, driver, false, false, false);
 	CHECK(driver.polls == 1);
-	CHECK(driver.shaders_freed == 1);
+	CHECK(driver.shaders_freed == 0);
 	TestQualificationPhysicalAccess::detach(device);
 }
 
@@ -6249,7 +6361,7 @@ TEST_CASE("[Qualification] service preserves first native retire maintenance err
 	TestQualificationPhysicalAccess::attach(device, driver);
 	TestQualificationPhysicalAccess::service_error_before_shader_enqueue(device, driver, true, false, false);
 	CHECK(driver.polls == 1);
-	CHECK(driver.shaders_freed == 1);
+	CHECK(driver.shaders_freed == 0);
 	TestQualificationPhysicalAccess::detach(device);
 }
 
@@ -6277,7 +6389,7 @@ TEST_CASE("[Qualification] exhausted native report keeps service error private a
 	TestQualificationPhysicalAccess::attach(device, driver);
 	TestQualificationPhysicalAccess::service_error_before_shader_enqueue(device, driver, false, true, false);
 	CHECK(driver.polls == 1);
-	CHECK(driver.shaders_freed == 1);
+	CHECK(driver.shaders_freed == 0);
 	TestQualificationPhysicalAccess::detach(device);
 }
 TEST_CASE("[Qualification] queued native service retains maintenance error across close") {
@@ -6287,7 +6399,7 @@ TEST_CASE("[Qualification] queued native service retains maintenance error acros
 	TestQualificationPhysicalAccess::attach(device, driver);
 	TestQualificationPhysicalAccess::service_error_before_shader_enqueue(device, driver, false, false, true);
 	CHECK(driver.polls == 1);
-	CHECK(driver.shaders_freed == 1);
+	CHECK(driver.shaders_freed == 0);
 	TestQualificationPhysicalAccess::detach(device);
 }
 
@@ -6298,7 +6410,7 @@ TEST_CASE("[Qualification] queued native close retains preexisting maintenance e
 	TestQualificationPhysicalAccess::attach(device, driver);
 	TestQualificationPhysicalAccess::service_error_before_shader_enqueue(device, driver, true, false, true);
 	CHECK(driver.polls == 1);
-	CHECK(driver.shaders_freed == 1);
+	CHECK(driver.shaders_freed == 0);
 	TestQualificationPhysicalAccess::detach(device);
 }
 
