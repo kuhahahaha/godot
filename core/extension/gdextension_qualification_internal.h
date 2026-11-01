@@ -31,6 +31,7 @@
 #pragma once
 
 #include "core/extension/gdextension_library_exit_guard.h"
+#include "core/extension/gdextension_record_source.h"
 #include "core/templates/local_vector.h"
 #include "servers/rendering/rendering_device.h"
 
@@ -103,12 +104,14 @@ struct QualificationTicket {
  GDExtensionQualificationRecordV2 range_origin = {};
  bool multi_readback = false;
  uint64_t additional_readback_serials[2] = {};
+ uint64_t original_readback_serial = 0;
  Ref<RenderingDevice::BufferGetDataResult> additional_results[2];
  uint32_t additional_copies_joined[2] = {};
  GDExtensionQualificationReportV1 report={};
  LocalVector<GDExtensionQualificationFactV1> facts;
  struct GraphMember {RDG::RecordHandle handle;uint32_t fact=0,frame=0,path_length=0;uint64_t epoch=0;bool sealed=false,returned=false;};
- struct NativeMember {RDD::NativeCallFact source;uint32_t fact=0,frame=0,slot=UINT32_MAX;uint64_t epoch=0;bool retained=false,owner_released=false;};
+ using NativeMember = NativeSourceMember;
+ const NativeSourceOrigin source_origin = NativeSourceOrigin::qualification();
  LocalVector<GraphMember> graphs;
  LocalVector<NativeMember> natives;
  struct Upload {
@@ -134,6 +137,16 @@ struct QualificationTicket {
  uint32_t readback_count() const { return multi_readback ? range_origin.readback_count : 1; }
  Ref<RenderingDevice::BufferGetDataResult> &readback_result(uint32_t index) { return index ? additional_results[index - 1] : result; }
  const Ref<RenderingDevice::BufferGetDataResult> &readback_result(uint32_t index) const { return index ? additional_results[index - 1] : result; }
+ uint64_t readback_serial(uint32_t index) const { return index ? additional_readback_serials[index - 1] : original_readback_serial; }
+ bool readback_complete(uint32_t index) const {
+	 const auto &owned = readback_result(index);
+	 if (owned.is_null()) {
+		 return false;
+	 }
+	 const auto range = readback_range(index);
+	 const ReadbackSourceState state = { owned->request_serial, owned->source_backing_serial, owned->source_offset, owned->source_size, owned->issued_size, owned->completed_size, uint64_t(owned->bytes.size()), owned->error, owned->delivered };
+	 return same_request_readback_complete(state, readback_serial(index), range.observed_backing_serial, range.readback_offset, range.readback_size);
+ }
  uint32_t &readback_cursor(uint32_t index) { return index ? additional_copies_joined[index - 1] : readback_copies_joined; }
  GDExtensionQualificationReadbackRangeV1 readback_range(uint32_t index) const {
 	 if (multi_readback) {

@@ -88,6 +88,7 @@ struct VersatileResourceTemplate {
 };
 
 class RenderingDevice;
+class TestRecordSourceAccess;
 class RenderingDeviceDriver : public RenderingDeviceCommons {
 	GDSOFTCLASS(RenderingDeviceDriver, RenderingDeviceCommons);
  friend class RenderingDevice;
@@ -198,12 +199,60 @@ public:
 		bool native_error = false;
 		uint64_t completed_serial = 0;
 		int64_t native_code = 0;
+		// Only an original same-native source may refine an uncertain issue.
+		// A quiet fence or a matching tail serial supplies no such authority.
+		IssueFact resolved_issue = IssueFact::NotIssued;
 		bool matches(uint64_t p_expected_serial) const {
 			return completed && !native_error && p_expected_serial != 0 && completed_serial == p_expected_serial;
 		}
 	};
 
+private:
+	friend class RenderingDevice;
+#ifdef TESTS_ENABLED
+	friend class TestRecordSourceAccess;
+#endif
+	// Range is constructed only by the original admitted core attachment.
+	struct NativeFactWriteRange {
+		NativeCallFact *data = nullptr;
+		uint32_t capacity = 0;
+		uint32_t written = 0;
+		Error error = OK;
+		bool issued = false;
+		bool coverage_lost = false;
+		uint64_t submission_serial = 0;
+		int64_t native_code = 0;
+	};
+	static thread_local NativeFactWriteRange *active_native_fact_range;
+	Error command_queue_execute_recorded(CommandQueueID, VectorView<SemaphoreID>, VectorView<CommandBufferID>, VectorView<SemaphoreID>, FenceID, NativeFactWriteRange &);
+
 protected:
+	// Claims precede the actual call. The backend fills that same index after
+	// its raw return; neither a Vector copy nor a global last report is involved.
+	bool bounded_native_capture_active() const { return active_native_fact_range != nullptr; }
+	bool native_fact_capacity_available() const { return active_native_fact_range && active_native_fact_range->data && active_native_fact_range->written < active_native_fact_range->capacity; }
+	bool claim_native_fact(uint32_t &index) {
+		auto *range = active_native_fact_range;
+		if (!range || !range->data || range->written == range->capacity) {
+			return false;
+		}
+		index = range->written++;
+		return true;
+	}
+	void finish_native_fact(uint32_t index, const NativeCallFact &fact, uint64_t submission_serial = 0) {
+		auto *range = active_native_fact_range;
+		if (!range || index >= range->written) {
+			if (range) {
+				range->coverage_lost = true;
+			}
+			return;
+		}
+		range->data[index] = fact;
+		range->issued = true;
+		range->error = fact.error;
+		range->submission_serial = submission_serial;
+		range->native_code = fact.native_code;
+	}
 	mutable QueueCallReport last_queue_call_report;
 	mutable Mutex queue_call_report_mutex;
 	static thread_local QueueCallReport *active_queue_call_report;
@@ -505,6 +554,7 @@ public:
  // No fallback may invoke end_segment's legacy wait on a qualification pass.
  virtual Error qualification_prepare_segment(QueueCallReport &r_report) { r_report={};return ERR_UNAVAILABLE; }
  virtual uint32_t qualification_native_call_bound(uint32_t p_slots) const { return 0; }
+
  virtual bool native_call_observation_supported() const { return false; }
  virtual FencePollResult native_call_poll(uint64_t p_native_serial) { return {}; }
  virtual FencePollResult native_call_wait(uint64_t p_native_serial) { return {}; }
@@ -1087,6 +1137,9 @@ public:
 	/******************/
 
 	virtual ~RenderingDeviceDriver();
+	// Additive internal virtual: full affected backend rebuild is required.
+	// No presentation producer is admitted by this source profile.
+	virtual uint32_t record_native_call_bound(uint32_t p_slots) const { return 0; }
 };
 
 using RDD = RenderingDeviceDriver;

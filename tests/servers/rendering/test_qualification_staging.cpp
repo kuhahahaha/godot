@@ -18,7 +18,14 @@ public:
  static Error upload(RenderingDevice &device,RID rid,const uint8_t *bytes,RenderingDevice::QualificationUploadProgress &progress){return device._buffer_update(device.storage_buffer_owner.get_or_null(rid),rid,0,64,bytes,&progress);}
  static void upload_in_flight(RenderingDevice &device){device.upload_staging_buffers.blocks.write[0].frame_used=9;device.upload_staging_buffers.blocks.write[0].fill_amount=64;}
  static void upload_reusable(RenderingDevice &device){device.upload_staging_buffers.blocks.write[0].frame_used=0;}
- static auto result(){Ref<RenderingDevice::BufferGetDataResult> result;result.instantiate();result->bytes.resize(64);result->qualification_owned=true;return result;}
+ static auto result() {
+	 Ref<RenderingDevice::BufferGetDataResult> result;
+	 result.instantiate();
+	 result->bytes.resize(64);
+	 result->qualification_owned = true;
+	 result->request_serial = 101;
+	 return result;
+ }
  static Error append(RenderingDevice &device,RID rid,const Ref<RenderingDevice::BufferGetDataResult> &result){return device._buffer_get_data_async(rid,Callable(),0,64,result);}
  static uint32_t queued(RenderingDevice &device){return device.frames[0].download_buffer_get_data_requests.size();}
  static void in_flight(RenderingDevice &device){device.download_staging_buffers.blocks.write[0].frame_used=9;device.download_staging_buffers.blocks.write[0].fill_amount=64;}

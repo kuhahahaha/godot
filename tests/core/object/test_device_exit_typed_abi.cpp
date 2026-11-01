@@ -1,14 +1,18 @@
 #include "core/extension/gdextension.h"
-#include "tests/test_macros.h"
-#include "core/object/message_queue.h"
 #include "core/extension/gdextension_library_loader.h"
 #include "core/extension/gdextension_manager.h"
+#include "core/extension/gdextension_production_registration.h"
 #include "core/io/config_file.h"
-#include "core/io/file_access.h"
 #include "core/io/dir_access.h"
+#include "core/io/file_access.h"
+#include "core/object/message_queue.h"
 #include "core/os/os.h"
+#include "tests/test_macros.h"
 #include "tests/test_utils.h"
+
+#include <cstring>
 #include <thread>
+#include <type_traits>
 
 namespace GDExtensionDeviceExit {
 GDExtensionInterfaceFunctionPtr test_typed_lifecycle_lookup(const char *name);
@@ -74,7 +78,21 @@ TEST_CASE("[DeviceExit][TypedABI] generated lifecycle procs preserve rejected ou
 }
 
 #include "core/extension/gdextension_function_loader.h"
+namespace TestDeviceExitContract {
+Error test_producer_admission(const GDExtensionDeviceExit::ProducerRegistrationRef &);
+void test_producer_capacity(GDExtensionDeviceExit::InitializationLevelContextRef, GDExtensionDeviceExit::LibraryCodeHoldRef, const void *);
+} //namespace TestDeviceExitContract
+
 namespace TestTypedLifecycleABI {
+static_assert(!std::is_copy_constructible_v<GDExtensionDeviceExit::ProducerRegistrationRef>);
+static_assert(!std::is_constructible_v<GDExtensionDeviceExit::ProducerRegistrationRef, uint64_t, uint64_t>);
+static bool exercise_producer = false;
+static GDExtensionDeviceExit::ProducerRegistrationRef producer;
+static GDExtensionProducerRegistrationRefV1 producer_abi;
+static GDExtensionDeviceExit::InitializationLevelContextRef producer_initialize;
+static int producer_identity;
+static int foreign_producer_identity;
+
 template <typename T>
 T proc(const char *name) {
 	return reinterpret_cast<T>(GDExtensionDeviceExit::test_typed_lifecycle_lookup(name));
@@ -154,8 +172,49 @@ static void initialize(void *, GDExtensionInitializationLevel level) {
 		CHECK(schedule(&abi, context, binding_cleanup, uint64_t(binding_object->get_instance_id())) == OK);
 	}
 	CHECK(proc<GDExtensionInterfaceDeviceExitAcquireCodeHoldV1>("device_exit_acquire_code_hold_v1")(&abi, borrowed, cleanup, &hold) == OK);
+	if (exercise_producer) {
+		using namespace GDExtensionDeviceExit;
+		auto &registry = Registry::get_singleton();
+		producer_initialize = { context.registry_instance, context.handle_serial };
+		LibraryCodeHoldRef code{ hold.registry_instance, hold.handle_serial };
+		TestDeviceExitContract::test_producer_capacity(producer_initialize, code, &producer_identity);
+		ProducerRegistrationRef refused;
+		CHECK(registry.bind_host_producer(producer_initialize, {}, &producer_identity, refused) != OK);
+		CHECK_FALSE(refused.is_valid());
+		Error wrong_thread = OK;
+		std::thread other([&] { wrong_thread = registry.bind_host_producer(producer_initialize, code, &producer_identity, refused); });
+		other.join();
+		CHECK(wrong_thread != OK);
+		CHECK_FALSE(refused.is_valid());
+		auto bind = proc<GDExtensionInterfaceDeviceSessionBindHostProducerV1>("device_session_bind_host_producer_v1");
+		CHECK(bind != nullptr);
+		if (bind) {
+			CHECK_EQ(bind(&abi, context, hold, &producer_identity, &producer_abi), OK);
+			CHECK_EQ(registry.import_producer_registration(producer_abi, producer), OK);
+		}
+		GDExtensionProducerRegistrationRefV1 wrong_domain{ hold.registry_instance, hold.handle_serial };
+		CHECK(registry.import_producer_registration(wrong_domain, refused) != OK);
+		CHECK_FALSE(refused.is_valid());
+		ProducerRegistrationRef repeated;
+		CHECK_EQ(registry.bind_host_producer(producer_initialize, code, &producer_identity, repeated), OK);
+		ProducerRegistrationIdentity original, same;
+		CHECK_EQ(registry.copy_producer_registration(producer, original), OK);
+		CHECK_EQ(registry.copy_producer_registration(repeated, same), OK);
+		CHECK(std::strcmp(original.label, same.label) == 0);
+		CHECK_NE(original.library_generation, 0);
+		CHECK_EQ(registry.bind_host_producer(producer_initialize, code, &foreign_producer_identity, refused), ERR_INVALID_DATA);
+		CHECK_FALSE(refused.is_valid());
+		CHECK_EQ(TestDeviceExitContract::test_producer_admission(producer), OK);
+	}
 	GDExtensionDeviceExitLibraryCodeHoldRef clone{};
 	CHECK(proc<GDExtensionInterfaceDeviceExitCloneCodeHoldV1>("device_exit_clone_code_hold_v1")(&abi, hold, &clone) == OK);
+	if (exercise_producer) {
+		GDExtensionDeviceExit::ProducerRegistrationRef refused;
+		CHECK_EQ(GDExtensionDeviceExit::Registry::get_singleton().bind_host_producer(producer_initialize,
+						 { clone.registry_instance, clone.handle_serial }, &producer_identity, refused),
+				ERR_INVALID_DATA);
+		CHECK_FALSE(refused.is_valid());
+	}
 	CHECK(proc<GDExtensionInterfaceDeviceExitReleaseCodeHoldV1>("device_exit_release_code_hold_v1")(&abi, clone) == OK);
 	CHECK(proc<GDExtensionInterfaceDeviceExitAfterBindingInitializeV1>("device_exit_after_binding_initialize_v1")(&abi, context) == OK);
 	if (exercise_object_cleanup) {
@@ -389,6 +448,98 @@ static void unscheduled_object_preflight_child() {
 	std::_Exit(intact ? 0 : 92);
 }
 REGISTER_TEST_COMMAND("--device-exit-typed-unscheduled-object-preflight", unscheduled_object_preflight_child);
+TEST_CASE("[DeviceExit][TypedABI] original producer identity survives code close without reopening admission") {
+	using namespace GDExtensionDeviceExit;
+	auto &registry = Registry::get_singleton();
+	struct ProducerTestCleanup {
+		~ProducerTestCleanup() {
+			exercise_producer = false;
+			producer.reset();
+			if (producer_abi.handle_serial) {
+				Registry::get_singleton().release_producer_registration_view(producer_abi);
+				producer_abi = {};
+			}
+		}
+	} cleanup;
+	exercise_producer = true;
+	ProducerRegistrationIdentity previous{};
+	ProducerRegistrationRef historical;
+	for (int attempt = 0; attempt < 2; ++attempt) {
+		token = {};
+		hold = {};
+		Ref<GDExtensionFunctionLoader> loader;
+		loader.instantiate();
+		loader->set_initialization_function(guarded_entry);
+		loader->set_device_exit_guard_version(1);
+		Ref<GDExtension> extension;
+		extension.instantiate();
+		REQUIRE_EQ(extension->open_library("libgodot://producer-registration", loader), OK);
+		REQUIRE_EQ(extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE), OK);
+		REQUIRE(producer.is_valid());
+		ProducerRegistrationIdentity identity;
+		CHECK_EQ(registry.copy_producer_registration(producer, identity), OK);
+		auto clone_registration = proc<GDExtensionInterfaceDeviceSessionCloneProducerRegistrationV1>("device_session_clone_producer_registration_v1");
+		auto copy_registration = proc<GDExtensionInterfaceDeviceSessionCopyProducerRegistrationV1>("device_session_copy_producer_registration_v1");
+		auto release_registration = proc<GDExtensionInterfaceDeviceSessionReleaseProducerRegistrationV1>("device_session_release_producer_registration_v1");
+		REQUIRE(clone_registration != nullptr);
+		REQUIRE(copy_registration != nullptr);
+		REQUIRE(release_registration != nullptr);
+		GDExtensionProducerRegistrationRefV1 clone{};
+		struct CloneCleanup {
+			GDExtensionProducerRegistrationRefV1 &ref;
+			~CloneCleanup() {
+				if (ref.handle_serial) {
+					Registry::get_singleton().release_producer_registration_view(ref);
+				}
+			}
+		} clone_cleanup{ clone };
+		CHECK_EQ(clone_registration(&abi, producer_abi, &clone), OK);
+		CHECK_NE(clone.handle_serial, producer_abi.handle_serial);
+		GDExtensionDeviceExitLibrarySnapshot wrong_view{ { 1, sizeof(GDExtensionDeviceExitLibrarySnapshot), 0 }, 0, 0, 0, 0, 0, 0, 0 };
+		CHECK(registry.copy({ producer_abi.registry_instance, producer_abi.handle_serial }, &wrong_view) != OK);
+		ProducerRegistrationRef refused;
+		CHECK(registry.bind_host_producer(producer_initialize, { hold.registry_instance, hold.handle_serial }, &producer_identity, refused) != OK);
+		CHECK_FALSE(refused.is_valid());
+		if (attempt) {
+			CHECK(std::strcmp(identity.label, previous.label) != 0);
+			CHECK_NE(identity.library_generation, previous.library_generation);
+			ProducerRegistrationIdentity old;
+			CHECK_EQ(registry.copy_producer_registration(historical, old), OK);
+			CHECK(std::strcmp(old.label, previous.label) == 0);
+			CHECK_EQ(TestDeviceExitContract::test_producer_admission(historical), ERR_UNAVAILABLE);
+		}
+		REQUIRE_EQ(extension->preflight_exit(CloseRoute::EXPLICIT), OK);
+		CHECK_EQ(TestDeviceExitContract::test_producer_admission(producer), ERR_UNAVAILABLE);
+		REQUIRE_EQ(extension->deinitialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE), OK);
+		CHECK_EQ(extension->close_library(), OK);
+		ProducerRegistrationIdentity closed;
+		CHECK_EQ(registry.copy_producer_registration(producer, closed), OK);
+		CHECK(std::strcmp(identity.label, closed.label) == 0);
+		CHECK_EQ(TestDeviceExitContract::test_producer_admission(producer), ERR_UNAVAILABLE);
+		GDExtensionProducerRegistrationIdentityV1 exported{};
+		exported.abi = { 1, sizeof(exported), 0 };
+		CHECK_EQ(copy_registration(&abi, clone, &exported), OK);
+		CHECK(std::strcmp(identity.label, exported.label) == 0);
+		CHECK_EQ(exported.library_generation, identity.library_generation);
+		CHECK_EQ(release_registration(&abi, producer_abi), OK);
+		CHECK_EQ(release_registration(&abi, producer_abi), ERR_INVALID_DATA);
+		ProducerRegistrationRef expired;
+		CHECK_EQ(registry.import_producer_registration(producer_abi, expired), ERR_INVALID_DATA);
+		CHECK_FALSE(expired.is_valid());
+		producer_abi = {};
+		CHECK_EQ(copy_registration(&abi, clone, &exported), OK);
+		CHECK_EQ(release_registration(&abi, clone), OK);
+		clone = {};
+		if (!attempt) {
+			CHECK_EQ(registry.clone_producer_registration(producer, historical), OK);
+			previous = closed;
+		}
+		producer.reset();
+	}
+	historical.reset();
+	exercise_producer = false;
+}
+
 TEST_CASE("[DeviceExit][TypedABI] version one selects guarded lookup and requires enrollment") {
 	guarded_lookup_seen = false;
 	token = {}; hold = {};
@@ -611,4 +762,48 @@ TEST_CASE("[DeviceExit][TypedABI] legacy lookup hides lifecycle and preserves me
 	CHECK(gdextension_get_proc_address("device_exit_terminate_blocked_v1") == nullptr);
 	CHECK(gdextension_get_proc_address("device_exit_bootstrap_library_v1") != nullptr);
 	CHECK(gdextension_get_proc_address("get_godot_version") != nullptr);
+}
+
+TEST_CASE("[DeviceExit][TypedABI] producer registration ABI preserves rejection and guarded lookup") {
+	using namespace TestTypedLifecycleABI;
+	for (const char *name : { "device_session_bind_host_producer_v1", "device_session_clone_producer_registration_v1", "device_session_copy_producer_registration_v1", "device_session_release_producer_registration_v1" }) {
+		CHECK(gdextension_get_proc_address(name) == nullptr);
+		CHECK(proc<GDExtensionInterfaceFunctionPtr>(name) != nullptr);
+	}
+	auto bind = proc<GDExtensionInterfaceDeviceSessionBindHostProducerV1>("device_session_bind_host_producer_v1");
+	auto clone = proc<GDExtensionInterfaceDeviceSessionCloneProducerRegistrationV1>("device_session_clone_producer_registration_v1");
+	auto copy = proc<GDExtensionInterfaceDeviceSessionCopyProducerRegistrationV1>("device_session_copy_producer_registration_v1");
+	auto release = proc<GDExtensionInterfaceDeviceSessionReleaseProducerRegistrationV1>("device_session_release_producer_registration_v1");
+	REQUIRE(bind != nullptr);
+	REQUIRE(clone != nullptr);
+	REQUIRE(copy != nullptr);
+	REQUIRE(release != nullptr);
+	GDExtensionProducerRegistrationRefV1 empty{};
+	CHECK_EQ(bind(nullptr, {}, {}, &producer_identity, &empty), ERR_INVALID_PARAMETER);
+	CHECK_EQ(empty.handle_serial, 0);
+	GDExtensionProducerRegistrationRefV1 occupied{ 11, 17 };
+	CHECK_EQ(bind(&abi, {}, {}, &producer_identity, &occupied), ERR_INVALID_DATA);
+	CHECK_EQ(occupied.registry_instance, 11);
+	CHECK_EQ(occupied.handle_serial, 17);
+	for (const GDExtensionDeviceExitAbi bad : { GDExtensionDeviceExitAbi{ 2, sizeof(abi), 0 }, GDExtensionDeviceExitAbi{ 1, 0, 0 }, GDExtensionDeviceExitAbi{ 1, sizeof(abi), 1 } }) {
+		CHECK_EQ(clone(&bad, {}, &empty), ERR_INVALID_PARAMETER);
+		CHECK_EQ(release(&bad, {}), ERR_INVALID_PARAMETER);
+		CHECK_EQ(empty.handle_serial, 0);
+	}
+	CHECK_EQ(clone(&abi, {}, &empty), ERR_INVALID_DATA);
+	CHECK_EQ(release(&abi, {}), ERR_INVALID_DATA);
+	GDExtensionProducerRegistrationIdentityV1 identity{};
+	identity.abi = { 1, sizeof(identity), 0 };
+	identity.library_generation = 37;
+	CHECK_EQ(copy(&abi, {}, &identity), ERR_INVALID_DATA);
+	CHECK_EQ(identity.library_generation, 37);
+	identity.abi.struct_size = 0;
+	CHECK_EQ(copy(&abi, {}, &identity), ERR_INVALID_PARAMETER);
+	CHECK_EQ(identity.library_generation, 37);
+	alignas(GDExtensionProducerRegistrationRefV1) unsigned char bytes[sizeof(empty) + 8] = {};
+	CHECK_EQ(clone(&abi, {}, reinterpret_cast<GDExtensionProducerRegistrationRefV1 *>(bytes + 1)), ERR_INVALID_PARAMETER);
+	for (const unsigned char byte : bytes) {
+		CHECK_EQ(byte, 0);
+	}
+	CHECK_EQ(clone(&abi, {}, reinterpret_cast<GDExtensionProducerRegistrationRefV1 *>(const_cast<GDExtensionDeviceExitAbi *>(&abi))), ERR_INVALID_PARAMETER);
 }

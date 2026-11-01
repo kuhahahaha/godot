@@ -103,6 +103,8 @@ void record_binding_entry_result(Error p_error);
 const char *get_binding_entry_diagnostic();
 
 class Registry;
+class ProducerRegistrationRef;
+struct ProducerRegistrationIdentity;
 class BootstrapScope;
 class CallbackScope;
 class BindingPublicationScope;
@@ -606,6 +608,11 @@ private:
 		uint32_t private_refs = 0;
 		uint32_t external_refs = 0;
 		uint64_t authority_serial = 0;
+		// Original Host evidence site, issued with this library attachment.
+		// The pointer is identity-only and is never dereferenced by core.
+		uint64_t producer_registration_serial = 0;
+		const void *producer_attachment_identity = nullptr;
+		uint64_t producer_code_holder = 0;
 		GDExtensionDeviceExitLibrarySnapshot snapshot = {};
 		char failure_detail[64] = {};
 	};
@@ -613,7 +620,14 @@ private:
 		GDExtension *token = nullptr;
 		uint32_t record = INVALID_SLOT;
 	};
-	enum class ViewDomain { METADATA, LIBRARY, INITIALIZE, DEINITIALIZE, PREFLIGHT, ACTION, SCENE_READY };
+	enum class ViewDomain { METADATA,
+		LIBRARY,
+		INITIALIZE,
+		DEINITIALIZE,
+		PREFLIGHT,
+		ACTION,
+		SCENE_READY,
+		PRODUCER_REGISTRATION };
 	struct View {
 		uint64_t serial = 0;
 		uint32_t record = 0;
@@ -676,6 +690,16 @@ private:
  Error select_scene_install_plan(const RecordRef &,GDExtensionSceneInstallPlanV2 &,SceneReadyFailureReason &);
  Error scene_install_plan_locked(const Record &,GDExtensionSceneInstallPlanV2 &,SceneReadyFailureReason &) const;
  bool scene_install_plan_matches_locked(const Record &,SceneReadyFailureReason * = nullptr) const;
+
+	// Caller holds mutex. Admission is separate from retained identity reads.
+	Error validate_host_producer_binding_locked(InitializationLevelContextRef, LibraryCodeHoldRef, const void *, uint32_t &);
+	Error producer_view_locked(GDExtensionProducerRegistrationRefV1, uint32_t &);
+	Error producer_view_capacity_locked(uint32_t &);
+	void issue_producer_view_locked(uint32_t, uint32_t, GDExtensionProducerRegistrationRefV1 &);
+	Error copy_producer_identity_locked(const Record &, ProducerRegistrationIdentity &);
+	Error producer_registration_locked(const ProducerRegistrationRef &, Record *&);
+	Error admit_producer_source_locked(const ProducerRegistrationRef &, Record *&);
+
 
 	void reclaim(uint32_t p_slot);
 	void try_finalize();
@@ -852,6 +876,17 @@ public:
 	Error after_user_terminator(const GDExtensionDeviceExitAbi *, DeinitLevelContextRef);
 	Error after_binding_deinit(const GDExtensionDeviceExitAbi *, DeinitLevelContextRef);
 	Error publish_exit_result(const GDExtensionDeviceExitAbi *, GuardToken, DeinitPreflightContextRef, const ExitDiagnosticV1 *);
+	// Original Host attachment import used by the guarded device-session ABI.
+	// The attachment address is identity, never operation/source permission.
+	Error bind_host_producer_view(InitializationLevelContextRef, LibraryCodeHoldRef, const void *, GDExtensionProducerRegistrationRefV1 &);
+	Error clone_producer_registration_view(GDExtensionProducerRegistrationRefV1, GDExtensionProducerRegistrationRefV1 &);
+	Error copy_producer_registration_view(GDExtensionProducerRegistrationRefV1, ProducerRegistrationIdentity &);
+	Error release_producer_registration_view(GDExtensionProducerRegistrationRefV1);
+	Error import_producer_registration(GDExtensionProducerRegistrationRefV1, ProducerRegistrationRef &);
+	Error bind_host_producer(InitializationLevelContextRef, LibraryCodeHoldRef, const void *, ProducerRegistrationRef &);
+	Error clone_producer_registration(const ProducerRegistrationRef &, ProducerRegistrationRef &);
+	Error copy_producer_registration(const ProducerRegistrationRef &, ProducerRegistrationIdentity &);
+
 	Error acquire_code_hold(const GDExtensionDeviceExitAbi *, GuardedLibraryRef, RegisteredCleanupRef, LibraryCodeHoldRef *);
 	Error clone_code_hold(const GDExtensionDeviceExitAbi *, LibraryCodeHoldRef, LibraryCodeHoldRef *);
 	Error release_code_hold(const GDExtensionDeviceExitAbi *, LibraryCodeHoldRef);

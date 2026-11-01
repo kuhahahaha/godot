@@ -49,10 +49,11 @@ Error qualification_native_capacity(RenderingDeviceDriver &driver, uint32_t curr
 	// Each declared graph can consume a separate continuation frame. Include
 	// one initial failure/membership frame and a fresh hidden-worker set for
 	// each of those frames, rather than counting workers only once.
-	const uint64_t frame_bound = graph_bound + 1;
-	const uint64_t base_slots = uint64_t(current_commands) + frame_bound;
-	if (base_slots > capacity || workers > (capacity - base_slots) / frame_bound) return ERR_PARAMETER_RANGE_ERROR;
-	const uint32_t slots = uint32_t(base_slots + uint64_t(workers) * frame_bound);
+	uint32_t slots = 0;
+	const Error arithmetic = qualification_source_slot_bound(graph_bound, current_commands, workers, uint32_t(capacity), slots);
+	if (arithmetic != OK) {
+		return arithmetic;
+	}
 	const uint32_t native_bound = driver.qualification_native_call_bound(slots);
 	if (!native_bound) return ERR_UNAVAILABLE;
 	if (native_bound > capacity - graph_bound) return ERR_PARAMETER_RANGE_ERROR;
@@ -313,7 +314,9 @@ void Registry::qualification_ticket_publish(QualificationTicket *ticket,Renderin
  }
  if(ticket->mapping_failed)++next.possible_count;
  next.owned_size=0;
- if(ticket->result.is_valid() && ticket->result->issued_size)next.readback_request=ticket->result->request_serial;
+ if (ticket->result.is_valid() && ticket->result->issued_size) {
+	 next.readback_request = ticket->readback_serial(0);
+ }
  next.issue_fact=ticket->natives.is_empty()?0:native_success?1:2;
  const bool sources_returned=mapped_all && returned && !ticket->frame_refs && native_success && !ticket->mapping_failed && (ticket->graphs.is_empty() || has_native);
  bool live_upload_claim = false;
@@ -333,9 +336,7 @@ void Registry::qualification_ticket_publish(QualificationTicket *ticket,Renderin
  else {next.state=4;next.phase=4;}
  bool result_complete = ticket->recorded && ticket->ordering_closed && ticket->readback_count() > 0;
  for (uint32_t i = 0; i < ticket->readback_count(); ++i) {
-	 const auto range = ticket->readback_range(i);
-	 const auto &owned = ticket->readback_result(i);
-	 result_complete = result_complete && owned.is_valid() && owned->delivered && owned->error == OK && owned->completed_size == range.readback_size && owned->issued_size == range.readback_size && uint64_t(owned->bytes.size()) == range.readback_size;
+	 result_complete = result_complete && ticket->readback_complete(i);
  }
  if(sources_returned && result_complete && !ticket->append_failed && !ticket->admission_closed) {
 	 next.state = 8;
@@ -385,7 +386,10 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record(GDExtensionQuali
   ticket=memnew(QualificationTicket);ticket->origin=*request;ticket->bridge_serial=bridge->serial;ticket->library=bridge->library;
   ticket->facts.reserve(QualificationTicket::FACT_CAPACITY);ticket->graphs.reserve(QualificationTicket::FACT_CAPACITY);ticket->natives.reserve(QualificationTicket::FACT_CAPACITY);ticket->resource_pins.reserve(128);ticket->physical_uses.reserve(128);
   ticket->result.instantiate();error=ticket->result->bytes.resize(request->readback_size);if(error!=OK){memdelete(ticket);return result(error,19);}
-  ticket->result->qualification_owned=true;qualification_serials.take(ticket->serial);qualification_serials.take(ticket->result->request_serial);
+  ticket->result->qualification_owned = true;
+  qualification_serials.take(ticket->serial);
+  qualification_serials.take(ticket->result->request_serial);
+  ticket->original_readback_serial = ticket->result->request_serial;
   auto &r=ticket->report;r.abi={1,sizeof(GDExtensionDeviceExitAbi),0};r.revision=1;r.record_generation=request->record_generation;r.request_nonce=request->request_nonce;r.source_backing_serial=request->observed_backing_serial;r.source_offset=request->readback_offset;r.source_size=request->readback_size;memcpy(r.request_digest,request->request_digest,32);memcpy(r.unit_digest,request->unit_digest,32);
   if(!bridge->cleanup_refs_reserved){records[bridge->library].private_refs+=2;bridge->cleanup_refs_reserved=true;}
   bridge->tickets[slot]=ticket;++bridge->children;++records[bridge->library].private_refs;
@@ -517,7 +521,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_copy(GDExtensionQualifi
  if(!destination||!capacity||capacity>16384)return result(ERR_INVALID_PARAMETER,2);
  MutexLock lock(mutex);QualificationBridge *bridge=nullptr;RenderingDevice *rd=nullptr;QualificationTicket *ticket=nullptr;Error error=qualification_bridge_locked(ref,false,false,bridge,rd);if(error!=OK)return result(error,17);error=qualification_ticket_locked(bridge,ticket_ref,ticket);if(error!=OK)return result(error,17);
  if (!ticket->multi_readback) {
-	 if (!revision || revision != ticket->report.revision || ticket->report.state != 8 || !ticket->physically_retired.load() || ticket->result.is_null() || ticket->result->error != OK || !ticket->result->delivered || capacity != ticket->report.owned_size || capacity != ticket->result->bytes.size()) {
+	 if (!revision || revision != ticket->report.revision || ticket->report.state != 8 || !ticket->physically_retired.load() || ticket->result.is_null() || !ticket->readback_complete(0) || capacity != ticket->report.owned_size || capacity != ticket->result->bytes.size()) {
 		 return result(ERR_BUSY, 16);
 	 }
 	 memcpy(destination, ticket->result->bytes.ptr(), capacity);
@@ -529,8 +533,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_copy(GDExtensionQualifi
  }
  for (uint32_t i = 0; i < ticket->readback_count(); ++i) {
 	 const auto range = ticket->readback_range(i);
-	 const auto &owned = ticket->readback_result(i);
-	 if (owned.is_null() || owned->error != OK || !owned->delivered || range.result_offset > capacity || range.readback_size > capacity - range.result_offset || uint64_t(owned->bytes.size()) != range.readback_size || owned->issued_size != range.readback_size || owned->completed_size != range.readback_size) {
+	 if (!ticket->readback_complete(i) || range.result_offset > capacity || range.readback_size > capacity - range.result_offset) {
 		 return result(ERR_BUSY, 16);
 	 }
  }
@@ -588,7 +591,10 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_release(GDExtensionQual
   rd->_thread_safe_.unlock();
  }
  for(auto &member:ticket->natives)if(member.retained && !member.owner_released) {
-  error=rd->driver->native_call_release(member.source.serial);if(error!=OK)return result(error,error==ERR_BUSY?19:17);member.owner_released=true;
+		 error = release_native_source(*rd->driver, member);
+		 if (error != OK) {
+			 return result(error, error == ERR_BUSY ? 19 : 17);
+		 }
  }
  RdUnlock rd_unlock;
  if(has_reverse_edges) {
@@ -696,6 +702,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_prepare_uploads(GDExten
 	ticket->result->qualification_owned = true;
 	qualification_serials.take(ticket->serial);
 	qualification_serials.take(ticket->result->request_serial);
+	ticket->original_readback_serial = ticket->result->request_serial;
 	if (p_multi_readback) {
 		for (auto &serial : ticket->additional_readback_serials) {
 			qualification_serials.take(serial);
@@ -842,7 +849,7 @@ void Registry::qualification_report_v2(const QualificationTicket *ticket, GDExte
 		out.readbacks[i].source = ticket->range_origin.readbacks[i];
 		const auto &owned = ticket->readback_result(i);
 		if (owned.is_valid()) {
-			out.readbacks[i].readback_request = owned->request_serial;
+			out.readbacks[i].readback_request = ticket->readback_serial(i);
 		}
 	}
 	out.owned_size = ticket->report.owned_size;
@@ -1023,7 +1030,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_v2(GDEx
 				return result(error, 19);
 			}
 			owned[i]->qualification_owned = true;
-			owned[i]->request_serial = i ? ticket->additional_readback_serials[i - 1] : ticket->result->request_serial;
+			owned[i]->request_serial = ticket->readback_serial(i);
 		}
 		error = rd->_qualification_pin_resources(ticket, resources);
 		if (error != OK) {

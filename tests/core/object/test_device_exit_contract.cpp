@@ -35,13 +35,14 @@ TEST_FORCE_LINK(test_device_exit_contract)
 #include "core/extension/gdextension.h"
 #include "core/extension/gdextension_function_loader.h"
 #include "core/extension/gdextension_library_loader.h"
+#include "core/extension/gdextension_production_registration.h"
 #include "core/io/config_file.h"
 #include "core/io/dir_access.h"
 #include "core/os/os.h"
 #include "tests/test_utils.h"
 
-#include <cstring>
 #include <cstdio>
+#include <cstring>
 #include <memory>
 #ifdef THREADS_ENABLED
 #include <atomic>
@@ -614,7 +615,59 @@ TEST_CASE("device_exit::foundation/bootstrap/nested-owner-and-thread-scope") {
 	nested_capture = nullptr;
 }
 
+using GDExtensionDeviceExit::InitializationLevelContextRef;
+using GDExtensionDeviceExit::LibraryCodeHoldRef;
+using GDExtensionDeviceExit::ProducerRegistrationRef;
+
 struct RegistryAccess {
+	static Error producer_admission(const ProducerRegistrationRef &p_ref) {
+		auto &registry = Registry::get_singleton();
+		MutexLock lock(registry.mutex);
+		Registry::Record *record = nullptr;
+		return registry.admit_producer_source_locked(p_ref, record);
+	}
+	static void producer_capacity(InitializationLevelContextRef p_frame, LibraryCodeHoldRef p_code, const void *p_identity) {
+		auto &registry = Registry::get_singleton();
+		Registry::View *view = nullptr;
+		REQUIRE_EQ(registry.resolve_borrow_locked(p_frame.registry_instance, p_frame.handle_serial, Registry::ViewDomain::INITIALIZE, view), OK);
+		REQUIRE(view != nullptr);
+		const auto &record = registry.records[view->record];
+		const void *root_before = record.producer_attachment_identity;
+		const uint64_t holder_before = record.producer_code_holder;
+		const uint32_t private_before = record.private_refs;
+		const uint32_t external_before = record.external_refs;
+		const uint64_t serial_before = registry.serials.next;
+		const bool exhausted_before = registry.serials.exhausted;
+		const uint32_t old_limit = registry.private_limit;
+		registry.private_limit = 0;
+		ProducerRegistrationRef refused;
+		const Error error = registry.bind_host_producer(p_frame, p_code, p_identity, refused);
+		registry.private_limit = old_limit;
+		CHECK_EQ(error, ERR_PARAMETER_RANGE_ERROR);
+		CHECK_FALSE(refused.is_valid());
+		CHECK_EQ(record.producer_attachment_identity, root_before);
+		CHECK_EQ(record.producer_code_holder, holder_before);
+		CHECK_EQ(record.private_refs, private_before);
+		CHECK_EQ(record.external_refs, external_before);
+		CHECK_EQ(registry.serials.next, serial_before);
+		CHECK_EQ(registry.serials.exhausted, exhausted_before);
+		registry.serials.exhausted = true;
+		GDExtensionProducerRegistrationRefV1 refused_view{};
+		const Error view_error = registry.bind_host_producer_view(p_frame, p_code, p_identity, refused_view);
+		registry.serials.exhausted = exhausted_before;
+		CHECK_EQ(view_error, ERR_PARAMETER_RANGE_ERROR);
+		CHECK_EQ(refused_view.registry_instance, 0);
+		CHECK_EQ(refused_view.handle_serial, 0);
+		CHECK_EQ(record.producer_attachment_identity, root_before);
+		CHECK_EQ(record.producer_code_holder, holder_before);
+		CHECK_EQ(record.private_refs, private_before);
+		CHECK_EQ(record.external_refs, external_before);
+		CHECK_EQ(registry.serials.next, serial_before);
+	}
+	static bool issuer_state(Registry &p_registry, uint64_t p_next, bool p_exhausted) {
+		return p_registry.serials.next == p_next && p_registry.serials.exhausted == p_exhausted;
+	}
+
 	static void refuse_external_issuance(MetadataCapture &p_api, bool p_exhaust_serial) {
 		auto &registry = Registry::get_singleton();
 		const uint32_t old_limit = registry.view_limit;
@@ -721,6 +774,13 @@ struct RegistryAccess {
 		return Error(p_registry.retain(&request, authority, &r_view));
 	}
 };
+
+Error test_producer_admission(const ProducerRegistrationRef &p_ref) {
+	return RegistryAccess::producer_admission(p_ref);
+}
+void test_producer_capacity(InitializationLevelContextRef p_frame, LibraryCodeHoldRef p_code, const void *p_identity) {
+	RegistryAccess::producer_capacity(p_frame, p_code, p_identity);
+}
 
 static Error reserved_dynamic_open(const String &p_path, const String &p_operation, const Ref<GDExtension> &p_extension, const Ref<GDExtensionLibraryLoader> &p_loader) {
 	return RegistryAccess::fail_reservation(p_path, p_operation, p_extension, p_loader);
@@ -855,10 +915,26 @@ TEST_CASE("device_exit::foundation/isolated/finalizing-needs-engine-end-and-last
 	CHECK_EQ(registry->reserve_open(2, new_owner, new_scope), OK);
 }
 
+TEST_CASE("device_exit::foundation/registration/reserves-original-identity-before-open") {
+	auto registry = RegistryAccess::make(1, 2);
+	uint64_t cycle;
+	REQUIRE_EQ(registry->begin_cycle(cycle), OK);
+	RegistryAccess::counters(*registry, 1, UINT64_MAX);
+	RecordRef owner, scope;
+	CHECK_EQ(registry->reserve_open(2, owner, scope), ERR_PARAMETER_RANGE_ERROR);
+	CHECK_FALSE(owner.is_valid());
+	CHECK_FALSE(scope.is_valid());
+	CHECK_EQ(RegistryAccess::occupied(*registry), 0);
+	CHECK(RegistryAccess::issuer_state(*registry, UINT64_MAX, false));
+	// The failed reservation did not consume the final authority serial.
+	RegistryAccess::counters(*registry, 1, UINT64_MAX - 1);
+	CHECK_EQ(registry->reserve_open(2, owner, scope), OK);
+}
+
 TEST_CASE("device_exit::foundation/isolated/exhaustion-and-failed-reservation-slots") {
 	CHECK(RegistryAccess::sequence_boundary());
 	auto registry = RegistryAccess::make(1, 2);
-	RegistryAccess::counters(*registry, UINT64_MAX, UINT64_MAX - 1);
+	RegistryAccess::counters(*registry, UINT64_MAX, UINT64_MAX - 2);
 	uint64_t cycle;
 	REQUIRE_EQ(registry->begin_cycle(cycle), OK);
 	RecordRef owner, scope;

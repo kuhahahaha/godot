@@ -238,70 +238,91 @@ void RenderingDevice::_qualification_issue_tickets_locked(uint32_t slot,const RD
    const uint32_t index=ticket->facts.size();ticket->facts.push_back(fact);ticket->observation_dirty=true;
    ticket->natives.push_back({source,index,uint32_t(frame),slot,frames[frame].qualification_epoch,false,false});
   }
-  if((error!=OK && error!=ERR_BUSY) || report.error!=OK || report.calls.is_empty()) {
+  if ((error != OK && error != ERR_BUSY) || report.error != OK || report.calls.is_empty()) {
 	  ticket->append_failed = true;
 	  if (ticket->report.native_error == OK) {
 		  ticket->report.native_error = error != OK ? error : report.error != OK ? report.error
 																				 : FAILED;
+		  ticket->report.native_code = report.native_code;
 	  }
-   if(!report.issued)ticket->mapping_failed=true;
+	  if (!report.issued) {
+		  ticket->mapping_failed = true;
+	  }
   }
-  registry.qualification_ticket_publish(ticket,this);
+  registry.qualification_ticket_publish(ticket, this);
  }
 }
 Error RenderingDevice::_qualification_retain_tickets(uint32_t index) {
- auto &registry=Registry::get_singleton();MutexLock lock(registry.mutex);
- for(auto *ticket:frames[index].qualification_tickets)for(auto &member:ticket->natives) {
-  if(member.retained || member.owner_released)continue;
-  const Error error=driver->native_call_retain(member.source.serial);
-  if(error!=OK)return error;
-  member.retained=true;
- }
- return OK;
+	auto &registry = Registry::get_singleton();
+	MutexLock lock(registry.mutex);
+	for (auto *ticket : frames[index].qualification_tickets) {
+		for (auto &member : ticket->natives) {
+			if (member.retained || member.owner_released) {
+				continue;
+			}
+			const Error error = retain_native_source(*driver, member);
+			if (error != OK) {
+				return error;
+			}
+		}
+	}
+	return OK;
 }
 Error RenderingDevice::_qualification_poll_tickets(uint32_t index) {
- if(frames[index].qualification_tickets.is_empty())return OK;
- auto &registry=Registry::get_singleton();
- for(auto *ticket:frames[index].qualification_tickets) {
-  for(auto &member:ticket->natives) {
-   if(member.owner_released)continue;
-   if(!member.retained) {
-    const Error error=driver->native_call_retain(member.source.serial);
-    if(error==ERR_BUSY)return ERR_BUSY;
-	if (error != OK) {
-		MutexLock lock(registry.mutex);
-		ticket->mapping_failed = true;
-		if (ticket->report.native_error == OK) {
-			ticket->report.native_error = error;
-		}
-		registry.qualification_ticket_publish(ticket, this);
-		return error;
+	if (frames[index].qualification_tickets.is_empty()) {
+		return OK;
 	}
-	member.retained=true;
-   }
-   const auto completion=driver->native_call_poll(member.source.serial);
-   MutexLock lock(registry.mutex);auto &fact=ticket->facts[member.fact];const auto old=fact;
-   if (completion.native_error) {
-	   fact.issue = uint32_t(member.source.issue);
-	   if (ticket->report.native_error == OK) {
-		   ticket->report.native_error = FAILED;
-		   ticket->report.native_code = completion.native_code;
-	   }
-	   fact.completion = member.source.issue == RDD::IssueFact::IssuedUnknown ? 4 : 3;
-	   fact.error = FAILED;
-	   fact.native_code = completion.native_code;
-	   ticket->append_failed = true;
-	   ticket->observation_dirty = true;
-	   registry.qualification_ticket_publish(ticket, this);
-	   return FAILED;
-   }
-   if(completion.matches(member.source.completion_serial)){fact.issue=1;fact.completion=2;fact.native_code=completion.native_code;fact.phase=4;}
-   if(memcmp(&old,&fact,sizeof(fact)))ticket->observation_dirty=true;
-   registry.qualification_ticket_publish(ticket,this);
-   if(!completion.matches(member.source.completion_serial))return ERR_BUSY;
-  }
- }
- return OK;
+	auto &registry = Registry::get_singleton();
+	for (auto *ticket : frames[index].qualification_tickets) {
+		for (auto &member : ticket->natives) {
+			if (member.owner_released) {
+				continue;
+			}
+			const auto completion = poll_native_source(*driver, member, ticket->source_origin);
+			if (completion.error == ERR_BUSY) {
+				return ERR_BUSY;
+			}
+			MutexLock lock(registry.mutex);
+			auto &fact = ticket->facts[member.fact];
+			const auto old = fact;
+			if (completion.error != OK) {
+				fact.issue = uint32_t(member.source.issue);
+				if (ticket->report.native_error == OK) {
+					ticket->report.native_error = completion.error;
+					ticket->report.native_code = completion.native_code;
+				}
+				fact.completion = completion.state == GDExtensionDeviceExit::NativeSourceObservation::State::Unknown ? 4 : 3;
+				fact.error = completion.error;
+				fact.native_code = completion.native_code;
+				ticket->append_failed = true;
+				ticket->observation_dirty = true;
+				if (!member.retained) {
+					ticket->mapping_failed = true;
+				}
+				registry.qualification_ticket_publish(ticket, this);
+				return completion.error;
+			}
+			if (completion.state == GDExtensionDeviceExit::NativeSourceObservation::State::Complete) {
+				fact.issue = uint32_t(completion.resolved_issue);
+				fact.completion = 2;
+				fact.native_code = completion.native_code;
+				fact.phase = 4;
+			} else if (completion.state == GDExtensionDeviceExit::NativeSourceObservation::State::Unknown) {
+				fact.issue = uint32_t(member.source.issue);
+				fact.completion = 4;
+				fact.native_code = completion.native_code;
+				ticket->mapping_failed = true;
+			}
+			if (memcmp(&old, &fact, sizeof(fact))) {
+				ticket->observation_dirty = true;
+			}
+			registry.qualification_ticket_publish(ticket, this);
+			if (completion.state != GDExtensionDeviceExit::NativeSourceObservation::State::Complete) {
+				return ERR_BUSY;
+			}
+		}
+	}
+	return OK;
 }
 void RenderingDevice::_qualification_return_frame_tickets(uint32_t index) {
  if(frames[index].qualification_tickets.is_empty())return;

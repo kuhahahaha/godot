@@ -186,6 +186,14 @@ public:
 			owned.instantiate();
 			owned->qualification_owned = true;
 			owned->request_serial = 101 + i;
+			if (i) {
+				ticket->additional_readback_serials[i - 1] = 101 + i;
+			} else {
+				ticket->original_readback_serial = 101;
+			}
+			owned->source_backing_serial = range.observed_backing_serial;
+			owned->source_offset = range.readback_offset;
+			owned->source_size = range.readback_size;
 			owned->bytes.resize(range.readback_size);
 			memcpy(owned->bytes.ptrw(), expected + range.result_offset, range.readback_size);
 			owned->issued_size = range.readback_size;
@@ -449,6 +457,14 @@ public:
 		const uint32_t expected_bytes[] = { 7, 8, 9, 10 };
 		ticket->result->bytes.resize(sizeof(expected_bytes));
 		memcpy(ticket->result->bytes.ptrw(), expected_bytes, sizeof(expected_bytes));
+		CHECK_FALSE(ticket->readback_complete(0));
+		// This CPU-only completed snapshot includes its original request and
+		// backing association; delivery and byte values alone are insufficient.
+		ticket->original_readback_serial = ticket->result->request_serial = 101;
+		ticket->origin.observed_backing_serial = ticket->result->source_backing_serial = 51;
+		ticket->origin.readback_size = ticket->result->source_size = sizeof(expected_bytes);
+		ticket->result->issued_size = ticket->result->completed_size = sizeof(expected_bytes);
+		CHECK(ticket->readback_complete(0));
 		GDExtensionQualificationFactV1 expected_facts[2] = {};
 		expected_facts[0].graph_kind = 1; expected_facts[0].graph_index = 17;
 		expected_facts[1].graph_kind = 2; expected_facts[1].graph_index = 29;
@@ -523,7 +539,12 @@ public:
 		ticket.result->qualification_owned = true;
 		ticket.result->bytes.resize(8);
 		ticket.result->issued_size = 8;
-		ticket.result->request_serial = 101;
+		ticket.result->request_serial = ticket.original_readback_serial = 101;
+		ticket.origin.observed_backing_serial = 11;
+		ticket.origin.readback_offset = 4;
+		ticket.result->source_backing_serial = 11;
+		ticket.result->source_offset = 4;
+		ticket.result->source_size = 8;
 		RenderingDevice::BufferGetDataRequest request;
 		request.size = 8;
 		request.frame_local_count = 2;
@@ -636,6 +657,8 @@ public:
 		ticket.report.revision = 1;
 		RDD::NativeCallFact source;
 		source.serial = source.completion_serial = 17;
+		source.queue_index = 1;
+		source.completion = RDD::CompletionCapability::Fence;
 		source.issue = RDD::IssueFact::IssuedUnknown;
 		source.native_code = -7;
 		GDExtensionQualificationFactV1 fact = {};
@@ -713,7 +736,8 @@ public:
 		}
 		// Invalid RID is deliberately later than capacity: no fake pipeline or
 		// production grant is needed to observe preappend slot-budget admission.
-		device.driver = nullptr; memdelete(registry);
+		device.driver = nullptr;
+		memdelete(registry);
 	}
 
 	static void unknown_native_error(uint32_t mode = 0) {
@@ -721,18 +745,30 @@ public:
 		using RDD = RenderingDeviceDriver;
 		struct Driver : TransferTestDriverBase {
 			bool pending = false, finished = false;
-			Error native_call_retain(uint64_t serial) override { CHECK(serial == 17); return OK; }
+			Error native_call_retain(uint64_t serial) override {
+				CHECK(serial == 17);
+				return OK;
+			}
 			FencePollResult native_call_poll(uint64_t serial) override {
 				CHECK(serial == 17);
-				FencePollResult out; out.completed_serial = serial;
-				out.native_error = !pending; out.native_code = pending ? 0 : -1;
-				out.completed = pending && finished; return out;
+				FencePollResult out;
+				out.completed_serial = serial;
+				out.native_error = !pending;
+				out.native_code = pending ? 0 : -1;
+				out.completed = pending && finished;
+				if (out.completed) {
+					out.resolved_issue = IssueFact::KnownAccepted; // Exact void-commit completion source.
+				}
+				return out;
 			}
 		} driver;
 		driver.pending = mode == 2;
-		RenderingDevice device; device.driver = &driver; device.frames.resize(1);
+		RenderingDevice device;
+		device.driver = &driver;
+		device.frames.resize(1);
 		QualificationTicket ticket; ticket.report.revision = 1; ticket.frame_refs = 1;
 		RDD::NativeCallFact source; source.serial = source.completion_serial = 17; source.queue_index = 3;
+		source.completion = RDD::CompletionCapability::Fence;
 		source.issue = mode == 1 ? RDD::IssueFact::KnownAccepted : RDD::IssueFact::IssuedUnknown;
 		source.error = mode == 2 ? OK : FAILED; source.native_code = mode == 2 ? 0 : -1;
 		GDExtensionQualificationFactV1 fact = {}; fact.issue = uint32_t(source.issue); fact.completion = 1;
@@ -834,7 +870,15 @@ public:
   device.draw_graph.initialize(&driver,[](RenderingDeviceDriver *,VectorView<RenderingDeviceDriver::AttachmentLoadOp>,VectorView<RenderingDeviceDriver::AttachmentStoreOp>,void *){return RenderingDeviceDriver::RenderPassID();},2,RenderingDeviceDriver::CommandQueueFamilyID(1),0);device.draw_graph.begin();
   auto &staging=device.download_staging_buffers;staging.blocks.resize(1);staging.block_size=staging.max_size=64;staging.blocks.write[0].driver_id=RenderingDeviceDriver::BufferID(51);staging.blocks.write[0].frame_used=10;staging.blocks.write[0].fill_amount=32;
   RenderingDevice::Buffer buffer;buffer.driver_id=RenderingDeviceDriver::BufferID(71);buffer.size=64;buffer.backing_serial=11;buffer.draw_tracker=RenderingDeviceGraph::resource_tracker_create();buffer.draw_tracker->buffer_driver_id=buffer.driver_id;RID rid=device.storage_buffer_owner.make_rid(buffer);
-  QualificationTicket ticket;ticket.recorded=true;ticket.report.revision=1;ticket.origin.readback_buffer=rid.get_id();ticket.origin.readback_size=64;ticket.result.instantiate();ticket.result->qualification_owned=true;ticket.result->bytes.resize(64);
+  QualificationTicket ticket;
+  ticket.recorded = true;
+  ticket.report.revision = 1;
+  ticket.origin.readback_buffer = rid.get_id();
+  ticket.origin.readback_size = 64;
+  ticket.result.instantiate();
+  ticket.result->qualification_owned = true;
+  ticket.result->request_serial = ticket.original_readback_serial = 101;
+  ticket.result->bytes.resize(64);
   auto &registry=Registry::get_singleton();std::atomic<bool> locked=false,release=false;
   std::thread holder([&]{device._thread_safe_.lock();locked=true;while(!release.load())std::this_thread::yield();device._thread_safe_.unlock();});
   while(!locked.load())std::this_thread::yield();
@@ -856,6 +900,9 @@ public:
   QualificationTicket ticket;ticket.report.revision=1;ticket.origin.readback_size=4;
   ticket.recorded=true;ticket.ordering_closed=true;ticket.result.instantiate();
   ticket.result->qualification_owned=true;ticket.result->bytes.resize(4);ticket.result->issued_size=4;
+  ticket.result->request_serial = ticket.original_readback_serial = 101;
+  ticket.origin.observed_backing_serial = ticket.result->source_backing_serial = 11;
+  ticket.result->source_size = 4;
   RenderingDevice::Buffer buffer;buffer.qualification_users=1;RID rid=device.storage_buffer_owner.make_rid(buffer);ticket.resource_pins.push_back(rid);
   GDExtensionQualificationFactV1 graph={};graph.semantic_kind=3;graph.command_slot=0;ticket.facts.push_back(graph);
   ticket.graphs.push_back({{},0,0,0,1,true,false});ticket.frame_refs=1;

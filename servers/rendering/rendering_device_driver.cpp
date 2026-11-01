@@ -95,6 +95,31 @@ RenderingDeviceDriver::QueueCallReport RenderingDeviceDriver::get_last_queue_cal
 
 Error RenderingDeviceDriver::command_queue_execute_and_present_observed(CommandQueueID p_cmd_queue, VectorView<SemaphoreID> p_wait_semaphores, VectorView<CommandBufferID> p_cmd_buffers, VectorView<SemaphoreID> p_cmd_semaphores, FenceID p_cmd_fence, VectorView<SwapChainID> p_swap_chains, QueueCallReport &r_report) {
 	r_report = QueueCallReport();
+	// The exact no-WSI Vulkan callsite has one original native fact. Pre-size
+	// its caller-local report before the call and use the same bounded writer
+	// as the private record path. Legacy reports retain their existing shape.
+	if (p_cmd_buffers.size() && !p_swap_chains.size() && record_native_call_bound(1) == 1) {
+		const Error allocation = r_report.calls.resize(1);
+		if (allocation != OK) {
+			r_report.error = allocation;
+			return allocation;
+		}
+		NativeFactWriteRange range;
+		range.data = r_report.calls.ptrw();
+		range.capacity = 1;
+		const Error error = command_queue_execute_recorded(p_cmd_queue, p_wait_semaphores, p_cmd_buffers, p_cmd_semaphores, p_cmd_fence, range);
+		if (!range.issued) {
+			r_report.calls.clear();
+		}
+		r_report.issued = range.issued;
+		r_report.error = range.coverage_lost ? ERR_INVALID_DATA : error;
+		r_report.native_code = range.native_code;
+		r_report.submission_serial = range.submission_serial;
+		// This is the legacy diagnostic publication, not production provenance.
+		// The private recorded overload never copies to this mutable report.
+		record_queue_call_report(r_report);
+		return r_report.error;
+	}
 	r_report.calls.reserve(8);
 	QueueCallReport *previous_report = active_queue_call_report;
 	active_queue_call_report = &r_report;
@@ -114,3 +139,19 @@ void RenderingDeviceDriver::notify_session_device_lost() const {
 
 void RenderingDeviceDriver::session_loss_identity(uint64_t& registry,uint64_t& epoch) const { GDExtensionDeviceExit::Registry::get_singleton().device_loss_identity(session_owner,registry,epoch); }
 void RenderingDeviceDriver::notify_session_device_lost(uint64_t registry,uint64_t epoch) { GDExtensionDeviceExit::Registry::get_singleton().device_lost(registry,epoch); }
+
+thread_local RenderingDeviceDriver::NativeFactWriteRange *RenderingDeviceDriver::active_native_fact_range = nullptr;
+Error RenderingDeviceDriver::command_queue_execute_recorded(CommandQueueID queue, VectorView<SemaphoreID> waits, VectorView<CommandBufferID> commands, VectorView<SemaphoreID> signals, FenceID fence, NativeFactWriteRange &range) {
+	if (!record_native_call_bound(1) || !range.data || range.written || range.capacity < record_native_call_bound(1) || active_native_fact_range) {
+		return ERR_UNAVAILABLE;
+	}
+	active_native_fact_range = &range;
+	const Error error = command_queue_execute_and_present(queue, waits, commands, signals, fence, {});
+	active_native_fact_range = nullptr;
+	range.error = error;
+	if (commands.size() && !range.written && error == OK) {
+		range.coverage_lost = true;
+		return ERR_INVALID_DATA;
+	}
+	return error;
+}

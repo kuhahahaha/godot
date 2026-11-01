@@ -3854,6 +3854,48 @@
             ]
         },
         {
+            "name": "GDExtensionProducerRegistrationRefV1",
+            "kind": "struct",
+            "description": [
+                "Opaque retained original Host producer registration. Numbers are handles only; labels do not authenticate a registration. This is not a code hold or operation/source grant."
+            ],
+            "members": [
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "handle_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProducerRegistrationIdentityV1",
+            "kind": "struct",
+            "description": [
+                "Read-only original registration identity. Native ABI version 1, struct_size sizeof this structure, reserved zero. label is bounded NUL-terminated UTF-8; copying it does not retain or authenticate the producer."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "library_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "label[96]",
+                    "type": "char"
+                }
+            ]
+        },
+        {
             "name": "GDExtensionDeviceExitUserLevelFnV1",
             "kind": "function",
             "arguments": [
@@ -14854,6 +14896,165 @@
             "description": [
                 "Original qualification bridge typed resource transaction; numeric observations do not authorize bare RIDs."
             ]
+        },
+        {
+            "name": "device_session_bind_host_producer_v1",
+            "since": "4.7",
+            "description": [
+                "Internal guarded device-session registration import. Existing loader and guarded entry adoption remain required. Native aligned nonaliasing pointers are required; abi version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero.",
+                "The original Registry owns all handles and metadata. Empty output handles remain empty on failure; nonempty outputs reject unchanged. No label, address, code hold or registration alone grants operation, OAS, evidence-site or native source authority.",
+                "Binds once inside the authenticated original SCENE initializer. Identical root and code holder retry returns the same registration identity; contradictory rebinding rejects before publication."
+            ],
+            "arguments": [
+                {
+                    "name": "abi",
+                    "type": "const GDExtensionDeviceExitAbi*",
+                    "description": [
+                        "ABI version and layout."
+                    ]
+                },
+                {
+                    "name": "initialize",
+                    "type": "GDExtensionDeviceExitInitializationLevelContextRef",
+                    "description": [
+                        "Exact original unacknowledged SCENE initializer context."
+                    ]
+                },
+                {
+                    "name": "code_hold",
+                    "type": "GDExtensionDeviceExitLibraryCodeHoldRef",
+                    "description": [
+                        "Original live SCENE cleanup code hold."
+                    ]
+                },
+                {
+                    "name": "attachment_identity",
+                    "type": "const void*",
+                    "description": [
+                        "Original Host root address, identity only and never dereferenced by core."
+                    ]
+                },
+                {
+                    "name": "out_registration",
+                    "type": "GDExtensionProducerRegistrationRefV1*",
+                    "description": [
+                        "Empty output; original Registry retains its metadata until release."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "int32_t",
+                "description": [
+                    "Existing Godot Error value."
+                ]
+            }
+        },
+        {
+            "name": "device_session_clone_producer_registration_v1",
+            "since": "4.7",
+            "description": [
+                "Internal guarded device-session registration import. Existing loader and guarded entry adoption remain required. Native aligned nonaliasing pointers are required; abi version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero.",
+                "The original Registry owns all handles and metadata. Empty output handles remain empty on failure; nonempty outputs reject unchanged. No label, address, code hold or registration alone grants operation, OAS, evidence-site or native source authority.",
+                "Retains only the already-issued original metadata, including after admission revocation. It cannot reopen source admission."
+            ],
+            "arguments": [
+                {
+                    "name": "abi",
+                    "type": "const GDExtensionDeviceExitAbi*",
+                    "description": [
+                        "ABI version and layout."
+                    ]
+                },
+                {
+                    "name": "source",
+                    "type": "GDExtensionProducerRegistrationRefV1",
+                    "description": [
+                        "Retained original registration handle."
+                    ]
+                },
+                {
+                    "name": "out_registration",
+                    "type": "GDExtensionProducerRegistrationRefV1*",
+                    "description": [
+                        "Empty output; original Registry retains its metadata until release."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "int32_t",
+                "description": [
+                    "Existing Godot Error value."
+                ]
+            }
+        },
+        {
+            "name": "device_session_copy_producer_registration_v1",
+            "since": "4.7",
+            "description": [
+                "Internal guarded device-session registration import. Existing loader and guarded entry adoption remain required. Native aligned nonaliasing pointers are required; abi version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero.",
+                "The original Registry owns all handles and metadata. Empty output handles remain empty on failure; nonempty outputs reject unchanged. No label, address, code hold or registration alone grants operation, OAS, evidence-site or native source authority.",
+                "Copies original immutable label, registry instance and library generation while the exact registration remains retained. No DSO pointer or encoder is invoked."
+            ],
+            "arguments": [
+                {
+                    "name": "abi",
+                    "type": "const GDExtensionDeviceExitAbi*",
+                    "description": [
+                        "ABI version and layout."
+                    ]
+                },
+                {
+                    "name": "source",
+                    "type": "GDExtensionProducerRegistrationRefV1",
+                    "description": [
+                        "Retained original registration handle."
+                    ]
+                },
+                {
+                    "name": "out_identity",
+                    "type": "GDExtensionProducerRegistrationIdentityV1*",
+                    "description": [
+                        "Caller initializes embedded abi to version 1, sizeof this structure, reserved zero. Preserved unchanged on failure."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "int32_t",
+                "description": [
+                    "Existing Godot Error value."
+                ]
+            }
+        },
+        {
+            "name": "device_session_release_producer_registration_v1",
+            "since": "4.7",
+            "description": [
+                "Internal guarded device-session registration import. Existing loader and guarded entry adoption remain required. Native aligned nonaliasing pointers are required; abi version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero.",
+                "The original Registry owns all handles and metadata. Empty output handles remain empty on failure; nonempty outputs reject unchanged. No label, address, code hold or registration alone grants operation, OAS, evidence-site or native source authority.",
+                "Returns exactly this retained registration handle once. It does not retire code, native work or any operation obligation. Repeated or wrong-domain release rejects."
+            ],
+            "arguments": [
+                {
+                    "name": "abi",
+                    "type": "const GDExtensionDeviceExitAbi*",
+                    "description": [
+                        "ABI version and layout."
+                    ]
+                },
+                {
+                    "name": "source",
+                    "type": "GDExtensionProducerRegistrationRefV1",
+                    "description": [
+                        "Retained original registration handle."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "int32_t",
+                "description": [
+                    "Existing Godot Error value."
+                ]
+            }
         }
     ]
 }

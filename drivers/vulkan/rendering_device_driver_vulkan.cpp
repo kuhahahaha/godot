@@ -3876,7 +3876,17 @@ RDD::CommandQueueID RenderingDeviceDriverVulkan::command_queue_create(CommandQue
 
 Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueueID p_cmd_queue, VectorView<SemaphoreID> p_wait_semaphores, VectorView<CommandBufferID> p_cmd_buffers, VectorView<SemaphoreID> p_cmd_semaphores, FenceID p_cmd_fence, VectorView<SwapChainID> p_swap_chains) {
 	ERR_FAIL_COND_V((p_wait_semaphores.size() > 0 && !p_wait_semaphores.ptr()) || (p_cmd_buffers.size() > 0 && !p_cmd_buffers.ptr()) || (p_cmd_semaphores.size() > 0 && !p_cmd_semaphores.ptr()) || (p_swap_chains.size() > 0 && !p_swap_chains.ptr()), ERR_INVALID_PARAMETER);
-	reset_queue_call_report();
+	const bool bounded_capture = bounded_native_capture_active();
+	uint32_t native_fact_index = UINT32_MAX;
+	if (bounded_capture) {
+		// The fixed production profile never imports WSI calls. Refuse before
+		// semaphore mutations, native-source creation or any actual queue call.
+		if (p_swap_chains.size() || (p_cmd_buffers.size() && !native_fact_capacity_available())) {
+			return ERR_PARAMETER_RANGE_ERROR;
+		}
+	} else {
+		reset_queue_call_report();
+	}
 	DEV_ASSERT(p_cmd_queue.id != 0);
 
 	VkResult err;
@@ -3886,7 +3896,9 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 	if (fence != nullptr && fence->submission_serial == UINT64_MAX) {
 		QueueCallReport report;
 		report.error = ERR_UNAVAILABLE;
-		record_queue_call_report(report);
+		if (!bounded_capture) {
+			record_queue_call_report(report);
+		}
 		return ERR_UNAVAILABLE;
 	}
 	NativeCall *native = nullptr;
@@ -3895,7 +3907,9 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 		if (prepared != OK) {
 			QueueCallReport report;
 			report.error = prepared;
-			record_queue_call_report(report);
+			if (!bounded_capture) {
+				record_queue_call_report(report);
+			}
 			return prepared;
 		}
 	}
@@ -3947,7 +3961,9 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 
 	if (p_cmd_buffers.size() > 0) {
 		QueueCallReport report;
-		report.calls.reserve(1 + p_swap_chains.size());
+		if (!bounded_capture) {
+			report.calls.reserve(1 + p_swap_chains.size());
+		}
 		report.issued = true;
 		report.present_attempted = p_swap_chains.size() > 0;
 		thread_local LocalVector<VkCommandBuffer> command_buffers;
@@ -3983,6 +3999,9 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 		submit_info.signalSemaphoreCount = signal_semaphores.size();
 		submit_info.pSignalSemaphores = signal_semaphores.ptr();
 
+		if (bounded_capture && !claim_native_fact(native_fact_index)) {
+			return ERR_PARAMETER_RANGE_ERROR;
+		}
 		device_queue.submit_mutex.lock();
 		reservation.release(); // From this actual call onward a failed prefix is retained.
 		err = vkQueueSubmit(device_queue.queue, 1, &submit_info, vk_fence);
@@ -4018,8 +4037,14 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 		fact.completion = CompletionCapability::Fence;
 		fact.completion_serial = native->serial;
 		fact.present = p_swap_chains.size() > 0;
-		report.calls.push_back(fact);
-		record_queue_call_report(report);
+		if (bounded_capture) {
+			finish_native_fact(native_fact_index, fact, report.submission_serial);
+		} else {
+			report.calls.push_back(fact);
+		}
+		if (!bounded_capture) {
+			record_queue_call_report(report);
+		}
 
 		if (err == VK_ERROR_DEVICE_LOST) {
 			print_lost_device_info();

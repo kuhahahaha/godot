@@ -69,7 +69,16 @@ RenderingDeviceDriver::FencePollResult RenderingDeviceDriverMetal::native_call_p
  if(!serial || !completion_records_mutex.try_lock())return out;
  for(auto *record:completion_records)if(record->serial==serial) {
   out.completed_serial=record->serial;
-  if(record->completed.load()) {out.completed=!record->failed.load();out.native_error=record->failed.load();out.native_code=record->native_code.load();}
+  if (record->completed.load()) {
+	  out.completed = !record->failed.load();
+	  out.native_error = record->failed.load();
+	  out.native_code = record->native_code.load();
+	  // The exact registered command's completion callback is an authoritative
+	  // acceptance resolution for Metal's void commit, unlike a quiet tail fence.
+	  if (out.completed) {
+		  out.resolved_issue = IssueFact::KnownAccepted;
+	  }
+  }
   break;
  }
  completion_records_mutex.unlock();return out;
@@ -81,7 +90,14 @@ RenderingDeviceDriver::FencePollResult RenderingDeviceDriverMetal::native_call_w
  command->waitUntilCompleted();
  FencePollResult out;MutexLock lock(completion_records_mutex);
  for(auto *record:completion_records)if(record->serial==serial) {
-  out.completed_serial=serial;out.native_error=record->failed.load();out.completed=record->completed.load()&&!out.native_error;out.native_code=record->native_code.load();break;
+		 out.completed_serial = serial;
+		 out.native_error = record->failed.load();
+		 out.completed = record->completed.load() && !out.native_error;
+		 out.native_code = record->native_code.load();
+		 if (out.completed) {
+			 out.resolved_issue = IssueFact::KnownAccepted;
+		 }
+		 break;
  }
  return out;
 }

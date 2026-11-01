@@ -60,6 +60,9 @@ class TestParticlesProcessRetryAccess;
 #include "servers/rendering/rendering_device_enums.h"
 #include "servers/rendering/rendering_device_graph.h"
 
+namespace GDExtensionDeviceExit {
+struct CheckedRecordAppend;
+}
 class RDTextureFormat;
 class RDTextureView;
 class RDAttachmentFormat;
@@ -119,6 +122,7 @@ private:
  friend class TestQualificationAckAccess;
  friend class TestQualificationStagingAccess;
  friend class TestQualificationTicketAccess;
+ friend class TestRecordSourceAccess;
  friend class TestQualificationRtAccess;
 	friend class RendererRD::TestParticlesProcessRetryAccess;
 	void test_arm_buffer_update_fault(RID p_buffer, uint32_t p_count) {
@@ -273,6 +277,8 @@ private:
  uint64_t next_qualification_frame_epoch = 1;
  bool qualification_retiring = false;
  bool qualification_recording = false;
+ GDExtensionDeviceExit::CheckedRecordAppend _record_source_dispatch(ComputeListID, uint32_t, uint32_t, uint32_t);
+ GDExtensionDeviceExit::CheckedRecordAppend _record_source_buffer_copy(RID, RID, uint32_t, uint32_t, uint32_t);
  RDG::RecordHandle _qualification_dispatch(ComputeListID p_list, uint32_t p_x, uint32_t p_y, uint32_t p_z);
  Error _qualification_maintenance();
  bool _qualification_resource_busy(RID p_rid);
@@ -350,10 +356,15 @@ private:
 		uint32_t completed_size = 0;
   uint32_t issued_size = 0;
   uint64_t request_serial = 0;
-		Error error = OK;
-		int64_t native_code = 0;
-		bool delivered = false;
-		bool qualification_owned = false;
+  // Captured from the original buffer at the first actual copy append.
+  // Continuations must retain this same request/backing/range association.
+  uint64_t source_backing_serial = 0;
+  uint32_t source_offset = 0;
+  uint32_t source_size = 0;
+  Error error = OK;
+  int64_t native_code = 0;
+  bool delivered = false;
+  bool qualification_owned = false;
 	};
 
  Error _buffer_get_data_async(RID, const Callable &, uint32_t, uint32_t, const Ref<BufferGetDataResult> &p_owned = {});

@@ -409,7 +409,9 @@ public:
 	Error native_call_recycle_wait(uint64_t) override;
 	Error native_call_retain(uint64_t) override;
 	Error native_call_release(uint64_t) override;
-	// Qualification admission still uses the inherited unavailable call bound.
+	// This profile admits no presentation and executes at most one vkQueueSubmit
+	// per command slot. Vulkan qualification keeps its existing unavailable cap.
+	uint32_t record_native_call_bound(uint32_t slots) const override { return slots; }
 	virtual FenceID fence_create() override final;
 	virtual Error fence_wait(FenceID p_fence) override final;
 	virtual FencePollResult fence_poll(FenceID p_fence, uint64_t p_expected_submission_serial) override final;

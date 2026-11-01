@@ -196,7 +196,9 @@ static GDExtensionDeviceSessionResultV1 release_context(GDExtensionDeviceRegistr
 static GDExtensionDeviceSessionResultV1 release_session(GDExtensionOriginalDeviceSessionRef s){return Registry::get_singleton().release_device_reference(s.registry_instance,s.handle_serial,true);}
 static GDExtensionDeviceSessionResultV1 bind_main_ready_session(const GDExtensionDeviceExitAbi *abi,GDExtensionDeviceExitSceneReadyContextRef frame,GDExtensionDeviceRegistryContextRef *c,GDExtensionOriginalDeviceSessionRef *s,uint64_t *id) { return Registry::get_singleton().bind_main_scene_ready_device_session(abi,frame,c,s,id); }
 void register_qualification_interfaces();
+void register_producer_registration_interfaces();
 void register_device_session_interfaces(){
+ register_producer_registration_interfaces();
  register_qualification_interfaces();
  GDExtension::register_interface_function("device_session_bind_main_scene_ready_v1",(GDExtensionInterfaceFunctionPtr)&bind_main_ready_session);
  GDExtension::register_interface_function("device_session_bind_v1",(GDExtensionInterfaceFunctionPtr)&bind_session);

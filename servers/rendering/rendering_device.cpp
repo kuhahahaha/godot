@@ -34,6 +34,7 @@
 #include "core/config/engine.h"
 #include "core/config/project_settings.h"
 #include "core/extension/gdextension_library_exit_guard.h"
+#include "core/extension/gdextension_record_source.h"
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
 #include "core/object/class_db.h"
@@ -1516,6 +1517,21 @@ Error RenderingDevice::_buffer_get_data_async(RID p_buffer, const Callable &p_ca
  if(!p_size)p_size=buffer->size;
  ERR_FAIL_COND_V(p_offset>buffer->size || p_size>buffer->size-p_offset,ERR_INVALID_PARAMETER);
  ERR_FAIL_COND_V(core ? (!p_owned->qualification_owned || !qualification_recording || p_callback.is_valid() || p_owned->bytes.size()!=p_size || p_owned->issued_size>p_size || p_owned->delivered || p_owned->error!=OK) : !p_callback.is_valid(),ERR_INVALID_PARAMETER);
+ if (core) {
+	 if (!p_owned->request_serial || !buffer->backing_serial) {
+		 return ERR_INVALID_DATA;
+	 }
+	 if (!p_owned->source_backing_serial) {
+		 if (p_owned->issued_size || !p_owned->copies.is_empty()) {
+			 return ERR_INVALID_DATA;
+		 }
+		 p_owned->source_backing_serial = buffer->backing_serial;
+		 p_owned->source_offset = p_offset;
+		 p_owned->source_size = p_size;
+	 } else if (p_owned->source_backing_serial != buffer->backing_serial || p_owned->source_offset != p_offset || p_owned->source_size != p_size) {
+		 return ERR_INVALID_DATA;
+	 }
+ }
  // The public legacy route retains its worker submission behavior. Core ticket
  // admission must join a real worker before using it; never silently wait here.
  if(core && buffer->transfer_worker_index>=0)return ERR_BUSY;
@@ -12029,3 +12045,71 @@ static_assert(ENUM_MEMBERS_EQUAL(RD::CALLBACK_RESOURCE_USAGE_ATTACHMENT_COLOR_RE
 static_assert(ENUM_MEMBERS_EQUAL(RD::CALLBACK_RESOURCE_USAGE_ATTACHMENT_DEPTH_STENCIL_READ_WRITE, RDG::RESOURCE_USAGE_ATTACHMENT_DEPTH_STENCIL_READ_WRITE));
 static_assert(ENUM_MEMBERS_EQUAL(RD::CALLBACK_RESOURCE_USAGE_GENERAL, RDG::RESOURCE_USAGE_GENERAL));
 static_assert(ENUM_MEMBERS_EQUAL(RD::CALLBACK_RESOURCE_USAGE_MAX, RDG::RESOURCE_USAGE_MAX));
+
+// These private variants capture actual original producer outcomes. Their
+// existence grants no operation/resource permission; original production
+// admission remains gated until the authenticated owner import is available.
+GDExtensionDeviceExit::CheckedRecordAppend RenderingDevice::_record_source_dispatch(ComputeListID list, uint32_t x, uint32_t y, uint32_t z) {
+	using Observation = GDExtensionDeviceExit::CheckedRecordAppend;
+	Observation observed;
+	if (render_thread_id != Thread::get_caller_id()) {
+		observed.error = ERR_UNAUTHORIZED;
+		return observed;
+	}
+	if (_recording_error() != OK || list != ID_TYPE_COMPUTE_LIST || !compute_list.active || !x || !y || !z || x > driver->limit_get(LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_X) || y > driver->limit_get(LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_Y) || z > driver->limit_get(LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_Z)) {
+		observed.error = ERR_INVALID_PARAMETER;
+		return observed;
+	}
+	auto *pipeline = compute_pipeline_owner.get_or_null(compute_list.state.pipeline);
+	if (!pipeline || !pipeline->driver_id || !pipeline->shader_driver_id || !shader_owner.owns(pipeline->shader) || pipeline->set_formats.size() != compute_list.state.set_count) {
+		observed.error = ERR_INVALID_DATA;
+		return observed;
+	}
+	const auto *shader = shader_owner.get_or_null(pipeline->shader);
+	if (!shader || shader->driver_id != pipeline->shader_driver_id || compute_list.state.pipeline_shader != pipeline->shader || compute_list.state.pipeline_shader_driver_id != pipeline->shader_driver_id) {
+		observed.error = ERR_INVALID_DATA;
+		return observed;
+	}
+	// Legacy release state cannot prove push supplied after shader change.
+	// Restrict this bounded profile until the original checked binding port is
+	// imported. Extra texture/transfer/descriptor producers are likewise excluded.
+	if (pipeline->push_constant_size || !driver->api_trait_get(RDD::API_TRAIT_HONORS_PIPELINE_BARRIERS)) {
+		observed.error = ERR_UNAVAILABLE;
+		return observed;
+	}
+	for (uint32_t i = 0; i < compute_list.state.set_count; ++i) {
+		const auto &binding = compute_list.state.sets[i];
+		if (!binding.pipeline_expected_format) {
+			continue;
+		}
+		auto *set = uniform_set_owner.get_or_null(binding.uniform_set);
+		if (!set || !set->driver_id || set->driver_id != binding.uniform_set_driver_id || set->shader_set != i || set->format != pipeline->set_formats[i] || pipeline->set_formats[i] != binding.pipeline_expected_format || binding.pipeline_expected_format != binding.uniform_set_format || !set->shared_textures_to_update.is_empty() || !set->pending_clear_textures.is_empty()) {
+			observed.error = ERR_UNAVAILABLE;
+			return observed;
+		}
+	}
+	observed.handle = _qualification_dispatch(list, x, y, z);
+	observed.state = observed.handle.is_valid() ? Observation::State::Appended : Observation::State::Unknown;
+	observed.error = observed.handle.is_valid() ? OK : FAILED;
+	return observed;
+}
+GDExtensionDeviceExit::CheckedRecordAppend RenderingDevice::_record_source_buffer_copy(RID from, RID to, uint32_t from_offset, uint32_t to_offset, uint32_t size) {
+	using Observation = GDExtensionDeviceExit::CheckedRecordAppend;
+	Observation observed;
+	if (render_thread_id != Thread::get_caller_id()) {
+		observed.error = ERR_UNAUTHORIZED;
+		return observed;
+	}
+	auto *src = _get_buffer_from_owner(from);
+	auto *dst = _get_buffer_from_owner(to);
+	if (!src || !dst || !src->driver_id || !dst->driver_id || !dst->draw_tracker || src->transfer_worker_index >= 0 || dst->transfer_worker_index >= 0) {
+		observed.error = ERR_UNAVAILABLE;
+		return observed;
+	}
+	const auto actual = _buffer_copy_recorded(from, to, from_offset, to_offset, size);
+	observed.handle = actual.copy_handle;
+	observed.error = actual.error;
+	observed.state = actual.effect == NativeAppendEffect::Recorded ? Observation::State::Appended : actual.effect == NativeAppendEffect::NoNewEffect ? Observation::State::Rejected
+																																					 : Observation::State::Unknown;
+	return observed;
+}

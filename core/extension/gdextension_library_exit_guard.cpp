@@ -1371,7 +1371,7 @@ Error Registry::reserve_open(uint32_t p_kind, RecordRef &r_wrapper, RecordRef &r
 			break;
 		}
 	}
-	if (slot == INVALID_SLOT || private_limit < 2 || generations.exhausted || serials.exhausted || frame_serials.exhausted) {
+	if (slot == INVALID_SLOT || private_limit < 2 || generations.exhausted || serials.exhausted || serials.next == UINT64_MAX || frame_serials.exhausted) {
 		std::memcpy(reservation_failure, "library reservation capacity or issuer exhausted", sizeof("library reservation capacity or issuer exhausted"));
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
@@ -1382,6 +1382,7 @@ Error Registry::reserve_open(uint32_t p_kind, RecordRef &r_wrapper, RecordRef &r
 	record.snapshot.abi = { 1, 48, 0 };
 	generations.take(record.snapshot.library_generation);
 	serials.take(record.authority_serial);
+	serials.take(record.producer_registration_serial);
 	record.snapshot.loader_kind = p_kind;
 	record.original_owner = p_owner;
 	record.owner_thread = Thread::get_caller_id();
