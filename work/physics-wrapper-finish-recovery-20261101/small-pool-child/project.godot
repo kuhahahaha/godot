@@ -1,0 +1,15 @@
+config_version=5
+
+[application]
+config/name="R1 two physics pumps small pool"
+
+[physics]
+2d/run_on_separate_thread=true
+3d/run_on_separate_thread=true
+3d/physics_engine="GodotPhysics3D"
+
+[threading]
+worker_pool/max_threads=1
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
