@@ -144,46 +144,94 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_close(GDExtensionQualif
  if(bridge->rt){CRASH_COND(bridge->rt->occupied || bridge->rt->queued);memdelete(bridge->rt);}
  memdelete(bridge);reclaim_device_locked(device);reclaim(library);try_finalize();return result(OK);
 }
-GDExtensionDeviceSessionResultV1 Registry::qualification_storage_create(GDExtensionQualificationBridgeRefV1 ref,const GDExtensionStorageCreateRequestV1 *request,GDExtensionStorageBackingV1 *out) {
- if(!aligned(out) || !aligned(request) || !separate(request,sizeof(*request),out,sizeof(*out)))return result(ERR_INVALID_PARAMETER,2);
- *out={};
- if(!valid_abi(&request->abi) || request->reserved || !request->bytes || request->bytes>268435456 || !request->allocation_generation || !request->create_attempt)return result(ERR_INVALID_PARAMETER,2);
- QualificationBridge *bridge=nullptr;RenderingDevice *rd=nullptr;QualificationBridge::Storage *child=nullptr;uint32_t slot=0;
- {
-  MutexLock lock(mutex);Error error=qualification_bridge_locked(ref,true,false,bridge,rd);if(error!=OK)return result(error,error==ERR_UNAUTHORIZED?15:16);
-  const bool accepted=qualification_accepted_call_locked(bridge,2);
-  for(auto *existing:bridge->storage)if(existing && existing->origin.allocation_slot==request->allocation_slot && existing->origin.allocation_generation==request->allocation_generation && existing->origin.part==request->part && existing->origin.create_attempt==request->create_attempt) {
-   if(memcmp(&existing->origin,request,sizeof(*request)))return result(ERR_INVALID_DATA,16);
-   if(existing->acknowledged)return result(ERR_DOES_NOT_EXIST,17);
-   if(existing->creating)return result(ERR_BUSY,16);
-   *out=existing->backing;return result(OK);
-  }
-  if((bridge->closing || records[bridge->library].quiescing || records[bridge->library].close_started) && !accepted)return result(ERR_BUSY,16);
-  for(;slot<QualificationBridge::CHILD_CAPACITY && bridge->storage[slot];++slot){}
-  // A published backing must retain the two original identities needed for
-  // retirement even if unrelated admissions later exhaust the sequence.
-  const uint32_t refs_needed=bridge->cleanup_refs_reserved?1:3;
-  if(slot==QualificationBridge::CHILD_CAPACITY || private_limit<refs_needed || records[bridge->library].private_refs>private_limit-refs_needed || !qualification_serial_capacity(4))return result(ERR_PARAMETER_RANGE_ERROR,19);
-  if(rd->_recording_error()!=OK)return result(rd->_recording_error(),16);
-  if(!bridge->cleanup_refs_reserved){records[bridge->library].private_refs+=2;bridge->cleanup_refs_reserved=true;}
-  child=memnew(QualificationBridge::Storage);qualification_serials.take(child->serial);qualification_serials.take(child->retire_serial);qualification_serials.take(child->dependency_serial);++qualification_cleanup_serial_reservations;child->cleanup_serial_reserved=true;child->origin=*request;
-  child->physical.bridge=bridge->serial;child->physical.child=child->serial;
-  bridge->storage[slot]=child;++bridge->children;++records[bridge->library].private_refs;
- }
- // The Registry child pins the original CodeHolder throughout the driver call;
- // do not hold Registry::mutex across callbacks into original device-loss code.
- RID rid=rd->_qualification_storage_create(uint32_t(request->bytes),&child->physical);
- MutexLock lock(mutex);
- if(rid.is_null()) {
-  CRASH_COND(!child->cleanup_serial_reserved || !qualification_cleanup_serial_reservations);--qualification_cleanup_serial_reservations;
-  bridge->storage[slot]=nullptr;--bridge->children;--records[bridge->library].private_refs;memdelete(child);qualification_trim_cleanup_ref_credits_locked(bridge);
-  return result(FAILED,16);
- }
- auto *buffer=rd->storage_buffer_owner.get_or_null(rid);CRASH_COND(!buffer || buffer->qualification_return!=&child->physical);
- child->backing={{1,sizeof(GDExtensionDeviceExitAbi),0},{instance,child->serial},rid.get_id(),buffer->backing_serial,buffer->size,uint64_t(buffer->usage),OK,1};
- child->creating=false;*out=child->backing;return result(OK);
+GDExtensionDeviceSessionResultV1 Registry::qualification_storage_create(GDExtensionQualificationBridgeRefV1 ref, const GDExtensionStorageCreateRequestV1 *request, GDExtensionStorageBackingV1 *out) {
+	if (!aligned(out) || !aligned(request) || !separate(request, sizeof(*request), out, sizeof(*out))) {
+		return result(ERR_INVALID_PARAMETER, 2);
+	}
+	*out = {};
+	if (!valid_abi(&request->abi) || request->reserved || !request->bytes || request->bytes > 268435456 || !request->allocation_generation || !request->create_attempt) {
+		return result(ERR_INVALID_PARAMETER, 2);
+	}
+	QualificationBridge *bridge = nullptr;
+	RenderingDevice *rd = nullptr;
+	QualificationBridge::Storage *child = nullptr;
+	uint32_t slot = 0;
+	{
+		MutexLock lock(mutex);
+		Error error = qualification_bridge_locked(ref, true, false, bridge, rd);
+		if (error != OK) {
+			return result(error, error == ERR_UNAUTHORIZED ? 15 : 16);
+		}
+		const bool accepted = qualification_accepted_call_locked(bridge, 2);
+		for (auto *existing : bridge->storage) {
+			if (existing && existing->origin.allocation_slot == request->allocation_slot && existing->origin.allocation_generation == request->allocation_generation && existing->origin.part == request->part && existing->origin.create_attempt == request->create_attempt) {
+				if (memcmp(&existing->origin, request, sizeof(*request))) {
+					return result(ERR_INVALID_DATA, 16);
+				}
+				if (existing->acknowledged) {
+					return result(ERR_DOES_NOT_EXIST, 17);
+				}
+				if (existing->creating) {
+					return result(ERR_BUSY, 16);
+				}
+				*out = existing->backing;
+				return result(OK);
+			}
+		}
+		if ((bridge->closing || records[bridge->library].quiescing || records[bridge->library].close_started) && !accepted) {
+			// Same-origin scan found no child; this call has not allocated anything.
+			return result(ERR_BUSY, GDEXTENSION_DEVICE_SESSION_REASON_STORAGE_CREATE_DEFERRED_V1);
+		}
+		for (; slot < QualificationBridge::CHILD_CAPACITY && bridge->storage[slot]; ++slot) {
+		}
+		// A published backing must retain the two original identities needed for
+		// retirement even if unrelated admissions later exhaust the sequence.
+		const uint32_t refs_needed = bridge->cleanup_refs_reserved ? 1 : 3;
+		if (slot == QualificationBridge::CHILD_CAPACITY || private_limit < refs_needed || records[bridge->library].private_refs > private_limit - refs_needed || !qualification_serial_capacity(4)) {
+			return result(ERR_PARAMETER_RANGE_ERROR, 19);
+		}
+		const Error recording_error = rd->_recording_error();
+		if (recording_error != OK) {
+			return result(recording_error, recording_error == ERR_BUSY ? GDEXTENSION_DEVICE_SESSION_REASON_STORAGE_CREATE_DEFERRED_V1 : GDEXTENSION_DEVICE_SESSION_REASON_NOT_ADMITTED_V1);
+		}
+		if (!bridge->cleanup_refs_reserved) {
+			records[bridge->library].private_refs += 2;
+			bridge->cleanup_refs_reserved = true;
+		}
+		child = memnew(QualificationBridge::Storage);
+		qualification_serials.take(child->serial);
+		qualification_serials.take(child->retire_serial);
+		qualification_serials.take(child->dependency_serial);
+		++qualification_cleanup_serial_reservations;
+		child->cleanup_serial_reserved = true;
+		child->origin = *request;
+		child->physical.bridge = bridge->serial;
+		child->physical.child = child->serial;
+		bridge->storage[slot] = child;
+		++bridge->children;
+		++records[bridge->library].private_refs;
+	}
+	// The Registry child pins the original CodeHolder throughout the driver call;
+	// do not hold Registry::mutex across callbacks into original device-loss code.
+	RID rid = rd->_qualification_storage_create(uint32_t(request->bytes), &child->physical);
+	MutexLock lock(mutex);
+	if (rid.is_null()) {
+		CRASH_COND(!child->cleanup_serial_reserved || !qualification_cleanup_serial_reservations);
+		--qualification_cleanup_serial_reservations;
+		bridge->storage[slot] = nullptr;
+		--bridge->children;
+		--records[bridge->library].private_refs;
+		memdelete(child);
+		qualification_trim_cleanup_ref_credits_locked(bridge);
+		return result(FAILED, 16);
+	}
+	auto *buffer = rd->storage_buffer_owner.get_or_null(rid);
+	CRASH_COND(!buffer || buffer->qualification_return != &child->physical);
+	child->backing = { { 1, sizeof(GDExtensionDeviceExitAbi), 0 }, { instance, child->serial }, rid.get_id(), buffer->backing_serial, buffer->size, uint64_t(buffer->usage), OK, 1 };
+	child->creating = false;
+	*out = child->backing;
+	return result(OK);
 }
-
 GDExtensionDeviceSessionResultV1 Registry::qualification_native_unit_create(GDExtensionQualificationBridgeRefV1 ref,const GDExtensionNativeUnitCreateRequestV1 *request,const void *bytes,uint64_t size,GDExtensionNativeUnitBackingV1 *out) {
  if(!aligned(out) || !aligned(request) || !separate(request,sizeof(*request),out,sizeof(*out)))return result(ERR_INVALID_PARAMETER,2);
  *out={};

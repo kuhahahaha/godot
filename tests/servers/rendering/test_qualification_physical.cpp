@@ -53,6 +53,109 @@ TEST_FORCE_LINK(test_qualification_physical)
 extern thread_local void (*test_uniform_set_after_rid_free)(RenderingDevice *);
 class TestQualificationPhysicalAccess {
 public:
+	static void deferred_storage_origin() {
+		using namespace GDExtensionDeviceExit;
+		// Controlled enrollment only. The original Registry entrypoint, origin
+		// scan, quota gates and RD recording state below are actual engine code.
+		TransferTestDriverBase driver;
+		RenderingDevice device;
+		device.driver = &driver;
+		device.render_thread_id = Thread::get_caller_id();
+		auto *registry = memnew(Registry);
+		auto *previous = RenderingDevice::singleton;
+		RenderingDevice::singleton = &device;
+		device.is_main_instance = true;
+		registry->instance = 71;
+		auto &record = registry->records[0];
+		record.owner_thread = Thread::get_caller_id();
+		record.snapshot.library_generation = 1;
+		record.guard_enrollment = GuardEnrollment::QUALIFIED;
+		record.private_refs = 1;
+		auto &native = registry->device_records[0];
+		native.object = &device;
+		native.live = true;
+		native.epoch = 1;
+		native.execution_thread = Thread::get_caller_id();
+		native.refs = 1;
+		struct Holder : HolderRetirement {
+			Holder() : HolderRetirement(RecordRef{}) {}
+			~Holder() = default;
+		} holder;
+		holder.generation = 1;
+		holder.qualification_children = 1;
+		auto *bridge = memnew(Registry::QualificationBridge);
+		bridge->serial = 11;
+		bridge->epoch = 1;
+		bridge->holder = &holder;
+		registry->qualification_bridges[0] = bridge;
+		struct Cleanup {
+			Registry *registry;
+			Registry::QualificationBridge *bridge;
+			RenderingDevice &device;
+			RenderingDevice *previous;
+			~Cleanup() {
+				for (auto *storage : bridge->storage) {
+					if (storage) {
+						memdelete(storage);
+					}
+				}
+				registry->qualification_bridges[0] = nullptr;
+				memdelete(bridge);
+				RenderingDevice::singleton = previous;
+				device.is_main_instance = false;
+				device.driver = nullptr;
+				memdelete(registry);
+			}
+		} cleanup{ registry, bridge, device, previous };
+		const GDExtensionQualificationBridgeRefV1 ref{ 71, 11 };
+		const GDExtensionStorageCreateRequestV1 request{ { 1, 16, 0 }, 128, 3, 1, 41, 1, 0 };
+		const auto serial = registry->qualification_serials.next;
+		const auto reserved = registry->qualification_cleanup_serial_reservations;
+		GDExtensionStorageBackingV1 backing = {};
+		device.qualification_frame_advance_pending = true;
+		auto result = registry->qualification_storage_create(ref, &request, &backing);
+		CHECK(result.native_error == ERR_BUSY);
+		CHECK(result.reason == GDEXTENSION_DEVICE_SESSION_REASON_STORAGE_CREATE_DEFERRED_V1);
+		CHECK(result.expected == 0);
+		CHECK(result.actual == 0);
+		CHECK(backing.backing.handle_serial == 0);
+		CHECK(backing.rid == 0);
+		CHECK(bridge->children == 0);
+		CHECK_FALSE(bridge->cleanup_refs_reserved);
+		CHECK(record.private_refs == 1);
+		CHECK(registry->qualification_serials.next == serial);
+		CHECK(registry->qualification_cleanup_serial_reservations == reserved);
+		// An in-progress original child is a retained prefix. The same empty
+		// output/Busy result must keep reason16 even while recording is Busy.
+		auto *existing = memnew(Registry::QualificationBridge::Storage);
+		existing->serial = 29;
+		existing->origin = request;
+		bridge->storage[0] = existing;
+		result = registry->qualification_storage_create(ref, &request, &backing);
+		CHECK(result.native_error == ERR_BUSY);
+		CHECK(result.reason == GDEXTENSION_DEVICE_SESSION_REASON_NOT_ADMITTED_V1);
+		CHECK(bridge->storage[0] == existing);
+		CHECK(existing->creating);
+		CHECK(existing->serial == 29);
+		CHECK(backing.backing.handle_serial == 0);
+		CHECK(registry->qualification_serials.next == serial);
+		bridge->storage[0] = nullptr;
+		memdelete(existing);
+		device.qualification_frame_advance_pending = false;
+		bridge->closing = true;
+		result = registry->qualification_storage_create(ref, &request, &backing);
+		CHECK(result.native_error == ERR_BUSY);
+		CHECK(result.reason == GDEXTENSION_DEVICE_SESSION_REASON_STORAGE_CREATE_DEFERRED_V1);
+		CHECK(bridge->children == 0);
+		CHECK(registry->qualification_serials.next == serial);
+		bridge->closing = false;
+		device.frame_issue_error = FAILED;
+		result = registry->qualification_storage_create(ref, &request, &backing);
+		CHECK(result.native_error == FAILED);
+		CHECK(result.reason == GDEXTENSION_DEVICE_SESSION_REASON_NOT_ADMITTED_V1);
+		CHECK(registry->qualification_serials.next == serial);
+		device.frame_issue_error = OK;
+	}
 	static void typed_production(RenderingDevice &device, uint32_t mode, bool *fail_set = nullptr) {
 		using namespace GDExtensionDeviceExit;
 		// Original production entrypoints and actual row/descriptor/frame-return code
@@ -2806,3 +2909,7 @@ TEST_CASE("[Qualification][Typed] definitively failed descriptor creation rolls 
 }
 
 } //namespace TestQualificationTyped
+
+TEST_CASE("[Qualification][StorageDeferred] busy before allocation is distinct from an existing creating prefix") {
+	TestQualificationPhysicalAccess::deferred_storage_origin();
+}

@@ -5780,6 +5780,14 @@
                 {
                     "name": "GDEXTENSION_DEVICE_SESSION_REASON_CAPACITY_V1",
                     "value": 19
+                },
+                {
+                    "name": "GDEXTENSION_DEVICE_SESSION_REASON_STORAGE_CREATE_DEFERRED_V1",
+                    "value": 20,
+                    "description": [
+                        "StorageCreate only: ERR_BUSY after the exact original-origin scan found no existing child, before this call allocated a child, serial or cleanup credit or entered native allocation. Backing and expected/actual remain zero.",
+                        "Does not certify future admission, absence of later concurrent calls, GPU completion, original account refund or permission to create after close. Existing creating prefixes, bridge-level refusal and non-Busy errors retain their existing reasons."
+                    ]
                 }
             ]
         },
