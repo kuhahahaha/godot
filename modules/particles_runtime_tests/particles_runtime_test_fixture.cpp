@@ -1,0 +1,466 @@
+/**************************************************************************/
+/*  particles_runtime_test_fixture.cpp                                    */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
+#include "particles_runtime_test_fixture.h"
+
+#include "core/object/callable_mp.h"
+#include "core/object/class_db.h"
+#include "core/os/os.h"
+#include "core/os/thread.h"
+#include "servers/rendering/renderer_rd/renderer_compositor_rd.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
+#include "servers/rendering/rendering_device.h"
+#include "servers/rendering/rendering_server.h"
+#include "servers/rendering/rendering_server_globals.h"
+
+#include <cstring>
+
+using Storage = RendererRD::ParticlesStorage;
+
+void ParticlesRuntimeTestFixture::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("begin"), &ParticlesRuntimeTestFixture::begin);
+	ClassDB::bind_method(D_METHOD("advance"), &ParticlesRuntimeTestFixture::advance);
+	ClassDB::bind_method(D_METHOD("result"), &ParticlesRuntimeTestFixture::result);
+}
+bool ParticlesRuntimeTestFixture::check(bool p_ok, const String &p_label) {
+	Dictionary event;
+	event["check"] = p_label;
+	event["ok"] = p_ok;
+	observations.push_back(event);
+	if (!p_ok) {
+		failures.push_back(p_label);
+	}
+	return p_ok;
+}
+bool ParticlesRuntimeTestFixture::on_owner() const {
+	return rd && RenderingDevice::get_singleton() == rd && rd->get_instance_id() == device &&
+			Thread::is_main_thread() && RenderingServer::get_singleton()->is_on_render_thread();
+}
+bool ParticlesRuntimeTestFixture::track_buffer(RID p_rid) {
+	if (p_rid.is_null()) {
+		return true;
+	}
+	for (uint32_t i = 0; i < allocation_count; i++) {
+		if (allocations[i].rid == p_rid) {
+			return true;
+		}
+	}
+	const auto *buffer = rd->_get_buffer_from_owner(p_rid);
+	if (!check(buffer && buffer->capture_test_allocation_serial && allocation_count < allocations.size(), "original buffer allocation identity")) {
+		return false;
+	}
+	const uint64_t serial = rd->capture_test_allocation_registry.resolve(buffer->driver_id.id, p_rid.get_id());
+	if (!check(serial == buffer->capture_test_allocation_serial, "original allocation owner authenticated")) {
+		return false;
+	}
+	allocations[allocation_count++] = { buffer->driver_id.id, serial, p_rid };
+	return true;
+}
+bool ParticlesRuntimeTestFixture::track_resource(RenderCaptureTestResourceKind p_kind, uint64_t p_driver) {
+	if (!check(resource_count < resources.size(), "bounded native resource observation")) {
+		return false;
+	}
+	const uint64_t token = rd->capture_test_resource_registry.track(p_kind, p_driver);
+	if (!check(token != 0, "original native resource identity")) {
+		return false;
+	}
+	resources[resource_count++] = token;
+	return true;
+}
+bool ParticlesRuntimeTestFixture::track_set(RID p_rid) {
+	if (p_rid.is_null()) {
+		return true;
+	}
+	const auto *set = rd->uniform_set_owner.get_or_null(p_rid);
+	return check(set != nullptr, "original uniform owner exists") && track_resource(RenderCaptureTestResourceKind::UniformSet, set->driver_id.id);
+}
+void ParticlesRuntimeTestFixture::track_particles(RID p_rid) {
+	if (p_rid.is_null()) {
+		return;
+	}
+	const auto *p = storage->particles_owner.get_or_null(p_rid);
+	if (!check(p != nullptr, "original particle owner exists before close")) {
+		return;
+	}
+	for (RID buffer : { p->particle_buffer, p->particle_instance_buffer, p->frame_params_buffer,
+				 p->emission_storage_buffer, p->unused_emission_storage_buffer, p->unused_trail_storage_buffer,
+				 p->trail_bind_pose_buffer, p->particles_sort_buffer }) {
+		track_buffer(buffer);
+	}
+	for (RID set : { p->particles_material_uniform_set, p->particles_copy_uniform_set,
+				 p->particles_transforms_buffer_uniform_set, p->collision_textures_uniform_set,
+				 p->trail_bind_pose_uniform_set, p->particles_sort_uniform_set }) {
+		track_set(set);
+	}
+}
+bool ParticlesRuntimeTestFixture::run_upload_boundaries() {
+	particle = storage->particles_allocate();
+	storage->particles_initialize(particle);
+	sub = storage->particles_allocate();
+	storage->particles_initialize(sub);
+	auto *p = storage->particles_owner.get_or_null(particle);
+	auto *s = storage->particles_owner.get_or_null(sub);
+	p->amount = 4;
+	s->amount = 4;
+	storage->_particles_update_buffers(p);
+	storage->_particles_allocate_emission_buffer(p);
+	storage->_particles_allocate_emission_buffer(s);
+	p->frame_history.resize(1);
+	p->trail_params.resize(1);
+	p->frame_params_buffer = rd->storage_buffer_create(sizeof(Storage::ParticlesFrameParams));
+	if (!check(p->particle_buffer.is_valid() && p->frame_params_buffer.is_valid() && p->emission_buffer && s->emission_buffer, "original retry fixture allocation")) {
+		return false;
+	}
+	std::array<Storage::ParticleData, 4> initial{};
+	for (auto &entry : initial) {
+		for (float &color : entry.color) {
+			color = -7.0f;
+		}
+	}
+	if (!check(rd->buffer_update(p->particle_buffer, 0, sizeof(initial), initial.data()) == OK, "particle GPU witness sentinel upload")) {
+		return false;
+	}
+	p->sub_emitter = sub;
+	for (RID target : { s->emission_storage_buffer, p->emission_storage_buffer, p->frame_params_buffer }) {
+		p->phase = 0.25;
+		p->cycle_number = 7;
+		p->frame_counter = 11;
+		p->clear = true;
+		p->force_sub_emit = true;
+		p->emitting = true;
+		p->has_collision_cache = true;
+		p->collision_3d_textures_used = 0;
+		p->emission_buffer->particle_count = 1;
+		s->emitting = true;
+		s->clear = false;
+		s->inactive = true;
+		s->inactive_time = 4.0;
+		for (int attempt = 0; attempt < 2; attempt++) {
+			rd->test_arm_buffer_update_fault(target, 1);
+			rd->test_reset_compute_dispatch_count();
+			check(!storage->_particles_process(p, 1.0 / 60.0), "exact upload boundary rejects simulation");
+			check(rd->test_get_buffer_update_fault_hits() == 1, "exact original buffer_update failure hit");
+			check(rd->test_get_compute_dispatch_count() == 0, "failed upload records no simulation dispatch");
+			check(p->phase == 0.25 && p->cycle_number == 7 && p->frame_counter == 11 && p->clear && p->force_sub_emit && p->emitting && p->emission_buffer->particle_count == 1 && p->has_collision_cache, "failed upload retains pending particle state");
+			check(s->emitting && !s->clear && s->inactive && s->inactive_time == 4.0, "failed upload retains original subemitter state");
+		}
+		rd->test_arm_buffer_update_fault(RID(), 0);
+		rd->test_reset_compute_dispatch_count();
+		if (!check(storage->_particles_process(p, 1.0 / 60.0), "same original request succeeds after fault removal")) {
+			return false;
+		}
+		check(rd->test_get_compute_dispatch_count() == 1, "retry records one original particle dispatch");
+		check(p->frame_counter == 12 && !p->clear && !p->force_sub_emit && p->emission_buffer->particle_count == 0 && !p->has_collision_cache, "retry consumes original pending state once");
+		check(!s->emitting && s->clear && !s->inactive && s->inactive_time == 0.0, "retry commits original subemitter transition");
+	}
+	const Error read = rd->buffer_get_data_async(p->particle_buffer, callable_mp(this, &ParticlesRuntimeTestFixture::readback).bind(0), 0, 4 * sizeof(Storage::ParticleData));
+	if (check(read == OK, "production particle async readback queued")) {
+		readbacks_queued++;
+	}
+	return read == OK;
+}
+bool ParticlesRuntimeTestFixture::run_progress(int p_kind) {
+	RID &rid = progress[p_kind];
+	rid = storage->particles_allocate();
+	storage->particles_initialize(rid);
+	auto *p = storage->particles_owner.get_or_null(rid);
+	p->amount = 4;
+	p->emitting = true;
+	p->inactive = false;
+	p->fixed_fps = 64;
+	storage->_particles_update_buffers(p);
+	p->frame_history.resize(1);
+	p->trail_params.resize(1);
+	p->frame_params_buffer = rd->storage_buffer_create(sizeof(Storage::ParticlesFrameParams));
+	if (!check(p->particle_buffer.is_valid() && p->frame_params_buffer.is_valid(), "progress fixture original buffers")) {
+		return false;
+	}
+	constexpr float step = 1.0f / 64.0f;
+	p->speed_scale = p_kind == 3 ? 1.0 : 0.0;
+	p->restart_request = false;
+	p->clear = true;
+	if (p_kind == 0) {
+		p->pre_process_time = 3 * step;
+	}
+	if (p_kind == 1) {
+		p->request_process_time = 3 * step;
+	}
+	if (p_kind == 2) {
+		p->request_process_time_residual = 3 * step;
+	}
+	if (p_kind == 3) {
+		p->frame_remainder = 3.5f * step;
+	}
+	float total = p_kind == 3 ? 3.5f * step : 3 * step;
+	if (p_kind == 3) {
+		const float delta = CLAMP(float(RendererCompositorRD::get_singleton()->get_frame_delta_time()), 0.0f, 0.1f);
+		total += delta;
+	}
+	const uint32_t expected_steps = uint32_t(Math::floor(total / step));
+	const float expected_remainder = total - expected_steps * step;
+	if (p_kind == 3) {
+		check(expected_remainder > 0.0f && expected_remainder < step, "fixed-step witness includes a nonzero fractional suffix");
+	}
+	rd->test_arm_buffer_update_fault_after(p->frame_params_buffer, 1, 1);
+	storage->particles_request_process(rid);
+	storage->update_particles();
+	check(rd->test_get_buffer_update_fault_hits() == 1 && p->frame_counter == 1, "progress failure follows one successful original step");
+	check(p->retry_pending && p->dirty && p->update_list.in_list(), "failed original work remains queued");
+	const real_t remaining = p_kind == 0 ? p->pre_process_time_remaining : p_kind == 1 ? p->request_process_time
+			: p_kind == 2															   ? p->request_process_time_residual
+																					   : p->frame_remainder;
+	check(remaining == total - step, "only successful prefix decrements original retained progress");
+	if (p_kind == 2) {
+		check(p->emitting, "failed residual suffix restores original emitting state");
+	}
+	check(p->speed_scale == (p_kind == 3 ? 1.0 : 0.0), "failed progress restores original speed scale");
+	if (p_kind == 0) {
+		check(p->pre_process_pending, "preprocess ownership survives partial failure");
+	}
+	if (p_kind == 3) {
+		check(p->frame_delta_committed && p->frame_delta_committed_frame == RSG::rasterizer->get_frame_number(), "frame delta committed to original frame");
+	}
+	rd->test_arm_buffer_update_fault(RID(), 0);
+	storage->update_particles(); // Same real rendering frame; do not charge its delta twice.
+	check(!p->retry_pending && !p->dirty && !p->update_list.in_list(), "original retry queue drains after recovery");
+	check(p->frame_counter == expected_steps, "retry consumes retained suffix without replay or duplicate frame delta");
+	if (p_kind == 2) {
+		check(!p->emitting, "successful residual suffix closes emission");
+	}
+	if (p_kind == 3) {
+		check(p->frame_remainder == expected_remainder, "retry preserves exact nonzero fractional frame remainder");
+	}
+	check(p->speed_scale == (p_kind == 3 ? 1.0 : 0.0), "successful progress restores original speed scale");
+	check(!p->pre_process_pending && p->request_process_time == 0.0 && p->request_process_time_residual == 0.0, "manual progress closes only after original success");
+	const Error read = rd->buffer_get_data_async(p->frame_params_buffer, callable_mp(this, &ParticlesRuntimeTestFixture::readback).bind(2 + p_kind), 0, sizeof(Storage::ParticlesFrameParams));
+	if (check(read == OK, "retained progress async readback queued")) {
+		readbacks_queued++;
+	}
+	return read == OK;
+}
+bool ParticlesRuntimeTestFixture::run_trail() {
+	RenderingDevice::ShaderStageSPIRVData stage;
+	stage.shader_stage = RenderingDevice::SHADER_STAGE_COMPUTE;
+	String error;
+	stage.spirv = rd->shader_compile_spirv_from_source(stage.shader_stage, "#version 450\nlayout(local_size_x=1) in; layout(set=2,binding=0,std430) buffer Trail { mat4 pose; }; void main(){pose[0][0]=17.25;}", RenderingDevice::SHADER_LANGUAGE_GLSL, &error);
+	if (!check(!stage.spirv.is_empty() && error.is_empty(), "trail compute shader compiles on actual main RD")) {
+		return false;
+	}
+	Vector<RenderingDevice::ShaderStageSPIRVData> stages;
+	stages.push_back(stage);
+	trail_shader = rd->shader_create_from_spirv(stages, "ParticlesRuntimeTrailRetry");
+	if (!check(trail_shader.is_valid(), "trail native shader exists")) {
+		return false;
+	}
+	track_resource(RenderCaptureTestResourceKind::Shader, rd->shader_owner.get_or_null(trail_shader)->driver_id.id);
+	Storage::Particles p;
+	p.test_reject_trail_allocation_once = true;
+	check(!Storage::_particles_ensure_trail_uniform(&p, trail_shader), "original trail fallback allocation failure");
+	check(!p.test_reject_trail_allocation_once && p.unused_trail_storage_buffer.is_null() && p.trail_bind_pose_uniform_set.is_null() && p.test_trail_uniform_attempts == 0, "trail failure stops before uniform creation");
+	const bool created = Storage::_particles_ensure_trail_uniform(&p, trail_shader);
+	trail_buffer = p.unused_trail_storage_buffer;
+	trail_set = p.trail_bind_pose_uniform_set;
+	if (!check(created && rd->uniform_set_is_valid(trail_set) && trail_buffer.is_valid(), "original trail retry creates real Metal resources")) {
+		return false;
+	}
+	check(Storage::_particles_ensure_trail_uniform(&p, trail_shader) && p.test_trail_uniform_attempts == 1 && trail_buffer == p.unused_trail_storage_buffer && trail_set == p.trail_bind_pose_uniform_set, "trail subsequent use retains original buffer and uniform");
+	track_buffer(trail_buffer);
+	track_set(trail_set);
+	trail_pipeline = rd->compute_pipeline_create(trail_shader);
+	if (!check(trail_pipeline.is_valid(), "trail native compute pipeline exists")) {
+		return false;
+	}
+	track_resource(RenderCaptureTestResourceKind::ComputePipeline, rd->compute_pipeline_owner.get_or_null(trail_pipeline)->driver_id.id);
+	const auto list = rd->compute_list_begin();
+	if (!check(list != RenderingDevice::INVALID_ID, "trail original compute list opens")) {
+		return false;
+	}
+	rd->compute_list_bind_compute_pipeline(list, trail_pipeline);
+	rd->compute_list_bind_uniform_set(list, trail_set, 2);
+	rd->compute_list_dispatch(list, 1, 1, 1);
+	rd->compute_list_end();
+	const Error read = rd->buffer_get_data_async(trail_buffer, callable_mp(this, &ParticlesRuntimeTestFixture::readback).bind(1), 0, 4);
+	if (check(read == OK, "trail async readback queued")) {
+		readbacks_queued++;
+	}
+	return read == OK;
+}
+void ParticlesRuntimeTestFixture::readback(const PackedByteArray &p_bytes, int p_kind) {
+	check(on_owner(), "async completion belongs to original main RD");
+	readbacks_completed++;
+	if (p_kind == 0) {
+		std::array<Storage::ParticleData, 4> data{};
+		if (check(p_bytes.size() == sizeof(data), "production particle readback exact bytes")) {
+			std::memcpy(data.data(), p_bytes.ptr(), sizeof(data));
+			bool active_shader_output = false;
+			for (const auto &entry : data) {
+				active_shader_output = active_shader_output || ((entry.active & 1u) && entry.color[0] == 1.0f && entry.color[1] == 1.0f && entry.color[2] == 1.0f && entry.color[3] == 1.0f);
+			}
+			check(active_shader_output, "actual production particle shader replaces sentinel on emitted particle");
+		}
+	} else if (p_kind == 1) {
+		float value = 0;
+		if (check(p_bytes.size() == sizeof(value), "trail readback exact bytes")) {
+			std::memcpy(&value, p_bytes.ptr(), sizeof(value));
+			check(value == 17.25f, "actual trail shader consumed original retried fallback");
+		}
+	} else {
+		Storage::ParticlesFrameParams data{};
+		if (check(p_bytes.size() == sizeof(data), "progress upload readback exact bytes")) {
+			std::memcpy(&data, p_bytes.ptr(), sizeof(data));
+			const auto *p = storage->particles_owner.get_or_null(progress[p_kind - 2]);
+			check(p && data.frame == p->frame_counter - 1, "original retained final frame reaches actual device buffer");
+		}
+	}
+}
+Error ParticlesRuntimeTestFixture::begin() {
+	if (started) {
+		return ERR_ALREADY_IN_USE;
+	}
+	started = true;
+	rd = RenderingDevice::get_singleton();
+	device = rd ? rd->get_instance_id() : ObjectID();
+	if (!rd || !on_owner() || !rd->is_main_instance || OS::get_singleton()->get_current_rendering_driver_name() != "metal" || !RendererCompositorRD::get_singleton()) {
+		rd = nullptr;
+		return ERR_UNAVAILABLE;
+	}
+	if (rd->draw_list.active || rd->compute_list.active || rd->raytracing_list.active) {
+		rd = nullptr;
+		return ERR_BUSY;
+	}
+	storage = static_cast<Storage *>(RendererCompositorRD::get_singleton()->get_particles_storage());
+	check(!rd->capture_test_coverage_failed, "shared native observation coverage intact at begin");
+	bool success = run_upload_boundaries();
+	for (int i = 0; i < 4; i++) {
+		success = run_progress(i) && success;
+	}
+	success = run_trail() && success;
+	rd->test_arm_buffer_update_fault(RID(), 0);
+	check(success && readbacks_queued == 6, "all fixed actual Metal workloads accepted");
+	return OK;
+}
+void ParticlesRuntimeTestFixture::release_resources() {
+	rd->test_arm_buffer_update_fault(RID(), 0);
+	for (RID rid : { particle, sub, progress[0], progress[1], progress[2], progress[3] }) {
+		track_particles(rid);
+	}
+	for (RID rid : { particle, sub, progress[0], progress[1], progress[2], progress[3] }) {
+		if (rid.is_valid()) {
+			storage->particles_free(rid);
+		}
+	}
+	particle = RID();
+	sub = RID();
+	for (RID &rid : progress) {
+		rid = RID();
+	}
+	for (RID rid : { trail_set, trail_pipeline, trail_shader, trail_buffer }) {
+		if (rid.is_valid()) {
+			rd->free_rid(rid);
+		}
+	}
+	trail_set = RID();
+	trail_pipeline = RID();
+	trail_shader = RID();
+	trail_buffer = RID();
+	released = true;
+	bool pending = false;
+	for (uint32_t i = 0; i < allocation_count; i++) {
+		check(rd->_get_buffer_from_owner(allocations[i].rid) == nullptr, "owner release removes original buffer RID");
+		pending = rd->capture_test_allocation_registry.physically_live(allocations[i].driver, allocations[i].serial) || pending;
+	}
+	check(pending && allocation_count > 0 && resource_count > 0, "owner release is not physical driver retirement");
+}
+Error ParticlesRuntimeTestFixture::advance() {
+	if (!on_owner()) {
+		return ERR_UNAVAILABLE;
+	}
+	if (retired) {
+		return OK;
+	}
+	if (!released) {
+		if (readbacks_completed != readbacks_queued) {
+			return ERR_BUSY;
+		}
+		release_resources();
+		return ERR_BUSY;
+	}
+	if (rd->capture_test_coverage_failed) {
+		check(false, "shared native tracking coverage lost");
+		return ERR_INVALID_DATA;
+	}
+	for (uint32_t i = 0; i < allocation_count; i++) {
+		if (rd->capture_test_allocation_registry.physically_live(allocations[i].driver, allocations[i].serial)) {
+			return ERR_BUSY;
+		}
+	}
+	for (uint32_t i = 0; i < resource_count; i++) {
+		const auto status = rd->capture_test_resource_registry.status(resources[i]);
+		if (status == RenderCaptureTestResourceRegistry::Status::Unknown) {
+			check(false, "native retirement identity lost");
+			return ERR_INVALID_DATA;
+		}
+		if (status == RenderCaptureTestResourceRegistry::Status::Live) {
+			return ERR_BUSY;
+		}
+	}
+	for (uint32_t i = 0; i < resource_count; i++) {
+		check(rd->capture_test_resource_registry.acknowledge(resources[i]), "original native physical return acknowledged");
+	}
+	retired = true;
+	check(readbacks_completed == 6, "all six original async readbacks physically completed");
+	return failures.is_empty() ? OK : FAILED;
+}
+Dictionary ParticlesRuntimeTestFixture::result() const {
+	Dictionary d;
+	d["done"] = retired;
+	d["released"] = released;
+	d["failures"] = failures;
+	d["checks"] = observations;
+	d["readbacks_queued"] = readbacks_queued;
+	d["readbacks_completed"] = readbacks_completed;
+	d["allocation_count"] = allocation_count;
+	d["native_resource_count"] = resource_count;
+	d["driver"] = OS::get_singleton()->get_current_rendering_driver_name();
+	d["renderer"] = OS::get_singleton()->get_current_rendering_method();
+	d["device_identity"] = uint64_t(device);
+	d["device_name"] = rd ? rd->get_device_name() : String();
+	d["device_vendor"] = rd ? rd->get_device_vendor_name() : String();
+	d["device_api"] = rd ? rd->get_device_api_version() : String();
+	d["frame_delay"] = rd ? rd->get_frame_delay() : 0;
+	return d;
+}
+ParticlesRuntimeTestFixture::~ParticlesRuntimeTestFixture() {
+	// The runner retains the fixture until every callback and physical return.
+	// Failed setup still releases original owners on their permitted thread.
+	if (on_owner() && !released && readbacks_queued == readbacks_completed) {
+		release_resources();
+	}
+}

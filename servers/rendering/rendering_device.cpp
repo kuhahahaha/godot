@@ -1272,9 +1272,16 @@ Error RenderingDevice::buffer_update(RID p_buffer, uint32_t p_offset, uint32_t p
 	ERR_FAIL_COND_V(buffer->qualification_return, ERR_UNAUTHORIZED);
 #ifdef TESTS_ENABLED
 	if (test_buffer_update_fault_count > 0 && test_buffer_update_fault_buffer == p_buffer) {
-		test_buffer_update_fault_count--;
-		test_buffer_update_fault_hits++;
-		return ERR_CANT_CREATE;
+#if defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
+		if (test_buffer_update_fault_skip > 0) {
+			test_buffer_update_fault_skip--;
+		} else
+#endif
+		{
+			test_buffer_update_fault_count--;
+			test_buffer_update_fault_hits++;
+			return ERR_CANT_CREATE;
+		}
 	}
 #endif
 	return _buffer_update(buffer, p_buffer, p_offset, p_size, p_data);
@@ -1573,7 +1580,7 @@ uint64_t RenderingDevice::buffer_get_device_address(RID p_buffer) {
  ERR_FAIL_COND_V(buffer->qualification_return,0);
 	ERR_FAIL_COND_V_MSG(!buffer->usage.has_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT), 0, "Buffer was not created with device address flag.");
 
-#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
 	if (buffer->capture_test_allocation_serial && !capture_test_allocation_registry.mark_access_escaped(buffer->driver_id.id, buffer->capture_test_allocation_serial)) {
 		capture_test_coverage_failed.store(true);
 	}
@@ -1588,7 +1595,7 @@ uint8_t *RenderingDevice::buffer_persistent_map_advance(RID p_buffer) {
 	ERR_FAIL_NULL_V_MSG(buffer, nullptr, "Buffer argument is not a valid buffer of any type.");
  ERR_FAIL_COND_V(buffer->qualification_return,nullptr);
 	direct_copy_count++;
-#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
 	if (buffer->capture_test_allocation_serial && !capture_test_allocation_registry.mark_access_escaped(buffer->driver_id.id, buffer->capture_test_allocation_serial)) {
 		capture_test_coverage_failed.store(true);
 	}
@@ -1672,7 +1679,7 @@ RID RenderingDevice::storage_buffer_create(uint32_t p_size_bytes, Span<uint8_t> 
 	buffer_memory += buffer.size;
 	_THREAD_SAFE_UNLOCK_
 
-#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
 	RID id = storage_buffer_owner.allocate_rid();
 	buffer.capture_test_allocation_serial = capture_test_allocation_registry.allocate(buffer.driver_id.id, id.get_id());
 	if (buffer.capture_test_allocation_serial == 0) {
@@ -4341,7 +4348,7 @@ RID RenderingDevice::vertex_buffer_create(uint32_t p_size_bytes, Span<uint8_t> p
 	buffer_memory += buffer.size;
 	_THREAD_SAFE_UNLOCK_
 
-#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
 	RID id = vertex_buffer_owner.allocate_rid();
 	buffer.capture_test_allocation_serial = capture_test_allocation_registry.allocate(buffer.driver_id.id, id.get_id());
 	if (buffer.capture_test_allocation_serial == 0) {
@@ -8885,7 +8892,7 @@ void RenderingDevice::_free_internal(RID p_id) {
 
 		RDG::resource_tracker_free(vertex_buffer->draw_tracker);
 		frames[frame].buffers_to_dispose_of.push_back(*vertex_buffer);
-#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
 		if (vertex_buffer->capture_test_allocation_serial) {
 			if (!capture_test_allocation_registry.release_owner(vertex_buffer->driver_id.id, vertex_buffer->capture_test_allocation_serial, p_id.get_id())) {
 				capture_test_coverage_failed.store(true);
@@ -8893,7 +8900,9 @@ void RenderingDevice::_free_internal(RID p_id) {
 		} else {
 			capture_test_coverage_failed.store(true);
 		}
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
 		RenderCaptureTestHooks::observe_buffer_free(p_id.get_id(), uint64_t(get_instance_id()), vertex_buffer->driver_id.id, vertex_buffer->capture_test_allocation_serial);
+#endif
 #endif
 		vertex_buffer_owner.free(p_id);
 	} else if (vertex_array_owner.owns(p_id)) {
@@ -8936,7 +8945,7 @@ void RenderingDevice::_free_internal(RID p_id) {
 
 		RDG::resource_tracker_free(storage_buffer->draw_tracker);
 		frames[frame].buffers_to_dispose_of.push_back(*storage_buffer);
-#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
 		if (storage_buffer->capture_test_allocation_serial) {
 			if (!capture_test_allocation_registry.release_owner(storage_buffer->driver_id.id, storage_buffer->capture_test_allocation_serial, p_id.get_id())) {
 				capture_test_coverage_failed.store(true);
@@ -8944,7 +8953,9 @@ void RenderingDevice::_free_internal(RID p_id) {
 		} else {
 			capture_test_coverage_failed.store(true);
 		}
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
 		RenderCaptureTestHooks::observe_buffer_free(p_id.get_id(), uint64_t(get_instance_id()), storage_buffer->driver_id.id, storage_buffer->capture_test_allocation_serial);
+#endif
 #endif
 		storage_buffer_owner.free(p_id);
 	} else if (uniform_set_owner.owns(p_id)) {
@@ -9201,7 +9212,7 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 
 		driver->pipeline_free(pipeline->driver_id);
 		_qualification_freed(pipeline->qualification_return);
-#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
 		capture_test_resource_registry.observe_free(RenderCaptureTestResourceKind::ComputePipeline, pipeline->driver_id.id);
 #endif
 
@@ -9256,7 +9267,7 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 		driver->uniform_set_free(uniform_set->driver_id);
 		for(auto *cell:uniform_set->qualification_dependencies) { CRASH_COND(!cell->dependent_children.load());cell->dependent_children.fetch_sub(1); }
 		_qualification_freed(uniform_set->qualification_return);
-#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
 		capture_test_resource_registry.observe_free(RenderCaptureTestResourceKind::UniformSet, uniform_set->driver_id.id);
 #endif
 
@@ -9269,7 +9280,7 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 
 		driver->shader_free(shader->driver_id);
 		_qualification_freed(shader->qualification_return);
-#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
 		capture_test_resource_registry.observe_free(RenderCaptureTestResourceKind::Shader, shader->driver_id.id);
 #endif
 
@@ -9305,7 +9316,7 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 		texture_memory -= driver->texture_get_allocation_size(texture->driver_id);
 		driver->texture_free(texture->driver_id);
 		_qualification_freed(texture->qualification_return);
-#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
 		capture_test_resource_registry.observe_free(RenderCaptureTestResourceKind::Texture, texture->driver_id.id);
 #endif
 
@@ -9317,12 +9328,14 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 		Buffer &buffer = frames[p_frame].buffers_to_dispose_of.front()->get();
 		driver->buffer_free(buffer.driver_id);
 		_qualification_freed(buffer.qualification_return);
-#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
 		if (buffer.capture_test_allocation_serial) {
 			if (!capture_test_allocation_registry.dispose(buffer.driver_id.id, buffer.capture_test_allocation_serial)) {
 				capture_test_coverage_failed.store(true);
 			} else {
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
 				RenderCaptureTestHooks::observe_buffer_dispose(uint64_t(get_instance_id()), buffer.driver_id.id, buffer.capture_test_allocation_serial);
+#endif
 			}
 		}
 #endif
@@ -10461,7 +10474,7 @@ uint64_t RenderingDevice::get_driver_resource(DriverResource p_resource, RID p_r
 			ERR_FAIL_NULL_V(buffer, 0);
 			ERR_FAIL_COND_V(buffer->qualification_return,0);
 
-#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
 			if (buffer->capture_test_allocation_serial && !capture_test_allocation_registry.mark_access_escaped(buffer->driver_id.id, buffer->capture_test_allocation_serial)) {
 				capture_test_coverage_failed.store(true);
 			}

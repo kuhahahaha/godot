@@ -30,7 +30,7 @@
 
 #pragma once
 #include "modules/modules_enabled.gen.h"
-#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
 #include <array>
 #include <cstdint>
 #include <mutex>
@@ -69,7 +69,7 @@ public:
 	bool access_escaped(uint64_t p_driver, uint64_t p_serial) const;
 };
 
-// Tracks only the pool's explicitly registered native objects. This is not a
+// Tracks only explicitly registered native test objects. This is not a
 // device-wide or K03 retirement ledger. Registration resolves actual RD owners;
 // release is observed after the original driver free returns.
 enum class RenderCaptureTestResourceKind : uint8_t { Shader,

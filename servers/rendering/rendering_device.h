@@ -40,7 +40,7 @@ class TestParticlesProcessRetryAccess;
 #endif
 
 #include <atomic>
-#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
 #include "servers/rendering/render_capture_test_tracking.h"
 #endif
 
@@ -83,6 +83,9 @@ class RenderingDevice : public RenderingDeviceCommons {
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
 	friend class RenderCaptureTestAccess;
 #endif
+#if defined(TESTS_ENABLED) && defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
+	friend class ParticlesRuntimeTestFixture;
+#endif
 
 	GDCLASS(RenderingDevice, Object)
 
@@ -121,14 +124,23 @@ private:
 	void test_arm_buffer_update_fault(RID p_buffer, uint32_t p_count) {
 		test_buffer_update_fault_buffer = p_buffer;
 		test_buffer_update_fault_count = p_count;
+#if defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
+		test_buffer_update_fault_skip = 0;
+#endif
 		test_buffer_update_fault_hits = 0;
 	}
+#if defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
+	void test_arm_buffer_update_fault_after(RID p_buffer, uint32_t p_count, uint32_t p_skip) {
+		test_arm_buffer_update_fault(p_buffer, p_count);
+		test_buffer_update_fault_skip = p_skip;
+	}
+#endif
 	uint32_t test_get_buffer_update_fault_hits() const { return test_buffer_update_fault_hits; }
 	void test_reset_compute_dispatch_count() { test_compute_dispatch_count = 0; }
 	uint32_t test_get_compute_dispatch_count() const { return test_compute_dispatch_count; }
 #endif
 	static RenderingDevice *singleton;
-#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
 	RenderCaptureTestAllocationRegistry capture_test_allocation_registry;
 	RenderCaptureTestResourceRegistry capture_test_resource_registry;
 	std::atomic<bool> capture_test_coverage_failed = false;
@@ -152,6 +164,9 @@ private:
 	// before staging or command recording can mutate device state.
 	RID test_buffer_update_fault_buffer;
 	uint32_t test_buffer_update_fault_count = 0;
+#if defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
+	uint32_t test_buffer_update_fault_skip = 0;
+#endif
 	uint32_t test_buffer_update_fault_hits = 0;
 	uint32_t test_compute_dispatch_count = 0;
 #endif
@@ -283,7 +298,7 @@ private:
 		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
 		uint64_t backing_serial = 0;
 		RDD::BufferID driver_id;
-#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
 		uint64_t capture_test_allocation_serial = 0;
 #endif
 		uint32_t size = 0;

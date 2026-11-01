@@ -42,12 +42,17 @@
 #include "servers/rendering/storage/particles_storage.h"
 #include "servers/rendering/storage/utilities.h"
 
+class ParticlesRuntimeTestFixture;
+
 namespace RendererRD {
 
 class SortEffects;
 
 class ParticlesStorage : public RendererParticlesStorage {
 private:
+#if defined(TESTS_ENABLED) && defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
+	friend class ::ParticlesRuntimeTestFixture;
+#endif
 #ifdef TESTS_ENABLED
 	friend class TestParticlesTrailAccess;
 	friend class TestParticlesReadbackAccess;
