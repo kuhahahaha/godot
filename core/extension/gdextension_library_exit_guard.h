@@ -691,26 +691,25 @@ private:
  Error scene_install_plan_locked(const Record &,GDExtensionSceneInstallPlanV2 &,SceneReadyFailureReason &) const;
  bool scene_install_plan_matches_locked(const Record &,SceneReadyFailureReason * = nullptr) const;
 
-	// Caller holds mutex. Admission is separate from retained identity reads.
-	Error validate_host_producer_binding_locked(InitializationLevelContextRef, LibraryCodeHoldRef, const void *, uint32_t &);
-	Error producer_view_locked(GDExtensionProducerRegistrationRefV1, uint32_t &);
-	Error producer_view_capacity_locked(uint32_t &);
-	void issue_producer_view_locked(uint32_t, uint32_t, GDExtensionProducerRegistrationRefV1 &);
-	Error copy_producer_identity_locked(const Record &, ProducerRegistrationIdentity &);
-	Error producer_registration_locked(const ProducerRegistrationRef &, Record *&);
-	Error admit_producer_source_locked(const ProducerRegistrationRef &, Record *&);
+ // Caller holds mutex. Admission is separate from retained identity reads.
+ Error validate_host_producer_binding_locked(InitializationLevelContextRef, LibraryCodeHoldRef, const void *, uint32_t &);
+ Error producer_view_locked(GDExtensionProducerRegistrationRefV1, uint32_t &);
+ Error producer_view_capacity_locked(uint32_t &);
+ void issue_producer_view_locked(uint32_t, uint32_t, GDExtensionProducerRegistrationRefV1 &);
+ Error copy_producer_identity_locked(const Record &, ProducerRegistrationIdentity &);
+ Error producer_registration_locked(const ProducerRegistrationRef &, Record *&);
+ Error admit_producer_source_locked(const ProducerRegistrationRef &, Record *&);
 
+ void reclaim(uint32_t p_slot);
+ void try_finalize();
 
-	void reclaim(uint32_t p_slot);
-	void try_finalize();
+ // Internal substrate only; guarded qualification still requires the complete
+ // original owner, level, service and control enrollment contract.
+ bool physical_can_close_locked(uint32_t p_slot) const;
+ Error preflight_exit(const RecordRef &p_ref, CloseRoute p_route);
 
-	// Internal substrate only; guarded qualification still requires the complete
-	// original owner, level, service and control enrollment contract.
-	bool physical_can_close_locked(uint32_t p_slot) const;
-	Error preflight_exit(const RecordRef &p_ref, CloseRoute p_route);
-
-public:
-private:
+ public:
+ private:
 #ifdef TESTS_ENABLED
  friend class ::TestQualificationPhysicalAccess;
  friend class ::TestQualificationAckAccess;

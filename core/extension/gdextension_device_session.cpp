@@ -197,15 +197,15 @@ static GDExtensionDeviceSessionResultV1 release_session(GDExtensionOriginalDevic
 static GDExtensionDeviceSessionResultV1 bind_main_ready_session(const GDExtensionDeviceExitAbi *abi,GDExtensionDeviceExitSceneReadyContextRef frame,GDExtensionDeviceRegistryContextRef *c,GDExtensionOriginalDeviceSessionRef *s,uint64_t *id) { return Registry::get_singleton().bind_main_scene_ready_device_session(abi,frame,c,s,id); }
 void register_qualification_interfaces();
 void register_producer_registration_interfaces();
-void register_device_session_interfaces(){
- register_producer_registration_interfaces();
- register_qualification_interfaces();
- GDExtension::register_interface_function("device_session_bind_main_scene_ready_v1",(GDExtensionInterfaceFunctionPtr)&bind_main_ready_session);
- GDExtension::register_interface_function("device_session_bind_v1",(GDExtensionInterfaceFunctionPtr)&bind_session);
- GDExtension::register_interface_function("device_session_bind_scene_ready_v1",(GDExtensionInterfaceFunctionPtr)&bind_ready_session);
- GDExtension::register_interface_function("device_session_copy_v1",(GDExtensionInterfaceFunctionPtr)&copy_session);
- GDExtension::register_interface_function("device_session_resolve_v1",(GDExtensionInterfaceFunctionPtr)&resolve_session);
- GDExtension::register_interface_function("device_session_release_context_v1",(GDExtensionInterfaceFunctionPtr)&release_context);
- GDExtension::register_interface_function("device_session_release_session_v1",(GDExtensionInterfaceFunctionPtr)&release_session);
+void register_device_session_interfaces() {
+	register_producer_registration_interfaces();
+	register_qualification_interfaces();
+	GDExtension::register_interface_function("device_session_bind_main_scene_ready_v1", (GDExtensionInterfaceFunctionPtr)&bind_main_ready_session);
+	GDExtension::register_interface_function("device_session_bind_v1", (GDExtensionInterfaceFunctionPtr)&bind_session);
+	GDExtension::register_interface_function("device_session_bind_scene_ready_v1", (GDExtensionInterfaceFunctionPtr)&bind_ready_session);
+	GDExtension::register_interface_function("device_session_copy_v1", (GDExtensionInterfaceFunctionPtr)&copy_session);
+	GDExtension::register_interface_function("device_session_resolve_v1", (GDExtensionInterfaceFunctionPtr)&resolve_session);
+	GDExtension::register_interface_function("device_session_release_context_v1", (GDExtensionInterfaceFunctionPtr)&release_context);
+	GDExtension::register_interface_function("device_session_release_session_v1", (GDExtensionInterfaceFunctionPtr)&release_session);
 }
 }
