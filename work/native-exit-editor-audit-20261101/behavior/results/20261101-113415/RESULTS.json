@@ -1,0 +1,118 @@
+{
+  "scope": "ordinary Godot selected SceneTree delete-queue ownership; no GPU/native extension/product acceptance",
+  "pin": {
+    "binary": "/Users/macbookair/Documents/Work/godot_ANGE/work/physics-wrapper-finish-recovery-20261101/bin/godot-store-r1.arm64",
+    "sha256": "edf3b010e2391120af96df148a81d87fc5a4c60801fa2de7ebffc7e9696eff58",
+    "controlled_build": "/Users/macbookair/Documents/Work/godot_ANGE/work/physics-wrapper-finish-recovery-20261101/bin/godot-store-r1.arm64.controlled_build.json",
+    "controlled_build_sha256": "d70aeb3de4c49396737a2f9c6e0d8948e26303bdbc6edda3e11e54888e34290e",
+    "source_drift": []
+  },
+  "script_sha256": "a9d59531b3f53c08b7a0ee3d245132189b09390811fc78d7640a694c059b23d3",
+  "project_sha256": "8ab7113d19337cb5179c32bb1f9ed1bb852ac3cf01c8cd185078a1d5fb0f859a",
+  "expect_fixed": false,
+  "runs": [
+    {
+      "case": "editor_detached",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/physics-wrapper-finish-recovery-20261101/bin/godot-store-r1.arm64",
+        "--headless",
+        "--editor",
+        "--path",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/behavior/probe",
+        "--script",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/behavior/probe/queue_free.gd",
+        "--",
+        "detached"
+      ],
+      "returncode": 42,
+      "expected_behavior": "precise detached-owner RED",
+      "behavior": {
+        "actual_self_frames": 2,
+        "editor": true,
+        "mode": "detached",
+        "node_invalid": false,
+        "passed": false,
+        "predelete": 0,
+        "tree_exited": 1
+      },
+      "checks": {
+        "not_timeout": true,
+        "one_behavior_result": true,
+        "actual_expected_behavior": true,
+        "no_parse_or_script_error": true
+      },
+      "objectdb_leak_summary": 209,
+      "log": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/behavior/results/20261101-113415/editor_detached.log",
+      "log_sha256": "8ed95d1558ce580a383394203bdaa7a02ddbbc29c1fe976401db749bbd8d60a0"
+    },
+    {
+      "case": "runtime_detached",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/physics-wrapper-finish-recovery-20261101/bin/godot-store-r1.arm64",
+        "--headless",
+        "--path",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/behavior/probe",
+        "--script",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/behavior/probe/queue_free.gd",
+        "--",
+        "detached"
+      ],
+      "returncode": 0,
+      "expected_behavior": "actual-free GREEN",
+      "behavior": {
+        "actual_self_frames": 2,
+        "editor": false,
+        "mode": "detached",
+        "node_invalid": true,
+        "passed": true,
+        "predelete": 1,
+        "tree_exited": 1
+      },
+      "checks": {
+        "not_timeout": true,
+        "one_behavior_result": true,
+        "actual_expected_behavior": true,
+        "no_parse_or_script_error": true
+      },
+      "objectdb_leak_summary": 0,
+      "log": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/behavior/results/20261101-113415/runtime_detached.log",
+      "log_sha256": "2592b9935377e552e1bb228825b0b3d6a89a8c82c26fc24941917c217c62caef"
+    },
+    {
+      "case": "editor_attached",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/physics-wrapper-finish-recovery-20261101/bin/godot-store-r1.arm64",
+        "--headless",
+        "--editor",
+        "--path",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/behavior/probe",
+        "--script",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/behavior/probe/queue_free.gd",
+        "--",
+        "attached"
+      ],
+      "returncode": 0,
+      "expected_behavior": "actual-free GREEN",
+      "behavior": {
+        "actual_self_frames": 2,
+        "editor": true,
+        "mode": "attached",
+        "node_invalid": true,
+        "passed": true,
+        "predelete": 1,
+        "tree_exited": 1
+      },
+      "checks": {
+        "not_timeout": true,
+        "one_behavior_result": true,
+        "actual_expected_behavior": true,
+        "no_parse_or_script_error": true
+      },
+      "objectdb_leak_summary": 209,
+      "log": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/behavior/results/20261101-113415/editor_attached.log",
+      "log_sha256": "34006690b50a73eb264dc53c50d70229cdb37dda1b24d8be3dde50d3bfedc7ba"
+    }
+  ],
+  "host_unchanged": true,
+  "source_unchanged": true
+}

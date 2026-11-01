@@ -1,0 +1,43 @@
+{
+  "scope": "ordinary headless editor capability and resource exit; no GPU or product acceptance",
+  "pin": {
+    "binary": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/bin/godot-editor-script.arm64",
+    "sha256": "a0cd958938bebf1ac698728c38e7dee9e5b623a4466fbea48ab9e304038d792f",
+    "controlled_build": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/bin/godot-editor-script.arm64.controlled_build.json",
+    "controlled_build_sha256": "e0b5774e7d87feea12e15ea510e85a65ba39bafea71bcaf477cea94f65b8fce8",
+    "source_drift": [],
+    "source_window": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/build-source-before.json",
+    "build_result": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/build-result.json"
+  },
+  "command": [
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/bin/godot-editor-script.arm64",
+    "--headless",
+    "--editor",
+    "--verbose",
+    "--path",
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/behavior/capability-results/20261101-114322/probe",
+    "--script",
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/behavior/capability-results/20261101-114322/probe/check.gd"
+  ],
+  "returncode": 0,
+  "capability": {
+    "EditorExportPlugin": true,
+    "GDScript": true,
+    "editor_hint": true,
+    "plugin_instance": true
+  },
+  "script_sha256": "259a6ca243de8e0a9046e51da7e6b7e5d10222ba2fd734a29d4a8444326a3244",
+  "checks": {
+    "not_timeout": true,
+    "capability_exit_zero": true,
+    "all_capability_fields_true": true,
+    "host_unchanged": true,
+    "source_unchanged": true
+  },
+  "resource_clean": true,
+  "canvas_leaks": {},
+  "objectdb_leaks": 0,
+  "other_rid_leaks": {},
+  "log": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/behavior/capability-results/20261101-114322/capability.log",
+  "log_sha256": "182d4445cff7ca917f07e4d5f688d22d65a2c06ce063a3968b50b444abafeea2"
+}

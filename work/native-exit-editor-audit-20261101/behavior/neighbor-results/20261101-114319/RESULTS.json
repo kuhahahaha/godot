@@ -1,0 +1,111 @@
+{
+  "scope": "ordinary startup selection and resource exit neighbors; no GPU/product acceptance",
+  "pin": {
+    "binary": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/bin/godot-editor-script.arm64",
+    "sha256": "a0cd958938bebf1ac698728c38e7dee9e5b623a4466fbea48ab9e304038d792f",
+    "controlled_build": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/bin/godot-editor-script.arm64.controlled_build.json",
+    "controlled_build_sha256": "e0b5774e7d87feea12e15ea510e85a65ba39bafea71bcaf477cea94f65b8fce8",
+    "source_drift": [],
+    "source_window": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/build-source-before.json",
+    "build_result": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/build-result.json"
+  },
+  "source_sha256": {
+    "queue_free.gd": "a9d59531b3f53c08b7a0ee3d245132189b09390811fc78d7640a694c059b23d3",
+    "custom_main_loop.gd": "97e6ca5783319012b18599c6d5e502527aafb6b0859c0600b7873f6611fbc6b2",
+    "project.godot": "8ab7113d19337cb5179c32bb1f9ed1bb852ac3cf01c8cd185078a1d5fb0f859a"
+  },
+  "runs": [
+    {
+      "case": "check_only",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/bin/godot-editor-script.arm64",
+        "--headless",
+        "--editor",
+        "--verbose",
+        "--path",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/behavior/probe",
+        "--check-only",
+        "--script",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/behavior/probe/queue_free.gd"
+      ],
+      "returncode": 0,
+      "checks": {
+        "not_timeout": true,
+        "exit_zero": true,
+        "no_exit_leaks": true,
+        "no_script_or_engine_errors": true,
+        "script_not_executed": true
+      },
+      "observation": null,
+      "log": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/behavior/neighbor-results/20261101-114319/check_only.log",
+      "log_sha256": "66a88abf68f584bcbdc96321ca49803a2dc5e1745c58688bc90e6a32ac70960c"
+    },
+    {
+      "case": "editor_no_script",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/bin/godot-editor-script.arm64",
+        "--headless",
+        "--editor",
+        "--verbose",
+        "--path",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/behavior/probe",
+        "--quit-after",
+        "8"
+      ],
+      "returncode": 0,
+      "checks": {
+        "not_timeout": true,
+        "exit_zero": true,
+        "no_exit_leaks": true,
+        "no_script_or_engine_errors": true,
+        "ordinary_editor_created": true
+      },
+      "observation": null,
+      "log": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/behavior/neighbor-results/20261101-114319/editor_no_script.log",
+      "log_sha256": "2e91ffbbfce04a5dfc73d1b3608ebfb202c8d8434e0a3c75355fb29d5c3fbe5a"
+    },
+    {
+      "case": "custom_main_loop",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/bin/godot-editor-script.arm64",
+        "--headless",
+        "--editor",
+        "--verbose",
+        "--path",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/behavior/probe",
+        "--script",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/behavior/probe/custom_main_loop.gd"
+      ],
+      "returncode": 0,
+      "checks": {
+        "not_timeout": true,
+        "exit_zero": true,
+        "no_exit_leaks": true,
+        "no_script_or_engine_errors": true,
+        "only_actual_custom_loop": true,
+        "no_editor_node_started": true
+      },
+      "observation": {
+        "debug_build": true,
+        "is_scene_tree": false,
+        "orphan_editor_nodes": 0,
+        "orphan_windows": 0,
+        "selected_self": true
+      },
+      "log": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/behavior/neighbor-results/20261101-114319/custom_main_loop.log",
+      "log_sha256": "77fec819e6ebfe439172e39fdf4568b6166012f963f842558daebfa37bebd14b"
+    }
+  ],
+  "host_unchanged": true,
+  "source_unchanged": true,
+  "capability_runner": {
+    "command": [
+      "/opt/homebrew/opt/python@3.14/bin/python3.14",
+      "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/behavior/run_capability.py",
+      "--pin",
+      "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/PINNED_HOST.json",
+      "--expect-clean"
+    ],
+    "returncode": 0
+  }
+}

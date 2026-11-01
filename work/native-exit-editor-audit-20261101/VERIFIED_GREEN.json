@@ -1,0 +1,126 @@
+{
+  "status": "one-line-repair-verified-on-immutable-host",
+  "scope": "ordinary headless editor MainLoop/singleton/delete-queue resource ownership only",
+  "host": {
+    "binary": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/bin/godot-editor-script.arm64",
+    "sha256": "a0cd958938bebf1ac698728c38e7dee9e5b623a4466fbea48ab9e304038d792f",
+    "controlled_build": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/bin/godot-editor-script.arm64.controlled_build.json",
+    "controlled_build_sha256": "e0b5774e7d87feea12e15ea510e85a65ba39bafea71bcaf477cea94f65b8fce8",
+    "source_drift": [],
+    "source_window": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/build-source-before.json",
+    "build_result": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/build-result.json"
+  },
+  "build": {
+    "command": [
+      "scons",
+      "platform=macos",
+      "target=editor",
+      "tests=yes",
+      "-j4"
+    ],
+    "rc": 0,
+    "seconds": 21.02,
+    "source_drift": []
+  },
+  "sourcepins": {
+    "main/main.cpp": {
+      "sha256": "ee9e9cc51309eaeb36f2a832b1035ed0c390865bedf1b48e34da7aeffcf162e7",
+      "in_pinned_build_cpp_h_window": true,
+      "matches_pinned_build_source": true
+    },
+    "scene/main/scene_tree.cpp": {
+      "sha256": "eed6dbff323344efff19f2de6763705aff062a76e00fd7cbe42a4ee849b7e5a4",
+      "in_pinned_build_cpp_h_window": true,
+      "matches_pinned_build_source": true
+    },
+    "scene/main/node.cpp": {
+      "sha256": "0db10a968bd027fec03f6b78ddf793660001f61eacb369cf4cf2cf6dd48f2b80",
+      "in_pinned_build_cpp_h_window": true,
+      "matches_pinned_build_source": true
+    },
+    "editor/editor_node.cpp": {
+      "sha256": "f6398e9a6a2a29ac6e1fd56d51f1e2521b7d74d63f6d4a770624e4af10569b22",
+      "in_pinned_build_cpp_h_window": true,
+      "matches_pinned_build_source": true
+    },
+    "platform/macos/os_macos.mm": {
+      "sha256": "47939c0918fe2dd391ce2d1a7aed9b6d33ea0dddf839bfc393412b7f213a1a06",
+      "in_pinned_build_cpp_h_window": false,
+      "matches_pinned_build_source": null
+    }
+  },
+  "sourcepin_limit": "Build source window records cpp/h and omits Objective-C++ .mm; OS_MacOS reference hash is recorded separately and is not claimed to match that absent entry. Main/SceneTree/Node/EditorNode match the recorded source window.",
+  "evidence": {
+    "behavior": {
+      "path": "behavior/results/20261101-114300/RESULTS.json",
+      "sha256": "a1d1fb7a90f4d74d99f446a6657981a609a9b699f4e258edb05b576c7e6c1d1d"
+    },
+    "neighbors": {
+      "path": "behavior/neighbor-results/20261101-114319/RESULTS.json",
+      "sha256": "3f473158051fbc0b1ee552175326c3f2c0286d9bd21abddc034d63f232ca9fe3"
+    },
+    "capability": {
+      "path": "behavior/capability-results/20261101-114322/RESULTS.json",
+      "sha256": "b9f7c41bab94d7169b55d8b251c305f5ec095cbd40c3b30aee7d39716608f412"
+    },
+    "error_neighbors": {
+      "path": "behavior/error-neighbor-results/20261101-114513/RESULTS.json",
+      "sha256": "6880126048cec2021b5b796e0d98a218eff17af635f5cde77317151e806dc57b"
+    }
+  },
+  "summary": {
+    "behavior": [
+      {
+        "case": "editor_detached",
+        "returncode": 0
+      },
+      {
+        "case": "runtime_detached",
+        "returncode": 0
+      },
+      {
+        "case": "editor_attached",
+        "returncode": 0
+      }
+    ],
+    "neighbors": [
+      {
+        "case": "check_only",
+        "returncode": 0
+      },
+      {
+        "case": "editor_no_script",
+        "returncode": 0
+      },
+      {
+        "case": "custom_main_loop",
+        "returncode": 0
+      }
+    ],
+    "capability": {
+      "returncode": 0,
+      "capability": {
+        "EditorExportPlugin": true,
+        "GDScript": true,
+        "editor_hint": true,
+        "plugin_instance": true
+      },
+      "resource_clean": true
+    },
+    "error_neighbors": [
+      {
+        "case": "invalid_check_only",
+        "returncode": 1
+      },
+      {
+        "case": "missing_script",
+        "returncode": 1
+      },
+      {
+        "case": "nonmainloop_check_only",
+        "returncode": 0
+      }
+    ]
+  },
+  "unexecuted_runtime_path": "Non-MainLoop cast failure calls OS_MacOS::alert then NSAlert.runModal, even headless; no blocking dialog was launched. Valid RefCounted script was separately checked with --check-only and not instantiated."
+}

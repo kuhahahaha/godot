@@ -1,0 +1,16 @@
+{
+  "scope": "ordinary engine owner queue behavioral RED; proposed one-line production fix remains unapplied",
+  "files": {
+    "FIX_CANDIDATE.patch": "f18a6e75d73a3f9b0e8496ac1bbdf1ce17c612ca5e561e07be96f9d51d310be0",
+    "behavior/probe/queue_free.gd": "a9d59531b3f53c08b7a0ee3d245132189b09390811fc78d7640a694c059b23d3",
+    "behavior/probe/project.godot": "8ab7113d19337cb5179c32bb1f9ed1bb852ac3cf01c8cd185078a1d5fb0f859a",
+    "behavior/probe/custom_main_loop.gd": "97e6ca5783319012b18599c6d5e502527aafb6b0859c0600b7873f6611fbc6b2",
+    "behavior/run.py": "cda994d5c4f753ea329ca92f8c0aae5d8e5df18a5acd08631b63dbc5f2310562",
+    "behavior/run_capability.py": "92262560e62e18856328ba43b0aef082fd067ffc587df6d5367eb166d560f3c8",
+    "baseline/check.gd": "259a6ca243de8e0a9046e51da7e6b7e5d10222ba2fd734a29d4a8444326a3244",
+    "baseline/project.godot": "e2c8824173773586878be40b8deb73deac2a7c96bb230cc323f7a303db7b469d",
+    "behavior/run_neighbors.py": "aedb8fdabe047a2944263c5fdf2224e6ce8659949c245c8d3082c314642ff971"
+  },
+  "behavior_evidence": "behavior/results/20261101-113415/RESULTS.json",
+  "capability_evidence": "COMPARISON.json"
+}
