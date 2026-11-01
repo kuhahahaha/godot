@@ -1,0 +1,181 @@
+{
+  "scope": "Godot original SceneReady/guard/QRT/native/physical control; not an ANGE product request, Method verification, or owner acceptance",
+  "host": {
+    "binary": "/Users/macbookair/Documents/Work/godot_ANGE/work/physics-wrapper-finish-recovery-20261101/bin/godot-store-r1.arm64",
+    "binary_sha256": "edf3b010e2391120af96df148a81d87fc5a4c60801fa2de7ebffc7e9696eff58",
+    "controlled_build": "/Users/macbookair/Documents/Work/godot_ANGE/work/physics-wrapper-finish-recovery-20261101/bin/godot-store-r1.arm64.controlled_build.json",
+    "controlled_build_sha256": "d70aeb3de4c49396737a2f9c6e0d8948e26303bdbc6edda3e11e54888e34290e",
+    "controlled_build_selection": {
+      "schema": 1,
+      "core_stamp": "d3e0acc8a208bbe9d092d1a4ba36f6c35841ed194ef9b6e3972d73b8ce315094",
+      "compiler_route": "BuiltinGlslangV1",
+      "compiler_stamp": "b0a0973b512173498b2e51480d4b9e1dc9ed00e5bb0fb0fc7bebb2231a9fe6f9",
+      "platform": "macos",
+      "architecture": "arm64",
+      "target_kind": "Executable"
+    },
+    "linkage": [
+      "/System/Library/Frameworks/ForceFeedback.framework/Versions/A/ForceFeedback",
+      "/System/Library/Frameworks/Cocoa.framework/Versions/A/Cocoa",
+      "/System/Library/Frameworks/Carbon.framework/Versions/A/Carbon",
+      "/System/Library/Frameworks/AudioUnit.framework/Versions/A/AudioUnit",
+      "/System/Library/Frameworks/CoreAudio.framework/Versions/A/CoreAudio",
+      "/System/Library/Frameworks/CoreMIDI.framework/Versions/A/CoreMIDI",
+      "/System/Library/Frameworks/IOKit.framework/Versions/A/IOKit",
+      "/System/Library/Frameworks/GameController.framework/Versions/A/GameController",
+      "/System/Library/Frameworks/CoreHaptics.framework/Versions/A/CoreHaptics",
+      "/System/Library/Frameworks/CoreVideo.framework/Versions/A/CoreVideo",
+      "/System/Library/Frameworks/AVFoundation.framework/Versions/A/AVFoundation",
+      "/System/Library/Frameworks/CoreMedia.framework/Versions/A/CoreMedia",
+      "/System/Library/Frameworks/QuartzCore.framework/Versions/A/QuartzCore",
+      "/System/Library/Frameworks/Security.framework/Versions/A/Security",
+      "/System/Library/Frameworks/UniformTypeIdentifiers.framework/Versions/A/UniformTypeIdentifiers",
+      "/System/Library/Frameworks/IOSurface.framework/Versions/A/IOSurface",
+      "/System/Library/Frameworks/Metal.framework/Versions/A/Metal",
+      "/System/Library/Frameworks/MetalFX.framework/Versions/A/MetalFX",
+      "/System/Library/Frameworks/MetalKit.framework/Versions/A/MetalKit",
+      "/usr/lib/libSystem.B.dylib",
+      "/usr/lib/libz.1.dylib",
+      "/usr/lib/libc++.1.dylib",
+      "/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit",
+      "/System/Library/Frameworks/ApplicationServices.framework/Versions/A/ApplicationServices",
+      "/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation",
+      "/System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics",
+      "/System/Library/Frameworks/CoreServices.framework/Versions/A/CoreServices",
+      "/System/Library/Frameworks/CoreText.framework/Versions/A/CoreText",
+      "/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation",
+      "/usr/lib/libobjc.A.dylib"
+    ],
+    "core_model": "monolithic"
+  },
+  "build": {
+    "scope": "standalone Godot native control; not an ANGE owner/request acceptance",
+    "header_sha256": "971a1ab90541900c50cde6eb45f62e7f5fcc1a95cbcb9a8632fab792a9835289",
+    "source_sha256": "d48e4bf46e71af1359fb0585a75201823735d42db913318d2176166d15bd444b",
+    "builds": [
+      {
+        "case": "positive",
+        "mode": 1,
+        "command": [
+          "clang++",
+          "-std=c++17",
+          "-dynamiclib",
+          "-arch",
+          "arm64",
+          "-mmacosx-version-min=11.0",
+          "-O2",
+          "-Wall",
+          "-Wextra",
+          "-Wno-unused-parameter",
+          "-Wno-deprecated-declarations",
+          "-DTICKET_MODE=1",
+          "-I",
+          "/Users/macbookair/Documents/Work/godot_ANGE",
+          "/Users/macbookair/Documents/Work/godot_ANGE/work/native-multireadback-20261101/runtime/v2_probe.cpp",
+          "-o",
+          "/Users/macbookair/Documents/Work/godot_ANGE/work/native-multireadback-20261101/runtime/v2_positive.dylib"
+        ],
+        "rc": 0,
+        "sha256": "1336e1ee2870ce16be7e6c0c73d5ccaae9f71d6dc2c2e7e31b0b522f45432911"
+      },
+      {
+        "case": "cancel_prefix",
+        "mode": 2,
+        "command": [
+          "clang++",
+          "-std=c++17",
+          "-dynamiclib",
+          "-arch",
+          "arm64",
+          "-mmacosx-version-min=11.0",
+          "-O2",
+          "-Wall",
+          "-Wextra",
+          "-Wno-unused-parameter",
+          "-Wno-deprecated-declarations",
+          "-DTICKET_MODE=2",
+          "-I",
+          "/Users/macbookair/Documents/Work/godot_ANGE",
+          "/Users/macbookair/Documents/Work/godot_ANGE/work/native-multireadback-20261101/runtime/v2_probe.cpp",
+          "-o",
+          "/Users/macbookair/Documents/Work/godot_ANGE/work/native-multireadback-20261101/runtime/v2_cancel_prefix.dylib"
+        ],
+        "rc": 0,
+        "sha256": "5e3191ee1cd33c9ee15725d57b1eb3d228ea6f3cdad832a5928487427f5124bc"
+      }
+    ]
+  },
+  "source_hashes": {
+    "capture.glsl": "c4e9a997d936d6edebdd1b079b1ebbea5a7bf521b184f2b94b8662f20104e2dc",
+    "body.glsl": "fee26a1cb22c98914e1695e7d425532ee0287ec365548c450a311b4bbfed2896",
+    "generate.gd": "56dde143f130d12a0714151e7ae093e99665868780b87d6dc1a68911ea83cb4a"
+  },
+  "runs": [
+    {
+      "case": "containers",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/physics-wrapper-finish-recovery-20261101/bin/godot-store-r1.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-multireadback-20261101/runtime/containers",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "safe",
+        "--script",
+        "generate.gd"
+      ],
+      "returncode": 0,
+      "log": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-multireadback-20261101/runtime/results/20261101-111020/containers.log",
+      "checks": {
+        "exit_zero": true,
+        "metal": true,
+        "clean": true,
+        "both_generated": true
+      }
+    },
+    {
+      "case": "store_destination",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/physics-wrapper-finish-recovery-20261101/bin/godot-store-r1.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-multireadback-20261101/runtime/store_destination",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "safe",
+        "--script",
+        "probe.gd"
+      ],
+      "returncode": 0,
+      "log": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-multireadback-20261101/runtime/results/20261101-111020/store_destination.log",
+      "checks": {
+        "exit_zero": true,
+        "metal": true,
+        "clean": true,
+        "original_kinds": true,
+        "loop": true,
+        "unload": true,
+        "terminal_2": true,
+        "terminal_3": true,
+        "allocator_issuer_negative": true,
+        "actual_store_e05_record": true,
+        "same_ticket_native_result": true
+      },
+      "kinds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        8,
+        10,
+        11
+      ]
+    }
+  ],
+  "host_unchanged": true
+}

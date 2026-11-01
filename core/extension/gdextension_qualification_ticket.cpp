@@ -41,40 +41,127 @@ Error Registry::qualification_ticket_locked(QualificationBridge *bridge,GDExtens
  for(auto *existing:bridge->tickets)if(existing && existing->serial==ref.handle_serial && !existing->acknowledged){ticket=existing;return OK;}
  return ERR_DOES_NOT_EXIST;
 }
-Error Registry::qualification_record_preflight(QualificationBridge *bridge,RenderingDevice *rd,const GDExtensionQualificationRecordV1 &request,LocalVector<RID> &resources) {
- if(!valid_abi(request.abi) || !request.record_generation || !request.request_nonce || request.library_generation!=records[bridge->library].snapshot.library_generation || !request.qualification_session_serial || !request.attempt || !request.sample_count || request.sample_count>512 || request.range_end<request.range_begin || request.range_end-request.range_begin!=request.sample_count || request.body_groups_x!=(request.sample_count+63)/64 || !request.readback_size || request.readback_size>16384 || !request.source_allocation_generation)return ERR_INVALID_PARAMETER;
- if(!rd->driver->native_call_observation_supported())return ERR_UNAVAILABLE;
- const uint64_t graph_bound=(request.readback_size+31)/32+2;
- uint32_t body_push[4],capture_push[4];memcpy(body_push,request.body_push,16);memcpy(capture_push,request.capture_push,16);
- if(body_push[1]!=request.sample_count || capture_push[1]!=request.sample_count)return ERR_INVALID_PARAMETER;
- const Error capacity_error=qualification_native_capacity(*rd->driver,rd->draw_graph.qualification_command_count(),graph_bound,rd->transfer_worker_pool_max_size);
- if(capacity_error!=OK)return capacity_error;
- if(request.body_groups_x>rd->driver->limit_get(RenderingDevice::LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_X))return ERR_INVALID_PARAMETER;
- const uint64_t pipelines[]={request.capture_pipeline,request.body_pipeline},sets[]={request.capture_set,request.body_set};
- for(uint32_t i=0;i<2;++i) {
-  RID pipeline_rid=RID::from_uint64(pipelines[i]),set_rid=RID::from_uint64(sets[i]);
-  auto *pipeline=rd->compute_pipeline_owner.get_or_null(pipeline_rid);auto *set=rd->uniform_set_owner.get_or_null(set_rid);
-  if(!pipeline || !set || !pipeline->driver_id || !set->driver_id || pipeline->push_constant_size!=16 || pipeline->set_formats.size()!=1 || !pipeline->set_formats[0] || pipeline->set_formats[0]!=set->format || set->shader_set!=0)return ERR_INVALID_DATA;
-  if(i==1 && (pipeline->local_group_size[0]!=64 || pipeline->local_group_size[1]!=1 || pipeline->local_group_size[2]!=1))return ERR_INVALID_DATA;
-  if(!set->shared_textures_to_update.is_empty() || !set->pending_clear_textures.is_empty() || !set->acceleration_structures.is_empty())return ERR_UNAVAILABLE;
-  if(!add_resource(resources,pipeline_rid) || !add_resource(resources,pipeline->shader) || !add_resource(resources,set_rid))return ERR_PARAMETER_RANGE_ERROR;
-  auto *dependencies=rd->reverse_dependency_map.getptr(set_rid);if(!dependencies)return ERR_INVALID_DATA;
-  for(RID dependency:*dependencies) {
-   if(rd->shader_owner.owns(dependency)){if(!add_resource(resources,dependency))return ERR_PARAMETER_RANGE_ERROR;continue;}
-   auto *buffer=rd->storage_buffer_owner.get_or_null(dependency);if(!buffer)buffer=rd->uniform_buffer_owner.get_or_null(dependency);
-   if(!buffer || !buffer->driver_id || buffer->usage.has_flag(RDD::BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT) || buffer->transfer_worker_index>=0)return ERR_UNAVAILABLE;
-   if(!add_resource(resources,dependency))return ERR_PARAMETER_RANGE_ERROR;
-  }
- }
- auto *buffer=rd->storage_buffer_owner.get_or_null(RID::from_uint64(request.readback_buffer));
- if(!buffer || !buffer->driver_id || !buffer->backing_serial || buffer->backing_serial!=request.observed_backing_serial || request.readback_offset>buffer->size || request.readback_size>buffer->size-request.readback_offset || !buffer->usage.has_flag(RDD::BUFFER_USAGE_TRANSFER_FROM_BIT) || buffer->transfer_worker_index>=0)return ERR_INVALID_DATA;
- if(!add_resource(resources,RID::from_uint64(request.readback_buffer)))return ERR_PARAMETER_RANGE_ERROR;
- for(RID rid:resources) {
-  auto *stored=rd->storage_buffer_owner.get_or_null(rid);auto *pipeline=rd->compute_pipeline_owner.get_or_null(rid);auto *shader=rd->shader_owner.get_or_null(rid);
-  auto *cell=stored?stored->qualification_return:pipeline?pipeline->qualification_return:shader?shader->qualification_return:nullptr;
-  if(cell && (cell->bridge!=bridge->serial || cell->use_closed.load()))return ERR_UNAUTHORIZED;
- }
- return OK;
+Error Registry::qualification_record_preflight(QualificationBridge *bridge, RenderingDevice *rd, const GDExtensionQualificationRecordV1 &request, LocalVector<RID> &resources, uint64_t capture_set1, uint64_t body_set1) {
+	if (!valid_abi(request.abi) || !request.record_generation || !request.request_nonce || request.library_generation != records[bridge->library].snapshot.library_generation || !request.qualification_session_serial || !request.attempt || !request.sample_count || request.sample_count > 512 || request.range_end < request.range_begin || request.range_end - request.range_begin != request.sample_count || request.body_groups_x != (request.sample_count + 63) / 64 || !request.readback_size || request.readback_size > 16384 || !request.source_allocation_generation)
+		return ERR_INVALID_PARAMETER;
+	if (!rd->driver->native_call_observation_supported())
+		return ERR_UNAVAILABLE;
+	const uint64_t graph_bound = (request.readback_size + 31) / 32 + 2;
+	uint32_t body_push[4], capture_push[4];
+	memcpy(body_push, request.body_push, 16);
+	memcpy(capture_push, request.capture_push, 16);
+	if (body_push[1] != request.sample_count || capture_push[1] != request.sample_count)
+		return ERR_INVALID_PARAMETER;
+	const Error capacity_error = qualification_native_capacity(*rd->driver, rd->draw_graph.qualification_command_count(), graph_bound, rd->transfer_worker_pool_max_size);
+	if (capacity_error != OK)
+		return capacity_error;
+	if (request.body_groups_x > rd->driver->limit_get(RenderingDevice::LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_X))
+		return ERR_INVALID_PARAMETER;
+	const uint64_t pipelines[] = { request.capture_pipeline, request.body_pipeline };
+	const uint64_t sets0[] = { request.capture_set, request.body_set }, sets1[] = { capture_set1, body_set1 };
+	for (uint32_t i = 0; i < 2; ++i) {
+		RID pipeline_rid = RID::from_uint64(pipelines[i]);
+		auto *pipeline = rd->compute_pipeline_owner.get_or_null(pipeline_rid);
+		const uint32_t set_count = sets1[i] ? 2 : 1;
+		if (!pipeline || !pipeline->driver_id || pipeline->push_constant_size != 16 || pipeline->set_formats.size() != set_count) {
+			return ERR_INVALID_DATA;
+		}
+		if (i == 1 && (pipeline->local_group_size[0] != 64 || pipeline->local_group_size[1] != 1 || pipeline->local_group_size[2] != 1))
+			return ERR_INVALID_DATA;
+		if (!add_resource(resources, pipeline_rid) || !add_resource(resources, pipeline->shader)) {
+			return ERR_PARAMETER_RANGE_ERROR;
+		}
+		for (uint32_t set_index = 0; set_index < set_count; ++set_index) {
+			RID set_rid = RID::from_uint64(set_index ? sets1[i] : sets0[i]);
+			auto *set = rd->uniform_set_owner.get_or_null(set_rid);
+			if (!set || !set->driver_id || !pipeline->set_formats[set_index] || pipeline->set_formats[set_index] != set->format || set->shader_set != set_index) {
+				return ERR_INVALID_DATA;
+			}
+			if (!set->shared_textures_to_update.is_empty() || !set->pending_clear_textures.is_empty() || !set->acceleration_structures.is_empty()) {
+				return ERR_UNAVAILABLE;
+			}
+			if (!add_resource(resources, set_rid)) {
+				return ERR_PARAMETER_RANGE_ERROR;
+			}
+			auto *dependencies = rd->reverse_dependency_map.getptr(set_rid);
+			if (!dependencies)
+				return ERR_INVALID_DATA;
+			for (RID dependency : *dependencies) {
+				if (rd->shader_owner.owns(dependency)) {
+					if (!add_resource(resources, dependency))
+						return ERR_PARAMETER_RANGE_ERROR;
+					continue;
+				}
+				auto *texture = rd->texture_owner.get_or_null(dependency);
+				auto *sampler = rd->sampler_owner.get_or_null(dependency);
+				if (texture || sampler) {
+					// A numeric RID or a same-numbered return cell is not the original
+					// method resource owner. Authenticate the typed child before admitting
+					// it; the later pin operation installs the physical reverse references.
+					auto *physical = texture ? texture->qualification_return : sampler->qualification_return;
+					auto matches = [&](const auto *child) { return child && &child->physical == physical && !child->creating && !child->retiring && !child->acknowledged && child->serial && child->rid == dependency.get_id() && child->object_serial && child->object_serial == child->physical.serial && child->physical.rid == child->rid && child->physical.bridge == bridge->serial && child->physical.child == child->serial; };
+					bool original = false;
+					if (texture) {
+						for (auto *child : bridge->textures) {
+							if (matches(child)) {
+								original = true;
+								break;
+							}
+						}
+					}
+					if (sampler) {
+						for (auto *child : bridge->samplers) {
+							if (matches(child)) {
+								original = true;
+								break;
+							}
+						}
+					}
+					if (!original) {
+						return ERR_UNAUTHORIZED;
+					}
+					// Shared fallback updates, pending clears, and legacy transfer workers
+					// require effects outside this original checked record operation.
+					if (texture && (!texture->driver_id || texture->owner.is_valid() || texture->shared_fallback || texture->pending_clear || texture->transfer_worker_index >= 0)) {
+						return ERR_UNAVAILABLE;
+					}
+					if (sampler && !sampler->driver_id) {
+						return ERR_UNAVAILABLE;
+					}
+				} else {
+					auto *buffer = rd->storage_buffer_owner.get_or_null(dependency);
+					if (!buffer) {
+						buffer = rd->uniform_buffer_owner.get_or_null(dependency);
+					}
+					if (!buffer || !buffer->driver_id || buffer->usage.has_flag(RDD::BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT) || buffer->transfer_worker_index >= 0) {
+						return ERR_UNAVAILABLE;
+					}
+				}
+				if (!add_resource(resources, dependency))
+					return ERR_PARAMETER_RANGE_ERROR;
+			}
+		}
+	}
+	auto *buffer = rd->storage_buffer_owner.get_or_null(RID::from_uint64(request.readback_buffer));
+	if (!buffer || !buffer->driver_id || !buffer->backing_serial || buffer->backing_serial != request.observed_backing_serial || request.readback_offset > buffer->size || request.readback_size > buffer->size - request.readback_offset || !buffer->usage.has_flag(RDD::BUFFER_USAGE_TRANSFER_FROM_BIT) || buffer->transfer_worker_index >= 0)
+		return ERR_INVALID_DATA;
+	if (!add_resource(resources, RID::from_uint64(request.readback_buffer)))
+		return ERR_PARAMETER_RANGE_ERROR;
+	for (RID rid : resources) {
+		auto *stored = rd->storage_buffer_owner.get_or_null(rid);
+		auto *pipeline = rd->compute_pipeline_owner.get_or_null(rid);
+		auto *shader = rd->shader_owner.get_or_null(rid);
+		auto *texture = rd->texture_owner.get_or_null(rid);
+		auto *sampler = rd->sampler_owner.get_or_null(rid);
+		auto *cell = stored ? stored->qualification_return : pipeline ? pipeline->qualification_return
+				: shader											  ? shader->qualification_return
+				: texture											  ? texture->qualification_return
+				: sampler											  ? sampler->qualification_return
+																	  : nullptr;
+		if (cell && (cell->bridge != bridge->serial || cell->use_closed.load()))
+			return ERR_UNAUTHORIZED;
+	}
+	return OK;
 }
 void Registry::qualification_record_append(QualificationTicket *ticket,RenderingDevice *rd) {
  const auto &request=ticket->origin;
@@ -83,6 +170,9 @@ void Registry::qualification_record_append(QualificationTicket *ticket,Rendering
  if(capture!=RenderingDevice::INVALID_ID) {
   rd->compute_list_bind_compute_pipeline(capture,RID::from_uint64(request.capture_pipeline));
   rd->compute_list_bind_uniform_set(capture,RID::from_uint64(request.capture_set),0);
+  if (ticket->multi_readback && ticket->range_origin.capture_set1) {
+	  rd->compute_list_bind_uniform_set(capture, RID::from_uint64(ticket->range_origin.capture_set1), 1);
+  }
   rd->compute_list_set_push_constant(capture,request.capture_push,16);
   ticket->capture=rd->_qualification_dispatch(capture,1,1,1);rd->compute_list_end();
  }
@@ -92,25 +182,65 @@ void Registry::qualification_record_append(QualificationTicket *ticket,Rendering
   if(body!=RenderingDevice::INVALID_ID) {
    rd->compute_list_bind_compute_pipeline(body,RID::from_uint64(request.body_pipeline));
    rd->compute_list_bind_uniform_set(body,RID::from_uint64(request.body_set),0);
+   if (ticket->multi_readback && ticket->range_origin.body_set1) {
+	   rd->compute_list_bind_uniform_set(body, RID::from_uint64(ticket->range_origin.body_set1), 1);
+   }
    rd->compute_list_set_push_constant(body,request.body_push,16);
    ticket->body=rd->_qualification_dispatch(body,request.body_groups_x,1,1);rd->compute_list_end();
   }
   {MutexLock lock(mutex);add_graph(ticket,ticket->body,2,rd->frame,rd->frames[rd->frame].qualification_epoch);}
  }
- Error error=ticket->body.is_valid()?rd->_buffer_get_data_async(RID::from_uint64(request.readback_buffer),Callable(),request.readback_offset,request.readback_size,ticket->result):FAILED;
+ Error first_error = ticket->body.is_valid() ? OK : FAILED;
+ if (ticket->body.is_valid()) {
+	 for (uint32_t i = 0; i < ticket->readback_count(); ++i) {
+		 {
+			 MutexLock lock(mutex);
+			 if (ticket->admission_closed.load()) {
+				 break;
+			 }
+		 }
+		 const auto range = ticket->readback_range(i);
+		 auto &owned = ticket->readback_result(i);
+		 const Error error = rd->_buffer_get_data_async(RID::from_uint64(range.readback_buffer), Callable(), range.readback_offset, range.readback_size, owned);
+		 {
+			 MutexLock lock(mutex);
+			 auto &joined = ticket->readback_cursor(i);
+			 for (; joined < owned->copies.size(); ++joined) {
+				 const auto &copy = owned->copies[joined];
+				 add_graph(ticket, copy.handle, 3, rd->frame, rd->frames[rd->frame].qualification_epoch, range.observed_backing_serial, copy.region.src_offset, copy.region.size);
+			 }
+		 }
+		 if (error != OK && error != ERR_BUSY) {
+			 first_error = error;
+			 break;
+		 }
+	 }
+ }
  rd->qualification_recording=false;
  MutexLock lock(mutex);
- for(;ticket->readback_copies_joined<ticket->result->copies.size();++ticket->readback_copies_joined) {
-  const auto &copy=ticket->result->copies[ticket->readback_copies_joined];add_graph(ticket,copy.handle,3,rd->frame,rd->frames[rd->frame].qualification_epoch,ticket->report.source_backing_serial,copy.region.src_offset,copy.region.size);
- }
  ticket->recorded=ticket->capture.is_valid() && ticket->body.is_valid();ticket->recording=false;
- if(error!=OK && error!=ERR_BUSY){ticket->append_failed=true;ticket->report.native_error=error;}
+ if (first_error != OK) {
+	 ticket->append_failed = true;
+	 if (ticket->report.native_error == OK) {
+		 ticket->report.native_error = first_error;
+	 }
+ }
  qualification_ticket_publish(ticket,rd);
 }
 void Registry::qualification_ticket_publish(QualificationTicket *ticket,RenderingDevice *rd) {
  if(ticket->report.state==8)return;
  auto next=ticket->report;
- if(ticket->result.is_valid() && ticket->result->error!=OK){ticket->append_failed=true;next.native_error=ticket->result->error;next.native_code=ticket->result->native_code;next.phase=5;}
+ for (uint32_t i = 0; i < ticket->readback_count(); ++i) {
+	 const auto &owned = ticket->readback_result(i);
+	 if (owned.is_valid() && owned->error != OK) {
+		 ticket->append_failed = true;
+		 if (next.native_error == OK) {
+			 next.native_error = owned->error;
+			 next.native_code = owned->native_code;
+		 }
+		 next.phase = 5;
+	 }
+ }
  next.required_count=ticket->facts.size();next.known_count=0;next.possible_count=0;next.fact_count=ticket->facts.size();
  bool sealed=true,returned=true,mapped_all=true,native_success=true,native_failed=false,native_unknown=false,has_native=!ticket->natives.is_empty();
  for(auto &graph:ticket->graphs) {
@@ -146,9 +276,16 @@ void Registry::qualification_ticket_publish(QualificationTicket *ticket,Renderin
  else if(!sealed) {next.state=2;next.phase=2;}
  else if(ticket->natives.is_empty()) {next.state=3;next.phase=3;}
  else {next.state=4;next.phase=4;}
- const bool result_complete=ticket->recorded && ticket->ordering_closed && ticket->result.is_valid() && ticket->result->delivered && ticket->result->error==OK && ticket->result->completed_size==ticket->origin.readback_size && ticket->result->issued_size==ticket->origin.readback_size;
+ bool result_complete = ticket->recorded && ticket->ordering_closed && ticket->readback_count() > 0;
+ for (uint32_t i = 0; i < ticket->readback_count(); ++i) {
+	 const auto range = ticket->readback_range(i);
+	 const auto &owned = ticket->readback_result(i);
+	 result_complete = result_complete && owned.is_valid() && owned->delivered && owned->error == OK && owned->completed_size == range.readback_size && owned->issued_size == range.readback_size && uint64_t(owned->bytes.size()) == range.readback_size;
+ }
  if(sources_returned && result_complete && !ticket->append_failed && !ticket->admission_closed) {
-  next.state=8;next.phase=5;next.owned_size=ticket->result->bytes.size();
+	 next.state = 8;
+	 next.phase = 5;
+	 next.owned_size = ticket->multi_readback ? ticket->range_origin.readback_size : ticket->result->bytes.size();
  }
  // A logical copy/append failure closes future appends. Physical ownership
  // can return independently only after every exact native source succeeded
@@ -216,30 +353,91 @@ void Registry::qualification_ticket_step(QualificationTicket *ticket,RenderingDe
  if(!rd->_thread_safe_.try_lock())return;
  RdUnlock rd_unlock;rd_unlock.mutex=&rd->_thread_safe_;
  if(rd->_recording_error()!=OK || rd->draw_list.active || rd->compute_list.active || rd->raytracing_list.active || rd->frame_wait_draining || rd->draw_graph.has_driver_callbacks())return;
- if(!ticket->append_failed && !ticket->admission_closed && ticket->recorded && ticket->result.is_valid() && ticket->result->error==OK && ticket->result->issued_size<ticket->origin.readback_size && !ticket->mapping_failed) {
-  rd->qualification_recording=true;
-  const Error error=rd->_buffer_get_data_async(RID::from_uint64(ticket->origin.readback_buffer),Callable(),ticket->origin.readback_offset,ticket->origin.readback_size,ticket->result);
-  rd->qualification_recording=false;
-  MutexLock lock(mutex);
-  for(;ticket->readback_copies_joined<ticket->result->copies.size();++ticket->readback_copies_joined) {
-   const auto &copy=ticket->result->copies[ticket->readback_copies_joined];add_graph(ticket,copy.handle,3,rd->frame,rd->frames[rd->frame].qualification_epoch,ticket->report.source_backing_serial,copy.region.src_offset,copy.region.size);
-  }
-  bool has_frame_graph=false;for(const auto &graph:ticket->graphs)if(graph.frame==uint32_t(rd->frame) && graph.epoch==rd->frames[rd->frame].qualification_epoch){has_frame_graph=true;break;}
-  if(has_frame_graph)rd->_qualification_add_frame_ticket(ticket);
-  if(error!=OK && error!=ERR_BUSY){ticket->append_failed=true;ticket->report.native_error=error;}
+ if (!ticket->append_failed && !ticket->admission_closed && ticket->recorded && !ticket->mapping_failed) {
+	 // A later-frame continuation must not read an output until the original
+	 // Body has physically returned with its exact successful native sources.
+	 const bool body_ready = !ticket->multi_readback || rd->draw_graph.contains_record(ticket->body) || ticket->body_returned_successfully();
+	 if (body_ready) {
+		 for (uint32_t i = 0; i < ticket->readback_count(); ++i) {
+			 const auto range = ticket->readback_range(i);
+			 auto &owned = ticket->readback_result(i);
+			 if (owned.is_null() || owned->error != OK || owned->issued_size >= range.readback_size) {
+				 continue;
+			 }
+			 {
+				 MutexLock lock(mutex);
+				 if (ticket->admission_closed.load()) {
+					 break;
+				 }
+				 ticket->recording = true;
+			 }
+			 rd->qualification_recording = true;
+			 const Error error = rd->_buffer_get_data_async(RID::from_uint64(range.readback_buffer), Callable(), range.readback_offset, range.readback_size, owned);
+			 rd->qualification_recording = false;
+			 MutexLock lock(mutex);
+			 ticket->recording = false;
+			 auto &joined = ticket->readback_cursor(i);
+			 for (; joined < owned->copies.size(); ++joined) {
+				 const auto &copy = owned->copies[joined];
+				 add_graph(ticket, copy.handle, 3, rd->frame, rd->frames[rd->frame].qualification_epoch, range.observed_backing_serial, copy.region.src_offset, copy.region.size);
+			 }
+			 bool has_frame_graph = false;
+			 for (const auto &graph : ticket->graphs) {
+				 if (graph.frame == uint32_t(rd->frame) && graph.epoch == rd->frames[rd->frame].qualification_epoch) {
+					 has_frame_graph = true;
+					 break;
+				 }
+			 }
+			 if (has_frame_graph) {
+				 rd->_qualification_add_frame_ticket(ticket);
+			 }
+			 if (error != OK && error != ERR_BUSY) {
+				 ticket->append_failed = true;
+				 if (ticket->report.native_error == OK) {
+					 ticket->report.native_error = error;
+				 }
+				 break;
+			 }
+		 }
+	 }
  }
  for(uint32_t index=0;index<rd->frames.size();++index) {
   bool member=false;for(auto *entry:rd->frames[index].qualification_tickets)if(entry==ticket){member=true;break;}
   if(!member || !rd->frames[index].fence_signaled)continue;
   const Error error=rd->_stall_for_frame(index,true);
-  if(error!=OK && error!=ERR_BUSY){MutexLock lock(mutex);ticket->append_failed=true;ticket->report.native_error=error;if(rd->frame_wait_native_code_valid.load())ticket->report.native_code=rd->frame_wait_native_code.load();}
+  if (error != OK && error != ERR_BUSY) {
+	  MutexLock lock(mutex);
+	  ticket->append_failed = true;
+	  if (ticket->report.native_error == OK) {
+		  ticket->report.native_error = error;
+		  if (rd->frame_wait_native_code_valid.load()) {
+			  ticket->report.native_code = rd->frame_wait_native_code.load();
+		  }
+	  }
+  }
  }
  MutexLock lock(mutex);qualification_ticket_publish(ticket,rd);
 }
 GDExtensionDeviceSessionResultV1 Registry::qualification_observe(GDExtensionQualificationBridgeRefV1 ref,GDExtensionQualificationTicketRefV1 ticket_ref,const GDExtensionQualificationBudgetV1 *budget,GDExtensionQualificationReportV1 *out) {
  if(!aligned(budget)||!aligned(out)||!separate(budget,sizeof(*budget),out,sizeof(*out)))return result(ERR_INVALID_PARAMETER,2);
  *out={};if(!valid_abi(budget->abi)||budget->reserved||budget->max_passes<1||budget->max_passes>32||budget->max_micros<1||budget->max_micros>5000)return result(ERR_INVALID_PARAMETER,2);
- {MutexLock lock(mutex);QualificationBridge *bridge=nullptr;RenderingDevice *rd=nullptr;QualificationTicket *ticket=nullptr;Error error=qualification_bridge_locked(ref,false,false,bridge,rd);if(error!=OK)return result(error,17);error=qualification_ticket_locked(bridge,ticket_ref,ticket);if(error!=OK)return result(error,17);}
+ {
+	 MutexLock lock(mutex);
+	 QualificationBridge *bridge = nullptr;
+	 RenderingDevice *rd = nullptr;
+	 QualificationTicket *ticket = nullptr;
+	 Error error = qualification_bridge_locked(ref, false, false, bridge, rd);
+	 if (error != OK) {
+		 return result(error, 17);
+	 }
+	 error = qualification_ticket_locked(bridge, ticket_ref, ticket);
+	 if (error != OK) {
+		 return result(error, 17);
+	 }
+	 if (ticket->multi_readback) {
+		 return result(ERR_INVALID_DATA, 16);
+	 }
+ }
  Error error=qualification_schedule(ref,ticket_ref.handle_serial,3,*budget);if(error!=OK)return result(error,17);
  MutexLock lock(mutex);QualificationBridge *bridge=nullptr;RenderingDevice *rd=nullptr;QualificationTicket *ticket=nullptr;error=qualification_bridge_locked(ref,false,false,bridge,rd);if(error!=OK)return result(error,17);error=qualification_ticket_locked(bridge,ticket_ref,ticket);if(error!=OK)return result(error,17);*out=ticket->report;return result(OK);
 }
@@ -263,8 +461,31 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_copy(GDExtensionQualifi
  *written=0;
  if(!destination||!capacity||capacity>16384)return result(ERR_INVALID_PARAMETER,2);
  MutexLock lock(mutex);QualificationBridge *bridge=nullptr;RenderingDevice *rd=nullptr;QualificationTicket *ticket=nullptr;Error error=qualification_bridge_locked(ref,false,false,bridge,rd);if(error!=OK)return result(error,17);error=qualification_ticket_locked(bridge,ticket_ref,ticket);if(error!=OK)return result(error,17);
- if(!revision || revision!=ticket->report.revision || ticket->report.state!=8 || !ticket->physically_retired.load() || ticket->result.is_null() || ticket->result->error!=OK || !ticket->result->delivered || capacity!=ticket->report.owned_size || capacity!=ticket->result->bytes.size())return result(ERR_BUSY,16);
- memcpy(destination,ticket->result->bytes.ptr(),capacity);*written=capacity;return result(OK);
+ if (!ticket->multi_readback) {
+	 if (!revision || revision != ticket->report.revision || ticket->report.state != 8 || !ticket->physically_retired.load() || ticket->result.is_null() || ticket->result->error != OK || !ticket->result->delivered || capacity != ticket->report.owned_size || capacity != ticket->result->bytes.size()) {
+		 return result(ERR_BUSY, 16);
+	 }
+	 memcpy(destination, ticket->result->bytes.ptr(), capacity);
+	 *written = capacity;
+	 return result(OK);
+ }
+ if (!revision || revision != ticket->report.revision || ticket->report.state != 8 || !ticket->physically_retired.load() || capacity != ticket->report.owned_size) {
+	 return result(ERR_BUSY, 16);
+ }
+ for (uint32_t i = 0; i < ticket->readback_count(); ++i) {
+	 const auto range = ticket->readback_range(i);
+	 const auto &owned = ticket->readback_result(i);
+	 if (owned.is_null() || owned->error != OK || !owned->delivered || range.result_offset > capacity || range.readback_size > capacity - range.result_offset || uint64_t(owned->bytes.size()) != range.readback_size || owned->issued_size != range.readback_size || owned->completed_size != range.readback_size) {
+		 return result(ERR_BUSY, 16);
+	 }
+ }
+ for (uint32_t i = 0; i < ticket->readback_count(); ++i) {
+	 const auto range = ticket->readback_range(i);
+	 const auto &owned = ticket->readback_result(i);
+	 memcpy(static_cast<uint8_t *>(destination) + range.result_offset, owned->bytes.ptr(), range.readback_size);
+ }
+ *written = capacity;
+ return result(OK);
 }
 GDExtensionDeviceSessionResultV1 Registry::qualification_release(GDExtensionQualificationBridgeRefV1 ref,GDExtensionQualificationTicketRefV1 ticket_ref) {
  MutexLock lock(mutex);QualificationBridge *bridge=nullptr;RenderingDevice *rd=nullptr;QualificationTicket *ticket=nullptr;Error error=qualification_bridge_locked(ref,false,false,bridge,rd);if(error!=OK)return result(error,17);error=qualification_ticket_locked(bridge,ticket_ref,ticket);if(error!=OK)return result(error,17);
@@ -311,48 +532,134 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_release(GDExtensionQual
   for(auto *cell:ticket->physical_uses)CRASH_COND(!cell->uses.erase(ticket));
   ticket->physical_uses.clear();
  }
- ticket->result.unref();ticket->admission_closed=true;ticket->acknowledged=true;--bridge->children;--records[bridge->library].private_refs;qualification_trim_cleanup_ref_credits_locked(bridge);return result(OK);
+ ticket->result.unref();
+ for (auto &owned : ticket->additional_results) {
+	 owned.unref();
+ }
+ ticket->admission_closed = true;
+ ticket->acknowledged = true;
+ --bridge->children;
+ --records[bridge->library].private_refs;
+ qualification_trim_cleanup_ref_credits_locked(bridge);
+ return result(OK);
 }
-GDExtensionDeviceSessionResultV1 Registry::qualification_prepare_uploads(GDExtensionQualificationBridgeRefV1 ref,const GDExtensionQualificationUploadPrepareV1 *request,const GDExtensionQualificationUploadPlanV1 *plans,uint32_t plan_count,GDExtensionQualificationTicketRefV1 *out,GDExtensionQualificationReportV1 *report) {
- if(!aligned(request)||!aligned(out)||!aligned(report)||!aligned(plans)||!plan_count||plan_count>128||!separate(request,sizeof(*request),plans,sizeof(*plans)*plan_count)||!separate(request,sizeof(*request),out,sizeof(*out))||!separate(request,sizeof(*request),report,sizeof(*report))||!separate(plans,sizeof(*plans)*plan_count,out,sizeof(*out))||!separate(plans,sizeof(*plans)*plan_count,report,sizeof(*report))||!separate(out,sizeof(*out),report,sizeof(*report))||out->registry_instance||out->handle_serial)return result(ERR_INVALID_PARAMETER,2);
- *out={};*report={};
- if(!valid_abi(request->abi)||request->reserved||request->upload_count!=plan_count||!request->record_generation||!request->request_nonce||!request->qualification_session_serial||!request->parent_serial||!request->reservation_serial||!request->attempt||!request->max_segments||request->max_segments>4096||!request->expected_result_bytes||request->expected_result_bytes>16384)return result(ERR_INVALID_PARAMETER,2);
- RdUnlock rd_unlock;MutexLock lock(mutex);QualificationBridge *bridge=nullptr;RenderingDevice *rd=nullptr;Error error=qualification_bridge_locked(ref,true,true,bridge,rd,7);if(error!=OK)return result(error,error==ERR_UNAUTHORIZED?15:16);
- if(request->library_generation!=records[bridge->library].snapshot.library_generation)return result(ERR_INVALID_DATA,17);
- uint32_t indices[128]={};bool present[128]={};uint64_t segments=0;
- for(uint32_t i=0;i<plan_count;++i) {
-  const auto &plan=plans[i];
-  if(!valid_abi(plan.abi)||plan.reserved||plan.upload_index>=plan_count||present[plan.upload_index]||plan.role>=GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_COUNT_V1||plan.owner_kind<GDEXTENSION_QUALIFICATION_UPLOAD_OWNER_E05_V1||plan.owner_kind>GDEXTENSION_QUALIFICATION_UPLOAD_OWNER_E24_V1||!plan.byte_size||plan.byte_size>UINT32_MAX||plan.byte_offset>UINT32_MAX||plan.byte_size>UINT32_MAX-plan.byte_offset)return result(ERR_INVALID_PARAMETER,2);
-  present[plan.upload_index]=true;indices[plan.upload_index]=i;segments+=(plan.byte_size+31)/32;
-  if(segments>request->max_segments)return result(ERR_PARAMETER_RANGE_ERROR,19);
- }
- for(auto *ticket:bridge->tickets)if(ticket && ticket->origin.record_generation==request->record_generation && ticket->origin.request_nonce==request->request_nonce) {
-  if(ticket->acknowledged)return result(ERR_DOES_NOT_EXIST,17);
-  if(!ticket->prepared || memcmp(&ticket->preparation,request,sizeof(*request)))return result(ERR_INVALID_DATA,16);
-  for(uint32_t i=0;i<plan_count;++i)if(memcmp(&ticket->uploads[i].plan,&plans[indices[i]],sizeof(*plans)))return result(ERR_INVALID_DATA,16);
-  *out={instance,ticket->serial};*report=ticket->report;return result(OK);
- }
- if(!rd->_thread_safe_.try_lock())return result(ERR_BUSY,19);rd_unlock.mutex=&rd->_thread_safe_;
- if(!rd->driver->native_call_observation_supported())return result(ERR_UNAVAILABLE,18);
- for(uint32_t i=0;i<plan_count;++i) {
-  error=qualification_upload_destination(bridge,rd,plans[i]);if(error!=OK)return result(error,error==ERR_UNAVAILABLE?18:2);
- }
- const uint64_t graph_bound=segments+(request->expected_result_bytes+31)/32+2;
- error=qualification_native_capacity(*rd->driver,rd->draw_graph.qualification_command_count(),graph_bound,rd->transfer_worker_pool_max_size);
- if(error!=OK)return result(error,error==ERR_UNAVAILABLE?18:19);
- uint32_t slot=0;for(;slot<QualificationBridge::CHILD_CAPACITY && bridge->tickets[slot];++slot){}
- const uint32_t refs_needed=bridge->cleanup_refs_reserved?1:3;
- if(slot==QualificationBridge::CHILD_CAPACITY || private_limit<refs_needed || records[bridge->library].private_refs>private_limit-refs_needed || !qualification_serial_capacity(2))return result(ERR_PARAMETER_RANGE_ERROR,19);
- auto *ticket=memnew(QualificationTicket);ticket->prepared=true;ticket->preparation=*request;ticket->bridge_serial=bridge->serial;ticket->library=bridge->library;
- ticket->origin.record_generation=request->record_generation;ticket->origin.request_nonce=request->request_nonce;
- ticket->facts.reserve(QualificationTicket::FACT_CAPACITY);ticket->graphs.reserve(QualificationTicket::FACT_CAPACITY);ticket->natives.reserve(QualificationTicket::FACT_CAPACITY);ticket->resource_pins.reserve(128);ticket->physical_uses.reserve(128);ticket->uploads.resize(plan_count);
- ticket->result.instantiate();error=ticket->result->bytes.resize(request->expected_result_bytes);if(error!=OK){memdelete(ticket);return result(error,19);}
- ticket->result->qualification_owned=true;qualification_serials.take(ticket->serial);qualification_serials.take(ticket->result->request_serial);
- for(uint32_t i=0;i<plan_count;++i){auto &upload=ticket->uploads[i];upload.plan=plans[indices[i]];upload.progress.max_segments=(upload.plan.byte_size+31)/32;upload.progress.segments.reserve(upload.progress.max_segments);}
- auto &r=ticket->report;r.abi={1,sizeof(GDExtensionDeviceExitAbi),0};r.revision=1;r.record_generation=request->record_generation;r.request_nonce=request->request_nonce;memcpy(r.request_digest,request->request_digest,32);memcpy(r.unit_digest,request->unit_digest,32);
- if(!bridge->cleanup_refs_reserved){records[bridge->library].private_refs+=2;bridge->cleanup_refs_reserved=true;}
- bridge->tickets[slot]=ticket;++bridge->children;++records[bridge->library].private_refs;ticket->physically_retired=true;
- *out={instance,ticket->serial};*report=r;return result(OK);
+GDExtensionDeviceSessionResultV1 Registry::qualification_prepare_uploads(GDExtensionQualificationBridgeRefV1 ref, const GDExtensionQualificationUploadPrepareV1 *request, const GDExtensionQualificationUploadPlanV1 *plans, uint32_t plan_count, GDExtensionQualificationTicketRefV1 *out, GDExtensionQualificationReportV1 *report, bool p_multi_readback) {
+	if (!aligned(request) || !aligned(out) || !aligned(report) || !aligned(plans) || !plan_count || plan_count > 128 || !separate(request, sizeof(*request), plans, sizeof(*plans) * plan_count) || !separate(request, sizeof(*request), out, sizeof(*out)) || !separate(request, sizeof(*request), report, sizeof(*report)) || !separate(plans, sizeof(*plans) * plan_count, out, sizeof(*out)) || !separate(plans, sizeof(*plans) * plan_count, report, sizeof(*report)) || !separate(out, sizeof(*out), report, sizeof(*report)) || out->registry_instance || out->handle_serial)
+		return result(ERR_INVALID_PARAMETER, 2);
+	*out = {};
+	*report = {};
+	if (!valid_abi(request->abi) || request->reserved || request->upload_count != plan_count || !request->record_generation || !request->request_nonce || !request->qualification_session_serial || !request->parent_serial || !request->reservation_serial || !request->attempt || !request->max_segments || request->max_segments > 4096 || !request->expected_result_bytes || request->expected_result_bytes > 16384)
+		return result(ERR_INVALID_PARAMETER, 2);
+	RdUnlock rd_unlock;
+	MutexLock lock(mutex);
+	QualificationBridge *bridge = nullptr;
+	RenderingDevice *rd = nullptr;
+	Error error = qualification_bridge_locked(ref, true, true, bridge, rd, p_multi_readback ? 11 : 7);
+	if (error != OK) {
+		return result(error, error == ERR_UNAUTHORIZED ? 15 : 16);
+	}
+	if (request->library_generation != records[bridge->library].snapshot.library_generation)
+		return result(ERR_INVALID_DATA, 17);
+	uint32_t indices[128] = {};
+	bool present[128] = {};
+	uint64_t segments = 0;
+	for (uint32_t i = 0; i < plan_count; ++i) {
+		const auto &plan = plans[i];
+		if (!valid_abi(plan.abi) || plan.reserved || plan.upload_index >= plan_count || present[plan.upload_index] || plan.role >= GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_COUNT_V1 || plan.owner_kind < GDEXTENSION_QUALIFICATION_UPLOAD_OWNER_E05_V1 || plan.owner_kind > GDEXTENSION_QUALIFICATION_UPLOAD_OWNER_E24_V1 || !plan.byte_size || plan.byte_size > UINT32_MAX || plan.byte_offset > UINT32_MAX || plan.byte_size > UINT32_MAX - plan.byte_offset)
+			return result(ERR_INVALID_PARAMETER, 2);
+		present[plan.upload_index] = true;
+		indices[plan.upload_index] = i;
+		segments += (plan.byte_size + 31) / 32;
+		if (segments > request->max_segments)
+			return result(ERR_PARAMETER_RANGE_ERROR, 19);
+	}
+	for (auto *ticket : bridge->tickets)
+		if (ticket && ticket->origin.record_generation == request->record_generation && ticket->origin.request_nonce == request->request_nonce) {
+			if (ticket->acknowledged)
+				return result(ERR_DOES_NOT_EXIST, 17);
+			if (!ticket->prepared || ticket->multi_readback != p_multi_readback || memcmp(&ticket->preparation, request, sizeof(*request))) {
+				return result(ERR_INVALID_DATA, 16);
+			}
+			for (uint32_t i = 0; i < plan_count; ++i)
+				if (memcmp(&ticket->uploads[i].plan, &plans[indices[i]], sizeof(*plans)))
+					return result(ERR_INVALID_DATA, 16);
+			*out = { instance, ticket->serial };
+			*report = ticket->report;
+			return result(OK);
+		}
+	if (!rd->_thread_safe_.try_lock())
+		return result(ERR_BUSY, 19);
+	rd_unlock.mutex = &rd->_thread_safe_;
+	if (!rd->driver->native_call_observation_supported())
+		return result(ERR_UNAVAILABLE, 18);
+	for (uint32_t i = 0; i < plan_count; ++i) {
+		error = qualification_upload_destination(bridge, rd, plans[i]);
+		if (error != OK)
+			return result(error, error == ERR_UNAVAILABLE ? 18 : 2);
+	}
+	const uint64_t graph_bound = segments + (request->expected_result_bytes + 31) / 32 + 2 + (p_multi_readback ? 2 : 0);
+	error = qualification_native_capacity(*rd->driver, rd->draw_graph.qualification_command_count(), graph_bound, rd->transfer_worker_pool_max_size);
+	if (error != OK)
+		return result(error, error == ERR_UNAVAILABLE ? 18 : 19);
+	uint32_t slot = 0;
+	for (; slot < QualificationBridge::CHILD_CAPACITY && bridge->tickets[slot]; ++slot) {
+	}
+	const uint32_t refs_needed = bridge->cleanup_refs_reserved ? 1 : 3;
+	if (slot == QualificationBridge::CHILD_CAPACITY || private_limit < refs_needed || records[bridge->library].private_refs > private_limit - refs_needed || !qualification_serial_capacity(p_multi_readback ? 4 : 2)) {
+		return result(ERR_PARAMETER_RANGE_ERROR, 19);
+	}
+	auto *ticket = memnew(QualificationTicket);
+	ticket->prepared = true;
+	ticket->multi_readback = p_multi_readback;
+	ticket->preparation = *request;
+	ticket->bridge_serial = bridge->serial;
+	ticket->library = bridge->library;
+	ticket->origin.record_generation = request->record_generation;
+	ticket->origin.request_nonce = request->request_nonce;
+	ticket->facts.reserve(QualificationTicket::FACT_CAPACITY);
+	ticket->graphs.reserve(QualificationTicket::FACT_CAPACITY);
+	ticket->natives.reserve(QualificationTicket::FACT_CAPACITY);
+	ticket->resource_pins.reserve(128);
+	ticket->physical_uses.reserve(128);
+	ticket->uploads.resize(plan_count);
+	ticket->result.instantiate();
+	error = ticket->result->bytes.resize(request->expected_result_bytes);
+	if (error != OK) {
+		memdelete(ticket);
+		return result(error, 19);
+	}
+	ticket->result->qualification_owned = true;
+	qualification_serials.take(ticket->serial);
+	qualification_serials.take(ticket->result->request_serial);
+	if (p_multi_readback) {
+		for (auto &serial : ticket->additional_readback_serials) {
+			qualification_serials.take(serial);
+		}
+	}
+	for (uint32_t i = 0; i < plan_count; ++i) {
+		auto &upload = ticket->uploads[i];
+		upload.plan = plans[indices[i]];
+		upload.progress.max_segments = (upload.plan.byte_size + 31) / 32;
+		upload.progress.segments.reserve(upload.progress.max_segments);
+	}
+	auto &r = ticket->report;
+	r.abi = { 1, sizeof(GDExtensionDeviceExitAbi), 0 };
+	r.revision = 1;
+	r.record_generation = request->record_generation;
+	r.request_nonce = request->request_nonce;
+	memcpy(r.request_digest, request->request_digest, 32);
+	memcpy(r.unit_digest, request->unit_digest, 32);
+	if (!bridge->cleanup_refs_reserved) {
+		records[bridge->library].private_refs += 2;
+		bridge->cleanup_refs_reserved = true;
+	}
+	bridge->tickets[slot] = ticket;
+	++bridge->children;
+	++records[bridge->library].private_refs;
+	ticket->physically_retired = true;
+	*out = { instance, ticket->serial };
+	*report = r;
+	return result(OK);
 }
 Error Registry::qualification_upload_destination(QualificationBridge *bridge,RenderingDevice *rd,const GDExtensionQualificationUploadPlanV1 &plan) {
  auto *buffer=rd->storage_buffer_owner.get_or_null(RID::from_uint64(plan.rid));
@@ -396,7 +703,13 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_upload(GDExtensionQuali
  ticket->continuation_pending=error==ERR_BUSY;
  for(uint32_t i=previous;i<upload->progress.segments.size();++i){const auto &segment=upload->progress.segments[i];add_graph(ticket,segment.handle,6,rd->frame,rd->frames[rd->frame].qualification_epoch,upload->plan.backing_serial,upload->plan.byte_offset+segment.begin,segment.end-segment.begin);}
  if(upload->progress.segments.size()>previous)rd->_qualification_add_frame_ticket(ticket);
- if(error!=OK && error!=ERR_BUSY){upload->failed=true;ticket->append_failed=true;ticket->report.native_error=error;}
+ if (error != OK && error != ERR_BUSY) {
+	 upload->failed = true;
+	 ticket->append_failed = true;
+	 if (ticket->report.native_error == OK) {
+		 ticket->report.native_error = error;
+	 }
+ }
  ticket->observation_dirty=true;qualification_ticket_publish(ticket,rd);
  auto &r=upload->report;r={};r.abi={1,sizeof(GDExtensionDeviceExitAbi),0};r.revision=ticket->report.revision;r.record_generation=request->record_generation;r.parent_serial=request->parent_serial;r.upload_index=request->upload_index;r.native_error=error==ERR_BUSY?OK:error;r.state=ticket->mapping_failed?3:error==ERR_BUSY?4:error!=OK?(upload->progress.segments.is_empty()?0:2):1;
  r.known_count=upload->progress.segments.size();r.appended_begin=upload->plan.byte_offset;r.appended_end=upload->plan.byte_offset+upload->progress.consumed;r.unappended_begin=r.appended_end;r.unappended_end=upload->plan.byte_offset+upload->plan.byte_size;
@@ -408,7 +721,9 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared(GDExten
  {
   MutexLock lock(mutex);Error error=qualification_bridge_locked(ref,true,true,bridge,rd,9);if(error!=OK)return result(error,error==ERR_UNAUTHORIZED?15:16);
   error=qualification_ticket_locked(bridge,ticket_ref,ticket);if(error!=OK)return result(error,17);
-  if(!ticket->prepared || ticket->admission_closed || ticket->recording || ticket->mapping_failed || ticket->append_failed)return result(ERR_BUSY,16);
+  if (!ticket->prepared || ticket->multi_readback || ticket->admission_closed || ticket->recording || ticket->mapping_failed || ticket->append_failed) {
+	  return result(ERR_BUSY, 16);
+  }
   if(ticket->recorded){if(memcmp(&ticket->origin,request,sizeof(*request)))return result(ERR_INVALID_DATA,16);*out=ticket->report;return result(OK);}
   const auto &p=ticket->preparation;
   if(request->record_generation!=p.record_generation || request->request_nonce!=p.request_nonce || request->library_generation!=p.library_generation || request->qualification_session_serial!=p.qualification_session_serial || request->vector_ordinal!=p.vector_ordinal || request->attempt!=p.attempt || request->readback_size!=p.expected_result_bytes || memcmp(request->request_digest,p.request_digest,32) || memcmp(request->unit_digest,p.unit_digest,32))return result(ERR_INVALID_DATA,16);
@@ -450,5 +765,257 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_cancel(GDExtensionQuali
  const GDExtensionQualificationBudgetV1 budget{{1,sizeof(GDExtensionDeviceExitAbi),0},1,1000,0};
  const Error error=qualification_schedule(ref,ticket_ref.handle_serial,3,budget);
  return result(error,error==ERR_UNAUTHORIZED?15:error!=OK?17:0);
+}
+
+void Registry::qualification_report_v2(const QualificationTicket *ticket, GDExtensionQualificationReportV2 &out) const {
+	out = {};
+	memcpy(&out, &ticket->report, offsetof(GDExtensionQualificationReportV1, readback_request));
+	out.abi.abi_version = 2;
+	out.readback_count = ticket->range_origin.readback_count;
+	out.readback_size = ticket->range_origin.readback_size;
+	for (uint32_t i = 0; i < out.readback_count; ++i) {
+		out.readbacks[i].source = ticket->range_origin.readbacks[i];
+		const auto &owned = ticket->readback_result(i);
+		if (owned.is_valid()) {
+			out.readbacks[i].readback_request = owned->request_serial;
+		}
+	}
+	out.owned_size = ticket->report.owned_size;
+	memcpy(out.request_digest, ticket->report.request_digest, 32);
+	memcpy(out.unit_digest, ticket->report.unit_digest, 32);
+}
+GDExtensionDeviceSessionResultV1 Registry::qualification_prepare_uploads_v2(GDExtensionQualificationBridgeRefV1 ref, const GDExtensionQualificationUploadPrepareV1 *request, const GDExtensionQualificationUploadPlanV1 *plans, uint32_t count, GDExtensionQualificationTicketRefV1 *out, GDExtensionQualificationReportV2 *report) {
+	if (!aligned(request) || !aligned(plans) || !aligned(out) || !aligned(report) || !count || count > 128 || !separate(request, sizeof(*request), report, sizeof(*report)) || !separate(plans, sizeof(*plans) * count, report, sizeof(*report)) || !separate(out, sizeof(*out), report, sizeof(*report))) {
+		return result(ERR_INVALID_PARAMETER, 2);
+	}
+	*report = {};
+	GDExtensionQualificationReportV1 old = {};
+	const auto status = qualification_prepare_uploads(ref, request, plans, count, out, &old, true);
+	if (status.native_error != OK) {
+		return status;
+	}
+	MutexLock lock(mutex);
+	QualificationBridge *bridge = nullptr;
+	RenderingDevice *rd = nullptr;
+	QualificationTicket *ticket = nullptr;
+	Error error = qualification_bridge_locked(ref, true, false, bridge, rd);
+	if (error != OK) {
+		return result(error, 16);
+	}
+	error = qualification_ticket_locked(bridge, *out, ticket);
+	if (error != OK) {
+		return result(error, 17);
+	}
+	qualification_report_v2(ticket, *report);
+	return result(OK);
+}
+GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_v2(GDExtensionQualificationBridgeRefV1 ref, GDExtensionQualificationTicketRefV1 ticket_ref, const GDExtensionQualificationRecordV2 *request, GDExtensionQualificationReportV2 *out) {
+	if (!aligned(request) || !aligned(out) || !separate(request, sizeof(*request), out, sizeof(*out))) {
+		return result(ERR_INVALID_PARAMETER, 2);
+	}
+	*out = {};
+	const auto descriptor_error = validate_qualification_record_v2(*request);
+	if (descriptor_error != OK) {
+		return result(descriptor_error, 2);
+	}
+	QualificationBridge *bridge = nullptr;
+	RenderingDevice *rd = nullptr;
+	QualificationTicket *ticket = nullptr;
+	RdUnlock rd_unlock;
+	{
+		MutexLock lock(mutex);
+		Error error = qualification_bridge_locked(ref, true, true, bridge, rd, 10);
+		if (error != OK) {
+			return result(error, error == ERR_UNAUTHORIZED ? 15 : 16);
+		}
+		error = qualification_ticket_locked(bridge, ticket_ref, ticket);
+		if (error != OK) {
+			return result(error, 17);
+		}
+		if (!ticket->prepared || !ticket->multi_readback || ticket->admission_closed || ticket->recording || ticket->mapping_failed || ticket->append_failed) {
+			return result(ERR_BUSY, 16);
+		}
+		if (ticket->recorded) {
+			if (memcmp(&ticket->range_origin, request, sizeof(*request))) {
+				return result(ERR_INVALID_DATA, 16);
+			}
+			qualification_report_v2(ticket, *out);
+			return result(OK);
+		}
+		const auto &p = ticket->preparation;
+		if (request->record_generation != p.record_generation || request->request_nonce != p.request_nonce || request->library_generation != p.library_generation || request->qualification_session_serial != p.qualification_session_serial || request->vector_ordinal != p.vector_ordinal || request->attempt != p.attempt || request->readback_size != p.expected_result_bytes || memcmp(request->request_digest, p.request_digest, 32) || memcmp(request->unit_digest, p.unit_digest, 32)) {
+			return result(ERR_INVALID_DATA, 16);
+		}
+		for (const auto &upload : ticket->uploads) {
+			if (!upload.attempted || upload.failed || upload.progress.consumed != upload.plan.byte_size || upload.report.state != 1 || upload.report.possible_count) {
+				return result(ERR_BUSY, 16);
+			}
+		}
+		if (!rd->_thread_safe_.try_lock()) {
+			return result(ERR_BUSY, 19);
+		}
+		rd_unlock.mutex = &rd->_thread_safe_;
+		uint64_t graph_bound = 2;
+		for (uint32_t i = 0; i < request->readback_count; ++i) {
+			graph_bound += (request->readbacks[i].readback_size + 31) / 32;
+		}
+		for (const auto &upload : ticket->uploads) {
+			graph_bound += (upload.plan.byte_size + 31) / 32;
+		}
+		error = qualification_native_capacity(*rd->driver, rd->draw_graph.qualification_command_count(), graph_bound, rd->transfer_worker_pool_max_size);
+		if (error != OK) {
+			return result(error, error == ERR_UNAVAILABLE ? 18 : 19);
+		}
+		const auto legacy = qualification_record_v1(*request);
+		LocalVector<RID> resources;
+		error = qualification_record_preflight(bridge, rd, legacy, resources, request->capture_set1, request->body_set1);
+		if (error != OK) {
+			return result(error, error == ERR_UNAVAILABLE ? 18 : error == ERR_PARAMETER_RANGE_ERROR ? 19
+																									: 2);
+		}
+		for (uint32_t i = 0; i < request->readback_count; ++i) {
+			const auto &range = request->readbacks[i];
+			RID rid = RID::from_uint64(range.readback_buffer);
+			auto *buffer = rd->storage_buffer_owner.get_or_null(rid);
+			uint32_t upload_role;
+			switch (range.role) {
+				case GDEXTENSION_QUALIFICATION_READBACK_NUMERIC_RAW_OUTPUT_V1:
+					upload_role = GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_RAW_OUTPUT_V1;
+					break;
+				case GDEXTENSION_QUALIFICATION_READBACK_METHOD_RAW_RESULTS_V1:
+					upload_role = GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_METHOD_RAW_RESULTS_V1;
+					break;
+				case GDEXTENSION_QUALIFICATION_READBACK_METHOD_DESTINATION_V1:
+					upload_role = GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_METHOD_RESOURCE_V1;
+					break;
+				case GDEXTENSION_QUALIFICATION_READBACK_METHOD_FAULT_PLANE_V1:
+					upload_role = GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_METHOD_FAULT_PLANE_V1;
+					break;
+				case GDEXTENSION_QUALIFICATION_READBACK_METHOD_RESULT_EPILOGUE_V1:
+					upload_role = GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_METHOD_RESULT_EPILOGUE_V1;
+					break;
+				default:
+					return result(ERR_INVALID_PARAMETER, 2);
+			}
+			const bool method_range = range.role != GDEXTENSION_QUALIFICATION_READBACK_NUMERIC_RAW_OUTPUT_V1;
+			const GDExtensionQualificationUploadPlanV1 *original_plan = nullptr;
+			for (const auto &upload : ticket->uploads) {
+				const auto &plan = upload.plan;
+				// METHOD_RESOURCE identifies the logical Store destination; the
+				// native allocation still belongs to its original E05 issuer.
+				if (plan.role == upload_role && plan.rid == range.readback_buffer && plan.backing_serial == range.observed_backing_serial && plan.byte_offset == range.readback_offset && plan.byte_size == range.readback_size && (!method_range || plan.owner_kind == GDEXTENSION_QUALIFICATION_UPLOAD_OWNER_E05_V1)) {
+					original_plan = &plan;
+					break;
+				}
+			}
+			if (!original_plan) {
+				return result(ERR_UNAUTHORIZED, 16);
+			}
+			if (!buffer || !buffer->driver_id || buffer->backing_serial != range.observed_backing_serial || range.readback_offset > buffer->size || range.readback_size > buffer->size - range.readback_offset || !buffer->usage.has_flag(RDD::BUFFER_USAGE_TRANSFER_FROM_BIT) || buffer->transfer_worker_index >= 0 || buffer->usage.has_flag(RDD::BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT)) {
+				return result(ERR_INVALID_DATA, 2);
+			}
+			if (method_range && !buffer->qualification_return) {
+				return result(ERR_UNAUTHORIZED, 16);
+			}
+			if (buffer->qualification_return) {
+				bool original = false;
+				for (auto *child : bridge->storage) {
+					if (child && &child->physical == buffer->qualification_return && original_plan->e05_backing.registry_instance == instance && original_plan->e05_backing.handle_serial == child->serial && !child->creating && !child->retiring && !child->acknowledged && child->origin.allocation_generation == range.source_allocation_generation && child->backing.rid == range.readback_buffer && child->backing.backing_serial == range.observed_backing_serial && child->physical.bridge == bridge->serial && !child->physical.use_closed.load()) {
+						original = true;
+						break;
+					}
+				}
+				if (!original) {
+					return result(ERR_UNAUTHORIZED, 16);
+				}
+			}
+			if (!add_resource(resources, rid)) {
+				return result(ERR_PARAMETER_RANGE_ERROR, 19);
+			}
+		}
+		if (rd->_recording_error() != OK || rd->draw_list.active || rd->compute_list.active || rd->raytracing_list.active || rd->frame_wait_draining || rd->draw_graph.has_driver_callbacks()) {
+			return result(ERR_BUSY, 19);
+		}
+		for (const auto &graph : ticket->graphs) {
+			if (ticket->facts[graph.fact].semantic_kind == 6 && !rd->draw_graph.contains_record(graph.handle)) {
+				if (!graph.returned || ticket->facts[graph.fact].issue != 1 || ticket->facts[graph.fact].completion != 2 || ticket->facts[graph.fact].error) {
+					return result(ERR_BUSY, 19);
+				}
+			}
+		}
+		Ref<RenderingDevice::BufferGetDataResult> owned[3];
+		for (uint32_t i = 0; i < request->readback_count; ++i) {
+			owned[i].instantiate();
+			error = owned[i]->bytes.resize(request->readbacks[i].readback_size);
+			if (error != OK) {
+				return result(error, 19);
+			}
+			owned[i]->qualification_owned = true;
+			owned[i]->request_serial = i ? ticket->additional_readback_serials[i - 1] : ticket->result->request_serial;
+		}
+		error = rd->_qualification_pin_resources(ticket, resources);
+		if (error != OK) {
+			return result(error, 16);
+		}
+		ticket->origin = legacy;
+		ticket->range_origin = *request;
+		ticket->result = owned[0];
+		for (uint32_t i = 1; i < request->readback_count; ++i) {
+			ticket->additional_results[i - 1] = owned[i];
+		}
+		ticket->report.source_backing_serial = legacy.observed_backing_serial;
+		ticket->report.source_offset = legacy.readback_offset;
+		ticket->report.source_size = legacy.readback_size;
+		ticket->recording = true;
+	}
+	rd->draw_graph.add_synchronization();
+	qualification_record_append(ticket, rd);
+	MutexLock lock(mutex);
+	qualification_report_v2(ticket, *out);
+	return result(OK);
+}
+GDExtensionDeviceSessionResultV1 Registry::qualification_observe_v2(GDExtensionQualificationBridgeRefV1 ref, GDExtensionQualificationTicketRefV1 ticket_ref, const GDExtensionQualificationBudgetV1 *budget, GDExtensionQualificationReportV2 *out) {
+	if (!aligned(budget) || !aligned(out) || !separate(budget, sizeof(*budget), out, sizeof(*out))) {
+		return result(ERR_INVALID_PARAMETER, 2);
+	}
+	*out = {};
+	if (!valid_abi(budget->abi) || budget->reserved || budget->max_passes < 1 || budget->max_passes > 32 || budget->max_micros < 1 || budget->max_micros > 5000) {
+		return result(ERR_INVALID_PARAMETER, 2);
+	}
+	{
+		MutexLock lock(mutex);
+		QualificationBridge *bridge = nullptr;
+		RenderingDevice *rd = nullptr;
+		QualificationTicket *ticket = nullptr;
+		Error error = qualification_bridge_locked(ref, false, false, bridge, rd);
+		if (error != OK) {
+			return result(error, 17);
+		}
+		error = qualification_ticket_locked(bridge, ticket_ref, ticket);
+		if (error != OK) {
+			return result(error, 17);
+		}
+		if (!ticket->multi_readback) {
+			return result(ERR_INVALID_DATA, 16);
+		}
+	}
+	const Error error = qualification_schedule(ref, ticket_ref.handle_serial, 3, *budget);
+	if (error != OK) {
+		return result(error, 17);
+	}
+	MutexLock lock(mutex);
+	QualificationBridge *bridge = nullptr;
+	RenderingDevice *rd = nullptr;
+	QualificationTicket *ticket = nullptr;
+	Error observed = qualification_bridge_locked(ref, false, false, bridge, rd);
+	if (observed != OK) {
+		return result(observed, 17);
+	}
+	observed = qualification_ticket_locked(bridge, ticket_ref, ticket);
+	if (observed != OK) {
+		return result(observed, 17);
+	}
+	qualification_report_v2(ticket, *out);
+	return result(OK);
 }
 } // namespace GDExtensionDeviceExit

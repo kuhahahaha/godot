@@ -1,0 +1,44 @@
+{
+  "state": "implemented_built_native_metal_store_and_original_controls_passed_ange_integration_pending",
+  "source_tree": "/Users/macbookair/Documents/Work/godot_ANGE",
+  "branch": "codex/particle-mainline",
+  "base_head": "98d315818db624e4b81f867f718ec5fac9beb385",
+  "json_sha256": "135740c3c51c83171a96f8f1f912837eec59c04edd0a3c604039ce1141ba9c72",
+  "header_sha256": "971a1ab90541900c50cde6eb45f62e7f5fcc1a95cbcb9a8632fab792a9835289",
+  "sizes": {
+    "RangeV1": 48,
+    "ObservationV1": 56,
+    "RecordV1": 312,
+    "ReportV1": 184,
+    "RecordV2": 448,
+    "ReportV2": 328
+  },
+  "rt": {
+    "kind10": {
+      "operation": "record_prepared_v2",
+      "request": 448,
+      "payload_ticket": 16,
+      "result": 328
+    },
+    "kind11": {
+      "operation": "prepare_uploads_v2",
+      "request": 152,
+      "result_with_ticket": 344
+    },
+    "upload": "kind8 unchanged"
+  },
+  "symbols": [
+    "device_session_qualification_prepare_uploads_v2",
+    "device_session_qualification_record_prepared_v2",
+    "device_session_qualification_observe_v2"
+  ],
+  "host": {
+    "binary": "/Users/macbookair/Documents/Work/godot_ANGE/work/physics-wrapper-finish-recovery-20261101/bin/godot-store-r1.arm64",
+    "sha256": "edf3b010e2391120af96df148a81d87fc5a4c60801fa2de7ebffc7e9696eff58",
+    "controlled_build": "/Users/macbookair/Documents/Work/godot_ANGE/work/physics-wrapper-finish-recovery-20261101/bin/godot-store-r1.arm64.controlled_build.json",
+    "controlled_build_sha256": "d70aeb3de4c49396737a2f9c6e0d8948e26303bdbc6edda3e11e54888e34290e",
+    "source_drift": []
+  },
+  "native_results": "work/native-multireadback-20261101/runtime/results/20261101-105953/results.json",
+  "native_results_store": "work/native-multireadback-20261101/runtime/results/20261101-111020/results.json"
+}

@@ -422,7 +422,7 @@ static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_MAPPING_V1==4);
 static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_OUTPUT_GATE_V1==5);
 static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_RAW_INPUT_V1==6);
 static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_RAW_OUTPUT_V1==7);
-static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_COUNT_V1==8);
+static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_COUNT_V1 == 19);
 static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_OWNER_INVALID_V1==0);
 static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_OWNER_E05_V1==1);
 static_assert(GDEXTENSION_QUALIFICATION_UPLOAD_OWNER_E09_V1==2);
@@ -499,3 +499,27 @@ static_assert(offsetof(GDExtensionSceneInstallPlanV2, main_rd_id) == 80, "GDExte
 static_assert(offsetof(GDExtensionSceneInstallPlanV2, main_rd_epoch) == 88, "GDExtensionSceneInstallPlanV2.main_rd_epoch");
 static_assert(std::is_same_v<GDExtensionDeviceExitSceneReadyCallbackV2, int32_t (*)(void *, GDExtensionDeviceExitSceneReadyContextRef, const GDExtensionSceneInstallPlanV2 *)>);
 static_assert(std::is_same_v<GDExtensionInterfaceDeviceExitRegisterSceneReadyV2, int32_t (*)(const GDExtensionSceneInstallRequirementsV2 *, GDExtensionDeviceExitInitializationLevelContextRef, GDExtensionDeviceExitSceneReadyCallbackV2, void *)>);
+
+// Additive multi-range ABI; V1 layout assertions above remain unchanged.
+static_assert(sizeof(GDExtensionQualificationReadbackRangeV1) == 48 && alignof(GDExtensionQualificationReadbackRangeV1) == 8);
+static_assert(sizeof(GDExtensionQualificationReadbackObservationV1) == 56 && alignof(GDExtensionQualificationReadbackObservationV1) == 8);
+static_assert(sizeof(GDExtensionQualificationRecordV2) == 448 && alignof(GDExtensionQualificationRecordV2) == 8);
+static_assert(offsetof(GDExtensionQualificationRecordV2, capture_pipeline) == 208);
+static_assert(offsetof(GDExtensionQualificationRecordV2, capture_set1) == 240);
+static_assert(offsetof(GDExtensionQualificationRecordV2, body_set1) == 248);
+static_assert(offsetof(GDExtensionQualificationRecordV2, readback_count) == 264);
+static_assert(offsetof(GDExtensionQualificationRecordV2, readback_size) == 268);
+static_assert(offsetof(GDExtensionQualificationRecordV2, readbacks) == 272);
+static_assert(offsetof(GDExtensionQualificationRecordV2, capture_push) == 416);
+static_assert(offsetof(GDExtensionQualificationRecordV2, body_push) == 432);
+static_assert(sizeof(GDExtensionQualificationReportV2) == 328 && alignof(GDExtensionQualificationReportV2) == 8);
+static_assert(offsetof(GDExtensionQualificationReportV2, readback_count) == 80);
+static_assert(offsetof(GDExtensionQualificationReportV2, readbacks) == 88);
+static_assert(offsetof(GDExtensionQualificationReportV2, owned_size) == 256);
+static_assert(offsetof(GDExtensionQualificationReportV2, request_digest) == 264);
+static_assert(offsetof(GDExtensionQualificationReportV2, unit_digest) == 296);
+static_assert(std::is_trivially_copyable_v<GDExtensionQualificationRecordV2> && std::is_standard_layout_v<GDExtensionQualificationRecordV2>);
+static_assert(std::is_trivially_copyable_v<GDExtensionQualificationReportV2> && std::is_standard_layout_v<GDExtensionQualificationReportV2>);
+static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationPrepareUploadsV2, GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, const GDExtensionQualificationUploadPrepareV1 *, const GDExtensionQualificationUploadPlanV1 *, uint32_t, GDExtensionQualificationTicketRefV1 *, GDExtensionQualificationReportV2 *)>);
+static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationRecordPreparedV2, GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationTicketRefV1, const GDExtensionQualificationRecordV2 *, GDExtensionQualificationReportV2 *)>);
+static_assert(std::is_same_v<GDExtensionInterfaceDeviceSessionQualificationObserveV2, GDExtensionDeviceSessionResultV1 (*)(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationTicketRefV1, const GDExtensionQualificationBudgetV1 *, GDExtensionQualificationReportV2 *)>);

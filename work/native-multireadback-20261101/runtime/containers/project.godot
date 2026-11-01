@@ -1,0 +1,5 @@
+config_version=5
+[application]
+config/name="Native Metal V2 container generation"
+[rendering]
+renderer/rendering_method="mobile"

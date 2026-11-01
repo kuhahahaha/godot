@@ -137,6 +137,20 @@ void RenderingDevice::_qualification_seal_tickets() {
    }
    if(!ticket->ordering_closed)ticket->mapping_failed=true;
   }
+  // Each actual result copy belongs after this request's Body. Same-frame
+  // recording order alone is insufficient: require the graph dependency path.
+  for (auto &graph : ticket->graphs) {
+	  if (ticket->multi_readback && ticket->facts[graph.fact].semantic_kind == 3 && draw_graph.contains_record(graph.handle)) {
+		  uint32_t path_length = 0;
+		  const bool current_body = draw_graph.contains_record(ticket->body);
+		  const bool ordered = current_body ? draw_graph.has_dependency_path(ticket->body, graph.handle, path_length) : ticket->body_returned_successfully();
+		  graph.path_length = current_body && ordered ? path_length : 0;
+		  ticket->ordering_closed = ticket->ordering_closed && ordered;
+		  if (!ordered) {
+			  ticket->mapping_failed = true;
+		  }
+	  }
+  }
   registry.qualification_ticket_publish(ticket,this);
  }
 }
@@ -165,7 +179,11 @@ void RenderingDevice::_qualification_issue_tickets_locked(uint32_t slot,const RD
    ticket->natives.push_back({source,index,uint32_t(frame),slot,frames[frame].qualification_epoch,false,false});
   }
   if((error!=OK && error!=ERR_BUSY) || report.error!=OK || report.calls.is_empty()) {
-   ticket->append_failed=true;ticket->report.native_error=error!=OK?error:report.error!=OK?report.error:FAILED;
+	  ticket->append_failed = true;
+	  if (ticket->report.native_error == OK) {
+		  ticket->report.native_error = error != OK ? error : report.error != OK ? report.error
+																				 : FAILED;
+	  }
    if(!report.issued)ticket->mapping_failed=true;
   }
   registry.qualification_ticket_publish(ticket,this);
@@ -190,12 +208,33 @@ Error RenderingDevice::_qualification_poll_tickets(uint32_t index) {
    if(!member.retained) {
     const Error error=driver->native_call_retain(member.source.serial);
     if(error==ERR_BUSY)return ERR_BUSY;
-    if(error!=OK){MutexLock lock(registry.mutex);ticket->mapping_failed=true;ticket->report.native_error=error;registry.qualification_ticket_publish(ticket,this);return error;}
-    member.retained=true;
+	if (error != OK) {
+		MutexLock lock(registry.mutex);
+		ticket->mapping_failed = true;
+		if (ticket->report.native_error == OK) {
+			ticket->report.native_error = error;
+		}
+		registry.qualification_ticket_publish(ticket, this);
+		return error;
+	}
+	member.retained=true;
    }
    const auto completion=driver->native_call_poll(member.source.serial);
    MutexLock lock(registry.mutex);auto &fact=ticket->facts[member.fact];const auto old=fact;
-   if(completion.native_error){fact.issue=uint32_t(member.source.issue);ticket->report.native_error=FAILED;ticket->report.native_code=completion.native_code;fact.completion=member.source.issue==RDD::IssueFact::IssuedUnknown?4:3;fact.error=FAILED;fact.native_code=completion.native_code;ticket->append_failed=true;ticket->observation_dirty=true;registry.qualification_ticket_publish(ticket,this);return FAILED;}
+   if (completion.native_error) {
+	   fact.issue = uint32_t(member.source.issue);
+	   if (ticket->report.native_error == OK) {
+		   ticket->report.native_error = FAILED;
+		   ticket->report.native_code = completion.native_code;
+	   }
+	   fact.completion = member.source.issue == RDD::IssueFact::IssuedUnknown ? 4 : 3;
+	   fact.error = FAILED;
+	   fact.native_code = completion.native_code;
+	   ticket->append_failed = true;
+	   ticket->observation_dirty = true;
+	   registry.qualification_ticket_publish(ticket, this);
+	   return FAILED;
+   }
    if(completion.matches(member.source.completion_serial)){fact.issue=1;fact.completion=2;fact.native_code=completion.native_code;fact.phase=4;}
    if(memcmp(&old,&fact,sizeof(fact)))ticket->observation_dirty=true;
    registry.qualification_ticket_publish(ticket,this);

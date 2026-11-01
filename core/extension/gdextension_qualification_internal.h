@@ -5,6 +5,58 @@
 #include "servers/rendering/rendering_device.h"
 
 namespace GDExtensionDeviceExit {
+// Shared POD validation runs on the owner before admission and again on RT.
+inline Error validate_qualification_record_v2(const GDExtensionQualificationRecordV2 &q) {
+	if (q.abi.abi_version != 2 || q.abi.struct_size != sizeof(GDExtensionDeviceExitAbi) || q.abi.reserved || !q.record_generation || !q.request_nonce || !q.library_generation || !q.qualification_session_serial || !q.attempt || !q.sample_count || q.sample_count > 512 || q.range_end < q.range_begin || q.range_end - q.range_begin != q.sample_count || q.body_groups_x != (q.sample_count + 63) / 64 || !q.readback_size || q.readback_size > 16384 || (q.readback_count != 1 && q.readback_count != 3)) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (q.capture_set_count < 1 || q.capture_set_count > 2 || q.body_set_count < 1 || q.body_set_count > 2 || bool(q.capture_set1) != (q.capture_set_count == 2) || bool(q.body_set1) != (q.body_set_count == 2) || (q.readback_count == 1 && (q.capture_set_count != 1 || q.body_set_count != 1))) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (q.readback_count == 3 && q.readbacks[2].readback_size != sizeof(uint32_t)) {
+		return ERR_INVALID_PARAMETER;
+	}
+	uint64_t total = 0;
+	for (uint32_t i = 0; i < q.readback_count; ++i) {
+		const auto &r = q.readbacks[i];
+		if (!r.readback_buffer || !r.source_allocation_generation || !r.observed_backing_serial || !r.readback_size || r.readback_offset > UINT32_MAX || r.readback_size > UINT32_MAX - r.readback_offset || r.result_offset != total || r.readback_size > q.readback_size - total) {
+			return ERR_INVALID_PARAMETER;
+		}
+		if (q.readback_count == 1 ? r.role != GDEXTENSION_QUALIFICATION_READBACK_NUMERIC_RAW_OUTPUT_V1 : i == 0 ? (r.role != GDEXTENSION_QUALIFICATION_READBACK_METHOD_RAW_RESULTS_V1 && r.role != GDEXTENSION_QUALIFICATION_READBACK_METHOD_DESTINATION_V1)
+						: i == 1																				? r.role != GDEXTENSION_QUALIFICATION_READBACK_METHOD_FAULT_PLANE_V1
+																												: r.role != GDEXTENSION_QUALIFICATION_READBACK_METHOD_RESULT_EPILOGUE_V1) {
+			return ERR_INVALID_PARAMETER;
+		}
+		for (uint32_t j = 0; j < i; ++j) {
+			const auto &other = q.readbacks[j];
+			if (r.readback_buffer == other.readback_buffer && (r.observed_backing_serial != other.observed_backing_serial || r.source_allocation_generation != other.source_allocation_generation || (r.readback_offset < other.readback_offset + other.readback_size && other.readback_offset < r.readback_offset + r.readback_size))) {
+				return ERR_INVALID_DATA;
+			}
+		}
+		total += r.readback_size;
+	}
+	const GDExtensionQualificationReadbackRangeV1 empty = {};
+	for (uint32_t i = q.readback_count; i < 3; ++i) {
+		if (memcmp(&q.readbacks[i], &empty, sizeof(empty))) {
+			return ERR_INVALID_PARAMETER;
+		}
+	}
+	return total == q.readback_size ? OK : ERR_INVALID_PARAMETER;
+}
+inline GDExtensionQualificationRecordV1 qualification_record_v1(const GDExtensionQualificationRecordV2 &q) {
+	GDExtensionQualificationRecordV1 old = {};
+	memcpy(&old, &q, offsetof(GDExtensionQualificationRecordV1, readback_buffer));
+	old.abi.abi_version = 1;
+	const auto &r = q.readbacks[0];
+	old.readback_buffer = r.readback_buffer;
+	old.source_allocation_generation = r.source_allocation_generation;
+	old.observed_backing_serial = r.observed_backing_serial;
+	old.readback_offset = r.readback_offset;
+	old.readback_size = r.readback_size;
+	memcpy(old.capture_push, q.capture_push, sizeof(old.capture_push));
+	memcpy(old.body_push, q.body_push, sizeof(old.body_push));
+	return old;
+}
 // One original bridge child, shared by graph/frame, native source observations,
 // the original async result and physical-return reverse indices. C facts are
 // snapshots of these original sources, never a separate completion authority.
@@ -14,6 +66,11 @@ struct QualificationTicket {
  uint32_t library=0;
  GDExtensionQualificationRecordV1 origin={};
  GDExtensionQualificationUploadPrepareV1 preparation={};
+ GDExtensionQualificationRecordV2 range_origin = {};
+ bool multi_readback = false;
+ uint64_t additional_readback_serials[2] = {};
+ Ref<RenderingDevice::BufferGetDataResult> additional_results[2];
+ uint32_t additional_copies_joined[2] = {};
  GDExtensionQualificationReportV1 report={};
  LocalVector<GDExtensionQualificationFactV1> facts;
  struct GraphMember {RDG::RecordHandle handle;uint32_t fact=0,frame=0,path_length=0;uint64_t epoch=0;bool sealed=false,returned=false;};
@@ -39,6 +96,46 @@ struct QualificationTicket {
  uint32_t ordering_path_length=0;
  bool ordering_closed=false,append_failed=false,mapping_failed=false,observation_dirty=false;
  bool resources_returned=false;
+ uint32_t readback_count() const { return multi_readback ? range_origin.readback_count : 1; }
+ Ref<RenderingDevice::BufferGetDataResult> &readback_result(uint32_t index) { return index ? additional_results[index - 1] : result; }
+ const Ref<RenderingDevice::BufferGetDataResult> &readback_result(uint32_t index) const { return index ? additional_results[index - 1] : result; }
+ uint32_t &readback_cursor(uint32_t index) { return index ? additional_copies_joined[index - 1] : readback_copies_joined; }
+ GDExtensionQualificationReadbackRangeV1 readback_range(uint32_t index) const {
+	 if (multi_readback) {
+		 return range_origin.readbacks[index];
+	 }
+	 return { origin.readback_buffer, origin.source_allocation_generation, origin.observed_backing_serial, origin.readback_offset, origin.readback_size, 0, GDEXTENSION_QUALIFICATION_READBACK_NUMERIC_RAW_OUTPUT_V1 };
+ }
+ bool body_returned_successfully() const {
+	 if (mapping_failed) {
+		 return false;
+	 }
+	 for (const auto &graph : graphs) {
+		 if (facts[graph.fact].semantic_kind == 2) {
+			 const auto &body_fact = facts[graph.fact];
+			 if (!graph.sealed || !graph.returned || body_fact.issue != 1 || body_fact.completion != 2 || body_fact.error) {
+				 return false;
+			 }
+			 bool mapped = false;
+			 // Later readback frames may acquire their own pending hidden sources.
+			 // Only the original Body frame/slot and its hidden sources prove Body.
+			 for (const auto &native : natives) {
+				 if (native.frame == graph.frame && native.epoch == graph.epoch && (native.slot == UINT32_MAX || native.slot == body_fact.command_slot)) {
+					 const auto &fact = facts[native.fact];
+					 if (fact.issue != 1 || fact.completion != 2 || fact.error) {
+						 return false;
+					 }
+					 if (native.slot == body_fact.command_slot) {
+						 mapped = true;
+					 }
+				 }
+			 }
+			 return mapped;
+		 }
+	 }
+	 return false;
+ }
+
  std::atomic<bool> physically_retired{false};
 };
 

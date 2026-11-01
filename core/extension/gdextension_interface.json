@@ -4302,6 +4302,202 @@
             ]
         },
         {
+            "name": "GDExtensionQualificationReadbackRoleV1",
+            "kind": "enum",
+            "values": [
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_READBACK_NUMERIC_RAW_OUTPUT_V1",
+                    "value": 0
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_READBACK_METHOD_RAW_RESULTS_V1",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_READBACK_METHOD_DESTINATION_V1",
+                    "value": 2
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_READBACK_METHOD_FAULT_PLANE_V1",
+                    "value": 3
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_READBACK_METHOD_RESULT_EPILOGUE_V1",
+                    "value": 4
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_READBACK_ROLE_COUNT_V1",
+                    "value": 5
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationReadbackRangeV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "readback_buffer",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "source_allocation_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "observed_backing_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "readback_offset",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "readback_size",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "result_offset",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "role",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationReadbackObservationV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "source",
+                    "type": "GDExtensionQualificationReadbackRangeV1"
+                },
+                {
+                    "name": "readback_request",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationRecordV2",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "record_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "request_nonce",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "library_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "qualification_session_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "range_begin",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "range_end",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "vector_ordinal",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "attempt",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "sample_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "body_groups_x",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "request_digest[32]",
+                    "type": "uint8_t"
+                },
+                {
+                    "name": "unit_digest[32]",
+                    "type": "uint8_t"
+                },
+                {
+                    "name": "capture_map_digest[32]",
+                    "type": "uint8_t"
+                },
+                {
+                    "name": "body_map_digest[32]",
+                    "type": "uint8_t"
+                },
+                {
+                    "name": "capture_pipeline",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "capture_set",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "body_pipeline",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "body_set",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "capture_set1",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "body_set1",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "capture_set_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "body_set_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "readback_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "readback_size",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "readbacks[3]",
+                    "type": "GDExtensionQualificationReadbackRangeV1"
+                },
+                {
+                    "name": "capture_push[16]",
+                    "type": "uint8_t"
+                },
+                {
+                    "name": "body_push[16]",
+                    "type": "uint8_t"
+                }
+            ]
+        },
+        {
             "name": "GDExtensionQualificationRecordV1",
             "kind": "struct",
             "members": [
@@ -4434,6 +4630,92 @@
                 {
                     "name": "usage_bits",
                     "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationReportV2",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "state",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "phase",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "native_error",
+                    "type": "int32_t"
+                },
+                {
+                    "name": "issue_fact",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "native_code",
+                    "type": "int64_t"
+                },
+                {
+                    "name": "revision",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "record_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "request_nonce",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "required_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "known_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "possible_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "fact_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "readback_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "readback_size",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "readbacks[3]",
+                    "type": "GDExtensionQualificationReadbackObservationV1"
+                },
+                {
+                    "name": "owned_size",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "request_digest[32]",
+                    "type": "uint8_t"
+                },
+                {
+                    "name": "unit_digest[32]",
+                    "type": "uint8_t"
                 }
             ]
         },
@@ -5496,8 +5778,52 @@
                     "value": 7
                 },
                 {
-                    "name": "GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_COUNT_V1",
+                    "name": "GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_METHOD_DOMAIN_COUNT_V1",
                     "value": 8
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_METHOD_FAULT_PLANE_V1",
+                    "value": 9
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_METHOD_INPUT_GATE_V1",
+                    "value": 10
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_METHOD_INSTANCE_GATE_V1",
+                    "value": 11
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_METHOD_MAPPING_V1",
+                    "value": 12
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_METHOD_OUTPUT_GATE_V1",
+                    "value": 13
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_METHOD_RAW_PARAMETERS_V1",
+                    "value": 14
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_METHOD_RAW_RESULTS_V1",
+                    "value": 15
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_METHOD_RESULT_EPILOGUE_V1",
+                    "value": 16
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_METHOD_INVOCATION_INPUTS_V1",
+                    "value": 17
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_METHOD_RESOURCE_V1",
+                    "value": 18
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_COUNT_V1",
+                    "value": 19
                 }
             ]
         },
@@ -12721,6 +13047,49 @@
             }
         },
         {
+            "name": "device_session_qualification_observe_v2",
+            "since": "4.7",
+            "description": [
+                "Original-bridge qualification ABI declaration; availability requires the actual guarded implementation. Copied correlation is not recording, completion, or disposal authority."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous in-process bridge."
+                    ]
+                },
+                {
+                    "name": "ticket",
+                    "type": "GDExtensionQualificationTicketRefV1",
+                    "description": [
+                        "Synchronous in-process ticket."
+                    ]
+                },
+                {
+                    "name": "budget",
+                    "type": "const GDExtensionQualificationBudgetV1*",
+                    "description": [
+                        "Synchronous in-process budget."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionQualificationReportV2*",
+                    "description": [
+                        "Synchronous in-process out report."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            }
+        },
+        {
             "name": "device_session_qualification_facts_v1",
             "since": "4.7",
             "description": [
@@ -13101,6 +13470,63 @@
             }
         },
         {
+            "name": "device_session_qualification_prepare_uploads_v2",
+            "since": "4.7",
+            "description": [
+                "Original-bridge qualification ABI declaration; availability requires the actual guarded implementation. Copied correlation is not recording, completion, or disposal authority."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous in-process bridge."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "const GDExtensionQualificationUploadPrepareV1*",
+                    "description": [
+                        "Synchronous in-process request."
+                    ]
+                },
+                {
+                    "name": "plans",
+                    "type": "const GDExtensionQualificationUploadPlanV1*",
+                    "description": [
+                        "Synchronous in-process plans."
+                    ]
+                },
+                {
+                    "name": "plan_count",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous in-process plan count."
+                    ]
+                },
+                {
+                    "name": "out_ticket",
+                    "type": "GDExtensionQualificationTicketRefV1*",
+                    "description": [
+                        "Synchronous in-process out ticket."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionQualificationReportV2*",
+                    "description": [
+                        "Synchronous in-process out report."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            }
+        },
+        {
             "name": "device_session_qualification_upload_v1",
             "since": "4.7",
             "description": [
@@ -13202,6 +13628,49 @@
                 {
                     "name": "out_report",
                     "type": "GDExtensionQualificationReportV1*",
+                    "description": [
+                        "Synchronous in-process out report."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_record_prepared_v2",
+            "since": "4.7",
+            "description": [
+                "Original-bridge qualification ABI declaration; availability requires the actual guarded implementation. Copied correlation is not recording, completion, or disposal authority."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous in-process bridge."
+                    ]
+                },
+                {
+                    "name": "ticket",
+                    "type": "GDExtensionQualificationTicketRefV1",
+                    "description": [
+                        "Synchronous in-process ticket."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "const GDExtensionQualificationRecordV2*",
+                    "description": [
+                        "Synchronous in-process request."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionQualificationReportV2*",
                     "description": [
                         "Synchronous in-process out report."
                     ]

@@ -22,6 +22,236 @@ TEST_FORCE_LINK(test_qualification_physical)
 extern thread_local void (*test_uniform_set_after_rid_free)(RenderingDevice *);
 class TestQualificationPhysicalAccess {
 public:
+	// Metadata-only original-child fixture: this exercises preappend admission,
+	// not texture production, native completion, or Method qualification.
+	static void typed_uniform_preflight(uint32_t p_mode, bool p_two_set = false) {
+		using namespace GDExtensionDeviceExit;
+		struct Driver : TransferTestDriverBase {
+			bool native_call_observation_supported() const override { return true; }
+			uint32_t qualification_native_call_bound(uint32_t p_slots) const override { return p_slots; }
+			uint64_t limit_get(Limit) override { return 65535; }
+		} driver;
+		RenderingDevice device;
+		device.driver = &driver;
+		auto *registry = memnew(Registry);
+		registry->records[0].snapshot.library_generation = 1;
+		Registry::QualificationBridge bridge;
+		bridge.serial = 11;
+		Registry::QualificationBridge::Texture texture_child;
+		Registry::QualificationBridge::Sampler sampler_child;
+		bridge.textures[0] = &texture_child;
+		bridge.samplers[0] = &sampler_child;
+		RenderingDevice::Texture texture;
+		texture.driver_id = RDD::TextureID(51);
+		texture.qualification_return = &texture_child.physical;
+		const RID texture_rid = device.texture_owner.make_rid(texture);
+		RenderingDevice::Sampler sampler;
+		sampler.driver_id = RDD::SamplerID(53);
+		sampler.qualification_return = &sampler_child.physical;
+		const RID sampler_rid = device.sampler_owner.make_rid(sampler);
+		auto initialize_child = [&](auto &p_child, RID p_rid, uint64_t p_serial) {
+			p_child.serial = p_serial;
+			p_child.rid = p_rid.get_id();
+			p_child.object_serial = p_serial + 100;
+			p_child.creating = false;
+			p_child.physical.bridge = bridge.serial;
+			p_child.physical.child = p_serial;
+			p_child.physical.rid = p_rid.get_id();
+			p_child.physical.serial = p_child.object_serial;
+		};
+		initialize_child(texture_child, texture_rid, 31);
+		initialize_child(sampler_child, sampler_rid, 37);
+		RenderingDevice::Shader shader;
+		const RID shader_rid = device.shader_owner.make_rid(shader);
+		RenderingDevice::ComputePipeline pipeline;
+		pipeline.shader = shader_rid;
+		pipeline.driver_id = RDD::PipelineID(57);
+		pipeline.push_constant_size = 16;
+		pipeline.set_formats.push_back(1);
+		pipeline.local_group_size[0] = 64;
+		pipeline.local_group_size[1] = pipeline.local_group_size[2] = 1;
+		const RID pipeline_rid = device.compute_pipeline_owner.make_rid(pipeline);
+		RenderingDevice::UniformSet set;
+		set.format = 1;
+		set.driver_id = RDD::UniformSetID(59);
+		const RID set_rid = device.uniform_set_owner.make_rid(set);
+		device.reverse_dependency_map[set_rid].insert(shader_rid);
+		device.reverse_dependency_map[set_rid].insert(texture_rid);
+		device.reverse_dependency_map[set_rid].insert(sampler_rid);
+		RID second_set;
+		if (p_two_set) {
+			device.compute_pipeline_owner.get_or_null(pipeline_rid)->set_formats.push_back(2);
+			RenderingDevice::UniformSet di;
+			di.format = 2;
+			di.shader_set = 1;
+			di.driver_id = RDD::UniformSetID(63);
+			second_set = device.uniform_set_owner.make_rid(di);
+			device.reverse_dependency_map[set_rid].erase(texture_rid);
+			device.reverse_dependency_map[set_rid].erase(sampler_rid);
+			device.reverse_dependency_map[second_set].insert(shader_rid);
+			device.reverse_dependency_map[second_set].insert(texture_rid);
+			device.reverse_dependency_map[second_set].insert(sampler_rid);
+		}
+		RenderingDevice::Buffer buffer;
+		buffer.driver_id = RDD::BufferID(61);
+		buffer.size = 64;
+		buffer.backing_serial = 67;
+		buffer.usage = RDD::BUFFER_USAGE_TRANSFER_FROM_BIT;
+		const RID buffer_rid = device.storage_buffer_owner.make_rid(buffer);
+		GDExtensionQualificationRecordV1 request = {};
+		request.abi = { 1, sizeof(GDExtensionDeviceExitAbi), 0 };
+		request.record_generation = request.request_nonce = request.library_generation = request.qualification_session_serial = 1;
+		request.attempt = 1;
+		request.sample_count = request.range_end = 4;
+		request.body_groups_x = 1;
+		request.source_allocation_generation = 1;
+		request.capture_pipeline = request.body_pipeline = pipeline_rid.get_id();
+		request.capture_set = request.body_set = set_rid.get_id();
+		request.readback_buffer = buffer_rid.get_id();
+		request.observed_backing_serial = 67;
+		request.readback_size = 4;
+		const uint32_t push[4] = { 0, 4, 0, 0 };
+		memcpy(request.body_push, push, 16);
+		memcpy(request.capture_push, push, 16);
+		auto *live_texture = device.texture_owner.get_or_null(texture_rid);
+		auto *live_sampler = device.sampler_owner.get_or_null(sampler_rid);
+		auto *live_set = device.uniform_set_owner.get_or_null(set_rid);
+		QualificationPhysicalReturn impostor;
+		RenderingDevice::Texture::SharedFallback fallback;
+		Error expected = p_mode ? ERR_UNAUTHORIZED : OK;
+		switch (p_mode) {
+			case 1:
+				live_texture->qualification_return = nullptr;
+				break;
+			case 2:
+				live_sampler->qualification_return = nullptr;
+				break;
+			case 3:
+				live_texture->qualification_return = &impostor;
+				break;
+			case 4:
+				live_sampler->qualification_return = &impostor;
+				break;
+			case 5:
+				++texture_child.rid;
+				break;
+			case 6:
+				++sampler_child.object_serial;
+				break;
+			case 7:
+				++texture_child.physical.bridge;
+				break;
+			case 8:
+				sampler_child.creating = true;
+				break;
+			case 9:
+				texture_child.retiring = true;
+				break;
+			case 10:
+				sampler_child.acknowledged = true;
+				break;
+			case 11:
+				texture_child.physical.use_closed = true;
+				break;
+			case 12:
+				sampler_child.physical.use_closed = true;
+				break;
+			case 13:
+				live_texture->transfer_worker_index = 0;
+				expected = ERR_UNAVAILABLE;
+				break;
+			case 14:
+				live_texture->pending_clear = true;
+				expected = ERR_UNAVAILABLE;
+				break;
+			case 15:
+				live_texture->owner = texture_rid;
+				expected = ERR_UNAVAILABLE;
+				break;
+			case 16:
+				live_texture->shared_fallback = &fallback;
+				expected = ERR_UNAVAILABLE;
+				break;
+			case 17:
+				live_texture->driver_id = {};
+				expected = ERR_UNAVAILABLE;
+				break;
+			case 18:
+				live_sampler->driver_id = {};
+				expected = ERR_UNAVAILABLE;
+				break;
+			case 19:
+				live_set->shared_textures_to_update.push_back({ 0, texture_rid });
+				expected = ERR_UNAVAILABLE;
+				break;
+			case 20:
+				live_set->pending_clear_textures.push_back(texture_rid);
+				expected = ERR_UNAVAILABLE;
+				break;
+			case 21:
+				live_set->acceleration_structures.push_back(buffer_rid);
+				expected = ERR_UNAVAILABLE;
+				break;
+			case 22:
+				++texture_child.physical.rid;
+				break;
+			case 23:
+				++sampler_child.physical.child;
+				break;
+			case 24:
+				texture_child.object_serial = texture_child.physical.serial = 0;
+				break;
+			case 25:
+				++bridge.serial;
+				break;
+		}
+		uint64_t second_rid = p_two_set ? second_set.get_id() : 0;
+		if (p_two_set && p_mode >= 26) {
+			expected = ERR_INVALID_DATA;
+			switch (p_mode) {
+				case 26:
+					device.uniform_set_owner.get_or_null(second_set)->format = 3;
+					break;
+				case 27:
+					device.uniform_set_owner.get_or_null(second_set)->shader_set = 0;
+					break;
+				case 28:
+					second_rid = 0;
+					break;
+				case 29:
+					device.compute_pipeline_owner.get_or_null(pipeline_rid)->set_formats.resize(1);
+					break;
+				case 30:
+					device.compute_pipeline_owner.get_or_null(pipeline_rid)->set_formats.push_back(3);
+					break;
+			}
+		}
+		LocalVector<RID> resources;
+		CHECK(registry->qualification_record_preflight(&bridge, &device, request, resources, second_rid, second_rid) == expected);
+		if (!p_mode) {
+			CHECK(resources.has(texture_rid));
+			CHECK(resources.has(sampler_rid));
+			CHECK(resources.size() == (p_two_set ? 7u : 6u));
+		}
+		CHECK(device.draw_graph.qualification_command_count() == 0);
+		CHECK(live_texture->qualification_users == 0);
+		CHECK(live_sampler->qualification_users == 0);
+		CHECK(texture_child.physical.uses.is_empty());
+		CHECK(sampler_child.physical.uses.is_empty());
+		device.reverse_dependency_map.clear();
+		live_texture->shared_fallback = nullptr;
+		device.storage_buffer_owner.free(buffer_rid);
+		device.uniform_set_owner.free(set_rid);
+		if (second_set.is_valid()) {
+			device.uniform_set_owner.free(second_set);
+		}
+		device.compute_pipeline_owner.free(pipeline_rid);
+		device.shader_owner.free(shader_rid);
+		device.texture_owner.free(texture_rid);
+		device.sampler_owner.free(sampler_rid);
+		device.driver = nullptr;
+		memdelete(registry);
+	}
 	struct InvalidationState {
 		RID old_rid;
 		RID replacement;
@@ -1944,4 +2174,18 @@ TEST_CASE("[Qualification][T1] a same-numbered but unregistered texture cell is 
 TEST_CASE("[Qualification][T1] parent release refuses an unsettled texture descendant") {
  RenderingDevice device;TestQualificationPhysical::Driver driver;TestQualificationPhysicalAccess::attach(device,driver);
  TestQualificationPhysicalAccess::texture_worker_descendant_does_not_livelock(device);CHECK(driver.texture_frees==1);CHECK(driver.frees==1);TestQualificationPhysicalAccess::detach(device);
+}
+
+TEST_CASE("[Qualification][T1] record preflight accepts only ready original typed texture and sampler children") {
+	for (uint32_t mode = 0; mode <= 25; ++mode) {
+		CAPTURE(mode);
+		TestQualificationPhysicalAccess::typed_uniform_preflight(mode);
+	}
+}
+
+TEST_CASE("[Qualification][MultiReadback] two original uniform sets retain typed dependency checks at the correct index") {
+	for (uint32_t mode = 0; mode < 31; ++mode) {
+		CAPTURE(mode);
+		TestQualificationPhysicalAccess::typed_uniform_preflight(mode, true);
+	}
 }

@@ -1,0 +1,57 @@
+{
+  "scope": "standalone Godot native control; not an ANGE owner/request acceptance",
+  "header_sha256": "971a1ab90541900c50cde6eb45f62e7f5fcc1a95cbcb9a8632fab792a9835289",
+  "source_sha256": "d48e4bf46e71af1359fb0585a75201823735d42db913318d2176166d15bd444b",
+  "builds": [
+    {
+      "case": "positive",
+      "mode": 1,
+      "command": [
+        "clang++",
+        "-std=c++17",
+        "-dynamiclib",
+        "-arch",
+        "arm64",
+        "-mmacosx-version-min=11.0",
+        "-O2",
+        "-Wall",
+        "-Wextra",
+        "-Wno-unused-parameter",
+        "-Wno-deprecated-declarations",
+        "-DTICKET_MODE=1",
+        "-I",
+        "/Users/macbookair/Documents/Work/godot_ANGE",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-multireadback-20261101/runtime/v2_probe.cpp",
+        "-o",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-multireadback-20261101/runtime/v2_positive.dylib"
+      ],
+      "rc": 0,
+      "sha256": "1336e1ee2870ce16be7e6c0c73d5ccaae9f71d6dc2c2e7e31b0b522f45432911"
+    },
+    {
+      "case": "cancel_prefix",
+      "mode": 2,
+      "command": [
+        "clang++",
+        "-std=c++17",
+        "-dynamiclib",
+        "-arch",
+        "arm64",
+        "-mmacosx-version-min=11.0",
+        "-O2",
+        "-Wall",
+        "-Wextra",
+        "-Wno-unused-parameter",
+        "-Wno-deprecated-declarations",
+        "-DTICKET_MODE=2",
+        "-I",
+        "/Users/macbookair/Documents/Work/godot_ANGE",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-multireadback-20261101/runtime/v2_probe.cpp",
+        "-o",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-multireadback-20261101/runtime/v2_cancel_prefix.dylib"
+      ],
+      "rc": 0,
+      "sha256": "5e3191ee1cd33c9ee15725d57b1eb3d228ea6f3cdad832a5928487427f5124bc"
+    }
+  ]
+}

@@ -12,6 +12,271 @@ TEST_FORCE_LINK(test_qualification_ticket)
 // native dispatch; the actual Metal control remains separately required.
 class TestQualificationTicketAccess {
 public:
+	static GDExtensionQualificationRecordV2 range_request() {
+		GDExtensionQualificationRecordV2 q = {};
+		q.abi = { 2, sizeof(GDExtensionDeviceExitAbi), 0 };
+		q.record_generation = q.request_nonce = q.library_generation = q.qualification_session_serial = 1;
+		q.attempt = 1;
+		q.range_end = q.sample_count = 4;
+		q.body_groups_x = 1;
+		q.capture_set_count = q.body_set_count = 2;
+		q.capture_set1 = 21;
+		q.body_set1 = 23;
+		q.readback_count = 3;
+		q.readback_size = 44;
+		q.readbacks[0] = { 31, 41, 51, 0, 24, 0, GDEXTENSION_QUALIFICATION_READBACK_METHOD_RAW_RESULTS_V1 };
+		q.readbacks[1] = { 32, 42, 52, 0, 16, 24, GDEXTENSION_QUALIFICATION_READBACK_METHOD_FAULT_PLANE_V1 };
+		q.readbacks[2] = { 33, 43, 53, 0, 4, 40, GDEXTENSION_QUALIFICATION_READBACK_METHOD_RESULT_EPILOGUE_V1 };
+		return q;
+	}
+	static void range_descriptors() {
+		using namespace GDExtensionDeviceExit;
+		auto q = range_request();
+		CHECK(validate_qualification_record_v2(q) == OK);
+		for (uint32_t mode = 0; mode < 17; ++mode) {
+			auto bad = q;
+			CAPTURE(mode);
+			switch (mode) {
+				case 0:
+					bad.abi.abi_version = 1;
+					break;
+				case 1:
+					bad.readback_count = 2;
+					break;
+				case 2:
+					bad.readback_count = 4;
+					break;
+				case 3:
+					bad.readback_size = 43;
+					break;
+				case 4:
+					bad.readbacks[1].result_offset = 25;
+					break;
+				case 5:
+					bad.readbacks[1].result_offset = 23;
+					break;
+				case 6:
+					bad.readbacks[0].readback_size = 0;
+					break;
+				case 7:
+					bad.readbacks[0].readback_offset = UINT64_MAX;
+					break;
+				case 8:
+					bad.readbacks[0].observed_backing_serial = 0;
+					break;
+				case 9:
+					bad.readbacks[0].source_allocation_generation = 0;
+					break;
+				case 10:
+					bad.readbacks[1].role = GDEXTENSION_QUALIFICATION_READBACK_METHOD_RESULT_EPILOGUE_V1;
+					break;
+				case 11:
+					bad.readbacks[1].readback_buffer = bad.readbacks[0].readback_buffer;
+					break;
+				case 12:
+					bad.readbacks[2].readback_size = 8;
+					bad.readback_size += 4;
+					break;
+				case 13:
+					bad.capture_set_count = 1;
+					break;
+				case 14:
+					bad.body_set_count = 3;
+					break;
+				case 15:
+					bad.body_set1 = 0;
+					break;
+				case 16:
+					bad.readback_size = 16385;
+					break;
+			}
+			CHECK(validate_qualification_record_v2(bad) != OK);
+		}
+		q.readbacks[0].role = GDEXTENSION_QUALIFICATION_READBACK_METHOD_DESTINATION_V1;
+		CHECK(validate_qualification_record_v2(q) == OK);
+		q = range_request();
+		q.readback_count = 1;
+		q.readback_size = 24;
+		q.readbacks[0].role = GDEXTENSION_QUALIFICATION_READBACK_NUMERIC_RAW_OUTPUT_V1;
+		q.readbacks[1] = {};
+		q.readbacks[2] = {};
+		q.capture_set_count = q.body_set_count = 1;
+		q.capture_set1 = q.body_set1 = 0;
+		CHECK(validate_qualification_record_v2(q) == OK);
+		q.readbacks[2].readback_buffer = 7;
+		CHECK(validate_qualification_record_v2(q) == ERR_INVALID_PARAMETER);
+	}
+	static void range_completion(uint32_t mode) {
+		using namespace GDExtensionDeviceExit;
+		auto *registry = memnew(Registry);
+		RenderingDevice device;
+		TransferTestDriverBase driver;
+		device.driver = &driver;
+		auto *previous = RenderingDevice::singleton;
+		RenderingDevice::singleton = &device;
+		device.is_main_instance = true;
+		registry->instance = 71;
+		auto &record = registry->records[0];
+		record.owner_thread = Thread::get_caller_id();
+		record.snapshot.library_generation = 1;
+		record.private_refs = registry->private_limit;
+		record.guard_enrollment = GuardEnrollment::QUALIFIED;
+		auto &native = registry->device_records[0];
+		native.object = &device;
+		native.live = true;
+		native.epoch = 1;
+		native.execution_thread = Thread::get_caller_id();
+		struct Holder : HolderRetirement {
+			Holder() : HolderRetirement(RecordRef{}) {}
+			~Holder() = default;
+		} holder;
+		holder.generation = 1;
+		auto *bridge = memnew(Registry::QualificationBridge);
+		bridge->serial = 11;
+		bridge->epoch = 1;
+		bridge->holder = &holder;
+		bridge->children = 1;
+		registry->qualification_bridges[0] = bridge;
+		auto *ticket = memnew(QualificationTicket);
+		ticket->serial = 23;
+		ticket->bridge_serial = 11;
+		ticket->prepared = ticket->multi_readback = ticket->recorded = ticket->ordering_closed = true;
+		ticket->range_origin = range_request();
+		ticket->report.revision = 1;
+		ticket->frame_refs = 1;
+		bridge->tickets[0] = ticket;
+		uint8_t expected[44];
+		for (uint32_t i = 0; i < 44; ++i) {
+			expected[i] = uint8_t(i + 7);
+		}
+		for (uint32_t i = 0; i < 3; ++i) {
+			const auto range = ticket->readback_range(i);
+			auto &owned = ticket->readback_result(i);
+			owned.instantiate();
+			owned->qualification_owned = true;
+			owned->request_serial = 101 + i;
+			owned->bytes.resize(range.readback_size);
+			memcpy(owned->bytes.ptrw(), expected + range.result_offset, range.readback_size);
+			owned->issued_size = range.readback_size;
+			GDExtensionQualificationFactV1 fact = {};
+			fact.semantic_kind = 3;
+			fact.command_slot = 0;
+			ticket->graphs.push_back({ {}, ticket->facts.size(), 0, 0, 1, true, false });
+			ticket->facts.push_back(fact);
+		}
+		RDD::NativeCallFact source;
+		source.serial = 17;
+		source.completion_serial = 73;
+		source.queue_index = 1;
+		GDExtensionQualificationFactV1 fact = {};
+		fact.issue = 1;
+		fact.completion = 2;
+		ticket->natives.push_back({ source, ticket->facts.size(), 0, 0, 1, false, false });
+		ticket->facts.push_back(fact);
+		registry->qualification_ticket_publish(ticket, &device);
+		CHECK(ticket->report.state != 8);
+		CHECK_FALSE(ticket->physically_retired.load());
+		uint8_t actual[44];
+		memset(actual, 0xa5, sizeof(actual));
+		uint32_t written = 99;
+		CHECK(registry->qualification_copy({ 71, 11 }, { 71, 23 }, ticket->report.revision, actual, sizeof(actual), &written).native_error == ERR_BUSY);
+		CHECK(written == 0);
+		CHECK(actual[0] == 0xa5);
+		for (uint32_t i = 0; i < 3; ++i) {
+			auto &owned = ticket->readback_result(i);
+			owned->completed_size = owned->bytes.size();
+			owned->delivered = true;
+			registry->qualification_ticket_publish(ticket, &device);
+			CHECK(ticket->report.state != 8);
+			CHECK(ticket->report.owned_size == 0);
+		}
+		if (mode == 1) {
+			ticket->readback_result(1)->error = ERR_CANT_ACQUIRE_RESOURCE;
+			ticket->readback_result(1)->native_code = -55;
+			registry->qualification_ticket_publish(ticket, &device);
+			ticket->readback_result(2)->error = FAILED;
+			ticket->readback_result(2)->native_code = -77;
+		}
+		if (mode == 2) {
+			CHECK(registry->qualification_cancel({ 71, 11 }, { 71, 23 }).native_error == OK);
+			CHECK(ticket->admission_closed.load());
+		}
+		for (auto &graph : ticket->graphs) {
+			graph.returned = true;
+		}
+		ticket->frame_refs = 0;
+		registry->qualification_ticket_publish(ticket, &device);
+		GDExtensionQualificationReportV2 report = {};
+		registry->qualification_report_v2(ticket, report);
+		CHECK(report.abi.abi_version == 2);
+		CHECK(report.readback_count == 3);
+		CHECK(report.readback_size == 44);
+		for (uint32_t i = 0; i < 3; ++i) {
+			CHECK(report.readbacks[i].readback_request == 101 + i);
+			CHECK(memcmp(&report.readbacks[i].source, &ticket->range_origin.readbacks[i], sizeof(GDExtensionQualificationReadbackRangeV1)) == 0);
+		}
+		CHECK(ticket->physically_retired.load());
+		written = 99;
+		auto copy = registry->qualification_copy({ 71, 11 }, { 71, 23 }, report.revision, actual, sizeof(actual), &written);
+		if (mode == 0) {
+			CHECK(report.state == 8);
+			CHECK(report.owned_size == 44);
+			CHECK(copy.native_error == OK);
+			CHECK(written == 44);
+			CHECK(memcmp(actual, expected, sizeof(actual)) == 0);
+			written = 99;
+			CHECK(registry->qualification_copy({ 71, 11 }, { 71, 23 }, report.revision - 1, actual, sizeof(actual), &written).native_error == ERR_BUSY);
+			CHECK(written == 0);
+		} else {
+			CHECK(report.state != 8);
+			CHECK(report.owned_size == 0);
+			CHECK(copy.native_error == ERR_BUSY);
+			CHECK(written == 0);
+			if (mode == 1) {
+				CHECK(report.native_error == ERR_CANT_ACQUIRE_RESOURCE);
+				CHECK(report.native_code == -55);
+			}
+		}
+		registry->qualification_bridges[0] = nullptr;
+		RenderingDevice::singleton = previous;
+		device.is_main_instance = false;
+		device.driver = nullptr;
+		memdelete(ticket);
+		memdelete(bridge);
+		memdelete(registry);
+	}
+	static void body_source_scope() {
+		using namespace GDExtensionDeviceExit;
+		QualificationTicket ticket;
+		GDExtensionQualificationFactV1 body = {};
+		body.semantic_kind = 2;
+		body.command_slot = 3;
+		body.issue = 1;
+		body.completion = 2;
+		ticket.facts.push_back(body);
+		ticket.graphs.push_back({ {}, 0, 0, 0, 1, true, true });
+		RDD::NativeCallFact source;
+		GDExtensionQualificationFactV1 known = {};
+		known.issue = 1;
+		known.completion = 2;
+		ticket.natives.push_back({ source, 1, 0, 3, 1, false, false });
+		ticket.facts.push_back(known);
+		CHECK(ticket.body_returned_successfully());
+		GDExtensionQualificationFactV1 pending = {};
+		pending.completion = 1;
+		ticket.natives.push_back({ source, 2, 1, UINT32_MAX, 2, false, false });
+		ticket.facts.push_back(pending);
+		CHECK(ticket.body_returned_successfully());
+		ticket.natives[1].frame = 0;
+		ticket.natives[1].epoch = 1;
+		CHECK_FALSE(ticket.body_returned_successfully());
+		ticket.facts[2].issue = 1;
+		ticket.facts[2].completion = 2;
+		CHECK(ticket.body_returned_successfully());
+		ticket.graphs[0].returned = false;
+		CHECK_FALSE(ticket.body_returned_successfully());
+	}
+
 #ifdef THREADS_ENABLED
 	static void replay_under_contention(bool p_prepared = false) {
 		using namespace GDExtensionDeviceExit;
@@ -703,3 +968,19 @@ TEST_CASE("[Qualification] callback pending source stays pending and can become 
 TEST_CASE("[Qualification] mixed Failed and Unknown sources preserve unresolved Unknown") { TestQualificationTicketAccess::unknown_native_error(3); }
 
 TEST_CASE("[Qualification] continuation preflight reserves fresh hidden worker sources per graph frame") { TestQualificationTicketAccess::continuation_capacity(); }
+
+TEST_CASE("[Qualification][MultiReadback] Numeric and Method wire rejects malformed range and set partitions") {
+	TestQualificationTicketAccess::range_descriptors();
+}
+TEST_CASE("[Qualification][MultiReadback] every actual range and physical source must return before aggregate copy") {
+	TestQualificationTicketAccess::range_completion(0);
+}
+TEST_CASE("[Qualification][MultiReadback] later range failures preserve the first cause and prohibit aggregate copy") {
+	TestQualificationTicketAccess::range_completion(1);
+}
+TEST_CASE("[Qualification][MultiReadback] cancellation retains the original prefix through physical return") {
+	TestQualificationTicketAccess::range_completion(2);
+}
+TEST_CASE("[Qualification][MultiReadback] Body proof excludes pending sources from subsequent copy frames") {
+	TestQualificationTicketAccess::body_source_scope();
+}

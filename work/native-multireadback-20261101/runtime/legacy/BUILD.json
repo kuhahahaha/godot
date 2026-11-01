@@ -1,0 +1,54 @@
+{
+  "scope": "V1 Record312/Report184/kinds1-9 native neighbor controls; no ANGE acceptance",
+  "header_sha256": "971a1ab90541900c50cde6eb45f62e7f5fcc1a95cbcb9a8632fab792a9835289",
+  "builds": [
+    {
+      "case": "qrt_ticket",
+      "command": [
+        "clang++",
+        "-std=c++17",
+        "-dynamiclib",
+        "-arch",
+        "arm64",
+        "-mmacosx-version-min=11.0",
+        "-O2",
+        "-Wall",
+        "-Wextra",
+        "-Wno-unused-parameter",
+        "-Wno-deprecated-declarations",
+        "-I",
+        "/Users/macbookair/Documents/Work/godot_ANGE",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-multireadback-20261101/runtime/legacy/qrt_ticket_probe.cpp",
+        "-o",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-multireadback-20261101/runtime/legacy/qrt_ticket_probe.dylib"
+      ],
+      "rc": 0,
+      "source_sha256": "d61e6782b051198dac6f326a572d32e11f2081391c3ac5031bdff5af7d4d32f1",
+      "sha256": "28903bc86bbbf51393986345846daadff413ecca3763ee12012351253cbff6ed"
+    },
+    {
+      "case": "qrt_upload",
+      "command": [
+        "clang++",
+        "-std=c++17",
+        "-dynamiclib",
+        "-arch",
+        "arm64",
+        "-mmacosx-version-min=11.0",
+        "-O2",
+        "-Wall",
+        "-Wextra",
+        "-Wno-unused-parameter",
+        "-Wno-deprecated-declarations",
+        "-I",
+        "/Users/macbookair/Documents/Work/godot_ANGE",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-multireadback-20261101/runtime/legacy/qrt_upload_probe.cpp",
+        "-o",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-multireadback-20261101/runtime/legacy/qrt_upload_probe.dylib"
+      ],
+      "rc": 0,
+      "source_sha256": "3fe22b9e63dc3cff1af6d651cc897c9419c0ef5bcce44fd6e2a987a095c637ab",
+      "sha256": "f11485ac6d734ea6e30f82f31fc6c849b60d34704ada2785495b3a5f5de1ca34"
+    }
+  ]
+}

@@ -365,8 +365,12 @@ void Registry::qualification_service(uint64_t bridge_serial,uint64_t serial,uint
    if(error!=OK && error!=ERR_BUSY) {
     MutexLock lock(mutex);
     if(kind==3)for(auto *ticket:bridge->tickets)if(ticket && ticket->serial==serial && !ticket->physically_retired.load()) {
-     ticket->append_failed=true;ticket->report.native_error=error;qualification_ticket_publish(ticket,rd);
-    }
+				ticket->append_failed = true;
+				if (ticket->report.native_error == OK) {
+					ticket->report.native_error = error;
+				}
+				qualification_ticket_publish(ticket, rd);
+	}
    }
    if(error!=OK)break;
   }
@@ -525,6 +529,15 @@ static GDExtensionDeviceSessionResultV1 release(GDExtensionQualificationBridgeRe
 static GDExtensionDeviceSessionResultV1 prepare_uploads(GDExtensionQualificationBridgeRefV1 b,const GDExtensionQualificationUploadPrepareV1 *q,const GDExtensionQualificationUploadPlanV1 *p,uint32_t n,GDExtensionQualificationTicketRefV1 *t,GDExtensionQualificationReportV1 *o){return Registry::get_singleton().qualification_prepare_uploads(b,q,p,n,t,o);}
 static GDExtensionDeviceSessionResultV1 upload(GDExtensionQualificationBridgeRefV1 b,GDExtensionQualificationTicketRefV1 t,const GDExtensionQualificationUploadRequestV1 *q,const void *p,uint32_t n,GDExtensionQualificationUploadSegmentV1 *s,uint32_t c,GDExtensionQualificationUploadReportV1 *o){return Registry::get_singleton().qualification_upload(b,t,q,p,n,s,c,o);}
 static GDExtensionDeviceSessionResultV1 record_prepared(GDExtensionQualificationBridgeRefV1 b,GDExtensionQualificationTicketRefV1 t,const GDExtensionQualificationRecordV1 *q,GDExtensionQualificationReportV1 *o){return Registry::get_singleton().qualification_record_prepared(b,t,q,o);}
+static GDExtensionDeviceSessionResultV1 prepare_uploads_v2(GDExtensionQualificationBridgeRefV1 b, const GDExtensionQualificationUploadPrepareV1 *q, const GDExtensionQualificationUploadPlanV1 *p, uint32_t n, GDExtensionQualificationTicketRefV1 *t, GDExtensionQualificationReportV2 *o) {
+	return Registry::get_singleton().qualification_prepare_uploads_v2(b, q, p, n, t, o);
+}
+static GDExtensionDeviceSessionResultV1 record_prepared_v2(GDExtensionQualificationBridgeRefV1 b, GDExtensionQualificationTicketRefV1 t, const GDExtensionQualificationRecordV2 *q, GDExtensionQualificationReportV2 *o) {
+	return Registry::get_singleton().qualification_record_prepared_v2(b, t, q, o);
+}
+static GDExtensionDeviceSessionResultV1 observe_v2(GDExtensionQualificationBridgeRefV1 b, GDExtensionQualificationTicketRefV1 t, const GDExtensionQualificationBudgetV1 *q, GDExtensionQualificationReportV2 *o) {
+	return Registry::get_singleton().qualification_observe_v2(b, t, q, o);
+}
 static GDExtensionDeviceSessionResultV1 cancel(GDExtensionQualificationBridgeRefV1 b,GDExtensionQualificationTicketRefV1 t){return Registry::get_singleton().qualification_cancel(b,t);}
 static GDExtensionDeviceSessionResultV1 rt_configure(GDExtensionQualificationBridgeRefV1 b,const GDExtensionQualificationRtConfigV1 *c){return Registry::get_singleton().qualification_rt_configure(b,c);}
 static GDExtensionDeviceSessionResultV1 rt_reserve(GDExtensionQualificationBridgeRefV1 b,const GDExtensionQualificationRtRequestV1 *h,const void *q,const void *p,GDExtensionQualificationRtRefV1 *r){return Registry::get_singleton().qualification_rt_reserve(b,h,q,p,r);}
@@ -544,6 +557,9 @@ void register_qualification_interfaces() {
  GDExtension::register_interface_function("device_session_qualification_copy_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&copy));
  GDExtension::register_interface_function("device_session_qualification_release_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&release));
  GDExtension::register_interface_function("device_session_qualification_prepare_uploads_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&prepare_uploads));
+ GDExtension::register_interface_function("device_session_qualification_prepare_uploads_v2", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&prepare_uploads_v2));
+ GDExtension::register_interface_function("device_session_qualification_record_prepared_v2", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&record_prepared_v2));
+ GDExtension::register_interface_function("device_session_qualification_observe_v2", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&observe_v2));
  GDExtension::register_interface_function("device_session_qualification_upload_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&upload));
  GDExtension::register_interface_function("device_session_qualification_record_prepared_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&record_prepared));
  GDExtension::register_interface_function("device_session_qualification_cancel_v1",reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&cancel));
