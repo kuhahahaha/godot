@@ -53,6 +53,9 @@ bool abi(const GDExtensionDeviceExitAbi &a) {
 bool source(const GDExtensionQualificationSourceV1 &s) {
 	return s.session_serial && s.generation;
 }
+bool same_source(const GDExtensionQualificationSourceV1 &a, const GDExtensionQualificationSourceV1 &b) {
+	return a.session_serial == b.session_serial && a.generation == b.generation && memcmp(a.digest, b.digest, sizeof(a.digest)) == 0;
+}
 struct RdUnlock {
 	Mutex *mutex = nullptr;
 	~RdUnlock() {
@@ -141,7 +144,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_texture_create(GDExtens
 			return result(ERR_INVALID_DATA, 17);
 		}
 		for (auto *old : b->textures) {
-			if (old && old->origin.create_attempt == q->create_attempt && old->source.session_serial == q->source.session_serial && old->source.generation == q->source.generation) {
+			if (old && old->origin.create_attempt == q->create_attempt && same_source(old->source, q->source)) {
 				if (memcmp(&old->origin, q, sizeof(*q))) {
 					return result(ERR_INVALID_DATA, 16);
 				}
@@ -235,7 +238,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_sampler_create(GDExtens
 			return result(ERR_INVALID_DATA, 17);
 		}
 		for (auto *old : b->samplers) {
-			if (old && old->origin.create_attempt == q->create_attempt && old->source.session_serial == q->source.session_serial && old->source.generation == q->source.generation) {
+			if (old && old->origin.create_attempt == q->create_attempt && same_source(old->source, q->source)) {
 				if (memcmp(&old->origin, q, sizeof(*q))) {
 					return result(ERR_INVALID_DATA, 16);
 				}

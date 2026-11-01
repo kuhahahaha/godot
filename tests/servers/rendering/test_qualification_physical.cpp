@@ -53,6 +53,159 @@ TEST_FORCE_LINK(test_qualification_physical)
 extern thread_local void (*test_uniform_set_after_rid_free)(RenderingDevice *);
 class TestQualificationPhysicalAccess {
 public:
+	static void complete_typed_source_key(RenderingDevice &device, uint32_t lifecycle, bool new_attempt) {
+		using namespace GDExtensionDeviceExit;
+		// Test enrollment and the creating flag are controlled CPU inputs. All
+		// create/retire/release entrypoints and actual RID owners are original.
+		auto *registry = memnew(Registry);
+		auto *previous = RenderingDevice::singleton;
+		RenderingDevice::singleton = &device;
+		device.is_main_instance = true;
+		device.render_thread_id = Thread::get_caller_id();
+		device.qualification_retiring = false;
+		registry->instance = 71;
+		auto &record = registry->records[0];
+		record.owner_thread = Thread::get_caller_id();
+		record.snapshot.library_generation = 1;
+		record.guard_enrollment = GuardEnrollment::QUALIFIED;
+		record.private_refs = 1;
+		auto &native = registry->device_records[0];
+		native.object = &device;
+		native.live = true;
+		native.epoch = 1;
+		native.execution_thread = Thread::get_caller_id();
+		native.refs = 1;
+		struct Holder : HolderRetirement {
+			Holder() : HolderRetirement(RecordRef{}) {}
+			~Holder() = default;
+		} holder;
+		holder.generation = 1;
+		holder.qualification_children = 1;
+		auto *bridge = memnew(Registry::QualificationBridge);
+		bridge->serial = 11;
+		bridge->epoch = 1;
+		bridge->holder = &holder;
+		registry->qualification_bridges[0] = bridge;
+		const GDExtensionQualificationBridgeRefV1 ref{ 71, 11 };
+		const auto retire = [&](QualificationResource *child) {
+			if (!child || child->acknowledged) {
+				return;
+			}
+			child->creating = false; // Restore only the fixture's controlled flag.
+			GDExtensionQualificationResourceRetireReportV1 report = {};
+			const auto request = child->retiring ? child->retirement : GDExtensionQualificationResourceRetireV1{ { 1, 16, 0 }, { 71, child->serial }, child->rid, child->object_serial, 1 };
+			CHECK(registry->qualification_resource_retire(ref, &request, &report).native_error == OK);
+			device._free_pending_resources(0);
+			registry->qualification_retire_step(bridge, &device, child->serial, 4);
+			CHECK(child->report.state == 1);
+			CHECK(registry->qualification_resource_retire_release(ref, { 71, child->serial }, child->report.revision).native_error == OK);
+		};
+		struct Cleanup {
+			std::function<void()> call;
+			~Cleanup() { call(); }
+		} cleanup{ [&] {
+			for (auto *child : bridge->textures) {
+				retire(child);
+			}
+			for (auto *child : bridge->samplers) {
+				retire(child);
+			}
+			CHECK(registry->qualification_close(ref).native_error == OK);
+			CHECK(holder.qualification_children == 0);
+			RenderingDevice::singleton = previous;
+			device.is_main_instance = false;
+			memdelete(registry);
+		} };
+		GDExtensionQualificationTextureCreateV1 texture = {};
+		texture.abi = { 1, 16, 0 };
+		texture.source = { 7, 1, { 9 } };
+		texture.library_generation = texture.create_attempt = 1;
+		texture.width = texture.height = 2;
+		texture.depth = 1;
+		texture.texture_type = 2;
+		texture.format = texture.usage = 1;
+		GDExtensionQualificationSamplerCreateV1 sampler = {};
+		sampler.abi = { 1, 16, 0 };
+		sampler.source = texture.source;
+		sampler.library_generation = sampler.create_attempt = 1;
+		sampler.repeat_u = sampler.repeat_v = sampler.repeat_w = 2;
+		GDExtensionQualificationResourceBackingV1 first_texture = {}, first_sampler = {}, replay = {};
+		REQUIRE(registry->qualification_texture_create(ref, &texture, &first_texture).native_error == OK);
+		REQUIRE(registry->qualification_sampler_create(ref, &sampler, &first_sampler).native_error == OK);
+		auto *old_texture = bridge->textures[0];
+		auto *old_sampler = bridge->samplers[0];
+		REQUIRE(old_texture);
+		REQUIRE(old_sampler);
+		const auto serial_before = registry->qualification_serials.next;
+		// Same full source/attempt is an exact replay, never another child.
+		CHECK(registry->qualification_texture_create(ref, &texture, &replay).native_error == OK);
+		CHECK(replay.resource.handle_serial == first_texture.resource.handle_serial);
+		CHECK(registry->qualification_sampler_create(ref, &sampler, &replay).native_error == OK);
+		CHECK(replay.resource.handle_serial == first_sampler.resource.handle_serial);
+		CHECK(registry->qualification_serials.next == serial_before);
+		auto changed_texture = texture;
+		changed_texture.width = 3;
+		CHECK(registry->qualification_texture_create(ref, &changed_texture, &replay).native_error == ERR_INVALID_DATA);
+		auto changed_sampler = sampler;
+		changed_sampler.mag_filter = 1;
+		CHECK(registry->qualification_sampler_create(ref, &changed_sampler, &replay).native_error == ERR_INVALID_DATA);
+		CHECK(registry->qualification_serials.next == serial_before);
+		if (lifecycle == 1) {
+			old_texture->creating = old_sampler->creating = true;
+		} else if (lifecycle == 2) {
+			for (QualificationResource *child : { static_cast<QualificationResource *>(old_texture), static_cast<QualificationResource *>(old_sampler) }) {
+				const GDExtensionQualificationResourceRetireV1 q{ { 1, 16, 0 }, { 71, child->serial }, child->rid, child->object_serial, 1 };
+				GDExtensionQualificationResourceRetireReportV1 report = {};
+				REQUIRE(registry->qualification_resource_retire(ref, &q, &report).native_error == OK);
+			}
+		} else if (lifecycle == 3) {
+			retire(old_texture);
+			retire(old_sampler);
+		}
+		if (lifecycle) {
+			const auto tr = registry->qualification_texture_create(ref, &texture, &replay);
+			const auto sr = registry->qualification_sampler_create(ref, &sampler, &replay);
+			const Error expected = lifecycle == 3 ? ERR_DOES_NOT_EXIST : ERR_BUSY;
+			CHECK(tr.native_error == expected);
+			CHECK(sr.native_error == expected);
+			CHECK(tr.reason == (lifecycle == 1 ? 19 : lifecycle == 3 ? 17
+																	 : 16));
+			CHECK(sr.reason == tr.reason);
+		}
+		// A changed origin is still invalid for this exact key in every state.
+		const auto before_reject = registry->qualification_serials.next;
+		const auto refs_before_reject = record.private_refs;
+		const auto children_before_reject = bridge->children;
+		const auto tr_changed = registry->qualification_texture_create(ref, &changed_texture, &replay);
+		CHECK(tr_changed.native_error == ERR_INVALID_DATA);
+		CHECK(tr_changed.reason == 16);
+		CHECK(replay.resource.handle_serial == 0);
+		const auto sr_changed = registry->qualification_sampler_create(ref, &changed_sampler, &replay);
+		CHECK(sr_changed.native_error == ERR_INVALID_DATA);
+		CHECK(sr_changed.reason == 16);
+		CHECK(replay.resource.handle_serial == 0);
+		CHECK(registry->qualification_serials.next == before_reject);
+		CHECK(record.private_refs == refs_before_reject);
+		CHECK(bridge->children == children_before_reject);
+		auto second_texture = texture;
+		auto second_sampler = sampler;
+		if (new_attempt) {
+			// A genuinely different physical creation attempt can reuse the same
+			// digest. The old acknowledged attempt remains closed above.
+			second_texture.create_attempt = second_sampler.create_attempt = 2;
+		} else {
+			second_texture.source.digest[31] = second_sampler.source.digest[31] = 10;
+		}
+		GDExtensionQualificationResourceBackingV1 next_texture = {}, next_sampler = {};
+		REQUIRE(registry->qualification_texture_create(ref, &second_texture, &next_texture).native_error == OK);
+		REQUIRE(registry->qualification_sampler_create(ref, &second_sampler, &next_sampler).native_error == OK);
+		CHECK(next_texture.resource.handle_serial != first_texture.resource.handle_serial);
+		CHECK(next_sampler.resource.handle_serial != first_sampler.resource.handle_serial);
+		CHECK(memcmp(&next_texture.source, &second_texture.source, sizeof(next_texture.source)) == 0);
+		CHECK(memcmp(&next_sampler.source, &second_sampler.source, sizeof(next_sampler.source)) == 0);
+		CHECK(old_texture->source.digest[0] == 9);
+		CHECK(old_sampler->source.digest[0] == 9);
+	}
 	static void deferred_storage_origin() {
 		using namespace GDExtensionDeviceExit;
 		// Controlled enrollment only. The original Registry entrypoint, origin
@@ -2912,4 +3065,20 @@ TEST_CASE("[Qualification][Typed] definitively failed descriptor creation rolls 
 
 TEST_CASE("[Qualification][StorageDeferred] busy before allocation is distinct from an existing creating prefix") {
 	TestQualificationPhysicalAccess::deferred_storage_origin();
+}
+
+TEST_CASE("[Qualification][TypedSourceKey] full source and physical attempt remain distinct across original lifecycle states") {
+	for (uint32_t state = 0; state < 4; ++state) {
+		for (bool new_attempt : { false, true }) {
+			INFO("Controlled previous resource state: ", state, ", same source/new attempt: ", new_attempt);
+			RenderingDevice device;
+			TestQualificationPhysical::Driver driver;
+			TestQualificationPhysicalAccess::attach(device, driver);
+			struct Detach {
+				RenderingDevice &device;
+				~Detach() { TestQualificationPhysicalAccess::detach(device); }
+			} detach{ device };
+			TestQualificationPhysicalAccess::complete_typed_source_key(device, state, new_attempt);
+		}
+	}
 }
