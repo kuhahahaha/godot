@@ -88,7 +88,7 @@ void CPUParticles2D::set_amount(int p_amount) {
 }
 
 void CPUParticles2D::set_lifetime(double p_lifetime) {
-	ERR_FAIL_COND_MSG(p_lifetime <= 0, "Particles lifetime must be greater than 0.");
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_lifetime) || p_lifetime <= 0, "Particles lifetime must be finite and greater than 0.");
 	lifetime = p_lifetime;
 }
 
@@ -97,18 +97,22 @@ void CPUParticles2D::set_one_shot(bool p_one_shot) {
 }
 
 void CPUParticles2D::set_pre_process_time(double p_time) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_time) || !Math::is_finite((float)p_time), "Particles pre-process time must be finite and representable.");
 	pre_process_time = p_time;
 }
 
 void CPUParticles2D::set_explosiveness_ratio(real_t p_ratio) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_ratio), "Particles explosiveness ratio must be finite.");
 	explosiveness_ratio = p_ratio;
 }
 
 void CPUParticles2D::set_randomness_ratio(real_t p_ratio) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_ratio), "Particles randomness ratio must be finite.");
 	randomness_ratio = p_ratio;
 }
 
 void CPUParticles2D::set_lifetime_randomness(double p_random) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_random), "Particles lifetime randomness must be finite.");
 	lifetime_randomness = p_random;
 }
 
@@ -132,6 +136,7 @@ void CPUParticles2D::set_use_local_coordinates(bool p_enable) {
 }
 
 void CPUParticles2D::set_speed_scale(double p_scale) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_scale), "Particles speed scale must be finite.");
 	speed_scale = p_scale;
 }
 
@@ -176,6 +181,7 @@ double CPUParticles2D::get_speed_scale() const {
 }
 
 void CPUParticles2D::set_draw_order(DrawOrder p_order) {
+	ERR_FAIL_INDEX(int(p_order), DRAW_ORDER_LIFETIME + 1);
 	draw_order = p_order;
 }
 
@@ -286,6 +292,7 @@ Ref<Texture2D> CPUParticles2D::get_texture() const {
 }
 
 void CPUParticles2D::set_fixed_fps(int p_count) {
+	ERR_FAIL_COND_MSG(p_count < 0, "Particles fixed FPS must be non-negative.");
 	fixed_fps = p_count;
 }
 
@@ -347,6 +354,7 @@ Vector2 CPUParticles2D::get_direction() const {
 }
 
 void CPUParticles2D::set_spread(real_t p_spread) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_spread), "Particles spread must be finite.");
 	spread = p_spread;
 }
 
@@ -356,6 +364,7 @@ real_t CPUParticles2D::get_spread() const {
 
 void CPUParticles2D::set_param_min(Parameter p_param, real_t p_value) {
 	ERR_FAIL_INDEX(p_param, PARAM_MAX);
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_value), "Particle parameter minimum must be finite.");
 
 	parameters_min[p_param] = p_value;
 	if (parameters_min[p_param] > parameters_max[p_param]) {
@@ -371,6 +380,7 @@ real_t CPUParticles2D::get_param_min(Parameter p_param) const {
 
 void CPUParticles2D::set_param_max(Parameter p_param, real_t p_value) {
 	ERR_FAIL_INDEX(p_param, PARAM_MAX);
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_value), "Particle parameter maximum must be finite.");
 
 	parameters_max[p_param] = p_value;
 	if (parameters_min[p_param] > parameters_max[p_param]) {
@@ -633,6 +643,7 @@ uint32_t CPUParticles2D::get_seed() const {
 }
 
 void CPUParticles2D::request_particles_process(real_t p_request_process_time, real_t p_request_process_time_residual) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_request_process_time) || !Math::is_finite(p_request_process_time_residual), "Particle process times must be finite.");
 	_request_process_time = p_request_process_time;
 	_request_process_time_residual = p_request_process_time_residual;
 	_update_internal();
@@ -712,11 +723,30 @@ void CPUParticles2D::_update_internal() {
 		return;
 	}
 
+	double delta = get_process_delta_time();
+	ERR_FAIL_COND_MSG(!Math::is_finite(delta), "Particle process delta must be finite.");
+	const bool inactive = !active && !emitting && _request_process_time <= 0.0 && _request_process_time_residual <= 0.0;
+	float request_time = time == 0 ? pre_process_time : 0;
+	request_time = request_time > _request_process_time ? request_time : _request_process_time;
+	request_time = request_time > _request_process_time_residual ? request_time : _request_process_time_residual;
+	const real_t request_frame_time = fixed_fps > 0 ? 1.0 / fixed_fps : 1.0 / 30.0;
+	if (!inactive) {
+		ERR_FAIL_COND_MSG(!Math::is_finite(request_time), "Particle process time must be finite and representable.");
+		if (request_time > 0.0) {
+			const float frame_step = request_frame_time;
+			auto can_process_time = [frame_step](float p_time) {
+				return p_time <= 0.0f || (p_time - frame_step) < p_time;
+			};
+			ERR_FAIL_COND_MSG((time == 0 && !can_process_time(pre_process_time)) || (_request_process_time > 0.0f && !can_process_time(_request_process_time)) ||
+							(_request_process_time_residual > 0.0f && !can_process_time(_request_process_time_residual)),
+					"Particle process time is too large to make progress.");
+		}
+	}
+
 	// Change update mode?
 	_refresh_interpolation_state();
 
-	double delta = get_process_delta_time();
-	if (!active && !emitting) {
+	if (inactive) {
 		set_process_internal(false);
 		_set_do_redraw(false);
 
@@ -729,42 +759,47 @@ void CPUParticles2D::_update_internal() {
 
 	_set_do_redraw(true);
 	{
-		float todo = time == 0 ? pre_process_time : 0;
-		todo = todo > _request_process_time ? todo : _request_process_time;
-		todo = todo > _request_process_time_residual ? todo : _request_process_time_residual;
-
+		float todo = request_time;
 		if (todo > 0.0) {
-			real_t frame_time;
-			if (fixed_fps > 0) {
-				frame_time = 1.0 / fixed_fps;
-			} else {
-				frame_time = 1.0 / 30.0;
-			}
-
-			float tmp_scale = speed_scale;
+			const real_t frame_time = request_frame_time;
+			double tmp_scale = speed_scale;
 			// We need this otherwise the speed scale of the particle system influences the `todo`.
 			speed_scale = 1.0;
 			if (time == 0) {
 				todo = pre_process_time;
 				while (todo > 0.0) {
+					const float previous_todo = todo;
 					_particles_process(frame_time > todo ? todo : frame_time);
 					todo -= frame_time;
+					if (todo >= previous_todo) {
+						break;
+					}
 				}
 			}
 			if (_request_process_time > 0.0) {
 				todo = _request_process_time;
 				emitting = true;
+				active = true;
+				set_process_internal(true);
 				while (todo > 0.0) {
+					const float previous_todo = todo;
 					_particles_process(frame_time > todo ? todo : frame_time);
 					todo -= frame_time;
+					if (todo >= previous_todo) {
+						break;
+					}
 				}
 			}
 			if (_request_process_time_residual > 0.0) {
 				emitting = false;
 				todo = _request_process_time_residual;
 				while (todo > 0.0) {
+					const float previous_todo = todo;
 					_particles_process(frame_time > todo ? todo : frame_time);
 					todo -= frame_time;
+					if (todo >= previous_todo) {
+						break;
+					}
 				}
 			}
 			speed_scale = tmp_scale;
@@ -914,8 +949,8 @@ void CPUParticles2D::_particles_process(double p_delta) {
 			}
 
 			real_t tex_anim_offset = 1.0;
-			if (curve_parameters[PARAM_ANGLE].is_valid()) {
-				tex_anim_offset = curve_parameters[PARAM_ANGLE]->sample(tv);
+			if (curve_parameters[PARAM_ANIM_OFFSET].is_valid()) {
+				tex_anim_offset = curve_parameters[PARAM_ANIM_OFFSET]->sample(tv);
 			}
 
 			p.seed = seed + uint32_t(i) + i + cycle;

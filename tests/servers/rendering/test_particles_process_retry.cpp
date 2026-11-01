@@ -2,8 +2,8 @@
 /*  test_particles_process_retry.cpp                                      */
 /**************************************************************************/
 
-#include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/renderer_rd/renderer_compositor_rd.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/rendering_device.h"
 #include "tests/test_macros.h"
 #ifdef VULKAN_ENABLED
@@ -21,8 +21,11 @@ public:
 	static void run_rd_upload_retry(RenderingDevice &p_rd, ParticlesStorage &p_storage, RID p_particle_rid, RID p_sub_emitter_rid) {
 		ParticlesStorage::Particles *particles = p_storage.particles_owner.get_or_null(p_particle_rid);
 		ParticlesStorage::Particles *sub_emitter = p_storage.particles_owner.get_or_null(p_sub_emitter_rid);
-		REQUIRE(particles != nullptr);
-		REQUIRE(sub_emitter != nullptr);
+		CHECK(particles != nullptr);
+		CHECK(sub_emitter != nullptr);
+		if (particles == nullptr || sub_emitter == nullptr) {
+			return;
+		}
 		particles->amount = 4;
 		particles->particle_buffer = p_rd.storage_buffer_create(sizeof(ParticlesStorage::ParticleData) * particles->amount);
 		particles->frame_params_buffer = p_rd.storage_buffer_create(sizeof(ParticlesStorage::ParticlesFrameParams));
@@ -48,8 +51,11 @@ public:
 
 		sub_emitter->amount = 4;
 		p_storage._particles_allocate_emission_buffer(sub_emitter);
-		REQUIRE(sub_emitter->emission_buffer != nullptr);
-		REQUIRE(sub_emitter->emission_storage_buffer.is_valid());
+		CHECK(sub_emitter->emission_buffer != nullptr);
+		CHECK(sub_emitter->emission_storage_buffer.is_valid());
+		if (sub_emitter->emission_buffer == nullptr || !sub_emitter->emission_storage_buffer.is_valid()) {
+			return;
+		}
 		sub_emitter->emitting = true;
 		sub_emitter->clear = false;
 		sub_emitter->inactive = true;
@@ -120,14 +126,31 @@ public:
 			return;
 		}
 		ParticlesStorage *storage = static_cast<ParticlesStorage *>(compositor->get_particles_storage());
-		REQUIRE(storage != nullptr);
+		CHECK(storage != nullptr);
+		if (storage == nullptr) {
+			return;
+		}
 		RID particle = storage->particles_allocate();
 		storage->particles_initialize(particle);
 		RID sub_emitter = storage->particles_allocate();
 		storage->particles_initialize(sub_emitter);
+		struct RetryCleanup {
+			RenderingDevice &rd;
+			ParticlesStorage &storage;
+			RID particle;
+			RID sub_emitter;
+
+			~RetryCleanup() {
+				TestParticlesProcessRetryAccess::arm_fault(rd, RID(), 0);
+				if (particle.is_valid()) {
+					storage.particles_free(particle);
+				}
+				if (sub_emitter.is_valid()) {
+					storage.particles_free(sub_emitter);
+				}
+			}
+		} cleanup = { *rd, *storage, particle, sub_emitter };
 		run_rd_upload_retry(*rd, *storage, particle, sub_emitter);
-		storage->particles_free(particle);
-		storage->particles_free(sub_emitter);
 #else
 		FAIL("Vulkan support is required for the production upload retry test.");
 #endif

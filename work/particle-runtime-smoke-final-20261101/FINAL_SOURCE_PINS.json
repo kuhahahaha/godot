@@ -1,0 +1,35 @@
+{
+  "scope": "particle node setters, conversion/resource notifications, CPU manual admission/scheduling; no new GPU retry or ANGE acceptance",
+  "source_sha256": {
+    "scene/2d/cpu_particles_2d.cpp": "91c6392fe74004b5a483db403e6678a29b408bc2ec333d066444a44d1a9c3a10",
+    "scene/2d/gpu_particles_2d.cpp": "30d7ce5ed67e1bac726f67b962f412a14b6bd7cc52546cf352cb82d5e5be86c4",
+    "scene/3d/cpu_particles_3d.cpp": "9ff4c2c352838dd5b5b735138cb8aca7272ebc9edfc85eb13aa606b38315514c",
+    "scene/3d/gpu_particles_3d.cpp": "0a0d470003be985590a9cab2e3a787a2d2acf81f9734736eb14984922a32fea6",
+    "tests/scene/test_gpu_particles.cpp": "b13497f6baa050a698e0202bc2850bd41c2de746396853c93d6fec5a9908e0a1",
+    "tests/servers/rendering/test_particles_process_retry.cpp": "39b889b6c12d35f96d8bc76709287b0fd827751ce67b08bbbded7f978a8e247d",
+    "tests/scene/fixtures/cpu_particle_manual_request/run.py": "0de4799acbb1eab064b5b9dfaa25c4404fc450675f6cf68c0e36a577c5fa7353",
+    "tests/scene/fixtures/cpu_particle_animation_offset/run.py": "e900672c10e633ac373d22f5a75b05343892d134db3b8b4cf522e0a857044323",
+    "tests/scene/fixtures/particle_emitter_velocity/run.py": "fa73df5ef527820cd340ab98ca8ab48e0745dc4c118f97686e0d1ac552975b6a",
+    "tests/scene/fixtures/particle_emitter_velocity_2d/run.py": "ff635b51a7ecd74e402b4bfd14d8fe794c58e48f1b45d16cc67944222ce7be29"
+  },
+  "cpu_native_host": {
+    "binary": "/Users/macbookair/Documents/Work/godot_ANGE/work/particle-runtime-smoke-final-20261101/bin/godot-cpu-manual.arm64",
+    "sha256": "ec55001baf673a0d9ae29b68ec5fe44d21098e5da8e7a5e183bc515add631e4d",
+    "controlled_build": "/Users/macbookair/Documents/Work/godot_ANGE/work/particle-runtime-smoke-final-20261101/bin/godot-cpu-manual.arm64.controlled_build.json",
+    "controlled_build_sha256": "1387afca42e958e70b169bf7bf54fdf003abb11f6fd73cb789317298b867244a",
+    "source_drift": [],
+    "source_window": "/Users/macbookair/Documents/Work/godot_ANGE/work/particle-runtime-smoke-final-20261101/manual-build-source-before.json",
+    "build_result": "/Users/macbookair/Documents/Work/godot_ANGE/work/particle-runtime-smoke-final-20261101/manual-build-result.json"
+  },
+  "cpu_native_results": [
+    "manual-native-green.json",
+    "manual-lifecycle.json"
+  ],
+  "node_test_host": "../physics-wrapper-finish-recovery-20261101/FORMATTED_PINNED_HOST.json",
+  "node_test_cases": 14,
+  "node_test_assertions": 75,
+  "source_fixtures": "final-source-fixtures.json",
+  "source_fixture_count": 14,
+  "all_source_fixtures_rc_zero": true,
+  "independent_review": "native-independent-review/CPU_MANUAL_REVIEW.md"
+}

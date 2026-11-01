@@ -1,0 +1,115 @@
+{
+  "status": "independent-scoped-review-no-blocking-finding",
+  "scope": "CPU manual emit/residual scheduling and preflight ordering; ordinary headless CPU lifecycle only",
+  "source_files": {
+    "scene/2d/cpu_particles_2d.cpp": {
+      "sha256": "91c6392fe74004b5a483db403e6678a29b408bc2ec333d066444a44d1a9c3a10",
+      "matches_authored_candidate": true,
+      "matches_engine_source_window": true
+    },
+    "scene/3d/cpu_particles_3d.cpp": {
+      "sha256": "9ff4c2c352838dd5b5b735138cb8aca7272ebc9edfc85eb13aa606b38315514c",
+      "matches_authored_candidate": true,
+      "matches_engine_source_window": true
+    },
+    "tests/scene/fixtures/cpu_particle_manual_request/run.py": {
+      "sha256": "0de4799acbb1eab064b5b9dfaa25c4404fc450675f6cf68c0e36a577c5fa7353",
+      "matches_authored_candidate": true,
+      "matches_engine_source_window": null
+    }
+  },
+  "manual_host": {
+    "binary": "/Users/macbookair/Documents/Work/godot_ANGE/work/particle-runtime-smoke-final-20261101/bin/godot-cpu-manual.arm64",
+    "sha256": "ec55001baf673a0d9ae29b68ec5fe44d21098e5da8e7a5e183bc515add631e4d",
+    "controlled_build": "/Users/macbookair/Documents/Work/godot_ANGE/work/particle-runtime-smoke-final-20261101/bin/godot-cpu-manual.arm64.controlled_build.json",
+    "controlled_build_sha256": "1387afca42e958e70b169bf7bf54fdf003abb11f6fd73cb789317298b867244a",
+    "source_drift": [],
+    "source_window": "/Users/macbookair/Documents/Work/godot_ANGE/work/particle-runtime-smoke-final-20261101/manual-build-source-before.json",
+    "build_result": "/Users/macbookair/Documents/Work/godot_ANGE/work/particle-runtime-smoke-final-20261101/manual-build-result.json"
+  },
+  "native_script_sha256": "6dc6d1ac268a67db5a7dd61ca574389a60656c08adf2e561a13c0196212f886e",
+  "native_lifecycle_receipt_sha256": "4961feeca8d77d7c76837bb937e770b62347cfb0c4fffe323c9c2e9cfe067140",
+  "native_lifecycle_log_sha256": "99539c22decdca97d48b832f7efe592f0da584e32df51f9d99042857c577194c",
+  "native_rows": [
+    {
+      "dimension": 2,
+      "emitting": false,
+      "finished": 1,
+      "frames": 54,
+      "one_shot": false,
+      "processing": false
+    },
+    {
+      "dimension": 2,
+      "emitting": false,
+      "finished": 1,
+      "frames": 102,
+      "one_shot": true,
+      "processing": false
+    },
+    {
+      "dimension": 2,
+      "rejected_after": {
+        "draw": 1,
+        "emitting": true,
+        "physics_processing": false,
+        "processing": true
+      },
+      "rejected_before": {
+        "draw": 1,
+        "emitting": true,
+        "physics_processing": false,
+        "processing": true
+      }
+    },
+    {
+      "dimension": 3,
+      "emitting": false,
+      "finished": 1,
+      "frames": 54,
+      "one_shot": false,
+      "processing": false
+    },
+    {
+      "dimension": 3,
+      "emitting": false,
+      "finished": 1,
+      "frames": 102,
+      "one_shot": true,
+      "processing": false
+    },
+    {
+      "dimension": 3,
+      "rejected_after": {
+        "draw": 1,
+        "emitting": true,
+        "physics_processing": false,
+        "processing": true
+      },
+      "rejected_before": {
+        "draw": 1,
+        "emitting": true,
+        "physics_processing": false,
+        "processing": true
+      }
+    }
+  ],
+  "native_expected_progress_errors": 2,
+  "native_returncode": 0,
+  "independent_extracted_control_check": {
+    "command": [
+      "python3",
+      "tests/scene/fixtures/cpu_particle_manual_request/run.py"
+    ],
+    "returncode": 0,
+    "variants": [
+      "2d float",
+      "2d double",
+      "3d float",
+      "3d double"
+    ],
+    "assertions_each": "22/22",
+    "layer": "production _update_internal body with test-only simulation recording; not actual full particle simulation or double-precision engine build"
+  },
+  "mutations": "No production or test source modified; no scons; no repeated native execution."
+}

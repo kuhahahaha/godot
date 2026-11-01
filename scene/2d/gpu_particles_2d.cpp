@@ -80,7 +80,7 @@ void GPUParticles2D::set_amount(int p_amount) {
 }
 
 void GPUParticles2D::set_lifetime(double p_lifetime) {
-	ERR_FAIL_COND_MSG(p_lifetime <= 0, "Particles lifetime must be greater than 0.");
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_lifetime) || p_lifetime <= 0, "Particles lifetime must be finite and greater than 0.");
 	lifetime = p_lifetime;
 	RS::get_singleton()->particles_set_lifetime(particles, lifetime);
 }
@@ -102,6 +102,7 @@ void GPUParticles2D::set_one_shot(bool p_enable) {
 }
 
 void GPUParticles2D::set_pre_process_time(double p_time) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_time), "Particles pre-process time must be finite.");
 	pre_process_time = p_time;
 	RS::get_singleton()->particles_set_pre_process_time(particles, pre_process_time);
 }
@@ -192,7 +193,8 @@ void GPUParticles2D::set_trail_enabled(bool p_enabled) {
 }
 
 void GPUParticles2D::set_trail_lifetime(double p_seconds) {
-	ERR_FAIL_COND(p_seconds < 0.01 - CMP_EPSILON);
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_seconds) || p_seconds < 0.01 - CMP_EPSILON, "Particle trail lifetime must be finite and at least 0.01 seconds.");
+	p_seconds = MIN(10.0, p_seconds);
 	trail_lifetime = p_seconds;
 	RS::get_singleton()->particles_set_trails(particles, trail_enabled, trail_lifetime);
 	queue_redraw();
@@ -215,6 +217,7 @@ void GPUParticles2D::set_trail_section_subdivisions(int p_subdivisions) {
 }
 
 void GPUParticles2D::set_interp_to_end(float p_interp) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_interp), "Particles interpolation factor must be finite.");
 	interp_to_end_factor = CLAMP(p_interp, 0.0, 1.0);
 	RS::get_singleton()->particles_set_interp_to_end(particles, interp_to_end_factor);
 }
@@ -248,6 +251,7 @@ void GPUParticles2D::_update_collision_size() {
 }
 
 void GPUParticles2D::set_collision_base_size(real_t p_size) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_size), "Particles collision base size must be finite.");
 	collision_base_size = p_size;
 	_update_collision_size();
 }
@@ -257,6 +261,7 @@ real_t GPUParticles2D::get_collision_base_size() const {
 }
 
 void GPUParticles2D::set_speed_scale(double p_scale) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_scale), "Particles speed scale must be finite.");
 	speed_scale = p_scale;
 	RS::get_singleton()->particles_set_speed_scale(particles, p_scale);
 }
@@ -313,6 +318,7 @@ double GPUParticles2D::get_speed_scale() const {
 }
 
 void GPUParticles2D::set_draw_order(DrawOrder p_order) {
+	ERR_FAIL_INDEX(int(p_order), DRAW_ORDER_REVERSE_LIFETIME + 1);
 	draw_order = p_order;
 	RS::get_singleton()->particles_set_draw_order(particles, RSE::ParticlesDrawOrder(p_order));
 }
@@ -322,6 +328,7 @@ GPUParticles2D::DrawOrder GPUParticles2D::get_draw_order() const {
 }
 
 void GPUParticles2D::set_fixed_fps(int p_count) {
+	ERR_FAIL_COND_MSG(p_count < 0, "Particles fixed FPS must be non-negative.");
 	fixed_fps = p_count;
 	RS::get_singleton()->particles_set_fixed_fps(particles, p_count);
 }
@@ -374,6 +381,7 @@ uint32_t GPUParticles2D::get_seed() const {
 }
 
 void GPUParticles2D::request_particles_process(real_t p_requested_process_time, real_t p_request_process_time_residual) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_requested_process_time) || !Math::is_finite(p_request_process_time_residual), "Particle process times must be finite.");
 	RS::get_singleton()->particles_request_process_time(particles, p_requested_process_time, p_request_process_time_residual);
 	if (p_requested_process_time > 0.0) {
 		emitting = true;
@@ -472,6 +480,7 @@ void GPUParticles2D::_attach_sub_emitter() {
 }
 
 void GPUParticles2D::_texture_changed() {
+	_update_collision_size();
 	// Changes to the texture need to trigger an update to make
 	// the editor redraw the sprite with the updated texture.
 	if (texture.is_valid()) {
@@ -810,8 +819,8 @@ void GPUParticles2D::_notification(int p_what) {
 		case NOTIFICATION_INTERNAL_PHYSICS_PROCESS: {
 			// Update velocity in physics process, so that velocity calculations remain correct
 			// if the physics tick rate is lower than the rendered framerate (especially without physics interpolation).
-			const Vector3 velocity = Vector3((get_global_position() - previous_position).x, (get_global_position() - previous_position).y, 0.0) /
-					get_physics_process_delta_time();
+			const double physics_delta = get_physics_process_delta_time();
+			const Vector3 velocity = physics_delta > 0.0 ? Vector3((get_global_position() - previous_position).x, (get_global_position() - previous_position).y, 0.0) / physics_delta : Vector3();
 
 			if (velocity != previous_velocity) {
 				RS::get_singleton()->particles_set_emitter_velocity(particles, velocity);
@@ -980,7 +989,7 @@ void GPUParticles2D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "draw_order", PROPERTY_HINT_ENUM, "Index,Lifetime,Reverse Lifetime"), "set_draw_order", "get_draw_order");
 	ADD_GROUP("Trails", "trail_");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "trail_enabled", PROPERTY_HINT_GROUP_ENABLE), "set_trail_enabled", "is_trail_enabled");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "trail_lifetime", PROPERTY_HINT_RANGE, "0.01,10,0.01,or_greater,suffix:s"), "set_trail_lifetime", "get_trail_lifetime");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "trail_lifetime", PROPERTY_HINT_RANGE, "0.01,10,0.01,suffix:s"), "set_trail_lifetime", "get_trail_lifetime");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "trail_sections", PROPERTY_HINT_RANGE, "2,128,1"), "set_trail_sections", "get_trail_sections");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "trail_section_subdivisions", PROPERTY_HINT_RANGE, "1,1024,1"), "set_trail_section_subdivisions", "get_trail_section_subdivisions");
 	ADD_GROUP("Process Material", "");

@@ -84,12 +84,13 @@ void GPUParticles3D::set_amount(int p_amount) {
 }
 
 void GPUParticles3D::set_lifetime(double p_lifetime) {
-	ERR_FAIL_COND_MSG(p_lifetime <= 0, "Particles lifetime must be greater than 0.");
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_lifetime) || p_lifetime <= 0, "Particles lifetime must be finite and greater than 0.");
 	lifetime = p_lifetime;
 	RS::get_singleton()->particles_set_lifetime(particles, lifetime);
 }
 
 void GPUParticles3D::set_interp_to_end(float p_interp) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_interp), "Particles interpolation factor must be finite.");
 	interp_to_end_factor = CLAMP(p_interp, 0.0, 1.0);
 	RS::get_singleton()->particles_set_interp_to_end(particles, interp_to_end_factor);
 }
@@ -127,6 +128,7 @@ uint32_t GPUParticles3D::get_seed() const {
 }
 
 void GPUParticles3D::set_pre_process_time(double p_time) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_time), "Particles pre-process time must be finite.");
 	pre_process_time = p_time;
 	RS::get_singleton()->particles_set_pre_process_time(particles, pre_process_time);
 }
@@ -179,11 +181,13 @@ void GPUParticles3D::set_process_material(const Ref<Material> &p_material) {
 }
 
 void GPUParticles3D::set_speed_scale(double p_scale) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_scale), "Particles speed scale must be finite.");
 	speed_scale = p_scale;
 	RS::get_singleton()->particles_set_speed_scale(particles, p_scale);
 }
 
 void GPUParticles3D::set_collision_base_size(real_t p_size) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_size), "Particles collision base size must be finite.");
 	collision_base_size = p_size;
 	RS::get_singleton()->particles_set_collision_base_size(particles, p_size);
 }
@@ -241,6 +245,7 @@ real_t GPUParticles3D::get_collision_base_size() const {
 }
 
 void GPUParticles3D::set_draw_order(DrawOrder p_order) {
+	ERR_FAIL_INDEX(int(p_order), DRAW_ORDER_VIEW_DEPTH + 1);
 	draw_order = p_order;
 	RS::get_singleton()->particles_set_draw_order(particles, RSE::ParticlesDrawOrder(p_order));
 }
@@ -252,7 +257,8 @@ void GPUParticles3D::set_trail_enabled(bool p_enabled) {
 }
 
 void GPUParticles3D::set_trail_lifetime(double p_seconds) {
-	ERR_FAIL_COND(p_seconds < 0.01 - CMP_EPSILON);
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_seconds) || p_seconds < 0.01 - CMP_EPSILON, "Particle trail lifetime must be finite and at least 0.01 seconds.");
+	p_seconds = MIN(10.0, p_seconds);
 	trail_lifetime = p_seconds;
 	RS::get_singleton()->particles_set_trails(particles, trail_enabled, trail_lifetime);
 }
@@ -286,14 +292,20 @@ int GPUParticles3D::get_draw_passes() const {
 void GPUParticles3D::set_draw_pass_mesh(int p_pass, const Ref<Mesh> &p_mesh) {
 	ERR_FAIL_INDEX(p_pass, draw_passes.size());
 
+	if (draw_passes.write[p_pass].is_valid()) {
+		draw_passes.write[p_pass]->disconnect_changed(callable_mp(this, &GPUParticles3D::_skinning_changed));
+	}
 	if (Engine::get_singleton()->is_editor_hint() && draw_passes.write[p_pass].is_valid()) {
 		draw_passes.write[p_pass]->disconnect_changed(callable_mp((Node *)this, &Node::update_configuration_warnings));
 	}
 
 	draw_passes.write[p_pass] = p_mesh;
 
+	if (draw_passes.write[p_pass].is_valid()) {
+		draw_passes.write[p_pass]->connect_changed(callable_mp(this, &GPUParticles3D::_skinning_changed), CONNECT_DEFERRED | CONNECT_REFERENCE_COUNTED);
+	}
 	if (Engine::get_singleton()->is_editor_hint() && draw_passes.write[p_pass].is_valid()) {
-		draw_passes.write[p_pass]->connect_changed(callable_mp((Node *)this, &Node::update_configuration_warnings), CONNECT_DEFERRED);
+		draw_passes.write[p_pass]->connect_changed(callable_mp((Node *)this, &Node::update_configuration_warnings), CONNECT_DEFERRED | CONNECT_REFERENCE_COUNTED);
 	}
 
 	RID mesh_rid;
@@ -314,6 +326,7 @@ Ref<Mesh> GPUParticles3D::get_draw_pass_mesh(int p_pass) const {
 }
 
 void GPUParticles3D::set_fixed_fps(int p_count) {
+	ERR_FAIL_COND_MSG(p_count < 0, "Particles fixed FPS must be non-negative.");
 	fixed_fps = p_count;
 	RS::get_singleton()->particles_set_fixed_fps(particles, p_count);
 }
@@ -485,6 +498,7 @@ void GPUParticles3D::_validate_property(PropertyInfo &p_property) const {
 }
 
 void GPUParticles3D::request_particles_process(real_t p_requested_process_time, real_t p_request_process_time_residual) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_requested_process_time) || !Math::is_finite(p_request_process_time_residual), "Particle process times must be finite.");
 	RS::get_singleton()->particles_request_process_time(particles, p_requested_process_time, p_request_process_time_residual);
 	// Setting emitting independently from set_emitting is important here
 	// we assume to be in a controlled process situation.
@@ -536,14 +550,8 @@ void GPUParticles3D::_notification(int p_what) {
 		// Use internal process when emitting and one_shot is on so that when
 		// the shot ends the editor can properly update.
 		case NOTIFICATION_INTERNAL_PROCESS: {
-			const Vector3 velocity = (get_global_position() - previous_position) / get_process_delta_time();
-
-			if (velocity != previous_velocity) {
-				RS::get_singleton()->particles_set_emitter_velocity(particles, velocity);
-				previous_velocity = velocity;
-			}
-			previous_position = get_global_position();
-
+			// Emitter velocity is sampled in the physics callback below. Keeping the
+			// position history there avoids render ticks consuming the physics interval.
 			if (one_shot) {
 				time += get_process_delta_time();
 				if (time > emission_time) {
@@ -567,7 +575,8 @@ void GPUParticles3D::_notification(int p_what) {
 		case NOTIFICATION_INTERNAL_PHYSICS_PROCESS: {
 			// Update velocity in physics process, so that velocity calculations remain correct
 			// if the physics tick rate is lower than the rendered framerate (especially without physics interpolation).
-			const Vector3 velocity = (get_global_position() - previous_position) / get_physics_process_delta_time();
+			const double physics_delta = get_physics_process_delta_time();
+			const Vector3 velocity = physics_delta > 0.0 ? (get_global_position() - previous_position) / physics_delta : Vector3();
 
 			if (velocity != previous_velocity) {
 				RS::get_singleton()->particles_set_emitter_velocity(particles, velocity);
@@ -643,7 +652,13 @@ void GPUParticles3D::_skinning_changed() {
 }
 
 void GPUParticles3D::set_skin(const Ref<Skin> &p_skin) {
+	if (skin.is_valid()) {
+		skin->disconnect_changed(callable_mp(this, &GPUParticles3D::_skinning_changed));
+	}
 	skin = p_skin;
+	if (skin.is_valid()) {
+		skin->connect_changed(callable_mp(this, &GPUParticles3D::_skinning_changed), CONNECT_DEFERRED);
+	}
 	_skinning_changed();
 }
 
@@ -652,6 +667,7 @@ Ref<Skin> GPUParticles3D::get_skin() const {
 }
 
 void GPUParticles3D::set_transform_align(TransformAlign p_align) {
+	ERR_FAIL_INDEX(int(p_align), TRANSFORM_ALIGN_LOCAL_BILLBOARD + 1);
 	if (p_align != transform_align) {
 		notify_property_list_changed();
 	}
@@ -674,6 +690,7 @@ RSE::ParticlesTransformAlignCustomSrc GPUParticles3D::get_transform_align_channe
 }
 
 void GPUParticles3D::set_transform_align_axis(RSE::ParticlesTransformAlignAxis p_axis) {
+	ERR_FAIL_INDEX(uint32_t(p_axis), uint32_t(RSE::ParticlesTransformAlignAxis::PARTICLES_ALIGN_AXIS_MAX));
 	transform_align_axis = p_axis;
 	RS::get_singleton()->particles_set_transform_align_axis(particles, p_axis);
 }
@@ -693,11 +710,25 @@ void GPUParticles3D::convert_from_particles(Node *p_particles) {
 	set_pre_process_time(cpu_particles->get_pre_process_time());
 	set_explosiveness_ratio(cpu_particles->get_explosiveness_ratio());
 	set_randomness_ratio(cpu_particles->get_randomness_ratio());
+	set_visibility_aabb(cpu_particles->get_visibility_aabb());
 	set_use_local_coordinates(cpu_particles->get_use_local_coordinates());
 	set_fixed_fps(cpu_particles->get_fixed_fps());
 	set_fractional_delta(cpu_particles->get_fractional_delta());
 	set_speed_scale(cpu_particles->get_speed_scale());
-	set_draw_order(DrawOrder(cpu_particles->get_draw_order()));
+	// CPU and GPU draw-order enums are not value-aligned: GPU has an extra
+	// reverse-lifetime mode before view-depth.
+	DrawOrder gpu_draw_order = DRAW_ORDER_INDEX;
+	switch (cpu_particles->get_draw_order()) {
+		case CPUParticles3D::DRAW_ORDER_LIFETIME:
+			gpu_draw_order = DRAW_ORDER_LIFETIME;
+			break;
+		case CPUParticles3D::DRAW_ORDER_VIEW_DEPTH:
+			gpu_draw_order = DRAW_ORDER_VIEW_DEPTH;
+			break;
+		default:
+			break;
+	}
+	set_draw_order(gpu_draw_order);
 	set_draw_pass_mesh(0, cpu_particles->get_mesh());
 
 	Ref<ParticleProcessMaterial> proc_mat = memnew(ParticleProcessMaterial);
@@ -732,6 +763,7 @@ void GPUParticles3D::convert_from_particles(Node *p_particles) {
 	proc_mat->set_emission_ring_height(cpu_particles->get_emission_ring_height());
 	proc_mat->set_emission_ring_radius(cpu_particles->get_emission_ring_radius());
 	proc_mat->set_emission_ring_inner_radius(cpu_particles->get_emission_ring_inner_radius());
+	proc_mat->set_emission_ring_axis(cpu_particles->get_emission_ring_axis());
 	proc_mat->set_emission_ring_cone_angle(cpu_particles->get_emission_ring_cone_angle());
 
 	if (cpu_particles->get_split_scale()) {
@@ -901,7 +933,7 @@ void GPUParticles3D::_bind_methods() {
 
 	ADD_GROUP("Trails", "trail_");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "trail_enabled", PROPERTY_HINT_GROUP_ENABLE), "set_trail_enabled", "is_trail_enabled");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "trail_lifetime", PROPERTY_HINT_RANGE, "0.01,10,0.01,or_greater,suffix:s"), "set_trail_lifetime", "get_trail_lifetime");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "trail_lifetime", PROPERTY_HINT_RANGE, "0.01,10,0.01,suffix:s"), "set_trail_lifetime", "get_trail_lifetime");
 	ADD_GROUP("Process Material", "");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "process_material", PROPERTY_HINT_RESOURCE_TYPE, "ParticleProcessMaterial,ShaderMaterial"), "set_process_material", "get_process_material");
 	ADD_GROUP("Draw Passes", "draw_");

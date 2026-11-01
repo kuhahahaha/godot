@@ -1,0 +1,30 @@
+{
+  "command": [
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/particle-runtime-smoke-final-20261101/bin/godot-cpu-manual.arm64",
+    "--headless",
+    "--fixed-fps",
+    "60",
+    "--path",
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/particle-runtime-smoke-final-20261101/astra-review/probe",
+    "--script",
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/particle-runtime-smoke-final-20261101/astra-review/probe/probe.gd"
+  ],
+  "host": {
+    "binary": "/Users/macbookair/Documents/Work/godot_ANGE/work/particle-runtime-smoke-final-20261101/bin/godot-cpu-manual.arm64",
+    "sha256": "ec55001baf673a0d9ae29b68ec5fe44d21098e5da8e7a5e183bc515add631e4d",
+    "controlled_build": "/Users/macbookair/Documents/Work/godot_ANGE/work/particle-runtime-smoke-final-20261101/bin/godot-cpu-manual.arm64.controlled_build.json",
+    "controlled_build_sha256": "1387afca42e958e70b169bf7bf54fdf003abb11f6fd73cb789317298b867244a",
+    "source_drift": [],
+    "source_window": "/Users/macbookair/Documents/Work/godot_ANGE/work/particle-runtime-smoke-final-20261101/manual-build-source-before.json",
+    "build_result": "/Users/macbookair/Documents/Work/godot_ANGE/work/particle-runtime-smoke-final-20261101/manual-build-result.json"
+  },
+  "returncode": 0,
+  "checks": {
+    "rc_zero": true,
+    "native_result": true,
+    "expected_progress_refusals": true,
+    "host_unchanged": true
+  },
+  "log": "manual-native-green.log",
+  "script_sha256": "15be6a59e26ce74d592a14a25fb07da04940ae62fe390341748e1110034aeda1"
+}
