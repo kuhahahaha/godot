@@ -1,9 +1,0 @@
-# P01 undelivered readback callback — 2026-10-30
-
-A successful asynchronous texture or buffer request can later fail to map its staging buffer. RD then drops its last Callable without invoking a success callback. Image collector previously left the original entry reserved; buffer collector left its pending count outstanding, so closed sessions could never drain. The last CallableCustom destructor now rejects an undelivered image entry, or cancels the undelivered raw entry and poisons its collector, under the existing mutex. An already completed or explicitly rejected/canceled entry is not changed. No bytes or completion are invented.
-
-The private fixed-input overlay reproduced RED for holder release and RD mock map failure on both paths; final P01 19/357, image map 1/9, buffer map 1/10, frame wait 16/293, and K03 44/1153 all passed. Before/after link input hashes match; manifest records source and binary identity. The test-only overlay enables the module fixture tests in two local preprocessor guards while retaining the module-disabled engine layout. This private overlay does not itself prove a module-enabled build or real hardware map fault. Author self-review only.
-
-An existing raw test that required indefinite non-drain after the last missing callback was updated to require drain with poison and no successful copy; normal late callback, multiple holders and explicit rejection/cancellation remain covered.
-
-The separate module-enabled editor build then returned rc 0. On its hash-stable binary, serial P01 97/9657, image map 1/9, buffer map 1/10, frame-wait 16/293, Qualification 103/1901, device_exit 133/2619 and K03 44/1153 all passed (rc 0). `MODULE_RUN.json` records the binary identity and selectors. This remains headless CPU/mock evidence; real hardware fault, production qualification, Ready and G1 are not established. Source commit `3fdda09c2c` was created after the build; the five source hashes in the manifest match the built bytes.

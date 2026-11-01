@@ -1,6 +1,32 @@
 /**************************************************************************/
 /*  test_vulkan_completion.cpp                                            */
 /**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
 
 #include "tests/test_macros.h"
 
@@ -99,7 +125,6 @@ public:
 };
 
 TEST_CASE("[K03][VulkanCompletion] native batch identity survives mismatch and exact recycle") {
-	using RDD = RenderingDeviceDriver;
 	RenderingContextDriverVulkan context;
 	REQUIRE(context.initialize() == OK);
 	RenderingDeviceDriverVulkan driver(&context);
@@ -169,7 +194,6 @@ TEST_CASE("[K03][VulkanCompletion] lost fence results revoke original epoch admi
 	REQUIRE(context.initialize() == OK);
 	RenderingDeviceDriverVulkan driver(&context);
 	REQUIRE(driver.initialize(0, 2) == OK);
-	using RDD = RenderingDeviceDriver;
 	const auto family = driver.command_queue_family_get(RDD::COMMAND_QUEUE_FAMILY_TRANSFER_BIT);
 	const auto queue = driver.command_queue_create(family);
 	const auto pool = driver.command_pool_create(family, RDD::COMMAND_BUFFER_TYPE_PRIMARY);
@@ -231,7 +255,6 @@ TEST_CASE("[K03][VulkanCompletion] lost fence results revoke original epoch admi
 }
 
 TEST_CASE("[K03][VulkanNativeCall] retained submit identity survives its original fence return without cross fence alias") {
-	using RDD = RenderingDeviceDriver;
 	RenderingContextDriverVulkan context;
 	REQUIRE(context.initialize() == OK);
 	RenderingDeviceDriverVulkan driver(&context);
@@ -274,7 +297,6 @@ TEST_CASE("[K03][VulkanNativeCall] retained submit identity survives its origina
 	driver.command_queue_free(queue);
 }
 TEST_CASE("[K03][VulkanNativeCall] submission without frame fence retains its own actual completion source") {
-	using RDD = RenderingDeviceDriver;
 	RenderingContextDriverVulkan context;
 	REQUIRE(context.initialize() == OK);
 	RenderingDeviceDriverVulkan driver(&context);
@@ -290,7 +312,7 @@ TEST_CASE("[K03][VulkanNativeCall] submission without frame fence retains its ow
 	REQUIRE(report.calls.size() == 1);
 	const auto &fact = report.calls[0];
 	CHECK(fact.serial != 0);
-	CHECK(fact.completion != RDD::CompletionCapability::None);
+	CHECK(fact.completion != RDD::CompletionCapability::NoCompletion);
 	CHECK(fact.completion_serial == fact.serial);
 	CHECK(driver.native_call_retain(fact.serial) == OK);
 	const auto completed = driver.native_call_wait(fact.serial);
@@ -307,7 +329,6 @@ TEST_CASE("[K03][VulkanNativeCall] submission without frame fence retains its ow
 }
 
 TEST_CASE("[K03][VulkanNativeCall] ordinary submission tolerates collection bookkeeping contention") {
-	using RDD = RenderingDeviceDriver;
 	RenderingContextDriverVulkan context;
 	REQUIRE(context.initialize() == OK);
 	RenderingDeviceDriverVulkan driver(&context);
@@ -357,7 +378,6 @@ TEST_CASE("[K03][VulkanNativeCall] ordinary submission tolerates collection book
 }
 
 TEST_CASE("[K03][VulkanNativeCall] same fence reuse preserves old snapshot across failed reset") {
-	using RDD = RenderingDeviceDriver;
 	RenderingContextDriverVulkan context;
 	REQUIRE(context.initialize() == OK);
 	RenderingDeviceDriverVulkan driver(&context);
@@ -409,7 +429,6 @@ TEST_CASE("[K03][VulkanNativeCall] same fence reuse preserves old snapshot acros
 }
 
 TEST_CASE("[K03][VulkanNativeCall] initial source loss observed after registration revokes its original owner") {
-	using RDD = RenderingDeviceDriver;
 	RenderingContextDriverVulkan context;
 	REQUIRE(context.initialize() == OK);
 	RenderingDeviceDriverVulkan driver(&context);
@@ -462,7 +481,6 @@ TEST_CASE("[K03][VulkanNativeCall] initial source loss observed after registrati
 	driver.command_queue_free(queue);
 }
 TEST_CASE("[K03][VulkanNativeCall] serial exhaustion rejects before issue and observer count refuses overflow") {
-	using RDD = RenderingDeviceDriver;
 	RenderingContextDriverVulkan context;
 	REQUIRE(context.initialize() == OK);
 	RenderingDeviceDriverVulkan driver(&context);
@@ -508,7 +526,6 @@ TEST_CASE("[K03][VulkanNativeCall] serial exhaustion rejects before issue and ob
 }
 
 TEST_CASE("[K03][VulkanNativeCall] unknown submit retains original source without inferring completion") {
-	using RDD = RenderingDeviceDriver;
 	RenderingContextDriverVulkan context;
 	REQUIRE(context.initialize() == OK);
 	RenderingDeviceDriverVulkan driver(&context);
@@ -553,7 +570,6 @@ TEST_CASE("[K03][VulkanNativeCall] unknown submit retains original source withou
 }
 
 TEST_CASE("[K03][VulkanNativeCall] blocking fence recycle waits while bounded recycle preserves Busy") {
-	using RDD = RenderingDeviceDriver;
 	RenderingContextDriverVulkan context;
 	REQUIRE(context.initialize() == OK);
 	RenderingDeviceDriverVulkan driver(&context);
@@ -604,7 +620,6 @@ TEST_CASE("[K03][VulkanNativeCall] blocking fence recycle waits while bounded re
 }
 
 TEST_CASE("[K03][VulkanNativeCall] blocking intermediate source recycle waits while bounded recycle preserves Busy") {
-	using RDD = RenderingDeviceDriver;
 	RenderingContextDriverVulkan context;
 	REQUIRE(context.initialize() == OK);
 	RenderingDeviceDriverVulkan driver(&context);
@@ -652,7 +667,6 @@ TEST_CASE("[K03][VulkanNativeCall] blocking intermediate source recycle waits wh
 }
 
 TEST_CASE("[K03][VulkanNativeCall] waiting recycle revalidates source after original fence return") {
-	using RDD = RenderingDeviceDriver;
 	RenderingContextDriverVulkan context;
 	REQUIRE(context.initialize() == OK);
 	RenderingDeviceDriverVulkan driver(&context);

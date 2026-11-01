@@ -2278,6 +2278,19 @@ void RenderForwardMobile::_fill_render_list(RenderListType p_render_list, const 
 		}
 	}
 
+	// External admission is shared by this fill. Validate the entire batch
+	// before appending anything so a late mismatch cannot leave a partial list.
+	if (p_render_data->packet_identity.external) {
+		for (int i = 0; i < (int)p_render_data->instances->size(); i++) {
+			GeometryInstanceForwardMobile *inst = static_cast<GeometryInstanceForwardMobile *>((*p_render_data->instances)[i]);
+			for (GeometryInstanceSurfaceDataCache *surf = inst->surface_caches; surf; surf = surf->next) {
+				if (!RenderDataRD::admission_succeeded(p_render_data->admit_surface_status(surf->material_generation))) {
+					return;
+				}
+			}
+		}
+	}
+
 	//fill list
 
 	for (int i = 0; i < (int)p_render_data->instances->size(); i++) {
@@ -2615,6 +2628,9 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 
 		pipeline_key.primitive_type = surf->primitive;
 		RID xforms_uniform_set = surf->owner->transforms_uniform_set;
+		if ((inst->flags_cache & INSTANCE_DATA_FLAG_PARTICLES) && !RD::get_singleton()->uniform_set_is_valid(xforms_uniform_set)) {
+			continue;
+		}
 
 		switch (p_pass_mode) {
 			case PASS_MODE_COLOR:
@@ -3177,6 +3193,9 @@ void RenderForwardMobile::_geometry_instance_update(RenderGeometryInstance *p_ge
 
 	if (ginstance->data->dirty_dependencies) {
 		ginstance->data->dependency_tracker.update_begin();
+		if (ginstance->data->base_type == RSE::INSTANCE_MULTIMESH) {
+			RSG::utilities->base_update_dependency(ginstance->data->base, &ginstance->data->dependency_tracker);
+		}
 	}
 
 	//add geometry for drawing
@@ -3281,8 +3300,7 @@ void RenderForwardMobile::_geometry_instance_update(RenderGeometryInstance *p_ge
 			ginstance->base_flags |= INSTANCE_DATA_FLAG_MULTIMESH_INDIRECT;
 		}
 
-		ginstance->transforms_uniform_set = mesh_storage->_multimesh_get_buffer_rd_rid(ginstance->data->base).is_valid() ?
-				mesh_storage->multimesh_get_3d_uniform_set(ginstance->data->base, scene_shader.default_shader_rd, TRANSFORMS_UNIFORM_SET) : RID();
+		ginstance->transforms_uniform_set = mesh_storage->_multimesh_get_buffer_rd_rid(ginstance->data->base).is_valid() ? mesh_storage->multimesh_get_3d_uniform_set(ginstance->data->base, scene_shader.default_shader_rd, TRANSFORMS_UNIFORM_SET) : RID();
 
 	} else if (ginstance->data->base_type == RSE::INSTANCE_PARTICLES) {
 		ginstance->base_flags |= INSTANCE_DATA_FLAG_PARTICLES;
@@ -3607,6 +3625,7 @@ void RenderForwardMobile::_geometry_instance_dependency_changed(Dependency::Depe
 		case Dependency::DEPENDENCY_CHANGED_MATERIAL:
 		case Dependency::DEPENDENCY_CHANGED_MESH:
 		case Dependency::DEPENDENCY_CHANGED_PARTICLES:
+		case Dependency::DEPENDENCY_CHANGED_PARTICLES_INSTANCES:
 		case Dependency::DEPENDENCY_CHANGED_MULTIMESH:
 		case Dependency::DEPENDENCY_CHANGED_SKELETON_DATA: {
 			static_cast<RenderGeometryInstance *>(p_tracker->userdata)->_mark_dirty();

@@ -29,12 +29,11 @@
 /**************************************************************************/
 
 #pragma once
-#include "core/templates/local_vector.h"
-#include "core/templates/rid.h"
-
 #include "core/error/error_list.h"
 #include "core/extension/gdextension_interface.gen.h"
 #include "core/os/mutex.h"
+#include "core/templates/local_vector.h"
+#include "core/templates/rid.h"
 
 class RenderingDevice;
 class TestQualificationPhysicalAccess;
@@ -194,16 +193,37 @@ protected:
 };
 
 // Internal state products adapted by the generated typed lifecycle ABI.
-struct GuardToken { uint64_t registry_instance = 0; uint64_t handle_serial = 0; };
-struct GuardedLibraryRef { uint64_t registry_instance = 0; uint64_t handle_serial = 0; };
-struct InitializationLevelContextRef { uint64_t registry_instance = 0; uint64_t handle_serial = 0; };
-struct DeinitLevelContextRef { uint64_t registry_instance = 0; uint64_t handle_serial = 0; };
+struct GuardToken {
+	uint64_t registry_instance = 0;
+	uint64_t handle_serial = 0;
+};
+struct GuardedLibraryRef {
+	uint64_t registry_instance = 0;
+	uint64_t handle_serial = 0;
+};
+struct InitializationLevelContextRef {
+	uint64_t registry_instance = 0;
+	uint64_t handle_serial = 0;
+};
+struct DeinitLevelContextRef {
+	uint64_t registry_instance = 0;
+	uint64_t handle_serial = 0;
+};
 using DeinitPreflightContextRef = GDExtensionDeviceExitDeinitPreflightContextRef;
-struct RegisteredCleanupRef { uint64_t registry_instance = 0; uint64_t handle_serial = 0; };
-struct LibraryCodeHoldRef { uint64_t registry_instance = 0; uint64_t handle_serial = 0; };
+struct RegisteredCleanupRef {
+	uint64_t registry_instance = 0;
+	uint64_t handle_serial = 0;
+};
+struct LibraryCodeHoldRef {
+	uint64_t registry_instance = 0;
+	uint64_t handle_serial = 0;
+};
 using UserLevelFnV1 = void (*)(void *, GDExtensionInitializationLevel);
 using PreflightFnV1 = int32_t (*)(DeinitPreflightContextRef, void *);
-struct LevelNeedsV1 { uint32_t user_services = 0; uint32_t binding_services = 0; };
+struct LevelNeedsV1 {
+	uint32_t user_services = 0;
+	uint32_t binding_services = 0;
+};
 struct GuardRegistrationV1 {
 	GDExtensionDeviceExitAbi abi{};
 	uint32_t binding_protocol = 0;
@@ -224,10 +244,26 @@ struct ExitDiagnosticV1 {
 	uint32_t level = UINT32_MAX;
 	uint64_t pending_count = 0;
 };
-enum class GuardEnrollment { UNAVAILABLE, PENDING_BOOTSTRAP, QUALIFIED, REVOKED };
-enum class LevelPhase { NONE, INITIALIZE, DEINITIALIZE, PREFLIGHT, SCENE_READY };
-enum class SceneReadyFailureReason { NO_SCENE_TREE, NO_ROOT_WORLD, NO_PUBLISHED_RENDERING_SERVER, ACTUAL_RD_UNSUPPORTED, LOCAL_RD_UNSUPPORTED, CALLBACK_REJECTED, PAIR_UNSCHEDULED, CALLBACK_QUOTA };
-enum class TerminalActionKind { OBJECT, LEVEL_USER, LEVEL_BINDING };
+enum class GuardEnrollment { UNAVAILABLE,
+	PENDING_BOOTSTRAP,
+	QUALIFIED,
+	REVOKED };
+enum class LevelPhase { NONE,
+	INITIALIZE,
+	DEINITIALIZE,
+	PREFLIGHT,
+	SCENE_READY };
+enum class SceneReadyFailureReason { NO_SCENE_TREE,
+	NO_ROOT_WORLD,
+	NO_PUBLISHED_RENDERING_SERVER,
+	ACTUAL_RD_UNSUPPORTED,
+	LOCAL_RD_UNSUPPORTED,
+	CALLBACK_REJECTED,
+	PAIR_UNSCHEDULED,
+	CALLBACK_QUOTA };
+enum class TerminalActionKind { OBJECT,
+	LEVEL_USER,
+	LEVEL_BINDING };
 struct LevelAction {
 	uint64_t serial = 0;
 	uint64_t generation = 0;
@@ -501,7 +537,7 @@ private:
 	friend class CleanupAction;
 	friend class CleanupScope;
 #ifdef TESTS_ENABLED
- friend class ::TestVulkanCompletionAccess;
+	friend class ::TestVulkanCompletionAccess;
 	friend struct TestDeviceExitContract::RegistryAccess;
 	friend struct TestDeviceExitLibraryClose::Access;
 	friend struct TestDeviceExitEntry::Access;
@@ -581,12 +617,21 @@ private:
 		bool control_complete = false;
 		bool preflight_accepted = false;
 		LevelState levels[4];
-		enum class SceneReadyState { ABSENT, REGISTERED, PENDING, IN_FRAME, DONE, CANCELLED_BEFORE_EFFECTS, UNSUPPORTED_BEFORE_EFFECTS, FAILED_LATE_PARTIAL };
+		enum class SceneReadyState { ABSENT,
+			REGISTERED,
+			PENDING,
+			IN_FRAME,
+			DONE,
+			CANCELLED_BEFORE_EFFECTS,
+			UNSUPPORTED_BEFORE_EFFECTS,
+			FAILED_LATE_PARTIAL };
 		SceneReadyState scene_ready_state = SceneReadyState::ABSENT;
 		uint64_t reserved_scene_ready_frame = 0;
 		uint64_t scene_ready_view_serial = 0;
 		uint32_t scene_ready_view_slot = INVALID_SLOT;
-		enum class SceneReadyFlavor { NONE, V1, V2 };
+		enum class SceneReadyFlavor { NONE,
+			V1,
+			V2 };
 		SceneReadyFlavor scene_ready_flavor = SceneReadyFlavor::NONE;
 		GDExtensionSceneInstallRequirementsV2 scene_install_requirements = {};
 		GDExtensionSceneInstallPlanV2 scene_install_plan = {};
@@ -687,9 +732,9 @@ private:
 	Error scene_ready_initialization_result(const RecordRef &p_ref);
 	Error reject_pending_scene_ready_before_effects(const RecordRef &p_ref, SceneReadyFailureReason p_reason);
 	bool scene_ready_main_device_available(const RecordRef &p_ref, Object *p_device);
- Error select_scene_install_plan(const RecordRef &,GDExtensionSceneInstallPlanV2 &,SceneReadyFailureReason &);
- Error scene_install_plan_locked(const Record &,GDExtensionSceneInstallPlanV2 &,SceneReadyFailureReason &) const;
- bool scene_install_plan_matches_locked(const Record &,SceneReadyFailureReason * = nullptr) const;
+	Error select_scene_install_plan(const RecordRef &, GDExtensionSceneInstallPlanV2 &, SceneReadyFailureReason &);
+	Error scene_install_plan_locked(const Record &, GDExtensionSceneInstallPlanV2 &, SceneReadyFailureReason &) const;
+	bool scene_install_plan_matches_locked(const Record &, SceneReadyFailureReason * = nullptr) const;
 
  // Caller holds mutex. Admission is separate from retained identity reads.
  Error validate_host_producer_binding_locked(InitializationLevelContextRef, LibraryCodeHoldRef, const void *, uint32_t &);
@@ -711,10 +756,10 @@ private:
  public:
  private:
 #ifdef TESTS_ENABLED
- friend class ::TestQualificationPhysicalAccess;
- friend class ::TestQualificationAckAccess;
- friend class ::TestQualificationTicketAccess;
- friend class ::TestQualificationRtAccess;
+	friend class ::TestQualificationPhysicalAccess;
+	friend class ::TestQualificationAckAccess;
+	friend class ::TestQualificationTicketAccess;
+	friend class ::TestQualificationRtAccess;
 #endif
  friend class ::RenderingDevice;
  friend class ::RenderingDeviceDriver;
@@ -758,29 +803,29 @@ private:
  Error qualification_ticket_locked(QualificationBridge *, GDExtensionQualificationTicketRefV1, QualificationTicket *&);
  Error qualification_bridge_locked(GDExtensionQualificationBridgeRefV1, bool, bool, QualificationBridge *&, RenderingDevice *&,uint32_t=0);
 
- Error device_created(Object*);
- Error device_execution_moved(Object *, uint64_t, uint64_t);
- void device_closed(Object*);
- void device_lost(Object*);
- void device_lost(uint64_t,uint64_t);
- void device_loss_identity(Object*,uint64_t&,uint64_t&);
- void device_destroyed(Object*);
- void reclaim_device_locked(uint32_t);
- Error device_ref_locked(uint64_t,uint64_t,bool,DeviceRef*&);
- Error issue_device_ref_locked(uint32_t,uint32_t,bool,uint64_t&);
+	Error device_created(Object *);
+	Error device_execution_moved(Object *, uint64_t, uint64_t);
+	void device_closed(Object *);
+	void device_lost(Object *);
+	void device_lost(uint64_t, uint64_t);
+	void device_loss_identity(Object *, uint64_t &, uint64_t &);
+	void device_destroyed(Object *);
+	void reclaim_device_locked(uint32_t);
+	Error device_ref_locked(uint64_t, uint64_t, bool, DeviceRef *&);
+	Error issue_device_ref_locked(uint32_t, uint32_t, bool, uint64_t &);
 	GDExtensionDeviceSessionResultV1 bind_device_session_in_frame(const GDExtensionDeviceExitAbi *, uint64_t, uint64_t, ViewDomain, Object *, GDExtensionDeviceRegistryContextRef *, GDExtensionOriginalDeviceSessionRef *);
 	// Caller holds Registry::mutex and authenticates the original level action.
 	// Both initialization and scene-ready scheduling share this atomic pair path.
 	Error schedule_object_cleanup_pair_locked(Record &p_record, uint64_t p_action, uint64_t p_object_id);
 	Error validate_object_cleanup_pair_locked(const Record &p_record, uint64_t p_object_id) const;
-public:
- GDExtensionDeviceSessionResultV1 bind_device_session(const GDExtensionDeviceExitAbi*,InitializationLevelContextRef,Object*,GDExtensionDeviceRegistryContextRef*,GDExtensionOriginalDeviceSessionRef*);
- GDExtensionDeviceSessionResultV1 bind_scene_ready_device_session(const GDExtensionDeviceExitAbi *,GDExtensionDeviceExitSceneReadyContextRef,Object *,GDExtensionDeviceRegistryContextRef *,GDExtensionOriginalDeviceSessionRef *);
- GDExtensionDeviceSessionResultV1 bind_main_scene_ready_device_session(const GDExtensionDeviceExitAbi *, GDExtensionDeviceExitSceneReadyContextRef, GDExtensionDeviceRegistryContextRef *, GDExtensionOriginalDeviceSessionRef *, uint64_t *);
- GDExtensionDeviceSessionResultV1 copy_device_session(GDExtensionDeviceRegistryContextRef,GDExtensionOriginalDeviceSessionRef,bool,GDExtensionDeviceSessionViewV1*);
- GDExtensionDeviceSessionResultV1 resolve_device_session(GDExtensionDeviceRegistryContextRef,uint64_t,uint64_t,GDExtensionOriginalDeviceSessionRef*);
- GDExtensionDeviceSessionResultV1 release_device_reference(uint64_t,uint64_t,bool);
 
+public:
+	GDExtensionDeviceSessionResultV1 bind_device_session(const GDExtensionDeviceExitAbi *, InitializationLevelContextRef, Object *, GDExtensionDeviceRegistryContextRef *, GDExtensionOriginalDeviceSessionRef *);
+	GDExtensionDeviceSessionResultV1 bind_scene_ready_device_session(const GDExtensionDeviceExitAbi *, GDExtensionDeviceExitSceneReadyContextRef, Object *, GDExtensionDeviceRegistryContextRef *, GDExtensionOriginalDeviceSessionRef *);
+	GDExtensionDeviceSessionResultV1 bind_main_scene_ready_device_session(const GDExtensionDeviceExitAbi *, GDExtensionDeviceExitSceneReadyContextRef, GDExtensionDeviceRegistryContextRef *, GDExtensionOriginalDeviceSessionRef *, uint64_t *);
+	GDExtensionDeviceSessionResultV1 copy_device_session(GDExtensionDeviceRegistryContextRef, GDExtensionOriginalDeviceSessionRef, bool, GDExtensionDeviceSessionViewV1 *);
+	GDExtensionDeviceSessionResultV1 resolve_device_session(GDExtensionDeviceRegistryContextRef, uint64_t, uint64_t, GDExtensionOriginalDeviceSessionRef *);
+	GDExtensionDeviceSessionResultV1 release_device_reference(uint64_t, uint64_t, bool);
 
  GDExtensionDeviceSessionResultV1 qualification_open(const GDExtensionDeviceExitAbi *, GDExtensionDeviceExitSceneReadyContextRef, GDExtensionDeviceRegistryContextRef, GDExtensionOriginalDeviceSessionRef, GDExtensionDeviceExitLibraryCodeHoldRef, GDExtensionQualificationBridgeRefV1 *);
  GDExtensionDeviceSessionResultV1 qualification_backing(GDExtensionQualificationBridgeRefV1, uint64_t, GDExtensionQualificationBackingV1 *);
@@ -827,7 +872,7 @@ public:
 	// declaration. No public handle or inferred constructor phase is accepted.
 	Error schedule_object_cleanup(const GDExtensionDeviceExitAbi *p_abi, InitializationLevelContextRef p_context, RegisteredCleanupRef p_terminal, uint64_t p_object_id);
 	Error register_scene_ready(const GDExtensionDeviceExitAbi *p_abi, InitializationLevelContextRef p_context, GDExtensionDeviceExitSceneReadyCallbackV1 p_callback, void *p_original_userdata);
- Error register_scene_ready_v2(const GDExtensionSceneInstallRequirementsV2 *,InitializationLevelContextRef,GDExtensionDeviceExitSceneReadyCallbackV2,void *);
+	Error register_scene_ready_v2(const GDExtensionSceneInstallRequirementsV2 *, InitializationLevelContextRef, GDExtensionDeviceExitSceneReadyCallbackV2, void *);
 	Error schedule_scene_ready_object_cleanup(const GDExtensionDeviceExitAbi *p_abi, GDExtensionDeviceExitSceneReadyContextRef p_context, uint32_t p_phase, uint64_t p_object_id);
 	Error scene_ready_abort_unscheduled_pair(const GDExtensionDeviceExitAbi *, GDExtensionDeviceExitSceneReadyContextRef, int32_t, uint32_t, uint64_t);
 	static void register_interfaces();

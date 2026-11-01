@@ -423,11 +423,11 @@ Error ParticlesRuntimeTestFixture::advance() {
 	}
 	for (uint32_t i = 0; i < resource_count; i++) {
 		const auto status = rd->capture_test_resource_registry.status(resources[i]);
-		if (status == RenderCaptureTestResourceRegistry::Status::Unknown) {
+		if (status == RenderCaptureTestResourceRegistry::ResourceStatus::Unknown) {
 			check(false, "native retirement identity lost");
 			return ERR_INVALID_DATA;
 		}
-		if (status == RenderCaptureTestResourceRegistry::Status::Live) {
+		if (status == RenderCaptureTestResourceRegistry::ResourceStatus::Live) {
 			return ERR_BUSY;
 		}
 	}

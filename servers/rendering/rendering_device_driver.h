@@ -91,16 +91,16 @@ class RenderingDevice;
 class TestRecordSourceAccess;
 class RenderingDeviceDriver : public RenderingDeviceCommons {
 	GDSOFTCLASS(RenderingDeviceDriver, RenderingDeviceCommons);
- friend class RenderingDevice;
+	friend class RenderingDevice;
 #ifdef TESTS_ENABLED
- friend class TestVulkanCompletionAccess;
+	friend class TestVulkanCompletionAccess;
 #endif
- RenderingDevice *session_owner = nullptr;
-protected:
- void notify_session_device_lost() const;
- void session_loss_identity(uint64_t&,uint64_t&) const;
- static void notify_session_device_lost(uint64_t,uint64_t);
+	RenderingDevice *session_owner = nullptr;
 
+protected:
+	void notify_session_device_lost() const;
+	void session_loss_identity(uint64_t &, uint64_t &) const;
+	static void notify_session_device_lost(uint64_t, uint64_t);
 
 public:
 	struct ID {
@@ -165,7 +165,7 @@ public:
 	};
 
 	enum class CompletionCapability : uint8_t {
-		None,
+		NoCompletion,
 		Fence,
 		CommandBuffer,
 	};
@@ -175,14 +175,14 @@ public:
 		IssueFact issue = IssueFact::NotIssued;
 		int64_t native_code = 0;
 		Error error = OK;
-		CompletionCapability completion = CompletionCapability::None;
+		CompletionCapability completion = CompletionCapability::NoCompletion;
 		uint64_t completion_serial = 0;
 		bool present = false;
-  uint32_t queue_index = 0;
-  bool source_owner_returned = false;
-  bool frame_observer_owned = false;
-  // WSI call diagnostics have no GPU-submission completion obligation.
-  bool presentation_only = false;
+		uint32_t queue_index = 0;
+		bool source_owner_returned = false;
+		bool frame_observer_owned = false;
+		// WSI call diagnostics have no GPU-submission completion obligation.
+		bool presentation_only = false;
 	};
 
 	struct QueueCallReport {
@@ -714,7 +714,9 @@ public:
 	virtual void uniform_set_free(UniformSetID p_uniform_set) = 0;
 	// An internal owner must retain an unknown descriptor and must not replay
 	// its return. This is not a GPU-completion or external authority receipt.
-	enum class QualificationDescriptorReturnState : uint32_t { Unavailable = 0, Returned = 1, Unknown = 2 };
+	enum class QualificationDescriptorReturnState : uint32_t { Unavailable = 0,
+		Returned = 1,
+		Unknown = 2 };
 	struct QualificationDescriptorReturn {
 		QualificationDescriptorReturnState state = QualificationDescriptorReturnState::Unavailable;
 		int32_t native_code = 0;

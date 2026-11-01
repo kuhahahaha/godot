@@ -72,8 +72,8 @@ TEST_CASE("[P01] Native session bounds immutable requests and closes without inv
 	const uint64_t capacity = dual_view ? 18 : 8;
 	skinned_mesh_capture_test_hook_reset();
 	auto session = SkinnedMeshCaptureTestNativeSession::create(1, 9001, dual_view);
-	REQUIRE(session != nullptr);
-	CHECK(SkinnedMeshCaptureTestNativeSession::create(1, 9002, false) == nullptr);
+	REQUIRE(static_cast<bool>(session));
+	CHECK_FALSE(static_cast<bool>(SkinnedMeshCaptureTestNativeSession::create(1, 9002, false)));
 	SkinnedMeshCaptureTestSessionRequest request;
 	CHECK(session->enqueue(request) == ERR_INVALID_PARAMETER);
 	request.scene = RID::from_uint64(1);
@@ -104,7 +104,7 @@ TEST_CASE("[P01] Native session bounds immutable requests and closes without inv
 TEST_CASE("[P01] Native session cleanup survives poisoned phase evidence and absent RD") {
 	skinned_mesh_capture_test_hook_reset();
 	auto session = SkinnedMeshCaptureTestNativeSession::create(2, 9002, false);
-	REQUIRE(session != nullptr);
+	REQUIRE(static_cast<bool>(session));
 	SkinnedMeshCaptureTestSessionRequest request;
 	request.request = 1;
 	request.scene = RID::from_uint64(1);
@@ -124,7 +124,7 @@ TEST_CASE("[P01] Native session cleanup survives poisoned phase evidence and abs
 
 TEST_CASE("[P01] Acquired session transport failure closes without blocking no-work cleanup") {
 	auto session = SkinnedMeshCaptureTestNativeSession::create(3, 9003, false, true);
-	REQUIRE(session != nullptr);
+	REQUIRE(static_cast<bool>(session));
 	SkinnedMeshCaptureTestNativeSessionTestAccess::maintain(*session);
 	CHECK(session->status().error == ERR_UNAVAILABLE);
 	CHECK(session->status().no_native_work);
@@ -135,7 +135,7 @@ TEST_CASE("[P01] Acquired session transport failure closes without blocking no-w
 TEST_CASE("[P01] Native FIFO receive gates an atomic phase batch and holder retirement") {
 	skinned_mesh_capture_test_hook_reset();
 	auto session = SkinnedMeshCaptureTestNativeSession::create(4, 9004, false);
-	REQUIRE(session != nullptr);
+	REQUIRE(static_cast<bool>(session));
 	SkinnedMeshCaptureTestSessionRequest early;
 	early.request = 1;
 	early.scene = RID::from_uint64(1);
@@ -175,7 +175,7 @@ TEST_CASE("[P01] Native FIFO receive gates an atomic phase batch and holder reti
 TEST_CASE("[P01] Native FIFO holder survives fixture owner release and undelivered cancellation") {
 	skinned_mesh_capture_test_hook_reset();
 	auto session = SkinnedMeshCaptureTestNativeSession::create(5, 9005, false);
-	REQUIRE(session != nullptr);
+	REQUIRE(static_cast<bool>(session));
 	std::weak_ptr<SkinnedMeshCaptureTestNativeSession> lifetime = session;
 	SkinnedMeshCaptureTestSessionRequest request;
 	request.request = 1;
@@ -192,7 +192,7 @@ TEST_CASE("[P01] Native FIFO holder survives fixture owner release and undeliver
 	CHECK_FALSE(lifetime.lock()->status().no_native_work);
 	delivery = Callable(); // Original holder released without executing.
 	session = lifetime.lock();
-	REQUIRE(session != nullptr);
+	REQUIRE(static_cast<bool>(session));
 	SkinnedMeshCaptureTestNativeSessionTestAccess::maintain(*session);
 	const auto state = session->status();
 	CHECK(state.no_native_work);
@@ -208,7 +208,7 @@ TEST_CASE("[P01] Native FIFO holder survives fixture owner release and undeliver
 TEST_CASE("[P01] Late FIFO receive cannot revive canceled requests or bypass copied holders") {
 	skinned_mesh_capture_test_hook_reset();
 	auto session = SkinnedMeshCaptureTestNativeSession::create(6, 9006, false);
-	REQUIRE(session != nullptr);
+	REQUIRE(static_cast<bool>(session));
 	SkinnedMeshCaptureTestSessionRequest request;
 	request.request = 1;
 	request.scene = RID::from_uint64(1);
@@ -239,7 +239,7 @@ TEST_CASE("[P01] Late FIFO receive cannot revive canceled requests or bypass cop
 TEST_CASE("[P01] Rejected FIFO batch consumes neither capacity nor publication identity") {
 	skinned_mesh_capture_test_hook_reset();
 	auto session = SkinnedMeshCaptureTestNativeSession::create(7, 9007, false);
-	REQUIRE(session != nullptr);
+	REQUIRE(static_cast<bool>(session));
 	SkinnedMeshCaptureTestSessionRequest request;
 	request.scene = RID::from_uint64(1);
 	request.mesh = RID::from_uint64(2);
@@ -277,7 +277,7 @@ TEST_CASE("[P01] Native delivery traverses the original RS cross-thread command 
 	REQUIRE(server != nullptr);
 	REQUIRE(server->is_on_render_thread()); // Headless test main owns dummy RT.
 	auto session = SkinnedMeshCaptureTestNativeSession::create(8, 9008, false);
-	REQUIRE(session != nullptr);
+	REQUIRE(static_cast<bool>(session));
 	SkinnedMeshCaptureTestSessionRequest request;
 	request.request = 1;
 	request.scene = RID::from_uint64(1);
@@ -308,7 +308,7 @@ TEST_CASE("[P01] Native delivery traverses the original RS cross-thread command 
 TEST_CASE("[P01] Native session detects late duplicate image after completed job") {
 	skinned_mesh_capture_test_hook_reset();
 	auto session = SkinnedMeshCaptureTestNativeSession::create(30, 9030, false);
-	REQUIRE(session != nullptr);
+	REQUIRE(static_cast<bool>(session));
 	Callable callback;
 	REQUIRE(SkinnedMeshCaptureTestNativeSessionTestAccess::prepare_completed_image(*session, callback) == OK);
 	PackedByteArray pixels;

@@ -1,8 +1,0 @@
-{
-  "binary": "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64",
-  "commands": [
-    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64 --headless --test --test-case='[K03][P2]*'",
-    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64 --headless --test --test-case='[Qualification][T1]*'",
-    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64 --headless --test --test-case='[QualificationNative][Vulkan]*'"
-  ]
-}

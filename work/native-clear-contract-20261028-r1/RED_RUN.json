@@ -1,7 +1,0 @@
-[
-  "/Users/macbookair/Documents/Work/godot_ANGE/work/native-clear-contract-20261028-r1/godot-clear",
-  "--disable-crash-handler",
-  "--headless",
-  "--test",
-  "--test-case=[RenderingDevice] buffer clear*"
-]

@@ -178,7 +178,7 @@ Error CallQueue::push_set(ObjectID p_id, const StringName &p_prop, const Variant
 			const String context = error_text;
 			UNLOCK_MUTEX;
 			print_queue_statistics(snapshot);
-			fprintf(stderr, "Failed set target ID: %llu. Message queue out of memory. %s\n", (unsigned long long)p_id, context.utf8().get_data());
+			fprintf(stderr, "Failed set target ID: %llu. Message queue out of memory. %s\n", static_cast<unsigned long long>(static_cast<uint64_t>(p_id)), context.utf8().get_data());
 			return ERR_OUT_OF_MEMORY;
 		}
 		_add_page();
@@ -220,7 +220,7 @@ Error CallQueue::push_notification(ObjectID p_id, int p_notification) {
 			const String context = error_text;
 			UNLOCK_MUTEX;
 			print_queue_statistics(snapshot);
-			fprintf(stderr, "Failed notification: %d target ID: %llu. Message queue out of memory. %s\n", p_notification, (unsigned long long)p_id, context.utf8().get_data());
+			fprintf(stderr, "Failed notification: %d target ID: %llu. Message queue out of memory. %s\n", p_notification, static_cast<unsigned long long>(static_cast<uint64_t>(p_id)), context.utf8().get_data());
 			return ERR_OUT_OF_MEMORY;
 		}
 		_add_page();

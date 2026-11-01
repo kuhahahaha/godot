@@ -44,6 +44,9 @@ namespace RendererSceneRenderImplementation {
 
 class RenderForwardMobile : public RendererSceneRenderRD {
 	friend SceneShaderForwardMobile;
+#ifdef TESTS_ENABLED
+	friend class TestB4RenderListAccess;
+#endif
 
 protected:
 	struct GeometryInstanceSurfaceDataCache;

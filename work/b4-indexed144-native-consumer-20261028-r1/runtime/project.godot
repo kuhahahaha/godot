@@ -1,4 +1,0 @@
-[application]
-config/name="Original K05 Decoder Control"
-[rendering]
-renderer/rendering_method="mobile"

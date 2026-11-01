@@ -1,5 +1,0 @@
-config_version=5
-[application]
-config/name="QB1 original ticket native control"
-[rendering]
-renderer/rendering_method="mobile"

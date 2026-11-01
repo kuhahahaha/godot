@@ -1,5 +1,0 @@
-config_version=5
-[application]
-config/name="Current fixed-pair U01 VFX control"
-[rendering]
-renderer/rendering_method="mobile"

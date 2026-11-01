@@ -1,9 +1,0 @@
-{
-  "status": "AUTHOR_SOURCE_AUDIT_NO_NEW_DEFECT_ESTABLISHED_COMBINED_COVERAGE_OPEN",
-  "tests_run": false,
-  "production_changed": false,
-  "next_action": "Add combined original E05 retirement / prepared-ticket re-admission / RT reference / bridge teardown control at the original test seam; do not repeat disjoint controls as proof.",
-  "scope": "source-only D physical lifecycle",
-  "review": "author only",
-  "goal": "active"
-}

@@ -1,5 +1,0 @@
-# d23 candidate native asynchronous readback — 2026-10-30
-
-The editor built from source `d23e0b5486ff398dc49ef6b24e213730d350a798` had SHA-256 `58d849014e17937a6e3f50664cc3ff0b3f5d21a1623c5a41a7f25fe79f280b7f`. Two independent copies of the existing main RenderingDevice async-readback fixture ran non-headless: Metal 4.0 Forward Mobile, safe render thread; Vulkan 1.2.357 Forward Mobile, separate render thread; both on Apple M3 Pro. Each returned 0, reported enqueue status 0 and exactly one matching 1,056,768-byte result. Vulkan emitted the standard warning that the separate render thread is experimental; neither log reported an ERROR, timeout, duplicate delivery or failure. Editor and fixture script/project hashes were stable before and after. Commands, inputs and raw logs are retained in `RUN.json`, `METAL.txt`, `VULKAN.txt`.
-
-This is an ordinary native RenderingDevice readback control on two real backends. It does not establish a product particle request, authenticated association, qualification ticket completion, actual hardware map failure, Ready, device close or G1.

@@ -1,8 +1,0 @@
-Executable: bin/godot.macos.editor.dev.arm64
-Executable SHA256: b747ac4dbc93e7d2a8ad00496fecfb83f709acf9ed1d0b924c16a82d1abfc476
-Shared: bin/libgodot.macos.editor.dev.arm64.dylib
-Shared SHA256: bb8f801ad461026855f1065e2e411714109b6f30b810aa3db83fbcbb6735e0bc
-Dependencies: /opt/homebrew/opt/glslang/lib/libglslang.16.dylib, /opt/homebrew/opt/glslang/lib/libSPIRV.16.dylib, /opt/homebrew/opt/glslang/lib/libglslang-default-resource-limits.16.dylib
-Executable identity record: schema0/unavailable
-Shared early-help host: rc0
-Shared core-only identity-specific host: rc134 after missing controlled_build_identity guard

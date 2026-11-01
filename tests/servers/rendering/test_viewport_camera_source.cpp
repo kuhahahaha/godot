@@ -1,12 +1,37 @@
 /**************************************************************************/
-/*  test_viewport_camera_source.cpp                                      */
+/*  test_viewport_camera_source.cpp                                       */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#include "servers/rendering/renderer_viewport.h"
 #include "servers/rendering/renderer_rd/storage_rd/render_data_rd.h"
-#include "tests/test_macros.h"
-
+#include "servers/rendering/renderer_viewport.h"
 #include "servers/rendering/rendering_server_globals.h"
+#include "tests/test_macros.h"
 
 TEST_FORCE_LINK(test_viewport_camera_source)
 
@@ -93,7 +118,6 @@ TEST_CASE("[B4][E15] viewport camera source requires explicit C01 registration")
 	CHECK(invalidated_previous->source_capture_ordinal == 0);
 	RSG::viewport->free(viewport);
 }
-
 
 TEST_CASE("[B4][E17] external packet identity requires camera tuple and material capability") {
 	RendererSceneRender::CameraData camera;
@@ -228,6 +252,18 @@ TEST_CASE("[B4][D-Next-7] packet admission propagates typed diagnostics") {
 	CHECK(render_data.admit_surface_status(11) == AdmissionStatus::MATERIAL_GENERATION_MISMATCH);
 	CHECK(render_data.packet_identity.retired);
 	CHECK(render_data.admit_camera_status() == AdmissionStatus::RETIRED);
+}
+
+TEST_CASE("[B4] exhausted material generation cannot admit an external packet") {
+	using Status = RenderDataRD::PacketAdmissionStatus;
+	RenderDataRD data;
+	CHECK(data.admit_surface_status(UINT64_MAX) == Status::ORDINARY_MESH);
+	data.packet_identity.external = true;
+	data.packet_identity.material_generation = UINT64_MAX - 1;
+	CHECK(data.admit_surface_status(UINT64_MAX - 1) == Status::ADMITTED);
+	data.packet_identity.material_generation = UINT64_MAX;
+	CHECK(data.admit_surface_status(UINT64_MAX) == Status::MATERIAL_GENERATION_MISMATCH);
+	CHECK(data.packet_identity.retired);
 }
 
 TEST_CASE("[B4][D-Next-8] retired status wins over ordinary Mesh compatibility") {
@@ -484,6 +520,17 @@ TEST_CASE("[B4][E18] native retirement receipt binds the exact packet identity")
 	CHECK(retired_before_ack.native_retirement_acknowledged());
 	retired_before_ack.retire_packet();
 	CHECK(retired_before_ack.native_retirement_acknowledged());
+}
+
+TEST_CASE("[B4][E18] saturated material generation cannot issue native retirement receipt") {
+	RenderDataRD render_data;
+	render_data.packet_identity.external = true;
+	CHECK(render_data.set_camera_source(41, 3, 9));
+	CHECK(render_data.set_previous_camera_source(41, 3, 8));
+	render_data.packet_identity.material_generation = UINT64_MAX;
+	CHECK_FALSE(render_data.packet_identity.material_admitted(UINT64_MAX, 0));
+	CHECK_FALSE(render_data.issue_native_retirement_receipt().is_valid());
+	CHECK_FALSE(render_data.native_retirement_receipt_issued);
 }
 
 TEST_CASE("[B4][E19] camera history advances only after color adoption") {

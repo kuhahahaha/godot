@@ -1,7 +1,0 @@
-[
-  "/Users/macbookair/Documents/Work/godot_ANGE/work/qualification-retired-upload-control-20261028-r1/godot-private",
-  "--disable-crash-handler",
-  "--headless",
-  "--test",
-  "--test-case=*retired E05 backing rejects same prepared upload*"
-]

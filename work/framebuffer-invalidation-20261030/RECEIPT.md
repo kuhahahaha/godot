@@ -1,9 +1,0 @@
-# Framebuffer invalidation reentry — 2026-10-30
-
-`RenderingDevice::_free_internal` originally invoked a framebuffer invalidation callback while its RID was still live. A synchronous callback reentering `free_rid` for that RID produced two notifications and two pending framebuffer disposal entries. A controlled test suppresses actual driver disposal and bounds reentry; the original implementation failed 3 of 5 assertions for callback count, RID validity and disposal count. This RED does not depend on a crash or a real GPU failure.
-
-Local commit `d870ac2787` copies the original callback and userdata, queues the existing framebuffer once, invalidates the RID, then invokes the callback synchronously on the original calling thread. The enhanced test passed 8/8, including a new framebuffer allocated in the same RID slot during the callback remaining live. The existing framebuffer-cache callback consumes its original userdata and requires no later access to the removed RID. This is an author-verified narrow behavior change; it does not establish safety for arbitrary reentry into a parent dependency cascade.
-
-The module-enabled editor build returned rc 0 at parent `3b81535627` plus the exact two-file source delta SHA-256 `67513fdb21201e6ce180f77ddd345593ad39c5ea50ea6dd2f93ddd2c02e96e21`. Binary SHA-256 `2de1f174b17f0e5b804cca26eb608dc7cc36b2e533950d1f8a9ecd159daae9b2` remained stable throughout the serial runs in `RUN.json`: focused 1/8, RenderingDevice 14/227, Qualification 103/1905, P01 97/9657, device_exit 133/2619, K03 44/1153 and R01 FrameWait 16/293, all rc 0. Qualification and device_exit emit their existing expected refusal diagnostics. Project clang-format 21.1.7 and `git diff --check` passed.
-
-This result is not a fix for unknown native descriptor returns, full device-finalization transaction, real GPU failure handling or whole FR acceptance. Independent review, sanitizer/release and downstream integration remain separate.

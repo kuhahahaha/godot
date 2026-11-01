@@ -1,8 +1,0 @@
-ERROR: Resumed function 'suspend()' after await, but script is gone. At script: gdscript://-9223372013819657519.gd:5
-   at: resume (modules/gdscript/gdscript_function.cpp:321)
-[doctest] doctest version is "2.4.12"
-[doctest] run with "--help" for options
-===============================================================================
-[doctest] test cases:  2 |  2 passed | 0 failed | 1970 skipped
-[doctest] assertions: 16 | 16 passed | 0 failed |
-[doctest] Status: SUCCESS!

@@ -303,13 +303,24 @@ private:
 	static bool _particles_ratio_is_valid(double p_ratio);
 	static bool _particles_get_buffer_size(uint64_t p_count, uint64_t p_element_size, uint64_t p_header_size, uint32_t &r_size);
 	bool _particles_process(Particles *p_particles, double p_delta);
+	static bool _particles_get_data_size(uint64_t p_amount, uint64_t p_userdata_count, uint64_t p_trail_count, uint64_t &r_size);
 	static bool _particles_get_data_size(const Particles *p_particles, uint64_t &r_size);
+	static bool _particles_get_total_amount(uint64_t p_amount, uint64_t p_trail_count, uint32_t &r_total_amount);
+	static bool _particles_get_draw_amount(uint64_t p_amount, bool p_trails_enabled, uint64_t p_trail_count, uint32_t &r_total_amount, uint32_t &r_trail_divisor);
+	static bool _particles_get_emission_data_size(uint64_t p_amount, uint64_t &r_size);
+	static bool _particles_get_trail_bind_pose_data_size(uint64_t p_count, uint64_t &r_size);
+	static bool _particles_get_frame_params_data_size(uint64_t p_count, uint64_t &r_size);
+	static bool _particles_get_trail_history_index(uint64_t p_index, uint64_t p_history_size, uint64_t p_trail_size, uint64_t &r_index);
+	static bool _particles_get_lifetime_split(uint64_t p_amount, double p_phase, uint32_t &r_split);
+	static bool _particles_get_history_size(double p_trail_lifetime, int p_fixed_fps, uint32_t &r_size);
+	static bool _particles_get_instance_data_size(uint64_t p_total_amount, uint32_t p_xform_size, bool p_motion_vectors, uint64_t &r_size);
+	static bool _particles_get_sort_data_size(uint64_t p_amount, uint64_t &r_size);
 	void _particles_allocate_emission_buffer(Particles *particles);
 	void _particles_ensure_unused_emission_buffer(Particles *particles);
 	static bool _particles_ensure_unused_trail_buffer(Particles *particles);
 	static bool _particles_ensure_trail_uniform(Particles *particles, RID p_shader);
 	void _particles_free_data(Particles *particles);
-	void _particles_update_buffers(Particles *particles);
+	bool _particles_update_buffers(Particles *particles);
 
 	struct ParticlesShader {
 		struct PushConstant {
@@ -551,17 +562,12 @@ public:
 	}
 
 	_FORCE_INLINE_ uint32_t particles_get_amount(RID p_particles, uint32_t &r_trail_divisor) {
+		r_trail_divisor = 1;
 		Particles *particles = particles_owner.get_or_null(p_particles);
 		ERR_FAIL_NULL_V(particles, 0);
 
-		if (particles->trails_enabled && particles->trail_bind_poses.size() > 1) {
-			r_trail_divisor = particles->trail_bind_poses.size();
-		} else {
-			r_trail_divisor = 1;
-		}
-
 		uint32_t total_amount = 0;
-		if (!_particles_get_total_amount(particles, total_amount)) {
+		if (!_particles_get_draw_amount(uint64_t(particles->amount), particles->trails_enabled, particles->trail_bind_poses.size(), total_amount, r_trail_divisor)) {
 			return 0;
 		}
 		return total_amount;
@@ -585,7 +591,10 @@ public:
 		Particles *particles = particles_owner.get_or_null(p_particles);
 		ERR_FAIL_NULL_V(particles, RID());
 		if (particles->particles_transforms_buffer_uniform_set.is_null() || !RD::get_singleton()->uniform_set_is_valid(particles->particles_transforms_buffer_uniform_set)) {
-			_particles_update_buffers(particles);
+			particles->particles_transforms_buffer_uniform_set = RID();
+			if (!_particles_update_buffers(particles) || particles->particle_instance_buffer.is_null()) {
+				return RID();
+			}
 			Vector<RD::Uniform> uniforms;
 
 			{

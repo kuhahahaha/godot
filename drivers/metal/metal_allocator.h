@@ -206,6 +206,10 @@ public:
 			device(p_device) {}
 	~MetalHeapAllocator() override;
 
+#ifdef TESTS_ENABLED
+	bool test_fail_buffer_after_allocation = false;
+#endif
+
 	MetalBuffer new_buffer(NS::UInteger p_length, MTL::ResourceOptions p_options) override;
 	MetalTexture new_texture(const MTL::TextureDescriptor *p_desc) override;
 	void free_buffer(MetalBuffer &p_buffer) override;

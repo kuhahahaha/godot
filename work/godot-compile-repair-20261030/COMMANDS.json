@@ -1,7 +1,0 @@
-{
-  "reproduce": "scons -Q -j2 target=editor dev_build=yes tests=yes module_skinned_mesh_capture_tests_enabled=yes; godot --headless --test --test-case='*[P01]*'",
-  "build": "/usr/bin/python3 /Users/macbookair/.local/bin/scons -Q -j1 target=editor dev_build=yes tests=yes module_skinned_mesh_capture_tests_enabled=yes",
-  "p01": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case='*[P01]*' --exit --no-colors --no-intro",
-  "callqueue": "bin/godot.macos.editor.dev.arm64 --headless --test --test-case='*[CallQueue]*' --exit --no-colors --no-intro",
-  "naming_audit": "find core editor main modules platform scene servers -type f | rg 'p01_probe|probe'"
-}

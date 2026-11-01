@@ -739,9 +739,24 @@ void Registry::qualification_resource_retire_step(QualificationBridge *b, Render
 			} else if (rd->_recording_error() != OK || rd->frame_wait_draining || rd->draw_list.active || rd->compute_list.active || rd->raytracing_list.active || rd->draw_graph.has_driver_callbacks()) {
 				reason = 1;
 			} else {
-				rd->qualification_retiring = true;
-				rd->free_rid(rid);
-				rd->qualification_retiring = false;
+				{
+					struct RetirementScope {
+						bool &retiring;
+						QualificationPhysicalReturn *&active_cell;
+						bool previous_retiring;
+						QualificationPhysicalReturn *previous_cell;
+						RetirementScope(bool &p_retiring, QualificationPhysicalReturn *&p_active_cell, QualificationPhysicalReturn *p_cell) :
+								retiring(p_retiring), active_cell(p_active_cell), previous_retiring(p_retiring), previous_cell(p_active_cell) {
+							retiring = true;
+							active_cell = p_cell;
+						}
+						~RetirementScope() {
+							active_cell = previous_cell;
+							retiring = previous_retiring;
+						}
+					} scope(rd->qualification_retiring, rd->qualification_retiring_cell, &c->physical);
+					rd->free_rid(rid);
+				}
 				if (!c->physical.enqueued) {
 					reason = 5;
 				}

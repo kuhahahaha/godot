@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  test_device_exit_method.cpp                                       */
+/*  test_device_exit_method.cpp                                           */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -449,7 +449,8 @@ static bool clear_all_targets(bool same_generation, bool missing_owner) {
 			clear_callback_order = clear_callback_order * 10 + 2;
 			CHECK_EQ(owner->close_library(), ERR_BUSY);
 			CHECK_EQ(clear_binding_owner->close_library(), ERR_BUSY);
-		}, nullptr
+		},
+		nullptr
 	};
 	object->set_instance_binding(clear_binding_owner, object, &callbacks);
 	good = registry.begin_quiesce(direct_record) == ERR_BUSY && good;
@@ -1533,13 +1534,13 @@ static GDExtensionInterfaceFunctionPtr native_intercept(const char *name) {
 class NativeMethodLoader : public GDExtensionLibraryLoader {
 public:
 	uint64_t generation = 0;
-	Error initialize(GDExtensionInterfaceGetProcAddress p_get, const Ref<GDExtension> &extension, GDExtensionInitialization *result) override {
+	Error initialize(GDExtensionInterfaceGetProcAddress get_proc_address, const Ref<GDExtension> &extension, GDExtensionInitialization *result) override {
 		owner = extension.ptr();
-		native_get = p_get;
-		auto bootstrap = reinterpret_cast<GDExtensionInterfaceDeviceExitBootstrapLibraryV1>(p_get("device_exit_bootstrap_library_v1"));
-		auto retain = reinterpret_cast<GDExtensionInterfaceDeviceExitRetainLibraryViewV1>(p_get("device_exit_retain_library_view_v1"));
-		auto copy = reinterpret_cast<GDExtensionInterfaceDeviceExitCopyLibrarySnapshotV1>(p_get("device_exit_copy_library_snapshot_v1"));
-		auto release = reinterpret_cast<GDExtensionInterfaceDeviceExitReleaseLibraryViewV1>(p_get("device_exit_release_library_view_v1"));
+		native_get = get_proc_address;
+		auto bootstrap = reinterpret_cast<GDExtensionInterfaceDeviceExitBootstrapLibraryV1>(get_proc_address("device_exit_bootstrap_library_v1"));
+		auto retain = reinterpret_cast<GDExtensionInterfaceDeviceExitRetainLibraryViewV1>(get_proc_address("device_exit_retain_library_view_v1"));
+		auto copy = reinterpret_cast<GDExtensionInterfaceDeviceExitCopyLibrarySnapshotV1>(get_proc_address("device_exit_copy_library_snapshot_v1"));
+		auto release = reinterpret_cast<GDExtensionInterfaceDeviceExitReleaseLibraryViewV1>(get_proc_address("device_exit_release_library_view_v1"));
 		const GDExtensionDeviceExitAbi abi = { 1, 16, 0 };
 		GDExtensionDeviceExitLibraryCapability authority = {};
 		GDExtensionDeviceExitLibraryViewRef view = {};

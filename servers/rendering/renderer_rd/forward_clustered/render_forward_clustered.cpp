@@ -420,6 +420,9 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 		pipeline_key.primitive_type = surf->primitive;
 
 		RID xforms_uniform_set = surf->owner->transforms_uniform_set;
+		if ((surf->owner->base_flags & INSTANCE_DATA_FLAG_PARTICLES) && !RD::get_singleton()->uniform_set_is_valid(xforms_uniform_set)) {
+			continue;
+		}
 
 		SceneShaderForwardClustered::ShaderSpecialization pipeline_specialization = p_params->base_specialization;
 		pipeline_specialization.multimesh = bool(surf->owner->base_flags & INSTANCE_DATA_FLAG_MULTIMESH);
@@ -964,6 +967,19 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 			// Opaque fills motion and alpha lists.
 			render_list[RENDER_LIST_MOTION].clear();
 			render_list[RENDER_LIST_ALPHA].clear();
+		}
+	}
+
+	// External admission is shared by this fill. Validate the entire batch
+	// before appending anything so a late mismatch cannot leave a partial list.
+	if (p_render_data->packet_identity.external) {
+		for (int i = 0; i < (int)p_render_data->instances->size(); i++) {
+			GeometryInstanceForwardClustered *inst = static_cast<GeometryInstanceForwardClustered *>((*p_render_data->instances)[i]);
+			for (GeometryInstanceSurfaceDataCache *surf = inst->surface_caches; surf; surf = surf->next) {
+				if (!RenderDataRD::admission_succeeded(p_render_data->admit_surface_status(surf->material_generation))) {
+					return;
+				}
+			}
 		}
 	}
 
@@ -4405,6 +4421,9 @@ void RenderForwardClustered::_geometry_instance_update(RenderGeometryInstance *p
 
 	if (ginstance->data->dirty_dependencies) {
 		ginstance->data->dependency_tracker.update_begin();
+		if (ginstance->data->base_type == RSE::INSTANCE_MULTIMESH) {
+			RSG::utilities->base_update_dependency(ginstance->data->base, &ginstance->data->dependency_tracker);
+		}
 	}
 
 	//add geometry for drawing
@@ -4509,8 +4528,7 @@ void RenderForwardClustered::_geometry_instance_update(RenderGeometryInstance *p
 			ginstance->base_flags |= INSTANCE_DATA_FLAG_MULTIMESH_INDIRECT;
 		}
 
-		ginstance->transforms_uniform_set = mesh_storage->_multimesh_get_buffer_rd_rid(ginstance->data->base).is_valid() ?
-				mesh_storage->multimesh_get_3d_uniform_set(ginstance->data->base, scene_shader.default_shader_rd, TRANSFORMS_UNIFORM_SET) : RID();
+		ginstance->transforms_uniform_set = mesh_storage->_multimesh_get_buffer_rd_rid(ginstance->data->base).is_valid() ? mesh_storage->multimesh_get_3d_uniform_set(ginstance->data->base, scene_shader.default_shader_rd, TRANSFORMS_UNIFORM_SET) : RID();
 
 	} else if (ginstance->data->base_type == RSE::INSTANCE_PARTICLES) {
 		ginstance->base_flags |= INSTANCE_DATA_FLAG_PARTICLES;

@@ -35,6 +35,7 @@
 
 class CurveTexture : public Texture2D {
 	GDCLASS(CurveTexture, Texture2D);
+	friend class ResourceSnapshotAccess;
 	RES_BASE_EXTENSION("curvetex")
 public:
 	enum TextureMode {

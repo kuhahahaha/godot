@@ -41,6 +41,7 @@ class Curve : public Resource {
 #ifdef TESTS_ENABLED
 	friend class TestResourceSnapshotAccess;
 #endif
+	friend class ResourceSnapshotAccess;
 	uint64_t _content_revision = 1;
 	void _advance_content_revision() {
 		// Saturation permanently denies later native capture; never reset/ABA.
@@ -172,6 +173,9 @@ protected:
 private:
 	bool _filter_property(const String &p_name, int p_index) const;
 
+	void _note_content_mutated();
+	void _fill_baked_values(real_t *p_values, int p_count) const;
+	real_t _sample_baked_values(real_t p_offset, const real_t *p_values, int p_count) const;
 	void mark_dirty();
 	int _add_point(Vector2 p_position,
 			real_t p_left_tangent = 0,

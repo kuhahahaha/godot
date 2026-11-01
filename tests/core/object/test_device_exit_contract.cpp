@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  test_device_exit_contract.cpp                                       */
+/*  test_device_exit_contract.cpp                                         */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -1132,12 +1132,19 @@ public:
 	bool open = false;
 	bool native_image_retained = true;
 	int closes = 0;
-	Error open_library(const String &) override { open = true; return OK; }
+	Error open_library(const String &) override {
+		open = true;
+		return OK;
+	}
 	Error initialize(GDExtensionInterfaceGetProcAddress p_get, const Ref<GDExtension> &p_extension, GDExtensionInitialization *r_initialization) override {
 		metadata_entry(p_get, p_extension.ptr(), r_initialization);
 		return initialize_result;
 	}
-	Error close_library() override { open = false; closes++; return OK; }
+	Error close_library() override {
+		open = false;
+		closes++;
+		return OK;
+	}
 	bool is_library_open() const override { return open; }
 	bool has_library_changed() const override { return false; }
 	bool library_exists() const override { return true; }

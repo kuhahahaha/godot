@@ -30,6 +30,7 @@
 
 #include "particles_storage.h"
 
+#include "core/os/os.h"
 #include "servers/rendering/renderer_rd/effects/sort_effects.h"
 #include "servers/rendering/renderer_rd/renderer_compositor_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
@@ -598,9 +599,9 @@ void ParticlesStorage::particles_set_seed(RID p_particles, uint32_t p_seed) {
 void ParticlesStorage::_particles_allocate_emission_buffer(Particles *particles) {
 	ERR_FAIL_COND(particles->emission_buffer != nullptr);
 
-	uint32_t emission_buffer_size = 0;
-	if (!_particles_get_buffer_size(uint64_t(particles->amount), sizeof(ParticleEmissionBuffer::Data), sizeof(uint32_t) * 4, emission_buffer_size)) {
-		ERR_PRINT("Particle emission buffer exceeds the rendering device buffer size limit.");
+	uint64_t emission_buffer_size = 0;
+	if (!_particles_get_emission_data_size(uint64_t(particles->amount), emission_buffer_size)) {
+		ERR_PRINT("Particle emission buffer size exceeds the supported allocation size.");
 		return;
 	}
 	particles->emission_buffer_data.resize(emission_buffer_size);
@@ -645,7 +646,10 @@ bool ParticlesStorage::_particles_ensure_unused_trail_buffer(Particles *particle
 }
 
 bool ParticlesStorage::_particles_ensure_trail_uniform(Particles *particles, RID p_shader) {
-	if (particles->trail_bind_pose_uniform_set.is_null()) {
+	if (particles->trail_bind_pose_uniform_set.is_null() || !RD::get_singleton()->uniform_set_is_valid(particles->trail_bind_pose_uniform_set)) {
+		// Drop an invalid handle before a replacement attempt so a failed create
+		// cannot leave stale state that looks like an existing uniform set.
+		particles->trail_bind_pose_uniform_set = RID();
 		Vector<RD::Uniform> uniforms;
 		{
 			RD::Uniform u;
@@ -745,28 +749,186 @@ void ParticlesStorage::particles_request_process(RID p_particles) {
 	}
 }
 
-bool ParticlesStorage::_particles_get_data_size(const Particles *p_particles, uint64_t &r_size) {
-	if (p_particles == nullptr || p_particles->amount <= 0) {
+bool ParticlesStorage::_particles_get_data_size(uint64_t p_amount, uint64_t p_userdata_count, uint64_t p_trail_count, uint64_t &r_size) {
+	if (p_amount == 0) {
 		r_size = 0;
 		return false;
 	}
 
-	uint64_t total_amount = uint64_t(p_particles->amount);
-	if (p_particles->trails_enabled && p_particles->trail_bind_poses.size() > 1) {
-		const uint64_t trail_count = uint64_t(p_particles->trail_bind_poses.size());
-		if (total_amount > UINT64_MAX / trail_count) {
+	uint64_t total_amount = p_amount;
+	if (p_trail_count > 1) {
+		if (total_amount > UINT64_MAX / p_trail_count) {
 			r_size = 0;
 			return false;
 		}
-		total_amount *= trail_count;
+		total_amount *= p_trail_count;
 	}
-	const uint64_t particle_data_size = sizeof(ParticleData) + sizeof(float) * 4 * uint64_t(p_particles->userdata_count);
+	if (p_userdata_count > (UINT64_MAX - sizeof(ParticleData)) / (sizeof(float) * 4)) {
+		r_size = 0;
+		return false;
+	}
+	const uint64_t particle_data_size = sizeof(ParticleData) + sizeof(float) * 4 * p_userdata_count;
 	if (particle_data_size != 0 && total_amount > UINT64_MAX / particle_data_size) {
 		r_size = 0;
 		return false;
 	}
 	r_size = total_amount * particle_data_size;
-	return r_size <= UINT32_MAX;
+	if (r_size > UINT32_MAX) {
+		r_size = 0;
+		return false;
+	}
+	return true;
+}
+
+bool ParticlesStorage::_particles_get_data_size(const Particles *p_particles, uint64_t &r_size) {
+	if (p_particles == nullptr || p_particles->amount <= 0) {
+		r_size = 0;
+		return false;
+	}
+	return _particles_get_data_size(uint64_t(p_particles->amount), uint64_t(p_particles->userdata_count), p_particles->trails_enabled ? uint64_t(p_particles->trail_bind_poses.size()) : 1, r_size);
+}
+
+bool ParticlesStorage::_particles_get_total_amount(uint64_t p_amount, uint64_t p_trail_count, uint32_t &r_total_amount) {
+	r_total_amount = 0;
+	if (p_amount == 0) {
+		return false;
+	}
+
+	const uint64_t effective_trail_count = MAX(uint64_t(1), p_trail_count);
+	if (p_amount > UINT64_MAX / effective_trail_count) {
+		return false;
+	}
+	const uint64_t total_amount = p_amount * effective_trail_count;
+	if (total_amount > UINT32_MAX) {
+		return false;
+	}
+	r_total_amount = uint32_t(total_amount);
+	return true;
+}
+
+bool ParticlesStorage::_particles_get_draw_amount(uint64_t p_amount, bool p_trails_enabled, uint64_t p_trail_count, uint32_t &r_total_amount, uint32_t &r_trail_divisor) {
+	r_total_amount = 0;
+	r_trail_divisor = 1;
+	const uint64_t trail_divisor = p_trails_enabled && p_trail_count > 1 ? p_trail_count : 1;
+	if (trail_divisor > 0xFF || !_particles_get_total_amount(p_amount, trail_divisor, r_total_amount)) {
+		return false;
+	}
+	r_trail_divisor = uint32_t(trail_divisor);
+	return true;
+}
+
+bool ParticlesStorage::_particles_get_emission_data_size(uint64_t p_amount, uint64_t &r_size) {
+	r_size = 0;
+	if (p_amount == 0 || p_amount > (UINT64_MAX - sizeof(uint32_t) * 4) / sizeof(ParticleEmissionBuffer::Data)) {
+		return false;
+	}
+	r_size = sizeof(uint32_t) * 4 + p_amount * sizeof(ParticleEmissionBuffer::Data);
+	if (r_size > UINT32_MAX) {
+		r_size = 0;
+		return false;
+	}
+	return true;
+}
+
+bool ParticlesStorage::_particles_get_trail_bind_pose_data_size(uint64_t p_count, uint64_t &r_size) {
+	r_size = 0;
+	if (p_count == 0 || p_count > UINT64_MAX / (16 * sizeof(float))) {
+		return false;
+	}
+	r_size = p_count * 16 * sizeof(float);
+	if (r_size > UINT32_MAX) {
+		r_size = 0;
+		return false;
+	}
+	return true;
+}
+
+bool ParticlesStorage::_particles_get_frame_params_data_size(uint64_t p_count, uint64_t &r_size) {
+	r_size = 0;
+	if (p_count == 0 || p_count > UINT64_MAX / sizeof(ParticlesFrameParams)) {
+		return false;
+	}
+	r_size = p_count * sizeof(ParticlesFrameParams);
+	if (r_size > UINT32_MAX) {
+		r_size = 0;
+		return false;
+	}
+	return true;
+}
+
+bool ParticlesStorage::_particles_get_trail_history_index(uint64_t p_index, uint64_t p_history_size, uint64_t p_trail_size, uint64_t &r_index) {
+	r_index = 0;
+	if (p_history_size == 0 || p_trail_size == 0 || p_index >= p_trail_size || p_index > UINT64_MAX / p_history_size) {
+		return false;
+	}
+	r_index = (p_index * p_history_size) / p_trail_size;
+	return true;
+}
+
+bool ParticlesStorage::_particles_get_lifetime_split(uint64_t p_amount, double p_phase, uint32_t &r_split) {
+	r_split = 0;
+	if (p_amount == 0 || p_amount > UINT32_MAX || !Math::is_finite(p_phase) || p_phase < 0.0) {
+		return false;
+	}
+	const double scaled_phase = double(p_amount) * p_phase;
+	if (!Math::is_finite(scaled_phase)) {
+		return false;
+	}
+	const uint64_t phase_index = scaled_phase >= double(p_amount - 1) ? p_amount - 1 : uint64_t(scaled_phase);
+	r_split = uint32_t((phase_index + 1) % p_amount);
+	return true;
+}
+
+bool ParticlesStorage::_particles_get_history_size(double p_trail_lifetime, int p_fixed_fps, uint32_t &r_size) {
+	r_size = 0;
+	if (!Math::is_finite(p_trail_lifetime) || p_trail_lifetime < 0.0 || p_fixed_fps <= 0) {
+		return false;
+	}
+	const double history_size = p_trail_lifetime * double(p_fixed_fps);
+	if (!Math::is_finite(history_size) || history_size > double(INT_MAX)) {
+		return false;
+	}
+	r_size = MAX(uint32_t(1), uint32_t(history_size));
+	return true;
+}
+
+bool ParticlesStorage::_particles_get_sort_data_size(uint64_t p_amount, uint64_t &r_size) {
+	if (p_amount == 0) {
+		r_size = 0;
+		return false;
+	}
+	const uint64_t even_amount = p_amount + (p_amount & 1);
+	if (even_amount < p_amount || even_amount > UINT64_MAX / (sizeof(float) * 2)) {
+		r_size = 0;
+		return false;
+	}
+	r_size = even_amount * sizeof(float) * 2;
+	if (r_size > UINT32_MAX) {
+		r_size = 0;
+		return false;
+	}
+	return true;
+}
+
+bool ParticlesStorage::_particles_get_instance_data_size(uint64_t p_total_amount, uint32_t p_xform_size, bool p_motion_vectors, uint64_t &r_size) {
+	uint64_t words_per_instance = uint64_t(p_xform_size) + 2;
+	if (p_total_amount > UINT64_MAX / (words_per_instance * sizeof(float) * 4)) {
+		r_size = 0;
+		return false;
+	}
+	r_size = p_total_amount * words_per_instance * sizeof(float) * 4;
+	if (p_motion_vectors) {
+		if (r_size > UINT64_MAX / 2) {
+			r_size = 0;
+			return false;
+		}
+		r_size *= 2;
+	}
+	if (r_size > UINT32_MAX) {
+		r_size = 0;
+		return false;
+	}
+	return true;
 }
 
 bool ParticlesStorage::_particles_get_buffer_size(uint64_t p_count, uint64_t p_element_size, uint64_t p_header_size, uint32_t &r_size) {
@@ -973,11 +1135,11 @@ void ParticlesStorage::_particles_restore_process_history(Particles *p_particles
 	}
 	if (p_particles->trail_params.size() > 1) {
 		for (uint32_t i = 0; i < p_particles->trail_params.size(); i++) {
-			uint32_t src_idx = i * p_particles->frame_history.size() / p_particles->trail_params.size();
+			uint64_t src_idx = uint64_t(i) * p_particles->frame_history.size() / p_particles->trail_params.size();
 			if (p_previous_trail_speed_scale <= 0.0) {
 				src_idx = 0;
 			}
-			p_particles->trail_params[i] = p_particles->frame_history[src_idx];
+			p_particles->trail_params[i] = p_particles->frame_history[uint32_t(src_idx)];
 		}
 	} else {
 		p_particles->trail_params[0] = p_particles->frame_history[0];
@@ -1030,6 +1192,7 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
 
 	if (p_particles->particles_material_uniform_set.is_null() || !RD::get_singleton()->uniform_set_is_valid(p_particles->particles_material_uniform_set)) {
+		p_particles->particles_material_uniform_set = RID();
 		thread_local LocalVector<RD::Uniform> uniforms;
 		uniforms.clear();
 
@@ -1089,6 +1252,14 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 			uniforms.push_back(u);
 		}
 
+#ifdef TESTS_ENABLED
+		// Exercise the same early-return branch as a rejected RD uniform allocation.
+		if (OS::get_singleton()->get_environment("GODOT_TEST_PARTICLES_REJECT_MATERIAL_UNIFORM_ONCE") == "1") {
+			OS::get_singleton()->unset_environment("GODOT_TEST_PARTICLES_REJECT_MATERIAL_UNIFORM_ONCE");
+			ERR_PRINT("Test-only particle material uniform allocation rejection.");
+			return false;
+		}
+#endif
 		p_particles->particles_material_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, particles_shader.default_shader_rd, 1);
 		if (p_particles->particles_material_uniform_set.is_null()) {
 			ERR_PRINT("Failed to create particle material uniform set.");
@@ -1389,6 +1560,7 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 			if (uniform_set_valid) {
 				RD::get_singleton()->free_rid(p_particles->collision_textures_uniform_set);
 			}
+			p_particles->collision_textures_uniform_set = RID();
 
 			thread_local LocalVector<RD::Uniform> uniforms;
 			uniforms.clear();
@@ -1483,15 +1655,27 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 		}
 	}
 
+#ifdef TESTS_ENABLED
+	if (OS::get_singleton()->get_environment("GODOT_TEST_PARTICLES_REJECT_AFTER_CLEAR_ONCE") == "1") {
+		OS::get_singleton()->unset_environment("GODOT_TEST_PARTICLES_REJECT_AFTER_CLEAR_ONCE");
+		ERR_PRINT("Test-only particle simulation rejection before committing clear.");
+		return fail_process();
+	}
+#endif
+
 	if (p_particles->trail_params.size() > 1) {
 		//fill the trail params
 		for (uint32_t i = 0; i < p_particles->trail_params.size(); i++) {
-			uint32_t src_idx = i * p_particles->frame_history.size() / p_particles->trail_params.size();
+			uint64_t src_idx = 0;
+			if (!_particles_get_trail_history_index(i, p_particles->frame_history.size(), p_particles->trail_params.size(), src_idx)) {
+				ERR_PRINT("Particle trail history index exceeds the supported range.");
+				return fail_process();
+			}
 			if (p_particles->speed_scale <= 0.0) {
 				// Stop trails.
 				src_idx = 0;
 			}
-			p_particles->trail_params[i] = p_particles->frame_history[src_idx];
+			p_particles->trail_params[i] = p_particles->frame_history[uint32_t(src_idx)];
 		}
 	} else {
 		p_particles->trail_params[0] = p_particles->frame_history[0];
@@ -1580,7 +1764,7 @@ void ParticlesStorage::particles_set_view_axis(RID p_particles, const Vector3 &p
 		return;
 	}
 
-	if (particles->particle_buffer.is_null() || particles->trail_bind_pose_uniform_set.is_null()) {
+	if (particles->particle_buffer.is_null() || particles->particles_copy_uniform_set.is_null() || !RD::get_singleton()->uniform_set_is_valid(particles->particles_copy_uniform_set) || particles->trail_bind_pose_uniform_set.is_null() || !RD::get_singleton()->uniform_set_is_valid(particles->trail_bind_pose_uniform_set)) {
 		return; //particles have not processed yet
 	}
 
@@ -1593,20 +1777,21 @@ void ParticlesStorage::particles_set_view_axis(RID p_particles, const Vector3 &p
 	bool do_sort = particles->draw_order == RSE::PARTICLES_DRAW_ORDER_VIEW_DEPTH;
 
 	//copy to sort buffer
-	if (do_sort && particles->particles_sort_buffer == RID()) {
-		uint32_t size = particles->amount;
-		if (size & 1) {
-			if (size == UINT32_MAX) {
-				ERR_PRINT("Particle sort buffer exceeds the rendering device buffer size limit.");
-				return;
-			}
-			size++; //make multiple of 16
+	if (do_sort && (particles->particles_sort_buffer.is_null() || !RD::get_singleton()->uniform_set_is_valid(particles->particles_sort_uniform_set))) {
+		if (RD::get_singleton()->uniform_set_is_valid(particles->particles_sort_uniform_set)) {
+			RD::get_singleton()->free_rid(particles->particles_sort_uniform_set);
 		}
-		if (!_particles_get_buffer_size(size, sizeof(float) * 2, 0, size)) {
-			ERR_PRINT("Particle sort buffer exceeds the rendering device buffer size limit.");
+		particles->particles_sort_uniform_set = RID();
+		if (particles->particles_sort_buffer.is_valid()) {
+			RD::get_singleton()->free_rid(particles->particles_sort_buffer);
+			particles->particles_sort_buffer = RID();
+		}
+		uint64_t sort_buffer_size = 0;
+		if (!_particles_get_sort_data_size(uint64_t(particles->amount), sort_buffer_size)) {
+			ERR_PRINT("Particle sort buffer size exceeds the rendering device buffer size limit.");
 			return;
 		}
-		particles->particles_sort_buffer = RD::get_singleton()->storage_buffer_create(size);
+		particles->particles_sort_buffer = RD::get_singleton()->storage_buffer_create(uint32_t(sort_buffer_size));
 		if (particles->particles_sort_buffer.is_null()) {
 			ERR_PRINT("Failed to create particle sort buffer.");
 			return;
@@ -1651,7 +1836,10 @@ void ParticlesStorage::particles_set_view_axis(RID p_particles, const Vector3 &p
 	}
 
 	copy_push_constant.order_by_lifetime = (particles->draw_order == RSE::PARTICLES_DRAW_ORDER_LIFETIME || particles->draw_order == RSE::PARTICLES_DRAW_ORDER_REVERSE_LIFETIME);
-	copy_push_constant.lifetime_split = (MIN(int(particles->amount * particles->phase), particles->amount - 1) + 1) % particles->amount;
+	if (!_particles_get_lifetime_split(uint64_t(particles->amount), particles->phase, copy_push_constant.lifetime_split)) {
+		ERR_PRINT("Particle lifetime split exceeds the supported range.");
+		return;
+	}
 	copy_push_constant.lifetime_reverse = particles->draw_order == RSE::PARTICLES_DRAW_ORDER_REVERSE_LIFETIME;
 	copy_push_constant.motion_vectors_current_offset = particles->instance_motion_vectors_current_offset;
 
@@ -1679,6 +1867,10 @@ void ParticlesStorage::particles_set_view_axis(RID p_particles, const Vector3 &p
 	copy_push_constant.pad2 = uint32_t(0);
 
 	if (do_sort) {
+		if (!RD::get_singleton()->compute_pipeline_is_valid(particles_shader.copy_pipelines[particles->userdata_count][ParticlesShader::COPY_MODE_FILL_SORT_BUFFER].get_rid())) {
+			ERR_PRINT("Particle sort copy pipeline is invalid.");
+			return;
+		}
 		RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 
 		RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, particles_shader.copy_pipelines[particles->userdata_count][ParticlesShader::COPY_MODE_FILL_SORT_BUFFER].get_rid());
@@ -1695,8 +1887,19 @@ void ParticlesStorage::particles_set_view_axis(RID p_particles, const Vector3 &p
 		}
 	}
 
-	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
+	uint32_t total_copy_particles = 0;
+	if (!_particles_get_total_amount(uint64_t(particles->amount), particles->trails_enabled ? uint64_t(particles->trail_bind_poses.size()) : 1, total_copy_particles)) {
+		ERR_PRINT("Particle copy amount exceeds the supported dispatch size.");
+		return;
+	}
+	copy_push_constant.total_particles = total_copy_particles;
+
 	uint32_t copy_mode = do_sort ? ParticlesShader::COPY_MODE_FILL_INSTANCES_WITH_SORT_BUFFER : ParticlesShader::COPY_MODE_FILL_INSTANCES;
+	if (!RD::get_singleton()->compute_pipeline_is_valid(particles_shader.copy_pipelines[particles->userdata_count][copy_mode].get_rid())) {
+		ERR_PRINT("Particle instance copy pipeline is invalid.");
+		return;
+	}
+	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 	copy_push_constant.copy_mode_2d = particles->mode == RSE::PARTICLES_MODE_2D ? 1 : 0;
 	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, particles_shader.copy_pipelines[particles->userdata_count][copy_mode].get_rid());
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, particles->particles_copy_uniform_set, 0);
@@ -1712,7 +1915,7 @@ void ParticlesStorage::particles_set_view_axis(RID p_particles, const Vector3 &p
 	RD::get_singleton()->compute_list_end();
 }
 
-void ParticlesStorage::_particles_update_buffers(Particles *particles) {
+bool ParticlesStorage::_particles_update_buffers(Particles *particles) {
 	uint32_t userdata_count = 0;
 
 	if (particles->process_material.is_valid()) {
@@ -1742,30 +1945,33 @@ void ParticlesStorage::_particles_update_buffers(Particles *particles) {
 		}
 
 		particles->particles_transforms_buffer_uniform_set = RID();
+		particles->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_PARTICLES_INSTANCES);
 		only_instances_changed = true;
-	} else if (!particles->particle_buffer.is_null()) {
-		// No operation is required because a buffer already exists, return early.
-		return;
+	} else if (!particles->particle_buffer.is_null() && !particles->particle_instance_buffer.is_null() && RD::get_singleton()->uniform_set_is_valid(particles->particles_copy_uniform_set)) {
+		// No operation is required when all buffers and the copy uniform already exist.
+		return true;
 	}
 
 	if (particles->amount > 0) {
-		uint32_t total_amount = 0;
-		if (!_particles_get_total_amount(particles, total_amount)) {
-			ERR_PRINT("Particle amount exceeds the rendering device limit.");
-			return;
+		uint64_t particle_data_size = 0;
+		const uint64_t trail_count = particles->trails_enabled ? uint64_t(particles->trail_bind_poses.size()) : 1;
+		if (!_particles_get_data_size(uint64_t(particles->amount), uint64_t(userdata_count), trail_count, particle_data_size)) {
+			ERR_PRINT("Particle buffer size exceeds the rendering device buffer size limit.");
+			return false;
 		}
+		const uint64_t total_amount = particle_data_size / (sizeof(ParticleData) + sizeof(float) * 4 * uint64_t(userdata_count));
 
 		uint32_t xform_size = particles->mode == RSE::PARTICLES_MODE_2D ? 2 : 3;
+		uint64_t particle_instance_buffer_size = 0;
+		if (!_particles_get_instance_data_size(total_amount, xform_size, uses_motion_vectors, particle_instance_buffer_size)) {
+			ERR_PRINT("Particle instance buffer size exceeds the rendering device buffer size limit.");
+			return false;
+		}
 		bool particle_buffer_created = false;
 		if (particles->particle_buffer.is_null()) {
-			uint32_t particle_buffer_size = 0;
-			if (!_particles_get_buffer_size(total_amount, sizeof(ParticleData) + uint64_t(userdata_count) * sizeof(float) * 4, 0, particle_buffer_size)) {
-				ERR_PRINT("Particle buffer exceeds the rendering device buffer size limit.");
-				return;
-			}
-			particles->particle_buffer = RD::get_singleton()->storage_buffer_create(particle_buffer_size);
+			particles->particle_buffer = RD::get_singleton()->storage_buffer_create(uint32_t(particle_data_size));
 			if (particles->particle_buffer.is_null()) {
-				return;
+				return false;
 			}
 			particles->userdata_count = userdata_count;
 			particles->restart_request = true;
@@ -1773,36 +1979,34 @@ void ParticlesStorage::_particles_update_buffers(Particles *particles) {
 		}
 
 		PackedByteArray data;
-		uint32_t particle_instance_buffer_size = 0;
-		if (!_particles_get_buffer_size(total_amount, uint64_t(xform_size + 1 + 1) * sizeof(float) * 4, 0, particle_instance_buffer_size)) {
-			ERR_PRINT("Particle instance buffer exceeds the rendering device buffer size limit.");
-			if (particle_buffer_created) {
-				RD::get_singleton()->free_rid(particles->particle_buffer);
-				particles->particle_buffer = RID();
-			}
-			return;
-		}
-		if (uses_motion_vectors) {
-			if (particle_instance_buffer_size > UINT32_MAX / 2) {
-				ERR_PRINT("Particle motion vector buffer exceeds the rendering device buffer size limit.");
-				if (particle_buffer_created) {
-					RD::get_singleton()->free_rid(particles->particle_buffer);
-					particles->particle_buffer = RID();
-				}
-				return;
-			}
-			particle_instance_buffer_size *= 2;
+		data.resize_initialized(uint32_t(particle_instance_buffer_size));
+
+		// A stale or externally invalidated copy uniform can leave the old instance
+		// buffer allocated while forcing this path to rebuild it. Release that RID
+		// before replacing it so a failed rebuild cannot leak the previous buffer.
+		if (particles->particle_instance_buffer.is_valid()) {
+			RD::get_singleton()->free_rid(particles->particle_instance_buffer);
+			particles->particle_instance_buffer = RID();
 		}
 
-		data.resize_initialized(particle_instance_buffer_size);
-
-		particles->particle_instance_buffer = RD::get_singleton()->storage_buffer_create(particle_instance_buffer_size, data);
+		// Test a rejected instance allocation after the particle data buffer already exists.
+		particles->particle_instance_buffer = RD::get_singleton()->storage_buffer_create(uint32_t(particle_instance_buffer_size), data);
+#ifdef TESTS_ENABLED
+		if (!particle_buffer_created && OS::get_singleton()->get_environment("GODOT_TEST_PARTICLES_REJECT_INSTANCE_ONCE") == "1") {
+			OS::get_singleton()->unset_environment("GODOT_TEST_PARTICLES_REJECT_INSTANCE_ONCE");
+			if (particles->particle_instance_buffer.is_valid()) {
+				RD::get_singleton()->free_rid(particles->particle_instance_buffer);
+			}
+			particles->particle_instance_buffer = RID();
+			ERR_PRINT("Test-only particle instance buffer allocation rejection.");
+		}
+#endif
 		if (particles->particle_instance_buffer.is_null()) {
 			if (particle_buffer_created) {
 				RD::get_singleton()->free_rid(particles->particle_buffer);
 				particles->particle_buffer = RID();
 			}
-			return;
+			return false;
 		}
 
 		{
@@ -1832,7 +2036,7 @@ void ParticlesStorage::_particles_update_buffers(Particles *particles) {
 					RD::get_singleton()->free_rid(particles->particle_buffer);
 					particles->particle_buffer = RID();
 				}
-				return;
+				return false;
 			}
 		}
 
@@ -1840,12 +2044,16 @@ void ParticlesStorage::_particles_update_buffers(Particles *particles) {
 		particles->instance_motion_vectors_current_offset = 0;
 		particles->instance_motion_vectors_previous_offset = 0;
 		particles->instance_motion_vectors_last_change = -1;
+		if (uses_motion_vectors) {
+			particles->instance_motion_vectors_enabled = true;
+		}
 
 		if (only_instances_changed) {
 			// The simulation buffer was retained, but the renderer must retrieve the rebuilt instances uniform.
 			particles->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_PARTICLES_INSTANCES);
 		}
 	}
+	return true;
 }
 void ParticlesStorage::update_particles() {
 	if (!particle_update_list.first()) {
@@ -1879,12 +2087,12 @@ void ParticlesStorage::update_particles() {
 			}
 		};
 
-		_particles_update_buffers(particles);
+		const bool buffers_ready = _particles_update_buffers(particles);
 		bool retrying = retry_candidate && particles->frame_delta_committed && particles->frame_delta_committed_frame == frame;
 		if (particles->amount <= 0) {
 			continue;
 		}
-		if (particles->particle_buffer.is_null() || particles->particle_instance_buffer.is_null() || !RD::get_singleton()->uniform_set_is_valid(particles->particles_copy_uniform_set)) {
+		if (!buffers_ready || particles->particle_buffer.is_null() || particles->particle_instance_buffer.is_null() || !RD::get_singleton()->uniform_set_is_valid(particles->particles_copy_uniform_set)) {
 			queue_retry();
 			continue;
 		}
@@ -1945,7 +2153,12 @@ void ParticlesStorage::update_particles() {
 			int history_size = 1;
 			int trail_steps = 1;
 			if (particles->trails_enabled && particles->trail_bind_poses.size() > 1) {
-				history_size = MAX(1, int(particles->trail_lifetime * fixed_fps));
+				uint32_t checked_history_size = 0;
+				if (!_particles_get_history_size(particles->trail_lifetime, fixed_fps, checked_history_size)) {
+					ERR_PRINT("Particle trail history size exceeds the supported range.");
+					continue;
+				}
+				history_size = checked_history_size;
 				trail_steps = particles->trail_bind_poses.size();
 			}
 
@@ -1961,8 +2174,13 @@ void ParticlesStorage::update_particles() {
 
 			if (uint32_t(trail_steps) != particles->trail_params.size() || particles->frame_params_buffer.is_null()) {
 				particles->trail_params.resize(trail_steps);
+				if (RD::get_singleton()->uniform_set_is_valid(particles->particles_material_uniform_set)) {
+					RD::get_singleton()->free_rid(particles->particles_material_uniform_set);
+				}
+				particles->particles_material_uniform_set = RID();
 				if (particles->frame_params_buffer.is_valid()) {
 					RD::get_singleton()->free_rid(particles->frame_params_buffer);
+					particles->frame_params_buffer = RID();
 				}
 				uint32_t frame_params_size = 0;
 				if (!_particles_get_buffer_size(uint64_t(trail_steps), sizeof(ParticlesFrameParams), 0, frame_params_size)) {
@@ -1979,6 +2197,10 @@ void ParticlesStorage::update_particles() {
 			}
 
 			if (particles->trail_bind_poses.size() > 1 && particles->trail_bind_pose_buffer.is_null()) {
+				if (RD::get_singleton()->uniform_set_is_valid(particles->trail_bind_pose_uniform_set)) {
+					RD::get_singleton()->free_rid(particles->trail_bind_pose_uniform_set);
+				}
+				particles->trail_bind_pose_uniform_set = RID();
 				uint32_t trail_bind_pose_size = 0;
 				if (!_particles_get_buffer_size(uint64_t(particles->trail_bind_poses.size()), sizeof(float) * 16, 0, trail_bind_pose_size)) {
 					ERR_PRINT("Particle trail bind pose buffer exceeds the rendering device buffer size limit.");
@@ -2167,7 +2389,6 @@ void ParticlesStorage::update_particles() {
 			} else {
 				todo = particles->frame_remainder;
 			}
-
 			while (todo >= frame_time || particles->clear) {
 				const float next_todo = todo > frame_time ? todo - frame_time : 0.0f;
 				if (todo >= frame_time && !(next_todo < todo)) {
@@ -2215,6 +2436,11 @@ void ParticlesStorage::update_particles() {
 		particles->instance_motion_vectors_last_change = frame;
 
 		// Copy particles to instance buffer.
+#ifdef TESTS_ENABLED
+		if (OS::get_singleton()->get_environment("GODOT_TEST_PARTICLES_REPORT_COPY") == "1") {
+			ERR_PRINT("Test-only particle instance copy reached.");
+		}
+#endif
 		if (particles->draw_order != RSE::PARTICLES_DRAW_ORDER_VIEW_DEPTH && particles->transform_align != RSE::PARTICLES_TRANSFORM_ALIGN_Z_BILLBOARD && particles->transform_align != RSE::PARTICLES_TRANSFORM_ALIGN_Z_BILLBOARD_Y_TO_VELOCITY && particles->transform_align != RSE::PARTICLES_TRANSFORM_ALIGN_LOCAL_BILLBOARD) {
 			//does not need view dependent operation, do copy here
 			ParticlesShader::CopyPushConstant copy_push_constant;
@@ -2277,10 +2503,17 @@ void ParticlesStorage::update_particles() {
 			}
 
 			copy_push_constant.order_by_lifetime = (particles->draw_order == RSE::PARTICLES_DRAW_ORDER_LIFETIME || particles->draw_order == RSE::PARTICLES_DRAW_ORDER_REVERSE_LIFETIME);
-			copy_push_constant.lifetime_split = (MIN(int(particles->amount * particles->phase), particles->amount - 1) + 1) % particles->amount;
+			if (!_particles_get_lifetime_split(uint64_t(particles->amount), particles->phase, copy_push_constant.lifetime_split)) {
+				ERR_PRINT("Particle lifetime split exceeds the supported range.");
+				continue;
+			}
 			copy_push_constant.lifetime_reverse = particles->draw_order == RSE::PARTICLES_DRAW_ORDER_REVERSE_LIFETIME;
 			copy_push_constant.motion_vectors_current_offset = particles->instance_motion_vectors_current_offset;
 
+			if (!RD::get_singleton()->compute_pipeline_is_valid(particles_shader.copy_pipelines[particles->userdata_count][ParticlesShader::COPY_MODE_FILL_INSTANCES].get_rid())) {
+				ERR_PRINT("Particle instance copy pipeline is invalid.");
+				continue;
+			}
 			RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 			copy_push_constant.copy_mode_2d = particles->mode == RSE::PARTICLES_MODE_2D ? 1 : 0;
 			RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, particles_shader.copy_pipelines[particles->userdata_count][ParticlesShader::COPY_MODE_FILL_INSTANCES].get_rid());

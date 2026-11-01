@@ -59,6 +59,9 @@ namespace RendererSceneRenderImplementation {
 
 class RenderForwardClustered : public RendererSceneRenderRD {
 	friend SceneShaderForwardClustered;
+#ifdef TESTS_ENABLED
+	friend class TestB4RenderListAccess;
+#endif
 
 	enum {
 		SCENE_UNIFORM_SET = 0,

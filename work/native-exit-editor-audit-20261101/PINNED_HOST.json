@@ -1,9 +1,0 @@
-{
-  "binary": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/bin/godot-editor-script.arm64",
-  "sha256": "a0cd958938bebf1ac698728c38e7dee9e5b623a4466fbea48ab9e304038d792f",
-  "controlled_build": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/bin/godot-editor-script.arm64.controlled_build.json",
-  "controlled_build_sha256": "e0b5774e7d87feea12e15ea510e85a65ba39bafea71bcaf477cea94f65b8fce8",
-  "source_drift": [],
-  "source_window": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/build-source-before.json",
-  "build_result": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-exit-editor-audit-20261101/build-result.json"
-}

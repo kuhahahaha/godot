@@ -1,3 +1,33 @@
+/**************************************************************************/
+/*  test_rendering_device_frame_wait.cpp                                  */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
 #include "tests/test_macros.h"
 
 TEST_FORCE_LINK(test_rendering_device_frame_wait)
@@ -118,6 +148,18 @@ public:
 		device.frames[0].chain_reports.push_back(report);
 	}
 	static bool native_source_returned(RenderingDevice &device) { return device.frames[0].chain_reports[0].calls[0].source_owner_returned; }
+	static void move_native_source_to_hidden(RenderingDevice &device) {
+		device.frames[0].qualification_hidden_reports.push_back(device.frames[0].chain_reports[0]);
+		device.frames[0].chain_reports.clear();
+	}
+	static bool hidden_source_returned(RenderingDevice &device) { return device.frames[0].qualification_hidden_reports[0].calls[0].source_owner_returned; }
+	static int64_t native_wait_code(const RenderingDevice &device) { return device.frame_wait_native_code; }
+	static bool native_wait_code_valid(const RenderingDevice &device) { return device.frame_wait_native_code_valid; }
+	static void select_other_frame(RenderingDevice &device) {
+		device.frames.resize(2);
+		device.frame = 1;
+	}
+	static Error readback_error(const RenderingDevice &device) { return device.frames[0].download_buffer_get_data_requests[0].result->error; }
 
 	static void attach(RenderingDevice &device, RenderingDeviceDriver &driver, const Callable &callback) {
 		device.driver = &driver;
@@ -195,15 +237,13 @@ public:
 		auto &frame = device.frames[0];
 		frame.fence_signaled = false;
 		frame.command_buffer = RenderingDeviceDriver::CommandBufferID(11);
-		device.draw_graph.initialize(device.driver,
-				[](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); },
-				1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+		device.draw_graph.initialize(device.driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
 		device.draw_graph.begin(primary_began);
 		auto result = frame.download_buffer_get_data_requests[0].result;
 		frame.download_buffer_get_data_requests[0].size = size;
 		frame.download_buffer_copy_regions[0].size = size;
 		const auto handle = device.draw_graph.add_buffer_get_data(RenderingDeviceDriver::BufferID(71), nullptr, RenderingDeviceDriver::BufferID(51), { 0, 0, size });
-		result->copies.push_back({ handle, RenderingDeviceDriver::BufferID(71), RenderingDeviceDriver::BufferID(51), { 0, 0, size } });
+		result->copies.push_back({ handle, RenderingDeviceDriver::BufferID(71), RenderingDeviceDriver::BufferID(51), { 0, 0, size }, false, RenderingDeviceGraph::RecordMappingState::Pending, UINT32_MAX, {}, false, OK, {} });
 		return result;
 	}
 	static void add_idle_slot(RenderingDevice &device) { device.frames.resize(2); }
@@ -216,7 +256,7 @@ public:
 		auto &request = frame.download_buffer_get_data_requests[0];
 		const auto region = frame.download_buffer_copy_regions[0];
 		const auto handle = device.draw_graph.add_buffer_get_data(RenderingDeviceDriver::BufferID(71), nullptr, RenderingDeviceDriver::BufferID(51), region);
-		request.result->copies.push_back({ handle, RenderingDeviceDriver::BufferID(71), RenderingDeviceDriver::BufferID(51), region });
+		request.result->copies.push_back({ handle, RenderingDeviceDriver::BufferID(71), RenderingDeviceDriver::BufferID(51), region, false, RenderingDeviceGraph::RecordMappingState::Pending, UINT32_MAX, {}, false, OK, {} });
 	}
 	static void separate_present(RenderingDevice &device) {
 		device.main_queue = RenderingDeviceDriver::CommandQueueID(1);
@@ -237,7 +277,7 @@ public:
 			const RenderingDeviceDriver::BufferID destination(51 + i);
 			const RenderingDeviceDriver::BufferCopyRegion region{ i * 4, 0, 4 };
 			const auto handle = device.draw_graph.add_buffer_get_data(RenderingDeviceDriver::BufferID(71), nullptr, destination, region);
-			request.result->copies.push_back({ handle, RenderingDeviceDriver::BufferID(71), destination, region });
+			request.result->copies.push_back({ handle, RenderingDeviceDriver::BufferID(71), destination, region, false, RenderingDeviceGraph::RecordMappingState::Pending, UINT32_MAX, {}, false, OK, {} });
 			frame.download_buffer_staging_buffers.push_back(destination);
 			frame.download_buffer_copy_regions.push_back(region);
 		}
@@ -279,17 +319,29 @@ public:
 	}
 };
 
-
 TEST_CASE("[K03][FrameWait] ordinary native source retirement waits while typed Busy retains source") {
 	class NativeDriver : public TransferTestDriverBase {
 	public:
 		int bounded = 0, blocking = 0;
 		bool native_call_observation_supported() const override { return true; }
-		FencePollResult native_call_poll(uint64_t serial) override { FencePollResult r; r.completed = true; r.completed_serial = serial; return r; }
+		FencePollResult native_call_poll(uint64_t serial) override {
+			FencePollResult r;
+			r.completed = true;
+			r.completed_serial = serial;
+			return r;
+		}
 		FencePollResult native_call_wait(uint64_t serial) override { return native_call_poll(serial); }
-		Error native_call_recycle(uint64_t serial) override { CHECK(serial == 17); ++bounded; return ERR_BUSY; }
+		Error native_call_recycle(uint64_t serial) override {
+			CHECK(serial == 17);
+			++bounded;
+			return ERR_BUSY;
+		}
 		// Ordinary retirement uses the blocking backend route.
-		Error native_call_recycle_wait(uint64_t serial) override { CHECK(serial == 17); ++blocking; return OK; }
+		Error native_call_recycle_wait(uint64_t serial) override {
+			CHECK(serial == 17);
+			++blocking;
+			return OK;
+		}
 	} driver;
 	RenderingDevice device;
 	TestFrameWaitAccess::attach_native_source(device, driver);
@@ -322,10 +374,19 @@ public:
 	int fail_call = 0;
 	uint64_t next_command = 12;
 	uint8_t bytes[4] = { 1, 2, 3, 4 };
-	Error fence_wait(FenceID) override { waits++; return result; }
-	uint8_t *buffer_map(BufferID) override { maps++; return map_failure ? nullptr : bytes; }
+	Error fence_wait(FenceID) override {
+		waits++;
+		return result;
+	}
+	uint8_t *buffer_map(BufferID) override {
+		maps++;
+		return map_failure ? nullptr : bytes;
+	}
 	void buffer_unmap(BufferID) override { unmaps++; }
-	bool command_pool_reset(CommandPoolID) override { resets++; return reset_result; }
+	bool command_pool_reset(CommandPoolID) override {
+		resets++;
+		return reset_result;
+	}
 	void command_copy_buffer(CommandBufferID, BufferID, BufferID, VectorView<BufferCopyRegion>) override {}
 	void command_pipeline_barrier(CommandBufferID, BitField<PipelineStageBits>, BitField<PipelineStageBits>, VectorView<MemoryAccessBarrier>, VectorView<BufferBarrier>, VectorView<TextureBarrier>, VectorView<AccelerationStructureBarrier>) override {}
 	void command_buffer_end(CommandBufferID) override {}
@@ -402,6 +463,72 @@ TEST_CASE("[R01][FrameWait] failed fence preserves requests and retry delivers o
 	REQUIRE(received.size() == 4);
 	CHECK(received[0] == 1);
 	CHECK(received[3] == 4);
+}
+
+TEST_CASE("[R01][FrameWait] native source error cannot later deliver its original readback") {
+	class NativeErrorDriver : public Driver {
+	public:
+		int polls = 0;
+		bool native_call_observation_supported() const override { return true; }
+		FencePollResult native_call_poll(uint64_t serial) override {
+			CHECK(serial == 17);
+			FencePollResult observed;
+			observed.completed_serial = serial;
+			if (++polls == 1) {
+				observed.native_error = true;
+				observed.native_code = -731;
+			} else {
+				observed.completed = true;
+			}
+			return observed;
+		}
+		FencePollResult native_call_wait(uint64_t serial) override { return native_call_poll(serial); }
+	} driver;
+	driver.result = OK;
+	RenderingDevice device;
+	callbacks = 0;
+	TestFrameWaitAccess::attach(device, driver, callable_mp_static(receive));
+	TestFrameWaitAccess::attach_native_source(device, driver);
+	TestFrameWaitAccess::select_other_frame(device);
+	CHECK(device._stall_for_frame(0, true) == FAILED);
+	CHECK(TestFrameWaitAccess::native_wait_code_valid(device));
+	CHECK(TestFrameWaitAccess::native_wait_code(device) == -731);
+	CHECK(TestFrameWaitAccess::readback_error(device) == FAILED);
+	CHECK(device._stall_for_frame(0, true) == FAILED);
+	CHECK(driver.polls == 1);
+	CHECK(driver.maps == 0);
+	CHECK(callbacks == 0);
+	CHECK(TestFrameWaitAccess::pending(device) == 1);
+	CHECK_FALSE(TestFrameWaitAccess::native_source_returned(device));
+	TestFrameWaitAccess::detach(device);
+}
+
+TEST_CASE("[R01][FrameWait] hidden native source error retains its original frame") {
+	class HiddenErrorDriver : public Driver {
+	public:
+		int polls = 0;
+		bool native_call_observation_supported() const override { return true; }
+		FencePollResult native_call_poll(uint64_t serial) override {
+			CHECK(serial == 17);
+			++polls;
+			FencePollResult observed;
+			observed.native_error = true;
+			observed.native_code = -731;
+			return observed;
+		}
+		FencePollResult native_call_wait(uint64_t serial) override { return native_call_poll(serial); }
+	} driver;
+	RenderingDevice device;
+	TestFrameWaitAccess::attach_native_source(device, driver);
+	TestFrameWaitAccess::move_native_source_to_hidden(device);
+	TestFrameWaitAccess::select_other_frame(device);
+	CHECK(device._stall_for_frame(0, true) == FAILED);
+	CHECK(TestFrameWaitAccess::native_wait_code_valid(device));
+	CHECK(TestFrameWaitAccess::native_wait_code(device) == -731);
+	CHECK(device._stall_for_frame(0, true) == FAILED);
+	CHECK(driver.polls == 1);
+	CHECK_FALSE(TestFrameWaitAccess::hidden_source_returned(device));
+	TestFrameWaitAccess::detach(device);
 }
 
 TEST_CASE("[R01][FrameWait] failed wait stops frame reset and flush") {
@@ -641,7 +768,8 @@ TEST_CASE("[R01][FrameWait] incomplete or failed result never publishes a succes
 		TestFrameWaitAccess::attach(device, driver, callable_mp_static(receive));
 		const auto result = TestFrameWaitAccess::split_first_segment(device);
 		CHECK(device._stall_for_frame(0) == OK);
-		const uint32_t offset = failure == 0 ? 1 : failure == 1 ? 3 : 2;
+		const uint32_t offset = failure == 0 ? 1 : failure == 1 ? 3
+																: 2;
 		const uint32_t size = failure == 2 ? 1 : 2;
 		TestFrameWaitAccess::next_segment(device, result, callable_mp_static(receive), offset, size);
 		driver.map_failure = failure == 3;
@@ -878,7 +1006,7 @@ TEST_CASE("[R01][FrameWait] native pool reset and primary begin failure close ad
 	}
 }
 
-}
+} //namespace TestRenderingDeviceFrameWait
 
 TEST_CASE("[R01][FrameWait] ordinary advance retries an early native wait before rotating again") {
 	TestFrameWaitAccess::busy_ordinary_advance_retries_same_slot();

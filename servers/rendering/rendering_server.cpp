@@ -1384,6 +1384,12 @@ Error RenderingServer::mesh_create_surface_data_from_arrays(RenderingServerTypes
 	surface_data.vertex_count = array_len;
 	surface_data.index_data = index_array;
 	surface_data.index_count = index_array_len;
+	// This conversion does not retain original index provenance. A reused
+	// output must not associate its previous source words with the new data.
+	surface_data.index_provenance_schema = 0;
+	surface_data.index_provenance_kind = RenderingServerTypes::SurfaceData::IndexProvenanceKind::NONE;
+	surface_data.index_provenance_word_count = 0;
+	surface_data.index_provenance_words.clear();
 	surface_data.blend_shape_data = blend_shape_data;
 	surface_data.bone_aabbs = bone_aabb;
 	surface_data.lods = lods;

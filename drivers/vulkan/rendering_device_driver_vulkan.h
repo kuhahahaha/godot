@@ -58,21 +58,21 @@ class FileAccess;
 class RenderingDeviceDriverVulkan : public RenderingDeviceDriver {
 #ifdef TESTS_ENABLED
 	friend class TestVulkanCompletionAccess;
- uint32_t test_fence_fault_phase = 0;
- VkResult test_fence_fault_result = VK_SUCCESS;
- bool test_submit_fault_applied = false;
- std::atomic<uint64_t> test_native_recycle_cv_waiting{ 0 };
- friend class TestQualificationVulkanAllocationAccess;
- uint32_t test_buffer_fault_stage = 0;
- uint32_t test_buffer_rollback_mask = 0;
- VkBuffer test_buffer_prefix = VK_NULL_HANDLE;
- VmaAllocation test_buffer_allocation_prefix = nullptr;
- uint32_t test_texture_fault_stage = 0;
- VkResult test_descriptor_free_error = VK_SUCCESS;
- uint32_t test_descriptor_free_calls = 0;
- uint32_t test_texture_rollback_mask = 0;
- VkImage test_texture_prefix = VK_NULL_HANDLE;
- VmaAllocation test_texture_allocation_prefix = nullptr;
+	uint32_t test_fence_fault_phase = 0;
+	VkResult test_fence_fault_result = VK_SUCCESS;
+	bool test_submit_fault_applied = false;
+	std::atomic<uint64_t> test_native_recycle_cv_waiting{ 0 };
+	friend class TestQualificationVulkanAllocationAccess;
+	uint32_t test_buffer_fault_stage = 0;
+	uint32_t test_buffer_rollback_mask = 0;
+	VkBuffer test_buffer_prefix = VK_NULL_HANDLE;
+	VmaAllocation test_buffer_allocation_prefix = nullptr;
+	uint32_t test_texture_fault_stage = 0;
+	VkResult test_descriptor_free_error = VK_SUCCESS;
+	uint32_t test_descriptor_free_calls = 0;
+	uint32_t test_texture_rollback_mask = 0;
+	VkImage test_texture_prefix = VK_NULL_HANDLE;
+	VmaAllocation test_texture_allocation_prefix = nullptr;
 #endif
 	/*****************/
 	/**** GENERIC ****/

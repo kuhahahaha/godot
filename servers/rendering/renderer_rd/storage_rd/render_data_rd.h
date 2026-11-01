@@ -75,7 +75,7 @@ public:
 			return !retired && has_previous_camera_source() && previous_view_id == p_view_id && previous_view_epoch == p_view_epoch && previous_camera_capture_ordinal == p_capture_ordinal;
 		}
 		bool material_admitted(uint64_t p_generation, uint32_t p_required_capabilities) const {
-			return external && !retired && material_generation == p_generation && p_generation != 0 && (material_capabilities & p_required_capabilities) == p_required_capabilities;
+			return external && !retired && material_generation == p_generation && p_generation != 0 && p_generation != UINT64_MAX && (material_capabilities & p_required_capabilities) == p_required_capabilities;
 		}
 		bool surface_admitted(uint64_t p_generation, uint32_t p_required_capabilities = 0) const {
 			return !retired && (!external || material_admitted(p_generation, p_required_capabilities));
@@ -99,7 +99,7 @@ public:
 		}
 	};
 
-	// Internal retirement acknowledgement for a packet's native references.
+	// Internal retirement acknowledgment for a packet's native references.
 	// This is an identity receipt only; it does not claim GPU completion.
 	struct NativeRetirementReceipt {
 		uint64_t view_id = 0;
@@ -158,7 +158,7 @@ public:
 		return packet_identity.previous_camera_source_matches(p_view_id, p_view_epoch, p_capture_ordinal);
 	}
 	NativeRetirementReceipt issue_native_retirement_receipt() const {
-		if (native_retirement_receipt_issued || native_retirement_acknowledged_state || !packet_identity.external || !packet_identity.has_camera_source() || !previous_camera_source_admitted() || packet_identity.material_generation == 0) {
+		if (native_retirement_receipt_issued || native_retirement_acknowledged_state || !packet_identity.external || !packet_identity.has_camera_source() || !previous_camera_source_admitted() || packet_identity.material_generation == 0 || packet_identity.material_generation == UINT64_MAX) {
 			return NativeRetirementReceipt();
 		}
 		native_retirement_receipt.view_id = packet_identity.view_id;

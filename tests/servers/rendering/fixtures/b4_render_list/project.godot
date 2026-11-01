@@ -1,0 +1,4 @@
+[application]
+config/name="B4 render-list admission fixture"
+[rendering]
+renderer/rendering_method="mobile"

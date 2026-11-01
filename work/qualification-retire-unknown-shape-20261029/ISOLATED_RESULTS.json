@@ -1,5 +1,0 @@
-{
-  "[Qualification] non-error Unknown remains well-formed while a dependent blocks retirement": 0,
-  "[TCPServer] When stopped shouldn't accept new connections": 1,
-  "[K03][MetalCompletion] no fence batches do not accumulate unowned records": 1
-}

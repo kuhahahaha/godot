@@ -31,8 +31,8 @@
 #include "mesh_storage.h"
 
 #include "core/io/marshalls.h"
-
 #include "servers/rendering/render_capture_test_hooks.h"
+#include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_viewport.h"
 #include "servers/rendering/rendering_server.h"
 #include "servers/rendering/rendering_server_types.h"
@@ -540,8 +540,21 @@ Error MeshStorage::mesh_add_external_surface(RID p_mesh, const ExternalSurfaceDe
 	ERR_FAIL_COND_V(mesh->surface_count == RSE::MAX_MESH_SURFACES, ERR_OUT_OF_MEMORY);
 	ERR_FAIL_COND_V(p_surface.vertex_count == 0 || p_surface.index_count == 0, ERR_INVALID_PARAMETER);
 	ERR_FAIL_COND_V(p_surface.primitive != RSE::PRIMITIVE_TRIANGLES || mesh->blend_shape_count != 0 || !mesh->instances.is_empty(), ERR_INVALID_PARAMETER);
+	const auto is_valid_aabb = [](const AABB &p_aabb) {
+		return p_aabb.is_finite() && p_aabb.get_end().is_finite() && p_aabb.size.x >= 0 && p_aabb.size.y >= 0 && p_aabb.size.z >= 0;
+	};
+	ERR_FAIL_COND_V(!is_valid_aabb(p_surface.aabb), ERR_INVALID_PARAMETER);
+	AABB combined_aabb = p_surface.aabb;
+	if (mesh->surface_count > 0) {
+		ERR_FAIL_COND_V(!is_valid_aabb(mesh->aabb), ERR_INVALID_PARAMETER);
+		combined_aabb = mesh->aabb;
+		combined_aabb.merge_with(p_surface.aabb);
+		ERR_FAIL_COND_V(!is_valid_aabb(combined_aabb), ERR_INVALID_PARAMETER);
+	}
 	ERR_FAIL_COND_V(p_surface.current_vertex_buffer.is_null() || p_surface.previous_vertex_buffer.is_null() || p_surface.index_buffer.is_null() || p_surface.index_array.is_null(), ERR_INVALID_PARAMETER);
-	ERR_FAIL_COND_V(p_surface.material.is_null(), ERR_INVALID_PARAMETER);
+	RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
+	ERR_FAIL_COND_V(!material_storage || !material_storage->owns_material(p_surface.material), ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(material_storage->material_get_generation(p_surface.material) == 0, ERR_INVALID_PARAMETER);
 	ERR_FAIL_COND_V(p_surface.generation == 0 || p_surface.current_allocation_generation == 0 || p_surface.previous_allocation_generation == 0, ERR_INVALID_PARAMETER);
 	ERR_FAIL_COND_V(p_surface.current_allocation_generation == p_surface.previous_allocation_generation, ERR_INVALID_PARAMETER);
 	ERR_FAIL_COND_V(p_surface.vertex_buffer_size < uint64_t(p_surface.vertex_count) * 144 || p_surface.previous_vertex_buffer_size < uint64_t(p_surface.vertex_count) * 144, ERR_INVALID_PARAMETER);
@@ -576,11 +589,7 @@ Error MeshStorage::mesh_add_external_surface(RID p_mesh, const ExternalSurfaceDe
 		return ERR_OUT_OF_MEMORY;
 	}
 	mesh->surfaces = new_surfaces;
-	if (mesh->surface_count == 0) {
-		mesh->aabb = p_surface.aabb;
-	} else {
-		mesh->aabb.merge_with(p_surface.aabb);
-	}
+	mesh->aabb = combined_aabb;
 	mesh->skeleton_aabb_version = 0;
 	mesh->surfaces[mesh->surface_count] = surface;
 	r_surface_index = mesh->surface_count++;
@@ -818,7 +827,12 @@ void MeshStorage::mesh_surface_set_material(RID p_mesh, int p_surface, RID p_mat
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL(mesh);
 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_surface, mesh->surface_count);
-	mesh->surfaces[p_surface]->material = p_material;
+	Mesh::Surface *surface = mesh->surfaces[p_surface];
+	if (surface->external) {
+		ERR_FAIL_COND_MSG(surface->material != p_material, "Indexed144 external material changes require a replacement output generation.");
+		return;
+	}
+	surface->material = p_material;
 
 	mesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MATERIAL);
 	mesh->material_cache.clear();
@@ -1818,15 +1832,38 @@ bool MeshStorage::_multimesh_enable_motion_vectors(MultiMesh *multimesh) {
 	if (multimesh->motion_vectors_enabled || multimesh->instances == 0) {
 		return true;
 	}
+	auto fail_replacement = [&]() {
+		_multimesh_invalidate_gpu_resources(multimesh);
+		multimesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MULTIMESH);
+		ERR_PRINT("MultiMesh motion-buffer replacement failed; drawing is disabled.");
+		return false;
+	};
 	uint32_t new_buffer_size;
-	ERR_FAIL_COND_V(_multimesh_buffer_size(multimesh->instances, multimesh->xform_format, multimesh->uses_colors, multimesh->uses_custom_data, true, new_buffer_size) != OK, false);
+	if (_multimesh_buffer_size(multimesh->instances, multimesh->xform_format, multimesh->uses_colors, multimesh->uses_custom_data, true, new_buffer_size) != OK) {
+		return fail_replacement();
+	}
 	const uint32_t buffer_size = new_buffer_size / 2;
-	ERR_FAIL_COND_V(!multimesh->buffer.is_valid(), false);
+	if (!multimesh->buffer.is_valid()) {
+		return fail_replacement();
+	}
 
 	Vector<float> doubled_cache;
 	if (!multimesh->data_cache.is_empty()) {
-		ERR_FAIL_COND_V(multimesh->data_cache.size() * sizeof(float) != buffer_size, false);
-		ERR_FAIL_COND_V(doubled_cache.resize(new_buffer_size / sizeof(float)) != OK, false);
+		if (multimesh->data_cache.size() * sizeof(float) != buffer_size) {
+			return fail_replacement();
+		}
+		Error resize_error;
+#ifdef TESTS_ENABLED
+		if (test_fail_motion_cache_resize) {
+			resize_error = ERR_OUT_OF_MEMORY;
+		} else
+#endif
+		{
+			resize_error = doubled_cache.resize(new_buffer_size / sizeof(float));
+		}
+		if (resize_error != OK) {
+			return fail_replacement();
+		}
 		memcpy(doubled_cache.ptrw(), multimesh->data_cache.ptr(), buffer_size);
 		memcpy(reinterpret_cast<uint8_t *>(doubled_cache.ptrw()) + buffer_size, multimesh->data_cache.ptr(), buffer_size);
 	}
@@ -1846,10 +1883,7 @@ bool MeshStorage::_multimesh_enable_motion_vectors(MultiMesh *multimesh) {
 		if (new_buffer.is_valid()) {
 			RD::get_singleton()->free_rid(new_buffer);
 		}
-		_multimesh_invalidate_gpu_resources(multimesh);
-		multimesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MULTIMESH);
-		ERR_PRINT("MultiMesh motion-buffer replacement failed; drawing is disabled.");
-		return false;
+		return fail_replacement();
 	}
 
 	RD::get_singleton()->free_rid(multimesh->buffer);
@@ -1921,7 +1955,7 @@ void MeshStorage::_multimesh_rebuild_command_buffer(MultiMesh *multimesh) {
 	const uint64_t byte_count = uint64_t(mesh->surface_count) * sizeof(uint32_t) * INDIRECT_MULTIMESH_COMMAND_STRIDE;
 	ERR_FAIL_COND(byte_count > UINT32_MAX);
 	Vector<uint8_t> bytes;
-	bytes.resize_initialized(byte_count);
+	ERR_FAIL_COND(bytes.resize_initialized(byte_count) != OK);
 	const uint32_t visible = multimesh->visible_instances < 0 ? uint32_t(multimesh->instances) : uint32_t(multimesh->visible_instances);
 	for (uint32_t i = 0; i < mesh->surface_count; i++) {
 		uint32_t offset = i * sizeof(uint32_t) * INDIRECT_MULTIMESH_COMMAND_STRIDE;
@@ -1982,7 +2016,6 @@ void MeshStorage::_multimesh_set_mesh(RID p_multimesh, RID p_mesh) {
 }
 
 void MeshStorage::_multimesh_refresh_mesh(MultiMesh *multimesh) {
-
 	_multimesh_rebuild_command_buffer(multimesh);
 
 	if (multimesh->instances == 0) {
@@ -2070,16 +2103,22 @@ void MeshStorage::_multimesh_update_motion_vectors_data_cache(MultiMesh *multime
 			uint8_t *data = (uint8_t *)multimesh->data_cache.ptrw();
 			uint32_t current_ofs = multimesh->motion_vectors_current_offset * multimesh->stride_cache * sizeof(float);
 			uint32_t previous_ofs = multimesh->motion_vectors_previous_offset * multimesh->stride_cache * sizeof(float);
-			uint32_t visible_instances = multimesh->visible_instances >= 0 ? multimesh->visible_instances : multimesh->instances;
-			uint32_t visible_region_count = visible_instances == 0 ? 0 : Math::division_round_up(visible_instances, (uint32_t)MULTIMESH_DIRTY_REGION_SIZE);
+			// Hidden edits must also survive CPU cache flips. Visibility only
+			// limits GPU uploads, not the instance data retained by the cache.
+			uint32_t region_count = Math::division_round_up((uint32_t)multimesh->instances, (uint32_t)MULTIMESH_DIRTY_REGION_SIZE);
 			uint32_t region_size = multimesh->stride_cache * MULTIMESH_DIRTY_REGION_SIZE * sizeof(float);
 			uint32_t size = multimesh->stride_cache * (uint32_t)multimesh->instances * (uint32_t)sizeof(float);
-			for (uint32_t i = 0; i < visible_region_count; i++) {
+			for (uint32_t i = 0; i < region_count; i++) {
 				if (multimesh->previous_data_cache_dirty_regions[i]) {
 					uint32_t offset = i * region_size;
 					memcpy(data + current_ofs + offset, data + previous_ofs + offset, MIN(region_size, size - offset));
 				}
 			}
+		}
+		if (!multimesh->buffer_set) {
+			// A fresh allocation has no prior instance transforms. Use the first
+			// cached upload for both frames until a nonempty upload is published.
+			multimesh->motion_vectors_previous_offset = multimesh->motion_vectors_current_offset;
 		}
 	}
 }
@@ -2589,13 +2628,16 @@ void MeshStorage::_update_dirty_multimeshes() {
 			uint32_t total_dirty_regions = multimesh->data_cache_dirty_region_count + multimesh->previous_data_cache_dirty_region_count;
 			if (total_dirty_regions != 0) {
 				Error upload_error = OK;
+				bool uploaded = false;
 				uint32_t data_cache_dirty_region_count = Math::division_round_up(multimesh->instances, (int)MULTIMESH_DIRTY_REGION_SIZE);
 				uint32_t visible_region_count = visible_instances == 0 ? 0 : Math::division_round_up(visible_instances, (uint32_t)MULTIMESH_DIRTY_REGION_SIZE);
 
 				uint32_t region_size = multimesh->stride_cache * MULTIMESH_DIRTY_REGION_SIZE * sizeof(float);
 				if (total_dirty_regions > 32 || total_dirty_regions > visible_region_count / 2) {
 					//if there too many dirty regions, or represent the majority of regions, just copy all, else transfer cost piles up too much
-					upload_error = RD::get_singleton()->buffer_update(multimesh->buffer, buffer_offset * sizeof(float), _multimesh_dirty_upload_size(visible_region_count, region_size, multimesh->instances * (uint32_t)multimesh->stride_cache * (uint32_t)sizeof(float)), data);
+					const uint32_t upload_size = _multimesh_dirty_upload_size(visible_region_count, region_size, multimesh->instances * (uint32_t)multimesh->stride_cache * (uint32_t)sizeof(float));
+					upload_error = RD::get_singleton()->buffer_update(multimesh->buffer, buffer_offset * sizeof(float), upload_size, data);
+					uploaded = upload_size > 0;
 				} else {
 					//not that many regions? update them all
 					for (uint32_t i = 0; i < visible_region_count; i++) {
@@ -2607,6 +2649,7 @@ void MeshStorage::_update_dirty_multimeshes() {
 							if (upload_error != OK) {
 								break;
 							}
+							uploaded = true;
 						}
 					}
 				}
@@ -2616,6 +2659,9 @@ void MeshStorage::_update_dirty_multimeshes() {
 					multimesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MULTIMESH);
 					ERR_PRINT("MultiMesh dirty-region upload failed; drawing is disabled.");
 				} else {
+					if (uploaded) {
+						multimesh->buffer_set = true;
+					}
 					memcpy(multimesh->previous_data_cache_dirty_regions, multimesh->data_cache_dirty_regions, data_cache_dirty_region_count * sizeof(bool));
 					memset(multimesh->data_cache_dirty_regions, 0, data_cache_dirty_region_count * sizeof(bool));
 

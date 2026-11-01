@@ -33,6 +33,9 @@
 // Included by modules_tests.gen.h only when this tests-only module is enabled.
 // Keep the fixture test object in the module archive reachable by the linker.
 namespace ForceLink {
+#ifdef VULKAN_ENABLED
+void force_link_test_capture_vulkan_fence_wait();
+#endif
 void force_link_test_capture_frame();
 void force_link_test_capture_transport_queue();
 void force_link_test_skinned_mesh_capture_test_probe_fixture();
@@ -40,6 +43,9 @@ void force_link_test_skinned_mesh_capture_test_probe_fixture();
 
 namespace TestSkinnedMeshCaptureTestProbeRegistration {
 static const bool fixture_linked = []() {
+#ifdef VULKAN_ENABLED
+	ForceLink::force_link_test_capture_vulkan_fence_wait();
+#endif
 	ForceLink::force_link_test_capture_frame();
 	ForceLink::force_link_test_capture_transport_queue();
 	ForceLink::force_link_test_skinned_mesh_capture_test_probe_fixture();
