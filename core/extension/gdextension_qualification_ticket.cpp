@@ -36,6 +36,16 @@ void add_graph(QualificationTicket *ticket,const RDG::RecordHandle &handle,uint3
  ticket->graphs.push_back({handle,ticket->facts.size(),frame,0,epoch,false,false});ticket->facts.push_back(fact);ticket->observation_dirty=true;
 }
 }
+Error Registry::qualification_typed_upload_capacity(QualificationTicket *ticket,RenderingDevice *rd,uint32_t rows) {
+ uint64_t bound=4+(ticket->preparation.expected_result_bytes+31)/32+rows;
+ for(const auto &upload:ticket->uploads)bound+=(upload.plan.byte_size+31)/32;
+ for(auto *image:ticket->texture_uploads)bound+=image->upload.max_segments;
+ return qualification_native_capacity(*rd->driver,rd->draw_graph.qualification_command_count(),bound,rd->transfer_worker_pool_max_size);
+}
+void Registry::qualification_add_upload_graph(QualificationTicket *ticket,RenderingDevice *rd,uint64_t instance,uint64_t frame,uint32_t kind,uint32_t index,uint32_t offset,uint64_t serial,uint64_t begin,uint64_t size) {
+ add_graph(ticket,{instance,frame,kind,index,offset},6,rd->frame,rd->frames[rd->frame].qualification_epoch,serial,begin,size);
+ rd->_qualification_add_frame_ticket(ticket);
+}
 Error Registry::qualification_ticket_locked(QualificationBridge *bridge,GDExtensionQualificationTicketRefV1 ref,QualificationTicket *&ticket) {
  if(ref.registry_instance!=instance || !ref.handle_serial)return ERR_INVALID_DATA;
  for(auto *existing:bridge->tickets)if(existing && existing->serial==ref.handle_serial && !existing->acknowledged){ticket=existing;return OK;}
@@ -276,6 +286,7 @@ void Registry::qualification_ticket_publish(QualificationTicket *ticket,Renderin
  for (const auto &upload : ticket->uploads) {
   live_upload_claim = live_upload_claim || upload.attempted || upload.progress.consumed || !upload.progress.segments.is_empty();
  }
+ for(auto *image:ticket->texture_uploads)live_upload_claim=live_upload_claim || image->upload_attempted;
  const bool no_effect=ticket->graphs.is_empty() && ticket->natives.is_empty() && !ticket->mapping_failed && !ticket->recording && !ticket->frame_refs;
  if(no_effect) {next.state=0;next.phase=0;}
  else if(ticket->mapping_failed || native_unknown) {next.state=6;next.phase=3;}
@@ -515,12 +526,14 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_release(GDExtensionQual
    for(auto *child:bridge->storage)if(child && &child->physical==cell)original=true;
    for(auto *child:bridge->textures)if(child && &child->physical==cell)original=true;
    for(auto *child:bridge->samplers)if(child && &child->physical==cell)original=true;
+   for(auto *child:bridge->sets)if(child && &child->physical==cell)original=true;
    for(auto *child:bridge->units)if(child && (&child->shader==cell || &child->pipeline==cell))original=true;
    if(!original)return false;
   }
   for(auto *child:bridge->storage)if(child && !check_cell(&child->physical,child->serial))return false;
   for(auto *child:bridge->textures)if(child && !check_cell(&child->physical,child->serial))return false;
   for(auto *child:bridge->samplers)if(child && !check_cell(&child->physical,child->serial))return false;
+  for(auto *child:bridge->sets)if(child && !check_cell(&child->physical,child->serial))return false;
   for(auto *child:bridge->units)if(child && (!check_cell(&child->shader,child->serial) || !check_cell(&child->pipeline,child->serial)))return false;
   return true;
  };
@@ -870,6 +883,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_v2(GDEx
 		for (const auto &upload : ticket->uploads) {
 			graph_bound += (upload.plan.byte_size + 31) / 32;
 		}
+  for(auto *image:ticket->texture_uploads)graph_bound+=image->upload.max_segments;
 		error = qualification_native_capacity(*rd->driver, rd->draw_graph.qualification_command_count(), graph_bound, rd->transfer_worker_pool_max_size);
 		if (error != OK) {
 			return result(error, error == ERR_UNAVAILABLE ? 18 : 19);
@@ -951,6 +965,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_v2(GDEx
 				}
 			}
 		}
+  error=qualification_typed_dependencies(bridge,rd,ticket,*request,resources);if(error!=OK)return result(error,16);
 		Ref<RenderingDevice::BufferGetDataResult> owned[3];
 		for (uint32_t i = 0; i < request->readback_count; ++i) {
 			owned[i].instantiate();

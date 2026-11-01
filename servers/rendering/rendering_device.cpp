@@ -2707,6 +2707,46 @@ Error RenderingDevice::texture_update(RID p_texture, uint32_t p_layer, const Vec
 	return OK;
 }
 
+// Original checked image upload: each accepted row is a real graph command.
+// The full immutable tight image is supplied on each retry; only its suffix is staged.
+Error RenderingDevice::_qualification_texture_upload(RID rid,const uint8_t *bytes,uint32_t size,QualificationUploadProgress &progress) {
+ if(!qualification_recording || !bytes || _recording_error()!=OK)return ERR_INVALID_PARAMETER;
+ auto *texture=texture_owner.get_or_null(rid);
+ if(!texture || !texture->qualification_return || !texture->driver_id || texture->owner.is_valid() || texture->shared_fallback || texture->transfer_worker_index>=0 || texture->mipmaps!=1 || texture->layers!=1 || texture->bound)return ERR_UNAVAILABLE;
+ const uint32_t pixel=texture->format==DATA_FORMAT_R32G32B32A32_SFLOAT?16:texture->format==DATA_FORMAT_R8G8B8A8_UNORM?4:0;
+ const uint64_t row64=uint64_t(texture->width)*pixel,rows=uint64_t(texture->height)*texture->depth;
+ if(!pixel || !row64 || !rows || rows>4096 || row64*rows!=size || progress.consumed>size || progress.consumed%row64 || progress.max_segments!=rows)return ERR_INVALID_DATA;
+ const uint32_t row_bytes=uint32_t(row64);
+ const uint32_t pitch_step=MAX(1U,uint32_t(driver->api_trait_get(RDD::API_TRAIT_TEXTURE_DATA_ROW_PITCH_STEP)));
+ const uint64_t pitch64=((row64+pitch_step-1)/pitch_step)*pitch_step;
+ if(pitch64>UINT32_MAX || pitch64>upload_staging_buffers.block_size || pitch64>upload_staging_buffers.max_size)return ERR_PARAMETER_RANGE_ERROR;
+ while(progress.consumed<size) {
+  uint32_t offset=0,amount=0;StagingRequiredAction action;
+  const Error error=_staging_buffer_allocate(upload_staging_buffers,uint32_t(pitch64),_texture_alignment(texture),offset,amount,action,true);
+  if(error!=OK)return error;
+  if(action!=STAGING_REQUIRED_ACTION_NONE || amount<pitch64)return ERR_BUSY;
+  if(progress.segments.size()>=progress.max_segments)return ERR_INVALID_DATA;
+  uint8_t *destination=upload_staging_buffers.blocks[upload_staging_buffers.current].data_ptr+offset;
+  memcpy(destination,bytes+progress.consumed,row_bytes);
+  if(pitch64>row_bytes)memset(destination+row_bytes,0,pitch64-row_bytes);
+  const uint32_t row=progress.consumed/row_bytes;
+  RDG::RecordedBufferToTextureCopy copy;
+  copy.from_buffer=upload_staging_buffers.blocks[upload_staging_buffers.current].driver_id;
+  copy.region.buffer_offset=offset;copy.region.row_pitch=uint32_t(pitch64);
+  copy.region.texture_subresource.aspect=RDD::TEXTURE_ASPECT_COLOR;
+  copy.region.texture_subresource.mipmap=0;copy.region.texture_subresource.layer=0;
+  copy.region.texture_offset=Vector3i(0,row%texture->height,row/texture->height);
+  copy.region.texture_region_size=Vector3i(texture->width,1,1);
+  if(_texture_make_mutable(texture,rid))draw_graph.add_synchronization();
+  const auto handle=draw_graph.add_texture_update(texture->driver_id,texture->draw_tracker,VectorView(&copy,1));
+  upload_staging_buffers.blocks.write[upload_staging_buffers.current].fill_amount=offset+amount;
+  progress.segments.push_back({handle,progress.consumed,progress.consumed+row_bytes});progress.consumed+=row_bytes;
+ }
+ // Every pixel now has an original upload command; no implicit clear is needed.
+ texture->pending_clear=false;texture->has_initial_data=true;
+ return OK;
+}
+
 void RenderingDevice::_texture_check_shared_fallback(Texture *p_texture) {
 	if (p_texture->shared_fallback == nullptr) {
 		p_texture->shared_fallback = memnew(Texture::SharedFallback);
@@ -4870,7 +4910,16 @@ void RenderingDevice::_uniform_set_update_clears(UniformSet *p_uniform_set) {
 	p_uniform_set->pending_clear_textures.clear();
 }
 
-RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniforms, RID p_shader, uint32_t p_shader_set, bool p_linear_pool) {
+RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniforms,RID p_shader,uint32_t p_shader_set,bool p_linear_pool) {
+ return _uniform_set_create_qualification(p_uniforms,p_shader,p_shader_set,p_linear_pool,nullptr,nullptr);
+}
+RID RenderingDevice::_qualification_uniform_set_create(const VectorView<Uniform> &uniforms,RID shader,uint32_t index,GDExtensionDeviceExit::QualificationPhysicalReturn *cell,const LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> &children) {
+ if(!cell || !cell->bridge || !cell->child || !cell->serial || cell->rid || cell->use_closed || !_qualification_reserve_free_event(cell))return RID();
+ RID result=_uniform_set_create_qualification(uniforms,shader,index,false,cell,&children);
+ if(result.is_null())_qualification_release_free_event(cell);
+ return result;
+}
+RID RenderingDevice::_uniform_set_create_qualification(const VectorView<RD::Uniform> &p_uniforms,RID p_shader,uint32_t p_shader_set,bool p_linear_pool,GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell,const LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> *p_children) {
 	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Recording is suspended after a frame fence wait failure.");
 	_THREAD_SAFE_METHOD_
 
@@ -4884,9 +4933,11 @@ RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniform
  for(uint32_t u=0;u<p_uniforms.size();++u)for(uint32_t i=0;i<p_uniforms[u].get_id_count();++i) {
   const auto &uniform=p_uniforms[u];
   auto *texture=texture_owner.get_or_null(uniform.get_id(i));
-  ERR_FAIL_COND_V(texture && texture->qualification_return,RID());
+  ERR_FAIL_COND_V(texture && texture->qualification_return && (!p_children || !p_children->has(texture->qualification_return)),RID());
+  if(texture && texture->qualification_return && !qualification_dependencies.has(texture->qualification_return))qualification_dependencies.push_back(texture->qualification_return);
   auto *sampler=sampler_owner.get_or_null(uniform.get_id(i));
-  ERR_FAIL_COND_V(sampler && sampler->qualification_return,RID());
+  ERR_FAIL_COND_V(sampler && sampler->qualification_return && (!p_children || !p_children->has(sampler->qualification_return)),RID());
+  if(sampler && sampler->qualification_return && !qualification_dependencies.has(sampler->qualification_return))qualification_dependencies.push_back(sampler->qualification_return);
   auto *buffer=storage_buffer_owner.get_or_null(uniform.get_id(i));
   if(buffer && buffer->qualification_return && !qualification_dependencies.has(buffer->qualification_return))qualification_dependencies.push_back(buffer->qualification_return);
  }
@@ -5301,6 +5352,7 @@ RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniform
 
 	UniformSet uniform_set;
  uniform_set.qualification_dependencies=qualification_dependencies;
+ uniform_set.qualification_return=p_cell;
  for(auto *cell:qualification_dependencies)cell->dependent_children.fetch_add(1);
 	uniform_set.driver_id = driver_uniform_set;
 	uniform_set.format = shader->set_formats[p_shader_set];
@@ -5316,6 +5368,7 @@ RID RenderingDevice::uniform_set_create(const VectorView<RD::Uniform> &p_uniform
 
  RID id=reserved_set;
  if(id.is_valid())uniform_set_owner.initialize_rid(id,uniform_set);else id=uniform_set_owner.make_rid(uniform_set);
+ if(p_cell)p_cell->rid=id.get_id();
 #ifdef DEV_ENABLED
 	set_resource_name(id, "RID:" + itos(id.get_id()));
 #endif
@@ -5343,6 +5396,7 @@ void RenderingDevice::uniform_set_set_invalidation_callback(RID p_uniform_set, I
 
 	UniformSet *us = uniform_set_owner.get_or_null(p_uniform_set);
 	ERR_FAIL_NULL(us);
+ ERR_FAIL_COND(us->qualification_return);
 	us->invalidated_callback = p_callback;
 	us->invalidated_callback_userdata = p_userdata;
 }
@@ -6377,7 +6431,7 @@ void RenderingDevice::draw_list_bind_uniform_set(DrawListID p_list, RID p_unifor
 
 	const UniformSet *uniform_set = uniform_set_owner.get_or_null(p_uniform_set);
 	ERR_FAIL_NULL(uniform_set);
-	ERR_FAIL_COND(!uniform_set->qualification_dependencies.is_empty() && !qualification_recording);
+	ERR_FAIL_COND((!uniform_set->qualification_dependencies.is_empty() || uniform_set->qualification_return) && !qualification_recording);
 
 	if (p_index > draw_list.state.set_count) {
 		draw_list.state.set_count = p_index;
@@ -7181,7 +7235,7 @@ void RenderingDevice::raytracing_list_bind_uniform_set(RaytracingListID p_list, 
 
 	UniformSet *uniform_set = uniform_set_owner.get_or_null(p_uniform_set);
 	ERR_FAIL_NULL(uniform_set);
-	ERR_FAIL_COND(!uniform_set->qualification_dependencies.is_empty() && !qualification_recording);
+	ERR_FAIL_COND((!uniform_set->qualification_dependencies.is_empty() || uniform_set->qualification_return) && !qualification_recording);
 
 #ifdef DEBUG_ENABLED
 	// Validate the acceleration structures.
@@ -7469,7 +7523,7 @@ void RenderingDevice::compute_list_bind_uniform_set(ComputeListID p_list, RID p_
 
 	UniformSet *uniform_set = uniform_set_owner.get_or_null(p_uniform_set);
 	ERR_FAIL_NULL(uniform_set);
-	ERR_FAIL_COND(!uniform_set->qualification_dependencies.is_empty() && !qualification_recording);
+	ERR_FAIL_COND((!uniform_set->qualification_dependencies.is_empty() || uniform_set->qualification_return) && !qualification_recording);
 
 	if (p_index > compute_list.state.set_count) {
 		compute_list.state.set_count = p_index;
@@ -8722,7 +8776,7 @@ void RenderingDevice::free_rid(RID p_rid) {
  auto *pipeline = compute_pipeline_owner.get_or_null(p_rid);
  auto *texture = texture_owner.get_or_null(p_rid);
  auto *sampler = sampler_owner.get_or_null(p_rid);
- ERR_FAIL_COND_MSG(!qualification_retiring && ((buffer && buffer->qualification_return) || (shader && shader->qualification_return) || (pipeline && pipeline->qualification_return) || (texture && texture->qualification_return) || (sampler && sampler->qualification_return)), "Qualification resources require their original owner retirement acknowledgement.");
+ ERR_FAIL_COND_MSG(!qualification_retiring && ((buffer && buffer->qualification_return) || (shader && shader->qualification_return) || (pipeline && pipeline->qualification_return) || (texture && texture->qualification_return) || (sampler && sampler->qualification_return) || (uniform_set_owner.get_or_null(p_rid) && uniform_set_owner.get_or_null(p_rid)->qualification_return)), "Qualification resources require their original owner retirement acknowledgement.");
  ERR_FAIL_COND_MSG(texture && texture->qualification_return && texture->transfer_worker_index >= 0, "Qualification texture has an unsettled transfer worker.");
  ERR_FAIL_COND_MSG(_qualification_resource_busy(p_rid),"Qualification ticket still owns this resource or one of its dependents.");
  if (!_free_dependencies(p_rid)) { // Recursively erase dependencies first, to avoid potential API problems.
@@ -8861,6 +8915,7 @@ void RenderingDevice::_free_internal(RID p_id) {
 		storage_buffer_owner.free(p_id);
 	} else if (uniform_set_owner.owns(p_id)) {
 		UniformSet *uniform_set = uniform_set_owner.get_or_null(p_id);
+  ERR_FAIL_COND(_qualification_enqueue(uniform_set->qualification_return)!=OK);
 		// The RID owner destroys the set before the synchronous callback.
 		InvalidationCallback invalidated_callback = uniform_set->invalidated_callback;
 		void *invalidated_callback_userdata = uniform_set->invalidated_callback_userdata;
@@ -9166,6 +9221,7 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 
 		driver->uniform_set_free(uniform_set->driver_id);
 		for(auto *cell:uniform_set->qualification_dependencies) { CRASH_COND(!cell->dependent_children.load());cell->dependent_children.fetch_sub(1); }
+  _qualification_freed(uniform_set->qualification_return);
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
 		capture_test_resource_registry.observe_free(RenderCaptureTestResourceKind::UniformSet, uniform_set->driver_id.id);
 #endif
@@ -10351,7 +10407,7 @@ uint64_t RenderingDevice::get_driver_resource(DriverResource p_resource, RID p_r
 		case DRIVER_RESOURCE_UNIFORM_SET: {
 			UniformSet *uniform_set = uniform_set_owner.get_or_null(p_rid);
 			ERR_FAIL_NULL_V(uniform_set, 0);
-			ERR_FAIL_COND_V(!uniform_set->qualification_dependencies.is_empty(),0);
+			ERR_FAIL_COND_V(uniform_set->qualification_return || !uniform_set->qualification_dependencies.is_empty(),0);
 
 			driver_id = uniform_set->driver_id.id;
 		} break;

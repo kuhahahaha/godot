@@ -5980,6 +5980,482 @@
                     "type": "GDExtensionDeviceSessionResultV1"
                 }
             ]
+        },
+        {
+            "name": "GDExtensionQualificationSourceV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "session_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "digest[32]",
+                    "type": "uint8_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationResourceRefV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "handle_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationResourceBackingV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "resource",
+                    "type": "GDExtensionQualificationResourceRefV1"
+                },
+                {
+                    "name": "source",
+                    "type": "GDExtensionQualificationSourceV1"
+                },
+                {
+                    "name": "rid",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "object_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "byte_size",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "kind",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "state",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationTextureCreateV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "source",
+                    "type": "GDExtensionQualificationSourceV1"
+                },
+                {
+                    "name": "library_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "create_attempt",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "width",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "height",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "depth",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "texture_type",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "format",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "usage",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationSamplerCreateV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "source",
+                    "type": "GDExtensionQualificationSourceV1"
+                },
+                {
+                    "name": "library_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "create_attempt",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "mag_filter",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "min_filter",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "mip_filter",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "repeat_u",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "repeat_v",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "repeat_w",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationSetCreateV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "source",
+                    "type": "GDExtensionQualificationSourceV1"
+                },
+                {
+                    "name": "library_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "create_attempt",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "ticket",
+                    "type": "GDExtensionQualificationTicketRefV1"
+                },
+                {
+                    "name": "unit",
+                    "type": "GDExtensionNativeUnitRefV1"
+                },
+                {
+                    "name": "shader_rid",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "shader_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "shader_set",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "binding_count",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationUniformBindingV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "binding",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "type",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "resource",
+                    "type": "GDExtensionQualificationResourceRefV1"
+                },
+                {
+                    "name": "rid",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "object_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "secondary",
+                    "type": "GDExtensionQualificationResourceRefV1"
+                },
+                {
+                    "name": "secondary_rid",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "secondary_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationTextureUploadV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "ticket",
+                    "type": "GDExtensionQualificationTicketRefV1"
+                },
+                {
+                    "name": "texture",
+                    "type": "GDExtensionQualificationResourceRefV1"
+                },
+                {
+                    "name": "record_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "parent_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "object_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "expected_revision",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "byte_size",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "payload_digest[32]",
+                    "type": "uint8_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationResourceRetireV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "resource",
+                    "type": "GDExtensionQualificationResourceRefV1"
+                },
+                {
+                    "name": "rid",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "object_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "retire_operation",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationResourceRetireReportV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "resource",
+                    "type": "GDExtensionQualificationResourceRefV1"
+                },
+                {
+                    "name": "rid",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "object_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "retire_operation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "revision",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "frame_epoch",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "event_seq",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "dependency_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "state",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "return_status",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "frame_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reason",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "native_error",
+                    "type": "int32_t"
+                },
+                {
+                    "name": "kind",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "native_code",
+                    "type": "int64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationResourceKindV1",
+            "kind": "enum",
+            "values": [
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_RESOURCE_INVALID_V1",
+                    "value": 0
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_RESOURCE_TEXTURE_V1",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_RESOURCE_SAMPLER_V1",
+                    "value": 2
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_RESOURCE_SET_V1",
+                    "value": 3
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationTextureTypeV1",
+            "kind": "enum",
+            "values": [
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_TEXTURE_TYPE_INVALID_V1",
+                    "value": 0
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_TEXTURE_TYPE_1D_V1",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_TEXTURE_TYPE_2D_V1",
+                    "value": 2
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_TEXTURE_TYPE_3D_V1",
+                    "value": 3
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationTextureFormatV1",
+            "kind": "enum",
+            "values": [
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_TEXTURE_FORMAT_INVALID_V1",
+                    "value": 0
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_TEXTURE_FORMAT_RGBA32F_V1",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_TEXTURE_FORMAT_RGBA8_V1",
+                    "value": 2
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationBindingTypeV1",
+            "kind": "enum",
+            "values": [
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_BINDING_INVALID_V1",
+                    "value": 0
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_BINDING_STORAGE_BUFFER_V1",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_BINDING_TEXTURE_V1",
+                    "value": 2
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_BINDING_SAMPLER_V1",
+                    "value": 3
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_BINDING_SAMPLER_WITH_TEXTURE_V1",
+                    "value": 4
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_BINDING_IMAGE_V1",
+                    "value": 5
+                }
+            ]
         }
     ],
     "interface": [
@@ -14077,6 +14553,307 @@
                     "Original native Error and closed device-session reason; API call return is not GPU completion."
                 ]
             }
+        },
+        {
+            "since": "4.7",
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            },
+            "name": "device_session_qualification_texture_create_v1",
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Original typed transaction bridge."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "const GDExtensionQualificationTextureCreateV1*",
+                    "description": [
+                        "Original typed transaction request."
+                    ]
+                },
+                {
+                    "name": "out_backing",
+                    "type": "GDExtensionQualificationResourceBackingV1*",
+                    "description": [
+                        "Original typed transaction out_backing."
+                    ]
+                }
+            ],
+            "description": [
+                "Original qualification bridge typed resource transaction; numeric observations do not authorize bare RIDs."
+            ]
+        },
+        {
+            "since": "4.7",
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            },
+            "name": "device_session_qualification_sampler_create_v1",
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Original typed transaction bridge."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "const GDExtensionQualificationSamplerCreateV1*",
+                    "description": [
+                        "Original typed transaction request."
+                    ]
+                },
+                {
+                    "name": "out_backing",
+                    "type": "GDExtensionQualificationResourceBackingV1*",
+                    "description": [
+                        "Original typed transaction out_backing."
+                    ]
+                }
+            ],
+            "description": [
+                "Original qualification bridge typed resource transaction; numeric observations do not authorize bare RIDs."
+            ]
+        },
+        {
+            "since": "4.7",
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            },
+            "name": "device_session_qualification_set_create_v1",
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Original typed transaction bridge."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "const GDExtensionQualificationSetCreateV1*",
+                    "description": [
+                        "Original typed transaction request."
+                    ]
+                },
+                {
+                    "name": "bindings",
+                    "type": "const GDExtensionQualificationUniformBindingV1*",
+                    "description": [
+                        "Original typed transaction bindings."
+                    ]
+                },
+                {
+                    "name": "binding_count",
+                    "type": "uint32_t",
+                    "description": [
+                        "Original typed transaction binding_count."
+                    ]
+                },
+                {
+                    "name": "out_backing",
+                    "type": "GDExtensionQualificationResourceBackingV1*",
+                    "description": [
+                        "Original typed transaction out_backing."
+                    ]
+                }
+            ],
+            "description": [
+                "Original qualification bridge typed resource transaction; numeric observations do not authorize bare RIDs."
+            ]
+        },
+        {
+            "since": "4.7",
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            },
+            "name": "device_session_qualification_texture_upload_v1",
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Original typed transaction bridge."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "const GDExtensionQualificationTextureUploadV1*",
+                    "description": [
+                        "Original typed transaction request."
+                    ]
+                },
+                {
+                    "name": "pixels",
+                    "type": "const void*",
+                    "description": [
+                        "Original typed transaction pixels."
+                    ]
+                },
+                {
+                    "name": "pixel_bytes",
+                    "type": "uint32_t",
+                    "description": [
+                        "Original typed transaction pixel_bytes."
+                    ]
+                },
+                {
+                    "name": "segments",
+                    "type": "GDExtensionQualificationUploadSegmentV1*",
+                    "description": [
+                        "Original typed transaction segments."
+                    ]
+                },
+                {
+                    "name": "segment_capacity",
+                    "type": "uint32_t",
+                    "description": [
+                        "Original typed transaction segment_capacity."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionQualificationUploadReportV1*",
+                    "description": [
+                        "Original typed transaction out_report."
+                    ]
+                }
+            ],
+            "description": [
+                "Original qualification bridge typed resource transaction; numeric observations do not authorize bare RIDs."
+            ]
+        },
+        {
+            "since": "4.7",
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            },
+            "name": "device_session_qualification_resource_retire_v1",
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Original typed transaction bridge."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "const GDExtensionQualificationResourceRetireV1*",
+                    "description": [
+                        "Original typed transaction request."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionQualificationResourceRetireReportV1*",
+                    "description": [
+                        "Original typed transaction out_report."
+                    ]
+                }
+            ],
+            "description": [
+                "Original qualification bridge typed resource transaction; numeric observations do not authorize bare RIDs."
+            ]
+        },
+        {
+            "since": "4.7",
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            },
+            "name": "device_session_qualification_resource_retire_observe_v1",
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Original typed transaction bridge."
+                    ]
+                },
+                {
+                    "name": "resource",
+                    "type": "GDExtensionQualificationResourceRefV1",
+                    "description": [
+                        "Original typed transaction resource."
+                    ]
+                },
+                {
+                    "name": "budget",
+                    "type": "const GDExtensionQualificationBudgetV1*",
+                    "description": [
+                        "Original typed transaction budget."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionQualificationResourceRetireReportV1*",
+                    "description": [
+                        "Original typed transaction out_report."
+                    ]
+                }
+            ],
+            "description": [
+                "Original qualification bridge typed resource transaction; numeric observations do not authorize bare RIDs."
+            ]
+        },
+        {
+            "since": "4.7",
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            },
+            "name": "device_session_qualification_resource_retire_release_v1",
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Original typed transaction bridge."
+                    ]
+                },
+                {
+                    "name": "resource",
+                    "type": "GDExtensionQualificationResourceRefV1",
+                    "description": [
+                        "Original typed transaction resource."
+                    ]
+                },
+                {
+                    "name": "revision",
+                    "type": "uint64_t",
+                    "description": [
+                        "Original typed transaction revision."
+                    ]
+                }
+            ],
+            "description": [
+                "Original qualification bridge typed resource transaction; numeric observations do not authorize bare RIDs."
+            ]
         }
     ]
 }

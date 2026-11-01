@@ -11,12 +11,14 @@ class TestQualificationAckAccess;
 namespace GDExtensionDeviceExit {
 class Registry;
 struct QualificationTicket;
+struct QualificationResource;
 // One exact object return cell within an original Registry child. This is not
 // a completion source: only the original RD queue and driver-free return write
 // it. Its parent retains it through the owner's later acknowledgement.
 class QualificationPhysicalReturn {
  friend class Registry;
  friend struct QualificationTicket;
+struct QualificationResource;
  friend class ::RenderingDevice;
 #ifdef TESTS_ENABLED
  friend class ::TestQualificationPhysicalAccess;

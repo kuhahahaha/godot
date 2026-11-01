@@ -60,6 +60,7 @@ inline GDExtensionQualificationRecordV1 qualification_record_v1(const GDExtensio
 	memcpy(old.body_push, q.body_push, sizeof(old.body_push));
 	return old;
 }
+struct QualificationResource;
 // One original bridge child, shared by graph/frame, native source observations,
 // the original async result and physical-return reverse indices. C facts are
 // snapshots of these original sources, never a separate completion authority.
@@ -88,6 +89,7 @@ struct QualificationTicket {
   bool attempted=false,failed=false;
  };
  LocalVector<Upload> uploads;
+ LocalVector<QualificationResource *> texture_uploads;
  Ref<RenderingDevice::BufferGetDataResult> result;
  LocalVector<RID> resource_pins;
  LocalVector<QualificationPhysicalReturn *> physical_uses;
@@ -142,6 +144,24 @@ struct QualificationTicket {
  std::atomic<bool> physically_retired{false};
 };
 
+// Common storage of the existing bridge children. No new registry or authority.
+struct QualificationResource {
+ uint64_t serial=0,rid=0,object_serial=0,retire_serial=0,dependency_serial=0;
+ uint32_t kind=0,accepted_rt_refs=0;
+ GDExtensionQualificationSourceV1 source={};
+ GDExtensionQualificationResourceBackingV1 backing={};
+ GDExtensionQualificationResourceRetireV1 retirement={};
+ GDExtensionQualificationResourceRetireReportV1 report={};
+ QualificationPhysicalReturn physical;
+ Error maintenance_error=OK;
+ bool creating=true,retiring=false,queued=false,acknowledged=false,cleanup_serial_reserved=false,queue_ref_credit=false;
+ uint64_t upload_ticket=0,last_upload_revision=0;
+ GDExtensionQualificationTextureUploadV1 upload_origin={};
+ RenderingDevice::QualificationUploadProgress upload;
+ GDExtensionQualificationUploadReportV1 upload_report={};
+ bool upload_attempted=false,upload_failed=false;
+};
+
 // Fixed transport storage owned by this same bridge. It carries API calls,
 // never GPU completion truth, DSO pointers, Callables, or another ticket.
 struct QualificationRtCell {
@@ -151,6 +171,7 @@ struct QualificationRtCell {
  Vector<GDExtensionQualificationUploadSegmentV1> segments;
  uint64_t serial=0,retired_operation=0,cleanup_child_serial=0;
  QualificationTicket *ticket=nullptr;
+ LocalVector<QualificationResource *> resource_refs;
  GDExtensionDeviceSessionResultV1 call_result={};
  uint32_t state=0,result_bytes=0,segment_count=0;
  bool ever_accepted=false,occupied=false,active=false,queued=false,executing=false,observed=false,admission_consumed=false,slot_ref_credit=false,queue_ref_credit=false,queue_ref_reserved=false;
@@ -191,17 +212,9 @@ struct Registry::QualificationBridge {
  };
  // Original bridge child for a method texture. The producer and typed
  // retire transaction must bind this cell before it can be admitted by wire.
- struct Texture {
-  uint64_t serial = 0, rid = 0, object_serial = 0;
-  QualificationPhysicalReturn physical;
-  bool creating = true, retiring = false, queued = false, acknowledged = false;
- };
- // Original bridge sampler child; no typed producer is exposed yet.
- struct Sampler {
-  uint64_t serial = 0, rid = 0, object_serial = 0;
-  QualificationPhysicalReturn physical;
-  bool creating = true, retiring = false, queued = false, acknowledged = false;
- };
+ struct Texture:QualificationResource {GDExtensionQualificationTextureCreateV1 origin={};};
+ struct Sampler:QualificationResource {GDExtensionQualificationSamplerCreateV1 origin={};};
+ struct UniformSet:QualificationResource {GDExtensionQualificationSetCreateV1 origin={};LocalVector<GDExtensionQualificationUniformBindingV1> bindings;};
  struct NativeUnit {
   uint64_t serial = 0, retire_serial = 0, dependency_serial = 0;
   GDExtensionNativeUnitCreateRequestV1 origin = {};
@@ -215,6 +228,7 @@ struct Registry::QualificationBridge {
  Storage *storage[CHILD_CAPACITY] = {};
  Texture *textures[CHILD_CAPACITY] = {};
  Sampler *samplers[CHILD_CAPACITY] = {};
+ UniformSet *sets[CHILD_CAPACITY] = {};
  NativeUnit *units[CHILD_CAPACITY] = {};
 };
 }

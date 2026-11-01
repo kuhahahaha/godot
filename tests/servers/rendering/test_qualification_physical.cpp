@@ -14,6 +14,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <thread>
+#include <functional>
 #if defined(METAL_ENABLED) && defined(MACOS_ENABLED)
 #include "drivers/metal/rendering_context_driver_metal.h"
 #include "drivers/metal/rendering_device_driver_metal3.h"
@@ -22,6 +23,96 @@ TEST_FORCE_LINK(test_qualification_physical)
 extern thread_local void (*test_uniform_set_after_rid_free)(RenderingDevice *);
 class TestQualificationPhysicalAccess {
 public:
+ static void typed_production(RenderingDevice &device,uint32_t mode,bool *fail_set=nullptr) {
+  using namespace GDExtensionDeviceExit;
+  // Original production entrypoints and actual row/descriptor/frame-return code
+  // run with a deterministic driver. Seeded native facts below are CPU controls,
+  // never a GPU dispatch/completion receipt.
+  auto &registry=Registry::get_singleton();REQUIRE(RenderingServer::get_singleton()->is_on_render_thread());
+  uint32_t library=0,native=0,slot=0;Registry::DeviceRecord saved_device;
+  uint64_t owner=0,generation=0;uint32_t refs=0,limit=0;GuardEnrollment guard;RenderingDevice *previous=nullptr;
+  struct Holder:HolderRetirement{Holder():HolderRetirement(RecordRef{}){}~Holder()=default;} holder;holder.generation=1;holder.qualification_children=1;
+  auto *bridge=memnew(Registry::QualificationBridge);
+  {MutexLock lock(registry.mutex);for(uint32_t i=0;i<Registry::RECORD_CAPACITY;++i)REQUIRE_FALSE((registry.records[i].occupied||registry.qualification_bridges[i]));for(;native<Registry::RECORD_CAPACITY&&registry.device_records[native].live;++native){}REQUIRE(native<Registry::RECORD_CAPACITY);
+   auto &r=registry.records[library];owner=r.owner_thread;generation=r.snapshot.library_generation;guard=r.guard_enrollment;refs=r.private_refs;limit=registry.private_limit;saved_device=registry.device_records[native];
+   r.owner_thread=Thread::get_caller_id();r.snapshot.library_generation=1;r.guard_enrollment=GuardEnrollment::QUALIFIED;r.private_refs=1;
+   previous=RenderingDevice::singleton;RenderingDevice::singleton=&device;device.is_main_instance=true;device.render_thread_id=Thread::get_caller_id();device.qualification_retiring=false;
+   auto &d=registry.device_records[native];d.object=&device;d.live=true;d.epoch=1;d.execution_thread=Thread::get_caller_id();d.refs=1;
+   registry.qualification_serials.take(bridge->serial);bridge->library=library;bridge->device=native;bridge->epoch=1;bridge->holder=&holder;registry.qualification_bridges[slot]=bridge;
+  }
+  struct Finally{std::function<void()> f;~Finally(){f();}} finally{[&]{MutexLock lock(registry.mutex);registry.qualification_bridges[slot]=nullptr;auto &r=registry.records[library];r.owner_thread=owner;r.snapshot.library_generation=generation;r.guard_enrollment=guard;r.private_refs=refs;registry.private_limit=limit;registry.device_records[native]=saved_device;RenderingDevice::singleton=previous;device.is_main_instance=false;}};
+  const GDExtensionQualificationBridgeRefV1 ref{registry.instance,bridge->serial};
+  GDExtensionQualificationTextureCreateV1 tc={};tc.abi={1,16,0};tc.source.session_serial=7;tc.source.generation=37;tc.source.digest[0]=9;tc.library_generation=tc.create_attempt=1;tc.width=tc.height=2;tc.depth=1;tc.texture_type=2;tc.format=tc.usage=1;
+  GDExtensionQualificationSamplerCreateV1 sc={};sc.abi={1,16,0};sc.source=tc.source;sc.library_generation=sc.create_attempt=1;sc.repeat_u=sc.repeat_v=sc.repeat_w=2;
+  GDExtensionQualificationResourceBackingV1 texture={},sampler={},set={};
+  if(mode==3||mode==4){
+   const auto before_refs=registry.records[library].private_refs,before_children=bridge->children;const auto before_events=device.qualification_free_event_reservations;const auto before_cleanup=registry.qualification_cleanup_serial_reservations;
+   ERR_PRINT_OFF;const auto failed=mode==3?registry.qualification_texture_create(ref,&tc,&texture):registry.qualification_sampler_create(ref,&sc,&sampler);ERR_PRINT_ON;
+   CHECK(failed.native_error==FAILED);const GDExtensionQualificationResourceBackingV1 zero={};CHECK(memcmp(mode==3?&texture:&sampler,&zero,sizeof(zero))==0);CHECK(bridge->textures[0]==nullptr);CHECK(bridge->samplers[0]==nullptr);CHECK(registry.records[library].private_refs==before_refs);CHECK(bridge->children==before_children);CHECK(device.qualification_free_event_reservations==before_events);CHECK(registry.qualification_cleanup_serial_reservations==before_cleanup);memdelete(bridge);return;
+  }
+  REQUIRE(registry.qualification_texture_create(ref,&tc,&texture).native_error==OK);REQUIRE(registry.qualification_sampler_create(ref,&sc,&sampler).native_error==OK);
+  auto *image=bridge->textures[0];auto *sample=bridge->samplers[0];REQUIRE(image!=nullptr);REQUIRE(sample!=nullptr);CHECK(image->physical.rid==texture.rid);CHECK(sample->physical.serial==sampler.object_serial);
+  GDExtensionQualificationResourceBackingV1 replay={};CHECK(registry.qualification_texture_create(ref,&tc,&replay).native_error==OK);CHECK(replay.resource.handle_serial==texture.resource.handle_serial);tc.width=3;CHECK(registry.qualification_texture_create(ref,&tc,&replay).native_error==ERR_INVALID_DATA);tc.width=2;
+  if(mode==2){
+   const GDExtensionQualificationRtConfigV1 config{{1,40,0},1,448,344,4,1024};REQUIRE(registry.qualification_rt_configure(ref,&config).native_error==OK);
+   {MutexLock lock(registry.mutex);registry.private_limit=registry.records[library].private_refs;}
+   GDExtensionQualificationResourceRetireV1 q{{1,16,0},sampler.resource,sampler.rid,sampler.object_serial,1};GDExtensionQualificationRtRequestV1 h{{1,56,0},16,0,1,0,sizeof(q),sizeof(GDExtensionQualificationResourceRetireReportV1),0,0};GDExtensionQualificationRtRefV1 rt={};
+   CHECK(registry.qualification_rt_reserve(ref,&h,&q,nullptr,&rt).native_error==OK);CHECK(sample->accepted_rt_refs==1);CHECK(registry.qualification_close(ref).native_error==ERR_BUSY);
+   CHECK(registry.qualification_rt_activate(ref,rt).native_error==OK);GDExtensionQualificationRtObservationV1 observation={};GDExtensionQualificationResourceRetireReportV1 report={};CHECK(registry.qualification_rt_observe(ref,rt,&observation,&report,sizeof(report),nullptr,0).native_error==OK);CHECK(observation.state==2);CHECK(observation.call_result.native_error==OK);CHECK(registry.qualification_rt_release(ref,rt).native_error==OK);CHECK(sample->accepted_rt_refs==0);
+   registry.qualification_retire_step(bridge,&device,sample->serial,4);CHECK(sample->physical.enqueued);device._free_pending_resources(0);registry.qualification_retire_step(bridge,&device,sample->serial,4);CHECK(sample->report.state==1);
+   const GDExtensionQualificationBudgetV1 budget{{1,16,0},1,100,0};CHECK(registry.qualification_resource_retire_observe(ref,sampler.resource,&budget,&report).native_error==OK);CHECK(registry.qualification_resource_retire_release(ref,sampler.resource,report.revision-1).native_error==ERR_BUSY);CHECK(registry.qualification_resource_retire_release(ref,sampler.resource,report.revision).native_error==OK);
+   GDExtensionQualificationResourceRetireV1 tq{{1,16,0},texture.resource,texture.rid,texture.object_serial,2};CHECK(registry.qualification_resource_retire(ref,&tq,&report).native_error==OK);device._free_pending_resources(0);registry.qualification_retire_step(bridge,&device,image->serial,4);CHECK(registry.qualification_resource_retire_release(ref,texture.resource,image->report.revision).native_error==OK);
+  }else{
+   GDExtensionStorageCreateRequestV1 sq{{1,16,0},128,0,0,5,1,0};GDExtensionStorageBackingV1 storage={};REQUIRE(registry.qualification_storage_create(ref,&sq,&storage).native_error==OK);
+   GDExtensionQualificationUploadPlanV1 plan={};plan.abi={1,16,0};plan.role=8;plan.owner_kind=1;plan.e05_backing=storage.backing;plan.rid=storage.rid;plan.backing_serial=storage.backing_serial;plan.byte_size=4;
+   GDExtensionQualificationUploadPrepareV1 prepare={};prepare.abi={1,16,0};prepare.record_generation=37;prepare.request_nonce=39;prepare.library_generation=1;prepare.qualification_session_serial=7;prepare.parent_serial=31;prepare.reservation_serial=97;prepare.attempt=prepare.upload_count=prepare.max_segments=1;prepare.expected_result_bytes=44;
+   GDExtensionQualificationTicketRefV1 ticket_ref={};GDExtensionQualificationReportV2 prepared={};REQUIRE(registry.qualification_prepare_uploads_v2(ref,&prepare,&plan,1,&ticket_ref,&prepared).native_error==OK);auto *ticket=bridge->tickets[0];REQUIRE(ticket!=nullptr);
+   uint8_t pixels[64],staging_bytes[64]={};for(uint32_t i=0;i<64;++i)pixels[i]=uint8_t(i+7);
+   device.frames_drawn=10;device.draw_graph.initialize(device.driver,[](RenderingDeviceDriver *,VectorView<RDD::AttachmentLoadOp>,VectorView<RDD::AttachmentStoreOp>,void *){return RDD::RenderPassID();},1,RDD::CommandQueueFamilyID(1),0);device.draw_graph.begin();
+   auto &staging=device.upload_staging_buffers;staging.blocks.resize(1);staging.block_size=staging.max_size=64;staging.blocks.write[0].driver_id=RDD::BufferID(51);staging.blocks.write[0].data_ptr=staging_bytes;staging.blocks.write[0].frame_used=10;staging.blocks.write[0].fill_amount=mode==1?64:0;
+   GDExtensionQualificationTextureUploadV1 upload={};upload.abi={1,16,0};upload.ticket=ticket_ref;upload.texture=texture.resource;upload.record_generation=37;upload.parent_serial=31;upload.object_serial=texture.object_serial;upload.expected_revision=ticket->report.revision;upload.byte_size=64;CryptoCore::sha256(pixels,64,upload.payload_digest);
+   GDExtensionQualificationUploadSegmentV1 segments[2]={};GDExtensionQualificationUploadReportV1 report={};CHECK(registry.qualification_texture_upload(ref,&upload,pixels,64,segments,2,&report).native_error==OK);CHECK(report.state==4);CHECK(image->upload.consumed==(mode==1?0:32));CHECK(ticket->facts.size()==(mode==1?0:1));CHECK_FALSE(ticket->physically_retired.load());CHECK(device.texture_owner.get_or_null(RID::from_uint64(texture.rid))->qualification_users==1);
+   const uint32_t prefix=ticket->facts.size();CHECK(registry.qualification_texture_upload(ref,&upload,pixels,64,segments,2,&report).native_error==OK);CHECK(ticket->facts.size()==prefix);
+   RID shader_rid,pipeline_rid;Registry::QualificationBridge::NativeUnit *unit=nullptr;
+   if(mode==0||mode==5){
+    staging.blocks.write[0].frame_used=0;upload.expected_revision=ticket->report.revision;CHECK(registry.qualification_texture_upload(ref,&upload,pixels,64,segments,2,&report).native_error==OK);CHECK(report.state==1);CHECK(report.known_count==2);CHECK(image->upload.consumed==64);CHECK(ticket->facts.size()==2);CHECK(memcmp(staging_bytes,pixels+32,32)==0);CHECK(image->physical.uses.size()==1);REQUIRE(image->upload.segments.size()==2);
+    device.draw_graph.add_compute_list_begin();const auto unordered=device.draw_graph.add_compute_list_dispatch(1,1,1);device.draw_graph.add_compute_list_end();uint32_t path=0;CHECK_FALSE(device.draw_graph.has_dependency_path(image->upload.segments[1].handle,unordered,path));
+    // This is the actual global handoff used by record_prepared_v2 before
+    // Capture. Capture needs no texture hazard to consume this dependency.
+    device.draw_graph.add_synchronization();device.draw_graph.add_compute_list_begin();const auto capture=device.draw_graph.add_compute_list_dispatch(1,1,1);device.draw_graph.add_compute_list_end();
+    for(const auto &segment:image->upload.segments){CHECK(device.draw_graph.has_dependency_path(segment.handle,capture,path));CHECK(path>0);}
+
+    unit=memnew(Registry::QualificationBridge::NativeUnit);registry.qualification_serials.take(unit->serial);unit->creating=false;unit->shader.bridge=bridge->serial;unit->shader.child=unit->serial;unit->shader.serial=103;unit->pipeline.bridge=bridge->serial;unit->pipeline.child=unit->serial;unit->pipeline.serial=104;
+    RenderingDevice::Shader shader;shader.driver_id=RDD::ShaderID(19);shader.qualification_return=&unit->shader;shader.uniform_sets.resize(1);RenderingDevice::ShaderUniform expected;expected.type=RenderingDevice::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;expected.binding=4;expected.length=1;shader.uniform_sets.write[0].push_back(expected);shader.set_formats.push_back(1);shader_rid=device.shader_owner.make_rid(shader);unit->shader.rid=shader_rid.get_id();
+    RenderingDevice::ComputePipeline pipeline;pipeline.shader=shader_rid;pipeline.qualification_return=&unit->pipeline;pipeline_rid=device.compute_pipeline_owner.make_rid(pipeline);unit->pipeline.rid=pipeline_rid.get_id();unit->backing.abi={1,16,0};unit->backing.state=1;unit->backing.known_mask=3;unit->backing.unit={registry.instance,unit->serial};unit->backing.shader_rid=shader_rid.get_id();unit->backing.shader_serial=103;unit->backing.pipeline_rid=pipeline_rid.get_id();bridge->units[0]=unit;
+    GDExtensionQualificationSetCreateV1 cs={};cs.abi={1,16,0};cs.source.session_serial=7;cs.source.generation=37;cs.source.digest[0]=9;cs.library_generation=cs.create_attempt=1;cs.ticket=ticket_ref;cs.unit=unit->backing.unit;cs.shader_rid=shader_rid.get_id();cs.shader_serial=103;cs.binding_count=1;
+    GDExtensionQualificationUniformBindingV1 binding={};binding.binding=4;binding.type=4;binding.resource=sampler.resource;binding.rid=sampler.rid;binding.object_serial=sampler.object_serial;binding.secondary=texture.resource;binding.secondary_rid=texture.rid;binding.secondary_serial=texture.object_serial;
+    auto wrong=binding;wrong.object_serial++;CHECK(registry.qualification_set_create(ref,&cs,&wrong,1,&set).native_error==ERR_UNAUTHORIZED);
+    if(mode==5){const auto before_refs=registry.records[library].private_refs,before_children=bridge->children;const auto before_events=device.qualification_free_event_reservations;const auto before_cleanup=registry.qualification_cleanup_serial_reservations;ERR_PRINT_OFF;const auto failed=registry.qualification_set_create(ref,&cs,&binding,1,&set);ERR_PRINT_ON;CHECK(failed.native_error==FAILED);const GDExtensionQualificationResourceBackingV1 zero={};CHECK(memcmp(&set,&zero,sizeof(zero))==0);CHECK(bridge->sets[0]==nullptr);CHECK(registry.records[library].private_refs==before_refs);CHECK(bridge->children==before_children);CHECK(device.qualification_free_event_reservations==before_events);CHECK(registry.qualification_cleanup_serial_reservations==before_cleanup);CHECK(image->physical.dependent_children.load()==0);CHECK(sample->physical.dependent_children.load()==0);REQUIRE(fail_set!=nullptr);*fail_set=false;}
+    REQUIRE(registry.qualification_set_create(ref,&cs,&binding,1,&set).native_error==OK);CHECK(image->physical.dependent_children.load()==1);CHECK(sample->physical.dependent_children.load()==1);
+    GDExtensionQualificationUniformBindingV1 extra[2]={binding,binding};extra[1].binding=99;auto extra_cs=cs;extra_cs.binding_count=2;extra_cs.create_attempt=2;CHECK(registry.qualification_set_create(ref,&extra_cs,extra,2,&replay).native_error==ERR_INVALID_DATA);
+    ERR_PRINT_OFF;device.uniform_set_set_invalidation_callback(RID::from_uint64(set.rid),[](void *){},nullptr);device.free_rid(RID::from_uint64(set.rid));ERR_PRINT_ON;CHECK(device.uniform_set_owner.owns(RID::from_uint64(set.rid)));CHECK(device.uniform_set_owner.get_or_null(RID::from_uint64(set.rid))->invalidated_callback==nullptr);
+    GDExtensionQualificationRecordV2 q={};q.qualification_session_serial=7;q.record_generation=37;q.readback_count=3;q.capture_set_count=q.body_set_count=1;q.capture_set=q.body_set=set.rid;q.capture_pipeline=q.body_pipeline=pipeline_rid.get_id();q.capture_map_digest[0]=q.body_map_digest[0]=9;LocalVector<RID> resources;resources.push_back(RID::from_uint64(set.rid));resources.push_back(RID::from_uint64(texture.rid));resources.push_back(RID::from_uint64(sampler.rid));CHECK(registry.qualification_typed_dependencies(bridge,&device,ticket,q,resources)==OK);
+    q.body_map_digest[0]++;CHECK(registry.qualification_typed_dependencies(bridge,&device,ticket,q,resources)==ERR_UNAUTHORIZED);q.body_map_digest[0]--;q.capture_map_digest[0]++;CHECK(registry.qualification_typed_dependencies(bridge,&device,ticket,q,resources)==ERR_UNAUTHORIZED);q.capture_map_digest[0]--;
+    unit->backing.pipeline_rid++;CHECK(registry.qualification_typed_dependencies(bridge,&device,ticket,q,resources)==ERR_UNAUTHORIZED);unit->backing.pipeline_rid--;
+    RenderingDevice::UniformSet ordinary;RID ordinary_rid=device.uniform_set_owner.make_rid(ordinary);q.body_set=ordinary_rid.get_id();CHECK(registry.qualification_typed_dependencies(bridge,&device,ticket,q,resources)==ERR_UNAUTHORIZED);q.readback_count=1;CHECK(registry.qualification_typed_dependencies(bridge,&device,ticket,q,resources)==OK);device.uniform_set_owner.free(ordinary_rid);
+   }
+   // Model exact returned native/frame sources only for these recorded row
+   // graphs; this deliberately does not execute a GPU command or assert one.
+   for(auto &g:ticket->graphs){g.sealed=g.returned=true;ticket->facts[g.fact].command_slot=0;}
+   if(!ticket->graphs.is_empty()){RDD::NativeCallFact native_fact;native_fact.serial=101;native_fact.completion_serial=201;native_fact.queue_index=1;GDExtensionQualificationFactV1 fact={};fact.issue=1;fact.completion=2;ticket->natives.push_back({native_fact,ticket->facts.size(),0,0,71,false,false});ticket->facts.push_back(fact);}
+   ticket->frame_refs=0;device.frames[0].qualification_tickets.clear();CHECK(registry.qualification_cancel(ref,ticket_ref).native_error==OK);CHECK(ticket->physically_retired.load());CHECK(ticket->report.owned_size==0);CHECK(registry.qualification_release(ref,ticket_ref).native_error==OK);CHECK(image->physical.uses.is_empty());
+   GDExtensionQualificationResourceRetireReportV1 retired={};GDExtensionQualificationResourceRetireV1 tq{{1,16,0},texture.resource,texture.rid,texture.object_serial,1},sq2{{1,16,0},sampler.resource,sampler.rid,sampler.object_serial,1};CHECK(registry.qualification_resource_retire(ref,&tq,&retired).native_error==OK);CHECK(registry.qualification_resource_retire(ref,&sq2,&retired).native_error==OK);
+   if(mode==0||mode==5){CHECK_FALSE(image->physical.enqueued);GDExtensionQualificationResourceRetireV1 setq{{1,16,0},set.resource,set.rid,set.object_serial,1};CHECK(registry.qualification_resource_retire(ref,&setq,&retired).native_error==OK);CHECK(bridge->sets[0]->physical.enqueued);CHECK(image->physical.dependent_children.load()==1);device._free_pending_resources(0);CHECK(image->physical.dependent_children.load()==0);registry.qualification_retire_step(bridge,&device,bridge->sets[0]->serial,4);CHECK(registry.qualification_resource_retire_release(ref,set.resource,bridge->sets[0]->report.revision).native_error==OK);registry.qualification_retire_step(bridge,&device,image->serial,4);registry.qualification_retire_step(bridge,&device,sample->serial,4);}
+   device._free_pending_resources(0);registry.qualification_retire_step(bridge,&device,image->serial,4);registry.qualification_retire_step(bridge,&device,sample->serial,4);CHECK(registry.qualification_resource_retire_release(ref,texture.resource,image->report.revision).native_error==OK);CHECK(registry.qualification_resource_retire_release(ref,sampler.resource,sample->report.revision).native_error==OK);
+   GDExtensionStorageRetireRequestV1 sr{{1,16,0},storage.backing,storage.rid,storage.backing_serial,0,0,5,1,0};GDExtensionStorageRetireRefV1 rr={};GDExtensionStorageRetireReportV1 rp={};CHECK(registry.qualification_storage_retire(ref,&sr,&rr,&rp).native_error==OK);device._free_pending_resources(0);registry.qualification_retire_step(bridge,&device,bridge->storage[0]->serial,1);CHECK(registry.qualification_storage_retire_release(ref,rr).native_error==OK);
+   if(unit){unit->acknowledged=true;CHECK_FALSE(device.reverse_dependency_map.has(RID::from_uint64(set.rid)));auto *remaining=device.dependency_map.getptr(shader_rid);CHECK((!remaining||remaining->is_empty()));CHECK(device._free_dependencies(pipeline_rid));CHECK(device._free_dependencies(shader_rid));device.compute_pipeline_owner.free(pipeline_rid);device.shader_owner.free(shader_rid);}
+   device.draw_graph.finalize();device.upload_staging_buffers.blocks.clear();
+  }
+  {MutexLock lock(registry.mutex);registry.qualification_trim_cleanup_ref_credits_locked(bridge);}CHECK(registry.records[library].private_refs==1);CHECK(bridge->children==0);CHECK(device.dependency_map.is_empty());CHECK(device.reverse_dependency_map.is_empty());
+  for(auto *c:bridge->textures)if(c)memdelete(c);for(auto *c:bridge->samplers)if(c)memdelete(c);for(auto *c:bridge->sets)if(c)memdelete(c);for(auto *c:bridge->storage)if(c)memdelete(c);for(auto *c:bridge->units)if(c)memdelete(c);for(auto *c:bridge->tickets)if(c)memdelete(c);if(bridge->rt)memdelete(bridge->rt);memdelete(bridge);
+ }
+
 	// Metadata-only original-child fixture: this exercises preappend admission,
 	// not texture production, native completion, or Method qualification.
 	static void typed_uniform_preflight(uint32_t p_mode, bool p_two_set = false) {
@@ -2188,4 +2279,23 @@ TEST_CASE("[Qualification][MultiReadback] two original uniform sets retain typed
 		CAPTURE(mode);
 		TestQualificationPhysicalAccess::typed_uniform_preflight(mode, true);
 	}
+}
+
+namespace TestQualificationTyped {
+class Driver:public TestQualificationPhysical::Driver {
+public:
+ bool fail_texture=false,fail_sampler=false,fail_set=false;
+ TextureID texture_create(const TextureFormat &f,const TextureView &v)override{return fail_texture?TextureID():TestQualificationPhysical::Driver::texture_create(f,v);}
+ SamplerID sampler_create(const SamplerState &state)override{return fail_sampler?SamplerID():TestQualificationPhysical::Driver::sampler_create(state);}
+
+ uint64_t api_trait_get(ApiTrait trait)override{return trait==API_TRAIT_TEXTURE_DATA_ROW_PITCH_STEP?64:trait==API_TRAIT_TEXTURE_TRANSFER_ALIGNMENT?16:0;}
+ UniformSetID uniform_set_create(VectorView<BoundUniform> uniforms,ShaderID,uint32_t index,int pool)override{CHECK(index==0);CHECK(pool==-1);CHECK(uniforms.size()==1);return fail_set?UniformSetID():UniformSetID(23);}
+ void uniform_set_free(UniformSetID id)override{CHECK(id==UniformSetID(23));++sets_freed;}
+};
+TEST_CASE("[Qualification][Typed] original producer row upload exact phase descriptors and frame return form one lifecycle") {RenderingDevice device;Driver driver;TestQualificationPhysicalAccess::attach(device,driver);TestQualificationPhysicalAccess::typed_production(device,0);TestQualificationPhysicalAccess::detach(device);}
+TEST_CASE("[Qualification][Typed] zero prefix busy keeps original image pin until owner cancel") {RenderingDevice device;Driver driver;TestQualificationPhysicalAccess::attach(device,driver);TestQualificationPhysicalAccess::typed_production(device,1);TestQualificationPhysicalAccess::detach(device);}
+TEST_CASE("[Qualification][Typed] accepted typed retire drains after bridge close with saturated private references") {RenderingDevice device;Driver driver;TestQualificationPhysicalAccess::attach(device,driver);TestQualificationPhysicalAccess::typed_production(device,2);TestQualificationPhysicalAccess::detach(device);}
+TEST_CASE("[Qualification][Typed] definitively failed texture and sampler creation roll back original reservations") {for(uint32_t mode:{3u,4u}){RenderingDevice device;Driver driver;driver.fail_texture=mode==3;driver.fail_sampler=mode==4;TestQualificationPhysicalAccess::attach(device,driver);TestQualificationPhysicalAccess::typed_production(device,mode);TestQualificationPhysicalAccess::detach(device);}}
+TEST_CASE("[Qualification][Typed] definitively failed descriptor creation rolls back and retries original allocation") {RenderingDevice device;Driver driver;driver.fail_set=true;TestQualificationPhysicalAccess::attach(device,driver);TestQualificationPhysicalAccess::typed_production(device,5,&driver.fail_set);TestQualificationPhysicalAccess::detach(device);}
+
 }

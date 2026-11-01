@@ -101,6 +101,7 @@ public:
 private:
 	friend class GDExtensionDeviceExit::Registry;
  friend struct GDExtensionDeviceExit::QualificationTicket;
+ friend struct GDExtensionDeviceExit::QualificationResource;
 	friend class RenderingServerDefault;
 #ifdef TESTS_ENABLED
 	friend class TestExternalOutputAccess;
@@ -1348,6 +1349,7 @@ private:
 	// the above restriction is not too serious.
 
 	struct UniformSet {
+  GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return=nullptr;
   uint32_t qualification_users = 0;
 		LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> qualification_dependencies;
 		uint32_t format = 0;
@@ -1375,6 +1377,9 @@ private:
 		void *invalidated_callback_userdata = nullptr;
 	};
 
+ RID _qualification_uniform_set_create(const VectorView<Uniform> &,RID,uint32_t,GDExtensionDeviceExit::QualificationPhysicalReturn *,const LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> &);
+ RID _uniform_set_create_qualification(const VectorView<Uniform> &,RID,uint32_t,bool,GDExtensionDeviceExit::QualificationPhysicalReturn *,const LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> *);
+ Error _qualification_texture_upload(RID,const uint8_t *,uint32_t,QualificationUploadProgress &);
 	RID_Owner<UniformSet, true> uniform_set_owner;
 
 	void _uniform_set_update_shared(UniformSet *p_uniform_set);

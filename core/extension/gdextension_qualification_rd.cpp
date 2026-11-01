@@ -23,6 +23,11 @@ bool RenderingDevice::_qualification_resource_busy(RID rid) {
   if(cell->enqueued || cell->reserved_event || cell->free_event)return true;
  }
  const auto *set=uniform_set_owner.get_or_null(rid);if(set && set->qualification_users)return true;
+ if(set && set->qualification_return) {
+  auto *cell=set->qualification_return;
+  if(!qualification_retiring || !cell->use_closed.load() || !_qualification_free_event_available(cell->event_capacity_reserved) || uint32_t(frame)>=frames.size() || !frames[frame].qualification_epoch)return true;
+  MutexLock lock(cell->mutex);if(cell->enqueued || cell->reserved_event || cell->free_event)return true;
+ }
  const auto *pipeline=compute_pipeline_owner.get_or_null(rid);if(pipeline && pipeline->qualification_users)return true;
  const auto *dependencies=dependency_map.getptr(rid);
  if(dependencies)for(RID child:*dependencies) {
@@ -45,17 +50,18 @@ Error RenderingDevice::_qualification_pin_resources(QualificationTicket *ticket,
   bool already=false;for(RID held:ticket->resource_pins)if(held==rid){already=true;break;}
   auto *texture=texture_owner.get_or_null(rid);
   auto *sampler=sampler_owner.get_or_null(rid);
+  auto *set=uniform_set_owner.get_or_null(rid);
   // New admissions revalidate existing texture/sampler pins and count each
   // new child only once within the incoming batch.
-  const bool typed_child=texture || sampler;
+  const bool typed_child=texture || sampler || (set && set->qualification_return);
   bool duplicate=false;if(typed_child && !already)for(uint32_t prior=0;prior<resource_index;++prior)if(resources[prior]==rid){duplicate=true;break;}
   if(already && !typed_child)continue;
   if(!already && !duplicate && ticket->resource_pins.size()+(++added)>128)return ERR_PARAMETER_RANGE_ERROR;
   Buffer *buffer=storage_buffer_owner.get_or_null(rid);if(!buffer)buffer=uniform_buffer_owner.get_or_null(rid);
-  auto *set=uniform_set_owner.get_or_null(rid);auto *pipeline=compute_pipeline_owner.get_or_null(rid);auto *shader=shader_owner.get_or_null(rid);
+  auto *pipeline=compute_pipeline_owner.get_or_null(rid);auto *shader=shader_owner.get_or_null(rid);
   if(texture && !texture->qualification_return)return ERR_UNAUTHORIZED;
   if(sampler && !sampler->qualification_return)return ERR_UNAUTHORIZED;
-  auto *physical=buffer?buffer->qualification_return:pipeline?pipeline->qualification_return:shader?shader->qualification_return:texture?texture->qualification_return:sampler?sampler->qualification_return:nullptr;
+  auto *physical=buffer?buffer->qualification_return:pipeline?pipeline->qualification_return:shader?shader->qualification_return:texture?texture->qualification_return:sampler?sampler->qualification_return:set?set->qualification_return:nullptr;
   if(typed_child) {
    // The caller holds Registry and RD locks: authenticate the pointer against
    // the original bridge child before reading it or admitting any resource.
@@ -64,6 +70,7 @@ Error RenderingDevice::_qualification_pin_resources(QualificationTicket *ticket,
     auto match=[&](const auto *child) {return child && &child->physical==physical && !child->creating && !child->retiring && !child->acknowledged && child->serial && child->rid==rid.get_id() && child->object_serial && child->object_serial==child->physical.serial && child->physical.rid==child->rid && child->physical.bridge==bridge->serial && child->physical.child==child->serial;};
     if(texture)for(auto *child:bridge->textures)if(match(child)){original=true;break;}
     if(sampler)for(auto *child:bridge->samplers)if(match(child)){original=true;break;}
+    if(set)for(auto *child:bridge->sets)if(match(child)){original=true;break;}
     break;
    }
    if(!original)return ERR_UNAUTHORIZED;
@@ -79,7 +86,7 @@ Error RenderingDevice::_qualification_pin_resources(QualificationTicket *ticket,
   auto *set=uniform_set_owner.get_or_null(rid);auto *pipeline=compute_pipeline_owner.get_or_null(rid);auto *shader=shader_owner.get_or_null(rid);auto *texture=texture_owner.get_or_null(rid);auto *sampler=sampler_owner.get_or_null(rid);
   uint32_t *count=buffer?&buffer->qualification_users:set?&set->qualification_users:pipeline?&pipeline->qualification_users:texture?&texture->qualification_users:sampler?&sampler->qualification_users:nullptr;
   if(count)++*count;ticket->resource_pins.push_back(rid);
-  auto *physical=buffer?buffer->qualification_return:pipeline?pipeline->qualification_return:shader?shader->qualification_return:texture?texture->qualification_return:sampler?sampler->qualification_return:nullptr;
+  auto *physical=buffer?buffer->qualification_return:pipeline?pipeline->qualification_return:shader?shader->qualification_return:texture?texture->qualification_return:sampler?sampler->qualification_return:set?set->qualification_return:nullptr;
   if(physical) {
    bool known=false;for(auto *used:ticket->physical_uses)if(used==physical){known=true;break;}
    if(!known){physical->uses.push_back(ticket);ticket->physical_uses.push_back(physical);}
