@@ -1306,7 +1306,133 @@ TEST_CASE("device_exit::method/closed-void-does-not-write-return-storage") {
 struct Access {
 	static void prepare(GDExtension &extension) { extension.prepare_reload(); }
 	static void finish(GDExtension &extension) { extension.finish_reload(); }
+	static bool has_reload_state(GDExtension &extension, const StringName &name, ObjectID id) {
+		return extension.extension_classes[name].instance_state.has(id);
+	}
 };
+
+namespace ReloadCapture {
+static const GDExtensionPropertyInfo *property = nullptr;
+static ObjectID trigger;
+static ObjectID victim;
+static int route = 0;
+static HashMap<ObjectID, int> list_calls;
+static int deletions = 0;
+static int getters = 0;
+static int default_getters = 0;
+static void destroy_victim() {
+	if (Object *object = ObjectDB::get_instance(victim)) {
+		victim = ObjectID();
+		deletions++;
+		memdelete(object);
+	}
+}
+static const GDExtensionPropertyInfo *list(GDExtensionClassInstancePtr instance, uint32_t *count) {
+	const ObjectID id = static_cast<Object *>(instance)->get_instance_id();
+	list_calls[id]++;
+	if (route == 0 && id == trigger) {
+		destroy_victim(); // The list receiver remains alive through Object::get_property_list.
+	}
+	*count = 1;
+	return property;
+}
+static GDExtensionBool get(GDExtensionClassInstancePtr instance, GDExtensionConstStringNamePtr name, GDExtensionVariantPtr result) {
+	if (*static_cast<const StringName *>(name) != StringName("reload_value")) {
+		return false;
+	}
+	const ObjectID id = static_cast<Object *>(instance)->get_instance_id();
+	*static_cast<Variant *>(result) = int64_t(73);
+	getters++;
+	if (route == 2 && id != trigger) {
+		default_getters++;
+	}
+	if ((route == 1 && id == trigger) || (route == 2 && id != trigger)) {
+		destroy_victim(); // Return true so Object::get does not read its receiver again.
+	}
+	return true;
+}
+static GDExtensionObjectPtr create(void *, GDExtensionBool) {
+	Object *object = memnew(Object);
+	ClassDB::set_object_extension_instance(object, "ReloadCaptureFixture", object);
+	return object;
+}
+static GDExtensionBool entry(GDExtensionInterfaceGetProcAddress get_proc, GDExtensionClassLibraryPtr library, GDExtensionInitialization *result) {
+	*result = {};
+	result->initialize = initialize;
+	result->deinitialize = deinitialize;
+	const auto register_class = reinterpret_cast<GDExtensionInterfaceClassdbRegisterExtensionClass6>(get_proc("classdb_register_extension_class6"));
+	unregister_class = reinterpret_cast<GDExtensionInterfaceClassdbUnregisterExtensionClass>(get_proc("classdb_unregister_extension_class"));
+	StringName name("ReloadCaptureFixture"), parent("Object");
+	GDExtensionClassCreationInfo6 info = {};
+	info.is_abstract = route != 2;
+	info.is_exposed = true;
+	info.get_func = get;
+	info.get_property_list_func = list;
+	info.recreate_instance_func = [](void *, GDExtensionObjectPtr object) -> GDExtensionClassInstancePtr { return object; };
+	if (route == 2) {
+		info.create_instance_func = create;
+	}
+	register_class(library, &name, &parent, &info);
+	return true;
+}
+} // namespace ReloadCapture
+
+TEST_CASE("device_exit::method/reload-capture-survives-property-callback-destruction") {
+	// Direct prepare() characterizes capture before admission sealing. The manager
+	// preflight/G1 path is a separate contract and is not exercised by this test.
+	for (int route = 0; route < 3; route++) {
+		CAPTURE(route);
+		ReloadCapture::route = route;
+		ReloadCapture::deletions = 0;
+		ReloadCapture::getters = 0;
+		ReloadCapture::default_getters = 0;
+		ReloadCapture::list_calls.clear();
+		StringName name("ReloadCaptureFixture"), property_name("reload_value"), empty;
+		String hint;
+		GDExtensionPropertyInfo property = { GDEXTENSION_VARIANT_TYPE_INT, &property_name, &empty, PROPERTY_HINT_NONE, &hint, PROPERTY_USAGE_STORAGE };
+		ReloadCapture::property = &property;
+		Ref<GDExtensionFunctionLoader> loader;
+		loader.instantiate();
+		loader->set_initialization_function(ReloadCapture::entry);
+		Ref<GDExtension> extension;
+		extension.instantiate();
+		// Function loaders do not read a .gdextension reloadable flag. Set it
+		// before registration so the production descriptor installs tracking.
+		extension->set_reloadable(true);
+		REQUIRE_EQ(extension->open_library("libgodot://reload-capture", loader), OK);
+		REQUIRE(extension->is_reloadable());
+		REQUIRE(ClassDB::is_class_reloadable(name));
+		Vector<ObjectID> ids;
+		for (int i = 0; i < (route == 0 ? 4 : 1); i++) {
+			Object *object = memnew(Object);
+			ClassDB::set_object_extension_instance(object, name, object);
+			ids.push_back(object->get_instance_id());
+		}
+		ReloadCapture::trigger = ids[0];
+		ReloadCapture::victim = route == 0 ? ids[2] : ids[0];
+		Access::prepare(*extension.ptr());
+		std::printf("RELOAD_CAPTURE route=%d deletions=%d getters=%d default_getters=%d trigger_lists=%d\n",
+				route, ReloadCapture::deletions, ReloadCapture::getters, ReloadCapture::default_getters, ReloadCapture::list_calls[ids[0]]);
+		CHECK_EQ(ReloadCapture::deletions, 1);
+		CHECK_GT(ReloadCapture::getters, 0);
+		CHECK_EQ(ReloadCapture::default_getters, route == 2 ? 1 : 0);
+		CHECK_EQ(ReloadCapture::list_calls[ids[0]], 1);
+		for (ObjectID id : ids) {
+			if (Object *object = ObjectDB::get_instance(id)) {
+				CHECK_EQ(ReloadCapture::list_calls[id], 1);
+				CHECK(Access::has_reload_state(*extension.ptr(), name, id));
+				memdelete(object);
+			} else {
+				CHECK_FALSE(Access::has_reload_state(*extension.ptr(), name, id));
+			}
+		}
+		unregister_class(extension.ptr(), &name);
+		Access::finish(*extension.ptr());
+		CHECK_EQ(extension->close_library(), OK);
+		ReloadCapture::property = nullptr;
+		ReloadCapture::list_calls.clear();
+	}
+}
 TEST_CASE("device_exit::method/reload-preserves-old-cached-return-abi-in-both-directions") {
 	for (bool old_ref : { false, true }) {
 		return_type = GDEXTENSION_VARIANT_TYPE_OBJECT;

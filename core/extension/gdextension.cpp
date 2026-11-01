@@ -1374,7 +1374,13 @@ void GDExtension::prepare_reload() {
 			M.value->is_reloading = true;
 		}
 
+		// Property callbacks can untrack or destroy instances. Keep iteration independent
+		// from the callback-mutable instance set and reacquire objects after callbacks.
+		Vector<ObjectID> instances;
 		for (const ObjectID &obj_id : E.value.instances) {
+			instances.push_back(obj_id);
+		}
+		for (const ObjectID &obj_id : instances) {
 			Object *obj = ObjectDB::get_instance(obj_id);
 			if (!obj) {
 				continue;
@@ -1384,13 +1390,35 @@ void GDExtension::prepare_reload() {
 			List<Pair<String, Variant>> state;
 			List<PropertyInfo> prop_list;
 			obj->get_property_list(&prop_list);
+			if (!(obj = ObjectDB::get_instance(obj_id))) {
+				continue;
+			}
+			bool instance_alive = true;
 			for (const PropertyInfo &P : prop_list) {
 				if (!(P.usage & PROPERTY_USAGE_STORAGE)) {
 					continue;
 				}
 
+				// Reacquire before each callback-capable property read. A previous
+				// default-value lookup may have destroyed this instance.
+				obj = ObjectDB::get_instance(obj_id);
+				if (!obj) {
+					instance_alive = false;
+					break;
+				}
 				Variant value = obj->get(P.name);
-				Variant default_value = ClassDB::class_get_default_property_value(obj->get_class_name(), P.name);
+				obj = ObjectDB::get_instance(obj_id);
+				if (!obj) {
+					instance_alive = false;
+					break;
+				}
+				StringName class_name = obj->get_class_name();
+				Variant default_value = ClassDB::class_get_default_property_value(class_name, P.name);
+				obj = ObjectDB::get_instance(obj_id);
+				if (!obj) {
+					instance_alive = false;
+					break;
+				}
 
 				if (default_value.get_type() != Variant::NIL && bool(Variant::evaluate(Variant::OP_EQUAL, value, default_value))) {
 					continue;
@@ -1402,10 +1430,12 @@ void GDExtension::prepare_reload() {
 
 				state.push_back(Pair<String, Variant>(P.name, value));
 			}
-			E.value.instance_state[obj_id] = {
-				std::move(state), // List<Pair<String, Variant>> properties;
-				obj->is_extension_placeholder(), // bool is_placeholder;
-			};
+			if (instance_alive && (obj = ObjectDB::get_instance(obj_id))) {
+				E.value.instance_state[obj_id] = {
+					std::move(state), // List<Pair<String, Variant>> properties;
+					obj->is_extension_placeholder(), // bool is_placeholder;
+				};
+			}
 		}
 	}
 }

@@ -1,0 +1,37 @@
+{
+  "head": "98d315818db624e4b81f867f718ec5fac9beb385",
+  "sha256": {
+    "core/extension/gdextension.cpp": "a4a0435d8a101253c4d34017ae9b6fc09f572dc73872577af05617849b41f774",
+    "core/object/object.cpp": "ab720040fa332f3e370e6937007763f6165831909709def86ba3e952e826d7a8",
+    "core/object/class_db.cpp": "e5d4531f697c0a3edc590d84e4de20acbcbfec3e3eb049de3dfe19b23dd5dcda",
+    "core/extension/gdextension_manager.cpp": "57a8ecf158d56bff068b9d714dc37e1082247c4ffc99a91732dd10048c3c926c",
+    "core/extension/gdextension_library_exit_guard.cpp": "f862f30cad13df1b7c732e3411c3a5809da0505d6c2665bdc724ae540b61a7ec",
+    "core/extension/gdextension_guard_enrollment.cpp": "c0d427d4a7d6f4d4749f82ba9e9c53eeec8a3e8d44b222a71d11303f4a7d27c0",
+    "tests/core/object/test_device_exit_method.cpp": "5852c7d70858a12a4c10931afa1ea96ff5496c0dc1edfe09b3f574e192751879",
+    "core/templates/hash_set.h": "dc0931f5d024338bd1e3c1137d7ffc0960a6b5b8910c90c724f73ab664f26a71",
+    "core/templates/hash_map.h": "886f04f6ae25a3deb3fe3f1f1d6e6c28895ee05a6ddd8c29c8d182830fdd1e80"
+  },
+  "engine_runtime": {
+    "state": "passed_direct_capture_fixture_not_manager_qualification",
+    "pinned_host": "work/physics-wrapper-finish-recovery-20261101/PINNED_HOST.json",
+    "selector": "device_exit::method/reload-capture-survives-property-callback-destruction",
+    "cases": 1,
+    "assertions": 33,
+    "rc": 0,
+    "neighbor_selector": "device_exit::method/*",
+    "neighbor_cases": 10,
+    "neighbor_assertions": 515,
+    "neighbor_rc": 0
+  },
+  "final_method_neighbors": {
+    "host_pin": "../native-exit-editor-audit-20261101/PINNED_HOST.json",
+    "log": "final-method-neighbors.log",
+    "rc": 0,
+    "cases": 10,
+    "assertions": 515,
+    "sources": {
+      "core/extension/gdextension.cpp": "a4a0435d8a101253c4d34017ae9b6fc09f572dc73872577af05617849b41f774",
+      "tests/core/object/test_device_exit_method.cpp": "5852c7d70858a12a4c10931afa1ea96ff5496c0dc1edfe09b3f574e192751879"
+    }
+  }
+}
