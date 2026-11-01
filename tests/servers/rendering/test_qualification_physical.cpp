@@ -252,42 +252,52 @@ public:
 			CryptoCore::sha256(pixels, 64, upload.payload_digest);
 			GDExtensionQualificationUploadSegmentV1 segments[2] = {};
 			GDExtensionQualificationUploadReportV1 report = {};
-			CHECK(registry.qualification_texture_upload(ref, &upload, pixels, 64, segments, 2, &report).native_error == OK);
-			CHECK(report.state == 4);
-			CHECK(image->upload.consumed == (mode == 1 ? 0 : 32));
-			CHECK(ticket->facts.size() == (mode == 1 ? 0 : 1));
-			CHECK_FALSE(ticket->physically_retired.load());
-			CHECK(device.texture_owner.get_or_null(RID::from_uint64(texture.rid))->qualification_users == 1);
-			const uint32_t prefix = ticket->facts.size();
-			CHECK(registry.qualification_texture_upload(ref, &upload, pixels, 64, segments, 2, &report).native_error == OK);
-			CHECK(ticket->facts.size() == prefix);
+			auto append_prefix = [&] {
+				CHECK(registry.qualification_texture_upload(ref, &upload, pixels, 64, segments, 2, &report).native_error == OK);
+				CHECK(report.state == 4);
+				CHECK(image->upload.consumed == (mode == 1 ? 0 : 32));
+				CHECK(ticket->facts.size() == (mode == 1 ? 0 : 1));
+				CHECK_FALSE(ticket->physically_retired.load());
+				CHECK(device.texture_owner.get_or_null(RID::from_uint64(texture.rid))->qualification_users == 1);
+				const uint32_t prefix = ticket->facts.size();
+				CHECK(registry.qualification_texture_upload(ref, &upload, pixels, 64, segments, 2, &report).native_error == OK);
+				CHECK(ticket->facts.size() == prefix);
+			};
+			if (mode != 6) {
+				append_prefix();
+			}
 			RID shader_rid, pipeline_rid;
 			Registry::QualificationBridge::NativeUnit *unit = nullptr;
-			if (mode == 0 || mode == 5) {
-				staging.blocks.write[0].frame_used = 0;
-				upload.expected_revision = ticket->report.revision;
-				CHECK(registry.qualification_texture_upload(ref, &upload, pixels, 64, segments, 2, &report).native_error == OK);
-				CHECK(report.state == 1);
-				CHECK(report.known_count == 2);
-				CHECK(image->upload.consumed == 64);
-				CHECK(ticket->facts.size() == 2);
-				CHECK(memcmp(staging_bytes, pixels + 32, 32) == 0);
-				CHECK(image->physical.uses.size() == 1);
-				REQUIRE(image->upload.segments.size() == 2);
-				device.draw_graph.add_compute_list_begin();
-				const auto unordered = device.draw_graph.add_compute_list_dispatch(1, 1, 1);
-				device.draw_graph.add_compute_list_end();
-				uint32_t path = 0;
-				CHECK_FALSE(device.draw_graph.has_dependency_path(image->upload.segments[1].handle, unordered, path));
-				// This is the actual global handoff used by record_prepared_v2 before
-				// Capture. Capture needs no texture hazard to consume this dependency.
-				device.draw_graph.add_synchronization();
-				device.draw_graph.add_compute_list_begin();
-				const auto capture = device.draw_graph.add_compute_list_dispatch(1, 1, 1);
-				device.draw_graph.add_compute_list_end();
-				for (const auto &segment : image->upload.segments) {
-					CHECK(device.draw_graph.has_dependency_path(segment.handle, capture, path));
-					CHECK(path > 0);
+			if (mode == 0 || mode == 5 || mode == 6) {
+				auto complete_image = [&] {
+					staging.blocks.write[0].frame_used = 0;
+					upload.expected_revision = ticket->report.revision;
+					CHECK(registry.qualification_texture_upload(ref, &upload, pixels, 64, segments, 2, &report).native_error == OK);
+					CHECK(report.state == 1);
+					CHECK(report.known_count == 2);
+					CHECK(image->upload.consumed == 64);
+					CHECK(ticket->facts.size() == 2);
+					CHECK(memcmp(staging_bytes, pixels + 32, 32) == 0);
+					CHECK(image->physical.uses.size() == 1);
+					REQUIRE(image->upload.segments.size() == 2);
+					device.draw_graph.add_compute_list_begin();
+					const auto unordered = device.draw_graph.add_compute_list_dispatch(1, 1, 1);
+					device.draw_graph.add_compute_list_end();
+					uint32_t path = 0;
+					CHECK_FALSE(device.draw_graph.has_dependency_path(image->upload.segments[1].handle, unordered, path));
+					// This is the actual global handoff used by record_prepared_v2 before
+					// Capture. Capture needs no texture hazard to consume this dependency.
+					device.draw_graph.add_synchronization();
+					device.draw_graph.add_compute_list_begin();
+					const auto capture = device.draw_graph.add_compute_list_dispatch(1, 1, 1);
+					device.draw_graph.add_compute_list_end();
+					for (const auto &segment : image->upload.segments) {
+						CHECK(device.draw_graph.has_dependency_path(segment.handle, capture, path));
+						CHECK(path > 0);
+					}
+				};
+				if (mode != 6) {
+					complete_image();
 				}
 
 				unit = memnew(Registry::QualificationBridge::NativeUnit);
@@ -347,6 +357,23 @@ public:
 				auto wrong = binding;
 				wrong.object_serial++;
 				CHECK(registry.qualification_set_create(ref, &cs, &wrong, 1, &set).native_error == ERR_UNAUTHORIZED);
+				if (mode == 6) {
+					CHECK_FALSE(image->upload_attempted);
+					CHECK(image->upload_ticket == 0);
+					CHECK(image->upload.consumed == 0);
+					CHECK(ticket->texture_uploads.is_empty());
+					image->upload_ticket = ticket->serial + 1;
+					CHECK(registry.qualification_set_create(ref, &cs, &binding, 1, &set).native_error == ERR_UNAUTHORIZED);
+					image->upload_ticket = 0;
+					image->source.digest[0]++;
+					CHECK(registry.qualification_set_create(ref, &cs, &binding, 1, &set).native_error == ERR_UNAUTHORIZED);
+					image->source.digest[0]--;
+					image->retiring = true;
+					CHECK(registry.qualification_set_create(ref, &cs, &binding, 1, &set).native_error == ERR_UNAUTHORIZED);
+					image->retiring = false;
+					CHECK(bridge->sets[0] == nullptr);
+					CHECK(image->physical.dependent_children.load() == 0);
+				}
 				if (mode == 5) {
 					const auto before_refs = registry.records[library].private_refs, before_children = bridge->children;
 					const auto before_events = device.qualification_free_event_reservations;
@@ -394,6 +421,25 @@ public:
 				resources.push_back(RID::from_uint64(set.rid));
 				resources.push_back(RID::from_uint64(texture.rid));
 				resources.push_back(RID::from_uint64(sampler.rid));
+				if (mode == 6) {
+					// The real constructor must not create an upload identity or readiness.
+					CHECK_FALSE(image->upload_attempted);
+					CHECK(image->upload_ticket == 0);
+					CHECK(image->upload.consumed == 0);
+					CHECK(ticket->texture_uploads.is_empty());
+					CHECK(registry.qualification_typed_dependencies(bridge, &device, ticket, q, resources) == ERR_UNAUTHORIZED);
+					append_prefix();
+					CHECK(image->upload.consumed == 32);
+					CHECK(registry.qualification_typed_dependencies(bridge, &device, ticket, q, resources) == ERR_UNAUTHORIZED);
+					complete_image();
+					// Metadata fault injection isolates the record gate after an actual complete upload.
+					image->upload_failed = true;
+					CHECK(registry.qualification_typed_dependencies(bridge, &device, ticket, q, resources) == ERR_UNAUTHORIZED);
+					image->upload_failed = false;
+					image->upload_ticket++;
+					CHECK(registry.qualification_typed_dependencies(bridge, &device, ticket, q, resources) == ERR_UNAUTHORIZED);
+					image->upload_ticket--;
+				}
 				CHECK(registry.qualification_typed_dependencies(bridge, &device, ticket, q, resources) == OK);
 				q.body_map_digest[0]++;
 				CHECK(registry.qualification_typed_dependencies(bridge, &device, ticket, q, resources) == ERR_UNAUTHORIZED);
@@ -440,7 +486,7 @@ public:
 			GDExtensionQualificationResourceRetireV1 tq{ { 1, 16, 0 }, texture.resource, texture.rid, texture.object_serial, 1 }, sq2{ { 1, 16, 0 }, sampler.resource, sampler.rid, sampler.object_serial, 1 };
 			CHECK(registry.qualification_resource_retire(ref, &tq, &retired).native_error == OK);
 			CHECK(registry.qualification_resource_retire(ref, &sq2, &retired).native_error == OK);
-			if (mode == 0 || mode == 5) {
+			if (mode == 0 || mode == 5 || mode == 6) {
 				CHECK_FALSE(image->physical.enqueued);
 				GDExtensionQualificationResourceRetireV1 setq{ { 1, 16, 0 }, set.resource, set.rid, set.object_serial, 1 };
 				CHECK(registry.qualification_resource_retire(ref, &setq, &retired).native_error == OK);
@@ -2717,6 +2763,14 @@ TEST_CASE("[Qualification][Typed] original producer row upload exact phase descr
 	TestQualificationPhysicalAccess::typed_production(device, 0);
 	TestQualificationPhysicalAccess::detach(device);
 }
+TEST_CASE("[Qualification][Typed] descriptors precede image upload while record rejects zero partial failed and foreign images") {
+	RenderingDevice device;
+	Driver driver;
+	TestQualificationPhysicalAccess::attach(device, driver);
+	TestQualificationPhysicalAccess::typed_production(device, 6);
+	TestQualificationPhysicalAccess::detach(device);
+}
+
 TEST_CASE("[Qualification][Typed] zero prefix busy keeps original image pin until owner cancel") {
 	RenderingDevice device;
 	Driver driver;

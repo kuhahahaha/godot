@@ -374,7 +374,8 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_set_create(GDExtensionQ
 			if (qualification_resource_locked(b, r, kind, child) != OK || child->creating || child->retiring || child->rid != rid || child->object_serial != serial || child->source.session_serial != q->source.session_serial || child->source.generation != q->source.generation || memcmp(child->source.digest, q->source.digest, 32) || child->physical.use_closed.load()) {
 				return false;
 			}
-			if (kind == 1 && (!child->upload_attempted || child->upload_failed || child->upload_ticket != ticket->serial || child->upload.consumed != child->backing.byte_size)) {
+			// Descriptor creation may precede upload; record admission checks image readiness.
+			if (kind == 1 && child->upload_ticket && child->upload_ticket != ticket->serial) {
 				return false;
 			}
 			if (!children.has(&child->physical)) {
