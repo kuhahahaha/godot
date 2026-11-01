@@ -6,9 +6,6 @@
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/rendering_device.h"
 #include "tests/test_macros.h"
-#ifdef VULKAN_ENABLED
-#include "drivers/vulkan/rendering_context_driver_vulkan.h"
-#endif
 #include <cstdlib>
 #include <functional>
 
@@ -119,7 +116,6 @@ public:
 		}
 	}
 	static void run_real_rd_upload_retry() {
-#ifdef VULKAN_ENABLED
 		RenderingDevice *rd = RenderingDevice::get_singleton();
 		RendererCompositorRD *compositor = RendererCompositorRD::get_singleton();
 		if (rd == nullptr || compositor == nullptr) {
@@ -152,9 +148,6 @@ public:
 			}
 		} cleanup = { *rd, *storage, particle, sub_emitter };
 		run_rd_upload_retry(*rd, *storage, particle, sub_emitter);
-#else
-		FAIL("Vulkan support is required for the production upload retry test.");
-#endif
 	}
 	static void run_real_collision_descriptor_retry() {
 		RenderingDevice *rd = RenderingDevice::get_singleton();
@@ -237,6 +230,17 @@ public:
 		CHECK(dependencies->has(texture_a));
 		CHECK_FALSE(dependencies->has(texture_b));
 	}
+	static void finish_real_rd_work() {
+		auto *rd = RenderingDevice::get_singleton();
+		REQUIRE(rd != nullptr);
+		REQUIRE_FALSE(rd->is_main_instance);
+		// These tests use the original offscreen RD, so the original local
+		// submit/sync pair issues actual Metal work and returns its native fences.
+		rd->submit();
+		rd->sync();
+		CHECK(rd->_recording_error() == OK);
+		CHECK_FALSE(rd->local_device_processing);
+	}
 
 	static void restore_shifted_history() {
 		ParticlesStorage::Particles particles;
@@ -315,10 +319,11 @@ TEST_CASE("[ParticlesProcessRetry] rollback restores shifted history without a f
 
 TEST_CASE("[ParticlesProcessRetryGPU] production buffer upload retry") {
 	if (std::getenv("GODOT_TEST_PARTICLES_PROCESS_RD") == nullptr) {
-		MESSAGE("UNRUN: set GODOT_TEST_PARTICLES_PROCESS_RD=1 to execute the Vulkan production-path test");
+		MESSAGE("UNRUN: set GODOT_TEST_PARTICLES_PROCESS_RD=1 to initialize the original offscreen Metal test backend");
 		return;
 	}
 	RendererRD::TestParticlesProcessRetryAccess::run_real_rd_upload_retry();
+	RendererRD::TestParticlesProcessRetryAccess::finish_real_rd_work();
 }
 
 TEST_CASE("[ParticlesProcessRetryGPU] collision A to B failure to A rebuilds the original descriptor") {
@@ -327,4 +332,5 @@ TEST_CASE("[ParticlesProcessRetryGPU] collision A to B failure to A rebuilds the
 		return;
 	}
 	RendererRD::TestParticlesProcessRetryAccess::run_real_collision_descriptor_retry();
+	RendererRD::TestParticlesProcessRetryAccess::finish_real_rd_work();
 }

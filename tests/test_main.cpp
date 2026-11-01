@@ -89,7 +89,11 @@ int test_main(int argc, char *argv[]) {
 	OS::get_singleton()->set_cmdline("", args, List<String>());
 	DisplayServerMock::register_mock_driver();
 
-	WorkerThreadPool::get_singleton()->init();
+	// Native particle test setup initializes this original pool before the real
+	// compositor can launch shader jobs. All ordinary tests retain this path.
+	if (OS::get_singleton()->get_environment("GODOT_TEST_PARTICLES_PROCESS_RD") != "1") {
+		WorkerThreadPool::get_singleton()->init();
+	}
 
 	{
 		const String test_path = TestUtils::get_temp_path("");

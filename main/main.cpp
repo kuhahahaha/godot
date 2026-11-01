@@ -160,6 +160,12 @@
 #endif // TOOLS_ENABLED && !GDSCRIPT_NO_LSP
 #endif // MODULE_GDSCRIPT_ENABLED
 
+#if defined(TESTS_ENABLED) && defined(METAL_ENABLED) && defined(MACOS_ENABLED)
+// Platform framework macros must follow engine declarations such as Variant nil.
+#include "drivers/metal/rendering_context_driver_metal.h"
+#include "servers/rendering/renderer_rd/renderer_compositor_rd.h"
+#endif
+
 /* Static members */
 
 // Singletons
@@ -195,6 +201,12 @@ static CameraServer *camera_server = nullptr;
 static AccessibilityServer *accessibility_server = nullptr;
 static DisplayServer *display_server = nullptr;
 static RenderingServer *rendering_server = nullptr;
+#if defined(TESTS_ENABLED) && defined(METAL_ENABLED) && defined(MACOS_ENABLED)
+// Owned by the original test setup/cleanup, after RS construction and before
+// RS initialization. The ordinary test path continues to own a dummy renderer.
+static RenderingContextDriverMetal *test_particles_metal_context = nullptr;
+static RenderingDevice *test_particles_rendering_device = nullptr;
+#endif
 static TextServerManager *tsman = nullptr;
 static ThemeDB *theme_db = nullptr;
 #ifndef PHYSICS_2D_DISABLED
@@ -833,10 +845,48 @@ Error Main::test_setup() {
 
 	message_queue = memnew(MessageQueue);
 
-	RasterizerDummy::make_current();
 	rendering_server = memnew(RenderingServerDefault());
+	const String particles_rd_test = OS::get_singleton()->get_environment("GODOT_TEST_PARTICLES_PROCESS_RD");
+	ERR_FAIL_COND_V_MSG(OS::get_singleton()->has_environment("GODOT_TEST_PARTICLES_PROCESS_RD") && particles_rd_test != "1", ERR_INVALID_PARAMETER, "GODOT_TEST_PARTICLES_PROCESS_RD must be absent or 1.");
+	if (particles_rd_test == "1") {
+#if defined(METAL_ENABLED) && defined(MACOS_ENABLED)
+		// --test bypasses normal DisplayServer/backend startup. Initialize the
+		// real offscreen backend here, before the original RS creates its RSG
+		// compositor/storages. No window, dummy RD, or singleton replacement.
+		ERR_FAIL_COND_V(RenderingDevice::get_singleton() != nullptr, ERR_ALREADY_IN_USE);
+		NS::SharedPtr<MTL::Device> available_device = NS::TransferPtr(MTL::CreateSystemDefaultDevice());
+		ERR_FAIL_COND_V_MSG(available_device.get() == nullptr, ERR_UNAVAILABLE, "Particle process tests require an actual Metal device.");
+		OS::get_singleton()->set_current_rendering_driver_name("metal", OS::RENDERING_SOURCE_COMMANDLINE);
+		OS::get_singleton()->set_current_rendering_method("mobile", OS::RENDERING_SOURCE_COMMANDLINE);
+		ProjectSettings::get_singleton()->set_setting("rendering/shader_compiler/shader_cache/enabled", false);
+		// Real compositor construction launches shader jobs. test_main skips
+		// its later ordinary initialization for this explicit native test mode.
+#ifdef THREADS_ENABLED
+		WorkerThreadPool::get_singleton()->init();
+#else
+		WorkerThreadPool::get_singleton()->init(0, 0);
+#endif
+		test_particles_metal_context = memnew(RenderingContextDriverMetal);
+		Error native_error = test_particles_metal_context->initialize();
+		ERR_FAIL_COND_V_MSG(native_error != OK, native_error, "Failed to initialize particle-test Metal context.");
+		test_particles_rendering_device = memnew(RenderingDevice);
+		native_error = test_particles_rendering_device->initialize(test_particles_metal_context);
+		ERR_FAIL_COND_V_MSG(native_error != OK, native_error, "Failed to initialize particle-test Metal RenderingDevice.");
+		RendererCompositorRD::make_current();
+#else
+		ERR_FAIL_V_MSG(ERR_UNAVAILABLE, "GODOT_TEST_PARTICLES_PROCESS_RD=1 requires a macOS Metal build.");
+#endif
+	} else {
+		RasterizerDummy::make_current();
+	}
 	rendering_server->init();
 	rendering_server->set_render_loop_enabled(false);
+#if defined(METAL_ENABLED) && defined(MACOS_ENABLED)
+	if (test_particles_rendering_device) {
+		ERR_FAIL_COND_V(RendererCompositorRD::get_singleton() == nullptr, ERR_CANT_CREATE);
+		print_line(vformat("PARTICLES_PROCESS_RD_READY backend=%s renderer=mobile offscreen=1 original_rs=1", test_particles_rendering_device->get_device_api_name()));
+	}
+#endif
 
 	// Initialize ThemeDB early so that scene types can register their theme items.
 	// Default theme will be initialized later, after modules and ScriptServer are ready.
@@ -944,6 +994,19 @@ void Main::test_cleanup() {
 		rendering_server->finish();
 		memdelete(rendering_server);
 	}
+#if defined(METAL_ENABLED) && defined(MACOS_ENABLED)
+	if (test_particles_rendering_device) {
+		// RS first returns its shader/storage owners. The original RD finalizer
+		// then waits the actual remaining submissions and physically frees them
+		// while its original Metal context and worker pool are still alive.
+		memdelete(test_particles_rendering_device);
+		test_particles_rendering_device = nullptr;
+		memdelete(test_particles_metal_context);
+		test_particles_metal_context = nullptr;
+		std::fprintf(stdout, "PARTICLES_PROCESS_RD_CLEANUP_RETURNED original_rs_rd_context=1\n");
+		std::fflush(stdout);
+	}
+#endif
 	if (message_queue) {
 		message_queue->flush();
 		memdelete(message_queue);
