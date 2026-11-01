@@ -39,6 +39,15 @@
 
 namespace GDExtensionDeviceExit {
 namespace {
+template <typename Bridge>
+void trace_child_metadata(const Bridge &bridge, const char *kind, const char *stage, Error error = OK, uint32_t reason = 0) {
+#ifdef TESTS_ENABLED
+	if (OS::get_singleton() && OS::get_singleton()->has_environment("GODOT_QUALIFICATION_CAPACITY_TRACE")) {
+		const auto stats = bridge.child_metadata_stats();
+		print_line(vformat("QCHILD kind=%s stage=%s bridge=%d error=%d reason=%d children=%d storage_hot=%d storage_cold=%d storage_credits=%d unit_hot=%d unit_cold=%d unit_credits=%d untracked_cells=%d arena_request_bytes=%d tracked_request_bytes=%d", kind, stage, bridge.serial, int(error), reason, bridge.children, stats.storage_hot_cells, stats.storage_cold_origins, stats.storage_origin_credits, stats.unit_hot_cells, stats.unit_cold_origins, stats.unit_origin_credits, stats.untracked_test_cells, stats.origin_arena_request_bytes, stats.tracked_request_bytes()));
+	}
+#endif
+}
 GDExtensionDeviceSessionResultV1 result(Error error, uint32_t reason=0) { return {int32_t(error),reason,0,0}; }
 template<class T> bool aligned(const T *p) { return p && uintptr_t(p)%alignof(T)==0; }
 bool separate(const void *a,size_t as,const void *b,size_t bs) {
@@ -123,7 +132,8 @@ void Registry::qualification_trim_cleanup_ref_credits_locked(QualificationBridge
 GDExtensionDeviceSessionResultV1 Registry::qualification_close(GDExtensionQualificationBridgeRefV1 ref) {
  MutexLock lock(mutex);QualificationBridge *bridge=nullptr;RenderingDevice *rd=nullptr;
  Error error=qualification_bridge_locked(ref,false,false,bridge,rd);if(error!=OK)return result(error,error==ERR_UNAUTHORIZED?15:17);
- bridge->closing=true;for(auto *ticket:bridge->tickets)if(ticket)ticket->admission_closed=true;if(bridge->children)return result(ERR_BUSY,16);
+ bridge->closing=true;for(auto *ticket:bridge->tickets)if(ticket)ticket->admission_closed=true;if(bridge->children){trace_child_metadata(*bridge,"bridge","close_busy",ERR_BUSY,16);return result(ERR_BUSY,16);}
+ trace_child_metadata(*bridge,"bridge","close");
  auto library=bridge->library,device=bridge->device;
  CRASH_COND(bridge->cleanup_slot_in_use || bridge->cleanup_queue_in_use);
  qualification_trim_cleanup_ref_credits_locked(bridge);
@@ -163,6 +173,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_storage_create(GDExtens
 			return result(error, error == ERR_UNAUTHORIZED ? 15 : 16);
 		}
 		const bool accepted = qualification_accepted_call_locked(bridge, 2);
+		bridge->collect_retired_children_locked();
 		for (auto *existing : bridge->storage) {
 			if (existing && existing->origin.allocation_slot == request->allocation_slot && existing->origin.allocation_generation == request->allocation_generation && existing->origin.part == request->part && existing->origin.create_attempt == request->create_attempt) {
 				if (memcmp(&existing->origin, request, sizeof(*request))) {
@@ -178,6 +189,11 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_storage_create(GDExtens
 				return result(OK);
 			}
 		}
+		if (const auto *old = bridge->storage_origins.find_retired([&](const auto &origin) {
+			return origin.allocation_slot == request->allocation_slot && origin.allocation_generation == request->allocation_generation && origin.part == request->part && origin.create_attempt == request->create_attempt;
+		})) {
+			return memcmp(&old->origin, request, sizeof(*request)) ? result(ERR_INVALID_DATA, 16) : result(ERR_DOES_NOT_EXIST, 17);
+		}
 		if ((bridge->closing || records[bridge->library].quiescing || records[bridge->library].close_started) && !accepted) {
 			// Same-origin scan found no child; this call has not allocated anything.
 			return result(ERR_BUSY, GDEXTENSION_DEVICE_SESSION_REASON_STORAGE_CREATE_DEFERRED_V1);
@@ -188,11 +204,18 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_storage_create(GDExtens
 		// retirement even if unrelated admissions later exhaust the sequence.
 		const uint32_t refs_needed = bridge->cleanup_refs_reserved ? 1 : 3;
 		if (slot == QualificationBridge::CHILD_CAPACITY || private_limit < refs_needed || records[bridge->library].private_refs > private_limit - refs_needed || !qualification_serial_capacity(4)) {
+			trace_child_metadata(*bridge, "storage", "preflight_refused", ERR_PARAMETER_RANGE_ERROR, 19);
 			return result(ERR_PARAMETER_RANGE_ERROR, 19);
 		}
 		const Error recording_error = rd->_recording_error();
 		if (recording_error != OK) {
 			return result(recording_error, recording_error == ERR_BUSY ? GDEXTENSION_DEVICE_SESSION_REASON_STORAGE_CREATE_DEFERRED_V1 : GDEXTENSION_DEVICE_SESSION_REASON_NOT_ADMITTED_V1);
+		}
+		uint32_t history_index = UINT32_MAX;
+		const Error history_error = bridge->storage_origins.prepare(history_index);
+		if (history_error != OK) {
+			trace_child_metadata(*bridge, "storage", "history_refused", history_error, 19);
+			return result(history_error, 19);
 		}
 		if (!bridge->cleanup_refs_reserved) {
 			records[bridge->library].private_refs += 2;
@@ -205,11 +228,14 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_storage_create(GDExtens
 		++qualification_cleanup_serial_reservations;
 		child->cleanup_serial_reserved = true;
 		child->origin = *request;
+		child->history_index = history_index;
+		bridge->storage_origins.begin(history_index, *request, child->serial);
 		child->physical.bridge = bridge->serial;
 		child->physical.child = child->serial;
 		bridge->storage[slot] = child;
 		++bridge->children;
 		++records[bridge->library].private_refs;
+		trace_child_metadata(*bridge, "storage", "pre_native_reserved");
 	}
 	// The Registry child pins the original CodeHolder throughout the driver call;
 	// do not hold Registry::mutex across callbacks into original device-loss code.
@@ -218,6 +244,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_storage_create(GDExtens
 	if (rid.is_null()) {
 		CRASH_COND(!child->cleanup_serial_reserved || !qualification_cleanup_serial_reservations);
 		--qualification_cleanup_serial_reservations;
+		bridge->storage_origins.discard(child->history_index, child->serial);
 		bridge->storage[slot] = nullptr;
 		--bridge->children;
 		--records[bridge->library].private_refs;
@@ -253,17 +280,27 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_native_unit_create(GDEx
  {
   MutexLock lock(mutex);Error error=qualification_bridge_locked(ref,true,false,bridge,rd);if(error!=OK)return result(error,16);
   const bool accepted=qualification_accepted_call_locked(bridge,4);
+  bridge->collect_retired_children_locked();
   for(auto *existing:bridge->units)if(existing && existing->origin.record_slot==request->record_slot && existing->origin.preparation_generation==request->preparation_generation && existing->origin.operation_serial==request->operation_serial && existing->origin.physical_unit==request->physical_unit) {
    if(memcmp(&existing->origin,request,sizeof(*request)))return result(ERR_INVALID_DATA,16);
    if(existing->acknowledged)return result(ERR_DOES_NOT_EXIST,17);
    if(existing->creating)return result(ERR_BUSY,16);
    *out=existing->backing;return result(OK);
   }
+
+  if (const auto *old = bridge->unit_origins.find_retired([&](const auto &origin) {
+   return origin.record_slot == request->record_slot && origin.preparation_generation == request->preparation_generation && origin.operation_serial == request->operation_serial && origin.physical_unit == request->physical_unit;
+  })) {
+   return memcmp(&old->origin,request,sizeof(*request)) ? result(ERR_INVALID_DATA,16) : result(ERR_DOES_NOT_EXIST,17);
+  }
   if((bridge->closing || records[bridge->library].quiescing || records[bridge->library].close_started) && !accepted)return result(ERR_BUSY,16);
   for(;slot<QualificationBridge::CHILD_CAPACITY && bridge->units[slot];++slot){}
   const uint32_t refs_needed=bridge->cleanup_refs_reserved?1:3;
   if(slot==QualificationBridge::CHILD_CAPACITY || private_limit<refs_needed || records[bridge->library].private_refs>private_limit-refs_needed || !qualification_serial_capacity(4) || !rd->_qualification_free_event_available(false) || !rd->next_qualification_object_serial || rd->next_qualification_object_serial==UINT64_MAX)return result(ERR_PARAMETER_RANGE_ERROR,19);
   if(rd->_recording_error()!=OK)return result(rd->_recording_error(),16);
+  uint32_t history_index=UINT32_MAX;
+  Error history_error=bridge->unit_origins.prepare(history_index);
+  if(history_error!=OK){trace_child_metadata(*bridge,"unit","history_refused",history_error,19);return result(history_error,19);}
   child=memnew(QualificationBridge::NativeUnit);
   if(!rd->_qualification_reserve_free_event(&child->shader) || !rd->_qualification_reserve_free_event(&child->pipeline) || !rd->_qualification_free_event_available(false)) {
    if(child->shader.event_capacity_reserved)rd->_qualification_release_free_event(&child->shader);
@@ -272,6 +309,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_native_unit_create(GDEx
   }
   if(!bridge->cleanup_refs_reserved){records[bridge->library].private_refs+=2;bridge->cleanup_refs_reserved=true;}
   qualification_serials.take(child->serial);qualification_serials.take(child->retire_serial);qualification_serials.take(child->dependency_serial);++qualification_cleanup_serial_reservations;child->cleanup_serial_reserved=true;child->origin=*request;
+  child->history_index=history_index;bridge->unit_origins.begin(history_index,*request,child->serial);
   child->shader.bridge=child->pipeline.bridge=bridge->serial;child->shader.child=child->pipeline.child=child->serial;
   child->shader.serial=rd->next_qualification_object_serial++;child->pipeline.serial=rd->next_qualification_object_serial++;
   child->backing.abi={1,sizeof(GDExtensionDeviceExitAbi),0};child->backing.unit={instance,child->serial};child->backing.event_seq=rd->next_qualification_free_event++;
@@ -281,16 +319,18 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_native_unit_create(GDEx
    if(pipeline_reservation.is_valid()){rd->compute_pipeline_owner.initialize_rid(pipeline_reservation,RenderingDevice::ComputePipeline());rd->compute_pipeline_owner.free(pipeline_reservation);}
    rd->_qualification_release_free_event(&child->shader);rd->_qualification_release_free_event(&child->pipeline);
    --qualification_cleanup_serial_reservations;
+   bridge->unit_origins.discard(child->history_index,child->serial);
    memdelete(child);qualification_trim_cleanup_ref_credits_locked(bridge);return result(ERR_CANT_CREATE,19);
   }
   bridge->units[slot]=child;++bridge->children;++records[bridge->library].private_refs;
+  trace_child_metadata(*bridge,"unit","pre_native_reserved");
  }
  RID shader=rd->_qualification_shader_create(source,RID(),{},&child->shader,shader_reservation);
  if(shader.is_null()) {
   rd->shader_owner.initialize_rid(shader_reservation,RenderingDevice::Shader());rd->shader_owner.free(shader_reservation);
   rd->compute_pipeline_owner.initialize_rid(pipeline_reservation,RenderingDevice::ComputePipeline());rd->compute_pipeline_owner.free(pipeline_reservation);
   rd->_qualification_release_free_event(&child->shader);rd->_qualification_release_free_event(&child->pipeline);
-  MutexLock lock(mutex);CRASH_COND(!child->cleanup_serial_reserved || !qualification_cleanup_serial_reservations);--qualification_cleanup_serial_reservations;bridge->units[slot]=nullptr;--bridge->children;--records[bridge->library].private_refs;memdelete(child);qualification_trim_cleanup_ref_credits_locked(bridge);return result(FAILED,16);
+  MutexLock lock(mutex);CRASH_COND(!child->cleanup_serial_reserved || !qualification_cleanup_serial_reservations);--qualification_cleanup_serial_reservations;bridge->unit_origins.discard(child->history_index,child->serial);bridge->units[slot]=nullptr;--bridge->children;--records[bridge->library].private_refs;memdelete(child);qualification_trim_cleanup_ref_credits_locked(bridge);return result(FAILED,16);
  }
  child->shader.rid=shader.get_id();child->backing.shader_rid=shader.get_id();child->backing.shader_serial=child->shader.serial;child->backing.known_mask=1;
  child->backing.effective_flags=uint64_t(rd->shader_get_compile_flags(shader));

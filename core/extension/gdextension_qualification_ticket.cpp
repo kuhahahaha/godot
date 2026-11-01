@@ -616,6 +616,17 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_release(GDExtensionQual
  for (auto &owned : ticket->additional_results) {
 	 owned.unref();
  }
+
+ // Original guards above have joined every frame/RT/native owner and removed
+ // both directions of physical pins. ACKed lookup is stale before these arrays
+ // can be read; retain fixed origin/preparation and exact upload plans only.
+ ticket->facts.reset();
+ ticket->graphs.reset();
+ ticket->natives.reset();
+ ticket->resource_pins.reset();
+ ticket->physical_uses.reset();
+ ticket->texture_uploads.reset();
+ for(auto &upload:ticket->uploads)upload.progress.segments.reset();
  ticket->admission_closed = true;
  ticket->acknowledged = true;
  --bridge->children;

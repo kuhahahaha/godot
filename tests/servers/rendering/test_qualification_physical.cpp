@@ -36,6 +36,7 @@
 #include "core/os/thread.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server.h"
+#include "servers/rendering/rendering_shader_container.h"
 #include "tests/servers/rendering/transfer_test_driver_base.h"
 #include "tests/test_macros.h"
 
@@ -53,6 +54,394 @@ TEST_FORCE_LINK(test_qualification_physical)
 extern thread_local void (*test_uniform_set_after_rid_free)(RenderingDevice *);
 class TestQualificationPhysicalAccess {
 public:
+	static void storage_retirement_capacity(RenderingDevice &device, uint32_t mode = 0, const int *native_creates = nullptr) {
+		using namespace GDExtensionDeviceExit;
+		// Controlled enrollment, actual original factory/RID/retire/ACK entries.
+		// Native driver calls are deterministic CPU ports, not a GPU receipt.
+		auto *registry = memnew(Registry);
+		auto *previous = RenderingDevice::singleton;
+		RenderingDevice::singleton = &device;
+		device.is_main_instance = true;
+		device.render_thread_id = Thread::get_caller_id();
+		device.qualification_retiring = false;
+		registry->instance = 71;
+		auto &record = registry->records[0];
+		record.owner_thread = Thread::get_caller_id();
+		record.snapshot.library_generation = 1;
+		record.guard_enrollment = GuardEnrollment::QUALIFIED;
+		record.private_refs = 1;
+		auto &native = registry->device_records[0];
+		native.object = &device;
+		native.live = true;
+		native.epoch = 1;
+		native.execution_thread = Thread::get_caller_id();
+		native.refs = 1;
+		struct Holder : HolderRetirement {
+			Holder() : HolderRetirement(RecordRef{}) {}
+			~Holder() = default;
+		} holder;
+		holder.generation = 1;
+		holder.qualification_children = 1;
+		auto *bridge = memnew(Registry::QualificationBridge);
+		bridge->serial = 11;
+		bridge->epoch = 1;
+		bridge->holder = &holder;
+		registry->qualification_bridges[0] = bridge;
+		const GDExtensionQualificationBridgeRefV1 ref{ 71, 11 };
+		GDExtensionQualificationRtRefV1 pending_rt = {};
+		const auto retire = [&](Registry::QualificationBridge::Storage *child) {
+			if (!child || child->acknowledged) {
+				return;
+			}
+			const auto &b = child->backing;
+			const auto &o = child->origin;
+			const GDExtensionStorageRetireRequestV1 request{ { 1, 16, 0 }, b.backing, b.rid, b.backing_serial, o.allocation_slot, o.part, o.allocation_generation, o.create_attempt + 1, 0 };
+			GDExtensionStorageRetireRefV1 retired = {};
+			GDExtensionStorageRetireReportV1 report = {};
+			const auto accepted = registry->qualification_storage_retire(ref, &request, &retired, &report);
+			CHECK(accepted.native_error == OK);
+			registry->qualification_retire_step(bridge, &device, child->serial, 1);
+			device._free_pending_resources(0);
+			registry->qualification_retire_step(bridge, &device, child->serial, 1);
+			CHECK(child->report.state == 1);
+			CHECK(registry->qualification_storage_retire_release(ref, retired).native_error == OK);
+		};
+		struct Cleanup {
+			std::function<void()> call;
+			~Cleanup() { call(); }
+		} cleanup{ [&] {
+			for (auto *ticket : bridge->tickets) {
+				if (ticket && !ticket->acknowledged) {
+					// Abort cleanup is a CPU fixture completion control only.
+					{
+						MutexLock registry_lock(registry->mutex);
+						MutexLock rd_lock(device._thread_safe_);
+						device._qualification_unpin_resources(ticket);
+					}
+					ticket->physically_retired.store(true);
+					CHECK(registry->qualification_release(ref, { 71, ticket->serial }).native_error == OK);
+				}
+			}
+			for (auto *child : bridge->storage) {
+				retire(child);
+			}
+			if (pending_rt.handle_serial) {
+				CHECK(registry->qualification_rt_release(ref, pending_rt).native_error == OK);
+			}
+			CHECK(registry->qualification_close(ref).native_error == OK);
+			CHECK(holder.qualification_children == 0);
+			RenderingDevice::singleton = previous;
+			device.is_main_instance = false;
+			memdelete(registry);
+		} };
+		uint64_t previous_serial = 0;
+		GDExtensionStorageCreateRequestV1 first_origin = {};
+		for (uint64_t generation = 1; generation <= (mode == 1 ? 160 : mode >= 2 ? 1
+																				 : 66);
+				++generation) {
+			for (uint32_t part = 0; part < 8; ++part) {
+				INFO("Original generation ", generation, ", part ", part);
+				const GDExtensionStorageCreateRequestV1 origin{ { 1, 16, 0 }, 128, 0, part, generation, uint64_t(part) * 2 + 1, 0 };
+				GDExtensionStorageBackingV1 backing = {};
+				const auto created = registry->qualification_storage_create(ref, &origin, &backing);
+				REQUIRE(created.native_error == OK);
+				if (created.native_error != OK) {
+					return; // Doctest's all-asserts build may continue after REQUIRE.
+				}
+				CHECK(backing.backing.handle_serial > previous_serial);
+				previous_serial = backing.backing.handle_serial;
+				if (generation == 1 && part == 0) {
+					first_origin = origin;
+				}
+				Registry::QualificationBridge::Storage *child = nullptr;
+				for (auto *entry : bridge->storage) {
+					if (entry && entry->serial == backing.backing.handle_serial) {
+						child = entry;
+						break;
+					}
+				}
+				REQUIRE(child);
+				if (!child) {
+					return;
+				}
+				QualificationTicket *retained_ticket = nullptr;
+				if (mode == 2 && generation == 1 && part == 0) {
+					// Actual pin/unpin and original release; only enrollment and
+					// physically-retired input below are controlled CPU facts.
+					retained_ticket = memnew(QualificationTicket);
+					REQUIRE(registry->qualification_serials.take(retained_ticket->serial));
+					retained_ticket->bridge_serial = bridge->serial;
+					bridge->tickets[0] = retained_ticket;
+					++bridge->children;
+					++record.private_refs;
+					LocalVector<RID> resources;
+					resources.push_back(RID::from_uint64(backing.rid));
+					{
+						MutexLock registry_lock(registry->mutex);
+						MutexLock rd_lock(device._thread_safe_);
+						REQUIRE(device._qualification_pin_resources(retained_ticket, resources) == OK);
+					}
+					const GDExtensionStorageRetireRequestV1 request{ { 1, 16, 0 }, backing.backing, backing.rid, backing.backing_serial, 0, part, generation, origin.create_attempt + 1, 0 };
+					GDExtensionStorageRetireRefV1 retired = {};
+					GDExtensionStorageRetireReportV1 report = {};
+					REQUIRE(registry->qualification_storage_retire(ref, &request, &retired, &report).native_error == OK);
+					CHECK_FALSE(child->physical.enqueued);
+					CHECK(registry->qualification_storage_retire_release(ref, retired).native_error == ERR_BUSY);
+					{
+						MutexLock registry_lock(registry->mutex);
+						MutexLock rd_lock(device._thread_safe_);
+						device._qualification_unpin_resources(retained_ticket);
+					}
+					retained_ticket->physically_retired.store(true);
+				}
+				if (mode == 3 && generation == 1 && part == 0) {
+					const GDExtensionQualificationRtConfigV1 config{ { 1, 40, 0 }, 1, 312, 200, 1, 256 };
+					REQUIRE(registry->qualification_rt_configure(ref, &config).native_error == OK);
+					const GDExtensionStorageRetireRequestV1 request{ { 1, 16, 0 }, backing.backing, backing.rid, backing.backing_serial, 0, part, generation, origin.create_attempt + 1, 0 };
+					const GDExtensionQualificationRtRequestV1 header{ { 1, 56, 0 }, 3, 0, 1, 0, sizeof(request), sizeof(GDExtensionStorageRetireRefV1) + sizeof(GDExtensionStorageRetireReportV1), 0, 0 };
+					REQUIRE(registry->qualification_rt_reserve(ref, &header, &request, nullptr, &pending_rt).native_error == OK);
+				}
+				retire(child);
+				if (retained_ticket || pending_rt.handle_serial) {
+					const auto probe_origin = GDExtensionStorageCreateRequestV1{ { 1, 16, 0 }, 128, 1, 0, 1, 1, 0 };
+					GDExtensionStorageBackingV1 probe = {};
+					REQUIRE(registry->qualification_storage_create(ref, &probe_origin, &probe).native_error == OK);
+					bool retained = false;
+					Registry::QualificationBridge::Storage *probe_child = nullptr;
+					for (auto *entry : bridge->storage) {
+						retained |= entry == child && entry->serial == backing.backing.handle_serial;
+						if (entry && entry->serial == probe.backing.handle_serial) {
+							probe_child = entry;
+						}
+					}
+					CHECK(retained);
+					if (!retained) {
+						// Abort recovery after the named assertion only: never read
+						// a cell whose original address was incorrectly reclaimed.
+						if (retained_ticket) {
+							retained_ticket->physical_uses.clear();
+						}
+						if (pending_rt.handle_serial) {
+							bridge->rt->cleanup_child_serial = 0;
+						}
+						return;
+					}
+					CHECK(child->acknowledged);
+					REQUIRE(probe_child);
+					retire(probe_child);
+					if (retained_ticket) {
+						CHECK(retained_ticket->physical_uses.size() == 1);
+						CHECK(child->physical.uses.size() == 1);
+						REQUIRE(registry->qualification_release(ref, { 71, retained_ticket->serial }).native_error == OK);
+						CHECK(child->physical.uses.is_empty());
+					}
+					if (pending_rt.handle_serial) {
+						REQUIRE(registry->qualification_rt_release(ref, pending_rt).native_error == OK);
+						pending_rt = {};
+					}
+				}
+				CHECK(bridge->children == 0);
+				CHECK(record.private_refs == 1);
+				const auto serial_after_return = registry->qualification_serials.next;
+				GDExtensionStorageBackingV1 replay = {};
+				const auto stale = registry->qualification_storage_create(ref, &origin, &replay);
+				CHECK(stale.native_error == ERR_DOES_NOT_EXIST);
+				CHECK(stale.reason == 17);
+				CHECK(replay.backing.handle_serial == 0);
+				CHECK(registry->qualification_serials.next == serial_after_return);
+			}
+		}
+		if (mode == 1) {
+			const uint64_t serial_before = registry->qualification_serials.next;
+			const uint64_t cleanup_before = registry->qualification_cleanup_serial_reservations;
+			const int creates_before = native_creates ? *native_creates : 0;
+			const GDExtensionStorageCreateRequestV1 excess{ { 1, 16, 0 }, 128, 0, 0, 161, 1, 0 };
+			GDExtensionStorageBackingV1 rejected = {};
+			const auto full = registry->qualification_storage_create(ref, &excess, &rejected);
+			CHECK(full.native_error == ERR_PARAMETER_RANGE_ERROR);
+			CHECK(full.reason == 19);
+			CHECK(rejected.backing.handle_serial == 0);
+			CHECK(registry->qualification_serials.next == serial_before);
+			CHECK(registry->qualification_cleanup_serial_reservations == cleanup_before);
+			CHECK((!native_creates || *native_creates == creates_before));
+			CHECK(bridge->storage_origins.used_count() == 1280);
+		}
+		GDExtensionStorageBackingV1 replay = {};
+		const auto stale = registry->qualification_storage_create(ref, &first_origin, &replay);
+		CHECK(stale.native_error == ERR_DOES_NOT_EXIST);
+		CHECK(stale.reason == 17);
+		CHECK(replay.backing.handle_serial == 0);
+		auto changed = first_origin;
+		changed.bytes = 256;
+		CHECK(registry->qualification_storage_create(ref, &changed, &replay).native_error == ERR_INVALID_DATA);
+		const auto stats = bridge->child_metadata_stats();
+		CHECK(stats.storage_hot_cells == 0);
+		CHECK(stats.storage_cold_origins == stats.storage_origin_credits);
+		CHECK(stats.untracked_test_cells == 0);
+		CHECK(stats.origin_arena_request_bytes == bridge->storage_origins.allocated_bytes());
+	}
+	static void unit_retirement_capacity(RenderingDevice &device, const Vector<uint8_t> &bytes, uint32_t mode = 0, const int *native_creates = nullptr, bool *shader_failure = nullptr) {
+		using namespace GDExtensionDeviceExit;
+		// Controlled enrollment, actual original factory/RID/retire/ACK entries.
+		// Native driver calls are deterministic CPU ports, not a GPU receipt.
+		auto *registry = memnew(Registry);
+		auto *previous = RenderingDevice::singleton;
+		RenderingDevice::singleton = &device;
+		device.is_main_instance = true;
+		device.render_thread_id = Thread::get_caller_id();
+		device.qualification_retiring = false;
+		registry->instance = 71;
+		auto &record = registry->records[0];
+		record.owner_thread = Thread::get_caller_id();
+		record.snapshot.library_generation = 1;
+		record.guard_enrollment = GuardEnrollment::QUALIFIED;
+		record.private_refs = 1;
+		auto &native = registry->device_records[0];
+		native.object = &device;
+		native.live = true;
+		native.epoch = 1;
+		native.execution_thread = Thread::get_caller_id();
+		native.refs = 1;
+		struct Holder : HolderRetirement {
+			Holder() : HolderRetirement(RecordRef{}) {}
+			~Holder() = default;
+		} holder;
+		holder.generation = 1;
+		holder.qualification_children = 1;
+		auto *bridge = memnew(Registry::QualificationBridge);
+		bridge->serial = 11;
+		bridge->epoch = 1;
+		bridge->holder = &holder;
+		registry->qualification_bridges[0] = bridge;
+		const GDExtensionQualificationBridgeRefV1 ref{ 71, 11 };
+
+		const auto retire = [&](Registry::QualificationBridge::NativeUnit *child) {
+			if (!child || child->acknowledged) {
+				return;
+			}
+			const GDExtensionNativeUnitRetireRequestV1 request{ { 1, 16, 0 }, child->backing.unit, child->origin.operation_serial + 1, 0 };
+			GDExtensionNativeUnitRetireRefV1 retired = {};
+			GDExtensionNativeUnitRetireReportV1 report = {};
+			CHECK(registry->qualification_native_unit_retire(ref, &request, &retired, &report).native_error == OK);
+			device._free_pending_resources(0);
+			registry->qualification_retire_step(bridge, &device, child->serial, 2);
+			CHECK(child->report.state == 1);
+			CHECK(registry->qualification_native_unit_retire_release(ref, retired).native_error == OK);
+		};
+		struct Cleanup {
+			std::function<void()> call;
+			~Cleanup() { call(); }
+		} cleanup{ [&] {
+			for (auto *child : bridge->units) {
+				retire(child);
+			}
+			CHECK(registry->qualification_close(ref).native_error == OK);
+			CHECK(holder.qualification_children == 0);
+			RenderingDevice::singleton = previous;
+			device.is_main_instance = false;
+			memdelete(registry);
+		} };
+		uint64_t previous_serial = 0;
+		GDExtensionNativeUnitCreateRequestV1 first_origin = {};
+		for (uint32_t record_slot = 0; record_slot < (mode == 1 ? 128 : mode >= 2 ? 1
+																				  : 66);
+				++record_slot) {
+			for (uint32_t unit = 0; unit < 2; ++unit) {
+				INFO("Original record slot ", record_slot, ", physical unit ", unit);
+				GDExtensionNativeUnitCreateRequestV1 origin = {};
+				origin.abi = { 1, 16, 0 };
+				origin.library_generation = origin.preparation_generation = 1;
+				origin.operation_serial = uint64_t(unit) * 2 + 1;
+				origin.container_byte_count = bytes.size();
+				origin.record_slot = record_slot;
+				origin.physical_unit = unit;
+				REQUIRE(CryptoCore::sha256(bytes.ptr(), bytes.size(), origin.container_digest) == OK);
+				GDExtensionNativeUnitBackingV1 backing = {};
+				if (mode == 3 && !record_slot && !unit) {
+					const auto failed = registry->qualification_native_unit_create(ref, &origin, bytes.ptr(), bytes.size(), &backing);
+					CHECK(failed.native_error == FAILED);
+					CHECK(backing.unit.handle_serial == 0);
+					CHECK(bridge->unit_origins.used_count() == 0);
+					CHECK(bridge->children == 0);
+					CHECK(record.private_refs == 1);
+					REQUIRE(shader_failure);
+					if (shader_failure) {
+						*shader_failure = false;
+					}
+				}
+				const auto created = registry->qualification_native_unit_create(ref, &origin, bytes.ptr(), bytes.size(), &backing);
+				REQUIRE(created.native_error == OK);
+				if (created.native_error != OK) {
+					return;
+				}
+				REQUIRE(backing.state == (mode == 2 ? 2 : 1));
+				CHECK(backing.known_mask == (mode == 2 ? 1 : 3));
+				CHECK(backing.unit.handle_serial > previous_serial);
+				previous_serial = backing.unit.handle_serial;
+				if (!record_slot && !unit) {
+					first_origin = origin;
+				}
+				Registry::QualificationBridge::NativeUnit *child = nullptr;
+				for (auto *entry : bridge->units) {
+					if (entry && entry->serial == backing.unit.handle_serial) {
+						child = entry;
+						break;
+					}
+				}
+				REQUIRE(child);
+				if (!child) {
+					return;
+				}
+				retire(child);
+				CHECK(bridge->children == 0);
+				CHECK(record.private_refs == 1);
+				const auto next_serial = registry->qualification_serials.next;
+				GDExtensionNativeUnitBackingV1 replay = {};
+				const auto stale = registry->qualification_native_unit_create(ref, &origin, bytes.ptr(), bytes.size(), &replay);
+				CHECK(stale.native_error == ERR_DOES_NOT_EXIST);
+				CHECK(stale.reason == 17);
+				CHECK(replay.unit.handle_serial == 0);
+				CHECK(registry->qualification_serials.next == next_serial);
+			}
+		}
+		if (mode == 1) {
+			const uint64_t serial_before = registry->qualification_serials.next;
+			const uint64_t cleanup_before = registry->qualification_cleanup_serial_reservations;
+			const int creates_before = native_creates ? *native_creates : 0;
+			auto excess = first_origin;
+			excess.record_slot = 128;
+			GDExtensionNativeUnitBackingV1 rejected = {};
+			const auto full = registry->qualification_native_unit_create(ref, &excess, bytes.ptr(), bytes.size(), &rejected);
+			CHECK(full.native_error == ERR_PARAMETER_RANGE_ERROR);
+			CHECK(full.reason == 19);
+			CHECK(rejected.unit.handle_serial == 0);
+			CHECK(registry->qualification_serials.next == serial_before);
+			CHECK(registry->qualification_cleanup_serial_reservations == cleanup_before);
+			CHECK((!native_creates || *native_creates == creates_before));
+			CHECK(bridge->unit_origins.used_count() == 256);
+		}
+		GDExtensionNativeUnitBackingV1 replay = {};
+		const auto stale = registry->qualification_native_unit_create(ref, &first_origin, bytes.ptr(), bytes.size(), &replay);
+		CHECK(stale.native_error == ERR_DOES_NOT_EXIST);
+		CHECK(stale.reason == 17);
+		CHECK(replay.unit.handle_serial == 0);
+		// Actual valid alternate codec payload, with an independently recomputed
+		// original digest, exercises cold full-origin mismatch before any driver.
+		Vector<uint8_t> altered = bytes;
+		REQUIRE(altered.size() >= 4);
+		CHECK(altered[altered.size() - 4] == 42);
+		altered.ptrw()[altered.size() - 4] = 43;
+		auto changed = first_origin;
+		REQUIRE(CryptoCore::sha256(altered.ptr(), altered.size(), changed.container_digest) == OK);
+		const auto rejected = registry->qualification_native_unit_create(ref, &changed, altered.ptr(), altered.size(), &replay);
+		CHECK(rejected.native_error == ERR_INVALID_DATA);
+		CHECK(rejected.reason == 16);
+		const auto stats = bridge->child_metadata_stats();
+		CHECK(stats.unit_hot_cells == 0);
+		CHECK(stats.unit_cold_origins == stats.unit_origin_credits);
+		CHECK(stats.untracked_test_cells == 0);
+		CHECK(stats.origin_arena_request_bytes == bridge->unit_origins.allocated_bytes());
+	}
 	static void complete_typed_source_key(RenderingDevice &device, uint32_t lifecycle, bool new_attempt) {
 		using namespace GDExtensionDeviceExit;
 		// Test enrollment and the creating flag are controlled CPU inputs. All
@@ -736,7 +1125,26 @@ public:
 			CHECK(registry.qualification_cancel(ref, ticket_ref).native_error == OK);
 			CHECK(ticket->physically_retired.load());
 			CHECK(ticket->report.owned_size == 0);
+			CHECK(ticket->facts.get_capacity() > 0);
+			CHECK(ticket->graphs.get_capacity() > 0);
+			CHECK(ticket->natives.get_capacity() > 0);
+			const uint32_t original_plan_count = ticket->uploads.size();
+			const auto original_plan = ticket->uploads[0].plan;
 			CHECK(registry.qualification_release(ref, ticket_ref).native_error == OK);
+			CHECK(ticket->facts.get_capacity() == 0);
+			CHECK(ticket->graphs.get_capacity() == 0);
+			CHECK(ticket->natives.get_capacity() == 0);
+			CHECK(ticket->resource_pins.get_capacity() == 0);
+			CHECK(ticket->physical_uses.get_capacity() == 0);
+			CHECK(ticket->texture_uploads.get_capacity() == 0);
+			for (const auto &upload : ticket->uploads) {
+				CHECK(upload.progress.segments.get_capacity() == 0);
+			}
+			CHECK(ticket->uploads.size() == original_plan_count);
+			CHECK(memcmp(&ticket->uploads[0].plan, &original_plan, sizeof(original_plan)) == 0);
+			GDExtensionQualificationReportV1 stale_report = {};
+			const GDExtensionQualificationBudgetV1 stale_budget{ { 1, 16, 0 }, 1, 1000, 0 };
+			CHECK(registry.qualification_observe(ref, ticket_ref, &stale_budget, &stale_report).native_error == ERR_DOES_NOT_EXIST);
 			CHECK(image->physical.uses.is_empty());
 			GDExtensionQualificationResourceRetireReportV1 retired = {};
 			GDExtensionQualificationResourceRetireV1 tq{ { 1, 16, 0 }, texture.resource, texture.rid, texture.object_serial, 1 }, sq2{ { 1, 16, 0 }, sampler.resource, sampler.rid, sampler.object_serial, 1 };
@@ -1671,7 +2079,11 @@ public:
   RenderingDeviceDriver::NativeCallFact a,b;a.serial=101;b.serial=102;ticket->natives.push_back({a,0,0,0,0,true,false});ticket->natives.push_back({b,0,0,0,0,true,false});
   auto first=registry->qualification_release({71,11},{71,23});CHECK(first.native_error==ERR_BUSY);CHECK(first.reason==19);
   CHECK(ticket->natives[0].owner_released);CHECK_FALSE(ticket->natives[1].owner_released);CHECK_FALSE(ticket->acknowledged);CHECK(ticket->physical_uses.size()==1);CHECK(storage->physical.uses.size()==1);
-  REQUIRE(registry->qualification_release({71,11},{71,23}).native_error==OK);CHECK(ticket->natives[1].owner_released);CHECK(ticket->physical_uses.is_empty());CHECK(storage->physical.uses.is_empty());
+  REQUIRE(registry->qualification_release({71,11},{71,23}).native_error==OK);
+  // Original native release counts are asserted by the enclosing test. After
+  // ACK, the private native array has returned its storage and cannot be read.
+  CHECK(ticket->acknowledged);CHECK(ticket->natives.is_empty());CHECK(ticket->natives.get_capacity()==0);
+  CHECK(ticket->physical_uses.is_empty());CHECK(ticket->physical_uses.get_capacity()==0);CHECK(storage->physical.uses.is_empty());
   registry->qualification_bridges[0]=nullptr;RenderingDevice::singleton=previous;device.driver=nullptr;device.is_main_instance=false;memdelete(ticket);memdelete(storage);memdelete(bridge);memdelete(registry);
  }
  static void ticket_bad_reverse_edges(RenderingDevice &device,uint32_t mode) {
@@ -3082,3 +3494,178 @@ TEST_CASE("[Qualification][TypedSourceKey] full source and physical attempt rema
 		}
 	}
 }
+
+TEST_CASE("[Qualification][ChildCapacity] acknowledged storage does not exhaust the original full numeric cohort") {
+	RenderingDevice device;
+	TestQualificationPhysical::Driver driver;
+	TestQualificationPhysicalAccess::attach(device, driver);
+	struct Detach {
+		RenderingDevice &device;
+		~Detach() { TestQualificationPhysicalAccess::detach(device); }
+	} detach{ device };
+	TestQualificationPhysicalAccess::storage_retirement_capacity(device);
+}
+namespace TestQualificationChildCapacity {
+// Mirrors the existing policy test codec: actual container serialization and
+// bounded parsing, deterministic native allocation. No SPIR-V or GPU claim.
+class Container : public RenderingShaderContainer {
+protected:
+	uint32_t _format() const override { return 0x43504143; }
+	uint32_t _format_version() const override { return 1; }
+	bool _set_code_from_spirv(const ReflectShader &) override { return false; }
+
+public:
+	void initialize() {
+		reflection_data.pipeline_type = RenderingDeviceCommons::PIPELINE_TYPE_COMPUTE;
+		reflection_data.stage_count = 1;
+		reflection_data.compute_local_size[0] = reflection_data.compute_local_size[1] = reflection_data.compute_local_size[2] = 1;
+		reflection_shader_stages.push_back(RenderingDeviceCommons::SHADER_STAGE_COMPUTE);
+		Shader shader;
+		shader.shader_stage = RenderingDeviceCommons::SHADER_STAGE_COMPUTE;
+		shader.code_compressed_bytes.push_back(42);
+		shaders.push_back(shader);
+	}
+};
+class Format : public RenderingShaderContainerFormat {
+public:
+	Ref<RenderingShaderContainer> create_container() const override { return memnew(Container); }
+	ShaderLanguageVersion get_shader_language_version() const override { return SHADER_LANGUAGE_VULKAN_VERSION_1_1; }
+	ShaderSpirvVersion get_shader_spirv_version() const override { return SHADER_SPIRV_VERSION_1_3; }
+};
+class Driver : public TestQualificationPhysical::Driver {
+	Format format;
+
+public:
+	const RenderingShaderContainerFormat &get_shader_container_format() const override { return format; }
+	int unit_creates = 0;
+	bool fail_shader = false, fail_pipeline = false;
+	ShaderID shader_create_from_container(const Ref<RenderingShaderContainer> &, const Vector<ImmutableSampler> &) override {
+		++unit_creates;
+		return fail_shader ? ShaderID() : ShaderID(19);
+	}
+	PipelineID compute_pipeline_create(ShaderID shader, VectorView<PipelineSpecializationConstant>) override {
+		CHECK(shader == ShaderID(19));
+		return fail_pipeline ? PipelineID() : PipelineID(41);
+	}
+	void pipeline_free(PipelineID pipeline) override { CHECK(pipeline == PipelineID(41)); }
+	bool shader_retire_ready_nonblocking(ShaderID) const override { return true; }
+};
+TEST_CASE("[Qualification][ChildCapacity] acknowledged native units do not exhaust sixty-six original record slots") {
+	RenderingDevice device;
+	Driver driver;
+	TestQualificationPhysicalAccess::attach(device, driver);
+	struct Detach {
+		RenderingDevice &device;
+		~Detach() { TestQualificationPhysicalAccess::detach(device); }
+	} detach{ device };
+	Ref<Container> container;
+	container.instantiate();
+	container->initialize();
+	const PackedByteArray packed = container->to_bytes();
+	REQUIRE_FALSE(packed.is_empty());
+	Vector<uint8_t> bytes;
+	bytes.resize(packed.size());
+	memcpy(bytes.ptrw(), packed.ptr(), packed.size());
+	TestQualificationPhysicalAccess::unit_retirement_capacity(device, bytes);
+}
+} // namespace TestQualificationChildCapacity
+
+TEST_CASE("[Qualification][ChildCapacity] history limit refuses native effects and preserves exact old origins") {
+	RenderingDevice device;
+	TestQualificationPhysical::Driver driver;
+	TestQualificationPhysicalAccess::attach(device, driver);
+	struct Detach {
+		RenderingDevice &device;
+		~Detach() { TestQualificationPhysicalAccess::detach(device); }
+	} detach{ device };
+	TestQualificationPhysicalAccess::storage_retirement_capacity(device, 1, &driver.creates);
+}
+TEST_CASE("[Qualification][ChildCapacity] original ticket pins delay ACKed metadata reuse") {
+	RenderingDevice device;
+	TestQualificationPhysical::Driver driver;
+	TestQualificationPhysicalAccess::attach(device, driver);
+	struct Detach {
+		RenderingDevice &device;
+		~Detach() { TestQualificationPhysicalAccess::detach(device); }
+	} detach{ device };
+	TestQualificationPhysicalAccess::storage_retirement_capacity(device, 2, &driver.creates);
+}
+TEST_CASE("[Qualification][ChildCapacity] original QRT cleanup ref delays ACKed metadata reuse") {
+	RenderingDevice device;
+	TestQualificationPhysical::Driver driver;
+	TestQualificationPhysicalAccess::attach(device, driver);
+	struct Detach {
+		RenderingDevice &device;
+		~Detach() { TestQualificationPhysicalAccess::detach(device); }
+	} detach{ device };
+	TestQualificationPhysicalAccess::storage_retirement_capacity(device, 3, &driver.creates);
+}
+
+namespace TestQualificationChildCapacity {
+TEST_CASE("[Qualification][ChildCapacity] unit origin quota refuses native effects") {
+	RenderingDevice device;
+	Driver driver;
+	driver.fail_pipeline = false;
+	driver.fail_shader = false;
+	TestQualificationPhysicalAccess::attach(device, driver);
+	struct Detach {
+		RenderingDevice &device;
+		~Detach() { TestQualificationPhysicalAccess::detach(device); }
+	} detach{ device };
+	Ref<Container> container;
+	container.instantiate();
+	container->initialize();
+	const PackedByteArray packed = container->to_bytes();
+	REQUIRE_FALSE(packed.is_empty());
+	Vector<uint8_t> bytes;
+	bytes.resize(packed.size());
+	memcpy(bytes.ptrw(), packed.ptr(), packed.size());
+	TestQualificationPhysicalAccess::unit_retirement_capacity(device, bytes, 1, &driver.unit_creates, &driver.fail_shader);
+}
+} //namespace TestQualificationChildCapacity
+
+namespace TestQualificationChildCapacity {
+TEST_CASE("[Qualification][ChildCapacity] partial native unit returns its exact shader before cold archival") {
+	RenderingDevice device;
+	Driver driver;
+	driver.fail_pipeline = true;
+	driver.fail_shader = false;
+	TestQualificationPhysicalAccess::attach(device, driver);
+	struct Detach {
+		RenderingDevice &device;
+		~Detach() { TestQualificationPhysicalAccess::detach(device); }
+	} detach{ device };
+	Ref<Container> container;
+	container.instantiate();
+	container->initialize();
+	const PackedByteArray packed = container->to_bytes();
+	REQUIRE_FALSE(packed.is_empty());
+	Vector<uint8_t> bytes;
+	bytes.resize(packed.size());
+	memcpy(bytes.ptrw(), packed.ptr(), packed.size());
+	TestQualificationPhysicalAccess::unit_retirement_capacity(device, bytes, 2, &driver.unit_creates, &driver.fail_shader);
+}
+} //namespace TestQualificationChildCapacity
+
+namespace TestQualificationChildCapacity {
+TEST_CASE("[Qualification][ChildCapacity] definitive empty unit failure returns its history credit") {
+	RenderingDevice device;
+	Driver driver;
+	driver.fail_pipeline = false;
+	driver.fail_shader = true;
+	TestQualificationPhysicalAccess::attach(device, driver);
+	struct Detach {
+		RenderingDevice &device;
+		~Detach() { TestQualificationPhysicalAccess::detach(device); }
+	} detach{ device };
+	Ref<Container> container;
+	container.instantiate();
+	container->initialize();
+	const PackedByteArray packed = container->to_bytes();
+	REQUIRE_FALSE(packed.is_empty());
+	Vector<uint8_t> bytes;
+	bytes.resize(packed.size());
+	memcpy(bytes.ptrw(), packed.ptr(), packed.size());
+	TestQualificationPhysicalAccess::unit_retirement_capacity(device, bytes, 3, &driver.unit_creates, &driver.fail_shader);
+}
+} //namespace TestQualificationChildCapacity

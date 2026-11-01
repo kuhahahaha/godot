@@ -30,6 +30,7 @@
 
 #pragma once
 
+#include "core/extension/gdextension_qualification_child_history.h"
 #include "core/extension/gdextension_library_exit_guard.h"
 #include "core/extension/gdextension_record_source.h"
 #include "core/templates/local_vector.h"
@@ -243,8 +244,17 @@ struct Registry::QualificationBridge {
   queued=false;credit=false;cleanup_queue_in_use=false;--children;
  }
  static constexpr uint32_t CHILD_CAPACITY = 128;
+ // Finite legacy Numeric/Method scope: the existing 128 ticket envelope,
+ // at most ten original method roles (numeric has eight), Capture and Body.
+ // This is a component limit, not a World/System/U08 byte grant or permission
+ // for unbounded pre-ticket churn. Every admitted original key uses a credit.
+ static constexpr uint32_t STORAGE_HISTORY_CAPACITY = CHILD_CAPACITY * 10;
+ static constexpr uint32_t UNIT_HISTORY_CAPACITY = CHILD_CAPACITY * 2;
+ QualificationChildHistory<GDExtensionStorageCreateRequestV1, STORAGE_HISTORY_CAPACITY> storage_origins;
+ QualificationChildHistory<GDExtensionNativeUnitCreateRequestV1, UNIT_HISTORY_CAPACITY> unit_origins;
  struct Storage {
   uint64_t serial = 0, retire_serial = 0, dependency_serial = 0;
+  uint32_t history_index = UINT32_MAX;
   GDExtensionStorageCreateRequestV1 origin = {};
   GDExtensionStorageBackingV1 backing = {};
   GDExtensionStorageRetireRequestV1 retirement = {};
@@ -267,6 +277,7 @@ struct Registry::QualificationBridge {
  };
  struct NativeUnit {
   uint64_t serial = 0, retire_serial = 0, dependency_serial = 0;
+  uint32_t history_index = UINT32_MAX;
   GDExtensionNativeUnitCreateRequestV1 origin = {};
   GDExtensionNativeUnitBackingV1 backing = {};
   GDExtensionNativeUnitRetireReportV1 report = {};
@@ -274,6 +285,18 @@ struct Registry::QualificationBridge {
   Error maintenance_error = OK;
   bool creating = true, retiring = false, queued = false, acknowledged = false, cleanup_serial_reserved = false, queue_ref_credit = false;
  };
+ void collect_retired_children_locked();
+ // Read-only component accounting under Registry::mutex. These observations
+ // do not include other ticket/typed/driver owners or grant a byte reservation.
+ struct ChildMetadataStats {
+  uint32_t storage_origin_credits=0,unit_origin_credits=0;
+  uint32_t storage_cold_origins=0,unit_cold_origins=0;
+  uint32_t storage_hot_cells=0,unit_hot_cells=0,untracked_test_cells=0;
+  uint64_t bridge_request_bytes=0,origin_arena_request_bytes=0;
+  uint64_t hot_cell_request_bytes=0,physical_pin_request_bytes=0;
+  uint64_t tracked_request_bytes() const { return bridge_request_bytes+origin_arena_request_bytes+hot_cell_request_bytes+physical_pin_request_bytes; }
+ };
+ ChildMetadataStats child_metadata_stats() const;
  QualificationTicket *tickets[CHILD_CAPACITY] = {};
  Storage *storage[CHILD_CAPACITY] = {};
  Texture *textures[CHILD_CAPACITY] = {};
@@ -281,4 +304,102 @@ struct Registry::QualificationBridge {
  UniformSet *sets[CHILD_CAPACITY] = {};
  NativeUnit *units[CHILD_CAPACITY] = {};
 };
+inline void Registry::QualificationBridge::collect_retired_children_locked() {
+	auto *bridge = this;
+	// Registry::mutex excludes original forward/reverse ticket-pin writers.
+	// Native ACK alone is insufficient: a retired ticket can still retain this
+	// exact metadata address until its original release unlinks both directions.
+	const auto referenced = [&](const QualificationPhysicalReturn &cell) {
+		if (!cell.uses.is_empty() || cell.dependent_children.load()) {
+			return true;
+		}
+		for (const auto *ticket : bridge->tickets) {
+			if (ticket) {
+				for (const auto *forward : ticket->physical_uses) {
+					if (forward == &cell) {
+						return true;
+					}
+				}
+			}
+		}
+		return false;
+	};
+	const auto returned = [](const QualificationPhysicalReturn &cell) {
+		return cell.rid ? cell.use_closed.load() && cell.enqueued && cell.free_event && cell.free_event == cell.reserved_event && !cell.event_capacity_reserved : !cell.event_capacity_reserved;
+	};
+	for (auto *&child : bridge->storage) {
+		if (!child || !child->acknowledged || child->history_index == UINT32_MAX || (bridge->rt && bridge->rt->occupied && bridge->rt->cleanup_child_serial == child->serial) || child->creating || child->queued || child->queue_ref_credit || child->cleanup_serial_reserved || child->maintenance_error != OK || referenced(child->physical)) {
+			continue;
+		}
+		{
+			MutexLock lock(child->physical.mutex);
+			if (!returned(child->physical)) {
+				continue;
+			}
+		}
+		bridge->storage_origins.archive_retired_origin(child->history_index, child->serial, child->retire_serial);
+		memdelete(child);
+		child = nullptr;
+	}
+	for (auto *&child : bridge->units) {
+		if (!child || !child->acknowledged || child->history_index == UINT32_MAX || (bridge->rt && bridge->rt->occupied && bridge->rt->cleanup_child_serial == child->serial) || child->creating || child->queued || child->queue_ref_credit || child->cleanup_serial_reserved || child->maintenance_error != OK || referenced(child->shader) || referenced(child->pipeline)) {
+			continue;
+		}
+		{
+			MutexLock shader_lock(child->shader.mutex);
+			MutexLock pipeline_lock(child->pipeline.mutex);
+			if (!returned(child->shader) || !returned(child->pipeline)) {
+				continue;
+			}
+		}
+		bridge->unit_origins.archive_retired_origin(child->history_index, child->serial, child->retire_serial);
+		memdelete(child);
+		child = nullptr;
+	}
+}
+
+inline Registry::QualificationBridge::ChildMetadataStats Registry::QualificationBridge::child_metadata_stats() const {
+	ChildMetadataStats stats;
+#ifdef DEBUG_ENABLED
+	constexpr uint64_t allocator_header = Memory::DATA_OFFSET;
+#else
+	constexpr uint64_t allocator_header = 0;
+#endif
+	stats.bridge_request_bytes = sizeof(*this) + allocator_header;
+	stats.storage_origin_credits = storage_origins.used_count();
+	stats.unit_origin_credits = unit_origins.used_count();
+	stats.storage_cold_origins = storage_origins.retired_count();
+	stats.unit_cold_origins = unit_origins.retired_count();
+	stats.origin_arena_request_bytes = storage_origins.allocated_bytes() + unit_origins.allocated_bytes();
+	const auto pin_bytes = [&](const QualificationPhysicalReturn &cell) {
+		const uint64_t capacity = cell.uses.get_capacity();
+		return capacity ? capacity * sizeof(QualificationTicket *) + allocator_header : 0;
+	};
+	for (const auto *child : storage) {
+		if (!child) {
+			continue;
+		}
+		if (child->history_index == UINT32_MAX) {
+			++stats.untracked_test_cells;
+			continue;
+		}
+		++stats.storage_hot_cells;
+		stats.hot_cell_request_bytes += sizeof(*child) + allocator_header;
+		stats.physical_pin_request_bytes += pin_bytes(child->physical);
+	}
+	for (const auto *child : units) {
+		if (!child) {
+			continue;
+		}
+		if (child->history_index == UINT32_MAX) {
+			++stats.untracked_test_cells;
+			continue;
+		}
+		++stats.unit_hot_cells;
+		stats.hot_cell_request_bytes += sizeof(*child) + allocator_header;
+		stats.physical_pin_request_bytes += pin_bytes(child->shader) + pin_bytes(child->pipeline);
+	}
+	return stats;
+}
+
 }
