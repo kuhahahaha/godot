@@ -722,7 +722,7 @@ private:
  void qualification_ticket_publish(QualificationTicket *, RenderingDevice *);
  void qualification_ticket_step(QualificationTicket *, RenderingDevice *);
  Error qualification_upload_destination(QualificationBridge *,RenderingDevice *,const GDExtensionQualificationUploadPlanV1 &);
- Error qualification_record_preflight(QualificationBridge *, RenderingDevice *, const GDExtensionQualificationRecordV1 &, LocalVector<RID> &,uint64_t p_capture_set1=0,uint64_t p_body_set1=0);
+ Error qualification_record_preflight(QualificationBridge *, RenderingDevice *, const GDExtensionQualificationRecordV1 &, LocalVector<RID> &,uint64_t p_capture_set1=0,uint64_t p_body_set1=0,bool p_allow_empty=false);
  void qualification_record_append(QualificationTicket *, RenderingDevice *);
  Error qualification_ticket_locked(QualificationBridge *, GDExtensionQualificationTicketRefV1, QualificationTicket *&);
  Error qualification_bridge_locked(GDExtensionQualificationBridgeRefV1, bool, bool, QualificationBridge *&, RenderingDevice *&,uint32_t=0);

@@ -59,3 +59,6 @@ Fresh tests=yes build rc0, source drift empty. Focused 7 cases/456 assertions an
 
 
 Store allocator correction also passed exact native RED→GREEN: logical METHOD_DESTINATION/METHOD_RESOURCE18 retains actual E05 backing authentication (instance, child serial, generation, physical cell, RID and live state). The old pinned host reached kind10 after successful prepare+4uploads and refused it; the corrected pinned host completed the exact three ranges and physical cleanup. The E24 issuer-tag/nonzero-E05-ref mismatch remains refused. Final native host/metadata are in `v2/ABI.json`; exact Store receipt is `work/native-multireadback-20261101/runtime/results/20261101-111020/results.json`.
+
+
+V2 C06 empty-domain dispatch is supported without synthesizing a domain: sample_count0, exact canonical range0..0, body_groups_x1 and push envelope0. Capture and Body are still recorded; the actual shader guard returns all lanes and all original readbacks/physical obligations remain required. This V2-only admission flag reaches the common internal preflight; Numeric V1 keeps its original nonempty rule. No ABI layout/symbol change.

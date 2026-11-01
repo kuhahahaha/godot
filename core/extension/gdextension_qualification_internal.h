@@ -7,7 +7,10 @@
 namespace GDExtensionDeviceExit {
 // Shared POD validation runs on the owner before admission and again on RT.
 inline Error validate_qualification_record_v2(const GDExtensionQualificationRecordV2 &q) {
-	if (q.abi.abi_version != 2 || q.abi.struct_size != sizeof(GDExtensionDeviceExitAbi) || q.abi.reserved || !q.record_generation || !q.request_nonce || !q.library_generation || !q.qualification_session_serial || !q.attempt || !q.sample_count || q.sample_count > 512 || q.range_end < q.range_begin || q.range_end - q.range_begin != q.sample_count || q.body_groups_x != (q.sample_count + 63) / 64 || !q.readback_size || q.readback_size > 16384 || (q.readback_count != 1 && q.readback_count != 3)) {
+	if (q.abi.abi_version != 2 || q.abi.struct_size != sizeof(GDExtensionDeviceExitAbi) || q.abi.reserved || !q.record_generation || !q.request_nonce || !q.library_generation || !q.qualification_session_serial || !q.attempt || q.sample_count > 512 || q.range_end < q.range_begin || q.range_end - q.range_begin != q.sample_count || q.body_groups_x != MAX(1u, (q.sample_count + 63) / 64) || !q.readback_size || q.readback_size > 16384 || (q.readback_count != 1 && q.readback_count != 3)) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (!q.sample_count && (q.range_begin || q.range_end)) {
 		return ERR_INVALID_PARAMETER;
 	}
 	if (q.capture_set_count < 1 || q.capture_set_count > 2 || q.body_set_count < 1 || q.body_set_count > 2 || bool(q.capture_set1) != (q.capture_set_count == 2) || bool(q.body_set1) != (q.body_set_count == 2) || (q.readback_count == 1 && (q.capture_set_count != 1 || q.body_set_count != 1))) {

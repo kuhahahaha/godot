@@ -1,0 +1,27 @@
+{
+  "case": "empty_domain",
+  "mode": 4,
+  "source_sha256": "86c013786d5cbc630f695e4cba1751ef87964d4a9bf5ebc875e1b4f6a3cad7c4",
+  "header_sha256": "971a1ab90541900c50cde6eb45f62e7f5fcc1a95cbcb9a8632fab792a9835289",
+  "command": [
+    "clang++",
+    "-std=c++17",
+    "-dynamiclib",
+    "-arch",
+    "arm64",
+    "-mmacosx-version-min=11.0",
+    "-O2",
+    "-Wall",
+    "-Wextra",
+    "-Wno-unused-parameter",
+    "-Wno-deprecated-declarations",
+    "-DTICKET_MODE=4",
+    "-I",
+    "/Users/macbookair/Documents/Work/godot_ANGE",
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-multireadback-20261101/runtime/v2_empty_domain_probe.cpp",
+    "-o",
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-multireadback-20261101/runtime/v2_empty_domain.dylib"
+  ],
+  "rc": 0,
+  "sha256": "e29773c57e8db9ff25321aa6c784f795ab60a217c3662929d49a4ff06e225b8c"
+}

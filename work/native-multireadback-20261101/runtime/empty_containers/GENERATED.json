@@ -1,0 +1,60 @@
+{
+  "host": {
+    "binary": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-multireadback-20261101/bin/godot-empty-2d-r1.arm64",
+    "binary_sha256": "0d1bf7c24e9222c7880ac09b4e47283523193c815d9b9069d3fec4f4e1035b83",
+    "controlled_build": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-multireadback-20261101/bin/godot-empty-2d-r1.arm64.controlled_build.json",
+    "controlled_build_sha256": "75f4b14d670848316607a5acadee90ca13b80f908acafa484fd27b34072b9577",
+    "controlled_build_selection": {
+      "schema": 1,
+      "core_stamp": "c12ca6197aecb2fd585dc3120cf9463e6d8608aea2b9d0702159c4711dd82178",
+      "compiler_route": "BuiltinGlslangV1",
+      "compiler_stamp": "d7c2b67a63eb5792d59844eab1a8b52f74ba35c16e9f772bb7f095da398c9449",
+      "platform": "macos",
+      "architecture": "arm64",
+      "target_kind": "Executable"
+    },
+    "linkage": [
+      "/System/Library/Frameworks/ForceFeedback.framework/Versions/A/ForceFeedback",
+      "/System/Library/Frameworks/Cocoa.framework/Versions/A/Cocoa",
+      "/System/Library/Frameworks/Carbon.framework/Versions/A/Carbon",
+      "/System/Library/Frameworks/AudioUnit.framework/Versions/A/AudioUnit",
+      "/System/Library/Frameworks/CoreAudio.framework/Versions/A/CoreAudio",
+      "/System/Library/Frameworks/CoreMIDI.framework/Versions/A/CoreMIDI",
+      "/System/Library/Frameworks/IOKit.framework/Versions/A/IOKit",
+      "/System/Library/Frameworks/GameController.framework/Versions/A/GameController",
+      "/System/Library/Frameworks/CoreHaptics.framework/Versions/A/CoreHaptics",
+      "/System/Library/Frameworks/CoreVideo.framework/Versions/A/CoreVideo",
+      "/System/Library/Frameworks/AVFoundation.framework/Versions/A/AVFoundation",
+      "/System/Library/Frameworks/CoreMedia.framework/Versions/A/CoreMedia",
+      "/System/Library/Frameworks/QuartzCore.framework/Versions/A/QuartzCore",
+      "/System/Library/Frameworks/Security.framework/Versions/A/Security",
+      "/System/Library/Frameworks/UniformTypeIdentifiers.framework/Versions/A/UniformTypeIdentifiers",
+      "/System/Library/Frameworks/IOSurface.framework/Versions/A/IOSurface",
+      "/System/Library/Frameworks/Metal.framework/Versions/A/Metal",
+      "/System/Library/Frameworks/MetalFX.framework/Versions/A/MetalFX",
+      "/System/Library/Frameworks/MetalKit.framework/Versions/A/MetalKit",
+      "/usr/lib/libSystem.B.dylib",
+      "/usr/lib/libz.1.dylib",
+      "/usr/lib/libc++.1.dylib",
+      "/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit",
+      "/System/Library/Frameworks/ApplicationServices.framework/Versions/A/ApplicationServices",
+      "/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation",
+      "/System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics",
+      "/System/Library/Frameworks/CoreServices.framework/Versions/A/CoreServices",
+      "/System/Library/Frameworks/CoreText.framework/Versions/A/CoreText",
+      "/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation",
+      "/usr/lib/libobjc.A.dylib"
+    ],
+    "core_model": "monolithic"
+  },
+  "source_hashes": {
+    "capture.glsl": "f22852df28aae06207e9c677fe961f7d1924a20e792f5a23d904aaba8e4bcfab",
+    "body.glsl": "d891cc58c17e27db5716f73b190804cd73f26b299580bb6542198673f949c3f9",
+    "generate.gd": "56dde143f130d12a0714151e7ae093e99665868780b87d6dc1a68911ea83cb4a"
+  },
+  "containers": {
+    "capture": "9ef16b3ef7a8c02b08e585e9ef7b5d9917addd22963c815d50ba8e29b5e00246",
+    "body": "dda7c4262d51d1666406124f29f5338500a06f143c2bd9df3bca5e93ebe338d6"
+  },
+  "log": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-multireadback-20261101/runtime/results/20261101-113943/containers.log"
+}

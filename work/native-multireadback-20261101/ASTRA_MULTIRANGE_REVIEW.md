@@ -80,3 +80,39 @@ The JSON schema is byte-identical to the candidate's schema. Main-tree ABI asser
 | `work/native-multireadback-20261101/runtime/v2_store_destination_probe.cpp` | `6c7bafe75006721ebe0e5af977c0ec62ecacc097f01079e721de7fdcab088e39` |
 | `work/native-multireadback-20261101/runtime/results/20261101-110408/STORE_DESTINATION_RED.json` | `438f1a4d21973c7f551787766d38155d302c2ad274c7f4bc246b53208ffe0771` |
 | `work/native-multireadback-20261101/runtime/results/20261101-110408/store_destination.log` | `a30c819125774ad5c5c5ef08a8f31c60b4c85843981621b5fe93fecf5cbdd178` |
+
+## Empty-domain V2 delta review — main tree, 2026-11-01
+
+No definite must-fix found in the narrow empty-domain admission delta. Review covered the three changed core files, the new `empty_range_dispatch` CPU test, original V1/QRT entry paths, native empty-domain probe and retained RED artifacts. No engine, compiler, scons or test runner was executed. Only this review file was updated.
+
+### Admission, dispatch and legacy separation
+
+- V2 POD validation accepts zero samples only with the exact canonical range `0..0` and `body_groups_x=1`. Zero groups and a shifted empty range such as `1..1` are rejected. For positive counts up to 512, `MAX(1, ceil(count/64))` equals the prior group calculation; the upper bound short-circuits before arithmetic could overflow.
+- The new private common-preflight `p_allow_empty` defaults to false. Both direct V1 callers use that default. Only `qualification_record_prepared_v2`, after V2 descriptor and ticket-mode validation, explicitly passes true for its internal legacy-shaped projection. QRT kinds 6/9 retain their `!sample_count` checks and their unchanged request layouts; V1 record/observe still reject V2-mode tickets. No public V1 empty-domain bypass was found.
+- Common preflight still compares both actual push envelopes to `sample_count`, so accepted empty records carry envelope zero. It still requires valid pipelines, group limits, resource ownership and physical pins.
+- Append remains an actual Capture dispatch of one group followed by an actual Body dispatch with the admitted group count, therefore one group for empty V2. There is no skipped Body, zero-group shortcut or synthesized sample/domain of one. The graph/native capacity still includes the original two graph operations plus each range's copy bound and prepared uploads.
+- Readback source ownership, per-range nonzero sizes, the three Method roles, real BufferGetDataResult closures, exact aggregate copying, Body ordering, native completion and physical-return gates are unchanged. Empty logical work does not become empty physical obligations.
+
+### Tests and native RED
+
+The new CPU case is a bounded admission test: canonical empty V2 is accepted by POD validation; groups zero and shifted empty ranges are rejected; default V1 preflight rejects zero samples; explicit V2 allowance reaches the unsupported-native-driver gate without resources or graph commands. It deliberately does not claim to execute Body, and this reviewer did not run it.
+
+The old pinned `edf3b010e2391120af96df148a81d87fc5a4c60801fa2de7ebffc7e9696eff58` host RED is valid for the precise previous validation failure. The raw log has successful genuine E05 prepare/replay and four successful uploads, then an exact QRT kind10 **reserve** refusal with sample0/range0..0/groups1 and error31/reason2. No kind10 dispatched-return marker exists. Exit91 occurs at `record_prepared_v2_empty_domain`; the receipt correctly does not claim Body execution, completion or cleanup on this RED.
+
+This reviewer independently matched host, controlled-build metadata, probe source/header/DSO and raw RED log hashes to the receipt. Empty-container GLSL source and compiled-container hashes also match their generation receipt. The independent probe uses actual runtime guards at the start of both Capture and Body GLSL: envelope zero returns before any buffer write. Its expected copied bytes are six original `0xa5a5a5a5` destination words, four original zero FaultPlane words and zero ResultEpilogue. It requires a real semantic Body graph fact with successful native observations and three distinct async result serials; the single dispatch-group count follows the admitted descriptor and unchanged native append code, not a separately exposed group-count field in the fact.
+
+JSON schema, full ABI assertions and QRT transport source have no changes against the current committed base for this delta. New-host GREEN remains pending at this snapshot; the RED and source review are not its substitute. The probe remains a native empty-domain control, not original ANGE C06/E24 provider acceptance.
+
+### Empty-domain delta fingerprints
+
+| File relative to repository | SHA-256 |
+| --- | --- |
+| `core/extension/gdextension_library_exit_guard.h` | `ac758224538f23a394e9977238b637c9226e987cf7dfdda54b7a85fb3a472fa1` |
+| `core/extension/gdextension_qualification_internal.h` | `5ee15ba127548ddefbd7294258178252394094f7880e505bf5bab0c36613139c` |
+| `core/extension/gdextension_qualification_ticket.cpp` | `a8d85ea3277ccf24ea4546b3376e91724e9c9548d60864289170fb261cf7b1b8` |
+| `tests/servers/rendering/test_qualification_ticket.cpp` | `4f1cc1d15754872daa58cd0e02011017e6025656fc48976bbbae6b72a9b1136f` |
+| `work/native-multireadback-20261101/runtime/v2_empty_domain_probe.cpp` | `86c013786d5cbc630f695e4cba1751ef87964d4a9bf5ebc875e1b4f6a3cad7c4` |
+| `work/native-multireadback-20261101/runtime/empty_containers/capture.glsl` | `f22852df28aae06207e9c677fe961f7d1924a20e792f5a23d904aaba8e4bcfab` |
+| `work/native-multireadback-20261101/runtime/empty_containers/body.glsl` | `d891cc58c17e27db5716f73b190804cd73f26b299580bb6542198673f949c3f9` |
+| `work/native-multireadback-20261101/runtime/results/20261101-111915/EMPTY_DOMAIN_RED.json` | `277ed7bea3c49e4535073f64a1d1c67c386272200db629823dcd29c8e560ec10` |
+| `work/native-multireadback-20261101/runtime/results/20261101-111915/empty_domain.log` | `79b030835d4a4da146970b74b3fe2cbac8f283b0fa8ea73096705187a10c80fb` |

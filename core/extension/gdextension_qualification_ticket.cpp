@@ -41,22 +41,30 @@ Error Registry::qualification_ticket_locked(QualificationBridge *bridge,GDExtens
  for(auto *existing:bridge->tickets)if(existing && existing->serial==ref.handle_serial && !existing->acknowledged){ticket=existing;return OK;}
  return ERR_DOES_NOT_EXIST;
 }
-Error Registry::qualification_record_preflight(QualificationBridge *bridge, RenderingDevice *rd, const GDExtensionQualificationRecordV1 &request, LocalVector<RID> &resources, uint64_t capture_set1, uint64_t body_set1) {
-	if (!valid_abi(request.abi) || !request.record_generation || !request.request_nonce || request.library_generation != records[bridge->library].snapshot.library_generation || !request.qualification_session_serial || !request.attempt || !request.sample_count || request.sample_count > 512 || request.range_end < request.range_begin || request.range_end - request.range_begin != request.sample_count || request.body_groups_x != (request.sample_count + 63) / 64 || !request.readback_size || request.readback_size > 16384 || !request.source_allocation_generation)
+Error Registry::qualification_record_preflight(QualificationBridge *bridge, RenderingDevice *rd, const GDExtensionQualificationRecordV1 &request, LocalVector<RID> &resources, uint64_t capture_set1, uint64_t body_set1, bool p_allow_empty) {
+	if (!valid_abi(request.abi) || !request.record_generation || !request.request_nonce || request.library_generation != records[bridge->library].snapshot.library_generation || !request.qualification_session_serial || !request.attempt || (!p_allow_empty && !request.sample_count) || request.sample_count > 512 || request.range_end < request.range_begin || request.range_end - request.range_begin != request.sample_count || request.body_groups_x != (p_allow_empty ? MAX(1u, (request.sample_count + 63) / 64) : (request.sample_count + 63) / 64) || !request.readback_size || request.readback_size > 16384 || !request.source_allocation_generation) {
 		return ERR_INVALID_PARAMETER;
-	if (!rd->driver->native_call_observation_supported())
+	}
+	if (p_allow_empty && !request.sample_count && (request.range_begin || request.range_end)) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (!rd->driver->native_call_observation_supported()) {
 		return ERR_UNAVAILABLE;
+	}
 	const uint64_t graph_bound = (request.readback_size + 31) / 32 + 2;
 	uint32_t body_push[4], capture_push[4];
 	memcpy(body_push, request.body_push, 16);
 	memcpy(capture_push, request.capture_push, 16);
-	if (body_push[1] != request.sample_count || capture_push[1] != request.sample_count)
+	if (body_push[1] != request.sample_count || capture_push[1] != request.sample_count) {
 		return ERR_INVALID_PARAMETER;
+	}
 	const Error capacity_error = qualification_native_capacity(*rd->driver, rd->draw_graph.qualification_command_count(), graph_bound, rd->transfer_worker_pool_max_size);
-	if (capacity_error != OK)
+	if (capacity_error != OK) {
 		return capacity_error;
-	if (request.body_groups_x > rd->driver->limit_get(RenderingDevice::LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_X))
+	}
+	if (request.body_groups_x > rd->driver->limit_get(RenderingDevice::LIMIT_MAX_COMPUTE_WORKGROUP_COUNT_X)) {
 		return ERR_INVALID_PARAMETER;
+	}
 	const uint64_t pipelines[] = { request.capture_pipeline, request.body_pipeline };
 	const uint64_t sets0[] = { request.capture_set, request.body_set }, sets1[] = { capture_set1, body_set1 };
 	for (uint32_t i = 0; i < 2; ++i) {
@@ -868,7 +876,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_v2(GDEx
 		}
 		const auto legacy = qualification_record_v1(*request);
 		LocalVector<RID> resources;
-		error = qualification_record_preflight(bridge, rd, legacy, resources, request->capture_set1, request->body_set1);
+		error = qualification_record_preflight(bridge, rd, legacy, resources, request->capture_set1, request->body_set1, true);
 		if (error != OK) {
 			return result(error, error == ERR_UNAVAILABLE ? 18 : error == ERR_PARAMETER_RANGE_ERROR ? 19
 																									: 2);

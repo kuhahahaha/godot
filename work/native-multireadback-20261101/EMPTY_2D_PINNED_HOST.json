@@ -1,0 +1,9 @@
+{
+  "binary": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-multireadback-20261101/bin/godot-empty-2d-r1.arm64",
+  "sha256": "0d1bf7c24e9222c7880ac09b4e47283523193c815d9b9069d3fec4f4e1035b83",
+  "controlled_build": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-multireadback-20261101/bin/godot-empty-2d-r1.arm64.controlled_build.json",
+  "controlled_build_sha256": "75f4b14d670848316607a5acadee90ca13b80f908acafa484fd27b34072b9577",
+  "source_drift": [],
+  "source_window": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-multireadback-20261101/empty-2d-source-before.json",
+  "build_result": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-multireadback-20261101/empty-2d-build.json"
+}

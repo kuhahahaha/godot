@@ -106,6 +106,37 @@ public:
 		q.readbacks[2].readback_buffer = 7;
 		CHECK(validate_qualification_record_v2(q) == ERR_INVALID_PARAMETER);
 	}
+
+	static void empty_range_dispatch() {
+		using namespace GDExtensionDeviceExit;
+		auto request = range_request();
+		request.sample_count = 0;
+		request.range_begin = request.range_end = 0;
+		request.body_groups_x = 1;
+		CHECK(validate_qualification_record_v2(request) == OK);
+		auto invalid = request;
+		invalid.body_groups_x = 0;
+		CHECK(validate_qualification_record_v2(invalid) == ERR_INVALID_PARAMETER);
+		invalid = request;
+		invalid.range_begin = invalid.range_end = 1;
+		CHECK(validate_qualification_record_v2(invalid) == ERR_INVALID_PARAMETER);
+		const auto legacy = qualification_record_v1(request);
+		auto *registry = memnew(Registry);
+		registry->records[0].snapshot.library_generation = 1;
+		Registry::QualificationBridge bridge;
+		RenderingDevice device;
+		TransferTestDriverBase driver;
+		device.driver = &driver;
+		LocalVector<RID> resources;
+		// This unsupported driver deliberately stops after the wire/empty-domain
+		// checks, before any fake resource or native dispatch could be admitted.
+		CHECK(registry->qualification_record_preflight(&bridge, &device, legacy, resources) == ERR_INVALID_PARAMETER);
+		CHECK(registry->qualification_record_preflight(&bridge, &device, legacy, resources, request.capture_set1, request.body_set1, true) == ERR_UNAVAILABLE);
+		CHECK(resources.is_empty());
+		CHECK(device.draw_graph.qualification_command_count() == 0);
+		device.driver = nullptr;
+		memdelete(registry);
+	}
 	static void range_completion(uint32_t mode) {
 		using namespace GDExtensionDeviceExit;
 		auto *registry = memnew(Registry);
@@ -983,4 +1014,8 @@ TEST_CASE("[Qualification][MultiReadback] cancellation retains the original pref
 }
 TEST_CASE("[Qualification][MultiReadback] Body proof excludes pending sources from subsequent copy frames") {
 	TestQualificationTicketAccess::body_source_scope();
+}
+
+TEST_CASE("[Qualification][MultiReadback] V2 empty domain keeps a real guarded group and V1 retains its original nonempty rule") {
+	TestQualificationTicketAccess::empty_range_dispatch();
 }

@@ -1,5 +1,5 @@
 {
-  "status": "four-original-probes-preserved-store-probe-compiled-accurate-red-on-old-pinned-host",
+  "status": "existing-controls-preserved-empty-domain-control-compiled-accurate-red-on-old-edf-host",
   "scope": "Godot native controls only; monolithic host pins executable and controlled-build metadata; not ANGE product or owner acceptance",
   "sha256": {
     "v2_probe.cpp": "d48e4bf46e71af1359fb0585a75201823735d42db913318d2176166d15bd444b",
@@ -20,6 +20,13 @@
     "legacy/ticket_containers/generate.gd": "4127c5a7bd2456ad6b07c6ab53ee8c375c094a99d020f7db41c58f49b1b66ec0",
     "v2_store_destination_probe.cpp": "6c7bafe75006721ebe0e5af977c0ec62ecacc097f01079e721de7fdcab088e39",
     "v2_store_destination.dylib": "a9cdd106566b7c54aa01d215383cb0669decd9c5ef1fe4002fe724b8e2085bee",
-    "prepare_store.py": "f273b044b0e84fbac6b52a3e46156963ea96bcdbee01a2922ec73c99e397b0d2"
+    "prepare_store.py": "f273b044b0e84fbac6b52a3e46156963ea96bcdbee01a2922ec73c99e397b0d2",
+    "v2_empty_domain_probe.cpp": "86c013786d5cbc630f695e4cba1751ef87964d4a9bf5ebc875e1b4f6a3cad7c4",
+    "v2_empty_domain.dylib": "e29773c57e8db9ff25321aa6c784f795ab60a217c3662929d49a4ff06e225b8c",
+    "prepare_empty.py": "8e2a126c37239327ceb6ba082936bc03dc1dd929d317b7fb3076d19a722b044d",
+    "run_empty.py": "27780db168d5d7788e081d0686c7dc33b7390d7013bf6deadeeabe4a15440a9b",
+    "empty_containers/capture.glsl": "f22852df28aae06207e9c677fe961f7d1924a20e792f5a23d904aaba8e4bcfab",
+    "empty_containers/body.glsl": "d891cc58c17e27db5716f73b190804cd73f26b299580bb6542198673f949c3f9",
+    "empty_containers/generate.gd": "56dde143f130d12a0714151e7ae093e99665868780b87d6dc1a68911ea83cb4a"
   }
 }

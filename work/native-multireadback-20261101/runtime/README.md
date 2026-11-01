@@ -106,3 +106,31 @@ Select it explicitly with the same pinned-host runner arguments and `--case stor
 The main coordinator explicitly authorized this Store-only run against the old pinned executable SHA `9e24b2281bf0b02735fb21b3e433a6142fe945d2856fd41c6f5f7d9965ab4575`. It produced the precise intended behavioral RED: real Metal, the wrong-E24-issuer negative refused with zero ticket, valid E05 prepare/replay succeeded, all four original uploads succeeded, then `record_prepared_v2` returned `ERR_UNAUTHORIZED=4`, reason16 for the real E05 destination plan. Probe exit was 91 at that exact call, not an unrelated shader/startup failure.
 
 Exact evidence is `results/20261101-110408/store_destination.log` and `STORE_DESTINATION_RED.json` beside it. The RED receipt verifies the unchanged pinned host, exact refusal location/role/issuer and all prerequisite successes. This intentionally failed process does not establish physical cleanup success or a GPU result. Main coordination owns the one-predicate production correction, rebuild and Store GREEN run.
+
+## Empty Method domain control (mode 4)
+
+`v2_empty_domain_probe.cpp`, `empty_containers/`, `prepare_empty.py` and `run_empty.py` are independent additions. They preserve the previously verified sources/DSOs, their default selection, and the JSON ABI. The original actual E05 Store destination is retained: range role METHOD_DESTINATION=2, plan role METHOD_RESOURCE=18, nonzero original E05 backing ref. This control sets domain sample_count=0, range_begin=range_end=0, Body groups_x=1, and both capture/body push envelopes to zero. Physical result buffers/ranges remain 24/16/4 bytes; an empty logical domain is not an empty native readback.
+
+Both independent GLSL copies contain `if (p.envelope == 0u) { return; }` before any effects. Nonempty branches remain identical to the original GLSL. GREEN still requires an actual recorded/completed one-group Body fact and three distinct nonzero actual async-result serials, exact partitioned native readback/copy44, and all original physical acknowledgements. Expected bytes are six unchanged `a5a5a5a5` destination words (four logical plus two trailing guards), four zero fault words, and a zero epilogue. No synthetic empty result is accepted.
+
+```sh
+python3 work/native-multireadback-20261101/runtime/prepare_empty.py
+python3 work/native-multireadback-20261101/runtime/run_empty.py \
+  --binary /absolute/path/to/the/source-matched-executable \
+  --binary-sha256 <verified-executable-sha256> \
+  --controlled-build /absolute/path/to/the-executable.controlled_build.json \
+  --controlled-build-sha256 <verified-metadata-sha256> \
+  --case empty_domain
+```
+
+This independent runner defaults to generating its guarded native containers and running only `empty_domain`; it never broadens into legacy or other GPU cases. Host/source/container identity checks are the same as the main runner.
+
+Main coordination explicitly authorized generating these guarded containers and running this case on the old Store-capable pinned executable SHA `edf3b010e2391120af96df148a81d87fc5a4c60801fa2de7ebffc7e9696eff58`. Actual Metal container generation succeeded; valid E05 prepare/replay and four exact uploads succeeded. The precise RED occurred at **QRT kind10 reserve validation**, before record dispatch, with sample_count=0/range0..0/groups1: `ERR_INVALID_PARAMETER=31`, reason2. Probe exit91 was at `record_prepared_v2_empty_domain`. It was not a shader/startup or arbitrary runtime failure.
+
+Evidence: `results/20261101-111915/empty_domain.log`, `containers.log`, and `EMPTY_DOMAIN_RED.json`. The RED receipt verifies all prerequisites and the exact refusal stage; it makes no Body/completion/physical-cleanup success claim. Main coordination owns V2 empty-domain validation/common-preflight correction, rebuild and GREEN. V1 Numeric's nonzero-domain restriction is unchanged by this fixture.
+
+## Source-matched empty-domain GREEN — 2026-11-01
+
+`../EMPTY_2D_PINNED_HOST.json` fixes executable SHA `0d1bf7c24e9222c7880ac09b4e47283523193c815d9b9069d3fec4f4e1035b83` and actual monolithic controlled-build identity. `scons platform=macos target=editor tests=yes -j4` returned zero; all 7,187 recorded source hashes remained unchanged through that build. The source window deliberately includes listed dirty physics/reload/particle changes rather than claiming a clean HEAD binary.
+
+`results/20261101-113943/results.json` records actual Metal container generation and empty-domain runtime, both rc0, all checks true and host unchanged. The original zero domain executes an actual one-group Body, produces three distinct async readback serials, returns the expected unchanged Store/zero FaultPlane/zero Epilogue bytes (44 total, including two trailing guards), and reaches physical acknowledgement. This closes the precise old-host reserve-validation RED above without changing either SDK layout or the V1 nonempty rule. Qualification neighbors pass 185 cases / 3,141 assertions (`../empty-qualification-neighbors.log`, rc0); the two texture driver-callback rejection diagnostics are the existing explicit negative controls. The test source was subsequently formatted without semantic changes. This is native engine evidence, not an ANGE Method product or owner acceptance.
