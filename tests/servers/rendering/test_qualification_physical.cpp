@@ -5491,8 +5491,8 @@ public:
 			CHECK(ticket->resource_pins.get_capacity() == 0);
 			CHECK(ticket->physical_uses.get_capacity() == 0);
 			CHECK(ticket->texture_uploads.get_capacity() == 0);
-			for (const auto &upload : ticket->uploads) {
-				CHECK(upload.progress.segments.get_capacity() == 0);
+			for (const auto &planned_upload : ticket->uploads) {
+				CHECK(planned_upload.progress.segments.get_capacity() == 0);
 			}
 			CHECK(ticket->uploads.size() == original_plan_count);
 			CHECK(memcmp(&ticket->uploads[0].plan, &original_plan, sizeof(original_plan)) == 0);
