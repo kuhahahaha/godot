@@ -167,6 +167,79 @@ bool RenderingDeviceGraph::has_synchronization_edge(const RecordHandle &p_before
 	return false;
 }
 
+RenderingDeviceGraph::DependencyPathResult RenderingDeviceGraph::query_dependency_path(const RecordHandle &p_before, const RecordHandle &p_after, const DependencyPathScratch &p_scratch, uint32_t &r_path_length) const {
+	r_path_length = 0;
+	uint32_t source;
+	uint32_t destination;
+	if (!_resolve_record_command_index(p_before, source) || !_resolve_record_command_index(p_after, destination)) {
+		return DependencyPathResult::Invalid;
+	}
+	if (source >= destination) {
+		return DependencyPathResult::NotFound;
+	}
+	return _query_dependency_path(source, destination, p_scratch, r_path_length);
+}
+
+RenderingDeviceGraph::DependencyPathResult RenderingDeviceGraph::_query_dependency_path(uint32_t p_source, uint32_t p_destination, const DependencyPathScratch &p_scratch, uint32_t &r_path_length) const {
+	r_path_length = 0;
+	if (p_scratch.capacity < command_count) {
+		return DependencyPathResult::InsufficientScratch;
+	}
+	const uintptr_t distances_address = reinterpret_cast<uintptr_t>(p_scratch.distances);
+	const uintptr_t pending_address = reinterpret_cast<uintptr_t>(p_scratch.pending);
+	const uint64_t bytes = uint64_t(command_count) * sizeof(uint32_t);
+	const uintptr_t length_address = reinterpret_cast<uintptr_t>(&r_path_length);
+	if (!p_scratch.distances || !p_scratch.pending || distances_address % alignof(uint32_t) != 0 || pending_address % alignof(uint32_t) != 0 ||
+			bytes > UINTPTR_MAX - distances_address || bytes > UINTPTR_MAX - pending_address ||
+			(distances_address < pending_address + bytes && pending_address < distances_address + bytes) ||
+			(length_address >= distances_address && length_address < distances_address + bytes) ||
+			(length_address >= pending_address && length_address < pending_address + bytes)) {
+		return DependencyPathResult::Invalid;
+	}
+	if (p_source >= command_count || p_destination >= command_count || command_count > command_data_offsets.size()) {
+		return DependencyPathResult::Invalid;
+	}
+	for (uint32_t i = 0; i < command_count; i++) {
+		p_scratch.distances[i] = UINT32_MAX;
+	}
+	uint32_t pending_count = 1;
+	p_scratch.distances[p_source] = 0;
+	p_scratch.pending[0] = p_source;
+	for (uint32_t pending_index = 0; pending_index < pending_count; pending_index++) {
+		const uint32_t current = p_scratch.pending[pending_index];
+		if (current >= command_count || command_data_offsets[current] > command_data.size() ||
+				sizeof(RecordedCommand) > command_data.size() - command_data_offsets[current]) {
+			return DependencyPathResult::Invalid;
+		}
+		const auto *command = reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offsets[current]]);
+		uint32_t visited_edges = 0;
+		for (int32_t node = command->adjacent_command_list_index; node >= 0;) {
+			if (uint32_t(node) >= command_list_nodes.size() || visited_edges++ >= command_list_nodes.size()) {
+				return DependencyPathResult::Invalid;
+			}
+			const RecordedCommandListNode &edge = command_list_nodes[node];
+			if (edge.command_index < 0 || uint32_t(edge.command_index) >= command_count || uint32_t(edge.command_index) <= current) {
+				return DependencyPathResult::Invalid;
+			}
+			const uint32_t next = uint32_t(edge.command_index);
+			const uint32_t next_distance = p_scratch.distances[current] + 1;
+			if (next == p_destination) {
+				r_path_length = next_distance;
+				return DependencyPathResult::Found;
+			}
+			if (p_scratch.distances[next] == UINT32_MAX) {
+				if (pending_count >= command_count) {
+					return DependencyPathResult::Invalid;
+				}
+				p_scratch.distances[next] = next_distance;
+				p_scratch.pending[pending_count++] = next;
+			}
+			node = edge.next_list_index;
+		}
+	}
+	return DependencyPathResult::NotFound;
+}
+
 bool RenderingDeviceGraph::has_dependency_path(const RecordHandle &p_before, const RecordHandle &p_after, uint32_t &r_path_length) const {
 	r_path_length = 0;
 	uint32_t source;
@@ -174,49 +247,11 @@ bool RenderingDeviceGraph::has_dependency_path(const RecordHandle &p_before, con
 	if (!_resolve_record_command_index(p_before, source) || !_resolve_record_command_index(p_after, destination) || source >= destination) {
 		return false;
 	}
-	if (source >= command_count || destination >= command_count || source >= command_data_offsets.size() || destination >= command_data_offsets.size() ||
-			command_data_offsets[source] >= command_data.size() || command_data_offsets[destination] >= command_data.size()) {
-		return false;
-	}
-
 	LocalVector<uint32_t> distances;
-	distances.resize(command_count);
-	for (uint32_t i = 0; i < command_count; i++) {
-		distances[i] = UINT32_MAX;
-	}
 	LocalVector<uint32_t> pending;
-	pending.reserve(command_count);
-	distances[source] = 0;
-	pending.push_back(source);
-
-	for (uint32_t pending_index = 0; pending_index < pending.size(); pending_index++) {
-		const uint32_t current = pending[pending_index];
-		if (current >= command_count || current >= command_data_offsets.size() || command_data_offsets[current] >= command_data.size()) {
-			return false;
-		}
-		const auto *command = reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offsets[current]]);
-		for (int32_t node = command->adjacent_command_list_index; node >= 0;) {
-			if (uint32_t(node) >= command_list_nodes.size()) {
-				return false;
-			}
-			const RecordedCommandListNode &edge = command_list_nodes[node];
-			if (edge.command_index < 0 || uint32_t(edge.command_index) >= command_count || uint32_t(edge.command_index) <= current) {
-				return false;
-			}
-			const uint32_t next = uint32_t(edge.command_index);
-			const uint32_t next_distance = distances[current] + 1;
-			if (next == destination) {
-				r_path_length = next_distance;
-				return true;
-			}
-			if (distances[next] == UINT32_MAX) {
-				distances[next] = next_distance;
-				pending.push_back(next);
-			}
-			node = edge.next_list_index;
-		}
-	}
-	return false;
+	distances.resize(command_count);
+	pending.resize(command_count);
+	return _query_dependency_path(source, destination, { distances.ptr(), pending.ptr(), command_count }, r_path_length) == DependencyPathResult::Found;
 }
 
 RenderingDeviceGraph::RecordMappingState RenderingDeviceGraph::record_mapping_state(const RecordHandle &p_handle) const {

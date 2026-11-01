@@ -71,6 +71,21 @@ public:
 	bool has_driver_callbacks() const;
 	uint32_t qualification_command_count() const { return command_count; }
 	bool has_synchronization_edge(const RecordHandle &p_before, const RecordHandle &p_after) const;
+	enum class DependencyPathResult : uint8_t {
+		Found,
+		NotFound,
+		Invalid,
+		InsufficientScratch,
+	};
+	struct DependencyPathScratch {
+		uint32_t *distances = nullptr;
+		uint32_t *pending = nullptr;
+		uint32_t capacity = 0; // Number of entries available in each disjoint array.
+	};
+	// Queries stored graph adjacency only. The caller owns both arrays and the
+	// graph writer permit. The output scalar must be outside both used prefixes;
+	// no allocation or native completion observation occurs.
+	DependencyPathResult query_dependency_path(const RecordHandle &p_before, const RecordHandle &p_after, const DependencyPathScratch &p_scratch, uint32_t &r_path_length) const;
 	bool has_dependency_path(const RecordHandle &p_before, const RecordHandle &p_after, uint32_t &r_path_length) const;
 	RecordMappingState record_mapping_state(const RecordHandle &p_handle) const;
 	bool resolve_record_command_buffer_slot(const RecordHandle &p_handle, uint32_t &r_slot) const;
@@ -904,6 +919,7 @@ private:
 	int32_t _add_to_write_list(int32_t p_command_index, Rect2i p_subresources, int32_t p_list_index, bool p_partial_coverage);
 	RecordedCommand *_allocate_command(uint32_t p_command_size, int32_t &r_command_index);
 	bool _resolve_record_command_index(const RecordHandle &p_handle, uint32_t &r_index) const;
+	DependencyPathResult _query_dependency_path(uint32_t p_source, uint32_t p_destination, const DependencyPathScratch &p_scratch, uint32_t &r_path_length) const;
 	DrawListInstruction *_allocate_draw_list_instruction(uint32_t p_instruction_size);
 	ComputeListInstruction *_allocate_compute_list_instruction(uint32_t p_instruction_size);
 	void _check_discardable_attachment_dependency(ResourceTracker *p_resource_tracker, int32_t p_previous_command_index, int32_t p_command_index);
