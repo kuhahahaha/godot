@@ -8877,7 +8877,7 @@ Error RenderingDevice::_qualification_enqueue(GDExtensionDeviceExit::Qualificati
 		return ERR_BUSY;
 	}
 	MutexLock lock(cell->mutex);
-	if (!cell->use_closed || cell->enqueued || cell->free_event) {
+	if (!cell->use_closed || cell->enqueued || cell->free_event || cell->return_error != OK) {
 		return ERR_BUSY;
 	}
 	if (!_qualification_free_event_available(cell->event_capacity_reserved)) {
@@ -8898,7 +8898,7 @@ void RenderingDevice::_qualification_freed(GDExtensionDeviceExit::QualificationP
 		return;
 	}
 	MutexLock lock(cell->mutex);
-	CRASH_COND(!cell->enqueued || !cell->reserved_event || cell->free_event);
+	CRASH_COND(!cell->enqueued || !cell->reserved_event || cell->free_event || cell->return_error != OK);
 	cell->free_event = cell->reserved_event;
 }
 RID RenderingDevice::_qualification_storage_create(uint32_t bytes, GDExtensionDeviceExit::QualificationPhysicalReturn *cell) {
@@ -9353,7 +9353,10 @@ void RenderingDevice::sync() {
 	local_device_processing = false;
 }
 
-void RenderingDevice::_free_pending_resources(int p_frame) {
+Error RenderingDevice::_free_pending_resources(int p_frame) {
+	if (frame_issue_error != OK) {
+		return frame_issue_error;
+	}
 	// Free in dependency usage order, so nothing weird happens.
 	// Pipelines.
 	while (frames[p_frame].render_pipelines_to_dispose_of.front()) {
@@ -9421,7 +9424,39 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 	while (frames[p_frame].uniform_sets_to_dispose_of.front()) {
 		UniformSet *uniform_set = &frames[p_frame].uniform_sets_to_dispose_of.front()->get();
 
-		driver->uniform_set_free(uniform_set->driver_id);
+		const bool qualified = uniform_set->qualification_return || !uniform_set->qualification_dependencies.is_empty();
+		if (qualified && uniform_set->qualification_disposal_error == OK && driver->qualification_uniform_set_free_supported()) {
+			const auto returned = driver->qualification_uniform_set_free(uniform_set->driver_id);
+			if (returned.state != RDD::QualificationDescriptorReturnState::Returned) {
+				uniform_set->qualification_disposal_error = returned.state == RDD::QualificationDescriptorReturnState::Unavailable ? ERR_UNAVAILABLE : FAILED;
+				uniform_set->qualification_disposal_native_code = returned.native_code;
+			}
+		} else if (!qualified || (uniform_set->qualification_disposal_error == OK && !driver->qualification_uniform_set_free_supported())) {
+			// Genuine void/no-error-channel backend return; ordinary sets retain
+			// their original free route. Never fall back after a checked refusal.
+			driver->uniform_set_free(uniform_set->driver_id);
+		}
+		if (uniform_set->qualification_disposal_error != OK) {
+			auto retain_failure = [&](GDExtensionDeviceExit::QualificationPhysicalReturn *cell) {
+				if (!cell) {
+					return;
+				}
+				MutexLock lock(cell->mutex);
+				if (cell->return_error == OK) {
+					cell->return_error = uniform_set->qualification_disposal_error;
+					cell->return_native_code = uniform_set->qualification_disposal_native_code;
+				}
+			};
+			retain_failure(uniform_set->qualification_return);
+			for (auto *cell : uniform_set->qualification_dependencies) {
+				retain_failure(cell);
+			}
+			frame_wait_native_code = uniform_set->qualification_disposal_native_code;
+			frame_wait_native_code_valid = true;
+			// Keep the descriptor in this original Frame and keep every reverse
+			// pin. Poisoning stops frame reuse/finalization and prevents replay.
+			return _fail_frame_wait_source(p_frame, uniform_set->qualification_disposal_error);
+		}
 		for(auto *cell:uniform_set->qualification_dependencies) { CRASH_COND(!cell->dependent_children.load());cell->dependent_children.fetch_sub(1); }
 		_qualification_freed(uniform_set->qualification_return);
 #if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
@@ -9504,6 +9539,7 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 	if (frames_pending_resources_for_processing > 0u) {
 		--frames_pending_resources_for_processing;
 	}
+	return OK;
 }
 
 uint32_t RenderingDevice::get_frame_delay() const {
@@ -9564,6 +9600,15 @@ Error RenderingDevice::_begin_frame(bool p_presented, bool p_nonblocking) {
 			}
 		}
 	}
+	// Dispose while this is still the completed original frame. A checked
+	// Unknown must prevent command-pool reset, epoch replacement and recording.
+	{
+		GodotProfileZoneGrouped(_profile_zone, "_free_pending_resources");
+		const Error disposal_error = _free_pending_resources(frame);
+		if (disposal_error != OK) {
+			return disposal_error;
+		}
+	}
 	frames[frame].primary_command_buffer_begun = false;
 	frames[frame].present_attempted = false;
 	frames[frame].present_report = RDD::QueueCallReport();
@@ -9597,10 +9642,6 @@ Error RenderingDevice::_begin_frame(bool p_presented, bool p_nonblocking) {
 	}
 
 	frames[frame].qualification_epoch = next_qualification_frame_epoch++;
-
-	// Erase pending resources.
-	GodotProfileZoneGrouped(_profile_zone, "_free_pending_resources");
-	_free_pending_resources(frame);
 
 	// Advance staging buffers if used.
 	if (upload_staging_buffers.used) {
@@ -10908,7 +10949,13 @@ void RenderingDevice::finalize() {
 	// Free everything pending.
 	for (uint32_t i = 0; i < frames.size(); i++) {
 		int f = (frame + i) % frames.size();
-		_free_pending_resources(f);
+		if (_free_pending_resources(f) != OK) {
+			CRASH_NOW_MSG("Descriptor return is unresolved during destructive RenderingDevice finalization; original frames and dependencies were retained.");
+		}
+	}
+	// No frame container or native synchronization object may be destroyed
+	// until disposal has succeeded for every original frame.
+	for (uint32_t i = 0; i < frames.size(); i++) {
 		driver->command_pool_free(frames[i].command_pool);
 		driver->timestamp_query_pool_free(frames[i].timestamp_pool);
 		driver->semaphore_free(frames[i].semaphore);

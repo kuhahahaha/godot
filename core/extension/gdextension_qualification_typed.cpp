@@ -772,7 +772,13 @@ void Registry::qualification_resource_retire_step(QualificationBridge *b, Render
 	if (c->physical.enqueued) {
 		next.dependency_serial = c->dependency_serial;
 	}
-	if (c->maintenance_error != OK) {
+	if (c->physical.return_error != OK) {
+		next.state = 2;
+		next.return_status = 0;
+		next.native_error = c->physical.return_error;
+		next.native_code = c->physical.return_native_code;
+		next.reason = 5;
+	} else if (c->maintenance_error != OK) {
 		next.state = 2;
 		next.native_error = c->maintenance_error;
 		next.reason = 5;

@@ -30,6 +30,7 @@
 
 #pragma once
 
+#include "core/error/error_list.h"
 #include "core/os/mutex.h"
 #include "core/templates/local_vector.h"
 
@@ -66,6 +67,10 @@ class QualificationPhysicalReturn {
 	uint32_t frame_slot = UINT32_MAX;
 	bool event_capacity_reserved = false;
 	bool enqueued = false;
+	// First unresolved original descriptor return, including a dependent set.
+	// This cell and all reverse pins survive; it is never a successful free event.
+	Error return_error = OK;
+	int64_t return_native_code = 0;
 	std::atomic<bool> use_closed{ false };
 	std::atomic<uint32_t> dependent_children{ 0 };
 	LocalVector<QualificationTicket *> uses;

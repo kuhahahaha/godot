@@ -722,6 +722,9 @@ public:
 		int32_t native_code = 0;
 	};
 	virtual QualificationDescriptorReturn qualification_uniform_set_free(UniformSetID) { return {}; }
+	// Capability of the original checked return port, not permission to free a
+	// descriptor. Unavailable on a supporting backend must never fall back to void.
+	virtual bool qualification_uniform_set_free_supported() const { return false; }
 	virtual bool uniform_sets_have_linear_pools() const { return false; }
 	virtual uint32_t uniform_sets_get_dynamic_offsets(VectorView<UniformSetID> p_uniform_sets, ShaderID p_shader, uint32_t p_first_set_index, uint32_t p_set_count) const = 0;
 

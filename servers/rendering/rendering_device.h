@@ -82,10 +82,16 @@ class RDAccelerationStructureGeometry;
 class RDAccelerationStructureInstance;
 class RDPipelineShader;
 class RDHitGroup;
+#ifdef TESTS_ENABLED
+namespace RendererRD {
+class TestParticlesProcessRetryAccess;
+}
+#endif
 
 class RenderingDevice : public RenderingDeviceCommons {
 #ifdef TESTS_ENABLED
 	friend class TestB4RenderingDeviceAccess;
+	friend class RendererRD::TestParticlesProcessRetryAccess;
 #endif
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
 	friend class RenderCaptureTestAccess;
@@ -1386,6 +1392,8 @@ private:
 		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
 		uint32_t qualification_users = 0;
 		LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> qualification_dependencies;
+		Error qualification_disposal_error = OK;
+		int64_t qualification_disposal_native_code = 0;
 		uint32_t format = 0;
 		RID shader_id;
 		uint32_t shader_set = 0;
@@ -2143,7 +2151,7 @@ public:
 	bool has_pending_resources_for_processing() const { return frames_pending_resources_for_processing != 0u; }
 
 private:
-	void _free_pending_resources(int p_frame);
+	Error _free_pending_resources(int p_frame);
 	Error _fail_frame_issue(Error p_error);
 	Error _fail_frame_wait_source(uint32_t p_frame, Error p_error);
 	void _seal_buffer_readback_records();

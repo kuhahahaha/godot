@@ -4161,6 +4161,11 @@ public:
 		cell.dependent_children.fetch_add(1);
 		return device.uniform_set_owner.make_rid(set);
 	}
+	static RID ordinary_descriptor(RenderingDevice &device) {
+		RenderingDevice::UniformSet set;
+		set.driver_id = RenderingDeviceDriver::UniformSetID(23);
+		return device.uniform_set_owner.make_rid(set);
+	}
 	static uint32_t dependents(const GDExtensionDeviceExit::QualificationPhysicalReturn &cell) { return cell.dependent_children.load(); }
 	static void reserve_unused_workers(RenderingDevice &device) { device.transfer_worker_pool.resize(4); }
 	static Error worker_try(RenderingDevice &device) { return device._submit_transfer_workers({}, true); }
@@ -4168,6 +4173,173 @@ public:
 	static void detach(RenderingDevice &device) {
 		device.frames.clear();
 		device.driver = nullptr;
+	}
+	template <class D>
+	static void checked_descriptor_lifecycle(RenderingDevice &device, D &driver, bool qualified, uint32_t mode) {
+		using namespace GDExtensionDeviceExit;
+		// Seed only the enrollment/accepted child fixtures. The original RD free,
+		// Frame disposer, retire report and ACK paths run below; this is no GPU proof.
+		auto *registry = memnew(Registry);
+		auto *previous = RenderingDevice::singleton;
+		RenderingDevice::singleton = &device;
+		device.is_main_instance = true;
+		registry->instance = 71;
+		auto &record = registry->records[0];
+		record.owner_thread = Thread::get_caller_id();
+		record.snapshot.library_generation = 1;
+		record.guard_enrollment = GuardEnrollment::QUALIFIED;
+		record.private_refs = 1;
+		auto &native = registry->device_records[0];
+		native.object = &device;
+		native.live = true;
+		native.epoch = 1;
+		native.execution_thread = Thread::get_caller_id();
+		struct Holder : HolderRetirement {
+			Holder() : HolderRetirement(RecordRef{}) {}
+			~Holder() = default;
+		} holder;
+		holder.generation = 1;
+		auto *bridge = memnew(Registry::QualificationBridge);
+		bridge->serial = 11;
+		bridge->epoch = 1;
+		bridge->holder = &holder;
+		registry->qualification_bridges[0] = bridge;
+		Registry::QualificationBridge::UniformSet child;
+		const GDExtensionQualificationBridgeRefV1 ref{ 71, 11 };
+		const GDExtensionStorageCreateRequestV1 create{ { 1, 16, 0 }, 128, 3, 1, 41, 1, 0 };
+		GDExtensionStorageBackingV1 backing{};
+		REQUIRE(registry->qualification_storage_create(ref, &create, &backing).native_error == OK);
+		auto *parent_child = bridge->storage[0];
+		REQUIRE(parent_child != nullptr);
+		child.kind = 3;
+		child.serial = 129;
+		child.object_serial = 130;
+		child.dependency_serial = 131;
+		child.creating = false;
+		child.physical.bridge = 11;
+		child.physical.child = child.serial;
+		child.physical.serial = child.object_serial;
+		auto &parent = parent_child->physical;
+		RenderingDevice::UniformSet set;
+		set.driver_id = RenderingDeviceDriver::UniformSetID(23);
+		set.qualification_dependencies.push_back(&parent);
+		parent.dependent_children = 1;
+		if (qualified) {
+			set.qualification_return = &child.physical;
+			REQUIRE(device._qualification_reserve_free_event(&child.physical));
+			bridge->sets[0] = &child;
+			++bridge->children;
+			++record.private_refs;
+		}
+		RID rid = device.uniform_set_owner.make_rid(set);
+		child.rid = child.physical.rid = rid.get_id();
+		struct Cleanup {
+			std::function<void()> f;
+			~Cleanup() { f(); }
+		} cleanup{ [&] {
+			// Deterministic driver IDs own no native allocation. Never forge an ACK
+			// or successful physical return to tear down an injected Unknown fixture.
+			if (device.uniform_set_owner.owns(rid)) {
+				device.uniform_set_owner.free(rid);
+			}
+			if (child.physical.event_capacity_reserved) {
+				device._qualification_release_free_event(&child.physical);
+			}
+			if (device.storage_buffer_owner.owns(RID::from_uint64(backing.rid))) {
+				device.storage_buffer_owner.free(RID::from_uint64(backing.rid));
+			}
+			if (parent.event_capacity_reserved) {
+				device._qualification_release_free_event(&parent);
+			}
+			bridge->storage[0] = nullptr;
+			bridge->sets[0] = nullptr;
+			registry->qualification_bridges[0] = nullptr;
+			device.frames.clear();
+			device.frame_issue_error = OK;
+			device.driver = nullptr;
+			device.is_main_instance = false;
+			RenderingDevice::singleton = previous;
+			memdelete(parent_child);
+			memdelete(bridge);
+			memdelete(registry);
+		} };
+		driver.cell = &parent;
+		driver.checked = mode != 3;
+		driver.outcome = mode == 1 ? RenderingDeviceDriver::QualificationDescriptorReturnState::Unknown : mode == 2 ? RenderingDeviceDriver::QualificationDescriptorReturnState::Unavailable : RenderingDeviceDriver::QualificationDescriptorReturnState::Returned;
+		GDExtensionQualificationResourceRetireV1 request{ { 1, 16, 0 }, { 71, child.serial }, child.rid, child.object_serial, 1 };
+		GDExtensionQualificationResourceRetireReportV1 report{};
+		if (qualified) {
+			REQUIRE(registry->qualification_resource_retire(ref, &request, &report).native_error == OK);
+			CHECK(child.physical.enqueued);
+		} else {
+			device.free_rid(rid);
+		}
+		CHECK_FALSE(device.uniform_set_owner.owns(rid));
+		CHECK(parent.dependent_children == 1);
+		const GDExtensionStorageRetireRequestV1 retire_parent{ { 1, 16, 0 }, backing.backing, backing.rid, backing.backing_serial, 3, 1, 41, 2, 0 };
+		GDExtensionStorageRetireRefV1 parent_retire{};
+		GDExtensionStorageRetireReportV1 parent_report{};
+		REQUIRE(registry->qualification_storage_retire(ref, &retire_parent, &parent_retire, &parent_report).native_error == OK);
+		const uint32_t retained_refs = record.private_refs;
+		const Error expected = mode == 1 ? FAILED : mode == 2 ? ERR_UNAVAILABLE : OK;
+		CHECK(device._free_pending_resources(0) == expected);
+		CHECK(driver.checked_calls == (driver.checked ? 1 : 0));
+		CHECK(driver.sets_freed == (mode == 3 ? 1 : 0));
+		if (expected != OK) {
+			CHECK(device.frames[0].uniform_sets_to_dispose_of.size() == 1);
+			CHECK(parent.dependent_children == 1);
+			CHECK(child.physical.free_event == 0);
+			CHECK(parent.return_error == expected);
+			CHECK(parent.return_native_code == (mode == 1 ? -77 : 0));
+			const uint64_t epoch = device.frames[0].qualification_epoch;
+			const uint64_t next_epoch = device.next_qualification_frame_epoch;
+			CHECK(device._begin_frame(false, true) == expected);
+			CHECK(device.frames[0].qualification_epoch == epoch);
+			CHECK(device.next_qualification_frame_epoch == next_epoch);
+			CHECK(device._free_pending_resources(0) == expected);
+			CHECK(driver.checked_calls == 1);
+			CHECK(driver.sets_freed == 0);
+			registry->qualification_retire_step(bridge, &device, parent_child->serial, 1);
+			REQUIRE(registry->qualification_storage_retire(ref, &retire_parent, &parent_retire, &parent_report).native_error == OK);
+			CHECK(parent_report.state == 2);
+			CHECK(parent_report.return_status == 0);
+			CHECK(parent_report.native_error == expected);
+			CHECK(parent_report.native_code == (mode == 1 ? -77 : 0));
+			CHECK(registry->qualification_storage_retire_release(ref, parent_retire).native_error == ERR_BUSY);
+			CHECK(record.private_refs == retained_refs);
+			CHECK(registry->qualification_close(ref).native_error == ERR_BUSY);
+			if (qualified) {
+				registry->qualification_retire_step(bridge, &device, child.serial, 4);
+				REQUIRE(registry->qualification_resource_retire(ref, &request, &report).native_error == OK);
+				CHECK(report.state == 2);
+				CHECK(report.return_status == 0);
+				CHECK(report.native_error == expected);
+				CHECK(report.native_code == (mode == 1 ? -77 : 0));
+				CHECK(registry->qualification_resource_retire_release(ref, request.resource, report.revision).native_error == ERR_BUSY);
+				CHECK(bridge->children == 2);
+				CHECK_FALSE(child.acknowledged);
+			}
+		} else {
+			CHECK(device.frames[0].uniform_sets_to_dispose_of.is_empty());
+			CHECK(parent.dependent_children == 0);
+			const uint64_t event = child.physical.free_event;
+			CHECK(device._free_pending_resources(0) == OK);
+			CHECK(driver.checked_calls == (driver.checked ? 1 : 0));
+			CHECK(child.physical.free_event == event);
+			if (qualified) {
+				CHECK(event != 0);
+				registry->qualification_retire_step(bridge, &device, child.serial, 4);
+				REQUIRE(registry->qualification_resource_retire(ref, &request, &report).native_error == OK);
+				CHECK(report.state == 1);
+				REQUIRE(registry->qualification_resource_retire_release(ref, request.resource, report.revision).native_error == OK);
+				CHECK(bridge->children == 1);
+			}
+			registry->qualification_retire_step(bridge, &device, parent_child->serial, 1);
+			CHECK(device._free_pending_resources(0) == OK);
+			registry->qualification_retire_step(bridge, &device, parent_child->serial, 1);
+			REQUIRE(registry->qualification_storage_retire_release(ref, parent_retire).native_error == OK);
+			CHECK(bridge->children == 0);
+		}
 	}
 	static void storage_retirement_capacity(RenderingDevice &device, uint32_t mode = 0, const int *native_creates = nullptr) {
 		using namespace GDExtensionDeviceExit;
@@ -5847,6 +6019,50 @@ TEST_CASE("[RenderingDevice][Qualification] unsupported checked descriptor retur
 	const auto result = driver.qualification_uniform_set_free(RenderingDeviceDriver::UniformSetID(23));
 	CHECK(result.state == RenderingDeviceDriver::QualificationDescriptorReturnState::Unavailable);
 	CHECK(result.native_code == 0);
+}
+TEST_CASE("[RenderingDevice][Qualification] original descriptor disposal retains Unknown through frame and owner ACK") {
+	class CheckedDriver : public Driver {
+	public:
+		bool checked = true;
+		int checked_calls = 0;
+		QualificationDescriptorReturnState outcome = QualificationDescriptorReturnState::Returned;
+		bool qualification_uniform_set_free_supported() const override { return checked; }
+		QualificationDescriptorReturn qualification_uniform_set_free(UniformSetID id) override {
+			CHECK(id == UniformSetID(23));
+			++checked_calls;
+			return { outcome, outcome == QualificationDescriptorReturnState::Unknown ? -77 : 0 };
+		}
+	};
+	for (bool qualified : { false, true }) {
+		for (uint32_t mode = 0; mode < 4; ++mode) {
+			RenderingDevice device;
+			CheckedDriver driver;
+			TestQualificationPhysicalAccess::attach(device, driver);
+			TestQualificationPhysicalAccess::checked_descriptor_lifecycle(device, driver, qualified, mode);
+		}
+	}
+}
+TEST_CASE("[RenderingDevice][Qualification] ordinary descriptor free keeps its original void path") {
+	class OrdinaryDriver : public TransferTestDriverBase {
+	public:
+		int frees = 0, checked_calls = 0;
+		bool qualification_uniform_set_free_supported() const override { return true; }
+		QualificationDescriptorReturn qualification_uniform_set_free(UniformSetID) override {
+			++checked_calls;
+			return { QualificationDescriptorReturnState::Unknown, -77 };
+		}
+		void uniform_set_free(UniformSetID id) override {
+			CHECK(id == UniformSetID(23));
+			++frees;
+		}
+	} driver;
+	RenderingDevice device;
+	TestQualificationPhysicalAccess::attach(device, driver);
+	device.free_rid(TestQualificationPhysicalAccess::ordinary_descriptor(device));
+	TestQualificationPhysicalAccess::dispose(device);
+	CHECK(driver.frees == 1);
+	CHECK(driver.checked_calls == 0);
+	TestQualificationPhysicalAccess::detach(device);
 }
 TEST_CASE("[Qualification] retire keeps exact original RID live while lists or callbacks are active") {
 	for (uint32_t mode = 1; mode <= 4; ++mode) {

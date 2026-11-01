@@ -633,7 +633,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_native_unit_create(GDEx
 	return result(OK);
 }
 void Registry::qualification_retire_step(QualificationBridge *bridge, RenderingDevice *rd, uint64_t serial, uint32_t kind) {
-	if (rd->_recording_error() != OK || rd->draw_list.active || rd->compute_list.active || rd->raytracing_list.active || rd->frame_wait_draining || rd->draw_graph.has_driver_callbacks() || !rd->_thread_safe_.try_lock()) {
+	if (rd->draw_list.active || rd->compute_list.active || rd->raytracing_list.active || rd->frame_wait_draining || rd->draw_graph.has_driver_callbacks() || !rd->_thread_safe_.try_lock()) {
 		return;
 	}
 	struct Unlock {
@@ -644,6 +644,9 @@ void Registry::qualification_retire_step(QualificationBridge *bridge, RenderingD
 	auto enqueue = [&](QualificationPhysicalReturn &cell, uint32_t type) -> uint32_t {
 		if (!cell.rid || cell.enqueued) {
 			return 0;
+		}
+		if (rd->_recording_error() != OK) {
+			return 1;
 		}
 		for (auto *ticket : cell.uses) {
 			if (!ticket->physically_retired.load()) {
@@ -743,7 +746,13 @@ void Registry::qualification_retire_step(QualificationBridge *bridge, RenderingD
 		if (physical.enqueued) {
 			report.dependency_set_serial = child->dependency_serial;
 		}
-		if (failed) {
+		if (physical.return_error != OK) {
+			report.state = 2;
+			report.return_status = 0;
+			report.reason = 5;
+			report.native_error = physical.return_error;
+			report.native_code = physical.return_native_code;
+		} else if (failed) {
 			report.state = 2;
 			report.return_status = 0;
 			report.reason = 5;
@@ -808,7 +817,14 @@ void Registry::qualification_retire_step(QualificationBridge *bridge, RenderingD
 		if (report.enqueued_mask == child->backing.known_mask && !report.unresolved_mask) {
 			report.dependency_set_serial = child->dependency_serial;
 		}
-		if (failed) {
+		const auto &failed_return = shader.return_error != OK ? shader : pipeline;
+		if (failed_return.return_error != OK) {
+			report.state = 2;
+			report.return_status = 0;
+			report.reason = 5;
+			report.native_error = failed_return.return_error;
+			report.native_code = failed_return.return_native_code;
+		} else if (failed) {
 			report.state = 2;
 			report.return_status = 0;
 			report.reason = 5;

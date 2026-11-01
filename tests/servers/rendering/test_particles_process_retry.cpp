@@ -10,6 +10,7 @@
 #include "drivers/vulkan/rendering_context_driver_vulkan.h"
 #endif
 #include <cstdlib>
+#include <functional>
 
 TEST_FORCE_LINK(test_particles_process_retry)
 
@@ -155,6 +156,87 @@ public:
 		FAIL("Vulkan support is required for the production upload retry test.");
 #endif
 	}
+	static void run_real_collision_descriptor_retry() {
+		RenderingDevice *rd = RenderingDevice::get_singleton();
+		RendererCompositorRD *compositor = RendererCompositorRD::get_singleton();
+		REQUIRE(rd != nullptr);
+		REQUIRE(compositor != nullptr);
+		auto *storage = static_cast<ParticlesStorage *>(compositor->get_particles_storage());
+		REQUIRE(storage != nullptr);
+		const RID particle = storage->particles_allocate();
+		storage->particles_initialize(particle);
+		const RID collision = storage->particles_collision_allocate();
+		storage->particles_collision_initialize(collision);
+		const RID instance = storage->particles_collision_instance_create(collision);
+		RID texture_a, texture_b;
+		struct Cleanup {
+			std::function<void()> f;
+			~Cleanup() { f(); }
+		} cleanup{ [&] {
+			arm_fault(*rd, RID(), 0);
+			storage->particles_free(particle);
+			storage->particles_collision_instance_free(instance);
+			storage->particles_collision_owner.get_or_null(collision)->heightfield_texture = RID();
+			storage->particles_collision_free(collision);
+			if (texture_a.is_valid()) {
+				rd->free_rid(texture_a);
+			}
+			if (texture_b.is_valid()) {
+				rd->free_rid(texture_b);
+			}
+		} };
+		RenderingDevice::TextureFormat format;
+		format.texture_type = RenderingDevice::TEXTURE_TYPE_2D;
+		format.format = RenderingDevice::DATA_FORMAT_R32_SFLOAT;
+		format.width = format.height = format.depth = format.array_layers = format.mipmaps = 1;
+		format.usage_bits = RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT;
+		texture_a = rd->texture_create(format, RenderingDevice::TextureView());
+		texture_b = rd->texture_create(format, RenderingDevice::TextureView());
+		REQUIRE(texture_a.is_valid());
+		REQUIRE(texture_b.is_valid());
+		auto *particles = storage->particles_owner.get_or_null(particle);
+		auto *collider = storage->particles_collision_owner.get_or_null(collision);
+		REQUIRE(particles != nullptr);
+		REQUIRE(collider != nullptr);
+		particles->amount = 4;
+		particles->particle_buffer = rd->storage_buffer_create(sizeof(ParticlesStorage::ParticleData) * 4);
+		particles->frame_params_buffer = rd->storage_buffer_create(sizeof(ParticlesStorage::ParticlesFrameParams));
+		REQUIRE(particles->particle_buffer.is_valid());
+		REQUIRE(particles->frame_params_buffer.is_valid());
+		particles->frame_history.resize(1);
+		particles->trail_params.resize(1);
+		storage->particles_collision_set_collision_type(collision, RSE::PARTICLES_COLLISION_TYPE_HEIGHTFIELD_COLLIDE);
+		storage->particles_collision_instance_set_active(instance, true);
+		storage->particles_add_collision(particle, instance);
+		collider->heightfield_texture = texture_a;
+		REQUIRE(storage->_particles_process(particles, 1.0 / 60.0));
+		const uint32_t frame_counter = particles->frame_counter;
+		const double phase = particles->phase;
+		const auto history = particles->frame_history[0];
+		const RID set_a = particles->collision_textures_uniform_set;
+		REQUIRE(rd->uniform_set_is_valid(set_a));
+		collider->heightfield_texture = texture_b;
+		arm_fault(*rd, particles->frame_params_buffer, 1);
+		CHECK_FALSE(storage->_particles_process(particles, 1.0 / 60.0));
+		CHECK(fault_hits(*rd) == 1);
+		CHECK(particles->frame_counter == frame_counter);
+		CHECK(particles->phase == phase);
+		CHECK(particles->frame_history[0].frame == history.frame);
+		CHECK(particles->collision_heightmap_texture == texture_a);
+		CHECK_FALSE(rd->uniform_set_is_valid(set_a));
+		CHECK(particles->collision_textures_uniform_set.is_null());
+		// Revert B to A before retry: a valid set(B) plus restored cache(A) must
+		// never suppress the original descriptor constructor on this attempt.
+		collider->heightfield_texture = texture_a;
+		arm_fault(*rd, RID(), 0);
+		REQUIRE(storage->_particles_process(particles, 1.0 / 60.0));
+		CHECK(particles->frame_counter == frame_counter + 1);
+		REQUIRE(rd->uniform_set_is_valid(particles->collision_textures_uniform_set));
+		const auto *dependencies = rd->reverse_dependency_map.getptr(particles->collision_textures_uniform_set);
+		REQUIRE(dependencies != nullptr);
+		CHECK(dependencies->has(texture_a));
+		CHECK_FALSE(dependencies->has(texture_b));
+	}
 
 	static void restore_shifted_history() {
 		ParticlesStorage::Particles particles;
@@ -237,4 +319,12 @@ TEST_CASE("[ParticlesProcessRetryGPU] production buffer upload retry") {
 		return;
 	}
 	RendererRD::TestParticlesProcessRetryAccess::run_real_rd_upload_retry();
+}
+
+TEST_CASE("[ParticlesProcessRetryGPU] collision A to B failure to A rebuilds the original descriptor") {
+	if (std::getenv("GODOT_TEST_PARTICLES_PROCESS_RD") == nullptr) {
+		MESSAGE("UNRUN: set GODOT_TEST_PARTICLES_PROCESS_RD=1 with a real RD/compositor for collision retry");
+		return;
+	}
+	RendererRD::TestParticlesProcessRetryAccess::run_real_collision_descriptor_retry();
 }

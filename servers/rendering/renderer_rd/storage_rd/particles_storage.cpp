@@ -1284,7 +1284,16 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 		previous_collision_3d_textures[i] = p_particles->collision_3d_textures[i];
 	}
 	bool history_shifted = false;
+	bool collision_set_rebuilt = false;
 	auto fail_process = [&]() -> bool {
+		// Cache rollback must not leave this attempt's valid set bound to the
+		// rejected texture tuple. A later A->B->A retry must rebuild from A.
+		if (collision_set_rebuilt) {
+			if (RD::get_singleton()->uniform_set_is_valid(p_particles->collision_textures_uniform_set)) {
+				RD::get_singleton()->free_rid(p_particles->collision_textures_uniform_set);
+			}
+			p_particles->collision_textures_uniform_set = RID();
+		}
 		p_particles->phase = previous_phase;
 		p_particles->cycle_number = previous_cycle_number;
 		p_particles->frame_counter = previous_frame_counter;
@@ -1557,6 +1566,7 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 		bool uniform_set_valid = RD::get_singleton()->uniform_set_is_valid(p_particles->collision_textures_uniform_set);
 
 		if (different || !uniform_set_valid) {
+			collision_set_rebuilt = true;
 			if (uniform_set_valid) {
 				RD::get_singleton()->free_rid(p_particles->collision_textures_uniform_set);
 			}
