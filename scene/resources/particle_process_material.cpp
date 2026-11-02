@@ -1855,8 +1855,12 @@ void ParticleProcessMaterial::set_emission_ring_height(real_t p_height) {
 }
 
 void ParticleProcessMaterial::set_emission_ring_radius(real_t p_radius) {
-	ERR_FAIL_COND_MSG(!Math::is_finite(p_radius) || !Math::is_finite(float(p_radius) * float(p_radius)) || p_radius < 0.0 || p_radius < emission_ring_inner_radius, "Particle emission ring radius must be finite and at least the inner radius, with a finite shader square.");
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_radius) || !Math::is_finite(float(p_radius) * float(p_radius)) || p_radius < 0.0, "Particle emission ring radius and its shader square must be finite and non-negative.");
 	emission_ring_radius = p_radius;
+	if (emission_ring_inner_radius > p_radius) {
+		emission_ring_inner_radius = p_radius;
+		RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->emission_ring_inner_radius, p_radius);
+	}
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->emission_ring_radius, p_radius);
 #ifdef TOOLS_ENABLED
 	emit_signal("emission_shape_changed");
@@ -1864,8 +1868,12 @@ void ParticleProcessMaterial::set_emission_ring_radius(real_t p_radius) {
 }
 
 void ParticleProcessMaterial::set_emission_ring_inner_radius(real_t p_radius) {
-	ERR_FAIL_COND_MSG(!Math::is_finite(p_radius) || !Math::is_finite(float(p_radius) * float(p_radius)) || p_radius < 0.0 || p_radius > emission_ring_radius, "Particle emission inner ring radius must be finite and between zero and the outer radius, with a finite shader square.");
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_radius) || !Math::is_finite(float(p_radius) * float(p_radius)) || p_radius < 0.0, "Particle emission inner ring radius and its shader square must be finite and non-negative.");
 	emission_ring_inner_radius = p_radius;
+	if (emission_ring_radius < p_radius) {
+		emission_ring_radius = p_radius;
+		RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->emission_ring_radius, p_radius);
+	}
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->emission_ring_inner_radius, p_radius);
 #ifdef TOOLS_ENABLED
 	emit_signal("emission_shape_changed");

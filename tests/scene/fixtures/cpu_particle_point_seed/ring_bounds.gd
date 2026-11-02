@@ -9,11 +9,11 @@ func _initialize() -> void:
 		emitter.emission_ring_radius = 5.0
 		emitter.emission_ring_inner_radius = 1.0
 		emitter.emission_ring_inner_radius = 6.0
-		if emitter.emission_ring_inner_radius != 1.0:
-			failures.append(emitter.get_class() + " accepted inner radius larger than outer radius")
+		if emitter.emission_ring_inner_radius != 6.0 or emitter.emission_ring_radius != 6.0:
+			failures.append(emitter.get_class() + " failed to grow outer radius with inner radius")
 		emitter.emission_ring_radius = 0.5
-		if emitter.emission_ring_radius != 5.0:
-			failures.append(emitter.get_class() + " accepted outer radius smaller than inner radius")
+		if emitter.emission_ring_radius != 0.5 or emitter.emission_ring_inner_radius != 0.5:
+			failures.append(emitter.get_class() + " failed to shrink inner radius with outer radius")
 		emitter.emission_ring_radius = 7.0
 		emitter.emission_ring_inner_radius = 6.0
 		if emitter.emission_ring_radius != 7.0 or emitter.emission_ring_inner_radius != 6.0:
@@ -40,8 +40,9 @@ func _initialize() -> void:
 		roundtrip.free()
 	var saved := CPUParticles2D.new()
 	saved.emitting = false
-	saved.emission_ring_radius = 5.0
-	saved.emission_ring_inner_radius = 4.0
+	saved.emission_ring_inner_radius = 0.0
+	saved.emission_ring_radius = 0.5
+	saved.emission_ring_inner_radius = 0.4
 	saved.emission_shape = CPUParticles2D.EMISSION_SHAPE_RING
 	root.add_child(saved)
 	var packed := PackedScene.new()
@@ -49,7 +50,7 @@ func _initialize() -> void:
 		failures.append("2D ring scene packing failed")
 	else:
 		var loaded := packed.instantiate() as CPUParticles2D
-		if loaded == null or not is_equal_approx(loaded.emission_ring_radius, 5.0) or not is_equal_approx(loaded.emission_ring_inner_radius, 4.0):
+		if loaded == null or not is_equal_approx(loaded.emission_ring_radius, 0.5) or not is_equal_approx(loaded.emission_ring_inner_radius, 0.4):
 			failures.append("2D ring scene roundtrip lost valid radii")
 		if loaded != null:
 			loaded.free()

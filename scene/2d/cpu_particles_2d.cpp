@@ -543,13 +543,15 @@ void CPUParticles2D::set_emission_colors(const Vector<Color> &p_colors) {
 }
 
 void CPUParticles2D::set_emission_ring_inner_radius(real_t p_inner_radius) {
-	ERR_FAIL_COND_MSG(!Math::is_finite(p_inner_radius) || !Math::is_finite(p_inner_radius * p_inner_radius) || p_inner_radius < 0.0f || p_inner_radius > emission_ring_radius, "Particle emission inner ring radius must be finite and between zero and the outer radius, with a finite square.");
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_inner_radius) || !Math::is_finite(p_inner_radius * p_inner_radius) || p_inner_radius < 0.0f, "Particle emission inner ring radius and its square must be finite and non-negative.");
 	emission_ring_inner_radius = p_inner_radius;
+	emission_ring_radius = MAX(emission_ring_radius, p_inner_radius);
 }
 
 void CPUParticles2D::set_emission_ring_radius(real_t p_ring_radius) {
-	ERR_FAIL_COND_MSG(!Math::is_finite(p_ring_radius) || !Math::is_finite(p_ring_radius * p_ring_radius) || p_ring_radius < 0.0f || p_ring_radius < emission_ring_inner_radius, "Particle emission ring radius must be finite and at least the inner radius, with a finite square.");
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_ring_radius) || !Math::is_finite(p_ring_radius * p_ring_radius) || p_ring_radius < 0.0f, "Particle emission ring radius and its square must be finite and non-negative.");
 	emission_ring_radius = p_ring_radius;
+	emission_ring_inner_radius = MIN(emission_ring_inner_radius, p_ring_radius);
 }
 
 real_t CPUParticles2D::get_emission_sphere_radius() const {
