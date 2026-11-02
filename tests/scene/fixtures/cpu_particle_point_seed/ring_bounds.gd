@@ -38,6 +38,22 @@ func _initialize() -> void:
 		cpu.free()
 		gpu.free()
 		roundtrip.free()
+	var saved := CPUParticles2D.new()
+	saved.emitting = false
+	saved.emission_ring_radius = 5.0
+	saved.emission_ring_inner_radius = 4.0
+	saved.emission_shape = CPUParticles2D.EMISSION_SHAPE_RING
+	root.add_child(saved)
+	var packed := PackedScene.new()
+	if packed.pack(saved) != OK:
+		failures.append("2D ring scene packing failed")
+	else:
+		var loaded := packed.instantiate() as CPUParticles2D
+		if loaded == null or not is_equal_approx(loaded.emission_ring_radius, 5.0) or not is_equal_approx(loaded.emission_ring_inner_radius, 4.0):
+			failures.append("2D ring scene roundtrip lost valid radii")
+		if loaded != null:
+			loaded.free()
+	saved.free()
 	emitter_2d.free()
 	emitter_3d.free()
 	print("CPU_RING_BOUNDS=" + JSON.stringify({"failures": failures}))
