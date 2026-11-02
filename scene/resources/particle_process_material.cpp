@@ -1437,6 +1437,7 @@ Vector3 ParticleProcessMaterial::get_velocity_pivot() {
 }
 
 void ParticleProcessMaterial::set_param(Parameter p_param, const Vector2 &p_value) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_value.x) || !Math::is_finite(p_value.y), "Particle material parameter bounds must be finite.");
 	set_param_min(p_param, p_value.x);
 	set_param_max(p_param, p_value.y);
 }
@@ -1825,6 +1826,7 @@ void ParticleProcessMaterial::set_emission_color_texture(const Ref<Texture2D> &p
 }
 
 void ParticleProcessMaterial::set_emission_point_count(int p_count) {
+	ERR_FAIL_COND_MSG(p_count < 1 || p_count > 1000000, "Particle emission point count must be between one and 1000000.");
 	emission_point_count = p_count;
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->emission_texture_point_count, p_count);
 }
@@ -2073,6 +2075,7 @@ bool ParticleProcessMaterial::get_turbulence_enabled() const {
 }
 
 void ParticleProcessMaterial::set_turbulence_noise_strength(float p_turbulence_noise_strength) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_turbulence_noise_strength) || p_turbulence_noise_strength < 0.0 || p_turbulence_noise_strength > 20.0, "Particle turbulence noise strength must be finite and between zero and 20.");
 	turbulence_noise_strength = p_turbulence_noise_strength;
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->turbulence_noise_strength, p_turbulence_noise_strength);
 }
@@ -2096,6 +2099,7 @@ float ParticleProcessMaterial::get_turbulence_noise_scale() const {
 }
 
 void ParticleProcessMaterial::set_turbulence_noise_speed_random(float p_turbulence_noise_speed_random) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_turbulence_noise_speed_random) || p_turbulence_noise_speed_random < 0.0 || p_turbulence_noise_speed_random > 4.0, "Particle turbulence noise speed randomness must be finite and between zero and four.");
 	turbulence_noise_speed_random = p_turbulence_noise_speed_random;
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->turbulence_noise_speed_random, p_turbulence_noise_speed_random);
 }
@@ -2294,6 +2298,7 @@ ParticleProcessMaterial::SubEmitterMode ParticleProcessMaterial::get_sub_emitter
 }
 
 void ParticleProcessMaterial::set_sub_emitter_frequency(double p_frequency) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_frequency) || p_frequency < 0.01 || p_frequency > 100.0, "Particle sub-emitter frequency must be finite and between 0.01 and 100 Hz.");
 	sub_emitter_frequency = p_frequency;
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->sub_emitter_frequency, 1.0 / p_frequency); //pass delta instead of frequency, since its easier to compute
 }
@@ -2303,6 +2308,7 @@ double ParticleProcessMaterial::get_sub_emitter_frequency() const {
 }
 
 void ParticleProcessMaterial::set_sub_emitter_amount_at_end(int p_amount) {
+	ERR_FAIL_COND_MSG(p_amount < 1 || p_amount > 32, "Particle sub-emitter amount at end must be between 1 and 32.");
 	sub_emitter_amount_at_end = p_amount;
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->sub_emitter_amount_at_end, p_amount);
 }
@@ -2312,6 +2318,7 @@ int ParticleProcessMaterial::get_sub_emitter_amount_at_end() const {
 }
 
 void ParticleProcessMaterial::set_sub_emitter_amount_at_collision(int p_amount) {
+	ERR_FAIL_COND_MSG(p_amount < 1 || p_amount > 32, "Particle sub-emitter amount at collision must be between 1 and 32.");
 	sub_emitter_amount_at_collision = p_amount;
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->sub_emitter_amount_at_collision, p_amount);
 }
@@ -2321,6 +2328,7 @@ int ParticleProcessMaterial::get_sub_emitter_amount_at_collision() const {
 }
 
 void ParticleProcessMaterial::set_sub_emitter_amount_at_start(int p_amount) {
+	ERR_FAIL_COND_MSG(p_amount < 1 || p_amount > 32, "Particle sub-emitter amount at start must be between 1 and 32.");
 	sub_emitter_amount_at_start = p_amount;
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->sub_emitter_amount_at_start, p_amount);
 }
@@ -2581,7 +2589,7 @@ void ParticleProcessMaterial::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "emission_point_texture", PROPERTY_HINT_RESOURCE_TYPE, Texture2D::get_class_static()), "set_emission_point_texture", "get_emission_point_texture");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "emission_normal_texture", PROPERTY_HINT_RESOURCE_TYPE, Texture2D::get_class_static()), "set_emission_normal_texture", "get_emission_normal_texture");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "emission_color_texture", PROPERTY_HINT_RESOURCE_TYPE, Texture2D::get_class_static()), "set_emission_color_texture", "get_emission_color_texture");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "emission_point_count", PROPERTY_HINT_RANGE, "0,1000000,1"), "set_emission_point_count", "get_emission_point_count");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "emission_point_count", PROPERTY_HINT_RANGE, "1,1000000,1"), "set_emission_point_count", "get_emission_point_count");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "emission_ring_axis"), "set_emission_ring_axis", "get_emission_ring_axis");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "emission_ring_height", PROPERTY_HINT_RANGE, "0,1000,0.01,or_greater"), "set_emission_ring_height", "get_emission_ring_height");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "emission_ring_radius", PROPERTY_HINT_RANGE, "0,1000,0.01,or_greater"), "set_emission_ring_radius", "get_emission_ring_radius");
