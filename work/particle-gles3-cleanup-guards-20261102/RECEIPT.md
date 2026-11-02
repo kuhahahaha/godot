@@ -16,3 +16,13 @@ GLES3 `ParticlesStorage::particles_free` and `particles_collision_free` now reje
 - Focused source fixture was run before the edit and failed with both expected missing-guard diagnostics (rc 1), then after the edit passed 2/2 (rc 0).
 - Scoped `git diff --check` passed.
 - Full SCons/editor and live Compatibility invalid-RID runtime tests were not run in this turn; no GPU qualification claim is made.
+
+## Post-commit verification — 2026-11-02
+
+- Incremental macOS editor build: `scons tests=yes platform=macos target=editor -j4`, rc 0; elapsed 21.63s. The resulting `bin/godot.macos.editor.arm64` SHA-256 is `19f8c9f542fb64db713a03a31413c8df9622100f50d81969254195f9527760e4`.
+- Focused native particle neighbor selection on that binary: 74 cases, 409 assertions, 0 failures (1955 skipped), rc 0.
+- `python3 work/particle-gles3-cleanup-guards-20261102/run.py`: 2/2 checks passed, rc 0.
+- `python3 -m unittest work/particle-native-six-link-audit-20261102/test_capture_run.py`: 17/17 tests passed, rc 0.
+- `git diff --check -- drivers/gles3/storage/particles_storage.cpp`: rc 0.
+
+These checks validate the bounded GLES3 source guard and nearby particle contracts only. They do not establish a production caller, fixed SDK/DSO association, or the six-link GPU lifecycle.
