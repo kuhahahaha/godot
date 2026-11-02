@@ -1030,10 +1030,10 @@ void CPUParticles2D::_particles_process(double p_delta) {
 					}
 				} break;
 				case EMISSION_SHAPE_RING: {
-					real_t t = Math::TAU * Math::randf();
+					real_t t = Math::TAU * rng->randf();
 					real_t outer_sq = emission_ring_radius * emission_ring_radius;
 					real_t inner_sq = emission_ring_inner_radius * emission_ring_inner_radius;
-					real_t radius = Math::sqrt(Math::randf() * (outer_sq - inner_sq) + inner_sq);
+					real_t radius = Math::sqrt(rng->randf() * (outer_sq - inner_sq) + inner_sq);
 					p.transform[2] = Vector2(Math::cos(t), Math::sin(t)) * radius;
 				} break;
 				case EMISSION_SHAPE_MAX: { // Max value for validity check.
