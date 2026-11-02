@@ -1455,7 +1455,7 @@ void CPUParticles2D::convert_from_particles(Node *p_particles) {
 	set_fixed_fps(gpu_particles->get_fixed_fps());
 	set_fractional_delta(gpu_particles->get_fractional_delta());
 	set_speed_scale(gpu_particles->get_speed_scale());
-	set_draw_order(DrawOrder(gpu_particles->get_draw_order()));
+	set_draw_order(gpu_particles->get_draw_order() == GPUParticles2D::DRAW_ORDER_INDEX ? DRAW_ORDER_INDEX : DRAW_ORDER_LIFETIME);
 	set_texture(gpu_particles->get_texture());
 
 	Ref<Material> mat = gpu_particles->get_material();
