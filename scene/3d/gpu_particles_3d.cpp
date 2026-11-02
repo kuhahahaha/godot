@@ -717,6 +717,7 @@ void GPUParticles3D::convert_from_particles(Node *p_particles) {
 	set_seed(cpu_particles->get_seed());
 	set_emitting(cpu_particles->is_emitting());
 	set_amount(cpu_particles->get_amount());
+	set_amount_ratio(1.0f);
 	set_lifetime(cpu_particles->get_lifetime());
 	set_one_shot(cpu_particles->get_one_shot());
 	set_pre_process_time(cpu_particles->get_pre_process_time());
