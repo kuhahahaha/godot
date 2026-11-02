@@ -82,6 +82,9 @@ def main() -> int:
         if verification.returncode != 0:
             print(f"OWNER_PACKAGE_VERIFY_STOP scenario={scenario} rc={verification.returncode}")
             return verification.returncode
+        if any(not path.is_file() or _digest(path) != spec_hashes[path] for path in specs):
+            print(f"OWNER_PACKAGE_SPEC_DRIFT_STOP scenario={scenario} spec drift after capture")
+            return 1
     print("OWNER_PACKAGE_EVIDENCE_INTACT production_acceptance=NOT_PASSED")
     return 0
 
