@@ -1603,6 +1603,43 @@ void CPUParticles3D::convert_from_particles(Node *p_particles) {
 	set_particle_flag(PARTICLE_FLAG_DISABLE_Z, material->get_particle_flag(ParticleProcessMaterial::PARTICLE_FLAG_DISABLE_Z));
 
 	set_emission_shape(EmissionShape(material->get_emission_shape()));
+	if (emission_shape == EMISSION_SHAPE_POINTS || emission_shape == EMISSION_SHAPE_DIRECTED_POINTS) {
+		Ref<Texture2D> point_texture = material->get_emission_point_texture();
+		Ref<Image> point_image = point_texture.is_valid() ? point_texture->get_image() : Ref<Image>();
+		int point_count = material->get_emission_point_count();
+		if (point_image.is_valid() && point_image->get_format() == Image::FORMAT_RGBF && point_count <= point_image->get_width() * point_image->get_height()) {
+			Vector<Vector3> points;
+			points.resize(point_count);
+			for (int i = 0; i < point_count; i++) {
+				Color pixel = point_image->get_pixel(i % point_image->get_width(), i / point_image->get_width());
+				points.write[i] = Vector3(pixel.r, pixel.g, pixel.b);
+			}
+			set_emission_points(points);
+			if (emission_shape == EMISSION_SHAPE_DIRECTED_POINTS) {
+				Ref<Texture2D> normal_texture = material->get_emission_normal_texture();
+				Ref<Image> normal_image = normal_texture.is_valid() ? normal_texture->get_image() : Ref<Image>();
+				if (normal_image.is_valid() && normal_image->get_format() == Image::FORMAT_RGBF && point_count <= normal_image->get_width() * normal_image->get_height()) {
+					Vector<Vector3> normals;
+					normals.resize(point_count);
+					for (int i = 0; i < point_count; i++) {
+						Color pixel = normal_image->get_pixel(i % normal_image->get_width(), i / normal_image->get_width());
+						normals.write[i] = Vector3(pixel.r, pixel.g, pixel.b);
+					}
+					set_emission_normals(normals);
+				}
+			}
+			Ref<Texture2D> color_texture = material->get_emission_color_texture();
+			Ref<Image> color_image = color_texture.is_valid() ? color_texture->get_image() : Ref<Image>();
+			if (color_image.is_valid() && color_image->get_format() == Image::FORMAT_RGBA8 && point_count <= color_image->get_width() * color_image->get_height()) {
+				Vector<Color> colors;
+				colors.resize(point_count);
+				for (int i = 0; i < point_count; i++) {
+					colors.write[i] = color_image->get_pixel(i % color_image->get_width(), i / color_image->get_width());
+				}
+				set_emission_colors(colors);
+			}
+		}
+	}
 	set_emission_sphere_radius(material->get_emission_sphere_radius());
 	set_emission_box_extents(material->get_emission_box_extents());
 	set_emission_ring_height(material->get_emission_ring_height());
