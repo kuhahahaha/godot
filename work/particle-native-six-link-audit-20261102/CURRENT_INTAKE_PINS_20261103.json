@@ -38,6 +38,18 @@
     "Current file hashes are an intake snapshot, not a formal A SDK/DSO pairing claim.",
     "The original A request issuer must supply the product caller and capture specs; no synthetic request is authorized."
   ],
+  "recheck": {
+    "ange_head": "11d2fcef0b3b44dd6a7f3abb073f1bdca2a2fa95",
+    "debug_dso_candidate_status": "MISSING_AT_PINNED_PATH",
+    "native_test_dso_observation": {
+      "disposition": "historical native-test artifact only, not product DSO",
+      "path": "/Users/macbookair/.codex/worktrees/e25-e26-final-integration/ANGE/build/particle-identity.libange.macos.template_debug.arm64.native_test.dylib/verified.dylib",
+      "sha256": "28d32a45cae2f38b5bd2e09d565cf088c14e6d2714ba5e01b6b0840fcac21831"
+    },
+    "owner_capture_specs": "ABSENT",
+    "product_issuer": "ABSENT_IN_SRC",
+    "release_dso_candidate_status": "MISSING_AT_PINNED_PATH"
+  },
   "required_owner_inputs_missing": [
     "original_product_issuer",
     "retained_request",
