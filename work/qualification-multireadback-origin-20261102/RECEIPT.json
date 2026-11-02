@@ -1,0 +1,30 @@
+{
+  "utc": "2026-11-02T08:18:40.542807+00:00",
+  "source_commit": "8d83aa3483ee06ae3028796579b4d0b198a18b77",
+  "scope": "Internal same-ticket V2 multi-readback aggregate copy: after completion, altering a later range request serial or backing serial rejects copy with written=0 and the full 44-byte destination untouched; restoring identity copies exact 44 bytes. This does not prove ANGE product request or native GPU completion.",
+  "source_sha256": {
+    "tests/servers/rendering/test_qualification_ticket.cpp": "90b92ca303fa4d83e459f271d5e02952e0efa6e4bc6520efb87833e06c45a9d5",
+    "core/extension/gdextension_qualification_ticket.cpp": "0b2cbca92056711cd9535a27fb0e1dc777591b4c3fd8533e2d31b4012c71cd91",
+    "core/extension/gdextension_record_source.cpp": "4b5a28934fc0d669f3fdcdd96b14b51dd091ac7bf75451244d8b9ac3750963aa",
+    "bin/godot.macos.editor.arm64": "94ed1b64e823de647c112661e50bc6a97c58adffd47ab87087820142f933f15b"
+  },
+  "commands": {
+    "build": "scons -j4 platform=macos target=editor tests=yes precision=single",
+    "focus": "bin/godot.macos.editor.arm64 --headless --test --test-case='[Qualification][MultiReadback] every actual range and physical source must return before aggregate copy'",
+    "neighbor": "bin/godot.macos.editor.arm64 --headless --test --test-case='[Qualification][MultiReadback]*'"
+  },
+  "results": {
+    "build_rc": 0,
+    "focus_rc": 0,
+    "focus_cases": "1/1",
+    "focus_assertions": "37/37",
+    "neighbor_rc": 0,
+    "neighbor_cases": "8/8",
+    "neighbor_assertions": "317/317"
+  },
+  "log_sha256": {
+    "BUILD.log": "12c9319bd08ec4194dd79460b9413919ca175ae7d21d30b4530f095b4201ecb9",
+    "FOCUS.log": "7c85b55ac52112b1d925cb6d4976a0a37af17a612acd389d384f353caa1d6986",
+    "NEIGHBOR.log": "899eb88051e1109dd37e092503e7da0af843c86c341202e5399740d38aaeb42f"
+  }
+}

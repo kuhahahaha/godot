@@ -263,6 +263,28 @@ public:
 			CHECK(copy.native_error == OK);
 			CHECK(written == 44);
 			CHECK(memcmp(actual, expected, sizeof(actual)) == 0);
+			auto &later = ticket->readback_result(1);
+			const uint64_t original_request = later->request_serial;
+			later->request_serial = original_request + 1;
+			memset(actual, 0xa5, sizeof(actual));
+			uint8_t untouched[sizeof(actual)];
+			memset(untouched, 0xa5, sizeof(untouched));
+			written = 99;
+			CHECK(registry->qualification_copy({ 71, 11 }, { 71, 23 }, report.revision, actual, sizeof(actual), &written).native_error == ERR_BUSY);
+			CHECK(written == 0);
+			CHECK(memcmp(actual, untouched, sizeof(actual)) == 0);
+			later->request_serial = original_request;
+			const uint64_t original_backing = later->source_backing_serial;
+			later->source_backing_serial = original_backing + 1;
+			written = 99;
+			CHECK(registry->qualification_copy({ 71, 11 }, { 71, 23 }, report.revision, actual, sizeof(actual), &written).native_error == ERR_BUSY);
+			CHECK(written == 0);
+			CHECK(memcmp(actual, untouched, sizeof(actual)) == 0);
+			later->source_backing_serial = original_backing;
+			written = 99;
+			CHECK(registry->qualification_copy({ 71, 11 }, { 71, 23 }, report.revision, actual, sizeof(actual), &written).native_error == OK);
+			CHECK(written == 44);
+			CHECK(memcmp(actual, expected, sizeof(actual)) == 0);
 			written = 99;
 			CHECK(registry->qualification_copy({ 71, 11 }, { 71, 23 }, report.revision - 1, actual, sizeof(actual), &written).native_error == ERR_BUSY);
 			CHECK(written == 0);
@@ -429,6 +451,30 @@ public:
 		result = registry->qualification_copy(bridge, ticket, 1, nullptr, sizeof(destination), &written);
 		CHECK(result.native_error == ERR_INVALID_PARAMETER);
 		CHECK(written == 0);
+		memdelete(registry);
+	}
+	static void v2_prepare_output_overlap() {
+		using namespace GDExtensionDeviceExit;
+		auto *registry = memnew(Registry);
+		GDExtensionQualificationUploadPrepareV1 request = {};
+		request.abi = { 1, sizeof(GDExtensionDeviceExitAbi), 0 };
+		request.record_generation = 37;
+		GDExtensionQualificationUploadPlanV1 plan = {};
+		plan.abi = { 1, sizeof(GDExtensionDeviceExitAbi), 0 };
+		plan.role = GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_RAW_OUTPUT_V1;
+		GDExtensionQualificationTicketRefV1 ticket = {};
+		alignas(GDExtensionQualificationReportV2) uint8_t request_storage[sizeof(GDExtensionQualificationReportV2)] = {};
+		memcpy(request_storage, &request, sizeof(request));
+		auto *overlapping_request = reinterpret_cast<GDExtensionQualificationUploadPrepareV1 *>(request_storage);
+		auto *overlapping_report = reinterpret_cast<GDExtensionQualificationReportV2 *>(request_storage);
+		CHECK(registry->qualification_prepare_uploads_v2({}, overlapping_request, &plan, 1, &ticket, overlapping_report).native_error == ERR_INVALID_PARAMETER);
+		CHECK(memcmp(request_storage, &request, sizeof(request)) == 0);
+		alignas(GDExtensionQualificationReportV2) uint8_t plan_storage[sizeof(GDExtensionQualificationReportV2)] = {};
+		memcpy(plan_storage, &plan, sizeof(plan));
+		auto *overlapping_plan = reinterpret_cast<GDExtensionQualificationUploadPlanV1 *>(plan_storage);
+		overlapping_report = reinterpret_cast<GDExtensionQualificationReportV2 *>(plan_storage);
+		CHECK(registry->qualification_prepare_uploads_v2({}, &request, overlapping_plan, 1, &ticket, overlapping_report).native_error == ERR_INVALID_PARAMETER);
+		CHECK(memcmp(plan_storage, &plan, sizeof(plan)) == 0);
 		memdelete(registry);
 	}
 	static void snapshot_after_overlap() {
@@ -1053,6 +1099,7 @@ public:
 	}
 };
 TEST_CASE("[Qualification] overlapping snapshot outputs are rejected without writing destination") { TestQualificationTicketAccess::snapshot_output_overlap(); }
+TEST_CASE("[Qualification][MultiReadback] V2 prepare rejects report overlap without modifying request or plan") { TestQualificationTicketAccess::v2_prepare_output_overlap(); }
 TEST_CASE("[Qualification] same ticket snapshots remain readable after overlap refusal") { TestQualificationTicketAccess::snapshot_after_overlap(); }
 TEST_CASE("[Qualification] original async map failure retains raw code and physical obligations") {
 	TestQualificationTicketAccess::readback_map_error(0);
