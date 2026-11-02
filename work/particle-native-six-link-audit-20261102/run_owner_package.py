@@ -28,6 +28,7 @@ def preflight(package: Path) -> list[Path]:
     module_spec = importlib.util.spec_from_file_location("owner_capture_run", capture_path)
     capture_module = importlib.util.module_from_spec(module_spec)
     module_spec.loader.exec_module(capture_module)
+    output_paths: set[Path] = set()
     for scenario, path in zip(SCENARIOS, specs):
         spec = json.loads(path.read_text())
         if spec.get("scenario") != scenario:
@@ -35,6 +36,11 @@ def preflight(package: Path) -> list[Path]:
         capture_module._validate(spec)
         if not {"readback", "correlation"}.issubset(spec.get("outputs", {})):
             raise ValueError(f"{scenario} must declare readback and correlation outputs")
+        for output in spec["outputs"].values():
+            destination = Path(output).resolve()
+            if destination in output_paths:
+                raise ValueError(f"output path overlap across scenarios: {destination}")
+            output_paths.add(destination)
         for name, item in spec["inputs"].items():
             source = Path(item["path"])
             if not source.is_file() or _digest(source) != item["sha256"]:
