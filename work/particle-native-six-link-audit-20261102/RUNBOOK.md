@@ -12,6 +12,7 @@ A supplies three complete JSON capture specs named `success.json`, `failure.json
 - `declared_versions`: nonempty `godot_revision`, `ange_revision`, `editor_version`, `sdk_version`, `dso_version`, `renderer`, and `device`.
 - `inputs`: `editor`, `script`, `sdk`, `dso`, `request`, `oracle`, `issuer`, and `project`; each has an absolute regular-file `path` and owner-supplied `sha256`. `project` means the project.godot file. Pin additional loaded assets and configuration under additional input names. Dirty source manifests belong here as additional pinned inputs.
 - `command`: literal argv array beginning with the pinned editor or `{editor}`. `{script}` is the only other supported substitution. A supplies actual project, renderer and product caller arguments, plus the request/oracle/issuer paths accepted by that caller. The controller does not create a caller or add ABI calls.
+- `outputs`: name-to-absolute-path object for raw files the original caller writes during the run. Declare each exact readback byte file and a machine-readable same-ticket correlation/return report here. Every output path must be absent before launch. The capture controller copies each file under `artifacts/` and records its size and SHA-256 in `capture.json`; a missing output makes the process capture incomplete.
 
 Use an output directory that does not already exist. After substituting the actual owner package and destination paths, these are the capture commands:
 
@@ -37,7 +38,7 @@ All rows start PENDING. Populate observed values and raw artifact offsets after 
 | Drain/exit | Every typed child retirement/ack rc, bridge close/unload rc, process rc | All owned resources acknowledged and close/drain succeeds before normal exit |
 | Failure/cancel | Original failure trigger or cancel rc, rejected later admission, admitted-work settlement, release and drain evidence | Expected failure/cancel outcome and physical return both observed for that scenario |
 
-The owner caller must export raw exact readback bytes before releasing the ticket. Pin its output destination in the command/package, preserve the file, record length/SHA-256 and associate it with the original ticket/report revision. stdout containing a digest alone is insufficient. If the current caller cannot export this evidence, that gate remains PENDING; do not substitute bytes from a native probe.
+The owner caller must export raw exact readback bytes before releasing the ticket. Declare its output path under `outputs`, preserve the captured copy, and associate it with the original ticket/report revision in a separate declared correlation report. stdout containing a digest alone is insufficient. If the current caller cannot export this evidence, that gate remains PENDING; do not substitute bytes from a native probe.
 
 ## Return package
 

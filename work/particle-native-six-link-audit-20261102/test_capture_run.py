@@ -152,6 +152,40 @@ class CaptureRunTests(unittest.TestCase):
             self.assertEqual(result["logs"][name],
                              hashlib.sha256((self.out / name).read_bytes()).hexdigest())
 
+    def test_declared_raw_output_is_copied_with_exact_bytes(self):
+        raw = self.root / "readback.bin"
+        self.spec["outputs"] = {"readback": str(raw)}
+        self.spec["command"] = ["{editor}", "-c",
+                                "from pathlib import Path; Path('readback.bin').write_bytes(bytes([0,7,8,9,255]))"]
+        result = self.run_capture()
+        self.assertEqual(result["status"], "PROCESS_CAPTURED")
+        artifact = result["output_artifacts"]["readback"]
+        self.assertEqual((self.out / "artifacts/readback").read_bytes(), bytes([0,7,8,9,255]))
+        self.assertEqual(artifact["size"], 5)
+        self.assertEqual(artifact["sha256"], hashlib.sha256(bytes([0,7,8,9,255])).hexdigest())
+        self.assertEqual(result["production_acceptance"], "NOT_PASSED")
+
+    def test_missing_declared_output_is_recorded_as_failed_capture(self):
+        self.spec["outputs"] = {"readback": str(self.root / "absent.bin")}
+        result = self.run_capture()
+        self.assertEqual(result["status"], "OUTPUT_INCOMPLETE")
+        self.assertEqual(result["output_artifacts"]["readback"]["status"], "MISSING")
+
+    def test_preexisting_output_is_rejected_before_launch(self):
+        self.spec["outputs"] = {"readback": self.spec["inputs"]["request"]["path"]}
+        with self.assertRaisesRegex(ValueError, "output paths must not exist"):
+            self.run_capture()
+        self.assertFalse(self.out.exists())
+
+    def test_nonzero_process_still_preserves_raw_output(self):
+        self.spec["outputs"] = {"readback": str(self.root / "failure.bin")}
+        self.spec["command"] = ["{editor}", "-c",
+                                "from pathlib import Path; import sys; Path('failure.bin').write_bytes(b'partial'); sys.exit(7)"]
+        result = self.run_capture()
+        self.assertEqual(result["status"], "PROCESS_FAILED")
+        self.assertEqual(result["returncode"], 7)
+        self.assertEqual((self.out / "artifacts/readback").read_bytes(), b"partial")
+
     def test_timeout_cannot_wait_for_child_inheriting_logs(self):
         self.spec["timeout_seconds"] = 0.2
         self.spec["command"] = ["{editor}", "-c",

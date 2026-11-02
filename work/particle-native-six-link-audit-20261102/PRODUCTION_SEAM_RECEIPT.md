@@ -16,3 +16,7 @@ The harness intentionally does not call a qualification ABI, synthesize an issue
 - A integration source audit: HEAD `79232c6d43b15af748ed5680276ef5a455ae8585` (dirty), `host_qualification_service.cpp` SHA-256 `9c8c89dfbbba4d432f42fbe4ad5e05a210752c30f71f0dac5e975835901d539f`, `e09_native_recorder.cpp` SHA-256 `6d320df703441ccf3185ba14f732936657ab75da38ca83c1f97e970e3eb6b323`.
 
 The 17-test harness result is control evidence only. A real production issuer, fixed SDK/DSO pair, same-ticket completion/readback bytes, cancellation/failure settlement, release, typed-child retirement, bridge close and process drain are still required by `R02_CORRELATION_ACCEPTANCE_TABLE.md`.
+
+## 2026-11-02 raw-output capture extension
+
+`capture_run.py` now accepts explicit absent-before-run output paths for original-caller raw readback bytes and a correlation/return report. It copies produced files into `artifacts/`, records byte size and SHA-256, and reports missing or uncopiable files as `OUTPUT_INCOMPLETE`. `python3 -m unittest discover -s work/particle-native-six-link-audit-20261102 -p 'test_capture_run.py'` passed 21/21 controls. This adds capture plumbing only; no A production request, fixed DSO pair or same-request six-link run has been observed here.

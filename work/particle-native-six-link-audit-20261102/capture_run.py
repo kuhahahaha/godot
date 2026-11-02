@@ -10,6 +10,7 @@ import math
 import argparse
 import os
 import signal
+import shutil
 
 REQUIRED_INPUTS = {
     "editor", "script", "sdk", "dso", "request", "oracle", "issuer", "project",
@@ -67,6 +68,23 @@ def _validate(spec):
             raise ValueError("each input must contain path and sha256")
         if not Path(item["path"]).is_absolute():
             raise ValueError("input paths must be absolute")
+    outputs = spec.get("outputs", {})
+    if not isinstance(outputs, dict):
+        raise ValueError("outputs must be a name-to-absolute-path object")
+    resolved_outputs = set()
+    for name, path in outputs.items():
+        if not isinstance(name, str) or not name or "/" in name or name in {".", ".."}:
+            raise ValueError("output names must be simple nonempty names")
+        if not isinstance(path, str) or not Path(path).is_absolute():
+            raise ValueError("output paths must be absolute")
+        if Path(path).exists() or Path(path).is_symlink():
+            raise ValueError("output paths must not exist before launch")
+        resolved_path = Path(path).resolve()
+        if resolved_path in resolved_outputs:
+            raise ValueError("output paths must be unique")
+        resolved_outputs.add(resolved_path)
+        if resolved_path in {Path(item["path"]).resolve() for item in spec["inputs"].values()}:
+            raise ValueError("output path overlaps pinned input")
 
 
 def capture(spec, output):
@@ -112,6 +130,27 @@ def capture(spec, output):
         launch_failed = False
     (output / "stdout.bin").write_bytes(stdout)
     (output / "stderr.bin").write_bytes(stderr)
+    output_artifacts = {}
+    if spec.get("outputs"):
+        artifact_dir = output / "artifacts"
+        artifact_dir.mkdir()
+        for name, source_path in spec["outputs"].items():
+            source = Path(source_path)
+            if source.is_file() and not source.is_symlink():
+                destination = artifact_dir / name
+                try:
+                    shutil.copyfile(source, destination)
+                except OSError as error:
+                    output_artifacts[name] = {"source_path": source_path, "status": "COPY_FAILED", "error": str(error)}
+                else:
+                    output_artifacts[name] = {
+                        "source_path": source_path,
+                        "capture_path": str(destination),
+                        "size": destination.stat().st_size,
+                        "sha256": _digest(str(destination)),
+                    }
+            else:
+                output_artifacts[name] = {"source_path": source_path, "status": "MISSING"}
     after = _snapshot(spec["inputs"])
     drift = before != after
     if timed_out:
@@ -122,6 +161,9 @@ def capture(spec, output):
         cleanup = "REQUIRES_SAME_OWNER_EVIDENCE"
     elif launch_failed:
         status = "LAUNCH_FAILED"
+        cleanup = "REQUIRES_SAME_OWNER_EVIDENCE"
+    elif any(item.get("status") in {"MISSING", "COPY_FAILED"} for item in output_artifacts.values()):
+        status = "OUTPUT_INCOMPLETE"
         cleanup = "REQUIRES_SAME_OWNER_EVIDENCE"
     elif returncode != 0:
         status = "PROCESS_FAILED"
@@ -137,6 +179,7 @@ def capture(spec, output):
         "command": command,
         "logs": {name: hashlib.sha256((output / name).read_bytes()).hexdigest()
                   for name in ("stdout.bin", "stderr.bin")},
+        "output_artifacts": output_artifacts,
         "production_acceptance": "NOT_PASSED", "native_cleanup": cleanup,
     }
     (output / "capture.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
