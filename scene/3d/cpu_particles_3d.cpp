@@ -1611,13 +1611,16 @@ void CPUParticles3D::convert_from_particles(Node *p_particles) {
 			Vector<Vector3> points;
 			points.resize(point_count);
 			bool valid_points = true;
+			Vector3 shape_scale = material->get_emission_shape_scale();
+			Vector3 shape_offset = material->get_emission_shape_offset();
 			for (int i = 0; i < point_count; i++) {
 				Color pixel = point_image->get_pixel(i % point_image->get_width(), i / point_image->get_width());
-				if (!Math::is_finite(pixel.r) || !Math::is_finite(pixel.g) || !Math::is_finite(pixel.b)) {
+				Vector3 position(pixel.r * shape_scale.x + shape_offset.x, pixel.g * shape_scale.y + shape_offset.y, pixel.b * shape_scale.z + shape_offset.z);
+				if (!Math::is_finite(position.x) || !Math::is_finite(position.y) || !Math::is_finite(position.z)) {
 					valid_points = false;
 					break;
 				}
-				points.write[i] = Vector3(pixel.r, pixel.g, pixel.b);
+				points.write[i] = position;
 			}
 			if (valid_points) {
 				set_emission_points(points);

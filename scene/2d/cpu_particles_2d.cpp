@@ -1517,13 +1517,16 @@ void CPUParticles2D::convert_from_particles(Node *p_particles) {
 			Vector<Vector2> points;
 			points.resize(point_count);
 			bool valid_points = true;
+			Vector3 shape_scale = proc_mat->get_emission_shape_scale();
+			Vector3 shape_offset = proc_mat->get_emission_shape_offset();
 			for (int i = 0; i < point_count; i++) {
 				Color pixel = point_image->get_pixel(i % point_image->get_width(), i / point_image->get_width());
-				if (!Math::is_finite(pixel.r) || !Math::is_finite(pixel.g)) {
+				Vector2 position(pixel.r * shape_scale.x + shape_offset.x, pixel.g * shape_scale.y + shape_offset.y);
+				if (!Math::is_finite(position.x) || !Math::is_finite(position.y)) {
 					valid_points = false;
 					break;
 				}
-				points.write[i] = Vector2(pixel.r, pixel.g);
+				points.write[i] = position;
 			}
 			if (valid_points) {
 				set_emission_points(points);
