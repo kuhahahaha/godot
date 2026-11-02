@@ -560,6 +560,9 @@ void GPUParticles2D::convert_from_particles(Node *p_particles) {
 	set_emitting(cpu_particles->is_emitting());
 	set_amount(cpu_particles->get_amount());
 	set_amount_ratio(1.0f);
+	if ((cpu_particles->get_emission_shape() == CPUParticles2D::EMISSION_SHAPE_POINTS || cpu_particles->get_emission_shape() == CPUParticles2D::EMISSION_SHAPE_DIRECTED_POINTS) && cpu_particles->get_emission_points().is_empty()) {
+		set_amount_ratio(0.0f);
+	}
 	set_lifetime(cpu_particles->get_lifetime());
 	set_one_shot(cpu_particles->get_one_shot());
 	set_pre_process_time(cpu_particles->get_pre_process_time());
