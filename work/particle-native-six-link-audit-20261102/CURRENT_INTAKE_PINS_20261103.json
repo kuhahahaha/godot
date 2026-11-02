@@ -1,0 +1,46 @@
+{
+  "ange_head": "3c9f6760864bebc2c0cc38a735266c8eddd089e0",
+  "files": {
+    "ange_cpp_generated_sdk_header": {
+      "bytes": 227439,
+      "path": "/Users/macbookair/.codex/worktrees/e25-e26-final-integration/ANGE/godot-cpp/gen/include/gdextension_interface.h",
+      "sha256": "a58f45404e88f32f3a21e98e42ccd913f44cfe89179fba5ea163fa6be57248c5"
+    },
+    "ange_debug_dso_candidate": {
+      "bytes": 71884832,
+      "path": "/Users/macbookair/.codex/worktrees/e25-e26-final-integration/ANGE/bin/libange.macos.template_debug.arm64.dylib",
+      "sha256": "8467856f28969d892d0d1f40eefc0d2bcec6f0f228963e6a147e1045fb127f9e"
+    },
+    "ange_release_dso_candidate": {
+      "bytes": 75167424,
+      "path": "/Users/macbookair/.codex/worktrees/e25-e26-final-integration/ANGE/bin/libange.macos.template_release.arm64.dylib",
+      "sha256": "bb14c6ec4c4f88348335b9c7c1bff720c973a485fad5c521ece9361c66bbb772"
+    },
+    "godot_editor": {
+      "bytes": 148782680,
+      "path": "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.arm64",
+      "sha256": "5de85061df3e2befd0366aef7d16625c88e48d4f9beba28a86d4356690c5116c"
+    },
+    "godot_generated_sdk_header": {
+      "bytes": 233016,
+      "path": "/Users/macbookair/Documents/Work/godot_ANGE/core/extension/gdextension_interface.gen.h",
+      "sha256": "d5ed173d160be54958031efb9c4e18a7e4d4806dd0d1e40fd33002cfe6d637ce"
+    }
+  },
+  "godot_head": "d70549c174f1bec3d11bcfdf8ca2f2a366d00441",
+  "notes": [
+    "Current file hashes are an intake snapshot, not a formal A SDK/DSO pairing claim.",
+    "The original A request issuer must supply the product caller and capture specs; no synthetic request is authorized."
+  ],
+  "required_owner_inputs_missing": [
+    "original_product_issuer",
+    "retained_request",
+    "independent_oracle",
+    "success_spec",
+    "failure_spec",
+    "cancel_spec",
+    "same_ticket_raw_readback_and_correlation_outputs"
+  ],
+  "schema": 1,
+  "status": "CANDIDATE_INPUTS_NOT_PRODUCT_PAIR"
+}

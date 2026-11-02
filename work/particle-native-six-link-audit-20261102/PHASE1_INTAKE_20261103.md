@@ -1,0 +1,15 @@
+# Phase 1 owner package intake, 2026-11-03
+
+The existing native Metal V2 fixture is a backend control, not an original ANGE product request. `CURRENT_INTAKE_PINS_20261103.json` records the current Godot editor, generated interface header, A debug/release DSO candidates and A generated godot-cpp header by absolute path, byte length and SHA-256. Its status is `CANDIDATE_INPUTS_NOT_PRODUCT_PAIR`: the file snapshot does not certify that A built either DSO against this exact Godot SDK/editor. The editor's controlled-build manifest confirms its own artifact SHA, but does not pair A's DSO.
+
+A must provide an authentic issuer, retained request, independent byte oracle, and `success.json`, `failure.json`, `cancel.json` under one package directory, each satisfying `RUNBOOK.md`. Then run:
+
+```sh
+python3 /Users/macbookair/Documents/Work/godot_ANGE/work/particle-native-six-link-audit-20261102/run_owner_package.py --package /ABSOLUTE/OWNER_PACKAGE --evidence /ABSOLUTE/NEW_EVIDENCE_DIRECTORY
+```
+
+The runner checks that all three specs exist before launch, captures success first, verifies its raw files, and stops on any capture or integrity failure. It next runs failure and cancel in that order. Exit 0 only means all three capture bundles are intact; source-aware comparison of the same-ticket report, raw bytes, independent oracle, physical retirement, release and close/drain remains required. The runner never assigns production acceptance.
+
+Current A integration tree HEAD `3c9f6760864bebc2c0cc38a735266c8eddd089e0` has no production caller of `HostControlService::prepare_system` or `request_method_qualification` in `src`. The original U02/System projection producer and publication owner are also absent per A's `work/prepared-system-projection-gap-20261103/REPORT.md`. Thus the actual three-spec run is pending owner source/API handoff; fixture callers and historical dylibs cannot replace it.
+
+Validation of the runner: `python3 -m py_compile` exited 0; the capture controller's 24 unit tests passed; a missing-spec package was rejected before evidence-directory creation; a deliberately invalid success spec stopped at success rc 2 without creating failure evidence. The earlier standalone GPU ring readback investigation is kept separate from Phase 1.
