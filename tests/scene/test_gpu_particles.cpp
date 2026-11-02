@@ -4,11 +4,14 @@
 
 #include "tests/test_macros.h"
 
+#include <limits>
+
 TEST_FORCE_LINK(test_gpu_particles)
 
 #include "scene/2d/cpu_particles_2d.h"
 #include "scene/2d/gpu_particles_2d.h"
 #include "scene/resources/particle_process_material.h"
+#include "scene/resources/image_texture.h"
 #include "scene/resources/material.h"
 
 #ifndef _3D_DISABLED
@@ -258,6 +261,29 @@ TEST_CASE("[GPUParticles] 3D animation warning checks all draw-pass surfaces") {
 	mesh->surface_set_material(1, animated_material);
 	CHECK_FALSE(has_animation_warning());
 	memdelete(particles);
+}
+
+TEST_CASE("[GPUParticles] 2D collision size rejects texture scaling overflow") {
+	GPUParticles2D *particles = memnew(GPUParticles2D);
+	Ref<Image> image = Image::create_empty(4, 4, false, Image::FORMAT_RGBA8);
+	Ref<ImageTexture> texture = ImageTexture::create_from_image(image);
+	particles->set_texture(texture);
+	particles->set_collision_base_size(2.0f);
+	CHECK(particles->get_collision_base_size() == 2.0f);
+	ERR_PRINT_OFF;
+	particles->set_collision_base_size(std::numeric_limits<float>::max());
+	ERR_PRINT_ON;
+	CHECK(particles->get_collision_base_size() == 2.0f);
+	memdelete(particles);
+
+	GPUParticles2D *replacement_particles = memnew(GPUParticles2D);
+	replacement_particles->set_collision_base_size(std::numeric_limits<float>::max());
+	ERR_PRINT_OFF;
+	replacement_particles->set_texture(texture);
+	ERR_PRINT_ON;
+	CHECK(replacement_particles->get_texture().is_null());
+	CHECK(replacement_particles->get_collision_base_size() == std::numeric_limits<float>::max());
+	memdelete(replacement_particles);
 }
 
 TEST_CASE("[GPUParticles] shared draw-pass mesh keeps its changed connection") {

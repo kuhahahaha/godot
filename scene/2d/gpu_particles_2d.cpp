@@ -241,17 +241,25 @@ double GPUParticles2D::get_trail_lifetime() const {
 }
 
 void GPUParticles2D::_update_collision_size() {
-	real_t csize = collision_base_size;
+	float csize = collision_base_size;
 
 	if (texture.is_valid()) {
-		csize *= (texture->get_width() + texture->get_height()) / 4.0; //half size since its a radius
+		csize = (float)(collision_base_size * ((double)texture->get_width() + texture->get_height()) / 4.0); // Half size since it is a radius.
+	}
+	if (!Math::is_finite(csize) || csize < 0.0f) {
+		ERR_PRINT("Particle collision size became invalid after a texture change; using zero until it can be recomputed.");
+		csize = 0.0f;
 	}
 
 	RS::get_singleton()->particles_set_collision_base_size(particles, csize);
 }
 
 void GPUParticles2D::set_collision_base_size(real_t p_size) {
-	ERR_FAIL_COND_MSG(!Math::is_finite(p_size), "Particles collision base size must be finite.");
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_size) || p_size < 0.0, "Particles collision base size must be finite and non-negative.");
+	if (texture.is_valid()) {
+		const float scaled_size = (float)(p_size * ((double)texture->get_width() + texture->get_height()) / 4.0);
+		ERR_FAIL_COND_MSG(!Math::is_finite(scaled_size) || scaled_size < 0.0f, "Particles collision base size must remain finite after texture scaling.");
+	}
 	collision_base_size = p_size;
 	_update_collision_size();
 }
