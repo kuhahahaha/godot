@@ -598,7 +598,11 @@ void GPUParticles2D::convert_from_particles(Node *p_particles) {
 
 	proc_mat->set_particle_flag(ParticleProcessMaterial::PARTICLE_FLAG_ALIGN_Y_TO_VELOCITY, cpu_particles->get_particle_flag(CPUParticles2D::PARTICLE_FLAG_ALIGN_Y_TO_VELOCITY));
 
-	proc_mat->set_emission_shape(ParticleProcessMaterial::EmissionShape(cpu_particles->get_emission_shape()));
+	CPUParticles2D::EmissionShape emission_shape = cpu_particles->get_emission_shape();
+	if (emission_shape == CPUParticles2D::EMISSION_SHAPE_DIRECTED_POINTS && cpu_particles->get_emission_normals().size() != cpu_particles->get_emission_points().size()) {
+		emission_shape = CPUParticles2D::EMISSION_SHAPE_POINTS;
+	}
+	proc_mat->set_emission_shape(ParticleProcessMaterial::EmissionShape(emission_shape));
 	if (cpu_particles->get_emission_shape() == CPUParticles2D::EMISSION_SHAPE_POINTS || cpu_particles->get_emission_shape() == CPUParticles2D::EMISSION_SHAPE_DIRECTED_POINTS) {
 		Vector<Vector2> points = cpu_particles->get_emission_points();
 		if (!points.is_empty()) {
