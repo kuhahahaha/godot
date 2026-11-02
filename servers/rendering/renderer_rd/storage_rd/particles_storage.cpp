@@ -447,6 +447,7 @@ void ParticlesStorage::particles_set_use_local_coordinates(RID p_particles, bool
 void ParticlesStorage::particles_set_fixed_fps(RID p_particles, int p_fps) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(!_particles_fixed_fps_is_valid(p_fps), "Particle fixed FPS must be non-negative.");
 
 	particles->fixed_fps = p_fps;
 
@@ -1014,6 +1015,9 @@ bool ParticlesStorage::_particles_trail_lifetime_is_valid(double p_lifetime) {
 	return Math::is_finite(p_lifetime) && p_lifetime >= 0.01 - CMP_EPSILON;
 }
 
+bool ParticlesStorage::_particles_fixed_fps_is_valid(int p_fps) {
+	return p_fps >= 0 && p_fps <= 1000;
+}
 bool ParticlesStorage::_particles_process_time_is_valid(double p_time) {
 	return Math::is_finite(p_time);
 }

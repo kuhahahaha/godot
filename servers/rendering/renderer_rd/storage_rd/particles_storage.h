@@ -299,6 +299,7 @@ private:
 	static bool _particles_lifetime_is_valid(double p_lifetime);
 	static bool _particles_trail_lifetime_is_valid(double p_lifetime);
 	static bool _particles_process_time_is_valid(double p_time);
+	static bool _particles_fixed_fps_is_valid(int p_fps);
 	static bool _particles_speed_scale_is_valid(double p_scale);
 	static bool _particles_ratio_is_valid(double p_ratio);
 	static bool _particles_get_buffer_size(uint64_t p_count, uint64_t p_element_size, uint64_t p_header_size, uint32_t &r_size);

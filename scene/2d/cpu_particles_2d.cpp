@@ -292,7 +292,7 @@ Ref<Texture2D> CPUParticles2D::get_texture() const {
 }
 
 void CPUParticles2D::set_fixed_fps(int p_count) {
-	ERR_FAIL_COND_MSG(p_count < 0, "Particles fixed FPS must be non-negative.");
+	ERR_FAIL_COND_MSG(p_count < 0 || p_count > 1000, "Particles fixed FPS must be between zero and 1000.");
 	fixed_fps = p_count;
 }
 

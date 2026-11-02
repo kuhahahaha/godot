@@ -272,6 +272,7 @@ void ParticlesStorage::particles_set_use_local_coordinates(RID p_particles, bool
 void ParticlesStorage::particles_set_fixed_fps(RID p_particles, int p_fps) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(p_fps < 0 || p_fps > 1000, "Particle fixed FPS must be between zero and 1000.");
 
 	particles->fixed_fps = p_fps;
 
