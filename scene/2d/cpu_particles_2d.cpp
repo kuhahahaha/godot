@@ -1013,7 +1013,7 @@ void CPUParticles2D::_particles_process(double p_delta) {
 						continue;
 					}
 
-					int random_idx = Math::rand() % pc;
+					int random_idx = rng->randi_range(0, pc - 1);
 
 					p.transform[2] = emission_points.get(random_idx);
 

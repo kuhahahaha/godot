@@ -1,0 +1,7 @@
+# CPU point emission fixed-seed receipt, 2026-11-02
+
+Before this change, both `CPUParticles2D::_particles_process` and `CPUParticles3D::_particles_process` chose point indices with process-global `Math::rand() % pc`, although each particle's other random choices use the node's `rng` seeded from `p.seed`. The empty-array guard is preserved. The two point-index calls now use `rng->randi_range(0, pc - 1)` after that guard.
+
+The new real `SceneTree` fixture is `tests/scene/fixtures/cpu_particle_point_seed/run.gd`. It creates fixed-seed 2D and 3D point emitters, adds them to the tree, asks each to process, and checks that neither consumes the global RNG stream. Before the fix, the pinned prechange editor exited 1 and reported both dimensions in `CPU_POINT_SEED.failures` (`/tmp/cpu-point-seed-red.log`). A fresh `scons platform=macos target=editor tests=yes -j4` after the fix exited 0 (`/tmp/cpu-point-seed-green-build.log`), producing editor SHA-256 `8323790a45836011b054f53417f42fe09d099ee66bd23d8426c5eba8e1997e86`. The same fixture then exited 0 with `CPU_POINT_SEED={"failures":[]}` (`/tmp/cpu-point-seed-green.log`). Command: `./bin/godot.macos.editor.arm64 --headless --path tests/scene/fixtures/cpu_particle_point_seed --script run.gd`.
+
+This verifies the actual CPU particle runtime no longer consumes global RNG for point index selection. It does not claim pixel output equality, GPU behavior, or a product request. The Godot worktree contains unrelated concurrent edits; only the two point-index hunks and this fixture/receipt belong to this commit.
