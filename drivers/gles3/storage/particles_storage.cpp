@@ -1424,6 +1424,7 @@ GLuint ParticlesStorage::particles_collision_get_heightfield_framebuffer(RID p_p
 void ParticlesStorage::particles_collision_set_collision_type(RID p_particles_collision, RSE::ParticlesCollisionType p_type) {
 	ParticlesCollision *particles_collision = particles_collision_owner.get_or_null(p_particles_collision);
 	ERR_FAIL_NULL(particles_collision);
+	ERR_FAIL_INDEX(int(p_type), RSE::PARTICLES_COLLISION_TYPE_HEIGHTFIELD_COLLIDE + 1);
 
 	if (p_type == particles_collision->type) {
 		return;
@@ -1456,6 +1457,7 @@ uint32_t ParticlesStorage::particles_collision_get_cull_mask(RID p_particles_col
 void ParticlesStorage::particles_collision_set_sphere_radius(RID p_particles_collision, real_t p_radius) {
 	ParticlesCollision *particles_collision = particles_collision_owner.get_or_null(p_particles_collision);
 	ERR_FAIL_NULL(particles_collision);
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_radius) || p_radius < 0.0, "Particle collision sphere radius must be finite and non-negative.");
 
 	particles_collision->radius = p_radius;
 	particles_collision->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_AABB);
@@ -1464,6 +1466,7 @@ void ParticlesStorage::particles_collision_set_sphere_radius(RID p_particles_col
 void ParticlesStorage::particles_collision_set_box_extents(RID p_particles_collision, const Vector3 &p_extents) {
 	ParticlesCollision *particles_collision = particles_collision_owner.get_or_null(p_particles_collision);
 	ERR_FAIL_NULL(particles_collision);
+	ERR_FAIL_COND_MSG(!p_extents.is_finite() || p_extents.x < 0.0 || p_extents.y < 0.0 || p_extents.z < 0.0, "Particle collision box extents must be finite and non-negative.");
 
 	if (particles_collision->type == RSE::PARTICLES_COLLISION_TYPE_HEIGHTFIELD_COLLIDE &&
 			(particles_collision->extents.x != p_extents.x || particles_collision->extents.z != p_extents.z) &&
@@ -1481,6 +1484,7 @@ void ParticlesStorage::particles_collision_set_box_extents(RID p_particles_colli
 void ParticlesStorage::particles_collision_set_attractor_strength(RID p_particles_collision, real_t p_strength) {
 	ParticlesCollision *particles_collision = particles_collision_owner.get_or_null(p_particles_collision);
 	ERR_FAIL_NULL(particles_collision);
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_strength), "Particle attractor strength must be finite.");
 
 	particles_collision->attractor_strength = p_strength;
 }
@@ -1488,6 +1492,7 @@ void ParticlesStorage::particles_collision_set_attractor_strength(RID p_particle
 void ParticlesStorage::particles_collision_set_attractor_directionality(RID p_particles_collision, real_t p_directionality) {
 	ParticlesCollision *particles_collision = particles_collision_owner.get_or_null(p_particles_collision);
 	ERR_FAIL_NULL(particles_collision);
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_directionality) || p_directionality < 0.0 || p_directionality > 1.0, "Particle attractor directionality must be finite and between zero and one.");
 
 	particles_collision->attractor_directionality = p_directionality;
 }
@@ -1495,6 +1500,7 @@ void ParticlesStorage::particles_collision_set_attractor_directionality(RID p_pa
 void ParticlesStorage::particles_collision_set_attractor_attenuation(RID p_particles_collision, real_t p_curve) {
 	ParticlesCollision *particles_collision = particles_collision_owner.get_or_null(p_particles_collision);
 	ERR_FAIL_NULL(particles_collision);
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_curve) || p_curve < 0.0 || p_curve > 8.0, "Particle attractor attenuation must be finite and between zero and eight.");
 
 	particles_collision->attractor_attenuation = p_curve;
 }
@@ -1595,6 +1601,7 @@ void ParticlesStorage::particles_collision_instance_free(RID p_rid) {
 void ParticlesStorage::particles_collision_instance_set_transform(RID p_collision_instance, const Transform3D &p_transform) {
 	ParticlesCollisionInstance *pci = particles_collision_instance_owner.get_or_null(p_collision_instance);
 	ERR_FAIL_NULL(pci);
+	ERR_FAIL_COND_MSG(!p_transform.is_finite(), "Particle collision instance transform must contain only finite values.");
 	pci->transform = p_transform;
 }
 

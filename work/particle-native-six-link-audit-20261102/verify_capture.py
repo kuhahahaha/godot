@@ -32,6 +32,7 @@ def verify(root: Path) -> dict:
     declared = capture.get("spec", {}).get("outputs", {})
     recorded = capture.get("output_artifacts", {})
     checks["output_inventory"] = set(declared) == set(recorded)
+    checks["required_raw_outputs"] = {"readback", "correlation"}.issubset(declared)
     for name, item in recorded.items():
         path = root / "artifacts" / name
         checks[f"artifact:{name}"] = (

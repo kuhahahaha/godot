@@ -13,6 +13,7 @@ A supplies three complete JSON capture specs named `success.json`, `failure.json
 - `inputs`: `editor`, `script`, `sdk`, `dso`, `request`, `oracle`, `issuer`, and `project`; each has an absolute regular-file `path` and owner-supplied `sha256`. `project` means the project.godot file. Pin additional loaded assets and configuration under additional input names. Dirty source manifests belong here as additional pinned inputs.
 - `command`: literal argv array beginning with the pinned editor or `{editor}`. `{script}` is the only other supported substitution. A supplies actual project, renderer and product caller arguments, plus the request/oracle/issuer paths accepted by that caller. The controller does not create a caller or add ABI calls.
 - `outputs`: name-to-absolute-path object for raw files the original caller writes during the run. Declare each exact readback byte file and a machine-readable same-ticket correlation/return report here. Every output path must be absent before launch. The capture controller copies each file under `artifacts/` and records its size and SHA-256 in `capture.json`; a missing output makes the process capture incomplete.
+  Name the required entries `readback` and `correlation`. The post-capture verifier rejects a bundle without both names, even if the child process exited successfully.
 
 Use an output directory that does not already exist. After substituting the actual owner package and destination paths, these are the capture commands:
 

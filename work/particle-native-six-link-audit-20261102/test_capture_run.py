@@ -192,8 +192,9 @@ class CaptureRunTests(unittest.TestCase):
 
     def test_verifier_checks_captured_raw_output(self):
         self.spec["outputs"] = {"readback": str(self.root / "bytes.bin")}
+        self.spec["outputs"]["correlation"] = str(self.root / "correlation.json")
         self.spec["command"] = ["{editor}", "-c",
-                                "from pathlib import Path; Path('bytes.bin').write_bytes(bytes([0,1,255]))"]
+                                "from pathlib import Path; Path('bytes.bin').write_bytes(bytes([0,1,255])); Path('correlation.json').write_text('{}')"]
         self.run_capture()
         result = self.verifier.verify(self.out)
         self.assertEqual(result["status"], "EVIDENCE_INTACT")
@@ -202,13 +203,20 @@ class CaptureRunTests(unittest.TestCase):
 
     def test_verifier_rejects_mutated_captured_bytes(self):
         self.spec["outputs"] = {"readback": str(self.root / "bytes.bin")}
+        self.spec["outputs"]["correlation"] = str(self.root / "correlation.json")
         self.spec["command"] = ["{editor}", "-c",
-                                "from pathlib import Path; Path('bytes.bin').write_bytes(b'original')"]
+                                "from pathlib import Path; Path('bytes.bin').write_bytes(b'original'); Path('correlation.json').write_text('{}')"]
         self.run_capture()
         (self.out / "artifacts/readback").write_bytes(b"replaced")
         result = self.verifier.verify(self.out)
         self.assertEqual(result["status"], "EVIDENCE_INCOMPLETE")
         self.assertFalse(result["checks"]["artifact:readback"])
+
+    def test_verifier_rejects_missing_required_output_declarations(self):
+        self.run_capture()
+        result = self.verifier.verify(self.out)
+        self.assertEqual(result["status"], "EVIDENCE_INCOMPLETE")
+        self.assertFalse(result["checks"]["required_raw_outputs"])
 
     def test_timeout_cannot_wait_for_child_inheriting_logs(self):
         self.spec["timeout_seconds"] = 0.2

@@ -24,3 +24,5 @@ The 17-test harness result is control evidence only. A real production issuer, f
 ## 2026-11-02 captured-bundle verifier
 
 `verify_capture.py` recomputes stored input, log and raw-output inventories, lengths and hashes after a capture. The expanded control suite passed 23/23 tests, including an altered raw-output rejection. `EVIDENCE_INTACT` is a file-integrity result only; `production_acceptance` stays `NOT_PASSED` until the original A request and fixed pair run meet the six-link table.
+
+The verifier now requires declared `readback` and `correlation` raw outputs; an empty output inventory is `EVIDENCE_INCOMPLETE`. The control suite passed 24/24 tests. This is a capture completeness gate, not a judgment that the reported ticket belongs to the original production issuer.
