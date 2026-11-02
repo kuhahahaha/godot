@@ -1324,12 +1324,15 @@ GLuint ParticlesStorage::particles_collision_get_heightfield_framebuffer(RID p_p
 		//create
 		const int resolutions[RSE::PARTICLES_COLLISION_HEIGHTFIELD_RESOLUTION_MAX] = { 256, 512, 1024, 2048, 4096, 8192 };
 		Size2i size;
-		if (particles_collision->extents.x > particles_collision->extents.z) {
+		if (!Math::is_finite(particles_collision->extents.x) || !Math::is_finite(particles_collision->extents.z) || particles_collision->extents.x <= 0.0 || particles_collision->extents.z <= 0.0) {
 			size.x = resolutions[particles_collision->heightfield_resolution];
-			size.y = int32_t(particles_collision->extents.z / particles_collision->extents.x * size.x);
+			size.y = size.x;
+		} else if (particles_collision->extents.x > particles_collision->extents.z) {
+			size.x = resolutions[particles_collision->heightfield_resolution];
+			size.y = MAX(1, int32_t(particles_collision->extents.z / particles_collision->extents.x * size.x));
 		} else {
 			size.y = resolutions[particles_collision->heightfield_resolution];
-			size.x = int32_t(particles_collision->extents.x / particles_collision->extents.z * size.y);
+			size.x = MAX(1, int32_t(particles_collision->extents.x / particles_collision->extents.z * size.y));
 		}
 
 		glGenTextures(1, &particles_collision->heightfield_texture);
@@ -1407,6 +1410,15 @@ void ParticlesStorage::particles_collision_set_sphere_radius(RID p_particles_col
 void ParticlesStorage::particles_collision_set_box_extents(RID p_particles_collision, const Vector3 &p_extents) {
 	ParticlesCollision *particles_collision = particles_collision_owner.get_or_null(p_particles_collision);
 	ERR_FAIL_NULL(particles_collision);
+
+	if (particles_collision->type == RSE::PARTICLES_COLLISION_TYPE_HEIGHTFIELD_COLLIDE &&
+			(particles_collision->extents.x != p_extents.x || particles_collision->extents.z != p_extents.z) &&
+			particles_collision->heightfield_texture != 0) {
+		GLES3::Utilities::get_singleton()->texture_free_data(particles_collision->heightfield_texture);
+		particles_collision->heightfield_texture = 0;
+		glDeleteFramebuffers(1, &particles_collision->heightfield_fb);
+		particles_collision->heightfield_fb = 0;
+	}
 
 	particles_collision->extents = p_extents;
 	particles_collision->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_AABB);
