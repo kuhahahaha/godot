@@ -2562,6 +2562,20 @@ void ParticlesStorage::particles_collision_set_sphere_radius(RID p_particles_col
 void ParticlesStorage::particles_collision_set_box_extents(RID p_particles_collision, const Vector3 &p_extents) {
 	ParticlesCollision *particles_collision = particles_collision_owner.get_or_null(p_particles_collision);
 	ERR_FAIL_NULL(particles_collision);
+	ERR_FAIL_COND_MSG(!p_extents.is_finite() || p_extents.x < 0.0 || p_extents.y < 0.0 || p_extents.z < 0.0, "Particle collision box extents must be finite and non-negative.");
+
+	const Vector3 previous_extents = particles_collision->extents;
+	if (particles_collision->type == RSE::PARTICLES_COLLISION_TYPE_HEIGHTFIELD_COLLIDE &&
+			(previous_extents.x != p_extents.x || previous_extents.z != p_extents.z)) {
+		if (particles_collision->heightfield_fb.is_valid()) {
+			RD::get_singleton()->free_rid(particles_collision->heightfield_fb);
+			particles_collision->heightfield_fb = RID();
+		}
+		if (particles_collision->heightfield_texture.is_valid()) {
+			RD::get_singleton()->free_rid(particles_collision->heightfield_texture);
+			particles_collision->heightfield_texture = RID();
+		}
+	}
 
 	particles_collision->extents = p_extents;
 	particles_collision->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_AABB);

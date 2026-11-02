@@ -21,3 +21,7 @@ The next implementation task is selected from these lanes using actual current s
 ## RD particle cleanup guards — 2026-11-02
 
 Direct native particle/collision free rejects null owner lookup. Source RED/GREEN, editor build and neighbor tests passed; no live invalid-RID GPU test claimed. Receipt: `work/particle-rd-cleanup-guards-20261102/RECEIPT.md`.
+
+## RD heightfield extents cache invalidation — 2026-11-02
+
+RD particle heightfield collision storage now retires cached framebuffer and depth texture when X/Z extents change, preserving cache for Y-only/equal/non-heightfield updates and rejecting invalid extents before mutation. The source fixture is RED at baseline (6/11) and GREEN currently (11/11); editor build and `[Particles]*` / `[ParticlesProcessRetry]*` neighbors pass. This is bounded native RD storage coverage; live GPU allocation-failure qualification remains separate. Receipt: `work/particle-rd-heightfield-extents-20261102/RECEIPT.md`.

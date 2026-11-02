@@ -93,6 +93,10 @@
     {
       "path": "work/particle-rd-cleanup-guards-20261102/RECEIPT.md",
       "sha256": "3a26dee0e849c14675c421ef7ca54f47717885618bbb5306d0d593df5b3a2b5c"
+    },
+    {
+      "path": "work/particle-rd-heightfield-extents-20261102/RECEIPT.md",
+      "sha256": "9eadb7ce1d1488a4086c838d189d05f9391d272263ac0d06c5d2893a4d9300eb"
     }
   ],
   "codex_goal_status_at_capture": "blocked"
