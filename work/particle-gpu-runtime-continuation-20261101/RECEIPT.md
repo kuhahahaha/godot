@@ -34,3 +34,11 @@ A fresh `scons platform=macos target=editor tests=yes module_particles_runtime_t
 The subsequent real Metal runner invocation is recorded in `results/20261102-191118/RESULTS.json`. It returned rc 41 with the explicit `tests_only_module_missing` result. The source has `modules/particles_runtime_tests/config.py:is_enabled() == False` by default and an opt-in `servers/rendering/SCsub` integration. The resulting executable nevertheless reported the explicit missing-module capability result under the pinned runner; the build artifact and generated module-registration state require a follow-up inspection before any positive GPU claim. This is a valid capability-negative result and is not GPU evidence; the older 2026-11-01 green host remains pinned to its original source window and is not attributed to the current dirty tree.
 
 The candidate module wiring and fixture expansion remain staged as review material in `CANDIDATE.patch`; they were not applied to the mixed dirty production tree in this rerun.
+
+## Current explicit-module rebuild and Metal rerun — 2026-11-02
+
+The prior capability-negative run was traced to an executable that did not contain the opt-in module. A fresh controlled build with `scons platform=macos target=editor tests=yes module_particles_runtime_tests_enabled=yes -j8` completed with rc 0. The generated `modules/modules_enabled.gen.h` contained `MODULE_PARTICLES_RUNTIME_TESTS_ENABLED`, and the pinned executable contained `ParticlesRuntimeTestFixture` symbols.
+
+Pinned executable: `bin/godot-particles-runtime-enabled-20261102.arm64`, SHA-256 `703dec7a66e99bf85e336cd3fb368e12f2a146f5aff318d0afa6c211a1406f65`. The controlled-build metadata SHA-256 is `762cfe40a6094141a321b1aa29602b4c43c7c4e8ce27a23ada6bc2b474543510`.
+
+The real Metal/mobile runner completed with rc 0. Receipt: `results/20261102-193655/RESULTS.json`. All checks passed: exact injected diagnostics, six queued/completed readbacks, allocation/resource ownership observations, no script errors, no exit leaks, and `actual_metal_positive=true`. This remains tests-only evidence and does not claim production, ANGE owner, typed-close, Ready, or G1 acceptance.
