@@ -190,7 +190,20 @@ CPUParticles3D::DrawOrder CPUParticles3D::get_draw_order() const {
 }
 
 void CPUParticles3D::set_mesh(const Ref<Mesh> &p_mesh) {
+	if (mesh == p_mesh) {
+		return;
+	}
+
+	if (mesh.is_valid()) {
+		mesh->disconnect_changed(callable_mp((Node *)this, &Node::update_configuration_warnings));
+	}
+
 	mesh = p_mesh;
+
+	if (mesh.is_valid()) {
+		mesh->connect_changed(callable_mp((Node *)this, &Node::update_configuration_warnings), CONNECT_DEFERRED | CONNECT_REFERENCE_COUNTED);
+	}
+
 	if (mesh.is_valid()) {
 		RS::get_singleton()->multimesh_set_mesh(multimesh, mesh->get_rid());
 	} else {
