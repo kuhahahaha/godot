@@ -301,6 +301,7 @@ void ParticleProcessMaterial::_update_shader() {
 		}
 		case EMISSION_SHAPE_POINTS: {
 			code += "uniform sampler2D emission_texture_points : hint_default_black;\n";
+			code += "uniform bool emission_texture_points_valid = false;\n";
 			code += "uniform int emission_texture_point_count;\n";
 			if (emission_color_texture.is_valid()) {
 				code += "uniform sampler2D emission_texture_color : hint_default_white;\n";
@@ -924,6 +925,11 @@ void ParticleProcessMaterial::_update_shader() {
 	code += "	if (AMOUNT_RATIO <= 0.0 || rand_from_seed(alt_seed) > AMOUNT_RATIO) {\n";
 	code += "		ACTIVE = false;\n";
 	code += "	}\n\n";
+	if (emission_shape == EMISSION_SHAPE_POINTS || emission_shape == EMISSION_SHAPE_DIRECTED_POINTS) {
+		code += "	if (!emission_texture_points_valid) {\n";
+		code += "		ACTIVE = false;\n";
+		code += "	}\n\n";
+	}
 
 	code += "	if (RESTART_CUSTOM) {\n";
 	code += "		CUSTOM = vec4(0.0);\n";
@@ -1810,6 +1816,7 @@ void ParticleProcessMaterial::set_emission_point_texture(const Ref<Texture2D> &p
 	emission_point_texture = p_points;
 	Variant tex_rid = p_points.is_valid() ? Variant(p_points->get_rid()) : Variant();
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->emission_texture_points, tex_rid);
+	RenderingServer::get_singleton()->material_set_param(_get_material(), "emission_texture_points_valid", p_points.is_valid());
 }
 
 void ParticleProcessMaterial::set_emission_normal_texture(const Ref<Texture2D> &p_normals) {
