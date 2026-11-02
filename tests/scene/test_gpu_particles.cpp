@@ -9,6 +9,7 @@ TEST_FORCE_LINK(test_gpu_particles)
 #include "scene/2d/cpu_particles_2d.h"
 #include "scene/2d/gpu_particles_2d.h"
 #include "scene/resources/particle_process_material.h"
+#include "scene/resources/material.h"
 
 #ifndef _3D_DISABLED
 #include "scene/3d/cpu_particles_3d.h"
@@ -211,6 +212,52 @@ TEST_CASE("[Particles] 3D conversion maps draw order enums by meaning") {
 
 	memdelete(gpu_particles);
 	memdelete(cpu_particles);
+}
+
+TEST_CASE("[GPUParticles] 3D animation warning checks all draw-pass surfaces") {
+	GPUParticles3D *particles = memnew(GPUParticles3D);
+	Ref<ArrayMesh> mesh;
+	mesh.instantiate();
+	Array arrays;
+	arrays.resize(Mesh::ARRAY_MAX);
+	BoxMesh::create_mesh_array(arrays, Vector3(1.0, 1.0, 1.0));
+	mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, arrays);
+	mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, arrays);
+
+	Ref<StandardMaterial3D> animated_material;
+	animated_material.instantiate();
+	animated_material->set_billboard_mode(BaseMaterial3D::BILLBOARD_PARTICLES);
+	Ref<StandardMaterial3D> ordinary_material;
+	ordinary_material.instantiate();
+	mesh->surface_set_material(0, animated_material);
+	mesh->surface_set_material(1, ordinary_material);
+	particles->set_draw_pass_mesh(0, mesh);
+
+	Ref<ParticleProcessMaterial> process_material;
+	process_material.instantiate();
+	process_material->set_param_max(ParticleProcessMaterial::PARAM_ANIM_SPEED, 1.0f);
+	particles->set_process_material(process_material);
+
+	auto has_animation_warning = [&]() {
+		for (const String &warning : particles->get_configuration_warnings()) {
+			if (warning.contains("Particles animation requires")) {
+				return true;
+			}
+		}
+		return false;
+	};
+
+	CHECK_FALSE(has_animation_warning());
+	particles->set_material_override(ordinary_material);
+	CHECK(has_animation_warning());
+	particles->set_material_override(animated_material);
+	CHECK_FALSE(has_animation_warning());
+	particles->set_material_override(Ref<Material>());
+	mesh->surface_set_material(0, ordinary_material);
+	CHECK(has_animation_warning());
+	mesh->surface_set_material(1, animated_material);
+	CHECK_FALSE(has_animation_warning());
+	memdelete(particles);
 }
 
 TEST_CASE("[GPUParticles] shared draw-pass mesh keeps its changed connection") {
