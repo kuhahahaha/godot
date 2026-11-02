@@ -188,7 +188,7 @@ void GPUParticles3D::set_speed_scale(double p_scale) {
 }
 
 void GPUParticles3D::set_collision_base_size(real_t p_size) {
-	ERR_FAIL_COND_MSG(!Math::is_finite(p_size), "Particles collision base size must be finite.");
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_size) || p_size < 0.0, "Particles collision base size must be finite and non-negative.");
 	collision_base_size = p_size;
 	RS::get_singleton()->particles_set_collision_base_size(particles, p_size);
 }

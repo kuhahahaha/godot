@@ -302,6 +302,7 @@ private:
 	static bool _particles_fixed_fps_is_valid(int p_fps);
 	static bool _particles_speed_scale_is_valid(double p_scale);
 	static bool _particles_ratio_is_valid(double p_ratio);
+	static bool _particles_collision_base_size_is_valid(real_t p_size);
 	static bool _particles_get_buffer_size(uint64_t p_count, uint64_t p_element_size, uint64_t p_header_size, uint32_t &r_size);
 	bool _particles_process(Particles *p_particles, double p_delta);
 	static bool _particles_get_data_size(const Particles *p_particles, uint64_t &r_size);

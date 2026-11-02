@@ -318,6 +318,7 @@ void ParticlesStorage::particles_set_trail_bind_poses(RID p_particles, const Vec
 void ParticlesStorage::particles_set_collision_base_size(RID p_particles, real_t p_size) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_size) || p_size < 0.0, "Particle collision base size must be finite and non-negative.");
 
 	particles->collision_base_size = p_size;
 }

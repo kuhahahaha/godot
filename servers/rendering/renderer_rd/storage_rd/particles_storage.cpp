@@ -518,6 +518,7 @@ void ParticlesStorage::particles_set_trail_bind_poses(RID p_particles, const Vec
 void ParticlesStorage::particles_set_collision_base_size(RID p_particles, real_t p_size) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(!_particles_collision_base_size_is_valid(p_size), "Particle collision base size must be finite and non-negative.");
 
 	particles->collision_base_size = p_size;
 }
@@ -1030,6 +1031,10 @@ bool ParticlesStorage::_particles_speed_scale_is_valid(double p_scale) {
 
 bool ParticlesStorage::_particles_ratio_is_valid(double p_ratio) {
 	return Math::is_finite(p_ratio);
+}
+
+bool ParticlesStorage::_particles_collision_base_size_is_valid(real_t p_size) {
+	return Math::is_finite(p_size) && p_size >= 0.0;
 }
 
 bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta) {
