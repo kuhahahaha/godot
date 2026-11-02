@@ -295,7 +295,7 @@ Vector3 CPUParticles3D::get_direction() const {
 }
 
 void CPUParticles3D::set_spread(real_t p_spread) {
-	ERR_FAIL_COND_MSG(!Math::is_finite(p_spread), "Particles spread must be finite.");
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_spread) || p_spread < 0.0f || p_spread > 180.0f, "Particles spread must be finite and between zero and 180 degrees.");
 	spread = p_spread;
 }
 
@@ -304,7 +304,7 @@ real_t CPUParticles3D::get_spread() const {
 }
 
 void CPUParticles3D::set_flatness(real_t p_flatness) {
-	ERR_FAIL_COND_MSG(!Math::is_finite(p_flatness), "Particles flatness must be finite.");
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_flatness) || p_flatness < 0.0f || p_flatness > 1.0f, "Particles flatness must be finite and between zero and one.");
 	flatness = p_flatness;
 }
 
@@ -454,11 +454,13 @@ void CPUParticles3D::set_emission_shape(EmissionShape p_shape) {
 }
 
 void CPUParticles3D::set_emission_sphere_radius(real_t p_radius) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_radius) || p_radius < 0.0f, "Particle emission radius must be finite and non-negative.");
 	emission_sphere_radius = p_radius;
 	update_gizmos();
 }
 
 void CPUParticles3D::set_emission_box_extents(Vector3 p_extents) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_extents.x) || !Math::is_finite(p_extents.y) || !Math::is_finite(p_extents.z) || p_extents.x < 0.0f || p_extents.y < 0.0f || p_extents.z < 0.0f, "Particle emission extents must be finite and non-negative.");
 	emission_box_extents = p_extents;
 	update_gizmos();
 }
@@ -481,21 +483,25 @@ void CPUParticles3D::set_emission_ring_axis(Vector3 p_axis) {
 }
 
 void CPUParticles3D::set_emission_ring_height(real_t p_height) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_height) || p_height < 0.0f, "Particle emission ring height must be finite and non-negative.");
 	emission_ring_height = p_height;
 	update_gizmos();
 }
 
 void CPUParticles3D::set_emission_ring_radius(real_t p_radius) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_radius) || !Math::is_finite(p_radius * p_radius) || p_radius < 0.0f, "Particle emission ring radius and its square must be finite and non-negative.");
 	emission_ring_radius = p_radius;
 	update_gizmos();
 }
 
 void CPUParticles3D::set_emission_ring_inner_radius(real_t p_radius) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_radius) || !Math::is_finite(p_radius * p_radius) || p_radius < 0.0f, "Particle emission inner ring radius and its square must be finite and non-negative.");
 	emission_ring_inner_radius = p_radius;
 	update_gizmos();
 }
 
 void CPUParticles3D::set_emission_ring_cone_angle(real_t p_angle) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_angle) || p_angle < 0.0f || p_angle > 90.0f, "Particle emission ring cone angle must be finite and between zero and 90 degrees.");
 	emission_ring_cone_angle = p_angle;
 	update_gizmos();
 }

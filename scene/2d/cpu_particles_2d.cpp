@@ -354,7 +354,7 @@ Vector2 CPUParticles2D::get_direction() const {
 }
 
 void CPUParticles2D::set_spread(real_t p_spread) {
-	ERR_FAIL_COND_MSG(!Math::is_finite(p_spread), "Particles spread must be finite.");
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_spread) || p_spread < 0.0f || p_spread > 180.0f, "Particles spread must be finite and between zero and 180 degrees.");
 	spread = p_spread;
 }
 
@@ -504,6 +504,7 @@ void CPUParticles2D::set_emission_shape(EmissionShape p_shape) {
 }
 
 void CPUParticles2D::set_emission_sphere_radius(real_t p_radius) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_radius) || p_radius < 0.0f, "Particle emission radius must be finite and non-negative.");
 	if (p_radius == emission_sphere_radius) {
 		return;
 	}
@@ -516,6 +517,7 @@ void CPUParticles2D::set_emission_sphere_radius(real_t p_radius) {
 }
 
 void CPUParticles2D::set_emission_rect_extents(Vector2 p_extents) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_extents.x) || !Math::is_finite(p_extents.y) || p_extents.x < 0.0f || p_extents.y < 0.0f, "Particle emission extents must be finite and non-negative.");
 	if (p_extents == emission_rect_extents) {
 		return;
 	}
@@ -540,10 +542,12 @@ void CPUParticles2D::set_emission_colors(const Vector<Color> &p_colors) {
 }
 
 void CPUParticles2D::set_emission_ring_inner_radius(real_t p_inner_radius) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_inner_radius) || !Math::is_finite(p_inner_radius * p_inner_radius) || p_inner_radius < 0.0f, "Particle emission inner ring radius and its square must be finite and non-negative.");
 	emission_ring_inner_radius = p_inner_radius;
 }
 
 void CPUParticles2D::set_emission_ring_radius(real_t p_ring_radius) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_ring_radius) || !Math::is_finite(p_ring_radius * p_ring_radius) || p_ring_radius < 0.0f, "Particle emission ring radius and its square must be finite and non-negative.");
 	emission_ring_radius = p_ring_radius;
 }
 
