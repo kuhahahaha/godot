@@ -20,3 +20,7 @@ The 17-test harness result is control evidence only. A real production issuer, f
 ## 2026-11-02 raw-output capture extension
 
 `capture_run.py` now accepts explicit absent-before-run output paths for original-caller raw readback bytes and a correlation/return report. It copies produced files into `artifacts/`, records byte size and SHA-256, and reports missing or uncopiable files as `OUTPUT_INCOMPLETE`. `python3 -m unittest discover -s work/particle-native-six-link-audit-20261102 -p 'test_capture_run.py'` passed 21/21 controls. This adds capture plumbing only; no A production request, fixed DSO pair or same-request six-link run has been observed here.
+
+## 2026-11-02 captured-bundle verifier
+
+`verify_capture.py` recomputes stored input, log and raw-output inventories, lengths and hashes after a capture. The expanded control suite passed 23/23 tests, including an altered raw-output rejection. `EVIDENCE_INTACT` is a file-integrity result only; `production_acceptance` stays `NOT_PASSED` until the original A request and fixed pair run meet the six-link table.

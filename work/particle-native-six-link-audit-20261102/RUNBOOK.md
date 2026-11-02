@@ -22,6 +22,8 @@ python3 /Users/macbookair/Documents/Work/godot_ANGE/work/particle-native-six-lin
 python3 /Users/macbookair/Documents/Work/godot_ANGE/work/particle-native-six-link-audit-20261102/capture_run.py --spec /ABSOLUTE/OWNER_PACKAGE/cancel.json --output /ABSOLUTE/EVIDENCE/cancel
 ```
 
+After each run, verify the saved evidence bytes with `python3 /Users/macbookair/Documents/Work/godot_ANGE/work/particle-native-six-link-audit-20261102/verify_capture.py /ABSOLUTE/EVIDENCE/<scenario>`. This checks the captured input pins and before/after inventory, raw stdout/stderr hashes, and every declared output file's captured size and hash. `EVIDENCE_INTACT` only means the capture bundle has not lost those bytes; it does not decide any native or production gate.
+
 `/ABSOLUTE/...` are unresolved placeholders, not runnable production inputs. Run success first and inspect its provenance before the other scenarios. Keep each controller shell rc and capture.json. CLI rc 0 means process capture succeeded; rc 1 means a captured process/pin/timeout/drift failure; rc 2 means specification or controller I/O failure. The actual child rc is `capture.json.returncode`, which may be null when no child launched. None of these return codes establishes production acceptance.
 
 ## Evidence review table

@@ -10,6 +10,7 @@ import tempfile
 import unittest
 
 MODULE_PATH = Path(__file__).with_name("capture_run.py")
+VERIFY_PATH = Path(__file__).with_name("verify_capture.py")
 
 
 class CaptureRunTests(unittest.TestCase):
@@ -18,6 +19,9 @@ class CaptureRunTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("capture_run", MODULE_PATH)
         cls.runner = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cls.runner)
+        verifier_spec = importlib.util.spec_from_file_location("verify_capture", VERIFY_PATH)
+        cls.verifier = importlib.util.module_from_spec(verifier_spec)
+        verifier_spec.loader.exec_module(cls.verifier)
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -185,6 +189,26 @@ class CaptureRunTests(unittest.TestCase):
         self.assertEqual(result["status"], "PROCESS_FAILED")
         self.assertEqual(result["returncode"], 7)
         self.assertEqual((self.out / "artifacts/readback").read_bytes(), b"partial")
+
+    def test_verifier_checks_captured_raw_output(self):
+        self.spec["outputs"] = {"readback": str(self.root / "bytes.bin")}
+        self.spec["command"] = ["{editor}", "-c",
+                                "from pathlib import Path; Path('bytes.bin').write_bytes(bytes([0,1,255]))"]
+        self.run_capture()
+        result = self.verifier.verify(self.out)
+        self.assertEqual(result["status"], "EVIDENCE_INTACT")
+        self.assertEqual(result["production_acceptance"], "NOT_PASSED")
+        self.assertTrue(result["checks"]["artifact:readback"])
+
+    def test_verifier_rejects_mutated_captured_bytes(self):
+        self.spec["outputs"] = {"readback": str(self.root / "bytes.bin")}
+        self.spec["command"] = ["{editor}", "-c",
+                                "from pathlib import Path; Path('bytes.bin').write_bytes(b'original')"]
+        self.run_capture()
+        (self.out / "artifacts/readback").write_bytes(b"replaced")
+        result = self.verifier.verify(self.out)
+        self.assertEqual(result["status"], "EVIDENCE_INCOMPLETE")
+        self.assertFalse(result["checks"]["artifact:readback"])
 
     def test_timeout_cannot_wait_for_child_inheriting_logs(self):
         self.spec["timeout_seconds"] = 0.2
