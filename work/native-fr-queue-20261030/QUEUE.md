@@ -13,3 +13,7 @@ The user's requested long goal covers all authorized Godot-side work in the orig
 | Cross-platform, CI, sanitizer, release, packaging and performance | Maintain exact source/binary identities and run applicable checks when prerequisites are available; a local debug pass cannot substitute for release, sanitizer, platform or public CI. Public `d064b9bf` CI run `41002290766` passed static and Linux sanitizer smoke. The subsequent `d23e0b` run `41006634414` failed static checks before Linux; the `181fc83` CI also failed; public `1655f55` run `41007283432` was observed in progress. | Each result remains scoped to its actual run; no product/GPU qualification is inferred. |
 
 The next implementation task is selected from these lanes using actual current source and adopted contracts. New evidence is recorded under its own fixed identities; author verification is not labeled independent review.
+
+## CPU empty point emission — 2026-11-02
+
+2D/3D empty point arrays deactivate and skip new particles. Source RED/GREEN and native neighbor suites passed. Receipt: `work/particle-cpu-empty-points-20261102/RECEIPT.md`.

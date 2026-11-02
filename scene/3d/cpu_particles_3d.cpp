@@ -979,7 +979,8 @@ void CPUParticles3D::_particles_process(double p_delta) {
 				case EMISSION_SHAPE_DIRECTED_POINTS: {
 					int pc = emission_points.size();
 					if (pc == 0) {
-						break;
+						p.active = false;
+						continue;
 					}
 
 					int random_idx = Math::rand() % pc;

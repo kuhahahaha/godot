@@ -85,6 +85,10 @@
     {
       "path": "work/descriptor-return-165-red-20261030/RECEIPT.md",
       "sha256": "7abf8843e3fb8a564946d0ff4d43abe9364ab036539a224ef2f5c084915ab2e3"
+    },
+    {
+      "path": "work/particle-cpu-empty-points-20261102/RECEIPT.md",
+      "sha256": "c31ea402f3c0b298db24da62f58e132c024edf1e5f23c2f0b1837fa4aed5f328"
     }
   ],
   "codex_goal_status_at_capture": "blocked"
