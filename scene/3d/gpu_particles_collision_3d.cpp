@@ -76,6 +76,7 @@ void GPUParticlesCollisionSphere3D::_bind_methods() {
 }
 
 void GPUParticlesCollisionSphere3D::set_radius(real_t p_radius) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_radius) || p_radius < 0.0, "Particle collision sphere radius must be finite and non-negative.");
 	radius = p_radius;
 	RS::get_singleton()->particles_collision_set_sphere_radius(_get_collision(), radius);
 	update_gizmos();
@@ -124,6 +125,7 @@ bool GPUParticlesCollisionBox3D::_get(const StringName &p_name, Variant &r_prope
 #endif // DISABLE_DEPRECATED
 
 void GPUParticlesCollisionBox3D::set_size(const Vector3 &p_size) {
+	ERR_FAIL_COND_MSG(!p_size.is_finite() || p_size.x < 0.0 || p_size.y < 0.0 || p_size.z < 0.0, "Particle collision box size must be finite and non-negative.");
 	size = p_size;
 	RS::get_singleton()->particles_collision_set_box_extents(_get_collision(), size / 2);
 	update_gizmos();
@@ -589,6 +591,7 @@ bool GPUParticlesCollisionSDF3D::_get(const StringName &p_name, Variant &r_prope
 #endif // DISABLE_DEPRECATED
 
 void GPUParticlesCollisionSDF3D::set_thickness(float p_thickness) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_thickness) || p_thickness < 0.0 || p_thickness > 2.0, "Particle collision SDF thickness must be finite and between zero and two.");
 	thickness = p_thickness;
 }
 
@@ -597,6 +600,7 @@ float GPUParticlesCollisionSDF3D::get_thickness() const {
 }
 
 void GPUParticlesCollisionSDF3D::set_size(const Vector3 &p_size) {
+	ERR_FAIL_COND_MSG(!p_size.is_finite() || p_size.x < 0.0 || p_size.y < 0.0 || p_size.z < 0.0, "Particle collision SDF size must be finite and non-negative.");
 	size = p_size;
 	RS::get_singleton()->particles_collision_set_box_extents(_get_collision(), size / 2);
 	update_gizmos();
@@ -607,6 +611,7 @@ Vector3 GPUParticlesCollisionSDF3D::get_size() const {
 }
 
 void GPUParticlesCollisionSDF3D::set_resolution(Resolution p_resolution) {
+	ERR_FAIL_INDEX(p_resolution, RESOLUTION_MAX);
 	resolution = p_resolution;
 	update_gizmos();
 }
@@ -771,6 +776,7 @@ bool GPUParticlesCollisionHeightField3D::_get(const StringName &p_name, Variant 
 #endif // DISABLE_DEPRECATED
 
 void GPUParticlesCollisionHeightField3D::set_size(const Vector3 &p_size) {
+	ERR_FAIL_COND_MSG(!p_size.is_finite() || p_size.x < 0.0 || p_size.y < 0.0 || p_size.z < 0.0, "Particle collision heightfield size must be finite and non-negative.");
 	size = p_size;
 	RS::get_singleton()->particles_collision_set_box_extents(_get_collision(), size / 2);
 	update_gizmos();
@@ -782,6 +788,7 @@ Vector3 GPUParticlesCollisionHeightField3D::get_size() const {
 }
 
 void GPUParticlesCollisionHeightField3D::set_resolution(Resolution p_resolution) {
+	ERR_FAIL_INDEX(p_resolution, RESOLUTION_MAX);
 	resolution = p_resolution;
 	RS::get_singleton()->particles_collision_set_height_field_resolution(_get_collision(), RSE::ParticlesCollisionHeightfieldResolution(resolution));
 	update_gizmos();
@@ -793,6 +800,7 @@ GPUParticlesCollisionHeightField3D::Resolution GPUParticlesCollisionHeightField3
 }
 
 void GPUParticlesCollisionHeightField3D::set_update_mode(UpdateMode p_update_mode) {
+	ERR_FAIL_COND_MSG(p_update_mode != UPDATE_MODE_WHEN_MOVED && p_update_mode != UPDATE_MODE_ALWAYS, "Invalid particle collision heightfield update mode.");
 	update_mode = p_update_mode;
 	set_process_internal(follow_camera_mode || update_mode == UPDATE_MODE_ALWAYS);
 }
@@ -861,6 +869,7 @@ uint32_t GPUParticlesAttractor3D::get_cull_mask() const {
 }
 
 void GPUParticlesAttractor3D::set_strength(real_t p_strength) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_strength), "Particle attractor strength must be finite.");
 	strength = p_strength;
 	RS::get_singleton()->particles_collision_set_attractor_strength(collision, p_strength);
 }
@@ -870,6 +879,7 @@ real_t GPUParticlesAttractor3D::get_strength() const {
 }
 
 void GPUParticlesAttractor3D::set_attenuation(real_t p_attenuation) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_attenuation) || p_attenuation < 0.0 || p_attenuation > 8.0, "Particle attractor attenuation must be finite and between zero and eight.");
 	attenuation = p_attenuation;
 	RS::get_singleton()->particles_collision_set_attractor_attenuation(collision, p_attenuation);
 }
@@ -879,6 +889,7 @@ real_t GPUParticlesAttractor3D::get_attenuation() const {
 }
 
 void GPUParticlesAttractor3D::set_directionality(real_t p_directionality) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_directionality) || p_directionality < 0.0 || p_directionality > 1.0, "Particle attractor directionality must be finite and between zero and one.");
 	directionality = p_directionality;
 	RS::get_singleton()->particles_collision_set_attractor_directionality(collision, p_directionality);
 	update_gizmos();
@@ -927,6 +938,7 @@ void GPUParticlesAttractorSphere3D::_bind_methods() {
 }
 
 void GPUParticlesAttractorSphere3D::set_radius(real_t p_radius) {
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_radius) || p_radius < 0.0, "Particle attractor sphere radius must be finite and non-negative.");
 	radius = p_radius;
 	RS::get_singleton()->particles_collision_set_sphere_radius(_get_collision(), radius);
 	update_gizmos();
@@ -975,6 +987,7 @@ bool GPUParticlesAttractorBox3D::_get(const StringName &p_name, Variant &r_prope
 #endif // DISABLE_DEPRECATED
 
 void GPUParticlesAttractorBox3D::set_size(const Vector3 &p_size) {
+	ERR_FAIL_COND_MSG(!p_size.is_finite() || p_size.x < 0.0 || p_size.y < 0.0 || p_size.z < 0.0, "Particle attractor box size must be finite and non-negative.");
 	size = p_size;
 	RS::get_singleton()->particles_collision_set_box_extents(_get_collision(), size / 2);
 	update_gizmos();
@@ -1027,6 +1040,7 @@ bool GPUParticlesAttractorVectorField3D::_get(const StringName &p_name, Variant 
 #endif // DISABLE_DEPRECATED
 
 void GPUParticlesAttractorVectorField3D::set_size(const Vector3 &p_size) {
+	ERR_FAIL_COND_MSG(!p_size.is_finite() || p_size.x < 0.0 || p_size.y < 0.0 || p_size.z < 0.0, "Particle attractor vector field size must be finite and non-negative.");
 	size = p_size;
 	RS::get_singleton()->particles_collision_set_box_extents(_get_collision(), size / 2);
 	update_gizmos();
