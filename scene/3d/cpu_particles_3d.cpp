@@ -1579,8 +1579,11 @@ void CPUParticles3D::convert_from_particles(Node *p_particles) {
 	set_emission_ring_cone_angle(material->get_emission_ring_cone_angle());
 
 	Ref<CurveXYZTexture> scale3D = material->get_param_texture(ParticleProcessMaterial::PARAM_SCALE);
+	split_scale = scale3D.is_valid();
+	scale_curve_x.unref();
+	scale_curve_y.unref();
+	scale_curve_z.unref();
 	if (scale3D.is_valid()) {
-		split_scale = true;
 		scale_curve_x = scale3D->get_curve_x();
 		scale_curve_y = scale3D->get_curve_y();
 		scale_curve_z = scale3D->get_curve_z();

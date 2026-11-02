@@ -1489,8 +1489,10 @@ void CPUParticles2D::convert_from_particles(Node *p_particles) {
 	set_emission_ring_inner_radius(proc_mat->get_emission_ring_inner_radius());
 
 	Ref<CurveXYZTexture> scale3D = proc_mat->get_param_texture(ParticleProcessMaterial::PARAM_SCALE);
+	split_scale = scale3D.is_valid();
+	scale_curve_x.unref();
+	scale_curve_y.unref();
 	if (scale3D.is_valid()) {
-		split_scale = true;
 		scale_curve_x = scale3D->get_curve_x();
 		scale_curve_y = scale3D->get_curve_y();
 	}
