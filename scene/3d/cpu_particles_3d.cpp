@@ -1549,7 +1549,40 @@ void CPUParticles3D::convert_from_particles(Node *p_particles) {
 	set_mesh(gpu_particles->get_draw_pass_mesh(0));
 
 	Ref<ParticleProcessMaterial> material = gpu_particles->get_process_material();
+	set_emission_points(Vector<Vector3>());
+	set_emission_normals(Vector<Vector3>());
+	set_emission_colors(Vector<Color>());
 	if (material.is_null()) {
+		set_direction(Vector3(1, 0, 0));
+		set_spread(45.0);
+		set_flatness(0.0);
+		set_color(Color(1, 1, 1, 1));
+		set_color_ramp(Ref<Gradient>());
+		set_color_initial_ramp(Ref<Gradient>());
+		for (int i = 0; i < PARTICLE_FLAG_MAX; i++) {
+			set_particle_flag(ParticleFlags(i), false);
+		}
+		set_emission_shape(EMISSION_SHAPE_POINT);
+		set_emission_sphere_radius(1.0);
+		set_emission_box_extents(Vector3(1, 1, 1));
+		set_emission_ring_axis(Vector3(0, 0, 1));
+		set_emission_ring_height(1.0);
+		set_emission_ring_radius(1.0);
+		set_emission_ring_inner_radius(0.0);
+		set_emission_ring_cone_angle(90.0);
+		set_split_scale(false);
+		set_scale_curve_x(Ref<Curve>());
+		set_scale_curve_y(Ref<Curve>());
+		set_scale_curve_z(Ref<Curve>());
+		set_gravity(Vector3(0, -9.8, 0));
+		set_lifetime_randomness(0.0);
+		for (int i = 0; i < PARAM_MAX; i++) {
+			Parameter param = Parameter(i);
+			real_t value = param == PARAM_SCALE ? 1.0 : 0.0;
+			set_param_min(param, value);
+			set_param_max(param, value);
+			set_param_curve(param, Ref<Curve>());
+		}
 		return;
 	}
 

@@ -1462,7 +1462,35 @@ void CPUParticles2D::convert_from_particles(Node *p_particles) {
 	set_material(mat);
 
 	Ref<ParticleProcessMaterial> proc_mat = gpu_particles->get_process_material();
+	set_emission_points(Vector<Vector2>());
+	set_emission_normals(Vector<Vector2>());
+	set_emission_colors(Vector<Color>());
 	if (proc_mat.is_null()) {
+		set_direction(Vector2(1, 0));
+		set_spread(45.0);
+		set_color(Color(1, 1, 1, 1));
+		set_color_ramp(Ref<Gradient>());
+		set_color_initial_ramp(Ref<Gradient>());
+		for (int i = 0; i < PARTICLE_FLAG_MAX; i++) {
+			set_particle_flag(ParticleFlags(i), false);
+		}
+		set_emission_shape(EMISSION_SHAPE_POINT);
+		set_emission_sphere_radius(1.0);
+		set_emission_rect_extents(Vector2(1, 1));
+		set_emission_ring_radius(1.0);
+		set_emission_ring_inner_radius(0.8);
+		set_split_scale(false);
+		set_scale_curve_x(Ref<Curve>());
+		set_scale_curve_y(Ref<Curve>());
+		set_gravity(Vector2(0, 980));
+		set_lifetime_randomness(0.0);
+		for (int i = 0; i < PARAM_MAX; i++) {
+			Parameter param = Parameter(i);
+			real_t value = param == PARAM_SCALE ? 1.0 : 0.0;
+			set_param_min(param, value);
+			set_param_max(param, value);
+			set_param_curve(param, Ref<Curve>());
+		}
 		return;
 	}
 
