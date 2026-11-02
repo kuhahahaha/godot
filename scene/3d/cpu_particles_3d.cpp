@@ -1560,14 +1560,10 @@ void CPUParticles3D::convert_from_particles(Node *p_particles) {
 	set_color(material->get_color());
 
 	Ref<GradientTexture1D> gt = material->get_color_ramp();
-	if (gt.is_valid()) {
-		set_color_ramp(gt->get_gradient());
-	}
+	set_color_ramp(gt.is_valid() ? gt->get_gradient() : Ref<Gradient>());
 
 	Ref<GradientTexture1D> gti = material->get_color_initial_ramp();
-	if (gti.is_valid()) {
-		set_color_initial_ramp(gti->get_gradient());
-	}
+	set_color_initial_ramp(gti.is_valid() ? gti->get_gradient() : Ref<Gradient>());
 
 	set_particle_flag(PARTICLE_FLAG_ALIGN_Y_TO_VELOCITY, material->get_particle_flag(ParticleProcessMaterial::PARTICLE_FLAG_ALIGN_Y_TO_VELOCITY));
 	set_particle_flag(PARTICLE_FLAG_ROTATE_Y, material->get_particle_flag(ParticleProcessMaterial::PARTICLE_FLAG_ROTATE_Y));
@@ -1597,8 +1593,7 @@ void CPUParticles3D::convert_from_particles(Node *p_particles) {
 	set_param_min(m_param, material->get_param_min(ParticleProcessMaterial::m_param)); \
 	{ \
 		Ref<CurveTexture> ctex = material->get_param_texture(ParticleProcessMaterial::m_param); \
-		if (ctex.is_valid()) \
-			set_param_curve(m_param, ctex->get_curve()); \
+		set_param_curve(m_param, ctex.is_valid() ? ctex->get_curve() : Ref<Curve>()); \
 	} \
 	set_param_max(m_param, material->get_param_max(ParticleProcessMaterial::m_param));
 
