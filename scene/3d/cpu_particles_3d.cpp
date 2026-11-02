@@ -1627,11 +1627,18 @@ void CPUParticles3D::convert_from_particles(Node *p_particles) {
 					if (normal_image.is_valid() && normal_image->get_format() == Image::FORMAT_RGBF && point_count <= normal_image->get_width() * normal_image->get_height()) {
 						Vector<Vector3> normals;
 						normals.resize(point_count);
+						bool valid_normals = true;
 						for (int i = 0; i < point_count; i++) {
 							Color pixel = normal_image->get_pixel(i % normal_image->get_width(), i / normal_image->get_width());
+							if (!Math::is_finite(pixel.r) || !Math::is_finite(pixel.g) || !Math::is_finite(pixel.b)) {
+								valid_normals = false;
+								break;
+							}
 							normals.write[i] = Vector3(pixel.r, pixel.g, pixel.b);
 						}
-						set_emission_normals(normals);
+						if (valid_normals) {
+							set_emission_normals(normals);
+						}
 					}
 				}
 				Ref<Texture2D> color_texture = material->get_emission_color_texture();
