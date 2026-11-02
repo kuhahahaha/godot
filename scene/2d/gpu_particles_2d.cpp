@@ -552,6 +552,8 @@ void GPUParticles2D::convert_from_particles(Node *p_particles) {
 	CPUParticles2D *cpu_particles = Object::cast_to<CPUParticles2D>(p_particles);
 	ERR_FAIL_NULL_MSG(cpu_particles, "Only CPUParticles2D nodes can be converted to GPUParticles2D.");
 
+	set_use_fixed_seed(cpu_particles->get_use_fixed_seed());
+	set_seed(cpu_particles->get_seed());
 	set_emitting(cpu_particles->is_emitting());
 	set_amount(cpu_particles->get_amount());
 	set_lifetime(cpu_particles->get_lifetime());
