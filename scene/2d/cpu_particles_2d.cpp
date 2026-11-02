@@ -97,7 +97,7 @@ void CPUParticles2D::set_one_shot(bool p_one_shot) {
 }
 
 void CPUParticles2D::set_pre_process_time(double p_time) {
-	ERR_FAIL_COND_MSG(!Math::is_finite(p_time) || !Math::is_finite((float)p_time), "Particles pre-process time must be finite and representable.");
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_time) || !Math::is_finite((float)p_time) || p_time < 0.0, "Particles pre-process time must be finite and non-negative.");
 	pre_process_time = p_time;
 }
 
@@ -647,7 +647,7 @@ uint32_t CPUParticles2D::get_seed() const {
 }
 
 void CPUParticles2D::request_particles_process(real_t p_request_process_time, real_t p_request_process_time_residual) {
-	ERR_FAIL_COND_MSG(!Math::is_finite(p_request_process_time) || !Math::is_finite(p_request_process_time_residual), "Particle process times must be finite.");
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_request_process_time) || !Math::is_finite(p_request_process_time_residual) || p_request_process_time < 0.0 || p_request_process_time_residual < 0.0, "Particle process times must be finite and non-negative.");
 	_request_process_time = p_request_process_time;
 	_request_process_time_residual = p_request_process_time_residual;
 	_update_internal();

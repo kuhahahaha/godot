@@ -397,14 +397,14 @@ void ParticlesStorage::particles_set_one_shot(RID p_particles, bool p_one_shot) 
 void ParticlesStorage::particles_set_pre_process_time(RID p_particles, double p_time) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
-	ERR_FAIL_COND_MSG(!_particles_process_time_is_valid(p_time), "Particle pre-process time must be finite.");
+	ERR_FAIL_COND_MSG(!_particles_process_time_is_valid(p_time), "Particle pre-process time must be finite and non-negative.");
 	particles->pre_process_time = p_time;
 }
 
 void ParticlesStorage::particles_request_process_time(RID p_particles, real_t p_request_process_time, real_t p_request_process_time_residual) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
-	ERR_FAIL_COND_MSG(!_particles_process_time_is_valid(p_request_process_time) || !_particles_process_time_is_valid(p_request_process_time_residual), "Particle process times must be finite.");
+	ERR_FAIL_COND_MSG(!_particles_process_time_is_valid(p_request_process_time) || !_particles_process_time_is_valid(p_request_process_time_residual), "Particle process times must be finite and non-negative.");
 	particles->request_process_time = p_request_process_time;
 	particles->request_process_time_residual = p_request_process_time_residual;
 }
@@ -1019,7 +1019,9 @@ bool ParticlesStorage::_particles_fixed_fps_is_valid(int p_fps) {
 	return p_fps >= 0 && p_fps <= 1000;
 }
 bool ParticlesStorage::_particles_process_time_is_valid(double p_time) {
-	return Math::is_finite(p_time);
+	// The remaining pre-process accumulator is real_t/float. Reject a finite
+	// double that would become infinity before the processing loop consumes it.
+	return Math::is_finite(p_time) && Math::is_finite((float)p_time) && p_time >= 0.0;
 }
 
 bool ParticlesStorage::_particles_speed_scale_is_valid(double p_scale) {

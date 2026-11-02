@@ -128,7 +128,7 @@ uint32_t GPUParticles3D::get_seed() const {
 }
 
 void GPUParticles3D::set_pre_process_time(double p_time) {
-	ERR_FAIL_COND_MSG(!Math::is_finite(p_time), "Particles pre-process time must be finite.");
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_time) || !Math::is_finite((float)p_time) || p_time < 0.0, "Particles pre-process time must be finite and non-negative.");
 	pre_process_time = p_time;
 	RS::get_singleton()->particles_set_pre_process_time(particles, pre_process_time);
 }
@@ -499,7 +499,7 @@ void GPUParticles3D::_validate_property(PropertyInfo &p_property) const {
 }
 
 void GPUParticles3D::request_particles_process(real_t p_requested_process_time, real_t p_request_process_time_residual) {
-	ERR_FAIL_COND_MSG(!Math::is_finite(p_requested_process_time) || !Math::is_finite(p_request_process_time_residual), "Particle process times must be finite.");
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_requested_process_time) || !Math::is_finite(p_request_process_time_residual) || p_requested_process_time < 0.0 || p_request_process_time_residual < 0.0, "Particle process times must be finite and non-negative.");
 	RS::get_singleton()->particles_request_process_time(particles, p_requested_process_time, p_request_process_time_residual);
 	// Setting emitting independently from set_emitting is important here
 	// we assume to be in a controlled process situation.

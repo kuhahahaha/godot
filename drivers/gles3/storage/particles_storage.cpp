@@ -221,12 +221,14 @@ void ParticlesStorage::particles_set_one_shot(RID p_particles, bool p_one_shot) 
 void ParticlesStorage::particles_set_pre_process_time(RID p_particles, double p_time) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_time) || !Math::is_finite((float)p_time) || p_time < 0.0, "Particle pre-process time must be finite and non-negative.");
 	particles->pre_process_time = p_time;
 }
 
 void ParticlesStorage::particles_request_process_time(RID p_particles, real_t p_request_process_time, real_t p_request_process_time_residual) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_request_process_time) || !Math::is_finite(p_request_process_time_residual) || p_request_process_time < 0.0 || p_request_process_time_residual < 0.0, "Particle process times must be finite and non-negative.");
 	particles->request_process_time = p_request_process_time;
 	particles->request_process_time_residual = p_request_process_time_residual;
 }
