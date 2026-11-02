@@ -569,9 +569,7 @@ void GPUParticles2D::convert_from_particles(Node *p_particles) {
 	set_texture(cpu_particles->get_texture());
 
 	Ref<Material> mat = cpu_particles->get_material();
-	if (mat.is_valid()) {
-		set_material(mat);
-	}
+	set_material(mat);
 
 	Ref<ParticleProcessMaterial> proc_mat = memnew(ParticleProcessMaterial);
 	set_process_material(proc_mat);
