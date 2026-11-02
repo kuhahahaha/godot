@@ -745,6 +745,7 @@ void GPUParticles3D::convert_from_particles(Node *p_particles) {
 	set_draw_order(gpu_draw_order);
 	set_draw_passes(1);
 	set_draw_pass_mesh(0, cpu_particles->get_mesh());
+	set_skin(Ref<Skin>());
 
 	Ref<ParticleProcessMaterial> proc_mat = memnew(ParticleProcessMaterial);
 	set_process_material(proc_mat);
