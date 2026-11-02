@@ -16,12 +16,14 @@
   "checks": {
     "exit_zero": true,
     "compatibility_initialized": true,
+    "unallocated_current_data_empty": true,
     "initial_readbacks_empty": true,
     "active_2d_3d_spread": true,
     "lifecycle_complete": true,
     "no_errors": true,
     "binary_unchanged": true
   },
+  "initial_data_bytes": 0,
   "initial": [
     [
       "2d",

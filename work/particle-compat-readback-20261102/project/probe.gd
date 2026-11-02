@@ -23,6 +23,11 @@ func _ready() -> void:
 	particles_2d.process_material = process_2d
 	particles_2d.visibility_rect = Rect2(-200, -200, 400, 400)
 	root_2d.add_child(particles_2d)
+	var direct_rid := RenderingServer.particles_create()
+	RenderingServer.particles_set_amount(direct_rid, 4)
+	var initial_data := RenderingServer.particles_get_current_data(direct_rid)
+	print("PARTICLE_READBACK stage=initial_data bytes=%d" % initial_data.size())
+	_check(initial_data.is_empty(), "unallocated direct particle data must be empty")
 	var initial_2d := particles_2d.capture_rect()
 	print("PARTICLE_READBACK stage=initial_2d rect=%s" % initial_2d)
 	_check(initial_2d.position.is_finite() and initial_2d.size.is_finite(), "initial 2D rect non-finite")
@@ -64,6 +69,7 @@ func _ready() -> void:
 	_check(active_3d.size.x > 0.0, "active 3D AABB has no spread")
 	particles_2d.queue_free()
 	particles_3d.queue_free()
+	RenderingServer.free_rid(direct_rid)
 	for _i in 5:
 		await get_tree().process_frame
 	print("PARTICLE_READBACK_COMPLETE frames=%d failures=%d freed2d=%s freed3d=%s" % [frames, failures.size(), not is_instance_valid(particles_2d), not is_instance_valid(particles_3d)])
