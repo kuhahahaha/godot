@@ -1519,7 +1519,7 @@ void CPUParticles3D::convert_from_particles(Node *p_particles) {
 
 	set_use_fixed_seed(gpu_particles->get_use_fixed_seed());
 	set_seed(gpu_particles->get_seed());
-	set_emitting(gpu_particles->is_emitting());
+	set_emitting(gpu_particles->is_emitting() && gpu_particles->get_amount_ratio() > 0.0f);
 	set_amount(gpu_particles->get_amount());
 	set_lifetime(gpu_particles->get_lifetime());
 	set_one_shot(gpu_particles->get_one_shot());

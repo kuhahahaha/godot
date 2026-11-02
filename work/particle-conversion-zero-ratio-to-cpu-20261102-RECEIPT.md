@@ -1,0 +1,5 @@
+# GPU to CPU zero ratio conversion
+
+GPUParticles2D and GPUParticles3D can be emitting with amount_ratio zero, which the process material treats as no emission. CPUParticles nodes have no amount ratio. Conversion previously copied emitting alone and thus resumed emission. Both CPU conversion paths now map the zero-ratio state to emitting false; a later conversion from the same GPU node with ratio one restores emitting true.
+
+The new headless 2D/3D scene fixture failed before the fix (exit 1, both dimensions) and passed after it (exit 0). Mixed-worktree `scons tests=yes platform=macos target=editor -j4` passed; rebuilt binary SHA256 `ef27171a033e12cc91c794374e3129bab78d72158ff67ab70bc354c3ddaeef17`. The rebuilt binary also passed the empty-point conversion fixture and conversion doctests (11 cases / 59 assertions). This verifies scene state under dummy rendering, not live GPU emission or an isolated build. Nonzero ratios are not representable in CPUParticles and remain approximated by its existing full emission behavior.
