@@ -415,13 +415,21 @@ AABB ParticlesStorage::particles_get_current_aabb(RID p_particles) {
 	ERR_FAIL_NULL_V(particles, AABB());
 
 	int total_amount = particles->amount;
+	if (particles->back_instance_buffer == 0 && particles->sort_buffer == 0) {
+		return AABB();
+	}
 
 	// If available, read from the sort buffer which should be 2 frames out of date.
 	// This will help alleviate GPU stalls.
 	GLuint read_buffer = particles->sort_buffer_filled ? particles->sort_buffer : particles->back_instance_buffer;
+	if (read_buffer == 0) {
+		return AABB();
+	}
+	const bool is_2d = particles->mode == RSE::PARTICLES_MODE_2D;
+	const uint32_t particle_data_size = is_2d ? sizeof(ParticleInstanceData2D) : sizeof(ParticleInstanceData3D);
 
-	Vector<uint8_t> buffer = Utilities::buffer_get_data(GL_ARRAY_BUFFER, read_buffer, total_amount * sizeof(ParticleInstanceData3D));
-	ERR_FAIL_COND_V(buffer.size() != (int)(total_amount * sizeof(ParticleInstanceData3D)), AABB());
+	Vector<uint8_t> buffer = Utilities::buffer_get_data(GL_ARRAY_BUFFER, read_buffer, total_amount * particle_data_size);
+	ERR_FAIL_COND_V(buffer.size() != (int)(total_amount * particle_data_size), AABB());
 
 	Transform3D inv = particles->emission_transform.affine_inverse();
 
@@ -430,13 +438,27 @@ AABB ParticlesStorage::particles_get_current_aabb(RID p_particles) {
 		bool first = true;
 
 		const uint8_t *data_ptr = (const uint8_t *)buffer.ptr();
-		uint32_t particle_data_size = sizeof(ParticleInstanceData3D);
 
 		for (int i = 0; i < total_amount; i++) {
-			const ParticleInstanceData3D &particle_data = *(const ParticleInstanceData3D *)&data_ptr[particle_data_size * i];
-			// If scale is 0.0, we assume the particle is inactive.
-			if (particle_data.xform[0] > 0.0) {
-				Vector3 pos = Vector3(particle_data.xform[3], particle_data.xform[7], particle_data.xform[11]);
+			Vector3 pos;
+			bool particle_active = false;
+			if (is_2d) {
+				const ParticleInstanceData2D &particle_data = *(const ParticleInstanceData2D *)&data_ptr[particle_data_size * i];
+				// If scale is 0.0, we assume the particle is inactive.
+				if (particle_data.xform[0] > 0.0) {
+					pos = Vector3(particle_data.xform[3], particle_data.xform[7], 0.0);
+					particle_active = true;
+				}
+			} else {
+				const ParticleInstanceData3D &particle_data = *(const ParticleInstanceData3D *)&data_ptr[particle_data_size * i];
+				// If scale is 0.0, we assume the particle is inactive.
+				if (particle_data.xform[0] > 0.0) {
+					pos = Vector3(particle_data.xform[3], particle_data.xform[7], particle_data.xform[11]);
+					particle_active = true;
+				}
+			}
+
+			if (particle_active) {
 				if (!particles->use_local_coords) {
 					pos = inv.xform(pos);
 				}
@@ -471,6 +493,9 @@ Vector<uint8_t> ParticlesStorage::particles_get_current_data(RID p_particles) co
 	}
 
 	const GLuint read_buffer = particles->sort_buffer_filled ? particles->sort_buffer : particles->back_instance_buffer;
+	if (read_buffer == 0) {
+		return Vector<uint8_t>();
+	}
 	const uint32_t stride = particles->mode == RSE::PARTICLES_MODE_2D ? sizeof(ParticleInstanceData2D) : sizeof(ParticleInstanceData3D);
 	return Utilities::buffer_get_data(GL_ARRAY_BUFFER, read_buffer, uint32_t(particles->amount) * stride);
 }
