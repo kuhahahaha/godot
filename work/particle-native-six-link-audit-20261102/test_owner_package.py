@@ -13,6 +13,45 @@ RUNNER = Path(__file__).with_name("run_owner_package.py")
 
 
 class OwnerPackageTests(unittest.TestCase):
+    def test_scenarios_must_use_one_fixed_editor_sdk_dso_tuple(self):
+        spec = importlib.util.spec_from_file_location("run_owner_package", RUNNER)
+        runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runner)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / "owner"
+            package.mkdir()
+            script = root / "script.py"
+            script.write_text("print('no launch')\n")
+            paths = {key: root / key for key in
+                     ("sdk", "dso", "request", "oracle", "issuer", "project")}
+            for path in paths.values():
+                path.write_text("input")
+            paths.update(editor=Path(sys.executable).resolve(), script=script)
+            inputs = {key: {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+                      for key, path in paths.items()}
+            alternate_dso = root / "alternate-dso"
+            alternate_dso.write_text("different valid binary")
+            versions = {key: "control" for key in
+                        ("godot_revision", "ange_revision", "editor_version", "sdk_version",
+                         "dso_version", "renderer", "device")}
+            for scenario in runner.SCENARIOS:
+                scenario_inputs = json.loads(json.dumps(inputs))
+                if scenario == "failure":
+                    scenario_inputs["dso"] = {
+                        "path": str(alternate_dso),
+                        "sha256": hashlib.sha256(alternate_dso.read_bytes()).hexdigest(),
+                    }
+                (package / f"{scenario}.json").write_text(json.dumps({
+                    "scenario": scenario, "cwd": str(root), "timeout_seconds": 5,
+                    "declared_versions": versions, "inputs": scenario_inputs,
+                    "command": ["{editor}", "{script}"],
+                    "outputs": {"readback": str(root / f"{scenario}.bin"),
+                                "correlation": str(root / f"{scenario}.out.json")},
+                }))
+            with self.assertRaisesRegex(ValueError, "failure.*fixed.*dso"):
+                runner.preflight(package)
+
     def test_cancel_cannot_rewrite_specs_and_report_intact(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -10,6 +10,9 @@ import subprocess
 
 
 SCENARIOS = ("success", "failure", "cancel")
+FIXED_INPUTS = ("editor", "script", "sdk", "dso", "issuer", "project")
+FIXED_VERSIONS = ("godot_revision", "ange_revision", "editor_version",
+                  "sdk_version", "dso_version", "renderer", "device")
 
 
 def _digest(path: Path) -> str:
@@ -29,11 +32,24 @@ def preflight(package: Path) -> list[Path]:
     capture_module = importlib.util.module_from_spec(module_spec)
     module_spec.loader.exec_module(capture_module)
     output_paths: set[Path] = set()
+    fixed_inputs = None
+    fixed_versions = None
     for scenario, path in zip(SCENARIOS, specs):
         spec = json.loads(path.read_text())
         if spec.get("scenario") != scenario:
             raise ValueError(f"{path} does not declare scenario {scenario}")
         capture_module._validate(spec)
+        current_inputs = {name: spec["inputs"][name] for name in FIXED_INPUTS}
+        current_versions = {name: spec["declared_versions"][name] for name in FIXED_VERSIONS}
+        if fixed_inputs is None:
+            fixed_inputs = current_inputs
+            fixed_versions = current_versions
+        else:
+            for name in FIXED_INPUTS:
+                if current_inputs[name] != fixed_inputs[name]:
+                    raise ValueError(f"{scenario} fixed input mismatch across scenarios: {name}")
+            if current_versions != fixed_versions:
+                raise ValueError("fixed versions mismatch across scenarios")
         if not {"readback", "correlation"}.issubset(spec.get("outputs", {})):
             raise ValueError(f"{scenario} must declare readback and correlation outputs")
         for output in spec["outputs"].values():
