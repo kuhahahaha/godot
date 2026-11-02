@@ -21,3 +21,7 @@ Control evidence only. A real production issuer, fixed SDK/DSO pair, same-ticket
 `RUNBOOK.md` fixes the success/failure/cancel controller commands, required owner spec fields, same-request evidence review table, raw readback export requirements and return package. Absolute owner package and output locations remain placeholders until A supplies its actual caller and fixed pair. No actual production command or expected result has been invented.
 
 Fresh verification after adding the runbook: the same 17 control tests passed, rc 0; scoped `git diff --check` passed. No production/GPU run was performed. QUEUE/MANIFEST retain existing unrelated working-tree changes and are excluded from this delivery commit.
+
+## Phase 1 owner package continuation, 2026-11-03
+
+The ordered three-scenario runner now preflights every spec and input hash, rejects shared output paths, and checks spec hashes before and after each capture. Commit `9db280b83b` additionally rejects success/failure/cancel specs that change the fixed editor/script/SDK/DSO/issuer/project input pins or declared revision/version/renderer/device tuple. A red mixed-DSO control became green; the combined owner-package and capture suite passed 29/29 tests and scoped `git diff --check` passed before commit. See `PHASE1_INTAKE_20261103.md` for current A intake and precise missing product evidence. This remains a capture-integrity control; production six-link acceptance is pending.
