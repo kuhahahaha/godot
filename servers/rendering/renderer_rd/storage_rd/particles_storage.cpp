@@ -694,6 +694,7 @@ void ParticlesStorage::particles_set_subemitter(RID p_particles, RID p_subemitte
 void ParticlesStorage::particles_emit(RID p_particles, const Transform3D &p_transform, const Vector3 &p_velocity, const Color &p_color, const Color &p_custom, uint32_t p_emit_flags) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(!p_transform.is_finite() || !p_velocity.is_finite() || !Math::is_finite(p_color.r) || !Math::is_finite(p_color.g) || !Math::is_finite(p_color.b) || !Math::is_finite(p_color.a) || !Math::is_finite(p_custom.r) || !Math::is_finite(p_custom.g) || !Math::is_finite(p_custom.b) || !Math::is_finite(p_custom.a), "Particle emission inputs must contain only finite values.");
 	ERR_FAIL_COND(particles->amount == 0);
 
 	if (particles->emitting) {

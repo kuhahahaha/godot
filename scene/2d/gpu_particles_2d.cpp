@@ -472,6 +472,7 @@ void GPUParticles2D::_validate_property(PropertyInfo &p_property) const {
 }
 
 void GPUParticles2D::emit_particle(const Transform2D &p_transform2d, const Vector2 &p_velocity2d, const Color &p_color, const Color &p_custom, uint32_t p_emit_flags) {
+	ERR_FAIL_COND_MSG(!p_transform2d.is_finite() || !p_velocity2d.is_finite() || !Math::is_finite(p_color.r) || !Math::is_finite(p_color.g) || !Math::is_finite(p_color.b) || !Math::is_finite(p_color.a) || !Math::is_finite(p_custom.r) || !Math::is_finite(p_custom.g) || !Math::is_finite(p_custom.b) || !Math::is_finite(p_custom.a), "Particle emission inputs must contain only finite values.");
 	Transform3D emit_transform;
 	emit_transform.basis.set_column(0, Vector3(p_transform2d.columns[0].x, p_transform2d.columns[0].y, 0));
 	emit_transform.basis.set_column(1, Vector3(p_transform2d.columns[1].x, p_transform2d.columns[1].y, 0));
