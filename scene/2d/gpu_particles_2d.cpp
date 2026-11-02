@@ -474,13 +474,15 @@ void GPUParticles2D::emit_particle(const Transform2D &p_transform2d, const Vecto
 }
 
 void GPUParticles2D::_attach_sub_emitter() {
+	RID sub_emitter_rid;
 	Node *n = get_node_or_null(sub_emitter);
 	if (n) {
 		GPUParticles2D *sen = Object::cast_to<GPUParticles2D>(n);
 		if (sen && sen != this) {
-			RS::get_singleton()->particles_set_subemitter(particles, sen->particles);
+			sub_emitter_rid = sen->particles;
 		}
 	}
+	RS::get_singleton()->particles_set_subemitter(particles, sub_emitter_rid);
 }
 
 void GPUParticles2D::_texture_changed() {
@@ -776,6 +778,12 @@ void GPUParticles2D::_notification(int p_what) {
 			set_process_internal(true);
 			set_physics_process_internal(true);
 			previous_position = get_global_position();
+		} break;
+
+		case NOTIFICATION_POST_ENTER_TREE: {
+			if (sub_emitter != NodePath()) {
+				_attach_sub_emitter();
+			}
 		} break;
 
 		case NOTIFICATION_EXIT_TREE: {

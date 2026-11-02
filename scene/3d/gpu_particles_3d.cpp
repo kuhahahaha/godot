@@ -520,13 +520,15 @@ void GPUParticles3D::emit_particle(const Transform3D &p_transform, const Vector3
 }
 
 void GPUParticles3D::_attach_sub_emitter() {
+	RID sub_emitter_rid;
 	Node *n = get_node_or_null(sub_emitter);
 	if (n) {
 		GPUParticles3D *sen = Object::cast_to<GPUParticles3D>(n);
 		if (sen && sen != this) {
-			RS::get_singleton()->particles_set_subemitter(particles, sen->particles);
+			sub_emitter_rid = sen->particles;
 		}
 	}
+	RS::get_singleton()->particles_set_subemitter(particles, sub_emitter_rid);
 }
 
 void GPUParticles3D::set_sub_emitter(const NodePath &p_path) {
@@ -600,6 +602,12 @@ void GPUParticles3D::_notification(int p_what) {
 			previous_position = get_global_transform().origin;
 			set_process_internal(true);
 			set_physics_process_internal(true);
+		} break;
+
+		case NOTIFICATION_POST_ENTER_TREE: {
+			if (sub_emitter != NodePath()) {
+				_attach_sub_emitter();
+			}
 		} break;
 
 		case NOTIFICATION_EXIT_TREE: {
