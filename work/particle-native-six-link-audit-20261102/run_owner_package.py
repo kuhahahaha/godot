@@ -61,9 +61,13 @@ def main() -> int:
         specs = preflight(package)
     except (OSError, ValueError, KeyError, TypeError) as error:
         parser.error(str(error))
+    spec_hashes = {path: _digest(path) for path in specs}
     evidence.mkdir(parents=True)
     root = Path(__file__).resolve().parent
     for scenario, spec in zip(SCENARIOS, specs):
+        if any(not path.is_file() or _digest(path) != spec_hashes[path] for path in specs):
+            print(f"OWNER_PACKAGE_SPEC_DRIFT_STOP scenario={scenario} spec drift before launch")
+            return 1
         destination = evidence / scenario
         capture = subprocess.run([
             "python3", str(root / "capture_run.py"), "--spec", str(spec),
