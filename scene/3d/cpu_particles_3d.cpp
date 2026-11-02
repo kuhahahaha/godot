@@ -73,6 +73,7 @@ void CPUParticles3D::_set_emitting() {
 }
 
 void CPUParticles3D::set_amount(int p_amount) {
+	ERR_FAIL_COND_MSG(p_amount > INT_MAX / (12 + 4 + 4), "Particle amount is too large for CPU particle storage.");
 	ERR_FAIL_COND_MSG(p_amount < 1, "Amount of particles must be greater than 0.");
 
 	particles.resize(p_amount);
