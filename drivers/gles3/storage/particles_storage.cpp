@@ -368,8 +368,10 @@ void ParticlesStorage::particles_set_draw_order(RID p_particles, RSE::ParticlesD
 void ParticlesStorage::particles_set_draw_passes(RID p_particles, int p_passes) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(p_passes < 1 || p_passes > 4, "Particle draw passes must be between 1 and 4.");
 
 	particles->draw_passes.resize(p_passes);
+	particles->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_PARTICLES);
 }
 
 void ParticlesStorage::particles_set_draw_pass_mesh(RID p_particles, int p_pass, RID p_mesh) {
