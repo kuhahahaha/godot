@@ -640,6 +640,7 @@ void GPUParticles2D::convert_from_particles(Node *p_particles) {
 	}
 	proc_mat->set_emission_sphere_radius(cpu_particles->get_emission_sphere_radius());
 
+	proc_mat->set_emission_ring_inner_radius(0.0);
 	proc_mat->set_emission_ring_radius(cpu_particles->get_emission_ring_radius());
 	proc_mat->set_emission_ring_inner_radius(cpu_particles->get_emission_ring_inner_radius());
 

@@ -490,13 +490,13 @@ void CPUParticles3D::set_emission_ring_height(real_t p_height) {
 }
 
 void CPUParticles3D::set_emission_ring_radius(real_t p_radius) {
-	ERR_FAIL_COND_MSG(!Math::is_finite(p_radius) || !Math::is_finite(p_radius * p_radius) || p_radius < 0.0f, "Particle emission ring radius and its square must be finite and non-negative.");
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_radius) || !Math::is_finite(p_radius * p_radius) || p_radius < 0.0f || p_radius < emission_ring_inner_radius, "Particle emission ring radius must be finite and at least the inner radius, with a finite square.");
 	emission_ring_radius = p_radius;
 	update_gizmos();
 }
 
 void CPUParticles3D::set_emission_ring_inner_radius(real_t p_radius) {
-	ERR_FAIL_COND_MSG(!Math::is_finite(p_radius) || !Math::is_finite(p_radius * p_radius) || p_radius < 0.0f, "Particle emission inner ring radius and its square must be finite and non-negative.");
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_radius) || !Math::is_finite(p_radius * p_radius) || p_radius < 0.0f || p_radius > emission_ring_radius, "Particle emission inner ring radius must be finite and between zero and the outer radius, with a finite square.");
 	emission_ring_inner_radius = p_radius;
 	update_gizmos();
 }
@@ -1660,6 +1660,7 @@ void CPUParticles3D::convert_from_particles(Node *p_particles) {
 	set_emission_sphere_radius(material->get_emission_sphere_radius());
 	set_emission_box_extents(material->get_emission_box_extents());
 	set_emission_ring_height(material->get_emission_ring_height());
+	set_emission_ring_inner_radius(0.0);
 	set_emission_ring_radius(material->get_emission_ring_radius());
 	set_emission_ring_inner_radius(material->get_emission_ring_inner_radius());
 	set_emission_ring_axis(material->get_emission_ring_axis());

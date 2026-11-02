@@ -543,12 +543,12 @@ void CPUParticles2D::set_emission_colors(const Vector<Color> &p_colors) {
 }
 
 void CPUParticles2D::set_emission_ring_inner_radius(real_t p_inner_radius) {
-	ERR_FAIL_COND_MSG(!Math::is_finite(p_inner_radius) || !Math::is_finite(p_inner_radius * p_inner_radius) || p_inner_radius < 0.0f, "Particle emission inner ring radius and its square must be finite and non-negative.");
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_inner_radius) || !Math::is_finite(p_inner_radius * p_inner_radius) || p_inner_radius < 0.0f || p_inner_radius > emission_ring_radius, "Particle emission inner ring radius must be finite and between zero and the outer radius, with a finite square.");
 	emission_ring_inner_radius = p_inner_radius;
 }
 
 void CPUParticles2D::set_emission_ring_radius(real_t p_ring_radius) {
-	ERR_FAIL_COND_MSG(!Math::is_finite(p_ring_radius) || !Math::is_finite(p_ring_radius * p_ring_radius) || p_ring_radius < 0.0f, "Particle emission ring radius and its square must be finite and non-negative.");
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_ring_radius) || !Math::is_finite(p_ring_radius * p_ring_radius) || p_ring_radius < 0.0f || p_ring_radius < emission_ring_inner_radius, "Particle emission ring radius must be finite and at least the inner radius, with a finite square.");
 	emission_ring_radius = p_ring_radius;
 }
 
@@ -1477,6 +1477,7 @@ void CPUParticles2D::convert_from_particles(Node *p_particles) {
 		set_emission_shape(EMISSION_SHAPE_POINT);
 		set_emission_sphere_radius(1.0);
 		set_emission_rect_extents(Vector2(1, 1));
+		set_emission_ring_inner_radius(0.0);
 		set_emission_ring_radius(1.0);
 		set_emission_ring_inner_radius(0.8);
 		set_split_scale(false);
@@ -1567,6 +1568,7 @@ void CPUParticles2D::convert_from_particles(Node *p_particles) {
 	Vector2 rect_extents = Vector2(proc_mat->get_emission_box_extents().x, proc_mat->get_emission_box_extents().y);
 	set_emission_rect_extents(rect_extents);
 
+	set_emission_ring_inner_radius(0.0);
 	set_emission_ring_radius(proc_mat->get_emission_ring_radius());
 	set_emission_ring_inner_radius(proc_mat->get_emission_ring_inner_radius());
 
