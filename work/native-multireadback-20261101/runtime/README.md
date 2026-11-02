@@ -1,6 +1,6 @@
 # Original Metal V2 multi-readback native control
 
-Status at handoff: **both standalone probe dylibs compiled; no Godot execution or container generation performed by this worker**. Main coordination must run this against its new source-matched executable and controlled-build metadata after integrating V2. This is a Godot native ABI/control fixture. It is not an ANGE product request, original R01/R02 acceptance, provider grant, Method verification, or owner acceptance.
+Current positive and cancel controls use the original same-ticket typed uniform-set constructor and retire/ack contract. The fixed Metal run and exact result are in `../TYPED_SET_CURRENT_HOST_RECEIPT_20261102.md`. This is a Godot native ABI/control fixture. It is not an ANGE product request, original R01/R02 acceptance, provider grant, Method verification, or owner acceptance.
 
 The fixture copies the established guard/SceneReady/main-session/QRT/physical-return scaffold from `work/native-bridge-implementation-20261026/integration-preflight-20261026/native-fixtures/qrt_upload_probe.cpp`. The original fixture is unchanged. Everything added here stays under this runtime directory; no production source or global engine artifact is changed.
 

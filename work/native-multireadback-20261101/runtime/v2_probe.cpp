@@ -122,6 +122,8 @@ GDExtensionInterfaceDeviceSessionQualificationRtReserveV1 rt_reserve;
 GDExtensionInterfaceDeviceSessionQualificationRtActivateV1 rt_activate;
 GDExtensionInterfaceDeviceSessionQualificationRtObserveV1 rt_observe;
 GDExtensionInterfaceDeviceSessionQualificationRtReleaseV1 rt_release;
+GDExtensionInterfaceDeviceSessionQualificationResourceRetireObserveV1 typed_observe;
+GDExtensionInterfaceDeviceSessionQualificationResourceRetireReleaseV1 typed_release;
 uint64_t rt_operation=1;bool rt_configured=false,rt_abort_tested=false;
 GDExtensionDeviceSessionResultV1 invoke_rt(GDExtensionQualificationBridgeRefV1 bridge,uint32_t kind,const void *request,uint32_t request_size,const void *payload,uint64_t payload_size,void *out,uint32_t out_size,GDExtensionQualificationUploadSegmentV1 *segments=nullptr,uint32_t segment_capacity=0) {
  memset(out,0,out_size);if(segment_capacity)memset(segments,0,segment_capacity*sizeof(*segments));
@@ -148,6 +150,11 @@ static_assert(sizeof(GDExtensionQualificationRecordV2)==448);
 static_assert(sizeof(GDExtensionQualificationReportV2)==328);
 static_assert(sizeof(GDExtensionQualificationReadbackRangeV1)==48);
 static_assert(sizeof(GDExtensionQualificationReadbackObservationV1)==56);
+static_assert(sizeof(GDExtensionQualificationSetCreateV1)==136);
+static_assert(sizeof(GDExtensionQualificationUniformBindingV1)==72);
+static_assert(sizeof(GDExtensionQualificationResourceBackingV1)==112);
+static_assert(sizeof(GDExtensionQualificationResourceRetireV1)==56);
+static_assert(sizeof(GDExtensionQualificationResourceRetireReportV1)==120);
 GDExtensionDeviceSessionResultV1 wrapped_prepare(GDExtensionQualificationBridgeRefV1 b,const GDExtensionQualificationUploadPrepareV1 *q,const GDExtensionQualificationUploadPlanV1 *p,uint32_t n,GDExtensionQualificationTicketRefV1 *t,GDExtensionQualificationReportV2 *o){struct Pair{GDExtensionQualificationTicketRefV1 ref;GDExtensionQualificationReportV2 report;}pair{};static_assert(sizeof(pair)==344);auto result=invoke_rt(b,11,q,sizeof(*q),p,uint64_t(n)*sizeof(*p),&pair,sizeof(pair));*t=pair.ref;*o=pair.report;return result;}
 GDExtensionDeviceSessionResultV1 wrapped_upload(GDExtensionQualificationBridgeRefV1 b,GDExtensionQualificationTicketRefV1 t,const GDExtensionQualificationUploadRequestV1 *q,const void *p,uint32_t n,GDExtensionQualificationUploadSegmentV1 *s,uint32_t c,GDExtensionQualificationUploadReportV1 *o){std::vector<uint8_t> payload(16+size_t(n));memcpy(payload.data(),&t,16);memcpy(payload.data()+16,p,n);return invoke_rt(b,8,q,sizeof(*q),payload.data(),payload.size(),o,sizeof(*o),s,c);}
 GDExtensionDeviceSessionResultV1 wrapped_prepared(GDExtensionQualificationBridgeRefV1 b,GDExtensionQualificationTicketRefV1 t,const GDExtensionQualificationRecordV2 *q,GDExtensionQualificationReportV2 *o){return invoke_rt(b,10,q,sizeof(*q),&t,sizeof(t),o,sizeof(*o));}
@@ -167,11 +174,8 @@ int32_t ready(void *userdata,GDExtensionDeviceExitSceneReadyContextRef context) 
   const auto bytes=read_file(paths[i]);GDExtensionNativeUnitCreateRequestV1 q{};q.abi=abi;q.library_generation=library_generation;q.preparation_generation=21;q.operation_serial=i+1;q.container_byte_count=bytes.size();q.record_slot=2;q.physical_unit=i;CC_SHA256(bytes.data(),bytes.size(),q.container_digest);memcpy(container_digests[i],q.container_digest,32);
   require(unit_create(bridge,&q,bytes.data(),bytes.size(),&units[i]).native_error,"unit_create");check(units[i].state==1 && units[i].known_mask==3 && !units[i].possible_mask,"unit_original");
  }
- void *rd=object_from_id(id);check(rd,"main_rd");
- const uint64_t output_buffers[]={backings[0].rid,backings[1].rid,backings[2].rid};
- const uint64_t input_buffers[]={backings[3].rid};
+ GDExtensionQualificationResourceBackingV1 typed_sets[2][2]{};
  uint64_t sets[2][2]{};
- for(uint32_t i=0;i<2;++i){sets[i][0]=set_create(rd,units[i].shader_rid,output_buffers,3,0);sets[i][1]=set_create(rd,units[i].shader_rid,input_buffers,1,1);}
  GDExtensionQualificationRecordV2 request{};request.abi={2,sizeof(GDExtensionDeviceExitAbi),0};
  request.record_generation=19;request.request_nonce=23;request.library_generation=library_generation;request.qualification_session_serial=7;request.range_end=4;request.attempt=1;request.sample_count=4;request.body_groups_x=1;
  request.capture_pipeline=units[0].pipeline_rid;request.capture_set=sets[0][0];request.capture_set1=sets[0][1];request.capture_set_count=2;
@@ -196,6 +200,14 @@ int32_t ready(void *userdata,GDExtensionDeviceExitSceneReadyContextRef context) 
  GDExtensionQualificationTicketRefV1 ticket{},repeat{};GDExtensionQualificationReportV2 report{},again{};
  require(prepare_ticket(bridge,&preparation,plans,4,&ticket,&report).native_error,"prepare_v2");check(ticket.handle_serial && report.abi.abi_version==2 && !report.state && !report.fact_count,"prepared_original");
  require(prepare_ticket(bridge,&preparation,plans,4,&repeat,&again).native_error,"prepare_v2_replay");check(!memcmp(&ticket,&repeat,sizeof(ticket)) && !memcmp(&report,&again,sizeof(report)),"prepare_exact_replay");
+ for(uint32_t phase=0;phase<2;++phase){for(uint32_t set_index=0;set_index<2;++set_index){
+  GDExtensionQualificationUniformBindingV1 bindings[3]{};const uint32_t count=set_index==0?3:1;
+  for(uint32_t n=0;n<count;++n){const uint32_t index=set_index==0?n:3;bindings[n].binding=n;bindings[n].type=1;bindings[n].resource={backings[index].backing.registry_instance,backings[index].backing.handle_serial};bindings[n].rid=backings[index].rid;bindings[n].object_serial=backings[index].backing_serial;}
+  GDExtensionQualificationSetCreateV1 q{};q.abi=abi;q.source.session_serial=request.qualification_session_serial;q.source.generation=request.record_generation;memcpy(q.source.digest,phase==0?request.capture_map_digest:request.body_map_digest,32);q.library_generation=library_generation;q.create_attempt=1;q.ticket=ticket;q.unit=units[phase].unit;q.shader_rid=units[phase].shader_rid;q.shader_serial=units[phase].shader_serial;q.shader_set=set_index;q.binding_count=count;
+  auto &created=typed_sets[phase][set_index];require(invoke_rt(bridge,15,&q,sizeof(q),bindings,count*sizeof(bindings[0]),&created,sizeof(created)).native_error,"typed_set_create");
+  check(created.state==1 && created.kind==3 && created.rid && created.object_serial && created.resource.handle_serial && !memcmp(&created.source,&q.source,sizeof(q.source)),"original_typed_set");sets[phase][set_index]=created.rid;
+ }}
+ request.capture_set=sets[0][0];request.capture_set1=sets[0][1];request.body_set=sets[1][0];request.body_set1=sets[1][1];
  GDExtensionQualificationUploadRequestV1 uploads[4]{};
  uint64_t revision=report.revision;
  for(uint32_t i=0;i<4;++i){
@@ -260,7 +272,15 @@ int32_t ready(void *userdata,GDExtensionDeviceExitSceneReadyContextRef context) 
  }
  uint32_t stale=99;check(facts_ticket(bridge,ticket,report.revision-1,0,facts.size(),facts.data(),&stale).native_error!=OK && !stale,"stale_revision_refused");
  require(release_ticket(bridge,ticket).native_error,"ticket_physical_ack");check(release_ticket(bridge,ticket).native_error!=OK,"ticket_ack_once");
- for(const auto &phase:sets)for(uint64_t set:phase){const void *args[]={&set};method("RenderingDevice","free_rid",2722037293,rd,args);}
+ uint32_t typed_acks=0;
+ for(const auto &phase:typed_sets)for(const auto &set:phase){
+  GDExtensionQualificationResourceRetireV1 q{abi,set.resource,set.rid,set.object_serial,700+typed_acks};GDExtensionQualificationResourceRetireReportV1 physical{};
+  require(invoke_rt(bridge,16,&q,sizeof(q),nullptr,0,&physical,sizeof(physical)).native_error,"typed_set_retire");
+  for(uint32_t pass=0;pass<5000 && physical.state==0;++pass){require(typed_observe(bridge,set.resource,&budget,&physical).native_error,"typed_set_observe");if(!physical.state)std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+  check(physical.state==1 && physical.return_status==1 && !physical.reason && !physical.native_error && physical.event_seq && physical.resource.handle_serial==set.resource.handle_serial,"typed_set_physical_return");
+  require(typed_release(bridge,set.resource,physical.revision).native_error,"typed_set_ack");++typed_acks;
+ }
+ check(typed_acks==4,"all_typed_sets_acknowledged");
  for(uint32_t i=0;i<2;++i){
   GDExtensionNativeUnitRetireRequestV1 q{abi,units[i].unit,3+i,0};GDExtensionNativeUnitRetireRefV1 cell{};GDExtensionNativeUnitRetireReportV1 physical{};require(unit_retire(bridge,&q,&cell,&physical).native_error,"unit_retire");
   for(uint32_t pass=0;pass<5000 && physical.state==0;++pass){require(unit_observe(bridge,cell,&budget,&physical).native_error,"unit_observe");if(!physical.state)std::this_thread::sleep_for(std::chrono::milliseconds(1));}
@@ -325,7 +345,9 @@ extern "C" __attribute__((visibility("default"))) GDExtensionBool phs1_probe_ini
  // Freeze an all-or-nothing table before guard enrollment or early effects.
  if (!load(get,"device_session_qualification_rt_configure_v1",rt_configure) || !load(get,"device_session_qualification_rt_reserve_v1",rt_reserve) || !load(get,"device_session_qualification_rt_activate_v1",rt_activate) || !load(get,"device_session_qualification_rt_observe_v1",rt_observe) || !load(get,"device_session_qualification_rt_release_v1",rt_release)) {std::fprintf(stderr,"QRT_PREFLIGHT_RED effects=0\n");std::_Exit(86);}
 
- if (!load(get,"device_session_qualification_prepare_uploads_v2",prepare_ticket) ||
+ if (!load(get,"device_session_qualification_resource_retire_observe_v1",typed_observe) ||
+!load(get,"device_session_qualification_resource_retire_release_v1",typed_release) ||
+!load(get,"device_session_qualification_prepare_uploads_v2",prepare_ticket) ||
 !load(get,"device_session_qualification_upload_v1",upload_ticket) ||
 !load(get,"device_session_qualification_record_prepared_v2",record_prepared_ticket) ||
 !load(get,"device_session_qualification_cancel_v1",cancel_ticket) ||

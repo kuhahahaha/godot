@@ -117,7 +117,9 @@ if not args.legacy_only and args.action in ("run", "all"):
             continue
         text, checks = launch(case, RUNTIME / case, "probe.gd")
         kinds = {int(n) for n in re.findall(r"QRT_NATIVE_RETURN kind=(\d+)", text)}
-        checks["original_kinds"] = kinds == ({1, 2, 3, 4, 5, 8, 10, 11} if case != "cancel_prefix" else {1, 2, 3, 4, 5, 8, 11})
+        checks["original_kinds"] = kinds == ({1, 2, 3, 4, 5, 8, 10, 11, 15, 16} if case != "cancel_prefix" else {1, 2, 3, 4, 5, 8, 11, 15, 16})
+        checks["typed_sets_created"] = len(re.findall(r"QRT_NATIVE_RETURN kind=15 .* error=0 reply_ack=1", text)) == 4
+        checks["typed_sets_retired"] = len(re.findall(r"QRT_NATIVE_RETURN kind=16 .* error=0 reply_ack=1", text)) == 4
         checks["loop"] = text.count("MULTI_V2_LOOP_INITIALIZED\n") == 1
         checks["unload"] = text.count("PHS1_DSO_UNLOAD tag=one\n") == 1
         unload = text.find("PHS1_DSO_UNLOAD tag=one\n")

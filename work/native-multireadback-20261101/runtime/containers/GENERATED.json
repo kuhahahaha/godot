@@ -1,14 +1,14 @@
 {
   "host": {
-    "binary": "/Users/macbookair/Documents/Work/godot_ANGE/work/physics-wrapper-finish-recovery-20261101/bin/godot-store-r1.arm64",
-    "binary_sha256": "edf3b010e2391120af96df148a81d87fc5a4c60801fa2de7ebffc7e9696eff58",
-    "controlled_build": "/Users/macbookair/Documents/Work/godot_ANGE/work/physics-wrapper-finish-recovery-20261101/bin/godot-store-r1.arm64.controlled_build.json",
-    "controlled_build_sha256": "d70aeb3de4c49396737a2f9c6e0d8948e26303bdbc6edda3e11e54888e34290e",
+    "binary": "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.arm64",
+    "binary_sha256": "471ca144b3fd5ddacead991380ca59c3f5f6f56c45e3720cd78ee21f41fc5bba",
+    "controlled_build": "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.arm64.controlled_build.json",
+    "controlled_build_sha256": "c6cbce87be6d6de2058c2d35ffe6cb1339da39c63de8eefa32f72843d05db7d9",
     "controlled_build_selection": {
       "schema": 1,
-      "core_stamp": "d3e0acc8a208bbe9d092d1a4ba36f6c35841ed194ef9b6e3972d73b8ce315094",
+      "core_stamp": "960a3a96d7aaff1ab9f897db9d528678b7e21b7dad603f368e151574e35d2837",
       "compiler_route": "BuiltinGlslangV1",
-      "compiler_stamp": "b0a0973b512173498b2e51480d4b9e1dc9ed00e5bb0fb0fc7bebb2231a9fe6f9",
+      "compiler_stamp": "acd4ac4fa64c1f66a4440053163e48a5ccf4bf61ec4f0268bdf47f98e9ed2bcd",
       "platform": "macos",
       "architecture": "arm64",
       "target_kind": "Executable"
@@ -53,8 +53,8 @@
     "generate.gd": "56dde143f130d12a0714151e7ae093e99665868780b87d6dc1a68911ea83cb4a"
   },
   "containers": {
-    "capture": "e5850fbdcfe0719e07d3160fd31759066df2384da7408633a298660e08e340da",
-    "body": "0a6cccf20d0acc3597c2323ff5bc3cc823b87f20f27e14f071bc6c1000cbff2e"
+    "capture": "4b2e30424663411396aac96e74185da0b8351bc900d545d1ac497c2fa1127240",
+    "body": "abc65249bf411831e4706de7225bb9d5cae3da9e5318f3dd391ba60c5d58e0be"
   },
-  "log": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-multireadback-20261101/runtime/results/20261101-111020/containers.log"
+  "log": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-multireadback-20261101/runtime/results/20261102-232830/containers.log"
 }

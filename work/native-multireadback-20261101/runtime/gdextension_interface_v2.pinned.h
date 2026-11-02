@@ -852,6 +852,20 @@ typedef struct {
 	uint64_t handle_serial;
 } GDExtensionDeviceExitLibraryCodeHoldRef;
 
+/* Opaque retained original Host producer registration. Numbers are handles only; labels do not authenticate a registration. This is not a code hold or operation/source grant. */
+typedef struct {
+	uint64_t registry_instance;
+	uint64_t handle_serial;
+} GDExtensionProducerRegistrationRefV1;
+
+/* Read-only original registration identity. Native ABI version 1, struct_size sizeof this structure, reserved zero. label is bounded NUL-terminated UTF-8; copying it does not retain or authenticate the producer. */
+typedef struct {
+	GDExtensionDeviceExitAbi abi;
+	uint64_t registry_instance;
+	uint64_t library_generation;
+	char label[96];
+} GDExtensionProducerRegistrationIdentityV1;
+
 typedef void (*GDExtensionDeviceExitUserLevelFnV1)(void *binding_userdata, GDExtensionInitializationLevel level);
 typedef int32_t (*GDExtensionDeviceExitPreflightFnV1)(GDExtensionDeviceExitDeinitPreflightContextRef context, void *userdata);
 typedef struct {
@@ -1378,6 +1392,10 @@ typedef enum {
 	GDEXTENSION_DEVICE_SESSION_REASON_STALE_TICKET_V1 = 17,
 	GDEXTENSION_DEVICE_SESSION_REASON_NATIVE_UNSUPPORTED_V1 = 18,
 	GDEXTENSION_DEVICE_SESSION_REASON_CAPACITY_V1 = 19,
+	/* StorageCreate only: ERR_BUSY after the exact original-origin scan found no existing child, before this call allocated a child, serial or cleanup credit or entered native allocation. Backing and expected/actual remain zero.
+	 * Does not certify future admission, absence of later concurrent calls, GPU completion, original account refund or permission to create after close. Existing creating prefixes, bridge-level refusal and non-Busy errors retain their existing reasons.
+	 */
+	GDEXTENSION_DEVICE_SESSION_REASON_STORAGE_CREATE_DEFERRED_V1 = 20,
 } GDExtensionDeviceSessionQualificationReasonV1;
 
 typedef enum {
@@ -1448,6 +1466,146 @@ typedef struct {
 	uint32_t segment_count;
 	GDExtensionDeviceSessionResultV1 call_result;
 } GDExtensionQualificationRtObservationV1;
+
+typedef struct {
+	uint64_t session_serial;
+	uint64_t generation;
+	uint8_t digest[32];
+} GDExtensionQualificationSourceV1;
+
+typedef struct {
+	uint64_t registry_instance;
+	uint64_t handle_serial;
+} GDExtensionQualificationResourceRefV1;
+
+typedef struct {
+	GDExtensionDeviceExitAbi abi;
+	GDExtensionQualificationResourceRefV1 resource;
+	GDExtensionQualificationSourceV1 source;
+	uint64_t rid;
+	uint64_t object_serial;
+	uint64_t byte_size;
+	uint32_t kind;
+	uint32_t state;
+} GDExtensionQualificationResourceBackingV1;
+
+typedef struct {
+	GDExtensionDeviceExitAbi abi;
+	GDExtensionQualificationSourceV1 source;
+	uint64_t library_generation;
+	uint64_t create_attempt;
+	uint32_t width;
+	uint32_t height;
+	uint32_t depth;
+	uint32_t texture_type;
+	uint32_t format;
+	uint32_t usage;
+} GDExtensionQualificationTextureCreateV1;
+
+typedef struct {
+	GDExtensionDeviceExitAbi abi;
+	GDExtensionQualificationSourceV1 source;
+	uint64_t library_generation;
+	uint64_t create_attempt;
+	uint32_t mag_filter;
+	uint32_t min_filter;
+	uint32_t mip_filter;
+	uint32_t repeat_u;
+	uint32_t repeat_v;
+	uint32_t repeat_w;
+} GDExtensionQualificationSamplerCreateV1;
+
+typedef struct {
+	GDExtensionDeviceExitAbi abi;
+	GDExtensionQualificationSourceV1 source;
+	uint64_t library_generation;
+	uint64_t create_attempt;
+	GDExtensionQualificationTicketRefV1 ticket;
+	GDExtensionNativeUnitRefV1 unit;
+	uint64_t shader_rid;
+	uint64_t shader_serial;
+	uint32_t shader_set;
+	uint32_t binding_count;
+} GDExtensionQualificationSetCreateV1;
+
+typedef struct {
+	uint32_t binding;
+	uint32_t type;
+	GDExtensionQualificationResourceRefV1 resource;
+	uint64_t rid;
+	uint64_t object_serial;
+	GDExtensionQualificationResourceRefV1 secondary;
+	uint64_t secondary_rid;
+	uint64_t secondary_serial;
+} GDExtensionQualificationUniformBindingV1;
+
+typedef struct {
+	GDExtensionDeviceExitAbi abi;
+	GDExtensionQualificationTicketRefV1 ticket;
+	GDExtensionQualificationResourceRefV1 texture;
+	uint64_t record_generation;
+	uint64_t parent_serial;
+	uint64_t object_serial;
+	uint64_t expected_revision;
+	uint64_t byte_size;
+	uint8_t payload_digest[32];
+} GDExtensionQualificationTextureUploadV1;
+
+typedef struct {
+	GDExtensionDeviceExitAbi abi;
+	GDExtensionQualificationResourceRefV1 resource;
+	uint64_t rid;
+	uint64_t object_serial;
+	uint64_t retire_operation;
+} GDExtensionQualificationResourceRetireV1;
+
+typedef struct {
+	GDExtensionDeviceExitAbi abi;
+	GDExtensionQualificationResourceRefV1 resource;
+	uint64_t rid;
+	uint64_t object_serial;
+	uint64_t retire_operation;
+	uint64_t revision;
+	uint64_t frame_epoch;
+	uint64_t event_seq;
+	uint64_t dependency_serial;
+	uint32_t state;
+	uint32_t return_status;
+	uint32_t frame_slot;
+	uint32_t reason;
+	int32_t native_error;
+	uint32_t kind;
+	int64_t native_code;
+} GDExtensionQualificationResourceRetireReportV1;
+
+typedef enum {
+	GDEXTENSION_QUALIFICATION_RESOURCE_INVALID_V1 = 0,
+	GDEXTENSION_QUALIFICATION_RESOURCE_TEXTURE_V1 = 1,
+	GDEXTENSION_QUALIFICATION_RESOURCE_SAMPLER_V1 = 2,
+	GDEXTENSION_QUALIFICATION_RESOURCE_SET_V1 = 3,
+} GDExtensionQualificationResourceKindV1;
+
+typedef enum {
+	GDEXTENSION_QUALIFICATION_TEXTURE_TYPE_INVALID_V1 = 0,
+	GDEXTENSION_QUALIFICATION_TEXTURE_TYPE_1D_V1 = 1,
+	GDEXTENSION_QUALIFICATION_TEXTURE_TYPE_2D_V1 = 2,
+	GDEXTENSION_QUALIFICATION_TEXTURE_TYPE_3D_V1 = 3,
+} GDExtensionQualificationTextureTypeV1;
+
+typedef enum {
+	GDEXTENSION_QUALIFICATION_TEXTURE_FORMAT_INVALID_V1 = 0,
+	GDEXTENSION_QUALIFICATION_TEXTURE_FORMAT_RGBA32F_V1 = 1,
+	GDEXTENSION_QUALIFICATION_TEXTURE_FORMAT_RGBA8_V1 = 2,
+} GDExtensionQualificationTextureFormatV1;
+
+typedef enum {
+	GDEXTENSION_QUALIFICATION_BINDING_INVALID_V1 = 0,
+	GDEXTENSION_QUALIFICATION_BINDING_STORAGE_BUFFER_V1 = 1,
+	GDEXTENSION_QUALIFICATION_BINDING_TEXTURE_V1 = 2,
+	GDEXTENSION_QUALIFICATION_BINDING_SAMPLER_V1 = 3,
+	GDEXTENSION_QUALIFICATION_BINDING_SAMPLER_WITH_TEXTURE_V1 = 4,
+	GDEXTENSION_QUALIFICATION_BINDING_IMAGE_V1 = 5,
+} GDExtensionQualificationBindingTypeV1;
 
 /**
  * @name get_godot_version
@@ -4803,6 +4961,180 @@ typedef GDExtensionDeviceSessionResultV1 (*GDExtensionInterfaceDeviceSessionQual
  * @return Original native Error and closed device-session reason; API call return is not GPU completion.
  */
 typedef GDExtensionDeviceSessionResultV1 (*GDExtensionInterfaceDeviceSessionQualificationRtReleaseV1)(GDExtensionQualificationBridgeRefV1 bridge, GDExtensionQualificationRtRefV1 ref);
+
+/**
+ * @name device_session_qualification_texture_create_v1
+ * @since 4.7
+ *
+ * Original qualification bridge typed resource transaction; numeric observations do not authorize bare RIDs.
+ *
+ * @param bridge Original typed transaction bridge.
+ * @param request Original typed transaction request.
+ * @param out_backing Original typed transaction out_backing.
+ *
+ * @return Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error.
+ */
+typedef GDExtensionDeviceSessionResultV1 (*GDExtensionInterfaceDeviceSessionQualificationTextureCreateV1)(GDExtensionQualificationBridgeRefV1 bridge, const GDExtensionQualificationTextureCreateV1 *request, GDExtensionQualificationResourceBackingV1 *out_backing);
+
+/**
+ * @name device_session_qualification_sampler_create_v1
+ * @since 4.7
+ *
+ * Original qualification bridge typed resource transaction; numeric observations do not authorize bare RIDs.
+ *
+ * @param bridge Original typed transaction bridge.
+ * @param request Original typed transaction request.
+ * @param out_backing Original typed transaction out_backing.
+ *
+ * @return Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error.
+ */
+typedef GDExtensionDeviceSessionResultV1 (*GDExtensionInterfaceDeviceSessionQualificationSamplerCreateV1)(GDExtensionQualificationBridgeRefV1 bridge, const GDExtensionQualificationSamplerCreateV1 *request, GDExtensionQualificationResourceBackingV1 *out_backing);
+
+/**
+ * @name device_session_qualification_set_create_v1
+ * @since 4.7
+ *
+ * Original qualification bridge typed resource transaction; numeric observations do not authorize bare RIDs.
+ *
+ * @param bridge Original typed transaction bridge.
+ * @param request Original typed transaction request.
+ * @param bindings Original typed transaction bindings.
+ * @param binding_count Original typed transaction binding_count.
+ * @param out_backing Original typed transaction out_backing.
+ *
+ * @return Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error.
+ */
+typedef GDExtensionDeviceSessionResultV1 (*GDExtensionInterfaceDeviceSessionQualificationSetCreateV1)(GDExtensionQualificationBridgeRefV1 bridge, const GDExtensionQualificationSetCreateV1 *request, const GDExtensionQualificationUniformBindingV1 *bindings, uint32_t binding_count, GDExtensionQualificationResourceBackingV1 *out_backing);
+
+/**
+ * @name device_session_qualification_texture_upload_v1
+ * @since 4.7
+ *
+ * Original qualification bridge typed resource transaction; numeric observations do not authorize bare RIDs.
+ *
+ * @param bridge Original typed transaction bridge.
+ * @param request Original typed transaction request.
+ * @param pixels Original typed transaction pixels.
+ * @param pixel_bytes Original typed transaction pixel_bytes.
+ * @param segments Original typed transaction segments.
+ * @param segment_capacity Original typed transaction segment_capacity.
+ * @param out_report Original typed transaction out_report.
+ *
+ * @return Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error.
+ */
+typedef GDExtensionDeviceSessionResultV1 (*GDExtensionInterfaceDeviceSessionQualificationTextureUploadV1)(GDExtensionQualificationBridgeRefV1 bridge, const GDExtensionQualificationTextureUploadV1 *request, const void *pixels, uint32_t pixel_bytes, GDExtensionQualificationUploadSegmentV1 *segments, uint32_t segment_capacity, GDExtensionQualificationUploadReportV1 *out_report);
+
+/**
+ * @name device_session_qualification_resource_retire_v1
+ * @since 4.7
+ *
+ * Original qualification bridge typed resource transaction; numeric observations do not authorize bare RIDs.
+ *
+ * @param bridge Original typed transaction bridge.
+ * @param request Original typed transaction request.
+ * @param out_report Original typed transaction out_report.
+ *
+ * @return Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error.
+ */
+typedef GDExtensionDeviceSessionResultV1 (*GDExtensionInterfaceDeviceSessionQualificationResourceRetireV1)(GDExtensionQualificationBridgeRefV1 bridge, const GDExtensionQualificationResourceRetireV1 *request, GDExtensionQualificationResourceRetireReportV1 *out_report);
+
+/**
+ * @name device_session_qualification_resource_retire_observe_v1
+ * @since 4.7
+ *
+ * Original qualification bridge typed resource transaction; numeric observations do not authorize bare RIDs.
+ *
+ * @param bridge Original typed transaction bridge.
+ * @param resource Original typed transaction resource.
+ * @param budget Original typed transaction budget.
+ * @param out_report Original typed transaction out_report.
+ *
+ * @return Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error.
+ */
+typedef GDExtensionDeviceSessionResultV1 (*GDExtensionInterfaceDeviceSessionQualificationResourceRetireObserveV1)(GDExtensionQualificationBridgeRefV1 bridge, GDExtensionQualificationResourceRefV1 resource, const GDExtensionQualificationBudgetV1 *budget, GDExtensionQualificationResourceRetireReportV1 *out_report);
+
+/**
+ * @name device_session_qualification_resource_retire_release_v1
+ * @since 4.7
+ *
+ * Original qualification bridge typed resource transaction; numeric observations do not authorize bare RIDs.
+ *
+ * @param bridge Original typed transaction bridge.
+ * @param resource Original typed transaction resource.
+ * @param revision Original typed transaction revision.
+ *
+ * @return Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error.
+ */
+typedef GDExtensionDeviceSessionResultV1 (*GDExtensionInterfaceDeviceSessionQualificationResourceRetireReleaseV1)(GDExtensionQualificationBridgeRefV1 bridge, GDExtensionQualificationResourceRefV1 resource, uint64_t revision);
+
+/**
+ * @name device_session_bind_host_producer_v1
+ * @since 4.7
+ *
+ * Internal guarded device-session registration import. Existing loader and guarded entry adoption remain required. Native aligned nonaliasing pointers are required; abi version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero.
+ *
+ * The original Registry owns all handles and metadata. Empty output handles remain empty on failure; nonempty outputs reject unchanged. No label, address, code hold or registration alone grants operation, OAS, evidence-site or native source authority.
+ * Binds once inside the authenticated original SCENE initializer. Identical root and code holder retry returns the same registration identity; contradictory rebinding rejects before publication.
+ *
+ * @param abi ABI version and layout.
+ * @param initialize Exact original unacknowledged SCENE initializer context.
+ * @param code_hold Original live SCENE cleanup code hold.
+ * @param attachment_identity Original Host root address, identity only and never dereferenced by core.
+ * @param out_registration Empty output; original Registry retains its metadata until release.
+ *
+ * @return Existing Godot Error value.
+ */
+typedef int32_t (*GDExtensionInterfaceDeviceSessionBindHostProducerV1)(const GDExtensionDeviceExitAbi *abi, GDExtensionDeviceExitInitializationLevelContextRef initialize, GDExtensionDeviceExitLibraryCodeHoldRef code_hold, const void *attachment_identity, GDExtensionProducerRegistrationRefV1 *out_registration);
+
+/**
+ * @name device_session_clone_producer_registration_v1
+ * @since 4.7
+ *
+ * Internal guarded device-session registration import. Existing loader and guarded entry adoption remain required. Native aligned nonaliasing pointers are required; abi version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero.
+ *
+ * The original Registry owns all handles and metadata. Empty output handles remain empty on failure; nonempty outputs reject unchanged. No label, address, code hold or registration alone grants operation, OAS, evidence-site or native source authority.
+ * Retains only the already-issued original metadata, including after admission revocation. It cannot reopen source admission.
+ *
+ * @param abi ABI version and layout.
+ * @param source Retained original registration handle.
+ * @param out_registration Empty output; original Registry retains its metadata until release.
+ *
+ * @return Existing Godot Error value.
+ */
+typedef int32_t (*GDExtensionInterfaceDeviceSessionCloneProducerRegistrationV1)(const GDExtensionDeviceExitAbi *abi, GDExtensionProducerRegistrationRefV1 source, GDExtensionProducerRegistrationRefV1 *out_registration);
+
+/**
+ * @name device_session_copy_producer_registration_v1
+ * @since 4.7
+ *
+ * Internal guarded device-session registration import. Existing loader and guarded entry adoption remain required. Native aligned nonaliasing pointers are required; abi version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero.
+ *
+ * The original Registry owns all handles and metadata. Empty output handles remain empty on failure; nonempty outputs reject unchanged. No label, address, code hold or registration alone grants operation, OAS, evidence-site or native source authority.
+ * Copies original immutable label, registry instance and library generation while the exact registration remains retained. No DSO pointer or encoder is invoked.
+ *
+ * @param abi ABI version and layout.
+ * @param source Retained original registration handle.
+ * @param out_identity Caller initializes embedded abi to version 1, sizeof this structure, reserved zero. Preserved unchanged on failure.
+ *
+ * @return Existing Godot Error value.
+ */
+typedef int32_t (*GDExtensionInterfaceDeviceSessionCopyProducerRegistrationV1)(const GDExtensionDeviceExitAbi *abi, GDExtensionProducerRegistrationRefV1 source, GDExtensionProducerRegistrationIdentityV1 *out_identity);
+
+/**
+ * @name device_session_release_producer_registration_v1
+ * @since 4.7
+ *
+ * Internal guarded device-session registration import. Existing loader and guarded entry adoption remain required. Native aligned nonaliasing pointers are required; abi version 1, sizeof(GDExtensionDeviceExitAbi), reserved zero.
+ *
+ * The original Registry owns all handles and metadata. Empty output handles remain empty on failure; nonempty outputs reject unchanged. No label, address, code hold or registration alone grants operation, OAS, evidence-site or native source authority.
+ * Returns exactly this retained registration handle once. It does not retire code, native work or any operation obligation. Repeated or wrong-domain release rejects.
+ *
+ * @param abi ABI version and layout.
+ * @param source Retained original registration handle.
+ *
+ * @return Existing Godot Error value.
+ */
+typedef int32_t (*GDExtensionInterfaceDeviceSessionReleaseProducerRegistrationV1)(const GDExtensionDeviceExitAbi *abi, GDExtensionProducerRegistrationRefV1 source);
 
 #ifdef __cplusplus
 }
