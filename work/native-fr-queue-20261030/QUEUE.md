@@ -17,3 +17,7 @@ The next implementation task is selected from these lanes using actual current s
 ## CPU empty point emission — 2026-11-02
 
 2D/3D empty point arrays deactivate and skip new particles. Source RED/GREEN and native neighbor suites passed. Receipt: `work/particle-cpu-empty-points-20261102/RECEIPT.md`.
+
+## RD particle cleanup guards — 2026-11-02
+
+Direct native particle/collision free rejects null owner lookup. Source RED/GREEN, editor build and neighbor tests passed; no live invalid-RID GPU test claimed. Receipt: `work/particle-rd-cleanup-guards-20261102/RECEIPT.md`.

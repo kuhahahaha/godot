@@ -89,6 +89,10 @@
     {
       "path": "work/particle-cpu-empty-points-20261102/RECEIPT.md",
       "sha256": "c31ea402f3c0b298db24da62f58e132c024edf1e5f23c2f0b1837fa4aed5f328"
+    },
+    {
+      "path": "work/particle-rd-cleanup-guards-20261102/RECEIPT.md",
+      "sha256": "3a26dee0e849c14675c421ef7ca54f47717885618bbb5306d0d593df5b3a2b5c"
     }
   ],
   "codex_goal_status_at_capture": "blocked"

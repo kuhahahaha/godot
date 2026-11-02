@@ -237,6 +237,7 @@ void ParticlesStorage::particles_initialize(RID p_rid) {
 
 void ParticlesStorage::particles_free(RID p_rid) {
 	Particles *particles = particles_owner.get_or_null(p_rid);
+	ERR_FAIL_NULL(particles);
 
 	particles->dependency.deleted_notify(p_rid);
 	particles->update_list.remove_from_list();
@@ -2445,6 +2446,7 @@ void ParticlesStorage::particles_collision_initialize(RID p_rid) {
 
 void ParticlesStorage::particles_collision_free(RID p_rid) {
 	ParticlesCollision *particles_collision = particles_collision_owner.get_or_null(p_rid);
+	ERR_FAIL_NULL(particles_collision);
 
 	if (particles_collision->heightfield_fb.is_valid()) {
 		RD::get_singleton()->free_rid(particles_collision->heightfield_fb);
