@@ -178,6 +178,7 @@ void GPUParticles3D::set_process_material(const Ref<Material> &p_material) {
 	RS::get_singleton()->particles_set_process_material(particles, material_rid);
 
 	update_configuration_warnings();
+	update_gizmos();
 }
 
 void GPUParticles3D::set_speed_scale(double p_scale) {

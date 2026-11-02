@@ -432,6 +432,10 @@ Rect2 GPUParticles2D::capture_rect() const {
 }
 
 void GPUParticles2D::set_texture(const Ref<Texture2D> &p_texture) {
+	if (p_texture.is_valid()) {
+		const float scaled_size = (float)(collision_base_size * ((double)p_texture->get_width() + p_texture->get_height()) / 4.0);
+		ERR_FAIL_COND_MSG(!Math::is_finite(scaled_size) || scaled_size < 0.0f, "Particle texture size would make the collision base size invalid.");
+	}
 	if (texture.is_valid()) {
 		texture->disconnect_changed(callable_mp(this, &GPUParticles2D::_texture_changed));
 	}
