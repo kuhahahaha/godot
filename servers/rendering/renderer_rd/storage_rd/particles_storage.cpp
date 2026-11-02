@@ -432,7 +432,7 @@ void ParticlesStorage::particles_set_custom_aabb(RID p_particles, const AABB &p_
 void ParticlesStorage::particles_set_speed_scale(RID p_particles, double p_scale) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
-	ERR_FAIL_COND_MSG(!_particles_speed_scale_is_valid(p_scale), "Particle speed scale must be finite.");
+	ERR_FAIL_COND_MSG(!_particles_speed_scale_is_valid(p_scale), "Particle speed scale must be finite and non-negative.");
 
 	particles->speed_scale = p_scale;
 }
@@ -1023,7 +1023,7 @@ bool ParticlesStorage::_particles_process_time_is_valid(double p_time) {
 }
 
 bool ParticlesStorage::_particles_speed_scale_is_valid(double p_scale) {
-	return Math::is_finite(p_scale);
+	return Math::is_finite(p_scale) && p_scale >= 0.0;
 }
 
 bool ParticlesStorage::_particles_ratio_is_valid(double p_ratio) {

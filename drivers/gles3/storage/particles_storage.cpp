@@ -258,6 +258,7 @@ void ParticlesStorage::particles_set_custom_aabb(RID p_particles, const AABB &p_
 void ParticlesStorage::particles_set_speed_scale(RID p_particles, double p_scale) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_scale) || p_scale < 0.0, "Particle speed scale must be finite and non-negative.");
 
 	particles->speed_scale = p_scale;
 }

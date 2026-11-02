@@ -182,7 +182,7 @@ void GPUParticles3D::set_process_material(const Ref<Material> &p_material) {
 }
 
 void GPUParticles3D::set_speed_scale(double p_scale) {
-	ERR_FAIL_COND_MSG(!Math::is_finite(p_scale), "Particles speed scale must be finite.");
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_scale) || p_scale < 0.0, "Particles speed scale must be finite and non-negative.");
 	speed_scale = p_scale;
 	RS::get_singleton()->particles_set_speed_scale(particles, p_scale);
 }

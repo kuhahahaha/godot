@@ -136,7 +136,7 @@ void CPUParticles2D::set_use_local_coordinates(bool p_enable) {
 }
 
 void CPUParticles2D::set_speed_scale(double p_scale) {
-	ERR_FAIL_COND_MSG(!Math::is_finite(p_scale), "Particles speed scale must be finite.");
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_scale) || p_scale < 0.0, "Particles speed scale must be finite and non-negative.");
 	speed_scale = p_scale;
 }
 
