@@ -1021,12 +1021,17 @@ void ParticlesStorage::_particles_update_instance_buffer(Particles *particles, c
 	particles_shader.copy_shader.version_set_uniform(ParticlesCopyShaderGLES3::ALIGN_AXIS, uint32_t(particles->transform_align_axis), particles_shader.copy_shader_version, variant, specialization);
 	particles_shader.copy_shader.version_set_uniform(ParticlesCopyShaderGLES3::ALIGN_CHANNEL_FILTER, uint32_t(particles->transform_align_channel_filter), particles_shader.copy_shader_version, variant, specialization);
 
+	uint32_t lifetime_split = 0;
+	if (particles->draw_order == RSE::PARTICLES_DRAW_ORDER_LIFETIME && !_particles_get_lifetime_split(uint64_t(particles->amount), particles->phase, lifetime_split)) {
+		ERR_PRINT("Particle lifetime split exceeds the supported range.");
+		return;
+	}
+
 	glBindVertexArray(particles->back_vertex_array);
 	glBindBufferRange(GL_TRANSFORM_FEEDBACK_BUFFER, 0, particles->front_instance_buffer, 0, particles->instance_buffer_size_cache);
 	glBeginTransformFeedback(GL_POINTS);
 
 	if (particles->draw_order == RSE::PARTICLES_DRAW_ORDER_LIFETIME) {
-		uint32_t lifetime_split = (MIN(int(particles->amount * particles->phase), particles->amount - 1) + 1) % particles->amount;
 		uint32_t stride = particles->process_buffer_stride_cache;
 
 		glBindBuffer(GL_ARRAY_BUFFER, particles->back_process_buffer);
@@ -1272,6 +1277,12 @@ void ParticlesStorage::update_particles() {
 
 template <typename ParticleInstanceData>
 void ParticlesStorage::_particles_reverse_lifetime_sort(Particles *particles) {
+	uint32_t lifetime_split = 0;
+	if (!_particles_get_lifetime_split(uint64_t(particles->amount), particles->sort_buffer_phase, lifetime_split)) {
+		ERR_PRINT("Particle lifetime split exceeds the supported range.");
+		return;
+	}
+
 	glBindBuffer(GL_ARRAY_BUFFER, particles->sort_buffer);
 
 	ParticleInstanceData *particle_array;
@@ -1287,7 +1298,6 @@ void ParticlesStorage::_particles_reverse_lifetime_sort(Particles *particles) {
 	godot_webgl2_glGetBufferSubData(GL_ARRAY_BUFFER, 0, buffer_size, particle_array);
 #endif
 
-	uint32_t lifetime_split = (MIN(int(particles->amount * particles->sort_buffer_phase), particles->amount - 1) + 1) % particles->amount;
 	for (uint32_t i = 0; i < lifetime_split / 2; i++) {
 		SWAP(particle_array[i], particle_array[lifetime_split - i - 1]);
 	}
@@ -1302,6 +1312,22 @@ void ParticlesStorage::_particles_reverse_lifetime_sort(Particles *particles) {
 	glBufferSubData(GL_ARRAY_BUFFER, 0, buffer_size, particle_vector.ptr());
 #endif
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
+}
+
+bool ParticlesStorage::_particles_get_lifetime_split(uint64_t p_amount, double p_phase, uint32_t &r_split) {
+	r_split = 0;
+	if (p_amount == 0 || p_amount > UINT32_MAX || !Math::is_finite(p_phase) || p_phase < 0.0) {
+		return false;
+	}
+
+	const double scaled_phase = double(p_amount) * p_phase;
+	if (!Math::is_finite(scaled_phase)) {
+		return false;
+	}
+
+	const uint64_t phase_index = scaled_phase >= double(p_amount - 1) ? p_amount - 1 : uint64_t(scaled_phase);
+	r_split = uint32_t((phase_index + 1) % p_amount);
+	return true;
 }
 
 Dependency *ParticlesStorage::particles_get_dependency(RID p_particles) const {

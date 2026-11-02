@@ -261,6 +261,8 @@ private:
 	void _particles_allocate_history_buffers(Particles *particles);
 	void _particles_update_instance_buffer(Particles *particles, const Vector3 &p_axis, const Vector3 &p_up_axis);
 
+	static bool _particles_get_lifetime_split(uint64_t p_amount, double p_phase, uint32_t &r_split);
+
 	template <typename T>
 	void _particles_reverse_lifetime_sort(Particles *particles);
 
