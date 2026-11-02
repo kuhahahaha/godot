@@ -40,6 +40,7 @@
 #include "scene/resources/canvas_item_material.h"
 #include "scene/resources/curve_texture.h"
 #include "scene/resources/gradient_texture.h"
+#include "scene/resources/image_texture.h"
 #include "scene/resources/particle_process_material.h"
 #include "servers/rendering/rendering_server.h"
 
@@ -552,6 +553,8 @@ void GPUParticles2D::convert_from_particles(Node *p_particles) {
 	CPUParticles2D *cpu_particles = Object::cast_to<CPUParticles2D>(p_particles);
 	ERR_FAIL_NULL_MSG(cpu_particles, "Only CPUParticles2D nodes can be converted to GPUParticles2D.");
 
+	set_sub_emitter(NodePath());
+	set_trail_enabled(false);
 	set_use_fixed_seed(cpu_particles->get_use_fixed_seed());
 	set_seed(cpu_particles->get_seed());
 	set_emitting(cpu_particles->is_emitting());
@@ -596,6 +599,38 @@ void GPUParticles2D::convert_from_particles(Node *p_particles) {
 	proc_mat->set_particle_flag(ParticleProcessMaterial::PARTICLE_FLAG_ALIGN_Y_TO_VELOCITY, cpu_particles->get_particle_flag(CPUParticles2D::PARTICLE_FLAG_ALIGN_Y_TO_VELOCITY));
 
 	proc_mat->set_emission_shape(ParticleProcessMaterial::EmissionShape(cpu_particles->get_emission_shape()));
+	if (cpu_particles->get_emission_shape() == CPUParticles2D::EMISSION_SHAPE_POINTS || cpu_particles->get_emission_shape() == CPUParticles2D::EMISSION_SHAPE_DIRECTED_POINTS) {
+		Vector<Vector2> points = cpu_particles->get_emission_points();
+		if (!points.is_empty()) {
+			const int count = points.size();
+			const int width = MIN(count, 2048);
+			const int height = (count + width - 1) / width;
+			Ref<Image> image = Image::create_empty(width, height, false, Image::FORMAT_RGF);
+			for (int i = 0; i < count; i++) {
+				image->set_pixel(i % width, i / width, Color(points[i].x, points[i].y, 0));
+			}
+			proc_mat->set_emission_point_texture(ImageTexture::create_from_image(image));
+			proc_mat->set_emission_point_count(count);
+
+			Vector<Vector2> normals = cpu_particles->get_emission_normals();
+			if (cpu_particles->get_emission_shape() == CPUParticles2D::EMISSION_SHAPE_DIRECTED_POINTS && normals.size() == count) {
+				Ref<Image> normal_image = Image::create_empty(width, height, false, Image::FORMAT_RGF);
+				for (int i = 0; i < count; i++) {
+					normal_image->set_pixel(i % width, i / width, Color(normals[i].x, normals[i].y, 0));
+				}
+				proc_mat->set_emission_normal_texture(ImageTexture::create_from_image(normal_image));
+			}
+
+			Vector<Color> colors = cpu_particles->get_emission_colors();
+			if (colors.size() == count) {
+				Ref<Image> color_image = Image::create_empty(width, height, false, Image::FORMAT_RGBA8);
+				for (int i = 0; i < count; i++) {
+					color_image->set_pixel(i % width, i / width, colors[i]);
+				}
+				proc_mat->set_emission_color_texture(ImageTexture::create_from_image(color_image));
+			}
+		}
+	}
 	proc_mat->set_emission_sphere_radius(cpu_particles->get_emission_sphere_radius());
 
 	proc_mat->set_emission_ring_radius(cpu_particles->get_emission_ring_radius());
@@ -619,7 +654,7 @@ void GPUParticles2D::convert_from_particles(Node *p_particles) {
 	proc_mat->set_param_min(ParticleProcessMaterial::m_param, cpu_particles->get_param_min(CPUParticles2D::m_param)); \
 	{ \
 		Ref<Curve> curve = cpu_particles->get_param_curve(CPUParticles2D::m_param); \
-		if (curve.is_valid()) { \
+		if (curve.is_valid() && (CPUParticles2D::m_param != CPUParticles2D::PARAM_SCALE || !cpu_particles->get_split_scale())) { \
 			Ref<CurveTexture> tex = memnew(CurveTexture); \
 			tex->set_curve(curve); \
 			proc_mat->set_param_texture(ParticleProcessMaterial::m_param, tex); \
