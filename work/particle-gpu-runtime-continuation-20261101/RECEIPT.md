@@ -26,3 +26,11 @@ The previously listed gate was subsequently executed on the pinned module-enable
 The run observed six queued and six completed async readbacks, four rendered frames, 26 original buffer RID releases followed by physical return acknowledgement, 22 native shader/pipeline/uniform resources freed, and no exit leaks. The exact 11 injected engine diagnostics matched the expected counter; no extra errors or script failures occurred. The full raw result is `results/20261101-122958/RESULTS.json` with review in `METAL_GREEN_REVIEW.md`.
 
 This closes the package's tests-only actual main-Metal retry, progress, trail-resource, readback, and physical-retirement gate. It remains separate from a production release build and from ANGE owner, typed-close, Ready, or G1 acceptance; the historical pre-run handoff above is retained rather than rewritten.
+
+## Current dirty-source rerun — 2026-11-02
+
+A fresh `scons platform=macos target=editor tests=yes module_particles_runtime_tests_enabled=yes -j8` completed with rc 0 and `source_drift=[]`; the resulting editor was pinned separately under `bin/godot-particles-runtime-current.arm64` with SHA-256 `19f8c9f542fb64db713a03a31413c8df9622100f50d81969254195f9527760e4` and controlled-build metadata SHA-256 `3ef8b748c7777311d20168050828c33939f35ca3897e7c29d5076a83cfe68df2`.
+
+The subsequent real Metal runner invocation is recorded in `results/20261102-191118/RESULTS.json`. It returned rc 41 with the explicit `tests_only_module_missing` result. The source has `modules/particles_runtime_tests/config.py:is_enabled() == False` by default and an opt-in `servers/rendering/SCsub` integration. The resulting executable nevertheless reported the explicit missing-module capability result under the pinned runner; the build artifact and generated module-registration state require a follow-up inspection before any positive GPU claim. This is a valid capability-negative result and is not GPU evidence; the older 2026-11-01 green host remains pinned to its original source window and is not attributed to the current dirty tree.
+
+The candidate module wiring and fixture expansion remain staged as review material in `CANDIDATE.patch`; they were not applied to the mixed dirty production tree in this rerun.
