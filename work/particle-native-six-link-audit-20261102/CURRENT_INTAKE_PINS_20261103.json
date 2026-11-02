@@ -28,6 +28,12 @@
     }
   },
   "godot_head": "d70549c174f1bec3d11bcfdf8ca2f2a366d00441",
+  "interface_pairing_check": {
+    "conclusion": "Current A debug/release DSO candidates cannot be accepted as formally paired to this Godot interface without owner rebuild or source-backed ABI reconciliation.",
+    "example": "Godot generated header has GDExtensionProducerRegistrationRefV1 and device_session_bind_host_producer_v1; A generated godot-cpp header does not.",
+    "method": "byte comparison plus unified diff",
+    "status": "MISMATCH"
+  },
   "notes": [
     "Current file hashes are an intake snapshot, not a formal A SDK/DSO pairing claim.",
     "The original A request issuer must supply the product caller and capture specs; no synthetic request is authorized."
