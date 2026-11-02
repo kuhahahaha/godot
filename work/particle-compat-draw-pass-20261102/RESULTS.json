@@ -1,0 +1,48 @@
+{
+  "binary_sha256": "b87ce88c36142d213b2ecc6e79e22995e4de5fa544ca3971dab89f7cc46e409d",
+  "command": [
+    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.arm64",
+    "--path",
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/particle-compat-draw-pass-20261102/project",
+    "--rendering-driver",
+    "opengl3",
+    "--rendering-method",
+    "gl_compatibility",
+    "--fixed-fps",
+    "60",
+    "--verbose"
+  ],
+  "process_rc": 0,
+  "checks": {
+    "exit_zero": true,
+    "compatibility_initialized": true,
+    "three_stages": true,
+    "colors_and_aabb": true,
+    "node_freed": true,
+    "no_errors": true,
+    "binary_unchanged": true
+  },
+  "samples": [
+    [
+      "one",
+      "1",
+      "690",
+      "0",
+      "0.652188"
+    ],
+    [
+      "two",
+      "2",
+      "200",
+      "680",
+      "0.652188"
+    ],
+    [
+      "shrunk",
+      "1",
+      "690",
+      "0",
+      "0.652188"
+    ]
+  ]
+}
