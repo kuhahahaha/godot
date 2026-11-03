@@ -471,6 +471,15 @@ TEST_CASE("[ResourceSnapshot] CurveXYZTexture revision tracks wrapper and child 
 	texture->set_curve_z(curve);
 	CHECK(texture->get_content_revision() > z_revision);
 
+	Ref<Curve> detached_curve;
+	detached_curve.instantiate();
+	texture->set_curve_x(detached_curve);
+	texture->set_curve_y(Ref<Curve>());
+	texture->set_curve_z(Ref<Curve>());
+	const uint64_t detached_revision = texture->get_content_revision();
+	curve->set_point_value(1, 0.75);
+	CHECK(texture->get_content_revision() == detached_revision);
+
 	const uint64_t width_revision = texture->get_content_revision();
 	texture->set_width(512);
 	CHECK(texture->get_content_revision() > width_revision);
