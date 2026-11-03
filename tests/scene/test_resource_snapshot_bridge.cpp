@@ -75,6 +75,7 @@ public:
 	static float first_offset(const Gradient *p) { return p->points[0].offset; }
 	static void exhaust(Curve *p) { p->_content_revision = UINT64_MAX - 1; }
 	static void exhaust(Gradient *p) { p->_content_revision = UINT64_MAX - 1; }
+	static void exhaust(CurveXYZTexture *p) { p->_content_revision = UINT64_MAX - 1; }
 };
 
 TEST_CASE("[ResourceSnapshot] native Curve snapshot uses source sampling and preserves prefixes") {
@@ -486,4 +487,19 @@ TEST_CASE("[ResourceSnapshot] CurveXYZTexture revision tracks wrapper and child 
 	const uint64_t width_revision = texture->get_content_revision();
 	texture->set_width(512);
 	CHECK(texture->get_content_revision() > width_revision);
+}
+
+TEST_CASE("[ResourceSnapshot] CurveXYZTexture revision saturates at UINT64_MAX") {
+	Ref<CurveXYZTexture> texture;
+	texture.instantiate();
+	Ref<Curve> curve;
+	curve.instantiate();
+	TestResourceSnapshotAccess::exhaust(texture.ptr());
+
+	texture->set_curve_x(curve);
+	CHECK(texture->get_content_revision() == UINT64_MAX);
+	texture->set_width(512);
+	CHECK(texture->get_content_revision() == UINT64_MAX);
+	curve->add_point(Vector2(0, 0));
+	CHECK(texture->get_content_revision() == UINT64_MAX);
 }
