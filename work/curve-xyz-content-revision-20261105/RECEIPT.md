@@ -24,3 +24,7 @@ Commit `0d0a1c736a` verifies that after replacing/removing child curves, mutatio
 ## ABI boundary coverage
 
 Commit `08267dd219` records that the current V1 texture snapshot ABI intentionally rejects `CurveXYZTexture` as an unsupported wrapper type. Its revision is available for future typed ABI work without silently changing the frozen source-kind contract.
+
+## Saturation coverage
+
+The follow-up test in commit `a7039d3e1d` sets the wrapper revision to `UINT64_MAX - 1` and verifies setter and child mutations saturate at `UINT64_MAX` without wrapping.
