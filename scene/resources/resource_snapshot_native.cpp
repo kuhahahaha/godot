@@ -450,7 +450,7 @@ uint32_t ange_texture_snapshot_v1(void *source, const AngeTextureSnapshotPlanV1 
 			return fail(ANGE_TEXTURE_INVALID_SOURCE_V1);
 		}
 		for (uint32_t i = 0; i < view.width; ++i) {
-			const Color color = gradient->get_color_at_offset(float(i) / float(view.width - 1));
+			const Color color = gradient->get_color_at_offset(view.width > 1 ? float(i) / float(view.width - 1) : 0.0f);
 			if (!finite_color(color)) {
 				return fail(ANGE_TEXTURE_INVALID_SOURCE_V1);
 			}

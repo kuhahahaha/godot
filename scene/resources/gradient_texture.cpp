@@ -102,7 +102,7 @@ void GradientTexture1D::_update() const {
 		Gradient &g = **gradient;
 		// `create()` isn't available for non-uint8_t data, so fill in the data manually.
 		for (int i = 0; i < width; i++) {
-			float ofs = float(i) / (width - 1);
+			float ofs = width > 1 ? float(i) / float(width - 1) : 0.0f;
 			image->set_pixel(i, 0, g.get_color_at_offset(ofs));
 		}
 
@@ -121,7 +121,7 @@ void GradientTexture1D::_update() const {
 			Gradient &g = **gradient;
 
 			for (int i = 0; i < width; i++) {
-				float ofs = float(i) / (width - 1);
+				float ofs = width > 1 ? float(i) / float(width - 1) : 0.0f;
 				Color color = g.get_color_at_offset(ofs);
 
 				wd8[i * 4 + 0] = uint8_t(color.get_r8());

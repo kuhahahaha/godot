@@ -52,6 +52,19 @@ TEST_CASE("[SceneTree][GradientTexture1D] Create GradientTexture1D") {
 	CHECK(gradient_texture->is_using_hdr());
 }
 
+TEST_CASE("[SceneTree][GradientTexture1D] Width one samples the gradient endpoint") {
+	Ref<GradientTexture1D> gradient_texture = memnew(GradientTexture1D);
+	Ref<Gradient> test_gradient = memnew(Gradient);
+	test_gradient->set_colors(PackedColorArray{Color(0.2, 0.4, 0.6, 0.8), Color(0.9, 0.1, 0.3, 1.0)});
+	gradient_texture->set_gradient(test_gradient);
+	gradient_texture->set_width(1);
+
+	Ref<Image> image = gradient_texture->get_image();
+	REQUIRE(image.is_valid());
+	CHECK(image->get_width() == 1);
+	CHECK(image->get_pixel(0, 0).is_equal_approx(test_gradient->get_color(0)));
+}
+
 TEST_CASE("[SceneTree][GradientTexture2D] Create GradientTexture2D") {
 	Ref<GradientTexture2D> gradient_texture = memnew(GradientTexture2D);
 
