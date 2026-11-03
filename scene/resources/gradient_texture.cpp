@@ -293,6 +293,9 @@ float GradientTexture2D::_get_gradient_offset_at(int x, int y) const {
 	}
 	float ofs = 0;
 	Vector2 pos;
+	// A one-pixel axis represents the normalized origin. Initialize both
+	// components so the unused division path cannot leave indeterminate data.
+	pos = Vector2();
 	if (width > 1) {
 		pos.x = static_cast<float>(x) / (width - 1);
 	}
