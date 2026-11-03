@@ -1,0 +1,80 @@
+{
+  "command": [
+    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.arm64",
+    "--path",
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/particle-vector-field-inplace-update-20261104",
+    "--rendering-driver",
+    "vulkan",
+    "--rendering-method",
+    "mobile",
+    "--fixed-fps",
+    "60",
+    "--script",
+    "res://probe.gd"
+  ],
+  "cwd": "/Users/macbookair/Documents/Work/godot_ANGE",
+  "timeout_seconds": 60,
+  "editor_sha_before": "5feadf94534a134a4a1d204dcc16b6fed54839ece6bcb365fa753f03792b33a4",
+  "editor_sha_after": "5feadf94534a134a4a1d204dcc16b6fed54839ece6bcb365fa753f03792b33a4",
+  "probe_sha": "274e36042a3c5ed9fbec9665aa70ad200955bf4ac4da9d1170b7142be0d25ee2",
+  "log_sha": "71afcd6bc41f0aa9edcf7275e9147c5233e4609298061b59cded0edc453e3c6d",
+  "returncode": 0,
+  "timed_out": false,
+  "stages": {
+    "plus_x": {
+      "active": 8,
+      "bytes": 1024,
+      "finite": true,
+      "max_x": 2.03996872901917,
+      "mean_x": 2.03996872901917,
+      "min_x": 2.03996872901917
+    },
+    "updated_minus_x": {
+      "active": 8,
+      "bytes": 1024,
+      "finite": true,
+      "max_x": -2.27996516227722,
+      "mean_x": -2.27996516227722,
+      "min_x": -2.27996516227722
+    }
+  },
+  "final": {
+    "minus": {
+      "motion": {
+        "active": 8,
+        "bytes": 1024,
+        "finite": true,
+        "max_x": -2.27996516227722,
+        "mean_x": -2.27996516227722,
+        "min_x": -2.27996516227722
+      },
+      "stage": "updated_minus_x"
+    },
+    "plus": {
+      "motion": {
+        "active": 8,
+        "bytes": 1024,
+        "finite": true,
+        "max_x": 2.03996872901917,
+        "mean_x": 2.03996872901917,
+        "min_x": 2.03996872901917
+      },
+      "stage": "plus_x"
+    },
+    "same_resource": true,
+    "same_rid": true
+  },
+  "checks": {
+    "exit_zero": true,
+    "not_timed_out": true,
+    "editor_pin_unchanged": true,
+    "vulkan_mobile": true,
+    "two_stages": true,
+    "same_resource": true,
+    "same_rid": true,
+    "finite_active_readback": true,
+    "plus_x_positive": true,
+    "updated_minus_x_negative": true,
+    "no_engine_errors": true
+  }
+}

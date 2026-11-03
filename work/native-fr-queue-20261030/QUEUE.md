@@ -8,6 +8,10 @@ The same-pair World trace proved the first `ERR_BUSY` comes from Metal copy-queu
 
 `GPUParticles3D::restart()` now keeps one-shot emission active through `lifetime` at high explosiveness, matching the setter and 2D restart paths. Fixed-editor timing RED became source-matched GREEN; `[GPUParticles]*` neighbors passed 25 cases / 138 assertions. The narrow change is committed as `3607bcc528`; see `work/particle-gpu3d-restart-timing-20261105/RECEIPT.md`. GPU pixels remain outside this timing proof.
 
+## 2026-11-04 live ImageTexture3D vector-field update
+
+A visible Vulkan Mobile probe kept the same active vector-field `ImageTexture3D` object and RID while `update()` changed both texture slices from +X to −X. Eight production RD particle transforms shifted mean X from +2.03997 to −2.27997; the 11/11 runner checks passed rc 0. This closes one in-place resource-sync motion gap, while other renderers and product ticket evidence remain open. See `work/particle-vector-field-inplace-update-20261104/RECEIPT.md`.
+
 The user's requested long goal covers all authorized Godot-side work in the original FRs, including native integration and cross-cutting work that can advance independently. This queue supplements the older evidence ledger; its old editor hashes and historical status paragraphs remain tied to their original receipts. A blocked owner or CI row is not completion of the queue. No scheduled task is used. The Codex goal record was observed as `blocked`; work continued in this turn, and the available goal API does not expose a resume operation.
 
 | Workstream | Current evidence and next work | Scope boundary |
