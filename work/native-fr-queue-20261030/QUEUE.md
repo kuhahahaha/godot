@@ -16,6 +16,10 @@ A visible Vulkan Mobile probe kept the same active vector-field `ImageTexture3D`
 
 A source-matched visible Metal Mobile editor ran paired heightfield probes: width 2→8 admitted collision (Y 0.11 versus disabled control −7.43), and width 8→2 released it (both −7.43); both rc 0, with eight finite active records per group. The expansion probe retained a sphere positive control. This adds Metal parity to the earlier Vulkan/Forward+/Compatibility evidence; product ticket and other platform gates stay open. See `work/particle-heightfield-mobile-extents-motion-20261105/METAL_EXPAND_SHRINK_RECEIPT.md`.
 
+## 2026-11-04 GPUParticles3D emission-curve visible synchronization
+
+Metal and Vulkan Mobile visible probes exercised `emission_curve` 0→in-place 1→replacement 0→detached-old 0.5. A 16×16 particle ROI retained 256 pixels; summed RGB luminance was `51.200→73.286→51.200→51.200` on both drivers, rc 0, with matching replacement/final PNG hashes. Velocity-limit curve motion and product ticket evidence remain open. See `work/particle-gpu3d-emission-curve-visible-20261105/RECEIPT.md`.
+
 ## 2026-11-04 GPUParticles3D initial-color ramp visible synchronization
 
 Visible Metal and Vulkan Mobile probes exercised `color_initial_ramp` through red→in-place green→replacement blue→detached-old yellow mutation. Both retained exact red/green/blue pixel counts `256/0/0 → 0/256/0 → 0/0/256 → 0/0/256`, rc 0, and matching replacement/final PNG hashes. Emission and velocity-limit curve GPU behavior remains open. See `work/particle-gpu3d-initial-ramp-visible-20261105/RECEIPT.md`.
