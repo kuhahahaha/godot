@@ -446,6 +446,9 @@ TEST_CASE("[ResourceSnapshot] texture plan and capture use real CurveTexture and
 	AngeTextureSnapshotPlanV1 missing_plan = {};
 	CHECK(ange_texture_snapshot_plan_v1(missing_curve.ptr(), ANGE_TEXTURE_FORMAT_RGBAF_V1, &missing_plan) == ANGE_TEXTURE_INVALID_SOURCE_V1);
 	CHECK(ange_texture_snapshot_plan_v1(curve.ptr(), ANGE_TEXTURE_FORMAT_RGBAF_V1, &missing_plan) == ANGE_TEXTURE_WRONG_TYPE_V1);
+	Ref<CurveXYZTexture> unsupported_curve;
+	unsupported_curve.instantiate();
+	CHECK(ange_texture_snapshot_plan_v1(unsupported_curve.ptr(), ANGE_TEXTURE_FORMAT_RGBAF_V1, &missing_plan) == ANGE_TEXTURE_WRONG_TYPE_V1);
 }
 
 TEST_CASE("[ResourceSnapshot] CurveXYZTexture revision tracks wrapper and child mutations") {
