@@ -19,7 +19,7 @@ The prepare interface now takes a `p_nonblocking` flag. `_end_frame()` passes it
 - Visible GPUParticles2D Mobile scene on the isolated editor: rc 0, `CONTROL_READY` and `CONTROL_DONE`, no seal or crash (`seal-wait-gpu2d-visible.log`).
 - Fixed `bin/godot.macos.editor.arm64` and sidecar restored and rehashed to `5feadf94534a134a4a1d204dcc16b6fed54839ece6bcb365fa753f03792b33a4` / `57dbe31a0c966c2ab5f3c79bef760a94749c13a4b0c2a8c7595483543289fad7`.
 
-A owner built the same-source DSO; the visible World/System/Cancel results appear below. Separate Direct/per-ticket evidence is still required for the product gate. The temporary TESTS-only `GODOT_MTL_PREPARE_TRACE` markers used for root-cause attribution were removed from the production source after the runtime experiment; the no-trace Metal object recompiles rc 0 (`seal-wait-clean-compile.log`). The isolated runtime pair above was built before marker removal, so a final no-trace editor relink remains to be verified if that exact artifact is required.
+A owner built the same-source DSO; the visible World/System/Cancel results appear below. Separate Direct/per-ticket evidence is still required for the product gate. The temporary TESTS-only `GODOT_MTL_PREPARE_TRACE` markers used for root-cause attribution were removed from the production source after the runtime experiment; the no-trace Metal object recompiles rc 0 (`seal-wait-clean-compile.log`). The isolated runtime pair above was built before marker removal; the final no-trace editor and its matching DSO are verified below.
 
 ## Matching native DSO visible Metal runs
 
