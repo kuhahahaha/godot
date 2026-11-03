@@ -13,6 +13,43 @@ RUNNER = Path(__file__).with_name("run_owner_package.py")
 
 
 class OwnerPackageTests(unittest.TestCase):
+    def test_controlled_build_pair_mismatch_is_rejected(self):
+        spec = importlib.util.spec_from_file_location("run_owner_package", RUNNER)
+        runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runner)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            editor = root / "editor"
+            dso = root / "dso"
+            editor.write_bytes(b"editor")
+            dso.write_bytes(b"dso")
+
+            def write_identity(path, core_stamp):
+                path.with_name(path.name + ".controlled_build.json").write_text(json.dumps({
+                    "selection": {
+                        "core_stamp": core_stamp,
+                        "compiler_route": "BuiltinGlslangV1",
+                        "compiler_stamp": "compiler",
+                        "platform": "macos",
+                        "architecture": "arm64",
+                        "target_kind": "Executable",
+                    }
+                }))
+
+            write_identity(editor, "core-a")
+            write_identity(dso, "core-b")
+            with self.assertRaisesRegex(ValueError, "controlled-build identity mismatch"):
+                runner._validate_pair_inputs({"inputs": {
+                    "editor": {"path": str(editor)},
+                    "dso": {"path": str(dso)},
+                }})
+
+            write_identity(dso, "core-a")
+            runner._validate_pair_inputs({"inputs": {
+                "editor": {"path": str(editor)},
+                "dso": {"path": str(dso)},
+            }})
+
     def test_scenarios_must_use_one_fixed_editor_sdk_dso_tuple(self):
         spec = importlib.util.spec_from_file_location("run_owner_package", RUNNER)
         runner = importlib.util.module_from_spec(spec)
