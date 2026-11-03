@@ -1,0 +1,42 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/scene/test_gpu_particles.cpp:1796:
+TEST CASE:  [GPUParticlesCollisionSizeRD] 2D texture size changes reach the backend
+
+tests/scene/test_gpu_particles.cpp:1799: MESSAGE: UNRUN: Vulkan renderer required for production collision-size test
+
+===============================================================================
+tests/scene/test_gpu_particles.cpp:1863:
+TEST CASE:  [GPUParticlesFieldRD] production field texture rebinding
+
+tests/scene/test_gpu_particles.cpp:1867: MESSAGE: UNRUN: Vulkan renderer required for production field test
+
+===============================================================================
+tests/scene/test_gpu_particles.cpp:2014:
+TEST CASE:  [GPUParticlesEmissionRD] production point emission texture rebinding
+
+tests/scene/test_gpu_particles.cpp:2017: MESSAGE: UNRUN: Vulkan renderer required for production emission test
+
+===============================================================================
+tests/scene/test_gpu_particles.cpp:2069:
+TEST CASE:  [GPUParticlesRampRD] production particle ramp texture rebinding
+
+tests/scene/test_gpu_particles.cpp:2072: MESSAGE: UNRUN: Vulkan renderer required for production ramp test
+
+===============================================================================
+tests/scene/test_gpu_particles.cpp:2122:
+TEST CASE:  [GPUParticlesSubEmitterRD] runtime target replacement rebinding
+
+tests/scene/test_gpu_particles.cpp:2125: MESSAGE: UNRUN: renderer compositor required for production sub-emitter test
+
+===============================================================================
+tests/scene/test_gpu_particles.cpp:2236:
+TEST CASE:  [GPUParticlesCurveRD] production particle parameter curve rebinding
+
+tests/scene/test_gpu_particles.cpp:2239: MESSAGE: UNRUN: Vulkan renderer required for production curve test
+
+===============================================================================
+[doctest] test cases:  78 |  78 passed | 0 failed | 1972 skipped
+[doctest] assertions: 383 | 383 passed | 0 failed |
+[doctest] Status: SUCCESS!
