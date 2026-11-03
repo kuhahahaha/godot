@@ -1,0 +1,6 @@
+Godot Engine v4.7.2.stable.custom_build.f3cacf1ce (2026-11-02 17:07:07 UTC) - https://godotengine.org
+Metal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M3 Pro (Apple9)
+
+GLES3_HEIGHTFIELD_MOTION_STAGE {"collision":{"active":8,"bytes":1024,"finite":true,"max_x":2.5,"max_y":0.109999902546406,"min_x":2.5,"min_y":0.109999902546406},"control":{"active":8,"bytes":1024,"finite":true,"max_x":2.5,"max_y":-7.42889165878296,"min_x":2.5,"min_y":-7.42889165878296},"stage":"wide_static","width":8.0}
+HEIGHTFIELD_SHRINK_STAGE {"collision":{"active":8,"bytes":1024,"finite":true,"max_x":2.5,"max_y":-7.42889165878296,"min_x":2.5,"min_y":-7.42889165878296},"control":{"active":8,"bytes":1024,"finite":true,"max_x":2.5,"max_y":-7.42889165878296,"min_x":2.5,"min_y":-7.42889165878296},"stage":"shrunk_midflight"}
+HEIGHTFIELD_SHRINK_CHECKS {"shrunk":true,"wide":true}

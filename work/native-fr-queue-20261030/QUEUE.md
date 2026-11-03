@@ -12,6 +12,10 @@ The same-pair World trace proved the first `ERR_BUSY` comes from Metal copy-queu
 
 A visible Vulkan Mobile probe kept the same active vector-field `ImageTexture3D` object and RID while `update()` changed both texture slices from +X to −X. Eight production RD particle transforms shifted mean X from +2.03997 to −2.27997; the 11/11 runner checks passed rc 0. The same unchanged probe also passed visible Metal Mobile rc 0 with identical motion reversal and no seal/crash. This closes one in-place resource-sync motion gap on Vulkan and Metal Mobile; other renderers and product ticket evidence remain open. See `work/particle-vector-field-inplace-update-20261104/RECEIPT.md`.
 
+## 2026-11-04 Metal Mobile heightfield live extent mutation
+
+A source-matched visible Metal Mobile editor ran paired heightfield probes: width 2→8 admitted collision (Y 0.11 versus disabled control −7.43), and width 8→2 released it (both −7.43); both rc 0, with eight finite active records per group. The expansion probe retained a sphere positive control. This adds Metal parity to the earlier Vulkan/Forward+/Compatibility evidence; product ticket and other platform gates stay open. See `work/particle-heightfield-mobile-extents-motion-20261105/METAL_EXPAND_SHRINK_RECEIPT.md`.
+
 The user's requested long goal covers all authorized Godot-side work in the original FRs, including native integration and cross-cutting work that can advance independently. This queue supplements the older evidence ledger; its old editor hashes and historical status paragraphs remain tied to their original receipts. A blocked owner or CI row is not completion of the queue. No scheduled task is used. The Codex goal record was observed as `blocked`; work continued in this turn, and the available goal API does not expose a resume operation.
 
 | Workstream | Current evidence and next work | Scope boundary |
