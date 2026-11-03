@@ -1,0 +1,8 @@
+Godot Engine v4.7.2.stable.custom_build.f3cacf1ce (2026-11-02 17:07:07 UTC) - https://godotengine.org
+Metal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M3 Pro (Apple9)
+
+LINEAR_ACCEL_STAGE {"motion":{"active":8,"bytes":1024,"finite":true,"mean_vx":1.0,"mean_x":0.5},"stage":"initial_low"}
+LINEAR_ACCEL_STAGE {"motion":{"active":8,"bytes":1024,"finite":true,"mean_vx":6.00000047683716,"mean_x":1.83333337306976},"stage":"updated_high"}
+LINEAR_ACCEL_STAGE {"motion":{"active":8,"bytes":1024,"finite":true,"mean_vx":1.0,"mean_x":0.5},"stage":"replaced_low"}
+LINEAR_ACCEL_STAGE {"motion":{"active":8,"bytes":1024,"finite":true,"mean_vx":1.0,"mean_x":0.5},"stage":"detached_old_modified"}
+LINEAR_ACCEL_RESULT renderer=mobile driver=metal passed=true rows=[{"motion":{"active":8,"bytes":1024,"finite":true,"mean_vx":1.0,"mean_x":0.5},"stage":"initial_low"},{"motion":{"active":8,"bytes":1024,"finite":true,"mean_vx":6.00000047683716,"mean_x":1.83333337306976},"stage":"updated_high"},{"motion":{"active":8,"bytes":1024,"finite":true,"mean_vx":1.0,"mean_x":0.5},"stage":"replaced_low"},{"motion":{"active":8,"bytes":1024,"finite":true,"mean_vx":1.0,"mean_x":0.5},"stage":"detached_old_modified"}]
