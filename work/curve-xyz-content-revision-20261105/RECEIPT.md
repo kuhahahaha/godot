@@ -23,4 +23,4 @@ Commit `0d0a1c736a` verifies that after replacing/removing child curves, mutatio
 
 ## ABI boundary coverage
 
-Commit `$(git rev-parse --short HEAD)` records that the current V1 texture snapshot ABI intentionally rejects `CurveXYZTexture` as an unsupported wrapper type. Its revision is available for future typed ABI work without silently changing the frozen source-kind contract.
+Commit `08267dd219` records that the current V1 texture snapshot ABI intentionally rejects `CurveXYZTexture` as an unsupported wrapper type. Its revision is available for future typed ABI work without silently changing the frozen source-kind contract.
