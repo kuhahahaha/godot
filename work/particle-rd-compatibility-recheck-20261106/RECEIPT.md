@@ -11,4 +11,4 @@ Focused source-extraction and harness checks ran against the current Godot workt
 - `particle_rd_heightfield_failure/run.py`: **2/2** checks passed.
 - `particle_buffer_retry/run.py`: **26/26** checks passed.
 
-The independent ANGE build in another worktree also reached `scons: done building targets.` during this inspection. That build result is recorded as context only and does not expand these fixture checks into Godot live-GPU or six-link acceptance.
+The independent ANGE build in another worktree also reached `scons: done building targets.` during this inspection. That build result is recorded as context only and does not expand these fixture checks into Godot live GPU, product six-link acceptance, or a full engine build.
