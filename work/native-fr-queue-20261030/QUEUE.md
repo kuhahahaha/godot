@@ -16,6 +16,10 @@ A visible Vulkan Mobile probe kept the same active vector-field `ImageTexture3D`
 
 A source-matched visible Metal Mobile editor ran paired heightfield probes: width 2→8 admitted collision (Y 0.11 versus disabled control −7.43), and width 8→2 released it (both −7.43); both rc 0, with eight finite active records per group. The expansion probe retained a sphere positive control. This adds Metal parity to the earlier Vulkan/Forward+/Compatibility evidence; product ticket and other platform gates stay open. See `work/particle-heightfield-mobile-extents-motion-20261105/METAL_EXPAND_SHRINK_RECEIPT.md`.
 
+## 2026-11-04 System/Method product pair intake
+
+Priority is now the authentic ANGE System/Method native request through same-ticket completion, exact readback, physical return, release and close/drain, followed by Sprite visible production consumption. The Godot fixed editor/sidecar and System scalar ABI were rechecked; Godot and phase1 selected interface JSON are byte-identical, and focused native controls passed 15/15 cases, 717/717 assertions. The retained native-test DSO selects a different core/compiler stamp and cannot be paired with the fixed editor; phase1 issuer/Host package is not integrated into the main ANGE tree. Product six-link remains open. See `work/system-scalar-native-20261103/PRODUCT_PAIR_INTAKE_20261104.md`. Pause expansion of local curve probes.
+
 ## 2026-11-04 GPUParticles3D radial-velocity curve GPU motion
 
 Visible Metal and Vulkan Mobile production RD readback exercised `radial_velocity_curve` zero→in-place one→replacement zero→detached-old 0.5 with sphere-surface emission. Both drivers returned eight finite active particles, mean X position `0.4201578→0.8403155→0.4201578→0.4201578` and mean X velocity `0→0.8403155→0→0`, rc 0. Readback is synchronized; other parameter curves and product ticket evidence remain open. See `work/particle-gpu3d-radial-velocity-visible-20261105/RECEIPT.md`.
