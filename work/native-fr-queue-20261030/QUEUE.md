@@ -16,6 +16,10 @@ A visible Vulkan Mobile probe kept the same active vector-field `ImageTexture3D`
 
 A source-matched visible Metal Mobile editor ran paired heightfield probes: width 2→8 admitted collision (Y 0.11 versus disabled control −7.43), and width 8→2 released it (both −7.43); both rc 0, with eight finite active records per group. The expansion probe retained a sphere positive control. This adds Metal parity to the earlier Vulkan/Forward+/Compatibility evidence; product ticket and other platform gates stay open. See `work/particle-heightfield-mobile-extents-motion-20261105/METAL_EXPAND_SHRINK_RECEIPT.md`.
 
+## 2026-11-04 GPUParticles3D rotation-velocity curve GPU transform
+
+Visible Metal and Vulkan Mobile production RD readback exercised `rotation_velocity_3d_curve` zero→in-place one→replacement zero→detached-old 0.5 on a fixed-seed GPUParticles3D node. Both drivers returned eight finite active records and mean absolute off-axis basis `0→0.0174531→0→0`, rc 0. Readback is synchronized; other parameter curves and product ticket evidence remain open. See `work/particle-gpu3d-rotation-curve-visible-20261105/RECEIPT.md`.
+
 ## 2026-11-04 GPUParticles3D velocity-limit curve GPU motion
 
 Visible Metal and Vulkan Mobile production RD readback exercised `velocity_limit_curve` 0.1→in-place 1.0→replacement 0.1→detached-old 0.5, restarting one fixed-seed GPUParticles3D node at each stage. Both drivers returned eight finite active records and mean X displacement `0.0509804→0.5→0.0509804→0.0509804`, rc 0. The readback is synchronized; unsynchronized performance and product ticket evidence remain open. See `work/particle-gpu3d-velocity-limit-visible-20261105/RECEIPT.md`.
