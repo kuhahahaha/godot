@@ -12,3 +12,7 @@ Commit: d25a7261fd
 - Added `[ResourceSnapshot] CurveXYZTexture revision tracks wrapper and child mutations` in `tests/scene/test_resource_snapshot_bridge.cpp`.
 - `git diff --check` passed for all three changed files.
 - Full Godot build/test was not started in this turn because the shared checkout had approximately 589 MiB free and other owner work was active; no build claim is made.
+
+## Follow-up coverage
+
+Commit `fe04b18672` extends the regression to X, Y, and Z child curve replacement. `git diff --check` passed. Full build remains deferred while shared owner work and low disk space are present.
