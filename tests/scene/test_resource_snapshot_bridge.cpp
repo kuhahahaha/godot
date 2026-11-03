@@ -408,6 +408,9 @@ TEST_CASE("[ResourceSnapshot] texture plan and capture use real CurveTexture and
 	float curve_first = 0;
 	memcpy(&curve_first, curve_output.ptr(), sizeof(curve_first));
 	CHECK(curve_first == doctest::Approx(0));
+	float curve_last = 0;
+	memcpy(&curve_last, curve_output.ptr() + (curve_plan.output_bytes - 16), sizeof(curve_last));
+	CHECK(curve_last == doctest::Approx(curve->sample_baked(real_t(31) / real_t(32))));
 	const auto curve_child_revision = curve_plan.source.child_revision;
 	curve->set_point_value(1, 0.5);
 	CHECK(curve->get_content_revision() != curve_child_revision);
