@@ -447,3 +447,24 @@ TEST_CASE("[ResourceSnapshot] texture plan and capture use real CurveTexture and
 	CHECK(ange_texture_snapshot_plan_v1(missing_curve.ptr(), ANGE_TEXTURE_FORMAT_RGBAF_V1, &missing_plan) == ANGE_TEXTURE_INVALID_SOURCE_V1);
 	CHECK(ange_texture_snapshot_plan_v1(curve.ptr(), ANGE_TEXTURE_FORMAT_RGBAF_V1, &missing_plan) == ANGE_TEXTURE_WRONG_TYPE_V1);
 }
+
+TEST_CASE("[ResourceSnapshot] CurveXYZTexture revision tracks wrapper and child mutations") {
+	Ref<CurveXYZTexture> texture;
+	texture.instantiate();
+	const uint64_t initial = texture->get_content_revision();
+
+	Ref<Curve> curve;
+	curve.instantiate();
+	curve->add_point(Vector2(0, 0));
+	curve->add_point(Vector2(1, 1));
+	texture->set_curve_x(curve);
+	CHECK(texture->get_content_revision() > initial);
+
+	const uint64_t child_revision = texture->get_content_revision();
+	curve->set_point_value(1, 0.5);
+	CHECK(texture->get_content_revision() > child_revision);
+
+	const uint64_t width_revision = texture->get_content_revision();
+	texture->set_width(512);
+	CHECK(texture->get_content_revision() > width_revision);
+}
