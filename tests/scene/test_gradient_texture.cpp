@@ -111,6 +111,20 @@ TEST_CASE("[SceneTree][GradientTexture2D] Width or height one samples determinis
 	CHECK(image->get_pixel(0, 0).is_equal_approx(test_gradient->get_color(0)));
 	CHECK(image->get_pixel(0, 1).r > image->get_pixel(0, 0).r);
 	CHECK(image->get_pixel(0, 1).g < image->get_pixel(0, 0).g);
+
+	Ref<GradientTexture2D> horizontal_gradient = memnew(GradientTexture2D);
+	horizontal_gradient->set_gradient(test_gradient);
+	horizontal_gradient->set_width(2);
+	horizontal_gradient->set_height(1);
+	horizontal_gradient->set_fill_from(Vector2(0, 0));
+	horizontal_gradient->set_fill_to(Vector2(1, 0));
+	image = horizontal_gradient->get_image();
+	REQUIRE(image.is_valid());
+	CHECK(image->get_width() == 2);
+	CHECK(image->get_height() == 1);
+	CHECK(image->get_pixel(0, 0).is_equal_approx(test_gradient->get_color(0)));
+	CHECK(image->get_pixel(1, 0).r > image->get_pixel(0, 0).r);
+	CHECK(image->get_pixel(1, 0).g < image->get_pixel(0, 0).g);
 }
 
 } // namespace TestGradientTexture
