@@ -4,7 +4,7 @@ Date: 2026-11-06
 
 This index enumerates the 2026-11-06 particle receipts currently present in the Godot worktree. It is a navigation artifact; it does not add runtime or GPU claims.
 
-Indexed receipts: **13**.
+Indexed receipts: **16**.
 
 ## `particle-aabb-process-fixture-recheck-20261106`
 
@@ -32,6 +32,10 @@ Indexed receipts: **13**.
 - `particle_scale_over_velocity/run.py`: **11/11** checks passed, including equal-bound and clamped scalar cases.
 - `particle_aabb_flags/run.py`: **17/17** float checks and **17/17** double checks passed.
 - `particle_instance_uniform_guard/run.py`: **3/3** checks passed.
+
+## `particle-fixture-suite-runtime-recheck-20261106`
+
+- **35/35** runners passed.
 
 ## `particle-fixture-suite-syntax-recheck-20261106`
 
@@ -63,6 +67,9 @@ Indexed receipts: **13**.
 - `particle_rd_cleanup/run.py`: **2/2** checks passed.
 - `particle_collision_uniform_retry/run.py`: **7/7** checks passed.
 
+## `particle-native-gap-scan-20261106`
+
+
 ## `particle-processing-fixture-recheck-20261106`
 
 - `particle_process_material_range_bounds/run.py`: **10/10** checks passed.
@@ -76,6 +83,9 @@ Indexed receipts: **13**.
 - `particle_rd_heightfield_extents/run.py`: **11/11** checks passed.
 - `particle_rd_heightfield_failure/run.py`: **2/2** checks passed.
 - `particle_buffer_retry/run.py`: **26/26** checks passed.
+
+## `particle-receipt-integrity-audit-20261106`
+
 
 ## `particle-setter-dependency-fixture-recheck-20261106`
 
