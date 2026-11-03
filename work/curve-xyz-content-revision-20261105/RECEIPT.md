@@ -16,3 +16,7 @@ Commit: d25a7261fd
 ## Follow-up coverage
 
 Commit `fe04b18672` extends the regression to X, Y, and Z child curve replacement. `git diff --check` passed. Full build remains deferred while shared owner work and low disk space are present.
+
+## Detach coverage
+
+Commit `0d0a1c736a` verifies that after replacing/removing child curves, mutations to the detached curve no longer advance the texture revision. `git diff --check` passed.
