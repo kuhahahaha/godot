@@ -20,3 +20,7 @@ Commit `fe04b18672` extends the regression to X, Y, and Z child curve replacemen
 ## Detach coverage
 
 Commit `0d0a1c736a` verifies that after replacing/removing child curves, mutations to the detached curve no longer advance the texture revision. `git diff --check` passed.
+
+## ABI boundary coverage
+
+Commit `$(git rev-parse --short HEAD)` records that the current V1 texture snapshot ABI intentionally rejects `CurveXYZTexture` as an unsupported wrapper type. Its revision is available for future typed ABI work without silently changing the frozen source-kind contract.
