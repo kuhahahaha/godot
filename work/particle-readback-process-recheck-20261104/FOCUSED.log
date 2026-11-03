@@ -1,0 +1,12 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_particles_process_retry.cpp:282:
+TEST CASE:  [ParticlesProcessRetryGPU] production buffer upload retry
+
+tests/servers/rendering/test_particles_process_retry.cpp:284: MESSAGE: UNRUN: set GODOT_TEST_PARTICLES_PROCESS_RD=1 to execute the Vulkan production-path test
+
+===============================================================================
+[doctest] test cases:  15 |  15 passed | 0 failed | 2033 skipped
+[doctest] assertions: 105 | 105 passed | 0 failed |
+[doctest] Status: SUCCESS!
