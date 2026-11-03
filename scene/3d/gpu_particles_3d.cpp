@@ -467,7 +467,7 @@ void GPUParticles3D::restart(bool p_keep_seed) {
 	active = true;
 	signal_canceled = false;
 	time = 0;
-	emission_time = lifetime * (1 - explosiveness_ratio);
+	emission_time = lifetime;
 	active_time = lifetime * (2 - explosiveness_ratio);
 	set_process_internal(true);
 }
