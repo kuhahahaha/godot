@@ -552,7 +552,7 @@ public:
  // Backends without this original mapping refuse qualification before append.
  // Transfer original hidden-copy observation ownership into the current Frame.
  // No fallback may invoke end_segment's legacy wait on a qualification pass.
- virtual Error qualification_prepare_segment(QueueCallReport &r_report) { r_report={};return ERR_UNAVAILABLE; }
+ virtual Error qualification_prepare_segment(QueueCallReport &r_report, bool p_nonblocking = true) { r_report={};return ERR_UNAVAILABLE; }
  virtual uint32_t qualification_native_call_bound(uint32_t p_slots) const { return 0; }
  // Original RD profile: main slots may wait and signal; transfer-worker
  // submissions never wait. Backends without a tighter proof keep their old bound.

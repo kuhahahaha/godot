@@ -200,7 +200,7 @@ protected:
 	LocalVector<MTL::Texture *> imported_textures;
 
 public:
- Error qualification_prepare_segment(QueueCallReport &r_report) override;
+ Error qualification_prepare_segment(QueueCallReport &r_report, bool p_nonblocking = true) override;
  bool native_call_observation_supported() const override { return true; }
  FencePollResult native_call_poll(uint64_t p_native_serial) override;
  FencePollResult native_call_wait(uint64_t p_native_serial) override;

@@ -46,6 +46,7 @@ TEST_CASE("[QualificationNative][Metal] actual hidden and final commits have dis
  std::thread observer([&]{contended=driver.native_call_poll(report.calls[0].serial);});observer.join();
  CHECK_FALSE(contended.completed);mutex.unlock();CHECK(driver.native_call_poll(report.calls[0].serial).matches(report.calls[0].completion_serial));
 #endif
+
  const uint64_t retained=report.calls[0].serial;
  REQUIRE(driver.native_call_retain(retained)==OK);
  REQUIRE(driver.fence_recycle(fence,report.submission_serial)==OK);
@@ -91,5 +92,25 @@ TEST_CASE("[QualificationNative][Metal] original hidden copy queue retains exact
  REQUIRE(driver.native_call_release(serial)==OK);CHECK_FALSE(driver.native_call_poll(serial).matches(serial));
  RDD::QueueCallReport no_work;CHECK(driver.qualification_prepare_segment(no_work)==OK);CHECK(no_work.calls.is_empty());
  driver.buffer_free(buffer);
+}
+
+TEST_CASE("[QualificationNative][Metal] ordinary frame prepares hidden copy before sealing") {
+ using RDD=RenderingDeviceDriver;
+ RenderingContextDriverMetal context;REQUIRE(context.initialize()==OK);
+ MTL3::RenderingDeviceDriverMetal driver(&context);REQUIRE(driver.initialize(0,2)==OK);
+ auto buffer=driver.buffer_create(4,RDD::BUFFER_USAGE_TRANSFER_TO_BIT,RDD::MEMORY_ALLOCATION_TYPE_CPU,0);
+ REQUIRE(bool(buffer));const uint8_t bytes[4]={2,4,6,8};
+ TestQualificationMetalCallAccess::queue_copy(driver,buffer,bytes,4);
+ RDD::QueueCallReport issued;
+ REQUIRE(driver.qualification_prepare_segment(issued,false)==OK);
+ REQUIRE(issued.calls.size()==1);
+ CHECK(issued.issued);
+ CHECK(driver.native_call_poll(issued.calls[0].serial).matches(issued.calls[0].completion_serial));
+ uint8_t *mapped=driver.buffer_map(buffer);REQUIRE(mapped);
+ CHECK(memcmp(mapped,bytes,4)==0);driver.buffer_unmap(buffer);
+ REQUIRE(driver.native_call_release(issued.calls[0].serial)==OK);
+ RDD::QueueCallReport no_work;
+ CHECK(driver.qualification_prepare_segment(no_work,false)==OK);
+ CHECK(no_work.calls.is_empty());driver.buffer_free(buffer);
 }
 #endif

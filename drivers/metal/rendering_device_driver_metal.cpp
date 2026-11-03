@@ -2875,12 +2875,20 @@ void RenderingDeviceDriverMetal::_copy_queue_copy_to_buffer(Span<uint8_t> p_src_
 	_copy_queue_buffer_consume(p_src_data.size());
 }
 
-Error RenderingDeviceDriverMetal::qualification_prepare_segment(QueueCallReport &report) {
+Error RenderingDeviceDriverMetal::qualification_prepare_segment(QueueCallReport &report, bool p_nonblocking) {
  report={};
- if(!copy_queue_mutex.try_lock())return ERR_BUSY;
+ if(p_nonblocking) {
+  if(!copy_queue_mutex.try_lock())return ERR_BUSY;
+ } else {
+  copy_queue_mutex.lock();
+ }
  struct Unlock {Mutex &mutex;~Unlock(){mutex.unlock();}} copy_unlock{copy_queue_mutex};
  if(!copy_queue_blit_encoder && !copy_queue_completion_record)return OK;
- if(!completion_records_mutex.try_lock())return ERR_BUSY;
+ if(p_nonblocking) {
+  if(!completion_records_mutex.try_lock())return ERR_BUSY;
+ } else {
+  completion_records_mutex.lock();
+ }
  Unlock completion_unlock{completion_records_mutex};
  if(!copy_queue_completion_record) {
   // Reserve the exact callback identity and transfer one observer to the Frame
@@ -2894,9 +2902,10 @@ Error RenderingDeviceDriverMetal::qualification_prepare_segment(QueueCallReport 
   report.calls.push_back(fact);report.issued=true;
   copy_queue_blit_encoder.get()->endEncoding();copy_queue_blit_encoder.reset();
   copy_queue_command_buffer.get()->commit();
-  return ERR_BUSY;
+  if(p_nonblocking)return ERR_BUSY;
  }
  auto *record=copy_queue_completion_record;
+ if(!p_nonblocking && !record->completed.load())copy_queue_command_buffer.get()->waitUntilCompleted();
  if(!record->completed.load())return ERR_BUSY;
  if(record->failed.load())return FAILED;
  // Original staging bytes cannot be reused before this actual callback.

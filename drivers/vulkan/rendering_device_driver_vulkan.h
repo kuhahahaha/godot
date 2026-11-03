@@ -398,7 +398,7 @@ private:
 	Error _native_call_recycle(uint64_t, bool);
 
 public:
-	Error qualification_prepare_segment(QueueCallReport &out) override {
+	Error qualification_prepare_segment(QueueCallReport &out, bool p_nonblocking = true) override {
 		out = {};
 		return OK;
 	}

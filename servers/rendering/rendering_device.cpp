@@ -9577,7 +9577,7 @@ Error RenderingDevice::_end_frame(bool p_nonblocking) {
  if(qualification_frame) {
   if(draw_list.active || compute_list.active || raytracing_list.active || frame_wait_draining || draw_graph.has_driver_callbacks())return ERR_BUSY;
   RDD::QueueCallReport hidden;
-  const Error error=driver->qualification_prepare_segment(hidden);
+  const Error error=driver->qualification_prepare_segment(hidden,p_nonblocking);
   if(!hidden.calls.is_empty()) {
    frames[frame].qualification_hidden_reports.push_back(hidden);
    _qualification_issue_tickets(UINT32_MAX,hidden,error);
