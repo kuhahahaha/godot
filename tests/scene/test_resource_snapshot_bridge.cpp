@@ -450,6 +450,13 @@ TEST_CASE("[ResourceSnapshot] texture plan and capture use real CurveTexture and
 	Ref<CurveXYZTexture> unsupported_curve;
 	unsupported_curve.instantiate();
 	CHECK(ange_texture_snapshot_plan_v1(unsupported_curve.ptr(), ANGE_TEXTURE_FORMAT_RGBAF_V1, &missing_plan) == ANGE_TEXTURE_WRONG_TYPE_V1);
+#ifdef THREADS_ENABLED
+	AngeTextureSnapshotPlanV1 threaded_plan = {};
+	uint32_t threaded_status = ANGE_TEXTURE_OK_V1;
+	std::thread other([&] { threaded_status = ange_texture_snapshot_plan_v1(curve_texture.ptr(), ANGE_TEXTURE_FORMAT_RGBAF_V1, &threaded_plan); });
+	other.join();
+	CHECK(threaded_status == ANGE_TEXTURE_WRONG_THREAD_V1);
+#endif
 }
 
 TEST_CASE("[ResourceSnapshot] CurveXYZTexture revision tracks wrapper and child mutations") {
