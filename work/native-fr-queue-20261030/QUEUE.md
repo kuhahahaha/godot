@@ -16,6 +16,10 @@ A visible Vulkan Mobile probe kept the same active vector-field `ImageTexture3D`
 
 A source-matched visible Metal Mobile editor ran paired heightfield probes: width 2→8 admitted collision (Y 0.11 versus disabled control −7.43), and width 8→2 released it (both −7.43); both rc 0, with eight finite active records per group. The expansion probe retained a sphere positive control. This adds Metal parity to the earlier Vulkan/Forward+/Compatibility evidence; product ticket and other platform gates stay open. See `work/particle-heightfield-mobile-extents-motion-20261105/METAL_EXPAND_SHRINK_RECEIPT.md`.
 
+## 2026-11-04 Metal Mobile color-ramp CPU/GPU matrix
+
+Visible Metal Mobile pixel probes passed for CPUParticles2D/3D and GPUParticles2D/3D: all four observed red→in-place green→replacement blue→detached-old still blue, with exact 256-pixel counts, rc 0, and matching final PNG hashes. This adds Metal to prior Compatibility/Vulkan color-ramp coverage. Other ramp slots and product ticket evidence remain open. See `work/particle-gpu2d-ramp-visible-20261105/METAL_RAMP_MATRIX_RECEIPT.md`.
+
 The user's requested long goal covers all authorized Godot-side work in the original FRs, including native integration and cross-cutting work that can advance independently. This queue supplements the older evidence ledger; its old editor hashes and historical status paragraphs remain tied to their original receipts. A blocked owner or CI row is not completion of the queue. No scheduled task is used. The Codex goal record was observed as `blocked`; work continued in this turn, and the available goal API does not expose a resume operation.
 
 | Workstream | Current evidence and next work | Scope boundary |
