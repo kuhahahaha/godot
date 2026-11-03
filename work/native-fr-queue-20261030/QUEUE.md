@@ -4,6 +4,10 @@
 
 The same-pair World trace proved the first `ERR_BUSY` comes from Metal copy-queue commit after one frame observer transfer. A source-matched Godot candidate lets ordinary frame preparation wait for that exact copy completion and retire it within the same seal; qualification maintenance stays nonblocking. Build rc 0, Metal doctests 3/3 and 63/63, visible GPUParticles2D rc 0. Trace-bearing matched pair passed visible Metal World/System/Cancel rc 0 without seal or present crash (94/0, 3/0, 3/0). Temporary trace code was removed and a new no-trace editor rebuilt (Metal 3/3, 63/63; broader Qualification 117/117, 43,082/43,082); A then rebuilt the DSO for the no-trace selection; visible Metal World/System/Cancel passed rc 0 (123/0, 3/0, 3/0), with no seal/present crash. Separate Direct and per-ticket product evidence remain open. Evidence: `work/particle-render-exit-seal-audit-20261105/SEAL_WAIT_CANDIDATE_RECEIPT.md`.
 
+## 2026-11-05 GPUParticles3D restart one-shot timing
+
+`GPUParticles3D::restart()` now keeps one-shot emission active through `lifetime` at high explosiveness, matching the setter and 2D restart paths. Fixed-editor timing RED became source-matched GREEN; `[GPUParticles]*` neighbors passed 25 cases / 138 assertions. The narrow change is committed as `3607bcc528`; see `work/particle-gpu3d-restart-timing-20261105/RECEIPT.md`. GPU pixels remain outside this timing proof.
+
 The user's requested long goal covers all authorized Godot-side work in the original FRs, including native integration and cross-cutting work that can advance independently. This queue supplements the older evidence ledger; its old editor hashes and historical status paragraphs remain tied to their original receipts. A blocked owner or CI row is not completion of the queue. No scheduled task is used. The Codex goal record was observed as `blocked`; work continued in this turn, and the available goal API does not expose a resume operation.
 
 | Workstream | Current evidence and next work | Scope boundary |
