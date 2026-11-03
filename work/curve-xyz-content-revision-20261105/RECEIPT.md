@@ -32,3 +32,7 @@ The follow-up test in commit `a7039d3e1d` sets the wrapper revision to `UINT64_M
 ## Thread boundary coverage
 
 Commit `eb9bcfb84d` adds a `THREADS_ENABLED` regression proving texture snapshot planning rejects off-main-thread access with `ANGE_TEXTURE_WRONG_THREAD_V1`.
+
+## Endpoint sampling coverage
+
+The follow-up test in commit `b26d0442d1` pins the final CurveTexture snapshot pixel to `sample_baked((width - 1) / width)`, matching the native snapshot and texture bake loops and preventing an accidental endpoint semantic split.
