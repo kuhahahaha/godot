@@ -28,3 +28,7 @@ Commit `08267dd219` records that the current V1 texture snapshot ABI intentional
 ## Saturation coverage
 
 The follow-up test in commit `a7039d3e1d` sets the wrapper revision to `UINT64_MAX - 1` and verifies setter and child mutations saturate at `UINT64_MAX` without wrapping.
+
+## Thread boundary coverage
+
+Commit `eb9bcfb84d` adds a `THREADS_ENABLED` regression proving texture snapshot planning rejects off-main-thread access with `ANGE_TEXTURE_WRONG_THREAD_V1`.
