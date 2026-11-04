@@ -1,0 +1,276 @@
+[
+  {
+    "name": "healthy",
+    "capacity": 2,
+    "surfaces": 1,
+    "expected_status": [
+      0,
+      1,
+      0,
+      0,
+      55,
+      0,
+      1,
+      0
+    ],
+    "expected_commands": [
+      6,
+      1,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "name": "count_zero",
+    "capacity": 2,
+    "surfaces": 1,
+    "expected_status": [
+      0,
+      0,
+      0,
+      0,
+      55,
+      0,
+      1,
+      0
+    ],
+    "expected_commands": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "name": "capacity_zero",
+    "capacity": 0,
+    "surfaces": 1,
+    "expected_status": [
+      0,
+      0,
+      0,
+      0,
+      55,
+      0,
+      1,
+      0
+    ],
+    "expected_commands": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "name": "source_invalid",
+    "capacity": 2,
+    "surfaces": 1,
+    "expected_status": [
+      1,
+      0,
+      0,
+      0,
+      55,
+      0,
+      1,
+      0
+    ],
+    "expected_commands": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "name": "source_count_mismatch",
+    "capacity": 2,
+    "surfaces": 1,
+    "expected_status": [
+      2,
+      0,
+      0,
+      0,
+      55,
+      0,
+      1,
+      0
+    ],
+    "expected_commands": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "name": "count_exceeds_capacity",
+    "capacity": 2,
+    "surfaces": 1,
+    "expected_status": [
+      2,
+      0,
+      0,
+      0,
+      55,
+      0,
+      1,
+      0
+    ],
+    "expected_commands": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "name": "current_geometry_escape",
+    "capacity": 2,
+    "surfaces": 1,
+    "expected_status": [
+      64,
+      0,
+      0,
+      0,
+      55,
+      0,
+      1,
+      0
+    ],
+    "expected_commands": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "name": "history_reset_ignores_previous",
+    "capacity": 2,
+    "surfaces": 1,
+    "expected_status": [
+      0,
+      1,
+      0,
+      0,
+      55,
+      0,
+      1,
+      0
+    ],
+    "expected_commands": [
+      6,
+      1,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "name": "history_valid_rejects_previous",
+    "capacity": 2,
+    "surfaces": 1,
+    "expected_status": [
+      64,
+      0,
+      0,
+      0,
+      55,
+      0,
+      1,
+      0
+    ],
+    "expected_commands": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "name": "history_not_permitted",
+    "capacity": 2,
+    "surfaces": 1,
+    "expected_status": [
+      32,
+      0,
+      0,
+      0,
+      55,
+      0,
+      1,
+      0
+    ],
+    "expected_commands": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "name": "multiple_surfaces",
+    "capacity": 2,
+    "surfaces": 2,
+    "expected_status": [
+      0,
+      1,
+      0,
+      0,
+      55,
+      0,
+      1,
+      0
+    ],
+    "expected_commands": [
+      6,
+      1,
+      0,
+      0,
+      0,
+      4,
+      1,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "name": "multiple_chunks",
+    "capacity": 65,
+    "surfaces": 2,
+    "expected_status": [
+      0,
+      65,
+      0,
+      0,
+      55,
+      0,
+      1,
+      0
+    ],
+    "expected_commands": [
+      6,
+      65,
+      0,
+      0,
+      0,
+      4,
+      65,
+      0,
+      0,
+      0
+    ]
+  }
+]

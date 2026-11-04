@@ -1,0 +1,396 @@
+
+#version 450
+
+#define MODE_INIT
+#define MODE_EMPTY
+
+
+#if defined(MODE_EMPTY) && defined(MODE_VALIDATE)
+#error Empty packets have no record validation dispatch.
+#endif
+
+// Instance192 only. All bindings and proof data are retained by the K owner.
+// Binding 3 is the original readable source backing, never a CPU count upload.
+// The owner resolves the accessor and its validity rule through the real E09
+// bridge before recording; these scalar offsets do not confer source authority.
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+#ifndef MODE_EMPTY
+layout(set = 0, binding = 0, std430) restrict readonly buffer CurrentRecords { uint words[]; } current_records;
+layout(set = 0, binding = 1, std430) restrict readonly buffer PreviousRecords { uint words[]; } previous_records;
+#endif
+layout(set = 0, binding = 2, std430) restrict readonly buffer OutputMetadata { uint words[]; } output_meta;
+layout(set = 0, binding = 3, std430) restrict readonly buffer SourceBacking { uint words[]; } source;
+layout(set = 0, binding = 4, std430) restrict buffer GuardScratch { uint words[]; } scratch;
+layout(set = 0, binding = 5, std430) restrict buffer GuardStatus { uint words[]; } status;
+layout(set = 0, binding = 6, std430) restrict buffer ProtectedCommands { uint words[]; } commands;
+
+struct SurfaceProof {
+	vec4 current_mesh_min;
+	vec4 current_mesh_max;
+	vec4 current_displacement_min;
+	vec4 current_displacement_max;
+	vec4 previous_mesh_min;
+	vec4 previous_mesh_max;
+	vec4 previous_displacement_min;
+	vec4 previous_displacement_max;
+	uvec4 command; // indexed (0/1), pinned native element count, reserved, reserved
+};
+
+layout(set = 0, binding = 7, std430) restrict readonly buffer GeometryProof {
+	vec4 current_decl_min;
+	vec4 current_decl_max;
+	vec4 previous_decl_min;
+	vec4 previous_decl_max;
+	vec4 cull_min;
+	vec4 cull_max;
+	vec4 current_host_inverse_rows[3];
+	vec4 previous_host_inverse_rows[3];
+	// count word, validity word, rule (1: initialized!=0, 2: fault==0), space
+	uvec4 source_accessor;
+	uvec4 options; // history permitted (0/1), three reserved zero words
+	SurfaceProof surfaces[];
+} proof;
+
+layout(push_constant, std430) uniform Params {
+	uint capacity;
+	uint sequence_low;
+	uint sequence_high;
+	uint surface_count;
+	uint record_base;
+	uint record_count;
+	uint reserved0;
+	uint reserved1;
+} params;
+
+const uint SOURCE_FAULT = 1u;
+const uint COUNT_FAULT = 2u;
+const uint META_FAULT = 4u;
+const uint NUMERIC_FAULT = 16u;
+const uint HISTORY_FAULT = 32u;
+const uint BOUNDS_FAULT = 64u;
+const uint RECORD_WORDS = 48u;
+const float ROUNDING_FLOOR = 0.00000095367431640625; // 2^-20
+
+void fault(uint bits, uint ordinal) {
+	atomicOr(scratch.words[8], bits);
+	atomicMin(scratch.words[9], ordinal);
+}
+
+bool finite_normal_or_zero(float value) {
+	uint magnitude = floatBitsToUint(value) & 0x7fffffffu;
+	return magnitude < 0x7f800000u && (magnitude == 0u || magnitude >= 0x00800000u);
+}
+
+bool finite_vec(vec3 value) {
+	return finite_normal_or_zero(value.x) && finite_normal_or_zero(value.y) && finite_normal_or_zero(value.z);
+}
+
+float next_up(float value) {
+	uint bits = floatBitsToUint(value);
+	if ((bits & 0x7fffffffu) == 0u) {
+		return uintBitsToFloat(1u);
+	}
+	return uintBitsToFloat(value > 0.0 ? bits + 1u : bits - 1u);
+}
+
+float next_down(float value) {
+	return -next_up(-value);
+}
+
+// Contraction is prohibited by precise intermediates. Widen *each* rounded
+// endpoint and outward-round the widening, including every affine dot step.
+vec2 rounded_interval(float value, inout bool numeric_valid) {
+	if (isnan(value) || isinf(value)) {
+		numeric_valid = false;
+		return vec2(0.0);
+	}
+	uint exponent = (floatBitsToUint(value) >> 23u) & 255u;
+	uint spacing_bits = exponent > 23u ? (exponent - 23u) << 23u : (exponent == 0u ? 1u : 1u << (exponent - 1u));
+	precise float width = uintBitsToFloat(max(spacing_bits, floatBitsToUint(ROUNDING_FLOOR)));
+	precise float low = value - width;
+	precise float high = value + width;
+	if (isnan(low) || isinf(low) || isnan(high) || isinf(high)) {
+		numeric_valid = false;
+		return vec2(0.0);
+	}
+	vec2 result = vec2(next_down(low), next_up(high));
+	if (any(isnan(result)) || any(isinf(result))) {
+		numeric_valid = false;
+	}
+	return result;
+}
+
+vec2 add_interval(vec2 left, vec2 right, inout bool numeric_valid) {
+	precise float low = left.x + right.x;
+	precise float high = left.y + right.y;
+	return vec2(rounded_interval(low, numeric_valid).x, rounded_interval(high, numeric_valid).y);
+}
+
+vec2 multiply_interval(vec2 left, vec2 right, inout bool numeric_valid) {
+	precise float p0 = left.x * right.x;
+	precise float p1 = left.x * right.y;
+	precise float p2 = left.y * right.x;
+	precise float p3 = left.y * right.y;
+	vec2 a = rounded_interval(p0, numeric_valid);
+	vec2 b = rounded_interval(p1, numeric_valid);
+	vec2 c = rounded_interval(p2, numeric_valid);
+	vec2 d = rounded_interval(p3, numeric_valid);
+	return vec2(min(min(a.x, b.x), min(c.x, d.x)), max(max(a.y, b.y), max(c.y, d.y)));
+}
+
+vec2 affine_interval(vec4 row, vec2 x, vec2 y, vec2 z, inout bool numeric_valid) {
+	vec2 result = multiply_interval(vec2(row.x), x, numeric_valid);
+	result = add_interval(result, multiply_interval(vec2(row.y), y, numeric_valid), numeric_valid);
+	result = add_interval(result, multiply_interval(vec2(row.z), z, numeric_valid), numeric_valid);
+	return add_interval(result, vec2(row.w), numeric_valid);
+}
+
+bool bounds_shape(vec4 lower, vec4 upper, bool strict) {
+	return finite_vec(lower.xyz) && finite_vec(upper.xyz) &&
+			floatBitsToUint(lower.w) == 0u && floatBitsToUint(upper.w) == 0u &&
+			(strict ? all(lessThan(lower.xyz, upper.xyz)) : all(lessThanEqual(lower.xyz, upper.xyz)));
+}
+
+bool contained(vec2 x, vec2 y, vec2 z, vec3 lower, vec3 upper) {
+	return x.x >= lower.x && y.x >= lower.y && z.x >= lower.z &&
+			x.y <= upper.x && y.y <= upper.y && z.y <= upper.z;
+}
+
+#ifndef MODE_EMPTY
+uint read_record(uint base, uint index, bool previous) {
+	return previous ? previous_records.words[base + index] : current_records.words[base + index];
+}
+
+vec4 read_row(uint base, uint offset, bool previous) {
+	return uintBitsToFloat(uvec4(read_record(base, offset, previous), read_record(base, offset + 1u, previous),
+			read_record(base, offset + 2u, previous), read_record(base, offset + 3u, previous)));
+}
+
+uint validate_record(uint ordinal, bool previous, out uint first_failure) {
+	first_failure = 0xffffffffu;
+	uint failure_base = ordinal * 16u + (previous ? 8u : 0u);
+	uint base = ordinal * RECORD_WORDS;
+	uint record_fault = 0u;
+	for (uint i = 0u; i < 44u; i++) {
+		if (!finite_normal_or_zero(uintBitsToFloat(read_record(base, i, previous)))) {
+			record_fault |= NUMERIC_FAULT;
+		}
+	}
+	uint flags = read_record(base, 46u, previous);
+	if ((flags & ~31u) != 0u || (flags & 1u) == 0u || read_record(base, 47u, previous) != 0u ||
+			read_record(base, 15u, previous) != 0u || read_record(base, 19u, previous) != 0u || read_record(base, 23u, previous) != 0u) {
+		record_fault |= NUMERIC_FAULT;
+	}
+	if (previous && (read_record(base, 44u, true) != read_record(base, 44u, false) ||
+			read_record(base, 45u, true) != read_record(base, 45u, false))) {
+		record_fault |= HISTORY_FAULT;
+	}
+	if (record_fault != 0u) {
+		first_failure = failure_base;
+		return record_fault;
+	}
+	vec4 row0 = read_row(base, 0u, previous);
+	vec4 row1 = read_row(base, 4u, previous);
+	vec4 row2 = read_row(base, 8u, previous);
+	vec3 declaration_min = previous ? proof.previous_decl_min.xyz : proof.current_decl_min.xyz;
+	vec3 declaration_max = previous ? proof.previous_decl_max.xyz : proof.current_decl_max.xyz;
+	for (uint surface = 0u; surface < params.surface_count; surface++) {
+		SurfaceProof bound = proof.surfaces[surface];
+		vec3 mesh_min = previous ? bound.previous_mesh_min.xyz : bound.current_mesh_min.xyz;
+		vec3 mesh_max = previous ? bound.previous_mesh_max.xyz : bound.current_mesh_max.xyz;
+		vec3 displacement_min = previous ? bound.previous_displacement_min.xyz : bound.current_displacement_min.xyz;
+		vec3 displacement_max = previous ? bound.previous_displacement_max.xyz : bound.current_displacement_max.xyz;
+		for (uint corner = 0u; corner < 8u; corner++) {
+			vec3 point = vec3((corner & 1u) == 0u ? mesh_min.x : mesh_max.x,
+					(corner & 2u) == 0u ? mesh_min.y : mesh_max.y,
+					(corner & 4u) == 0u ? mesh_min.z : mesh_max.z);
+			bool numeric_valid = true;
+			vec2 x = add_interval(vec2(point.x), vec2(displacement_min.x, displacement_max.x), numeric_valid);
+			vec2 y = add_interval(vec2(point.y), vec2(displacement_min.y, displacement_max.y), numeric_valid);
+			vec2 z = add_interval(vec2(point.z), vec2(displacement_min.z, displacement_max.z), numeric_valid);
+			vec2 world_x = affine_interval(row0, x, y, z, numeric_valid);
+			vec2 world_y = affine_interval(row1, x, y, z, numeric_valid);
+			vec2 world_z = affine_interval(row2, x, y, z, numeric_valid);
+			bool inside_cull = contained(world_x, world_y, world_z, proof.cull_min.xyz, proof.cull_max.xyz);
+			// Inverse each corner interval separately. Never inverse a collapsed world AABB.
+			if (proof.source_accessor.w == 2u) {
+				vec4 inverse0 = previous ? proof.previous_host_inverse_rows[0] : proof.current_host_inverse_rows[0];
+				vec4 inverse1 = previous ? proof.previous_host_inverse_rows[1] : proof.current_host_inverse_rows[1];
+				vec4 inverse2 = previous ? proof.previous_host_inverse_rows[2] : proof.current_host_inverse_rows[2];
+				x = affine_interval(inverse0, world_x, world_y, world_z, numeric_valid);
+				y = affine_interval(inverse1, world_x, world_y, world_z, numeric_valid);
+				z = affine_interval(inverse2, world_x, world_y, world_z, numeric_valid);
+			} else {
+				x = world_x;
+				y = world_y;
+				z = world_z;
+			}
+			if (!numeric_valid) {
+				record_fault |= NUMERIC_FAULT;
+				first_failure = min(first_failure, failure_base + surface);
+			} else if (!inside_cull || !contained(x, y, z, declaration_min, declaration_max)) {
+				record_fault |= BOUNDS_FAULT;
+				first_failure = min(first_failure, failure_base + surface);
+			}
+		}
+	}
+	return record_fault;
+}
+
+#endif
+
+void initialize_guard() {
+	for (uint i = 0u; i < 16u; i++) {
+		scratch.words[i] = 0u;
+	}
+	scratch.words[9] = 0xffffffffu;
+	for (uint i = 0u; i < 8u; i++) {
+		status.words[i] = 0u;
+	}
+	status.words[4] = params.sequence_low;
+	status.words[5] = params.sequence_high;
+	status.words[6] = 1u;
+	// Extents are also preflighted by the owner; range guards prevent OOB if a
+	// malformed component caller violates that precondition.
+	for (uint i = 0u; i < min(params.surface_count, 8u) * 5u && i < uint(commands.words.length()); i++) {
+		commands.words[i] = 0u;
+	}
+	uint initial_fault = 0u;
+#ifdef MODE_EMPTY
+	if (params.capacity != 0u) {
+		initial_fault |= COUNT_FAULT;
+	}
+#endif
+	if (params.surface_count == 0u || params.surface_count > 8u || params.capacity > (1u << 20u) ||
+			params.reserved0 != 0u || params.reserved1 != 0u ||
+			uint(commands.words.length()) < params.surface_count * 5u || uint(proof.surfaces.length()) < params.surface_count) {
+		initial_fault |= META_FAULT;
+	}
+	if (uint(output_meta.words.length()) < 8u) {
+		initial_fault |= META_FAULT;
+	} else {
+		for (uint i = 0u; i < 8u; i++) {
+			scratch.words[i] = output_meta.words[i];
+		}
+		if (scratch.words[3] != 0u) {
+			initial_fault |= SOURCE_FAULT;
+		}
+		if (scratch.words[0] > params.capacity || scratch.words[4] != params.capacity) {
+			initial_fault |= COUNT_FAULT;
+		}
+		if (scratch.words[1] != 0u || scratch.words[2] != 0u || scratch.words[5] != 1u ||
+				scratch.words[6] != params.sequence_low || scratch.words[7] != params.sequence_high) {
+			initial_fault |= META_FAULT;
+		}
+	}
+	if (proof.source_accessor.x >= uint(source.words.length()) || proof.source_accessor.y >= uint(source.words.length())) {
+		initial_fault |= SOURCE_FAULT;
+	} else {
+		uint raw_validity = source.words[proof.source_accessor.y];
+		uint rule = proof.source_accessor.z;
+		if (!((rule == 1u && raw_validity != 0u) || (rule == 2u && raw_validity == 0u))) {
+			initial_fault |= SOURCE_FAULT;
+		}
+		if (source.words[proof.source_accessor.x] != scratch.words[0]) {
+			initial_fault |= COUNT_FAULT;
+		}
+	}
+	if (proof.source_accessor.w < 1u || proof.source_accessor.w > 2u || proof.options.x > 1u || any(notEqual(proof.options.yzw, uvec3(0u))) ||
+			!bounds_shape(proof.current_decl_min, proof.current_decl_max, true) ||
+			!bounds_shape(proof.previous_decl_min, proof.previous_decl_max, true) || !bounds_shape(proof.cull_min, proof.cull_max, true)) {
+		initial_fault |= META_FAULT;
+	}
+	for (uint row = 0u; row < 3u; row++) {
+		vec4 current_row = proof.current_host_inverse_rows[row];
+		vec4 previous_row = proof.previous_host_inverse_rows[row];
+		if (!finite_vec(current_row.xyz) || !finite_normal_or_zero(current_row.w) ||
+				!finite_vec(previous_row.xyz) || !finite_normal_or_zero(previous_row.w)) {
+			initial_fault |= NUMERIC_FAULT;
+		}
+	}
+	for (uint i = 0u; i < min(min(params.surface_count, 8u), uint(proof.surfaces.length())); i++) {
+		SurfaceProof bound = proof.surfaces[i];
+		if (!bounds_shape(bound.current_mesh_min, bound.current_mesh_max, false) ||
+				!bounds_shape(bound.previous_mesh_min, bound.previous_mesh_max, false) ||
+				!bounds_shape(bound.current_displacement_min, bound.current_displacement_max, false) ||
+				!bounds_shape(bound.previous_displacement_min, bound.previous_displacement_max, false) ||
+				bound.command.x > 1u || bound.command.y == 0u || any(notEqual(bound.command.zw, uvec2(0u)))) {
+			initial_fault |= META_FAULT;
+		}
+	}
+	// Immutable across all validation lanes: a record failure must not cause
+	// other lanes to skip validation or race on the aggregate atomic fault.
+	scratch.words[10] = initial_fault;
+	if (initial_fault != 0u) {
+		fault(initial_fault, 0u);
+	}
+}
+
+void main() {
+	// These two K-owned buffers have fixed minimum sizes. Refuse without any
+	// store if malformed descriptors reach the shader; owner preflight reports it.
+	if (uint(scratch.words.length()) < 16u || uint(status.words.length()) < 8u) {
+		return;
+	}
+#ifdef MODE_INIT
+	if (gl_GlobalInvocationID.x == 0u) {
+		initialize_guard();
+	}
+#endif
+#ifdef MODE_VALIDATE
+	uint lane = gl_GlobalInvocationID.x;
+	if (params.record_base > params.capacity || params.record_count > params.capacity - params.record_base) {
+		if (lane == 0u) {
+			fault(COUNT_FAULT, 0u);
+		}
+		return;
+	}
+	if (lane >= params.record_count) {
+		return;
+	}
+	uint ordinal = params.record_base + lane;
+	// Never fetch uninitialized tails, or a source/meta/header-faulted packet.
+	if (ordinal >= scratch.words[0] || scratch.words[10] != 0u) {
+		return;
+	}
+	uint current_capacity = uint(current_records.words.length()) / RECORD_WORDS;
+	if (ordinal >= current_capacity) {
+		fault(COUNT_FAULT, ordinal * 16u);
+		return;
+	}
+	uint first_failure;
+	uint bits = validate_record(ordinal, false, first_failure);
+	uint flags = current_records.words[ordinal * RECORD_WORDS + 46u];
+	if ((flags & 2u) != 0u) {
+		if (proof.options.x == 0u || ordinal >= uint(previous_records.words.length()) / RECORD_WORDS) {
+			bits |= HISTORY_FAULT;
+			first_failure = min(first_failure, ordinal * 16u + 8u);
+		} else {
+			uint previous_failure;
+			bits |= validate_record(ordinal, true, previous_failure);
+			first_failure = min(first_failure, previous_failure);
+		}
+	}
+	if (bits != 0u) {
+		fault(bits, first_failure);
+	}
+#endif
+#ifdef MODE_FINALIZE
+	if (gl_GlobalInvocationID.x != 0u) {
+		return;
+	}
+	uint bits = scratch.words[8];
+	status.words[0] = bits;
+	status.words[1] = bits == 0u ? scratch.words[0] : 0u;
+	status.words[2] = 0u;
+	status.words[3] = 0u;
+	// INIT wrote every slot zero. Only a fault-free nonempty packet changes it.
+	if (bits == 0u && scratch.words[0] != 0u) {
+		for (uint i = 0u; i < params.surface_count; i++) {
+			commands.words[i * 5u] = proof.surfaces[i].command.y;
+			commands.words[i * 5u + 1u] = scratch.words[0];
+		}
+	}
+#endif
+}
