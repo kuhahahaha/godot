@@ -5040,7 +5040,16 @@ void RenderingDeviceDriverD3D12::command_render_draw_indexed_indirect(CommandBuf
 		_resource_transitions_flush(cmd_buf_info);
 	}
 
-	cmd_buf_info->cmd_list->ExecuteIndirect(indirect_cmd_signatures.draw_indexed.Get(), p_draw_count, indirect_buf_info->resource, p_offset, nullptr, 0);
+	// ExecuteIndirect takes its byte stride from the immutable command signature.
+	// Keep packed records batched; padded records reuse it one command at a time.
+	if (p_draw_count > 1u && p_stride > sizeof(D3D12_DRAW_INDEXED_ARGUMENTS)) {
+		for (uint32_t i = 0; i < p_draw_count; i++) {
+			const uint64_t offset = p_offset + uint64_t(i) * p_stride;
+			cmd_buf_info->cmd_list->ExecuteIndirect(indirect_cmd_signatures.draw_indexed.Get(), 1, indirect_buf_info->resource, offset, nullptr, 0);
+		}
+	} else {
+		cmd_buf_info->cmd_list->ExecuteIndirect(indirect_cmd_signatures.draw_indexed.Get(), p_draw_count, indirect_buf_info->resource, p_offset, nullptr, 0);
+	}
 }
 
 void RenderingDeviceDriverD3D12::command_render_draw_indexed_indirect_count(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, BufferID p_count_buffer, uint64_t p_count_buffer_offset, uint32_t p_max_draw_count, uint32_t p_stride) {
@@ -5066,7 +5075,16 @@ void RenderingDeviceDriverD3D12::command_render_draw_indirect(CommandBufferID p_
 		_resource_transitions_flush(cmd_buf_info);
 	}
 
-	cmd_buf_info->cmd_list->ExecuteIndirect(indirect_cmd_signatures.draw.Get(), p_draw_count, indirect_buf_info->resource, p_offset, nullptr, 0);
+	// ExecuteIndirect takes its byte stride from the immutable command signature.
+	// Keep packed records batched; padded records reuse it one command at a time.
+	if (p_draw_count > 1u && p_stride > sizeof(D3D12_DRAW_ARGUMENTS)) {
+		for (uint32_t i = 0; i < p_draw_count; i++) {
+			const uint64_t offset = p_offset + uint64_t(i) * p_stride;
+			cmd_buf_info->cmd_list->ExecuteIndirect(indirect_cmd_signatures.draw.Get(), 1, indirect_buf_info->resource, offset, nullptr, 0);
+		}
+	} else {
+		cmd_buf_info->cmd_list->ExecuteIndirect(indirect_cmd_signatures.draw.Get(), p_draw_count, indirect_buf_info->resource, p_offset, nullptr, 0);
+	}
 }
 
 void RenderingDeviceDriverD3D12::command_render_draw_indirect_count(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, BufferID p_count_buffer, uint64_t p_count_buffer_offset, uint32_t p_max_draw_count, uint32_t p_stride) {
