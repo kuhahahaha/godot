@@ -1033,7 +1033,7 @@ public:
 			CHECK_FALSE(ticket.physically_retired.load());
 		}
 		// Synthetic reducer inputs own no GPU work. This is fixture cleanup,
-		// never an acknowledgement or proof that an Unknown may retire.
+		// never an acknowledgment or proof that an Unknown may retire.
 		device.frames.clear();
 		device.storage_buffer_owner.free(rid);
 		device.driver = nullptr;
