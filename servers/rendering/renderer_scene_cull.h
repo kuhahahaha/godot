@@ -56,6 +56,14 @@ class RendererSceneCull : public RenderingMethod {
 	friend class RenderCaptureTestAccess;
 #endif
 public:
+	struct SceneSphereSource {
+		uint64_t source_key = 0;
+		uint64_t shape_revision = 0;
+		Transform3D transform;
+		float radius = 0;
+	};
+	bool scene_sphere_snapshot_pairs(RID p_receiver, uint32_t p_max_sources, Vector<SceneSphereSource> &r_sources) const;
+
 	RendererSceneRender *scene_render = nullptr;
 
 	enum {

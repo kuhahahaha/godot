@@ -38,6 +38,7 @@
 #include "servers/rendering/rendering_light_culler.h"
 #include "servers/rendering/rendering_server.h"
 #include "servers/rendering/rendering_server_default.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/renderer_viewport.h"
 
 #ifndef XR_DISABLED
@@ -173,6 +174,46 @@ void RendererSceneCull::occluder_set_mesh(RID p_occluder, const PackedVector3Arr
 }
 
 /* SCENARIO API */
+
+bool RendererSceneCull::scene_sphere_snapshot_pairs(RID p_receiver, uint32_t p_max_sources, Vector<SceneSphereSource> &r_sources) const {
+	r_sources.clear();
+	const Instance *receiver = instance_owner.get_or_null(p_receiver);
+	if (!receiver || receiver->base_type != RSE::INSTANCE_PARTICLES || !receiver->scenario || p_max_sources == 0) {
+		return false;
+	}
+	if (!receiver->visible) {
+		return true;
+	}
+	RendererRD::ParticlesStorage *storage = RendererRD::ParticlesStorage::get_singleton();
+	if (!storage) {
+		return false;
+	}
+	for (const SelfList<InstancePair> *link = receiver->pairs.first(); link; link = link->next()) {
+		const InstancePair *pair = link->self();
+		const Instance *source = pair->a == receiver ? pair->b : pair->a;
+		if (source->base_type != RSE::INSTANCE_PARTICLES_COLLISION || !source->visible || source->scenario != receiver->scenario) {
+			continue;
+		}
+		const InstanceParticlesCollisionData *collision = static_cast<const InstanceParticlesCollisionData *>(source->base_data);
+		if (!(collision->cull_mask & receiver->layer_mask)) {
+			continue;
+		}
+		SceneSphereSource value;
+		if (!storage->particles_collision_instance_get_scene_sphere(collision->instance, value.source_key, value.shape_revision, value.transform, value.radius)) {
+			continue;
+		}
+		if (r_sources.size() >= p_max_sources) {
+			r_sources.clear();
+			return false;
+		}
+		r_sources.push_back(value);
+	}
+	struct SourceKeyLess {
+		bool operator()(const SceneSphereSource &a, const SceneSphereSource &b) const { return a.source_key < b.source_key; }
+	};
+	r_sources.sort_custom<SourceKeyLess>();
+	return true;
+}
 
 void RendererSceneCull::_instance_pair(Instance *p_A, Instance *p_B) {
 	RendererSceneCull *self = (RendererSceneCull *)singleton;

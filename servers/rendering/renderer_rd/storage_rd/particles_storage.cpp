@@ -2547,6 +2547,7 @@ void ParticlesStorage::particles_collision_set_collision_type(RID p_particles_co
 		particles_collision->heightfield_texture = RID();
 	}
 	particles_collision->type = p_type;
+	particles_collision->scene_shape_revision++;
 	particles_collision->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_AABB);
 }
 
@@ -2581,6 +2582,7 @@ void ParticlesStorage::particles_collision_set_sphere_radius(RID p_particles_col
 	ERR_FAIL_COND_MSG(!Math::is_finite(p_radius) || p_radius < 0.0, "Particle collision sphere radius must be finite and non-negative.");
 
 	particles_collision->radius = p_radius;
+	particles_collision->scene_shape_revision++;
 	particles_collision->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_AABB);
 }
 
@@ -2707,8 +2709,10 @@ Dependency *ParticlesStorage::particles_collision_get_dependency(RID p_particles
 /* Particles collision instance */
 
 RID ParticlesStorage::particles_collision_instance_create(RID p_collision) {
+	ERR_FAIL_COND_V(next_scene_source_key == 0, RID());
 	ParticlesCollisionInstance pci;
 	pci.collision = p_collision;
+	pci.scene_source_key = next_scene_source_key++;
 	return particles_collision_instance_owner.make_rid(pci);
 }
 
@@ -2727,4 +2731,20 @@ void ParticlesStorage::particles_collision_instance_set_active(RID p_collision_i
 	ParticlesCollisionInstance *pci = particles_collision_instance_owner.get_or_null(p_collision_instance);
 	ERR_FAIL_NULL(pci);
 	pci->active = p_active;
+}
+
+bool ParticlesStorage::particles_collision_instance_get_scene_sphere(RID p_instance, uint64_t &r_source_key, uint64_t &r_shape_revision, Transform3D &r_transform, float &r_radius) const {
+	const ParticlesCollisionInstance *pci = particles_collision_instance_owner.get_or_null(p_instance);
+	if (!pci || !pci->active || pci->scene_source_key == 0) {
+		return false;
+	}
+	const ParticlesCollision *pc = particles_collision_owner.get_or_null(pci->collision);
+	if (!pc || pc->type != RSE::PARTICLES_COLLISION_TYPE_SPHERE_COLLIDE) {
+		return false;
+	}
+	r_source_key = pci->scene_source_key;
+	r_shape_revision = pc->scene_shape_revision;
+	r_transform = pci->transform;
+	r_radius = pc->radius;
+	return true;
 }

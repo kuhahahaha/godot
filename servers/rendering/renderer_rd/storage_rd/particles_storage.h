@@ -440,6 +440,7 @@ private:
 
 	struct ParticlesCollision {
 		RSE::ParticlesCollisionType type = RSE::PARTICLES_COLLISION_TYPE_SPHERE_ATTRACT;
+		uint64_t scene_shape_revision = 1;
 		uint32_t cull_mask = 0xFFFFFFFF;
 		float radius = 1.0;
 		Vector3 extents = Vector3(1, 1, 1);
@@ -460,8 +461,10 @@ private:
 	struct ParticlesCollisionInstance {
 		RID collision;
 		Transform3D transform;
+		uint64_t scene_source_key = 0;
 		bool active = false;
 	};
+	uint64_t next_scene_source_key = 1;
 
 	mutable RID_Owner<ParticlesCollision, true> particles_collision_owner;
 
@@ -653,6 +656,7 @@ public:
 	virtual void particles_collision_instance_free(RID p_rid) override;
 	virtual void particles_collision_instance_set_transform(RID p_collision_instance, const Transform3D &p_transform) override;
 	virtual void particles_collision_instance_set_active(RID p_collision_instance, bool p_active) override;
+	bool particles_collision_instance_get_scene_sphere(RID p_collision_instance, uint64_t &r_source_key, uint64_t &r_shape_revision, Transform3D &r_transform, float &r_radius) const;
 };
 
 } // namespace RendererRD
