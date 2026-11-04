@@ -170,6 +170,12 @@ using RDD = RenderingDeviceDriver;
 using Access = TestTransferWorkerAccess;
 
 class Driver : public TransferTestDriverBase {
+	[[noreturn]] static void _unexpected_legacy_wait() {
+		CRASH_NOW_MSG("Legacy wait must not recycle a typed transfer fence.");
+		// MSVC's debugger break can return when execution is resumed.
+		std::abort();
+	}
+
 public:
 	FencePollResult poll_result;
 	FencePollResult wait_result;
@@ -209,7 +215,7 @@ public:
 		polls++;
 		return poll_result;
 	}
-	Error fence_wait(FenceID) override { CRASH_NOW_MSG("Legacy wait must not recycle a typed transfer fence."); }
+	Error fence_wait(FenceID) override { _unexpected_legacy_wait(); }
 	FencePollResult fence_wait_observed(FenceID, uint64_t p_serial) override {
 		CHECK(p_serial == 41);
 		waits++;

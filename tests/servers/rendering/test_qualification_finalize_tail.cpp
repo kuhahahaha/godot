@@ -53,35 +53,41 @@ public:
 };
 namespace TestQualificationFinalizeTail {
 class Context : public RenderingContextDriver {
+	[[noreturn]] static void _unexpected_operation() {
+		CRASH_NOW_MSG("Unexpected finalize-tail fixture context operation.");
+		// MSVC's debugger break can return when execution is resumed.
+		std::abort();
+	}
+
 public:
-	Error initialize() override { CRASH_NOW_MSG("Unexpected finalize-tail fixture context operation."); }
-	const Device &device_get(uint32_t p_device_index) const override { CRASH_NOW_MSG("Unexpected finalize-tail fixture context operation."); }
-	uint32_t device_get_count() const override { CRASH_NOW_MSG("Unexpected finalize-tail fixture context operation."); }
-	bool device_supports_present(uint32_t p_device_index, SurfaceID p_surface) const override { CRASH_NOW_MSG("Unexpected finalize-tail fixture context operation."); }
-	RenderingDeviceDriver *driver_create() override { CRASH_NOW_MSG("Unexpected finalize-tail fixture context operation."); }
+	Error initialize() override { _unexpected_operation(); }
+	const Device &device_get(uint32_t p_device_index) const override { _unexpected_operation(); }
+	uint32_t device_get_count() const override { _unexpected_operation(); }
+	bool device_supports_present(uint32_t p_device_index, SurfaceID p_surface) const override { _unexpected_operation(); }
+	RenderingDeviceDriver *driver_create() override { _unexpected_operation(); }
 	void driver_free(RenderingDeviceDriver *p_driver) override {
 		std::fprintf(stderr, "QB1_DRIVER_FREE_RETURN\n");
 		std::fflush(stderr);
 	}
-	SurfaceID surface_create(const void *p_platform_data) override { CRASH_NOW_MSG("Unexpected finalize-tail fixture context operation."); }
-	void surface_set_size(SurfaceID p_surface, uint32_t p_width, uint32_t p_height) override { CRASH_NOW_MSG("Unexpected finalize-tail fixture context operation."); }
-	void surface_set_vsync_mode(SurfaceID p_surface, DisplayServerEnums::VSyncMode p_vsync_mode) override { CRASH_NOW_MSG("Unexpected finalize-tail fixture context operation."); }
-	DisplayServerEnums::VSyncMode surface_get_vsync_mode(SurfaceID p_surface) const override { CRASH_NOW_MSG("Unexpected finalize-tail fixture context operation."); }
-	void surface_set_hdr_output_enabled(SurfaceID p_surface, bool p_enabled) override { CRASH_NOW_MSG("Unexpected finalize-tail fixture context operation."); }
-	bool surface_get_hdr_output_enabled(SurfaceID p_surface) const override { CRASH_NOW_MSG("Unexpected finalize-tail fixture context operation."); }
-	void surface_set_hdr_output_reference_luminance(SurfaceID p_surface, float p_reference_luminance) override { CRASH_NOW_MSG("Unexpected finalize-tail fixture context operation."); }
-	float surface_get_hdr_output_reference_luminance(SurfaceID p_surface) const override { CRASH_NOW_MSG("Unexpected finalize-tail fixture context operation."); }
-	void surface_set_hdr_output_max_luminance(SurfaceID p_surface, float p_max_luminance) override { CRASH_NOW_MSG("Unexpected finalize-tail fixture context operation."); }
-	float surface_get_hdr_output_max_luminance(SurfaceID p_surface) const override { CRASH_NOW_MSG("Unexpected finalize-tail fixture context operation."); }
-	void surface_set_hdr_output_linear_luminance_scale(SurfaceID p_surface, float p_linear_luminance_scale) override { CRASH_NOW_MSG("Unexpected finalize-tail fixture context operation."); }
-	float surface_get_hdr_output_linear_luminance_scale(SurfaceID p_surface) const override { CRASH_NOW_MSG("Unexpected finalize-tail fixture context operation."); }
-	float surface_get_hdr_output_max_value(SurfaceID p_surface) const override { CRASH_NOW_MSG("Unexpected finalize-tail fixture context operation."); }
-	uint32_t surface_get_width(SurfaceID p_surface) const override { CRASH_NOW_MSG("Unexpected finalize-tail fixture context operation."); }
-	uint32_t surface_get_height(SurfaceID p_surface) const override { CRASH_NOW_MSG("Unexpected finalize-tail fixture context operation."); }
-	void surface_set_needs_resize(SurfaceID p_surface, bool p_needs_resize) override { CRASH_NOW_MSG("Unexpected finalize-tail fixture context operation."); }
-	bool surface_get_needs_resize(SurfaceID p_surface) const override { CRASH_NOW_MSG("Unexpected finalize-tail fixture context operation."); }
-	void surface_destroy(SurfaceID p_surface) override { CRASH_NOW_MSG("Unexpected finalize-tail fixture context operation."); }
-	bool is_debug_utils_enabled() const override { CRASH_NOW_MSG("Unexpected finalize-tail fixture context operation."); }
+	SurfaceID surface_create(const void *p_platform_data) override { _unexpected_operation(); }
+	void surface_set_size(SurfaceID p_surface, uint32_t p_width, uint32_t p_height) override { _unexpected_operation(); }
+	void surface_set_vsync_mode(SurfaceID p_surface, DisplayServerEnums::VSyncMode p_vsync_mode) override { _unexpected_operation(); }
+	DisplayServerEnums::VSyncMode surface_get_vsync_mode(SurfaceID p_surface) const override { _unexpected_operation(); }
+	void surface_set_hdr_output_enabled(SurfaceID p_surface, bool p_enabled) override { _unexpected_operation(); }
+	bool surface_get_hdr_output_enabled(SurfaceID p_surface) const override { _unexpected_operation(); }
+	void surface_set_hdr_output_reference_luminance(SurfaceID p_surface, float p_reference_luminance) override { _unexpected_operation(); }
+	float surface_get_hdr_output_reference_luminance(SurfaceID p_surface) const override { _unexpected_operation(); }
+	void surface_set_hdr_output_max_luminance(SurfaceID p_surface, float p_max_luminance) override { _unexpected_operation(); }
+	float surface_get_hdr_output_max_luminance(SurfaceID p_surface) const override { _unexpected_operation(); }
+	void surface_set_hdr_output_linear_luminance_scale(SurfaceID p_surface, float p_linear_luminance_scale) override { _unexpected_operation(); }
+	float surface_get_hdr_output_linear_luminance_scale(SurfaceID p_surface) const override { _unexpected_operation(); }
+	float surface_get_hdr_output_max_value(SurfaceID p_surface) const override { _unexpected_operation(); }
+	uint32_t surface_get_width(SurfaceID p_surface) const override { _unexpected_operation(); }
+	uint32_t surface_get_height(SurfaceID p_surface) const override { _unexpected_operation(); }
+	void surface_set_needs_resize(SurfaceID p_surface, bool p_needs_resize) override { _unexpected_operation(); }
+	bool surface_get_needs_resize(SurfaceID p_surface) const override { _unexpected_operation(); }
+	void surface_destroy(SurfaceID p_surface) override { _unexpected_operation(); }
+	bool is_debug_utils_enabled() const override { _unexpected_operation(); }
 };
 static void child() {
 	if (!OS::get_singleton()->has_environment("GODOT_QB_FINALIZE_TAIL_CONTROL")) {
