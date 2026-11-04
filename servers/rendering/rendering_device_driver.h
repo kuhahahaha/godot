@@ -165,7 +165,7 @@ public:
 	};
 
 	enum class CompletionCapability : uint8_t {
-		None,
+		Disabled,
 		Fence,
 		CommandBuffer,
 	};
@@ -175,7 +175,7 @@ public:
 		IssueFact issue = IssueFact::NotIssued;
 		int64_t native_code = 0;
 		Error error = OK;
-		CompletionCapability completion = CompletionCapability::None;
+		CompletionCapability completion = CompletionCapability::Disabled;
 		uint64_t completion_serial = 0;
 		bool present = false;
   uint32_t queue_index = 0;
