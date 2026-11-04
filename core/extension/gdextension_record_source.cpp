@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  gdextension_record_source.cpp                                  */
+/*  gdextension_record_source.cpp                                         */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -38,12 +38,12 @@ bool valid_original_operation_identity(const OriginalOperationIdentity &id) noex
 }
 bool same_original_operation_identity(const OriginalOperationIdentity &a, const OriginalOperationIdentity &b) noexcept {
 	return valid_original_operation_identity(a) && valid_original_operation_identity(b) &&
-		a.owner_request_nonce == b.owner_request_nonce &&
-		a.library_generation == b.library_generation &&
-		a.qualification_session_serial == b.qualification_session_serial &&
-		a.record_generation == b.record_generation &&
-		a.record_range_begin == b.record_range_begin &&
-		a.record_range_end == b.record_range_end;
+			a.owner_request_nonce == b.owner_request_nonce &&
+			a.library_generation == b.library_generation &&
+			a.qualification_session_serial == b.qualification_session_serial &&
+			a.record_generation == b.record_generation &&
+			a.record_range_begin == b.record_range_begin &&
+			a.record_range_end == b.record_range_end;
 }
 Error bind_checked_record_append(CheckedRecordAppend &append, const OriginalOperationIdentity &identity) noexcept {
 	if (!valid_original_operation_identity(identity)) {
