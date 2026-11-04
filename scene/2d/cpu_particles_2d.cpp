@@ -1524,12 +1524,12 @@ void CPUParticles2D::convert_from_particles(Node *p_particles) {
 			Vector3 shape_offset = proc_mat->get_emission_shape_offset();
 			for (int i = 0; i < point_count; i++) {
 				Color pixel = point_image->get_pixel(i % point_image->get_width(), i / point_image->get_width());
-				Vector2 position(pixel.r * shape_scale.x + shape_offset.x, pixel.g * shape_scale.y + shape_offset.y);
-				if (!Math::is_finite(position.x) || !Math::is_finite(position.y)) {
+				Vector2 emission_position(pixel.r * shape_scale.x + shape_offset.x, pixel.g * shape_scale.y + shape_offset.y);
+				if (!Math::is_finite(emission_position.x) || !Math::is_finite(emission_position.y)) {
 					valid_points = false;
 					break;
 				}
-				points.write[i] = position;
+				points.write[i] = emission_position;
 			}
 			if (valid_points) {
 				set_emission_points(points);
