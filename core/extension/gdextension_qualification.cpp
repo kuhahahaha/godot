@@ -511,6 +511,10 @@ void Registry::qualification_service(uint64_t bridge_serial,uint64_t serial,uint
    }
    if(returned)break;
    const Error error=rd->_qualification_maintenance();
+   if (error != OK && error != ERR_BUSY && kind == 3) {
+    MutexLock lock(mutex);
+    for (auto *ticket : bridge->tickets) if (ticket && ticket->serial == serial) ticket->remember_system_set_return_error(error);
+   }
    // Publish a real maintenance failure before any later retirement step can
    // enqueue another driver free. Keep the first cause and the original child.
    if(error!=OK && error!=ERR_BUSY && kind!=3) {

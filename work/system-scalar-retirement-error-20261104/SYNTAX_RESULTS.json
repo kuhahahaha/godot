@@ -1,0 +1,94 @@
+[
+  {
+    "file": "core/extension/gdextension_system_scalar.cpp",
+    "command": [
+      "clang++",
+      "-std=c++17",
+      "-fsyntax-only",
+      "-Wall",
+      "-Wextra",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-source-integration-20261104/snapshot",
+      "-I.",
+      "-Iplatform/macos",
+      "-Ithirdparty/vulkan/include",
+      "-DDEBUG_ENABLED",
+      "-DTESTS_ENABLED",
+      "-DTOOLS_ENABLED",
+      "-DTHREADS_ENABLED",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_system_scalar.cpp"
+    ],
+    "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104",
+    "exit_code": 0,
+    "elapsed_seconds": 0.43
+  },
+  {
+    "file": "core/extension/gdextension_qualification.cpp",
+    "command": [
+      "clang++",
+      "-std=c++17",
+      "-fsyntax-only",
+      "-Wall",
+      "-Wextra",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-source-integration-20261104/snapshot",
+      "-I.",
+      "-Iplatform/macos",
+      "-Ithirdparty/vulkan/include",
+      "-DDEBUG_ENABLED",
+      "-DTESTS_ENABLED",
+      "-DTOOLS_ENABLED",
+      "-DTHREADS_ENABLED",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_qualification.cpp"
+    ],
+    "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104",
+    "exit_code": 0,
+    "elapsed_seconds": 0.74
+  },
+  {
+    "file": "core/extension/gdextension_qualification_ticket.cpp",
+    "command": [
+      "clang++",
+      "-std=c++17",
+      "-fsyntax-only",
+      "-Wall",
+      "-Wextra",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-source-integration-20261104/snapshot",
+      "-I.",
+      "-Iplatform/macos",
+      "-Ithirdparty/vulkan/include",
+      "-DDEBUG_ENABLED",
+      "-DTESTS_ENABLED",
+      "-DTOOLS_ENABLED",
+      "-DTHREADS_ENABLED",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_qualification_ticket.cpp"
+    ],
+    "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104",
+    "exit_code": 0,
+    "elapsed_seconds": 0.72
+  },
+  {
+    "file": "tests/servers/rendering/test_system_scalar.cpp",
+    "command": [
+      "clang++",
+      "-std=c++17",
+      "-fsyntax-only",
+      "-Wall",
+      "-Wextra",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-source-integration-20261104/snapshot",
+      "-I.",
+      "-Iplatform/macos",
+      "-Ithirdparty/vulkan/include",
+      "-DDEBUG_ENABLED",
+      "-DTESTS_ENABLED",
+      "-DTOOLS_ENABLED",
+      "-DTHREADS_ENABLED",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/tests/servers/rendering/test_system_scalar.cpp"
+    ],
+    "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104",
+    "exit_code": 0,
+    "elapsed_seconds": 0.54
+  }
+]

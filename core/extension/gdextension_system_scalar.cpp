@@ -208,7 +208,14 @@ GDExtensionDeviceSessionResultV1 Registry::system_scalar_observe(GDExtensionQual
 		if (error != OK) return scalar_result(error, 17);
 		if (ticket_ref.registry_instance != instance || !ticket_ref.handle_serial) return scalar_result(ERR_INVALID_DATA, 17);
 		bool found = false;
-		for (auto *ticket : bridge->tickets) if (ticket && ticket->system_scalar && !ticket->acknowledged && ticket->serial == ticket_ref.handle_serial) { found = true; break; }
+		for (auto *ticket : bridge->tickets) if (ticket && ticket->system_scalar && !ticket->acknowledged && ticket->serial == ticket_ref.handle_serial) {
+			if (ticket->system_set_return_error != OK) {
+				scalar_report(ticket, out);
+				return scalar_result(ticket->system_set_return_error, 16);
+			}
+			found = true;
+			break;
+		}
 		if (!found) return scalar_result(ERR_DOES_NOT_EXIST, 17);
 	}
 	Error error = qualification_schedule(ref, ticket_ref.handle_serial, 3, *budget);
@@ -217,7 +224,10 @@ GDExtensionDeviceSessionResultV1 Registry::system_scalar_observe(GDExtensionQual
 	QualificationBridge *bridge = nullptr; RenderingDevice *rd = nullptr;
 	error = qualification_bridge_locked(ref, false, false, bridge, rd);
 	if (error != OK) return scalar_result(error, 17);
-	for (auto *ticket : bridge->tickets) if (ticket && ticket->system_scalar && !ticket->acknowledged && ticket->serial == ticket_ref.handle_serial) { scalar_report(ticket, out); return scalar_result(OK); }
+	for (auto *ticket : bridge->tickets) if (ticket && ticket->system_scalar && !ticket->acknowledged && ticket->serial == ticket_ref.handle_serial) {
+		scalar_report(ticket, out);
+		return scalar_result(ticket->system_set_return_error, ticket->system_set_return_error == OK ? 0 : 16);
+	}
 	return scalar_result(ERR_DOES_NOT_EXIST, 17);
 }
 
@@ -289,9 +299,9 @@ void Registry::system_scalar_set_return_step(QualificationTicket *ticket, Render
 	if (rd->_recording_error() != OK || rd->draw_list.active || rd->compute_list.active || rd->raytracing_list.active || !rd->frames[rd->frame].qualification_epoch || !rd->_qualification_free_event_available(ticket->system_set_physical.event_capacity_reserved)) return;
 	{
 		MutexLock lock(mutex);
-		if (!ticket->system_set.is_valid() || ticket->system_set_return_requested || !ticket->physically_retired.load()) return;
+		if (!ticket->system_set.is_valid() || ticket->system_set_return_requested || !ticket->physically_retired.load() || ticket->system_set_return_error != OK) return;
 		auto *set = rd->uniform_set_owner.get_or_null(ticket->system_set);
-		if (!set || set->qualification_return != &ticket->system_set_physical || set->qualification_users || ticket->system_set_physical.dependent_children.load()) { ticket->system_set_return_error = ERR_INVALID_DATA; return; }
+		if (!set || set->qualification_return != &ticket->system_set_physical || set->qualification_users || ticket->system_set_physical.dependent_children.load()) { ticket->remember_system_set_return_error(ERR_INVALID_DATA); return; }
 		ticket->system_set_physical.use_closed.store(true);
 	}
 	rd->qualification_retiring = true;

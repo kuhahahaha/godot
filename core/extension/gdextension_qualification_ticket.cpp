@@ -583,6 +583,9 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_release(GDExtensionQual
 	 if(ticket_ref.registry_instance!=instance || !ticket_ref.handle_serial)return result(ERR_INVALID_DATA,17);
 	 for(auto *candidate:bridge->tickets)if(candidate && candidate->system_scalar && candidate->serial==ticket_ref.handle_serial && !candidate->acknowledged){ticket=candidate;break;}
 	 if(!ticket)return result(ERR_DOES_NOT_EXIST,17);
+	 // Preserve the failed retirement's source/metadata pins and report. A
+	 // later physical free is not an acknowledgement or an error reset.
+	 if(ticket->system_set_return_error!=OK)return result(ticket->system_set_return_error,16);
  } else {error=qualification_ticket_locked(bridge,ticket_ref,ticket);if(error!=OK)return result(error,17);}
  if(ticket->accepted_rt_refs || ticket->recording || ticket->frame_refs || !ticket->physically_retired.load())return result(ERR_BUSY,16);
  if(ticket->queued)return result(ERR_BUSY,19);

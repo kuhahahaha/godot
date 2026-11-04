@@ -79,4 +79,43 @@ TEST_CASE("[SystemScalar] native admission includes every copy and continuation 
 	driver.bound = 3584;
 	CHECK(system_scalar_native_capacity(driver, 0, 0, 16384, 32) == ERR_PARAMETER_RANGE_ERROR);
 }
+TEST_CASE("[SystemScalar] set retirement keeps first error without changing completed computation") {
+	QualificationTicket ticket(true);
+	ticket.system_set = RID::from_uint64(7);
+	ticket.physically_retired.store(true);
+	ticket.report.state = 8;
+	ticket.report.revision = 23;
+	ticket.report.native_code = -41;
+	ticket.system_report.state = 8;
+	ticket.system_report.revision = 23;
+	ticket.system_report.native_code = -41;
+	const auto report = ticket.report;
+	const auto system_report = ticket.system_report;
+	ticket.remember_system_set_return_error(ERR_BUSY);
+	CHECK(ticket.system_set_return_error == OK);
+	ticket.remember_system_set_return_error(FAILED);
+	CHECK(ticket.system_set_return_error == FAILED);
+	ticket.remember_system_set_return_error(ERR_INVALID_DATA);
+	ticket.remember_system_set_return_error(OK);
+	CHECK(ticket.system_set_return_error == FAILED);
+	CHECK(memcmp(&ticket.report, &report, sizeof(report)) == 0);
+	CHECK(memcmp(&ticket.system_report, &system_report, sizeof(system_report)) == 0);
+	CHECK_FALSE(ticket.acknowledged);
+}
+
+TEST_CASE("[SystemScalar] set retirement error does not replace active-operation or absent-set outcomes") {
+	QualificationTicket ticket(true);
+	ticket.system_set = RID::from_uint64(7);
+	ticket.remember_system_set_return_error(FAILED);
+	CHECK(ticket.system_set_return_error == OK);
+	ticket.physically_retired.store(true);
+	ticket.system_set = RID();
+	ticket.remember_system_set_return_error(FAILED);
+	CHECK(ticket.system_set_return_error == OK);
+	QualificationTicket qualification;
+	qualification.physically_retired.store(true);
+	qualification.system_set = RID::from_uint64(7);
+	qualification.remember_system_set_return_error(FAILED);
+	CHECK(qualification.system_set_return_error == OK);
+}
 } // namespace TestSystemScalar

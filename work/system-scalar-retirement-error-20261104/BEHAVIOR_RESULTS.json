@@ -1,0 +1,14 @@
+[
+  {
+    "stage": "red",
+    "revision": "93f18e5a30",
+    "exit_code": 1,
+    "output": "FAIL maintenance failure retained after compute completion\nFAIL maintenance failure prevents another set free enqueue\nFAIL later error Busy or success cannot clear first failure\nFAIL observe surfaces stored failure before scheduling\nFAIL observe error still returns original completed report\nFAIL observe after service surfaces stored failure\nFAIL release returns stored error instead of Busy\nFAIL failed release changes no native pins or ACK\nFAIL queued-free error stays sticky after physical return\nfailures=9\n"
+  },
+  {
+    "stage": "green",
+    "revision": "working tree",
+    "exit_code": 0,
+    "output": "failures=0\n"
+  }
+]

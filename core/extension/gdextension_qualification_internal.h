@@ -157,6 +157,14 @@ struct QualificationTicket {
  uint32_t ordering_path_length=0;
  bool ordering_closed=false,append_failed=false,mapping_failed=false,observation_dirty=false;
  bool resources_returned=false;
+ void remember_system_set_return_error(Error p_error) {
+  if (!system_scalar || !physically_retired.load() || system_set.is_null() || p_error == OK || p_error == ERR_BUSY || system_set_return_error != OK) return;
+  MutexLock lock(system_set_physical.mutex);
+  // A completed computation can still own an unreturned internal set. Keep
+  // that retirement failure separate from its immutable computation report.
+  // An already returned set cannot inherit an unrelated maintenance failure.
+  if (!system_set_physical.free_event) system_set_return_error = p_error;
+ }
  void finish_system_append(Error p_error) {
   recording = false;
   if (body_append.state == CheckedRecordAppend::State::Unknown) {
