@@ -33,6 +33,7 @@
 #include "core/extension/gdextension_production_registration.h"
 #include "core/os/thread.h"
 #include "servers/rendering/rendering_device.h"
+#include "servers/rendering/rendering_server_default.h"
 
 #include <cstddef>
 #include <cstring>
@@ -389,7 +390,7 @@ Error Registry::production_request_locked(GDExtensionProductionRequestRefV1 ref,
 			if (e != OK) {
 				return e;
 			}
-			if (r.attachment != a || (admit && r.cancelled)) {
+			if (r.attachment != a || (admit && (r.cancelled || r.control.state != ProductionControlState::OWNER_CONSUMED))) {
 				return ERR_BUSY;
 			}
 			out = &r;
@@ -841,18 +842,21 @@ GDExtensionDeviceSessionResultV1 Registry::production_observe(GDExtensionProduct
 	if (e != OK) {
 		return result(e, 16);
 	}
-	// Observation never initiates copy/upload or promotes retained unknown work.
-	GDExtensionProductionReportV1 report = {};
-	report.abi = ABI;
-	report.operation = r->operation;
-	report.revision = r->revision;
-	report.recorded_end = r->operation.canonical_begin;
-	report.cancelled = r->cancelled;
-	report.possible_obligations = r->effects_pending ? 1 : 0;
-	report.cause = result(r->effects_pending ? ERR_BUSY : OK);
-	*out = report;
+	production_report_locked(*r, *out);
 	return result(OK);
 }
+void Registry::production_report_locked(const ProductionRequest &r, GDExtensionProductionReportV1 &report) const {
+	// A control return reports maintenance, never native completion or ACK.
+	report = {};
+	report.abi = ABI;
+	report.operation = r.operation;
+	report.revision = r.revision;
+	report.recorded_end = r.operation.canonical_begin;
+	report.cancelled = r.cancelled;
+	report.possible_obligations = r.effects_pending ? 1 : 0;
+	report.cause = result(r.effects_pending ? ERR_BUSY : OK);
+}
+
 GDExtensionDeviceSessionResultV1 Registry::production_cancel(GDExtensionProductionRequestRefV1 ref) {
 	MutexLock lock(mutex);
 	ProductionRequest *r = nullptr;
@@ -861,6 +865,13 @@ GDExtensionDeviceSessionResultV1 Registry::production_cancel(GDExtensionProducti
 	if (e != OK) {
 		return result(e, 16);
 	}
+	if (r->control.state != ProductionControlState::OWNER_CONSUMED) {
+		return result(ERR_BUSY, 16);
+	}
+	return production_cancel_locked(*r);
+}
+GDExtensionDeviceSessionResultV1 Registry::production_cancel_locked(ProductionRequest &request) {
+	auto *r = &request;
 	if (!r->cancelled) {
 		if (r->revision == UINT64_MAX) {
 			return result(ERR_PARAMETER_RANGE_ERROR, 19);
@@ -878,6 +889,14 @@ GDExtensionDeviceSessionResultV1 Registry::production_release(GDExtensionProduct
 	if (e != OK) {
 		return result(e, 16);
 	}
+	if (r->control.state != ProductionControlState::OWNER_CONSUMED) {
+		return result(ERR_BUSY, 16);
+	}
+	return production_release_locked(*r, rd, true);
+}
+GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionRequest &request, RenderingDevice *rd, bool reclaim) {
+	auto *r = &request;
+	Error e = OK;
 	if (r->effects_pending) {
 		return result(ERR_BUSY, 16);
 	}
@@ -904,6 +923,10 @@ GDExtensionDeviceSessionResultV1 Registry::production_release(GDExtensionProduct
 	}
 	if (e != OK) {
 		return result(e, 16);
+	}
+	// RT returns its result before the owner can reset/reuse this arena slot.
+	if (!reclaim) {
+		return result(OK);
 	}
 	auto reset = [](auto *cells, uint32_t count) { using T=std::remove_pointer_t<decltype(cells)>;for(uint32_t i=0;i<count;++i){cells[i].~T();new (&cells[i]) T();} };
 	reset(r->actions, r->capacity.suboperations);
@@ -976,6 +999,11 @@ GDExtensionDeviceSessionResultV1 Registry::production_close(GDExtensionProductio
 		return result(e, 16);
 	}
 	for (uint32_t i = 0; i < a->quote.capacity.requests; ++i) {
+		if (a->requests[i].control.state != ProductionControlState::OWNER_CONSUMED) {
+			return result(ERR_BUSY, 16);
+		}
+	}
+	for (uint32_t i = 0; i < a->quote.capacity.requests; ++i) {
 		const auto &request = a->requests[i];
 		if (request.serial && !request.cancelled && request.revision == UINT64_MAX) {
 			return result(ERR_PARAMETER_RANGE_ERROR, 19);
@@ -1030,5 +1058,179 @@ GDExtensionDeviceSessionResultV1 Registry::production_close(GDExtensionProductio
 	reclaim(library);
 	try_finalize();
 	return result(OK);
+}
+
+static_assert(std::is_trivially_copyable_v<ProductionControlInput>);
+static_assert(std::is_trivially_copyable_v<ProductionControlOutput>);
+static_assert(std::is_trivially_copyable_v<ProductionControlCell>);
+
+Error Registry::production_control_accept(GDExtensionProductionRequestRefV1 ref, ProductionControlKind kind, uint64_t *out) {
+	if (!aligned(out) || uint32_t(kind) > uint32_t(ProductionControlKind::RELEASE)) {
+		return ERR_INVALID_PARAMETER;
+	}
+	MutexLock lock(mutex);
+	ProductionRequest *r = nullptr;
+	RenderingDevice *rd = nullptr;
+	Error error = production_request_locked(ref, false, r, rd);
+	if (error != OK) {
+		return error;
+	}
+	auto &cell = r->control;
+	if (cell.state != ProductionControlState::OWNER_CONSUMED) {
+		// A retry retrieves the same retained operation, never overwrites it.
+		if (cell.input.kind != kind) {
+			return ERR_BUSY;
+		}
+		*out = cell.serial;
+		return OK;
+	}
+	if (!r->next_control_serial) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	cell = {};
+	cell.serial = r->next_control_serial;
+	r->next_control_serial = cell.serial == UINT64_MAX ? 0 : cell.serial + 1;
+	cell.input = { r->serial, r->operation.record_generation, kind };
+	cell.state = ProductionControlState::PENDING;
+	// The existing request child retains this entire arena and original holder.
+	// Close and direct Release refuse this cell until its owner consumes return.
+	*out = cell.serial;
+	return OK;
+}
+
+Error Registry::production_control_schedule(GDExtensionProductionRequestRefV1 ref, uint64_t serial) {
+	MutexLock lock(mutex);
+	ProductionRequest *r = nullptr;
+	RenderingDevice *rd = nullptr;
+	Error error = production_request_locked(ref, false, r, rd);
+	if (error != OK) {
+		return error;
+	}
+	auto &cell = r->control;
+	if (!serial || cell.serial != serial || cell.state == ProductionControlState::OWNER_CONSUMED) {
+		return ERR_DOES_NOT_EXIST;
+	}
+	if (cell.state != ProductionControlState::PENDING) {
+		return OK;
+	}
+	auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
+	if (!server || this != &get_singleton()) {
+		return ERR_UNAVAILABLE;
+	}
+	// Publication holds the original Registry lock; CQMT does not execute inline
+	// and releases its lock before dispatch. The scalar command owns no DSO code.
+	cell.state = ProductionControlState::QUEUED;
+	if (!server->_try_production_control_dispatch(instance, r->attachment->serial, r->serial, serial)) {
+		cell.state = ProductionControlState::PENDING;
+		return ERR_BUSY;
+	}
+	return OK;
+}
+
+void Registry::production_control_execute_locked(ProductionRequest &request, RenderingDevice *rd) {
+	auto &cell = request.control;
+	CRASH_COND(cell.state != ProductionControlState::QUEUED);
+	cell.state = ProductionControlState::EXECUTING;
+	cell.output = {};
+	cell.output.request_serial = request.serial;
+	cell.output.control_serial = cell.serial;
+	switch (cell.input.kind) {
+		case ProductionControlKind::OBSERVE:
+			cell.output.result = result(OK);
+			break;
+		case ProductionControlKind::CANCEL:
+			cell.output.result = production_cancel_locked(request);
+			break;
+		case ProductionControlKind::RELEASE:
+			// Only drop proven no-effect request edges; uncertain work remains retained.
+			cell.output.result = production_release_locked(request, rd, false);
+			break;
+	}
+	production_report_locked(request, cell.output.report);
+	cell.state = ProductionControlState::RETURNED;
+	// No recursive schedule, driver wait, native completion, or source ACK here.
+}
+
+void Registry::production_control_dispatch(uint64_t registry, uint64_t attachment, uint64_t request, uint64_t serial) {
+	auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
+	if (!server || Thread::get_caller_id() != server->server_thread) {
+		return;
+	}
+	MutexLock lock(mutex);
+	if (registry != instance || !serial) {
+		return;
+	}
+	for (auto *a : production_attachments) {
+		if (!a || a->serial != attachment) {
+			continue;
+		}
+		for (uint32_t i = 0; i < a->quote.capacity.requests; ++i) {
+			auto &r = a->requests[i];
+			auto &cell = r.control;
+			if (!request || r.serial != request || cell.serial != serial || cell.state != ProductionControlState::QUEUED) {
+				continue;
+			}
+			auto &owner = records[a->library];
+			auto &device = device_records[a->device];
+			// This validates the original enrolled object and retained queue admission.
+			// It does not create a qualification TLS permission or a numeric grant.
+			if (r.attachment != a || cell.input.request_serial != r.serial ||
+					cell.input.record_generation != r.operation.record_generation ||
+					!owner.occupied || owner.snapshot.library_generation != a->library_generation ||
+					owner.producer_registration_serial != a->producer_serial ||
+					!owner.producer_attachment_identity || !a->holder ||
+					a->holder->handle_serial != owner.producer_code_holder ||
+					a->holder->generation != a->library_generation ||
+					a->holder->terminal_action != a->terminal_action || !a->holder->production_children ||
+					device.epoch != a->epoch || device.execution_thread != Thread::get_caller_id() ||
+					!a->held_device || device.object != a->held_device ||
+					a->held_device->production_entity_registry.load(std::memory_order_acquire) != this) {
+				cell.output = {};
+				cell.output.request_serial = r.serial;
+				cell.output.control_serial = cell.serial;
+				cell.output.result = result(ERR_INVALID_DATA, 16);
+				cell.state = ProductionControlState::RETURNED;
+				return;
+			}
+			// A loss/sealed preflight does not erase already accepted cleanup. Pending
+			// native effects are still checked by the real release helper and retained.
+			production_control_execute_locked(r, a->held_device);
+			return;
+		}
+		return;
+	}
+}
+
+Error Registry::production_control_consume(GDExtensionProductionRequestRefV1 ref, uint64_t serial, ProductionControlOutput *out) {
+	if (!aligned(out)) {
+		return ERR_INVALID_PARAMETER;
+	}
+	MutexLock lock(mutex);
+	ProductionRequest *r = nullptr;
+	RenderingDevice *rd = nullptr;
+	Error error = production_request_locked(ref, false, r, rd);
+	if (error != OK) {
+		return error;
+	}
+	auto &cell = r->control;
+	if (!serial || cell.serial != serial || cell.state == ProductionControlState::OWNER_CONSUMED) {
+		return ERR_DOES_NOT_EXIST;
+	}
+	if (cell.state != ProductionControlState::RETURNED) {
+		return ERR_BUSY;
+	}
+	const auto retained = cell.output;
+	if (cell.input.kind == ProductionControlKind::RELEASE && retained.result.native_error == OK) {
+		// The RT has returned. Reclaim is now owned by the original owner; it must
+		// succeed before the result is consumed or the request slot becomes reusable.
+		const auto released = production_release_locked(*r, rd, true);
+		if (released.native_error != OK) {
+			return Error(released.native_error);
+		}
+	} else {
+		cell.state = ProductionControlState::OWNER_CONSUMED;
+	}
+	*out = retained;
+	return OK;
 }
 } // namespace GDExtensionDeviceExit

@@ -44,7 +44,15 @@
 #include "servers/rendering/rendering_server_types.h"
 #include "servers/server_wrap_mt_common.h"
 
-namespace GDExtensionDeviceExit { class Registry; }
+namespace GDExtensionDeviceExit {
+class Registry;
+}
+
+#ifdef TESTS_ENABLED
+namespace TestProductionRequest {
+struct Access;
+}
+#endif
 
 class RenderingServerDefault : public RenderingServer {
 	GDSOFTCLASS(RenderingServerDefault, RenderingServer);
@@ -94,11 +102,16 @@ class RenderingServerDefault : public RenderingServer {
 	void _run_post_draw_steps();
 	void _init();
 	void _finish();
- friend class GDExtensionDeviceExit::Registry;
- bool _try_qualification_service(uint64_t,uint64_t,uint32_t,uint32_t,uint32_t);
- bool _try_qualification_rt_dispatch(uint64_t,uint64_t);
- void _qualification_rt_dispatch(uint64_t,uint64_t);
- void _qualification_service(uint64_t,uint64_t,uint32_t,uint32_t,uint32_t);
+	friend class GDExtensionDeviceExit::Registry;
+#ifdef TESTS_ENABLED
+	friend struct TestProductionRequest::Access;
+#endif
+	bool _try_qualification_service(uint64_t, uint64_t, uint32_t, uint32_t, uint32_t);
+	bool _try_qualification_rt_dispatch(uint64_t, uint64_t);
+	void _qualification_rt_dispatch(uint64_t, uint64_t);
+	bool _try_production_control_dispatch(uint64_t, uint64_t, uint64_t, uint64_t);
+	void _production_control_dispatch(uint64_t, uint64_t, uint64_t, uint64_t);
+	void _qualification_service(uint64_t, uint64_t, uint32_t, uint32_t, uint32_t);
 
 	void _free(RID p_rid);
 

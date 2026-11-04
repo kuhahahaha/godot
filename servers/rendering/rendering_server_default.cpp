@@ -29,8 +29,8 @@
 /**************************************************************************/
 
 #include "rendering_server_default.h"
-#include "core/extension/gdextension_library_exit_guard.h"
 
+#include "core/extension/gdextension_library_exit_guard.h"
 #include "core/object/callable_mp.h"
 #include "core/os/os.h"
 #include "core/profiling/profiling.h"
@@ -283,11 +283,13 @@ void RenderingServerDefault::_finish() {
 	memdelete(RSG::rasterizer);
 	memdelete(RSG::scene);
 	memdelete(RSG::camera_attributes);
- if (create_thread) {
-  // Complete native disposal on the assigned rendering thread before main destroys the Object.
-  RenderingDevice *rd=RenderingDevice::get_singleton();
-  if (rd && rd->is_main_instance) rd->_finalize_on_rendering_server_thread();
- }
+	if (create_thread) {
+		// Complete native disposal on the assigned rendering thread before main destroys the Object.
+		RenderingDevice *rd = RenderingDevice::get_singleton();
+		if (rd && rd->is_main_instance) {
+			rd->_finalize_on_rendering_server_thread();
+		}
+	}
 }
 
 void RenderingServerDefault::init() {
@@ -493,17 +495,32 @@ RenderingServerDefault::RenderingServerDefault(bool p_create_thread) {
 RenderingServerDefault::~RenderingServerDefault() {
 }
 
-void RenderingServerDefault::_qualification_rt_dispatch(uint64_t bridge,uint64_t serial) {
- GDExtensionDeviceExit::Registry::get_singleton().qualification_rt_dispatch(bridge,serial);
+void RenderingServerDefault::_qualification_rt_dispatch(uint64_t bridge, uint64_t serial) {
+	GDExtensionDeviceExit::Registry::get_singleton().qualification_rt_dispatch(bridge, serial);
 }
-bool RenderingServerDefault::_try_qualification_rt_dispatch(uint64_t bridge,uint64_t serial) {
- if(Thread::get_caller_id()==server_thread){_qualification_rt_dispatch(bridge,serial);return true;}
- return command_queue.try_push_bounded(65536,this,&RenderingServerDefault::_qualification_rt_dispatch,bridge,serial);
+bool RenderingServerDefault::_try_qualification_rt_dispatch(uint64_t bridge, uint64_t serial) {
+	if (Thread::get_caller_id() == server_thread) {
+		_qualification_rt_dispatch(bridge, serial);
+		return true;
+	}
+	return command_queue.try_push_bounded(65536, this, &RenderingServerDefault::_qualification_rt_dispatch, bridge, serial);
 }
-void RenderingServerDefault::_qualification_service(uint64_t bridge,uint64_t child,uint32_t kind,uint32_t passes,uint32_t micros) {
- GDExtensionDeviceExit::Registry::get_singleton().qualification_service(bridge,child,kind,passes,micros);
+void RenderingServerDefault::_qualification_service(uint64_t bridge, uint64_t child, uint32_t kind, uint32_t passes, uint32_t micros) {
+	GDExtensionDeviceExit::Registry::get_singleton().qualification_service(bridge, child, kind, passes, micros);
 }
-bool RenderingServerDefault::_try_qualification_service(uint64_t bridge,uint64_t child,uint32_t kind,uint32_t passes,uint32_t micros) {
- if(Thread::get_caller_id()==server_thread) { _qualification_service(bridge,child,kind,passes,micros);return true; }
- return command_queue.try_push_bounded(65536,this,&RenderingServerDefault::_qualification_service,bridge,child,kind,passes,micros);
+bool RenderingServerDefault::_try_qualification_service(uint64_t bridge, uint64_t child, uint32_t kind, uint32_t passes, uint32_t micros) {
+	if (Thread::get_caller_id() == server_thread) {
+		_qualification_service(bridge, child, kind, passes, micros);
+		return true;
+	}
+	return command_queue.try_push_bounded(65536, this, &RenderingServerDefault::_qualification_service, bridge, child, kind, passes, micros);
+}
+
+void RenderingServerDefault::_production_control_dispatch(uint64_t registry, uint64_t attachment, uint64_t request, uint64_t control) {
+	GDExtensionDeviceExit::Registry::get_singleton().production_control_dispatch(registry, attachment, request, control);
+}
+bool RenderingServerDefault::_try_production_control_dispatch(uint64_t registry, uint64_t attachment, uint64_t request, uint64_t control) {
+	// Always join the original FIFO, including a call already on the RT.
+	// A single attempt cannot requeue itself while flush_all is consuming it.
+	return command_queue.try_push_bounded(65536, this, &RenderingServerDefault::_production_control_dispatch, registry, attachment, request, control);
 }
