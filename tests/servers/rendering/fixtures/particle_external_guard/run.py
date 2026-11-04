@@ -76,7 +76,7 @@ def main():
             selected = re.sub(r'#ifdef MODE_(INIT|VALIDATE|FINALIZE)\n(.*?)#endif',
                               lambda m: m[2] if m[1] == mode else '', main_body, flags=re.S)
             functions += '\nvoid shader_' + mode + '() {' + translate(selected) + '}\n'
-        harness = Path(__file__).with_name('harness.cpp').read_text()
+        harness = Path(__file__).with_name('harness.cpp.in').read_text()
         surface = source[source.index('struct SurfaceProof {'):source.index('\nlayout(set = 0, binding = 7')]
         cpp = temp / 'guard.cpp'
         cpp.write_text(harness.replace('// PRODUCTION_SURFACE', surface).replace('// PRODUCTION_FUNCTIONS', functions))
