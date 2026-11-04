@@ -93,11 +93,21 @@ public:
 	uint32_t fail_on = 0;
 	Vector<uint64_t> bytes;
 	Vector<uint64_t> returned;
+	Vector<String> names;
 	Storage *storage = nullptr;
 	BufferID buffer_create(uint64_t p_bytes, BitField<BufferUsageBits>, MemoryAllocationType, uint64_t) override {
 		bytes.push_back(p_bytes);
 		++creates;
 		return creates == fail_on ? BufferID() : BufferID(100 + creates);
+	}
+	void set_object_name(ObjectType p_type, ID p_driver_id, const String &p_name) override {
+		// DEV_ENABLED names each successfully allocated storage buffer. Keep the
+		// shared transfer driver strict; only this fixture admits that operation.
+		CHECK(p_type == OBJECT_TYPE_BUFFER);
+		CHECK(creates != fail_on);
+		CHECK(p_driver_id.id == 100 + creates);
+		CHECK(p_name.begins_with("RID:"));
+		names.push_back(p_name);
 	}
 	void buffer_free(BufferID p_id) override {
 		// Core must not publish RETURNED before this exact native call returns.
@@ -131,6 +141,13 @@ TEST_CASE("[RenderingDevice][ExternalOutputPrefix] third allocation failure reta
 	Access::Report report;
 	REQUIRE(Access::observe(*storage, report) == OK);
 	CHECK(report.created_count == 2);
+#ifdef DEV_ENABLED
+	REQUIRE(driver.names.size() == 2);
+	CHECK(driver.names[0] == "RID:" + itos(report.resources[0].native.rid));
+	CHECK(driver.names[1] == "RID:" + itos(report.resources[1].native.rid));
+#else
+	CHECK(driver.names.is_empty());
+#endif
 	CHECK(report.enqueued_count == 2);
 	CHECK(report.all_driver_returned == false);
 	CHECK(report.creation_error == ERR_CANT_CREATE);
