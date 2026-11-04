@@ -1,0 +1,340 @@
+{
+  "backend": "vulkan",
+  "control_only": false,
+  "aligned_sizes": true,
+  "command": [
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/host/editor.arm64",
+    "--path",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-runtime-control-20261104/runs/20261104T042145Z-593b92c2-vulkan/project",
+    "--rendering-driver",
+    "vulkan",
+    "--rendering-method",
+    "mobile",
+    "--render-thread",
+    "safe",
+    "--resolution",
+    "64x64",
+    "--audio-driver",
+    "Dummy",
+    "--disable-crash-handler"
+  ],
+  "host_sha256": "4e99d8df4482f596ee892944a38d9bff28bf8f622c8a4b2cd4e7081a33e6c528",
+  "frozen_old_baseline": true,
+  "rc": 0,
+  "duration_seconds": 2.79834012495121,
+  "expected_aux_collision_red": false,
+  "literal_oracle_green": true,
+  "accepted": true,
+  "report": {
+    "dynamic_binding_tested": false,
+    "free_requests_only": true,
+    "main_rd": true,
+    "pass": true,
+    "physical_disposal_observed": false,
+    "production_authority": false,
+    "rows": [
+      {
+        "completed_readback_callbacks": 4,
+        "expected_words": [
+          [
+            11.0,
+            12.0,
+            13.0,
+            14.0,
+            15.0,
+            16.0,
+            17.0,
+            114.0
+          ],
+          [
+            101.0,
+            102.0,
+            103.0,
+            104.0,
+            21.0,
+            22.0,
+            23.0,
+            122.0
+          ],
+          [
+            1065353216.0,
+            1073741824.0,
+            1077936128.0,
+            1082130432.0,
+            1084227584.0,
+            1086324736.0,
+            1088421888.0,
+            1090519040.0,
+            1120534528.0,
+            1128923136.0,
+            1134002176.0,
+            1137311744.0
+          ],
+          [
+            8.0,
+            4.0,
+            3.0,
+            4.0
+          ]
+        ],
+        "name": "baseline_reuse_A_to_B",
+        "observed": {
+          "0": [
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            114
+          ],
+          "1": [
+            101,
+            102,
+            103,
+            104,
+            21,
+            22,
+            23,
+            122
+          ],
+          "2": [
+            1065353216,
+            1073741824,
+            1077936128,
+            1082130432,
+            1084227584,
+            1086324736,
+            1088421888,
+            1090519040,
+            1120534528,
+            1128923136,
+            1134002176,
+            1137311744
+          ],
+          "3": [
+            8,
+            4,
+            3,
+            4
+          ]
+        },
+        "pass": true,
+        "pipeline": "B",
+        "requested_byte_sizes": [
+          32.0,
+          32.0,
+          48.0,
+          16.0
+        ],
+        "set_shader": "A"
+      },
+      {
+        "completed_readback_callbacks": 4,
+        "expected_words": [
+          [
+            31.0,
+            32.0,
+            33.0,
+            34.0,
+            35.0,
+            36.0,
+            37.0,
+            38.0,
+            39.0,
+            40.0,
+            41.0,
+            234.0
+          ],
+          [
+            201.0,
+            202.0,
+            203.0,
+            204.0,
+            41.0,
+            42.0,
+            43.0,
+            44.0,
+            45.0,
+            46.0,
+            47.0,
+            242.0
+          ],
+          [
+            1084227584.0,
+            1086324736.0,
+            1088421888.0,
+            1090519040.0,
+            1121058816.0,
+            1129185280.0,
+            1134133248.0,
+            1137442816.0
+          ],
+          [
+            12.0,
+            8.0,
+            2.0,
+            4.0
+          ]
+        ],
+        "name": "recreated_sizes_B_to_B",
+        "observed": {
+          "0": [
+            31,
+            32,
+            33,
+            34,
+            35,
+            36,
+            37,
+            38,
+            39,
+            40,
+            41,
+            234
+          ],
+          "1": [
+            201,
+            202,
+            203,
+            204,
+            41,
+            42,
+            43,
+            44,
+            45,
+            46,
+            47,
+            242
+          ],
+          "2": [
+            1084227584,
+            1086324736,
+            1088421888,
+            1090519040,
+            1121058816,
+            1129185280,
+            1134133248,
+            1137442816
+          ],
+          "3": [
+            12,
+            8,
+            2,
+            4
+          ]
+        },
+        "pass": true,
+        "pipeline": "B",
+        "requested_byte_sizes": [
+          48.0,
+          48.0,
+          32.0,
+          16.0
+        ],
+        "set_shader": "B"
+      },
+      {
+        "completed_readback_callbacks": 4,
+        "expected_words": [
+          [
+            11.0,
+            12.0,
+            13.0,
+            14.0,
+            15.0,
+            16.0,
+            17.0,
+            114.0
+          ],
+          [
+            101.0,
+            102.0,
+            103.0,
+            104.0,
+            21.0,
+            22.0,
+            23.0,
+            122.0
+          ],
+          [
+            1065353216.0,
+            1073741824.0,
+            1077936128.0,
+            1082130432.0,
+            1084227584.0,
+            1086324736.0,
+            1088421888.0,
+            1090519040.0,
+            1120534528.0,
+            1128923136.0,
+            1134002176.0,
+            1137311744.0
+          ],
+          [
+            8.0,
+            4.0,
+            3.0,
+            4.0
+          ]
+        ],
+        "name": "reverse_reuse_B_to_A",
+        "observed": {
+          "0": [
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            114
+          ],
+          "1": [
+            101,
+            102,
+            103,
+            104,
+            21,
+            22,
+            23,
+            122
+          ],
+          "2": [
+            1065353216,
+            1073741824,
+            1077936128,
+            1082130432,
+            1084227584,
+            1086324736,
+            1088421888,
+            1090519040,
+            1120534528,
+            1128923136,
+            1134002176,
+            1137311744
+          ],
+          "3": [
+            8,
+            4,
+            3,
+            4
+          ]
+        },
+        "pass": true,
+        "pipeline": "A",
+        "requested_byte_sizes": [
+          32.0,
+          32.0,
+          48.0,
+          16.0
+        ],
+        "set_shader": "B"
+      }
+    ]
+  },
+  "error_lines": [],
+  "scope": "Main-RD finite array length/address mechanism; free requests only; no production authority or physical-disposal qualification",
+  "dynamic_api_control": "deferred: public uniform API exposes no dynamic buffer offset binding"
+}

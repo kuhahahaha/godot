@@ -1,0 +1,182 @@
+; SPIR-V
+; Version: 1.0
+; Generator: Khronos Glslang Reference Front End; 11
+; Bound: 108
+; Schema: 0
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %main "main"
+               OpExecutionMode %main LocalSize 1 1 1
+               OpSource GLSL 450
+               OpName %main "main"
+               OpName %a "a"
+               OpName %ActiveZero "ActiveZero"
+               OpMemberName %ActiveZero 0 "values"
+               OpName %active_zero "active_zero"
+               OpName %b "b"
+               OpName %PrefixRuntime "PrefixRuntime"
+               OpMemberName %PrefixRuntime 0 "header"
+               OpMemberName %PrefixRuntime 1 "values"
+               OpName %prefixed "prefixed"
+               OpName %c "c"
+               OpName %VectorRuntime "VectorRuntime"
+               OpMemberName %VectorRuntime 0 "values"
+               OpName %vectors "vectors"
+               OpName %d "d"
+               OpName %OutputRuntime "OutputRuntime"
+               OpMemberName %OutputRuntime 0 "values"
+               OpName %output_words "output_words"
+               OpDecorate %_runtimearr_uint ArrayStride 4
+               OpDecorate %ActiveZero BufferBlock
+               OpMemberDecorate %ActiveZero 0 Offset 0
+               OpDecorate %active_zero Binding 0
+               OpDecorate %active_zero DescriptorSet 0
+               OpDecorate %_runtimearr_uint_0 ArrayStride 4
+               OpDecorate %PrefixRuntime BufferBlock
+               OpMemberDecorate %PrefixRuntime 0 Offset 0
+               OpMemberDecorate %PrefixRuntime 1 Offset 16
+               OpDecorate %prefixed Binding 3
+               OpDecorate %prefixed DescriptorSet 0
+               OpDecorate %_runtimearr_v4float ArrayStride 16
+               OpDecorate %VectorRuntime BufferBlock
+               OpMemberDecorate %VectorRuntime 0 Offset 0
+               OpDecorate %vectors Binding 2
+               OpDecorate %vectors DescriptorSet 1
+               OpDecorate %_runtimearr_uint_1 ArrayStride 4
+               OpDecorate %OutputRuntime BufferBlock
+               OpMemberDecorate %OutputRuntime 0 Offset 0
+               OpDecorate %output_words Binding 5
+               OpDecorate %output_words DescriptorSet 0
+               OpDecorate %gl_WorkGroupSize BuiltIn WorkgroupSize
+       %void = OpTypeVoid
+          %3 = OpTypeFunction %void
+       %uint = OpTypeInt 32 0
+%_ptr_Function_uint = OpTypePointer Function %uint
+%_runtimearr_uint = OpTypeRuntimeArray %uint
+ %ActiveZero = OpTypeStruct %_runtimearr_uint
+%_ptr_Uniform_ActiveZero = OpTypePointer Uniform %ActiveZero
+%active_zero = OpVariable %_ptr_Uniform_ActiveZero Uniform
+        %int = OpTypeInt 32 1
+     %v4uint = OpTypeVector %uint 4
+%_runtimearr_uint_0 = OpTypeRuntimeArray %uint
+%PrefixRuntime = OpTypeStruct %v4uint %_runtimearr_uint_0
+%_ptr_Uniform_PrefixRuntime = OpTypePointer Uniform %PrefixRuntime
+   %prefixed = OpVariable %_ptr_Uniform_PrefixRuntime Uniform
+      %float = OpTypeFloat 32
+    %v4float = OpTypeVector %float 4
+%_runtimearr_v4float = OpTypeRuntimeArray %v4float
+%VectorRuntime = OpTypeStruct %_runtimearr_v4float
+%_ptr_Uniform_VectorRuntime = OpTypePointer Uniform %VectorRuntime
+    %vectors = OpVariable %_ptr_Uniform_VectorRuntime Uniform
+%_runtimearr_uint_1 = OpTypeRuntimeArray %uint
+%OutputRuntime = OpTypeStruct %_runtimearr_uint_1
+%_ptr_Uniform_OutputRuntime = OpTypePointer Uniform %OutputRuntime
+%output_words = OpVariable %_ptr_Uniform_OutputRuntime Uniform
+     %uint_4 = OpConstant %uint 4
+       %bool = OpTypeBool
+      %int_0 = OpConstant %int 0
+%_ptr_Uniform_uint = OpTypePointer Uniform %uint
+      %int_1 = OpConstant %int 1
+      %int_2 = OpConstant %int 2
+      %int_3 = OpConstant %int 3
+     %uint_0 = OpConstant %uint 0
+     %uint_1 = OpConstant %uint 1
+     %uint_2 = OpConstant %uint 2
+%_ptr_Uniform_v4float = OpTypePointer Uniform %v4float
+  %float_100 = OpConstant %float 100
+  %float_200 = OpConstant %float 200
+  %float_300 = OpConstant %float 300
+  %float_400 = OpConstant %float 400
+        %103 = OpConstantComposite %v4float %float_100 %float_200 %float_300 %float_400
+     %v3uint = OpTypeVector %uint 3
+%gl_WorkGroupSize = OpConstantComposite %v3uint %uint_1 %uint_1 %uint_1
+       %main = OpFunction %void None %3
+          %5 = OpLabel
+          %a = OpVariable %_ptr_Function_uint Function
+          %b = OpVariable %_ptr_Function_uint Function
+          %c = OpVariable %_ptr_Function_uint Function
+          %d = OpVariable %_ptr_Function_uint Function
+         %13 = OpArrayLength %uint %active_zero 0
+         %15 = OpBitcast %int %13
+         %16 = OpBitcast %uint %15
+               OpStore %a %16
+         %23 = OpArrayLength %uint %prefixed 1
+         %24 = OpBitcast %int %23
+         %25 = OpBitcast %uint %24
+               OpStore %b %25
+         %33 = OpArrayLength %uint %vectors 0
+         %34 = OpBitcast %int %33
+         %35 = OpBitcast %uint %34
+               OpStore %c %35
+         %41 = OpArrayLength %uint %output_words 0
+         %42 = OpBitcast %int %41
+         %43 = OpBitcast %uint %42
+               OpStore %d %43
+         %44 = OpLoad %uint %d
+         %47 = OpUGreaterThanEqual %bool %44 %uint_4
+               OpSelectionMerge %49 None
+               OpBranchConditional %47 %48 %49
+         %48 = OpLabel
+         %51 = OpLoad %uint %a
+         %53 = OpAccessChain %_ptr_Uniform_uint %output_words %int_0 %int_0
+               OpStore %53 %51
+         %55 = OpLoad %uint %b
+         %56 = OpAccessChain %_ptr_Uniform_uint %output_words %int_0 %int_1
+               OpStore %56 %55
+         %58 = OpLoad %uint %c
+         %59 = OpAccessChain %_ptr_Uniform_uint %output_words %int_0 %int_2
+               OpStore %59 %58
+         %61 = OpLoad %uint %d
+         %62 = OpAccessChain %_ptr_Uniform_uint %output_words %int_0 %int_3
+               OpStore %62 %61
+               OpBranch %49
+         %49 = OpLabel
+         %63 = OpLoad %uint %a
+         %65 = OpUGreaterThan %bool %63 %uint_0
+               OpSelectionMerge %67 None
+               OpBranchConditional %65 %66 %67
+         %66 = OpLabel
+         %68 = OpLoad %uint %a
+         %70 = OpISub %uint %68 %uint_1
+         %71 = OpAccessChain %_ptr_Uniform_uint %active_zero %int_0 %int_0
+         %72 = OpLoad %uint %71
+         %74 = OpAccessChain %_ptr_Uniform_uint %prefixed %int_0 %uint_2
+         %75 = OpLoad %uint %74
+         %76 = OpIAdd %uint %72 %75
+         %77 = OpAccessChain %_ptr_Uniform_uint %active_zero %int_0 %70
+               OpStore %77 %76
+               OpBranch %67
+         %67 = OpLabel
+         %78 = OpLoad %uint %b
+         %79 = OpUGreaterThan %bool %78 %uint_0
+               OpSelectionMerge %81 None
+               OpBranchConditional %79 %80 %81
+         %80 = OpLabel
+         %82 = OpLoad %uint %b
+         %83 = OpISub %uint %82 %uint_1
+         %84 = OpAccessChain %_ptr_Uniform_uint %prefixed %int_1 %int_0
+         %85 = OpLoad %uint %84
+         %86 = OpAccessChain %_ptr_Uniform_uint %prefixed %int_0 %uint_0
+         %87 = OpLoad %uint %86
+         %88 = OpIAdd %uint %85 %87
+         %89 = OpAccessChain %_ptr_Uniform_uint %prefixed %int_1 %83
+               OpStore %89 %88
+               OpBranch %81
+         %81 = OpLabel
+         %90 = OpLoad %uint %c
+         %91 = OpUGreaterThan %bool %90 %uint_0
+               OpSelectionMerge %93 None
+               OpBranchConditional %91 %92 %93
+         %92 = OpLabel
+         %94 = OpLoad %uint %c
+         %95 = OpISub %uint %94 %uint_1
+         %97 = OpAccessChain %_ptr_Uniform_v4float %vectors %int_0 %int_0
+         %98 = OpLoad %v4float %97
+        %104 = OpFAdd %v4float %98 %103
+        %105 = OpAccessChain %_ptr_Uniform_v4float %vectors %int_0 %95
+               OpStore %105 %104
+               OpBranch %93
+         %93 = OpLabel
+               OpReturn
+               OpFunctionEnd

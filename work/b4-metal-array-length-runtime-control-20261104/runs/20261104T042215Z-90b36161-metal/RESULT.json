@@ -1,0 +1,46 @@
+{
+  "backend": "metal",
+  "control_only": false,
+  "aligned_sizes": false,
+  "command": [
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/host/editor.arm64",
+    "--path",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-runtime-control-20261104/runs/20261104T042215Z-90b36161-metal/project",
+    "--rendering-driver",
+    "metal",
+    "--rendering-method",
+    "mobile",
+    "--render-thread",
+    "safe",
+    "--resolution",
+    "64x64",
+    "--audio-driver",
+    "Dummy",
+    "--disable-crash-handler"
+  ],
+  "host_sha256": "4e99d8df4482f596ee892944a38d9bff28bf8f622c8a4b2cd4e7081a33e6c528",
+  "frozen_old_baseline": true,
+  "rc": 2,
+  "duration_seconds": 1.0646928329952061,
+  "expected_aux_collision_red": true,
+  "literal_oracle_green": false,
+  "accepted": true,
+  "report": {
+    "dynamic_binding_tested": false,
+    "free_requests_only": true,
+    "main_rd": true,
+    "pass": false,
+    "physical_disposal_observed": false,
+    "production_authority": false,
+    "rows": []
+  },
+  "error_lines": [
+    "LENGTH_FATAL pipeline creation B",
+    "ERROR: Error compiling shader : program_source:51:33: error: reinterpret_cast from 'const constant uint *const constant' (aka 'const constant unsigned int *const constant') to 'device ActiveZero *const constant &' casts away qualifiers",
+    "ERROR: Failed to compile Metal library",
+    "ERROR: Condition \"std::holds_alternative<Error>(function_or_err)\" is true. Returning: PipelineID()",
+    "ERROR: Condition \"!pipeline.driver_id\" is true. Returning: RID()"
+  ],
+  "scope": "Main-RD finite array length/address mechanism; free requests only; no production authority or physical-disposal qualification",
+  "dynamic_api_control": "deferred: public uniform API exposes no dynamic buffer offset binding"
+}

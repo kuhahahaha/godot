@@ -1,0 +1,21 @@
+#version 450
+layout(local_size_x=1,local_size_y=1,local_size_z=1) in;
+layout(set=0,binding=0,std430) buffer ActiveZero { uint values[]; } active_zero;
+layout(set=0,binding=3,std430) buffer PrefixRuntime { uvec4 header; uint values[]; } prefixed;
+layout(set=1,binding=2,std430) buffer VectorRuntime { vec4 values[]; } vectors;
+layout(set=0,binding=5,std430) buffer OutputRuntime { uint values[]; } output_words;
+void main() {
+ uint a=5u;
+ uint b=6u;
+ uint c=3u;
+ uint d=4u;
+ if(d>=4u) {
+  output_words.values[0]=a;
+  output_words.values[1]=b;
+  output_words.values[2]=c;
+  output_words.values[3]=d;
+ }
+ if(a>0u) active_zero.values[a-1u]=active_zero.values[0]+prefixed.header.z;
+ if(b>0u) prefixed.values[b-1u]=prefixed.values[0]+prefixed.header.x;
+ if(c>0u) vectors.values[c-1u]=vectors.values[0]+vec4(100.0,200.0,300.0,400.0);
+}
