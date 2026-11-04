@@ -56,6 +56,10 @@ public:
 	void command_render_draw_indirect(CommandBufferID, BufferID, uint64_t, uint32_t, uint32_t) override { draws++; }
 	void command_render_draw_indexed_indirect(CommandBufferID, BufferID, uint64_t, uint32_t, uint32_t) override { indexed_draws++; }
 	uint64_t api_trait_get(ApiTrait p_trait) override { return p_trait == API_TRAIT_HONORS_PIPELINE_BARRIERS ? 1 : 0; }
+	uint64_t limit_get(Limit p_limit) override {
+		CHECK(p_limit == LIMIT_MAX_BOUND_UNIFORM_SETS);
+		return 16;
+	}
 	uint32_t uniform_sets_get_dynamic_offsets(VectorView<UniformSetID>, ShaderID, uint32_t, uint32_t) const override { return 0; }
 };
 
