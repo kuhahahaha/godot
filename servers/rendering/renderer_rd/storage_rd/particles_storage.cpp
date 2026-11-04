@@ -2537,6 +2537,7 @@ void ParticlesStorage::particles_collision_set_collision_type(RID p_particles_co
 	if (p_type == particles_collision->type) {
 		return;
 	}
+	ERR_FAIL_COND_MSG(particles_collision->scene_shape_revision == UINT64_MAX, "Particle collision scene shape revision exhausted.");
 
 	if (particles_collision->heightfield_fb.is_valid()) {
 		RD::get_singleton()->free_rid(particles_collision->heightfield_fb);
@@ -2580,6 +2581,7 @@ void ParticlesStorage::particles_collision_set_sphere_radius(RID p_particles_col
 	ParticlesCollision *particles_collision = particles_collision_owner.get_or_null(p_particles_collision);
 	ERR_FAIL_NULL(particles_collision);
 	ERR_FAIL_COND_MSG(!Math::is_finite(p_radius) || p_radius < 0.0, "Particle collision sphere radius must be finite and non-negative.");
+	ERR_FAIL_COND_MSG(particles_collision->scene_shape_revision == UINT64_MAX, "Particle collision scene shape revision exhausted.");
 
 	particles_collision->radius = p_radius;
 	particles_collision->scene_shape_revision++;
@@ -2592,6 +2594,10 @@ void ParticlesStorage::particles_collision_set_box_extents(RID p_particles_colli
 	ERR_FAIL_COND_MSG(!p_extents.is_finite() || p_extents.x < 0.0 || p_extents.y < 0.0 || p_extents.z < 0.0, "Particle collision box extents must be finite and non-negative.");
 
 	const Vector3 previous_extents = particles_collision->extents;
+	if (particles_collision->type == RSE::PARTICLES_COLLISION_TYPE_HEIGHTFIELD_COLLIDE &&
+			(previous_extents.x != p_extents.x || previous_extents.y != p_extents.y || previous_extents.z != p_extents.z)) {
+		ERR_FAIL_COND_MSG(particles_collision->scene_shape_revision == UINT64_MAX, "Particle collision scene shape revision exhausted.");
+	}
 	if (particles_collision->type == RSE::PARTICLES_COLLISION_TYPE_HEIGHTFIELD_COLLIDE &&
 			(previous_extents.x != p_extents.x || previous_extents.z != p_extents.z)) {
 		if (particles_collision->heightfield_fb.is_valid()) {
@@ -2657,6 +2663,7 @@ void ParticlesStorage::particles_collision_set_height_field_resolution(RID p_par
 	if (particles_collision->heightfield_resolution == p_resolution) {
 		return;
 	}
+	ERR_FAIL_COND_MSG(particles_collision->scene_shape_revision == UINT64_MAX, "Particle collision scene shape revision exhausted.");
 
 	particles_collision->heightfield_resolution = p_resolution;
 	particles_collision->scene_shape_revision++;
