@@ -245,6 +245,11 @@ TEST_CASE("[P01][SceneTree] Public admission validates fixed source before nativ
 	sample["pose_matrices"] = pose;
 	CHECK(fixture->submit_public_snapshot(sample) == ERR_INVALID_DATA); // No actual signal observed yet.
 	skeleton->emit_signal("skeleton_updated");
+	Dictionary foreign_content = sample.duplicate(true);
+	foreign_content["positions"] = PackedVector3Array{ Vector3(0, 0, 0), Vector3(2, 0, 0), Vector3(0, 1, 0) };
+	foreign_content["source_content_digest"] = "ad7cf91f95b75328a2d0fad62684480d26ead753ad3907ca7a0656079db3dfa8";
+	CHECK(fixture->submit_public_snapshot(foreign_content) == ERR_INVALID_DATA);
+	CHECK(String(fixture->take_result()["last_diagnostic"]) == "P01_SOURCE");
 	CHECK(fixture->submit_public_snapshot(sample) == ERR_INVALID_PARAMETER); // Dummy renderer has no skeleton RID.
 	CHECK(String(fixture->take_result()["last_diagnostic"]) == "P01_CREATE_OR_COPY");
 	Dictionary wrong_bind = sample.duplicate(true);

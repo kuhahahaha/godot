@@ -52,6 +52,7 @@
 #include "scene/resources/mesh.h"
 #include "scene/resources/3d/skin.h"
 #include "servers/rendering/rendering_server.h"
+#include <cmath>
 #if !defined(DISABLE_DEPRECATED) && !defined(PHYSICS_3D_DISABLED)
 #include "scene/3d/physics/physical_bone_simulator_3d.h"
 #endif
@@ -388,6 +389,33 @@ Error SkinnedMeshCaptureTestFixture::submit_public_snapshot(const Dictionary &p_
 	}
 	if (snapshot.pose_signal_ordinal != public_signal_ordinal || snapshot.observed_signal_ordinal != public_signal_ordinal || public_signal_ordinal <= 0 || skin->get_bind_count() != 2 || skeleton->get_bone_count() != 2) {
 		return reject(ERR_INVALID_DATA, "P01_SOURCE");
+	}
+	if (mesh->get_mesh()->get_surface_count() != 1) {
+		return reject(ERR_INVALID_DATA, "P01_SOURCE");
+	}
+	const Array arrays = mesh->get_mesh()->surface_get_arrays(0);
+	if (arrays.size() != Mesh::ARRAY_MAX || arrays[Mesh::ARRAY_VERTEX].get_type() != Variant::PACKED_VECTOR3_ARRAY || arrays[Mesh::ARRAY_BONES].get_type() != Variant::PACKED_INT32_ARRAY || arrays[Mesh::ARRAY_WEIGHTS].get_type() != Variant::PACKED_FLOAT32_ARRAY) {
+		return reject(ERR_INVALID_DATA, "P01_SOURCE");
+	}
+	const PackedVector3Array positions = arrays[Mesh::ARRAY_VERTEX];
+	const PackedInt32Array indices = arrays[Mesh::ARRAY_BONES];
+	const PackedFloat32Array weights = arrays[Mesh::ARRAY_WEIGHTS];
+	if (positions.size() != 3 || indices.size() != 12 || weights.size() != 12) {
+		return reject(ERR_INVALID_DATA, "P01_SOURCE");
+	}
+	for (int i = 0; i < 3; ++i) {
+		if (snapshot.positions[i] != positions[i]) {
+			return reject(ERR_INVALID_DATA, "P01_SOURCE");
+		}
+	}
+	for (int i = 0; i < 12; ++i) {
+		if (!Math::is_finite(weights[i]) || weights[i] < 0 || weights[i] > 1) {
+			return reject(ERR_INVALID_DATA, "P01_SOURCE");
+		}
+		const int expected_weight = int(std::round(double(weights[i]) * 65535.0));
+		if (snapshot.bind_indices[i] != indices[i] || snapshot.weights_u16[i] != expected_weight) {
+			return reject(ERR_INVALID_DATA, "P01_SOURCE");
+		}
 	}
 	uint8_t bind_bytes[2 * (4 + 3 + 4 + 4 + 48)] = {};
 	size_t bind_size = 0;
