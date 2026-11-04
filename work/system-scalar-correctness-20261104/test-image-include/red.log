@@ -1,0 +1,4 @@
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/tests/scene/test_image_texture.cpp:85:27: error: use of undeclared identifier 'callable_mp'
+   85 |         texture->connect_changed(callable_mp(observer.ptr(), &ChangeObserver::on_changed));
+      |                                  ^~~~~~~~~~~
+1 error generated.
