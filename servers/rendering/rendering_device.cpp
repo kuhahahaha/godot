@@ -8068,6 +8068,9 @@ void RenderingDevice::compute_list_add_barrier(ComputeListID p_list) {
 	ERR_RENDER_THREAD_GUARD();
 	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
 
+	ERR_FAIL_COND(p_list != ID_TYPE_COMPUTE_LIST);
+	ERR_FAIL_COND(!compute_list.active);
+
 	compute_list_barrier_state = compute_list.state;
 	compute_list_end();
 	compute_list_begin();

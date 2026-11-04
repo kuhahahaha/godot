@@ -142,6 +142,84 @@ public:
 			set->pending_clear_textures.push_back(p_device.texture_owner.make_rid(texture));
 		}
 	}
+	static void barrier_guards(RenderingDevice &device) {
+		device.render_thread_id = Thread::get_caller_id();
+		const auto list = device.compute_list_begin();
+		device.compute_list.state.dispatch_count = 17;
+		device.compute_list_barrier_state.dispatch_count = 91;
+		const auto first = device.draw_graph.add_compute_list_dispatch(1, 1, 1);
+		ERR_PRINT_OFF;
+		device.compute_list_add_barrier(RenderingDevice::ID_TYPE_DRAW_LIST);
+		ERR_PRINT_ON;
+		CHECK(device.compute_list.active);
+		CHECK(device.compute_list.state.dispatch_count == 17);
+		CHECK(device.compute_list_barrier_state.dispatch_count == 91);
+		const auto after_wrong = device.draw_graph.add_compute_list_dispatch(1, 1, 1);
+		CHECK(first.index == after_wrong.index);
+		device.frame_wait_error = FAILED;
+		ERR_PRINT_OFF;
+		device.compute_list_add_barrier(list);
+		ERR_PRINT_ON;
+		device.frame_wait_error = OK;
+		CHECK(device.compute_list.state.dispatch_count == 17);
+		CHECK(device.compute_list_barrier_state.dispatch_count == 91);
+		device.render_thread_id ^= 1;
+		ERR_PRINT_OFF;
+		device.compute_list_add_barrier(list);
+		ERR_PRINT_ON;
+		device.render_thread_id = Thread::get_caller_id();
+		CHECK(device.compute_list.state.dispatch_count == 17);
+		CHECK(device.compute_list_barrier_state.dispatch_count == 91);
+		device.compute_list_end();
+		device.compute_list.state.dispatch_count = 23;
+		const auto commands = device.draw_graph.qualification_command_count();
+		ERR_PRINT_OFF;
+		device.compute_list_add_barrier(list);
+		ERR_PRINT_ON;
+		CHECK_FALSE(device.compute_list.active);
+		CHECK(device.compute_list.state.dispatch_count == 23);
+		CHECK(device.compute_list_barrier_state.dispatch_count == 91);
+		CHECK(device.draw_graph.qualification_command_count() == commands);
+
+		RenderingDevice::Shader shader;
+		shader.driver_id = RDD::ShaderID(7);
+		RID shader_rid = device.shader_owner.make_rid(shader);
+		RenderingDevice::ComputePipeline pipeline;
+		pipeline.driver_id = RDD::PipelineID(8);
+		pipeline.shader = shader_rid;
+		pipeline.shader_driver_id = shader.driver_id;
+		pipeline.push_constant_size = 16;
+		pipeline.set_formats.push_back(1);
+		RID pipeline_rid = device.compute_pipeline_owner.make_rid(pipeline);
+		RenderingDevice::UniformSet set;
+		set.driver_id = RDD::UniformSetID(82);
+		set.format = 1;
+		RID set_rid = device.uniform_set_owner.make_rid(set);
+		const uint32_t push[4] = { 7, 11, 19, 23 };
+		device.compute_list_begin();
+		device.compute_list_bind_compute_pipeline(list, pipeline_rid);
+		device.compute_list_bind_uniform_set(list, set_rid, 0);
+		device.compute_list_set_push_constant(list, push, sizeof(push));
+		const auto before = device.draw_graph.add_compute_list_dispatch(1, 1, 1);
+		device.compute_list_add_barrier(list);
+		CHECK(device.compute_list.active);
+		CHECK(device.compute_list.state.pipeline == pipeline_rid);
+		CHECK(device.compute_list.state.sets[0].uniform_set == set_rid);
+		CHECK(device.compute_list.state.push_constant_size == sizeof(push));
+		CHECK(memcmp(device.compute_list.state.push_constant_data, push, sizeof(push)) == 0);
+		CHECK(device.compute_list_barrier_state.pipeline == pipeline_rid);
+		const auto after = device.draw_graph.add_compute_list_dispatch(1, 1, 1);
+		CHECK(after.graph_instance == before.graph_instance);
+		CHECK(after.graph_frame == before.graph_frame);
+		CHECK(after.index == before.index + 1);
+		CHECK(device.draw_graph.contains_record(before));
+		CHECK(device.draw_graph.contains_record(after));
+		device.compute_list_end();
+		device.uniform_set_owner.free(set_rid);
+		device.compute_pipeline_owner.free(pipeline_rid);
+		device.shader_owner.free(shader_rid);
+	}
+
 	static void compute_begin(RenderingDevice &p_device) {
 		p_device.draw_graph.add_compute_list_begin();
 		p_device.compute_list.active = true;
@@ -549,4 +627,12 @@ TEST_CASE("[RenderingDevice] buffer readback validates explicit and default span
 		CHECK(TestExternalOutputAccess::commands(device) == before);
 		TestExternalOutputAccess::detach(device);
 	}
+}
+
+TEST_CASE("[RenderingDevice] compute barrier rejects invalid lists before state or graph mutation") {
+	RenderingDevice device;
+	ExternalOutputGraphDriver driver;
+	TestExternalOutputAccess::attach(device, driver);
+	TestExternalOutputAccess::barrier_guards(device);
+	TestExternalOutputAccess::detach(device);
 }
