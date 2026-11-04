@@ -172,6 +172,7 @@ private:
 	bool volumetric_fog_filter_active = true;
 
 public:
+	static Transform3D heightfield_capture_camera(const Transform3D &p_transform, float p_scaled_half_height);
 	static RendererSceneRenderRD *get_singleton() { return singleton; }
 
 	/* LIGHTING */
