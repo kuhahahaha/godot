@@ -279,6 +279,7 @@
 
 # Tests
 
+/modules/particles_runtime_tests/              @godotengine/tests
 /tests/                                       @godotengine/tests
 
 # Thirdparty
