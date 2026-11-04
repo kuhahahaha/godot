@@ -129,6 +129,32 @@ class ProductionCaptureCell {
 	uint64_t graph_instance = 0, frame_epoch = 0;
 	uint32_t command_slot = UINT32_MAX, first_native = UINT32_MAX;
 };
+// Core-owned maintenance only; this is not an extension ABI or execution grant.
+enum class ProductionControlKind : uint32_t { OBSERVE,
+	CANCEL,
+	RELEASE };
+enum class ProductionControlState : uint32_t { OWNER_CONSUMED,
+	PENDING,
+	QUEUED,
+	EXECUTING,
+	RETURNED };
+struct ProductionControlInput {
+	uint64_t request_serial;
+	uint64_t record_generation;
+	ProductionControlKind kind;
+};
+struct ProductionControlOutput {
+	uint64_t request_serial;
+	uint64_t control_serial;
+	GDExtensionDeviceSessionResultV1 result;
+	GDExtensionProductionReportV1 report;
+};
+struct ProductionControlCell {
+	ProductionControlInput input;
+	ProductionControlOutput output;
+	uint64_t serial;
+	ProductionControlState state;
+};
 class ProductionRequest {
 	friend class Registry;
 #ifdef TESTS_ENABLED
@@ -153,6 +179,10 @@ class ProductionRequest {
 	uint64_t payload_offset = 0, readback_offset = 0, payload_used = 0;
 	uint32_t command_count = 0, frame_count = 0;
 	uint64_t revision = 1;
+	// One fixed mailbox per request, included by sizeof(ProductionRequest) in
+	// the checked arena Quote. Never aliases retained payload or return cells.
+	ProductionControlCell control = {};
+	uint64_t next_control_serial = 1;
 	bool frozen = false, cancelled = false, effects_pending = false;
 	// No numeric field or DTO populates original scope/window/K03 authority.
 };

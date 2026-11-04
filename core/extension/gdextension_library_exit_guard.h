@@ -36,6 +36,7 @@
 #include "core/templates/rid.h"
 
 class RenderingDevice;
+class RenderingServerDefault;
 class TestProductionResourceUseAccess;
 class TestQualificationPhysicalAccess;
 class TestQualificationAckAccess;
@@ -74,6 +75,8 @@ class ProductionAttachment;
 class ProductionRequest;
 class ProductionResourceSlot;
 class ProductionActionCell;
+enum class ProductionControlKind : uint32_t;
+struct ProductionControlOutput;
 struct OriginalOperationIdentity;
 struct QualificationTicket;
 struct QualificationResource;
@@ -530,6 +533,7 @@ class NativeCloseScope {
 // Bounded core record storage. Public views expose metadata only; full guarded
 // admission remains unavailable until the complete entry/holder contract closes.
 class Registry {
+	friend class ::RenderingServerDefault;
 	friend class ::GDExtension;
 	friend class ::GDExtensionManager;
 
@@ -558,6 +562,7 @@ private:
 	friend struct TestDeviceExitLibraryClose::Access;
 	friend struct TestDeviceExitEntry::Access;
 #endif
+	void production_control_dispatch(uint64_t, uint64_t, uint64_t, uint64_t);
 	static constexpr uint32_t RECORD_CAPACITY = MAX_LIVE_GENERATIONS;
 	static constexpr uint32_t VIEW_CAPACITY = 8192;
 	static constexpr uint32_t PRIVATE_CAPACITY = 4096;
@@ -820,6 +825,10 @@ private:
 	GDExtensionDeviceSessionResultV1 production_prepare_upload_locked(ProductionRequest &, const GDExtensionProductionUploadV1 &, const void *, uint64_t);
 	Error production_unpin_resources_locked(ProductionRequest &);
 	Error production_entity_return_locked(ProductionAttachment &);
+	GDExtensionDeviceSessionResultV1 production_cancel_locked(ProductionRequest &);
+	GDExtensionDeviceSessionResultV1 production_release_locked(ProductionRequest &, RenderingDevice *, bool);
+	void production_report_locked(const ProductionRequest &, GDExtensionProductionReportV1 &) const;
+	void production_control_execute_locked(ProductionRequest &, RenderingDevice *);
 	// Private metadata staging; cannot issue source scope or open native recording.
 	Error production_reserve_metadata_locked(ProductionAttachment &, const GDExtensionProductionOperationV1 &, const GDExtensionProductionCapacityV1 &, const GDExtensionProductionActionV1 *, uint32_t, const GDExtensionProductionResourceV1 *, uint32_t, const GDExtensionProductionUseV1 *, uint32_t, const GDExtensionProductionReadbackV1 *, uint32_t, ProductionRequest *&);
 	Sequence qualification_serials;
@@ -921,6 +930,10 @@ public:
 	GDExtensionDeviceSessionResultV1 qualification_rt_observe(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationRtRefV1, GDExtensionQualificationRtObservationV1 *, void *, uint32_t, GDExtensionQualificationUploadSegmentV1 *, uint32_t);
 	GDExtensionDeviceSessionResultV1 qualification_rt_release(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationRtRefV1);
 	void qualification_rt_dispatch(uint64_t, uint64_t);
+	// Internal Core receiver; no public production proc is installed.
+	Error production_control_accept(GDExtensionProductionRequestRefV1, ProductionControlKind, uint64_t *);
+	Error production_control_schedule(GDExtensionProductionRequestRefV1, uint64_t);
+	Error production_control_consume(GDExtensionProductionRequestRefV1, uint64_t, ProductionControlOutput *);
 
 	GDExtensionDeviceSessionResultV1 qualification_close(GDExtensionQualificationBridgeRefV1);
 	GDExtensionDeviceSessionResultV1 qualification_storage_create(GDExtensionQualificationBridgeRefV1, const GDExtensionStorageCreateRequestV1 *, GDExtensionStorageBackingV1 *);

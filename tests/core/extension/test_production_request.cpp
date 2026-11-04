@@ -31,6 +31,7 @@
 #include "core/extension/gdextension_production_request.h"
 #include "core/os/thread.h"
 #include "servers/rendering/rendering_device.h"
+#include "servers/rendering/rendering_server_default.h"
 #include "tests/servers/rendering/transfer_test_driver_base.h"
 #include "tests/test_macros.h"
 
@@ -174,6 +175,613 @@ struct Access {
 			return registry->production_reserve_metadata_locked(*attachment, operation, capacity, &action, 1, &resource, 1, &use, 1, nullptr, 0, out);
 		}
 	};
+
+	// Same live singleton and original FIFO used by the engine. Only the newly
+	// reserved record, device and views belong to this controlled CPU fixture.
+	struct SingletonEnrollment {
+		Registry &registry = Registry::get_singleton();
+		RenderingServerDefault *server = nullptr;
+		RenderingDevice rd;
+		QuoteDriver driver;
+		Holder holder;
+		GDExtensionDeviceExit::RecordRef reference, scope;
+		GDExtensionDeviceExit::RegistrationContext frame;
+		GDExtensionDeviceExitSceneReadyContextRef ready = {};
+		GDExtensionProducerRegistrationRefV1 producer = {};
+		GDExtensionDeviceRegistryContextRef context = {};
+		GDExtensionOriginalDeviceSessionRef session = {};
+		GDExtensionProductionAttachmentRefV1 attachment = {};
+		Request *request = nullptr;
+		uint32_t device_slot = UINT32_MAX;
+		uint64_t instance = 0;
+
+		Error initialize(RenderingServerDefault *p_server, uint32_t loader_kind = 1) {
+			using namespace GDExtensionDeviceExit;
+			if (!p_server) {
+				return ERR_INVALID_PARAMETER;
+			}
+			// The dummy renderer has no RD. The normal RD constructor supplied the
+			// singleton here; neither the live Registry nor RS singleton is replaced.
+			if (!(RenderingDevice::get_singleton() == &rd)) {
+				return ERR_UNAVAILABLE;
+			}
+			if (p_server->create_thread) {
+				return ERR_UNAVAILABLE;
+			}
+			if (!(p_server->server_thread == Thread::get_caller_id())) {
+				return ERR_UNAVAILABLE;
+			}
+			server = p_server;
+			server->sync();
+			rd.driver = &driver;
+			rd.is_main_instance = true;
+			rd.frames.resize(1);
+			if (rd.frames.size() != 1) {
+				return ERR_OUT_OF_MEMORY;
+			}
+			rd.transfer_worker_pool_max_size = 0;
+			rd.draw_graph.add_capture_timestamp(RDD::QueryPoolID(1), 0);
+			if (Error error = registry.device_created(&rd); error != OK) {
+				return error;
+			}
+			if (Error error = registry.reserve_open(loader_kind, reference, scope, nullptr); error != OK) {
+				return error;
+			}
+			{
+				MutexLock lock(registry.mutex);
+				if (!(registry.phase == Registry::Phase::RUNNING)) {
+					return ERR_UNAVAILABLE;
+				}
+				if (!((registry.live_services & (1u << 5)) != 0)) {
+					return ERR_UNAVAILABLE;
+				}
+				instance = registry.instance;
+				if (!(instance != 0)) {
+					return ERR_UNAVAILABLE;
+				}
+				auto &record = registry.records[reference.slot];
+				record.attached = true;
+				record.guard_enrollment = GuardEnrollment::QUALIFIED;
+				record.scene_ready_state = Registry::Record::SceneReadyState::IN_FRAME;
+				record.producer_attachment_identity = this;
+				if (!(registry.holder_serials.take(holder.handle_serial))) {
+					return ERR_PARAMETER_RANGE_ERROR;
+				}
+				record.producer_code_holder = holder.handle_serial;
+				holder.typed_code_hold = true;
+				holder.generation = record.snapshot.library_generation;
+				holder.acquired_thread = record.owner_thread;
+				if (!(registry.action_serials.take(holder.terminal_action))) {
+					return ERR_PARAMETER_RANGE_ERROR;
+				}
+				record.holders = &holder;
+				auto &scene = record.levels[GDEXTENSION_INITIALIZATION_SCENE];
+				scene.initialized = true;
+				auto &action = scene.binding_action;
+				action.serial = holder.terminal_action;
+				action.generation = holder.generation;
+				action.owner_thread = record.owner_thread;
+				action.level = GDEXTENSION_INITIALIZATION_SCENE;
+				action.kind = TerminalActionKind::LEVEL_BINDING;
+				action.services = 1u << 5;
+				action.wrapper = &Enrollment::original_terminator;
+				action.userdata = this;
+				record.original_initialization.deinitialize = action.wrapper;
+				record.original_initialization.userdata = action.userdata;
+				frame.enter(reference, true);
+				frame.level_phase = LevelPhase::SCENE_READY;
+				if (!(registry.frame_serials.take(frame.frame_id))) {
+					return ERR_PARAMETER_RANGE_ERROR;
+				}
+				ready.registry_instance = instance;
+				if (Error error = registry.issue_borrow_locked(Registry::ViewDomain::SCENE_READY, 0, ready.handle_serial); error != OK) {
+					return error;
+				}
+				uint32_t view = UINT32_MAX;
+				if (Error error = registry.producer_view_capacity_locked(view); error != OK) {
+					return error;
+				}
+				registry.issue_producer_view_locked(reference.slot, view, producer);
+				for (uint32_t i = 0; i < Registry::RECORD_CAPACITY; ++i) {
+					if (registry.device_records[i].object == &rd) {
+						device_slot = i;
+						break;
+					}
+				}
+				if (!(device_slot != UINT32_MAX)) {
+					return ERR_UNAVAILABLE;
+				}
+			}
+			if (Error error = Error(registry.bind_scene_ready_device_session(&Enrollment::ABI, ready, &rd, &context, &session).native_error); error != OK) {
+				return error;
+			}
+			GDExtensionProductionCapacityV1 whole = { Enrollment::ABI, 2, 2, 2, 2, 2, 32, 0, 2, 8, 0 };
+			GDExtensionProductionMetadataQuoteV1 quote = {};
+			if (Error error = Error(registry.production_quote(&Enrollment::ABI, ready, producer, context, session, &whole, &quote).native_error); error != OK) {
+				return error;
+			}
+			GDExtensionProductionInstallationReportV1 report = {};
+			if (Error error = Error(registry.production_accept(&Enrollment::ABI, ready, producer, context, session, { instance, holder.handle_serial }, &quote, &attachment, &report).native_error); error != OK) {
+				return error;
+			}
+			auto single = whole;
+			single.requests = single.suboperations = single.resources = single.resource_uses = single.graph_memberships = single.return_cells = 1;
+			single.native_memberships = 16;
+			single.retained_payload_bytes = 4;
+			MutexLock lock(registry.mutex);
+			ProductionAttachment *accepted = nullptr;
+			RenderingDevice *device = nullptr;
+			if (Error error = registry.production_attachment_locked(attachment, true, accepted, device); error != OK) {
+				return error;
+			}
+			const GDExtensionProductionOperationV1 operation = { Enrollment::ABI, 91, 1, 10, 11 };
+			const GDExtensionProductionActionV1 action = { 10, GDEXTENSION_PRODUCTION_UPLOAD_V1, 0, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX };
+			const GDExtensionProductionResourceV1 resource = { GDEXTENSION_PRODUCTION_STORAGE_V1, 0, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 16, 0 };
+			const GDExtensionProductionUseV1 use = { 0, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 4, 0 };
+			if (Error error = registry.production_reserve_metadata_locked(*accepted, operation, single, &action, 1, &resource, 1, &use, 1, nullptr, 0, request); error != OK) {
+				return error;
+			}
+			return request ? OK : ERR_INVALID_DATA;
+		}
+		~SingletonEnrollment() {
+			using namespace GDExtensionDeviceExit;
+			// This CPU fixture never initialized native RD state. Suppress native
+			// teardown on every destructor path, including partial setup/refund failure.
+			// Original entity-hold checks still run in the actual RD destructor.
+			rd.driver = nullptr;
+			rd.native_finalization_returned = true;
+			// Explicit early returns may leave only a prefix of initialization acquired.
+			// Drain and return only this fixture's acquired handles; never assume slot 0.
+			// No fabricated return, singleton swap, or private alternate queue.
+			if (server) {
+				server->sync();
+			}
+			if (request && request->serial) {
+				const GDExtensionProductionRequestRefV1 ref = { instance, request->serial };
+				if (request->control.state == ProductionControlState::PENDING) {
+					if (!Access::check_step(registry.production_control_schedule(ref, request->control.serial) == OK)) {
+						return;
+					}
+					server->sync();
+				}
+				if (request->control.state == ProductionControlState::RETURNED) {
+					ProductionControlOutput output = {};
+					if (!Access::check_step(registry.production_control_consume(ref, request->control.serial, &output) == OK)) {
+						return;
+					}
+				}
+				if (request->serial) {
+					if (!Access::check_step(registry.production_cancel(ref).native_error == OK)) {
+						return;
+					}
+					if (!Access::check_step(registry.production_release(ref).native_error == OK)) {
+						return;
+					}
+				}
+			}
+			if (attachment.handle_serial) {
+				if (!Access::check_step(registry.production_close(attachment).native_error == OK)) {
+					return;
+				}
+			}
+			if (producer.handle_serial) {
+				if (!Access::check_step(registry.release_producer_registration_view(producer) == OK)) {
+					return;
+				}
+			}
+			if (context.handle_serial) {
+				if (!Access::check_step(registry.release_device_reference(instance, context.handle_serial, false).native_error == OK)) {
+					return;
+				}
+			}
+			if (session.handle_serial) {
+				if (!Access::check_step(registry.release_device_reference(instance, session.handle_serial, true).native_error == OK)) {
+					return;
+				}
+			}
+			frame.leave();
+			if (reference.is_valid()) {
+				MutexLock lock(registry.mutex);
+				auto &record = registry.records[reference.slot];
+				if (!Access::check_step(record.private_refs == 2)) {
+					return;
+				}
+				if (!Access::check_step(record.external_refs == 0)) {
+					return;
+				}
+				if (!Access::check_step(record.cleanup_reservations == 0)) {
+					return;
+				}
+				if (!Access::check_step(holder.production_children == 0)) {
+					return;
+				}
+				record.holders = nullptr;
+				record.attached = false;
+			}
+			scope.reset();
+			reference.reset();
+			rd.driver = nullptr;
+			rd.frames.clear();
+			rd.native_finalization_returned = true;
+			// RD's real destructor returns its real device_created enrollment.
+		}
+	};
+	struct SingletonCounts {
+		uint32_t records = 0, views = 0, devices = 0, device_refs = 0, attachments = 0;
+		uint64_t private_refs = 0, external_refs = 0, instance = 0;
+		uint32_t services = 0;
+	};
+	static SingletonCounts singleton_counts() {
+		auto &registry = Registry::get_singleton();
+		MutexLock lock(registry.mutex);
+		SingletonCounts count;
+		count.instance = registry.instance;
+		count.services = registry.live_services;
+		for (const auto &r : registry.records) {
+			count.records += r.occupied;
+			count.private_refs += r.private_refs;
+			count.external_refs += r.external_refs;
+		}
+		for (const auto &v : registry.views) {
+			count.views += v.serial != 0;
+		}
+		for (const auto &d : registry.device_records) {
+			count.devices += d.epoch != 0;
+		}
+		for (const auto &r : registry.device_refs) {
+			count.device_refs += r.serial != 0;
+		}
+		for (const auto *a : registry.production_attachments) {
+			count.attachments += a != nullptr;
+		}
+		return count;
+	}
+	struct ForeignDispatch {
+		RenderingServerDefault *server;
+		uint64_t instance, attachment, request, serial;
+		uint64_t called_thread = 0;
+		bool returned = false;
+		static void run(void *opaque) {
+			auto &p = *static_cast<ForeignDispatch *>(opaque);
+			p.called_thread = Thread::get_caller_id();
+			p.server->_production_control_dispatch(p.instance, p.attachment, p.request, p.serial);
+			p.returned = true;
+		}
+	};
+	static bool check_step(bool success) {
+		CHECK(success);
+		return success;
+	}
+	static void singleton_initialization_refusal() {
+		using namespace GDExtensionDeviceExit;
+		auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
+		if (!check_step(server != nullptr)) {
+			return;
+		}
+		if (!check_step(!server->create_thread && server->server_thread == Thread::get_caller_id() && RenderingDevice::get_singleton() == nullptr)) {
+			return;
+		}
+		server->sync();
+		auto &registry = Registry::get_singleton();
+		const auto before = singleton_counts();
+		const auto original_zero = registry.records[0];
+		auto *const original_frame = RegistrationContext::current;
+		{
+			SingletonEnrollment fixture;
+			// Original reserve_open rejects an invalid kind before issuing a record.
+			// No global capacity/issuer or existing singleton record is overwritten.
+			const Error error = fixture.initialize(server, 0);
+			if (!check_step(error == ERR_INVALID_PARAMETER)) {
+				return;
+			}
+			if (!check_step(!fixture.reference.is_valid() && !fixture.scope.is_valid())) {
+				return;
+			}
+			if (!check_step(fixture.request == nullptr && fixture.attachment.handle_serial == 0 && fixture.producer.handle_serial == 0 && fixture.context.handle_serial == 0 && fixture.session.handle_serial == 0)) {
+				return;
+			}
+		}
+		const auto after = singleton_counts();
+		CHECK(after.instance == before.instance);
+		CHECK(after.services == before.services);
+		CHECK(after.records == before.records);
+		CHECK(after.views == before.views);
+		CHECK(after.devices == before.devices);
+		CHECK(after.device_refs == before.device_refs);
+		CHECK(after.attachments == before.attachments);
+		CHECK(after.private_refs == before.private_refs);
+		CHECK(after.external_refs == before.external_refs);
+		const auto &zero = registry.records[0];
+		CHECK(zero.occupied == original_zero.occupied);
+		CHECK(zero.attached == original_zero.attached);
+		CHECK(zero.private_refs == original_zero.private_refs);
+		CHECK(zero.external_refs == original_zero.external_refs);
+		CHECK(zero.snapshot.library_generation == original_zero.snapshot.library_generation);
+		CHECK(zero.owner_thread == original_zero.owner_thread);
+		CHECK(zero.guard_enrollment == original_zero.guard_enrollment);
+		CHECK(zero.scene_ready_state == original_zero.scene_ready_state);
+		CHECK(zero.producer_attachment_identity == original_zero.producer_attachment_identity);
+		CHECK(zero.producer_registration_serial == original_zero.producer_registration_serial);
+		CHECK(zero.producer_code_holder == original_zero.producer_code_holder);
+		CHECK(zero.holders == original_zero.holders);
+		CHECK(RegistrationContext::current == original_frame);
+		CHECK(RenderingServer::get_singleton() == server);
+		CHECK(RenderingDevice::get_singleton() == nullptr);
+	}
+	static void singleton_control_fifo() {
+		using namespace GDExtensionDeviceExit;
+		auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
+		if (!check_step(server != nullptr)) {
+			return;
+		}
+		if (!check_step(!(server->create_thread))) {
+			return;
+		}
+		if (!check_step(server->server_thread == Thread::get_caller_id())) {
+			return;
+		}
+		if (!check_step(RenderingDevice::get_singleton() == nullptr)) {
+			return;
+		}
+		auto &registry = Registry::get_singleton();
+		server->sync();
+		auto *const original_frame = RegistrationContext::current;
+		const auto before = singleton_counts();
+		{
+			SingletonEnrollment fixture;
+			const Error initialized = fixture.initialize(server);
+			if (!check_step(initialized == OK)) {
+				return;
+			}
+			if (!check_step(fixture.request != nullptr)) {
+				return;
+			}
+			auto *request = fixture.request;
+			const GDExtensionProductionRequestRefV1 ref = { fixture.instance, request->serial };
+			ProductionControlOutput output = {};
+			uint64_t serial = 0;
+			if (!check_step(registry.production_control_accept(ref, ProductionControlKind::OBSERVE, &serial) == OK)) {
+				return;
+			}
+			// A real queued stale serial cannot turn a merely pending cell into return.
+			if (!check_step(server->_try_production_control_dispatch(fixture.instance, fixture.attachment.handle_serial, ref.handle_serial, serial + 1))) {
+				return;
+			}
+			server->sync();
+			if (!check_step(request->control.state == ProductionControlState::PENDING)) {
+				return;
+			}
+			if (!check_step(registry.production_control_consume(ref, serial, &output) == ERR_BUSY)) {
+				return;
+			}
+			if (!check_step(registry.production_control_schedule(ref, serial) == OK)) {
+				return;
+			}
+			if (!check_step(request->control.state == ProductionControlState::QUEUED)) {
+				return;
+			}
+			if (!check_step(registry.production_control_consume(ref, serial, &output) == ERR_BUSY)) {
+				return;
+			}
+			// Negative calls cannot consume the genuine queued admission. The
+			// successful path below still runs only through the original FIFO.
+			server->_production_control_dispatch(fixture.instance, fixture.attachment.handle_serial, ref.handle_serial, serial + 1);
+			if (!check_step(request->control.state == ProductionControlState::QUEUED)) {
+				return;
+			}
+			server->_production_control_dispatch(0, fixture.attachment.handle_serial, ref.handle_serial, serial);
+			if (!check_step(request->control.state == ProductionControlState::QUEUED)) {
+				return;
+			}
+#ifdef THREADS_ENABLED
+			ForeignDispatch foreign{ server, fixture.instance, fixture.attachment.handle_serial, ref.handle_serial, serial };
+			Thread thread;
+			thread.start(&ForeignDispatch::run, &foreign);
+			thread.wait_to_finish();
+			if (!check_step(foreign.returned)) {
+				return;
+			}
+			if (!check_step(foreign.called_thread != 0)) {
+				return;
+			}
+			if (!check_step(foreign.called_thread != server->server_thread)) {
+				return;
+			}
+			if (!check_step(request->control.state == ProductionControlState::QUEUED)) {
+				return;
+			}
+			if (!check_step(registry.production_control_consume(ref, serial, &output) == ERR_BUSY)) {
+				return;
+			}
+#endif
+			server->sync(); // Real NoThread FIFO, not a GPU completion assertion.
+			if (!check_step(request->control.state == ProductionControlState::RETURNED)) {
+				return;
+			}
+			if (!check_step(registry.production_control_consume(ref, serial, &output) == OK)) {
+				return;
+			}
+			if (!check_step(output.request_serial == ref.handle_serial)) {
+				return;
+			}
+			if (!check_step(output.control_serial == serial)) {
+				return;
+			}
+			if (!check_step(output.result.native_error == OK)) {
+				return;
+			}
+
+			// No-effect scope does not invent native completion: a controlled pending
+			// marker makes the real RT release refuse and retain the original request.
+			if (!check_step(registry.production_control_accept(ref, ProductionControlKind::RELEASE, &serial) == OK)) {
+				return;
+			}
+			request->effects_pending = true;
+			const Error scheduled_unknown = registry.production_control_schedule(ref, serial);
+			if (scheduled_unknown == OK) {
+				server->sync();
+			}
+			const bool obligation_retained = request->effects_pending;
+			request->effects_pending = false; // Restore test input before any early exit.
+			if (!check_step(scheduled_unknown == OK && obligation_retained)) {
+				return;
+			}
+			if (!check_step(registry.production_control_consume(ref, serial, &output) == OK)) {
+				return;
+			}
+			if (!check_step(output.result.native_error == ERR_BUSY && request->serial == ref.handle_serial)) {
+				return;
+			}
+			// Each tuple mismatch goes through the actual queued Core receiver. Restore
+			// only this test-owned field before the original owner consumes its error.
+			for (uint32_t mismatch = 0; mismatch < 3; ++mismatch) {
+				if (!check_step(registry.production_control_accept(ref, ProductionControlKind::CANCEL, &serial) == OK)) {
+					return;
+				}
+				if (!check_step(registry.production_control_schedule(ref, serial) == OK)) {
+					return;
+				}
+				uint64_t *field = mismatch == 0 ? &registry.device_records[fixture.device_slot].epoch : mismatch == 1 ? &registry.records[fixture.reference.slot].producer_registration_serial
+																													  : &fixture.holder.handle_serial;
+				const uint64_t saved = *field;
+				*field = 0;
+				server->sync();
+				*field = saved;
+				if (!check_step(request->control.state == ProductionControlState::RETURNED)) {
+					return;
+				}
+				if (!check_step(registry.production_control_consume(ref, serial, &output) == OK)) {
+					return;
+				}
+				if (!check_step(output.result.native_error == ERR_INVALID_DATA)) {
+					return;
+				}
+				if (!check_step(!(request->cancelled))) {
+					return;
+				}
+			}
+			if (!check_step(registry.production_control_accept(ref, ProductionControlKind::CANCEL, &serial) == OK)) {
+				return;
+			}
+			uint32_t queued = 0;
+			// Identical fixed scalar Core commands fill the same bounded FIFO. Invalid
+			// registry identity makes them inert when the original RS dispatches them.
+			for (; queued < 65536; ++queued) {
+				if (!server->_try_production_control_dispatch(0, 0, 0, 0)) {
+					break;
+				}
+			}
+			if (!check_step(queued > 0)) {
+				return;
+			}
+			if (!check_step(queued < 65536)) {
+				return;
+			}
+			if (!check_step(registry.production_control_schedule(ref, serial) == ERR_BUSY)) {
+				return;
+			}
+			if (!check_step(request->control.state == ProductionControlState::PENDING)) {
+				return;
+			}
+			if (!check_step(request->control.serial == serial)) {
+				return;
+			}
+			if (!check_step(!(request->cancelled))) {
+				return;
+			}
+			if (!check_step(registry.production_close(fixture.attachment).native_error == ERR_BUSY)) {
+				return;
+			}
+			if (!check_step(registry.production_control_consume(ref, serial, &output) == ERR_BUSY)) {
+				return;
+			}
+			server->sync();
+			if (!check_step(request->control.state == ProductionControlState::PENDING)) {
+				return;
+			}
+			if (!check_step(registry.production_control_schedule(ref, serial) == OK)) {
+				return;
+			}
+			if (!check_step(request->control.state == ProductionControlState::QUEUED)) {
+				return;
+			}
+			if (!check_step(!(request->cancelled))) {
+				return;
+			}
+			server->sync();
+			if (!check_step(request->cancelled)) {
+				return;
+			}
+			if (!check_step(registry.production_control_consume(ref, serial, &output) == OK)) {
+				return;
+			}
+			if (!check_step(output.result.native_error == OK)) {
+				return;
+			}
+			if (!check_step(registry.production_control_accept(ref, ProductionControlKind::RELEASE, &serial) == OK)) {
+				return;
+			}
+			if (!check_step(registry.production_control_schedule(ref, serial) == OK)) {
+				return;
+			}
+			server->sync();
+			if (!check_step(request->serial == ref.handle_serial)) {
+				return;
+			}
+			if (!check_step(request->attachment && request->attachment->children == 1)) {
+				return;
+			}
+			if (!check_step(registry.production_release(ref).native_error == ERR_BUSY)) {
+				return;
+			}
+			if (!check_step(registry.production_control_consume(ref, serial, &output) == OK)) {
+				return;
+			}
+			if (!check_step(output.result.native_error == OK)) {
+				return;
+			}
+			if (!check_step(request->serial == 0)) {
+				return;
+			}
+		}
+		const auto after = singleton_counts();
+		if (!check_step(after.instance == before.instance)) {
+			return;
+		}
+		if (!check_step(after.services == before.services)) {
+			return;
+		}
+		if (!check_step(after.records == before.records)) {
+			return;
+		}
+		if (!check_step(after.views == before.views)) {
+			return;
+		}
+		if (!check_step(after.devices == before.devices)) {
+			return;
+		}
+		if (!check_step(after.device_refs == before.device_refs)) {
+			return;
+		}
+		if (!check_step(after.attachments == before.attachments)) {
+			return;
+		}
+		if (!check_step(after.private_refs == before.private_refs)) {
+			return;
+		}
+		if (!check_step(after.external_refs == before.external_refs)) {
+			return;
+		}
+		if (!check_step(RegistrationContext::current == original_frame)) {
+			return;
+		}
+		if (!check_step(RenderingServer::get_singleton() == server)) {
+			return;
+		}
+		if (!check_step(RenderingDevice::get_singleton() == nullptr)) {
+			return;
+		}
+	}
 	static void accepted_arena_lifecycle() {
 		Enrollment fixture;
 		auto &registry = *fixture.registry;
@@ -517,4 +1125,12 @@ TEST_CASE("[ProductionRequest] device loss invalidates work but preserves unknow
 
 TEST_CASE("[ProductionRequest] refused finalize preserves original qualification close on same device") {
 	TestProductionRequest::Access::finalization_preserves_qualification_cleanup();
+}
+
+TEST_CASE("[SceneTree][ProductionRequest] singleton RS FIFO returns retained control to original owner") {
+	TestProductionRequest::Access::singleton_control_fifo();
+}
+
+TEST_CASE("[SceneTree][ProductionRequest] refused singleton fixture never claims default record zero") {
+	TestProductionRequest::Access::singleton_initialization_refusal();
 }

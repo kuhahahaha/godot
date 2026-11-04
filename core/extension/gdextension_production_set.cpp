@@ -28,8 +28,6 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#pragma once
-
 #include "core/extension/gdextension_production_request.h"
 #include "core/extension/gdextension_qualification_internal.h"
 
