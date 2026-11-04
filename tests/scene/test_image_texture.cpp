@@ -33,6 +33,7 @@
 TEST_FORCE_LINK(test_image_texture)
 
 #include "core/io/image.h"
+#include "core/object/callable_mp.h"
 #include "scene/resources/image_texture.h"
 #include "tests/test_utils.h"
 

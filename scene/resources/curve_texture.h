@@ -91,6 +91,10 @@ class CurveXYZTexture : public Texture2D {
 	GDCLASS(CurveXYZTexture, Texture2D);
 	RES_BASE_EXTENSION("curvetex")
 
+#ifdef TESTS_ENABLED
+	friend class TestResourceSnapshotAccess;
+#endif
+
 private:
 	mutable RID _texture;
 	Ref<Curve> _curve_x;
