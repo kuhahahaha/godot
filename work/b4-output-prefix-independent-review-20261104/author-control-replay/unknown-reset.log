@@ -1,1 +1,0 @@
-Assertion failed: (s->observe(r)==ERR_INVALID_DATA&&!r.all_driver_returned), function run, file unknown-reset.cpp.in, line 352.

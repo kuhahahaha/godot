@@ -1,8 +1,0 @@
-Godot Engine v4.7.2.stable.custom_build.f3cacf1ce (2026-11-02 17:07:07 UTC) - https://godotengine.org
-Metal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M3 Pro (Apple9)
-
-GPU3D_EMISSION_STAGE initial_low pixels=256 luminance=51.200 saved=true
-GPU3D_EMISSION_STAGE updated_high pixels=256 luminance=73.286 saved=true
-GPU3D_EMISSION_STAGE replaced_low pixels=256 luminance=51.200 saved=true
-GPU3D_EMISSION_STAGE detached_old_modified pixels=256 luminance=51.200 saved=true
-GPU3D_EMISSION_RESULT renderer=mobile driver=metal passed=true observations=[{"luminance":51.2000007629395,"pixels":256,"saved":true,"stage":"initial_low"},{"luminance":73.2862777709961,"pixels":256,"saved":true,"stage":"updated_high"},{"luminance":51.2000007629395,"pixels":256,"saved":true,"stage":"replaced_low"},{"luminance":51.2000007629395,"pixels":256,"saved":true,"stage":"detached_old_modified"}]

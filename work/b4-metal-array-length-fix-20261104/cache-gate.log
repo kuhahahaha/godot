@@ -1,2 +1,0 @@
-PASS real format3 container rejected by exact production header gate; synthetic format4 header accepted only at gate, not full deserialization
-

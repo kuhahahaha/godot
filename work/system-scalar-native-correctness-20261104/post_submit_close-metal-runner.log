@@ -1,2 +1,0 @@
-post_submit_close 0 {'expected_exit': True, 'actual_backend': True, 'actual_selection': True, 'forbidden_patterns_absent': True, 'unload': True, 'native_close': True, 'actual_body_issue_before_close': True, 'original_ticket_drain': True}
-/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/results/20261104-024428-038945-metal/results.json

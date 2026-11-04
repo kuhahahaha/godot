@@ -1,1 +1,0 @@
-Assertion failed: (load64(data+8*n)==0x100000+256+8*n+8), function main, file test.cpp, line 31.

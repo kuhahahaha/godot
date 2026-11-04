@@ -1,4 +1,0 @@
-ERROR: Condition "texture && texture->qualification_return" is true. Returning: ERR_UNAUTHORIZED
-   at: driver_callback_add (servers/rendering/rendering_device.cpp:1310)
-ERROR: Condition "texture && texture->qualification_return" is true. Returning: ERR_UNAUTHORIZED
-   at: driver_callback_add (servers/rendering/rendering_device.cpp:1310)

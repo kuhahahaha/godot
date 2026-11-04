@@ -1,7 +1,0 @@
-INIT: SPIR-V compile/validate/layout PASS
-VALIDATE: SPIR-V compile/validate/layout PASS
-FINALIZE: SPIR-V compile/validate/layout PASS
-INIT_EMPTY: SPIR-V compile/validate/layout PASS
-FINALIZE_EMPTY: SPIR-V compile/validate/layout PASS
-9 frozen numeric CPU production-control cases PASS; no GPU claim
-{"gpu_execution": false, "provenance_bridge": false, "component_only": true}

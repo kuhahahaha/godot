@@ -1,2 +1,0 @@
-native_unknown 0 {'expected_exit': True, 'actual_backend': True, 'actual_selection': True, 'forbidden_patterns_absent': True, 'required_observations': True, 'no_false_unload': True}
-/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/results/20261104-024431-458836-metal/results.json

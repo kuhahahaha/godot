@@ -1,7 +1,0 @@
-Godot Engine v4.7.2.stable.custom_build.7aed2b484 (2026-10-29 23:37:28 UTC) - https://godotengine.org
-Metal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M3 Pro (Apple9)
-
-[PHS1] world direct-space world=-9223372005917588023 space=3092376453120 child=31474058714
-[ANGE] guarded scene initialization refused stage=install_main_storage code=13 field=host.storage_owner_transport owner=E05 expected=1 actual=0
-[ANGE] guarded SceneReady materialization refused stage=install_main_storage
-U01_EXTENSION=1

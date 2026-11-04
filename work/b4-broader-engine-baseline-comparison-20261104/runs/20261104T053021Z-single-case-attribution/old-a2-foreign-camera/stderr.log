@@ -1,6 +1,0 @@
-ERROR: Attempted to save a foreign camera source token.
-   at: viewport_set_prev_camera_data (servers/rendering/renderer_viewport.cpp:1285)
-ERROR: Attempted to save a foreign camera source token.
-   at: viewport_set_prev_camera_data (servers/rendering/renderer_viewport.cpp:1285)
-ERROR: Attempted to save a foreign camera source token.
-   at: viewport_set_prev_camera_data (servers/rendering/renderer_viewport.cpp:1285)
