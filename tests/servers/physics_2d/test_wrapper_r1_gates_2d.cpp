@@ -255,7 +255,7 @@ static void barrier_hook(void *p_context, Access::Point p_point) {
 		}
 	} else if (p_point == Access::Point::AFTER_BARRIER && context->force_early_ack) {
 		// Publish the legal post-barrier request, then keep Main inside
-		// this hook even if the observer injects an invalid acknowledgement.
+		// this hook even if the observer injects an invalid acknowledgment.
 		// Main cannot begin backend sync or a second flush before the trap.
 		Access::force_early_park(context->wrapper);
 		wait_gate(context->negative_hold);
@@ -266,7 +266,7 @@ static void barrier_hook(void *p_context, Access::Point p_point) {
 	}
 }
 
-TEST_CASE("[PhysicsWrapper2DR1Gates] barrier precedes PARK and acknowledgement waits for trailing cleanup") {
+TEST_CASE("[PhysicsWrapper2DR1Gates] barrier precedes PARK and acknowledgment waits for trailing cleanup") {
 	REQUIRE(PhysicsServer2D::get_singleton() == nullptr);
 	auto *backend = memnew(Backend);
 	auto *wrapper = memnew(PhysicsServer2DWrapMT(backend, true));
