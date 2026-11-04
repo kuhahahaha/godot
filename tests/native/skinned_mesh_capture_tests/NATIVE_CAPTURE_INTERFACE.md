@@ -62,8 +62,11 @@ batches on main and sends a native callable through the original RS command
 queue. Only its actual receive admits a batch at the next after-scene phase.
 The session registry and callable retain ownership independently of the fixture;
 close cancels unrecorded requests and cannot declare terminal while any delivery
-callable holder or accepted readback remains. These private status fields are not
-yet serialized action witnesses and the fixture has not yet activated this path.
+callable holder or accepted readback remains. The current fixture activates this
+path only for S02/N after its main-thread, main-RD, child-claim and in-tree checks.
+Other members/routes remain unavailable. Its bounded action continuation does
+not provide the missing public snapshot association: `submit_public_snapshot`
+still rejects. These private status fields are not serialized action witnesses.
 
 Pool retirement observes the original buffer disposal plus the pool's registered
 shader, compute pipeline and uniform-set frees. Reused native handles receive
