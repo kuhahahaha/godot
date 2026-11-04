@@ -210,19 +210,34 @@ RDD::CommandQueueID RenderingDeviceDriverMetal::command_queue_create(CommandQueu
 	return CommandQueueID(1);
 }
 
-Error RenderingDeviceDriverMetal::_execute_and_present_barriers(CommandQueueID queue,VectorView<SemaphoreID> waits,VectorView<CommandBufferID> commands,VectorView<SemaphoreID> signals,FenceID fence,VectorView<SwapChainID> swaps) {
- return _execute_and_present_common(queue,waits,commands,signals,fence,swaps,true);
+Error RenderingDeviceDriverMetal::_execute_and_present_barriers(CommandQueueID queue, VectorView<SemaphoreID> waits, VectorView<CommandBufferID> commands, VectorView<SemaphoreID> signals, FenceID fence, VectorView<SwapChainID> swaps) {
+	return _execute_and_present_common(queue, waits, commands, signals, fence, swaps, true);
 }
-Error RenderingDeviceDriverMetal::_execute_and_present(CommandQueueID queue,VectorView<SemaphoreID> waits,VectorView<CommandBufferID> commands,VectorView<SemaphoreID> signals,FenceID fence,VectorView<SwapChainID> swaps) {
- return _execute_and_present_common(queue,waits,commands,signals,fence,swaps,false);
+Error RenderingDeviceDriverMetal::_execute_and_present(CommandQueueID queue, VectorView<SemaphoreID> waits, VectorView<CommandBufferID> commands, VectorView<SemaphoreID> signals, FenceID fence, VectorView<SwapChainID> swaps) {
+	return _execute_and_present_common(queue, waits, commands, signals, fence, swaps, false);
 }
+bool RenderingDeviceDriverMetal::native_issue_bound(NativeIssueKind p_kind, uint32_t p_commands, uint32_t &r_bound) const {
+	if (p_kind == NativeIssueKind::PREPARE_SEGMENT) {
+		r_bound = 1;
+		return true;
+	}
+	const uint32_t extra = p_kind == NativeIssueKind::MAIN_SLOT ? 2 : 1;
+	if (p_commands > UINT32_MAX - extra) {
+		return false;
+	}
+	r_bound = p_commands ? p_commands + extra : 0;
+	return true;
+}
+
 uint32_t RenderingDeviceDriverMetal::qualification_native_call_bound(uint32_t slots) const {
- // Each actual Metal3 queue slot can commit its command plus the barrier-mode
- // wait and signal commands. Include every already committed wrapper source;
- // future unexpected expansion remains a retained failure, never truncation.
- uint64_t count=uint64_t(slots)*3+1;
- for(const auto *command:command_buffers)count+=command->pending_completion_records.size();
- return count>4096 ? 0 : uint32_t(count);
+	// Each actual Metal3 queue slot can commit its command plus the barrier-mode
+	// wait and signal commands. Include every already committed wrapper source;
+	// future unexpected expansion remains a retained failure, never truncation.
+	uint64_t count = uint64_t(slots) * 3 + 1;
+	for (const auto *command : command_buffers) {
+		count += command->pending_completion_records.size();
+	}
+	return count > 4096 ? 0 : uint32_t(count);
 }
 uint32_t RenderingDeviceDriverMetal::qualification_native_call_bound_for_profile(uint32_t p_main_slots, uint32_t p_worker_slots, uint32_t p_frames) const {
 	if (!p_frames || p_frames > p_main_slots || p_worker_slots > UINT32_MAX - p_main_slots) {
@@ -243,75 +258,135 @@ uint32_t RenderingDeviceDriverMetal::qualification_native_call_bound_for_profile
 #endif
 	return count > 4096 ? 0 : uint32_t(count);
 }
-Error RenderingDeviceDriverMetal::_execute_and_present_common(CommandQueueID queue,VectorView<SemaphoreID> waits,VectorView<CommandBufferID> commands,VectorView<SemaphoreID> signals,FenceID fence_id,VectorView<SwapChainID> swaps,bool barriers) {
- QueueCallReport report;report.present_attempted=swaps.size()>0;
- if(commands.size()==0) {record_queue_call_report(report);return OK;}
- LocalVector<CompletionRecord *> records;
- for(uint32_t i=0;i<commands.size();++i) {
-  auto *command=reinterpret_cast<MDCommandBuffer *>(commands[i].id);
-  for(auto *record:command->pending_completion_records)records.push_back(record);
-  command->pending_completion_records.clear();
-  if(command->completion_record_failed)report.error=ERR_UNAVAILABLE;
- }
- // Reserve this finite batch's actual commit identities before its first new
- // native call. Already committed hidden records remain owned on refusal.
- const uint64_t count=uint64_t(commands.size())+(barriers && waits.size()>0 ? 1:0)+(barriers && signals.size()>0 ? 1:0);
- const uint64_t first=count<=UINT32_MAX ? reserve_native_call_serials(count) : 0;
- if(!first)report.error=ERR_UNAVAILABLE;
- auto *previous_records=active_completion_records;
- const uint64_t previous_serial=active_native_serial;const uint32_t previous_count=active_native_serial_count;
- active_completion_records=&records;active_native_serial=first;active_native_serial_count=first?count:0;
- auto *fence=reinterpret_cast<Fence *>(fence_id.id);
- uint64_t presented_serial=0;
- if(report.error==OK && barriers && waits.size()>0) {
-  MTL::CommandBuffer *cb=device_queue->commandBuffer();
-  if(!cb)report.error=ERR_CANT_CREATE;
-  else {
+Error RenderingDeviceDriverMetal::_execute_and_present_common(CommandQueueID queue, VectorView<SemaphoreID> waits, VectorView<CommandBufferID> commands, VectorView<SemaphoreID> signals, FenceID fence_id, VectorView<SwapChainID> swaps, bool barriers) {
+	QueueCallReport report;
+	report.present_attempted = swaps.size() > 0;
+	if (commands.size() == 0) {
+		record_queue_call_report(report);
+		return OK;
+	}
+	LocalVector<CompletionRecord *> records;
+	for (uint32_t i = 0; i < commands.size(); ++i) {
+		auto *command = reinterpret_cast<MDCommandBuffer *>(commands[i].id);
+		for (auto *record : command->pending_completion_records) {
+			records.push_back(record);
+		}
+		command->pending_completion_records.clear();
+		if (command->completion_record_failed) {
+			report.error = ERR_UNAVAILABLE;
+		}
+	}
+	// Reserve this finite batch's actual commit identities before its first new
+	// native call. Already committed hidden records remain owned on refusal.
+	const uint64_t count = uint64_t(commands.size()) + (barriers && waits.size() > 0 ? 1 : 0) + (barriers && signals.size() > 0 ? 1 : 0);
+	const uint64_t first = count <= UINT32_MAX ? reserve_native_call_serials(count) : 0;
+	if (!first) {
+		report.error = ERR_UNAVAILABLE;
+	}
+	auto *previous_issue_count = active_native_issue_count;
+	active_native_issue_count = &report.native_issue_count;
+	auto *previous_records = active_completion_records;
+	const uint64_t previous_serial = active_native_serial;
+	const uint32_t previous_count = active_native_serial_count;
+	active_completion_records = &records;
+	active_native_serial = first;
+	active_native_serial_count = first ? count : 0;
+	auto *fence = reinterpret_cast<Fence *>(fence_id.id);
+	uint64_t presented_serial = 0;
+	if (report.error == OK && barriers && waits.size() > 0) {
+		MTL::CommandBuffer *cb = device_queue->commandBuffer();
+		if (!cb) {
+			report.error = ERR_CANT_CREATE;
+		} else {
 #ifdef DEV_ENABLED
-   cb->setLabel(MTLSTR("Wait Command Buffer"));
+			cb->setLabel(MTLSTR("Wait Command Buffer"));
 #endif
-   for(uint32_t i=0;i<waits.size();++i) {auto *sem=reinterpret_cast<Semaphore *>(waits[i].id);cb->encodeWait(sem->event.get(),sem->value);}
-   if(register_completion_record(cb,0))cb->commit();else report.error=ERR_UNAVAILABLE;
-  }
- }
- for(uint32_t i=0;report.error==OK && i<commands.size();++i) {
-  auto *command=reinterpret_cast<MDCommandBuffer *>(commands[i].id);
-  const bool tail=i+1==commands.size();
-  if(tail && fence) {
-   command->end();MTL::CommandBuffer *cb=command->ensure_command_buffer();
-   if(!cb){report.error=ERR_CANT_CREATE;break;}
-   fence->signal(cb);fence->observed=false;
-  }
-  if(tail)for(uint32_t j=0;j<swaps.size();++j) {
-   auto *swap=reinterpret_cast<SwapChain *>(swaps[j].id);
-   auto *surface=reinterpret_cast<RenderingContextDriverMetal::Surface *>(swap->surface);surface->present(command);
-  }
-  command->commit();
-  if(command->completion_record_failed) {report.error=ERR_UNAVAILABLE;break;}
-  if(tail && fence)fence->armed=true;
-  if(tail && report.present_attempted && !records.is_empty())presented_serial=records[records.size()-1]->serial;
- }
- if(report.error==OK && barriers && signals.size()>0) {
-  MTL::CommandBuffer *cb=device_queue->commandBuffer();
-  if(!cb)report.error=ERR_CANT_CREATE;
-  else {
-   for(uint32_t i=0;i<signals.size();++i) {auto *sem=reinterpret_cast<Semaphore *>(signals[i].id);sem->value++;cb->encodeSignalEvent(sem->event.get(),sem->value);}
-   if(register_completion_record(cb,fence?fence->value:0))cb->commit();else report.error=ERR_UNAVAILABLE;
-  }
- }
- active_completion_records=previous_records;active_native_serial=previous_serial;active_native_serial_count=previous_count;
- if(fence && fence->armed) {
-  fence->completion_records=records;
-  for(auto *record:records)record->fence_owned=true;
-  report.submission_serial=fence->value;
- }
- report.issued=!records.is_empty();
- for(auto *record:records) {
-  NativeCallFact fact;fact.queue_index=uint32_t(queue.id);fact.serial=record->serial;fact.issue=IssueFact::IssuedUnknown;
-  fact.completion=CompletionCapability::CommandBuffer;fact.completion_serial=record->serial;fact.present=record->serial==presented_serial;
-  report.calls.push_back(fact);
- }
- record_queue_call_report(report);return report.error;
+			for (uint32_t i = 0; i < waits.size(); ++i) {
+				auto *sem = reinterpret_cast<Semaphore *>(waits[i].id);
+				cb->encodeWait(sem->event.get(), sem->value);
+			}
+			if (register_completion_record(cb, 0)) {
+				++report.native_issue_count;
+				cb->commit();
+			} else {
+				report.error = ERR_UNAVAILABLE;
+			}
+		}
+	}
+	for (uint32_t i = 0; report.error == OK && i < commands.size(); ++i) {
+		auto *command = reinterpret_cast<MDCommandBuffer *>(commands[i].id);
+		const bool tail = i + 1 == commands.size();
+		if (tail && fence) {
+			command->end();
+			MTL::CommandBuffer *cb = command->ensure_command_buffer();
+			if (!cb) {
+				report.error = ERR_CANT_CREATE;
+				break;
+			}
+			fence->signal(cb);
+			fence->observed = false;
+		}
+		if (tail) {
+			for (uint32_t j = 0; j < swaps.size(); ++j) {
+				auto *swap = reinterpret_cast<SwapChain *>(swaps[j].id);
+				auto *surface = reinterpret_cast<RenderingContextDriverMetal::Surface *>(swap->surface);
+				surface->present(command);
+			}
+		}
+		command->commit();
+		if (command->completion_record_failed) {
+			report.error = ERR_UNAVAILABLE;
+			break;
+		}
+		if (tail && fence) {
+			fence->armed = true;
+		}
+		if (tail && report.present_attempted && !records.is_empty()) {
+			presented_serial = records[records.size() - 1]->serial;
+		}
+	}
+	if (report.error == OK && barriers && signals.size() > 0) {
+		MTL::CommandBuffer *cb = device_queue->commandBuffer();
+		if (!cb) {
+			report.error = ERR_CANT_CREATE;
+		} else {
+			for (uint32_t i = 0; i < signals.size(); ++i) {
+				auto *sem = reinterpret_cast<Semaphore *>(signals[i].id);
+				sem->value++;
+				cb->encodeSignalEvent(sem->event.get(), sem->value);
+			}
+			if (register_completion_record(cb, fence ? fence->value : 0)) {
+				++report.native_issue_count;
+				cb->commit();
+			} else {
+				report.error = ERR_UNAVAILABLE;
+			}
+		}
+	}
+	active_native_issue_count = previous_issue_count;
+	active_completion_records = previous_records;
+	active_native_serial = previous_serial;
+	active_native_serial_count = previous_count;
+	if (fence && fence->armed) {
+		fence->completion_records = records;
+		for (auto *record : records) {
+			record->fence_owned = true;
+		}
+		report.submission_serial = fence->value;
+	}
+	report.issued = !records.is_empty();
+	for (auto *record : records) {
+		NativeCallFact fact;
+		fact.queue_index = uint32_t(queue.id);
+		fact.serial = record->serial;
+		fact.issue = IssueFact::IssuedUnknown;
+		fact.completion = CompletionCapability::CommandBuffer;
+		fact.completion_serial = record->serial;
+		fact.present = record->serial == presented_serial;
+		report.calls.push_back(fact);
+	}
+	record_queue_call_report(report);
+	return report.error;
 }
 
 Error RenderingDeviceDriverMetal::command_queue_execute_and_present(CommandQueueID p_cmd_queue, VectorView<SemaphoreID> p_wait_sem, VectorView<CommandBufferID> p_cmd_buffers, VectorView<SemaphoreID> p_cmd_sem, FenceID p_cmd_fence, VectorView<SwapChainID> p_swap_chains) {

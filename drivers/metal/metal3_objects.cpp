@@ -261,9 +261,17 @@ void MDCommandBuffer::_commit() {
 	// completion handler. Native command buffers are otherwise created lazily.
 	MTL::CommandBuffer *cb = command_buffer();
 	CRASH_COND_MSG(cb == nullptr, "Metal command buffer allocation failed before submission.");
- auto *record=device_driver->register_completion_record(cb,0);
- if(!record) {completion_record_failed=true;return;}
- if(!device_driver->active_completion_records)pending_completion_records.push_back(record);
+	auto *record = device_driver->register_completion_record(cb, 0);
+	if (!record) {
+		completion_record_failed = true;
+		return;
+	}
+	if (!device_driver->active_completion_records) {
+		pending_completion_records.push_back(record);
+	}
+	if (device_driver->active_native_issue_count) {
+		++*device_driver->active_native_issue_count;
+	}
 	cb->commit();
 	commandBuffer.reset();
 	state_begin = false;

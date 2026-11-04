@@ -40,6 +40,11 @@ class RenderingDevice;
 class TestQualificationPhysicalAccess;
 class TestQualificationAckAccess;
 class TestProductionResourceUseAccess;
+#ifdef TESTS_ENABLED
+namespace TestProductionNativeObserve {
+struct Access;
+}
+#endif
 namespace GDExtensionDeviceExit {
 class Registry;
 struct QualificationTicket;
@@ -58,6 +63,7 @@ class QualificationPhysicalReturn {
 	friend class ::TestQualificationPhysicalAccess;
 	friend class ::TestQualificationAckAccess;
 	friend class ::TestProductionResourceUseAccess;
+	friend struct ::TestProductionNativeObserve::Access;
 #endif
 	BinaryMutex mutex;
 	uint64_t bridge = 0;

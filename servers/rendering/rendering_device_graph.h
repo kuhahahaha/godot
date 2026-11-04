@@ -47,7 +47,13 @@
 
 #define USE_BUFFER_BARRIERS 1
 
+namespace GDExtensionDeviceExit {
+class Registry;
+}
+
 class RenderingDeviceGraph {
+	friend class GDExtensionDeviceExit::Registry;
+
 public:
 	// Identity of a command actually copied into this graph's record storage.
 	// A compute instruction remains inside its list until add_compute_list_end;
@@ -55,7 +61,7 @@ public:
 	struct RecordHandle {
 		uint64_t graph_instance = 0;
 		uint64_t graph_frame = 0;
-		uint32_t kind = 0; // 1 = graph command, 2 = compute instruction, 3 = draw instruction.
+		uint32_t kind = 0; // 1 = graph command, 2 = compute instruction, 3 = draw instruction, 4 = closed compute list.
 		uint32_t index = 0;
 		uint32_t offset = 0;
 		bool is_valid() const { return graph_instance != 0 && graph_frame != 0 && kind != 0; }
@@ -978,7 +984,7 @@ public:
 	void add_compute_list_uniform_set_prepare_for_use(RDD::ShaderID p_shader, RDD::UniformSetID p_uniform_set, uint32_t set_index);
 	void add_compute_list_usage(ResourceTracker *p_tracker, ResourceUsage p_usage);
 	void add_compute_list_usages(VectorView<ResourceTracker *> p_trackers, VectorView<ResourceUsage> p_usages);
-	void add_compute_list_end();
+	RecordHandle add_compute_list_end();
 	void add_draw_list_begin(FramebufferCache *p_framebuffer_cache, Rect2i p_region, VectorView<AttachmentOperation> p_attachment_operations, VectorView<RDD::RenderPassClearValue> p_attachment_clear_values, BitField<RDD::PipelineStageBits> p_stages, uint32_t p_breadcrumb = 0, bool p_split_cmd_buffer = false);
 	void add_draw_list_begin(RDD::RenderPassID p_render_pass, RDD::FramebufferID p_framebuffer, Rect2i p_region, VectorView<AttachmentOperation> p_attachment_operations, VectorView<RDD::RenderPassClearValue> p_attachment_clear_values, BitField<RDD::PipelineStageBits> p_stages, uint32_t p_breadcrumb = 0, bool p_split_cmd_buffer = false);
 	void add_draw_list_bind_index_buffer(RDD::BufferID p_buffer, RDD::IndexBufferFormat p_format, uint32_t p_offset);

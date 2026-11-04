@@ -1124,7 +1124,15 @@ uint64_t ShaderCompileAudit::append(const Dictionary &p_record) {
 			return 0;
 		}
 #ifdef WINDOWS_ENABLED
+#ifdef _MSC_VER
+		FILE *reserved = nullptr;
+		if (_wfopen_s(&reserved, reinterpret_cast<const wchar_t *>(path.utf16().get_data()), L"wbx") != 0) {
+			fail();
+			return 0;
+		}
+#else
 		FILE *reserved = _wfopen(reinterpret_cast<const wchar_t *>(path.utf16().get_data()), L"wbx");
+#endif
 #else
 		FILE *reserved = fopen(path.utf8().get_data(), "wbx");
 #endif

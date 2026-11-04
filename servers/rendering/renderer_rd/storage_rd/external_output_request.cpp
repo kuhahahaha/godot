@@ -58,7 +58,7 @@ bool exact_keys(const Dictionary &p_dictionary, const char *const *p_fields, uin
 	return seen == (1u << p_count) - 1u;
 }
 
-bool read_u32(const Dictionary &p_dictionary, const char *p_key, uint32_t &r_value) {
+bool read_request_u32(const Dictionary &p_dictionary, const char *p_key, uint32_t &r_value) {
 	const Variant *value = p_dictionary.getptr(p_key);
 	if (!value || value->get_type() != Variant::INT) {
 		return false;
@@ -110,14 +110,14 @@ bool read_camera(const Variant &p_value, ExternalOutputRequestCommon::CameraSour
 bool read_common(const Dictionary &p_dictionary, ExternalOutputRequestCommon &r_common) {
 	uint32_t schema;
 	ExternalOutputRequestCommon common;
-	if (!read_u32(p_dictionary, "schema", schema) || schema != 1 ||
+	if (!read_request_u32(p_dictionary, "schema", schema) || schema != 1 ||
 			!read_u64(p_dictionary, "generation", common.generation) ||
 			!read_u64(p_dictionary, "present_seq", common.present_seq) ||
 			!read_token(p_dictionary, "output_tag", common.output_tag) ||
 			!read_token(p_dictionary, "view_tag", common.view_tag) ||
 			!read_token(p_dictionary, "phase_token", common.phase_token) ||
 			!read_token(p_dictionary, "current_host_token", common.current_host_token) ||
-			!read_u32(p_dictionary, "history_reset", common.history_reset) || common.history_reset > 10) {
+			!read_request_u32(p_dictionary, "history_reset", common.history_reset) || common.history_reset > 10) {
 		return false;
 	}
 	const Variant *bounds = p_dictionary.getptr("bounds");
@@ -177,7 +177,7 @@ Error ExternalOutputRequest::parse(const Dictionary &p_request, ExternalOutputRe
 	if (!exact_keys(p_request, fields, 18) || !read_common(p_request, request.common) ||
 			!read_u64(p_request, "content_version", request.content_version) ||
 			!read_u64(p_request, "view_epoch", request.view_epoch) ||
-			!read_u32(p_request, "pass_mask", request.pass_mask) || (request.pass_mask & ~ExternalOutputConfig::PASS_KNOWN_MASK) ||
+			!read_request_u32(p_request, "pass_mask", request.pass_mask) || (request.pass_mask & ~ExternalOutputConfig::PASS_KNOWN_MASK) ||
 			!read_token(p_request, "layout_digest", request.layout_digest) ||
 			!read_token(p_request, "mapping_digest", request.mapping_digest) ||
 			!read_token(p_request, "source_token", request.source_token)) {

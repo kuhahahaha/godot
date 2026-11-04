@@ -309,10 +309,14 @@ private:
 	uint64_t next_qualification_frame_epoch = 1;
 	bool qualification_retiring = false;
 	bool qualification_recording = false;
+	GDExtensionDeviceExit::ProductionRequest *production_recording_request = nullptr;
+	bool _production_resource_permitted(RID) const;
 	GDExtensionDeviceExit::CheckedRecordAppend _record_source_dispatch(const GDExtensionDeviceExit::OriginalOperationIdentity &, ComputeListID, uint32_t, uint32_t, uint32_t, const void * = nullptr, uint32_t = 0);
 	GDExtensionDeviceExit::CheckedRecordAppend _record_source_buffer_copy(const GDExtensionDeviceExit::OriginalOperationIdentity &, RID, RID, uint32_t, uint32_t, uint32_t);
+	GDExtensionDeviceExit::CheckedRecordAppend _record_source_buffer_upload(const GDExtensionDeviceExit::OriginalOperationIdentity &, RID, uint32_t, uint32_t, const void *, GDExtensionDeviceExit::BufferUploadSourceCapture &);
 	struct SourceDrawAppendResult;
 	SourceDrawAppendResult _record_source_draw_indirect(const GDExtensionDeviceExit::OriginalOperationIdentity &, DrawListID, bool, RID, uint32_t, uint32_t, uint32_t);
+	RDG::RecordHandle _compute_list_end_recorded();
 	RDG::RecordHandle _compute_list_dispatch_recorded(ComputeListID p_list, uint32_t p_x, uint32_t p_y, uint32_t p_z);
 	Error _qualification_maintenance();
 	bool _qualification_resource_busy(RID p_rid);
@@ -403,7 +407,7 @@ private:
 		bool qualification_owned = false;
 	};
 
-	Error _buffer_get_data_async(RID, const Callable &, uint32_t, uint32_t, const Ref<BufferGetDataResult> &p_owned = {});
+	Error _buffer_get_data_async(RID, const Callable &, uint32_t, uint32_t, const Ref<BufferGetDataResult> &p_owned = {}, GDExtensionDeviceExit::BufferReadbackSourceCapture *p_capture = nullptr);
 
 	struct BufferGetDataRequest {
 		RID buffer;
@@ -414,6 +418,7 @@ private:
 		uint32_t result_offset = 0;
 		bool final_segment = true;
 		Ref<BufferGetDataResult> result;
+		GDExtensionDeviceExit::BufferReadbackSourceCapture *capture = nullptr;
 	};
 
 	struct QualificationUploadProgress {
@@ -424,7 +429,7 @@ private:
 		LocalVector<Segment> segments;
 		uint32_t consumed = 0, max_segments = 0;
 	};
-	Error _buffer_update(Buffer *p_buffer, RID p_buffer_id, uint32_t p_offset, uint32_t p_size, const void *p_data, QualificationUploadProgress *p_progress = nullptr);
+	Error _buffer_update(Buffer *p_buffer, RID p_buffer_id, uint32_t p_offset, uint32_t p_size, const void *p_data, QualificationUploadProgress *p_progress = nullptr, GDExtensionDeviceExit::BufferUploadSourceCapture *p_source = nullptr);
 
 	enum class NativeAppendEffect : uint8_t {
 		NoNewEffect,
@@ -1460,11 +1465,53 @@ private:
 	Error _native_disposal_free(const NativeDisposalWitness &p_witness);
 	Error _native_disposal_observe(const NativeDisposalWitness &p_witness, NativeDisposalWitness::Report &r_report) const;
 	Error _native_disposal_maintenance();
+	struct NativeDisposalBudget {
+		uint32_t receipts = 0;
+		uint32_t passes = 0;
+		uint64_t deadline_usec = 0;
+	};
+	struct NativeDisposalUsage {
+		uint32_t polls = 0;
+		uint32_t frees = 0;
+		uint32_t issues = 0;
+		uint32_t retains = 0;
+		uint32_t releases = 0;
+		uint32_t recycles = 0;
+		uint32_t passes = 0;
+	};
+	// WORK accounts command recording/CPU phases only. Receipts count actual
+	// native observation, ownership return, issue and physical free calls.
+	enum class NativeDisposalWork : uint8_t { POLL,
+		FREE,
+		ISSUE,
+		RETAIN,
+		RELEASE,
+		RECYCLE,
+		WORK };
+	std::atomic<bool> native_disposal_active = false;
+	struct NativeDisposalContinuation {
+		uint32_t phase = 0;
+		uint32_t target = 0;
+		uint32_t end_phase = 0;
+		uint32_t begin_phase = 0;
+		uint32_t slot = 0;
+		uint32_t slot_count = 0;
+		RDD::CommandBufferID command_buffer;
+	} native_disposal_continuation;
+	const NativeDisposalBudget *native_disposal_budget = nullptr;
+	NativeDisposalUsage *native_disposal_usage = nullptr;
+	bool _native_disposal_available(NativeDisposalWork p_work, uint32_t p_count = 1) const;
+	bool _native_disposal_admit(NativeDisposalWork p_work, uint32_t p_count = 1);
+	Error _native_disposal_stall_step(uint32_t p_frame);
+	bool _native_disposal_charge(const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage, NativeDisposalWork p_work);
+	Error _native_disposal_maintenance_step(const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage);
+	Error _free_pending_resources_step(int p_frame, const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage);
+
 	bool _native_disposal_enqueue(NativeDisposalWitness &p_witness, uint64_t p_rid, uint64_t p_serial, uint64_t p_backing);
 	void _native_disposal_returned(NativeDisposalWitness &p_witness, uint64_t p_rid, uint64_t p_serial, uint64_t p_backing);
 
 	RID _qualification_uniform_set_create(const VectorView<Uniform> &, RID, uint32_t, GDExtensionDeviceExit::QualificationPhysicalReturn *, const LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> &);
-	RID _uniform_set_create_qualification(const VectorView<Uniform> &, RID, uint32_t, bool, GDExtensionDeviceExit::QualificationPhysicalReturn *, const LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> *, const NativeDisposalWitness *p_native_disposal = nullptr);
+	RID _uniform_set_create_qualification(const VectorView<Uniform> &, RID, uint32_t, bool, GDExtensionDeviceExit::QualificationPhysicalReturn *, const LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> *, const NativeDisposalWitness *p_native_disposal = nullptr, const GDExtensionDeviceExit::ProductionRequest *p_production = nullptr);
 	Error _qualification_texture_upload(RID, const uint8_t *, uint32_t, QualificationUploadProgress &);
 	RID_Owner<UniformSet, true> uniform_set_owner;
 
@@ -1986,6 +2033,9 @@ private:
 	/**** TRANSFER WORKER ****/
 	/*************************/
 
+	struct TransferWorker;
+	Error _production_join_transfer_worker(TransferWorker *, bool);
+	Error _production_retain_frame_sources(uint32_t);
 	struct TransferWorker {
 		uint32_t index = 0;
 		RDD::BufferID staging_buffer;
@@ -1999,6 +2049,8 @@ private:
 		bool recording = false;
 		bool submitted = false;
 		bool qualification_observer_pending = false;
+		bool production_observer_pending = false;
+		bool submission_pending = false;
 		bool poisoned = false;
 		RDD::QueueCallReport last_submission;
 		RDD::FencePollResult last_completion;
@@ -2089,6 +2141,29 @@ private:
 
 	struct Frame {
 		uint64_t qualification_epoch = 0;
+		// Cursor over the original owner queues. Counts seal this drain's cutoff;
+		// callback/reentrant additions remain in the queues for the next safe epoch.
+		struct DisposalCursor {
+			bool active = false;
+			uint32_t remaining[10] = {};
+			uint32_t kind = 0;
+			uint32_t phase = 0;
+			uint32_t item = 0;
+			uint64_t allocation_size = 0;
+		} disposal;
+		struct MaintenanceWait {
+			uint32_t phase = 0;
+			uint32_t report = 0;
+			uint32_t call = 0;
+			bool ready = false;
+			bool fence_returned = false;
+			uint32_t request = 0;
+			uint32_t region = 0;
+			uint64_t offset = 0;
+			bool request_started = false;
+			uint8_t *mapped = nullptr;
+		} maintenance_wait;
+
 		// List in usage order, from last to free to first to free.
 		List<Buffer> buffers_to_dispose_of;
 		List<Texture> textures_to_dispose_of;
@@ -2181,7 +2256,7 @@ private:
 			return issue_error;
 		}
 		const Error wait_error = frame_wait_error.load();
-		return wait_error != OK ? wait_error : ((frame_wait_draining.load() || qualification_frame_advance_pending.load()) ? ERR_BUSY : OK);
+		return wait_error != OK ? wait_error : ((frame_wait_draining.load() || qualification_frame_advance_pending.load() || native_disposal_active.load()) ? ERR_BUSY : OK);
 	}
 
 	// Whenever logic/physics request a graphics operation (not just deleting a resource) that requires

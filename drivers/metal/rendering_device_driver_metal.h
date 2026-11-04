@@ -37,8 +37,8 @@
 #include "servers/rendering/rendering_device_driver.h"
 
 #include <Metal/Metal.hpp>
-#include <atomic>
 
+#include <atomic>
 #include <optional>
 #include <variant>
 
@@ -66,7 +66,7 @@ class API_AVAILABLE(macos(11.0), ios(14.0), tvos(14.0)) RenderingDeviceDriverMet
 	friend class MDUniformSet;
 #ifdef TESTS_ENABLED
 	friend class TestMetalCompletionAccess;
- friend class TestQualificationMetalCallAccess;
+	friend class TestQualificationMetalCallAccess;
 #endif
 
 	template <typename T>
@@ -87,18 +87,19 @@ protected:
 		std::atomic<bool> retired = false;
 		std::atomic<int64_t> native_code = 0;
 		uint64_t serial = 0;
-  std::atomic<bool> fence_owned{false};
-  uint32_t observers = 0;
+		std::atomic<bool> fence_owned{ false };
+		uint32_t observers = 0;
 		NS::SharedPtr<MTL::CommandBuffer> command_buffer;
 	};
 
- std::atomic<uint64_t> next_native_call_serial{1};
- uint64_t reserve_native_call_serials(uint32_t p_count);
- static thread_local uint64_t active_native_serial;
- static thread_local uint32_t active_native_serial_count;
+	std::atomic<uint64_t> next_native_call_serial{ 1 };
+	uint64_t reserve_native_call_serials(uint32_t p_count);
+	static thread_local uint64_t active_native_serial;
+	static thread_local uint32_t active_native_serial_count;
 	Mutex completion_records_mutex;
 	LocalVector<CompletionRecord *> completion_records;
 	static thread_local LocalVector<CompletionRecord *> *active_completion_records;
+	static thread_local uint32_t *active_native_issue_count;
 	CompletionRecord *register_completion_record(MTL::CommandBuffer *p_command_buffer, uint64_t p_serial, bool p_collection_locked = false);
 	bool completion_records_complete(const LocalVector<CompletionRecord *> &p_records) const;
 	bool completion_records_failed(const LocalVector<CompletionRecord *> &p_records, int64_t &r_native_code) const;
@@ -140,7 +141,7 @@ protected:
 	// If this is not nullptr, there are pending copy operations.
 	NS::SharedPtr<MTL::CommandBuffer> copy_queue_command_buffer;
 	NS::SharedPtr<MTL::BlitCommandEncoder> copy_queue_blit_encoder;
- CompletionRecord *copy_queue_completion_record = nullptr;
+	CompletionRecord *copy_queue_completion_record = nullptr;
 	MetalBuffer copy_queue_buffer;
 	NS::UInteger copy_queue_buffer_offset = 0;
 
@@ -200,13 +201,13 @@ protected:
 	LocalVector<MTL::Texture *> imported_textures;
 
 public:
- Error qualification_prepare_segment(QueueCallReport &r_report, bool p_nonblocking = true) override;
- bool native_call_observation_supported() const override { return true; }
- FencePollResult native_call_poll(uint64_t p_native_serial) override;
- FencePollResult native_call_wait(uint64_t p_native_serial) override;
- Error native_call_recycle(uint64_t p_native_serial) override;
- Error native_call_retain(uint64_t p_native_serial) override;
- Error native_call_release(uint64_t p_native_serial) override;
+	Error qualification_prepare_segment(QueueCallReport &r_report, bool p_nonblocking = true) override;
+	bool native_call_observation_supported() const override { return true; }
+	FencePollResult native_call_poll(uint64_t p_native_serial) override;
+	FencePollResult native_call_wait(uint64_t p_native_serial) override;
+	Error native_call_recycle(uint64_t p_native_serial) override;
+	Error native_call_retain(uint64_t p_native_serial) override;
+	Error native_call_release(uint64_t p_native_serial) override;
 	void encode_imported_resources(MTL::RenderCommandEncoder *p_enc);
 	void encode_imported_resources(MTL::ComputeCommandEncoder *p_enc);
 

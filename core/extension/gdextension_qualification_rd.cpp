@@ -325,6 +325,11 @@ void RenderingDevice::_qualification_add_frame_ticket(QualificationTicket *ticke
 	}
 }
 void RenderingDevice::_qualification_seal_tickets() {
+	{
+		auto &registry = Registry::get_singleton();
+		MutexLock lock(registry.mutex);
+		registry.production_seal_graphs_locked(*this);
+	}
 	if (frames[frame].qualification_tickets.is_empty()) {
 		return;
 	}
@@ -395,6 +400,11 @@ void RenderingDevice::_qualification_seal_tickets() {
 	}
 }
 void RenderingDevice::_qualification_issue_tickets(uint32_t slot, const RDD::QueueCallReport &report, Error error) {
+	{
+		auto &registry = Registry::get_singleton();
+		MutexLock lock(registry.mutex);
+		registry.production_capture_issue_locked(*this, slot, { report }, error);
+	}
 	if (frames[frame].qualification_tickets.is_empty()) {
 		return;
 	}
@@ -467,6 +477,10 @@ void RenderingDevice::_qualification_issue_tickets_locked(uint32_t slot, const R
 	}
 }
 Error RenderingDevice::_qualification_retain_tickets(uint32_t index) {
+	const Error production = _production_retain_frame_sources(index);
+	if (production != OK) {
+		return production;
+	}
 	auto &registry = Registry::get_singleton();
 	MutexLock lock(registry.mutex);
 	for (auto *ticket : frames[index].qualification_tickets) {
@@ -483,6 +497,10 @@ Error RenderingDevice::_qualification_retain_tickets(uint32_t index) {
 	return OK;
 }
 Error RenderingDevice::_qualification_poll_tickets(uint32_t index) {
+	const Error production = _production_retain_frame_sources(index);
+	if (production != OK) {
+		return production;
+	}
 	if (frames[index].qualification_tickets.is_empty()) {
 		return OK;
 	}

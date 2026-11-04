@@ -1007,31 +1007,6 @@
 				[b]Note:[/b] Resource names are only set when the engine runs in verbose mode ([method OS.is_stdout_verbose] = [code]true[/code]), or when using an engine build compiled with the [code]dev_mode=yes[/code] SCons option. The graphics driver must also support the [code]VK_EXT_DEBUG_UTILS_EXTENSION_NAME[/code] Vulkan extension for named resources to work.
 			</description>
 		</method>
-		<method name="shader_compile_binary_from_spirv_with_options">
-			<return type="PackedByteArray" />
-			<param index="0" name="spirv" type="RDShaderSPIRV" />
-			<param index="1" name="shader_name" type="String" />
-			<param index="2" name="flags" type="int" enum="RenderingDevice.ShaderCompileFlags" is_bitfield="true" />
-			<description>
-				Compiles SPIR-V with the requested policy. Unknown or backend-unsupported flags are rejected. Zero preserves the default policy. Returns an empty array on failure.
-			</description>
-		</method>
-		<method name="shader_create_from_spirv_with_options">
-			<return type="RID" />
-			<param index="0" name="spirv" type="RDShaderSPIRV" />
-			<param index="1" name="shader_name" type="String" />
-			<param index="2" name="flags" type="int" enum="RenderingDevice.ShaderCompileFlags" is_bitfield="true" />
-			<description>
-				Creates a shader with the requested compile policy. Unknown or backend-unsupported flags are rejected before native compilation. Returns an invalid RID on failure.
-			</description>
-		</method>
-		<method name="shader_get_compile_flags" qualifiers="const">
-			<return type="int" enum="RenderingDevice.ShaderCompileFlags" is_bitfield="true" />
-			<param index="0" name="shader" type="RID" />
-			<description>
-				Returns the requested flags stored by a successfully created shader, not a claim of native pipeline completion. Invalid RIDs and unfilled placeholders report an error and return zero.
-			</description>
-		</method>
 		<method name="shader_compile_binary_from_spirv">
 			<return type="PackedByteArray" />
 			<param index="0" name="spirv_data" type="RDShaderSPIRV" />
@@ -1039,6 +1014,15 @@
 			<description>
 				Compiles a binary shader from [param spirv_data] and returns the compiled binary data as a [PackedByteArray]. This compiled shader is specific to the GPU model and driver version used; it will not work on different GPU models or even different driver versions. See also [method shader_compile_spirv_from_source].
 				[param name] is an optional human-readable name that can be given to the compiled shader for organizational purposes.
+			</description>
+		</method>
+		<method name="shader_compile_binary_from_spirv_with_options">
+			<return type="PackedByteArray" />
+			<param index="0" name="spirv" type="RDShaderSPIRV" />
+			<param index="1" name="shader_name" type="String" />
+			<param index="2" name="flags" type="int" enum="RenderingDevice.ShaderCompileFlags" is_bitfield="true" />
+			<description>
+				Compiles SPIR-V with the requested policy. Unknown or backend-unsupported flags are rejected. Zero preserves the default policy. Returns an empty array on failure.
 			</description>
 		</method>
 		<method name="shader_compile_spirv_from_source">
@@ -1068,10 +1052,26 @@
 				Once finished with your RID, you will want to free the RID using the RenderingDevice's [method free_rid] method. See also [method shader_compile_spirv_from_source] and [method shader_create_from_bytecode].
 			</description>
 		</method>
+		<method name="shader_create_from_spirv_with_options">
+			<return type="RID" />
+			<param index="0" name="spirv" type="RDShaderSPIRV" />
+			<param index="1" name="shader_name" type="String" />
+			<param index="2" name="flags" type="int" enum="RenderingDevice.ShaderCompileFlags" is_bitfield="true" />
+			<description>
+				Creates a shader with the requested compile policy. Unknown or backend-unsupported flags are rejected before native compilation. Returns an invalid RID on failure.
+			</description>
+		</method>
 		<method name="shader_create_placeholder">
 			<return type="RID" />
 			<description>
 				Create a placeholder RID by allocating an RID without initializing it for use in [method shader_create_from_bytecode]. This allows you to create an RID for a shader and pass it around, but defer compiling the shader to a later time.
+			</description>
+		</method>
+		<method name="shader_get_compile_flags" qualifiers="const">
+			<return type="int" enum="RenderingDevice.ShaderCompileFlags" is_bitfield="true" />
+			<param index="0" name="shader" type="RID" />
+			<description>
+				Returns the requested flags stored by a successfully created shader, not a claim of native pipeline completion. Invalid RIDs and unfilled placeholders report an error and return zero.
 			</description>
 		</method>
 		<method name="shader_get_vertex_input_attribute_mask">
@@ -1392,6 +1392,9 @@
 		</method>
 	</methods>
 	<constants>
+		<constant name="SHADER_COMPILE_FLAG_DISABLE_FAST_MATH" value="1" enum="ShaderCompileFlags" is_bitfield="true">
+			Requests disabled fast math. Metal applies safe compiler options; Vulkan preserves the supplied SPIR-V constraints. This does not add unsupported floating-point capabilities. D3D12 does not support this flag.
+		</constant>
 		<constant name="DEVICE_TYPE_OTHER" value="0" enum="DeviceType">
 			Rendering device type does not match any of the other enum values or is unknown.
 		</constant>
@@ -3125,9 +3128,6 @@
 		</constant>
 		<constant name="DRAW_IGNORE_ALL" value="720640" enum="DrawFlags" is_bitfield="true">
 			Ignore the previous contents of all attachments.
-		</constant>
-		<constant name="SHADER_COMPILE_FLAG_DISABLE_FAST_MATH" value="1" enum="ShaderCompileFlags" is_bitfield="true">
-			Requests disabled fast math. Metal applies safe compiler options; Vulkan preserves the supplied SPIR-V constraints. This does not add unsupported floating-point capabilities. D3D12 does not support this flag.
 		</constant>
 	</constants>
 </class>

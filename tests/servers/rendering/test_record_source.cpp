@@ -381,8 +381,14 @@ public:
 		CHECK(device.draw_graph.qualification_command_count() == before + 1);
 		device.storage_buffer_owner.get_or_null(dst)->draw_tracker = nullptr;
 		before = device.draw_graph.qualification_command_count();
-		CHECK(device._record_source_buffer_copy(identity, src, dst, 0, 0, 16).error == ERR_UNAVAILABLE);
-		CHECK(device.draw_graph.qualification_command_count() == before);
+		auto mutable_copy = device._record_source_buffer_copy(identity, src, dst, 0, 0, 16);
+		CHECK(mutable_copy.error == OK);
+		CHECK(mutable_copy.state == State::Appended);
+		CHECK(mutable_copy.became_mutable);
+		CHECK(device.draw_graph.contains_record(mutable_copy.handle));
+		CHECK(mutable_copy.transfer_count == 0);
+		auto *mutable_tracker = device.storage_buffer_owner.get_or_null(dst)->draw_tracker;
+		before = device.draw_graph.qualification_command_count();
 		device.compute_list.active = true;
 		CHECK(device._record_source_dispatch(identity, RenderingDevice::ID_TYPE_COMPUTE_LIST, 0, 1, 1).error == ERR_INVALID_PARAMETER);
 		CHECK(device._record_source_dispatch(identity, RenderingDevice::ID_TYPE_COMPUTE_LIST, 1, 1, 1).error == ERR_INVALID_DATA);
@@ -422,6 +428,7 @@ public:
 		device.shader_owner.free(shader_rid);
 		RDG::resource_tracker_free(from.draw_tracker);
 		RDG::resource_tracker_free(to.draw_tracker);
+		RDG::resource_tracker_free(mutable_tracker);
 		device.storage_buffer_owner.free(src);
 		device.storage_buffer_owner.free(dst);
 		device.driver = nullptr;

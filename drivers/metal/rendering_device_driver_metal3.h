@@ -88,8 +88,9 @@ protected:
 	void remove_residency_set_to_main_queue(MTL::ResidencySet *p_set) override API_AVAILABLE(macos(15.0), ios(18.0), tvos(18.0), visionos(2.0));
 
 public:
- uint32_t qualification_native_call_bound(uint32_t p_slots) const override;
- uint32_t qualification_native_call_bound_for_profile(uint32_t p_main_slots, uint32_t p_worker_slots, uint32_t p_frames) const override;
+	bool native_issue_bound(NativeIssueKind p_kind, uint32_t p_commands, uint32_t &r_bound) const override;
+	uint32_t qualification_native_call_bound(uint32_t p_slots) const override;
+	uint32_t qualification_native_call_bound_for_profile(uint32_t p_main_slots, uint32_t p_worker_slots, uint32_t p_frames) const override;
 	Error initialize(uint32_t p_device_index, uint32_t p_frame_count) override;
 
 	FenceID fence_create() override;
