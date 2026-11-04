@@ -214,6 +214,29 @@ public:
 		CHECK(failed.state == Observation::State::NativeError);
 		CHECK(failed.error == FAILED);
 		CHECK(failed.native_code == -21);
+		CHECK(failed.completion_error == FAILED);
+		const uint32_t before = driver.polls;
+		uncertain.source.error = ERR_UNAVAILABLE;
+		uncertain.source.native_code = -9;
+		auto combined = poll_native_source(driver, uncertain, production);
+		CHECK(driver.polls == before + 1);
+		CHECK(combined.error == ERR_UNAVAILABLE);
+		CHECK(combined.native_code == -9);
+		CHECK(combined.completion_error == FAILED);
+		CHECK(combined.completion_native_code == -21);
+		CHECK(combined.state == Observation::State::Unknown);
+		driver.observed.native_error = false;
+		combined = poll_native_source(driver, uncertain, production);
+		CHECK(driver.polls == before + 2);
+		CHECK(combined.error == ERR_UNAVAILABLE);
+		CHECK(combined.completion_error == OK);
+		auto unretained = member();
+		driver.retain_error = ERR_BUSY;
+		CHECK(poll_native_source(driver, unretained, production).completion_error == OK);
+		driver.retain_error = ERR_INVALID_DATA;
+		CHECK(poll_native_source(driver, unretained, production).completion_error == OK);
+		CHECK(driver.polls == before + 2);
+		driver.retain_error = OK;
 		driver.release_error = ERR_BUSY;
 		CHECK(release_native_source(driver, original) == ERR_BUSY);
 		CHECK_FALSE(original.owner_released);
@@ -222,6 +245,9 @@ public:
 		CHECK(original.owner_released);
 		CHECK(release_native_source(driver, original) == OK);
 		CHECK(driver.releases == 2);
+		const uint32_t released_polls = driver.polls;
+		CHECK(poll_native_source(driver, original, production).completion_error == OK);
+		CHECK(driver.polls == released_polls);
 		CHECK(driver.waits == 0);
 	}
 	static void bounded_capture() {

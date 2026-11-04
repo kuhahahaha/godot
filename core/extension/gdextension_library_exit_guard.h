@@ -67,6 +67,9 @@ struct RegistryAccess;
 }
 #endif
 
+namespace TestProductionNativeObserve {
+struct Access;
+}
 namespace TestProductionRequest {
 struct Access;
 }
@@ -75,6 +78,8 @@ class ProductionAttachment;
 class ProductionRequest;
 class ProductionResourceSlot;
 class ProductionActionCell;
+class ProductionNativeCell;
+struct ProductionServiceUsage;
 enum class ProductionControlKind : uint32_t;
 struct ProductionControlOutput;
 struct OriginalOperationIdentity;
@@ -146,6 +151,7 @@ class RecordRef {
 	friend class CleanupScope;
 #ifdef TESTS_ENABLED
 	friend struct TestProductionRequest::Access;
+	friend struct TestProductionNativeObserve::Access;
 	friend struct TestDeviceExitContract::RegistryAccess;
 	friend struct TestDeviceExitLibraryClose::Access;
 	friend struct TestDeviceExitEntry::Access;
@@ -376,6 +382,7 @@ class RegistrationContext {
 	friend class CleanupScope;
 #ifdef TESTS_ENABLED
 	friend struct TestProductionRequest::Access;
+	friend struct TestProductionNativeObserve::Access;
 #endif
 	static thread_local RegistrationContext *current;
 	RegistrationContext *previous = nullptr;
@@ -556,6 +563,7 @@ private:
 	friend class CleanupScope;
 #ifdef TESTS_ENABLED
 	friend struct ::TestProductionRequest::Access;
+	friend struct ::TestProductionNativeObserve::Access;
 	friend class ::TestProductionResourceUseAccess;
 	friend class ::TestVulkanCompletionAccess;
 	friend struct TestDeviceExitContract::RegistryAccess;
@@ -826,7 +834,10 @@ private:
 	Error production_unpin_resources_locked(ProductionRequest &);
 	Error production_entity_return_locked(ProductionAttachment &);
 	GDExtensionDeviceSessionResultV1 production_cancel_locked(ProductionRequest &);
-	GDExtensionDeviceSessionResultV1 production_release_locked(ProductionRequest &, RenderingDevice *, bool);
+	GDExtensionDeviceSessionResultV1 production_release_locked(ProductionRequest &, RenderingDevice *, bool, const GDExtensionProductionServiceBudgetV1 * = nullptr, ProductionServiceUsage * = nullptr);
+	Error production_native_owner_locked(const ProductionRequest &, uint32_t, const ProductionNativeCell *&) const;
+	Error production_poll_native_locked(ProductionRequest &, RenderingDeviceDriver &, const GDExtensionProductionServiceBudgetV1 &, bool, ProductionServiceUsage &);
+	Error production_native_fact_locked(const ProductionRequest &, uint32_t, GDExtensionProductionFactV1 &) const;
 	void production_report_locked(const ProductionRequest &, GDExtensionProductionReportV1 &) const;
 	void production_control_execute_locked(ProductionRequest &, RenderingDevice *);
 	// Private metadata staging; cannot issue source scope or open native recording.
@@ -896,6 +907,7 @@ public:
 	GDExtensionDeviceSessionResultV1 production_prepare_upload(GDExtensionProductionRequestRefV1, const GDExtensionProductionUploadV1 *, const void *, uint64_t);
 	GDExtensionDeviceSessionResultV1 production_prepare_readback(GDExtensionProductionRequestRefV1, uint64_t, uint32_t);
 	GDExtensionDeviceSessionResultV1 production_observe(GDExtensionProductionRequestRefV1, const GDExtensionProductionServiceBudgetV1 *, GDExtensionProductionReportV1 *);
+	GDExtensionDeviceSessionResultV1 production_facts(GDExtensionProductionRequestRefV1, uint64_t, uint32_t, GDExtensionProductionFactV1 *, uint32_t, uint32_t *);
 	GDExtensionDeviceSessionResultV1 production_cancel(GDExtensionProductionRequestRefV1);
 	GDExtensionDeviceSessionResultV1 production_release(GDExtensionProductionRequestRefV1);
 	GDExtensionDeviceSessionResultV1 production_close(GDExtensionProductionAttachmentRefV1);
@@ -931,7 +943,7 @@ public:
 	GDExtensionDeviceSessionResultV1 qualification_rt_release(GDExtensionQualificationBridgeRefV1, GDExtensionQualificationRtRefV1);
 	void qualification_rt_dispatch(uint64_t, uint64_t);
 	// Internal Core receiver; no public production proc is installed.
-	Error production_control_accept(GDExtensionProductionRequestRefV1, ProductionControlKind, uint64_t *);
+	Error production_control_accept(GDExtensionProductionRequestRefV1, ProductionControlKind, uint64_t *, const GDExtensionProductionServiceBudgetV1 * = nullptr);
 	Error production_control_schedule(GDExtensionProductionRequestRefV1, uint64_t);
 	Error production_control_consume(GDExtensionProductionRequestRefV1, uint64_t, ProductionControlOutput *);
 

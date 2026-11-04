@@ -48,6 +48,9 @@ class ExternalOutputStorage;
 namespace TestProductionRequest {
 struct Access;
 }
+namespace TestProductionNativeObserve {
+struct Access;
+}
 namespace RendererRD {
 class TestParticlesProcessRetryAccess;
 }
@@ -145,6 +148,7 @@ private:
 	friend class TestRecordSourceAccess;
 	friend class TestProductionResourceUseAccess;
 	friend struct TestProductionRequest::Access;
+	friend struct TestProductionNativeObserve::Access;
 	friend class TestQualificationRtAccess;
 	friend class RendererRD::TestParticlesProcessRetryAccess;
 	void test_arm_buffer_update_fault(RID p_buffer, uint32_t p_count) {
