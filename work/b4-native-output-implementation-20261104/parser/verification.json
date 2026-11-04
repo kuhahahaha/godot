@@ -1,0 +1,96 @@
+{
+  "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104",
+  "checks": [
+    {
+      "name": "debug-tests",
+      "command": [
+        "clang++",
+        "-std=c++17",
+        "-fsyntax-only",
+        "-I.",
+        "-Iplatform/macos",
+        "-DDEBUG_ENABLED",
+        "-DTESTS_ENABLED",
+        "-DTOOLS_ENABLED",
+        "-DTHREADS_ENABLED",
+        "servers/rendering/renderer_rd/storage_rd/external_output_config.cpp",
+        "tests/servers/rendering/test_external_output_config.cpp"
+      ],
+      "rc": 0,
+      "raw_log": "debug-tests.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "release-production",
+      "command": [
+        "clang++",
+        "-std=c++17",
+        "-fsyntax-only",
+        "-I.",
+        "-Iplatform/macos",
+        "-DTHREADS_ENABLED",
+        "servers/rendering/renderer_rd/storage_rd/external_output_config.cpp"
+      ],
+      "rc": 0,
+      "raw_log": "release-production.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "double-tests",
+      "command": [
+        "clang++",
+        "-std=c++17",
+        "-fsyntax-only",
+        "-I.",
+        "-Iplatform/macos",
+        "-DDEBUG_ENABLED",
+        "-DTESTS_ENABLED",
+        "-DTOOLS_ENABLED",
+        "-DTHREADS_ENABLED",
+        "-DREAL_T_IS_DOUBLE",
+        "servers/rendering/renderer_rd/storage_rd/external_output_config.cpp",
+        "tests/servers/rendering/test_external_output_config.cpp"
+      ],
+      "rc": 0,
+      "raw_log": "double-tests.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "own-files-diff-check",
+      "command": [
+        "git",
+        "diff",
+        "--no-index",
+        "--check",
+        "--",
+        "/dev/null",
+        "<each-own-file>"
+      ],
+      "results": [
+        {
+          "file": "servers/rendering/renderer_rd/storage_rd/external_output_config.cpp",
+          "rc": 1,
+          "output": ""
+        },
+        {
+          "file": "servers/rendering/renderer_rd/storage_rd/external_output_config.h",
+          "rc": 1,
+          "output": ""
+        },
+        {
+          "file": "tests/servers/rendering/test_external_output_config.cpp",
+          "rc": 1,
+          "output": ""
+        }
+      ],
+      "note": "These new files are untracked; no-index rc1 denotes file content difference, not whitespace failure. No diagnostics means check found no whitespace errors."
+    }
+  ],
+  "source_sha256": {
+    "servers/rendering/renderer_rd/storage_rd/external_output_config.cpp": "004176d0c0ea5728ba0c055a3c716b7fa2fbd5fbea578c5d8e8fad53be2bc2dc",
+    "servers/rendering/renderer_rd/storage_rd/external_output_config.h": "6da096fbdbdbeb9a6b4ba66fd682548ade59658cdf351d6b7464f118fde6f794",
+    "tests/servers/rendering/test_external_output_config.cpp": "daf2ac497b99ca311e08b51c53df46ac7255963c4c2bd32bcb4ebf4b477aeb73"
+  },
+  "doctest_cases": 6,
+  "doctest_execution": "NOT RUN: no new engine build performed; syntax-only checks do not execute assertions or confer GPU/production acceptance."
+}
