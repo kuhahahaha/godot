@@ -13599,7 +13599,7 @@
             "since": "4.7",
             "description": [
                 "Register an exact core Object binding cleanup as due in the borrowed USER or BINDING level action. The original Object action and all bound holders must exist in the same library generation; the original owner still performs the actual free.",
-                "Object ID is the original core ObjectDB ID, not a pointer or caller-invented cleanup authority. Only the issuing initialization frame may enroll, before its binding acknowledgement."
+                "Object ID is the original core ObjectDB ID, not a pointer or caller-invented cleanup authority. Only the issuing initialization frame may enroll, before its binding acknowledgment."
             ],
             "arguments": [
                 {
@@ -14164,7 +14164,7 @@
             "name": "device_exit_register_scene_ready_v1",
             "since": "4.7",
             "description": [
-                "Register the original generation scene-ready callback inside its qualified SCENE initializer before binding acknowledgement. Guarded lookup only; no late effects or enrollment are inferred."
+                "Register the original generation scene-ready callback inside its qualified SCENE initializer before binding acknowledgment. Guarded lookup only; no late effects or enrollment are inferred."
             ],
             "arguments": [
                 {
