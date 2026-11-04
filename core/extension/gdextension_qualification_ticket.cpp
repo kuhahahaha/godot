@@ -87,8 +87,8 @@ Error Registry::qualification_typed_upload_capacity(QualificationTicket *ticket,
 	}
 	return qualification_native_capacity(*rd->driver, rd->draw_graph.qualification_command_count(), bound, rd->transfer_worker_pool_max_size);
 }
-void Registry::qualification_add_upload_graph(QualificationTicket *ticket, RenderingDevice *rd, uint64_t instance, uint64_t frame, uint32_t kind, uint32_t index, uint32_t offset, uint64_t serial, uint64_t begin, uint64_t size) {
-	add_graph(ticket, { instance, frame, kind, index, offset }, 6, rd->frame, rd->frames[rd->frame].qualification_epoch, serial, begin, size);
+void Registry::qualification_add_upload_graph(QualificationTicket *ticket, RenderingDevice *rd, uint64_t graph_instance, uint64_t frame, uint32_t kind, uint32_t index, uint32_t offset, uint64_t serial, uint64_t begin, uint64_t size) {
+	add_graph(ticket, { graph_instance, frame, kind, index, offset }, 6, rd->frame, rd->frames[rd->frame].qualification_epoch, serial, begin, size);
 	rd->_qualification_add_frame_ticket(ticket);
 }
 Error Registry::qualification_ticket_locked(QualificationBridge *bridge,GDExtensionQualificationTicketRefV1 ref,QualificationTicket *&ticket) {
@@ -241,7 +241,7 @@ void Registry::qualification_record_append(QualificationTicket *ticket,Rendering
    ticket->capture = ticket->capture_append.handle;
   } else {
    rd->compute_list_set_push_constant(capture,request.capture_push,16);
-   ticket->capture=rd->_qualification_dispatch(capture,1,1,1);
+   ticket->capture=rd->_compute_list_dispatch_recorded(capture,1,1,1);
   }
   rd->compute_list_end();
  }
@@ -259,7 +259,7 @@ void Registry::qualification_record_append(QualificationTicket *ticket,Rendering
     ticket->body = ticket->body_append.handle;
    } else {
     rd->compute_list_set_push_constant(body,request.body_push,16);
-    ticket->body=rd->_qualification_dispatch(body,request.body_groups_x,1,1);
+    ticket->body=rd->_compute_list_dispatch_recorded(body,request.body_groups_x,1,1);
    }
    rd->compute_list_end();
   }

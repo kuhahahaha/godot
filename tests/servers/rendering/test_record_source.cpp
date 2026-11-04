@@ -47,6 +47,47 @@ class TestRecordSourceAccess {
 		Error retain_error = OK, release_error = OK;
 		FencePollResult observed;
 		bool unknown_issue = false;
+		bool honors_barriers = true;
+		uint32_t expected_uniform_set = 51;
+		uint32_t push_calls = 0, prepare_calls = 0, set_calls = 0, dispatch_calls = 0;
+		uint32_t pushed_words[4] = {};
+		CommandBufferID command_buffer_create(CommandPoolID) override { return CommandBufferID(61); }
+		bool command_buffer_begin(CommandBufferID) override { return true; }
+		void command_buffer_end(CommandBufferID) override {}
+		SemaphoreID semaphore_create() override { return SemaphoreID(62); }
+		void command_insert_breadcrumb(CommandBufferID, uint32_t) override {}
+		void command_pipeline_barrier(CommandBufferID, BitField<PipelineStageBits>, BitField<PipelineStageBits>, VectorView<MemoryAccessBarrier>, VectorView<BufferBarrier>, VectorView<TextureBarrier>, VectorView<AccelerationStructureBarrier>) override {}
+		void command_bind_compute_pipeline(CommandBufferID, PipelineID p_pipeline) override { CHECK(p_pipeline == PipelineID(8)); }
+		void command_bind_push_constants(CommandBufferID, ShaderID p_shader, uint32_t p_first, VectorView<uint32_t> p_data) override {
+			CHECK(p_shader == ShaderID(7));
+			CHECK(p_first == 0);
+			REQUIRE(p_data.size() == 4);
+			++push_calls;
+			for (uint32_t i = 0; i < 4; ++i) {
+				pushed_words[i] = p_data[i];
+			}
+		}
+		void command_uniform_set_prepare_for_use(CommandBufferID, UniformSetID p_set, ShaderID p_shader, uint32_t p_index) override {
+			CHECK(p_set == UniformSetID(9));
+			CHECK(p_shader == ShaderID(7));
+			CHECK(p_index == 0);
+			++prepare_calls;
+		}
+		void command_bind_compute_uniform_sets(CommandBufferID, VectorView<UniformSetID> p_sets, ShaderID p_shader, uint32_t p_first, uint32_t p_count, uint32_t) override {
+			CHECK(p_shader == ShaderID(7));
+			CHECK(p_first == 0);
+			CHECK(p_count == 1);
+			REQUIRE(p_sets.size() == 1);
+			CHECK(p_sets[0] == UniformSetID(9));
+			++set_calls;
+		}
+		void command_compute_dispatch(CommandBufferID, uint32_t p_x, uint32_t p_y, uint32_t p_z) override {
+			CHECK(p_x == 1);
+			CHECK(p_y == 2);
+			CHECK(p_z == 3);
+			++dispatch_calls;
+		}
+
 		uint32_t record_native_call_bound(uint32_t slots) const override { return slots; }
 		bool native_call_observation_supported() const override { return true; }
 		Error native_call_retain(uint64_t serial) override {
@@ -69,10 +110,10 @@ class TestRecordSourceAccess {
 			return {};
 		}
 		uint64_t limit_get(Limit) override { return 64; }
-		uint64_t api_trait_get(ApiTrait trait) override { return trait == API_TRAIT_HONORS_PIPELINE_BARRIERS ? 1 : 0; }
+		uint64_t api_trait_get(ApiTrait trait) override { return trait == API_TRAIT_HONORS_PIPELINE_BARRIERS && honors_barriers ? 1 : 0; }
 		uint32_t uniform_sets_get_dynamic_offsets(VectorView<UniformSetID> sets, ShaderID, uint32_t first, uint32_t count) const override {
 			CHECK(sets.size() == 1);
-			CHECK(sets[0] == UniformSetID(51));
+			CHECK(sets[0] == UniformSetID(expected_uniform_set));
 			CHECK(first == 0);
 			CHECK(count == 1);
 			return 0; // The controlled set has no dynamic descriptors.
@@ -331,12 +372,17 @@ public:
 		device.compute_list.state.pipeline = pipeline_rid;
 		device.compute_list.state.pipeline_shader = shader_rid;
 		device.compute_list.state.pipeline_shader_driver_id = shader.driver_id;
+#ifdef DEBUG_ENABLED
+		device.compute_list.validation.pipeline_active = true;
+		device.compute_list.validation.pipeline_push_constant_size = 16;
+#endif
 		CHECK(device._record_source_dispatch(identity, RenderingDevice::ID_TYPE_COMPUTE_LIST, 1, 1, 1).error == ERR_UNAVAILABLE);
 		CHECK(device.draw_graph.qualification_command_count() == before);
 		device.compute_pipeline_owner.get_or_null(pipeline_rid)->push_constant_size = 0;
 		device.compute_list.state.pipeline_shader_driver_id = shader.driver_id;
 #ifdef DEBUG_ENABLED
 		device.compute_list.validation.pipeline_active = true;
+		device.compute_list.validation.pipeline_push_constant_size = 0;
 #endif
 		device.draw_graph.add_compute_list_begin();
 		auto dispatched = device._record_source_dispatch(identity, RenderingDevice::ID_TYPE_COMPUTE_LIST, 1, 1, 1);
@@ -354,6 +400,121 @@ public:
 		device.storage_buffer_owner.free(dst);
 		device.driver = nullptr;
 	}
+	static void normal_push_dispatch() {
+		using namespace GDExtensionDeviceExit;
+		using State = CheckedRecordAppend::State;
+		const OriginalOperationIdentity identity{ 41, 42, 43, 44, 0, 4 };
+		const uint32_t push[4] = { 0x12345678, 0xabcdef01, 0x87654321, 0x10fedcba };
+		RenderingDevice device;
+		Driver driver;
+		driver.honors_barriers = false;
+		driver.expected_uniform_set = 9;
+		device.driver = &driver;
+		device.render_thread_id = Thread::get_caller_id();
+		device.draw_graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RDD::CommandQueueFamilyID(1), 0);
+		device.draw_graph.begin();
+		RenderingDevice::Shader shader;
+		shader.driver_id = RDD::ShaderID(7);
+		RID shader_rid = device.shader_owner.make_rid(shader);
+		RenderingDevice::ComputePipeline pipeline;
+		pipeline.driver_id = RDD::PipelineID(8);
+		pipeline.shader_driver_id = shader.driver_id;
+		pipeline.shader = shader_rid;
+		pipeline.push_constant_size = sizeof(push);
+		pipeline.set_formats.push_back(123);
+		RID pipeline_rid = device.compute_pipeline_owner.make_rid(pipeline);
+		RenderingDevice::UniformSet set;
+		set.driver_id = RDD::UniformSetID(9);
+		set.shader_id = shader_rid;
+		set.shader_set = 0;
+		set.format = 123;
+		RID set_rid = device.uniform_set_owner.make_rid(set);
+		const auto list = device.compute_list_begin();
+		device.compute_list_bind_compute_pipeline(list, pipeline_rid);
+		device.compute_list_bind_uniform_set(list, set_rid, 0);
+		auto rejected = [&](const void *data, uint32_t size, Error error) {
+			const auto result = device._record_source_dispatch(identity, list, 1, 2, 3, data, size);
+			CHECK(result.state == State::Rejected);
+			CHECK(result.error == error);
+			CHECK(result.operation_bound);
+			CHECK_FALSE(result.handle.is_valid());
+			CHECK(device.compute_list.state.push_constant_size == 0);
+			CHECK(device.compute_list.state.dispatch_count == 0);
+			CHECK_FALSE(device.compute_list.state.sets[0].bound);
+		};
+		rejected(nullptr, sizeof(push), ERR_UNAVAILABLE);
+		rejected(push, 12, ERR_UNAVAILABLE);
+		rejected(push, 132, ERR_UNAVAILABLE);
+		QualificationPhysicalReturn physical;
+		auto *owned_pipeline = device.compute_pipeline_owner.get_or_null(pipeline_rid);
+		auto *owned_shader = device.shader_owner.get_or_null(shader_rid);
+		auto *owned_set = device.uniform_set_owner.get_or_null(set_rid);
+		owned_pipeline->qualification_return = &physical;
+		rejected(push, sizeof(push), ERR_UNAUTHORIZED);
+		owned_pipeline->qualification_return = nullptr;
+		owned_shader->qualification_return = &physical;
+		rejected(push, sizeof(push), ERR_UNAUTHORIZED);
+		owned_shader->qualification_return = nullptr;
+		owned_set->qualification_return = &physical;
+		rejected(push, sizeof(push), ERR_UNAUTHORIZED);
+		owned_set->qualification_return = nullptr;
+		owned_set->qualification_dependencies.push_back(&physical);
+		rejected(push, sizeof(push), ERR_UNAUTHORIZED);
+		owned_set->qualification_dependencies.clear();
+		owned_set->format = 124;
+		rejected(push, sizeof(push), ERR_UNAVAILABLE);
+		owned_set->format = 123;
+#ifdef DEBUG_ENABLED
+		device.compute_list.validation.pipeline_active = false;
+		rejected(push, sizeof(push), ERR_INVALID_DATA);
+		device.compute_list.validation.pipeline_active = true;
+		device.compute_list.validation.pipeline_push_constant_size = 12;
+		rejected(push, sizeof(push), ERR_INVALID_DATA);
+		device.compute_list.validation.pipeline_push_constant_size = sizeof(push);
+#endif
+		CHECK_FALSE(device.qualification_recording);
+		const auto ordinary = device._record_source_dispatch(identity, list, 1, 2, 3, push, sizeof(push));
+		CHECK(ordinary.error == OK);
+		CHECK(ordinary.state == State::Appended);
+		CHECK(same_original_operation_identity(ordinary.operation, identity));
+		CHECK(device.draw_graph.contains_record(ordinary.handle));
+		CHECK(device.compute_list.state.push_constant_size == sizeof(push));
+		CHECK(memcmp(device.compute_list.state.push_constant_data, push, sizeof(push)) == 0);
+		CHECK(device.compute_list.state.sets[0].bound);
+		CHECK_FALSE(device.qualification_recording);
+		// Existing qualification context remains distinct; this is a fake-owner
+		// control, not a production admission grant or a new flag setter API.
+		device.qualification_recording = true;
+		owned_pipeline->qualification_return = &physical;
+		owned_shader->qualification_return = &physical;
+		owned_set->qualification_return = &physical;
+		device.compute_list_bind_uniform_set(list, set_rid, 0);
+		const auto qualified = device._record_source_dispatch(identity, list, 1, 2, 3, push, sizeof(push));
+		device.qualification_recording = false;
+		CHECK(qualified.error == OK);
+		CHECK(qualified.state == State::Appended);
+		CHECK(device.draw_graph.contains_record(qualified.handle));
+		CHECK(ordinary.handle.graph_instance == qualified.handle.graph_instance);
+		CHECK(ordinary.handle.graph_frame == qualified.handle.graph_frame);
+		CHECK(ordinary.handle.index == qualified.handle.index);
+		CHECK(ordinary.handle.offset < qualified.handle.offset);
+		device.compute_list_end();
+		CHECK(device.draw_graph.contains_record(ordinary.handle));
+		CHECK(device.draw_graph.contains_record(qualified.handle));
+		RDG::CommandBufferPool pool;
+		RDD::CommandBufferID primary(60);
+		device.draw_graph.end(true, false, primary, pool);
+		CHECK(driver.push_calls == 2);
+		CHECK(driver.prepare_calls == 2);
+		CHECK(driver.set_calls == 2);
+		CHECK(driver.dispatch_calls == 2);
+		CHECK(memcmp(driver.pushed_words, push, sizeof(push)) == 0);
+		device.uniform_set_owner.free(set_rid);
+		device.compute_pipeline_owner.free(pipeline_rid);
+		device.shader_owner.free(shader_rid);
+		device.driver = nullptr;
+	}
+
 	static void checked_indirect_draw() {
 		using namespace GDExtensionDeviceExit;
 		using State = CheckedRecordAppend::State;
@@ -615,4 +776,8 @@ TEST_CASE("[RecordSource] original ticket readback rejects replaced request and 
 
 TEST_CASE("[RecordSource] original indirect draw retains exact identity native prefix and transfer") {
 	TestRecordSourceAccess::checked_indirect_draw();
+}
+
+TEST_CASE("[RecordSource] ordinary push and backend descriptor preparation preserve original dispatch") {
+	TestRecordSourceAccess::normal_push_dispatch();
 }

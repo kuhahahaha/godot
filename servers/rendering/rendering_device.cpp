@@ -7770,10 +7770,10 @@ void RenderingDevice::compute_list_set_push_constant(ComputeListID p_list, const
 }
 
 void RenderingDevice::compute_list_dispatch(ComputeListID list, uint32_t x, uint32_t y, uint32_t z) {
-	_qualification_dispatch(list, x, y, z);
+	_compute_list_dispatch_recorded(list, x, y, z);
 }
 
-RDG::RecordHandle RenderingDevice::_qualification_dispatch(ComputeListID p_list, uint32_t p_x_groups, uint32_t p_y_groups, uint32_t p_z_groups) {
+RDG::RecordHandle RenderingDevice::_compute_list_dispatch_recorded(ComputeListID p_list, uint32_t p_x_groups, uint32_t p_y_groups, uint32_t p_z_groups) {
 	ERR_RENDER_THREAD_GUARD_V(RDG::RecordHandle());
 	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RDG::RecordHandle(), "Recording is suspended after a frame fence wait failure.");
 
@@ -12521,7 +12521,7 @@ GDExtensionDeviceExit::CheckedRecordAppend RenderingDevice::_record_source_dispa
 		return observed;
 	}
 	auto *pipeline = compute_pipeline_owner.get_or_null(compute_list.state.pipeline);
-	if (!pipeline || !pipeline->driver_id || !pipeline->shader_driver_id || !shader_owner.owns(pipeline->shader) || pipeline->set_formats.size() != compute_list.state.set_count) {
+	if (!pipeline || !pipeline->driver_id || !pipeline->shader_driver_id || !shader_owner.owns(pipeline->shader) || compute_list.state.set_count > MAX_UNIFORM_SETS || pipeline->set_formats.size() != compute_list.state.set_count) {
 		observed.error = ERR_INVALID_DATA;
 		return observed;
 	}
@@ -12530,9 +12530,20 @@ GDExtensionDeviceExit::CheckedRecordAppend RenderingDevice::_record_source_dispa
 		observed.error = ERR_INVALID_DATA;
 		return observed;
 	}
-	// Qualification supplies the push bytes in this checked call. Its dispatch
-	// prepares descriptors and synchronization through the backend-specific path.
-	if (push_size != pipeline->push_constant_size || (push_size && (!qualification_recording || !push_data || push_size > MAX_PUSH_CONSTANT_SIZE)) || (!qualification_recording && !driver->api_trait_get(RDD::API_TRAIT_HONORS_PIPELINE_BARRIERS))) {
+	// The identity joins the original operation; it never authorizes another
+	// family's resources. Preserve the existing qualification ownership boundary.
+	if ((pipeline->qualification_return && (!qualification_recording || pipeline->qualification_return->use_closed.load())) ||
+			(shader->qualification_return && (!qualification_recording || shader->qualification_return->use_closed.load()))) {
+		observed.error = ERR_UNAUTHORIZED;
+		return observed;
+	}
+#ifdef DEBUG_ENABLED
+	if (!compute_list.validation.pipeline_active || compute_list.validation.pipeline_push_constant_size != pipeline->push_constant_size) {
+		observed.error = ERR_INVALID_DATA;
+		return observed;
+	}
+#endif
+	if (push_size != pipeline->push_constant_size || (push_size && (!push_data || push_size > MAX_PUSH_CONSTANT_SIZE))) {
 		observed.error = ERR_UNAVAILABLE;
 		return observed;
 	}
@@ -12542,15 +12553,22 @@ GDExtensionDeviceExit::CheckedRecordAppend RenderingDevice::_record_source_dispa
 			continue;
 		}
 		auto *set = uniform_set_owner.get_or_null(binding.uniform_set);
+		if (set && !qualification_recording && (set->qualification_return || !set->qualification_dependencies.is_empty())) {
+			observed.error = ERR_UNAUTHORIZED;
+			return observed;
+		}
 		if (!set || !set->driver_id || set->driver_id != binding.uniform_set_driver_id || set->shader_set != i || set->format != pipeline->set_formats[i] || pipeline->set_formats[i] != binding.pipeline_expected_format || binding.pipeline_expected_format != binding.uniform_set_format || !set->shared_textures_to_update.is_empty() || !set->pending_clear_textures.is_empty()) {
 			observed.error = ERR_UNAVAILABLE;
 			return observed;
 		}
 	}
+	// Every checked/public dispatch refusal is above the first push effect.
+	// The shared mechanical tail has no failing return after descriptor prepare;
+	// empty shared/clear lists above also exclude hidden preparation work.
 	if (push_size) {
 		compute_list_set_push_constant(list, push_data, push_size);
 	}
-	observed.handle = _qualification_dispatch(list, x, y, z);
+	observed.handle = _compute_list_dispatch_recorded(list, x, y, z);
 	observed.state = observed.handle.is_valid() ? Observation::State::Appended : Observation::State::Unknown;
 	observed.error = observed.handle.is_valid() ? OK : FAILED;
 	return observed;

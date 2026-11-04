@@ -294,7 +294,7 @@ private:
 	GDExtensionDeviceExit::CheckedRecordAppend _record_source_buffer_copy(const GDExtensionDeviceExit::OriginalOperationIdentity &, RID, RID, uint32_t, uint32_t, uint32_t);
 	struct SourceDrawAppendResult;
 	SourceDrawAppendResult _record_source_draw_indirect(const GDExtensionDeviceExit::OriginalOperationIdentity &, DrawListID, bool, RID, uint32_t, uint32_t, uint32_t);
-	RDG::RecordHandle _qualification_dispatch(ComputeListID p_list, uint32_t p_x, uint32_t p_y, uint32_t p_z);
+	RDG::RecordHandle _compute_list_dispatch_recorded(ComputeListID p_list, uint32_t p_x, uint32_t p_y, uint32_t p_z);
 	Error _qualification_maintenance();
 	bool _qualification_resource_busy(RID p_rid);
 	Error _qualification_pin_resources(GDExtensionDeviceExit::QualificationTicket *p_ticket, const LocalVector<RID> &p_resources);

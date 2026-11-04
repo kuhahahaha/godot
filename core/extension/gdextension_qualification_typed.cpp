@@ -655,11 +655,11 @@ Error Registry::qualification_typed_dependencies(QualificationBridge *b, Renderi
 	const uint64_t phase_sets[2][2] = { { q.capture_set, q.capture_set1 }, { q.body_set, q.body_set1 } };
 	const uint64_t pipelines[2] = { q.capture_pipeline, q.body_pipeline };
 	const uint32_t counts[2] = { q.capture_set_count, q.body_set_count };
-	for (uint32_t phase = 0; phase < 2; ++phase) {
-		for (uint32_t index = 0; index < counts[phase]; ++index) {
+	for (uint32_t record_phase = 0; record_phase < 2; ++record_phase) {
+		for (uint32_t index = 0; index < counts[record_phase]; ++index) {
 			QualificationBridge::UniformSet *c = nullptr;
 			for (auto *candidate : b->sets) {
-				if (candidate && candidate->rid == phase_sets[phase][index] && !candidate->acknowledged) {
+				if (candidate && candidate->rid == phase_sets[record_phase][index] && !candidate->acknowledged) {
 					c = candidate;
 					break;
 				}
@@ -670,15 +670,15 @@ Error Registry::qualification_typed_dependencies(QualificationBridge *b, Renderi
 				}
 				continue;
 			}
-			const uint8_t *expected = phase == 0 ? q.capture_map_digest : q.body_map_digest;
+			const uint8_t *expected = record_phase == 0 ? q.capture_map_digest : q.body_map_digest;
 			auto *set = rd->uniform_set_owner.get_or_null(RID::from_uint64(c->rid));
-			auto *pipeline = rd->compute_pipeline_owner.get_or_null(RID::from_uint64(pipelines[phase]));
+			auto *pipeline = rd->compute_pipeline_owner.get_or_null(RID::from_uint64(pipelines[record_phase]));
 			if (!set || set->qualification_return != &c->physical || !pipeline || pipeline->shader.get_id() != c->origin.shader_rid || c->creating || c->retiring || c->source.session_serial != q.qualification_session_serial || c->source.generation != q.record_generation || c->origin.ticket.registry_instance != instance || c->origin.ticket.handle_serial != ticket->serial || c->origin.shader_set != index || memcmp(c->source.digest, expected, 32)) {
 				return ERR_UNAUTHORIZED;
 			}
 			bool unit = false;
 			for (auto *u : b->units) {
-				if (u && c->origin.unit.registry_instance == instance && u->serial == c->origin.unit.handle_serial && !u->creating && !u->retiring && !u->acknowledged && u->backing.unit.registry_instance == instance && u->backing.unit.handle_serial == u->serial && u->backing.state == 1 && u->backing.known_mask == 3 && !u->backing.possible_mask && u->backing.pipeline_rid == pipelines[phase] && u->backing.shader_rid == c->origin.shader_rid && u->backing.shader_serial == c->origin.shader_serial && pipeline->qualification_return == &u->pipeline) {
+				if (u && c->origin.unit.registry_instance == instance && u->serial == c->origin.unit.handle_serial && !u->creating && !u->retiring && !u->acknowledged && u->backing.unit.registry_instance == instance && u->backing.unit.handle_serial == u->serial && u->backing.state == 1 && u->backing.known_mask == 3 && !u->backing.possible_mask && u->backing.pipeline_rid == pipelines[record_phase] && u->backing.shader_rid == c->origin.shader_rid && u->backing.shader_serial == c->origin.shader_serial && pipeline->qualification_return == &u->pipeline) {
 					unit = true;
 					break;
 				}
