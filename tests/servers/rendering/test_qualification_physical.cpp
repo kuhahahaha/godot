@@ -114,8 +114,8 @@ public:
 				if (ticket && !ticket->acknowledged) {
 					// Abort cleanup is a CPU fixture completion control only.
 					{
-						MutexLock registry_lock(registry->mutex);
 						MutexLock rd_lock(device._thread_safe_);
+						MutexLock registry_lock(registry->mutex);
 						device._qualification_unpin_resources(ticket);
 					}
 					ticket->physically_retired.store(true);
@@ -177,8 +177,8 @@ public:
 					LocalVector<RID> resources;
 					resources.push_back(RID::from_uint64(backing.rid));
 					{
-						MutexLock registry_lock(registry->mutex);
 						MutexLock rd_lock(device._thread_safe_);
+						MutexLock registry_lock(registry->mutex);
 						REQUIRE(device._qualification_pin_resources(retained_ticket, resources) == OK);
 					}
 					const GDExtensionStorageRetireRequestV1 request{ { 1, 16, 0 }, backing.backing, backing.rid, backing.backing_serial, 0, part, generation, origin.create_attempt + 1, 0 };
@@ -188,8 +188,8 @@ public:
 					CHECK_FALSE(child->physical.enqueued);
 					CHECK(registry->qualification_storage_retire_release(ref, retired).native_error == ERR_BUSY);
 					{
-						MutexLock registry_lock(registry->mutex);
 						MutexLock rd_lock(device._thread_safe_);
+						MutexLock registry_lock(registry->mutex);
 						device._qualification_unpin_resources(retained_ticket);
 					}
 					retained_ticket->physically_retired.store(true);
@@ -1806,7 +1806,7 @@ public:
 				resources.push_back(rid);
 			}
 			Error pinned;
-			auto reject = [&]() {Error status;{MutexLock registry_lock(registry.mutex);MutexLock rd_lock(device._thread_safe_);status=device._qualification_pin_resources(&ticket,resources);}CHECK(status==ERR_UNAUTHORIZED);CHECK(ticket.resource_pins.is_empty());CHECK(ticket.physical_uses.is_empty());CHECK(cell->uses.is_empty());CHECK(ticket.physically_retired.load()); };
+			auto reject = [&]() {Error status;{MutexLock rd_lock(device._thread_safe_);MutexLock registry_lock(registry.mutex);status=device._qualification_pin_resources(&ticket,resources);}CHECK(status==ERR_UNAUTHORIZED);CHECK(ticket.resource_pins.is_empty());CHECK(ticket.physical_uses.is_empty());CHECK(cell->uses.is_empty());CHECK(ticket.physically_retired.load()); };
 			QualificationPhysicalReturn impostor;
 			impostor.bridge = bridge->serial;
 			impostor.child = 31;
@@ -1834,8 +1834,8 @@ public:
 			reject();
 			cell->use_closed = false;
 			{
-				MutexLock registry_lock(registry.mutex);
 				MutexLock rd_lock(device._thread_safe_);
+				MutexLock registry_lock(registry.mutex);
 				pinned = device._qualification_pin_resources(&ticket, resources);
 			}
 			CHECK_MESSAGE(pinned == OK, "An original sampler child must be admitted once even when repeated in a batch.");
@@ -1847,8 +1847,8 @@ public:
 				cell->use_closed = true;
 				Error retry;
 				{
-					MutexLock registry_lock(registry.mutex);
 					MutexLock rd_lock(device._thread_safe_);
+					MutexLock registry_lock(registry.mutex);
 					retry = device._qualification_pin_resources(&ticket, resources);
 				}
 				CHECK(retry == ERR_UNAUTHORIZED);
@@ -1860,8 +1860,8 @@ public:
 				CHECK(device.sampler_owner.owns(rid));
 				CHECK_FALSE(cell->enqueued);
 				{
-					MutexLock registry_lock(registry.mutex);
 					MutexLock rd_lock(device._thread_safe_);
+					MutexLock registry_lock(registry.mutex);
 					device._qualification_unpin_resources(&ticket);
 				}
 				CHECK(ticket.resource_pins.is_empty());
@@ -1968,16 +1968,16 @@ public:
 		auto &registry = GDExtensionDeviceExit::Registry::get_singleton();
 		Error pinned;
 		{
-			MutexLock registry_lock(registry.mutex);
 			MutexLock rd_lock(device._thread_safe_);
+			MutexLock registry_lock(registry.mutex);
 			pinned = device._qualification_pin_resources(&ticket, resources);
 		}
 		CHECK(pinned == ERR_UNAUTHORIZED);
 		CHECK(ticket.resource_pins.is_empty());
 		CHECK(ticket.physical_uses.is_empty());
 		if (pinned == OK) {
-			MutexLock registry_lock(registry.mutex);
 			MutexLock rd_lock(device._thread_safe_);
+			MutexLock registry_lock(registry.mutex);
 			device._qualification_unpin_resources(&ticket);
 		}
 		device.free_rid(rid);
@@ -2227,7 +2227,7 @@ public:
 			LocalVector<RID> resources;
 			resources.push_back(rid);
 			Error pinned;
-			auto reject = [&]() {Error status;{MutexLock registry_lock(registry.mutex);MutexLock rd_lock(device._thread_safe_);status=device._qualification_pin_resources(&ticket,resources);}CHECK(status==ERR_UNAUTHORIZED);CHECK(ticket.resource_pins.is_empty());CHECK(ticket.physical_uses.is_empty());CHECK(cell.uses.is_empty());CHECK(ticket.physically_retired.load()); };
+			auto reject = [&]() {Error status;{MutexLock rd_lock(device._thread_safe_);MutexLock registry_lock(registry.mutex);status=device._qualification_pin_resources(&ticket,resources);}CHECK(status==ERR_UNAUTHORIZED);CHECK(ticket.resource_pins.is_empty());CHECK(ticket.physical_uses.is_empty());CHECK(cell.uses.is_empty());CHECK(ticket.physically_retired.load()); };
 			QualificationPhysicalReturn impostor;
 			impostor.bridge = bridge->serial;
 			impostor.child = child->serial;
@@ -2266,14 +2266,14 @@ public:
 				repeated_resources.push_back(rid);
 			}
 			{
-				MutexLock registry_lock(registry.mutex);
 				MutexLock rd_lock(device._thread_safe_);
+				MutexLock registry_lock(registry.mutex);
 				pinned = device._qualification_pin_resources(&ticket, repeated_resources);
 			}
 			CHECK(pinned == OK);
 			if (pinned != OK) {
-				MutexLock registry_lock(registry.mutex);
 				MutexLock rd_lock(device._thread_safe_);
+				MutexLock registry_lock(registry.mutex);
 				pinned = device._qualification_pin_resources(&ticket, resources);
 			}
 			if (pinned == OK) {
@@ -2284,8 +2284,8 @@ public:
 				cell.use_closed = true;
 				Error repeated;
 				{
-					MutexLock registry_lock(registry.mutex);
 					MutexLock rd_lock(device._thread_safe_);
+					MutexLock registry_lock(registry.mutex);
 					repeated = device._qualification_pin_resources(&ticket, resources);
 				}
 				CHECK(repeated == ERR_UNAUTHORIZED);
@@ -2299,8 +2299,8 @@ public:
 				CHECK(device.texture_owner.owns(rid));
 				CHECK_FALSE(cell.enqueued);
 				{
-					MutexLock registry_lock(registry.mutex);
 					MutexLock rd_lock(device._thread_safe_);
+					MutexLock registry_lock(registry.mutex);
 					device._qualification_unpin_resources(&ticket);
 				}
 				CHECK(ticket.resource_pins.is_empty());
@@ -2348,14 +2348,14 @@ public:
 		auto &registry = Registry::get_singleton();
 		Error pinned;
 		{
-			MutexLock registry_lock(registry.mutex);
 			MutexLock rd_lock(device._thread_safe_);
+			MutexLock registry_lock(registry.mutex);
 			pinned = device._qualification_pin_resources(&ticket, resources);
 		}
 		CHECK(pinned == ERR_UNAUTHORIZED);
 		if (pinned == OK) {
-			MutexLock registry_lock(registry.mutex);
 			MutexLock rd_lock(device._thread_safe_);
+			MutexLock registry_lock(registry.mutex);
 			device._qualification_unpin_resources(&ticket);
 			cell.uses.clear();
 			ticket.physical_uses.clear();
@@ -2389,14 +2389,14 @@ public:
 		auto &registry = Registry::get_singleton();
 		Error pinned;
 		{
-			MutexLock registry_lock(registry.mutex);
 			MutexLock rd_lock(device._thread_safe_);
+			MutexLock registry_lock(registry.mutex);
 			pinned = device._qualification_pin_resources(&ticket, resources);
 		}
 		CHECK(pinned == ERR_UNAUTHORIZED);
 		if (pinned == OK) {
-			MutexLock registry_lock(registry.mutex);
 			MutexLock rd_lock(device._thread_safe_);
+			MutexLock registry_lock(registry.mutex);
 			device._qualification_unpin_resources(&ticket);
 		}
 		CHECK(ticket.resource_pins.is_empty());
@@ -2719,8 +2719,8 @@ public:
 		resources.push_back(rid);
 		Error result;
 		{
-			MutexLock registry_lock(registry->mutex);
 			MutexLock rd_lock(device._thread_safe_);
+			MutexLock registry_lock(registry->mutex);
 			result = device._qualification_pin_resources(&ticket, resources);
 		}
 		CHECK(result == ERR_UNAUTHORIZED);
