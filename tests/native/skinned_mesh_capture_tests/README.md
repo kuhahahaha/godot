@@ -13,9 +13,8 @@ artificial test consumer is introduced. Both module-on and module-off discovery
 must exclude it. Actual transport tests remain with the optional native module.
 
 These documents previously lived in `tests/native/p01_probe/`. The immutable
-payload schema and public `--p01-*` wire identifiers are unchanged. Old-to-new
-mapping and original files can be retrieved from the fixed historical commit
-`6a101f46f645d90d06936f4dab0d6f328870ed9e` under
-`work/p01-native-package/native-test-structure/`. They are local historical
-evidence rather than current checkout dependencies; their original paths and
-hashes remain unchanged.
+payload schema and public `--p01-*` wire identifiers are unchanged. Retrieve the
+original files from the parent of migration commit
+`60193dc953d18a92cceb11f37912db4d11b56dd3` at `tests/native/p01_probe/`.
+Historical receipts retain their original paths and hashes; their local work
+packages are separate evidence, not current checkout dependencies.
