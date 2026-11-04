@@ -243,6 +243,9 @@ jobs:
           name: ${{ matrix.cache-name }}
 
       - name: Unit tests
+        env:
+          GODOT_TEST_PHYSICS_3D_BACKEND: 'GodotPhysics3D'
+          GODOT_TEST_PHYSICS_3D_THREADED: '0'
         run: |
           ${{ matrix.bin }} --version
           ${{ matrix.bin }} --help
