@@ -31,6 +31,7 @@
 #include "core/extension/gdextension_production_request.h"
 
 #include "core/extension/gdextension_production_registration.h"
+#include "core/os/os.h"
 #include "core/os/thread.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_default.h"
@@ -79,10 +80,32 @@ struct RdUnlock {
 bool range(uint64_t offset, uint64_t bytes, uint64_t extent) {
 	return offset <= extent && bytes <= extent - offset;
 }
+bool before_service_deadline(const GDExtensionProductionServiceBudgetV1 &budget) {
+	return budget.deadline_micros && OS::get_singleton() && OS::get_singleton()->get_ticks_usec() < budget.deadline_micros;
+}
+bool service_budget_active(const GDExtensionProductionServiceBudgetV1 &budget) {
+	return budget.controls && budget.receipts && budget.passes && before_service_deadline(budget);
+}
+bool same_service_budget(const GDExtensionProductionServiceBudgetV1 &a, const GDExtensionProductionServiceBudgetV1 &b) {
+	return a.deadline_micros == b.deadline_micros && a.controls == b.controls && a.receipts == b.receipts && a.passes == b.passes;
+}
+bool retainable_native_source(const RDD::NativeCallFact &s) {
+	return s.serial && s.queue_index && s.completion_serial && s.completion != RDD::CompletionCapability::Disabled && !s.presentation_only;
+}
+bool same_native_source(const RDD::NativeCallFact &a, const RDD::NativeCallFact &b) {
+	return a.serial == b.serial && a.issue == b.issue && a.error == b.error && a.native_code == b.native_code && a.completion == b.completion && a.completion_serial == b.completion_serial && a.queue_index == b.queue_index && a.present == b.present && a.presentation_only == b.presentation_only && a.source_owner_returned == b.source_owner_returned && a.frame_observer_owned == b.frame_observer_owned;
+}
+bool same_native_observation(const NativeSourceObservation &a, const NativeSourceObservation &b) {
+	return a.state == b.state && a.error == b.error && a.native_code == b.native_code && a.completion_native_code == b.completion_native_code && a.resolved_issue == b.resolved_issue && a.retention_error == b.retention_error && a.completion_error == b.completion_error;
+}
 } //namespace
 Error Registry::production_layout(const GDExtensionProductionCapacityV1 &c, GDExtensionProductionMetadataQuoteV1 &out, uint32_t current_commands, uint32_t workers) {
 	if (!abi(c.abi) || !c.requests || !c.suboperations || !c.resources || c.requests > c.suboperations || c.requests > c.resources || c.resource_uses < c.resources || c.graph_memberships < c.suboperations || c.native_memberships < c.suboperations || c.return_cells < c.resources || c.readbacks > c.suboperations) {
 		return ERR_INVALID_PARAMETER;
+	}
+	// Report counters and the paged graph/native fact index use uint32_t.
+	if (uint64_t(c.graph_memberships) + c.native_memberships + c.readbacks + c.return_cells + 2 > UINT32_MAX) {
+		return ERR_PARAMETER_RANGE_ERROR;
 	}
 	// Each reserved request owns its command slice. Its pre-existing RD prefix
 	// cannot be shared with another request, even when both observe the same
@@ -390,7 +413,7 @@ Error Registry::production_request_locked(GDExtensionProductionRequestRefV1 ref,
 			if (e != OK) {
 				return e;
 			}
-			if (r.attachment != a || (admit && (r.cancelled || r.control.state != ProductionControlState::OWNER_CONSUMED))) {
+			if (r.attachment != a || (admit && (r.cancelled || r.release_started || r.control.state != ProductionControlState::OWNER_CONSUMED))) {
 				return ERR_BUSY;
 			}
 			out = &r;
@@ -846,15 +869,286 @@ GDExtensionDeviceSessionResultV1 Registry::production_observe(GDExtensionProduct
 	return result(OK);
 }
 void Registry::production_report_locked(const ProductionRequest &r, GDExtensionProductionReportV1 &report) const {
-	// A control return reports maintenance, never native completion or ACK.
 	report = {};
 	report.abi = ABI;
 	report.operation = r.operation;
 	report.revision = r.revision;
+	// Recording/segment/ACK frontiers remain owned by the original record window.
 	report.recorded_end = r.operation.canonical_begin;
 	report.cancelled = r.cancelled;
-	report.possible_obligations = r.effects_pending ? 1 : 0;
-	report.cause = result(r.effects_pending ? ERR_BUSY : OK);
+	report.possible_obligations = uint32_t(r.effects_pending) + uint32_t(r.source_device_lost);
+	if (r.graph_count > r.capacity.graph_memberships || r.native_count > r.capacity.native_memberships || uint64_t(r.graph_count) + r.native_count > UINT32_MAX) {
+		report.cause = result(ERR_INVALID_DATA, 16);
+		return;
+	}
+	report.fact_count = r.graph_count + r.native_count;
+	Error cause = OK;
+	for (uint32_t i = 0; i < r.graph_count; ++i) {
+		if (!r.graphs || r.graphs[i].request != &r) {
+			report.cause = result(ERR_INVALID_DATA, 16);
+			return;
+		}
+		report.possible_obligations += r.graphs[i].pending;
+	}
+	for (uint32_t i = 0; i < r.native_count; ++i) {
+		const ProductionNativeCell *owner = nullptr;
+		const Error error = production_native_owner_locked(r, i, owner);
+		if (error != OK) {
+			report.cause = result(error, 16);
+			return;
+		}
+		if (r.natives[i].owner_index != i) {
+			continue;
+		}
+		const bool complete = owner->observation.state == NativeSourceObservation::State::Complete;
+		report.known_obligations += owner->member.source.issue == RDD::IssueFact::KnownAccepted || complete;
+		report.possible_obligations += owner->member.source.issue == RDD::IssueFact::IssuedUnknown && !complete;
+		report.complete_obligations += complete;
+		if (cause == OK) {
+			cause = owner->member.source.error != OK ? owner->member.source.error : owner->observation.completion_error != OK ? owner->observation.completion_error
+					: owner->member.retention_error != OK																	  ? owner->member.retention_error
+																															  : owner->release_error;
+		}
+	}
+	for (uint32_t i = 0; i < r.capacity.return_cells; ++i) {
+		report.physical_returns_pending += r.returns[i].pending;
+	}
+	for (uint32_t i = 0; i < r.readback_count; ++i) {
+		const auto &readback = r.readbacks[i];
+		if (readback.source.issued) {
+			report.possible_obligations += !readback.source.delivered;
+			if (readback.declaration.resource_slot < r.resource_count) {
+				const auto &resource = r.resources[readback.declaration.resource_slot];
+				report.ready_readbacks += resource.imported && same_request_readback_complete(readback.source, r.serial, resource.backing_serial, readback.declaration.byte_offset, readback.declaration.byte_size);
+			}
+		}
+	}
+	if (cause == OK && r.source_device_lost) {
+		cause = ERR_UNAVAILABLE;
+	}
+	if (cause == OK && (report.possible_obligations || report.physical_returns_pending || report.known_obligations != report.complete_obligations)) {
+		cause = ERR_BUSY;
+	}
+	report.cause = result(cause);
+}
+Error Registry::production_native_owner_locked(const ProductionRequest &r, uint32_t index, const ProductionNativeCell *&out) const {
+	out = nullptr;
+	if (r.native_count > r.capacity.native_memberships || r.graph_count > r.capacity.graph_memberships || index >= r.native_count || !r.natives) {
+		return ERR_INVALID_DATA;
+	}
+	const auto &cell = r.natives[index];
+	if (cell.request != &r || cell.owner_index > index || cell.owner_index >= r.native_count) {
+		return ERR_INVALID_DATA;
+	}
+	const auto &owner = r.natives[cell.owner_index];
+	if (owner.request != &r || owner.owner_index != cell.owner_index || !same_native_source(cell.member.source, owner.member.source) ||
+			(cell.owner_index != index && (cell.member.retained || cell.member.owner_released))) {
+		return ERR_INVALID_DATA;
+	}
+	if (cell.fact.membership_parent != UINT32_MAX && (cell.fact.membership_parent >= r.graph_count || !r.graphs || r.graphs[cell.fact.membership_parent].request != &r)) {
+		return ERR_INVALID_DATA;
+	}
+	out = &owner;
+	return OK;
+}
+
+Error Registry::production_native_fact_locked(const ProductionRequest &r, uint32_t index, GDExtensionProductionFactV1 &out) const {
+	const ProductionNativeCell *owner = nullptr;
+	Error error = production_native_owner_locked(r, index, owner);
+	if (error != OK) {
+		return error;
+	}
+	const auto &member = r.natives[index].member;
+	out = r.natives[index].fact;
+	out.native_serial = member.source.serial;
+	out.completion_serial = member.source.completion_serial;
+	out.backend_queue = member.source.queue_index;
+	out.issue = uint32_t(member.source.issue); // Immutable original issue classification.
+	out.issue_error = member.source.error;
+	out.issue_native_code = member.source.native_code;
+	out.retention_error = owner->member.retention_error;
+	out.completion_native_code = owner->observation.completion_native_code;
+	// Completion failure and issue failure have separate meanings. In particular
+	// a quiet poll never turns the original issue error into a completion error.
+	out.completion = member.source.issue == RDD::IssueFact::NotIssued ? 0 : owner->observation.state == NativeSourceObservation::State::Complete ? 2
+			: owner->observation.completion_error != OK																							 ? 3
+			: owner->observation.state == NativeSourceObservation::State::Unknown || owner->member.retention_error != OK						 ? 4
+																																				 : 1;
+	return OK;
+}
+
+Error Registry::production_poll_native_locked(ProductionRequest &r, RDD &driver, const GDExtensionProductionServiceBudgetV1 &budget, bool live, ProductionServiceUsage &used) {
+	used = {};
+	// These are caller reductions on already retained Core maintenance, not B's
+	// missing installed owner-turn grant. Zero query does not even retain a ref.
+	if (!service_budget_active(budget) || !r.native_count) {
+		return OK;
+	}
+	if (r.native_count > r.capacity.native_memberships || !r.natives) {
+		return ERR_INVALID_DATA;
+	}
+	if (r.revision == UINT64_MAX) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	used.controls = 1;
+	if (!live) {
+		if (!r.source_device_lost) {
+			r.source_device_lost = true;
+			++r.revision;
+		}
+		return ERR_UNAVAILABLE;
+	}
+	if (r.source_device_lost) {
+		return ERR_UNAVAILABLE;
+	}
+	const auto origin = NativeSourceOrigin::production();
+	// Fixed Core ceiling; caller values only reduce this maintenance turn.
+	const uint32_t visits = MIN(MIN(budget.passes, r.native_count), 64u);
+	const uint32_t receipts = MIN(budget.receipts, 128u);
+	while (used.passes < visits && used.receipts < receipts && before_service_deadline(budget)) {
+		if (r.revision == UINT64_MAX) {
+			return ERR_PARAMETER_RANGE_ERROR;
+		}
+		const uint32_t index = r.observe_cursor % r.native_count;
+		const ProductionNativeCell *owner = nullptr;
+		Error error = production_native_owner_locked(r, index, owner);
+		if (error != OK) {
+			return error;
+		}
+		++used.passes;
+		r.observe_cursor = (index + 1) % r.native_count;
+		auto &cell = r.natives[index];
+		if (cell.owner_index != index || cell.member.owner_released || cell.member.source.issue == RDD::IssueFact::NotIssued || cell.observation.state == NativeSourceObservation::State::Complete) {
+			continue;
+		}
+		const auto old = cell.observation;
+		const bool retained_before = cell.member.retained;
+		const Error retention_before = cell.member.retention_error;
+		const uint64_t request_serial = r.serial, control_serial = r.control.serial;
+		auto *attachment = r.attachment;
+		auto local_member = cell.member;
+		auto local_observation = cell.observation;
+		// EXECUTING prevents close/release/reuse of this fixed control and its
+		// request. The existing entity edge and held RD lock retain the device.
+		// Driver poll can synchronously notify this Registry of device loss:
+		// never call it while holding the non-recursive Registry mutex.
+		struct UnlockRegistry {
+			BinaryMutex &mutex;
+			explicit UnlockRegistry(BinaryMutex &p_mutex) : mutex(p_mutex) {
+				mutex.unlock();
+			}
+			~UnlockRegistry() { mutex.lock(); }
+		};
+		auto validate_return = [&]() {
+			CRASH_COND(r.serial != request_serial || r.attachment != attachment ||
+					r.control.serial != control_serial ||
+					r.control.state != ProductionControlState::EXECUTING ||
+					cell.request != &r || cell.owner_index != index ||
+					!same_native_source(cell.member.source, local_member.source));
+		};
+		if (!local_member.retained && before_service_deadline(budget)) {
+			const bool driver_called = retainable_native_source(local_member.source);
+			Error retained;
+			{
+				UnlockRegistry unlock(mutex);
+				retained = retain_native_source(driver, local_member);
+			}
+			validate_return();
+			used.receipts += driver_called ? 1 : 0;
+			if (retained != OK) {
+				local_observation.retention_error = retained;
+				local_observation.error =
+						retained == ERR_BUSY || local_member.source.error == OK
+						? retained
+						: local_member.source.error;
+				local_observation.native_code = local_member.source.error == OK
+						? 0
+						: local_member.source.native_code;
+				local_observation.state = retained == ERR_BUSY
+						? NativeSourceObservation::State::Pending
+						: NativeSourceObservation::State::Unknown;
+			}
+		}
+		if (device_records[attachment->device].live && local_member.retained &&
+				used.receipts < receipts && before_service_deadline(budget)) {
+			++used.receipts;
+			{
+				UnlockRegistry unlock(mutex);
+				// Already retained: exactly one original poll, no hidden retain.
+				local_observation = poll_native_source(driver, local_member, origin);
+			}
+			validate_return();
+		}
+		const bool lost = !device_records[attachment->device].live;
+		if (lost) {
+			r.source_device_lost = true;
+			local_observation.state = NativeSourceObservation::State::Unknown;
+			if (local_observation.error == OK) {
+				local_observation.error = ERR_UNAVAILABLE;
+			}
+		}
+		// Account any actual retained reference even if its own callback marked
+		// the device lost. No identity check or loss may silently drop that ref.
+		cell.member = local_member;
+		cell.observation = local_observation;
+		if (lost || retained_before != cell.member.retained ||
+				retention_before != cell.member.retention_error ||
+				!same_native_observation(old, cell.observation)) {
+			++r.revision;
+		}
+		if (lost) {
+			return ERR_UNAVAILABLE;
+		}
+	}
+	return OK;
+}
+
+GDExtensionDeviceSessionResultV1 Registry::production_facts(GDExtensionProductionRequestRefV1 ref, uint64_t revision, uint32_t first, GDExtensionProductionFactV1 *out, uint32_t capacity, uint32_t *written) {
+	if (!aligned(written) || (capacity && (!aligned(out) || uint64_t(capacity) * sizeof(*out) > SIZE_MAX || !separate(out, size_t(capacity) * sizeof(*out), written, sizeof(*written))))) {
+		return result(ERR_INVALID_PARAMETER, 2);
+	}
+	MutexLock lock(mutex);
+	ProductionRequest *r = nullptr;
+	RenderingDevice *rd = nullptr;
+	Error error = production_request_locked(ref, false, r, rd);
+	if (error != OK) {
+		return result(error, 16);
+	}
+	if (revision != r->revision) {
+		return result(ERR_DOES_NOT_EXIST, 16);
+	}
+	if (r->graph_count > r->capacity.graph_memberships || r->native_count > r->capacity.native_memberships || uint64_t(r->graph_count) + r->native_count > UINT32_MAX) {
+		return result(ERR_INVALID_DATA, 16);
+	}
+	const uint32_t total = r->graph_count + r->native_count;
+	if (first > total) {
+		return result(ERR_INVALID_PARAMETER, 2);
+	}
+	const uint32_t count = MIN(capacity, total - first);
+	// Prevalidate the entire requested page, so errors do not partially publish.
+	for (uint32_t i = first; i < first + count; ++i) {
+		if (i < r->graph_count) {
+			if (!r->graphs || r->graphs[i].request != r) {
+				return result(ERR_INVALID_DATA, 16);
+			}
+		} else {
+			const ProductionNativeCell *owner = nullptr;
+			error = production_native_owner_locked(*r, i - r->graph_count, owner);
+			if (error != OK) {
+				return result(error, 16);
+			}
+		}
+	}
+	for (uint32_t i = 0; i < count; ++i) {
+		const uint32_t index = first + i;
+		if (index < r->graph_count) {
+			out[i] = r->graphs[index].fact;
+		} else {
+			production_native_fact_locked(*r, index - r->graph_count, out[i]);
+		}
+	}
+	*written = count;
+	return result(OK);
 }
 
 GDExtensionDeviceSessionResultV1 Registry::production_cancel(GDExtensionProductionRequestRefV1 ref) {
@@ -894,37 +1188,130 @@ GDExtensionDeviceSessionResultV1 Registry::production_release(GDExtensionProduct
 	}
 	return production_release_locked(*r, rd, true);
 }
-GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionRequest &request, RenderingDevice *rd, bool reclaim) {
+GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionRequest &request, RenderingDevice *rd, bool reclaim, const GDExtensionProductionServiceBudgetV1 *budget, ProductionServiceUsage *usage) {
 	auto *r = &request;
-	Error e = OK;
-	if (r->effects_pending) {
+	if (usage) {
+		*usage = {};
+	}
+	if (r->effects_pending || r->source_device_lost) {
 		return result(ERR_BUSY, 16);
 	}
-	for (uint32_t i = 0; i < r->capacity.native_memberships; ++i) {
-		if (r->natives[i].member.retained && !r->natives[i].member.owner_released) {
+	if (r->graph_count > r->capacity.graph_memberships || r->native_count > r->capacity.native_memberships) {
+		return result(ERR_INVALID_DATA, 16);
+	}
+	for (uint32_t i = 0; i < r->graph_count; ++i) {
+		if (!r->graphs || r->graphs[i].request != r) {
+			return result(ERR_INVALID_DATA, 16);
+		}
+		if (r->graphs[i].pending) {
 			return result(ERR_BUSY, 16);
 		}
+	}
+	bool native_refs_pending = false, native_issued = false;
+	for (uint32_t i = 0; i < r->native_count; ++i) {
+		const ProductionNativeCell *owner = nullptr;
+		const Error error = production_native_owner_locked(*r, i, owner);
+		if (error != OK) {
+			return result(error, 16);
+		}
+		if (r->natives[i].owner_index != i) {
+			continue;
+		}
+		if (owner->member.source.issue == RDD::IssueFact::NotIssued) {
+			if (owner->member.retained || owner->member.owner_released) {
+				return result(ERR_INVALID_DATA, 16);
+			}
+			continue;
+		}
+		native_issued = true;
+		if (owner->observation.state != NativeSourceObservation::State::Complete || !owner->member.retained) {
+			return result(ERR_BUSY, 16);
+		}
+		native_refs_pending |= !owner->member.owner_released;
+	}
+	if (native_issued && (!rd || !r->attachment || !device_records[r->attachment->device].live)) {
+		return result(ERR_UNAVAILABLE, 16);
 	}
 	for (uint32_t i = 0; i < r->capacity.return_cells; ++i) {
 		if (r->returns[i].pending) {
 			return result(ERR_BUSY, 16);
 		}
 	}
+	for (uint32_t i = 0; i < r->readback_count; ++i) {
+		if (r->readbacks[i].source.issued && !r->readbacks[i].source.delivered) {
+			return result(ERR_BUSY, 16);
+		}
+	}
+	// Native observer references may only be dropped in the original owner's
+	// final-release phase. RT readiness neither releases them nor signs R01 ACK.
+	if (!reclaim && native_issued) {
+		return result(OK);
+	}
 	bool has_pins = false;
 	for (uint32_t i = 0; i < r->resource_count; ++i) {
 		has_pins |= r->resources[i].use_count != 0;
 	}
-	if (has_pins && (!rd || !rd->_thread_safe_.try_lock())) {
+	if ((has_pins || native_refs_pending) && (!rd || !rd->_thread_safe_.try_lock())) {
 		return result(ERR_BUSY, 16);
 	}
+	const bool locked = has_pins || native_refs_pending;
+	Error e = OK;
+	if (native_refs_pending) {
+		if (!rd->driver || !budget || !service_budget_active(*budget) || r->revision == UINT64_MAX) {
+			rd->_thread_safe_.unlock();
+			return result(r->revision == UINT64_MAX ? ERR_PARAMETER_RANGE_ERROR : ERR_BUSY, 16);
+		}
+		ProductionServiceUsage used = { 1, 0, 0 };
+		r->release_started = true;
+		const uint32_t visits = MIN(MIN(budget->passes, r->native_count), 64u);
+		const uint32_t receipts = MIN(budget->receipts, 128u);
+		while (used.passes < visits && used.receipts < receipts && before_service_deadline(*budget)) {
+			if (r->revision == UINT64_MAX) {
+				e = ERR_PARAMETER_RANGE_ERROR;
+				break;
+			}
+			const uint32_t index = r->release_cursor % r->native_count;
+			r->release_cursor = (index + 1) % r->native_count;
+			++used.passes;
+			auto &cell = r->natives[index];
+			if (cell.owner_index != index || !cell.member.retained || cell.member.owner_released) {
+				continue;
+			}
+			if (!before_service_deadline(*budget)) {
+				break;
+			}
+			++used.receipts; // Exactly one original driver reference-return attempt.
+			const Error returned = release_native_source(*rd->driver, cell.member);
+			if (cell.release_error != returned || returned == OK) {
+				++r->revision;
+			}
+			cell.release_error = returned;
+			if (e == OK && returned != OK) {
+				e = returned;
+			}
+		}
+		if (usage) {
+			*usage = used;
+		}
+		for (uint32_t i = 0; i < r->native_count; ++i) {
+			const auto &cell = r->natives[i];
+			if (cell.owner_index == i && cell.member.retained && !cell.member.owner_released && e == OK) {
+				e = ERR_BUSY;
+			}
+		}
+		if (e != OK) {
+			rd->_thread_safe_.unlock();
+			return result(e, 16);
+		}
+	}
 	e = production_unpin_resources_locked(*r);
-	if (has_pins) {
+	if (locked) {
 		rd->_thread_safe_.unlock();
 	}
 	if (e != OK) {
 		return result(e, 16);
 	}
-	// RT returns its result before the owner can reset/reuse this arena slot.
+	// RT metadata cleanup returns before its owner may reset the arena slot.
 	if (!reclaim) {
 		return result(OK);
 	}
@@ -1064,7 +1451,14 @@ static_assert(std::is_trivially_copyable_v<ProductionControlInput>);
 static_assert(std::is_trivially_copyable_v<ProductionControlOutput>);
 static_assert(std::is_trivially_copyable_v<ProductionControlCell>);
 
-Error Registry::production_control_accept(GDExtensionProductionRequestRefV1 ref, ProductionControlKind kind, uint64_t *out) {
+Error Registry::production_control_accept(GDExtensionProductionRequestRefV1 ref, ProductionControlKind kind, uint64_t *out, const GDExtensionProductionServiceBudgetV1 *budget) {
+	GDExtensionProductionServiceBudgetV1 limit = { ABI, 0, 0, 0, 0, 0 };
+	if (budget) {
+		if (!aligned(budget) || !abi(budget->abi) || budget->reserved) {
+			return ERR_INVALID_PARAMETER;
+		}
+		limit = *budget;
+	}
 	if (!aligned(out) || uint32_t(kind) > uint32_t(ProductionControlKind::RELEASE)) {
 		return ERR_INVALID_PARAMETER;
 	}
@@ -1078,7 +1472,7 @@ Error Registry::production_control_accept(GDExtensionProductionRequestRefV1 ref,
 	auto &cell = r->control;
 	if (cell.state != ProductionControlState::OWNER_CONSUMED) {
 		// A retry retrieves the same retained operation, never overwrites it.
-		if (cell.input.kind != kind) {
+		if (cell.input.kind != kind || !same_service_budget(cell.input.budget, limit)) {
 			return ERR_BUSY;
 		}
 		*out = cell.serial;
@@ -1090,7 +1484,7 @@ Error Registry::production_control_accept(GDExtensionProductionRequestRefV1 ref,
 	cell = {};
 	cell.serial = r->next_control_serial;
 	r->next_control_serial = cell.serial == UINT64_MAX ? 0 : cell.serial + 1;
-	cell.input = { r->serial, r->operation.record_generation, kind };
+	cell.input = { r->serial, r->operation.record_generation, kind, limit };
 	cell.state = ProductionControlState::PENDING;
 	// The existing request child retains this entire arena and original holder.
 	// Close and direct Release refuse this cell until its owner consumes return.
@@ -1135,9 +1529,20 @@ void Registry::production_control_execute_locked(ProductionRequest &request, Ren
 	cell.output.request_serial = request.serial;
 	cell.output.control_serial = cell.serial;
 	switch (cell.input.kind) {
-		case ProductionControlKind::OBSERVE:
-			cell.output.result = result(OK);
-			break;
+		case ProductionControlKind::OBSERVE: {
+			Error error = OK;
+			if (request.native_count && service_budget_active(cell.input.budget)) {
+				if (!rd || !rd->driver) {
+					error = ERR_UNAVAILABLE;
+				} else if (!rd->_thread_safe_.try_lock()) {
+					error = ERR_BUSY;
+				} else {
+					RdUnlock unlock{ rd->_thread_safe_ };
+					error = production_poll_native_locked(request, *rd->driver, cell.input.budget, device_records[request.attachment->device].live, cell.output.service_usage);
+				}
+			}
+			cell.output.result = result(error);
+		} break;
 		case ProductionControlKind::CANCEL:
 			cell.output.result = production_cancel_locked(request);
 			break;
@@ -1219,13 +1624,16 @@ Error Registry::production_control_consume(GDExtensionProductionRequestRefV1 ref
 	if (cell.state != ProductionControlState::RETURNED) {
 		return ERR_BUSY;
 	}
-	const auto retained = cell.output;
+	auto retained = cell.output;
 	if (cell.input.kind == ProductionControlKind::RELEASE && retained.result.native_error == OK) {
 		// The RT has returned. Reclaim is now owned by the original owner; it must
 		// succeed before the result is consumed or the request slot becomes reusable.
-		const auto released = production_release_locked(*r, rd, true);
+		const auto released = production_release_locked(*r, rd, true, &cell.input.budget, &retained.owner_usage);
+		retained.owner_return = released;
 		if (released.native_error != OK) {
-			return Error(released.native_error);
+			// This owner's turn has consumed its bounded credit. Keep all unreturned
+			// cells/edges and accept a fresh exact control turn for a later retry.
+			cell.state = ProductionControlState::OWNER_CONSUMED;
 		}
 	} else {
 		cell.state = ProductionControlState::OWNER_CONSUMED;

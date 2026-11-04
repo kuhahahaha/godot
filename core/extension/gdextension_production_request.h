@@ -35,6 +35,9 @@
 #include "core/extension/gdextension_record_source.h"
 
 class TestProductionResourceUseAccess;
+namespace TestProductionNativeObserve {
+struct Access;
+}
 namespace TestProductionRequest {
 struct Access;
 }
@@ -49,6 +52,7 @@ class ProductionResourceSlot {
 #ifdef TESTS_ENABLED
 	friend class ::TestProductionResourceUseAccess;
 	friend struct ::TestProductionRequest::Access;
+	friend struct ::TestProductionNativeObserve::Access;
 #endif
 	friend class ProductionRequest;
 	ProductionResourceSlot() = default;
@@ -68,6 +72,7 @@ class ProductionActionCell {
 	friend class Registry;
 #ifdef TESTS_ENABLED
 	friend struct ::TestProductionRequest::Access;
+	friend struct ::TestProductionNativeObserve::Access;
 #endif
 	ProductionActionCell() = default;
 	ProductionRequest *request = nullptr;
@@ -83,6 +88,7 @@ class ProductionUseCell {
 	friend class Registry;
 #ifdef TESTS_ENABLED
 	friend struct ::TestProductionRequest::Access;
+	friend struct ::TestProductionNativeObserve::Access;
 	friend class ::TestProductionResourceUseAccess;
 #endif
 	ProductionUseCell() = default;
@@ -93,6 +99,10 @@ class ProductionUseCell {
 };
 class ProductionReadbackCell {
 	friend class Registry;
+#ifdef TESTS_ENABLED
+	friend struct ::TestProductionRequest::Access;
+	friend struct ::TestProductionNativeObserve::Access;
+#endif
 	ProductionReadbackCell() = default;
 	ProductionRequest *request = nullptr;
 	GDExtensionProductionReadbackV1 declaration = {};
@@ -101,19 +111,38 @@ class ProductionReadbackCell {
 };
 class ProductionGraphCell {
 	friend class Registry;
+#ifdef TESTS_ENABLED
+	friend struct ::TestProductionRequest::Access;
+	friend struct ::TestProductionNativeObserve::Access;
+#endif
 	ProductionGraphCell() = default;
 	ProductionRequest *request = nullptr;
 	RDG::RecordHandle handle;
 	GDExtensionProductionFactV1 fact = {};
+	bool pending = false;
 };
 class ProductionNativeCell {
 	friend class Registry;
-	ProductionNativeCell() = default;
+#ifdef TESTS_ENABLED
+	friend struct ::TestProductionRequest::Access;
+	friend struct ::TestProductionNativeObserve::Access;
+#endif
+	ProductionNativeCell() { fact.membership_parent = UINT32_MAX; }
 	ProductionRequest *request = nullptr;
 	NativeSourceMember member;
+	// Only original source capture populates these rows; no public numeric writer.
+	// Aliases retain each membership edge but only the first cell owns a ref.
+	uint32_t owner_index = UINT32_MAX;
+	GDExtensionProductionFactV1 fact = {};
+	NativeSourceObservation observation;
+	Error release_error = OK;
 };
 class ProductionReturnCell {
 	friend class Registry;
+#ifdef TESTS_ENABLED
+	friend struct ::TestProductionRequest::Access;
+	friend struct ::TestProductionNativeObserve::Access;
+#endif
 	ProductionReturnCell() = default;
 	ProductionRequest *request = nullptr;
 	uint64_t serial = 0;
@@ -123,6 +152,7 @@ class ProductionCaptureCell {
 	friend class Registry;
 #ifdef TESTS_ENABLED
 	friend struct ::TestProductionRequest::Access;
+	friend struct ::TestProductionNativeObserve::Access;
 #endif
 	ProductionCaptureCell() = default;
 	ProductionRequest *request = nullptr;
@@ -142,12 +172,20 @@ struct ProductionControlInput {
 	uint64_t request_serial;
 	uint64_t record_generation;
 	ProductionControlKind kind;
+	GDExtensionProductionServiceBudgetV1 budget;
+};
+struct ProductionServiceUsage {
+	uint32_t controls, receipts, passes;
 };
 struct ProductionControlOutput {
 	uint64_t request_serial;
 	uint64_t control_serial;
 	GDExtensionDeviceSessionResultV1 result;
 	GDExtensionProductionReportV1 report;
+	ProductionServiceUsage service_usage;
+	// Owner reference return is distinct from the immutable RT result.
+	GDExtensionDeviceSessionResultV1 owner_return;
+	ProductionServiceUsage owner_usage;
 };
 struct ProductionControlCell {
 	ProductionControlInput input;
@@ -159,6 +197,7 @@ class ProductionRequest {
 	friend class Registry;
 #ifdef TESTS_ENABLED
 	friend struct ::TestProductionRequest::Access;
+	friend struct ::TestProductionNativeObserve::Access;
 	friend class ::TestProductionResourceUseAccess;
 #endif
 	ProductionRequest() = default;
@@ -179,6 +218,9 @@ class ProductionRequest {
 	uint64_t payload_offset = 0, readback_offset = 0, payload_used = 0;
 	uint32_t command_count = 0, frame_count = 0;
 	uint64_t revision = 1;
+	uint32_t graph_count = 0, native_count = 0;
+	uint32_t observe_cursor = 0, release_cursor = 0;
+	bool source_device_lost = false, release_started = false;
 	// One fixed mailbox per request, included by sizeof(ProductionRequest) in
 	// the checked arena Quote. Never aliases retained payload or return cells.
 	ProductionControlCell control = {};
@@ -190,6 +232,7 @@ class ProductionAttachment {
 	friend class Registry;
 #ifdef TESTS_ENABLED
 	friend struct ::TestProductionRequest::Access;
+	friend struct ::TestProductionNativeObserve::Access;
 	friend class ::TestProductionResourceUseAccess;
 #endif
 	ProductionAttachment() = default;

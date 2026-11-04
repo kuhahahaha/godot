@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  gdextension_record_source.h                                  */
+/*  gdextension_record_source.h                                           */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -46,7 +46,8 @@ class NativeSourceOrigin {
 	friend class ::TestRecordSourceAccess;
 #endif
 	enum class Kind : uint8_t { Qualification,
-		Production, SystemScalar };
+		Production,
+		SystemScalar };
 	const Kind kind;
 	explicit NativeSourceOrigin(Kind p_kind) : kind(p_kind) {}
 	static NativeSourceOrigin qualification() { return NativeSourceOrigin(Kind::Qualification); }
@@ -83,6 +84,8 @@ struct NativeSourceObservation {
 	int64_t completion_native_code = 0;
 	RDD::IssueFact resolved_issue = RDD::IssueFact::NotIssued;
 	Error retention_error = OK;
+	// Independent raw completion failure, even when issue.error takes precedence.
+	Error completion_error = OK;
 };
 // Immutable identity retained by the original R01 owner across checked
 // admission, native completion, and exact readback. RD handles and serials

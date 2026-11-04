@@ -91,6 +91,7 @@ NativeSourceObservation poll_native_source(RDD &driver, NativeSourceMember &memb
 	// Both arms observe exactly the retained original serial. No wait, global
 	// last-report lookup, tail-fence inference or timeout promotion is allowed.
 	const auto observed = driver.native_call_poll(member.source.serial);
+	result.completion_error = observed.native_error ? FAILED : OK;
 	result.completion_native_code = observed.native_code;
 	member.completion_native_code = observed.native_code;
 	result.native_code = observed.native_code;
