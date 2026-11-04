@@ -6674,6 +6674,884 @@
                     "type": "uint32_t"
                 }
             ]
+        },
+        {
+            "name": "GDExtensionProductionAttachmentRefV1",
+            "kind": "struct",
+            "description": [
+                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+            ],
+            "members": [
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "handle_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionRequestRefV1",
+            "kind": "struct",
+            "description": [
+                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+            ],
+            "members": [
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "handle_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionCapacityV1",
+            "kind": "struct",
+            "description": [
+                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "requests",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "suboperations",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "resources",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "resource_uses",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "graph_memberships",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "native_memberships",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "readbacks",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "return_cells",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "retained_payload_bytes",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "readback_bytes",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionMetadataQuoteV1",
+            "kind": "struct",
+            "description": [
+                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "capacity",
+                    "type": "GDExtensionProductionCapacityV1"
+                },
+                {
+                    "name": "allocation_bytes",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "allocation_alignment",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "graph_slots",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "graph_frames",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "cleanup_slots",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionInstallationStateV1",
+            "kind": "enum",
+            "description": [
+                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+            ],
+            "values": [
+                {
+                    "name": "GDEXTENSION_PRODUCTION_INSTALL_ACCEPTED_V1",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_INSTALL_RETURN_PENDING_V1",
+                    "value": 2
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_INSTALL_RETURNED_V1",
+                    "value": 3
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionInstallationReportV1",
+            "kind": "struct",
+            "description": [
+                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "state",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "allocated_bytes",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "returned_bytes",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "cause",
+                    "type": "GDExtensionDeviceSessionResultV1"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionOperationV1",
+            "kind": "struct",
+            "description": [
+                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "owner_request_nonce",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "record_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "canonical_begin",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "canonical_end",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionActionKindV1",
+            "kind": "enum",
+            "description": [
+                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+            ],
+            "values": [
+                {
+                    "name": "GDEXTENSION_PRODUCTION_DISPATCH_V1",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_COPY_V1",
+                    "value": 2
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_UPLOAD_V1",
+                    "value": 3
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_READBACK_V1",
+                    "value": 4
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionResourceKindV1",
+            "kind": "enum",
+            "description": [
+                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+            ],
+            "values": [
+                {
+                    "name": "GDEXTENSION_PRODUCTION_STORAGE_V1",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_UNIT_V1",
+                    "value": 2
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_SET_V1",
+                    "value": 3
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionAccessV1",
+            "kind": "enum",
+            "description": [
+                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+            ],
+            "values": [
+                {
+                    "name": "GDEXTENSION_PRODUCTION_READ_V1",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_WRITE_V1",
+                    "value": 2
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_READ_WRITE_V1",
+                    "value": 3
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_ATOMIC_V1",
+                    "value": 4
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionResourceOwnershipV1",
+            "kind": "enum",
+            "description": [
+                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+            ],
+            "values": [
+                {
+                    "name": "GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1",
+                    "value": 2
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionListBoundaryV1",
+            "kind": "enum",
+            "description": [
+                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+            ],
+            "values": [
+                {
+                    "name": "GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1",
+                    "value": 0
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1",
+                    "value": 1
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionActionV1",
+            "kind": "struct",
+            "description": [
+                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+            ],
+            "members": [
+                {
+                    "name": "canonical_suboperation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "action_kind",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "physical_unit",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "first_use",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "use_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "list_boundary",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "readback_slot",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionUseV1",
+            "kind": "struct",
+            "description": [
+                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+            ],
+            "members": [
+                {
+                    "name": "resource_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "access",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "byte_offset",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "byte_size",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "required_usage",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionResourceV1",
+            "kind": "struct",
+            "description": [
+                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+            ],
+            "members": [
+                {
+                    "name": "resource_kind",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "original_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "original_part",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "ownership",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "original_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "physical_bytes",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "required_usage",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionReadbackV1",
+            "kind": "struct",
+            "description": [
+                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+            ],
+            "members": [
+                {
+                    "name": "resource_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "canonical_producer",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "canonical_copy",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "byte_offset",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "byte_size",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionSetBindingV1",
+            "kind": "struct",
+            "description": [
+                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "set",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "binding",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "array_element",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "resource_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "offset",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "bytes",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionDispatchV1",
+            "kind": "struct",
+            "description": [
+                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "canonical_suboperation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "unit_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "first_set_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "set_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "groups_x",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "groups_y",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "groups_z",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "push_bytes",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionCopyV1",
+            "kind": "struct",
+            "description": [
+                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "canonical_suboperation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "source_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "destination_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "source_offset",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "destination_offset",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "bytes",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionUploadV1",
+            "kind": "struct",
+            "description": [
+                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "canonical_suboperation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "destination_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "destination_offset",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "bytes",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionAppendStateV1",
+            "kind": "enum",
+            "description": [
+                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+            ],
+            "values": [
+                {
+                    "name": "GDEXTENSION_PRODUCTION_REJECTED_V1",
+                    "value": 0
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_APPENDED_V1",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_UNKNOWN_V1",
+                    "value": 2
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionAppendV1",
+            "kind": "struct",
+            "description": [
+                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "revision",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "canonical_suboperation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "state",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "cause",
+                    "type": "GDExtensionDeviceSessionResultV1"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionFactV1",
+            "kind": "struct",
+            "description": [
+                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+            ],
+            "members": [
+                {
+                    "name": "canonical_suboperation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "graph_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "graph_frame",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "graph_kind",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "graph_index",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "graph_offset",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "command_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "backend_queue",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "issue",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "completion",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "phase",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "native_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "completion_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "issue_native_code",
+                    "type": "int64_t"
+                },
+                {
+                    "name": "completion_native_code",
+                    "type": "int64_t"
+                },
+                {
+                    "name": "issue_error",
+                    "type": "int32_t"
+                },
+                {
+                    "name": "retention_error",
+                    "type": "int32_t"
+                },
+                {
+                    "name": "membership_parent",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionReportV1",
+            "kind": "struct",
+            "description": [
+                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "operation",
+                    "type": "GDExtensionProductionOperationV1"
+                },
+                {
+                    "name": "revision",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "captured_segment",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "acknowledged_segment",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "recorded_end",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "fact_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "known_obligations",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "possible_obligations",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "complete_obligations",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "ready_readbacks",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "physical_returns_pending",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "cancelled",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "cause",
+                    "type": "GDExtensionDeviceSessionResultV1"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionSegmentV1",
+            "kind": "struct",
+            "description": [
+                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "segment",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "segment_revision",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "first_canonical",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "end_canonical",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "incomplete_upload_parent",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionServiceBudgetV1",
+            "kind": "struct",
+            "description": [
+                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "deadline_micros",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "controls",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "receipts",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "passes",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                }
+            ]
         }
     ],
     "interface": [
