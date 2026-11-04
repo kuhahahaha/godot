@@ -1,0 +1,4 @@
+servers/rendering/renderer_rd/storage_rd/external_output_storage.cpp:46:87: error: conditional expression is ambiguous; 'RenderingDevice::StorageBufferUsage' can be converted to 'BitField<RenderingDevice::StorageBufferUsage>' and vice versa
+   46 |                 const BitField<RenderingDevice::StorageBufferUsage> usage = i == PROTECTED_COMMANDS ? RenderingDevice::STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT : BitField<RenderingDevice::StorageBufferUsage>();
+      |                                                                                                     ^ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+1 error generated.

@@ -1,0 +1,53 @@
+#include <cassert>
+#include <cstdint>
+#include <memory>
+#include <vector>
+#include <cstdio>
+#include <type_traits>
+#define TESTS_ENABLED
+// Standalone control-flow model only. Real Core witnesses/queues are exercised
+// by the engine doctests, which are not executed by this harness.
+enum Error { OK, ERR_ALREADY_IN_USE, ERR_INVALID_PARAMETER, ERR_BUSY, ERR_INVALID_DATA, ERR_CANT_CREATE, ERR_UNAUTHORIZED };
+struct RID {
+ uint64_t value=0;
+ bool is_null() const{return !value;}
+ bool is_valid() const{return value;}
+};
+template<class T> struct BitField { int value=0; BitField()=default; BitField(T p):value(int(p)){} };
+struct NativeDisposalWitness {
+ enum class State {EMPTY,LIVE,ENQUEUED,RETURNED,UNKNOWN};
+ struct Report {State state=State::EMPTY;uint64_t rid=0,serial=0;};
+ std::shared_ptr<Report> cell;
+};
+struct Thread {static uint64_t get_caller_id(){return 1;}};
+struct RenderingDevice {
+ bool is_main_instance=true;
+ uint64_t render_thread_id=1;
+ enum StorageBufferUsage { STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT=1 };
+ uint32_t creates=0,fail_on=0,maintenance_calls=0;
+ bool busy=false;
+ Error maintenance_result=ERR_BUSY;
+ std::vector<uint32_t> bytes,usages;
+ std::vector<std::shared_ptr<NativeDisposalWitness::Report>> cells;
+ Error _native_disposal_preflight() const {return !is_main_instance||render_thread_id!=Thread::get_caller_id()?ERR_UNAUTHORIZED:busy?ERR_BUSY:OK;}
+ Error _native_disposal_storage_create(uint32_t n,BitField<StorageBufferUsage> u,RID &rid,NativeDisposalWitness&w) {
+  ++creates;bytes.push_back(n);usages.push_back(u.value);
+  if(creates==fail_on)return ERR_CANT_CREATE;
+  rid.value=100+creates;w.cell=std::make_shared<NativeDisposalWitness::Report>();
+  *w.cell={NativeDisposalWitness::State::LIVE,rid.value,1000+creates};cells.push_back(w.cell);return OK;
+ }
+ Error _native_disposal_free(const NativeDisposalWitness&w){
+  if(busy)return ERR_BUSY;
+  if(w.cell->state==NativeDisposalWitness::State::UNKNOWN)return ERR_INVALID_DATA;
+  if(w.cell->state==NativeDisposalWitness::State::LIVE)w.cell->state=NativeDisposalWitness::State::ENQUEUED;
+  return OK;
+ }
+ Error _native_disposal_observe(const NativeDisposalWitness&w,NativeDisposalWitness::Report&r)const {
+  r=*w.cell;return r.state==NativeDisposalWitness::State::UNKNOWN?ERR_INVALID_DATA:OK;
+ }
+ Error _native_disposal_maintenance(){++maintenance_calls;return maintenance_result;}
+ void returned(){for(auto &c:cells)if(c->state==NativeDisposalWitness::State::ENQUEUED)c->state=NativeDisposalWitness::State::RETURNED;}
+};
+namespace RendererRD {
+struct ExternalOutputConfig { static Error checked_buffer_bytes(uint64_t,uint64_t,uint64_t,uint32_t&); };
+}

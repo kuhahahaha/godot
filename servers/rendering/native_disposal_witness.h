@@ -16,6 +16,7 @@ class NativeDisposalWitness {
 	friend class RenderingDevice;
 #ifdef TESTS_ENABLED
 	friend class TestNativeDisposalAccess;
+	friend class TestExternalOutputPrefixAccess;
 #endif
 
 public:

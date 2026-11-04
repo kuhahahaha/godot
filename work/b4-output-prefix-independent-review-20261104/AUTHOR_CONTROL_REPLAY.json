@@ -1,0 +1,82 @@
+[
+  {
+    "name": "production",
+    "compile_command": [
+      "clang++",
+      "-std=c++17",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-x",
+      "c++",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-output-prefix-independent-review-20261104/author-control-replay/production.cpp.in",
+      "-o",
+      "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/b4-prefix-replay-jxec3iux/production"
+    ],
+    "rc": 0,
+    "expected_assertion": null,
+    "matched": true,
+    "source_sha256": "72b1a47e3f8adddb6781e3ddbf82ab4ba2ad92a1272fe6701d227eba2fc823cc",
+    "log_sha256": "6817892363ba4dc2acd2e3fcf891704e17f18ed1dec3a558a8da865907403c28"
+  },
+  {
+    "name": "lost-failure-retirement",
+    "compile_command": [
+      "clang++",
+      "-std=c++17",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-x",
+      "c++",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-output-prefix-independent-review-20261104/author-control-replay/lost-failure-retirement.cpp.in",
+      "-o",
+      "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/b4-prefix-replay-jxec3iux/lost-failure-retirement"
+    ],
+    "rc": -6,
+    "expected_assertion": "r.enqueued_count==2",
+    "matched": true,
+    "source_sha256": "0e8bb5dda71b8284447f867dd3bf30debced8cbc2dbafcc09972bfcbfe4039f2",
+    "log_sha256": "9925f647aa82f3af3af8c7cb51a164ec7beb16924cf63ddf1b55e5c1f74f6b9d"
+  },
+  {
+    "name": "premature-enqueued-return",
+    "compile_command": [
+      "clang++",
+      "-std=c++17",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-x",
+      "c++",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-output-prefix-independent-review-20261104/author-control-replay/premature-enqueued-return.cpp.in",
+      "-o",
+      "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/b4-prefix-replay-jxec3iux/premature-enqueued-return"
+    ],
+    "rc": -6,
+    "expected_assertion": "!r.all_driver_returned",
+    "matched": true,
+    "source_sha256": "da76cceef4f7453aa6a5f04bd4cc80c8e0d4438b8c43cdca89ebde27683614c6",
+    "log_sha256": "7a02ef40b92f7bdb248173479286c40a412b86812f61ed5c8b11a5006ef85d7d"
+  },
+  {
+    "name": "unknown-reset",
+    "compile_command": [
+      "clang++",
+      "-std=c++17",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-x",
+      "c++",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-output-prefix-independent-review-20261104/author-control-replay/unknown-reset.cpp.in",
+      "-o",
+      "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/b4-prefix-replay-jxec3iux/unknown-reset"
+    ],
+    "rc": -6,
+    "expected_assertion": "s->observe(r)==ERR_INVALID_DATA&&!r.all_driver_returned",
+    "matched": true,
+    "source_sha256": "d451d320aca097834cb049004927129e846d7cd76c3fc9b6c88612708f0939fe",
+    "log_sha256": "2275713e27386947682ffa543b6156fcb44b5b019a088c0141fee77e02047978"
+  }
+]

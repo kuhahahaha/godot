@@ -127,6 +127,7 @@ private:
 	friend class TestQualificationFinalizeAccess;
 	friend class TestQualificationPhysicalAccess;
 	friend class TestNativeDisposalAccess;
+	friend class TestExternalOutputPrefixAccess;
  friend class TestQualificationAckAccess;
  friend class TestQualificationStagingAccess;
  friend class TestQualificationTicketAccess;

@@ -1,0 +1,5 @@
+servers/rendering/renderer_rd/storage_rd/external_output_storage.h
+servers/rendering/renderer_rd/storage_rd/external_output_storage.cpp
+tests/servers/rendering/test_external_output_prefix.cpp
+servers/rendering/rendering_device.h
+servers/rendering/native_disposal_witness.h
