@@ -41,6 +41,9 @@ class ExternalOutputStorage;
 }
 
 #ifdef TESTS_ENABLED
+namespace TestProductionRequest {
+struct Access;
+}
 namespace RendererRD {
 class TestParticlesProcessRetryAccess;
 }
@@ -136,6 +139,8 @@ private:
 	friend class TestQualificationStagingAccess;
 	friend class TestQualificationTicketAccess;
 	friend class TestRecordSourceAccess;
+	friend class TestProductionResourceUseAccess;
+	friend struct TestProductionRequest::Access;
 	friend class TestQualificationRtAccess;
 	friend class RendererRD::TestParticlesProcessRetryAccess;
 	void test_arm_buffer_update_fault(RID p_buffer, uint32_t p_count) {

@@ -30,8 +30,8 @@
 
 #pragma once
 
-#include "core/extension/gdextension_qualification_child_history.h"
 #include "core/extension/gdextension_library_exit_guard.h"
+#include "core/extension/gdextension_qualification_child_history.h"
 #include "core/extension/gdextension_record_source.h"
 #include "core/templates/local_vector.h"
 #include "servers/rendering/rendering_device.h"
@@ -93,11 +93,13 @@ inline GDExtensionQualificationRecordV1 qualification_record_v1(const GDExtensio
 	return old;
 }
 inline OriginalOperationIdentity qualification_operation_identity(const GDExtensionQualificationRecordV3 &q) {
- return {q.record.request_nonce, q.record.library_generation, q.record.qualification_session_serial, q.record.record_generation, q.original_range_begin, q.original_range_end};
+	return { q.record.request_nonce, q.record.library_generation, q.record.qualification_session_serial, q.record.record_generation, q.original_range_begin, q.original_range_end };
 }
 inline Error validate_qualification_record_v3(const GDExtensionQualificationRecordV3 &q) {
- if (q.abi.abi_version != 3 || q.abi.struct_size != sizeof(q) || q.abi.reserved || !valid_original_operation_identity(qualification_operation_identity(q))) return ERR_INVALID_PARAMETER;
- return validate_qualification_record_v2(q.record);
+	if (q.abi.abi_version != 3 || q.abi.struct_size != sizeof(q) || q.abi.reserved || !valid_original_operation_identity(qualification_operation_identity(q))) {
+		return ERR_INVALID_PARAMETER;
+	}
+	return validate_qualification_record_v2(q.record);
 }
 // Shared bounded-source admission. This does not authorize a caller or issue
 // an operation; both consumers retain their original bridge admission gates.
@@ -108,152 +110,171 @@ struct QualificationResource;
 // the original async result and physical-return reverse indices. C facts are
 // snapshots of these original sources, never a separate completion authority.
 struct QualificationTicket {
- explicit QualificationTicket(bool p_system_scalar = false) : system_scalar(p_system_scalar), source_origin(p_system_scalar ? NativeSourceOrigin::system_scalar() : NativeSourceOrigin::qualification()) {}
- static constexpr uint32_t FACT_CAPACITY=4096;
- bool system_scalar = false;
- GDExtensionSystemScalarRecordV1 system_origin = {};
- RID system_set;
- QualificationPhysicalReturn system_set_physical;
- bool system_set_return_requested = false;
- Error system_set_return_error = OK;
- uint64_t serial=0,bridge_serial=0;
- uint32_t library=0;
- GDExtensionQualificationRecordV1 origin={};
- GDExtensionQualificationUploadPrepareV1 preparation={};
- GDExtensionQualificationRecordV2 range_origin = {};
- OriginalOperationIdentity operation;
- bool operation_bound = false;
- CheckedRecordAppend capture_append, body_append;
- bool multi_readback = false;
- uint64_t additional_readback_serials[2] = {};
- uint64_t original_readback_serial = 0;
- Ref<RenderingDevice::BufferGetDataResult> additional_results[2];
- uint32_t additional_copies_joined[2] = {};
- GDExtensionQualificationReportV1 report={};
- GDExtensionSystemScalarReportV1 system_report = {};
- LocalVector<GDExtensionQualificationFactV1> facts;
- struct GraphMember {RDG::RecordHandle handle;uint32_t fact=0,frame=0,path_length=0;uint64_t epoch=0;bool sealed=false,returned=false;};
- using NativeMember = NativeSourceMember;
- const NativeSourceOrigin source_origin;
- LocalVector<GraphMember> graphs;
- LocalVector<NativeMember> natives;
- struct Upload {
-  GDExtensionQualificationUploadPlanV1 plan={};
-  RenderingDevice::QualificationUploadProgress progress;
-  GDExtensionQualificationUploadReportV1 report={};
-  uint64_t last_request_revision=0;
-  bool attempted=false,failed=false;
- };
- LocalVector<Upload> uploads;
- LocalVector<QualificationResource *> texture_uploads;
- Ref<RenderingDevice::BufferGetDataResult> result;
- LocalVector<RID> resource_pins;
- LocalVector<QualificationPhysicalReturn *> physical_uses;
- RDG::RecordHandle capture,body;
- uint32_t frame_refs=0,readback_copies_joined=0,accepted_rt_refs=0;
- bool prepared=false,recorded=false,recording=false,queued=false,acknowledged=false,queue_ref_credit=false;
- std::atomic<bool> admission_closed{false};
- bool stop_requested=false,continuation_pending=false;
- uint32_t ordering_path_length=0;
- bool ordering_closed=false,append_failed=false,mapping_failed=false,observation_dirty=false;
- bool resources_returned=false;
+	explicit QualificationTicket(bool p_system_scalar = false) : system_scalar(p_system_scalar), source_origin(p_system_scalar ? NativeSourceOrigin::system_scalar() : NativeSourceOrigin::qualification()) {}
+	static constexpr uint32_t FACT_CAPACITY = 4096;
+	bool system_scalar = false;
+	GDExtensionSystemScalarRecordV1 system_origin = {};
+	RID system_set;
+	QualificationPhysicalReturn system_set_physical;
+	bool system_set_return_requested = false;
+	Error system_set_return_error = OK;
+	uint64_t serial = 0, bridge_serial = 0;
+	uint32_t library = 0;
+	GDExtensionQualificationRecordV1 origin = {};
+	GDExtensionQualificationUploadPrepareV1 preparation = {};
+	GDExtensionQualificationRecordV2 range_origin = {};
+	OriginalOperationIdentity operation;
+	bool operation_bound = false;
+	CheckedRecordAppend capture_append, body_append;
+	bool multi_readback = false;
+	uint64_t additional_readback_serials[2] = {};
+	uint64_t original_readback_serial = 0;
+	Ref<RenderingDevice::BufferGetDataResult> additional_results[2];
+	uint32_t additional_copies_joined[2] = {};
+	GDExtensionQualificationReportV1 report = {};
+	GDExtensionSystemScalarReportV1 system_report = {};
+	LocalVector<GDExtensionQualificationFactV1> facts;
+	struct GraphMember {
+		RDG::RecordHandle handle;
+		uint32_t fact = 0, frame = 0, path_length = 0;
+		uint64_t epoch = 0;
+		bool sealed = false, returned = false;
+	};
+	using NativeMember = NativeSourceMember;
+	const NativeSourceOrigin source_origin;
+	LocalVector<GraphMember> graphs;
+	LocalVector<NativeMember> natives;
+	struct Upload {
+		GDExtensionQualificationUploadPlanV1 plan = {};
+		RenderingDevice::QualificationUploadProgress progress;
+		GDExtensionQualificationUploadReportV1 report = {};
+		uint64_t last_request_revision = 0;
+		bool attempted = false, failed = false;
+	};
+	LocalVector<Upload> uploads;
+	LocalVector<QualificationResource *> texture_uploads;
+	Ref<RenderingDevice::BufferGetDataResult> result;
+	LocalVector<RID> resource_pins;
+	LocalVector<QualificationPhysicalReturn *> physical_uses;
+	RDG::RecordHandle capture, body;
+	uint32_t frame_refs = 0, readback_copies_joined = 0, accepted_rt_refs = 0;
+	bool prepared = false, recorded = false, recording = false, queued = false, acknowledged = false, queue_ref_credit = false;
+	std::atomic<bool> admission_closed{ false };
+	bool stop_requested = false, continuation_pending = false;
+	uint32_t ordering_path_length = 0;
+	bool ordering_closed = false, append_failed = false, mapping_failed = false, observation_dirty = false;
+	bool resources_returned = false;
 #ifdef TESTS_ENABLED
- bool test_system_append_unknown_injected = false;
- bool test_system_set_return_error_injected = false;
- bool test_inject_system_append_unknown() {
-  if (!system_scalar || test_system_append_unknown_injected || body_append.state != CheckedRecordAppend::State::Appended || !body_append.handle.is_valid()) return false;
-  test_system_append_unknown_injected = true;
-  body_append.state = CheckedRecordAppend::State::Unknown;
-  body_append.handle = {};
-  body_append.error = FAILED;
-  return true;
- }
- bool test_inject_system_set_return_error() {
-  if (!system_scalar || test_system_set_return_error_injected || !physically_retired.load() || system_set.is_null() || system_set_return_error != OK) return false;
-  MutexLock lock(system_set_physical.mutex);
-  if (system_set_physical.free_event) return false;
-  test_system_set_return_error_injected = true;
-  return true;
- }
+	bool test_system_append_unknown_injected = false;
+	bool test_system_set_return_error_injected = false;
+	bool test_inject_system_append_unknown() {
+		if (!system_scalar || test_system_append_unknown_injected || body_append.state != CheckedRecordAppend::State::Appended || !body_append.handle.is_valid()) {
+			return false;
+		}
+		test_system_append_unknown_injected = true;
+		body_append.state = CheckedRecordAppend::State::Unknown;
+		body_append.handle = {};
+		body_append.error = FAILED;
+		return true;
+	}
+	bool test_inject_system_set_return_error() {
+		if (!system_scalar || test_system_set_return_error_injected || !physically_retired.load() || system_set.is_null() || system_set_return_error != OK) {
+			return false;
+		}
+		MutexLock lock(system_set_physical.mutex);
+		if (system_set_physical.free_event) {
+			return false;
+		}
+		test_system_set_return_error_injected = true;
+		return true;
+	}
 #endif
- void remember_system_set_return_error(Error p_error) {
-  if (!system_scalar || !physically_retired.load() || system_set.is_null() || p_error == OK || p_error == ERR_BUSY || system_set_return_error != OK) return;
-  MutexLock lock(system_set_physical.mutex);
-  // A completed computation can still own an unreturned internal set. Keep
-  // that retirement failure separate from its immutable computation report.
-  // An already returned set cannot inherit an unrelated maintenance failure.
-  if (!system_set_physical.free_event) system_set_return_error = p_error;
- }
- void finish_system_append(Error p_error) {
-  recording = false;
-  if (body_append.state == CheckedRecordAppend::State::Unknown) {
-   // No recoverable graph handle does not prove no native effect. Keep the
-   // original physical pins quarantined; publish exposes possible_count and
-   // Unknown without inventing a graph/native completion member.
-   mapping_failed = true;
-   observation_dirty = true;
-   if (p_error == OK) p_error = FAILED;
-  }
-  if (p_error != OK) {
-   append_failed = true;
-   if (report.native_error == OK) report.native_error = p_error;
-  }
- }
+	void remember_system_set_return_error(Error p_error) {
+		if (!system_scalar || !physically_retired.load() || system_set.is_null() || p_error == OK || p_error == ERR_BUSY || system_set_return_error != OK) {
+			return;
+		}
+		MutexLock lock(system_set_physical.mutex);
+		// A completed computation can still own an unreturned internal set. Keep
+		// that retirement failure separate from its immutable computation report.
+		// An already returned set cannot inherit an unrelated maintenance failure.
+		if (!system_set_physical.free_event) {
+			system_set_return_error = p_error;
+		}
+	}
+	void finish_system_append(Error p_error) {
+		recording = false;
+		if (body_append.state == CheckedRecordAppend::State::Unknown) {
+			// No recoverable graph handle does not prove no native effect. Keep the
+			// original physical pins quarantined; publish exposes possible_count and
+			// Unknown without inventing a graph/native completion member.
+			mapping_failed = true;
+			observation_dirty = true;
+			if (p_error == OK) {
+				p_error = FAILED;
+			}
+		}
+		if (p_error != OK) {
+			append_failed = true;
+			if (report.native_error == OK) {
+				report.native_error = p_error;
+			}
+		}
+	}
 
- uint32_t readback_count() const { return multi_readback ? range_origin.readback_count : 1; }
- Ref<RenderingDevice::BufferGetDataResult> &readback_result(uint32_t index) { return index ? additional_results[index - 1] : result; }
- const Ref<RenderingDevice::BufferGetDataResult> &readback_result(uint32_t index) const { return index ? additional_results[index - 1] : result; }
- uint64_t readback_serial(uint32_t index) const { return index ? additional_readback_serials[index - 1] : original_readback_serial; }
- bool readback_complete(uint32_t index) const {
-	 const auto &owned = readback_result(index);
-	 if (owned.is_null()) {
-		 return false;
-	 }
-	 const auto range = readback_range(index);
-	 const ReadbackSourceState state = { owned->request_serial, owned->source_backing_serial, owned->source_offset, owned->source_size, owned->issued_size, owned->completed_size, uint64_t(owned->bytes.size()), owned->error, owned->delivered };
-	 return same_request_readback_complete(state, readback_serial(index), range.observed_backing_serial, range.readback_offset, range.readback_size);
- }
- uint32_t &readback_cursor(uint32_t index) { return index ? additional_copies_joined[index - 1] : readback_copies_joined; }
- GDExtensionQualificationReadbackRangeV1 readback_range(uint32_t index) const {
-	 if (multi_readback) {
-		 return range_origin.readbacks[index];
-	 }
-	 if (system_scalar) {
-		 return { system_origin.output.rid, system_origin.output_allocation_generation, system_origin.output.backing_serial, system_origin.output_offset, uint64_t(system_origin.output_word_count) * sizeof(uint32_t), 0, UINT32_MAX };
-	 }
-	 return { origin.readback_buffer, origin.source_allocation_generation, origin.observed_backing_serial, origin.readback_offset, origin.readback_size, 0, GDEXTENSION_QUALIFICATION_READBACK_NUMERIC_RAW_OUTPUT_V1 };
- }
- bool body_returned_successfully() const {
-	 if (mapping_failed) {
-		 return false;
-	 }
-	 for (const auto &graph : graphs) {
-		 if (facts[graph.fact].semantic_kind == 2) {
-			 const auto &body_fact = facts[graph.fact];
-			 if (!graph.sealed || !graph.returned || body_fact.issue != 1 || body_fact.completion != 2 || body_fact.error) {
-				 return false;
-			 }
-			 bool mapped = false;
-			 // Later readback frames may acquire their own pending hidden sources.
-			 // Only the original Body frame/slot and its hidden sources prove Body.
-			 for (const auto &native : natives) {
-				 if (native.frame == graph.frame && native.epoch == graph.epoch && (native.slot == UINT32_MAX || native.slot == body_fact.command_slot)) {
-					 const auto &fact = facts[native.fact];
-					 if (fact.issue != 1 || fact.completion != 2 || fact.error) {
-						 return false;
-					 }
-					 if (native.slot == body_fact.command_slot) {
-						 mapped = true;
-					 }
-				 }
-			 }
-			 return mapped;
-		 }
-	 }
-	 return false;
- }
+	uint32_t readback_count() const { return multi_readback ? range_origin.readback_count : 1; }
+	Ref<RenderingDevice::BufferGetDataResult> &readback_result(uint32_t index) { return index ? additional_results[index - 1] : result; }
+	const Ref<RenderingDevice::BufferGetDataResult> &readback_result(uint32_t index) const { return index ? additional_results[index - 1] : result; }
+	uint64_t readback_serial(uint32_t index) const { return index ? additional_readback_serials[index - 1] : original_readback_serial; }
+	bool readback_complete(uint32_t index) const {
+		const auto &owned = readback_result(index);
+		if (owned.is_null()) {
+			return false;
+		}
+		const auto range = readback_range(index);
+		const ReadbackSourceState state = { owned->request_serial, owned->source_backing_serial, owned->source_offset, owned->source_size, owned->issued_size, owned->completed_size, uint64_t(owned->bytes.size()), owned->error, owned->delivered };
+		return same_request_readback_complete(state, readback_serial(index), range.observed_backing_serial, range.readback_offset, range.readback_size);
+	}
+	uint32_t &readback_cursor(uint32_t index) { return index ? additional_copies_joined[index - 1] : readback_copies_joined; }
+	GDExtensionQualificationReadbackRangeV1 readback_range(uint32_t index) const {
+		if (multi_readback) {
+			return range_origin.readbacks[index];
+		}
+		if (system_scalar) {
+			return { system_origin.output.rid, system_origin.output_allocation_generation, system_origin.output.backing_serial, system_origin.output_offset, uint64_t(system_origin.output_word_count) * sizeof(uint32_t), 0, UINT32_MAX };
+		}
+		return { origin.readback_buffer, origin.source_allocation_generation, origin.observed_backing_serial, origin.readback_offset, origin.readback_size, 0, GDEXTENSION_QUALIFICATION_READBACK_NUMERIC_RAW_OUTPUT_V1 };
+	}
+	bool body_returned_successfully() const {
+		if (mapping_failed) {
+			return false;
+		}
+		for (const auto &graph : graphs) {
+			if (facts[graph.fact].semantic_kind == 2) {
+				const auto &body_fact = facts[graph.fact];
+				if (!graph.sealed || !graph.returned || body_fact.issue != 1 || body_fact.completion != 2 || body_fact.error) {
+					return false;
+				}
+				bool mapped = false;
+				// Later readback frames may acquire their own pending hidden sources.
+				// Only the original Body frame/slot and its hidden sources prove Body.
+				for (const auto &native : natives) {
+					if (native.frame == graph.frame && native.epoch == graph.epoch && (native.slot == UINT32_MAX || native.slot == body_fact.command_slot)) {
+						const auto &fact = facts[native.fact];
+						if (fact.issue != 1 || fact.completion != 2 || fact.error) {
+							return false;
+						}
+						if (native.slot == body_fact.command_slot) {
+							mapped = true;
+						}
+					}
+				}
+				return mapped;
+			}
+		}
+		return false;
+	}
 
- std::atomic<bool> physically_retired{false};
+	std::atomic<bool> physically_retired{ false };
 };
 
 // Common storage of the existing bridge children. No new registry or authority.
@@ -277,100 +298,109 @@ struct QualificationResource {
 // Fixed transport storage owned by this same bridge. It carries API calls,
 // never GPU completion truth, DSO pointers, Callables, or another ticket.
 struct QualificationRtCell {
- GDExtensionQualificationRtConfigV1 config={};
- GDExtensionQualificationRtRequestV1 header={};
- Vector<uint8_t> request,payload,result;
- Vector<GDExtensionQualificationUploadSegmentV1> segments;
- uint64_t serial=0,retired_operation=0,cleanup_child_serial=0;
- QualificationTicket *ticket=nullptr;
- LocalVector<QualificationResource *> resource_refs;
- GDExtensionDeviceSessionResultV1 call_result={};
- uint32_t state=0,result_bytes=0,segment_count=0;
- bool ever_accepted=false,occupied=false,active=false,queued=false,executing=false,observed=false,admission_consumed=false,slot_ref_credit=false,queue_ref_credit=false,queue_ref_reserved=false;
+	GDExtensionQualificationRtConfigV1 config = {};
+	GDExtensionQualificationRtRequestV1 header = {};
+	Vector<uint8_t> request, payload, result;
+	Vector<GDExtensionQualificationUploadSegmentV1> segments;
+	uint64_t serial = 0, retired_operation = 0, cleanup_child_serial = 0;
+	QualificationTicket *ticket = nullptr;
+	LocalVector<QualificationResource *> resource_refs;
+	GDExtensionDeviceSessionResultV1 call_result = {};
+	uint32_t state = 0, result_bytes = 0, segment_count = 0;
+	bool ever_accepted = false, occupied = false, active = false, queued = false, executing = false, observed = false, admission_consumed = false, slot_ref_credit = false, queue_ref_credit = false, queue_ref_reserved = false;
 };
 
 // Storage belongs to the original Registry. Public numeric observations never
 // create one of these children. The parent CodeHolder cannot return while live.
 struct Registry::QualificationBridge {
- uint64_t serial = 0;
- uint32_t library = 0;
- uint32_t device = 0;
- uint64_t epoch = 0;
- HolderRetirement *holder = nullptr;
- QualificationRtCell *rt=nullptr;
- bool closing = false;
- bool cleanup_refs_reserved = false, cleanup_slot_in_use = false, cleanup_queue_in_use = false;
- uint32_t children = 0;
- // Registry mutex is held by the caller. The credit remains a real retained
- // library reference while it is transferred to the original queue work.
- bool claim_cleanup_queue(bool &queued,bool &credit) {
-  if(!cleanup_refs_reserved || cleanup_queue_in_use || queued || credit)return false;
-  queued=true;credit=true;cleanup_queue_in_use=true;++children;return true;
- }
- void release_cleanup_queue(bool &queued,bool &credit) {
-  CRASH_COND(!queued || !credit || !cleanup_queue_in_use || !children);
-  queued=false;credit=false;cleanup_queue_in_use=false;--children;
- }
- static constexpr uint32_t CHILD_CAPACITY = 128;
- // Finite legacy Numeric/Method scope: the existing 128 ticket envelope,
- // at most ten original method roles (numeric has eight), Capture and Body.
- // This is a component limit, not a World/System/U08 byte grant or permission
- // for unbounded pre-ticket churn. Every admitted original key uses a credit.
- static constexpr uint32_t STORAGE_HISTORY_CAPACITY = CHILD_CAPACITY * 10;
- static constexpr uint32_t UNIT_HISTORY_CAPACITY = CHILD_CAPACITY * 2;
- QualificationChildHistory<GDExtensionStorageCreateRequestV1, STORAGE_HISTORY_CAPACITY> storage_origins;
- QualificationChildHistory<GDExtensionNativeUnitCreateRequestV1, UNIT_HISTORY_CAPACITY> unit_origins;
- struct Storage {
-  uint64_t serial = 0, retire_serial = 0, dependency_serial = 0;
-  uint32_t history_index = UINT32_MAX;
-  GDExtensionStorageCreateRequestV1 origin = {};
-  GDExtensionStorageBackingV1 backing = {};
-  GDExtensionStorageRetireRequestV1 retirement = {};
-  GDExtensionStorageRetireReportV1 report = {};
-  QualificationPhysicalReturn physical;
-  Error maintenance_error = OK;
-  bool creating = true, retiring = false, queued = false, acknowledged = false, cleanup_serial_reserved = false, queue_ref_credit = false;
- };
- // Original bridge child for a method texture. The producer and typed
- // retire transaction must bind this cell before it can be admitted by wire.
- struct Texture : QualificationResource {
-	 GDExtensionQualificationTextureCreateV1 origin = {};
- };
- struct Sampler : QualificationResource {
-	 GDExtensionQualificationSamplerCreateV1 origin = {};
- };
- struct UniformSet : QualificationResource {
-	 GDExtensionQualificationSetCreateV1 origin = {};
-	 LocalVector<GDExtensionQualificationUniformBindingV1> bindings;
- };
- struct NativeUnit {
-  uint64_t serial = 0, retire_serial = 0, dependency_serial = 0;
-  uint32_t history_index = UINT32_MAX;
-  GDExtensionNativeUnitCreateRequestV1 origin = {};
-  GDExtensionNativeUnitBackingV1 backing = {};
-  GDExtensionNativeUnitRetireReportV1 report = {};
-  QualificationPhysicalReturn shader, pipeline;
-  Error maintenance_error = OK;
-  bool creating = true, retiring = false, queued = false, acknowledged = false, cleanup_serial_reserved = false, queue_ref_credit = false;
- };
- void collect_retired_children_locked();
- // Read-only component accounting under Registry::mutex. These observations
- // do not include other ticket/typed/driver owners or grant a byte reservation.
- struct ChildMetadataStats {
-  uint32_t storage_origin_credits=0,unit_origin_credits=0;
-  uint32_t storage_cold_origins=0,unit_cold_origins=0;
-  uint32_t storage_hot_cells=0,unit_hot_cells=0,untracked_test_cells=0;
-  uint64_t bridge_request_bytes=0,origin_arena_request_bytes=0;
-  uint64_t hot_cell_request_bytes=0,physical_pin_request_bytes=0;
-  uint64_t tracked_request_bytes() const { return bridge_request_bytes+origin_arena_request_bytes+hot_cell_request_bytes+physical_pin_request_bytes; }
- };
- ChildMetadataStats child_metadata_stats() const;
- QualificationTicket *tickets[CHILD_CAPACITY] = {};
- Storage *storage[CHILD_CAPACITY] = {};
- Texture *textures[CHILD_CAPACITY] = {};
- Sampler *samplers[CHILD_CAPACITY] = {};
- UniformSet *sets[CHILD_CAPACITY] = {};
- NativeUnit *units[CHILD_CAPACITY] = {};
+	uint64_t serial = 0;
+	uint32_t library = 0;
+	uint32_t device = 0;
+	uint64_t epoch = 0;
+	HolderRetirement *holder = nullptr;
+	QualificationRtCell *rt = nullptr;
+	bool closing = false;
+	bool cleanup_refs_reserved = false, cleanup_slot_in_use = false, cleanup_queue_in_use = false;
+	uint32_t children = 0;
+	// Registry mutex is held by the caller. The credit remains a real retained
+	// library reference while it is transferred to the original queue work.
+	bool claim_cleanup_queue(bool &queued, bool &credit) {
+		if (!cleanup_refs_reserved || cleanup_queue_in_use || queued || credit) {
+			return false;
+		}
+		queued = true;
+		credit = true;
+		cleanup_queue_in_use = true;
+		++children;
+		return true;
+	}
+	void release_cleanup_queue(bool &queued, bool &credit) {
+		CRASH_COND(!queued || !credit || !cleanup_queue_in_use || !children);
+		queued = false;
+		credit = false;
+		cleanup_queue_in_use = false;
+		--children;
+	}
+	static constexpr uint32_t CHILD_CAPACITY = 128;
+	// Finite legacy Numeric/Method scope: the existing 128 ticket envelope,
+	// at most ten original method roles (numeric has eight), Capture and Body.
+	// This is a component limit, not a World/System/U08 byte grant or permission
+	// for unbounded pre-ticket churn. Every admitted original key uses a credit.
+	static constexpr uint32_t STORAGE_HISTORY_CAPACITY = CHILD_CAPACITY * 10;
+	static constexpr uint32_t UNIT_HISTORY_CAPACITY = CHILD_CAPACITY * 2;
+	QualificationChildHistory<GDExtensionStorageCreateRequestV1, STORAGE_HISTORY_CAPACITY> storage_origins;
+	QualificationChildHistory<GDExtensionNativeUnitCreateRequestV1, UNIT_HISTORY_CAPACITY> unit_origins;
+	struct Storage {
+		uint64_t serial = 0, retire_serial = 0, dependency_serial = 0;
+		uint32_t history_index = UINT32_MAX;
+		GDExtensionStorageCreateRequestV1 origin = {};
+		GDExtensionStorageBackingV1 backing = {};
+		GDExtensionStorageRetireRequestV1 retirement = {};
+		GDExtensionStorageRetireReportV1 report = {};
+		QualificationPhysicalReturn physical;
+		Error maintenance_error = OK;
+		bool creating = true, retiring = false, queued = false, acknowledged = false, cleanup_serial_reserved = false, queue_ref_credit = false;
+	};
+	// Original bridge child for a method texture. The producer and typed
+	// retire transaction must bind this cell before it can be admitted by wire.
+	struct Texture : QualificationResource {
+		GDExtensionQualificationTextureCreateV1 origin = {};
+	};
+	struct Sampler : QualificationResource {
+		GDExtensionQualificationSamplerCreateV1 origin = {};
+	};
+	struct UniformSet : QualificationResource {
+		GDExtensionQualificationSetCreateV1 origin = {};
+		LocalVector<GDExtensionQualificationUniformBindingV1> bindings;
+	};
+	struct NativeUnit {
+		uint64_t serial = 0, retire_serial = 0, dependency_serial = 0;
+		uint32_t history_index = UINT32_MAX;
+		GDExtensionNativeUnitCreateRequestV1 origin = {};
+		GDExtensionNativeUnitBackingV1 backing = {};
+		GDExtensionNativeUnitRetireReportV1 report = {};
+		QualificationPhysicalReturn shader, pipeline;
+		Error maintenance_error = OK;
+		bool creating = true, retiring = false, queued = false, acknowledged = false, cleanup_serial_reserved = false, queue_ref_credit = false;
+	};
+	void collect_retired_children_locked();
+	// Read-only component accounting under Registry::mutex. These observations
+	// do not include other ticket/typed/driver owners or grant a byte reservation.
+	struct ChildMetadataStats {
+		uint32_t storage_origin_credits = 0, unit_origin_credits = 0;
+		uint32_t storage_cold_origins = 0, unit_cold_origins = 0;
+		uint32_t storage_hot_cells = 0, unit_hot_cells = 0, untracked_test_cells = 0;
+		uint64_t bridge_request_bytes = 0, origin_arena_request_bytes = 0;
+		uint64_t hot_cell_request_bytes = 0, physical_pin_request_bytes = 0;
+		uint64_t tracked_request_bytes() const { return bridge_request_bytes + origin_arena_request_bytes + hot_cell_request_bytes + physical_pin_request_bytes; }
+	};
+	ChildMetadataStats child_metadata_stats() const;
+	QualificationTicket *tickets[CHILD_CAPACITY] = {};
+	Storage *storage[CHILD_CAPACITY] = {};
+	Texture *textures[CHILD_CAPACITY] = {};
+	Sampler *samplers[CHILD_CAPACITY] = {};
+	UniformSet *sets[CHILD_CAPACITY] = {};
+	NativeUnit *units[CHILD_CAPACITY] = {};
 };
 inline void Registry::QualificationBridge::collect_retired_children_locked() {
 	auto *bridge = this;
@@ -378,7 +408,7 @@ inline void Registry::QualificationBridge::collect_retired_children_locked() {
 	// Native ACK alone is insufficient: a retired ticket can still retain this
 	// exact metadata address until its original release unlinks both directions.
 	const auto referenced = [&](const QualificationPhysicalReturn &cell) {
-		if (!cell.uses.is_empty() || cell.dependent_children.load()) {
+		if (!cell.uses.is_empty() || cell.production_uses || cell.dependent_children.load()) {
 			return true;
 		}
 		for (const auto *ticket : bridge->tickets) {
@@ -470,4 +500,4 @@ inline Registry::QualificationBridge::ChildMetadataStats Registry::Qualification
 	return stats;
 }
 
-}
+} //namespace GDExtensionDeviceExit

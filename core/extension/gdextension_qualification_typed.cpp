@@ -713,6 +713,9 @@ void Registry::qualification_resource_retire_step(QualificationBridge *b, Render
 		reason = 5;
 	}
 	if (!reason && !c->physical.enqueued) {
+		if (c->physical.production_uses) {
+			reason = 3;
+		}
 		for (auto *ticket : c->physical.uses) {
 			if (!ticket->physically_retired.load()) {
 				reason = 3;
@@ -892,7 +895,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_resource_retire_release
 	}
 	const auto &r = c->report;
 	MutexLock physical_lock(c->physical.mutex);
-	if (!abi(r.abi) || r.resource.registry_instance != instance || r.resource.handle_serial != c->serial || r.kind != c->kind || c->physical.bridge != b->serial || c->physical.child != c->serial || c->physical.rid != c->rid || c->physical.serial != c->object_serial || !c->physical.use_closed.load() || !c->physical.enqueued || !c->physical.reserved_event || c->physical.free_event != c->physical.reserved_event || !r.frame_epoch || r.frame_slot == UINT32_MAX || !revision || revision != r.revision || !c->retiring || c->creating || c->queued || c->accepted_rt_refs || c->maintenance_error != OK || r.state != 1 || r.return_status != 1 || r.reason || r.native_error || r.native_code || r.rid != c->rid || r.object_serial != c->object_serial || r.retire_operation != c->retirement.retire_operation || r.dependency_serial != c->dependency_serial || r.frame_slot != c->physical.frame_slot || r.frame_epoch != c->physical.frame_epoch || !r.event_seq || r.event_seq != c->physical.free_event || c->physical.dependent_children.load() || !c->physical.uses.is_empty()) {
+	if (!abi(r.abi) || r.resource.registry_instance != instance || r.resource.handle_serial != c->serial || r.kind != c->kind || c->physical.bridge != b->serial || c->physical.child != c->serial || c->physical.rid != c->rid || c->physical.serial != c->object_serial || !c->physical.use_closed.load() || !c->physical.enqueued || !c->physical.reserved_event || c->physical.free_event != c->physical.reserved_event || !r.frame_epoch || r.frame_slot == UINT32_MAX || !revision || revision != r.revision || !c->retiring || c->creating || c->queued || c->accepted_rt_refs || c->maintenance_error != OK || r.state != 1 || r.return_status != 1 || r.reason || r.native_error || r.native_code || r.rid != c->rid || r.object_serial != c->object_serial || r.retire_operation != c->retirement.retire_operation || r.dependency_serial != c->dependency_serial || r.frame_slot != c->physical.frame_slot || r.frame_epoch != c->physical.frame_epoch || !r.event_seq || r.event_seq != c->physical.free_event || c->physical.dependent_children.load() || !c->physical.uses.is_empty() || c->physical.production_uses) {
 		return result(ERR_BUSY, 16);
 	}
 	if (c->cleanup_serial_reserved) {

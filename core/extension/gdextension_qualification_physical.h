@@ -32,41 +32,47 @@
 
 #include "core/os/mutex.h"
 #include "core/templates/local_vector.h"
-#include <cstdint>
+
 #include <atomic>
+#include <cstdint>
 
 class RenderingDevice;
 class TestQualificationPhysicalAccess;
 class TestQualificationAckAccess;
+class TestProductionResourceUseAccess;
 namespace GDExtensionDeviceExit {
 class Registry;
 struct QualificationTicket;
 struct QualificationResource;
+class ProductionResourceUse;
 // One exact object return cell within an original Registry child. This is not
 // a completion source: only the original RD queue and driver-free return write
 // it. Its parent retains it through the owner's later acknowledgement.
 class QualificationPhysicalReturn {
- friend class Registry;
- friend struct QualificationTicket;
- struct QualificationResource;
- friend class ::RenderingDevice;
+	friend class Registry;
+	friend class ProductionResourceUse;
+	friend struct QualificationTicket;
+	struct QualificationResource;
+	friend class ::RenderingDevice;
 #ifdef TESTS_ENABLED
- friend class ::TestQualificationPhysicalAccess;
- friend class ::TestQualificationAckAccess;
+	friend class ::TestQualificationPhysicalAccess;
+	friend class ::TestQualificationAckAccess;
+	friend class ::TestProductionResourceUseAccess;
 #endif
- BinaryMutex mutex;
- uint64_t bridge = 0;
- uint64_t child = 0;
- uint64_t rid = 0;
- uint64_t serial = 0;
- uint64_t frame_epoch = 0;
- uint64_t reserved_event = 0;
- uint64_t free_event = 0;
- uint32_t frame_slot = UINT32_MAX;
- bool event_capacity_reserved = false;
- bool enqueued = false;
- std::atomic<bool> use_closed{false};
- std::atomic<uint32_t> dependent_children{0};
- LocalVector<QualificationTicket *> uses;
+	BinaryMutex mutex;
+	uint64_t bridge = 0;
+	uint64_t child = 0;
+	uint64_t rid = 0;
+	uint64_t serial = 0;
+	uint64_t frame_epoch = 0;
+	uint64_t reserved_event = 0;
+	uint64_t free_event = 0;
+	uint32_t frame_slot = UINT32_MAX;
+	bool event_capacity_reserved = false;
+	bool enqueued = false;
+	std::atomic<bool> use_closed{ false };
+	std::atomic<uint32_t> dependent_children{ 0 };
+	LocalVector<QualificationTicket *> uses;
+	ProductionResourceUse *production_uses = nullptr;
 };
-}
+} //namespace GDExtensionDeviceExit

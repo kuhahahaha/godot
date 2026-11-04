@@ -1095,7 +1095,7 @@ Error Registry::release_code_hold(const GDExtensionDeviceExitAbi *abi, LibraryCo
 			if (!holder->typed_code_hold || holder->handle_serial != hold.handle_serial || holder->pending) {
 				continue;
 			}
-			if (holder->qualification_children) {
+			if (holder->qualification_children || holder->production_children) {
 				return ERR_BUSY;
 			}
 			auto *frame = RegistrationContext::current;

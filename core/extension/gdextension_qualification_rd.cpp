@@ -87,6 +87,16 @@ bool RenderingDevice::_qualification_resource_busy(RID rid) {
 	if (pipeline && pipeline->qualification_users) {
 		return true;
 	}
+	const auto *shader = shader_owner.get_or_null(rid);
+	const auto *physical = buffer ? buffer->qualification_return : texture ? texture->qualification_return
+			: sampler													   ? sampler->qualification_return
+			: set														   ? set->qualification_return
+			: pipeline													   ? pipeline->qualification_return
+			: shader													   ? shader->qualification_return
+																		   : nullptr;
+	if (physical && physical->production_uses) {
+		return true;
+	}
 	const auto *dependencies = dependency_map.getptr(rid);
 	if (dependencies) {
 		for (RID child : *dependencies) {
