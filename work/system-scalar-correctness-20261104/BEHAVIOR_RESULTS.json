@@ -1,0 +1,12 @@
+[
+  {
+    "stage": "red",
+    "exit_code": 1,
+    "output": "FAIL Unknown marks missing mapping\nFAIL Unknown does not retire without native facts\nFAIL Unknown retains resource pins\nFAIL over native+graph bound refuses admission\nFAIL refusal precedes ticket/serial publication\nFAIL original driver observes complete continuation profile\nFAIL unsupported driver bound refuses admission\nFAIL sub32 staging cannot use copy bound\nFAIL slot arithmetic cannot wrap\nFAIL 16KiB one-over native bound\nfailures=10\n"
+  },
+  {
+    "stage": "green",
+    "exit_code": 0,
+    "output": "failures=0\n"
+  }
+]
