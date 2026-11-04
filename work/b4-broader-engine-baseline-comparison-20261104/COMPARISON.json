@@ -1,0 +1,47 @@
+{
+  "old_host_sha256": "4e99d8df4482f596ee892944a38d9bff28bf8f622c8a4b2cd4e7081a33e6c528",
+  "old_source": "a2f009e6cd5251abea5a611eaf9edac50b8749b3",
+  "new_host_sha256": "965cb0ef6e137dcf17298d504f404a6f53aaa0421d03d080ef36e9b5b9b24eb6",
+  "new_source": "94b06dc4876d153492aa0c0e2f3457d2f5afc92e",
+  "old_cases": 252,
+  "old_assertions": 50356,
+  "new_cases": 258,
+  "new_assertions": 50430,
+  "added_case_names": [
+    "[RenderingDevice][NativeDisposal] failed native creation leaves no witness or hidden pending resource",
+    "[RenderingDevice][NativeDisposal] preflight and serial mismatch cannot manufacture returned",
+    "[RenderingDevice][NativeDisposal] real buffer queue retains metadata until driver free returns",
+    "[RenderingDevice][NativeDisposal] set cascade reports each actual free independently",
+    "[ShaderLanguage] inverse model cannot be assigned or borrowed by canvas shaders",
+    "[ShaderLanguage] spatial inverse model is a readonly matrix in vertex and fragment"
+  ],
+  "removed_case_names": [],
+  "diagnostic_payloads_identical_in_order": true,
+  "diagnostic_counter": {
+    "ERROR: Condition \"texture && texture->qualification_return\" is true. Returning: ERR_UNAUTHORIZED": 2,
+    "ERROR: Condition \"!pipeline.driver_id\" is true. Returning: RID()": 2,
+    "ERROR: Condition \"!shader_id\" is true. Returning: RID()": 1,
+    "Unicode parsing error, some characters were replaced with � (U+FFFD): Invalid UTF-8 leading byte (ff)": 1,
+    "ERROR: Attempted to save a foreign camera source token.": 3
+  },
+  "unattributed_diagnostics": [],
+  "source_negative_case_files": [
+    {
+      "file": "tests/servers/rendering/test_qualification_physical.cpp",
+      "a2_and_94b_bytes_identical": true,
+      "sha256": "2c0e0dd4ebcbd7f45f308f8bd6a168c170dca4c19cc1184501f6779e1639c8a0"
+    },
+    {
+      "file": "tests/servers/rendering/test_shader_compile_policy.cpp",
+      "a2_and_94b_bytes_identical": true,
+      "sha256": "ad714bef86fed2322cff1b05d63bdc50656ce22930f3d2516f89db02b550e5e4"
+    },
+    {
+      "file": "tests/servers/rendering/test_viewport_camera_source.cpp",
+      "a2_and_94b_bytes_identical": true,
+      "sha256": "47a8764eeaefb4129d29c58721f5a313994e1ed4817dc8e086b39cc90c631a97"
+    }
+  ],
+  "original_new_execute_pass_preserved": false,
+  "limited_conclusion": "No new diagnostic family/payload/count under this exact filter; all nine messages independently attributed to five intentional negative cases. Strict raw-stderr clean status remains false. No whole-engine/GPU/whole-B4 acceptance."
+}

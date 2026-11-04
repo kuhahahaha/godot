@@ -1,0 +1,17 @@
+ERROR: Condition "texture && texture->qualification_return" is true. Returning: ERR_UNAUTHORIZED
+   at: driver_callback_add (servers/rendering/rendering_device.cpp:1310)
+ERROR: Condition "texture && texture->qualification_return" is true. Returning: ERR_UNAUTHORIZED
+   at: driver_callback_add (servers/rendering/rendering_device.cpp:1310)
+ERROR: Condition "!pipeline.driver_id" is true. Returning: RID()
+   at: _qualification_pipeline_create (servers/rendering/rendering_device.cpp:5701)
+ERROR: Condition "!pipeline.driver_id" is true. Returning: RID()
+   at: _qualification_pipeline_create (servers/rendering/rendering_device.cpp:5701)
+ERROR: Condition "!shader_id" is true. Returning: RID()
+   at: _qualification_shader_create (servers/rendering/rendering_device.cpp:4771)
+Unicode parsing error, some characters were replaced with � (U+FFFD): Invalid UTF-8 leading byte (ff)
+ERROR: Attempted to save a foreign camera source token.
+   at: viewport_set_prev_camera_data (servers/rendering/renderer_viewport.cpp:1285)
+ERROR: Attempted to save a foreign camera source token.
+   at: viewport_set_prev_camera_data (servers/rendering/renderer_viewport.cpp:1285)
+ERROR: Attempted to save a foreign camera source token.
+   at: viewport_set_prev_camera_data (servers/rendering/renderer_viewport.cpp:1285)

@@ -1,0 +1,836 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<doctest binary="/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/host/editor.arm64" version="2.4.12">
+  <Options order_by="file" rand_seed="0" first="0" last="4294967295" abort_after="0" subcase_filter_levels="2147483647" case_sensitive="true" no_throw="false" no_skip="false"/>
+  <TestSuite>
+    <TestCase name="[CommandQueue][Qualification] full bounded enqueue has no effect and retry preserves FIFO" filename="tests/core/templates/test_command_queue_bounded.cpp" line="20">
+      <OverallResultsAsserts successes="10" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[CommandQueue][Qualification] contended bounded enqueue refuses without waiting or publication" filename="tests/core/templates/test_command_queue_bounded.cpp" line="40">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[B4] native_packet_join" filename="tests/servers/rendering/test_external_output_contract.cpp" line="208">
+      <SubCase name="J14 transfer dependencies and refused draw prefixes remain distinguishable" filename="tests/servers/rendering/test_external_output_contract.cpp" line="209">
+      </SubCase>
+      <SubCase name="J14 output capture refuses pending texture preparation before descriptor effects" filename="tests/servers/rendering/test_external_output_contract.cpp" line="246">
+      </SubCase>
+      <SubCase name="J14 checked RD companions retain actual handles and exact preflight errors" filename="tests/servers/rendering/test_external_output_contract.cpp" line="269">
+      </SubCase>
+      <SubCase name="J14 public copy rejects overflowing source and destination spans before append" filename="tests/servers/rendering/test_external_output_contract.cpp" line="313">
+      </SubCase>
+      <SubCase name="J13 record offsets must identify actual instruction boundaries" filename="tests/servers/rendering/test_external_output_contract.cpp" line="328">
+      </SubCase>
+      <SubCase name="J14 copy and indirect draws map only actual executed list instructions" filename="tests/servers/rendering/test_external_output_contract.cpp" line="351">
+      </SubCase>
+      <OverallResultsAsserts successes="142" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[RenderingDevice] compute indirect validates aligned complete command span before effects" filename="tests/servers/rendering/test_external_output_contract.cpp" line="428">
+      <OverallResultsAsserts successes="27" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[RenderingDevice] buffer clear validates aligned spans and skips empty commands before effects" filename="tests/servers/rendering/test_external_output_contract.cpp" line="456">
+      <OverallResultsAsserts successes="44" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[RenderingDevice] buffer update validates the full span before return guard and mapping" filename="tests/servers/rendering/test_external_output_contract.cpp" line="496">
+      <OverallResultsAsserts successes="80" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[RenderingDevice] buffer readback validates explicit and default spans before allocation" filename="tests/servers/rendering/test_external_output_contract.cpp" line="533">
+      <OverallResultsAsserts successes="15" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[B4][K05] external surface descriptor requires distinct generations" filename="tests/servers/rendering/test_mesh_storage_external.cpp" line="9">
+      <OverallResultsAsserts successes="7" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[B4][K05] actual Indexed144 cache retains exact mask generations and borrowed buffers" filename="tests/servers/rendering/test_mesh_storage_external.cpp" line="170">
+      <OverallResultsAsserts successes="43" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[B4][K05] failed original VA construction publishes no cached version" filename="tests/servers/rendering/test_mesh_storage_external.cpp" line="178">
+      <OverallResultsAsserts successes="49" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[B4][K05] original renderer pipeline keys distinguish Indexed144 from ordinary Mesh" filename="tests/servers/rendering/test_mesh_storage_external.cpp" line="186">
+      <OverallResultsAsserts successes="2" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[B4][MultiMesh] rounded dirty uploads cannot wrap into a zero byte success" filename="tests/servers/rendering/test_multimesh_rebuild.cpp" line="16">
+      <OverallResultsAsserts successes="4" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[B4][MultiMesh] allocation preflight bounds the complete buffer before mutation" filename="tests/servers/rendering/test_multimesh_rebuild.cpp" line="26">
+      <OverallResultsAsserts successes="26" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] Returned before queue tail keeps storage ack retryable and exact once" filename="tests/servers/rendering/test_qualification_ack.cpp" line="130">
+      <OverallResultsAsserts successes="16" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] Returned before queue tail keeps native unit ack retryable and exact once" filename="tests/servers/rendering/test_qualification_ack.cpp" line="131">
+      <OverallResultsAsserts successes="16" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] storage retire ack rejects inconsistent returned reports" filename="tests/servers/rendering/test_qualification_ack.cpp" line="134">
+      <OverallResultsAsserts successes="20" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] native unit retire ack rejects inconsistent returned reports" filename="tests/servers/rendering/test_qualification_ack.cpp" line="135">
+      <OverallResultsAsserts successes="20" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] native shader-only ack requires original physical return association" filename="tests/servers/rendering/test_qualification_ack.cpp" line="137">
+      <OverallResultsAsserts successes="124" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] native two-unit ack requires original physical return association" filename="tests/servers/rendering/test_qualification_ack.cpp" line="138">
+      <OverallResultsAsserts successes="128" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[RenderingDevice][Qualification] original backing serial saturates without reuse" filename="tests/servers/rendering/test_qualification_backing_serial.cpp" line="12">
+      <OverallResultsAsserts successes="4" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[RenderingDevice][Qualification] asynchronous storage creation reserves distinct original serials" filename="tests/servers/rendering/test_qualification_backing_serial.cpp" line="21">
+      <OverallResultsAsserts successes="2" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[RenderingDevice][Qualification] pending and wrong fence preserve frame without wait or recycle" filename="tests/servers/rendering/test_qualification_frame.cpp" line="33">
+      <OverallResultsAsserts successes="11" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[RenderingDevice][Qualification] matching successful poll completes without a legacy fence wait" filename="tests/servers/rendering/test_qualification_frame.cpp" line="44">
+      <OverallResultsAsserts successes="9" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[R02][Qualification] only consumed synchronization with actual adjacency proves Capture to Body ordering" filename="tests/servers/rendering/test_qualification_graph_order.cpp" line="5">
+      <OverallResultsAsserts successes="6" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Metal] actual hidden and final commits have distinct retained identities" filename="tests/servers/rendering/test_qualification_metal_calls.cpp" line="20">
+      <OverallResultsAsserts successes="34" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Metal] original hidden copy queue retains exact bytes and nonwaiting source" filename="tests/servers/rendering/test_qualification_metal_calls.cpp" line="71">
+      <OverallResultsAsserts successes="17" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Metal] ordinary frame prepares hidden copy before sealing" filename="tests/servers/rendering/test_qualification_metal_calls.cpp" line="97">
+      <OverallResultsAsserts successes="12" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[RenderingDevice][Qualification] invalidation retains original callback when uniform set slot is reused" filename="tests/servers/rendering/test_qualification_physical.cpp" line="2967">
+      <OverallResultsAsserts successes="5" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[RenderingDevice] framebuffer invalidation is synchronous and reentry does not duplicate disposal" filename="tests/servers/rendering/test_qualification_physical.cpp" line="2974">
+      <OverallResultsAsserts successes="8" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[RenderingDevice] parent disposal remains active through child invalidation" filename="tests/servers/rendering/test_qualification_physical.cpp" line="2981">
+      <OverallResultsAsserts successes="6" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[RenderingDevice] child invalidation can retire a sibling during parent disposal" filename="tests/servers/rendering/test_qualification_physical.cpp" line="2989">
+      <OverallResultsAsserts successes="7" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[RenderingDevice] late busy dependent preserves parent and edge until retry" filename="tests/servers/rendering/test_qualification_physical.cpp" line="2996">
+      <OverallResultsAsserts successes="11" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[RenderingDevice] busy dependent preserves its parent until retry" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3003">
+      <OverallResultsAsserts successes="12" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[RenderingDevice][Qualification] buffer return follows exact physical free and survives RID erase" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3010">
+      <OverallResultsAsserts successes="12" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[RenderingDevice][Qualification] dependent descriptor pin survives RID erase until driver return" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3022">
+      <OverallResultsAsserts successes="6" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[RenderingDevice][Qualification] unsupported checked descriptor return has no driver effect" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3030">
+      <OverallResultsAsserts successes="2" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] retire keeps exact original RID live while lists or callbacks are active" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3035">
+      <OverallResultsAsserts successes="44" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[RenderingDevice][Qualification] contended transfer lock refuses maintenance before driver effect" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3042">
+      <OverallResultsAsserts successes="2" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][E05] accepted storage retains retirement identities near registry exhaustion" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3054">
+      <OverallResultsAsserts successes="22" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][E05] accepted storage retains physical event capacity at exhaustion" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3062">
+      <OverallResultsAsserts successes="16" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][E05] failed storage creation releases reserved event capacity" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3068">
+      <OverallResultsAsserts successes="13" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][E05] event capacity protects previously accepted resource kinds" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3074">
+      <OverallResultsAsserts successes="36" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] accepted native unit retains retirement identity after sequence exhaustion" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3082">
+      <OverallResultsAsserts successes="8" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] retired E05 backing rejects same prepared upload and preserves RT release and bridge teardown" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3088">
+      <OverallResultsAsserts successes="38" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][E05] QRT cleanup release preserves retry and stale-ref safety" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3093">
+      <OverallResultsAsserts successes="19" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][E05] QRT cleanup retries reject old refs with available serials" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3099">
+      <OverallResultsAsserts successes="28" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][E05] QRT cleanup capacity excludes unrelated admissions" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3105">
+      <OverallResultsAsserts successes="18" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][E05] last QRT serial delivers original retirement before release" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3111">
+      <OverallResultsAsserts successes="20" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][E05] last QRT serial retries observed no-effect dispatch failure" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3117">
+      <OverallResultsAsserts successes="32" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][E05] conflicting cleanup waits for original owner before next child" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3123">
+      <OverallResultsAsserts successes="35" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][E05] accepted storage retains cleanup at private reference capacity" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3129">
+      <OverallResultsAsserts successes="31" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][E05] last cleanup slot returns reserved private references" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3135">
+      <OverallResultsAsserts successes="21" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][E05] prepared ticket requires cleanup capacity" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3141">
+      <OverallResultsAsserts successes="16" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][E05] saturated ticket transport drains after cancellation" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3147">
+      <OverallResultsAsserts successes="20" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][E05] saturated ticket record transport drains after cancellation" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3153">
+      <OverallResultsAsserts successes="20" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][E05] ticket transport retries after shared queue credit returns" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3159">
+      <OverallResultsAsserts successes="25" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][E05] full server queue retries ticket cleanup and transport" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3166">
+      <OverallResultsAsserts successes="30" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][E05] accepted storage retains QRT cleanup at registry exhaustion" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3173">
+      <OverallResultsAsserts successes="15" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] storage retire retains unknown after maintenance failure and physical free" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3179">
+      <OverallResultsAsserts successes="17" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] native unit retire reducer retains maintenance unknown on observed event" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3184">
+      <OverallResultsAsserts successes="10" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] service native poll error remains unknown after storage free" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3189">
+      <OverallResultsAsserts successes="19" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] storage maintenance unknown prevents new retire enqueue" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3194">
+      <OverallResultsAsserts successes="9" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] service poll error precedes new native shader retirement" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3199">
+      <OverallResultsAsserts successes="12" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] service preserves first native retire maintenance error" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3204">
+      <OverallResultsAsserts successes="12" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] native unit exhausted retire revision freezes report and prevents new enqueue" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3209">
+      <OverallResultsAsserts successes="5" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] native unit unknown without maintenance error accepts original later event" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3213">
+      <OverallResultsAsserts successes="5" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] exhausted native report keeps service error private and close busy" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3218">
+      <OverallResultsAsserts successes="11" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] queued native service retains maintenance error across close" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3222">
+      <OverallResultsAsserts successes="15" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] queued native close retains preexisting maintenance error" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3227">
+      <OverallResultsAsserts successes="15" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] ticket ack removes only its original reverse uses after RD contention" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3232">
+      <OverallResultsAsserts successes="29" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] ticket ack rejects damaged or duplicate reverse edges without partial unlink" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3237">
+      <OverallResultsAsserts successes="30" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] ticket native release retry retains reverse edges until all observers return" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3241">
+      <OverallResultsAsserts successes="16" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] empty ticket ack preserves progress during RD contention" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3247">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] ticket observer return survives later RD contention without replay" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3250">
+      <OverallResultsAsserts successes="10" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] foreign bridge physical child cannot acquire ticket reverse use" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3256">
+      <OverallResultsAsserts successes="10" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] non-error Unknown remains well-formed while a dependent blocks retirement" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3261">
+      <OverallResultsAsserts successes="74" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] unit pipeline identity failure is not masked by shader pending" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3269">
+      <OverallResultsAsserts successes="8" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] unknown pipeline preserves its original shader" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3274">
+      <OverallResultsAsserts successes="30" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] mismatched pipeline cell cannot publish Returned from an event" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3281">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][T1] original texture owner reports its real driver return" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3286">
+      <OverallResultsAsserts successes="14" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][T1] original sampler owner reports its real driver return" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3292">
+      <OverallResultsAsserts successes="14" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][T1] original sampler is retained by its ticket while in use" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3298">
+      <OverallResultsAsserts successes="68" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][T1] marked sampler rejects legacy access and implicit parent return" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3304">
+      <OverallResultsAsserts successes="13" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][T1] ordinary sampler retains its original lifecycle" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3310">
+      <OverallResultsAsserts successes="10" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][T1] sampler creation refuses suspended recording before driver effects" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3316">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][T1] marked texture refuses legacy sharing and upload" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3322">
+      <OverallResultsAsserts successes="13" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][T1] marked texture rejects driver callbacks before an ordinary prefix" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3328">
+      <OverallResultsAsserts successes="10" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][T1] worker refusal preserves texture dependencies" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3333">
+      <OverallResultsAsserts successes="10" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][T1] original texture is retained by its ticket while in use" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3338">
+      <OverallResultsAsserts successes="63" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][T1] ordinary texture cannot become a qualification resource" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3343">
+      <OverallResultsAsserts successes="6" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][T1] Metal original texture owner physically returns an empty RGBA32F texture" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3349">
+      <OverallResultsAsserts successes="14" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][T1] Metal original sampler owner physically returns a sampler" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3358">
+      <OverallResultsAsserts successes="14" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][T1] texture ticket acknowledgement preserves the neighboring original use" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3369">
+      <OverallResultsAsserts successes="6" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][T1] sampler ticket acknowledgement preserves the neighboring original use" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3374">
+      <OverallResultsAsserts successes="6" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][T1] live method children retain bridge cleanup credits" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3379">
+      <OverallResultsAsserts successes="10" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][T1] a same-numbered but unregistered texture cell is not authority" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3383">
+      <OverallResultsAsserts successes="7" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][T1] parent release refuses an unsettled texture descendant" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3388">
+      <OverallResultsAsserts successes="13" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][T1] record preflight accepts only ready original typed texture and sampler children" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3393">
+      <OverallResultsAsserts successes="159" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][MultiReadback] two original uniform sets retain typed dependency checks at the correct index" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3400">
+      <OverallResultsAsserts successes="189" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][Typed] original producer row upload exact phase descriptors and frame return form one lifecycle" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3427">
+      <OverallResultsAsserts successes="1118" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][Typed] descriptors precede image upload while record rejects zero partial failed and foreign images" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3434">
+      <OverallResultsAsserts successes="1136" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][Typed] zero prefix busy keeps original image pin until owner cancel" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3442">
+      <OverallResultsAsserts successes="1078" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][Typed] accepted typed retire drains after bridge close with saturated private references" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3449">
+      <OverallResultsAsserts successes="1058" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][Typed] definitively failed texture and sampler creation roll back original reservations" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3456">
+      <OverallResultsAsserts successes="2068" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][Typed] definitively failed descriptor creation rolls back and retries original allocation" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3467">
+      <OverallResultsAsserts successes="1131" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][StorageDeferred] busy before allocation is distinct from an existing creating prefix" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3478">
+      <OverallResultsAsserts successes="25" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][TypedSourceKey] full source and physical attempt remain distinct across original lifecycle states" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3482">
+      <OverallResultsAsserts successes="404" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][ChildCapacity] acknowledged storage does not exhaust the original full numeric cohort" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3498">
+      <OverallResultsAsserts successes="7402" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][ChildCapacity] acknowledged native units do not exhaust sixty-six original record slots" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3553">
+      <OverallResultsAsserts successes="2391" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][ChildCapacity] history limit refuses native effects and preserves exact old origins" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3573">
+      <OverallResultsAsserts successes="17937" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][ChildCapacity] original ticket pins delay ACKed metadata reuse" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3583">
+      <OverallResultsAsserts successes="140" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][ChildCapacity] original QRT cleanup ref delays ACKed metadata reuse" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3593">
+      <OverallResultsAsserts successes="134" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][ChildCapacity] unit origin quota refuses native effects" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3605">
+      <OverallResultsAsserts successes="4630" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][ChildCapacity] partial native unit returns its exact shader before cold archival" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3628">
+      <OverallResultsAsserts successes="49" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][ChildCapacity] definitive empty unit failure returns its history credit" filename="tests/servers/rendering/test_qualification_physical.cpp" line="3651">
+      <OverallResultsAsserts successes="57" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationRt] standalone accepted slot reserves its queue capacity" filename="tests/servers/rendering/test_qualification_rt.cpp" line="349">
+      <OverallResultsAsserts successes="40" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationRt] full rendering queue refuses then retries retained slot" filename="tests/servers/rendering/test_qualification_rt.cpp" line="351">
+      <OverallResultsAsserts successes="40" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationRt] malformed header does not overwrite aliased request or payload" filename="tests/servers/rendering/test_qualification_rt.cpp" line="353">
+      <OverallResultsAsserts successes="13" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationRt] fixed copied slot retries once across pressure close return and owner ack" filename="tests/servers/rendering/test_qualification_rt.cpp" line="356">
+      <SubCase name="cleanup_duplicate_and_possible_free" filename="tests/servers/rendering/test_qualification_rt.cpp" line="356">
+      </SubCase>
+      <OverallResultsAsserts successes="91" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationRt] preactivation abort drops exactly the accepted original ticket pin" filename="tests/servers/rendering/test_qualification_rt.cpp" line="357">
+      <OverallResultsAsserts successes="23" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationRt] accepted typed upload retains same ticket across owner cancel and returned refusal" filename="tests/servers/rendering/test_qualification_rt.cpp" line="358">
+      <OverallResultsAsserts successes="36" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationRt] accepted close scope admits its typed call exactly once" filename="tests/servers/rendering/test_qualification_rt.cpp" line="360">
+      <SubCase name="cleanup_kind3_kind5_after_quiesce" filename="tests/servers/rendering/test_qualification_rt.cpp" line="360">
+      </SubCase>
+      <SubCase name="all_other_kinds_remain_closed" filename="tests/servers/rendering/test_qualification_rt.cpp" line="360">
+      </SubCase>
+      <SubCase name="cleanup_child_auth_complete_request" filename="tests/servers/rendering/test_qualification_rt.cpp" line="360">
+      </SubCase>
+      <OverallResultsAsserts successes="228" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationRt] V3 admission retains original operation identity and legacy V2 ABI" filename="tests/servers/rendering/test_qualification_rt.cpp" line="362">
+      <OverallResultsAsserts successes="87" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] readback retains actual graph prefix without either staging wait" filename="tests/servers/rendering/test_qualification_staging.cpp" line="37">
+      <OverallResultsAsserts successes="21" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] in flight staging refuses before first readback append" filename="tests/servers/rendering/test_qualification_staging.cpp" line="48">
+      <OverallResultsAsserts successes="5" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] checked upload resumes only actual suffix through both exhausted staging cases" filename="tests/servers/rendering/test_qualification_staging.cpp" line="53">
+      <OverallResultsAsserts successes="21" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] overlapping snapshot outputs are rejected without writing destination" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1117">
+      <OverallResultsAsserts successes="16" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][MultiReadback] V2 prepare rejects report overlap without modifying request or plan" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1118">
+      <OverallResultsAsserts successes="4" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] same ticket snapshots remain readable after overlap refusal" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1119">
+      <OverallResultsAsserts successes="20" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] original async map failure retains raw code and physical obligations" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1120">
+      <OverallResultsAsserts successes="35" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] async map success and legacy failure preserve original outcome" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1124">
+      <OverallResultsAsserts successes="36" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] frame poll failure retains original native code" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1128">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] ticket poll failure retains original native code" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1129">
+      <OverallResultsAsserts successes="4" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] chain poll failure retains original native code" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1130">
+      <OverallResultsAsserts successes="2" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] ticket keeps distinct native and completion identities until every source and frame returns" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1131">
+      <OverallResultsAsserts successes="10" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] sealing accepts an actual transitive graph path" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1133">
+      <OverallResultsAsserts successes="7" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] zero-effect prepared ticket reacquires original resource pins before retry" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1135">
+      <OverallResultsAsserts successes="15" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] attempted upload keeps original writer pin across zero-effect busy publish" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1136">
+      <OverallResultsAsserts successes="8" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] settled native work releases resource pins after a logical readback copy failure" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1137">
+      <OverallResultsAsserts successes="12" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] unresolved source mapping keeps failed ticket resource pins" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1138">
+      <OverallResultsAsserts successes="4" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] owner stop is opt in exact ticket monotone and preserves immutable Complete" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1140">
+      <OverallResultsAsserts successes="31" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] exact record replay returns original ticket despite RD contention" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1143">
+      <OverallResultsAsserts successes="11" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] exact prepared replay returns canonical original plans despite RD contention" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1144">
+      <OverallResultsAsserts successes="11" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] ticket continuation refuses contended RD before graph and resumes the same suffix" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1145">
+      <OverallResultsAsserts successes="17" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] unknown submit error preserves original issue possible set and resource obligations" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1148">
+      <OverallResultsAsserts successes="13" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] known accepted native error stays Failed and retains obligations" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1150">
+      <OverallResultsAsserts successes="13" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] callback pending source stays pending and can become known successful" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1151">
+      <OverallResultsAsserts successes="20" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] mixed Failed and Unknown sources preserve unresolved Unknown" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1152">
+      <OverallResultsAsserts successes="13" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] continuation preflight reserves fresh hidden worker sources per graph frame" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1154">
+      <OverallResultsAsserts successes="22" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][MultiReadback] Numeric and Method wire rejects malformed range and set partitions" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1156">
+      <OverallResultsAsserts successes="21" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][MultiReadback] every actual range and physical source must return before aggregate copy" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1159">
+      <OverallResultsAsserts successes="37" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][MultiReadback] later range failures preserve the first cause and prohibit aggregate copy" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1162">
+      <OverallResultsAsserts successes="27" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][MultiReadback] cancellation retains the original prefix through physical return" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1165">
+      <OverallResultsAsserts successes="27" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][MultiReadback] Body proof excludes pending sources from subsequent copy frames" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1168">
+      <OverallResultsAsserts successes="5" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][MultiReadback] V2 empty domain keeps a real guarded group and V1 retains its original nonempty rule" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1172">
+      <OverallResultsAsserts successes="7" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification][VulkanQualification] original gate charges graphs and native submissions together" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1177">
+      <OverallResultsAsserts successes="11" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[Qualification] continuation capacity preserves main and waitless worker profiles" filename="tests/servers/rendering/test_qualification_ticket.cpp" line="1191">
+      <OverallResultsAsserts successes="10" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] checked descriptor return preserves unknown without replay" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="44">
+      <OverallResultsAsserts successes="23" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] independent unknown descriptors remain separately retained" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="82">
+      <OverallResultsAsserts successes="15" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] unknown descriptor destruction probe" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="98">
+      <OverallResultsAsserts successes="0" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] failed manual buffer creation returns its actual native prefix" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="105">
+      <OverallResultsAsserts successes="8" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] failed extra-tracking texture creation rolls back image and memory" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="120">
+      <OverallResultsAsserts successes="11" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] texture creation rejects an invalid direct view format" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="139">
+      <OverallResultsAsserts successes="4" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] texture creation rejects invalid view swizzles" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="154">
+      <OverallResultsAsserts successes="7" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] direct format queries reject an invalid format" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="181">
+      <OverallResultsAsserts successes="7" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] vertex format creation rejects an invalid format" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="197">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] direct buffer format rejects invalid input" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="207">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] sampler creation rejects invalid filter" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="215">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] sampler creation rejects invalid repeat mode" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="228">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] sampler creation rejects invalid compare op" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="241">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] sampler creation rejects invalid border color" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="255">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] index binding rejects invalid format before command access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="268">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] vertex binding rejects missing arrays before command access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="276">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] attachment clear rejects missing views before command access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="284">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] viewport binding rejects missing view before command access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="292">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] scissor binding rejects missing view before command access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="300">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] push constants reject missing data before command access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="308">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] render uniform binding rejects missing sets before command access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="316">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] compute uniform binding rejects missing sets before command access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="324">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] secondary command execution rejects missing view before command access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="332">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] render pass begin rejects missing clear values before command access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="340">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] pipeline barrier rejects missing views before command access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="348">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] framebuffer creation rejects missing attachment views before resource access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="356">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] uniform set creation rejects missing binding views before resource access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="364">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] render pass creation rejects missing top-level views before resource access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="372">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] dynamic uniform offset query rejects missing set views before resource access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="380">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] render pipeline creation rejects missing view inputs before resource access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="388">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] compute pipeline creation rejects missing specialization views before resource access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="400">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] BLAS creation rejects missing geometry views before feature access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="408">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] timestamp query rejects missing result output before native access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="416">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] texture copyable-layout query rejects missing output before resource access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="424">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] texture copyable-layout query rejects invalid resource before access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="432">
+      <OverallResultsAsserts successes="4" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] dynamic buffer-offset query rejects invalid resource before access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="444">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] texture allocation-size query rejects invalid resource before access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="453">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] buffer allocation-size query rejects invalid resource before access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="461">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] buffer device-address query rejects invalid resource before access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="469">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] buffer map rejects invalid resource before access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="477">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] buffer unmap rejects invalid resource before access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="485">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] persistent buffer-map advance rejects invalid resource before access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="493">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] buffer flush rejects invalid resource before access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="501">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] buffer texel-format assignment rejects invalid resource before access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="509">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] texture free rejects invalid resource before access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="517">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] texture data query rejects invalid resource before access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="525">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] shared texture creation rejects invalid owner before access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="533">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] shared texture slice creation rejects invalid owner before access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="543">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] buffer free rejects invalid resource before access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="553">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] queue submit rejects missing wait view before queue access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="561">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] buffer copy rejects missing region view before command access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="569">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] texture copy rejects missing region view before command access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="577">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] buffer-to-texture copy rejects missing region view before command access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="585">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] texture-to-buffer copy rejects missing region view before command access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="593">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] texture creation rejects an invalid shareable format" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="601">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] texture creation rejects an invalid base format" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="615">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] render pass creation rejects an invalid attachment format" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="628">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] render pass creation rejects an invalid attachment layout" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="637">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] texture creation rejects an invalid sample count" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="648">
+      <OverallResultsAsserts successes="4" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] texture creation rejects an invalid texture type" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="663">
+      <OverallResultsAsserts successes="4" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] texture layout commands reject invalid layouts before resource access" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="679">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] render pass creation rejects invalid view counts" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="696">
+      <OverallResultsAsserts successes="4" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] BLAS creation rejects an invalid vertex format" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="706">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] render pass creation rejects an invalid sample count" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="716">
+      <OverallResultsAsserts successes="3" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[QualificationNative][Vulkan] render pipeline creation rejects invalid primitive and sample count" filename="tests/servers/rendering/test_qualification_vulkan_allocation.cpp" line="727">
+      <OverallResultsAsserts successes="4" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[K03][P2] RenderingDeviceDriver exposes typed native completion facts" filename="tests/servers/rendering/test_rendering_device_driver_completion.cpp" line="10">
+      <OverallResultsAsserts successes="8" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="policy_flags [ShaderCompilePolicy]" filename="tests/servers/rendering/test_shader_compile_policy.cpp" line="768">
+      <SubCase name="Unknown and unsupported flags are never narrowed away" filename="tests/servers/rendering/test_shader_compile_policy.cpp" line="769">
+      </SubCase>
+      <SubCase name="Public policy methods are discoverable" filename="tests/servers/rendering/test_shader_compile_policy.cpp" line="779">
+      </SubCase>
+      <SubCase name="Unsupported bytecode never invokes the native backend" filename="tests/servers/rendering/test_shader_compile_policy.cpp" line="785">
+      </SubCase>
+      <SubCase name="Real RD Ref/native and bytecode admission rejects before backend side effects" filename="tests/servers/rendering/test_shader_compile_policy.cpp" line="799">
+      </SubCase>
+      <SubCase name="Empty stage collection never reaches backend compilation" filename="tests/servers/rendering/test_shader_compile_policy.cpp" line="880">
+      </SubCase>
+      <OverallResultsAsserts successes="56" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="policy_container [ShaderCompilePolicy]" filename="tests/servers/rendering/test_shader_compile_policy.cpp" line="891">
+      <SubCase name="ShaderRD cache writer emits version five" filename="tests/servers/rendering/test_shader_compile_policy.cpp" line="893">
+      </SubCase>
+      <SubCase name="Partial cache rollback clears loaded RIDs and only current group bytes" filename="tests/servers/rendering/test_shader_compile_policy.cpp" line="903">
+      </SubCase>
+      <SubCase name="Version two is rejected before backend callbacks" filename="tests/servers/rendering/test_shader_compile_policy.cpp" line="939">
+      </SubCase>
+      <SubCase name="Version three independent header and complete bounded roundtrip" filename="tests/servers/rendering/test_shader_compile_policy.cpp" line="951">
+      </SubCase>
+      <SubCase name="Noncanonical and malformed UTF-8 names are rejected before reserialization" filename="tests/servers/rendering/test_shader_compile_policy.cpp" line="987">
+      </SubCase>
+      <SubCase name="Audit digest preserves the actual input including nonzero padding" filename="tests/servers/rendering/test_shader_compile_policy.cpp" line="1003">
+      </SubCase>
+      <SubCase name="Raw payload must fill the complete declared output" filename="tests/servers/rendering/test_shader_compile_policy.cpp" line="1025">
+      </SubCase>
+      <SubCase name="Corrupt Zstd data must be rejected" filename="tests/servers/rendering/test_shader_compile_policy.cpp" line="1032">
+      </SubCase>
+      <SubCase name="Zstd short output must be rejected" filename="tests/servers/rendering/test_shader_compile_policy.cpp" line="1037">
+      </SubCase>
+      <OverallResultsAsserts successes="305" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="policy_library_key [ShaderCompilePolicy]" filename="tests/servers/rendering/test_shader_compile_policy.cpp" line="1047">
+      <OverallResultsAsserts successes="21" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="policy_options [ShaderCompilePolicy]" filename="tests/servers/rendering/test_shader_compile_policy.cpp" line="1161">
+      <SubCase name="Audit exclusive creation, schema and latched failure" filename="tests/servers/rendering/test_shader_compile_policy.cpp" line="1166">
+      </SubCase>
+      <SubCase name="Audit row and UTF-8 byte bounds are exact" filename="tests/servers/rendering/test_shader_compile_policy.cpp" line="1195">
+      </SubCase>
+      <SubCase name="Concurrent audit sinks never truncate the winner" filename="tests/servers/rendering/test_shader_compile_policy.cpp" line="1233">
+      </SubCase>
+      <SubCase name="Audit verifies independently readable bytes after apparently successful flush" filename="tests/servers/rendering/test_shader_compile_policy.cpp" line="1255">
+      </SubCase>
+      <SubCase name="Unsupported export targets fail for both explicit and implicit safe policy before tools" filename="tests/servers/rendering/test_shader_compile_policy.cpp" line="1275">
+      </SubCase>
+      <SubCase name="NoContraction conversion retains precise operations without fast pragmas" filename="tests/servers/rendering/test_shader_compile_policy.cpp" line="1329">
+      </SubCase>
+      <SubCase name="Real Metal reflection extras and malicious profile/count encodings" filename="tests/servers/rendering/test_shader_compile_policy.cpp" line="1362">
+      </SubCase>
+      <SubCase name="Production offline arguments use effective policy and invariance" filename="tests/servers/rendering/test_shader_compile_policy.cpp" line="1453">
+      </SubCase>
+      <SubCase name="Offline tool success requires execution, OS success, raw zero and nonempty product" filename="tests/servers/rendering/test_shader_compile_policy.cpp" line="1471">
+      </SubCase>
+      <SubCase name="Actual SPIR-V execution model is checked before tools" filename="tests/servers/rendering/test_shader_compile_policy.cpp" line="1479">
+      </SubCase>
+      <SubCase name="Bridge independently rejects input bounds and returns fixed profile schema" filename="tests/servers/rendering/test_shader_compile_policy.cpp" line="1506">
+      </SubCase>
+      <SubCase name="Actual stage options are independent and preserve safe mode" filename="tests/servers/rendering/test_shader_compile_policy.cpp" line="1564">
+      </SubCase>
+      <OverallResultsAsserts successes="5174" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[ShaderPreprocessor] Simple defines" filename="tests/servers/rendering/test_shader_preprocessor.cpp" line="103">
+      <OverallResultsAsserts successes="2" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[ShaderPreprocessor] Avoid merging adjacent tokens" filename="tests/servers/rendering/test_shader_preprocessor.cpp" line="140">
+      <OverallResultsAsserts successes="2" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[ShaderPreprocessor] Complex defines" filename="tests/servers/rendering/test_shader_preprocessor.cpp" line="160">
+      <OverallResultsAsserts successes="2" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[ShaderPreprocessor] Concatenation" filename="tests/servers/rendering/test_shader_preprocessor.cpp" line="189">
+      <OverallResultsAsserts successes="2" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[ShaderPreprocessor] Nested concatenation" filename="tests/servers/rendering/test_shader_preprocessor.cpp" line="229">
+      <OverallResultsAsserts successes="2" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[ShaderPreprocessor] Concatenation sorting network" filename="tests/servers/rendering/test_shader_preprocessor.cpp" line="257">
+      <OverallResultsAsserts successes="2" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[ShaderPreprocessor] Undefined behavior" filename="tests/servers/rendering/test_shader_preprocessor.cpp" line="296">
+      <OverallResultsAsserts successes="0" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[ShaderPreprocessor] Invalid concatenations" filename="tests/servers/rendering/test_shader_preprocessor.cpp" line="317">
+      <OverallResultsAsserts successes="6" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[B4][E15] viewport camera source requires explicit C01 registration" filename="tests/servers/rendering/test_viewport_camera_source.cpp" line="13">
+      <OverallResultsAsserts successes="38" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[B4][E17] external packet identity requires camera tuple and material capability" filename="tests/servers/rendering/test_viewport_camera_source.cpp" line="98">
+      <OverallResultsAsserts successes="31" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[B4][D-Next-5] RenderDataRD admission wrappers close all four packet paths" filename="tests/servers/rendering/test_viewport_camera_source.cpp" line="150">
+      <OverallResultsAsserts successes="9" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[B4][D-Next-6] packet admission atomically retires camera and surface failures" filename="tests/servers/rendering/test_viewport_camera_source.cpp" line="183">
+      <OverallResultsAsserts successes="9" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[B4][D-Next-7] packet admission propagates typed diagnostics" filename="tests/servers/rendering/test_viewport_camera_source.cpp" line="211">
+      <OverallResultsAsserts successes="8" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[B4][D-Next-8] retired status wins over ordinary Mesh compatibility" filename="tests/servers/rendering/test_viewport_camera_source.cpp" line="233">
+      <OverallResultsAsserts successes="10" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[B4][D-Next-9] status, bool helpers, and predicates stay retired-first" filename="tests/servers/rendering/test_viewport_camera_source.cpp" line="251">
+      <OverallResultsAsserts successes="17" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[B4][D-Next-10] retire clears camera and material packet state" filename="tests/servers/rendering/test_viewport_camera_source.cpp" line="288">
+      <OverallResultsAsserts successes="11" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[B4][D-Next-11] implicit admission failures preserve cleared retired state" filename="tests/servers/rendering/test_viewport_camera_source.cpp" line="314">
+      <OverallResultsAsserts successes="15" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[B4][D-Next-12] material invalidation defers retirement until surface use" filename="tests/servers/rendering/test_viewport_camera_source.cpp" line="347">
+      <OverallResultsAsserts successes="12" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[B4][D-Next-13] camera tuple enters RenderDataRD through one typed seam" filename="tests/servers/rendering/test_viewport_camera_source.cpp" line="374">
+      <OverallResultsAsserts successes="11" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[B4][D-Next-14] retired packet rejects camera tuple restoration" filename="tests/servers/rendering/test_viewport_camera_source.cpp" line="394">
+      <OverallResultsAsserts successes="8" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[B4][D-Next-16] external packet capability boundary fails closed" filename="tests/servers/rendering/test_viewport_camera_source.cpp" line="408">
+      <OverallResultsAsserts successes="7" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[B4][E15][E16] render packet carries previous camera source identity" filename="tests/servers/rendering/test_viewport_camera_source.cpp" line="424">
+      <OverallResultsAsserts successes="14" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[B4][E18] native retirement receipt binds the exact packet identity" filename="tests/servers/rendering/test_viewport_camera_source.cpp" line="447">
+      <OverallResultsAsserts successes="24" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[B4][E19] camera history advances only after color adoption" filename="tests/servers/rendering/test_viewport_camera_source.cpp" line="489">
+      <OverallResultsAsserts successes="16" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[K03][VulkanQualification] checked submission bound covers main and worker slots" filename="tests/servers/rendering/test_vulkan_completion.cpp" line="101">
+      <OverallResultsAsserts successes="14" failures="0" test_case_success="true"/>
+    </TestCase>
+  </TestSuite>
+  <OverallResultsAsserts successes="50356" failures="0"/>
+  <OverallResultsTestCases successes="252" failures="0"/>
+</doctest>

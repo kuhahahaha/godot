@@ -1,0 +1,2 @@
+ERROR: Condition "!shader_id" is true. Returning: RID()
+   at: _qualification_shader_create (servers/rendering/rendering_device.cpp:4805)

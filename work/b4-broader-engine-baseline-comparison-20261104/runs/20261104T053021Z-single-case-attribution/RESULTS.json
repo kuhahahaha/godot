@@ -1,0 +1,372 @@
+[
+  {
+    "host_label": "old-a2",
+    "host_sha256": "4e99d8df4482f596ee892944a38d9bff28bf8f622c8a4b2cd4e7081a33e6c528",
+    "canonical_source": "a2f009e6cd5251abea5a611eaf9edac50b8749b3",
+    "job": "texture-callback",
+    "name": "[Qualification][T1] marked texture rejects driver callbacks before an ordinary prefix",
+    "subcase": null,
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/host/editor.arm64",
+      "--test",
+      "--reporters=xml",
+      "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-broader-engine-baseline-comparison-20261104/runs/20261104T053021Z-single-case-attribution/old-a2-texture-callback/doctest.xml",
+      "--no-colors=true",
+      "--no-skipped-summary=true",
+      "--case-sensitive=true",
+      "--test-case=[Qualification][T1] marked texture rejects driver callbacks before an ordinary prefix"
+    ],
+    "rc": 0,
+    "case_names": [
+      "[Qualification][T1] marked texture rejects driver callbacks before an ordinary prefix"
+    ],
+    "stats": {
+      "successes": "1",
+      "failures": "0"
+    },
+    "assertions": {
+      "successes": "10",
+      "failures": "0"
+    },
+    "expected_diagnostic": "ERROR: Condition \"texture && texture->qualification_return\" is true. Returning: ERR_UNAUTHORIZED",
+    "expected_diagnostic_count": 2,
+    "observed_diagnostic_payload": [
+      "ERROR: Condition \"texture && texture->qualification_return\" is true. Returning: ERR_UNAUTHORIZED",
+      "ERROR: Condition \"texture && texture->qualification_return\" is true. Returning: ERR_UNAUTHORIZED"
+    ],
+    "attribution_pass": true
+  },
+  {
+    "host_label": "old-a2",
+    "host_sha256": "4e99d8df4482f596ee892944a38d9bff28bf8f622c8a4b2cd4e7081a33e6c528",
+    "canonical_source": "a2f009e6cd5251abea5a611eaf9edac50b8749b3",
+    "job": "partial-pipeline",
+    "name": "[Qualification][ChildCapacity] partial native unit returns its exact shader before cold archival",
+    "subcase": null,
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/host/editor.arm64",
+      "--test",
+      "--reporters=xml",
+      "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-broader-engine-baseline-comparison-20261104/runs/20261104T053021Z-single-case-attribution/old-a2-partial-pipeline/doctest.xml",
+      "--no-colors=true",
+      "--no-skipped-summary=true",
+      "--case-sensitive=true",
+      "--test-case=[Qualification][ChildCapacity] partial native unit returns its exact shader before cold archival"
+    ],
+    "rc": 0,
+    "case_names": [
+      "[Qualification][ChildCapacity] partial native unit returns its exact shader before cold archival"
+    ],
+    "stats": {
+      "successes": "1",
+      "failures": "0"
+    },
+    "assertions": {
+      "successes": "49",
+      "failures": "0"
+    },
+    "expected_diagnostic": "ERROR: Condition \"!pipeline.driver_id\" is true. Returning: RID()",
+    "expected_diagnostic_count": 2,
+    "observed_diagnostic_payload": [
+      "ERROR: Condition \"!pipeline.driver_id\" is true. Returning: RID()",
+      "ERROR: Condition \"!pipeline.driver_id\" is true. Returning: RID()"
+    ],
+    "attribution_pass": true
+  },
+  {
+    "host_label": "old-a2",
+    "host_sha256": "4e99d8df4482f596ee892944a38d9bff28bf8f622c8a4b2cd4e7081a33e6c528",
+    "canonical_source": "a2f009e6cd5251abea5a611eaf9edac50b8749b3",
+    "job": "empty-shader",
+    "name": "[Qualification][ChildCapacity] definitive empty unit failure returns its history credit",
+    "subcase": null,
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/host/editor.arm64",
+      "--test",
+      "--reporters=xml",
+      "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-broader-engine-baseline-comparison-20261104/runs/20261104T053021Z-single-case-attribution/old-a2-empty-shader/doctest.xml",
+      "--no-colors=true",
+      "--no-skipped-summary=true",
+      "--case-sensitive=true",
+      "--test-case=[Qualification][ChildCapacity] definitive empty unit failure returns its history credit"
+    ],
+    "rc": 0,
+    "case_names": [
+      "[Qualification][ChildCapacity] definitive empty unit failure returns its history credit"
+    ],
+    "stats": {
+      "successes": "1",
+      "failures": "0"
+    },
+    "assertions": {
+      "successes": "57",
+      "failures": "0"
+    },
+    "expected_diagnostic": "ERROR: Condition \"!shader_id\" is true. Returning: RID()",
+    "expected_diagnostic_count": 1,
+    "observed_diagnostic_payload": [
+      "ERROR: Condition \"!shader_id\" is true. Returning: RID()"
+    ],
+    "attribution_pass": true
+  },
+  {
+    "host_label": "old-a2",
+    "host_sha256": "4e99d8df4482f596ee892944a38d9bff28bf8f622c8a4b2cd4e7081a33e6c528",
+    "canonical_source": "a2f009e6cd5251abea5a611eaf9edac50b8749b3",
+    "job": "malformed-utf8",
+    "name": "policy_container [ShaderCompilePolicy]",
+    "subcase": "Noncanonical and malformed UTF-8 names are rejected before reserialization",
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/host/editor.arm64",
+      "--test",
+      "--reporters=xml",
+      "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-broader-engine-baseline-comparison-20261104/runs/20261104T053021Z-single-case-attribution/old-a2-malformed-utf8/doctest.xml",
+      "--no-colors=true",
+      "--no-skipped-summary=true",
+      "--case-sensitive=true",
+      "--test-case=policy_container [ShaderCompilePolicy]",
+      "--subcase=Noncanonical and malformed UTF-8 names are rejected before reserialization"
+    ],
+    "rc": 0,
+    "case_names": [
+      "policy_container [ShaderCompilePolicy]"
+    ],
+    "stats": {
+      "successes": "1",
+      "failures": "0"
+    },
+    "assertions": {
+      "successes": "2",
+      "failures": "0"
+    },
+    "expected_diagnostic": "Unicode parsing error, some characters were replaced with � (U+FFFD): Invalid UTF-8 leading byte (ff)",
+    "expected_diagnostic_count": 1,
+    "observed_diagnostic_payload": [
+      "Unicode parsing error, some characters were replaced with � (U+FFFD): Invalid UTF-8 leading byte (ff)"
+    ],
+    "attribution_pass": true
+  },
+  {
+    "host_label": "old-a2",
+    "host_sha256": "4e99d8df4482f596ee892944a38d9bff28bf8f622c8a4b2cd4e7081a33e6c528",
+    "canonical_source": "a2f009e6cd5251abea5a611eaf9edac50b8749b3",
+    "job": "foreign-camera",
+    "name": "[B4][E15] viewport camera source requires explicit C01 registration",
+    "subcase": null,
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/host/editor.arm64",
+      "--test",
+      "--reporters=xml",
+      "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-broader-engine-baseline-comparison-20261104/runs/20261104T053021Z-single-case-attribution/old-a2-foreign-camera/doctest.xml",
+      "--no-colors=true",
+      "--no-skipped-summary=true",
+      "--case-sensitive=true",
+      "--test-case=[B4][E15] viewport camera source requires explicit C01 registration"
+    ],
+    "rc": 0,
+    "case_names": [
+      "[B4][E15] viewport camera source requires explicit C01 registration"
+    ],
+    "stats": {
+      "successes": "1",
+      "failures": "0"
+    },
+    "assertions": {
+      "successes": "38",
+      "failures": "0"
+    },
+    "expected_diagnostic": "ERROR: Attempted to save a foreign camera source token.",
+    "expected_diagnostic_count": 3,
+    "observed_diagnostic_payload": [
+      "ERROR: Attempted to save a foreign camera source token.",
+      "ERROR: Attempted to save a foreign camera source token.",
+      "ERROR: Attempted to save a foreign camera source token."
+    ],
+    "attribution_pass": true
+  },
+  {
+    "host_label": "new-94b",
+    "host_sha256": "965cb0ef6e137dcf17298d504f404a6f53aaa0421d03d080ef36e9b5b9b24eb6",
+    "canonical_source": "94b06dc4876d153492aa0c0e2f3457d2f5afc92e",
+    "job": "texture-callback",
+    "name": "[Qualification][T1] marked texture rejects driver callbacks before an ordinary prefix",
+    "subcase": null,
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-native-build-20261104/attempt-03/host/editor.arm64",
+      "--test",
+      "--reporters=xml",
+      "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-broader-engine-baseline-comparison-20261104/runs/20261104T053021Z-single-case-attribution/new-94b-texture-callback/doctest.xml",
+      "--no-colors=true",
+      "--no-skipped-summary=true",
+      "--case-sensitive=true",
+      "--test-case=[Qualification][T1] marked texture rejects driver callbacks before an ordinary prefix"
+    ],
+    "rc": 0,
+    "case_names": [
+      "[Qualification][T1] marked texture rejects driver callbacks before an ordinary prefix"
+    ],
+    "stats": {
+      "successes": "1",
+      "failures": "0"
+    },
+    "assertions": {
+      "successes": "10",
+      "failures": "0"
+    },
+    "expected_diagnostic": "ERROR: Condition \"texture && texture->qualification_return\" is true. Returning: ERR_UNAUTHORIZED",
+    "expected_diagnostic_count": 2,
+    "observed_diagnostic_payload": [
+      "ERROR: Condition \"texture && texture->qualification_return\" is true. Returning: ERR_UNAUTHORIZED",
+      "ERROR: Condition \"texture && texture->qualification_return\" is true. Returning: ERR_UNAUTHORIZED"
+    ],
+    "attribution_pass": true
+  },
+  {
+    "host_label": "new-94b",
+    "host_sha256": "965cb0ef6e137dcf17298d504f404a6f53aaa0421d03d080ef36e9b5b9b24eb6",
+    "canonical_source": "94b06dc4876d153492aa0c0e2f3457d2f5afc92e",
+    "job": "partial-pipeline",
+    "name": "[Qualification][ChildCapacity] partial native unit returns its exact shader before cold archival",
+    "subcase": null,
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-native-build-20261104/attempt-03/host/editor.arm64",
+      "--test",
+      "--reporters=xml",
+      "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-broader-engine-baseline-comparison-20261104/runs/20261104T053021Z-single-case-attribution/new-94b-partial-pipeline/doctest.xml",
+      "--no-colors=true",
+      "--no-skipped-summary=true",
+      "--case-sensitive=true",
+      "--test-case=[Qualification][ChildCapacity] partial native unit returns its exact shader before cold archival"
+    ],
+    "rc": 0,
+    "case_names": [
+      "[Qualification][ChildCapacity] partial native unit returns its exact shader before cold archival"
+    ],
+    "stats": {
+      "successes": "1",
+      "failures": "0"
+    },
+    "assertions": {
+      "successes": "49",
+      "failures": "0"
+    },
+    "expected_diagnostic": "ERROR: Condition \"!pipeline.driver_id\" is true. Returning: RID()",
+    "expected_diagnostic_count": 2,
+    "observed_diagnostic_payload": [
+      "ERROR: Condition \"!pipeline.driver_id\" is true. Returning: RID()",
+      "ERROR: Condition \"!pipeline.driver_id\" is true. Returning: RID()"
+    ],
+    "attribution_pass": true
+  },
+  {
+    "host_label": "new-94b",
+    "host_sha256": "965cb0ef6e137dcf17298d504f404a6f53aaa0421d03d080ef36e9b5b9b24eb6",
+    "canonical_source": "94b06dc4876d153492aa0c0e2f3457d2f5afc92e",
+    "job": "empty-shader",
+    "name": "[Qualification][ChildCapacity] definitive empty unit failure returns its history credit",
+    "subcase": null,
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-native-build-20261104/attempt-03/host/editor.arm64",
+      "--test",
+      "--reporters=xml",
+      "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-broader-engine-baseline-comparison-20261104/runs/20261104T053021Z-single-case-attribution/new-94b-empty-shader/doctest.xml",
+      "--no-colors=true",
+      "--no-skipped-summary=true",
+      "--case-sensitive=true",
+      "--test-case=[Qualification][ChildCapacity] definitive empty unit failure returns its history credit"
+    ],
+    "rc": 0,
+    "case_names": [
+      "[Qualification][ChildCapacity] definitive empty unit failure returns its history credit"
+    ],
+    "stats": {
+      "successes": "1",
+      "failures": "0"
+    },
+    "assertions": {
+      "successes": "57",
+      "failures": "0"
+    },
+    "expected_diagnostic": "ERROR: Condition \"!shader_id\" is true. Returning: RID()",
+    "expected_diagnostic_count": 1,
+    "observed_diagnostic_payload": [
+      "ERROR: Condition \"!shader_id\" is true. Returning: RID()"
+    ],
+    "attribution_pass": true
+  },
+  {
+    "host_label": "new-94b",
+    "host_sha256": "965cb0ef6e137dcf17298d504f404a6f53aaa0421d03d080ef36e9b5b9b24eb6",
+    "canonical_source": "94b06dc4876d153492aa0c0e2f3457d2f5afc92e",
+    "job": "malformed-utf8",
+    "name": "policy_container [ShaderCompilePolicy]",
+    "subcase": "Noncanonical and malformed UTF-8 names are rejected before reserialization",
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-native-build-20261104/attempt-03/host/editor.arm64",
+      "--test",
+      "--reporters=xml",
+      "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-broader-engine-baseline-comparison-20261104/runs/20261104T053021Z-single-case-attribution/new-94b-malformed-utf8/doctest.xml",
+      "--no-colors=true",
+      "--no-skipped-summary=true",
+      "--case-sensitive=true",
+      "--test-case=policy_container [ShaderCompilePolicy]",
+      "--subcase=Noncanonical and malformed UTF-8 names are rejected before reserialization"
+    ],
+    "rc": 0,
+    "case_names": [
+      "policy_container [ShaderCompilePolicy]"
+    ],
+    "stats": {
+      "successes": "1",
+      "failures": "0"
+    },
+    "assertions": {
+      "successes": "2",
+      "failures": "0"
+    },
+    "expected_diagnostic": "Unicode parsing error, some characters were replaced with � (U+FFFD): Invalid UTF-8 leading byte (ff)",
+    "expected_diagnostic_count": 1,
+    "observed_diagnostic_payload": [
+      "Unicode parsing error, some characters were replaced with � (U+FFFD): Invalid UTF-8 leading byte (ff)"
+    ],
+    "attribution_pass": true
+  },
+  {
+    "host_label": "new-94b",
+    "host_sha256": "965cb0ef6e137dcf17298d504f404a6f53aaa0421d03d080ef36e9b5b9b24eb6",
+    "canonical_source": "94b06dc4876d153492aa0c0e2f3457d2f5afc92e",
+    "job": "foreign-camera",
+    "name": "[B4][E15] viewport camera source requires explicit C01 registration",
+    "subcase": null,
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-native-build-20261104/attempt-03/host/editor.arm64",
+      "--test",
+      "--reporters=xml",
+      "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-broader-engine-baseline-comparison-20261104/runs/20261104T053021Z-single-case-attribution/new-94b-foreign-camera/doctest.xml",
+      "--no-colors=true",
+      "--no-skipped-summary=true",
+      "--case-sensitive=true",
+      "--test-case=[B4][E15] viewport camera source requires explicit C01 registration"
+    ],
+    "rc": 0,
+    "case_names": [
+      "[B4][E15] viewport camera source requires explicit C01 registration"
+    ],
+    "stats": {
+      "successes": "1",
+      "failures": "0"
+    },
+    "assertions": {
+      "successes": "38",
+      "failures": "0"
+    },
+    "expected_diagnostic": "ERROR: Attempted to save a foreign camera source token.",
+    "expected_diagnostic_count": 3,
+    "observed_diagnostic_payload": [
+      "ERROR: Attempted to save a foreign camera source token.",
+      "ERROR: Attempted to save a foreign camera source token.",
+      "ERROR: Attempted to save a foreign camera source token."
+    ],
+    "attribution_pass": true
+  }
+]

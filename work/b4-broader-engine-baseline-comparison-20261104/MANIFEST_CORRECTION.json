@@ -1,0 +1,8 @@
+{
+  "issue": "Isolation script regenerated FILES after each host and included the previous FILES itself on the second pass. Final hash audit detected only this stale self entry.",
+  "original_manifest_preserved": "runs/20261104T053021Z-single-case-attribution/FILES.self-inclusion-original.json",
+  "correction": "Exclude current FILES.json from the manifest; preserve all original raw logs/XML/results unchanged. Future generator similarly corrected.",
+  "raw_logs_changed": false,
+  "verdicts_changed": false,
+  "all_corrected_manifest_entries_match": true
+}
