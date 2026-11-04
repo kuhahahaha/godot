@@ -8759,7 +8759,7 @@ Error RenderingDevice::_native_disposal_preflight() const {
 	if (!is_main_instance || render_thread_id != Thread::get_caller_id() || !driver || native_finalization_returned) {
 		return ERR_UNAUTHORIZED;
 	}
-	if (frames.is_empty() || frame >= frames.size() || draw_list.active || compute_list.active || raytracing_list.active) {
+	if (frames.is_empty() || uint32_t(frame) >= frames.size() || draw_list.active || compute_list.active || raytracing_list.active) {
 		return ERR_BUSY;
 	}
 	return _recording_error();
@@ -8900,7 +8900,7 @@ Error RenderingDevice::_qualification_maintenance() {
 
 Error RenderingDevice::_native_disposal_maintenance() {
  if(render_thread_id!=Thread::get_caller_id() || !is_main_instance || !driver || native_finalization_returned)return ERR_UNAUTHORIZED;
- if(frames.is_empty() || frame >= frames.size())return ERR_UNCONFIGURED;
+ if(frames.is_empty() || uint32_t(frame) >= frames.size())return ERR_UNCONFIGURED;
  if(draw_list.active || compute_list.active || raytracing_list.active || frame_wait_draining)return ERR_BUSY;
  if(!_thread_safe_.try_lock())return ERR_BUSY;
  struct Unlock { Mutex &mutex; ~Unlock(){mutex.unlock();} } unlock{_thread_safe_};
