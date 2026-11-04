@@ -1,0 +1,84 @@
+{
+  "time_utc": "2026-11-04T04:04:00.343054+00:00",
+  "heads": {
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104": "a6eefb5af7877b798d7a00bbb4cdd586165bc2a5",
+    "/Users/macbookair/Documents/Work/ANGE": "e00103fe2beb9cb901996ec0c585b340ddc11144",
+    "/Users/macbookair/Documents/Work/ANGE_phase1_integration": "debcccb436726ec88d2380284f434e312f6c4d2c"
+  },
+  "scope": "read-only inventory, no source changes/build/test; integration and main source are owner-dirty snapshots",
+  "files": {
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/rendering_device.h": "eb2d016c6d65377ccda005205314fbd9f29b686ec1b2339447853aa56f890708",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/native_disposal_witness.h": "a7040f41cafc560eaa3360725e00e783aaca5577928d5c718b86fff7321f33f3",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/core/extension/gdextension_system_scalar.cpp": "8d66af685d4a675c9e17785965bf153b580a35728957aefbe77d7958e6c461b6",
+    "/Users/macbookair/Documents/Work/ANGE/src/godot/particle/e09_native_recorder.h": "b91d16ce67c6fd47f33ea2c81de38954bb511284b3eef24c9a1694de607b9023",
+    "/Users/macbookair/Documents/Work/ANGE/src/godot/particle/main_rd_storage_transport.cpp": "2f1d0f1c6f382cbc48a87cc8f4333a6240102da97291081e516f223d9e4c1ed4",
+    "/Users/macbookair/Documents/Work/ANGE/src/particle/stage_execution/record_session.h": "d8b3116ce9ae6dac2996f9f1c25408100a9cd4882b3bf3f91c895157373dd4bc",
+    "/Users/macbookair/Documents/Work/ANGE_phase1_integration/src/godot/particle/e09_native_recorder.cpp": "17d6e94dffb83ddc601614c7e2c021e09592d7f5c206abd96978c9e98ecdcb40",
+    "/Users/macbookair/Documents/Work/ANGE_phase1_integration/src/godot/particle/e09_native_recorder.h": "9dd7152c4fed70c7d6ec67203f003c2063b8acad9169ed0bbcd8473e09fe397a",
+    "/Users/macbookair/Documents/Work/ANGE_phase1_integration/src/particle/stage_execution/record_session.h": "7afa9e9d96bc94cf29509ff8af5c5afbc184b40d1d11315a26c74e23e8d79aba",
+    "/Users/macbookair/Documents/Work/ANGE_phase1_integration/src/godot/bridge/ecs_world.cpp": "6983fb7b09c691a1e48780cafaf547374c0f565c23c9eda4539b034cc10213bf",
+    "/Users/macbookair/Documents/Work/ANGE_phase1_integration/src/godot/particle/world_gpu_system_request.cpp": "311e3094231de04fab9af779f8951b484c75fc960992ba9e0ec264d6ff9ec36b"
+  },
+  "queries": [
+    {
+      "cwd": "/Users/macbookair/Documents/Work/ANGE",
+      "command": [
+        "rg",
+        "-n",
+        "OriginalOperationRef|FinalOutputSourceRef|U04FinalRootSelectionRef|PublishedSnapshotRef|SnapshotBundle|record_token|SourceBridge",
+        "src/particle",
+        "src/godot/particle",
+        "src/engine/particles"
+      ],
+      "rc": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "cwd": "/Users/macbookair/Documents/Work/ANGE_phase1_integration",
+      "command": [
+        "rg",
+        "-n",
+        "OriginalOperationRef|FinalOutputSourceRef|U04FinalRootSelectionRef|PublishedSnapshotRef|SnapshotBundle|record_token|SourceBridge",
+        "src/particle",
+        "src/godot/particle",
+        "src/engine/particles"
+      ],
+      "rc": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104",
+      "command": [
+        "rg",
+        "-n",
+        "particles_external|ExternalOutputStorage|record_token",
+        "servers/rendering/rendering_server.h",
+        "servers/rendering/rendering_server.cpp",
+        "servers/rendering/storage/particles_storage.h",
+        "servers/rendering/renderer_rd/storage_rd/particles_storage.h",
+        "servers/rendering/rendering_device.h"
+      ],
+      "rc": 0,
+      "stdout": "servers/rendering/rendering_device.h:38:class ExternalOutputStorage;\nservers/rendering/rendering_device.h:118:\tfriend class RendererRD::ExternalOutputStorage;\n",
+      "stderr": ""
+    },
+    {
+      "cwd": "/Users/macbookair/Documents/Work/ANGE_phase1_integration",
+      "command": [
+        "rg",
+        "-n",
+        "request_particle_gpu_system|poll_particle_gpu_system|take_particle_gpu_system_result",
+        "src",
+        "-g",
+        "*.cpp",
+        "-g",
+        "*.h"
+      ],
+      "rc": 0,
+      "stdout": "src/godot/bridge/ecs_world.cpp:4351:EcsWorld::ParticleGpuRequestStartResult EcsWorld::request_particle_gpu_system(\nsrc/godot/bridge/ecs_world.cpp:4423:particle::Result<void> EcsWorld::poll_particle_gpu_system(const String &path) {\nsrc/godot/bridge/ecs_world.cpp:4450:EcsWorld::take_particle_gpu_system_result(const String &path) {\nsrc/godot/bridge/ecs_world.h:250:  ParticleGpuRequestStartResult request_particle_gpu_system(\nsrc/godot/bridge/ecs_world.h:257:  particle::Result<void> poll_particle_gpu_system(const godot::String &world_path);\nsrc/godot/bridge/ecs_world.h:259:  take_particle_gpu_system_result(const godot::String &world_path);\n",
+      "stderr": ""
+    }
+  ]
+}

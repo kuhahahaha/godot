@@ -1,0 +1,158 @@
+{
+  "rows": [
+    {
+      "renderer": "clustered",
+      "profile": "native",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-red-clustered-native.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-red-clustered-native.vert\n",
+      "target_observed": true,
+      "sha256": "ddbe24176af5c32e9ba7bef179cd2649ee2f808974caeb01a3881a87ba1d5fab"
+    },
+    {
+      "renderer": "clustered",
+      "profile": "native",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-red-clustered-native.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-red-clustered-native.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-red-clustered-native.frag:500: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "target_observed": true,
+      "sha256": "21d5f19b61e1351862a124394838e5db49466b316f727aab3d836a2d06650306"
+    },
+    {
+      "renderer": "clustered",
+      "profile": "instance192_group",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-red-clustered-instance192_group.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-temp.spv"
+      ],
+      "returncode": 2,
+      "stdout": "SPIR-V is not generated for failed compile or link\n",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-red-clustered-instance192_group.vert\nERROR: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-red-clustered-instance192_group.vert:928: '#error' : Instance192 does not admit native particle trails  \nERROR: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-red-clustered-instance192_group.vert:929: '' : missing #endif \nERROR: 2 compilation errors.  No code generated.\n\n\nERROR: Linking vertex stage: Missing entry point: Each stage requires one entry point\n\n",
+      "target_observed": true,
+      "sha256": "383dcfd90c6b347718b9afb97a606db29ed5a33c983ff00fdd909093a138694e"
+    },
+    {
+      "renderer": "clustered",
+      "profile": "instance192_group",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-red-clustered-instance192_group.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-temp.spv"
+      ],
+      "returncode": 2,
+      "stdout": "SPIR-V is not generated for failed compile or link\n",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-red-clustered-instance192_group.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-red-clustered-instance192_group.frag:501: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \nERROR: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-red-clustered-instance192_group.frag:937: '#error' : Instance192 does not admit native particle trails  \nERROR: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-red-clustered-instance192_group.frag:938: '' : missing #endif \nERROR: 2 compilation errors.  No code generated.\n\n\nERROR: Linking fragment stage: Missing entry point: Each stage requires one entry point\n\n",
+      "target_observed": true,
+      "sha256": "03377ade96494ed0e492a2a97d5f4233c2526916088394943fc9acf93f5b0533"
+    },
+    {
+      "renderer": "mobile",
+      "profile": "native",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-red-mobile-native.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-red-mobile-native.vert\n",
+      "target_observed": true,
+      "sha256": "a503ed51648bc250e6d5c7dc860053fef35478c0a4009cca6173d179f4555166"
+    },
+    {
+      "renderer": "mobile",
+      "profile": "native",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-red-mobile-native.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-red-mobile-native.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-red-mobile-native.frag:575: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "target_observed": true,
+      "sha256": "1da44a0d8f6dda4c0d13887841b16d828773dfa060987628b39d6467124ec4de"
+    },
+    {
+      "renderer": "mobile",
+      "profile": "instance192_group",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-red-mobile-instance192_group.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-temp.spv"
+      ],
+      "returncode": 2,
+      "stdout": "SPIR-V is not generated for failed compile or link\n",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-red-mobile-instance192_group.vert\nERROR: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-red-mobile-instance192_group.vert:840: '#error' : Instance192 does not admit native particle trails  \nERROR: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-red-mobile-instance192_group.vert:841: '' : missing #endif \nERROR: 2 compilation errors.  No code generated.\n\n\nERROR: Linking vertex stage: Missing entry point: Each stage requires one entry point\n\n",
+      "target_observed": true,
+      "sha256": "125f423fde0468acdfc04f49f31f0967768ccb8957bfbd1fa05ca5aaa2e2d9dc"
+    },
+    {
+      "renderer": "mobile",
+      "profile": "instance192_group",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-red-mobile-instance192_group.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-temp.spv"
+      ],
+      "returncode": 2,
+      "stdout": "SPIR-V is not generated for failed compile or link\n",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-red-mobile-instance192_group.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-red-mobile-instance192_group.frag:576: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \nERROR: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-red-mobile-instance192_group.frag:855: '#error' : Instance192 does not admit native particle trails  \nERROR: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/trail-red-mobile-instance192_group.frag:856: '' : missing #endif \nERROR: 2 compilation errors.  No code generated.\n\n\nERROR: Linking fragment stage: Missing entry point: Each stage requires one entry point\n\n",
+      "target_observed": true,
+      "sha256": "62708df5163822bb02da29b939e4218780bd2a1f991a2081f0390bb3cc3df6d9"
+    }
+  ],
+  "engine_runtime": false,
+  "explanation": "Native materials are globally compiled in enabled Instance192 groups; this proves the exact template failure only. Lifecycle effect is source-proven."
+}

@@ -77,7 +77,7 @@ layout(location = 10) in uvec4 bone_attrib;
 layout(location = 11) in vec4 weight_attrib;
 #endif
 
-#if defined(MODE_RENDER_MOTION_VECTORS)
+#if defined(MODE_RENDER_MOTION_VECTORS) && !defined(USE_INSTANCE192_OUTPUT)
 layout(location = 12) in vec4 previous_vertex_attrib;
 
 #if defined(NORMAL_USED) || defined(TANGENT_USED)
@@ -100,6 +100,10 @@ void axis_angle_to_tbn(vec3 axis, float angle, out vec3 tangent, out vec3 binorm
 }
 
 /* Varyings */
+#ifdef USE_INSTANCE192_OUTPUT
+layout(location = 10) out flat uvec2 instance192_interp;
+#endif
+
 
 layout(location = 0) out vec3 vertex_interp;
 
@@ -273,7 +277,11 @@ void vertex_shader(in vec3 vertex,
 		in vec3 tangent_highp,
 		in vec3 binormal_highp,
 #endif
-		in uint instance_index, in uint multimesh_offset, in mat3x4 in_model_matrix,
+		in uint instance_index, in uint multimesh_offset,
+#ifdef USE_INSTANCE192_OUTPUT
+		in bool instance192_previous_record,
+#endif
+		in mat3x4 in_model_matrix,
 #ifdef USE_DOUBLE_PRECISION
 		in vec3 model_precision,
 		in vec3 view_precision,
@@ -305,6 +313,7 @@ void vertex_shader(in vec3 vertex,
 			in_inv_view_matrix[2],
 			vec4(0.0, 0.0, 0.0, 1.0)));
 
+#ifndef USE_INSTANCE192_OUTPUT
 	mat4 model_matrix = transpose(mat4(in_model_matrix[0],
 			in_model_matrix[1],
 			in_model_matrix[2],
@@ -317,9 +326,24 @@ void vertex_shader(in vec3 vertex,
 		model_normal_matrix = mat3(model_matrix);
 	}
 
+#endif
+
+#ifdef USE_INSTANCE192_OUTPUT
+	Instance192Record instance192_record = instance192_read(uint(gl_InstanceIndex), instance192_previous_record);
+	// C already includes Host for Local output. Never multiply the scene Host.
+	mat4 model_matrix = instance192_record.model;
+	mat3 model_normal_matrix = instance192_record.normal;
+	mat4 instance192_inverse_model_matrix = instance192_record.inverse_model;
+	instance_custom = instance192_record.custom;
+#ifdef COLOR_USED
+	color_highp *= instance192_record.color;
+#endif
+#endif
+
 	mat4 matrix;
 	mat4 read_model_matrix = model_matrix;
 
+#ifndef USE_INSTANCE192_OUTPUT
 	if (sc_multimesh()) {
 		//multimesh, instances are for it
 
@@ -404,6 +428,15 @@ void vertex_shader(in vec3 vertex,
 #endif // !defined(USE_DOUBLE_PRECISION) || defined(SKIP_TRANSFORM_USED) || defined(VERTEX_WORLD_COORDS_USED) || defined(MODEL_MATRIX_USED)
 		model_normal_matrix = model_normal_matrix * mat3(matrix);
 	}
+#endif
+
+#ifdef INV_MODEL_MATRIX_USED
+#ifdef USE_INSTANCE192_OUTPUT
+	mat4 read_inv_model_matrix = instance192_record.inverse_model;
+#else
+	mat4 read_inv_model_matrix = inverse(read_model_matrix);
+#endif
+#endif
 
 #ifdef UV_USED
 	uv_interp = uv_attrib;
@@ -715,6 +748,9 @@ void vertex_shader(in vec3 vertex,
 }
 
 void main() {
+#ifdef USE_INSTANCE192_OUTPUT
+	instance192_interp = uvec2(uint(gl_InstanceIndex), instance192_flags(uint(gl_InstanceIndex)));
+#endif
 #if defined(MODE_RENDER_MOTION_VECTORS)
 	vec3 prev_vertex;
 #ifdef NORMAL_USED
@@ -726,13 +762,25 @@ void main() {
 #endif
 
 	_unpack_vertex_attributes(
+#ifdef USE_INSTANCE192_OUTPUT
+			vertex_angle_attrib,
+#else
 			previous_vertex_attrib,
+#endif
 			instances.data[draw_call.instance_index].compressed_aabb_position_pad.xyz,
 			instances.data[draw_call.instance_index].compressed_aabb_size_pad.xyz,
 #if defined(NORMAL_USED) || defined(TANGENT_USED)
+#ifdef USE_INSTANCE192_OUTPUT
+			axis_tangent_attrib,
+#else
 			previous_normal_attrib,
+#endif
 #ifdef USE_INDEXED144_VERTEX_INPUT
+#ifdef USE_INSTANCE192_OUTPUT
+			tangent_attrib,
+#else
 			previous_tangent_attrib,
+#endif
 #endif
 #ifdef NORMAL_USED
 			prev_normal,
@@ -750,7 +798,11 @@ void main() {
 			prev_tangent,
 			prev_binormal,
 #endif
-			draw_call.instance_index, draw_call.multimesh_motion_vectors_previous_offset, instances.data[draw_call.instance_index].prev_transform,
+			draw_call.instance_index, draw_call.multimesh_motion_vectors_previous_offset,
+#ifdef USE_INSTANCE192_OUTPUT
+			true,
+#endif
+			instances.data[draw_call.instance_index].prev_transform,
 #ifdef USE_DOUBLE_PRECISION
 			instances.data[draw_call.instance_index].prev_model_precision.xyz,
 			scene_data_block.prev_data.inv_view_precision,
@@ -815,7 +867,11 @@ void main() {
 			tangent,
 			binormal,
 #endif
-			draw_call.instance_index, draw_call.multimesh_motion_vectors_current_offset, instances.data[draw_call.instance_index].transform,
+			draw_call.instance_index, draw_call.multimesh_motion_vectors_current_offset,
+#ifdef USE_INSTANCE192_OUTPUT
+			false,
+#endif
+			instances.data[draw_call.instance_index].transform,
 #ifdef USE_DOUBLE_PRECISION
 			instances.data[draw_call.instance_index].model_precision.xyz,
 			scene_data_block.data.inv_view_precision,
@@ -868,6 +924,9 @@ void main() {
 
 /* Include our forward mobile UBOs definitions etc. */
 #include "scene_forward_mobile_inc.glsl"
+#ifdef USE_INSTANCE192_OUTPUT
+layout(location = 10) in flat uvec2 instance192_interp;
+#endif
 
 
 /* Varyings */
@@ -1143,8 +1202,12 @@ hvec4 fog_process(vec3 vertex) {
 #endif //!MODE_RENDER DEPTH
 
 void main() {
-#ifdef UBERSHADER
-	bool front_facing = gl_FrontFacing;
+#ifdef USE_INSTANCE192_OUTPUT
+	if (instance192_discard_face(MATERIAL_FRONT_FACING)) {
+		discard;
+	}
+#elif defined(UBERSHADER)
+	bool front_facing = MATERIAL_FRONT_FACING;
 	if (uc_cull_mode() == POLYGON_CULL_BACK && !front_facing) {
 		discard;
 	} else if (uc_cull_mode() == POLYGON_CULL_FRONT && front_facing) {
@@ -1209,7 +1272,7 @@ void main() {
 #ifdef NORMAL_USED
 	vec3 normal_highp = normal_interp;
 #if defined(DO_SIDE_CHECK)
-	if (!gl_FrontFacing) {
+	if (!MATERIAL_FRONT_FACING) {
 		normal_highp = -normal_highp;
 	}
 #endif // DO_SIDE_CHECK
@@ -1275,6 +1338,20 @@ void main() {
 	} else {
 		model_normal_matrix = mat3(read_model_matrix);
 	}
+#ifdef USE_INSTANCE192_OUTPUT
+	Instance192Record instance192_record = instance192_read(instance192_interp.x, false);
+	read_model_matrix = instance192_record.model;
+	model_normal_matrix = instance192_record.normal;
+#endif
+
+#ifdef INV_MODEL_MATRIX_USED
+#ifdef USE_INSTANCE192_OUTPUT
+	mat4 read_inv_model_matrix = instance192_record.inverse_model;
+#else
+	mat4 read_inv_model_matrix = inverse(read_model_matrix);
+#endif
+#endif
+
 
 	mat4 read_view_matrix = transpose(mat4(scene_data.view_matrix[0],
 			scene_data.view_matrix[1],
@@ -1403,7 +1480,11 @@ void main() {
 
 // alpha hash can be used in unison with alpha antialiasing
 #ifdef ALPHA_HASH_USED
+	#ifdef USE_INSTANCE192_OUTPUT
+	vec3 object_pos = (instance192_record.inverse_model * inv_view_matrix * vec4(vertex, 1.0)).xyz;
+#else
 	vec3 object_pos = (inverse(read_model_matrix) * inv_view_matrix * vec4(vertex, 1.0)).xyz;
+#endif
 #ifdef MODE_RENDER_MATERIAL
 	if (alpha < compute_alpha_hash_threshold(object_pos, alpha_hash_scale)) {
 		alpha = half(0.0);
@@ -2484,5 +2565,10 @@ void main() {
 	vec3 prev_ndc = prev_screen_position.xyz / prev_screen_position.w;
 	prev_ndc.y = -prev_ndc.y;
 	frag_color = vec4(ndc - prev_ndc, 0.0);
+#ifdef USE_INSTANCE192_OUTPUT
+	if (!instance192_has_history(instance192_interp.y)) {
+		frag_color = vec4(0.0);
+	}
+#endif
 #endif
 }

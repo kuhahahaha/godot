@@ -1,0 +1,298 @@
+{
+  "shader": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/renderer_rd/shaders/instance192_inc.glsl",
+  "shader_sha256": "addfac12981e8fceb4290327e99e0039659873d0d22a8d162036654a3e10b5c3",
+  "literal_rows": [
+    {
+      "uber": false,
+      "raster_front": false,
+      "record_mirror": false,
+      "flags": 1,
+      "logical_front": false,
+      "spec4": 0,
+      "dynamic_uc_cull": 1,
+      "discard": false
+    },
+    {
+      "uber": false,
+      "raster_front": false,
+      "record_mirror": false,
+      "flags": 1,
+      "logical_front": false,
+      "spec4": 1,
+      "dynamic_uc_cull": 2,
+      "discard": false
+    },
+    {
+      "uber": false,
+      "raster_front": false,
+      "record_mirror": false,
+      "flags": 1,
+      "logical_front": false,
+      "spec4": 2,
+      "dynamic_uc_cull": 0,
+      "discard": true
+    },
+    {
+      "uber": false,
+      "raster_front": false,
+      "record_mirror": true,
+      "flags": 5,
+      "logical_front": true,
+      "spec4": 0,
+      "dynamic_uc_cull": 1,
+      "discard": false
+    },
+    {
+      "uber": false,
+      "raster_front": false,
+      "record_mirror": true,
+      "flags": 5,
+      "logical_front": true,
+      "spec4": 1,
+      "dynamic_uc_cull": 2,
+      "discard": true
+    },
+    {
+      "uber": false,
+      "raster_front": false,
+      "record_mirror": true,
+      "flags": 5,
+      "logical_front": true,
+      "spec4": 2,
+      "dynamic_uc_cull": 0,
+      "discard": false
+    },
+    {
+      "uber": false,
+      "raster_front": true,
+      "record_mirror": false,
+      "flags": 1,
+      "logical_front": true,
+      "spec4": 0,
+      "dynamic_uc_cull": 1,
+      "discard": false
+    },
+    {
+      "uber": false,
+      "raster_front": true,
+      "record_mirror": false,
+      "flags": 1,
+      "logical_front": true,
+      "spec4": 1,
+      "dynamic_uc_cull": 2,
+      "discard": true
+    },
+    {
+      "uber": false,
+      "raster_front": true,
+      "record_mirror": false,
+      "flags": 1,
+      "logical_front": true,
+      "spec4": 2,
+      "dynamic_uc_cull": 0,
+      "discard": false
+    },
+    {
+      "uber": false,
+      "raster_front": true,
+      "record_mirror": true,
+      "flags": 5,
+      "logical_front": false,
+      "spec4": 0,
+      "dynamic_uc_cull": 1,
+      "discard": false
+    },
+    {
+      "uber": false,
+      "raster_front": true,
+      "record_mirror": true,
+      "flags": 5,
+      "logical_front": false,
+      "spec4": 1,
+      "dynamic_uc_cull": 2,
+      "discard": false
+    },
+    {
+      "uber": false,
+      "raster_front": true,
+      "record_mirror": true,
+      "flags": 5,
+      "logical_front": false,
+      "spec4": 2,
+      "dynamic_uc_cull": 0,
+      "discard": true
+    },
+    {
+      "uber": true,
+      "raster_front": false,
+      "record_mirror": false,
+      "flags": 1,
+      "logical_front": false,
+      "spec4": 1,
+      "dynamic_uc_cull": 0,
+      "discard": false
+    },
+    {
+      "uber": true,
+      "raster_front": false,
+      "record_mirror": false,
+      "flags": 1,
+      "logical_front": false,
+      "spec4": 2,
+      "dynamic_uc_cull": 1,
+      "discard": false
+    },
+    {
+      "uber": true,
+      "raster_front": false,
+      "record_mirror": false,
+      "flags": 1,
+      "logical_front": false,
+      "spec4": 0,
+      "dynamic_uc_cull": 2,
+      "discard": true
+    },
+    {
+      "uber": true,
+      "raster_front": false,
+      "record_mirror": true,
+      "flags": 5,
+      "logical_front": true,
+      "spec4": 1,
+      "dynamic_uc_cull": 0,
+      "discard": false
+    },
+    {
+      "uber": true,
+      "raster_front": false,
+      "record_mirror": true,
+      "flags": 5,
+      "logical_front": true,
+      "spec4": 2,
+      "dynamic_uc_cull": 1,
+      "discard": true
+    },
+    {
+      "uber": true,
+      "raster_front": false,
+      "record_mirror": true,
+      "flags": 5,
+      "logical_front": true,
+      "spec4": 0,
+      "dynamic_uc_cull": 2,
+      "discard": false
+    },
+    {
+      "uber": true,
+      "raster_front": true,
+      "record_mirror": false,
+      "flags": 1,
+      "logical_front": true,
+      "spec4": 1,
+      "dynamic_uc_cull": 0,
+      "discard": false
+    },
+    {
+      "uber": true,
+      "raster_front": true,
+      "record_mirror": false,
+      "flags": 1,
+      "logical_front": true,
+      "spec4": 2,
+      "dynamic_uc_cull": 1,
+      "discard": true
+    },
+    {
+      "uber": true,
+      "raster_front": true,
+      "record_mirror": false,
+      "flags": 1,
+      "logical_front": true,
+      "spec4": 0,
+      "dynamic_uc_cull": 2,
+      "discard": false
+    },
+    {
+      "uber": true,
+      "raster_front": true,
+      "record_mirror": true,
+      "flags": 5,
+      "logical_front": false,
+      "spec4": 1,
+      "dynamic_uc_cull": 0,
+      "discard": false
+    },
+    {
+      "uber": true,
+      "raster_front": true,
+      "record_mirror": true,
+      "flags": 5,
+      "logical_front": false,
+      "spec4": 2,
+      "dynamic_uc_cull": 1,
+      "discard": false
+    },
+    {
+      "uber": true,
+      "raster_front": true,
+      "record_mirror": true,
+      "flags": 5,
+      "logical_front": false,
+      "spec4": 0,
+      "dynamic_uc_cull": 2,
+      "discard": true
+    }
+  ],
+  "runs": [
+    {
+      "uber": false,
+      "variant": "current",
+      "command": [
+        "clang++",
+        "-std=c++17",
+        "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/instance192-cull-hh2if5yn/literal.cpp",
+        "-o",
+        "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/instance192-cull-hh2if5yn/literal"
+      ],
+      "build_returncode": 0,
+      "run_returncode": 0,
+      "stdout": "12 literal rows / 24 helper assertions, failures=0 (CPU only)\n",
+      "stderr": "",
+      "expected_red": false
+    },
+    {
+      "uber": true,
+      "variant": "current",
+      "command": [
+        "clang++",
+        "-std=c++17",
+        "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/instance192-cull-de80cdm7/literal.cpp",
+        "-o",
+        "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/instance192-cull-de80cdm7/literal"
+      ],
+      "build_returncode": 0,
+      "run_returncode": 0,
+      "stdout": "12 literal rows / 24 helper assertions, failures=0 (CPU only)\n",
+      "stderr": "",
+      "expected_red": false
+    },
+    {
+      "uber": true,
+      "variant": "old_always_spec4",
+      "command": [
+        "clang++",
+        "-std=c++17",
+        "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/instance192-cull-z20x65u7/literal.cpp",
+        "-o",
+        "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/instance192-cull-z20x65u7/literal"
+      ],
+      "build_returncode": 0,
+      "run_returncode": 1,
+      "stdout": "12 literal rows / 24 helper assertions, failures=8 (CPU only)\n",
+      "stderr": "CULL_LITERAL_MISMATCH actual=1 expected=0\nCULL_LITERAL_MISMATCH actual=0 expected=1\nCULL_LITERAL_MISMATCH actual=1 expected=0\nCULL_LITERAL_MISMATCH actual=0 expected=1\nCULL_LITERAL_MISMATCH actual=1 expected=0\nCULL_LITERAL_MISMATCH actual=0 expected=1\nCULL_LITERAL_MISMATCH actual=1 expected=0\nCULL_LITERAL_MISMATCH actual=0 expected=1\n",
+      "expected_red": true
+    }
+  ],
+  "gpu_winding_calibration": false,
+  "qualification": false
+}

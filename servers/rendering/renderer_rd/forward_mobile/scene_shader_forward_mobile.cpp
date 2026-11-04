@@ -83,6 +83,7 @@ void SceneShaderForwardMobile::ShaderData::set_code(const String &p_code) {
 	writes_modelview_or_projection = false;
 	uses_world_coordinates = false;
 	uses_particle_trails = false;
+	instance192_unqualified_vertex_modes = false;
 
 	int depth_drawi = DEPTH_DRAW_OPAQUE;
 
@@ -120,6 +121,9 @@ void SceneShaderForwardMobile::ShaderData::set_code(const String &p_code) {
 	actions.render_mode_flags["unshaded"] = &unshaded;
 	actions.render_mode_flags["wireframe"] = &wireframe;
 	actions.render_mode_flags["particle_trails"] = &uses_particle_trails;
+	actions.render_mode_flags["skip_vertex_transform"] = &instance192_unqualified_vertex_modes;
+	actions.write_flag_pointers["MODEL_MATRIX"] = &instance192_unqualified_vertex_modes;
+	actions.write_flag_pointers["POSITION"] = &instance192_unqualified_vertex_modes;
 	actions.render_mode_flags["world_vertex_coords"] = &uses_world_coordinates;
 
 	actions.usage_flag_pointers["ALPHA"] = &uses_alpha;
@@ -290,6 +294,7 @@ Pair<ShaderRD *, RID> SceneShaderForwardMobile::ShaderData::get_native_shader_an
 }
 
 void SceneShaderForwardMobile::ShaderData::_create_pipeline(PipelineKey p_pipeline_key) {
+	ERR_FAIL_COND(p_pipeline_key.instance192 && p_pipeline_key.cull_mode > RD::POLYGON_CULL_BACK);
 #if PRINT_PIPELINE_COMPILATION_KEYS
 	print_line(
 			"HASH:", p_pipeline_key.hash(),
@@ -387,7 +392,7 @@ void SceneShaderForwardMobile::ShaderData::_create_pipeline(PipelineKey p_pipeli
 	}
 
 	RD::PipelineRasterizationState raster_state;
-	raster_state.cull_mode = p_pipeline_key.cull_mode;
+	raster_state.cull_mode = p_pipeline_key.instance192 ? RD::POLYGON_CULL_DISABLED : p_pipeline_key.cull_mode;
 	raster_state.wireframe = wireframe || p_pipeline_key.wireframe;
 
 	RD::PipelineMultisampleState multisample_state;
@@ -459,7 +464,15 @@ void SceneShaderForwardMobile::ShaderData::_create_pipeline(PipelineKey p_pipeli
 	sc.type = RD::PIPELINE_SPECIALIZATION_CONSTANT_TYPE_BOOL;
 	specialization_constants.push_back(sc);
 
-	RID shader_rid = get_shader_variant(p_pipeline_key.version, p_pipeline_key.ubershader, p_pipeline_key.indexed144);
+	if (p_pipeline_key.instance192) {
+		sc = {};
+		sc.constant_id = 4;
+		sc.int_value = uint32_t(p_pipeline_key.cull_mode);
+		sc.type = RD::PIPELINE_SPECIALIZATION_CONSTANT_TYPE_INT;
+		specialization_constants.push_back(sc);
+	}
+
+	RID shader_rid = get_shader_variant(p_pipeline_key.version, p_pipeline_key.ubershader, p_pipeline_key.indexed144, p_pipeline_key.instance192);
 	ERR_FAIL_COND(shader_rid.is_null());
 
 	RID pipeline = RD::get_singleton()->render_pipeline_create(shader_rid, p_pipeline_key.framebuffer_format_id, p_pipeline_key.vertex_format_id, primitive_rd, raster_state, multisample_state, depth_stencil_state, blend_state, 0, p_pipeline_key.render_pass, specialization_constants);
@@ -472,6 +485,15 @@ void SceneShaderForwardMobile::ShaderData::_create_pipeline(PipelineKey p_pipeli
 	ERR_FAIL_COND(pipeline.is_null());
 
 	pipeline_hash_map.add_compiled_pipeline(p_pipeline_key.hash(), pipeline);
+}
+
+bool SceneShaderForwardMobile::ShaderData::instance192_shader_supported() const {
+#ifdef REAL_T_IS_DOUBLE
+	return false;
+#else
+	return !uses_particle_trails && !uses_point_size && !writes_modelview_or_projection &&
+			!uses_world_coordinates && !instance192_unqualified_vertex_modes;
+#endif
 }
 
 RD::PolygonCullMode SceneShaderForwardMobile::ShaderData::get_cull_mode_from_cull_variant(CullVariant p_cull_variant) {
@@ -490,11 +512,17 @@ void SceneShaderForwardMobile::ShaderData::_clear_vertex_input_mask_cache() {
 	}
 }
 
-RID SceneShaderForwardMobile::ShaderData::get_shader_variant(ShaderVersion p_shader_version, bool p_ubershader, bool p_indexed144) const {
+RID SceneShaderForwardMobile::ShaderData::get_shader_variant(ShaderVersion p_shader_version, bool p_ubershader, bool p_indexed144, bool p_instance192) const {
+	ERR_FAIL_COND_V(p_indexed144 && p_instance192, RID());
+	ERR_FAIL_COND_V(p_instance192 && !instance192_shader_supported(), RID());
 	if (version.is_valid()) {
 		MutexLock lock(SceneShaderForwardMobile::singleton_mutex);
 		ERR_FAIL_NULL_V(SceneShaderForwardMobile::singleton, RID());
 		uint32_t shader_index = p_shader_version + (SceneShaderForwardMobile::singleton->use_fp16 ? SHADER_VERSION_MAX * 2 : 0) + (p_ubershader ? SHADER_VERSION_MAX : 0);
+		if (p_instance192) {
+			SceneShaderForwardMobile::singleton->shader.enable_group(SceneShaderForwardMobile::singleton->instance192_shader_groups[shader_index]);
+			shader_index += INSTANCE192_VARIANT_OFFSET;
+		}
 		if (p_indexed144) {
 			SceneShaderForwardMobile::singleton->shader.enable_group(SceneShaderForwardMobile::singleton->indexed144_shader_groups[shader_index]);
 			shader_index += INDEXED144_VARIANT_OFFSET;
@@ -505,13 +533,15 @@ RID SceneShaderForwardMobile::ShaderData::get_shader_variant(ShaderVersion p_sha
 	}
 }
 
-uint64_t SceneShaderForwardMobile::ShaderData::get_vertex_input_mask(ShaderVersion p_shader_version, bool p_ubershader, bool p_indexed144) {
+uint64_t SceneShaderForwardMobile::ShaderData::get_vertex_input_mask(ShaderVersion p_shader_version, bool p_ubershader, bool p_indexed144, bool p_instance192) {
+	ERR_FAIL_COND_V(p_indexed144 && p_instance192, 0);
+	ERR_FAIL_COND_V(p_instance192 && !instance192_shader_supported(), 0);
 	// Vertex input masks require knowledge of the shader. Since querying the shader can be expensive due to high contention and the necessary mutex, we cache the result instead.
 	// It is intentional for the range of the input masks to be different than the versions available in the shaders as it'll only ever use the regular variants or the FP16 ones.
-	uint32_t input_mask_index = p_shader_version + (p_ubershader ? SHADER_VERSION_MAX : 0) + (p_indexed144 ? SHADER_VERSION_MAX * 2 : 0);
+	uint32_t input_mask_index = p_shader_version + (p_ubershader ? SHADER_VERSION_MAX : 0) + (p_instance192 ? SHADER_VERSION_MAX * 4 : p_indexed144 ? SHADER_VERSION_MAX * 2 : 0);
 	uint64_t input_mask = vertex_input_masks[input_mask_index].load(std::memory_order_relaxed);
 	if (input_mask == 0) {
-		RID shader_rid = get_shader_variant(p_shader_version, p_ubershader, p_indexed144);
+		RID shader_rid = get_shader_variant(p_shader_version, p_ubershader, p_indexed144, p_instance192);
 		ERR_FAIL_COND_V(shader_rid.is_null(), 0);
 
 		input_mask = RD::get_singleton()->shader_get_vertex_input_attribute_mask(shader_rid);
@@ -656,6 +686,13 @@ void SceneShaderForwardMobile::init(const String p_defines) {
 			shader_versions.push_back(ShaderRD::VariantDefine(indexed_group, String::utf8(ordinary.text.get_data()) + "\n#define USE_INDEXED144_VERTEX_INPUT\n", false));
 		}
 
+		for (uint32_t i = 0; i < ordinary_variant_count; ++i) {
+			const ShaderRD::VariantDefine ordinary = shader_versions[i];
+			const int instance_group = ordinary.group + SHADER_GROUP_MAX * 2;
+			instance192_shader_groups.push_back(instance_group);
+			shader_versions.push_back(ShaderRD::VariantDefine(instance_group, String::utf8(ordinary.text.get_data()) + "\n#define USE_INSTANCE192_OUTPUT\n", false));
+		}
+
 		Vector<uint64_t> dynamic_buffers;
 		dynamic_buffers.push_back(ShaderRD::DynamicBuffer::encode(RenderForwardMobile::RENDER_PASS_UNIFORM_SET, 0));
 		dynamic_buffers.push_back(ShaderRD::DynamicBuffer::encode(RenderForwardMobile::RENDER_PASS_UNIFORM_SET, 1));
@@ -674,6 +711,7 @@ void SceneShaderForwardMobile::init(const String p_defines) {
 		ShaderCompiler::DefaultIdentifierActions actions;
 
 		actions.renames["MODEL_MATRIX"] = "read_model_matrix";
+		actions.renames["INV_MODEL_MATRIX"] = "read_inv_model_matrix";
 		actions.renames["MODEL_NORMAL_MATRIX"] = "model_normal_matrix";
 		actions.renames["VIEW_MATRIX"] = "read_view_matrix";
 		actions.renames["INV_VIEW_MATRIX"] = "inv_view_matrix";
@@ -714,7 +752,7 @@ void SceneShaderForwardMobile::init(const String p_defines) {
 		actions.renames["VIEWPORT_SIZE"] = "read_viewport_size";
 
 		actions.renames["FRAGCOORD"] = "gl_FragCoord";
-		actions.renames["FRONT_FACING"] = "gl_FrontFacing";
+		actions.renames["FRONT_FACING"] = "MATERIAL_FRONT_FACING";
 		actions.renames["NORMAL_MAP"] = "normal_map_highp";
 		actions.renames["NORMAL_MAP_DEPTH"] = "normal_map_depth_highp";
 		actions.renames["BENT_NORMAL_MAP"] = "bent_normal_map_highp";
@@ -825,6 +863,7 @@ void SceneShaderForwardMobile::init(const String p_defines) {
 		actions.usage_defines["IRRADIANCE"] = "#define CUSTOM_IRRADIANCE_USED\n";
 
 		actions.usage_defines["MODEL_MATRIX"] = "#define MODEL_MATRIX_USED\n";
+		actions.usage_defines["INV_MODEL_MATRIX"] = "#define INV_MODEL_MATRIX_USED\n#define MODEL_MATRIX_USED\n";
 
 		actions.usage_defines["POINT_SIZE"] = "#define POINT_SIZE_USED\n";
 		actions.usage_defines["POINT_COORD"] = "#define POINT_COORD_USED\n";

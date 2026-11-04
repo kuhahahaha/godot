@@ -1,0 +1,6 @@
+{
+  "servers/rendering/renderer_rd/shader_rd.cpp": "3b564d068a6231a6653d9989b4f78dedcab3422675d299616df2f564e78322b3",
+  "servers/rendering/renderer_rd/shaders/instance192_inc.glsl": "1a99fe4681ca3b46a7c7a8b4baae098959e7ac9c40d56b96333a87732f343682",
+  "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.cpp": "acec81f61d4adbd93a7ee8c47614b69187d82026b3a7f46fc0e14f1375816cde",
+  "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.cpp": "bf42d21bda553ad2cefa279063dcb874d84e4e9b4f96fc1d60e3ff9c7dafcd9a"
+}

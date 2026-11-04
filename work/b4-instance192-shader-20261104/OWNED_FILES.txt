@@ -1,0 +1,9 @@
+servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h
+servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.cpp
+servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.h
+servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.cpp
+servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered.glsl
+servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered_inc.glsl
+servers/rendering/renderer_rd/shaders/forward_mobile/scene_forward_mobile.glsl
+servers/rendering/renderer_rd/shaders/forward_mobile/scene_forward_mobile_inc.glsl
+servers/rendering/renderer_rd/shaders/instance192_inc.glsl

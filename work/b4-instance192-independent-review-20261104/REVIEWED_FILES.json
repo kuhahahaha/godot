@@ -1,0 +1,21 @@
+{
+  "baseline": "a6eefb5af7877b798d7a00bbb4cdd586165bc2a5",
+  "files": {
+    "servers/rendering/renderer_rd/shaders/instance192_inc.glsl": "addfac12981e8fceb4290327e99e0039659873d0d22a8d162036654a3e10b5c3",
+    "servers/rendering/shader_types.cpp": "da111e09ea4a604c85d81b6d8511ad28b8153fabebebc495ca699e3dc98053ae",
+    "drivers/gles3/storage/material_storage.cpp": "c4b73884b1f641c83db6ef5e82daedfa818a612a42f9882e712dd6a1dfdd6299",
+    "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h": "69b23e3fd2ad3d1f4475f40be6eccf3101f5cd4e37c00b952ea398559390f78d",
+    "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.cpp": "acec81f61d4adbd93a7ee8c47614b69187d82026b3a7f46fc0e14f1375816cde",
+    "servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered.glsl": "15efaf1247f96edbdc1c23d8cef3cc1ed0c969c0545c4b304effc3a0c0c5d252",
+    "servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered_inc.glsl": "b051af279231507bea4eae5292d4b14a86dbef934cfd474d36ac9ae06a7c7546",
+    "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.h": "5cb7cc10e72702fca47871aa0ec1bc47a2cd4eb89ca83385a892d3374edd9732",
+    "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.cpp": "bf42d21bda553ad2cefa279063dcb874d84e4e9b4f96fc1d60e3ff9c7dafcd9a",
+    "servers/rendering/renderer_rd/shaders/forward_mobile/scene_forward_mobile.glsl": "d98b1049c148bb2f9dd3423cd98975cc4a4b6b873c36e2c76945a9920fa857fc",
+    "servers/rendering/renderer_rd/shaders/forward_mobile/scene_forward_mobile_inc.glsl": "e7d860b6c8663cb0962457123d8a7fb3c3e61eb27081a30eb4723b96f063bcb2"
+  },
+  "contracts": {
+    "/Users/macbookair/Documents/Work/Dev/ANGEParticleDesign/docs/contracts/b4-native-output/OUTPUT_CONTRACT.md": "8f8a739836ec42b268662fa63eec48437b44cc0aa33d4704bf0044e557e968cb",
+    "/Users/macbookair/Documents/Work/Dev/ANGEParticleDesign/docs/contracts/b4-native-output/BOUNDS_MATERIAL_CONTRACT.md": "d110ed7611cf427247fc80374668181a610ebe6fa590ad34adca63ce5ddec2f4",
+    "/Users/macbookair/Documents/Work/Dev/ANGEParticleDesign/docs/contracts/b4-native-output/HISTORY_SOURCE_CONTRACT.md": "65b3035f2857328ff6ec91eb68f57b04f34fc8bd99e5606e34b89c605849a276"
+  }
+}

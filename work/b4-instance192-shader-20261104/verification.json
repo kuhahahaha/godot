@@ -1,0 +1,160 @@
+{
+  "schema": 1,
+  "recorded_utc": "2026-11-04T04:03:56.822328+00:00",
+  "status": "component_shader_source_and_compile_evidence_only",
+  "head": "a6eefb5af7877b798d7a00bbb4cdd586165bc2a5",
+  "owned_production_files": {
+    "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h": {
+      "sha256": "69b23e3fd2ad3d1f4475f40be6eccf3101f5cd4e37c00b952ea398559390f78d",
+      "bytes": 15847
+    },
+    "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.cpp": {
+      "sha256": "acec81f61d4adbd93a7ee8c47614b69187d82026b3a7f46fc0e14f1375816cde",
+      "bytes": 52199
+    },
+    "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.h": {
+      "sha256": "5cb7cc10e72702fca47871aa0ec1bc47a2cd4eb89ca83385a892d3374edd9732",
+      "bytes": 14237
+    },
+    "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.cpp": {
+      "sha256": "bf42d21bda553ad2cefa279063dcb874d84e4e9b4f96fc1d60e3ff9c7dafcd9a",
+      "bytes": 51426
+    },
+    "servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered.glsl": {
+      "sha256": "15efaf1247f96edbdc1c23d8cef3cc1ed0c969c0545c4b304effc3a0c0c5d252",
+      "bytes": 112991
+    },
+    "servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered_inc.glsl": {
+      "sha256": "b051af279231507bea4eae5292d4b14a86dbef934cfd474d36ac9ae06a7c7546",
+      "bytes": 15262
+    },
+    "servers/rendering/renderer_rd/shaders/forward_mobile/scene_forward_mobile.glsl": {
+      "sha256": "d98b1049c148bb2f9dd3423cd98975cc4a4b6b873c36e2c76945a9920fa857fc",
+      "bytes": 89688
+    },
+    "servers/rendering/renderer_rd/shaders/forward_mobile/scene_forward_mobile_inc.glsl": {
+      "sha256": "e7d860b6c8663cb0962457123d8a7fb3c3e61eb27081a30eb4723b96f063bcb2",
+      "bytes": 12037
+    },
+    "servers/rendering/renderer_rd/shaders/instance192_inc.glsl": {
+      "sha256": "addfac12981e8fceb4290327e99e0039659873d0d22a8d162036654a3e10b5c3",
+      "bytes": 2769
+    }
+  },
+  "root_owned_builtin_dependencies": {
+    "servers/rendering/shader_types.cpp": {
+      "sha256": "da111e09ea4a604c85d81b6d8511ad28b8153fabebebc495ca699e3dc98053ae",
+      "bytes": 49408
+    },
+    "drivers/gles3/storage/material_storage.cpp": {
+      "sha256": "c4b73884b1f641c83db6ef5e82daedfa818a612a42f9882e712dd6a1dfdd6299",
+      "bytes": 132563
+    }
+  },
+  "commands": [
+    "python3 work/b4-instance192-shader-20261104/compile.py",
+    "python3 work/b4-instance192-shader-20261104/negative_and_native.py",
+    "python3 work/b4-instance192-shader-20261104/cull_literal.py"
+  ],
+  "results": {
+    "full_stages": 272,
+    "linked_pairs": 136,
+    "native_token_equalities": 24,
+    "profile_refusals": 4,
+    "old_global_trails_error_target_red": 2,
+    "varying_collision_target_red": 2,
+    "cull_literal_rows": 24,
+    "cull_assertions": 48,
+    "old_uber_static_only_target_red_mismatches": 8,
+    "cpp_tu_syntax": 2
+  },
+  "source_frozen": true,
+  "engine_build": false,
+  "gpu_run": false,
+  "runtime_shadercompiler_frontend": false,
+  "sourcebridge_qualified": false,
+  "backend_winding_calibrated": false,
+  "native_draw_and_retirement_qualified": false,
+  "artifacts": {
+    "RECEIPT.md": {
+      "sha256": "238d866b48e750a874c34717c3dbdf743de5be97a22d394509616c4b73254719",
+      "bytes": 6841
+    },
+    "clustered-syntax.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "clustered-syntax.stderr.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "clustered-syntax.stdout.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "compile-results.json": {
+      "sha256": "7f40a7fca7cde3d0ec399d570cd6e08b3057193f05d6a329001e6d30a54fe0f3",
+      "bytes": 198978
+    },
+    "compile.log": {
+      "sha256": "1ea66ad114f655287ae0b20e722a74dbc313dbcdb9b934b8ace0fe01730a7796",
+      "bytes": 6232
+    },
+    "compile.py": {
+      "sha256": "edcd465731e80967801ee04730475761334983112a44663877a4b602730e58c5",
+      "bytes": 7197
+    },
+    "cull-literal-results.json": {
+      "sha256": "ae8f2a89a8d75f082ff02304f372a039065cfb23361479d3512e49d5ac18c1b6",
+      "bytes": 7269
+    },
+    "cull-literal.log": {
+      "sha256": "1cc7308ce62fc1a14e6152e1d2d2a3495212de16f37b96451d431980169a2d99",
+      "bytes": 247
+    },
+    "cull_literal.py": {
+      "sha256": "f17c6801723399bf4a41322c473e8206542cecda29f1b3128aa56738b03a259b",
+      "bytes": 3206
+    },
+    "failing.glsl": {
+      "sha256": "66129e5a7d8658849e558a3687e30f6d032afd44c3533f3f80a1e6fcbfa0c44a",
+      "bytes": 59320
+    },
+    "instance192-before-isolation-fixes.glsl": {
+      "sha256": "1a99fe4681ca3b46a7c7a8b4baae098959e7ac9c40d56b96333a87732f343682",
+      "bytes": 2533
+    },
+    "mobile-syntax.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "mobile-syntax.stderr.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "mobile-syntax.stdout.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "negative-native-results.json": {
+      "sha256": "0d52d694cb544d06bb198c27aa7ea8273db8390c5ae187e01abecd14d793c2e6",
+      "bytes": 16722
+    },
+    "negative-native.log": {
+      "sha256": "d43c3e89b44acc7a4872e84afc2a9e7b43fb29d3a84b5d491633e14f6a7a3396",
+      "bytes": 1973
+    },
+    "negative_and_native.py": {
+      "sha256": "bf355d5ad5b5ca1e5757af1d3527400352329fc54be6a315b9b2e64409be5445",
+      "bytes": 5429
+    },
+    "syntax-results.json": {
+      "sha256": "d9bb9b933c7b3d3464f4baf5635c8a791f783a94e15f056a3b8880276c49509c",
+      "bytes": 2532
+    },
+    "OWNED_FILES.txt": {
+      "sha256": "cab5a2784f27094211258018af8f52870f2ad40fb296aec287b3c9a07eed2188",
+      "bytes": 711
+    }
+  }
+}

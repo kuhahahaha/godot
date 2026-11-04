@@ -1,0 +1,2024 @@
+{
+  "rows": [
+    {
+      "label": "clustered-tbn_color-uber0-fp160",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-tbn_color-uber0-fp160.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-tbn_color-uber0-fp160.vert\n",
+      "sha256": "8db64499b3d24c3dd61c5d10f18296e16c0feecee574dfdeac0a3f543ae0ba9f",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "clustered-tbn_color-uber0-fp160",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-tbn_color-uber0-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-tbn_color-uber0-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-tbn_color-uber0-fp160.frag:511: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "c8238db385230a9483fb52fcd74f7d6aeea46abfb1922b760eae368c5678c103",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "clustered-tbn_color-uber0-fp160",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-tbn_color-uber0-fp160.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-tbn_color-uber0-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-tbn_color-uber0-fp160.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-tbn_color-uber0-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-tbn_color-uber0-fp160.frag:511: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "clustered-tbn_color-uber1-fp160",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-tbn_color-uber1-fp160.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-tbn_color-uber1-fp160.vert\n",
+      "sha256": "618d17a59d176b93b93f1994b694394b16323c722861bb9a83c6880d429da31b",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "clustered-tbn_color-uber1-fp160",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-tbn_color-uber1-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-tbn_color-uber1-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-tbn_color-uber1-fp160.frag:512: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "555a11aaa766421727ca8ffe72f48725955420bf87464149c31623bda1b12643",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "clustered-tbn_color-uber1-fp160",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-tbn_color-uber1-fp160.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-tbn_color-uber1-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-tbn_color-uber1-fp160.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-tbn_color-uber1-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-tbn_color-uber1-fp160.frag:512: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "clustered-normalmap-uber0-fp160",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-normalmap-uber0-fp160.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-normalmap-uber0-fp160.vert\n",
+      "sha256": "b1e15568dc8e97a05570f9c27ecac64792eaac475c16963e51a25c6852fd1e0c",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "clustered-normalmap-uber0-fp160",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-normalmap-uber0-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-normalmap-uber0-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-normalmap-uber0-fp160.frag:513: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "adfc2a508610942d2b403f1f1dfcf6e97b84e07dbd33868d424c1bacb000a547",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "clustered-normalmap-uber0-fp160",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-normalmap-uber0-fp160.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-normalmap-uber0-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-normalmap-uber0-fp160.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-normalmap-uber0-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-normalmap-uber0-fp160.frag:513: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "clustered-normalmap-uber1-fp160",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-normalmap-uber1-fp160.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-normalmap-uber1-fp160.vert\n",
+      "sha256": "d90fb5c7c947187b4f406d144b46c7f1141e2b35fd7d1e379c7c4e458b1c3cdb",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "clustered-normalmap-uber1-fp160",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-normalmap-uber1-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-normalmap-uber1-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-normalmap-uber1-fp160.frag:514: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "5dd2e51775e178bab2efbf6b2d273ba1e2a924827a834846eee819b64ae885c4",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "clustered-normalmap-uber1-fp160",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-normalmap-uber1-fp160.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-normalmap-uber1-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-normalmap-uber1-fp160.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-normalmap-uber1-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-normalmap-uber1-fp160.frag:514: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "clustered-vertex_lighting-uber0-fp160",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-vertex_lighting-uber0-fp160.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-vertex_lighting-uber0-fp160.vert\n",
+      "sha256": "d41102acdb18df26e9cdc4040ce19fe48954f3dcf5e37c2b0a69f6b87a2fb732",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "clustered-vertex_lighting-uber0-fp160",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-vertex_lighting-uber0-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-vertex_lighting-uber0-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-vertex_lighting-uber0-fp160.frag:512: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "ec6c04b4b74690dff72d4c90f356db583155c696d40c0ad6d7523bc0cc3e4236",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "clustered-vertex_lighting-uber0-fp160",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-vertex_lighting-uber0-fp160.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-vertex_lighting-uber0-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-vertex_lighting-uber0-fp160.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-vertex_lighting-uber0-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-vertex_lighting-uber0-fp160.frag:512: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "clustered-vertex_lighting-uber1-fp160",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-vertex_lighting-uber1-fp160.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-vertex_lighting-uber1-fp160.vert\n",
+      "sha256": "7ff8557927a5fe0889f558757e4e6ea4a6f45eac82b289145b388c1b4bc5cb10",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "clustered-vertex_lighting-uber1-fp160",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-vertex_lighting-uber1-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-vertex_lighting-uber1-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-vertex_lighting-uber1-fp160.frag:513: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "50524d6255ccada7efcca06ef391e6c7c498e5fb6b7ed0ab0d89eea282d3646b",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "clustered-vertex_lighting-uber1-fp160",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-vertex_lighting-uber1-fp160.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-vertex_lighting-uber1-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-vertex_lighting-uber1-fp160.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-vertex_lighting-uber1-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-vertex_lighting-uber1-fp160.frag:513: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "clustered-alpha_motion_multiview-uber0-fp160",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-alpha_motion_multiview-uber0-fp160.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-alpha_motion_multiview-uber0-fp160.vert\n",
+      "sha256": "c956403823743e354197a603afa69ced684a927bfdc0d031f3d406ece4e3e68f",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "clustered-alpha_motion_multiview-uber0-fp160",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-alpha_motion_multiview-uber0-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-alpha_motion_multiview-uber0-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-alpha_motion_multiview-uber0-fp160.frag:515: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "a1b5de2f16415b5537f36660ecd5624cfe9f0e3c4e11913c7803a54374cb9ea5",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "clustered-alpha_motion_multiview-uber0-fp160",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-alpha_motion_multiview-uber0-fp160.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-alpha_motion_multiview-uber0-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-alpha_motion_multiview-uber0-fp160.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-alpha_motion_multiview-uber0-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-alpha_motion_multiview-uber0-fp160.frag:515: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "clustered-alpha_motion_multiview-uber1-fp160",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-alpha_motion_multiview-uber1-fp160.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-alpha_motion_multiview-uber1-fp160.vert\n",
+      "sha256": "ef096be31a3b5845965275673d683ea72216c71d356bb51ee47617c67e64229a",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "clustered-alpha_motion_multiview-uber1-fp160",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-alpha_motion_multiview-uber1-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-alpha_motion_multiview-uber1-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-alpha_motion_multiview-uber1-fp160.frag:516: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "db28476b370d592a643f77edcda498110bae41558f9164597fa74a344d6e098d",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "clustered-alpha_motion_multiview-uber1-fp160",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-alpha_motion_multiview-uber1-fp160.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-alpha_motion_multiview-uber1-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-alpha_motion_multiview-uber1-fp160.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-alpha_motion_multiview-uber1-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-alpha_motion_multiview-uber1-fp160.frag:516: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "clustered-shadow-uber0-fp160",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-shadow-uber0-fp160.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-shadow-uber0-fp160.vert\n",
+      "sha256": "29962460edb448b891b4162462c66c3d95988cdf53596ef889a63d867b9b64bc",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "clustered-shadow-uber0-fp160",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-shadow-uber0-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-shadow-uber0-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-shadow-uber0-fp160.frag:513: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "998cf590dd621e41b92f4bc258dda52d60f54adae31a9de0897e1e54b7c80aa8",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "clustered-shadow-uber0-fp160",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-shadow-uber0-fp160.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-shadow-uber0-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-shadow-uber0-fp160.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-shadow-uber0-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-shadow-uber0-fp160.frag:513: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "clustered-shadow-uber1-fp160",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-shadow-uber1-fp160.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-shadow-uber1-fp160.vert\n",
+      "sha256": "9c351f22759231606b1967f77ee35d4e01816c73003eed5922e48cb3343707d8",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "clustered-shadow-uber1-fp160",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-shadow-uber1-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-shadow-uber1-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-shadow-uber1-fp160.frag:514: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "b8bc6643825eb2ba90bfc4c75d9bb8d77246f0b78c6d7b5b494013884e583670",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "clustered-shadow-uber1-fp160",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-shadow-uber1-fp160.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-shadow-uber1-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-shadow-uber1-fp160.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-shadow-uber1-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-shadow-uber1-fp160.frag:514: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "clustered-dual_shadow-uber0-fp160",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-dual_shadow-uber0-fp160.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-dual_shadow-uber0-fp160.vert\n",
+      "sha256": "a26d092b9e8e31101cbc6dfee70a9b6c5d5cc72d2aa3e84df5305239bb71e38b",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "clustered-dual_shadow-uber0-fp160",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-dual_shadow-uber0-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-dual_shadow-uber0-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-dual_shadow-uber0-fp160.frag:514: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "3d60d5ba4551b296557244d2469d33baa9bf271b56804acc9a642b7cb0ca8d7c",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "clustered-dual_shadow-uber0-fp160",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-dual_shadow-uber0-fp160.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-dual_shadow-uber0-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-dual_shadow-uber0-fp160.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-dual_shadow-uber0-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-dual_shadow-uber0-fp160.frag:514: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "clustered-dual_shadow-uber1-fp160",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-dual_shadow-uber1-fp160.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-dual_shadow-uber1-fp160.vert\n",
+      "sha256": "d9958af769ecf04fba509c67d8ac8452b357fe75fe9652ae19650791339ca16a",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "clustered-dual_shadow-uber1-fp160",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-dual_shadow-uber1-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-dual_shadow-uber1-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-dual_shadow-uber1-fp160.frag:515: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "fa75b1daed5db3e6dbf2cc73f87fddc32ea1d323073fa653d7454727939bd3b7",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "clustered-dual_shadow-uber1-fp160",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-dual_shadow-uber1-fp160.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-dual_shadow-uber1-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-dual_shadow-uber1-fp160.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-dual_shadow-uber1-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/clustered-dual_shadow-uber1-fp160.frag:515: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "mobile-tbn_color-uber0-fp160",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber0-fp160.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber0-fp160.vert\n",
+      "sha256": "8cc2e3a5dbeefe1b6d3a96dce387292ebc484aba18b82eeb0ba60a9fb32de4c2",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-tbn_color-uber0-fp160",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber0-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber0-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber0-fp160.frag:586: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "904f79c8eb50b2327d9612161eb8fae7b2b8fc4457af285c925b43382fbae4e6",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-tbn_color-uber0-fp160",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber0-fp160.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber0-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber0-fp160.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber0-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber0-fp160.frag:586: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "mobile-tbn_color-uber0-fp161",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber0-fp161.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber0-fp161.vert\n",
+      "sha256": "5306475ac32b606e3301bd7dcacb0fc8d40def35de4160fffe62b59f4fc53360",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-tbn_color-uber0-fp161",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber0-fp161.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber0-fp161.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber0-fp161.frag:587: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "409c05c41f399cda5a360b0398f13402e314a87f858abd6a55eab355ba90f919",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-tbn_color-uber0-fp161",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber0-fp161.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber0-fp161.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber0-fp161.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber0-fp161.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber0-fp161.frag:587: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "mobile-tbn_color-uber1-fp160",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber1-fp160.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber1-fp160.vert\n",
+      "sha256": "0c59072a6bef4ad35ed9c83b1c297846f629e8ea696541fa10c32514fa7bcb64",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-tbn_color-uber1-fp160",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber1-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber1-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber1-fp160.frag:587: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "465be7f5134254d8af462a4bb547e3b2a25a99126cfe7faf842335617801f2a7",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-tbn_color-uber1-fp160",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber1-fp160.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber1-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber1-fp160.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber1-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber1-fp160.frag:587: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "mobile-tbn_color-uber1-fp161",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber1-fp161.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber1-fp161.vert\n",
+      "sha256": "a36fd14138550f490b63301611426987330567b0c9afe4eae47d2c07403c3c58",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-tbn_color-uber1-fp161",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber1-fp161.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber1-fp161.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber1-fp161.frag:588: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "dfbb0663cae4accacf3210b1da604fd2c67f681cb93c50d6da8c80aa50491fe7",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-tbn_color-uber1-fp161",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber1-fp161.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber1-fp161.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber1-fp161.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber1-fp161.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-tbn_color-uber1-fp161.frag:588: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "mobile-normalmap-uber0-fp160",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber0-fp160.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber0-fp160.vert\n",
+      "sha256": "4ffd8a010b63bde4e80afac3a40d2b5a8b6ca0e7b6be5071d36d35437e6408ec",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-normalmap-uber0-fp160",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber0-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber0-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber0-fp160.frag:588: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "bf8a4bd4a54726060a9792c829227beb9965903c74ee1a99b3f9ec5884f762e0",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-normalmap-uber0-fp160",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber0-fp160.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber0-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber0-fp160.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber0-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber0-fp160.frag:588: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "mobile-normalmap-uber0-fp161",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber0-fp161.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber0-fp161.vert\n",
+      "sha256": "bb7058de11a771382a3fe87d4af6b5709bdc523bb03781655f0c36a089e208ff",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-normalmap-uber0-fp161",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber0-fp161.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber0-fp161.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber0-fp161.frag:589: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "7ad2ca158eee2937be405f0f988ebf2816617f8892758dfe4d44491603f76fcf",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-normalmap-uber0-fp161",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber0-fp161.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber0-fp161.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber0-fp161.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber0-fp161.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber0-fp161.frag:589: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "mobile-normalmap-uber1-fp160",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber1-fp160.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber1-fp160.vert\n",
+      "sha256": "d722a186875ad3bd2af07df1042d7dcf9b44f4426c8cb92871ad74f4eeb38b9e",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-normalmap-uber1-fp160",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber1-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber1-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber1-fp160.frag:589: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "a89626493ed06498c55a517712c8503d7c14ec36aef1837173923069fc978ff3",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-normalmap-uber1-fp160",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber1-fp160.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber1-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber1-fp160.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber1-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber1-fp160.frag:589: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "mobile-normalmap-uber1-fp161",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber1-fp161.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber1-fp161.vert\n",
+      "sha256": "f14c26a205225d849f52803fbb15445a967fdc869ac15f376063de471de57bf0",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-normalmap-uber1-fp161",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber1-fp161.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber1-fp161.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber1-fp161.frag:590: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "3e11613f9c7e949f2de7594a89a01091a8125e486ba7bcfc058c83b6b1f9334c",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-normalmap-uber1-fp161",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber1-fp161.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber1-fp161.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber1-fp161.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber1-fp161.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-normalmap-uber1-fp161.frag:590: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "mobile-vertex_lighting-uber0-fp160",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber0-fp160.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber0-fp160.vert\n",
+      "sha256": "4e767730c741436d98463a5d153d7457a9a44184473ec9e3a705c44aba608ddf",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-vertex_lighting-uber0-fp160",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber0-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber0-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber0-fp160.frag:587: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "0b788a02c4d9fe7d8393d7722c1e410f0e93da05d18ec0a4fa4e1426b9a5cb22",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-vertex_lighting-uber0-fp160",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber0-fp160.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber0-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber0-fp160.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber0-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber0-fp160.frag:587: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "mobile-vertex_lighting-uber0-fp161",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber0-fp161.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber0-fp161.vert\n",
+      "sha256": "44b0f85007a8a0fefdcf753c6ce27aae6d68083e1c5a558c5c4a4638d0109db7",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-vertex_lighting-uber0-fp161",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber0-fp161.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber0-fp161.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber0-fp161.frag:588: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "56e57f1d2487c47131ccf1055f2312c252a2db707e29fdba45061ec261606220",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-vertex_lighting-uber0-fp161",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber0-fp161.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber0-fp161.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber0-fp161.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber0-fp161.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber0-fp161.frag:588: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "mobile-vertex_lighting-uber1-fp160",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber1-fp160.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber1-fp160.vert\n",
+      "sha256": "25cc6cde0f6222acc9b69d2687fbb56b2e234716b4d9985083f167b817ec2e75",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-vertex_lighting-uber1-fp160",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber1-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber1-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber1-fp160.frag:588: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "404566be03760868cf2fb0761d459bc57d6b01d5d63dcaada5b9634d71b5a3f8",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-vertex_lighting-uber1-fp160",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber1-fp160.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber1-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber1-fp160.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber1-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber1-fp160.frag:588: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "mobile-vertex_lighting-uber1-fp161",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber1-fp161.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber1-fp161.vert\n",
+      "sha256": "3879ba7feddd9f1cfa0ef443bb9ace023348001ec0dbc405ded358c37006ab09",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-vertex_lighting-uber1-fp161",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber1-fp161.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber1-fp161.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber1-fp161.frag:589: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "6907f531398342afc4300b843f0765f7942c4041457017d45a470110342f6127",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-vertex_lighting-uber1-fp161",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber1-fp161.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber1-fp161.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber1-fp161.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber1-fp161.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-vertex_lighting-uber1-fp161.frag:589: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "mobile-alpha_motion_multiview-uber0-fp160",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber0-fp160.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber0-fp160.vert\n",
+      "sha256": "6db5a7af7e1dbc52037adf4429fc966e6895a5a382b85e8bf577f315f41565cd",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-alpha_motion_multiview-uber0-fp160",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber0-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber0-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber0-fp160.frag:589: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "9d236469c1179713b31cf95c1f02e4592589cd8bdf75ddc57de6409514babab8",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-alpha_motion_multiview-uber0-fp160",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber0-fp160.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber0-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber0-fp160.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber0-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber0-fp160.frag:589: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "mobile-alpha_motion_multiview-uber0-fp161",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber0-fp161.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber0-fp161.vert\n",
+      "sha256": "fcc6097d11859ef284cfc3129ca85fc59bb3b07894ab75fa5d97670e8c454456",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-alpha_motion_multiview-uber0-fp161",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber0-fp161.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber0-fp161.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber0-fp161.frag:590: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "d5d97d09ab7d5c415be9c2dc2ac0e24e0fa26491e5ab251dbc6f053c75a28c43",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-alpha_motion_multiview-uber0-fp161",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber0-fp161.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber0-fp161.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber0-fp161.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber0-fp161.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber0-fp161.frag:590: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "mobile-alpha_motion_multiview-uber1-fp160",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber1-fp160.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber1-fp160.vert\n",
+      "sha256": "2206f6fd4f775303da410df6a553716224afe49f7f5c19967e3ed035e8767472",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-alpha_motion_multiview-uber1-fp160",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber1-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber1-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber1-fp160.frag:590: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "265883da42086639e9b5cea9e03ac8ccedc17bced533d9f7afeb69af28afaf90",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-alpha_motion_multiview-uber1-fp160",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber1-fp160.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber1-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber1-fp160.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber1-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber1-fp160.frag:590: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "mobile-alpha_motion_multiview-uber1-fp161",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber1-fp161.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber1-fp161.vert\n",
+      "sha256": "96413335a74252ab799b179a1bb200e1545bf8d8fe057c86bce0dae4ade13e39",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-alpha_motion_multiview-uber1-fp161",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber1-fp161.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber1-fp161.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber1-fp161.frag:591: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "c31a9f51446edb3866eca1a12715bc0d172100737dd3193af6aed227964f86a7",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-alpha_motion_multiview-uber1-fp161",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber1-fp161.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber1-fp161.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber1-fp161.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber1-fp161.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-alpha_motion_multiview-uber1-fp161.frag:591: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "mobile-shadow-uber0-fp160",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber0-fp160.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber0-fp160.vert\n",
+      "sha256": "bd76c619f80215101a1f927a904af7070b41da22b89671139f564067d8e54e80",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-shadow-uber0-fp160",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber0-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber0-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber0-fp160.frag:588: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "1011e7c34289829faba5ebafa13035d267f49ba81dcfca12b7d36faddaece232",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-shadow-uber0-fp160",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber0-fp160.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber0-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber0-fp160.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber0-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber0-fp160.frag:588: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "mobile-shadow-uber0-fp161",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber0-fp161.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber0-fp161.vert\n",
+      "sha256": "c52d5d657899d65d7e4e5b0e372dcfec8bff83e961df3a94ede1d4262f32a771",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-shadow-uber0-fp161",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber0-fp161.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber0-fp161.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber0-fp161.frag:589: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "b555deee7f883e573829aa26a01be0981aa94258d247ff6ceb3d75c90fabe380",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-shadow-uber0-fp161",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber0-fp161.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber0-fp161.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber0-fp161.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber0-fp161.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber0-fp161.frag:589: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "mobile-shadow-uber1-fp160",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber1-fp160.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber1-fp160.vert\n",
+      "sha256": "a7119e21d61345277dd4b6f94edaa6de735eb7c22d32228caee97eee98af0e07",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-shadow-uber1-fp160",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber1-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber1-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber1-fp160.frag:589: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "5a60e925eb88d95b921af3f27efe49e1c080055adba7db135a4407ef6466f527",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-shadow-uber1-fp160",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber1-fp160.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber1-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber1-fp160.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber1-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber1-fp160.frag:589: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "mobile-shadow-uber1-fp161",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber1-fp161.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber1-fp161.vert\n",
+      "sha256": "e02012ec98f89a96121f2e4e3f0bab374ada47a94c67fdb65d3b16d3ad663465",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-shadow-uber1-fp161",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber1-fp161.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber1-fp161.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber1-fp161.frag:590: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "387b9b47eef9fafe16e225f678d4bca4d4dd83398a4aacbd8ee705edd9c93fa0",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-shadow-uber1-fp161",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber1-fp161.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber1-fp161.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber1-fp161.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber1-fp161.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-shadow-uber1-fp161.frag:590: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "mobile-dual_shadow-uber0-fp160",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber0-fp160.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber0-fp160.vert\n",
+      "sha256": "b25eebc149ba7887f7d7d0911313a9a40d9a19f465b021244c033482d4decfef",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-dual_shadow-uber0-fp160",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber0-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber0-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber0-fp160.frag:589: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "ffa2da8e982dc5e94c4c84350d0a12d6096df80f6651e68bdaa3e554aee90463",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-dual_shadow-uber0-fp160",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber0-fp160.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber0-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber0-fp160.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber0-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber0-fp160.frag:589: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "mobile-dual_shadow-uber0-fp161",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber0-fp161.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber0-fp161.vert\n",
+      "sha256": "48d17466d95013d994b4bf8ba0a5abcb06709cab2c210b972e346f3dda7e59b1",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-dual_shadow-uber0-fp161",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber0-fp161.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber0-fp161.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber0-fp161.frag:590: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "a8e9a1c6579fcbf4827e30657dc31fa416db90a7b985a31351e322b0196df0ac",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-dual_shadow-uber0-fp161",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber0-fp161.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber0-fp161.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber0-fp161.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber0-fp161.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber0-fp161.frag:590: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "mobile-dual_shadow-uber1-fp160",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber1-fp160.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber1-fp160.vert\n",
+      "sha256": "bf60f97af858b0e712b19e6fb996605e80bf82622daaf4f03e9e7cc7dd909802",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-dual_shadow-uber1-fp160",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber1-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber1-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber1-fp160.frag:590: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "e18271b170b91e45000e6bfcba4bd4c2cfbf53eea0ea921f0d53e31a4b54fa94",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-dual_shadow-uber1-fp160",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber1-fp160.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber1-fp160.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber1-fp160.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber1-fp160.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber1-fp160.frag:590: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    },
+    {
+      "label": "mobile-dual_shadow-uber1-fp161",
+      "stage": "vert",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber1-fp161.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber1-fp161.vert\n",
+      "sha256": "24c161331092b4f428b1f2813cf171d1d7d34ac9fe1e8498a37fd87316b93dda",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-dual_shadow-uber1-fp161",
+      "stage": "frag",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber1-fp161.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber1-fp161.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber1-fp161.frag:591: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n",
+      "sha256": "7e699bf9b83906d3cad348b590fbc2bb173c1857f9d30ff66fbea26a4dc456fa",
+      "spirv_validation_returncode": 0
+    },
+    {
+      "label": "mobile-dual_shadow-uber1-fp161",
+      "stage": "link",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "--target-env",
+        "vulkan1.1",
+        "-l",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber1-fp161.vert",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber1-fp161.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/temp.spv"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber1-fp161.vert\n/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber1-fp161.frag\nWARNING: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-instance192-independent-review-20261104/mobile-dual_shadow-uber1-fp161.frag:591: '' : all default precisions are highp; use precision statements to quiet warning, e.g.:\n         \"precision mediump int; precision highp float;\" \n\n"
+    }
+  ],
+  "inputs": {
+    "servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered.glsl": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered.glsl",
+      "sha256": "15efaf1247f96edbdc1c23d8cef3cc1ed0c969c0545c4b304effc3a0c0c5d252"
+    },
+    "servers/rendering/renderer_rd/shaders/half_inc.glsl": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/renderer_rd/shaders/half_inc.glsl",
+      "sha256": "67966a569574374790902dd83a588a8b0c88965e908b3da2f970c2c59ad52c69"
+    },
+    "servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered_inc.glsl": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered_inc.glsl",
+      "sha256": "b051af279231507bea4eae5292d4b14a86dbef934cfd474d36ac9ae06a7c7546"
+    },
+    "servers/rendering/renderer_rd/shaders/cluster_data_inc.glsl": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/renderer_rd/shaders/cluster_data_inc.glsl",
+      "sha256": "edab8ca650a3dd238e8068633fcab0bd809b314c903164455d0b024bdb6bd7e1"
+    },
+    "servers/rendering/renderer_rd/shaders/decal_data_inc.glsl": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/renderer_rd/shaders/decal_data_inc.glsl",
+      "sha256": "17847a5fed6bf37d9b3686353d059c327ef5cf038e375d930166b29bb4cf235a"
+    },
+    "servers/rendering/renderer_rd/shaders/oct_inc.glsl": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/renderer_rd/shaders/oct_inc.glsl",
+      "sha256": "6b69835f45684d6476fb87793e0e8fb3f88fc6c5fb9fe9d5d119d491af4fad31"
+    },
+    "servers/rendering/renderer_rd/shaders/scene_data_inc.glsl": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/renderer_rd/shaders/scene_data_inc.glsl",
+      "sha256": "8386dd5fd6785859854f27ef4639778ecf168cc9a87ca4c5df0875736ad76c35"
+    },
+    "servers/rendering/renderer_rd/shaders/environment/height_fog_inc.glsl": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/renderer_rd/shaders/environment/height_fog_inc.glsl",
+      "sha256": "485e0110bbb953e8270cfb803b4b1d68f15e9faa7ea889b78547dc766bc6cb53"
+    },
+    "servers/rendering/renderer_rd/shaders/light_data_inc.glsl": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/renderer_rd/shaders/light_data_inc.glsl",
+      "sha256": "0f6641c83d8e91b60e383c6cf16fa1e760842362361e5f6992bfe0dceedad40f"
+    },
+    "servers/rendering/renderer_rd/shaders/instance192_inc.glsl": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/renderer_rd/shaders/instance192_inc.glsl",
+      "sha256": "1a99fe4681ca3b46a7c7a8b4baae098959e7ac9c40d56b96333a87732f343682"
+    },
+    "servers/rendering/renderer_rd/shaders/scene_forward_vertex_lights_inc.glsl": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/renderer_rd/shaders/scene_forward_vertex_lights_inc.glsl",
+      "sha256": "7a9fd7f71aa89ff27ef529c3aeda797090a5772440558ade06b4d2b772792c3c"
+    },
+    "servers/rendering/renderer_rd/shaders/scene_forward_aa_inc.glsl": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/renderer_rd/shaders/scene_forward_aa_inc.glsl",
+      "sha256": "3f2cb4ac860581824cf2cffe1f9ee11db7b681b016da484c88e2bc535d99d91a"
+    },
+    "servers/rendering/renderer_rd/shaders/scene_forward_lights_inc.glsl": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/renderer_rd/shaders/scene_forward_lights_inc.glsl",
+      "sha256": "9b790fa88e8e9c08cb812a9d24d75720a95e425b081a7449f64e59777e24fd82"
+    },
+    "servers/rendering/renderer_rd/shaders/area_lights_inc.glsl": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/renderer_rd/shaders/area_lights_inc.glsl",
+      "sha256": "dafd5e3c7b3fd001c1c1f0241fa9577cf978a9438fe12fa6a9b6e353e63825b5"
+    },
+    "servers/rendering/renderer_rd/shaders/scene_forward_gi_inc.glsl": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/renderer_rd/shaders/scene_forward_gi_inc.glsl",
+      "sha256": "7ccd55ad326d0cc6eea87f7fa886e83c5ff4351ad1af162fecd06846dcaf7d0f"
+    },
+    "servers/rendering/renderer_rd/shaders/forward_mobile/scene_forward_mobile.glsl": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/renderer_rd/shaders/forward_mobile/scene_forward_mobile.glsl",
+      "sha256": "d98b1049c148bb2f9dd3423cd98975cc4a4b6b873c36e2c76945a9920fa857fc"
+    },
+    "servers/rendering/renderer_rd/shaders/forward_mobile/scene_forward_mobile_inc.glsl": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/renderer_rd/shaders/forward_mobile/scene_forward_mobile_inc.glsl",
+      "sha256": "e7d860b6c8663cb0962457123d8a7fb3c3e61eb27081a30eb4723b96f063bcb2"
+    },
+    "servers/rendering/renderer_rd/shaders/environment/mobile_fog_transport_inc.glsl": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/renderer_rd/shaders/environment/mobile_fog_transport_inc.glsl",
+      "sha256": "31c2ce43653fd0ba994b51bdad1bd083575393edfdf400e1295b610e34cea4ff"
+    }
+  },
+  "gpu": false,
+  "engine_shader_compiler": false
+}

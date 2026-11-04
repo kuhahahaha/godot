@@ -1,0 +1,68 @@
+{
+  "baseline": {
+    "host": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/host/editor.arm64",
+    "source": "a2f009e6cd5251abea5a611eaf9edac50b8749b3",
+    "command": [
+      "--path",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-spatial-inverse-model-20261104",
+      "--rendering-driver",
+      "metal",
+      "--rendering-method",
+      "mobile",
+      "--render-thread",
+      "safe",
+      "--script",
+      "probe.gd"
+    ],
+    "expected_diagnostic": "Unknown identifier in expression: 'INV_MODEL_MATRIX'",
+    "diagnostic_present": true
+  },
+  "current_syntax": {
+    "shader_types_and_test": 0,
+    "gles3_material_storage": 0,
+    "fallback_includes": "frozen a2 source/generated headers",
+    "engine_tests_run": false,
+    "gpu_current_run": false
+  },
+  "sha256": {
+    "servers/rendering/shader_types.cpp": "da111e09ea4a604c85d81b6d8511ad28b8153fabebebc495ca699e3dc98053ae",
+    "drivers/gles3/storage/material_storage.cpp": "c4b73884b1f641c83db6ef5e82daedfa818a612a42f9882e712dd6a1dfdd6299",
+    "tests/servers/rendering/test_spatial_inverse_model.cpp": "12ecedb22d70a15ddb6157dc2a38eb90636a53c2c82fe977d2ee74e5c88a58d3"
+  },
+  "logs": {
+    "gles3-syntax.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "baseline.log": "e9f1b563565f2f7cb7964d6754485fcdfe4216733f0d3b9f36fdeafac21a4fd7",
+    "syntax.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "commands": {
+    "shader_types_and_test": [
+      "clang++",
+      "-std=c++17",
+      "-fsyntax-only",
+      "-I.",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/platform/macos",
+      "-DDEBUG_ENABLED",
+      "-DTESTS_ENABLED",
+      "-DTOOLS_ENABLED",
+      "-DTHREADS_ENABLED",
+      "servers/rendering/shader_types.cpp",
+      "tests/servers/rendering/test_spatial_inverse_model.cpp"
+    ],
+    "gles3_material_storage": [
+      "clang++",
+      "-std=c++17",
+      "-fsyntax-only",
+      "-I.",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/platform/macos",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/thirdparty/glad",
+      "-DGLES3_ENABLED",
+      "-DDEBUG_ENABLED",
+      "-DTESTS_ENABLED",
+      "-DTOOLS_ENABLED",
+      "-DTHREADS_ENABLED",
+      "drivers/gles3/storage/material_storage.cpp"
+    ]
+  }
+}

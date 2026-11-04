@@ -200,6 +200,7 @@ public:
 			uint32_t wireframe = false;
 			uint32_t ubershader = false;
 			bool indexed144 = false;
+			bool instance192 = false;
 
 			uint32_t hash() const {
 				uint32_t h = hash_murmur3_one_64(vertex_format_id);
@@ -216,6 +217,9 @@ public:
 				if (indexed144) {
 					h = hash_murmur3_one_32(1, h);
 				}
+				if (instance192) {
+					h = hash_murmur3_one_32(2, h);
+				}
 				return hash_fmix32(h);
 			}
 		};
@@ -225,7 +229,7 @@ public:
 
 		RID version;
 
-		static const uint32_t VERTEX_INPUT_MASKS_SIZE = (ShaderVersion::SHADER_VERSION_COLOR_PASS * 2 + SHADER_COLOR_PASS_FLAG_COUNT) * 2;
+		static const uint32_t VERTEX_INPUT_MASKS_SIZE = (ShaderVersion::SHADER_VERSION_COLOR_PASS * 2 + SHADER_COLOR_PASS_FLAG_COUNT) * 3;
 		std::atomic<uint64_t> vertex_input_masks[VERTEX_INPUT_MASKS_SIZE] = {};
 
 		Vector<ShaderCompiler::GeneratedCode::Texture> texture_uniforms;
@@ -255,6 +259,7 @@ public:
 		bool uses_tangent = false;
 		bool writes_tangent = false;
 		bool uses_particle_trails = false;
+		bool instance192_unqualified_vertex_modes = false;
 		bool uses_normal_map = false;
 		bool uses_bent_normal_map = false;
 		bool wireframe = false;
@@ -310,12 +315,15 @@ public:
 		virtual bool is_animated() const;
 		virtual bool casts_shadows() const;
 		virtual RenderingServerTypes::ShaderNativeSourceCode get_native_source_code() const;
+		// Structural support only: caller must still pin a qualified material,
+		// bounds/source/history proof and backend mirror-cull calibration.
+		bool instance192_shader_supported() const;
 		virtual Pair<ShaderRD *, RID> get_native_shader_and_version() const;
 		uint16_t _get_shader_version(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader) const;
-		RID _get_shader_variant(uint16_t p_shader_version, bool p_indexed144 = false) const;
+		RID _get_shader_variant(uint16_t p_shader_version, bool p_indexed144 = false, bool p_instance192 = false) const;
 		void _clear_vertex_input_mask_cache();
-		RID get_shader_variant(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader, bool p_indexed144 = false) const;
-		uint64_t get_vertex_input_mask(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader, bool p_indexed144 = false);
+		RID get_shader_variant(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader, bool p_indexed144 = false, bool p_instance192 = false) const;
+		uint64_t get_vertex_input_mask(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader, bool p_indexed144 = false, bool p_instance192 = false);
 		RD::PolygonCullMode get_cull_mode_from_cull_variant(CullVariant p_cull_variant);
 		bool is_valid() const;
 
@@ -351,7 +359,9 @@ public:
 
 	SceneForwardClusteredShaderRD shader;
 	static constexpr uint32_t INDEXED144_VARIANT_OFFSET = ShaderVersion::SHADER_VERSION_COLOR_PASS * 2 + SHADER_COLOR_PASS_FLAG_COUNT;
+	static constexpr uint32_t INSTANCE192_VARIANT_OFFSET = INDEXED144_VARIANT_OFFSET * 2;
 	Vector<int> indexed144_shader_groups;
+	Vector<int> instance192_shader_groups;
 	ShaderCompiler compiler;
 	bool emulate_point_size = false;
 

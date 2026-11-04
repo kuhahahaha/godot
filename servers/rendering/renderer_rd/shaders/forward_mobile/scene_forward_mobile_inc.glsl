@@ -440,6 +440,13 @@ layout(set = 2, binding = 0, std430) restrict readonly buffer Transforms {
 }
 transforms;
 
+#ifdef USE_INSTANCE192_OUTPUT
+#include "../instance192_inc.glsl"
+#define MATERIAL_FRONT_FACING instance192_front_facing(gl_FrontFacing, instance192_interp.y)
+#else
+#define MATERIAL_FRONT_FACING gl_FrontFacing
+#endif
+
 /* Set 3 User Material */
 
 #ifdef USE_RADIANCE_OCTMAP_ARRAY

@@ -1,0 +1,19 @@
+# Independent spatial inverse-model interface review
+
+Reviewer: `/root/b4_disposal_review`, separate from root and the shader implementer. Scope is the new readonly spatial vertex/fragment `INV_MODEL_MATRIX`, both RD compiler/template mappings, the GLES compatibility mapping and new language tests. `REVIEWED_FILES.json` fixes the reviewed source and baseline-log SHA256 values. Production source was not edited.
+
+No blocking source defect found in this interface slice.
+
+- `shader_types.cpp` registers readonly `MAT4` in spatial vertex and fragment, using the existing `constt` convention. It adds no Canvas or light builtin. Two force-linked doctests cover metadata, valid use in both stages, forbidden assignment in each stage and Canvas rejection. These engine tests have not run.
+- Both RD compiler actions rename the builtin to `read_inv_model_matrix`; usage emits both `INV_MODEL_MATRIX_USED` and `MODEL_MATRIX_USED`. The latter keeps Native double-precision multimesh composition of `read_model_matrix` when inverse is the only model builtin used. New inverse work is conditional on actual usage, so old shaders without the builtin do not acquire an extra inverse calculation.
+- Both RD vertex templates declare inverse after their Native multimesh/particle composition and before the user vertex snippet. In fragment, declaration follows External Instance192 replacement of the model and normal values, and precedes user fragment code. Native uses `inverse(read_model_matrix)`; External uses the validated record's inverse. No second host transform is introduced by this interface. External double remains separately refused by the shader component.
+- The GLES mapping is in the spatial scene compiler block, not Canvas. `inverse(model_matrix)` is a valid expression in both relevant GLSL scopes. The real GLES vertex function builds local `model_matrix` including its instancing transform before `#CODE : VERTEX`; fragment declares local `model_matrix` before `#CODE : FRAGMENT`. GLES templates do not depend on the RD-specific `MODEL_MATRIX_USED` switch. This mapping preserves Compatibility support for the globally recognized language builtin without enabling External output there.
+- The retained old a2 Metal/Forward Mobile baseline log explicitly reports `Unknown identifier in expression: 'INV_MODEL_MATRIX'` at the intended shader line; process completion by itself is not treated as the red oracle.
+
+## Additional independently executed compatibility check
+
+Compiled the actual complete GLES scene vertex/fragment templates with manually translated inverse uses in each user-code slot, including Native base, instanced and depth modes: **6/6 GLSL 300 ES stages returned 0**. `GLES_TEMPLATE_RESULTS.json` records exact commands, inputs and generated-source SHA256 values; generated `.vert`/`.frag` files and raw logs are adjacent and can be passed directly to the recorded `glslangValidator` commands. Mode constants are fixture configuration, not production capability defaults.
+
+An initial exploratory template invocation omitted the required `MAX_GLOBAL_SHADER_UNIFORMS` definition and failed at its unrelated array declaration. The completed invocation uses the renderer's existing value 256 (`rasterizer_scene_gles3.cpp`) plus explicit fixture light/roughness bounds. This harness setup failure is not a source regression or a target red result.
+
+The renderer shader implementer's broader RD compile matrix was inspected as context, not independently re-executed here. Root's C++ syntax results were reported to this reviewer but are not substituted for executed language tests. Manual snippets do not exercise Engine ShaderCompiler translation, engine registration or a live GLES/RD device. Linked-engine tests, runtime material compilation, numerical GPU output and overall B4 acceptance remain pending.
