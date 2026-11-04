@@ -33,6 +33,9 @@
 #include "servers/rendering/rendering_device.h"
 
 class TestExternalOutputPrefixAccess;
+#if defined(TESTS_ENABLED) && defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
+class ParticlesExternalOutputTestFixture;
+#endif
 
 namespace RendererRD {
 class ParticlesStorage;
@@ -47,6 +50,9 @@ class ParticlesStorage;
 // No destructor submits/free guesses.
 class ExternalOutputStorage {
 	friend class ParticlesStorage;
+#if defined(TESTS_ENABLED) && defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
+	friend class ::ParticlesExternalOutputTestFixture;
+#endif
 #ifdef TESTS_ENABLED
 	friend class ::TestExternalOutputPrefixAccess;
 #endif
