@@ -278,10 +278,10 @@ TEST_CASE("[PhysicsWrapper2DR1Gates] barrier precedes PARK and acknowledgement w
 	Access::hook(wrapper, barrier_hook, &context);
 	Thread controller;
 	controller.start([](void *p_context) {
-		auto *context = static_cast<BarrierContext *>(p_context);
+		auto *thread_context = static_cast<BarrierContext *>(p_context);
 		const uint64_t deadline = OS::get_singleton()->get_ticks_usec() + 10000000;
-		while (!context->barrier_entered.load()) {
-			if (context->before_barrier.load() && Access::snapshot(context->wrapper).requested != 0) {
+		while (!thread_context->barrier_entered.load()) {
+			if (thread_context->before_barrier.load() && Access::snapshot(thread_context->wrapper).requested != 0) {
 				trap(86, "PHYSICS2D_R3_PARK_BEFORE_BARRIER_PRE_WAIT");
 			}
 			if (OS::get_singleton()->get_ticks_usec() >= deadline) {
@@ -292,29 +292,29 @@ TEST_CASE("[PhysicsWrapper2DR1Gates] barrier precedes PARK and acknowledgement w
 		{
 			Ref<GatedCleanup> payload;
 			payload.instantiate();
-			payload->context = context;
-			context->wrapper->shape_set_data(RID(), Variant(payload));
+			payload->context = thread_context;
+			thread_context->wrapper->shape_set_data(RID(), Variant(payload));
 		}
-		context->wrapper->finish(); // Foreign request during the held barrier.
-		context->stop_did_not_park = Access::snapshot(context->wrapper).requested == 0;
-		context->barrier_release.post();
-		wait_gate(context->cleanup_entered);
+		thread_context->wrapper->finish(); // Foreign request during the held barrier.
+		thread_context->stop_did_not_park = Access::snapshot(thread_context->wrapper).requested == 0;
+		thread_context->barrier_release.post();
+		wait_gate(thread_context->cleanup_entered);
 		const uint64_t park_deadline = OS::get_singleton()->get_ticks_usec() + 10000000;
-		while (Access::snapshot(context->wrapper).requested == 0) {
+		while (Access::snapshot(thread_context->wrapper).requested == 0) {
 			if (OS::get_singleton()->get_ticks_usec() >= park_deadline) {
 				trap(87, "PHYSICS2D_R1_FIXTURE_PARK_REQUEST_UNREACHED");
 			}
 			OS::get_singleton()->delay_usec(100);
 		}
-		if (context->force_early_ack) {
-			Access::force_early_ack(context->wrapper);
+		if (thread_context->force_early_ack) {
+			Access::force_early_ack(thread_context->wrapper);
 		}
-		const auto held = Access::snapshot(context->wrapper);
-		context->ack_waited_for_cleanup = held.acknowledged < held.requested && !held.parked && context->backend->sync_count.load() == 0 && context->backend->finish_count.load() == 0;
-		if (!context->ack_waited_for_cleanup) {
+		const auto held = Access::snapshot(thread_context->wrapper);
+		thread_context->ack_waited_for_cleanup = held.acknowledged < held.requested && !held.parked && thread_context->backend->sync_count.load() == 0 && thread_context->backend->finish_count.load() == 0;
+		if (!thread_context->ack_waited_for_cleanup) {
 			trap(86, "PHYSICS2D_R3_ACK_BEFORE_CLEANUP_RETURN");
 		}
-		context->cleanup_release.post();
+		thread_context->cleanup_release.post();
 	},
 			&context);
 	wrapper->sync();
@@ -378,24 +378,24 @@ TEST_CASE("[PhysicsWrapper2DR1Gates] late admitted publisher and end-sync releas
 	Access::hook(wrapper, publisher_hook, &context);
 	Thread producer;
 	producer.start([](void *p_context) {
-		auto *context = static_cast<PublisherContext *>(p_context);
+		auto *thread_context = static_cast<PublisherContext *>(p_context);
 		{
 			Ref<ReleaseFromCleanup> payload;
 			payload.instantiate();
-			payload->wrapper = context->wrapper;
-			context->wrapper->shape_set_data(RID(), Variant(payload));
+			payload->wrapper = thread_context->wrapper;
+			thread_context->wrapper->shape_set_data(RID(), Variant(payload));
 		}
-		context->producer_done.post();
+		thread_context->producer_done.post();
 	},
 			&context);
 	wait_gate(context.admitted);
 	Thread controller;
 	controller.start([](void *p_context) {
-		auto *context = static_cast<PublisherContext *>(p_context);
-		wait_gate(context->empty_flush);
-		context->publish.post();
-		wait_gate(context->producer_done);
-		context->resume_drain.post();
+		auto *thread_context = static_cast<PublisherContext *>(p_context);
+		wait_gate(thread_context->empty_flush);
+		thread_context->publish.post();
+		wait_gate(thread_context->producer_done);
+		thread_context->resume_drain.post();
 	},
 			&context);
 	wrapper->finish();
@@ -451,10 +451,10 @@ TEST_CASE("[PhysicsWrapper2DR1Gates] rejected Main boundary admission still serv
 	Access::hook(wrapper, boundary_hook, &context);
 	Thread controller;
 	controller.start([](void *p_context) {
-		auto *context = static_cast<BoundaryContext *>(p_context);
-		wait_gate(context->entered);
-		context->wrapper->finish();
-		context->release.post();
+		auto *thread_context = static_cast<BoundaryContext *>(p_context);
+		wait_gate(thread_context->entered);
+		thread_context->wrapper->finish();
+		thread_context->release.post();
 	},
 			&context);
 	switch (boundary) {

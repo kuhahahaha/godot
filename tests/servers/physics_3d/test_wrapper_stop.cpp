@@ -291,14 +291,14 @@ TEST_CASE("[PhysicsWrapperStop] direct getter preflush payload cleanup defers fi
 	} context{ wrapper, backend };
 	Thread producer;
 	producer.start([](void *p_userdata) {
-		auto *context = static_cast<ProducerContext *>(p_userdata);
+		auto *thread_context = static_cast<ProducerContext *>(p_userdata);
 		Ref<FinishFromPayloadCleanup> payload;
 		payload.instantiate();
-		payload->wrapper = context->wrapper;
-		payload->backend = context->backend;
+		payload->wrapper = thread_context->wrapper;
+		payload->backend = thread_context->backend;
 		// The nonthreaded wrapper still queues a foreign async setter. After
 		// this thread returns, only the real queued Variant owns the payload.
-		context->wrapper->shape_set_data(RID(), Variant(payload));
+		thread_context->wrapper->shape_set_data(RID(), Variant(payload));
 	},
 			&context);
 	producer.wait_to_finish();
