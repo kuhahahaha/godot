@@ -41,9 +41,9 @@ template<class T> bool aligned(const T *p){return p && uintptr_t(p)%alignof(T)==
 bool disjoint(const void *a,size_t as,const void *b,size_t bs){const auto x=uintptr_t(a),y=uintptr_t(b);return x<=y?as<=y-x:bs<=x-y;}
 bool abi(const GDExtensionDeviceExitAbi &value,uint32_t size=sizeof(GDExtensionDeviceExitAbi)){return value.abi_version==1 && value.struct_size==size && !value.reserved;}
 template<class T> T pod(const void *bytes){T value;memcpy(&value,bytes,sizeof(value));return value;}
-constexpr uint32_t request_sizes[] = { 0, 8, 56, 80, 104, 48, sizeof(GDExtensionQualificationRecordV1), sizeof(GDExtensionQualificationUploadPrepareV1), sizeof(GDExtensionQualificationUploadRequestV1), sizeof(GDExtensionQualificationRecordV1), sizeof(GDExtensionQualificationRecordV2), sizeof(GDExtensionQualificationUploadPrepareV1), sizeof(GDExtensionQualificationTextureCreateV1), sizeof(GDExtensionQualificationSamplerCreateV1), sizeof(GDExtensionQualificationTextureUploadV1), sizeof(GDExtensionQualificationSetCreateV1), sizeof(GDExtensionQualificationResourceRetireV1) };
-constexpr uint32_t result_sizes[] = { 0, 48, 72, 136, 96, sizeof(GDExtensionQualificationReportV1), sizeof(GDExtensionQualificationTicketRefV1) + sizeof(GDExtensionQualificationReportV1), sizeof(GDExtensionQualificationTicketRefV1) + sizeof(GDExtensionQualificationReportV1), sizeof(GDExtensionQualificationUploadReportV1), sizeof(GDExtensionQualificationReportV1), sizeof(GDExtensionQualificationReportV2), sizeof(GDExtensionQualificationTicketRefV1) + sizeof(GDExtensionQualificationReportV2), sizeof(GDExtensionQualificationResourceBackingV1), sizeof(GDExtensionQualificationResourceBackingV1), sizeof(GDExtensionQualificationUploadReportV1), sizeof(GDExtensionQualificationResourceBackingV1), sizeof(GDExtensionQualificationResourceRetireReportV1) };
-constexpr uint32_t MAX_REQUEST = sizeof(GDExtensionQualificationRecordV2), MAX_RESULT = sizeof(GDExtensionQualificationTicketRefV1) + sizeof(GDExtensionQualificationReportV2), MAX_SEGMENTS = 4096;
+constexpr uint32_t request_sizes[] = { 0, 8, 56, 80, 104, 48, sizeof(GDExtensionQualificationRecordV1), sizeof(GDExtensionQualificationUploadPrepareV1), sizeof(GDExtensionQualificationUploadRequestV1), sizeof(GDExtensionQualificationRecordV1), sizeof(GDExtensionQualificationRecordV2), sizeof(GDExtensionQualificationUploadPrepareV1), sizeof(GDExtensionQualificationTextureCreateV1), sizeof(GDExtensionQualificationSamplerCreateV1), sizeof(GDExtensionQualificationTextureUploadV1), sizeof(GDExtensionQualificationSetCreateV1), sizeof(GDExtensionQualificationResourceRetireV1), sizeof(GDExtensionQualificationRecordV3) };
+constexpr uint32_t result_sizes[] = { 0, 48, 72, 136, 96, sizeof(GDExtensionQualificationReportV1), sizeof(GDExtensionQualificationTicketRefV1) + sizeof(GDExtensionQualificationReportV1), sizeof(GDExtensionQualificationTicketRefV1) + sizeof(GDExtensionQualificationReportV1), sizeof(GDExtensionQualificationUploadReportV1), sizeof(GDExtensionQualificationReportV1), sizeof(GDExtensionQualificationReportV2), sizeof(GDExtensionQualificationTicketRefV1) + sizeof(GDExtensionQualificationReportV2), sizeof(GDExtensionQualificationResourceBackingV1), sizeof(GDExtensionQualificationResourceBackingV1), sizeof(GDExtensionQualificationUploadReportV1), sizeof(GDExtensionQualificationResourceBackingV1), sizeof(GDExtensionQualificationResourceRetireReportV1), sizeof(GDExtensionQualificationReportV2) };
+constexpr uint32_t MAX_REQUEST = sizeof(GDExtensionQualificationRecordV3), MAX_RESULT = sizeof(GDExtensionQualificationTicketRefV1) + sizeof(GDExtensionQualificationReportV2), MAX_SEGMENTS = 4096;
 constexpr uint64_t MAX_PAYLOAD=67108864;
 Error validate_request(const GDExtensionQualificationRtRequestV1 &h,const uint8_t *bytes) {
  switch(h.kind) {
@@ -61,6 +61,10 @@ Error validate_request(const GDExtensionQualificationRtRequestV1 &h,const uint8_
 	  }
   } break;
   case 8: {const auto q=pod<GDExtensionQualificationUploadRequestV1>(bytes);if(!abi(q.abi)||q.reserved||!q.record_generation||!q.parent_serial||!q.rid||!q.backing_serial||!q.byte_size||q.byte_size>UINT32_MAX||q.byte_offset>UINT32_MAX||q.byte_size>UINT32_MAX-q.byte_offset||!q.expected_revision||q.role>=GDEXTENSION_QUALIFICATION_UPLOAD_ROLE_COUNT_V1||q.owner_kind<1||q.owner_kind>5||h.payload_bytes!=16+q.byte_size||h.segment_capacity<(q.byte_size+31)/32)return ERR_INVALID_PARAMETER;}break;
+  case 17: {
+   const auto q = pod<GDExtensionQualificationRecordV3>(bytes);
+   if (validate_qualification_record_v3(q) != OK || h.payload_bytes != sizeof(GDExtensionQualificationTicketRefV1)) return ERR_INVALID_PARAMETER;
+  } break;
   case 10: {
 	  const auto q = pod<GDExtensionQualificationRecordV2>(bytes);
 	  if (validate_qualification_record_v2(q) != OK || h.payload_bytes != sizeof(GDExtensionQualificationTicketRefV1)) {
@@ -142,7 +146,7 @@ Error Registry::qualification_rt_ticket_locked(QualificationBridge *bridge,const
 		return OK;
 	}
 
-	if (header.kind != 8 && header.kind != 9 && header.kind != 10) {
+	if (header.kind != 8 && header.kind != 9 && header.kind != 10 && header.kind != 17) {
 		return OK;
 	}
  const auto ref=pod<GDExtensionQualificationTicketRefV1>(payload);
@@ -155,17 +159,20 @@ Error Registry::qualification_rt_ticket_locked(QualificationBridge *bridge,const
   const auto &upload=ticket->uploads[q.upload_index];const auto &plan=upload.plan;
   if(q.record_generation!=origin.record_generation || q.parent_serial!=origin.parent_serial || q.rid!=plan.rid || q.backing_serial!=plan.backing_serial || q.byte_offset!=plan.byte_offset || q.byte_size!=plan.byte_size || q.role!=plan.role || q.owner_kind!=plan.owner_kind || memcmp(&q.e05_backing,&plan.e05_backing,sizeof(plan.e05_backing)) || memcmp(q.payload_digest,plan.payload_digest,32) || (q.expected_revision!=ticket->report.revision && (!upload.attempted || q.expected_revision!=upload.last_request_revision)) || header.segment_capacity<upload.progress.max_segments)return ERR_INVALID_DATA;
  } else {
-	 const auto range_q = header.kind == 10 ? pod<GDExtensionQualificationRecordV2>(request) : GDExtensionQualificationRecordV2{};
-	 auto q = header.kind == 10 ? qualification_record_v1(range_q) : pod<GDExtensionQualificationRecordV1>(request);
-	 if (header.kind == 10) {
+	 const auto range_q = header.kind == 17 ? pod<GDExtensionQualificationRecordV3>(request).record : header.kind == 10 ? pod<GDExtensionQualificationRecordV2>(request) : GDExtensionQualificationRecordV2{};
+     if (ticket->operation_bound) {
+      if (header.kind != 17 || !same_original_operation_identity(ticket->operation, qualification_operation_identity(pod<GDExtensionQualificationRecordV3>(request)))) return ERR_INVALID_DATA;
+     }
+	 auto q = (header.kind == 10 || header.kind == 17) ? qualification_record_v1(range_q) : pod<GDExtensionQualificationRecordV1>(request);
+	 if (header.kind == 10 || header.kind == 17) {
 		 q.readback_size = range_q.readback_size;
 	 }
-	 if ((header.kind == 10) != ticket->multi_readback) {
+	 if ((header.kind == 10 || header.kind == 17) != ticket->multi_readback) {
 		 return ERR_INVALID_DATA;
 	 }
   if(q.record_generation!=origin.record_generation || q.request_nonce!=origin.request_nonce || q.library_generation!=origin.library_generation || q.qualification_session_serial!=origin.qualification_session_serial || q.vector_ordinal!=origin.vector_ordinal || q.attempt!=origin.attempt || q.readback_size!=origin.expected_result_bytes || memcmp(q.request_digest,origin.request_digest,32) || memcmp(q.unit_digest,origin.unit_digest,32))return ERR_INVALID_DATA;
   if (ticket->recorded) {
-	  if (header.kind == 10 ? memcmp(&range_q, &ticket->range_origin, sizeof(range_q)) : memcmp(&q, &ticket->origin, sizeof(q))) {
+	  if ((header.kind == 10 || header.kind == 17) ? memcmp(&range_q, &ticket->range_origin, sizeof(range_q)) : memcmp(&q, &ticket->origin, sizeof(q))) {
 		  return ERR_INVALID_DATA;
 	  }
   } else {
@@ -186,7 +193,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_rt_reserve(GDExtensionQ
  if (!disjoint(request, 1, out, sizeof(*out)) || !disjoint(request, header.request_bytes, out, sizeof(*out)) || (payload && (!disjoint(payload, 1, out, sizeof(*out)) || header.payload_bytes > SIZE_MAX || !disjoint(payload, size_t(header.payload_bytes), out, sizeof(*out))))) {
 	 return result(ERR_INVALID_PARAMETER, 2);
  }
- if (!abi(header.abi, sizeof(header)) || header.flags || header.reserved || !header.operation_serial || header.kind < 1 || header.kind > 16 || header.request_bytes != request_sizes[header.kind] || header.result_capacity != result_sizes[header.kind] || header.segment_capacity > MAX_SEGMENTS || ((header.kind == 8 || header.kind == 14) ? !header.segment_capacity : header.segment_capacity != 0) || header.payload_bytes > MAX_PAYLOAD || ((header.payload_bytes != 0) != (payload != nullptr))) {
+ if (!abi(header.abi, sizeof(header)) || header.flags || header.reserved || !header.operation_serial || header.kind < 1 || header.kind > 17 || header.request_bytes != request_sizes[header.kind] || header.result_capacity != result_sizes[header.kind] || header.segment_capacity > MAX_SEGMENTS || ((header.kind == 8 || header.kind == 14) ? !header.segment_capacity : header.segment_capacity != 0) || header.payload_bytes > MAX_PAYLOAD || ((header.payload_bytes != 0) != (payload != nullptr))) {
 	 *out = {};
 	 return result(ERR_INVALID_PARAMETER, 2);
  }
@@ -235,7 +242,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_rt_reserve(GDExtensionQ
  }
  const bool use_cleanup_reservation=cleanup_reserved && *cleanup_reserved;
  const bool use_slot_credit = (header.kind == 3 || header.kind == 5 || header.kind == 16) && bridge->cleanup_refs_reserved;
- const bool use_shared_queue = bridge->cleanup_refs_reserved && (use_slot_credit || header.kind == 8 || header.kind == 9 || header.kind == 10 || header.kind == 14 || header.kind == 15);
+ const bool use_shared_queue = bridge->cleanup_refs_reserved && (use_slot_credit || header.kind == 8 || header.kind == 9 || header.kind == 17 || header.kind == 10 || header.kind == 14 || header.kind == 15);
  const uint32_t refs_needed=uint32_t(!use_slot_credit)+uint32_t(!use_shared_queue);
  if(use_slot_credit && bridge->cleanup_slot_in_use)return result(ERR_BUSY,19);
  if(private_limit<refs_needed || records[bridge->library].private_refs>private_limit-refs_needed || (use_cleanup_reservation ? (qualification_serials.exhausted || !qualification_cleanup_serial_reservations) : !qualification_serial_capacity(1)))return result(ERR_PARAMETER_RANGE_ERROR,19);
@@ -291,7 +298,7 @@ Error Registry::qualification_rt_schedule(GDExtensionQualificationBridgeRefV1 re
   if(!cell->active || cell->state!=1 || cell->queued)return OK;
   // Already accepted ticket work must drain after owner cancellation even
   // when its slot consumed the last unreserved library reference.
-  const bool ticket_work = (cell->header.kind == 8 || cell->header.kind == 9 || cell->header.kind == 10 || cell->header.kind == 14 || cell->header.kind == 15) && cell->ticket;
+  const bool ticket_work = (cell->header.kind == 8 || cell->header.kind == 9 || cell->header.kind == 17 || cell->header.kind == 10 || cell->header.kind == 14 || cell->header.kind == 15) && cell->ticket;
   const bool use_queue_credit = (cell->header.kind == 3 || cell->header.kind == 5 || cell->header.kind == 16 || ticket_work) && bridge->cleanup_refs_reserved;
   if(use_queue_credit){if(!bridge->claim_cleanup_queue(cell->queued,cell->queue_ref_credit))return OK;}
   else if(cell->queue_ref_reserved){cell->queued=true;++bridge->children;}
@@ -423,6 +430,14 @@ void Registry::qualification_rt_dispatch(uint64_t bridge_serial,uint64_t serial)
     called=qualification_upload(bridge_ref,ticket,&q,cell->payload.ptr()+sizeof(ticket),uint32_t(q.byte_size),cell->segments.ptrw(),cell->header.segment_capacity,&out);save(out);segment_count=out.out_written;valid_output=called.native_error!=OK || (abi(out.abi) && segment_count<=cell->header.segment_capacity);
    }break;
    case 9: {const auto q=pod<GDExtensionQualificationRecordV1>(cell->request.ptr());const auto ticket=pod<GDExtensionQualificationTicketRefV1>(cell->payload.ptr());GDExtensionQualificationReportV1 out={};called=qualification_record_prepared(bridge_ref,ticket,&q,&out);save(out);valid_output=called.native_error!=OK || abi(out.abi);}break;
+   case 17: {
+    const auto q = pod<GDExtensionQualificationRecordV3>(cell->request.ptr());
+    const auto ticket = pod<GDExtensionQualificationTicketRefV1>(cell->payload.ptr());
+    GDExtensionQualificationReportV2 out = {};
+    called = qualification_record_prepared_v3(bridge_ref, ticket, &q, &out);
+    save(out);
+    valid_output = called.native_error != OK || (out.abi.abi_version == 2 && out.abi.struct_size == sizeof(GDExtensionDeviceExitAbi) && !out.abi.reserved);
+   } break;
    case 10: {
 	   const auto q = pod<GDExtensionQualificationRecordV2>(cell->request.ptr());
 	   const auto ticket = pod<GDExtensionQualificationTicketRefV1>(cell->payload.ptr());

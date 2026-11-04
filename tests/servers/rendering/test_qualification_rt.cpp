@@ -220,6 +220,72 @@ public:
    REQUIRE(admitted.handle_serial!=0);REQUIRE(f.registry->qualification_rt_release(f.ref,admitted).native_error==OK);f.registry->records[0].quiescing=true;
   }
  }
+ static void original_operation_admission() {
+  Fixture f;
+  auto c=config();
+  c.max_request_bytes=sizeof(GDExtensionQualificationRecordV3);
+  c.max_result_bytes=sizeof(GDExtensionQualificationTicketRefV1)+sizeof(GDExtensionQualificationReportV2);
+  REQUIRE(f.registry->qualification_rt_configure(f.ref,&c).native_error==OK);
+  auto *ticket=memnew(Ticket);
+  ticket->serial=23;ticket->bridge_serial=11;ticket->prepared=true;ticket->multi_readback=true;ticket->physically_retired=true;
+  auto &origin=ticket->preparation;
+  origin.record_generation=37;origin.request_nonce=39;origin.library_generation=1;origin.qualification_session_serial=7;origin.attempt=1;origin.expected_result_bytes=16;
+  ticket->operation_bound=true;
+  ticket->operation={39,1,7,37,0,8};
+  f.bridge->tickets[0]=ticket;
+  GDExtensionQualificationRecordV3 request{};
+  request.abi={3,sizeof(request),0};request.original_range_begin=0;request.original_range_end=8;
+  auto &q=request.record;
+  q.abi={2,sizeof(GDExtensionDeviceExitAbi),0};q.record_generation=37;q.request_nonce=39;q.library_generation=1;q.qualification_session_serial=7;q.attempt=1;
+  q.range_end=q.sample_count=4;q.body_groups_x=1;q.readback_size=16;q.readback_count=1;q.capture_set_count=q.body_set_count=1;
+  auto &range=q.readbacks[0];range.readback_buffer=f.buffer.get_id();range.source_allocation_generation=41;range.observed_backing_serial=17;range.readback_size=16;range.role=GDEXTENSION_QUALIFICATION_READBACK_NUMERIC_RAW_OUTPUT_V1;
+  const GDExtensionQualificationTicketRefV1 child{71,23};
+  GDExtensionQualificationRtRequestV1 header{{1,sizeof(GDExtensionQualificationRtRequestV1),0},17,0,1,sizeof(child),sizeof(request),sizeof(GDExtensionQualificationReportV2),0,0};
+  const auto refs=f.registry->records[0].private_refs;
+  const auto children=f.bridge->children;
+  GDExtensionQualificationRtRefV1 accepted{},same{};
+  REQUIRE(f.registry->qualification_rt_reserve(f.ref,&header,&request,&child,&accepted).native_error==OK);
+  CHECK(accepted.handle_serial!=0);CHECK(ticket->accepted_rt_refs==1);CHECK(f.bridge->rt->ticket==ticket);
+  CHECK(f.bridge->rt->header.kind==17);CHECK(memcmp(f.bridge->rt->request.ptr(),&request,sizeof(request))==0);
+  REQUIRE(f.registry->qualification_rt_reserve(f.ref,&header,&request,&child,&same).native_error==OK);
+  CHECK(same.handle_serial==accepted.handle_serial);CHECK(ticket->accepted_rt_refs==1);
+  REQUIRE(f.registry->qualification_rt_release(f.ref,accepted).native_error==OK);
+  CHECK(ticket->accepted_rt_refs==0);CHECK(f.bridge->children==children);CHECK(f.registry->records[0].private_refs==refs);
+  ++header.operation_serial;
+  const auto serial=f.registry->qualification_serials.next;
+  // Refusals run on an empty slot, so identity validation must precede all
+  // slot publication and must leave the original ticket reusable.
+  for(uint32_t variant=0;variant<4;++variant) {
+   auto changed=request;
+   if(variant==0)++changed.record.request_nonce;
+   if(variant==1)++changed.original_range_end;
+   if(variant==2)++changed.original_range_begin;
+   if(variant==3){++changed.original_range_begin;++changed.original_range_end;}
+   GDExtensionQualificationRtRefV1 refused{};
+   const auto result=f.registry->qualification_rt_reserve(f.ref,&header,&changed,&child,&refused);
+   CHECK(result.native_error==ERR_INVALID_DATA);CHECK(result.reason==16);
+   CHECK(refused.registry_instance==0);CHECK(refused.handle_serial==0);CHECK_FALSE(f.bridge->rt->occupied);
+   CHECK(ticket->accepted_rt_refs==0);CHECK_FALSE(ticket->recorded);CHECK(ticket->graphs.is_empty());
+   CHECK(f.bridge->children==children);CHECK(f.registry->records[0].private_refs==refs);CHECK(f.registry->qualification_serials.next==serial);
+   CHECK(ticket->operation.owner_request_nonce==39);CHECK(ticket->operation.record_range_begin==0);CHECK(ticket->operation.record_range_end==8);
+  }
+  // A legacy V2 envelope remains valid for an unbound ticket, but cannot
+  // bypass the immutable identity retained by a V3 ticket.
+  auto legacy=header;legacy.kind=10;legacy.request_bytes=sizeof(q);
+  GDExtensionQualificationRtRefV1 out{};
+  CHECK(f.registry->qualification_rt_reserve(f.ref,&legacy,&q,&child,&out).native_error==ERR_INVALID_DATA);
+  CHECK(out.handle_serial==0);CHECK(ticket->accepted_rt_refs==0);CHECK(f.registry->qualification_serials.next==serial);
+  ticket->operation_bound=false;
+  REQUIRE(f.registry->qualification_rt_reserve(f.ref,&legacy,&q,&child,&out).native_error==OK);
+  CHECK(f.bridge->rt->header.kind==10);CHECK(f.bridge->rt->header.request_bytes==sizeof(GDExtensionQualificationRecordV2));
+  CHECK(memcmp(f.bridge->rt->request.ptr(),&q,sizeof(q))==0);CHECK(q.abi.abi_version==2);CHECK(q.abi.struct_size==sizeof(GDExtensionDeviceExitAbi));
+  REQUIRE(f.registry->qualification_rt_release(f.ref,out).native_error==OK);
+  ticket->operation_bound=true;++header.operation_serial;
+  REQUIRE(f.registry->qualification_rt_reserve(f.ref,&header,&request,&child,&out).native_error==OK);
+  CHECK(ticket->accepted_rt_refs==1);
+  REQUIRE(f.registry->qualification_rt_release(f.ref,out).native_error==OK);
+  CHECK(ticket->accepted_rt_refs==0);CHECK(f.bridge->children==children);CHECK(f.registry->records[0].private_refs==refs);
+ }
  static void one_accepted_call() {
   Fixture f;auto c=config();REQUIRE(f.registry->qualification_rt_configure(f.ref,&c).native_error==OK);
   auto header=query(1);uint64_t rid=f.buffer.get_id();GDExtensionQualificationRtRefV1 ref={};REQUIRE(f.registry->qualification_rt_reserve(f.ref,&header,&rid,nullptr,&ref).native_error==OK);
@@ -292,3 +358,7 @@ TEST_CASE("[QualificationRt] preactivation abort drops exactly the accepted orig
 TEST_CASE("[QualificationRt] accepted typed upload retains same ticket across owner cancel and returned refusal") {TestQualificationRtAccess::same_ticket_pin(true);}
 
 TEST_CASE("[QualificationRt] accepted close scope admits its typed call exactly once") {TestQualificationRtAccess::one_accepted_call();SUBCASE("cleanup_kind3_kind5_after_quiesce"){TestQualificationRtAccess::cleanup(false,false);}SUBCASE("all_other_kinds_remain_closed"){TestQualificationRtAccess::other_kinds_closed();}SUBCASE("cleanup_child_auth_complete_request"){TestQualificationRtAccess::cleanup(true,false);}}
+
+TEST_CASE("[QualificationRt] V3 admission retains original operation identity and legacy V2 ABI") {
+ TestQualificationRtAccess::original_operation_admission();
+}

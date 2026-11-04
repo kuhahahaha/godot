@@ -31,6 +31,31 @@
 #include "core/extension/gdextension_record_source.h"
 
 namespace GDExtensionDeviceExit {
+bool valid_original_operation_identity(const OriginalOperationIdentity &id) noexcept {
+	return id.owner_request_nonce && id.library_generation &&
+			id.qualification_session_serial && id.record_generation &&
+			id.record_range_begin < id.record_range_end;
+}
+bool same_original_operation_identity(const OriginalOperationIdentity &a, const OriginalOperationIdentity &b) noexcept {
+	return valid_original_operation_identity(a) && valid_original_operation_identity(b) &&
+		a.owner_request_nonce == b.owner_request_nonce &&
+		a.library_generation == b.library_generation &&
+		a.qualification_session_serial == b.qualification_session_serial &&
+		a.record_generation == b.record_generation &&
+		a.record_range_begin == b.record_range_begin &&
+		a.record_range_end == b.record_range_end;
+}
+Error bind_checked_record_append(CheckedRecordAppend &append, const OriginalOperationIdentity &identity) noexcept {
+	if (!valid_original_operation_identity(identity)) {
+		return ERR_INVALID_DATA;
+	}
+	if (append.operation_bound && !same_original_operation_identity(append.operation, identity)) {
+		return ERR_UNAUTHORIZED;
+	}
+	append.operation = identity;
+	append.operation_bound = true;
+	return OK;
+}
 Error retain_native_source(RDD &driver, NativeSourceMember &member) {
 	if (member.retained || member.owner_released) {
 		return OK;

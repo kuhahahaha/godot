@@ -46,11 +46,12 @@ class NativeSourceOrigin {
 	friend class ::TestRecordSourceAccess;
 #endif
 	enum class Kind : uint8_t { Qualification,
-		Production };
+		Production, SystemScalar };
 	const Kind kind;
 	explicit NativeSourceOrigin(Kind p_kind) : kind(p_kind) {}
 	static NativeSourceOrigin qualification() { return NativeSourceOrigin(Kind::Qualification); }
 	static NativeSourceOrigin production() { return NativeSourceOrigin(Kind::Production); }
+	static NativeSourceOrigin system_scalar() { return NativeSourceOrigin(Kind::SystemScalar); }
 
 public:
 	NativeSourceOrigin() = delete;
@@ -83,6 +84,19 @@ struct NativeSourceObservation {
 	RDD::IssueFact resolved_issue = RDD::IssueFact::NotIssued;
 	Error retention_error = OK;
 };
+// Immutable identity retained by the original R01 owner across checked
+// admission, native completion, and exact readback. RD handles and serials
+// cannot substitute for these owner-issued fields.
+struct OriginalOperationIdentity {
+	uint64_t owner_request_nonce = 0;
+	uint64_t library_generation = 0;
+	uint64_t qualification_session_serial = 0;
+	uint64_t record_generation = 0;
+	uint64_t record_range_begin = 0;
+	uint64_t record_range_end = 0;
+};
+bool valid_original_operation_identity(const OriginalOperationIdentity &) noexcept;
+bool same_original_operation_identity(const OriginalOperationIdentity &, const OriginalOperationIdentity &) noexcept;
 // Private core helpers consumed by the original RD/ticket owner. They carry no
 // public API, callbacks, caller-authored proof, handle issuer or source registry.
 Error retain_native_source(RDD &, NativeSourceMember &);
@@ -112,5 +126,10 @@ struct CheckedRecordAppend {
 	State state = State::Rejected;
 	Error error = OK;
 	RDG::RecordHandle handle;
+	OriginalOperationIdentity operation;
+	bool operation_bound = false;
 };
+// Binds the append observation to the original owner identity. This is an
+// internal join only; it does not create an identity from an RD handle.
+Error bind_checked_record_append(CheckedRecordAppend &, const OriginalOperationIdentity &) noexcept;
 } // namespace GDExtensionDeviceExit

@@ -209,6 +209,19 @@ public:
 	}
 	static void request_identity() {
 		using namespace GDExtensionDeviceExit;
+		const OriginalOperationIdentity owner{11, 12, 13, 14, 0, 4};
+		const OriginalOperationIdentity changed{11, 12, 13, 14, 0, 5};
+		CHECK(valid_original_operation_identity(owner));
+		CHECK(same_original_operation_identity(owner, owner));
+		CHECK_FALSE(same_original_operation_identity(owner, changed));
+		CheckedRecordAppend observation;
+		CHECK(bind_checked_record_append(observation, owner) == OK);
+		CHECK(observation.operation_bound);
+		CHECK(same_original_operation_identity(observation.operation, owner));
+		CHECK(bind_checked_record_append(observation, changed) == ERR_UNAUTHORIZED);
+		const OriginalOperationIdentity invalid{11, 12, 13, 14, 4, 4};
+		CHECK_FALSE(valid_original_operation_identity(invalid));
+		CHECK(bind_checked_record_append(observation, invalid) == ERR_INVALID_DATA);
 		const ReadbackSourceState complete{ 101, 11, 4, 8, 8, 8, 8, OK, true };
 		CHECK(same_request_readback_complete(complete, 101, 11, 4, 8));
 		for (uint32_t mode = 0; mode < 10; ++mode) {
@@ -252,6 +265,7 @@ public:
 	}
 	static void checked_append() {
 		using State = GDExtensionDeviceExit::CheckedRecordAppend::State;
+		const GDExtensionDeviceExit::OriginalOperationIdentity identity{11, 12, 13, 14, 0, 4};
 		RenderingDevice device;
 		Driver driver;
 		device.driver = &driver;
@@ -271,25 +285,33 @@ public:
 		to.draw_tracker->buffer_driver_id = to.driver_id;
 		RID src = device.storage_buffer_owner.make_rid(from), dst = device.storage_buffer_owner.make_rid(to);
 		uint32_t before = device.draw_graph.qualification_command_count();
+		const GDExtensionDeviceExit::OriginalOperationIdentity missing{};
+		auto denied = device._record_source_buffer_copy(missing, src, dst, 0, 0, 16);
+		CHECK(denied.state == State::Rejected);
+		CHECK(denied.error == ERR_INVALID_DATA);
+		CHECK_FALSE(denied.operation_bound);
+		CHECK(device.draw_graph.qualification_command_count() == before);
 		ERR_PRINT_OFF;
-		auto bad = device._record_source_buffer_copy(src, dst, 31, 0, 2);
+		auto bad = device._record_source_buffer_copy(identity, src, dst, 31, 0, 2);
 		CHECK(bad.state == State::Rejected);
 		CHECK(bad.error == ERR_INVALID_PARAMETER);
 		CHECK(device.draw_graph.qualification_command_count() == before);
 		CHECK(device.buffer_copy(src, dst, 31, 0, 2) == ERR_INVALID_PARAMETER);
 		ERR_PRINT_ON;
-		auto appended = device._record_source_buffer_copy(src, dst, 0, 0, 16);
+		auto appended = device._record_source_buffer_copy(identity, src, dst, 0, 0, 16);
 		CHECK(appended.state == State::Appended);
 		CHECK(appended.error == OK);
+		CHECK(appended.operation_bound);
+		CHECK(GDExtensionDeviceExit::same_original_operation_identity(appended.operation, identity));
 		CHECK(device.draw_graph.contains_record(appended.handle));
 		CHECK(device.draw_graph.qualification_command_count() == before + 1);
 		device.storage_buffer_owner.get_or_null(dst)->draw_tracker = nullptr;
 		before = device.draw_graph.qualification_command_count();
-		CHECK(device._record_source_buffer_copy(src, dst, 0, 0, 16).error == ERR_UNAVAILABLE);
+		CHECK(device._record_source_buffer_copy(identity, src, dst, 0, 0, 16).error == ERR_UNAVAILABLE);
 		CHECK(device.draw_graph.qualification_command_count() == before);
 		device.compute_list.active = true;
-		CHECK(device._record_source_dispatch(RenderingDevice::ID_TYPE_COMPUTE_LIST, 0, 1, 1).error == ERR_INVALID_PARAMETER);
-		CHECK(device._record_source_dispatch(RenderingDevice::ID_TYPE_COMPUTE_LIST, 1, 1, 1).error == ERR_INVALID_DATA);
+		CHECK(device._record_source_dispatch(identity, RenderingDevice::ID_TYPE_COMPUTE_LIST, 0, 1, 1).error == ERR_INVALID_PARAMETER);
+		CHECK(device._record_source_dispatch(identity, RenderingDevice::ID_TYPE_COMPUTE_LIST, 1, 1, 1).error == ERR_INVALID_DATA);
 		RenderingDevice::Shader shader;
 		shader.driver_id = RDD::ShaderID(7);
 		RID shader_rid = device.shader_owner.make_rid(shader);
@@ -302,7 +324,7 @@ public:
 		device.compute_list.state.pipeline = pipeline_rid;
 		device.compute_list.state.pipeline_shader = shader_rid;
 		device.compute_list.state.pipeline_shader_driver_id = shader.driver_id;
-		CHECK(device._record_source_dispatch(RenderingDevice::ID_TYPE_COMPUTE_LIST, 1, 1, 1).error == ERR_UNAVAILABLE);
+		CHECK(device._record_source_dispatch(identity, RenderingDevice::ID_TYPE_COMPUTE_LIST, 1, 1, 1).error == ERR_UNAVAILABLE);
 		CHECK(device.draw_graph.qualification_command_count() == before);
 		device.compute_pipeline_owner.get_or_null(pipeline_rid)->push_constant_size = 0;
 		device.compute_list.state.pipeline_shader_driver_id = shader.driver_id;
@@ -310,9 +332,10 @@ public:
 		device.compute_list.validation.pipeline_active = true;
 #endif
 		device.draw_graph.add_compute_list_begin();
-		auto dispatched = device._record_source_dispatch(RenderingDevice::ID_TYPE_COMPUTE_LIST, 1, 1, 1);
+		auto dispatched = device._record_source_dispatch(identity, RenderingDevice::ID_TYPE_COMPUTE_LIST, 1, 1, 1);
 		CHECK(dispatched.state == State::Appended);
 		CHECK(dispatched.error == OK);
+		CHECK(GDExtensionDeviceExit::same_original_operation_identity(dispatched.operation, identity));
 		CHECK(device.draw_graph.contains_record(dispatched.handle));
 		device.draw_graph.add_compute_list_end();
 		device.compute_list.active = false;

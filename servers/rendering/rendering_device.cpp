@@ -12056,12 +12056,15 @@ static_assert(ENUM_MEMBERS_EQUAL(RD::CALLBACK_RESOURCE_USAGE_ATTACHMENT_DEPTH_ST
 static_assert(ENUM_MEMBERS_EQUAL(RD::CALLBACK_RESOURCE_USAGE_GENERAL, RDG::RESOURCE_USAGE_GENERAL));
 static_assert(ENUM_MEMBERS_EQUAL(RD::CALLBACK_RESOURCE_USAGE_MAX, RDG::RESOURCE_USAGE_MAX));
 
-// These private variants capture actual original producer outcomes. Their
-// existence grants no operation/resource permission; original production
-// admission remains gated until the authenticated owner import is available.
-GDExtensionDeviceExit::CheckedRecordAppend RenderingDevice::_record_source_dispatch(ComputeListID list, uint32_t x, uint32_t y, uint32_t z) {
+// Capture original producer outcomes after the caller has admitted the operation.
+// The copied identity does not itself grant operation or resource permission.
+GDExtensionDeviceExit::CheckedRecordAppend RenderingDevice::_record_source_dispatch(const GDExtensionDeviceExit::OriginalOperationIdentity &identity, ComputeListID list, uint32_t x, uint32_t y, uint32_t z, const void *push_data, uint32_t push_size) {
 	using Observation = GDExtensionDeviceExit::CheckedRecordAppend;
 	Observation observed;
+	observed.error = GDExtensionDeviceExit::bind_checked_record_append(observed, identity);
+	if (observed.error != OK) {
+		return observed;
+	}
 	if (render_thread_id != Thread::get_caller_id()) {
 		observed.error = ERR_UNAUTHORIZED;
 		return observed;
@@ -12080,10 +12083,9 @@ GDExtensionDeviceExit::CheckedRecordAppend RenderingDevice::_record_source_dispa
 		observed.error = ERR_INVALID_DATA;
 		return observed;
 	}
-	// Legacy release state cannot prove push supplied after shader change.
-	// Restrict this bounded profile until the original checked binding port is
-	// imported. Extra texture/transfer/descriptor producers are likewise excluded.
-	if (pipeline->push_constant_size || !driver->api_trait_get(RDD::API_TRAIT_HONORS_PIPELINE_BARRIERS)) {
+	// Qualification supplies the push bytes in this checked call. Its dispatch
+	// prepares descriptors and synchronization through the backend-specific path.
+	if (push_size != pipeline->push_constant_size || (push_size && (!qualification_recording || !push_data || push_size > MAX_PUSH_CONSTANT_SIZE)) || (!qualification_recording && !driver->api_trait_get(RDD::API_TRAIT_HONORS_PIPELINE_BARRIERS))) {
 		observed.error = ERR_UNAVAILABLE;
 		return observed;
 	}
@@ -12098,14 +12100,21 @@ GDExtensionDeviceExit::CheckedRecordAppend RenderingDevice::_record_source_dispa
 			return observed;
 		}
 	}
+	if (push_size) {
+		compute_list_set_push_constant(list, push_data, push_size);
+	}
 	observed.handle = _qualification_dispatch(list, x, y, z);
 	observed.state = observed.handle.is_valid() ? Observation::State::Appended : Observation::State::Unknown;
 	observed.error = observed.handle.is_valid() ? OK : FAILED;
 	return observed;
 }
-GDExtensionDeviceExit::CheckedRecordAppend RenderingDevice::_record_source_buffer_copy(RID from, RID to, uint32_t from_offset, uint32_t to_offset, uint32_t size) {
+GDExtensionDeviceExit::CheckedRecordAppend RenderingDevice::_record_source_buffer_copy(const GDExtensionDeviceExit::OriginalOperationIdentity &identity, RID from, RID to, uint32_t from_offset, uint32_t to_offset, uint32_t size) {
 	using Observation = GDExtensionDeviceExit::CheckedRecordAppend;
 	Observation observed;
+	observed.error = GDExtensionDeviceExit::bind_checked_record_append(observed, identity);
+	if (observed.error != OK) {
+		return observed;
+	}
 	if (render_thread_id != Thread::get_caller_id()) {
 		observed.error = ERR_UNAUTHORIZED;
 		return observed;

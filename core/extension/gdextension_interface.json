@@ -4540,6 +4540,28 @@
             ]
         },
         {
+            "name": "GDExtensionQualificationRecordV3",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "record",
+                    "type": "GDExtensionQualificationRecordV2"
+                },
+                {
+                    "name": "original_range_begin",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "original_range_end",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
             "name": "GDExtensionQualificationRecordV1",
             "kind": "struct",
             "members": [
@@ -6504,6 +6526,152 @@
                 {
                     "name": "GDEXTENSION_QUALIFICATION_BINDING_IMAGE_V1",
                     "value": 5
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionSystemScalarTicketRefV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "handle_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionSystemScalarRecordV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "unit",
+                    "type": "GDExtensionNativeUnitBackingV1"
+                },
+                {
+                    "name": "output",
+                    "type": "GDExtensionStorageBackingV1"
+                },
+                {
+                    "name": "output_allocation_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "library_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "session_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "record_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "request_nonce",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "output_offset",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "output_word_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionSystemScalarReportV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "state",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "phase",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "native_error",
+                    "type": "int32_t"
+                },
+                {
+                    "name": "issue_fact",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "native_code",
+                    "type": "int64_t"
+                },
+                {
+                    "name": "revision",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "record_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "request_nonce",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "required_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "known_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "possible_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "fact_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "readback_request",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "source_backing_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "source_offset",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "source_size",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "owned_size",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
                 }
             ]
         }
@@ -14210,6 +14378,49 @@
             }
         },
         {
+            "name": "device_session_qualification_record_prepared_v3",
+            "since": "4.7",
+            "description": [
+                "Records a prepared qualification ticket with the original operation identity. The V2 record retains its dispatch envelope; original_range_begin/end are the owner-issued canonical range. Requires the original render-thread bridge admission."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous in-process bridge."
+                    ]
+                },
+                {
+                    "name": "ticket",
+                    "type": "GDExtensionQualificationTicketRefV1",
+                    "description": [
+                        "Synchronous in-process ticket."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "const GDExtensionQualificationRecordV3*",
+                    "description": [
+                        "Synchronous in-process request."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionQualificationReportV2*",
+                    "description": [
+                        "Synchronous in-process out report."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            }
+        },
+        {
             "name": "device_session_qualification_native_unit_create_v1",
             "since": "4.7",
             "description": [
@@ -15061,6 +15272,271 @@
                 "type": "int32_t",
                 "description": [
                     "Existing Godot Error value."
+                ]
+            }
+        },
+        {
+            "name": "device_session_system_scalar_record_v1",
+            "since": "4.7",
+            "description": [
+                "Original System scalar typed dispatch and exact output readback; distinct from qualification capture."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Original in-process value; all handles are authenticated by Registry."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "const GDExtensionSystemScalarRecordV1*",
+                    "description": [
+                        "Original in-process value; all handles are authenticated by Registry."
+                    ]
+                },
+                {
+                    "name": "out_ticket",
+                    "type": "GDExtensionSystemScalarTicketRefV1*",
+                    "description": [
+                        "Original in-process value; all handles are authenticated by Registry."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionSystemScalarReportV1*",
+                    "description": [
+                        "Original in-process value; all handles are authenticated by Registry."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Godot Error and reason for the original Registry action."
+                ]
+            }
+        },
+        {
+            "name": "device_session_system_scalar_observe_v1",
+            "since": "4.7",
+            "description": [
+                "Observe same ticket native completion and readback."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Original in-process value; all handles are authenticated by Registry."
+                    ]
+                },
+                {
+                    "name": "ticket",
+                    "type": "GDExtensionSystemScalarTicketRefV1",
+                    "description": [
+                        "Original in-process value; all handles are authenticated by Registry."
+                    ]
+                },
+                {
+                    "name": "budget",
+                    "type": "const GDExtensionQualificationBudgetV1*",
+                    "description": [
+                        "Original in-process value; all handles are authenticated by Registry."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionSystemScalarReportV1*",
+                    "description": [
+                        "Original in-process value; all handles are authenticated by Registry."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Godot Error and reason for the original Registry action."
+                ]
+            }
+        },
+        {
+            "name": "device_session_system_scalar_facts_v1",
+            "since": "4.7",
+            "description": [
+                "Copy ticket facts at exact report revision."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Original in-process value; all handles are authenticated by Registry."
+                    ]
+                },
+                {
+                    "name": "ticket",
+                    "type": "GDExtensionSystemScalarTicketRefV1",
+                    "description": [
+                        "Original in-process value; all handles are authenticated by Registry."
+                    ]
+                },
+                {
+                    "name": "revision",
+                    "type": "uint64_t",
+                    "description": [
+                        "Original in-process value; all handles are authenticated by Registry."
+                    ]
+                },
+                {
+                    "name": "first",
+                    "type": "uint32_t",
+                    "description": [
+                        "Original in-process value; all handles are authenticated by Registry."
+                    ]
+                },
+                {
+                    "name": "capacity",
+                    "type": "uint32_t",
+                    "description": [
+                        "Original in-process value; all handles are authenticated by Registry."
+                    ]
+                },
+                {
+                    "name": "out_facts",
+                    "type": "GDExtensionQualificationFactV1*",
+                    "description": [
+                        "Original in-process value; all handles are authenticated by Registry."
+                    ]
+                },
+                {
+                    "name": "out_written",
+                    "type": "uint32_t*",
+                    "description": [
+                        "Original in-process value; all handles are authenticated by Registry."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Godot Error and reason for the original Registry action."
+                ]
+            }
+        },
+        {
+            "name": "device_session_system_scalar_copy_v1",
+            "since": "4.7",
+            "description": [
+                "Copy exact completed output words from same ticket."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Original in-process value; all handles are authenticated by Registry."
+                    ]
+                },
+                {
+                    "name": "ticket",
+                    "type": "GDExtensionSystemScalarTicketRefV1",
+                    "description": [
+                        "Original in-process value; all handles are authenticated by Registry."
+                    ]
+                },
+                {
+                    "name": "revision",
+                    "type": "uint64_t",
+                    "description": [
+                        "Original in-process value; all handles are authenticated by Registry."
+                    ]
+                },
+                {
+                    "name": "out_bytes",
+                    "type": "void*",
+                    "description": [
+                        "Original in-process value; all handles are authenticated by Registry."
+                    ]
+                },
+                {
+                    "name": "capacity",
+                    "type": "uint32_t",
+                    "description": [
+                        "Original in-process value; all handles are authenticated by Registry."
+                    ]
+                },
+                {
+                    "name": "out_written",
+                    "type": "uint32_t*",
+                    "description": [
+                        "Original in-process value; all handles are authenticated by Registry."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Godot Error and reason for the original Registry action."
+                ]
+            }
+        },
+        {
+            "name": "device_session_system_scalar_cancel_v1",
+            "since": "4.7",
+            "description": [
+                "Close admission; preserve accepted prefix through physical return."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Original in-process value; all handles are authenticated by Registry."
+                    ]
+                },
+                {
+                    "name": "ticket",
+                    "type": "GDExtensionSystemScalarTicketRefV1",
+                    "description": [
+                        "Original in-process value; all handles are authenticated by Registry."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Godot Error and reason for the original Registry action."
+                ]
+            }
+        },
+        {
+            "name": "device_session_system_scalar_release_v1",
+            "since": "4.7",
+            "description": [
+                "Acknowledge ticket only after physical retirement."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Original in-process value; all handles are authenticated by Registry."
+                    ]
+                },
+                {
+                    "name": "ticket",
+                    "type": "GDExtensionSystemScalarTicketRefV1",
+                    "description": [
+                        "Original in-process value; all handles are authenticated by Registry."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Godot Error and reason for the original Registry action."
                 ]
             }
         }

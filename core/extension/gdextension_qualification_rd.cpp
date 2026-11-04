@@ -111,7 +111,10 @@ Error RenderingDevice::_qualification_pin_resources(QualificationTicket *ticket,
     auto match=[&](const auto *child) {return child && &child->physical==physical && !child->creating && !child->retiring && !child->acknowledged && child->serial && child->rid==rid.get_id() && child->object_serial && child->object_serial==child->physical.serial && child->physical.rid==child->rid && child->physical.bridge==bridge->serial && child->physical.child==child->serial;};
     if(texture)for(auto *child:bridge->textures)if(match(child)){original=true;break;}
     if(sampler)for(auto *child:bridge->samplers)if(match(child)){original=true;break;}
-	if (set) {
+	if (set && ticket->system_scalar && physical == &ticket->system_set_physical && ticket->system_set == rid && !ticket->system_set_physical.use_closed.load()) {
+		original = true;
+	}
+	if (set && !original) {
 		for (auto *child : bridge->sets) {
 			if (match(child)) {
 				original = true;
@@ -178,7 +181,9 @@ void RenderingDevice::_qualification_seal_tickets() {
    }
    member.sealed=true;fact.command_slot=slot;fact.phase=2;ticket->observation_dirty=true;
   }
-  if(ticket->capture.is_valid() && ticket->body.is_valid() && draw_graph.contains_record(ticket->capture) && draw_graph.contains_record(ticket->body)) {
+  if (ticket->system_scalar && ticket->body.is_valid() && draw_graph.contains_record(ticket->body)) {
+	  ticket->ordering_closed = true;
+  } else if(ticket->capture.is_valid() && ticket->body.is_valid() && draw_graph.contains_record(ticket->capture) && draw_graph.contains_record(ticket->body)) {
    ticket->ordering_path_length=0;
    uint32_t path_length=0;
    ticket->ordering_closed=draw_graph.has_dependency_path(ticket->capture,ticket->body,path_length);
@@ -200,7 +205,7 @@ void RenderingDevice::_qualification_seal_tickets() {
   // Each actual result copy belongs after this request's Body. Same-frame
   // recording order alone is insufficient: require the graph dependency path.
   for (auto &graph : ticket->graphs) {
-	  if (ticket->multi_readback && ticket->facts[graph.fact].semantic_kind == 3 && draw_graph.contains_record(graph.handle)) {
+	  if ((ticket->multi_readback || ticket->system_scalar) && ticket->facts[graph.fact].semantic_kind == 3 && draw_graph.contains_record(graph.handle)) {
 		  uint32_t path_length = 0;
 		  const bool current_body = draw_graph.contains_record(ticket->body);
 		  const bool ordered = current_body ? draw_graph.has_dependency_path(ticket->body, graph.handle, path_length) : ticket->body_returned_successfully();

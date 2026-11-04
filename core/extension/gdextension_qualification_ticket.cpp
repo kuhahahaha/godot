@@ -92,7 +92,7 @@ void Registry::qualification_add_upload_graph(QualificationTicket *ticket, Rende
 }
 Error Registry::qualification_ticket_locked(QualificationBridge *bridge,GDExtensionQualificationTicketRefV1 ref,QualificationTicket *&ticket) {
  if(ref.registry_instance!=instance || !ref.handle_serial)return ERR_INVALID_DATA;
- for(auto *existing:bridge->tickets)if(existing && existing->serial==ref.handle_serial && !existing->acknowledged){ticket=existing;return OK;}
+ for(auto *existing:bridge->tickets)if(existing && !existing->system_scalar && existing->serial==ref.handle_serial && !existing->acknowledged){ticket=existing;return OK;}
  return ERR_DOES_NOT_EXIST;
 }
 Error Registry::qualification_record_preflight(QualificationBridge *bridge, RenderingDevice *rd, const GDExtensionQualificationRecordV1 &request, LocalVector<RID> &resources, uint64_t capture_set1, uint64_t body_set1, bool p_allow_empty) {
@@ -235,8 +235,14 @@ void Registry::qualification_record_append(QualificationTicket *ticket,Rendering
   if (ticket->multi_readback && ticket->range_origin.capture_set1) {
 	  rd->compute_list_bind_uniform_set(capture, RID::from_uint64(ticket->range_origin.capture_set1), 1);
   }
-  rd->compute_list_set_push_constant(capture,request.capture_push,16);
-  ticket->capture=rd->_qualification_dispatch(capture,1,1,1);rd->compute_list_end();
+  if (ticket->operation_bound) {
+   ticket->capture_append = rd->_record_source_dispatch(ticket->operation, capture, 1, 1, 1, request.capture_push, 16);
+   ticket->capture = ticket->capture_append.handle;
+  } else {
+   rd->compute_list_set_push_constant(capture,request.capture_push,16);
+   ticket->capture=rd->_qualification_dispatch(capture,1,1,1);
+  }
+  rd->compute_list_end();
  }
  {MutexLock lock(mutex);add_graph(ticket,ticket->capture,1,rd->frame,rd->frames[rd->frame].qualification_epoch);rd->_qualification_add_frame_ticket(ticket);}
  if(ticket->capture.is_valid()) {
@@ -247,12 +253,23 @@ void Registry::qualification_record_append(QualificationTicket *ticket,Rendering
    if (ticket->multi_readback && ticket->range_origin.body_set1) {
 	   rd->compute_list_bind_uniform_set(body, RID::from_uint64(ticket->range_origin.body_set1), 1);
    }
-   rd->compute_list_set_push_constant(body,request.body_push,16);
-   ticket->body=rd->_qualification_dispatch(body,request.body_groups_x,1,1);rd->compute_list_end();
+   if (ticket->operation_bound) {
+    ticket->body_append = rd->_record_source_dispatch(ticket->operation, body, request.body_groups_x, 1, 1, request.body_push, 16);
+    ticket->body = ticket->body_append.handle;
+   } else {
+    rd->compute_list_set_push_constant(body,request.body_push,16);
+    ticket->body=rd->_qualification_dispatch(body,request.body_groups_x,1,1);
+   }
+   rd->compute_list_end();
   }
   {MutexLock lock(mutex);add_graph(ticket,ticket->body,2,rd->frame,rd->frames[rd->frame].qualification_epoch);}
  }
  Error first_error = ticket->body.is_valid() ? OK : FAILED;
+ if (ticket->operation_bound && !ticket->capture.is_valid() && ticket->capture_append.error != OK) {
+  first_error = ticket->capture_append.error;
+ } else if (ticket->operation_bound && !ticket->body.is_valid() && ticket->body_append.error != OK) {
+  first_error = ticket->body_append.error;
+ }
  if (ticket->body.is_valid()) {
 	 for (uint32_t i = 0; i < ticket->readback_count(); ++i) {
 		 {
@@ -343,7 +360,7 @@ void Registry::qualification_ticket_publish(QualificationTicket *ticket,Renderin
  else if(!sealed) {next.state=2;next.phase=2;}
  else if(ticket->natives.is_empty()) {next.state=3;next.phase=3;}
  else {next.state=4;next.phase=4;}
- bool result_complete = ticket->recorded && ticket->ordering_closed && ticket->readback_count() > 0;
+ bool result_complete = ticket->recorded && (ticket->system_scalar || ticket->ordering_closed) && ticket->readback_count() > 0;
  for (uint32_t i = 0; i < ticket->readback_count(); ++i) {
 	 result_complete = result_complete && ticket->readback_complete(i);
  }
@@ -359,7 +376,7 @@ void Registry::qualification_ticket_publish(QualificationTicket *ticket,Renderin
  if(ticket->append_failed)ticket->admission_closed=true;
  if(ticket->admission_closed)ticket->continuation_pending=false;
  const bool failed_prefix_settled=ticket->append_failed && sources_returned && !ticket->recording;
- const bool cancelled_upload_settled=ticket->prepared && ticket->admission_closed && sources_returned && !ticket->recording;
+ const bool cancelled_upload_settled=(ticket->prepared || ticket->system_scalar) && ticket->admission_closed && (sources_returned || (no_effect && !live_upload_claim)) && !ticket->recording;
  if(cancelled_upload_settled){next.state=7;next.phase=6;next.owned_size=0;}
  // A prepared ticket whose upload has already attempted an effect still owns
  // its original writer claim when the checked call returns with no graph
@@ -373,6 +390,11 @@ void Registry::qualification_ticket_publish(QualificationTicket *ticket,Renderin
   else ++next.revision;
   ticket->report=next;ticket->observation_dirty=false;
  }
+ if (ticket->system_scalar) {
+	 static_assert(offsetof(GDExtensionSystemScalarReportV1, readback_request) == offsetof(GDExtensionQualificationReportV1, readback_request));
+	 static_assert(sizeof(GDExtensionSystemScalarReportV1) == offsetof(GDExtensionQualificationReportV1, request_digest));
+	 memcpy(&ticket->system_report, &ticket->report, sizeof(ticket->system_report));
+ }
 }
 GDExtensionDeviceSessionResultV1 Registry::qualification_record(GDExtensionQualificationBridgeRefV1 ref,const GDExtensionQualificationRecordV1 *request,GDExtensionQualificationTicketRefV1 *out,GDExtensionQualificationReportV1 *report) {
  if(!aligned(request)||!aligned(out)||!aligned(report)||!separate(request,sizeof(*request),out,sizeof(*out))||!separate(request,sizeof(*request),report,sizeof(*report))||!separate(out,sizeof(*out),report,sizeof(*report))||out->registry_instance||out->handle_serial)return result(ERR_INVALID_PARAMETER,2);
@@ -381,7 +403,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record(GDExtensionQuali
   MutexLock lock(mutex);Error error=qualification_bridge_locked(ref,true,true,bridge,rd,6);if(error!=OK)return result(error,error==ERR_UNAUTHORIZED?15:16);
   // Exact replay reads the original ticket, without re-admitting its resources
   // against a later RD window or appending the same work again.
-  for(auto *existing:bridge->tickets)if(existing && existing->origin.record_generation==request->record_generation && existing->origin.request_nonce==request->request_nonce) {
+  for(auto *existing:bridge->tickets)if(existing && !existing->system_scalar && existing->origin.record_generation==request->record_generation && existing->origin.request_nonce==request->request_nonce) {
    if(existing->acknowledged)return result(ERR_DOES_NOT_EXIST,17);
    if(existing->prepared || memcmp(&existing->origin,request,sizeof(*request)))return result(ERR_INVALID_DATA,16);
    if(existing->recording)return result(ERR_BUSY,19);
@@ -424,7 +446,7 @@ void Registry::qualification_ticket_step(QualificationTicket *ticket,RenderingDe
  if (!ticket->append_failed && !ticket->admission_closed && ticket->recorded && !ticket->mapping_failed) {
 	 // A later-frame continuation must not read an output until the original
 	 // Body has physically returned with its exact successful native sources.
-	 const bool body_ready = !ticket->multi_readback || rd->draw_graph.contains_record(ticket->body) || ticket->body_returned_successfully();
+	 const bool body_ready = (!ticket->multi_readback && !ticket->system_scalar) || rd->draw_graph.contains_record(ticket->body) || ticket->body_returned_successfully();
 	 if (body_ready) {
 		 for (uint32_t i = 0; i < ticket->readback_count(); ++i) {
 			 const auto range = ticket->readback_range(i);
@@ -554,8 +576,13 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_copy(GDExtensionQualifi
  *written = capacity;
  return result(OK);
 }
-GDExtensionDeviceSessionResultV1 Registry::qualification_release(GDExtensionQualificationBridgeRefV1 ref,GDExtensionQualificationTicketRefV1 ticket_ref) {
- MutexLock lock(mutex);QualificationBridge *bridge=nullptr;RenderingDevice *rd=nullptr;QualificationTicket *ticket=nullptr;Error error=qualification_bridge_locked(ref,false,false,bridge,rd);if(error!=OK)return result(error,17);error=qualification_ticket_locked(bridge,ticket_ref,ticket);if(error!=OK)return result(error,17);
+GDExtensionDeviceSessionResultV1 Registry::qualification_release(GDExtensionQualificationBridgeRefV1 ref,GDExtensionQualificationTicketRefV1 ticket_ref,bool p_system_scalar) {
+ MutexLock lock(mutex);QualificationBridge *bridge=nullptr;RenderingDevice *rd=nullptr;QualificationTicket *ticket=nullptr;Error error=qualification_bridge_locked(ref,false,false,bridge,rd);if(error!=OK)return result(error,17);
+ if(p_system_scalar) {
+	 if(ticket_ref.registry_instance!=instance || !ticket_ref.handle_serial)return result(ERR_INVALID_DATA,17);
+	 for(auto *candidate:bridge->tickets)if(candidate && candidate->system_scalar && candidate->serial==ticket_ref.handle_serial && !candidate->acknowledged){ticket=candidate;break;}
+	 if(!ticket)return result(ERR_DOES_NOT_EXIST,17);
+ } else {error=qualification_ticket_locked(bridge,ticket_ref,ticket);if(error!=OK)return result(error,17);}
  if(ticket->accepted_rt_refs || ticket->recording || ticket->frame_refs || !ticket->physically_retired.load())return result(ERR_BUSY,16);
  if(ticket->queued)return result(ERR_BUSY,19);
  // Writers of physical_uses and cell.uses hold both Registry and RD locks;
@@ -574,6 +601,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_release(GDExtensionQual
    for(auto *child:bridge->storage)if(child && &child->physical==cell)original=true;
    for(auto *child:bridge->textures)if(child && &child->physical==cell)original=true;
    for(auto *child:bridge->samplers)if(child && &child->physical==cell)original=true;
+   if (p_system_scalar && &ticket->system_set_physical == cell) original=true;
    for (auto *child : bridge->sets) {
 	   if (child && &child->physical == cell) {
 		   original = true;
@@ -585,6 +613,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_release(GDExtensionQual
   for(auto *child:bridge->storage)if(child && !check_cell(&child->physical,child->serial))return false;
   for(auto *child:bridge->textures)if(child && !check_cell(&child->physical,child->serial))return false;
   for(auto *child:bridge->samplers)if(child && !check_cell(&child->physical,child->serial))return false;
+  if (p_system_scalar && !check_cell(&ticket->system_set_physical,ticket->serial))return false;
   for (auto *child : bridge->sets) {
 	  if (child && !check_cell(&child->physical, child->serial)) {
 		  return false;
@@ -605,6 +634,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_release(GDExtensionQual
 			 return result(error, error == ERR_BUSY ? 19 : 17);
 		 }
  }
+ if (p_system_scalar && ticket->system_set.is_valid() && !ticket->system_set_physical.free_event) return result(ERR_BUSY,16);
  RdUnlock rd_unlock;
  if(has_reverse_edges) {
   if(!rd->_thread_safe_.try_lock())return result(ERR_BUSY,19);rd_unlock.mutex=&rd->_thread_safe_;
@@ -906,7 +936,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_prepare_uploads_v2(GDEx
 	qualification_report_v2(ticket, *report);
 	return result(OK);
 }
-GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_v2(GDExtensionQualificationBridgeRefV1 ref, GDExtensionQualificationTicketRefV1 ticket_ref, const GDExtensionQualificationRecordV2 *request, GDExtensionQualificationReportV2 *out) {
+GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_v2(GDExtensionQualificationBridgeRefV1 ref, GDExtensionQualificationTicketRefV1 ticket_ref, const GDExtensionQualificationRecordV2 *request, GDExtensionQualificationReportV2 *out, const OriginalOperationIdentity *operation) {
 	if (!aligned(request) || !aligned(out) || !separate(request, sizeof(*request), out, sizeof(*out))) {
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
@@ -921,7 +951,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_v2(GDEx
 	RdUnlock rd_unlock;
 	{
 		MutexLock lock(mutex);
-		Error error = qualification_bridge_locked(ref, true, true, bridge, rd, 10);
+		Error error = qualification_bridge_locked(ref, true, true, bridge, rd, operation ? 17 : 10);
 		if (error != OK) {
 			return result(error, error == ERR_UNAUTHORIZED ? 15 : 16);
 		}
@@ -932,6 +962,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_v2(GDEx
 		if (!ticket->prepared || !ticket->multi_readback || ticket->admission_closed || ticket->recording || ticket->mapping_failed || ticket->append_failed) {
 			return result(ERR_BUSY, 16);
 		}
+		if (ticket->operation_bound && (!operation || !same_original_operation_identity(ticket->operation, *operation))) return result(ERR_INVALID_DATA, 16);
 		if (ticket->recorded) {
 			if (memcmp(&ticket->range_origin, request, sizeof(*request))) {
 				return result(ERR_INVALID_DATA, 16);
@@ -1061,6 +1092,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_v2(GDEx
 		if (error != OK) {
 			return result(error, 16);
 		}
+		if (operation) { ticket->operation = *operation; ticket->operation_bound = true; }
 		ticket->origin = legacy;
 		ticket->range_origin = *request;
 		ticket->result = owned[0];
@@ -1077,6 +1109,14 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_v2(GDEx
 	MutexLock lock(mutex);
 	qualification_report_v2(ticket, *out);
 	return result(OK);
+}
+GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_v3(GDExtensionQualificationBridgeRefV1 ref, GDExtensionQualificationTicketRefV1 ticket_ref, const GDExtensionQualificationRecordV3 *request, GDExtensionQualificationReportV2 *out) {
+ if (!aligned(request) || !aligned(out) || !separate(request, sizeof(*request), out, sizeof(*out))) return result(ERR_INVALID_PARAMETER, 2);
+ *out = {};
+ const Error error = validate_qualification_record_v3(*request);
+ if (error != OK) return result(error, 2);
+ const auto operation = qualification_operation_identity(*request);
+ return qualification_record_prepared_v2(ref, ticket_ref, &request->record, out, &operation);
 }
 GDExtensionDeviceSessionResultV1 Registry::qualification_observe_v2(GDExtensionQualificationBridgeRefV1 ref, GDExtensionQualificationTicketRefV1 ticket_ref, const GDExtensionQualificationBudgetV1 *budget, GDExtensionQualificationReportV2 *out) {
 	if (!aligned(budget) || !aligned(out) || !separate(budget, sizeof(*budget), out, sizeof(*out))) {

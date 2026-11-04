@@ -447,7 +447,7 @@ Error Registry::qualification_schedule(GDExtensionQualificationBridgeRefV1 ref,u
   MutexLock lock(mutex);Error error=qualification_bridge_locked(ref,false,false,bridge,rd);if(error!=OK)return error;
   if(kind==1)for(auto *child:bridge->storage)if(child && child->serial==serial && child->retiring){if(child->report.state==1)return OK;queued=&child->queued;queue_credit=&child->queue_ref_credit;break;}
   if(kind==2)for(auto *child:bridge->units)if(child && child->serial==serial && child->retiring){if(child->report.state==1)return OK;queued=&child->queued;queue_credit=&child->queue_ref_credit;break;}
-  if(kind==3)for(auto *ticket:bridge->tickets)if(ticket && !ticket->acknowledged && ticket->serial==serial){if(ticket->physically_retired.load() && !ticket->continuation_pending)return OK;queued=&ticket->queued;queue_credit=&ticket->queue_ref_credit;break;}
+  if(kind==3)for(auto *ticket:bridge->tickets)if(ticket && !ticket->acknowledged && ticket->serial==serial){if(ticket->physically_retired.load() && !ticket->continuation_pending && (!ticket->system_scalar || ticket->system_set.is_null() || ticket->system_set_physical.free_event))return OK;queued=&ticket->queued;queue_credit=&ticket->queue_ref_credit;break;}
   if (kind == 4) {
 	  QualificationResource *child = nullptr;
 	  if (qualification_resource_locked(bridge, { instance, serial }, 0, child) == OK && child->retiring) {
@@ -495,11 +495,11 @@ void Registry::qualification_service(uint64_t bridge_serial,uint64_t serial,uint
   const uint64_t start=OS::get_singleton()->get_ticks_usec();
   for(uint32_t pass=0;pass<passes;++pass) {
    if(OS::get_singleton()->get_ticks_usec()-start>=micros)break;
-   if(kind==3){for(auto *ticket:bridge->tickets)if(ticket && ticket->serial==serial)qualification_ticket_step(ticket,rd);}
+   if(kind==3){for(auto *ticket:bridge->tickets)if(ticket && ticket->serial==serial){qualification_ticket_step(ticket,rd);system_scalar_set_return_step(ticket,rd);}}
    else qualification_retire_step(bridge,rd,serial,kind);
    bool returned=false;
    { MutexLock lock(mutex);
-    if(kind==3)for(auto *ticket:bridge->tickets)if(ticket && ticket->serial==serial)returned=ticket->physically_retired.load() && !ticket->continuation_pending;
+    if(kind==3)for(auto *ticket:bridge->tickets)if(ticket && ticket->serial==serial)returned=ticket->physically_retired.load() && !ticket->continuation_pending && (!ticket->system_scalar || ticket->system_set.is_null() || ticket->system_set_physical.free_event);
 	if (kind == 4) {
 		QualificationResource *child = nullptr;
 		if (qualification_resource_locked(bridge, { instance, serial }, 0, child) == OK) {
@@ -535,7 +535,7 @@ void Registry::qualification_service(uint64_t bridge_serial,uint64_t serial,uint
      if(child->report.report_revision!=UINT64_MAX) {child->report.state=2;child->report.return_status=0;child->report.reason=5;child->report.native_error=error;++child->report.report_revision;}
     }
    }
-   if(kind==3){for(auto *ticket:bridge->tickets)if(ticket && ticket->serial==serial)qualification_ticket_step(ticket,rd);}
+   if(kind==3){for(auto *ticket:bridge->tickets)if(ticket && ticket->serial==serial){qualification_ticket_step(ticket,rd);system_scalar_set_return_step(ticket,rd);}}
    else qualification_retire_step(bridge,rd,serial,kind);
    if(error!=OK && error!=ERR_BUSY) {
     MutexLock lock(mutex);
@@ -712,6 +712,12 @@ static GDExtensionDeviceSessionResultV1 native_unit_create(GDExtensionQualificat
 static GDExtensionDeviceSessionResultV1 native_unit_retire(GDExtensionQualificationBridgeRefV1 b,const GDExtensionNativeUnitRetireRequestV1 *q,GDExtensionNativeUnitRetireRefV1 *r,GDExtensionNativeUnitRetireReportV1 *o){return Registry::get_singleton().qualification_native_unit_retire(b,q,r,o);}
 static GDExtensionDeviceSessionResultV1 native_unit_retire_observe(GDExtensionQualificationBridgeRefV1 b,GDExtensionNativeUnitRetireRefV1 r,const GDExtensionQualificationBudgetV1 *q,GDExtensionNativeUnitRetireReportV1 *o){return Registry::get_singleton().qualification_native_unit_retire_observe(b,r,q,o);}
 static GDExtensionDeviceSessionResultV1 native_unit_retire_release(GDExtensionQualificationBridgeRefV1 b,GDExtensionNativeUnitRetireRefV1 r){return Registry::get_singleton().qualification_native_unit_retire_release(b,r);}
+static GDExtensionDeviceSessionResultV1 system_scalar_record(GDExtensionQualificationBridgeRefV1 b,const GDExtensionSystemScalarRecordV1 *q,GDExtensionSystemScalarTicketRefV1 *t,GDExtensionSystemScalarReportV1 *o){return Registry::get_singleton().system_scalar_record(b,q,t,o);}
+static GDExtensionDeviceSessionResultV1 system_scalar_observe(GDExtensionQualificationBridgeRefV1 b,GDExtensionSystemScalarTicketRefV1 t,const GDExtensionQualificationBudgetV1 *q,GDExtensionSystemScalarReportV1 *o){return Registry::get_singleton().system_scalar_observe(b,t,q,o);}
+static GDExtensionDeviceSessionResultV1 system_scalar_facts(GDExtensionQualificationBridgeRefV1 b,GDExtensionSystemScalarTicketRefV1 t,uint64_t r,uint32_t f,uint32_t c,GDExtensionQualificationFactV1 *o,uint32_t *n){return Registry::get_singleton().system_scalar_facts(b,t,r,f,c,o,n);}
+static GDExtensionDeviceSessionResultV1 system_scalar_copy(GDExtensionQualificationBridgeRefV1 b,GDExtensionSystemScalarTicketRefV1 t,uint64_t r,void *o,uint32_t c,uint32_t *n){return Registry::get_singleton().system_scalar_copy(b,t,r,o,c,n);}
+static GDExtensionDeviceSessionResultV1 system_scalar_cancel(GDExtensionQualificationBridgeRefV1 b,GDExtensionSystemScalarTicketRefV1 t){return Registry::get_singleton().system_scalar_cancel(b,t);}
+static GDExtensionDeviceSessionResultV1 system_scalar_release(GDExtensionQualificationBridgeRefV1 b,GDExtensionSystemScalarTicketRefV1 t){return Registry::get_singleton().system_scalar_release(b,t);}
 static GDExtensionDeviceSessionResultV1 record(GDExtensionQualificationBridgeRefV1 b,const GDExtensionQualificationRecordV1 *q,GDExtensionQualificationTicketRefV1 *t,GDExtensionQualificationReportV1 *o){return Registry::get_singleton().qualification_record(b,q,t,o);}
 static GDExtensionDeviceSessionResultV1 observe(GDExtensionQualificationBridgeRefV1 b,GDExtensionQualificationTicketRefV1 t,const GDExtensionQualificationBudgetV1 *q,GDExtensionQualificationReportV1 *o){return Registry::get_singleton().qualification_observe(b,t,q,o);}
 static GDExtensionDeviceSessionResultV1 facts(GDExtensionQualificationBridgeRefV1 b,GDExtensionQualificationTicketRefV1 t,uint64_t r,uint32_t f,uint32_t c,GDExtensionQualificationFactV1 *o,uint32_t *n){return Registry::get_singleton().qualification_facts(b,t,r,f,c,o,n);}
@@ -726,6 +732,9 @@ static GDExtensionDeviceSessionResultV1 prepare_uploads_v2(GDExtensionQualificat
 static GDExtensionDeviceSessionResultV1 record_prepared_v2(GDExtensionQualificationBridgeRefV1 b, GDExtensionQualificationTicketRefV1 t, const GDExtensionQualificationRecordV2 *q, GDExtensionQualificationReportV2 *o) {
 	return Registry::get_singleton().qualification_record_prepared_v2(b, t, q, o);
 }
+static GDExtensionDeviceSessionResultV1 record_prepared_v3(GDExtensionQualificationBridgeRefV1 b, GDExtensionQualificationTicketRefV1 t, const GDExtensionQualificationRecordV3 *q, GDExtensionQualificationReportV2 *o) {
+	return Registry::get_singleton().qualification_record_prepared_v3(b, t, q, o);
+}
 static GDExtensionDeviceSessionResultV1 observe_v2(GDExtensionQualificationBridgeRefV1 b, GDExtensionQualificationTicketRefV1 t, const GDExtensionQualificationBudgetV1 *q, GDExtensionQualificationReportV2 *o) {
 	return Registry::get_singleton().qualification_observe_v2(b, t, q, o);
 }
@@ -738,6 +747,12 @@ static GDExtensionDeviceSessionResultV1 rt_release(GDExtensionQualificationBridg
 void register_qualification_typed_interfaces();
 void register_qualification_interfaces() {
 	register_qualification_typed_interfaces();
+	GDExtension::register_interface_function("device_session_system_scalar_record_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&system_scalar_record));
+	GDExtension::register_interface_function("device_session_system_scalar_observe_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&system_scalar_observe));
+	GDExtension::register_interface_function("device_session_system_scalar_facts_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&system_scalar_facts));
+	GDExtension::register_interface_function("device_session_system_scalar_copy_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&system_scalar_copy));
+	GDExtension::register_interface_function("device_session_system_scalar_cancel_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&system_scalar_cancel));
+	GDExtension::register_interface_function("device_session_system_scalar_release_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&system_scalar_release));
 	GDExtension::register_interface_function("device_session_qualification_rt_configure_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&rt_configure));
 	GDExtension::register_interface_function("device_session_qualification_rt_reserve_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&rt_reserve));
 	GDExtension::register_interface_function("device_session_qualification_rt_activate_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&rt_activate));
@@ -752,6 +767,7 @@ void register_qualification_interfaces() {
 	GDExtension::register_interface_function("device_session_qualification_prepare_uploads_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&prepare_uploads));
 	GDExtension::register_interface_function("device_session_qualification_prepare_uploads_v2", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&prepare_uploads_v2));
 	GDExtension::register_interface_function("device_session_qualification_record_prepared_v2", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&record_prepared_v2));
+	GDExtension::register_interface_function("device_session_qualification_record_prepared_v3", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&record_prepared_v3));
 	GDExtension::register_interface_function("device_session_qualification_observe_v2", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&observe_v2));
 	GDExtension::register_interface_function("device_session_qualification_upload_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&upload));
 	GDExtension::register_interface_function("device_session_qualification_record_prepared_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&record_prepared));

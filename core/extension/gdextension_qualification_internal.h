@@ -92,27 +92,45 @@ inline GDExtensionQualificationRecordV1 qualification_record_v1(const GDExtensio
 	memcpy(old.body_push, q.body_push, sizeof(old.body_push));
 	return old;
 }
+inline OriginalOperationIdentity qualification_operation_identity(const GDExtensionQualificationRecordV3 &q) {
+ return {q.record.request_nonce, q.record.library_generation, q.record.qualification_session_serial, q.record.record_generation, q.original_range_begin, q.original_range_end};
+}
+inline Error validate_qualification_record_v3(const GDExtensionQualificationRecordV3 &q) {
+ if (q.abi.abi_version != 3 || q.abi.struct_size != sizeof(q) || q.abi.reserved || !valid_original_operation_identity(qualification_operation_identity(q))) return ERR_INVALID_PARAMETER;
+ return validate_qualification_record_v2(q.record);
+}
 struct QualificationResource;
 // One original bridge child, shared by graph/frame, native source observations,
 // the original async result and physical-return reverse indices. C facts are
 // snapshots of these original sources, never a separate completion authority.
 struct QualificationTicket {
+ explicit QualificationTicket(bool p_system_scalar = false) : system_scalar(p_system_scalar), source_origin(p_system_scalar ? NativeSourceOrigin::system_scalar() : NativeSourceOrigin::qualification()) {}
  static constexpr uint32_t FACT_CAPACITY=4096;
+ bool system_scalar = false;
+ GDExtensionSystemScalarRecordV1 system_origin = {};
+ RID system_set;
+ QualificationPhysicalReturn system_set_physical;
+ bool system_set_return_requested = false;
+ Error system_set_return_error = OK;
  uint64_t serial=0,bridge_serial=0;
  uint32_t library=0;
  GDExtensionQualificationRecordV1 origin={};
  GDExtensionQualificationUploadPrepareV1 preparation={};
  GDExtensionQualificationRecordV2 range_origin = {};
+ OriginalOperationIdentity operation;
+ bool operation_bound = false;
+ CheckedRecordAppend capture_append, body_append;
  bool multi_readback = false;
  uint64_t additional_readback_serials[2] = {};
  uint64_t original_readback_serial = 0;
  Ref<RenderingDevice::BufferGetDataResult> additional_results[2];
  uint32_t additional_copies_joined[2] = {};
  GDExtensionQualificationReportV1 report={};
+ GDExtensionSystemScalarReportV1 system_report = {};
  LocalVector<GDExtensionQualificationFactV1> facts;
  struct GraphMember {RDG::RecordHandle handle;uint32_t fact=0,frame=0,path_length=0;uint64_t epoch=0;bool sealed=false,returned=false;};
  using NativeMember = NativeSourceMember;
- const NativeSourceOrigin source_origin = NativeSourceOrigin::qualification();
+ const NativeSourceOrigin source_origin;
  LocalVector<GraphMember> graphs;
  LocalVector<NativeMember> natives;
  struct Upload {
@@ -152,6 +170,9 @@ struct QualificationTicket {
  GDExtensionQualificationReadbackRangeV1 readback_range(uint32_t index) const {
 	 if (multi_readback) {
 		 return range_origin.readbacks[index];
+	 }
+	 if (system_scalar) {
+		 return { system_origin.output.rid, system_origin.output_allocation_generation, system_origin.output.backing_serial, system_origin.output_offset, uint64_t(system_origin.output_word_count) * sizeof(uint32_t), 0, UINT32_MAX };
 	 }
 	 return { origin.readback_buffer, origin.source_allocation_generation, origin.observed_backing_serial, origin.readback_offset, origin.readback_size, 0, GDEXTENSION_QUALIFICATION_READBACK_NUMERIC_RAW_OUTPUT_V1 };
  }

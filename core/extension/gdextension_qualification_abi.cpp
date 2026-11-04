@@ -657,3 +657,8 @@ static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1, reason) =
 static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1, native_error) == 104);
 static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1, kind) == 108);
 static_assert(offsetof(GDExtensionQualificationResourceRetireReportV1, native_code) == 112);
+
+static_assert(sizeof(GDExtensionQualificationRecordV3) == 480);
+static_assert(offsetof(GDExtensionQualificationRecordV3, record) == 16);
+static_assert(offsetof(GDExtensionQualificationRecordV3, original_range_begin) == 464);
+static_assert(offsetof(GDExtensionQualificationRecordV3, original_range_end) == 472);

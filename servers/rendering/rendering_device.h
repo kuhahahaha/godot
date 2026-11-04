@@ -62,6 +62,7 @@ class TestParticlesProcessRetryAccess;
 
 namespace GDExtensionDeviceExit {
 struct CheckedRecordAppend;
+struct OriginalOperationIdentity;
 }
 class RDTextureFormat;
 class RDTextureView;
@@ -277,8 +278,8 @@ private:
  uint64_t next_qualification_frame_epoch = 1;
  bool qualification_retiring = false;
  bool qualification_recording = false;
- GDExtensionDeviceExit::CheckedRecordAppend _record_source_dispatch(ComputeListID, uint32_t, uint32_t, uint32_t);
- GDExtensionDeviceExit::CheckedRecordAppend _record_source_buffer_copy(RID, RID, uint32_t, uint32_t, uint32_t);
+ GDExtensionDeviceExit::CheckedRecordAppend _record_source_dispatch(const GDExtensionDeviceExit::OriginalOperationIdentity &, ComputeListID, uint32_t, uint32_t, uint32_t, const void * = nullptr, uint32_t = 0);
+ GDExtensionDeviceExit::CheckedRecordAppend _record_source_buffer_copy(const GDExtensionDeviceExit::OriginalOperationIdentity &, RID, RID, uint32_t, uint32_t, uint32_t);
  RDG::RecordHandle _qualification_dispatch(ComputeListID p_list, uint32_t p_x, uint32_t p_y, uint32_t p_z);
  Error _qualification_maintenance();
  bool _qualification_resource_busy(RID p_rid);
