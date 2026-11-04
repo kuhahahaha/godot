@@ -572,8 +572,11 @@ TEST_CASE("[DeviceExit][TypedABI] version one refuses an entry without guard reg
 	CHECK_FALSE(loader->is_library_open());
 }
 TEST_CASE("[DeviceExit][TypedABI] version one loads an actual dynamic image") {
-	const String image = DirAccess::create(DirAccess::ACCESS_FILESYSTEM)->get_current_dir().path_join("work/typed-lifecycle-abi-v1/native-dynamic/libtyped_dynamic.dylib");
-	if (!FileAccess::exists(image)) { return; }
+	const String image = DirAccess::create(DirAccess::ACCESS_FILESYSTEM)->get_current_dir().path_join("tests/core/object/fixtures/libtyped_dynamic.dylib");
+	if (!FileAccess::exists(image)) {
+		TEST_FAIL_COND_WARN(true, "Optional native dynamic fixture is absent; this dynamic-image case was not executed. Build it using tests/core/object/fixtures/README.md.");
+		return;
+	}
 	const String path = TestUtils::get_temp_path("typed-dynamic.gdextension");
 	Ref<ConfigFile> config; config.instantiate();
 	config->set_value("configuration", "entry_symbol", "typed_dynamic_entry");
@@ -591,8 +594,11 @@ TEST_CASE("[DeviceExit][TypedABI] version one loads an actual dynamic image") {
 	CHECK(DirAccess::remove_absolute(path) == OK);
 }
 TEST_CASE("[DeviceExit][TypedABI] manager loads guarded SCENE from its declared minimum") {
-	const String image = DirAccess::create(DirAccess::ACCESS_FILESYSTEM)->get_current_dir().path_join("work/typed-lifecycle-abi-v1/native-dynamic/libtyped_dynamic.dylib");
-	if (!FileAccess::exists(image)) { return; }
+	const String image = DirAccess::create(DirAccess::ACCESS_FILESYSTEM)->get_current_dir().path_join("tests/core/object/fixtures/libtyped_dynamic.dylib");
+	if (!FileAccess::exists(image)) {
+		TEST_FAIL_COND_WARN(true, "Optional native dynamic fixture is absent; this dynamic-image case was not executed. Build it using tests/core/object/fixtures/README.md.");
+		return;
+	}
 	const String path = TestUtils::get_temp_path("typed-manager.gdextension");
 	Ref<ConfigFile> config; config.instantiate();
 	config->set_value("configuration", "entry_symbol", "typed_dynamic_entry");

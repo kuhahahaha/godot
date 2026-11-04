@@ -444,8 +444,11 @@ TEST_CASE("device_exit::library-close/function-success-return") {
 }
 
 TEST_CASE("device_exit::library-close/manager-real-dynamic-close-fact") {
-	const String image = DirAccess::create(DirAccess::ACCESS_FILESYSTEM)->get_current_dir().path_join("work/typed-lifecycle-abi-v1/native-dynamic/libtyped_dynamic.dylib");
-	if (!FileAccess::exists(image)) { return; }
+	const String image = DirAccess::create(DirAccess::ACCESS_FILESYSTEM)->get_current_dir().path_join("tests/core/object/fixtures/libtyped_dynamic.dylib");
+	if (!FileAccess::exists(image)) {
+		TEST_FAIL_COND_WARN(true, "Optional native dynamic fixture is absent; this dynamic-image case was not executed. Build it using tests/core/object/fixtures/README.md.");
+		return;
+	}
 	const String path = TestUtils::get_temp_path("typed-manager-close-fact.gdextension");
 	Ref<ConfigFile> config; config.instantiate();
 	config->set_value("configuration", "entry_symbol", "typed_dynamic_entry");
