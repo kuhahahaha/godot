@@ -56,10 +56,12 @@ struct Access {
 		QuoteDriver driver;
 		Registry *registry = memnew(Registry);
 		Holder holder;
+		GDExtensionQualificationBridgeRefV1 qualification = {};
 		GDExtensionDeviceExit::RecordRef reference;
 		GDExtensionDeviceExit::RegistrationContext frame;
 		static constexpr GDExtensionDeviceExitAbi ABI = { 1, sizeof(GDExtensionDeviceExitAbi), 0 };
 		static constexpr uint64_t INSTANCE = 9101;
+		static void original_terminator(void *, GDExtensionInitializationLevel) {}
 		Enrollment() {
 			using namespace GDExtensionDeviceExit;
 			rd.driver = &driver;
@@ -81,7 +83,19 @@ struct Access {
 			record.producer_code_holder = 3;
 			record.guard_enrollment = GuardEnrollment::QUALIFIED;
 			record.scene_ready_state = Registry::Record::SceneReadyState::IN_FRAME;
-			record.levels[GDEXTENSION_INITIALIZATION_SCENE].binding_action.serial = 4;
+			auto &scene = record.levels[GDEXTENSION_INITIALIZATION_SCENE];
+			scene.initialized = true;
+			scene.binding_action.serial = 4;
+			scene.binding_action.generation = 1;
+			scene.binding_action.owner_thread = record.owner_thread;
+			scene.binding_action.level = GDEXTENSION_INITIALIZATION_SCENE;
+			scene.binding_action.kind = TerminalActionKind::LEVEL_BINDING;
+			scene.binding_action.services = 1u << 5;
+			scene.binding_action.wrapper = &original_terminator;
+			scene.binding_action.userdata = this;
+			record.original_initialization.deinitialize = &original_terminator;
+			record.original_initialization.userdata = this;
+			registry->live_services = 1u << 5;
 			record.private_refs = 1;
 			holder.typed_code_hold = true;
 			holder.handle_serial = 3;
@@ -119,6 +133,9 @@ struct Access {
 					}
 				}
 				registry->production_close({ INSTANCE, attachment->serial });
+			}
+			if (qualification.handle_serial) {
+				registry->qualification_close(qualification);
 			}
 			frame.leave();
 			reference.reset();
@@ -217,6 +234,148 @@ struct Access {
 			CHECK(entry == nullptr);
 		}
 		CHECK(fixture.rd.draw_graph.qualification_command_count() == 1);
+	}
+
+	static void actual_entity_hold() {
+		Enrollment fixture;
+		auto &registry = *fixture.registry;
+		auto &record = registry.records[0];
+		auto &device = registry.device_records[0];
+		auto &action = record.levels[GDEXTENSION_INITIALIZATION_SCENE].binding_action;
+		const GDExtensionProductionCapacityV1 capacity = { Enrollment::ABI, 2, 2, 2, 2, 2, 32, 0, 2, 8, 0 };
+		GDExtensionProductionMetadataQuoteV1 quote = {};
+		REQUIRE(registry.production_quote(&Enrollment::ABI, { Enrollment::INSTANCE, 5 }, { Enrollment::INSTANCE, 9 }, { Enrollment::INSTANCE, 6 }, { Enrollment::INSTANCE, 7 }, &capacity, &quote).native_error == OK);
+		GDExtensionProductionAttachmentRefV1 refused = {};
+		GDExtensionProductionInstallationReportV1 report = {};
+		action.services = 0;
+		CHECK(registry.production_accept(&Enrollment::ABI, { Enrollment::INSTANCE, 5 }, { Enrollment::INSTANCE, 9 }, { Enrollment::INSTANCE, 6 }, { Enrollment::INSTANCE, 7 }, { Enrollment::INSTANCE, 3 }, &quote, &refused, &report).native_error == ERR_UNAUTHORIZED);
+		CHECK(refused.handle_serial == 0);
+		CHECK(fixture.rd.production_entity_holds == nullptr);
+		action.services = 1u << 5;
+		action.generation = 2;
+		CHECK(registry.production_accept(&Enrollment::ABI, { Enrollment::INSTANCE, 5 }, { Enrollment::INSTANCE, 9 }, { Enrollment::INSTANCE, 6 }, { Enrollment::INSTANCE, 7 }, { Enrollment::INSTANCE, 3 }, &quote, &refused, &report).native_error == ERR_UNAUTHORIZED);
+		action.generation = 1;
+		registry.live_services = 0;
+		CHECK(registry.production_accept(&Enrollment::ABI, { Enrollment::INSTANCE, 5 }, { Enrollment::INSTANCE, 9 }, { Enrollment::INSTANCE, 6 }, { Enrollment::INSTANCE, 7 }, { Enrollment::INSTANCE, 3 }, &quote, &refused, &report).native_error == ERR_UNAVAILABLE);
+		registry.live_services = 1u << 5;
+		const auto attachment = fixture.accept(capacity);
+		auto *edge = fixture.rd.production_entity_holds;
+		REQUIRE(edge != nullptr);
+		CHECK(edge->held_device == &fixture.rd);
+		CHECK(edge->epoch == device.epoch);
+		CHECK(edge->terminal_action == action.serial);
+		++device.epoch;
+		CHECK(registry.production_close(attachment).native_error == ERR_INVALID_DATA);
+		CHECK(fixture.rd.production_entity_holds == edge);
+		--device.epoch;
+		CHECK(registry.release_code_hold(&Enrollment::ABI, { Enrollment::INSTANCE, 3 }) == ERR_BUSY);
+		CHECK(registry.service_stopping(1u << 5) == ERR_BUSY);
+		record.guard_enrollment = GDExtensionDeviceExit::GuardEnrollment::REVOKED;
+		CHECK(registry.service_stopping(1u << 5) == ERR_BUSY);
+		record.guard_enrollment = GDExtensionDeviceExit::GuardEnrollment::QUALIFIED;
+		ERR_PRINT_OFF;
+		fixture.rd.finalize();
+		ERR_PRINT_ON;
+		CHECK(device.live);
+		CHECK(fixture.rd.production_finalization_started.load());
+		CHECK_FALSE(fixture.rd.native_finalization_returned);
+		CHECK(fixture.rd.driver == &fixture.driver);
+		CHECK(fixture.rd.frames.size() == 1);
+		CHECK(fixture.rd.production_entity_holds == edge);
+		CHECK(device.object == &fixture.rd);
+		CHECK(registry.production_close(attachment).native_error == OK);
+		CHECK(fixture.rd.production_entity_holds == nullptr);
+		CHECK(fixture.rd.production_entity_registry.load() == nullptr);
+		CHECK_FALSE(fixture.rd.native_finalization_returned);
+		// No native allocations exist in this fake-driver fixture. Remove only
+		// its explicit CPU frame stub and then exercise the real empty finalize.
+		fixture.rd.frames.clear();
+		fixture.rd.driver = nullptr;
+		fixture.rd.finalize();
+		CHECK(fixture.rd.native_finalization_returned);
+	}
+	static void entity_hold_after_loss() {
+		Enrollment fixture;
+		auto &registry = *fixture.registry;
+		// Match the actual B Host's original SCENE USER terminal route.
+		auto &scene = registry.records[0].levels[GDEXTENSION_INITIALIZATION_SCENE];
+		scene.user_action = scene.binding_action;
+		scene.user_action.kind = GDExtensionDeviceExit::TerminalActionKind::LEVEL_USER;
+		scene.binding_action = {};
+		const GDExtensionProductionCapacityV1 whole = { Enrollment::ABI, 2, 2, 2, 2, 2, 32, 0, 2, 8, 0 };
+		const auto attachment = fixture.accept(whole);
+		auto single = whole;
+		single.requests = single.suboperations = single.resources = single.resource_uses = single.graph_memberships = single.return_cells = 1;
+		single.native_memberships = 16;
+		single.retained_payload_bytes = 4;
+		Request *request = nullptr;
+		REQUIRE(fixture.reserve(attachment, single, 21, request) == OK);
+		const GDExtensionProductionRequestRefV1 ref = { Enrollment::INSTANCE, request->serial };
+		registry.device_lost(&fixture.rd);
+		CHECK_FALSE(registry.device_records[0].live);
+		ERR_PRINT_OFF;
+		fixture.rd.finalize();
+		ERR_PRINT_ON;
+		CHECK_FALSE(registry.device_records[0].live);
+		CHECK(fixture.rd.production_entity_holds != nullptr);
+		// Controlled unknown obligation: loss cannot promote it to completion or
+		// turn a metadata Close into actual physical disposal.
+		request->effects_pending = true;
+		CHECK(registry.production_cancel(ref).native_error == ERR_BUSY);
+		CHECK(registry.production_release(ref).native_error == ERR_BUSY);
+		CHECK(registry.production_close(attachment).native_error == ERR_BUSY);
+		CHECK(fixture.rd.production_entity_holds != nullptr);
+		CHECK_FALSE(fixture.rd.native_finalization_returned);
+		request->effects_pending = false; // Remove only the injected CPU-test state.
+		REQUIRE(registry.production_release(ref).native_error == OK);
+		REQUIRE(registry.production_close(attachment).native_error == OK);
+		CHECK(fixture.rd.production_entity_holds == nullptr);
+		CHECK_FALSE(fixture.rd.native_finalization_returned);
+	}
+
+	static void finalization_preserves_qualification_cleanup() {
+		Enrollment fixture;
+		auto &registry = *fixture.registry;
+		registry.device_refs[0].qualification_main = true;
+		registry.device_refs[1].qualification_main = true;
+		REQUIRE(registry.qualification_open(&Enrollment::ABI, { Enrollment::INSTANCE, 5 }, { Enrollment::INSTANCE, 6 }, { Enrollment::INSTANCE, 7 }, { Enrollment::INSTANCE, 3 }, &fixture.qualification).native_error == OK);
+		CHECK(fixture.holder.qualification_children == 1);
+		const GDExtensionProductionCapacityV1 whole = { Enrollment::ABI, 2, 2, 2, 2, 2, 32, 0, 2, 8, 0 };
+		const auto attachment = fixture.accept(whole);
+		auto single = whole;
+		single.requests = single.suboperations = single.resources = single.resource_uses = single.graph_memberships = single.return_cells = 1;
+		single.native_memberships = 16;
+		single.retained_payload_bytes = 4;
+		Request *request = nullptr;
+		REQUIRE(fixture.reserve(attachment, single, 31, request) == OK);
+		const GDExtensionProductionRequestRefV1 ref = { Enrollment::INSTANCE, request->serial };
+		ERR_PRINT_OFF;
+		fixture.rd.finalize();
+		ERR_PRINT_ON;
+		CHECK(registry.device_records[0].live);
+		CHECK_FALSE(fixture.rd.native_finalization_returned);
+		CHECK(fixture.rd.driver == &fixture.driver);
+		const uint8_t payload[4] = { 1, 2, 3, 4 };
+		const GDExtensionProductionUploadV1 upload = { Enrollment::ABI, 10, 0, 0, 0, 4 };
+		CHECK(registry.production_prepare_upload(ref, &upload, payload, 4).native_error == ERR_BUSY);
+		GDExtensionQualificationBackingV1 backing = {};
+		CHECK(registry.qualification_backing(fixture.qualification, 1, &backing).native_error == ERR_BUSY);
+		GDExtensionQualificationBridgeRefV1 extra = {};
+		CHECK(registry.qualification_open(&Enrollment::ABI, { Enrollment::INSTANCE, 5 }, { Enrollment::INSTANCE, 6 }, { Enrollment::INSTANCE, 7 }, { Enrollment::INSTANCE, 3 }, &extra).native_error != OK);
+		CHECK(extra.handle_serial == 0);
+		REQUIRE(registry.production_cancel(ref).native_error == OK);
+		REQUIRE(registry.production_release(ref).native_error == OK);
+		REQUIRE(registry.production_close(attachment).native_error == OK);
+		CHECK(fixture.holder.production_children == 0);
+		// The old owner must still reach its original cleanup while native teardown
+		// has not started. This fails if Busy incorrectly writes DeviceClosed.
+		REQUIRE(registry.qualification_close(fixture.qualification).native_error == OK);
+		fixture.qualification = {};
+		CHECK(fixture.holder.qualification_children == 0);
+		CHECK(registry.records[0].private_refs == 1);
+		CHECK(registry.device_records[0].refs == 0);
+		CHECK(registry.device_records[0].live);
+		CHECK_FALSE(fixture.rd.native_finalization_returned);
 	}
 	static void immutable_payload() {
 		using namespace GDExtensionDeviceExit;
@@ -347,4 +506,15 @@ TEST_CASE("[ProductionRequest] attachment quote retains each request command pre
 
 TEST_CASE("[ProductionRequest] actual accepted arena reserves two requests and refunds on close") {
 	TestProductionRequest::Access::accepted_arena_lifecycle();
+}
+
+TEST_CASE("[ProductionRequest] original entity hold blocks actual finalize until exact return") {
+	TestProductionRequest::Access::actual_entity_hold();
+}
+TEST_CASE("[ProductionRequest] device loss invalidates work but preserves unknown entity obligation") {
+	TestProductionRequest::Access::entity_hold_after_loss();
+}
+
+TEST_CASE("[ProductionRequest] refused finalize preserves original qualification close on same device") {
+	TestProductionRequest::Access::finalization_preserves_qualification_cleanup();
 }

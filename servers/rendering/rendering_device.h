@@ -36,6 +36,10 @@
 
 #include "modules/modules_enabled.gen.h"
 
+namespace GDExtensionDeviceExit {
+class ProductionAttachment;
+}
+
 namespace RendererRD {
 class ExternalOutputStorage;
 }
@@ -179,6 +183,12 @@ private:
 	uint64_t test_main_screen_epoch = 0;
 #endif
 	bool native_finalization_returned = false;
+	// Entity-edge publication/removal is protected by its original Registry.
+	// The atomic owner selects that Registry before acquiring its lock.
+	std::atomic<GDExtensionDeviceExit::Registry *> production_entity_registry{ nullptr };
+	GDExtensionDeviceExit::ProductionAttachment *production_entity_holds = nullptr;
+	std::atomic<bool> production_finalization_started{ false };
+	Error _begin_production_finalization();
 
 #ifdef TESTS_ENABLED
 	// Test-only synchronous upload fault injection. The hook is armed only for

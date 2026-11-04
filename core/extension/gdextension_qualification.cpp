@@ -87,7 +87,7 @@ Error Registry::qualification_bridge_locked(GDExtensionQualificationBridgeRefV1 
 			return ERR_UNAUTHORIZED;
 		}
 		const bool accepted = admit && execution && qualification_accepted_call_locked(bridge, accepted_kind);
-		if (admit && (record.guard_enrollment != GuardEnrollment::QUALIFIED || ((bridge->closing || record.quiescing || record.close_started) && !accepted))) {
+		if (admit && (record.guard_enrollment != GuardEnrollment::QUALIFIED || ((bridge->closing || record.quiescing || record.close_started || rd->production_finalization_started.load(std::memory_order_acquire)) && !accepted))) {
 			return ERR_BUSY;
 		}
 		if (!bridge->holder || bridge->holder->pending || bridge->holder->generation != record.snapshot.library_generation) {
@@ -137,7 +137,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_open(const GDExtensionD
 	}
 	auto &device = device_records[c->device];
 	auto *rd = Object::cast_to<RenderingDevice>(device.object);
-	if (!rd || !rd->is_main_instance || rd != RenderingDevice::get_singleton() || !device.live || device.execution_thread != rd->render_thread_id) {
+	if (!rd || !rd->is_main_instance || rd != RenderingDevice::get_singleton() || !device.live || device.execution_thread != rd->render_thread_id || rd->production_finalization_started.load(std::memory_order_acquire)) {
 		return result(ERR_UNAVAILABLE, 18);
 	}
 	HolderRetirement *holder = nullptr;
@@ -367,6 +367,9 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_storage_create(GDExtens
 			})) {
 			return memcmp(&old->origin, request, sizeof(*request)) ? result(ERR_INVALID_DATA, 16) : result(ERR_DOES_NOT_EXIST, 17);
 		}
+		if (rd->production_finalization_started.load(std::memory_order_acquire) && !accepted) {
+			return result(ERR_BUSY, GDEXTENSION_DEVICE_SESSION_REASON_NOT_ADMITTED_V1);
+		}
 		if ((bridge->closing || records[bridge->library].quiescing || records[bridge->library].close_started) && !accepted) {
 			// Same-origin scan found no child; this call has not allocated anything.
 			return result(ERR_BUSY, GDEXTENSION_DEVICE_SESSION_REASON_STORAGE_CREATE_DEFERRED_V1);
@@ -505,6 +508,9 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_native_unit_create(GDEx
 				return origin.record_slot == request->record_slot && origin.preparation_generation == request->preparation_generation && origin.operation_serial == request->operation_serial && origin.physical_unit == request->physical_unit;
 			})) {
 			return memcmp(&old->origin, request, sizeof(*request)) ? result(ERR_INVALID_DATA, 16) : result(ERR_DOES_NOT_EXIST, 17);
+		}
+		if (rd->production_finalization_started.load(std::memory_order_acquire) && !accepted) {
+			return result(ERR_BUSY, GDEXTENSION_DEVICE_SESSION_REASON_NOT_ADMITTED_V1);
 		}
 		if ((bridge->closing || records[bridge->library].quiescing || records[bridge->library].close_started) && !accepted) {
 			return result(ERR_BUSY, 16);

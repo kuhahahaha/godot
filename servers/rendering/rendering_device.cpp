@@ -11061,9 +11061,15 @@ void RenderingDevice::_finalize_on_rendering_server_thread() {
 	GDExtensionDeviceExit::require_close_success(native_finalization_returned ? OK : ERR_BUSY, GDExtensionDeviceExit::CloseRoute::LAST_REF);
 }
 
+Error RenderingDevice::_begin_production_finalization() {
+	auto *registry = production_entity_registry.load(std::memory_order_acquire);
+	return (registry ? *registry : GDExtensionDeviceExit::Registry::get_singleton()).device_begin_finalization(this);
+}
+
 void RenderingDevice::finalize() {
 	ERR_RENDER_THREAD_GUARD();
-	GDExtensionDeviceExit::Registry::get_singleton().device_closed(this);
+	const Error entity_return = _begin_production_finalization();
+	ERR_FAIL_COND_MSG(entity_return != OK, "RenderingDevice native finalization is blocked by an original production entity obligation.");
 
 	if (!frames.is_empty()) {
 		// Wait for all frames to have finished rendering.
@@ -12083,11 +12089,14 @@ void RenderingDevice::make_current() {
 }
 
 RenderingDevice::~RenderingDevice() {
+	// A void finalize refusal must never fall through to C++ member destruction.
+	GDExtensionDeviceExit::require_close_success(_begin_production_finalization(), GDExtensionDeviceExit::CloseRoute::LAST_REF);
 	// The original RS owns the execution thread. Its completed native teardown
 	// is distinct from the later DisplayServer/Object owner destruction.
 	if (!native_finalization_returned) {
 		finalize();
 	}
+	GDExtensionDeviceExit::require_close_success(native_finalization_returned ? OK : ERR_BUSY, GDExtensionDeviceExit::CloseRoute::LAST_REF);
 	GDExtensionDeviceExit::Registry::get_singleton().device_destroyed(this);
 
 	if (singleton == this) {

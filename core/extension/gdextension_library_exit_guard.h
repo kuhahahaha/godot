@@ -819,6 +819,7 @@ private:
 	Error production_freeze_locked(ProductionRequest &);
 	GDExtensionDeviceSessionResultV1 production_prepare_upload_locked(ProductionRequest &, const GDExtensionProductionUploadV1 &, const void *, uint64_t);
 	Error production_unpin_resources_locked(ProductionRequest &);
+	Error production_entity_return_locked(ProductionAttachment &);
 	// Private metadata staging; cannot issue source scope or open native recording.
 	Error production_reserve_metadata_locked(ProductionAttachment &, const GDExtensionProductionOperationV1 &, const GDExtensionProductionCapacityV1 &, const GDExtensionProductionActionV1 *, uint32_t, const GDExtensionProductionResourceV1 *, uint32_t, const GDExtensionProductionUseV1 *, uint32_t, const GDExtensionProductionReadbackV1 *, uint32_t, ProductionRequest *&);
 	Sequence qualification_serials;
@@ -851,6 +852,7 @@ private:
 
 	Error device_created(Object *);
 	Error device_execution_moved(Object *, uint64_t, uint64_t);
+	Error device_begin_finalization(RenderingDevice *);
 	void device_closed(Object *);
 	void device_lost(Object *);
 	void device_lost(uint64_t, uint64_t);
