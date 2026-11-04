@@ -1,0 +1,320 @@
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_system_scalar.cpp:5:
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension.h:35:
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_loader.h:33:
+In file included from ./core/object/ref_counted.h:33:
+In file included from ./core/object/object.h:35:
+In file included from ./core/object/gdtype.h:33:
+In file included from ./core/object/method_info.h:33:
+In file included from ./core/object/property_info.h:34:
+In file included from ./core/variant/variant.h:33:
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/core_string_names.h:33:
+In file included from ./core/string/string_name.h:33:
+./core/string/ustring.h:785:63: warning: unused parameter 'p_context' [-Wunused-parameter]
+  785 | _FORCE_INLINE_ String ETR(const String &p_text, const String &p_context = "") {
+      |                                                               ^
+./core/string/ustring.h:802:102: warning: unused parameter 'p_context' [-Wunused-parameter]
+  802 | _FORCE_INLINE_ String ETRN(const String &p_text, const String &p_text_plural, int p_n, const String &p_context = "") {
+      |                                                                                                      ^
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_system_scalar.cpp:5:
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension.h:35:
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_loader.h:33:
+In file included from ./core/object/ref_counted.h:33:
+./core/object/object.h:589:39: warning: unused parameter 'p_name' [-Wunused-parameter]
+  589 |         virtual bool _setv(const StringName &p_name, const Variant &p_property) { return false; }
+      |                                              ^
+./core/object/object.h:589:62: warning: unused parameter 'p_property' [-Wunused-parameter]
+  589 |         virtual bool _setv(const StringName &p_name, const Variant &p_property) { return false; }
+      |                                                                     ^
+./core/object/object.h:590:39: warning: unused parameter 'p_name' [-Wunused-parameter]
+  590 |         virtual bool _getv(const StringName &p_name, Variant &r_property) const { return false; }
+      |                                              ^
+./core/object/object.h:590:56: warning: unused parameter 'r_property' [-Wunused-parameter]
+  590 |         virtual bool _getv(const StringName &p_name, Variant &r_property) const { return false; }
+      |                                                               ^
+./core/object/object.h:591:55: warning: unused parameter 'p_list' [-Wunused-parameter]
+  591 |         virtual void _get_property_listv(List<PropertyInfo> *p_list, bool p_reversed) const {}
+      |                                                              ^
+./core/object/object.h:591:68: warning: unused parameter 'p_reversed' [-Wunused-parameter]
+  591 |         virtual void _get_property_listv(List<PropertyInfo> *p_list, bool p_reversed) const {}
+      |                                                                           ^
+./core/object/object.h:592:49: warning: unused parameter 'p_property' [-Wunused-parameter]
+  592 |         virtual void _validate_propertyv(PropertyInfo &p_property) const {}
+      |                                                        ^
+./core/object/object.h:593:55: warning: unused parameter 'p_name' [-Wunused-parameter]
+  593 |         virtual bool _property_can_revertv(const StringName &p_name) const { return false; }
+      |                                                              ^
+./core/object/object.h:594:55: warning: unused parameter 'p_name' [-Wunused-parameter]
+  594 |         virtual bool _property_get_revertv(const StringName &p_name, Variant &r_property) const { return false; }
+      |                                                              ^
+./core/object/object.h:594:72: warning: unused parameter 'r_property' [-Wunused-parameter]
+  594 |         virtual bool _property_get_revertv(const StringName &p_name, Variant &r_property) const { return false; }
+      |                                                                               ^
+./core/object/object.h:598:42: warning: unused parameter 'p_notification' [-Wunused-parameter]
+  598 |         virtual void _notification_forwardv(int p_notification) {}
+      |                                                 ^
+./core/object/object.h:599:43: warning: unused parameter 'p_notification' [-Wunused-parameter]
+  599 |         virtual void _notification_backwardv(int p_notification) {}
+      |                                                  ^
+./core/object/object.h:604:30: warning: unused parameter 'p_name' [-Wunused-parameter]
+  604 |         bool _set(const StringName &p_name, const Variant &p_property) { return false; }
+      |                                     ^
+./core/object/object.h:604:53: warning: unused parameter 'p_property' [-Wunused-parameter]
+  604 |         bool _set(const StringName &p_name, const Variant &p_property) { return false; }
+      |                                                            ^
+./core/object/object.h:605:30: warning: unused parameter 'p_name' [-Wunused-parameter]
+  605 |         bool _get(const StringName &p_name, Variant &r_property) const { return false; }
+      |                                     ^
+./core/object/object.h:605:47: warning: unused parameter 'r_property' [-Wunused-parameter]
+  605 |         bool _get(const StringName &p_name, Variant &r_property) const { return false; }
+      |                                                      ^
+./core/object/object.h:606:46: warning: unused parameter 'p_list' [-Wunused-parameter]
+  606 |         void _get_property_list(List<PropertyInfo> *p_list) const {}
+      |                                                     ^
+./core/object/object.h:607:40: warning: unused parameter 'p_property' [-Wunused-parameter]
+  607 |         void _validate_property(PropertyInfo &p_property) const {}
+      |                                               ^
+./core/object/object.h:608:46: warning: unused parameter 'p_name' [-Wunused-parameter]
+  608 |         bool _property_can_revert(const StringName &p_name) const { return false; }
+      |                                                     ^
+./core/object/object.h:609:46: warning: unused parameter 'p_name' [-Wunused-parameter]
+  609 |         bool _property_get_revert(const StringName &p_name, Variant &r_property) const { return false; }
+      |                                                     ^
+./core/object/object.h:609:63: warning: unused parameter 'r_property' [-Wunused-parameter]
+  609 |         bool _property_get_revert(const StringName &p_name, Variant &r_property) const { return false; }
+      |                                                                      ^
+./core/object/object.h:610:25: warning: unused parameter 'p_notification' [-Wunused-parameter]
+  610 |         void _notification(int p_notification) {}
+      |                                ^
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_system_scalar.cpp:5:
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension.h:35:
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_loader.h:33:
+./core/object/ref_counted.h:37:2: warning: unused parameter 'p_rval' [-Wunused-parameter]
+   37 |         GDCLASS(RefCounted, Object);
+      |         ^
+./core/object/object.h:254:32: note: expanded from macro 'GDCLASS'
+  254 |         void operator=(const m_class &p_rval) {} \
+      |                                       ^
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_system_scalar.cpp:5:
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension.h:35:
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_loader.h:33:
+./core/object/ref_counted.h:285:2: warning: unused parameter 'p_rval' [-Wunused-parameter]
+  285 |         GDCLASS(WeakRef, RefCounted);
+      |         ^
+./core/object/object.h:254:32: note: expanded from macro 'GDCLASS'
+  254 |         void operator=(const m_class &p_rval) {} \
+      |                                       ^
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_system_scalar.cpp:5:
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension.h:35:
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_loader.h:47:43: warning: unused parameter 'p_path' [-Wunused-parameter]
+   47 |         virtual Error prepare_open(const String &p_path) { return OK; }
+      |                                                  ^
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_system_scalar.cpp:5:
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension.h:36:
+In file included from ./core/io/resource.h:33:
+./core/io/resource_uid.h:42:2: warning: unused parameter 'p_rval' [-Wunused-parameter]
+   42 |         GDCLASS(ResourceUID, Object)
+      |         ^
+./core/object/object.h:254:32: note: expanded from macro 'GDCLASS'
+  254 |         void operator=(const m_class &p_rval) {} \
+      |                                       ^
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_system_scalar.cpp:5:
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension.h:36:
+In file included from ./core/io/resource.h:34:
+In file included from ./core/object/gdvirtual.gen.h:7:
+In file included from ./core/variant/variant_caster.h:34:
+./core/variant/type_info.h:259:46: warning: unused parameter 'param' [-Wunused-parameter]
+  259 | inline StringName __constant_get_enum_name(T param) {
+      |                                              ^
+./core/variant/type_info.h:288:50: warning: unused parameter 'param' [-Wunused-parameter]
+  288 | inline StringName __constant_get_bitfield_name(T param) {
+      |                                                  ^
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_system_scalar.cpp:5:
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension.h:36:
+In file included from ./core/io/resource.h:34:
+In file included from ./core/object/gdvirtual.gen.h:8:
+./core/variant/variant_internal.h:987:45: warning: unused parameter 'r_ret' [-Wunused-parameter]
+  987 |         _FORCE_INLINE_ static void adjust(Variant *r_ret) {
+      |                                                    ^
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_system_scalar.cpp:5:
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension.h:36:
+./core/io/resource.h:53:2: warning: unused parameter 'p_rval' [-Wunused-parameter]
+   53 |         GDCLASS(Resource, RefCounted);
+      |         ^
+./core/object/object.h:254:32: note: expanded from macro 'GDCLASS'
+  254 |         void operator=(const m_class &p_rval) {} \
+      |                                       ^
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_system_scalar.cpp:5:
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension.h:51:2: warning: unused parameter 'p_rval' [-Wunused-parameter]
+   51 |         GDCLASS(GDExtension, Resource)
+      |         ^
+./core/object/object.h:254:32: note: expanded from macro 'GDCLASS'
+  254 |         void operator=(const m_class &p_rval) {} \
+      |                                       ^
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_system_scalar.cpp:6:
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_qualification_internal.h:35:
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_record_source.h:33:
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/servers/rendering/rendering_device_driver.h:338:37: warning: unused parameter 'p_buffer' [-Wunused-parameter]
+  338 |         virtual void buffer_flush(BufferID p_buffer) {}
+      |                                            ^
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/servers/rendering/rendering_device_driver.h:555:78: warning: unused parameter 'p_nonblocking' [-Wunused-parameter]
+  555 |  virtual Error qualification_prepare_segment(QueueCallReport &r_report, bool p_nonblocking = true) { r_report={};return ERR_UNAVAILABLE; }
+      |                                                                              ^
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/servers/rendering/rendering_device_driver.h:556:60: warning: unused parameter 'p_slots' [-Wunused-parameter]
+  556 |  virtual uint32_t qualification_native_call_bound(uint32_t p_slots) const { return 0; }
+      |                                                            ^
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/servers/rendering/rendering_device_driver.h:567:52: warning: unused parameter 'p_native_serial' [-Wunused-parameter]
+  567 |  virtual FencePollResult native_call_poll(uint64_t p_native_serial) { return {}; }
+      |                                                    ^
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/servers/rendering/rendering_device_driver.h:568:52: warning: unused parameter 'p_native_serial' [-Wunused-parameter]
+  568 |  virtual FencePollResult native_call_wait(uint64_t p_native_serial) { return {}; }
+      |                                                    ^
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/servers/rendering/rendering_device_driver.h:569:45: warning: unused parameter 'p_native_serial' [-Wunused-parameter]
+  569 |  virtual Error native_call_recycle(uint64_t p_native_serial) { return ERR_UNAVAILABLE; }
+      |                                             ^
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/servers/rendering/rendering_device_driver.h:571:44: warning: unused parameter 'p_native_serial' [-Wunused-parameter]
+  571 |  virtual Error native_call_retain(uint64_t p_native_serial) { return ERR_UNAVAILABLE; }
+      |                                            ^
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/servers/rendering/rendering_device_driver.h:572:45: warning: unused parameter 'p_native_serial' [-Wunused-parameter]
+  572 |  virtual Error native_call_release(uint64_t p_native_serial) { return ERR_UNAVAILABLE; }
+      |                                             ^
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/servers/rendering/rendering_device_driver.h:648:62: warning: unused parameter 'p_swap_chain' [-Wunused-parameter]
+  648 |         virtual int swap_chain_get_pre_rotation_degrees(SwapChainID p_swap_chain) { return 0; }
+      |                                                                     ^
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/servers/rendering/rendering_device_driver.h:661:50: warning: unused parameter 'p_swap_chain' [-Wunused-parameter]
+  661 |         virtual void swap_chain_set_max_fps(SwapChainID p_swap_chain, int p_max_fps) {}
+      |                                                         ^
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/servers/rendering/rendering_device_driver.h:661:68: warning: unused parameter 'p_max_fps' [-Wunused-parameter]
+  661 |         virtual void swap_chain_set_max_fps(SwapChainID p_swap_chain, int p_max_fps) {}
+      |                                                                           ^
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/servers/rendering/rendering_device_driver.h:688:51: warning: unused parameter 'p_shader' [-Wunused-parameter]
+  688 |         virtual uint32_t shader_get_layout_hash(ShaderID p_shader) { return 0; }
+      |                                                          ^
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/servers/rendering/rendering_device_driver.h:690:56: warning: unused parameter 'p_shader' [-Wunused-parameter]
+  690 |         virtual bool shader_retire_ready_nonblocking(ShaderID p_shader) const { return false; }
+      |                                                               ^
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/servers/rendering/rendering_device_driver.h:713:50: warning: unused parameter 'p_linear_pool_index' [-Wunused-parameter]
+  713 |         virtual void linear_uniform_set_pools_reset(int p_linear_pool_index) {}
+      |                                                         ^
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/servers/rendering/rendering_device_driver.h:1027:51: warning: unused parameter 'p_cmd_buffer' [-Wunused-parameter]
+ 1027 |         virtual void command_group_begin(CommandBufferID p_cmd_buffer) {}
+      |                                                          ^
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/servers/rendering/rendering_device_driver.h:1028:49: warning: unused parameter 'p_cmd_buffer' [-Wunused-parameter]
+ 1028 |         virtual void command_group_end(CommandBufferID p_cmd_buffer) {}
+      |                                                        ^
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/servers/rendering/rendering_device_driver.h:1141:59: warning: unused parameter 'p_queue' [-Wunused-parameter]
+ 1141 |         virtual bool is_composite_alpha_supported(CommandQueueID p_queue) const { return false; }
+      |                                                                  ^
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/servers/rendering/rendering_device_driver.h:1150:53: warning: unused parameter 'p_slots' [-Wunused-parameter]
+ 1150 |         virtual uint32_t record_native_call_bound(uint32_t p_slots) const { return 0; }
+      |                                                            ^
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_system_scalar.cpp:6:
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_qualification_internal.h:35:
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_record_source.h:34:
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/servers/rendering/rendering_device_graph.h:33:
+./core/object/worker_thread_pool.h:45:2: warning: unused parameter 'p_rval' [-Wunused-parameter]
+   45 |         GDCLASS(WorkerThreadPool, Object)
+      |         ^
+./core/object/object.h:254:32: note: expanded from macro 'GDCLASS'
+  254 |         void operator=(const m_class &p_rval) {} \
+      |                                       ^
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_system_scalar.cpp:6:
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_qualification_internal.h:35:
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_record_source.h:34:
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/servers/rendering/rendering_device_graph.h:33:
+./core/object/worker_thread_pool.h:59:42: warning: unused parameter 'p_index' [-Wunused-parameter]
+   59 |                 virtual void callback_indexed(uint32_t p_index) {}
+      |                                                        ^
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_system_scalar.cpp:6:
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_qualification_internal.h:37:
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/servers/rendering/rendering_device.h:94:2: warning: unused parameter 'p_rval' [-Wunused-parameter]
+   94 |         GDCLASS(RenderingDevice, Object)
+      |         ^
+./core/object/object.h:254:32: note: expanded from macro 'GDCLASS'
+  254 |         void operator=(const m_class &p_rval) {} \
+      |                                       ^
+In file included from /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_system_scalar.cpp:9:
+./core/os/os.h:199:51: warning: unused parameter 'p_path' [-Wunused-parameter]
+  199 |         virtual Error open_dynamic_library(const String &p_path, void *&p_library_handle, GDExtensionData *p_data = nullptr) { return ERR_UNAVAILABLE; }
+      |                                                          ^
+./core/os/os.h:199:66: warning: unused parameter 'p_library_handle' [-Wunused-parameter]
+  199 |         virtual Error open_dynamic_library(const String &p_path, void *&p_library_handle, GDExtensionData *p_data = nullptr) { return ERR_UNAVAILABLE; }
+      |                                                                         ^
+./core/os/os.h:199:101: warning: unused parameter 'p_data' [-Wunused-parameter]
+  199 |         virtual Error open_dynamic_library(const String &p_path, void *&p_library_handle, GDExtensionData *p_data = nullptr) { return ERR_UNAVAILABLE; }
+      |                                                                                                            ^
+./core/os/os.h:200:44: warning: unused parameter 'p_library_handle' [-Wunused-parameter]
+  200 |         virtual Error close_dynamic_library(void *p_library_handle) { return ERR_UNAVAILABLE; }
+      |                                                   ^
+./core/os/os.h:201:56: warning: unused parameter 'p_library_handle' [-Wunused-parameter]
+  201 |         virtual Error get_dynamic_library_symbol_handle(void *p_library_handle, const String &p_name, void *&p_symbol_handle, bool p_optional = false) { return ERR_UNAVAILABLE; }
+      |                                                               ^
+./core/os/os.h:201:88: warning: unused parameter 'p_name' [-Wunused-parameter]
+  201 |         virtual Error get_dynamic_library_symbol_handle(void *p_library_handle, const String &p_name, void *&p_symbol_handle, bool p_optional = false) { return ERR_UNAVAILABLE; }
+      |                                                                                               ^
+./core/os/os.h:201:103: warning: unused parameter 'p_symbol_handle' [-Wunused-parameter]
+  201 |         virtual Error get_dynamic_library_symbol_handle(void *p_library_handle, const String &p_name, void *&p_symbol_handle, bool p_optional = false) { return ERR_UNAVAILABLE; }
+      |                                                                                                              ^
+./core/os/os.h:201:125: warning: unused parameter 'p_optional' [-Wunused-parameter]
+  201 |         virtual Error get_dynamic_library_symbol_handle(void *p_library_handle, const String &p_name, void *&p_symbol_handle, bool p_optional = false) { return ERR_UNAVAILABLE; }
+      |                                                                                                                                    ^
+./core/os/os.h:212:52: warning: unused parameter 'p_font_name' [-Wunused-parameter]
+  212 |         virtual String get_system_font_path(const String &p_font_name, int p_weight = 400, int p_stretch = 100, bool p_italic = false) const { return String(); }
+      |                                                           ^
+./core/os/os.h:212:69: warning: unused parameter 'p_weight' [-Wunused-parameter]
+  212 |         virtual String get_system_font_path(const String &p_font_name, int p_weight = 400, int p_stretch = 100, bool p_italic = false) const { return String(); }
+      |                                                                            ^
+./core/os/os.h:212:89: warning: unused parameter 'p_stretch' [-Wunused-parameter]
+  212 |         virtual String get_system_font_path(const String &p_font_name, int p_weight = 400, int p_stretch = 100, bool p_italic = false) const { return String(); }
+      |                                                                                                ^
+./core/os/os.h:212:111: warning: unused parameter 'p_italic' [-Wunused-parameter]
+  212 |         virtual String get_system_font_path(const String &p_font_name, int p_weight = 400, int p_stretch = 100, bool p_italic = false) const { return String(); }
+      |                                                                                                                      ^
+./core/os/os.h:213:69: warning: unused parameter 'p_font_name' [-Wunused-parameter]
+  213 |         virtual Vector<String> get_system_font_path_for_text(const String &p_font_name, const String &p_text, const String &p_locale = String(), const String &p_script = String(), int p_weight = 400, int p_stretch = 100, bool p_italic = false) const { return Vector<String>(); }
+      |                                                                            ^
+./core/os/os.h:213:96: warning: unused parameter 'p_text' [-Wunused-parameter]
+  213 |         virtual Vector<String> get_system_font_path_for_text(const String &p_font_name, const String &p_text, const String &p_locale = String(), const String &p_script = String(), int p_weight = 400, int p_stretch = 100, bool p_italic = false) const { return Vector<String>(); }
+      |                                                                                                       ^
+./core/os/os.h:213:118: warning: unused parameter 'p_locale' [-Wunused-parameter]
+  213 |         virtual Vector<String> get_system_font_path_for_text(const String &p_font_name, const String &p_text, const String &p_locale = String(), const String &p_script = String(), int p_weight = 400, int p_stretch = 100, bool p_italic = false) const { return Vector<String>(); }
+      |                                                                                                                             ^
+./core/os/os.h:213:153: warning: unused parameter 'p_script' [-Wunused-parameter]
+  213 |         virtual Vector<String> get_system_font_path_for_text(const String &p_font_name, const String &p_text, const String &p_locale = String(), const String &p_script = String(), int p_weight = 400, int p_stretch = 100, bool p_italic = false) const { return Vector<String>(); }
+      |                                                                                                                                                                ^
+./core/os/os.h:213:178: warning: unused parameter 'p_weight' [-Wunused-parameter]
+  213 |         virtual Vector<String> get_system_font_path_for_text(const String &p_font_name, const String &p_text, const String &p_locale = String(), const String &p_script = String(), int p_weight = 400, int p_stretch = 100, bool p_italic = false) const { return Vector<String>(); }
+      |                                                                                                                                                                                         ^
+./core/os/os.h:213:198: warning: unused parameter 'p_stretch' [-Wunused-parameter]
+  213 |         virtual Vector<String> get_system_font_path_for_text(const String &p_font_name, const String &p_text, const String &p_locale = String(), const String &p_script = String(), int p_weight = 400, int p_stretch = 100, bool p_italic = false) const { return Vector<String>(); }
+      |                                                                                                                                                                                                             ^
+./core/os/os.h:213:220: warning: unused parameter 'p_italic' [-Wunused-parameter]
+  213 |         virtual Vector<String> get_system_font_path_for_text(const String &p_font_name, const String &p_text, const String &p_locale = String(), const String &p_script = String(), int p_weight = 400, int p_stretch = 100, bool p_italic = false) const { return Vector<String>(); }
+      |                                                                                                                                                                                                                                   ^
+./core/os/os.h:216:53: warning: unused parameter 'p_path' [-Wunused-parameter]
+  216 |         virtual Dictionary execute_with_pipe(const String &p_path, const List<String> &p_arguments, bool p_blocking = true) { return Dictionary(); }
+      |                                                            ^
+./core/os/os.h:216:81: warning: unused parameter 'p_arguments' [-Wunused-parameter]
+  216 |         virtual Dictionary execute_with_pipe(const String &p_path, const List<String> &p_arguments, bool p_blocking = true) { return Dictionary(); }
+      |                                                                                        ^
+./core/os/os.h:216:99: warning: unused parameter 'p_blocking' [-Wunused-parameter]
+  216 |         virtual Dictionary execute_with_pipe(const String &p_path, const List<String> &p_arguments, bool p_blocking = true) { return Dictionary(); }
+      |                                                                                                          ^
+./core/os/os.h:224:36: warning: unused parameter 'p_duration_ms' [-Wunused-parameter]
+  224 |         virtual void vibrate_handheld(int p_duration_ms = 500, float p_amplitude = -1.0) {}
+      |                                           ^
+./core/os/os.h:224:63: warning: unused parameter 'p_amplitude' [-Wunused-parameter]
+  224 |         virtual void vibrate_handheld(int p_duration_ms = 500, float p_amplitude = -1.0) {}
+      |                                                                      ^
+./core/os/os.h:345:44: warning: unused parameter 'p_path' [-Wunused-parameter]
+  345 |         virtual Error move_to_trash(const String &p_path) { return FAILED; }
+      |                                                   ^
+./core/os/os.h:372:48: warning: unused parameter 'p_name' [-Wunused-parameter]
+  372 |         virtual bool request_permission(const String &p_name) { return true; }
+      |                                                       ^
+./core/os/os.h:414:66: warning: unused parameter 'p_display_driver' [-Wunused-parameter]
+  414 |         virtual bool _test_create_rendering_device_and_gl(const String &p_display_driver) const { return true; }
+      |                                                                         ^
+./core/os/os.h:415:59: warning: unused parameter 'p_display_driver' [-Wunused-parameter]
+  415 |         virtual bool _test_create_rendering_device(const String &p_display_driver) const { return true; }
+      |                                                                  ^
+82 warnings generated.

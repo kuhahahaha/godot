@@ -24,7 +24,7 @@ internal=read('core/extension/gdextension_qualification_internal.h')
 qualification=read('core/extension/gdextension_qualification.cpp')
 ticket=read('core/extension/gdextension_qualification_ticket.cpp')
 remember=body(internal,'void remember_system_set_return_error(') if 'void remember_system_set_return_error(' in internal else ''
-start=qualification.index('const Error error=rd->_qualification_maintenance();')
+start=qualification.index('const Error error=', qualification.index('void Registry::qualification_service('))
 service=qualification[start:qualification.index('if(error!=OK)break;',start)]
 observe=body(system,'Registry::system_scalar_observe(')
 start=observe.index('bool found = false;')
@@ -52,7 +52,7 @@ struct QualificationTicket{
  Error system_set_return_error=OK;Report report,system_report;
  void remember_system_set_return_error(Error p_error){REMEMBER}
 };
-struct Result{Error native_error;uint32_t reason;int64_t native_code;uint64_t reserved;};
+struct Result{Error native_error;uint32_t reason;uint64_t expected;uint64_t actual;};
 Result scalar_result(Error error,uint32_t reason=0){return {error,reason,0,0};}Result result(Error error,uint32_t reason=0){return scalar_result(error,reason);}
 void scalar_report(const QualificationTicket* ticket,Report*out){*out=ticket->system_report;}
 struct RenderingDevice{
@@ -103,7 +103,7 @@ int main(){uint32_t failures=0;auto check=[&](bool yes,const char*why){if(!yes){
  auto post=r.postobserve(&observed);check(post.native_error==FAILED,"observe after service surfaces stored failure");
  auto released=r.release();check(released.native_error==FAILED,"release returns stored error instead of Busy");
  check(r.native_release_frontier==0&&r.ack_frontier==0&&!t.acknowledged,"failed release changes no native pins or ACK");
- check(pre.native_code==0&&post.native_code==0&&released.native_code==0,"no invented native error code");
+ check(pre.expected==0&&pre.actual==0&&post.expected==0&&post.actual==0&&released.expected==0&&released.actual==0,"Error-only result preserves zero expected/actual slots");
  check(same_report(t.report,before)&&same_report(t.system_report,before),"report revision and original native code remain immutable");
  // A queued free remains quarantined on error; a later real free is not an
  // automatic error reset or permission to ACK.

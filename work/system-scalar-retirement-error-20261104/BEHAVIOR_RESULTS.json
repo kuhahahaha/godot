@@ -7,7 +7,7 @@
   },
   {
     "stage": "green",
-    "revision": "working tree",
+    "revision": "working tree with TESTS-only hooks preprocessed out",
     "exit_code": 0,
     "output": "failures=0\n"
   }

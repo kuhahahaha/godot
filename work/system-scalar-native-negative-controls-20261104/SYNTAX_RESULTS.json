@@ -1,0 +1,171 @@
+[
+  {
+    "file": "core/extension/gdextension_system_scalar.cpp",
+    "tests_enabled": true,
+    "command": [
+      "clang++",
+      "-std=c++17",
+      "-fsyntax-only",
+      "-Wall",
+      "-Wextra",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-source-integration-20261104/snapshot",
+      "-I.",
+      "-Iplatform/macos",
+      "-Ithirdparty/vulkan/include",
+      "-DDEBUG_ENABLED",
+      "-DTOOLS_ENABLED",
+      "-DTHREADS_ENABLED",
+      "-DTESTS_ENABLED",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_system_scalar.cpp"
+    ],
+    "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104",
+    "exit_code": 0,
+    "elapsed_seconds": 0.43
+  },
+  {
+    "file": "core/extension/gdextension_qualification.cpp",
+    "tests_enabled": true,
+    "command": [
+      "clang++",
+      "-std=c++17",
+      "-fsyntax-only",
+      "-Wall",
+      "-Wextra",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-source-integration-20261104/snapshot",
+      "-I.",
+      "-Iplatform/macos",
+      "-Ithirdparty/vulkan/include",
+      "-DDEBUG_ENABLED",
+      "-DTOOLS_ENABLED",
+      "-DTHREADS_ENABLED",
+      "-DTESTS_ENABLED",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_qualification.cpp"
+    ],
+    "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104",
+    "exit_code": 0,
+    "elapsed_seconds": 0.71
+  },
+  {
+    "file": "tests/servers/rendering/test_system_scalar.cpp",
+    "tests_enabled": true,
+    "command": [
+      "clang++",
+      "-std=c++17",
+      "-fsyntax-only",
+      "-Wall",
+      "-Wextra",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-source-integration-20261104/snapshot",
+      "-I.",
+      "-Iplatform/macos",
+      "-Ithirdparty/vulkan/include",
+      "-DDEBUG_ENABLED",
+      "-DTOOLS_ENABLED",
+      "-DTHREADS_ENABLED",
+      "-DTESTS_ENABLED",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/tests/servers/rendering/test_system_scalar.cpp"
+    ],
+    "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104",
+    "exit_code": 0,
+    "elapsed_seconds": 0.52
+  },
+  {
+    "file": "core/extension/gdextension_system_scalar.cpp",
+    "tests_enabled": false,
+    "command": [
+      "clang++",
+      "-std=c++17",
+      "-fsyntax-only",
+      "-Wall",
+      "-Wextra",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-source-integration-20261104/snapshot",
+      "-I.",
+      "-Iplatform/macos",
+      "-Ithirdparty/vulkan/include",
+      "-DDEBUG_ENABLED",
+      "-DTOOLS_ENABLED",
+      "-DTHREADS_ENABLED",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_system_scalar.cpp"
+    ],
+    "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104",
+    "exit_code": 0,
+    "elapsed_seconds": 0.39
+  },
+  {
+    "file": "core/extension/gdextension_qualification.cpp",
+    "tests_enabled": false,
+    "command": [
+      "clang++",
+      "-std=c++17",
+      "-fsyntax-only",
+      "-Wall",
+      "-Wextra",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-source-integration-20261104/snapshot",
+      "-I.",
+      "-Iplatform/macos",
+      "-Ithirdparty/vulkan/include",
+      "-DDEBUG_ENABLED",
+      "-DTOOLS_ENABLED",
+      "-DTHREADS_ENABLED",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/core/extension/gdextension_qualification.cpp"
+    ],
+    "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104",
+    "exit_code": 0,
+    "elapsed_seconds": 0.69
+  },
+  {
+    "file": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/negative_probe.cpp",
+    "mode": 1,
+    "command": [
+      "clang++",
+      "-std=c++17",
+      "-fsyntax-only",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/work/system-scalar-native-negative-controls-20261104/syntax-only-inputs",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/include",
+      "-DSYSTEM_NEGATIVE_KIND=1",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/negative_probe.cpp"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.37,
+    "sdk_sha256": "ec25549317a591c3009de34f217bcb835f1d3cc52ba2d8782bde2af15d5dbad7",
+    "evidence": "syntax only; not a rebuilt host/SDK pair"
+  },
+  {
+    "file": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/negative_probe.cpp",
+    "mode": 2,
+    "command": [
+      "clang++",
+      "-std=c++17",
+      "-fsyntax-only",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/work/system-scalar-native-negative-controls-20261104/syntax-only-inputs",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/include",
+      "-DSYSTEM_NEGATIVE_KIND=2",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/negative_probe.cpp"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.38,
+    "sdk_sha256": "ec25549317a591c3009de34f217bcb835f1d3cc52ba2d8782bde2af15d5dbad7",
+    "evidence": "syntax only; not a rebuilt host/SDK pair"
+  },
+  {
+    "file": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/negative_probe.cpp",
+    "mode": 3,
+    "command": [
+      "clang++",
+      "-std=c++17",
+      "-fsyntax-only",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/system-scalar-correctness-20261104/work/system-scalar-native-negative-controls-20261104/syntax-only-inputs",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/include",
+      "-DSYSTEM_NEGATIVE_KIND=3",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/negative_probe.cpp"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.37,
+    "sdk_sha256": "ec25549317a591c3009de34f217bcb835f1d3cc52ba2d8782bde2af15d5dbad7",
+    "evidence": "syntax only; not a rebuilt host/SDK pair"
+  }
+]

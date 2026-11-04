@@ -1,0 +1,107 @@
+{
+  "schema": 1,
+  "status": "prepared_not_native_run",
+  "recorded_utc": "2026-11-04T01:53:14.790955+00:00",
+  "commands": [
+    {
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/test_runner.py"
+      ],
+      "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange",
+      "returncode": 0,
+      "stdout": "command-0.stdout.log",
+      "stderr": "command-0.stderr.log"
+    },
+    {
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/run.py",
+        "--help"
+      ],
+      "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange",
+      "returncode": 0,
+      "stdout": "command-1.stdout.log",
+      "stderr": "command-1.stderr.log"
+    }
+  ],
+  "python_ast": "passed",
+  "python_validation_groups": 6,
+  "host_executed": false,
+  "gpu_executed": false,
+  "dso_compiled": false,
+  "engine_built": false,
+  "new_host_sdk_pair": "pending root single builder",
+  "cxx_and_gdscript_for_new_pair": "not yet checked against generated new SDK/host",
+  "old_results_reused": false,
+  "files": {
+    "runtime/README.md": {
+      "sha256": "d9c16273c1dc87c9f939df3cf2ddb990f1ac1904562e18b1188f71780e6e46d3",
+      "bytes": 5536
+    },
+    "runtime/SOURCE_PROVENANCE.json": {
+      "sha256": "6bc8bc94c28b02b49fe91a9c824eec30bdef7d043e8c666e97759329b485cbdd",
+      "bytes": 1987
+    },
+    "runtime/generate.gd": {
+      "sha256": "623c1bdee9ed858a687d3a79d35e04bad71015ff807c5053b2dd752093c26d9d",
+      "bytes": 1305
+    },
+    "runtime/include/core/error/error_list.h": {
+      "sha256": "f0dde7784ec40f043a3c0b37fd0965a1e871b2ccd2fe67f3517a200c1952653d",
+      "bytes": 4676
+    },
+    "runtime/negative_cases.json": {
+      "sha256": "61301569447ea147e5e5451beee9c3e7edc570d2178ec0f500fe75065767b661",
+      "bytes": 2618
+    },
+    "runtime/negative_probe.cpp": {
+      "sha256": "69e2aac09c946e147b57a58b24e96beccaaa17acd8563904075f5f7401c73283",
+      "bytes": 34992
+    },
+    "runtime/positive.cpp": {
+      "sha256": "09560511cffa3bb566e6b9c5d84a0aa147272d3ca9565e1f5676928764fb62e8",
+      "bytes": 28598
+    },
+    "runtime/post_submit_close.cpp": {
+      "sha256": "40a958775f936e4a50b01697e1241eaa22bfa1ea1379e2630126b3d5dc918a82",
+      "bytes": 32569
+    },
+    "runtime/post_submit_close.original.cpp": {
+      "sha256": "6340583673cf290e8aca4778b7d31e9b5cac2c5b04343f7696e259a48e3fb820",
+      "bytes": 30248
+    },
+    "runtime/probe.gd": {
+      "sha256": "e2fa2e69c83d3de31f512a1354424bbc118254e8ad89dc7e1f9d986ef00f2084",
+      "bytes": 461
+    },
+    "runtime/run.py": {
+      "sha256": "b652aa71a000c93dea42c960ca5a21f14d09116d4b8518ce08fdb720ea8b55b6",
+      "bytes": 20535
+    },
+    "runtime/scalar.glsl": {
+      "sha256": "59430bc2675ea4413eaca299ad95d2a9e4dfc7bcef6ada43b717ee3b8b893bc4",
+      "bytes": 201
+    },
+    "runtime/test_runner.py": {
+      "sha256": "8180e836c98b51f53218dd76a9bae7ba0c3aaac4a04b0dbb357085481a89c681",
+      "bytes": 4643
+    },
+    "preparation/command-0.stderr.log": {
+      "sha256": "1e43b905e11ca028139fe5078016515111aaf7cebf8d6a3e224b7d03b9cb6ac9",
+      "bytes": 104
+    },
+    "preparation/command-0.stdout.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "preparation/command-1.stderr.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "preparation/command-1.stdout.log": {
+      "sha256": "a7911789b1c38b54e35e912d3c44556d7c6441e7ff493b97618f6aed846a095c",
+      "bytes": 727
+    }
+  }
+}

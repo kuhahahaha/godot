@@ -23,7 +23,7 @@ struct QualificationTicket{
   if (!system_set_physical.free_event) system_set_return_error = p_error;
  }
 };
-struct Result{Error native_error;uint32_t reason;int64_t native_code;uint64_t reserved;};
+struct Result{Error native_error;uint32_t reason;uint64_t expected;uint64_t actual;};
 Result scalar_result(Error error,uint32_t reason=0){return {error,reason,0,0};}Result result(Error error,uint32_t reason=0){return scalar_result(error,reason);}
 void scalar_report(const QualificationTicket* ticket,Report*out){*out=ticket->system_report;}
 struct RenderingDevice{
@@ -72,7 +72,20 @@ struct Registry{
 		ticket->system_set_physical.use_closed.store(false);
 	}
 }
- void service(Error injected){auto* bridge=&bridge_storage;auto* rd=&device;device.maintenance_error=injected;uint32_t kind=3;uint64_t serial=17;const Error error=rd->_qualification_maintenance();
+ void service(Error injected){auto* bridge=&bridge_storage;auto* rd=&device;device.maintenance_error=injected;uint32_t kind=3;uint64_t serial=17;const Error error=[&]() {
+#ifdef TESTS_ENABLED
+    if (kind == 3 && OS::get_singleton()->get_environment("GODOT_SYSTEM_SCALAR_TEST_SET_RETURN_ERROR") == "1") {
+     MutexLock lock(mutex);
+     for (auto *ticket : bridge->tickets) if (ticket && ticket->serial == serial && ticket->test_inject_system_set_return_error()) {
+      // A controlled failure of this maintenance attempt, never a GPU error
+      // or fabricated free event. The normal sticky-error path consumes it.
+      print_line(vformat("SYS_SCALAR_INJECT kind=set_return_maintenance_error ticket=%d free_event=0 error=%d", ticket->serial, int(FAILED)));
+      return FAILED;
+     }
+    }
+#endif
+    return rd->_qualification_maintenance();
+   }();
    if (error != OK && error != ERR_BUSY && kind == 3) {
     MutexLock lock(mutex);
     for (auto *ticket : bridge->tickets) if (ticket && ticket->serial == serial) ticket->remember_system_set_return_error(error);
@@ -162,7 +175,7 @@ int main(){uint32_t failures=0;auto check=[&](bool yes,const char*why){if(!yes){
  auto post=r.postobserve(&observed);check(post.native_error==FAILED,"observe after service surfaces stored failure");
  auto released=r.release();check(released.native_error==FAILED,"release returns stored error instead of Busy");
  check(r.native_release_frontier==0&&r.ack_frontier==0&&!t.acknowledged,"failed release changes no native pins or ACK");
- check(pre.native_code==0&&post.native_code==0&&released.native_code==0,"no invented native error code");
+ check(pre.expected==0&&pre.actual==0&&post.expected==0&&post.actual==0&&released.expected==0&&released.actual==0,"Error-only result preserves zero expected/actual slots");
  check(same_report(t.report,before)&&same_report(t.system_report,before),"report revision and original native code remain immutable");
  // A queued free remains quarantined on error; a later real free is not an
  // automatic error reset or permission to ACK.
