@@ -615,7 +615,6 @@ public:
 		binding.pipeline_expected_format = 1;
 		binding.uniform_set_format = 1;
 		binding.bound = false;
-#ifdef DEBUG_ENABLED
 		ERR_PRINT_OFF;
 		const auto prefix = device._record_source_draw_indirect(identity, RenderingDevice::ID_TYPE_DRAW_LIST, true, rid, 0, 1, 20);
 		ERR_PRINT_ON;
@@ -631,7 +630,6 @@ public:
 		CHECK(device.draw_list.state.draw_count == 1);
 		device.draw_list.validation.index_array_count = 1;
 		binding.bound = false;
-#endif
 		const auto indexed = device._record_source_draw_indirect(identity, RenderingDevice::ID_TYPE_DRAW_LIST, true, rid, 0, 1, 20);
 		CHECK(indexed.observed.error == OK);
 		CHECK(indexed.observed.state == State::Appended);
