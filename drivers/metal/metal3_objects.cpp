@@ -1892,6 +1892,12 @@ void MDCommandBuffer::_bind_uniforms_argument_buffers(MDUniformSet *p_set, MDSha
 
 		// Copy the base argument buffer data.
 		memcpy(alloc.ptr, p_set->arg_buffer_data.ptr(), buffer_size);
+		if (shader_set.buffer_sizes.resource_count != 0) {
+			// This allocation, not the cached CPU template or a prior frame,
+			// owns the size table reached through the copied argument pointer.
+			ERR_FAIL_COND(!shader_set.buffer_sizes.write_address(alloc.ptr, alloc.buffer->gpuAddress(), alloc.offset));
+			enc->useResource(alloc.buffer, MTL::ResourceUsageRead);
+		}
 
 		// Update dynamic buffer GPU addresses.
 		uint64_t *ptr = (uint64_t *)alloc.ptr;
@@ -1915,6 +1921,9 @@ void MDCommandBuffer::_bind_uniforms_argument_buffers(MDUniformSet *p_set, MDSha
 		enc->setVertexBuffer(alloc.buffer, alloc.offset, p_set_index);
 		enc->setFragmentBuffer(alloc.buffer, alloc.offset, p_set_index);
 	} else {
+		if (shader_set.buffer_sizes.resource_count != 0) {
+			enc->useResource(p_set->arg_buffer.buffer.get(), MTL::ResourceUsageRead);
+		}
 		enc->setVertexBuffer(p_set->arg_buffer.buffer.get(), 0, p_set_index);
 		enc->setFragmentBuffer(p_set->arg_buffer.buffer.get(), 0, p_set_index);
 	}
@@ -2048,6 +2057,10 @@ void MDCommandBuffer::_bind_uniforms_argument_buffers_compute(MDUniformSet *p_se
 
 		// Copy the base argument buffer data.
 		memcpy(alloc.ptr, p_set->arg_buffer_data.ptr(), buffer_size);
+		if (shader_set.buffer_sizes.resource_count != 0) {
+			ERR_FAIL_COND(!shader_set.buffer_sizes.write_address(alloc.ptr, alloc.buffer->gpuAddress(), alloc.offset));
+			enc->useResource(alloc.buffer, MTL::ResourceUsageRead);
+		}
 
 		// Update dynamic buffer GPU addresses.
 		uint64_t *ptr = (uint64_t *)alloc.ptr;
@@ -2070,6 +2083,9 @@ void MDCommandBuffer::_bind_uniforms_argument_buffers_compute(MDUniformSet *p_se
 
 		enc->setBuffer(alloc.buffer, alloc.offset, p_set_index);
 	} else {
+		if (shader_set.buffer_sizes.resource_count != 0) {
+			enc->useResource(p_set->arg_buffer.buffer.get(), MTL::ResourceUsageRead);
+		}
 		enc->setBuffer(p_set->arg_buffer.buffer.get(), 0, p_set_index);
 	}
 }

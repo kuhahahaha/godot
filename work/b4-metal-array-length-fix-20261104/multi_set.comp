@@ -1,0 +1,6 @@
+#version 450
+layout(local_size_x=1)in;
+layout(set=0,binding=3,std430)readonly buffer A{uvec4 prefix;uint x[];}a;
+layout(set=1,binding=9,std430)readonly buffer B{vec4 x[];}b;
+layout(set=1,binding=17,std430)buffer O{uint x[];}o;
+void main(){o.x[0]=a.x.length();o.x[1]=b.x.length();o.x[2]=o.x.length();o.x[3]=a.x[0]+uint(b.x[0].x);}

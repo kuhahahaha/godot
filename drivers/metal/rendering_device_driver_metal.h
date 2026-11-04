@@ -244,6 +244,9 @@ public:
 
 public:
 	struct BufferInfo : MetalBuffer {
+		// Descriptor-visible bytes, excluding allocator padding and all other
+		// persistent frames. Dynamic size_bytes is a stride, not this extent.
+		uint64_t logical_size = 0;
 		_FORCE_INLINE_ bool is_dynamic() const { return _frame_idx != UINT32_MAX; }
 		_FORCE_INLINE_ uint32_t frame_index() const { return _frame_idx; }
 		_FORCE_INLINE_ void set_frame_index(uint32_t p_frame_index) { _frame_idx = p_frame_index; }

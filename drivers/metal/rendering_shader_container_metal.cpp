@@ -34,6 +34,7 @@
 #include "core/io/marshalls.h"
 #include "core/os/os.h"
 #include "core/templates/fixed_vector.h"
+#include "drivers/metal/metal_buffer_size_table.h"
 #include "drivers/metal/metal_utils.h"
 
 #include <thirdparty/spirv-reflect/spirv_reflect.h>
@@ -497,6 +498,7 @@ bool RenderingShaderContainerMetal::_set_code_from_spirv(const ReflectShader &p_
 	// Assign MSL bindings for all the descriptor sets.
 	typedef std::pair<MSLResourceBinding, uint32_t> MSLBindingInfo;
 	LocalVector<MSLBindingInfo> spirv_bindings;
+	LocalVector<MSLResourceBinding> buffer_size_bindings;
 	MSLResourceBinding push_constant_resource_binding;
 	{
 		enum IndexType {
@@ -524,9 +526,10 @@ bool RenderingShaderContainerMetal::_set_code_from_spirv(const ReflectShader &p_
 
 		for (const ReflectDescriptorSet &dset : p_shader.uniform_sets) {
 			// Reset the index count for each descriptor set, as this is an index in to the argument table.
-			uint32_t next_arg_buffer_index = 0;
+			uint64_t next_arg_buffer_index = 0;
+			bool has_storage_buffer = false;
 			auto next_arg_index = [&next_arg_buffer_index](uint32_t p_stride) -> uint32_t {
-				uint32_t v = next_arg_buffer_index;
+				uint32_t v = uint32_t(next_arg_buffer_index);
 				next_arg_buffer_index += p_stride;
 				return v;
 			};
@@ -537,6 +540,13 @@ bool RenderingShaderContainerMetal::_set_code_from_spirv(const ReflectShader &p_
 				found->active_stages = uniform.stages;
 
 				RDC::UniformType type = RDC::UniformType(uniform.type);
+				const bool is_storage_buffer = type == RDC::UNIFORM_TYPE_STORAGE_BUFFER || type == RDC::UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC;
+				has_storage_buffer |= is_storage_buffer;
+				// RD's buffer bindings currently accept exactly one RID and reflect
+				// block bytes, not descriptor-array counts. Do not silently alias
+				// a buffer array onto one Metal argument entry.
+				ERR_FAIL_COND_V_MSG((is_storage_buffer || type == RDC::UNIFORM_TYPE_UNIFORM_BUFFER || type == RDC::UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC) && binding.array.dims_count != 0,
+						false, "Metal buffer descriptor arrays are not supported by the RenderingDevice binding ABI.");
 				uint32_t binding_stride = 1; // If this is an array, stride will be the length of the array.
 				if (uniform.length > 1) {
 					switch (type) {
@@ -552,6 +562,10 @@ bool RenderingShaderContainerMetal::_set_code_from_spirv(const ReflectShader &p_
 						} break;
 					}
 				}
+				// Combined samplers consume two ranges. Check before either
+				// allocator narrows an index; the serialized ARG IDs are u32.
+				ERR_FAIL_COND_V_MSG(next_arg_buffer_index + uint64_t(binding_stride) * 2 > uint64_t(INT32_MAX) / sizeof(uint64_t), false,
+						"Metal argument layout exceeds the allocation limit.");
 
 				// Determine access type.
 				switch (binding.descriptor_type) {
@@ -712,6 +726,17 @@ bool RenderingShaderContainerMetal::_set_code_from_spirv(const ReflectShader &p_
 				iter++;
 				found++;
 			}
+			if (msl_options.argument_buffers && has_storage_buffer) {
+				MetalBufferSizeTable layout;
+				ERR_FAIL_COND_V_MSG(!layout.initialize(uint32_t(next_arg_buffer_index)), false, "Metal buffer-size table exceeds the argument allocation limit.");
+				MSLResourceBinding auxiliary;
+				auxiliary.desc_set = idx_dset;
+				auxiliary.binding = kBufferSizeBufferBinding;
+				auxiliary.basetype = SPIRType::UInt;
+				auxiliary.count = 1;
+				auxiliary.msl_buffer = layout.resource_count;
+				buffer_size_bindings.push_back(auxiliary);
+			}
 			idx_dset++;
 		}
 
@@ -749,6 +774,10 @@ bool RenderingShaderContainerMetal::_set_code_from_spirv(const ReflectShader &p_
 			rb.stage = execution_model;
 			compiler.add_msl_resource_binding(rb);
 		}
+		for (MSLResourceBinding &binding : buffer_size_bindings) {
+			binding.stage = execution_model;
+			compiler.add_msl_resource_binding(binding);
+		}
 
 		if (push_constant_resource_binding.desc_set == ResourceBindingPushConstantDescriptorSet) {
 			push_constant_resource_binding.stage = execution_model;
@@ -764,6 +793,10 @@ bool RenderingShaderContainerMetal::_set_code_from_spirv(const ReflectShader &p_
 		} catch (CompilerError &e) {
 			ERR_FAIL_V_MSG(false, "Failed to compile stage " + String(RDC::SHADER_STAGE_NAMES[stage]) + ": " + e.what());
 		}
+		// Direct/Tier1 binding needs a separate global length-table ABI. Refuse
+		// before publishing a container instead of emitting an unbound slot25.
+		ERR_FAIL_COND_V_MSG(!msl_options.argument_buffers && compiler.needs_buffer_size_buffer(), false,
+				"Metal OpArrayLength requires Tier2 argument-buffer binding; direct binding is not supported.");
 
 		ERR_FAIL_COND_V_MSG(compiler.get_entry_points_and_stages().size() != 1, false, "Expected a single entry point and stage.");
 

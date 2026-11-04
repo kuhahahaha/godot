@@ -1,0 +1,8 @@
+{
+  "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/drivers/metal/rendering_shader_container_metal.cpp",
+  "sha256": "b8b0d4e08590d84be70f25ef8955a736cae8df19ad01b50a761d91dbafd14a78",
+  "aux": "if (msl_options.argument_buffers && has_storage_buffer) {\n\t\t\t\tMetalBufferSizeTable layout;\n\t\t\t\tERR_FAIL_COND_V_MSG(!layout.initialize(uint32_t(next_arg_buffer_index)), false, \"Metal buffer-size table exceeds the argument allocation limit.\");\n\t\t\t\tMSLResourceBinding auxiliary;\n\t\t\t\tauxiliary.desc_set = idx_dset;\n\t\t\t\tauxiliary.binding = kBufferSizeBufferBinding;\n\t\t\t\tauxiliary.basetype = SPIRType::UInt;\n\t\t\t\tauxiliary.count = 1;\n\t\t\t\tauxiliary.msl_buffer = layout.resource_count;\n\t\t\t\tbuffer_size_bindings.push_back(auxiliary);\n\t\t\t}",
+  "descriptor_array": "ERR_FAIL_COND_V_MSG((is_storage_buffer || type == RDC::UNIFORM_TYPE_UNIFORM_BUFFER || type == RDC::UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC) && binding.array.dims_count != 0,\n\t\t\t\t\t\tfalse, \"Metal buffer descriptor arrays are not supported by the RenderingDevice binding ABI.\");",
+  "direct": "ERR_FAIL_COND_V_MSG(!msl_options.argument_buffers && compiler.needs_buffer_size_buffer(), false,\n\t\t\t\t\"Metal OpArrayLength requires Tier2 argument-buffer binding; direct binding is not supported.\");",
+  "format_version": 4
+}

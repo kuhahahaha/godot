@@ -34,6 +34,7 @@
 #endif
 
 #include "drivers/metal/metal_allocator.h"
+#include "drivers/metal/metal_buffer_size_table.h"
 #include "drivers/metal/metal_device_properties.h"
 #include "drivers/metal/metal_utils.h"
 #include "drivers/metal/pixel_formats.h"
@@ -777,6 +778,7 @@ struct API_AVAILABLE(macos(11.0), ios(14.0), tvos(14.0), visionos(2.0)) UniformS
 	LocalVector<UniformInfo> uniforms;
 	LocalVector<uint32_t> dynamic_uniforms;
 	uint32_t buffer_size = 0;
+	MetalBufferSizeTable buffer_sizes;
 };
 
 class API_AVAILABLE(macos(11.0), ios(14.0), tvos(14.0), visionos(2.0)) DynamicOffsetLayout {

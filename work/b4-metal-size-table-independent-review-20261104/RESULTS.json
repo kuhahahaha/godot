@@ -1,0 +1,52 @@
+[
+  {
+    "name": "author-model",
+    "compile_command": [
+      "clang++",
+      "-std=c++17",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I.",
+      "work/b4-metal-array-length-fix-20261104/layout_test.cpp",
+      "-o",
+      "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/b4-independent-size-table-y5l7tw96/author-model"
+    ],
+    "rc": 0,
+    "log_sha256": "278f582959864a2e8d00bd6b6a9ef2abdc581872e9e805f7270090f2c4f0899f"
+  },
+  {
+    "name": "independent-boundaries",
+    "compile_command": [
+      "clang++",
+      "-std=c++17",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I.",
+      "work/b4-metal-size-table-independent-review-20261104/boundary_test.cpp",
+      "-o",
+      "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/b4-independent-size-table-y5l7tw96/independent-boundaries"
+    ],
+    "rc": 0,
+    "log_sha256": "e1f42eecfc719b8bc5f112020669d8801be15c99ec7b11406857d8489ce45c8a"
+  },
+  {
+    "name": "independent-asan-ubsan",
+    "compile_command": [
+      "clang++",
+      "-std=c++17",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I.",
+      "work/b4-metal-size-table-independent-review-20261104/boundary_test.cpp",
+      "-o",
+      "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/b4-independent-size-table-y5l7tw96/independent-asan-ubsan",
+      "-fsanitize=address,undefined",
+      "-fno-omit-frame-pointer"
+    ],
+    "rc": 0,
+    "log_sha256": "e1f42eecfc719b8bc5f112020669d8801be15c99ec7b11406857d8489ce45c8a"
+  }
+]

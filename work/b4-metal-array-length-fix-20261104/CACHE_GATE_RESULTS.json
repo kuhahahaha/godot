@@ -1,0 +1,34 @@
+{
+  "rows": [
+    {
+      "command": [
+        "clang++",
+        "-std=c++17",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/cache_gate_test.cpp",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/cache_gate_test"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/cache_gate_test",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-guard-metal-diagnosis-20261104/INIT.metalbin"
+      ],
+      "returncode": 0,
+      "stdout": "PASS real format3 container rejected by exact production header gate; synthetic format4 header accepted only at gate, not full deserialization\n",
+      "stderr": ""
+    }
+  ],
+  "scope": "verbatim production prefix gate, not complete native container deserialization",
+  "source_gates": [
+    "ERR_FAIL_COND_V(header.magic_number != CONTAINER_MAGIC_NUMBER || header.version != CONTAINER_VERSION, false);",
+    "ERR_FAIL_COND_V(header.format != _format() || header.format_version != _format_version(), false);"
+  ],
+  "new_format": 4
+}

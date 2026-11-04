@@ -322,6 +322,7 @@ RDD::BufferID RenderingDeviceDriverMetal::buffer_create(uint64_t p_size, BitFiel
 		buf_info = VersatileResource::allocate<BufferInfo>(resources_allocator);
 	}
 	*static_cast<MetalBuffer *>(buf_info) = buffer;
+	buf_info->logical_size = original_size;
 
 	return BufferID(buf_info);
 }
@@ -1521,10 +1522,12 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 		set.uniforms.resize(set_size);
 
 		uint8_t dynamic_count = 0;
+		bool has_storage_buffer = false;
 
 		LocalVector<UniformInfo>::Iterator iter = set.uniforms.begin();
 		for (uint32_t j = 0; j < set_size; j++) {
 			const ShaderUniform &uniform = refl_set.ptr()[j];
+			has_storage_buffer |= uniform.type == UNIFORM_TYPE_STORAGE_BUFFER || uniform.type == UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC;
 			const RSCM::UniformData &bind = mtl_set.ptr()[j];
 
 			switch (uniform.type) {
@@ -1547,10 +1550,18 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 				continue;
 			}
 #define VAL(x) (x == UINT32_MAX ? 0 : x)
-			uint32_t max = std::max({ VAL(ui.arg_buffer.texture), VAL(ui.arg_buffer.buffer), VAL(ui.arg_buffer.sampler) });
-			max += ui.arrayLength > 0 ? ui.arrayLength - 1 : 0;
-			set.buffer_size = std::max(set.buffer_size, (max + 1) * (uint32_t)sizeof(uint64_t));
+			const uint64_t end = uint64_t(std::max({ VAL(ui.arg_buffer.texture), VAL(ui.arg_buffer.buffer), VAL(ui.arg_buffer.sampler) })) + std::max(ui.arrayLength, 1u);
+			ERR_FAIL_COND_V_MSG(end > uint64_t(INT32_MAX) / sizeof(uint64_t), ShaderID(), "Metal argument layout exceeds the allocation limit.");
+			set.buffer_size = std::max(set.buffer_size, uint32_t(end * sizeof(uint64_t)));
 #undef VAL
+		}
+		// Layout depends only on the reflected set, never active-stage usage or
+		// OpArrayLength presence. A no-length shader can create a set for another
+		// compatible shader that does use length(). The tail shares ownership of
+		// the ordinary argument allocation (or its per-command dynamic copy).
+		if (has_storage_buffer) {
+			ERR_FAIL_COND_V_MSG(!set.buffer_sizes.initialize(set.buffer_size / sizeof(uint64_t)), ShaderID(), "Metal buffer-size table exceeds the argument allocation limit.");
+			set.buffer_size = set.buffer_sizes.allocation_size;
 		}
 
 		if (dynamic_count > 0) {
@@ -1620,6 +1631,7 @@ RDD::UniformSetID RenderingDeviceDriverMetal::uniform_set_create(VectorView<Boun
 	MDShader *shader = (MDShader *)(p_shader.id);
 	ERR_FAIL_INDEX_V_MSG(p_set_index, shader->sets.size(), UniformSetID(), "Set index out of range");
 	const UniformSet &shader_set = shader->sets.get(p_set_index);
+	ERR_FAIL_COND_V(p_uniforms.size() != shader_set.uniforms.size(), UniformSetID());
 	MDUniformSet *set = memnew(MDUniformSet);
 	// Determine if there are any dynamic uniforms in this set.
 	bool is_dynamic = !shader_set.dynamic_uniforms.is_empty();
@@ -1627,7 +1639,11 @@ RDD::UniformSetID RenderingDeviceDriverMetal::uniform_set_create(VectorView<Boun
 	Vector<uint8_t> arg_buffer_data;
 
 	if (device_properties->features.argument_buffers_supported()) {
-		arg_buffer_data.resize(shader_set.buffer_size);
+		if (arg_buffer_data.resize(shader_set.buffer_size) != OK) {
+			memdelete(set);
+			ERR_FAIL_V(UniformSetID());
+		}
+		arg_buffer_data.fill(0);
 
 		// If argument buffers are enabled, we have already verified availability, so we can skip the runtime check.
 		GODOT_CLANG_WARNING_PUSH_AND_IGNORE("-Wunguarded-availability-new")
@@ -1660,6 +1676,14 @@ RDD::UniformSetID RenderingDeviceDriverMetal::uniform_set_create(VectorView<Boun
 			const BoundUniform &uniform = p_uniforms[i];
 			const UniformInfo &ui = shader_set.uniforms[i];
 			const UniformInfo::Indexes &idx = ui.arg_buffer;
+			if (shader_set.buffer_sizes.resource_count != 0 &&
+					(uniform.type == UNIFORM_TYPE_STORAGE_BUFFER || uniform.type == UNIFORM_TYPE_UNIFORM_BUFFER || uniform.is_dynamic())) {
+				const BufferInfo *buffer = (const BufferInfo *)uniform.ids[0].id;
+				if (!shader_set.buffer_sizes.write_length(ptr, idx.buffer, buffer->logical_size)) {
+					memdelete(set);
+					ERR_FAIL_V_MSG(UniformSetID(), "Metal descriptor byte length exceeds the size-table ABI.");
+				}
+			}
 
 			switch (uniform.type) {
 				case UNIFORM_TYPE_SAMPLER: {
@@ -1762,6 +1786,16 @@ RDD::UniformSetID RenderingDeviceDriverMetal::uniform_set_create(VectorView<Boun
 
 		if (!is_dynamic) {
 			set->arg_buffer = allocator->new_buffer(shader_set.buffer_size, base_hazard_tracking | MTL::ResourceStorageModePrivate);
+			if (!set->arg_buffer.buffer) {
+				memdelete(set);
+				ERR_FAIL_V_MSG(UniformSetID(), "Failed to allocate Metal argument buffer.");
+			}
+			if (shader_set.buffer_sizes.resource_count != 0 &&
+					!shader_set.buffer_sizes.write_address(arg_buffer_data.ptrw(), set->arg_buffer.buffer->gpuAddress())) {
+				allocator->free_buffer(set->arg_buffer);
+				memdelete(set);
+				ERR_FAIL_V_MSG(UniformSetID(), "Metal buffer-size table address overflow.");
+			}
 #if DEV_ENABLED
 			char label[64];
 			snprintf(label, sizeof(label), "Uniform Set %u", p_set_index);

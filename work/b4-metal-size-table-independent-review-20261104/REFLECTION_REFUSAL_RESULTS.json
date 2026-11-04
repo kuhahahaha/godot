@@ -1,0 +1,85 @@
+{
+  "production_expression": "(is_storage_buffer || type == RDC::UNIFORM_TYPE_UNIFORM_BUFFER || type == RDC::UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC) && binding.array.dims_count != 0",
+  "production_expression_sha256": "f72d81b53fc3f320eed14e2a9059a96a17467a35566f48e7137a9f1fc2a0d87e",
+  "rows": [
+    {
+      "mode": "production",
+      "case": "runtime_member_not_descriptor_array",
+      "expected_refusal": false,
+      "rc": 0,
+      "oracle_pass": true,
+      "stdout": "binding=0 descriptor_array_dims=0 rejected=0\nbinding=7 descriptor_array_dims=0 rejected=0\n",
+      "stderr": "",
+      "shader": "#version 450\nlayout(local_size_x=1)in;\nlayout(set=0,binding=0,std430) buffer T{uint values[];}a;\nlayout(set=0,binding=7,std430)buffer O{uint words[];}o;void main(){o.words[0]=a.values[0];}\n",
+      "spirv_sha256": "fab383f061d832c87a433d7a6bf9d6651ca89efbde3bdc8f7ac55669ee7a2a2a"
+    },
+    {
+      "mode": "production",
+      "case": "storage_descriptor_array_one",
+      "expected_refusal": true,
+      "rc": 0,
+      "oracle_pass": true,
+      "stdout": "binding=0 descriptor_array_dims=1 rejected=1\nbinding=7 descriptor_array_dims=0 rejected=0\n",
+      "stderr": "",
+      "shader": "#version 450\nlayout(local_size_x=1)in;\nlayout(set=0,binding=0,std430) buffer T{uint values[];}a[1];\nlayout(set=0,binding=7,std430)buffer O{uint words[];}o;void main(){o.words[0]=a[0].values[0];}\n",
+      "spirv_sha256": "1e68d8f362e195de51d64096c5d8ba5e8fe450de0aa5879a828abc1d7b924ff8"
+    },
+    {
+      "mode": "production",
+      "case": "storage_descriptor_array_two",
+      "expected_refusal": true,
+      "rc": 0,
+      "oracle_pass": true,
+      "stdout": "binding=0 descriptor_array_dims=1 rejected=1\nbinding=7 descriptor_array_dims=0 rejected=0\n",
+      "stderr": "",
+      "shader": "#version 450\nlayout(local_size_x=1)in;\nlayout(set=0,binding=0,std430) buffer T{uint values[];}a[2];\nlayout(set=0,binding=7,std430)buffer O{uint words[];}o;void main(){o.words[0]=a[1].values[0];}\n",
+      "spirv_sha256": "f68ef75e9c42738809697341f59d0c170125307ca4561df30a176fef9bbd5ba0"
+    },
+    {
+      "mode": "production",
+      "case": "uniform_descriptor_array",
+      "expected_refusal": true,
+      "rc": 0,
+      "oracle_pass": true,
+      "stdout": "binding=0 descriptor_array_dims=1 rejected=1\nbinding=7 descriptor_array_dims=0 rejected=0\n",
+      "stderr": "",
+      "shader": "#version 450\nlayout(local_size_x=1)in;\nlayout(set=0,binding=0,std140) uniform T{uvec4 values;}a[2];\nlayout(set=0,binding=7,std430)buffer O{uint words[];}o;void main(){o.words[0]=a[1].values.x;}\n",
+      "spirv_sha256": "87e0820f18b920fce81b95b79651d44b42a0f9d9e58f0d2fdf757a5833a505ac"
+    },
+    {
+      "mode": "mutation",
+      "case": "storage_descriptor_array_one",
+      "expected_refusal": true,
+      "rc": 1,
+      "oracle_pass": true,
+      "stdout": "binding=0 descriptor_array_dims=1 rejected=0\nbinding=7 descriptor_array_dims=0 rejected=0\n",
+      "stderr": "TARGET_REFUSAL_ORACLE_MISMATCH\n",
+      "shader": "#version 450\nlayout(local_size_x=1)in;\nlayout(set=0,binding=0,std430) buffer T{uint values[];}a[1];\nlayout(set=0,binding=7,std430)buffer O{uint words[];}o;void main(){o.words[0]=a[0].values[0];}\n",
+      "spirv_sha256": "1e68d8f362e195de51d64096c5d8ba5e8fe450de0aa5879a828abc1d7b924ff8"
+    },
+    {
+      "mode": "mutation",
+      "case": "storage_descriptor_array_two",
+      "expected_refusal": true,
+      "rc": 1,
+      "oracle_pass": true,
+      "stdout": "binding=0 descriptor_array_dims=1 rejected=0\nbinding=7 descriptor_array_dims=0 rejected=0\n",
+      "stderr": "TARGET_REFUSAL_ORACLE_MISMATCH\n",
+      "shader": "#version 450\nlayout(local_size_x=1)in;\nlayout(set=0,binding=0,std430) buffer T{uint values[];}a[2];\nlayout(set=0,binding=7,std430)buffer O{uint words[];}o;void main(){o.words[0]=a[1].values[0];}\n",
+      "spirv_sha256": "f68ef75e9c42738809697341f59d0c170125307ca4561df30a176fef9bbd5ba0"
+    },
+    {
+      "mode": "mutation",
+      "case": "uniform_descriptor_array",
+      "expected_refusal": true,
+      "rc": 1,
+      "oracle_pass": true,
+      "stdout": "binding=0 descriptor_array_dims=1 rejected=0\nbinding=7 descriptor_array_dims=0 rejected=0\n",
+      "stderr": "TARGET_REFUSAL_ORACLE_MISMATCH\n",
+      "shader": "#version 450\nlayout(local_size_x=1)in;\nlayout(set=0,binding=0,std140) uniform T{uvec4 values;}a[2];\nlayout(set=0,binding=7,std430)buffer O{uint words[];}o;void main(){o.words[0]=a[1].values.x;}\n",
+      "spirv_sha256": "87e0820f18b920fce81b95b79651d44b42a0f9d9e58f0d2fdf757a5833a505ac"
+    }
+  ],
+  "full_container_executed": false,
+  "native_metal_executed": false
+}

@@ -1,0 +1,1 @@
+Assertion failed: (table.sizes_offset==1431655760 && table.allocation_size==2147483640), function main, file test.cpp, line 14.

@@ -1,0 +1,27 @@
+production layout helper PASS
+INIT exact mapping RED PASS
+INIT auxiliary mapping GREEN PASS
+VALIDATE exact mapping RED PASS
+VALIDATE auxiliary mapping GREEN PASS
+FINALIZE exact mapping RED PASS
+FINALIZE auxiliary mapping GREEN PASS
+INIT_EMPTY exact mapping RED PASS
+INIT_EMPTY auxiliary mapping GREEN PASS
+FINALIZE_EMPTY exact mapping RED PASS
+FINALIZE_EMPTY auxiliary mapping GREEN PASS
+multi-set GLSL PASS
+multi-set SPIRV PASS
+multi-set baseline RED PASS
+multi-set disjoint auxiliary GREEN PASS
+array GLSL legal upstream PASS
+actual container array-refusal slice PASS
+mixed resources GLSL PASS
+mixed resources auxiliary ID5 PASS
+actual container direct-length refusal slice PASS
+direct no-length GLSL PASS
+direct no-length retained PASS
+merged vert GLSL PASS
+merged frag GLSL PASS
+merged reflection vert auxiliary ID2 PASS
+merged reflection frag auxiliary ID2 PASS
+ALL CHECKS PASS

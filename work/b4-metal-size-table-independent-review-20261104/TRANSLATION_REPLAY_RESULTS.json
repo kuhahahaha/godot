@@ -1,0 +1,118 @@
+[
+  {
+    "name": "multi-set disjoint auxiliary GREEN",
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/translate_test",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/multi_set.spv",
+      "fixed",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-size-table-independent-review-20261104/translation/multi_set-fixed.metal"
+    ],
+    "rc": 0,
+    "stdout": "PASS repository SPIRV-Cross stage=5 sets=2 array_length=1\n",
+    "stderr": "",
+    "input_sha256": {
+      "work/b4-metal-array-length-fix-20261104/translate_test": "2457eb2b5b242789219579e5b9de259c199adf3807eff70247d129b347bb08b0",
+      "work/b4-metal-array-length-fix-20261104/multi_set.spv": "60ccb998d84eab75f624ce457a14f1e3398ba01c6e454fa31aea5c27c401f821"
+    }
+  },
+  {
+    "name": "actual container array-refusal slice",
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/translate_test",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/descriptor_array.spv",
+      "fixed",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-size-table-independent-review-20261104/translation/descriptor_array.metal"
+    ],
+    "rc": 3,
+    "stdout": "",
+    "stderr": "TARGET_REFUSAL buffer descriptor arrays unsupported by RD single-ID ABI\n",
+    "input_sha256": {
+      "work/b4-metal-array-length-fix-20261104/translate_test": "2457eb2b5b242789219579e5b9de259c199adf3807eff70247d129b347bb08b0",
+      "work/b4-metal-array-length-fix-20261104/descriptor_array.spv": "d793ac841c7df64c6eaaf1ce75bc4a568c136cac22abdfbbd46238ce07413f85"
+    }
+  },
+  {
+    "name": "mixed resources auxiliary ID5",
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/translate_test",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/mixed_resources.spv",
+      "fixed",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-size-table-independent-review-20261104/translation/mixed_resources.metal"
+    ],
+    "rc": 0,
+    "stdout": "PASS repository SPIRV-Cross stage=5 sets=1 array_length=1\n",
+    "stderr": "",
+    "input_sha256": {
+      "work/b4-metal-array-length-fix-20261104/translate_test": "2457eb2b5b242789219579e5b9de259c199adf3807eff70247d129b347bb08b0",
+      "work/b4-metal-array-length-fix-20261104/mixed_resources.spv": "f7f6303aa5d11a1101a8fa04da863678c25abf3739832d69d92e13bb3ae07c38"
+    }
+  },
+  {
+    "name": "actual container direct-length refusal slice",
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/translate_test",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/mixed_resources.spv",
+      "direct",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-size-table-independent-review-20261104/translation/direct_length.metal"
+    ],
+    "rc": 4,
+    "stdout": "",
+    "stderr": "TARGET_REFUSAL direct OpArrayLength requires unsupported auxiliary binding\n",
+    "input_sha256": {
+      "work/b4-metal-array-length-fix-20261104/translate_test": "2457eb2b5b242789219579e5b9de259c199adf3807eff70247d129b347bb08b0",
+      "work/b4-metal-array-length-fix-20261104/mixed_resources.spv": "f7f6303aa5d11a1101a8fa04da863678c25abf3739832d69d92e13bb3ae07c38"
+    }
+  },
+  {
+    "name": "direct no-length retained",
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/translate_test",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/direct_no_length.spv",
+      "direct",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-size-table-independent-review-20261104/translation/direct_no_length.metal"
+    ],
+    "rc": 0,
+    "stdout": "PASS repository SPIRV-Cross stage=5 sets=1 array_length=0\n",
+    "stderr": "",
+    "input_sha256": {
+      "work/b4-metal-array-length-fix-20261104/translate_test": "2457eb2b5b242789219579e5b9de259c199adf3807eff70247d129b347bb08b0",
+      "work/b4-metal-array-length-fix-20261104/direct_no_length.spv": "d8989c0c5242159d44b408d4ab08f72b8841d44e1f107bdfb5f5b3d32a03ccd6"
+    }
+  },
+  {
+    "name": "merged reflection vert auxiliary ID2",
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/translate_test",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/merged.vert.spv",
+      "fixed",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-size-table-independent-review-20261104/translation/merged-vert.metal",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/merged.frag.spv"
+    ],
+    "rc": 0,
+    "stdout": "PASS repository SPIRV-Cross stage=0 sets=1 array_length=1\n",
+    "stderr": "",
+    "input_sha256": {
+      "work/b4-metal-array-length-fix-20261104/translate_test": "2457eb2b5b242789219579e5b9de259c199adf3807eff70247d129b347bb08b0",
+      "work/b4-metal-array-length-fix-20261104/merged.vert.spv": "5d04b7664a692dc776af0a6ec1b00565a1dc37d452bfa6d107288ae58add708f",
+      "work/b4-metal-array-length-fix-20261104/merged.frag.spv": "fe9eb113f0462604a4d40bff1c80f66e630609907141497285676963ea13cc67"
+    }
+  },
+  {
+    "name": "merged reflection frag auxiliary ID2",
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/translate_test",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/merged.frag.spv",
+      "fixed",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-size-table-independent-review-20261104/translation/merged-frag.metal",
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/merged.vert.spv"
+    ],
+    "rc": 0,
+    "stdout": "PASS repository SPIRV-Cross stage=4 sets=1 array_length=1\n",
+    "stderr": "",
+    "input_sha256": {
+      "work/b4-metal-array-length-fix-20261104/translate_test": "2457eb2b5b242789219579e5b9de259c199adf3807eff70247d129b347bb08b0",
+      "work/b4-metal-array-length-fix-20261104/merged.frag.spv": "fe9eb113f0462604a4d40bff1c80f66e630609907141497285676963ea13cc67",
+      "work/b4-metal-array-length-fix-20261104/merged.vert.spv": "5d04b7664a692dc776af0a6ec1b00565a1dc37d452bfa6d107288ae58add708f"
+    }
+  }
+]

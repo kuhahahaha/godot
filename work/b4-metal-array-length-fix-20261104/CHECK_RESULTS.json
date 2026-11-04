@@ -1,0 +1,347 @@
+{
+  "rows": [
+    {
+      "name": "production layout helper",
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/layout_test"
+      ],
+      "returncode": 0,
+      "expected_returncode": 0,
+      "stdout": "PASS checked layout boundaries, exact lengths, same-layout reuse, independent sets, dynamic self-pointer and overflow\n",
+      "stderr": ""
+    },
+    {
+      "name": "INIT exact mapping RED",
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/translate_test",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-guard-main-rd-gpu-20261104/project/INIT.spv",
+        "baseline",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/INIT-baseline.metal"
+      ],
+      "returncode": 2,
+      "expected_returncode": 2,
+      "stdout": "",
+      "stderr": "TARGET_RED auxiliary argument collides with a real resource\n"
+    },
+    {
+      "name": "INIT auxiliary mapping GREEN",
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/translate_test",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-guard-main-rd-gpu-20261104/project/INIT.spv",
+        "fixed",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/INIT-fixed.metal"
+      ],
+      "returncode": 0,
+      "expected_returncode": 0,
+      "stdout": "PASS repository SPIRV-Cross stage=5 sets=1 array_length=1\n",
+      "stderr": ""
+    },
+    {
+      "name": "VALIDATE exact mapping RED",
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/translate_test",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-guard-main-rd-gpu-20261104/project/VALIDATE.spv",
+        "baseline",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/VALIDATE-baseline.metal"
+      ],
+      "returncode": 2,
+      "expected_returncode": 2,
+      "stdout": "",
+      "stderr": "TARGET_RED auxiliary argument collides with a real resource\n"
+    },
+    {
+      "name": "VALIDATE auxiliary mapping GREEN",
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/translate_test",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-guard-main-rd-gpu-20261104/project/VALIDATE.spv",
+        "fixed",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/VALIDATE-fixed.metal"
+      ],
+      "returncode": 0,
+      "expected_returncode": 0,
+      "stdout": "PASS repository SPIRV-Cross stage=5 sets=1 array_length=1\n",
+      "stderr": ""
+    },
+    {
+      "name": "FINALIZE exact mapping RED",
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/translate_test",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-guard-main-rd-gpu-20261104/project/FINALIZE.spv",
+        "baseline",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/FINALIZE-baseline.metal"
+      ],
+      "returncode": 2,
+      "expected_returncode": 2,
+      "stdout": "",
+      "stderr": "TARGET_RED auxiliary argument collides with a real resource\n"
+    },
+    {
+      "name": "FINALIZE auxiliary mapping GREEN",
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/translate_test",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-guard-main-rd-gpu-20261104/project/FINALIZE.spv",
+        "fixed",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/FINALIZE-fixed.metal"
+      ],
+      "returncode": 0,
+      "expected_returncode": 0,
+      "stdout": "PASS repository SPIRV-Cross stage=5 sets=1 array_length=1\n",
+      "stderr": ""
+    },
+    {
+      "name": "INIT_EMPTY exact mapping RED",
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/translate_test",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-guard-main-rd-gpu-20261104/project/INIT_EMPTY.spv",
+        "baseline",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/INIT_EMPTY-baseline.metal"
+      ],
+      "returncode": 2,
+      "expected_returncode": 2,
+      "stdout": "",
+      "stderr": "TARGET_RED auxiliary argument collides with a real resource\n"
+    },
+    {
+      "name": "INIT_EMPTY auxiliary mapping GREEN",
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/translate_test",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-guard-main-rd-gpu-20261104/project/INIT_EMPTY.spv",
+        "fixed",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/INIT_EMPTY-fixed.metal"
+      ],
+      "returncode": 0,
+      "expected_returncode": 0,
+      "stdout": "PASS repository SPIRV-Cross stage=5 sets=1 array_length=1\n",
+      "stderr": ""
+    },
+    {
+      "name": "FINALIZE_EMPTY exact mapping RED",
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/translate_test",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-guard-main-rd-gpu-20261104/project/FINALIZE_EMPTY.spv",
+        "baseline",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/FINALIZE_EMPTY-baseline.metal"
+      ],
+      "returncode": 2,
+      "expected_returncode": 2,
+      "stdout": "",
+      "stderr": "TARGET_RED auxiliary argument collides with a real resource\n"
+    },
+    {
+      "name": "FINALIZE_EMPTY auxiliary mapping GREEN",
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/translate_test",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-guard-main-rd-gpu-20261104/project/FINALIZE_EMPTY.spv",
+        "fixed",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/FINALIZE_EMPTY-fixed.metal"
+      ],
+      "returncode": 0,
+      "expected_returncode": 0,
+      "stdout": "PASS repository SPIRV-Cross stage=5 sets=1 array_length=1\n",
+      "stderr": ""
+    },
+    {
+      "name": "multi-set GLSL",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/multi_set.comp",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/multi_set.spv"
+      ],
+      "returncode": 0,
+      "expected_returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/multi_set.comp\n"
+    },
+    {
+      "name": "multi-set SPIRV",
+      "command": [
+        "spirv-val",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/multi_set.spv"
+      ],
+      "returncode": 0,
+      "expected_returncode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "multi-set baseline RED",
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/translate_test",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/multi_set.spv",
+        "baseline",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/multi_set-baseline.metal"
+      ],
+      "returncode": 2,
+      "expected_returncode": 2,
+      "stdout": "",
+      "stderr": "TARGET_RED auxiliary argument collides with a real resource\n"
+    },
+    {
+      "name": "multi-set disjoint auxiliary GREEN",
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/translate_test",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/multi_set.spv",
+        "fixed",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/multi_set-fixed.metal"
+      ],
+      "returncode": 0,
+      "expected_returncode": 0,
+      "stdout": "PASS repository SPIRV-Cross stage=5 sets=2 array_length=1\n",
+      "stderr": ""
+    },
+    {
+      "name": "array GLSL legal upstream",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/descriptor_array.comp",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/descriptor_array.spv"
+      ],
+      "returncode": 0,
+      "expected_returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/descriptor_array.comp\n"
+    },
+    {
+      "name": "actual container array-refusal slice",
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/translate_test",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/descriptor_array.spv",
+        "fixed",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/descriptor_array.metal"
+      ],
+      "returncode": 3,
+      "expected_returncode": 3,
+      "stdout": "",
+      "stderr": "TARGET_REFUSAL buffer descriptor arrays unsupported by RD single-ID ABI\n"
+    },
+    {
+      "name": "mixed resources GLSL",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/mixed_resources.comp",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/mixed_resources.spv"
+      ],
+      "returncode": 0,
+      "expected_returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/mixed_resources.comp\n"
+    },
+    {
+      "name": "mixed resources auxiliary ID5",
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/translate_test",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/mixed_resources.spv",
+        "fixed",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/mixed_resources.metal"
+      ],
+      "returncode": 0,
+      "expected_returncode": 0,
+      "stdout": "PASS repository SPIRV-Cross stage=5 sets=1 array_length=1\n",
+      "stderr": ""
+    },
+    {
+      "name": "actual container direct-length refusal slice",
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/translate_test",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/mixed_resources.spv",
+        "direct",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/direct_length.metal"
+      ],
+      "returncode": 4,
+      "expected_returncode": 4,
+      "stdout": "",
+      "stderr": "TARGET_REFUSAL direct OpArrayLength requires unsupported auxiliary binding\n"
+    },
+    {
+      "name": "direct no-length GLSL",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/direct_no_length.comp",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/direct_no_length.spv"
+      ],
+      "returncode": 0,
+      "expected_returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/direct_no_length.comp\n"
+    },
+    {
+      "name": "direct no-length retained",
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/translate_test",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/direct_no_length.spv",
+        "direct",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/direct_no_length.metal"
+      ],
+      "returncode": 0,
+      "expected_returncode": 0,
+      "stdout": "PASS repository SPIRV-Cross stage=5 sets=1 array_length=0\n",
+      "stderr": ""
+    },
+    {
+      "name": "merged vert GLSL",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/merged.vert",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/merged.vert.spv"
+      ],
+      "returncode": 0,
+      "expected_returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/merged.vert\n"
+    },
+    {
+      "name": "merged frag GLSL",
+      "command": [
+        "glslangValidator",
+        "-V",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/merged.frag",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/merged.frag.spv"
+      ],
+      "returncode": 0,
+      "expected_returncode": 0,
+      "stdout": "",
+      "stderr": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/merged.frag\n"
+    },
+    {
+      "name": "merged reflection vert auxiliary ID2",
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/translate_test",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/merged.vert.spv",
+        "fixed",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/merged-vert.metal",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/merged.frag.spv"
+      ],
+      "returncode": 0,
+      "expected_returncode": 0,
+      "stdout": "PASS repository SPIRV-Cross stage=0 sets=1 array_length=1\n",
+      "stderr": ""
+    },
+    {
+      "name": "merged reflection frag auxiliary ID2",
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/translate_test",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/merged.frag.spv",
+        "fixed",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/merged-frag.metal",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-array-length-fix-20261104/merged.vert.spv"
+      ],
+      "returncode": 0,
+      "expected_returncode": 0,
+      "stdout": "PASS repository SPIRV-Cross stage=4 sets=1 array_length=1\n",
+      "stderr": ""
+    }
+  ],
+  "engine_build": false,
+  "gpu": false
+}

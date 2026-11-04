@@ -1,0 +1,18 @@
+{
+  "binaries": {
+    "layout_test": {
+      "sha256": "315c20d322d98cd56e50f2a5ed7fe76d569258b3df9be7372a628fe0c862c09f",
+      "bytes": 65048
+    },
+    "translate_test": {
+      "sha256": "6d5d872d42aaa641429b38343235e2850cd397b7c30673159bb6e9a064d88e33",
+      "bytes": 7669056
+    },
+    "cache_gate_test": {
+      "sha256": "85f16bb2ab63ac74891322a75799227df06191adc4c3c3d5a543a87c161a79f8",
+      "bytes": 54112
+    }
+  },
+  "retained": false,
+  "reason": "Rebuild with verify.py; standalone executables omitted from source evidence package."
+}

@@ -1,0 +1,7 @@
+drivers/metal/metal_buffer_size_table.h
+drivers/metal/rendering_shader_container_metal.h
+drivers/metal/rendering_shader_container_metal.cpp
+drivers/metal/rendering_device_driver_metal.h
+drivers/metal/rendering_device_driver_metal.cpp
+drivers/metal/metal_objects_shared.h
+drivers/metal/metal3_objects.cpp

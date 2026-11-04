@@ -201,7 +201,9 @@ private:
 	MetalDeviceProfile::MinimumRequirements inspect_spirv(const ReflectShader &p_shader);
 
 public:
-	static constexpr uint32_t FORMAT_VERSION = 3;
+	// Version4 fixes the argument-buffer size-table ABI for every storage set,
+	// including sets created with shaders which do not themselves use length().
+	static constexpr uint32_t FORMAT_VERSION = 4;
 	static void append_compile_policy_arguments(List<String> &r_args, const StageData &p_stage);
 #ifdef TESTS_ENABLED
 	struct OfflineCompileTestResult {
