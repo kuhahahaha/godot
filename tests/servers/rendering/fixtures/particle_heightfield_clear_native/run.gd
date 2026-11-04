@@ -1,0 +1,26 @@
+extends SceneTree
+
+var fixture: RefCounted
+var started: int
+
+func _initialize() -> void:
+	if not ClassDB.class_exists("ParticlesHeightfieldClearTestFixture"):
+		quit(77)
+		return
+	fixture = ClassDB.instantiate("ParticlesHeightfieldClearTestFixture")
+	started = Time.get_ticks_msec()
+	call_deferred("_start")
+
+func _start() -> void:
+	RenderingServer.set_render_loop_enabled(false)
+	RenderingServer.call_on_render_thread(Callable(fixture, "run"))
+
+func _process(_delta: float) -> bool:
+	var result: Dictionary = fixture.call("result")
+	if result.has("pass"):
+		print("HEIGHTFIELD_CLEAR_NATIVE_PASS ", JSON.stringify(result))
+		quit(0 if result["pass"] else 1)
+	elif Time.get_ticks_msec() - started > 30000:
+		print("HEIGHTFIELD_CLEAR_NATIVE_FAIL ", JSON.stringify(result))
+		quit(1)
+	return false
