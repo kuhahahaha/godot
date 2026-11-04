@@ -5,6 +5,10 @@
 #include "core/os/semaphore.h"
 #include "servers/rendering/rendering_server.h"
 #include <thread>
+#if defined(VULKAN_ENABLED) && defined(MACOS_ENABLED)
+#include "drivers/vulkan/rendering_context_driver_vulkan.h"
+#include "drivers/vulkan/rendering_device_driver_vulkan.h"
+#endif
 TEST_FORCE_LINK(test_qualification_ticket)
 
 // These controls feed deliberately distinct source observations into the
@@ -12,6 +16,18 @@ TEST_FORCE_LINK(test_qualification_ticket)
 // native dispatch; the actual Metal control remains separately required.
 class TestQualificationTicketAccess {
 public:
+	static Error original_upload_capacity(RenderingDeviceDriver &driver, uint32_t result_bytes, uint32_t workers) {
+		RenderingDevice device;
+		device.driver = &driver;
+		device.transfer_worker_pool_max_size = workers;
+		GDExtensionDeviceExit::QualificationTicket ticket;
+		ticket.preparation.expected_result_bytes = result_bytes;
+		const Error status = GDExtensionDeviceExit::Registry::get_singleton().qualification_typed_upload_capacity(&ticket, &device, 0);
+		CHECK(device.draw_graph.qualification_command_count() == 0);
+		CHECK(ticket.facts.is_empty());
+		device.driver = nullptr;
+		return status;
+	}
 	static GDExtensionQualificationRecordV2 range_request() {
 		GDExtensionQualificationRecordV2 q = {};
 		q.abi = { 2, sizeof(GDExtensionDeviceExitAbi), 0 };
@@ -1156,6 +1172,21 @@ TEST_CASE("[Qualification][MultiReadback] Body proof excludes pending sources fr
 TEST_CASE("[Qualification][MultiReadback] V2 empty domain keeps a real guarded group and V1 retains its original nonempty rule") {
 	TestQualificationTicketAccess::empty_range_dispatch();
 }
+
+#if defined(VULKAN_ENABLED) && defined(MACOS_ENABLED)
+TEST_CASE("[Qualification][VulkanQualification] original gate charges graphs and native submissions together") {
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	// G314 + (G314+1)*(11+1) = 4094 fits the unchanged 4096 facts.
+	CHECK(TestQualificationTicketAccess::original_upload_capacity(driver, 9920, 11) == OK);
+	// The next graph still has a native bound below 4096, but total facts
+	// become 4107. Reject before any graph or source is published.
+	CHECK(TestQualificationTicketAccess::original_upload_capacity(driver, 9952, 11) == ERR_PARAMETER_RANGE_ERROR);
+	CHECK(TestQualificationTicketAccess::original_upload_capacity(driver, 9920, UINT32_MAX) == ERR_PARAMETER_RANGE_ERROR);
+}
+#endif
 
 TEST_CASE("[Qualification] continuation capacity preserves main and waitless worker profiles") {
 	TestQualificationTicketAccess::continuation_profile_capacity();

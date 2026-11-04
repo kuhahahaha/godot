@@ -403,6 +403,13 @@ public:
 		return OK;
 	}
 	bool native_call_observation_supported() const override { return true; }
+	uint32_t qualification_native_call_bound(uint32_t p_slots) const override {
+		// Each nonempty main or transfer-worker slot makes one vkQueueSubmit;
+		// waits/signals share that VkSubmitInfo. Segment preparation adds none.
+		// The inherited profile checks frame validity and main+worker overflow.
+		// This bounds retained submission sources, not WSI presentation facts.
+		return p_slots <= 4096 ? p_slots : 0;
+	}
 	FencePollResult native_call_poll(uint64_t) override;
 	FencePollResult native_call_wait(uint64_t) override;
 	Error native_call_recycle(uint64_t) override;
@@ -410,7 +417,7 @@ public:
 	Error native_call_retain(uint64_t) override;
 	Error native_call_release(uint64_t) override;
 	// This profile admits no presentation and executes at most one vkQueueSubmit
-	// per command slot. Vulkan qualification keeps its existing unavailable cap.
+	// per command slot. Qualification separately charges graph facts above.
 	uint32_t record_native_call_bound(uint32_t slots) const override { return slots; }
 	virtual FenceID fence_create() override final;
 	virtual Error fence_wait(FenceID p_fence) override final;

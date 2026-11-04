@@ -98,6 +98,27 @@ public:
 	}
 };
 
+TEST_CASE("[K03][VulkanQualification] checked submission bound covers main and worker slots") {
+	RenderingContextDriverVulkan context;
+	REQUIRE(context.initialize() == OK);
+	RenderingDeviceDriverVulkan driver(&context);
+	REQUIRE(driver.initialize(0, 2) == OK);
+	CHECK(driver.qualification_native_call_bound(0) == 0);
+	CHECK(driver.qualification_native_call_bound(1) == 1);
+	CHECK(driver.qualification_native_call_bound(4096) == 4096);
+	CHECK(driver.qualification_native_call_bound(4097) == 0);
+	CHECK(driver.qualification_native_call_bound(UINT32_MAX) == 0);
+	// The original G144 profile has 145 main slots and eleven workers per
+	// continuation frame. Vulkan submits each slot once, without hidden work.
+	CHECK(driver.qualification_native_call_bound_for_profile(145, 1595, 145) == 1740);
+	CHECK(driver.qualification_native_call_bound_for_profile(1, 4095, 1) == 4096);
+	CHECK(driver.qualification_native_call_bound_for_profile(1, 4096, 1) == 0);
+	CHECK(driver.qualification_native_call_bound_for_profile(UINT32_MAX, 1, 1) == 0);
+	CHECK(driver.qualification_native_call_bound_for_profile(1, 0, 0) == 0);
+	CHECK(driver.qualification_native_call_bound_for_profile(1, 0, 2) == 0);
+	CHECK(driver.qualification_native_call_bound_for_profile(0, 0, 1) == 0);
+}
+
 TEST_CASE("[K03][VulkanCompletion] native batch identity survives mismatch and exact recycle") {
 	using RDD = RenderingDeviceDriver;
 	RenderingContextDriverVulkan context;
