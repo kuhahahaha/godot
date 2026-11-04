@@ -1,0 +1,36 @@
+[
+  {
+    "name": "syntax-debug-tests",
+    "command": [
+      "clang++",
+      "-std=c++17",
+      "-fsyntax-only",
+      "-I.",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/platform/macos",
+      "-DDEBUG_ENABLED",
+      "-DTESTS_ENABLED",
+      "-DTOOLS_ENABLED",
+      "-DTHREADS_ENABLED",
+      "servers/rendering/renderer_rd/effects/particles_external_guard.cpp",
+      "tests/servers/rendering/test_external_output_guard.cpp"
+    ],
+    "rc": 0,
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "syntax-release",
+    "command": [
+      "clang++",
+      "-std=c++17",
+      "-fsyntax-only",
+      "-I.",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104",
+      "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/platform/macos",
+      "-DTHREADS_ENABLED",
+      "servers/rendering/renderer_rd/effects/particles_external_guard.cpp"
+    ],
+    "rc": 0,
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+]

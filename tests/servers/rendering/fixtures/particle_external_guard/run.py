@@ -36,9 +36,12 @@ def main():
         raise SystemExit('required component tools missing: ' + str(tools))
     with tempfile.TemporaryDirectory(prefix='particle-external-guard-') as directory:
         temp = Path(directory)
-        for mode in ('INIT', 'VALIDATE', 'FINALIZE'):
+        for mode in ('INIT', 'VALIDATE', 'FINALIZE', 'INIT_EMPTY', 'FINALIZE_EMPTY'):
             shader = temp / (mode + '.comp')
-            shader.write_text(glsl.replace('#version 450', '#version 450\n#define MODE_' + mode))
+            defines = '#define MODE_' + mode.removesuffix('_EMPTY') + '\n'
+            if mode.endswith('_EMPTY'):
+                defines += '#define MODE_EMPTY\n'
+            shader.write_text(glsl.replace('#version 450', '#version 450\n' + defines))
             spv = temp / (mode + '.spv')
             run([tools['glslangValidator'], '-V', str(shader), '-o', str(spv)])
             run([tools['spirv-val'], str(spv)])
@@ -48,8 +51,11 @@ def main():
             for member, offset in enumerate((0, 16, 32, 48, 64, 80, 96, 144, 192, 208, 224)):
                 assert f'OpMemberDecorate %GeometryProof {member} Offset {offset}' in assembly
             for index, name in enumerate(('current_records', 'previous_records', 'output_meta', 'source', 'scratch', 'status', 'commands', 'proof')):
-                assert f'OpDecorate %{name} Binding {index}' in assembly
-                assert f'OpDecorate %{name} DescriptorSet 0' in assembly
+                if mode.endswith('_EMPTY') and index < 2:
+                    assert f'OpDecorate %{name} Binding {index}' not in assembly, 'empty guard must not require record descriptors'
+                else:
+                    assert f'OpDecorate %{name} Binding {index}' in assembly
+                    assert f'OpDecorate %{name} DescriptorSet 0' in assembly
             assert 'ArrayStride 144' in assembly
             if mode == 'VALIDATE':
                 assert assembly.count('NoContraction') >= 8

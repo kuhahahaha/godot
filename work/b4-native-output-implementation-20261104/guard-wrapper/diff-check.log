@@ -1,0 +1,17 @@
+[
+  {
+    "file": "servers/rendering/renderer_rd/effects/particles_external_guard.cpp",
+    "rc": 1,
+    "diagnostics": ""
+  },
+  {
+    "file": "servers/rendering/renderer_rd/effects/particles_external_guard.h",
+    "rc": 1,
+    "diagnostics": ""
+  },
+  {
+    "file": "tests/servers/rendering/test_external_output_guard.cpp",
+    "rc": 1,
+    "diagnostics": ""
+  }
+]

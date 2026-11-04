@@ -4,14 +4,20 @@
 
 #VERSION_DEFINES
 
+#if defined(MODE_EMPTY) && defined(MODE_VALIDATE)
+#error Empty packets have no record validation dispatch.
+#endif
+
 // Instance192 only. All bindings and proof data are retained by the K owner.
 // Binding 3 is the original readable source backing, never a CPU count upload.
 // The owner resolves the accessor and its validity rule through the real E09
 // bridge before recording; these scalar offsets do not confer source authority.
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
+#ifndef MODE_EMPTY
 layout(set = 0, binding = 0, std430) restrict readonly buffer CurrentRecords { uint words[]; } current_records;
 layout(set = 0, binding = 1, std430) restrict readonly buffer PreviousRecords { uint words[]; } previous_records;
+#endif
 layout(set = 0, binding = 2, std430) restrict readonly buffer OutputMetadata { uint words[]; } output_meta;
 layout(set = 0, binding = 3, std430) restrict readonly buffer SourceBacking { uint words[]; } source;
 layout(set = 0, binding = 4, std430) restrict buffer GuardScratch { uint words[]; } scratch;
@@ -150,6 +156,7 @@ bool contained(vec2 x, vec2 y, vec2 z, vec3 lower, vec3 upper) {
 			x.y <= upper.x && y.y <= upper.y && z.y <= upper.z;
 }
 
+#ifndef MODE_EMPTY
 uint read_record(uint base, uint index, bool previous) {
 	return previous ? previous_records.words[base + index] : current_records.words[base + index];
 }
@@ -230,6 +237,8 @@ uint validate_record(uint ordinal, bool previous, out uint first_failure) {
 	return record_fault;
 }
 
+#endif
+
 void initialize_guard() {
 	for (uint i = 0u; i < 16u; i++) {
 		scratch.words[i] = 0u;
@@ -247,6 +256,11 @@ void initialize_guard() {
 		commands.words[i] = 0u;
 	}
 	uint initial_fault = 0u;
+#ifdef MODE_EMPTY
+	if (params.capacity != 0u) {
+		initial_fault |= COUNT_FAULT;
+	}
+#endif
 	if (params.surface_count == 0u || params.surface_count > 8u || params.capacity > (1u << 20u) ||
 			params.reserved0 != 0u || params.reserved1 != 0u ||
 			uint(commands.words.length()) < params.surface_count * 5u || uint(proof.surfaces.length()) < params.surface_count) {

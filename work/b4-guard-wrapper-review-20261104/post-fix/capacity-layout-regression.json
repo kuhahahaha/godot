@@ -1,0 +1,44 @@
+{
+  "execution": "CPU production method body with transport shims; glslang SPIR-V reflection",
+  "snapshot_sha256": {
+    "particles_external_guard.glsl": "4570c3136e27a3beb699593d1e496119fa677d44c3cc5abfe31c5e2712c982d7",
+    "particles_external_guard.cpp": "57fefc032cbe09ba9da109e702d40bc0de49c107ff4d101cfa3475017957f9c4",
+    "particles_external_guard.h": "7b7f55f71f7d6c34591c253e2cf9f983087f149c53640325556c3e1506513910"
+  },
+  "planner_rc": 0,
+  "provided_bindings": [
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "variants": {
+    "INIT_EMPTY": {
+      "reflected_required_bindings": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "missing_bindings": []
+    },
+    "FINALIZE_EMPTY": {
+      "reflected_required_bindings": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "missing_bindings": []
+    }
+  },
+  "empty_descriptor_coverage_pass": true,
+  "empty_modes_selected_and_validation_absent": true,
+  "native_uniform_set_execution": false
+}

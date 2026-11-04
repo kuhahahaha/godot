@@ -1,0 +1,11 @@
+INIT: SPIR-V compile/validate/layout PASS
+VALIDATE: SPIR-V compile/validate/layout PASS
+FINALIZE: SPIR-V compile/validate/layout PASS
+Traceback (most recent call last):
+  File "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_external_guard/run.py", line 104, in <module>
+    main()
+    ~~~~^^
+  File "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_external_guard/run.py", line 55, in main
+    assert f'OpDecorate %{name} Binding {index}' not in assembly, 'empty guard must not require record descriptors'
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: empty guard must not require record descriptors

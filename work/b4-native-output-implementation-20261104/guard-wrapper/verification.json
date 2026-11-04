@@ -1,0 +1,82 @@
+{
+  "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104",
+  "head": "8355b9a7ae2fb5e0ceaaa8453021865df16add62",
+  "checks": [
+    {
+      "name": "syntax-debug-tests",
+      "command": [
+        "clang++",
+        "-std=c++17",
+        "-fsyntax-only",
+        "-I.",
+        "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104",
+        "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/platform/macos",
+        "-DDEBUG_ENABLED",
+        "-DTESTS_ENABLED",
+        "-DTOOLS_ENABLED",
+        "-DTHREADS_ENABLED",
+        "servers/rendering/renderer_rd/effects/particles_external_guard.cpp",
+        "tests/servers/rendering/test_external_output_guard.cpp"
+      ],
+      "rc": 0,
+      "log": "syntax-debug-tests.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "syntax-release",
+      "command": [
+        "clang++",
+        "-std=c++17",
+        "-fsyntax-only",
+        "-I.",
+        "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104",
+        "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/platform/macos",
+        "-DTHREADS_ENABLED",
+        "servers/rendering/renderer_rd/effects/particles_external_guard.cpp"
+      ],
+      "rc": 0,
+      "log": "syntax-release.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "shader-component",
+      "command": [
+        "python3",
+        "tests/servers/rendering/fixtures/particle_external_guard/run.py",
+        "--mutations"
+      ],
+      "rc": 0,
+      "log": "empty-layout-green.log",
+      "log_sha256": "d1d456a6b12e1764e28610f7a47f426632e098c746d3d73660794b7aa6296db3"
+    }
+  ],
+  "sha256": {
+    "servers/rendering/renderer_rd/effects/particles_external_guard.cpp": "57fefc032cbe09ba9da109e702d40bc0de49c107ff4d101cfa3475017957f9c4",
+    "servers/rendering/renderer_rd/effects/particles_external_guard.h": "7b7f55f71f7d6c34591c253e2cf9f983087f149c53640325556c3e1506513910",
+    "tests/servers/rendering/test_external_output_guard.cpp": "157d727d8ab8bee9e92fdc2a1cf705fba361020a607f6dec683e2e476993127a",
+    "servers/rendering/renderer_rd/shaders/particles_external_guard.glsl": "4570c3136e27a3beb699593d1e496119fa677d44c3cc5abfe31c5e2712c982d7",
+    "servers/rendering/renderer_rd/shaders/particles_external_guard.glsl.gen.h": "388aab6c6ed4ac43bdbca7dbca8994da1deae58ff27903e55da3c9ad302f6dc9"
+  },
+  "new_doctest_cases": 5,
+  "new_doctest_run": false,
+  "gpu_execution": false,
+  "native_pipeline_preparation_run": false,
+  "production_source_authority": false,
+  "diff_checks": [
+    {
+      "file": "servers/rendering/renderer_rd/effects/particles_external_guard.cpp",
+      "rc": 1,
+      "diagnostics": ""
+    },
+    {
+      "file": "servers/rendering/renderer_rd/effects/particles_external_guard.h",
+      "rc": 1,
+      "diagnostics": ""
+    },
+    {
+      "file": "tests/servers/rendering/test_external_output_guard.cpp",
+      "rc": 1,
+      "diagnostics": ""
+    }
+  ]
+}

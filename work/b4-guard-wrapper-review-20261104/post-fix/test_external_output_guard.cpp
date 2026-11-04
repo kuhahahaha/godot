@@ -1,0 +1,189 @@
+/**************************************************************************/
+/*  test_external_output_guard.cpp                                        */
+/**************************************************************************/
+
+#include "servers/rendering/renderer_rd/effects/particles_external_guard.h"
+#include "tests/test_macros.h"
+
+TEST_FORCE_LINK(test_external_output_guard)
+
+namespace TestExternalOutputGuard {
+
+using Guard = RendererRD::ParticlesExternalGuard;
+
+// Test-local RIDs exercise pure layout rejection, never real native backing.
+static Guard::Bindings bindings_for(uint32_t p_capacity, uint32_t p_surfaces) {
+	Guard::Bindings bindings;
+	const uint64_t bytes[Guard::BINDING_COUNT] = { uint64_t(p_capacity) * 192, uint64_t(p_capacity) * 192, 32, 16, 64, 32, uint64_t(p_surfaces) * 20, 224 + uint64_t(p_surfaces) * 144 };
+	for (uint32_t i = 0; i < Guard::BINDING_COUNT; i++) {
+		bindings.buffers[i].byte_length = bytes[i];
+		if (bytes[i] != 0) {
+			bindings.buffers[i].rid = RID::from_uint64(100 + i);
+		}
+	}
+	return bindings;
+}
+
+static Guard::GeometryProofHeader source_header() {
+	Guard::GeometryProofHeader proof;
+	proof.source_accessor[0] = 1;
+	proof.source_accessor[1] = 3;
+	proof.source_accessor[2] = 1;
+	proof.source_accessor[3] = 1;
+	return proof;
+}
+
+static Guard::PushConstant request_for(uint32_t p_capacity, uint32_t p_surfaces = 1) {
+	Guard::PushConstant request;
+	request.capacity = p_capacity;
+	request.record_count = p_capacity;
+	request.surface_count = p_surfaces;
+	request.sequence_low = 0x12345678;
+	request.sequence_high = 0xabcdef01;
+	return request;
+}
+
+static void rejects_unchanged(const Guard::PushConstant &p_request, const Guard::Bindings &p_bindings, const Guard::GeometryProofHeader &p_proof, uint32_t p_groups = 8) {
+	Guard::LayoutPlan plan;
+	plan.initialize.capacity = 999;
+	plan.finalize.sequence_high = 777;
+	CHECK(Guard::plan_layout(p_request, p_bindings, p_proof, p_groups, plan) == ERR_INVALID_PARAMETER);
+	CHECK(plan.initialize.capacity == 999);
+	CHECK(plan.finalize.sequence_high == 777);
+	CHECK(plan.uniforms.is_empty());
+	CHECK(plan.validation_chunks.is_empty());
+}
+
+TEST_CASE("[ExternalOutputGuard] bounded chunks cover every capacity lane once before separate finalize") {
+	const auto request = request_for(257, 8);
+	Guard::LayoutPlan plan;
+	REQUIRE(Guard::plan_layout(request, bindings_for(257, 8), source_header(), 2, plan) == OK);
+	REQUIRE(plan.validation_chunks.size() == 3);
+	REQUIRE(plan.validation_groups_x.size() == 3);
+	CHECK(plan.validation_chunks[0].record_base == 0);
+	CHECK(plan.validation_chunks[0].record_count == 128);
+	CHECK(plan.validation_chunks[1].record_base == 128);
+	CHECK(plan.validation_chunks[1].record_count == 128);
+	CHECK(plan.validation_chunks[2].record_base == 256);
+	CHECK(plan.validation_chunks[2].record_count == 1);
+	CHECK(plan.validation_groups_x[0] == 2);
+	CHECK(plan.validation_groups_x[1] == 2);
+	CHECK(plan.validation_groups_x[2] == 1);
+	CHECK(plan.initialize.record_count == 0);
+	CHECK(plan.finalize.record_count == 0);
+	CHECK(plan.finalize.sequence_low == 0x12345678);
+	CHECK(plan.finalize.sequence_high == 0xabcdef01);
+	CHECK(plan.uniforms.size() == 8);
+	CHECK(plan.initialize_mode == Guard::INIT);
+	CHECK(plan.finalize_mode == Guard::FINALIZE);
+	// A caller cannot silently validate a suffix/subset and then finalize.
+	auto partial = request;
+	partial.record_base = 1;
+	rejects_unchanged(partial, bindings_for(257, 8), source_header());
+	partial = request;
+	partial.record_count = 256;
+	rejects_unchanged(partial, bindings_for(257, 8), source_header());
+}
+
+TEST_CASE("[ExternalOutputGuard] zero capacity retains actual source validation without dummy records") {
+	const auto request = request_for(0);
+	const auto bindings = bindings_for(0, 1);
+	Guard::LayoutPlan plan;
+	REQUIRE(Guard::plan_layout(request, bindings, source_header(), 1, plan) == OK);
+	CHECK(plan.validation_chunks.is_empty());
+	CHECK(plan.uniforms.size() == 6);
+	CHECK(plan.initialize_mode == Guard::INIT_EMPTY);
+	CHECK(plan.finalize_mode == Guard::FINALIZE_EMPTY);
+	for (const auto &uniform : plan.uniforms) {
+		CHECK(uniform.binding >= Guard::OUTPUT_META);
+	}
+	auto missing_source = bindings;
+	missing_source.buffers[Guard::SOURCE_BACKING] = Guard::BufferBinding();
+	rejects_unchanged(request, missing_source, source_header());
+	auto dummy_record = bindings;
+	dummy_record.buffers[Guard::CURRENT_RECORDS].rid = RID::from_uint64(500);
+	dummy_record.buffers[Guard::CURRENT_RECORDS].byte_length = 192;
+	rejects_unchanged(request, dummy_record, source_header());
+}
+
+TEST_CASE("[ExternalOutputGuard] every binding has exact protected extent and separate retained RID") {
+	const auto request = request_for(4, 2);
+	const auto bindings = bindings_for(4, 2);
+	for (uint32_t i = 0; i < Guard::BINDING_COUNT; i++) {
+		auto malformed = bindings;
+		malformed.buffers[i].rid = RID();
+		rejects_unchanged(request, malformed, source_header());
+		malformed = bindings;
+		malformed.buffers[i].byte_length = UINT64_C(0x100000000);
+		rejects_unchanged(request, malformed, source_header());
+		malformed = bindings;
+		malformed.buffers[i].byte_length--;
+		rejects_unchanged(request, malformed, source_header());
+		if (i != Guard::SOURCE_BACKING) {
+			malformed = bindings;
+			malformed.buffers[i].byte_length += 4;
+			rejects_unchanged(request, malformed, source_header());
+		}
+		for (uint32_t j = 0; j < i; j++) {
+			malformed = bindings;
+			malformed.buffers[i].rid = malformed.buffers[j].rid;
+			rejects_unchanged(request, malformed, source_header());
+		}
+	}
+}
+
+TEST_CASE("[ExternalOutputGuard] source accessor and reserved header fields reject before producing a plan") {
+	const auto request = request_for(1);
+	const auto bindings = bindings_for(1, 1);
+	const auto proof = source_header();
+	for (int index : { 0, 1 }) {
+		auto malformed = proof;
+		malformed.source_accessor[index] = 4; // First word beyond the 16-byte source.
+		rejects_unchanged(request, bindings, malformed);
+	}
+	for (int index : { 2, 3 }) {
+		for (uint32_t invalid : { 0u, 3u, UINT32_MAX }) {
+			auto malformed = proof;
+			malformed.source_accessor[index] = invalid;
+			rejects_unchanged(request, bindings, malformed);
+		}
+	}
+	for (int index = 0; index < 4; index++) {
+		auto malformed = proof;
+		malformed.options[index] = index == 0 ? 2 : 1;
+		rejects_unchanged(request, bindings, malformed);
+	}
+	for (uint32_t rule : { 1u, 2u }) {
+		for (uint32_t space : { 1u, 2u }) {
+			auto supported = proof;
+			supported.source_accessor[2] = rule;
+			supported.source_accessor[3] = space;
+			supported.options[0] = 1;
+			Guard::LayoutPlan plan;
+			CHECK(Guard::plan_layout(request, bindings, supported, UINT32_MAX, plan) == OK);
+		}
+	}
+}
+
+TEST_CASE("[ExternalOutputGuard] invalid shape cannot enlarge dispatch or expose partial plan") {
+	const auto valid = request_for(1);
+	const auto bindings = bindings_for(1, 1);
+	for (uint32_t count : { 0u, 9u, UINT32_MAX }) {
+		auto request = valid;
+		request.surface_count = count;
+		rejects_unchanged(request, bindings, source_header());
+	}
+	auto request = valid;
+	request.capacity = (1u << 20) + 1;
+	request.record_count = request.capacity;
+	rejects_unchanged(request, bindings, source_header());
+	request = valid;
+	request.reserved0 = 1;
+	rejects_unchanged(request, bindings, source_header());
+	request = valid;
+	request.reserved1 = 1;
+	rejects_unchanged(request, bindings, source_header());
+	rejects_unchanged(valid, bindings, source_header(), 0);
+}
+
+} // namespace TestExternalOutputGuard
