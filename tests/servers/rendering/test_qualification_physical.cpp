@@ -343,8 +343,8 @@ public:
 		} };
 		uint64_t previous_serial = 0;
 		GDExtensionNativeUnitCreateRequestV1 first_origin = {};
-		for (uint32_t record_slot = 0; record_slot < (mode == 1 ? 128 : mode >= 2 ? 1
-																				  : 66);
+		for (uint32_t record_slot = 0; record_slot < (mode == 1 ? 128u : mode >= 2 ? 1u
+																				  : 66u);
 				++record_slot) {
 			for (uint32_t unit = 0; unit < 2; ++unit) {
 				INFO("Original record slot ", record_slot, ", physical unit ", unit);
@@ -1137,8 +1137,8 @@ public:
 			CHECK(ticket->resource_pins.get_capacity() == 0);
 			CHECK(ticket->physical_uses.get_capacity() == 0);
 			CHECK(ticket->texture_uploads.get_capacity() == 0);
-			for (const auto &upload : ticket->uploads) {
-				CHECK(upload.progress.segments.get_capacity() == 0);
+			for (const auto &upload_progress : ticket->uploads) {
+				CHECK(upload_progress.progress.segments.get_capacity() == 0);
 			}
 			CHECK(ticket->uploads.size() == original_plan_count);
 			CHECK(memcmp(&ticket->uploads[0].plan, &original_plan, sizeof(original_plan)) == 0);

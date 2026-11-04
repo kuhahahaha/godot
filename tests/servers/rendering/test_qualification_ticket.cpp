@@ -847,7 +847,6 @@ public:
 
 	static void unknown_native_error(uint32_t mode = 0) {
 		using namespace GDExtensionDeviceExit;
-		using RDD = RenderingDeviceDriver;
 		struct Driver : TransferTestDriverBase {
 			bool pending = false, finished = false;
 			Error native_call_retain(uint64_t serial) override {
