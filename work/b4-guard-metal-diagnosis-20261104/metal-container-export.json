@@ -1,0 +1,53 @@
+{
+  "command": [
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/host/editor.arm64",
+    "--path",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-guard-main-rd-gpu-20261104/project",
+    "--rendering-driver",
+    "metal",
+    "--rendering-method",
+    "mobile",
+    "--render-thread",
+    "safe",
+    "--resolution",
+    "64x64",
+    "--audio-driver",
+    "Dummy",
+    "--disable-crash-handler",
+    "--",
+    "--export-metal"
+  ],
+  "rc": 0,
+  "duration_seconds": 2.0026775000151247,
+  "host_sha256": "4e99d8df4482f596ee892944a38d9bff28bf8f622c8a4b2cd4e7081a33e6c528",
+  "script_sha256": "df09733f67cefb6902c705c3fdd422ee7d9c19641e53b8e0e669ffefb918a276",
+  "log_sha256": "3933e7a7fc7827f46ac3cf0abf384e4a30803e8d5c90d00921971b217efe400a",
+  "outputs": {
+    "work/b4-guard-metal-diagnosis-20261104/INIT-validate_only_records.metalbin": {
+      "bytes": 4276,
+      "sha256": "45648648815d9361cddd669f09bd8b8f3abb48be0cc2226e968468df1631572a"
+    },
+    "work/b4-guard-metal-diagnosis-20261104/FINALIZE_EMPTY.metalbin": {
+      "bytes": 1840,
+      "sha256": "b636ce5fcbde4c5ef99da5778083b47ae59dc0f8967b1fb3dd29bd8fc5b29e49"
+    },
+    "work/b4-guard-metal-diagnosis-20261104/INIT.metalbin": {
+      "bytes": 4456,
+      "sha256": "a3943934d4858e3bcc28575b6e14dac1c1bb832423ec45471379057e64a2dea8"
+    },
+    "work/b4-guard-metal-diagnosis-20261104/INIT_EMPTY.metalbin": {
+      "bytes": 4280,
+      "sha256": "6b0602c658c67a3dc933aa50661e0aa6d08144cb7265d82a520928c86b60b4bb"
+    },
+    "work/b4-guard-metal-diagnosis-20261104/VALIDATE.metalbin": {
+      "bytes": 6836,
+      "sha256": "91ac07bdebdae6e1fbb4295a3e99eebfe73fc731009345c4371310571b30f144"
+    },
+    "work/b4-guard-metal-diagnosis-20261104/FINALIZE.metalbin": {
+      "bytes": 2036,
+      "sha256": "6ddc0c1645e4e5c45a5ff5c0b7f39503a7ce9fc7cd7b2d22debf9eb02c9f1763"
+    }
+  },
+  "pipeline_creation": false,
+  "gpu_execution": false
+}

@@ -1,0 +1,369 @@
+; SPIR-V
+; Version: 1.0
+; Generator: Khronos Glslang Reference Front End; 11
+; Bound: 148
+; Schema: 0
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %main "main" %gl_GlobalInvocationID
+               OpExecutionMode %main LocalSize 64 1 1
+               OpSource GLSL 450
+               OpName %main "main"
+               OpName %GuardScratch "GuardScratch"
+               OpMemberName %GuardScratch 0 "words"
+               OpName %scratch "scratch"
+               OpName %GuardStatus "GuardStatus"
+               OpMemberName %GuardStatus 0 "words"
+               OpName %status "status"
+               OpName %gl_GlobalInvocationID "gl_GlobalInvocationID"
+               OpName %bits "bits"
+               OpName %i "i"
+               OpName %Params "Params"
+               OpMemberName %Params 0 "capacity"
+               OpMemberName %Params 1 "sequence_low"
+               OpMemberName %Params 2 "sequence_high"
+               OpMemberName %Params 3 "surface_count"
+               OpMemberName %Params 4 "record_base"
+               OpMemberName %Params 5 "record_count"
+               OpMemberName %Params 6 "reserved0"
+               OpMemberName %Params 7 "reserved1"
+               OpName %params "params"
+               OpName %ProtectedCommands "ProtectedCommands"
+               OpMemberName %ProtectedCommands 0 "words"
+               OpName %commands "commands"
+               OpName %SurfaceProof "SurfaceProof"
+               OpMemberName %SurfaceProof 0 "current_mesh_min"
+               OpMemberName %SurfaceProof 1 "current_mesh_max"
+               OpMemberName %SurfaceProof 2 "current_displacement_min"
+               OpMemberName %SurfaceProof 3 "current_displacement_max"
+               OpMemberName %SurfaceProof 4 "previous_mesh_min"
+               OpMemberName %SurfaceProof 5 "previous_mesh_max"
+               OpMemberName %SurfaceProof 6 "previous_displacement_min"
+               OpMemberName %SurfaceProof 7 "previous_displacement_max"
+               OpMemberName %SurfaceProof 8 "command"
+               OpName %GeometryProof "GeometryProof"
+               OpMemberName %GeometryProof 0 "current_decl_min"
+               OpMemberName %GeometryProof 1 "current_decl_max"
+               OpMemberName %GeometryProof 2 "previous_decl_min"
+               OpMemberName %GeometryProof 3 "previous_decl_max"
+               OpMemberName %GeometryProof 4 "cull_min"
+               OpMemberName %GeometryProof 5 "cull_max"
+               OpMemberName %GeometryProof 6 "current_host_inverse_rows"
+               OpMemberName %GeometryProof 7 "previous_host_inverse_rows"
+               OpMemberName %GeometryProof 8 "source_accessor"
+               OpMemberName %GeometryProof 9 "options"
+               OpMemberName %GeometryProof 10 "surfaces"
+               OpName %proof "proof"
+               OpName %CurrentRecords "CurrentRecords"
+               OpMemberName %CurrentRecords 0 "words"
+               OpName %current_records "current_records"
+               OpName %PreviousRecords "PreviousRecords"
+               OpMemberName %PreviousRecords 0 "words"
+               OpName %previous_records "previous_records"
+               OpName %OutputMetadata "OutputMetadata"
+               OpMemberName %OutputMetadata 0 "words"
+               OpName %output_meta "output_meta"
+               OpName %SourceBacking "SourceBacking"
+               OpMemberName %SourceBacking 0 "words"
+               OpName %source "source"
+               OpDecorate %_runtimearr_uint ArrayStride 4
+               OpDecorate %GuardScratch BufferBlock
+               OpMemberDecorate %GuardScratch 0 Restrict
+               OpMemberDecorate %GuardScratch 0 Offset 0
+               OpDecorate %scratch Restrict
+               OpDecorate %scratch Binding 4
+               OpDecorate %scratch DescriptorSet 0
+               OpDecorate %_runtimearr_uint_0 ArrayStride 4
+               OpDecorate %GuardStatus BufferBlock
+               OpMemberDecorate %GuardStatus 0 Restrict
+               OpMemberDecorate %GuardStatus 0 Offset 0
+               OpDecorate %status Restrict
+               OpDecorate %status Binding 5
+               OpDecorate %status DescriptorSet 0
+               OpDecorate %gl_GlobalInvocationID BuiltIn GlobalInvocationId
+               OpDecorate %Params Block
+               OpMemberDecorate %Params 0 Offset 0
+               OpMemberDecorate %Params 1 Offset 4
+               OpMemberDecorate %Params 2 Offset 8
+               OpMemberDecorate %Params 3 Offset 12
+               OpMemberDecorate %Params 4 Offset 16
+               OpMemberDecorate %Params 5 Offset 20
+               OpMemberDecorate %Params 6 Offset 24
+               OpMemberDecorate %Params 7 Offset 28
+               OpDecorate %_runtimearr_uint_1 ArrayStride 4
+               OpDecorate %ProtectedCommands BufferBlock
+               OpMemberDecorate %ProtectedCommands 0 Restrict
+               OpMemberDecorate %ProtectedCommands 0 Offset 0
+               OpDecorate %commands Restrict
+               OpDecorate %commands Binding 6
+               OpDecorate %commands DescriptorSet 0
+               OpDecorate %_arr_v4float_uint_3 ArrayStride 16
+               OpDecorate %_arr_v4float_uint_3_0 ArrayStride 16
+               OpMemberDecorate %SurfaceProof 0 Offset 0
+               OpMemberDecorate %SurfaceProof 1 Offset 16
+               OpMemberDecorate %SurfaceProof 2 Offset 32
+               OpMemberDecorate %SurfaceProof 3 Offset 48
+               OpMemberDecorate %SurfaceProof 4 Offset 64
+               OpMemberDecorate %SurfaceProof 5 Offset 80
+               OpMemberDecorate %SurfaceProof 6 Offset 96
+               OpMemberDecorate %SurfaceProof 7 Offset 112
+               OpMemberDecorate %SurfaceProof 8 Offset 128
+               OpDecorate %_runtimearr_SurfaceProof ArrayStride 144
+               OpDecorate %GeometryProof BufferBlock
+               OpMemberDecorate %GeometryProof 0 Restrict
+               OpMemberDecorate %GeometryProof 0 NonWritable
+               OpMemberDecorate %GeometryProof 0 Offset 0
+               OpMemberDecorate %GeometryProof 1 Restrict
+               OpMemberDecorate %GeometryProof 1 NonWritable
+               OpMemberDecorate %GeometryProof 1 Offset 16
+               OpMemberDecorate %GeometryProof 2 Restrict
+               OpMemberDecorate %GeometryProof 2 NonWritable
+               OpMemberDecorate %GeometryProof 2 Offset 32
+               OpMemberDecorate %GeometryProof 3 Restrict
+               OpMemberDecorate %GeometryProof 3 NonWritable
+               OpMemberDecorate %GeometryProof 3 Offset 48
+               OpMemberDecorate %GeometryProof 4 Restrict
+               OpMemberDecorate %GeometryProof 4 NonWritable
+               OpMemberDecorate %GeometryProof 4 Offset 64
+               OpMemberDecorate %GeometryProof 5 Restrict
+               OpMemberDecorate %GeometryProof 5 NonWritable
+               OpMemberDecorate %GeometryProof 5 Offset 80
+               OpMemberDecorate %GeometryProof 6 Restrict
+               OpMemberDecorate %GeometryProof 6 NonWritable
+               OpMemberDecorate %GeometryProof 6 Offset 96
+               OpMemberDecorate %GeometryProof 7 Restrict
+               OpMemberDecorate %GeometryProof 7 NonWritable
+               OpMemberDecorate %GeometryProof 7 Offset 144
+               OpMemberDecorate %GeometryProof 8 Restrict
+               OpMemberDecorate %GeometryProof 8 NonWritable
+               OpMemberDecorate %GeometryProof 8 Offset 192
+               OpMemberDecorate %GeometryProof 9 Restrict
+               OpMemberDecorate %GeometryProof 9 NonWritable
+               OpMemberDecorate %GeometryProof 9 Offset 208
+               OpMemberDecorate %GeometryProof 10 Restrict
+               OpMemberDecorate %GeometryProof 10 NonWritable
+               OpMemberDecorate %GeometryProof 10 Offset 224
+               OpDecorate %proof Restrict
+               OpDecorate %proof NonWritable
+               OpDecorate %proof Binding 7
+               OpDecorate %proof DescriptorSet 0
+               OpDecorate %gl_WorkGroupSize BuiltIn WorkgroupSize
+               OpDecorate %_runtimearr_uint_2 ArrayStride 4
+               OpDecorate %CurrentRecords BufferBlock
+               OpMemberDecorate %CurrentRecords 0 Restrict
+               OpMemberDecorate %CurrentRecords 0 NonWritable
+               OpMemberDecorate %CurrentRecords 0 Offset 0
+               OpDecorate %current_records Restrict
+               OpDecorate %current_records NonWritable
+               OpDecorate %current_records Binding 0
+               OpDecorate %current_records DescriptorSet 0
+               OpDecorate %_runtimearr_uint_3 ArrayStride 4
+               OpDecorate %PreviousRecords BufferBlock
+               OpMemberDecorate %PreviousRecords 0 Restrict
+               OpMemberDecorate %PreviousRecords 0 NonWritable
+               OpMemberDecorate %PreviousRecords 0 Offset 0
+               OpDecorate %previous_records Restrict
+               OpDecorate %previous_records NonWritable
+               OpDecorate %previous_records Binding 1
+               OpDecorate %previous_records DescriptorSet 0
+               OpDecorate %_runtimearr_uint_4 ArrayStride 4
+               OpDecorate %OutputMetadata BufferBlock
+               OpMemberDecorate %OutputMetadata 0 Restrict
+               OpMemberDecorate %OutputMetadata 0 NonWritable
+               OpMemberDecorate %OutputMetadata 0 Offset 0
+               OpDecorate %output_meta Restrict
+               OpDecorate %output_meta NonWritable
+               OpDecorate %output_meta Binding 2
+               OpDecorate %output_meta DescriptorSet 0
+               OpDecorate %_runtimearr_uint_5 ArrayStride 4
+               OpDecorate %SourceBacking BufferBlock
+               OpMemberDecorate %SourceBacking 0 Restrict
+               OpMemberDecorate %SourceBacking 0 NonWritable
+               OpMemberDecorate %SourceBacking 0 Offset 0
+               OpDecorate %source Restrict
+               OpDecorate %source NonWritable
+               OpDecorate %source Binding 3
+               OpDecorate %source DescriptorSet 0
+       %void = OpTypeVoid
+          %3 = OpTypeFunction %void
+       %bool = OpTypeBool
+       %uint = OpTypeInt 32 0
+%_runtimearr_uint = OpTypeRuntimeArray %uint
+%GuardScratch = OpTypeStruct %_runtimearr_uint
+%_ptr_Uniform_GuardScratch = OpTypePointer Uniform %GuardScratch
+    %scratch = OpVariable %_ptr_Uniform_GuardScratch Uniform
+        %int = OpTypeInt 32 1
+    %uint_16 = OpConstant %uint 16
+%_runtimearr_uint_0 = OpTypeRuntimeArray %uint
+%GuardStatus = OpTypeStruct %_runtimearr_uint_0
+%_ptr_Uniform_GuardStatus = OpTypePointer Uniform %GuardStatus
+     %status = OpVariable %_ptr_Uniform_GuardStatus Uniform
+     %uint_8 = OpConstant %uint 8
+     %v3uint = OpTypeVector %uint 3
+%_ptr_Input_v3uint = OpTypePointer Input %v3uint
+%gl_GlobalInvocationID = OpVariable %_ptr_Input_v3uint Input
+     %uint_0 = OpConstant %uint 0
+%_ptr_Input_uint = OpTypePointer Input %uint
+%_ptr_Function_uint = OpTypePointer Function %uint
+      %int_0 = OpConstant %int 0
+      %int_8 = OpConstant %int 8
+%_ptr_Uniform_uint = OpTypePointer Uniform %uint
+      %int_1 = OpConstant %int 1
+      %int_2 = OpConstant %int 2
+      %int_3 = OpConstant %int 3
+     %Params = OpTypeStruct %uint %uint %uint %uint %uint %uint %uint %uint
+%_ptr_PushConstant_Params = OpTypePointer PushConstant %Params
+     %params = OpVariable %_ptr_PushConstant_Params PushConstant
+%_ptr_PushConstant_uint = OpTypePointer PushConstant %uint
+%_runtimearr_uint_1 = OpTypeRuntimeArray %uint
+%ProtectedCommands = OpTypeStruct %_runtimearr_uint_1
+%_ptr_Uniform_ProtectedCommands = OpTypePointer Uniform %ProtectedCommands
+   %commands = OpVariable %_ptr_Uniform_ProtectedCommands Uniform
+     %uint_5 = OpConstant %uint 5
+      %float = OpTypeFloat 32
+    %v4float = OpTypeVector %float 4
+     %uint_3 = OpConstant %uint 3
+%_arr_v4float_uint_3 = OpTypeArray %v4float %uint_3
+%_arr_v4float_uint_3_0 = OpTypeArray %v4float %uint_3
+     %v4uint = OpTypeVector %uint 4
+%SurfaceProof = OpTypeStruct %v4float %v4float %v4float %v4float %v4float %v4float %v4float %v4float %v4uint
+%_runtimearr_SurfaceProof = OpTypeRuntimeArray %SurfaceProof
+%GeometryProof = OpTypeStruct %v4float %v4float %v4float %v4float %v4float %v4float %_arr_v4float_uint_3 %_arr_v4float_uint_3_0 %v4uint %v4uint %_runtimearr_SurfaceProof
+%_ptr_Uniform_GeometryProof = OpTypePointer Uniform %GeometryProof
+      %proof = OpVariable %_ptr_Uniform_GeometryProof Uniform
+     %int_10 = OpConstant %int 10
+     %uint_1 = OpConstant %uint 1
+    %uint_64 = OpConstant %uint 64
+%gl_WorkGroupSize = OpConstantComposite %v3uint %uint_64 %uint_1 %uint_1
+%_runtimearr_uint_2 = OpTypeRuntimeArray %uint
+%CurrentRecords = OpTypeStruct %_runtimearr_uint_2
+%_ptr_Uniform_CurrentRecords = OpTypePointer Uniform %CurrentRecords
+%current_records = OpVariable %_ptr_Uniform_CurrentRecords Uniform
+%_runtimearr_uint_3 = OpTypeRuntimeArray %uint
+%PreviousRecords = OpTypeStruct %_runtimearr_uint_3
+%_ptr_Uniform_PreviousRecords = OpTypePointer Uniform %PreviousRecords
+%previous_records = OpVariable %_ptr_Uniform_PreviousRecords Uniform
+%_runtimearr_uint_4 = OpTypeRuntimeArray %uint
+%OutputMetadata = OpTypeStruct %_runtimearr_uint_4
+%_ptr_Uniform_OutputMetadata = OpTypePointer Uniform %OutputMetadata
+%output_meta = OpVariable %_ptr_Uniform_OutputMetadata Uniform
+%_runtimearr_uint_5 = OpTypeRuntimeArray %uint
+%SourceBacking = OpTypeStruct %_runtimearr_uint_5
+%_ptr_Uniform_SourceBacking = OpTypePointer Uniform %SourceBacking
+     %source = OpVariable %_ptr_Uniform_SourceBacking Uniform
+     %uint_2 = OpConstant %uint 2
+     %uint_4 = OpConstant %uint 4
+    %uint_32 = OpConstant %uint 32
+    %uint_48 = OpConstant %uint 48
+%float_9_53674316en07 = OpConstant %float 9.53674316e-07
+       %main = OpFunction %void None %3
+          %5 = OpLabel
+       %bits = OpVariable %_ptr_Function_uint Function
+         %57 = OpVariable %_ptr_Function_uint Function
+          %i = OpVariable %_ptr_Function_uint Function
+         %12 = OpArrayLength %uint %scratch 0
+         %14 = OpBitcast %int %12
+         %15 = OpBitcast %uint %14
+         %17 = OpULessThan %bool %15 %uint_16
+         %18 = OpLogicalNot %bool %17
+               OpSelectionMerge %20 None
+               OpBranchConditional %18 %19 %20
+         %19 = OpLabel
+         %25 = OpArrayLength %uint %status 0
+         %26 = OpBitcast %int %25
+         %27 = OpBitcast %uint %26
+         %29 = OpULessThan %bool %27 %uint_8
+               OpBranch %20
+         %20 = OpLabel
+         %30 = OpPhi %bool %17 %5 %29 %19
+               OpSelectionMerge %32 None
+               OpBranchConditional %30 %31 %32
+         %31 = OpLabel
+               OpReturn
+         %32 = OpLabel
+         %39 = OpAccessChain %_ptr_Input_uint %gl_GlobalInvocationID %uint_0
+         %40 = OpLoad %uint %39
+         %41 = OpINotEqual %bool %40 %uint_0
+               OpSelectionMerge %43 None
+               OpBranchConditional %41 %42 %43
+         %42 = OpLabel
+               OpReturn
+         %43 = OpLabel
+         %50 = OpAccessChain %_ptr_Uniform_uint %scratch %int_0 %int_8
+         %51 = OpLoad %uint %50
+               OpStore %bits %51
+         %52 = OpLoad %uint %bits
+         %53 = OpAccessChain %_ptr_Uniform_uint %status %int_0 %int_0
+               OpStore %53 %52
+         %55 = OpLoad %uint %bits
+         %56 = OpIEqual %bool %55 %uint_0
+               OpSelectionMerge %59 None
+               OpBranchConditional %56 %58 %62
+         %58 = OpLabel
+         %60 = OpAccessChain %_ptr_Uniform_uint %scratch %int_0 %int_0
+         %61 = OpLoad %uint %60
+               OpStore %57 %61
+               OpBranch %59
+         %62 = OpLabel
+               OpStore %57 %uint_0
+               OpBranch %59
+         %59 = OpLabel
+         %63 = OpLoad %uint %57
+         %64 = OpAccessChain %_ptr_Uniform_uint %status %int_0 %int_1
+               OpStore %64 %63
+         %66 = OpAccessChain %_ptr_Uniform_uint %status %int_0 %int_2
+               OpStore %66 %uint_0
+         %68 = OpAccessChain %_ptr_Uniform_uint %status %int_0 %int_3
+               OpStore %68 %uint_0
+         %69 = OpLoad %uint %bits
+         %70 = OpIEqual %bool %69 %uint_0
+               OpSelectionMerge %72 None
+               OpBranchConditional %70 %71 %72
+         %71 = OpLabel
+         %73 = OpAccessChain %_ptr_Uniform_uint %scratch %int_0 %int_0
+         %74 = OpLoad %uint %73
+         %75 = OpINotEqual %bool %74 %uint_0
+               OpBranch %72
+         %72 = OpLabel
+         %76 = OpPhi %bool %70 %59 %75 %71
+               OpSelectionMerge %78 None
+               OpBranchConditional %76 %77 %78
+         %77 = OpLabel
+               OpStore %i %uint_0
+               OpBranch %80
+         %80 = OpLabel
+               OpLoopMerge %82 %83 None
+               OpBranch %84
+         %84 = OpLabel
+         %85 = OpLoad %uint %i
+         %90 = OpAccessChain %_ptr_PushConstant_uint %params %int_3
+         %91 = OpLoad %uint %90
+         %92 = OpULessThan %bool %85 %91
+               OpBranchConditional %92 %81 %82
+         %81 = OpLabel
+         %97 = OpLoad %uint %i
+         %99 = OpIMul %uint %97 %uint_5
+        %112 = OpLoad %uint %i
+        %114 = OpAccessChain %_ptr_Uniform_uint %proof %int_10 %112 %int_8 %uint_1
+        %115 = OpLoad %uint %114
+        %116 = OpAccessChain %_ptr_Uniform_uint %commands %int_0 %99
+               OpStore %116 %115
+        %117 = OpLoad %uint %i
+        %118 = OpIMul %uint %117 %uint_5
+        %119 = OpIAdd %uint %118 %uint_1
+        %120 = OpAccessChain %_ptr_Uniform_uint %scratch %int_0 %int_0
+        %121 = OpLoad %uint %120
+        %122 = OpAccessChain %_ptr_Uniform_uint %commands %int_0 %119
+               OpStore %122 %121
+               OpBranch %83
+         %83 = OpLabel
+        %123 = OpLoad %uint %i
+        %124 = OpIAdd %uint %123 %int_1
+               OpStore %i %124
+               OpBranch %80
+         %82 = OpLabel
+               OpBranch %78
+         %78 = OpLabel
+               OpReturn
+               OpFunctionEnd

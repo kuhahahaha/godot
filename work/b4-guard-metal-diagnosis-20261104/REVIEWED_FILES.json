@@ -1,0 +1,19 @@
+{
+  "head": "1623ac0b317b09f9808ae3b09cd00898a7f36ded",
+  "files": {
+    "drivers/metal/rendering_shader_container_metal.cpp": "52446f496e7edb7c91dd260a92f2cd5b1d7dd227b490161fd9c43bd7cae6f277",
+    "drivers/metal/rendering_shader_container_metal.h": "f0d021b042bf5d2df384822b362cd92203310bf4451e722b6993d53969a2dbfe",
+    "drivers/metal/rendering_device_driver_metal.cpp": "b4049582baef683a784fbaa6efd09fbf62aff62ad369107fbb1a222f9af91660",
+    "drivers/metal/rendering_device_driver_metal.h": "8b820f714307faa621c69f377e0a061868cb96c59961e3d4d5c72e5aebd6fe47",
+    "drivers/metal/metal_objects_shared.h": "6934bb7acd031499773c5c1812270ddb7e3206f9aee3ceb9974924f99d2d2a9e",
+    "drivers/metal/metal3_objects.cpp": "74fae03f1615c05b8af4b2aa6fed97800953ca978097d2f6a6997c41f8a6a743",
+    "servers/rendering/rendering_shader_container.cpp": "06e89723ab1584a27a539d1a8ff1bc0cb3b44ccd12d6d8011e7adf65e07504af",
+    "servers/rendering/rendering_device.cpp": "755c94a735afdfb087462fdb2db7a4abcc824e48d25f4edeca411345157387db",
+    "servers/rendering/renderer_rd/shaders/particles_external_guard.glsl": "4570c3136e27a3beb699593d1e496119fa677d44c3cc5abfe31c5e2712c982d7",
+    "servers/rendering/renderer_rd/effects/particles_external_guard.cpp": "57fefc032cbe09ba9da109e702d40bc0de49c107ff4d101cfa3475017957f9c4",
+    "thirdparty/spirv-cross/spirv_msl.cpp": "f219ee63880c8681f4452ca2310659ae155025267b01b3c25c24e8ff43915dca",
+    "thirdparty/spirv-cross/spirv_msl.hpp": "0a76970f464ff267ebaf29a717811104a00f5391362c839b0c65d7d8e3521b79",
+    "thirdparty/re-spirv/re-spirv.cpp": "c4b1a58358c43013ae4a416a6d60119a54c8dee940d385b65aa073cecea73b3a",
+    "drivers/vulkan/rendering_device_driver_vulkan.cpp": "b755d7c8556c3310814d9f2767e161686441bb882a245dbe6215e03bb50bebf8"
+  }
+}

@@ -1,0 +1,428 @@
+{
+  "rows": [
+    {
+      "container": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-guard-metal-diagnosis-20261104/FINALIZE.metalbin",
+      "container_sha256": "6ddc0c1645e4e5c45a5ff5c0b7f39503a7ce9fc7cd7b2d22debf9eb02c9f1763",
+      "stage": 4,
+      "compression_flags": 1,
+      "compressed_size": 1162,
+      "source_size": 3805,
+      "library_size": 0,
+      "source_sha256": "a7139bbacdbd55344f60eeadf3eabf7389fda80cd345b2d74f09b9d4f02de9c1",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-guard-metal-diagnosis-20261104/FINALIZE.metal",
+      "relevant_lines": [
+        {
+          "line": 87,
+          "text": "    constant uint* spvBufferSizeConstants [[id(0)]];"
+        },
+        {
+          "line": 88,
+          "text": "    // Overlapping binding: device CurrentRecords* __restrict current_records [[id(0)]];"
+        },
+        {
+          "line": 89,
+          "text": "    device PreviousRecords* __restrict previous_records [[id(1)]];"
+        },
+        {
+          "line": 90,
+          "text": "    device OutputMetadata* __restrict output_meta [[id(2)]];"
+        },
+        {
+          "line": 91,
+          "text": "    device SourceBacking* __restrict source [[id(3)]];"
+        },
+        {
+          "line": 92,
+          "text": "    device GuardScratch* __restrict scratch [[id(4)]];"
+        },
+        {
+          "line": 93,
+          "text": "    device GuardStatus* __restrict status [[id(5)]];"
+        },
+        {
+          "line": 94,
+          "text": "    device ProtectedCommands* __restrict commands [[id(6)]];"
+        },
+        {
+          "line": 95,
+          "text": "    device GeometryProof* __restrict proof [[id(7)]];"
+        },
+        {
+          "line": 98,
+          "text": "kernel void main0(constant spvDescriptorSetBuffer0& spvDescriptorSet0 [[buffer(0)]], constant uint* spvBufferSizeConstants [[buffer(25)]], constant Params& params [[buffer(1)]], uint3 gl_GlobalInvocationID [[thread_position_in_grid]])"
+        },
+        {
+          "line": 100,
+          "text": "    constant uint& spvDescriptorSet0_scratchBufferSize = spvDescriptorSet0.spvBufferSizeConstants[4];"
+        },
+        {
+          "line": 101,
+          "text": "    constant uint& spvDescriptorSet0_statusBufferSize = spvDescriptorSet0.spvBufferSizeConstants[5];"
+        },
+        {
+          "line": 102,
+          "text": "    device auto &current_records = *reinterpret_cast<device CurrentRecords* __restrict constant &>(spvDescriptorSet0.spvBufferSizeConstants);"
+        }
+      ]
+    },
+    {
+      "container": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-guard-metal-diagnosis-20261104/FINALIZE_EMPTY.metalbin",
+      "container_sha256": "b636ce5fcbde4c5ef99da5778083b47ae59dc0f8967b1fb3dd29bd8fc5b29e49",
+      "stage": 4,
+      "compression_flags": 1,
+      "compressed_size": 1119,
+      "source_size": 3574,
+      "library_size": 0,
+      "source_sha256": "0576a265c8ffed1fc6414876567be55d5217c7fe83113dff0ec803b190060adc",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-guard-metal-diagnosis-20261104/FINALIZE_EMPTY.metal",
+      "relevant_lines": [
+        {
+          "line": 77,
+          "text": "    constant uint* spvBufferSizeConstants [[id(0)]];"
+        },
+        {
+          "line": 78,
+          "text": "    // Overlapping binding: device OutputMetadata* __restrict output_meta [[id(0)]];"
+        },
+        {
+          "line": 79,
+          "text": "    device SourceBacking* __restrict source [[id(1)]];"
+        },
+        {
+          "line": 80,
+          "text": "    device GuardScratch* __restrict scratch [[id(2)]];"
+        },
+        {
+          "line": 81,
+          "text": "    device GuardStatus* __restrict status [[id(3)]];"
+        },
+        {
+          "line": 82,
+          "text": "    device ProtectedCommands* __restrict commands [[id(4)]];"
+        },
+        {
+          "line": 83,
+          "text": "    device GeometryProof* __restrict proof [[id(5)]];"
+        },
+        {
+          "line": 86,
+          "text": "kernel void main0(constant spvDescriptorSetBuffer0& spvDescriptorSet0 [[buffer(0)]], constant uint* spvBufferSizeConstants [[buffer(25)]], constant Params& params [[buffer(1)]], uint3 gl_GlobalInvocationID [[thread_position_in_grid]])"
+        },
+        {
+          "line": 88,
+          "text": "    constant uint& spvDescriptorSet0_scratchBufferSize = spvDescriptorSet0.spvBufferSizeConstants[2];"
+        },
+        {
+          "line": 89,
+          "text": "    constant uint& spvDescriptorSet0_statusBufferSize = spvDescriptorSet0.spvBufferSizeConstants[3];"
+        },
+        {
+          "line": 90,
+          "text": "    device auto &output_meta = *reinterpret_cast<device OutputMetadata* __restrict constant &>(spvDescriptorSet0.spvBufferSizeConstants);"
+        }
+      ]
+    },
+    {
+      "container": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-guard-metal-diagnosis-20261104/INIT-validate_only_records.metalbin",
+      "container_sha256": "45648648815d9361cddd669f09bd8b8f3abb48be0cc2226e968468df1631572a",
+      "stage": 4,
+      "compression_flags": 1,
+      "compressed_size": 3541,
+      "source_size": 15902,
+      "library_size": 0,
+      "source_sha256": "ab20f4dbd7e9043a7d7f5ac8d0524adc78fa4992dba515b038cc9943841fa63e",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-guard-metal-diagnosis-20261104/INIT-validate_only_records.metal",
+      "relevant_lines": [
+        {
+          "line": 93,
+          "text": "    constant uint* spvBufferSizeConstants [[id(0)]];"
+        },
+        {
+          "line": 94,
+          "text": "    // Overlapping binding: device OutputMetadata* __restrict output_meta [[id(0)]];"
+        },
+        {
+          "line": 95,
+          "text": "    device SourceBacking* __restrict source [[id(1)]];"
+        },
+        {
+          "line": 96,
+          "text": "    device GuardScratch* __restrict scratch [[id(2)]];"
+        },
+        {
+          "line": 97,
+          "text": "    device GuardStatus* __restrict status [[id(3)]];"
+        },
+        {
+          "line": 98,
+          "text": "    device ProtectedCommands* __restrict commands [[id(4)]];"
+        },
+        {
+          "line": 99,
+          "text": "    device GeometryProof* __restrict proof [[id(5)]];"
+        },
+        {
+          "line": 616,
+          "text": "kernel void main0(constant spvDescriptorSetBuffer0& spvDescriptorSet0 [[buffer(0)]], constant uint* spvBufferSizeConstants [[buffer(25)]], constant Params& params [[buffer(1)]], uint3 gl_GlobalInvocationID [[thread_position_in_grid]])"
+        },
+        {
+          "line": 618,
+          "text": "    constant uint& spvDescriptorSet0_scratchBufferSize = spvDescriptorSet0.spvBufferSizeConstants[2];"
+        },
+        {
+          "line": 619,
+          "text": "    constant uint& spvDescriptorSet0_statusBufferSize = spvDescriptorSet0.spvBufferSizeConstants[3];"
+        },
+        {
+          "line": 620,
+          "text": "    constant uint& spvDescriptorSet0_commandsBufferSize = spvDescriptorSet0.spvBufferSizeConstants[4];"
+        },
+        {
+          "line": 621,
+          "text": "    constant uint& spvDescriptorSet0_proofBufferSize = spvDescriptorSet0.spvBufferSizeConstants[5];"
+        },
+        {
+          "line": 622,
+          "text": "    constant uint& output_metaBufferSize = spvDescriptorSet0.spvBufferSizeConstants[0];"
+        },
+        {
+          "line": 623,
+          "text": "    constant uint& spvDescriptorSet0_sourceBufferSize = spvDescriptorSet0.spvBufferSizeConstants[1];"
+        },
+        {
+          "line": 624,
+          "text": "    device auto &output_meta = *reinterpret_cast<device OutputMetadata* __restrict constant &>(spvDescriptorSet0.spvBufferSizeConstants);"
+        }
+      ]
+    },
+    {
+      "container": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-guard-metal-diagnosis-20261104/INIT.metalbin",
+      "container_sha256": "a3943934d4858e3bcc28575b6e14dac1c1bb832423ec45471379057e64a2dea8",
+      "stage": 4,
+      "compression_flags": 1,
+      "compressed_size": 3587,
+      "source_size": 16190,
+      "library_size": 0,
+      "source_sha256": "53ace04539edc7099106a496d4c818f9694a7ba6ab27c8909055298ad13029d4",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-guard-metal-diagnosis-20261104/INIT.metal",
+      "relevant_lines": [
+        {
+          "line": 103,
+          "text": "    constant uint* spvBufferSizeConstants [[id(0)]];"
+        },
+        {
+          "line": 104,
+          "text": "    // Overlapping binding: device CurrentRecords* __restrict current_records [[id(0)]];"
+        },
+        {
+          "line": 105,
+          "text": "    device PreviousRecords* __restrict previous_records [[id(1)]];"
+        },
+        {
+          "line": 106,
+          "text": "    device OutputMetadata* __restrict output_meta [[id(2)]];"
+        },
+        {
+          "line": 107,
+          "text": "    device SourceBacking* __restrict source [[id(3)]];"
+        },
+        {
+          "line": 108,
+          "text": "    device GuardScratch* __restrict scratch [[id(4)]];"
+        },
+        {
+          "line": 109,
+          "text": "    device GuardStatus* __restrict status [[id(5)]];"
+        },
+        {
+          "line": 110,
+          "text": "    device ProtectedCommands* __restrict commands [[id(6)]];"
+        },
+        {
+          "line": 111,
+          "text": "    device GeometryProof* __restrict proof [[id(7)]];"
+        },
+        {
+          "line": 628,
+          "text": "kernel void main0(constant spvDescriptorSetBuffer0& spvDescriptorSet0 [[buffer(0)]], constant uint* spvBufferSizeConstants [[buffer(25)]], constant Params& params [[buffer(1)]], uint3 gl_GlobalInvocationID [[thread_position_in_grid]])"
+        },
+        {
+          "line": 630,
+          "text": "    constant uint& spvDescriptorSet0_scratchBufferSize = spvDescriptorSet0.spvBufferSizeConstants[4];"
+        },
+        {
+          "line": 631,
+          "text": "    constant uint& spvDescriptorSet0_statusBufferSize = spvDescriptorSet0.spvBufferSizeConstants[5];"
+        },
+        {
+          "line": 632,
+          "text": "    constant uint& spvDescriptorSet0_commandsBufferSize = spvDescriptorSet0.spvBufferSizeConstants[6];"
+        },
+        {
+          "line": 633,
+          "text": "    constant uint& spvDescriptorSet0_proofBufferSize = spvDescriptorSet0.spvBufferSizeConstants[7];"
+        },
+        {
+          "line": 634,
+          "text": "    constant uint& spvDescriptorSet0_output_metaBufferSize = spvDescriptorSet0.spvBufferSizeConstants[2];"
+        },
+        {
+          "line": 635,
+          "text": "    constant uint& spvDescriptorSet0_sourceBufferSize = spvDescriptorSet0.spvBufferSizeConstants[3];"
+        },
+        {
+          "line": 636,
+          "text": "    device auto &current_records = *reinterpret_cast<device CurrentRecords* __restrict constant &>(spvDescriptorSet0.spvBufferSizeConstants);"
+        }
+      ]
+    },
+    {
+      "container": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-guard-metal-diagnosis-20261104/INIT_EMPTY.metalbin",
+      "container_sha256": "6b0602c658c67a3dc933aa50661e0aa6d08144cb7265d82a520928c86b60b4bb",
+      "stage": 4,
+      "compression_flags": 1,
+      "compressed_size": 3564,
+      "source_size": 15974,
+      "library_size": 0,
+      "source_sha256": "0585e9a08bc35627bc5c154a655801d3ef60a29002a1d4388f133565fcb12154",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-guard-metal-diagnosis-20261104/INIT_EMPTY.metal",
+      "relevant_lines": [
+        {
+          "line": 93,
+          "text": "    constant uint* spvBufferSizeConstants [[id(0)]];"
+        },
+        {
+          "line": 94,
+          "text": "    // Overlapping binding: device OutputMetadata* __restrict output_meta [[id(0)]];"
+        },
+        {
+          "line": 95,
+          "text": "    device SourceBacking* __restrict source [[id(1)]];"
+        },
+        {
+          "line": 96,
+          "text": "    device GuardScratch* __restrict scratch [[id(2)]];"
+        },
+        {
+          "line": 97,
+          "text": "    device GuardStatus* __restrict status [[id(3)]];"
+        },
+        {
+          "line": 98,
+          "text": "    device ProtectedCommands* __restrict commands [[id(4)]];"
+        },
+        {
+          "line": 99,
+          "text": "    device GeometryProof* __restrict proof [[id(5)]];"
+        },
+        {
+          "line": 620,
+          "text": "kernel void main0(constant spvDescriptorSetBuffer0& spvDescriptorSet0 [[buffer(0)]], constant uint* spvBufferSizeConstants [[buffer(25)]], constant Params& params [[buffer(1)]], uint3 gl_GlobalInvocationID [[thread_position_in_grid]])"
+        },
+        {
+          "line": 622,
+          "text": "    constant uint& spvDescriptorSet0_scratchBufferSize = spvDescriptorSet0.spvBufferSizeConstants[2];"
+        },
+        {
+          "line": 623,
+          "text": "    constant uint& spvDescriptorSet0_statusBufferSize = spvDescriptorSet0.spvBufferSizeConstants[3];"
+        },
+        {
+          "line": 624,
+          "text": "    constant uint& spvDescriptorSet0_commandsBufferSize = spvDescriptorSet0.spvBufferSizeConstants[4];"
+        },
+        {
+          "line": 625,
+          "text": "    constant uint& spvDescriptorSet0_proofBufferSize = spvDescriptorSet0.spvBufferSizeConstants[5];"
+        },
+        {
+          "line": 626,
+          "text": "    constant uint& output_metaBufferSize = spvDescriptorSet0.spvBufferSizeConstants[0];"
+        },
+        {
+          "line": 627,
+          "text": "    constant uint& spvDescriptorSet0_sourceBufferSize = spvDescriptorSet0.spvBufferSizeConstants[1];"
+        },
+        {
+          "line": 628,
+          "text": "    device auto &output_meta = *reinterpret_cast<device OutputMetadata* __restrict constant &>(spvDescriptorSet0.spvBufferSizeConstants);"
+        }
+      ]
+    },
+    {
+      "container": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-guard-metal-diagnosis-20261104/VALIDATE.metalbin",
+      "container_sha256": "91ac07bdebdae6e1fbb4295a3e99eebfe73fc731009345c4371310571b30f144",
+      "stage": 4,
+      "compression_flags": 1,
+      "compressed_size": 5963,
+      "source_size": 29582,
+      "library_size": 0,
+      "source_sha256": "1f312e9ee1cd5cd41e63061505d9b2675d173209c474f25b6280387c0926b231",
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-guard-metal-diagnosis-20261104/VALIDATE.metal",
+      "relevant_lines": [
+        {
+          "line": 164,
+          "text": "    constant uint* spvBufferSizeConstants [[id(0)]];"
+        },
+        {
+          "line": 165,
+          "text": "    // Overlapping binding: device CurrentRecords* __restrict current_records [[id(0)]];"
+        },
+        {
+          "line": 166,
+          "text": "    device PreviousRecords* __restrict previous_records [[id(1)]];"
+        },
+        {
+          "line": 167,
+          "text": "    device OutputMetadata* __restrict output_meta [[id(2)]];"
+        },
+        {
+          "line": 168,
+          "text": "    device SourceBacking* __restrict source [[id(3)]];"
+        },
+        {
+          "line": 169,
+          "text": "    device GuardScratch* __restrict scratch [[id(4)]];"
+        },
+        {
+          "line": 170,
+          "text": "    device GuardStatus* __restrict status [[id(5)]];"
+        },
+        {
+          "line": 171,
+          "text": "    device ProtectedCommands* __restrict commands [[id(6)]];"
+        },
+        {
+          "line": 172,
+          "text": "    device GeometryProof* __restrict proof [[id(7)]];"
+        },
+        {
+          "line": 873,
+          "text": "kernel void main0(constant spvDescriptorSetBuffer0& spvDescriptorSet0 [[buffer(0)]], constant uint* spvBufferSizeConstants [[buffer(25)]], constant Params& params [[buffer(1)]], uint3 gl_GlobalInvocationID [[thread_position_in_grid]])"
+        },
+        {
+          "line": 875,
+          "text": "    constant uint& spvDescriptorSet0_scratchBufferSize = spvDescriptorSet0.spvBufferSizeConstants[4];"
+        },
+        {
+          "line": 876,
+          "text": "    constant uint& spvDescriptorSet0_previous_recordsBufferSize = spvDescriptorSet0.spvBufferSizeConstants[1];"
+        },
+        {
+          "line": 877,
+          "text": "    constant uint& current_recordsBufferSize = spvDescriptorSet0.spvBufferSizeConstants[0];"
+        },
+        {
+          "line": 878,
+          "text": "    constant uint& spvDescriptorSet0_statusBufferSize = spvDescriptorSet0.spvBufferSizeConstants[5];"
+        },
+        {
+          "line": 879,
+          "text": "    device auto &current_records = *reinterpret_cast<device CurrentRecords* __restrict constant &>(spvDescriptorSet0.spvBufferSizeConstants);"
+        }
+      ]
+    }
+  ],
+  "actual_host_translation": true,
+  "pipeline_compile_or_dispatch": false
+}
