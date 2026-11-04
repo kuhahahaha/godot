@@ -31,6 +31,7 @@
 #pragma once
 
 #include "core/extension/gdextension_qualification_physical.h"
+#include "core/extension/gdextension_record_source.h"
 #include "servers/rendering/native_disposal_witness.h"
 
 #include "modules/modules_enabled.gen.h"
@@ -291,6 +292,8 @@ private:
 	bool qualification_recording = false;
 	GDExtensionDeviceExit::CheckedRecordAppend _record_source_dispatch(const GDExtensionDeviceExit::OriginalOperationIdentity &, ComputeListID, uint32_t, uint32_t, uint32_t, const void * = nullptr, uint32_t = 0);
 	GDExtensionDeviceExit::CheckedRecordAppend _record_source_buffer_copy(const GDExtensionDeviceExit::OriginalOperationIdentity &, RID, RID, uint32_t, uint32_t, uint32_t);
+	struct SourceDrawAppendResult;
+	SourceDrawAppendResult _record_source_draw_indirect(const GDExtensionDeviceExit::OriginalOperationIdentity &, DrawListID, bool, RID, uint32_t, uint32_t, uint32_t);
 	RDG::RecordHandle _qualification_dispatch(ComputeListID p_list, uint32_t p_x, uint32_t p_y, uint32_t p_z);
 	Error _qualification_maintenance();
 	bool _qualification_resource_busy(RID p_rid);
@@ -438,6 +441,12 @@ private:
 			result.error = p_error;
 			return result;
 		}
+	};
+	// Mechanical original-owner join only; all native prefix and transfer facts
+	// stay attached for the packet owner even when the draw itself is refused.
+	struct SourceDrawAppendResult {
+		GDExtensionDeviceExit::CheckedRecordAppend observed;
+		DrawAppendResult native;
 	};
 	CopyAppendResult _buffer_copy_recorded(RID p_src_buffer, RID p_dst_buffer, uint32_t p_src_offset, uint32_t p_dst_offset, uint32_t p_size);
 	DrawAppendResult _draw_list_draw_indirect_recorded(DrawListID p_list, bool p_use_indices, RID p_buffer, uint32_t p_offset, uint32_t p_draw_count, uint32_t p_stride, bool p_capture = true);

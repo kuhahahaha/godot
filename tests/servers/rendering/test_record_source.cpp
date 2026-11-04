@@ -347,6 +347,146 @@ public:
 		device.storage_buffer_owner.free(dst);
 		device.driver = nullptr;
 	}
+	static void checked_indirect_draw() {
+		using namespace GDExtensionDeviceExit;
+		using State = CheckedRecordAppend::State;
+		const OriginalOperationIdentity identity{ 31, 32, 33, 34, 4, 8 };
+		RenderingDevice device;
+		Driver driver;
+		device.driver = &driver;
+		device.render_thread_id = Thread::get_caller_id();
+		device.is_main_instance = false; // Same owner-thread semantics as copy/dispatch.
+		device.draw_graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RDD::CommandQueueFamilyID(1), 0);
+		device.draw_graph.begin();
+		device.draw_graph.add_draw_list_begin(RDD::RenderPassID(1), RDD::FramebufferID(2), Rect2i(), {}, {}, {}, 0, false);
+		device.draw_list.active = true;
+#ifdef DEBUG_ENABLED
+		device.draw_list.validation.pipeline_active = true;
+		device.draw_list.validation.pipeline_vertex_format = RenderingDevice::INVALID_ID;
+#endif
+		RenderingDevice::Buffer buffer;
+		buffer.driver_id = RDD::BufferID(41);
+		buffer.size = 32;
+		buffer.usage = RDD::BUFFER_USAGE_INDIRECT_BIT;
+		buffer.draw_tracker = RDG::resource_tracker_create();
+		buffer.draw_tracker->buffer_driver_id = buffer.driver_id;
+		buffer.transfer_worker_index = 0;
+		buffer.transfer_worker_operation = 9;
+		RID rid = device.storage_buffer_owner.make_rid(buffer);
+		auto *worker = memnew(RenderingDevice::TransferWorker);
+		worker->index = 0;
+		device.transfer_worker_pool.push_back(worker);
+		device.transfer_worker_pool_size = 1;
+		device.transfer_worker_operation_used_by_draw.resize(1);
+		device.transfer_worker_operation_used_by_draw[0] = 0;
+		const auto missing = device._record_source_draw_indirect({}, RenderingDevice::ID_TYPE_DRAW_LIST, false, rid, 0, 1, 20);
+		CHECK(missing.observed.error == ERR_INVALID_DATA);
+		CHECK(missing.observed.state == State::Rejected);
+		CHECK_FALSE(missing.observed.operation_bound);
+		CHECK(missing.native.effect == RenderingDevice::NativeAppendEffect::NoNewEffect);
+		CHECK(missing.native.prefix_count == 0);
+		CHECK_FALSE(missing.native.draw_handle.is_valid());
+		device.render_thread_id ^= 1;
+		const auto wrong_thread = device._record_source_draw_indirect(identity, RenderingDevice::ID_TYPE_DRAW_LIST, false, rid, 0, 1, 20);
+		device.render_thread_id = Thread::get_caller_id();
+		CHECK(wrong_thread.observed.error == ERR_UNAUTHORIZED);
+		CHECK(wrong_thread.observed.state == State::Rejected);
+		CHECK(wrong_thread.observed.operation_bound);
+		CHECK(same_original_operation_identity(wrong_thread.observed.operation, identity));
+		CHECK(wrong_thread.native.effect == RenderingDevice::NativeAppendEffect::NoNewEffect);
+		CHECK_FALSE(wrong_thread.native.draw_handle.is_valid());
+		const auto wrong_list = device._record_source_draw_indirect(identity, RenderingDevice::ID_TYPE_COMPUTE_LIST, false, rid, 0, 1, 20);
+		CHECK(wrong_list.observed.error == ERR_INVALID_PARAMETER);
+		CHECK(wrong_list.observed.state == State::Rejected);
+		CHECK(wrong_list.observed.operation_bound);
+		CHECK(wrong_list.native.effect == RenderingDevice::NativeAppendEffect::NoNewEffect);
+		CHECK_FALSE(wrong_list.native.draw_handle.is_valid());
+		CHECK(device.draw_list.state.draw_count == 0);
+		ERR_PRINT_OFF;
+		const auto bad_span = device._record_source_draw_indirect(identity, RenderingDevice::ID_TYPE_DRAW_LIST, false, rid, 0, 2, 20);
+		CHECK(bad_span.observed.error == ERR_INVALID_PARAMETER);
+		CHECK(bad_span.native.error == bad_span.observed.error);
+		CHECK(bad_span.observed.state == State::Rejected);
+		CHECK(bad_span.native.effect == RenderingDevice::NativeAppendEffect::NoNewEffect);
+		CHECK_FALSE(bad_span.observed.handle.is_valid());
+		CHECK_FALSE(bad_span.native.capture_complete);
+		CHECK(bad_span.native.prefix_count == 0);
+		CHECK(device.draw_list.state.draw_count == 0);
+		CHECK(device.storage_buffer_owner.get_or_null(rid)->transfer_worker_index == 0);
+		device.frame_wait_error = ERR_CANT_ACQUIRE_RESOURCE;
+		const auto suspended = device._record_source_draw_indirect(identity, RenderingDevice::ID_TYPE_DRAW_LIST, false, rid, 0, 1, 20);
+		device.frame_wait_error = OK;
+		ERR_PRINT_ON;
+		CHECK(suspended.observed.error == ERR_CANT_ACQUIRE_RESOURCE);
+		CHECK(suspended.native.error == ERR_CANT_ACQUIRE_RESOURCE);
+		CHECK(suspended.observed.state == State::Rejected);
+		const auto drawn = device._record_source_draw_indirect(identity, RenderingDevice::ID_TYPE_DRAW_LIST, false, rid, 0, 1, 20);
+		CHECK(drawn.observed.error == OK);
+		CHECK(drawn.observed.state == State::Appended);
+		CHECK(drawn.observed.operation_bound);
+		CHECK(same_original_operation_identity(drawn.observed.operation, identity));
+		CHECK(device.draw_graph.contains_record(drawn.observed.handle));
+		CHECK(drawn.observed.handle.graph_instance == drawn.native.draw_handle.graph_instance);
+		CHECK(drawn.observed.handle.graph_frame == drawn.native.draw_handle.graph_frame);
+		CHECK(drawn.observed.handle.index == drawn.native.draw_handle.index);
+		CHECK(drawn.observed.handle.offset == drawn.native.draw_handle.offset);
+		CHECK(drawn.native.effect == RenderingDevice::NativeAppendEffect::Recorded);
+		CHECK(drawn.native.capture_complete);
+		CHECK(drawn.native.has_transfer);
+		CHECK(drawn.native.transfer.worker == 0);
+		CHECK(drawn.native.transfer.operation == 9);
+		CHECK(device.transfer_worker_operation_used_by_draw[0] == 9);
+		RenderingDevice::UniformSet set;
+		set.format = 1;
+		set.driver_id = RDD::UniformSetID(51);
+		RID set_rid = device.uniform_set_owner.make_rid(set);
+		device.draw_list.state.set_count = 1;
+		auto &binding = device.draw_list.state.sets[0];
+		binding.uniform_set = set_rid;
+		binding.uniform_set_driver_id = set.driver_id;
+		binding.pipeline_expected_format = 1;
+		binding.uniform_set_format = 1;
+		binding.bound = false;
+#ifdef DEBUG_ENABLED
+		ERR_PRINT_OFF;
+		const auto prefix = device._record_source_draw_indirect(identity, RenderingDevice::ID_TYPE_DRAW_LIST, true, rid, 0, 1, 20);
+		ERR_PRINT_ON;
+		CHECK(prefix.observed.error == ERR_INVALID_PARAMETER);
+		CHECK(prefix.native.error == prefix.observed.error);
+		CHECK(prefix.observed.state == State::Unknown);
+		CHECK(same_original_operation_identity(prefix.observed.operation, identity));
+		CHECK(prefix.native.effect == RenderingDevice::NativeAppendEffect::NativePrefixOnly);
+		CHECK(prefix.native.capture_complete);
+		CHECK(prefix.native.prefix_count == 1);
+		CHECK(device.draw_graph.contains_record(prefix.native.prefix_handles[0]));
+		CHECK_FALSE(prefix.observed.handle.is_valid());
+		CHECK(device.draw_list.state.draw_count == 1);
+		device.draw_list.validation.index_array_count = 1;
+		binding.bound = false;
+#endif
+		const auto indexed = device._record_source_draw_indirect(identity, RenderingDevice::ID_TYPE_DRAW_LIST, true, rid, 0, 1, 20);
+		CHECK(indexed.observed.error == OK);
+		CHECK(indexed.observed.state == State::Appended);
+		CHECK(same_original_operation_identity(indexed.observed.operation, identity));
+		CHECK(device.draw_graph.contains_record(indexed.observed.handle));
+		CHECK(indexed.native.prefix_count == 1);
+		CHECK(device.draw_graph.contains_record(indexed.native.prefix_handles[0]));
+		const auto zero = device._record_source_draw_indirect(identity, RenderingDevice::ID_TYPE_DRAW_LIST, false, rid, 0, 0, 0);
+		CHECK(zero.observed.state == State::Appended);
+		CHECK(zero.observed.error == OK);
+		CHECK(device.draw_graph.contains_record(zero.native.draw_handle));
+		CHECK(device.draw_list.state.draw_count == 3);
+		device.draw_graph.add_draw_list_end();
+		device.draw_list.active = false;
+		RDG::resource_tracker_free(buffer.draw_tracker);
+		device.storage_buffer_owner.free(rid);
+		device.uniform_set_owner.free(set_rid);
+		device.transfer_worker_pool.clear();
+		device.transfer_worker_pool_size = 0;
+		memdelete(worker);
+		device.driver = nullptr;
+	}
+
 	static void original_readback_identity() {
 		GDExtensionDeviceExit::QualificationTicket ticket;
 		ticket.original_readback_serial = 101;
@@ -464,4 +604,8 @@ TEST_CASE("[RecordSource] original qualification reducer consumes shared native 
 
 TEST_CASE("[RecordSource] original ticket readback rejects replaced request and backing") {
 	TestRecordSourceAccess::original_readback_identity();
+}
+
+TEST_CASE("[RecordSource] original indirect draw retains exact identity native prefix and transfer") {
+	TestRecordSourceAccess::checked_indirect_draw();
 }

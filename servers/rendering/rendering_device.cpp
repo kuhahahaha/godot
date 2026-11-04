@@ -12579,3 +12579,31 @@ GDExtensionDeviceExit::CheckedRecordAppend RenderingDevice::_record_source_buffe
 																																					 : Observation::State::Unknown;
 	return observed;
 }
+
+RenderingDevice::SourceDrawAppendResult RenderingDevice::_record_source_draw_indirect(const GDExtensionDeviceExit::OriginalOperationIdentity &identity, DrawListID list, bool use_indices, RID buffer, uint32_t offset, uint32_t draw_count, uint32_t stride) {
+	using Observation = GDExtensionDeviceExit::CheckedRecordAppend;
+	SourceDrawAppendResult result;
+	result.observed.error = GDExtensionDeviceExit::bind_checked_record_append(result.observed, identity);
+	if (result.observed.error != OK) {
+		result.native.error = result.observed.error;
+		return result;
+	}
+	if (render_thread_id != Thread::get_caller_id()) {
+		result.observed.error = ERR_UNAUTHORIZED;
+		result.native.error = result.observed.error;
+		return result;
+	}
+	if (list != ID_TYPE_DRAW_LIST) {
+		result.observed.error = ERR_INVALID_PARAMETER;
+		result.native.error = result.observed.error;
+		return result;
+	}
+	// Keep the original checked draw as the only span/preparation/append path.
+	// Unknown includes a refused draw with real descriptor-prefix obligations.
+	result.native = _draw_list_draw_indirect_recorded(list, use_indices, buffer, offset, draw_count, stride, true);
+	result.observed.handle = result.native.draw_handle;
+	result.observed.error = result.native.error;
+	result.observed.state = result.native.effect == NativeAppendEffect::Recorded ? Observation::State::Appended : result.native.effect == NativeAppendEffect::NoNewEffect ? Observation::State::Rejected
+																																										  : Observation::State::Unknown;
+	return result;
+}
