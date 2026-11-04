@@ -34,33 +34,47 @@ struct RID { int id=0; bool is_valid() const { return id!=0; } };
 struct Vector3 { float x,y,z; bool is_finite() const { return std::isfinite(x)&&std::isfinite(y)&&std::isfinite(z); } };
 namespace RSE { enum { PARTICLES_COLLISION_TYPE_HEIGHTFIELD_COLLIDE=1 }; }
 struct Dependency { enum { DEPENDENCY_CHANGED_AABB }; int changes=0; void changed_notify(int) { changes++; } };
-struct ParticlesCollision { int type=1; Vector3 extents{1,1,1}; RID heightfield_fb{7}, heightfield_texture{8}; uint64_t scene_shape_revision=1; Dependency dependency; };
-struct Owner { ParticlesCollision value; ParticlesCollision *get_or_null(RID rid) { return rid.id==1?&value:nullptr; } } particles_collision_owner;
+struct ParticlesCollision { int type=1; Vector3 extents{1,1,1}; uint64_t scene_shape_revision=1; Dependency dependency; };
+struct ParticlesCollisionInstance { RID heightfield_fb, heightfield_texture; };
+struct Owner { ParticlesCollision value; ParticlesCollision *get_or_null(RID rid) { return rid.id==1?&value:nullptr; } };
 struct RD { std::vector<int> freed; static RD *get_singleton() { static RD rd; return &rd; } void free_rid(RID rid) { freed.push_back(rid.id); } };
-void set_extents(RID p_particles_collision, const Vector3 &p_extents)
+struct ParticlesStorage {
+    Owner particles_collision_owner;
+    ParticlesCollisionInstance instances[2]{{{7},{8}},{{9},{10}}};
+    void _heightfield_invalidate_base_instances(RID) {
+        for (auto &instance : instances) {
+            if (instance.heightfield_fb.is_valid()) RD::get_singleton()->free_rid(instance.heightfield_fb);
+            if (instance.heightfield_texture.is_valid()) RD::get_singleton()->free_rid(instance.heightfield_texture);
+            instance.heightfield_fb=RID(); instance.heightfield_texture=RID();
+        }
+    }
+    void particles_collision_set_box_extents(RID, const Vector3 &);
+};
+void ParticlesStorage::particles_collision_set_box_extents(RID p_particles_collision, const Vector3 &p_extents)
 '''
     suffix = r'''
 int main() {
     int checks=0, failures=0;
     auto check=[&](bool ok,const char *label) { checks++; if(!ok) { failures++; std::printf("FAIL %s\n",label); } };
-    auto reset=[]() { particles_collision_owner.value=ParticlesCollision(); RD::get_singleton()->freed.clear(); };
+    ParticlesStorage storage;
+    auto reset=[&]() { storage.particles_collision_owner.value=ParticlesCollision(); storage.instances[0]={{7},{8}}; storage.instances[1]={{9},{10}}; RD::get_singleton()->freed.clear(); };
     for (Vector3 next : {Vector3{2,1,1}, Vector3{1,1,2}}) {
-        reset(); set_extents(RID{1}, next);
-        auto &p=particles_collision_owner.value;
-        check(!p.heightfield_fb.is_valid()&&!p.heightfield_texture.is_valid(),"aspect mutation drops both cached RIDs");
-        check(RD::get_singleton()->freed==std::vector<int>({7,8}),"cache retired once in dependency order");
+        reset(); storage.particles_collision_set_box_extents(RID{1}, next);
+        auto &p=storage.particles_collision_owner.value;
+        check(!storage.instances[0].heightfield_fb.is_valid()&&!storage.instances[0].heightfield_texture.is_valid()&&!storage.instances[1].heightfield_fb.is_valid()&&!storage.instances[1].heightfield_texture.is_valid(),"aspect mutation drops both instance targets");
+        check(RD::get_singleton()->freed==std::vector<int>({7,8,9,10}),"instance targets retired once in dependency order");
         check(p.extents.x==next.x&&p.extents.z==next.z&&p.dependency.changes==1,"new extent and AABB notification");
     }
-    reset(); set_extents(RID{1},Vector3{1,2,1});
+    reset(); storage.particles_collision_set_box_extents(RID{1},Vector3{1,2,1});
     check(RD::get_singleton()->freed.empty(),"Y-only keeps cache");
-    reset(); set_extents(RID{1},Vector3{1,1,1});
+    reset(); storage.particles_collision_set_box_extents(RID{1},Vector3{1,1,1});
     check(RD::get_singleton()->freed.empty(),"equal extents keep cache");
-    reset(); particles_collision_owner.value.type=0; set_extents(RID{1},Vector3{2,1,1});
+    reset(); storage.particles_collision_owner.value.type=0; storage.particles_collision_set_box_extents(RID{1},Vector3{2,1,1});
     check(RD::get_singleton()->freed.empty(),"other collision type keeps cache");
-    reset(); set_extents(RID{1},Vector3{-1,1,1});
-    check(RD::get_singleton()->freed.empty()&&particles_collision_owner.value.extents.x==1,"invalid extent preserves state");
-    reset(); particles_collision_owner.value.heightfield_fb=RID(); particles_collision_owner.value.heightfield_texture=RID();
-    set_extents(RID{1},Vector3{2,1,1});
+    reset(); storage.particles_collision_set_box_extents(RID{1},Vector3{-1,1,1});
+    check(RD::get_singleton()->freed.empty()&&storage.particles_collision_owner.value.extents.x==1,"invalid extent preserves state");
+    reset(); storage.instances[0]={}; storage.instances[1]={};
+    storage.particles_collision_set_box_extents(RID{1},Vector3{2,1,1});
     check(RD::get_singleton()->freed.empty(),"absent cache does not free invalid RIDs");
     std::printf("RD heightfield extent cache: %d/%d checks passed\n", checks-failures,checks);
     return failures?1:0;

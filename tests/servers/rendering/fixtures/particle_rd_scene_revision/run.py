@@ -59,7 +59,6 @@ struct ParticlesCollision {
     float radius=1;
     Vector3 extents{1,1,1};
     RSE::ParticlesCollisionHeightfieldResolution heightfield_resolution=RSE::PARTICLES_COLLISION_HEIGHTFIELD_RESOLUTION_256;
-    RID heightfield_fb{7}, heightfield_texture{8};
     uint64_t scene_shape_revision=1;
     Dependency dependency;
 };
@@ -67,6 +66,7 @@ struct Owner { ParticlesCollision value; ParticlesCollision *get_or_null(RID rid
 struct RD { std::vector<int> freed; static RD *get_singleton() { static RD rd; return &rd; } void free_rid(RID rid) { freed.push_back(rid.id); } };
 struct ParticlesStorage {
     Owner particles_collision_owner;
+    void _heightfield_invalidate_base_instances(RID) { RD::get_singleton()->free_rid({7}); RD::get_singleton()->free_rid({8}); }
     void particles_collision_set_collision_type(RID, RSE::ParticlesCollisionType);
     void particles_collision_set_sphere_radius(RID, real_t);
     void particles_collision_set_box_extents(RID, const Vector3 &);

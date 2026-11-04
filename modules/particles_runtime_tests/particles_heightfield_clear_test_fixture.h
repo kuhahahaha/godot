@@ -12,12 +12,15 @@ class ParticlesHeightfieldClearTestFixture : public RefCounted {
 	mutable Mutex result_mutex;
 	bool started = false;
 	RID collision;
+	RID first_instance;
+	RID second_instance;
 	RID shader;
 	RID pipeline;
 	RID buffer;
 	RID sampler;
 	RID uniform_set;
-	RID texture;
+	RID first_texture;
+	RID second_texture;
 	RenderingDevice *rd = nullptr;
 	void sample_done(const PackedByteArray &p_bytes);
 

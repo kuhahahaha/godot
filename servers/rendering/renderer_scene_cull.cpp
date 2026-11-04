@@ -4246,7 +4246,8 @@ void RendererSceneCull::render_particle_colliders() {
 				scene_cull_result.geometry_instances.push_back(geom->geometry_instance);
 			}
 
-			scene_render->render_particle_collider_heightfield(hfpc->base, hfpc->transform, scene_cull_result.geometry_instances);
+			const InstanceParticlesCollisionData *collision = static_cast<const InstanceParticlesCollisionData *>(hfpc->base_data);
+			scene_render->render_particle_collider_heightfield(collision->instance, hfpc->transform, scene_cull_result.geometry_instances);
 		}
 		heightfield_particle_colliders_update_list.remove(heightfield_particle_colliders_update_list.begin());
 	}

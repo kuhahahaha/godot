@@ -1548,17 +1548,19 @@ Transform3D RendererSceneRenderRD::heightfield_capture_camera(const Transform3D 
 	return camera;
 }
 
-void RendererSceneRenderRD::render_particle_collider_heightfield(RID p_collider, const Transform3D &p_transform, const PagedArray<RenderGeometryInstance *> &p_instances) {
+void RendererSceneRenderRD::render_particle_collider_heightfield(RID p_collision_instance, const Transform3D &p_transform, const PagedArray<RenderGeometryInstance *> &p_instances) {
 	RendererRD::ParticlesStorage *particles_storage = RendererRD::ParticlesStorage::get_singleton();
+	const RID collider = particles_storage->particles_collision_instance_get_collision(p_collision_instance);
 
-	ERR_FAIL_COND(!particles_storage->particles_collision_is_heightfield(p_collider));
-	Vector3 extents = particles_storage->particles_collision_get_extents(p_collider) * p_transform.basis.get_scale();
+	ERR_FAIL_COND(!particles_storage->particles_collision_is_heightfield(collider));
+	Vector3 extents = particles_storage->particles_collision_get_extents(collider) * p_transform.basis.get_scale();
 	Projection cm;
 	cm.set_orthogonal(-extents.x, extents.x, -extents.z, extents.z, 0, extents.y * 2.0);
 
 	Transform3D cam_xform = heightfield_capture_camera(p_transform, extents.y);
 
-	RID fb = particles_storage->particles_collision_get_heightfield_framebuffer(p_collider);
+	RID fb = particles_storage->particles_collision_get_heightfield_framebuffer(p_collision_instance);
+	ERR_FAIL_COND(fb.is_null());
 
 	_render_particle_collider_heightfield(fb, cam_xform, cm, p_instances);
 }
