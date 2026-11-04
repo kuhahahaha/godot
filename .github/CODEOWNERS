@@ -279,7 +279,7 @@
 
 # Tests
 
-/modules/particles_runtime_tests/              @godotengine/tests
+/modules/particles_runtime_tests/              @kuhahahaha
 /tests/                                       @godotengine/tests
 
 # Thirdparty
