@@ -4,7 +4,7 @@ Execution follows the existing authorized P1–P4 plan in the design master; thi
 
 - P1: strict create-config syntax/projection and checked bytes implemented. Six doctests added; debug/tests, release production, and double syntax checks passed. Doctests not executed. Independent Sol review found no confirmed defect; mesh/material ownership, exact flattened surface count and numeric/profile admission remain storage duties.
 - P2: six RS APIs, immutable External mode, native simulator bypass and resource reservation remain pending. No RID/capability is minted by P1.
-- P3: Instance192 protected init/validate/finalize guard shader and component fixture under implementation. Actual pipeline preparation/RD checked production owner integration and both renderers remain pending. Indexed144/SceneOnly support is not inferred from this shader.
+- P3: Instance192 protected init/validate/finalize guard shader and component fixture implemented; 3 SPIR-V variants, 40 scalar production-control cases and 3 expected-red mutations passed. Actual pipeline preparation/RD checked production owner integration and both renderers remain pending. Indexed144/SceneOnly support is not inferred from this shader.
 - P4: production operation/source association, E09 record-token bridge, no-next-draw maintenance/physical owner ACK and actual E34/U05 route remain pending. Existing source registration alone and qualification ticket mechanics are not production authority.
 
 Latest pass_mask owner decision is imported from OUTPUT_CONTRACT §2 #external-pass-mask: schema1 bits 1/2/4/8/16, KNOWN31; no caller-defined mask policy. Do not numerically cast renderer enums into this wire domain.
