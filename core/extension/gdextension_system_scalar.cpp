@@ -5,6 +5,9 @@
 #include "core/extension/gdextension.h"
 #include "core/extension/gdextension_qualification_internal.h"
 #include "core/os/thread.h"
+#ifdef TESTS_ENABLED
+#include "core/os/os.h"
+#endif
 
 namespace GDExtensionDeviceExit {
 namespace {
@@ -33,7 +36,13 @@ Error system_scalar_native_capacity(RenderingDeviceDriver &driver, uint32_t curr
 	const uint64_t graph_bound = 1 + (uint64_t(bytes) + 31) / 32;
 	// One dispatch plus all copy regions, with the existing owner policy's
 	// initial failure frame and hidden workers in every continuation frame.
-	return qualification_native_capacity(driver, current_commands, graph_bound, workers);
+	const Error error = qualification_native_capacity(driver, current_commands, graph_bound, workers);
+#ifdef TESTS_ENABLED
+	if (OS::get_singleton() && OS::get_singleton()->get_environment("GODOT_QUALIFICATION_CAPACITY_TRACE") == "1") {
+		print_line(vformat("SYS_SCALAR_CAPACITY current=%d workers=%d bytes=%d graphs=%d error=%d", current_commands, workers, bytes, graph_bound, int(error)));
+	}
+#endif
+	return error;
 }
 
 GDExtensionDeviceSessionResultV1 Registry::system_scalar_record(GDExtensionQualificationBridgeRefV1 ref, const GDExtensionSystemScalarRecordV1 *q, GDExtensionSystemScalarTicketRefV1 *out_ticket, GDExtensionSystemScalarReportV1 *out_report) {
@@ -156,6 +165,16 @@ GDExtensionDeviceSessionResultV1 Registry::system_scalar_record(GDExtensionQuali
 		rd->compute_list_bind_compute_pipeline(list, RID::from_uint64(q->unit.pipeline_rid));
 		rd->compute_list_bind_uniform_set(list, ticket->system_set, 0);
 		ticket->body_append = rd->_record_source_dispatch({ q->request_nonce, q->library_generation, q->session_serial, q->record_generation, 0, q->output_word_count }, list, 1, 1, 1);
+#ifdef TESTS_ENABLED
+		if (OS::get_singleton()->get_environment("GODOT_SYSTEM_SCALAR_TEST_APPEND_UNKNOWN") == "1") {
+			const auto original = ticket->body_append.handle;
+			if (ticket->test_inject_system_append_unknown()) {
+				// Adapter observation fault after real graph append, not a claim
+				// that the native driver or GPU produced an unknown issue result.
+				print_line(vformat("SYS_SCALAR_INJECT kind=append_observation_unknown ticket=%d original_graph=%d:%d:%d:%d:%d", ticket->serial, original.graph_instance, original.graph_frame, original.kind, original.index, original.offset));
+			}
+		}
+#endif
 		ticket->body = ticket->body_append.handle;
 		rd->compute_list_end();
 	}

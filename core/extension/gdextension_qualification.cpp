@@ -510,7 +510,20 @@ void Registry::qualification_service(uint64_t bridge_serial,uint64_t serial,uint
     if(kind==2)for(auto *child:bridge->units)if(child && child->serial==serial)returned=child->report.state==1;
    }
    if(returned)break;
-   const Error error=rd->_qualification_maintenance();
+   const Error error=[&]() {
+#ifdef TESTS_ENABLED
+    if (kind == 3 && OS::get_singleton()->get_environment("GODOT_SYSTEM_SCALAR_TEST_SET_RETURN_ERROR") == "1") {
+     MutexLock lock(mutex);
+     for (auto *ticket : bridge->tickets) if (ticket && ticket->serial == serial && ticket->test_inject_system_set_return_error()) {
+      // A controlled failure of this maintenance attempt, never a GPU error
+      // or fabricated free event. The normal sticky-error path consumes it.
+      print_line(vformat("SYS_SCALAR_INJECT kind=set_return_maintenance_error ticket=%d free_event=0 error=%d", ticket->serial, int(FAILED)));
+      return FAILED;
+     }
+    }
+#endif
+    return rd->_qualification_maintenance();
+   }();
    if (error != OK && error != ERR_BUSY && kind == 3) {
     MutexLock lock(mutex);
     for (auto *ticket : bridge->tickets) if (ticket && ticket->serial == serial) ticket->remember_system_set_return_error(error);

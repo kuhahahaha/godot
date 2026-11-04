@@ -118,4 +118,36 @@ TEST_CASE("[SystemScalar] set retirement error does not replace active-operation
 	qualification.remember_system_set_return_error(FAILED);
 	CHECK(qualification.system_set_return_error == OK);
 }
+TEST_CASE("[SystemScalar] controlled Unknown injection requires a real append and fires once") {
+	QualificationTicket ticket(true);
+	CHECK_FALSE(ticket.test_inject_system_append_unknown());
+	ticket.body_append.state = CheckedRecordAppend::State::Appended;
+	ticket.body_append.handle = { 11, 12, 1, 0, 0 };
+	CHECK(ticket.test_inject_system_append_unknown());
+	CHECK(ticket.body_append.state == CheckedRecordAppend::State::Unknown);
+	CHECK_FALSE(ticket.body_append.handle.is_valid());
+	CHECK(ticket.body_append.error == FAILED);
+	ticket.body_append.state = CheckedRecordAppend::State::Appended;
+	ticket.body_append.handle = { 11, 12, 1, 1, 0 };
+	CHECK_FALSE(ticket.test_inject_system_append_unknown());
+	CHECK(ticket.body_append.handle.is_valid());
+	QualificationTicket qualification;
+	qualification.body_append = ticket.body_append;
+	CHECK_FALSE(qualification.test_inject_system_append_unknown());
+}
+
+TEST_CASE("[SystemScalar] controlled set-return injection requires retired compute and fires once") {
+	QualificationTicket ticket(true);
+	CHECK_FALSE(ticket.test_inject_system_set_return_error());
+	ticket.system_set = RID::from_uint64(7);
+	CHECK_FALSE(ticket.test_inject_system_set_return_error());
+	ticket.physically_retired.store(true);
+	CHECK(ticket.test_inject_system_set_return_error());
+	CHECK_FALSE(ticket.test_inject_system_set_return_error());
+	CHECK(ticket.system_set_return_error == OK); // The real service consumes FAILED.
+	QualificationTicket qualification;
+	qualification.system_set = RID::from_uint64(7);
+	qualification.physically_retired.store(true);
+	CHECK_FALSE(qualification.test_inject_system_set_return_error());
+}
 } // namespace TestSystemScalar

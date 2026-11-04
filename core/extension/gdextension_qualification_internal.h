@@ -157,6 +157,25 @@ struct QualificationTicket {
  uint32_t ordering_path_length=0;
  bool ordering_closed=false,append_failed=false,mapping_failed=false,observation_dirty=false;
  bool resources_returned=false;
+#ifdef TESTS_ENABLED
+ bool test_system_append_unknown_injected = false;
+ bool test_system_set_return_error_injected = false;
+ bool test_inject_system_append_unknown() {
+  if (!system_scalar || test_system_append_unknown_injected || body_append.state != CheckedRecordAppend::State::Appended || !body_append.handle.is_valid()) return false;
+  test_system_append_unknown_injected = true;
+  body_append.state = CheckedRecordAppend::State::Unknown;
+  body_append.handle = {};
+  body_append.error = FAILED;
+  return true;
+ }
+ bool test_inject_system_set_return_error() {
+  if (!system_scalar || test_system_set_return_error_injected || !physically_retired.load() || system_set.is_null() || system_set_return_error != OK) return false;
+  MutexLock lock(system_set_physical.mutex);
+  if (system_set_physical.free_event) return false;
+  test_system_set_return_error_injected = true;
+  return true;
+ }
+#endif
  void remember_system_set_return_error(Error p_error) {
   if (!system_scalar || !physically_retired.load() || system_set.is_null() || p_error == OK || p_error == ERR_BUSY || system_set_return_error != OK) return;
   MutexLock lock(system_set_physical.mutex);
