@@ -70,6 +70,13 @@ class TestRecordSourceAccess {
 		}
 		uint64_t limit_get(Limit) override { return 64; }
 		uint64_t api_trait_get(ApiTrait trait) override { return trait == API_TRAIT_HONORS_PIPELINE_BARRIERS ? 1 : 0; }
+		uint32_t uniform_sets_get_dynamic_offsets(VectorView<UniformSetID> sets, ShaderID, uint32_t first, uint32_t count) const override {
+			CHECK(sets.size() == 1);
+			CHECK(sets[0] == UniformSetID(51));
+			CHECK(first == 0);
+			CHECK(count == 1);
+			return 0; // The controlled set has no dynamic descriptors.
+		}
 		Error command_queue_execute_and_present(CommandQueueID, VectorView<SemaphoreID>, VectorView<CommandBufferID>, VectorView<SemaphoreID>, FenceID, VectorView<SwapChainID> swaps) override {
 			CHECK(swaps.size() == 0);
 			uint32_t index = UINT32_MAX;
