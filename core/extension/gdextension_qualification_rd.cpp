@@ -237,7 +237,7 @@ void RenderingDevice::_qualification_issue_tickets_locked(uint32_t slot,const RD
 		  continue;
 	  }
    bool known=false;for(const auto &member:ticket->natives)if(member.source.serial==source.serial && source.serial){known=true;break;}if(known)continue;
-   if(ticket->facts.size()>=QualificationTicket::FACT_CAPACITY || !source.queue_index || !source.serial || !source.completion_serial || source.completion==RDD::CompletionCapability::None) {ticket->mapping_failed=true;continue;}
+   if(ticket->facts.size()>=QualificationTicket::FACT_CAPACITY || !source.queue_index || !source.serial || !source.completion_serial || source.completion==RDD::CompletionCapability::Disabled) {ticket->mapping_failed=true;continue;}
    GDExtensionQualificationFactV1 fact={};fact.backend_queue=source.queue_index;fact.semantic_kind=slot==UINT32_MAX?4:5;fact.command_slot=slot;fact.parent_fact=parent;fact.phase=3;
    fact.issue=uint32_t(source.issue);fact.completion=1;fact.error=source.error;fact.native_serial=source.serial;fact.completion_serial=source.completion_serial;fact.native_code=source.native_code;
    const uint32_t index=ticket->facts.size();ticket->facts.push_back(fact);ticket->observation_dirty=true;

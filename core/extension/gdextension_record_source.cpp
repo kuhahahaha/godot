@@ -60,7 +60,7 @@ Error retain_native_source(RDD &driver, NativeSourceMember &member) {
 	if (member.retained || member.owner_released) {
 		return OK;
 	}
-	if (!member.source.serial || !member.source.queue_index || !member.source.completion_serial || member.source.completion == RDD::CompletionCapability::None || member.source.presentation_only) {
+	if (!member.source.serial || !member.source.queue_index || !member.source.completion_serial || member.source.completion == RDD::CompletionCapability::Disabled || member.source.presentation_only) {
 		member.retention_error = ERR_INVALID_DATA;
 		return ERR_INVALID_DATA;
 	}
