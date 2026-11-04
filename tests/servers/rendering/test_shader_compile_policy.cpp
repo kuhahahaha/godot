@@ -47,6 +47,7 @@ TEST_FORCE_LINK(test_shader_compile_policy)
 
 #include "modules/modules_enabled.gen.h"
 
+#include <array>
 #include <thread>
 
 #ifdef METAL_ENABLED
@@ -816,7 +817,7 @@ TEST_CASE("policy_flags [ShaderCompilePolicy]") {
 		stage.shader_stage = RenderingDeviceCommons::SHADER_STAGE_COMPUTE;
 		stage.spirv.push_back(0);
 		Vector<RenderingDeviceCommons::ShaderStageSPIRVData> stages{ stage };
-		for (uint64_t flags : { uint64_t(1), uint64_t(2), uint64_t(3), uint64_t(1) << 40, UINT64_MAX }) {
+		for (uint64_t flags : std::array<uint64_t, 5>{ uint64_t(1), uint64_t(2), uint64_t(3), uint64_t(1) << 40, UINT64_MAX }) {
 			ERR_PRINT_OFF;
 			CHECK(rd.shader_compile_binary_from_spirv_with_options(stages, "unsupported", flags).is_empty());
 			CHECK(rd.shader_create_from_spirv_with_options(stages, "unsupported", flags).is_null());

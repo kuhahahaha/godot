@@ -209,8 +209,8 @@ public:
 	}
 	static void request_identity() {
 		using namespace GDExtensionDeviceExit;
-		const OriginalOperationIdentity owner{11, 12, 13, 14, 0, 4};
-		const OriginalOperationIdentity changed{11, 12, 13, 14, 0, 5};
+		const OriginalOperationIdentity owner{ 11, 12, 13, 14, 0, 4 };
+		const OriginalOperationIdentity changed{ 11, 12, 13, 14, 0, 5 };
 		CHECK(valid_original_operation_identity(owner));
 		CHECK(same_original_operation_identity(owner, owner));
 		CHECK_FALSE(same_original_operation_identity(owner, changed));
@@ -219,53 +219,53 @@ public:
 		CHECK(observation.operation_bound);
 		CHECK(same_original_operation_identity(observation.operation, owner));
 		CHECK(bind_checked_record_append(observation, changed) == ERR_UNAUTHORIZED);
-		const OriginalOperationIdentity invalid{11, 12, 13, 14, 4, 4};
+		const OriginalOperationIdentity invalid{ 11, 12, 13, 14, 4, 4 };
 		CHECK_FALSE(valid_original_operation_identity(invalid));
 		CHECK(bind_checked_record_append(observation, invalid) == ERR_INVALID_DATA);
 		const ReadbackSourceState complete{ 101, 11, 4, 8, 8, 8, 8, OK, true };
 		CHECK(same_request_readback_complete(complete, 101, 11, 4, 8));
 		for (uint32_t mode = 0; mode < 10; ++mode) {
-			auto changed = complete;
+			auto changed_readback = complete;
 			switch (mode) {
 				case 0:
-					++changed.request_serial;
+					++changed_readback.request_serial;
 					break;
 				case 1:
-					++changed.backing_serial;
+					++changed_readback.backing_serial;
 					break;
 				case 2:
-					++changed.offset;
+					++changed_readback.offset;
 					break;
 				case 3:
-					++changed.size;
+					++changed_readback.size;
 					break;
 				case 4:
-					--changed.issued;
+					--changed_readback.issued;
 					break;
 				case 5:
-					--changed.completed;
+					--changed_readback.completed;
 					break;
 				case 6:
-					--changed.owned_bytes;
+					--changed_readback.owned_bytes;
 					break;
 				case 7:
-					changed.error = ERR_CANT_ACQUIRE_RESOURCE;
+					changed_readback.error = ERR_CANT_ACQUIRE_RESOURCE;
 					break;
 				case 8:
-					changed.delivered = false;
+					changed_readback.delivered = false;
 					break;
 				case 9:
-					changed.request_serial = 0;
+					changed_readback.request_serial = 0;
 					break;
 			}
 			CAPTURE(mode);
-			CHECK_FALSE(same_request_readback_complete(changed, 101, 11, 4, 8));
+			CHECK_FALSE(same_request_readback_complete(changed_readback, 101, 11, 4, 8));
 		}
 		CHECK_FALSE(same_request_readback_complete(complete, 101, 11, UINT64_MAX, 8));
 	}
 	static void checked_append() {
 		using State = GDExtensionDeviceExit::CheckedRecordAppend::State;
-		const GDExtensionDeviceExit::OriginalOperationIdentity identity{11, 12, 13, 14, 0, 4};
+		const GDExtensionDeviceExit::OriginalOperationIdentity identity{ 11, 12, 13, 14, 0, 4 };
 		RenderingDevice device;
 		Driver driver;
 		device.driver = &driver;
