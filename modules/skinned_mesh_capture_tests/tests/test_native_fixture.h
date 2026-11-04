@@ -45,6 +45,8 @@
 
 #include "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_capture.h"
 #include "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_fixture.h"
+#include "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_public_snapshot.h"
+#include "modules/skinned_mesh_capture_tests/tests/test_public_snapshot.h"
 
 // C++-only scene construction access. It neither arms native acquisition nor
 // creates a script-facing preflight bypass.
@@ -71,6 +73,16 @@ struct SkinnedMeshCaptureTestFixtureTestAccess {
 	}
 
 	static Error prepare(SkinnedMeshCaptureTestFixture *p_fixture, const StringName &p_member) { return p_fixture->build_fixed_scene(p_member); }
+	static void acquired_public(SkinnedMeshCaptureTestFixture *p_fixture, uint64_t p_epoch, bool p_prepare_scene = false) {
+		p_fixture->session_epoch = p_epoch;
+		p_fixture->route = "P";
+		p_fixture->session = SkinnedMeshCaptureTestNativeSession::create(41, p_epoch, false);
+		if (p_prepare_scene) {
+			CHECK(p_fixture->build_fixed_scene("S02") == OK);
+		} else {
+			p_fixture->scene_prepared = true;
+		}
+	}
 };
 
 namespace TestSkinnedMeshCaptureTestNativeFixture {
@@ -193,6 +205,59 @@ TEST_CASE("[P01] Native fixture fails closed before acquisition") {
 	CHECK(fixture->close() == OK);
 	CHECK(fixture->begin("S02", "N") == ERR_ALREADY_IN_USE);
 	memdelete(fixture);
+}
+TEST_CASE("[P01] Public admission rejects a decoded snapshot without its live fixed owner") {
+	auto *fixture = memnew(SkinnedMeshCaptureTestFixture);
+	SkinnedMeshCaptureTestFixtureTestAccess::acquired_public(fixture, 9041);
+	REQUIRE(fixture->take_result()["execution"] == "in_progress");
+	Dictionary snapshot = TestSkinnedMeshCaptureTestPublicSnapshot::baseline();
+	snapshot["epoch"] = int64_t(9041);
+	CHECK(fixture->submit_public_snapshot(snapshot) == ERR_INVALID_DATA);
+	CHECK(String(fixture->take_result()["last_diagnostic"]) == "P01_SOURCE");
+	CHECK(Array(fixture->take_result()["captures"]).is_empty());
+	fixture->close();
+	memdelete(fixture);
+	SkinnedMeshCaptureTestNativeSession::service_retirement();
+}
+TEST_CASE("[P01][SceneTree] Public admission validates fixed source before native recording") {
+	auto *fixture = memnew(SkinnedMeshCaptureTestFixture);
+	SceneTree::get_singleton()->get_root()->add_child(fixture);
+	SkinnedMeshCaptureTestFixtureTestAccess::acquired_public(fixture, 9042, true);
+	auto *source = Object::cast_to<Node3D>(fixture->get_node_or_null(NodePath("Source")));
+	auto *mesh = Object::cast_to<MeshInstance3D>(fixture->get_node_or_null(NodePath("Source/Mesh")));
+	auto *skeleton = Object::cast_to<Skeleton3D>(fixture->get_node_or_null(NodePath("Source/Skeleton")));
+	REQUIRE(source != nullptr);
+	REQUIRE(mesh != nullptr);
+	REQUIRE(skeleton != nullptr);
+	Dictionary sample = TestSkinnedMeshCaptureTestPublicSnapshot::baseline();
+	sample["epoch"] = int64_t(9042);
+	Dictionary ids = sample["source_object_ids"];
+	ids["source_node"] = String::num_uint64(uint64_t(source->get_instance_id()));
+	ids["mesh_instance"] = String::num_uint64(uint64_t(mesh->get_instance_id()));
+	ids["skeleton_node"] = String::num_uint64(uint64_t(skeleton->get_instance_id()));
+	ids["mesh"] = String::num_uint64(uint64_t(mesh->get_mesh()->get_instance_id()));
+	ids["skin_reference"] = String::num_uint64(uint64_t(mesh->get_skin_reference()->get_instance_id()));
+	ids["skin"] = String::num_uint64(uint64_t(mesh->get_skin_reference()->get_skin()->get_instance_id()));
+	sample["source_object_ids"] = ids;
+	sample["bind_digest"] = "b84cbe60832eeb50b191f124624e9c5ee98b4e4ae3b4f4891074396a10ecf4a6";
+	PackedFloat32Array pose = sample["pose_matrices"];
+	pose.set(3, 0.0f); // Actual fixed scene is still at t0.
+	sample["pose_matrices"] = pose;
+	CHECK(fixture->submit_public_snapshot(sample) == ERR_INVALID_DATA); // No actual signal observed yet.
+	skeleton->emit_signal("skeleton_updated");
+	CHECK(fixture->submit_public_snapshot(sample) == ERR_INVALID_PARAMETER); // Dummy renderer has no skeleton RID.
+	CHECK(String(fixture->take_result()["last_diagnostic"]) == "P01_CREATE_OR_COPY");
+	Dictionary wrong_bind = sample.duplicate(true);
+	wrong_bind["bind_digest"] = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+	CHECK(fixture->submit_public_snapshot(wrong_bind) == ERR_INVALID_DATA);
+	CHECK(String(fixture->take_result()["last_diagnostic"]) == "P01_SOURCE");
+	sample["request_id"] = int64_t(2);
+	CHECK(fixture->submit_public_snapshot(sample) == ERR_INVALID_PARAMETER);
+	CHECK(String(fixture->take_result()["last_diagnostic"]) == "P01_STATE");
+	CHECK(Array(fixture->take_result()["captures"]).is_empty()); // FIFO/RT has not recorded.
+	fixture->close();
+	memdelete(fixture);
+	SkinnedMeshCaptureTestNativeSession::service_retirement();
 }
 
 TEST_CASE("[P01] Native fixture rejects foreign-thread calls without changing state") {

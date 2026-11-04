@@ -41,6 +41,7 @@
 class SkinnedMeshCaptureTestNativeSessionTestAccess {
 public:
 	static Error prepare(SkinnedMeshCaptureTestNativeSession &p_session, const std::vector<SkinnedMeshCaptureTestSessionRequest> &p_requests, Callable &r_delivery) { return p_session.prepare_delivery(p_requests, r_delivery); }
+	static String pending_public_digest(const SkinnedMeshCaptureTestNativeSession &p_session) { return p_session.pending.front().request.public_snapshot.source_content_digest; }
 	static void maintain(SkinnedMeshCaptureTestNativeSession &p_session) { p_session.maintain(); }
 	static void phase(SkinnedMeshCaptureTestNativeSession &p_session, uint64_t p_frame, bool p_after_views) { p_session.phase(p_frame, p_after_views); }
 	static Error prepare_completed_image(SkinnedMeshCaptureTestNativeSession &p_session, Callable &r_callback) {
@@ -99,6 +100,44 @@ TEST_CASE("[P01] Native session bounds immutable requests and closes without inv
 	CHECK(status.no_native_work);
 	CHECK_FALSE(status.pool_retired);
 	CHECK_FALSE(status.initialized);
+	SkinnedMeshCaptureTestNativeSessionTestAccess::remove_terminal();
+}
+TEST_CASE("[P01] Public snapshots enter the original FIFO with exact epoch and request") {
+	skinned_mesh_capture_test_hook_reset();
+	auto session = SkinnedMeshCaptureTestNativeSession::create(31, 9031, false);
+	REQUIRE(session != nullptr);
+	SkinnedMeshCaptureTestSessionRequest request;
+	request.request = 1;
+	request.public_source = true;
+	request.public_snapshot.epoch = 9031;
+	request.public_snapshot.request_id = 1;
+	request.scene = RID::from_uint64(1);
+	request.mesh = RID::from_uint64(2);
+	request.skeleton = RID::from_uint64(3);
+	Callable delivery;
+	request.public_snapshot.epoch = 9030;
+	CHECK(SkinnedMeshCaptureTestNativeSessionTestAccess::prepare(*session, { request }, delivery) == ERR_INVALID_PARAMETER);
+	CHECK(delivery.is_null());
+	request.public_snapshot.epoch = 9031;
+	request.public_snapshot.request_id = 2;
+	CHECK(SkinnedMeshCaptureTestNativeSessionTestAccess::prepare(*session, { request }, delivery) == ERR_INVALID_PARAMETER);
+	CHECK(delivery.is_null());
+	request.public_snapshot.request_id = 1;
+	request.public_snapshot.source_content_digest = "original";
+	REQUIRE(SkinnedMeshCaptureTestNativeSessionTestAccess::prepare(*session, { request }, delivery) == OK);
+	request.public_snapshot.request_id = 3;
+	request.public_snapshot.source_content_digest = "changed";
+	CHECK(SkinnedMeshCaptureTestNativeSessionTestAccess::pending_public_digest(*session) == "original");
+	delivery.call();
+	SkinnedMeshCaptureTestNativeSessionTestAccess::phase(*session, 93, false);
+	const auto status = session->status();
+	REQUIRE(status.results.size() == 1);
+	CHECK(status.results[0].request == 1);
+	CHECK(status.results[0].received);
+	CHECK(status.error == ERR_UNAVAILABLE); // Dummy renderer has no RD; no GPU success claim.
+	session->close();
+	delivery = Callable();
+	SkinnedMeshCaptureTestNativeSessionTestAccess::maintain(*session);
 	SkinnedMeshCaptureTestNativeSessionTestAccess::remove_terminal();
 }
 TEST_CASE("[P01] Native session cleanup survives poisoned phase evidence and absent RD") {
