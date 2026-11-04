@@ -131,7 +131,7 @@ void PhysicsServer3DWrapMT::_notify_pump() {
 	WorkerThreadPool::TaskID task;
 	{
 		MutexLock lock(control_mutex);
-		task = pump_exited ? WorkerThreadPool::INVALID_TASK_ID : server_task_id;
+		task = pump_exited ? WorkerThreadPool::TaskID(WorkerThreadPool::INVALID_TASK_ID) : server_task_id;
 	}
 	if (task != WorkerThreadPool::INVALID_TASK_ID) {
 		WorkerThreadPool::get_singleton()->notify_yield_over(task);

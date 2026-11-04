@@ -7164,10 +7164,10 @@ RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_draw_indirect_reco
 	}
 
 	if (p_use_indices) {
-#ifdef DEBUG_ENABLED
 		ERR_FAIL_COND_V_MSG(!draw_list.validation.index_array_count, result.failure(ERR_INVALID_PARAMETER),
 				"Draw command requested indices, but no index buffer was set.");
 
+#ifdef DEBUG_ENABLED
 		ERR_FAIL_COND_V_MSG(draw_list.validation.pipeline_uses_restart_indices != draw_list.validation.index_buffer_uses_restart_indices, result.failure(ERR_INVALID_PARAMETER),
 				"The usage of restart indices in index buffer does not match the render primitive in the pipeline.");
 #endif

@@ -898,7 +898,10 @@ TEST_CASE("[DeviceExit][TypedABI] legacy lookup hides lifecycle and preserves me
 	CHECK(gdextension_get_proc_address("device_exit_terminate_initialize_blocked_v1") == nullptr);
 	CHECK(gdextension_get_proc_address("device_exit_terminate_blocked_v1") == nullptr);
 	CHECK(gdextension_get_proc_address("device_exit_bootstrap_library_v1") != nullptr);
+	CHECK(gdextension_get_proc_address("get_godot_version2") != nullptr);
+#ifndef DISABLE_DEPRECATED
 	CHECK(gdextension_get_proc_address("get_godot_version") != nullptr);
+#endif
 }
 
 TEST_CASE("[DeviceExit][TypedABI] producer registration ABI preserves rejection and guarded lookup") {
