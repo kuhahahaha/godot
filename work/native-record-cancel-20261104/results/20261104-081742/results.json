@@ -1,0 +1,165 @@
+{
+  "host": {
+    "binary": "/Users/macbookair/Documents/Work/godot_ANGE/work/particle-render-exit-seal-audit-20261105/seal-wait-clean-pair/editor.arm64",
+    "sha256": "887bff69ab84ab6f35a88f2f2bb9cd46d5970bb7e4ca7a230ea5c94761130392",
+    "metadata_sha256": "c7355cb7415dcc2584522d9a2f2bbbf663fe591aec46c24a3fd655eea297293a",
+    "selection": {
+      "schema": 1,
+      "core_stamp": "1da8f74011c7992723d1cd5c47aaacc35f480898ad8a2a3bb1cdd97e1ea9548b",
+      "compiler_route": "BuiltinGlslangV1",
+      "compiler_stamp": "39a3123a771d415829a5f3f909f8fcb3f748a3caf0a958637aaaec2c8093d166",
+      "platform": "macos",
+      "architecture": "arm64",
+      "target_kind": "Executable"
+    },
+    "linkage": "/Users/macbookair/Documents/Work/godot_ANGE/work/particle-render-exit-seal-audit-20261105/seal-wait-clean-pair/editor.arm64:\n\t/System/Library/Frameworks/ForceFeedback.framework/Versions/A/ForceFeedback (compatibility version 1.0.0, current version 1.0.2)\n\t/System/Library/Frameworks/Cocoa.framework/Versions/A/Cocoa (compatibility version 1.0.0, current version 24.0.0)\n\t/System/Library/Frameworks/Carbon.framework/Versions/A/Carbon (compatibility version 2.0.0, current version 170.0.0)\n\t/System/Library/Frameworks/AudioUnit.framework/Versions/A/AudioUnit (compatibility version 1.0.0, current version 1.0.0)\n\t/System/Library/Frameworks/CoreAudio.framework/Versions/A/CoreAudio (compatibility version 1.0.0, current version 1.0.0)\n\t/System/Library/Frameworks/CoreMIDI.framework/Versions/A/CoreMIDI (compatibility version 1.0.0, current version 69.0.0)\n\t/System/Library/Frameworks/IOKit.framework/Versions/A/IOKit (compatibility version 1.0.0, current version 275.0.0)\n\t/System/Library/Frameworks/GameController.framework/Versions/A/GameController (compatibility version 1.0.0, current version 14.1.2)\n\t/System/Library/Frameworks/CoreHaptics.framework/Versions/A/CoreHaptics (compatibility version 1.0.0, current version 1.0.0)\n\t/System/Library/Frameworks/CoreVideo.framework/Versions/A/CoreVideo (compatibility version 1.2.0, current version 776.2.0)\n\t/System/Library/Frameworks/AVFoundation.framework/Versions/A/AVFoundation (compatibility version 1.0.0, current version 2.0.0)\n\t/System/Library/Frameworks/CoreMedia.framework/Versions/A/CoreMedia (compatibility version 1.0.0, current version 3385.14.5)\n\t/System/Library/Frameworks/QuartzCore.framework/Versions/A/QuartzCore (compatibility version 1.2.0, current version 1223.10.17)\n\t/System/Library/Frameworks/Security.framework/Versions/A/Security (compatibility version 1.0.0, current version 62460.40.78)\n\t/System/Library/Frameworks/UniformTypeIdentifiers.framework/Versions/A/UniformTypeIdentifiers (compatibility version 1.0.0, current version 709.0.0)\n\t/System/Library/Frameworks/IOSurface.framework/Versions/A/IOSurface (compatibility version 1.0.0, current version 1.0.0)\n\t/System/Library/Frameworks/Metal.framework/Versions/A/Metal (compatibility version 1.0.0, current version 383.1.0)\n\t/System/Library/Frameworks/MetalFX.framework/Versions/A/MetalFX (compatibility version 1.0.0, current version 1.0.0)\n\t/System/Library/Frameworks/MetalKit.framework/Versions/A/MetalKit (compatibility version 1.0.0, current version 174.4.0)\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1359.40.3)\n\t/usr/lib/libz.1.dylib (compatibility version 1.0.0, current version 1.2.12)\n\t/usr/lib/libc++.1.dylib (compatibility version 1.0.0, current version 2200.32.0)\n\t/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit (compatibility version 45.0.0, current version 2775.20.133)\n\t/System/Library/Frameworks/ApplicationServices.framework/Versions/A/ApplicationServices (compatibility version 1.0.0, current version 66.0.0)\n\t/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation (compatibility version 150.0.0, current version 5027.1.8)\n\t/System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics (compatibility version 64.0.0, current version 2050.1.6)\n\t/System/Library/Frameworks/CoreServices.framework/Versions/A/CoreServices (compatibility version 1.0.0, current version 1226.0.0)\n\t/System/Library/Frameworks/CoreText.framework/Versions/A/CoreText (compatibility version 1.0.0, current version 910.0.0)\n\t/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation (compatibility version 300.0.0, current version 5027.1.8)\n\t/usr/lib/libobjc.A.dylib (compatibility version 1.0.0, current version 228.0.0)\n"
+  },
+  "inputs": {
+    "run.py": "a66fa1e5533b474deef99324da4618501b83a10087d0572c72616aca1f437fa4",
+    "runtime/typed_probe.cpp": "7a806873b4a6a4a63b877a0f46dce6d3df5bb617109412910065fb922e6739e8",
+    "runtime/typed_setup.inc": "c16bb0b13a6a6c222d475517445d429dafef9d4cd2d9bf65cdbfb98d2fcde504",
+    "runtime/typed_retire.inc": "3174e64f1b4867a704e7ecd0eac585eeb5e483ed75316df476c79a07819e67b9",
+    "runtime/gdextension_interface_v2.pinned.h": "e2273bc588a8810ba545214731380cfd9f831842b70f4d62f354c815e339115b",
+    "runtime/containers/body.glsl": "643016f04ba7c8f46a8be96ac9928e1a3dfd53efa227351a2ac83a77650b9832",
+    "runtime/containers/capture.glsl": "c4e9a997d936d6edebdd1b079b1ebbea5a7bf521b184f2b94b8662f20104e2dc",
+    "runtime/containers/generate.gd": "56dde143f130d12a0714151e7ae093e99665868780b87d6dc1a68911ea83cb4a"
+  },
+  "builds": [
+    {
+      "case": "omit_cancel_control",
+      "command": [
+        "clang++",
+        "-DOMIT_AFTER_RECORD_CANCEL",
+        "-std=c++17",
+        "-dynamiclib",
+        "-arch",
+        "arm64",
+        "-mmacosx-version-min=11.0",
+        "-O2",
+        "-Wall",
+        "-Wextra",
+        "-Wno-unused-parameter",
+        "-Wno-deprecated-declarations",
+        "-DTICKET_MODE=3",
+        "-I",
+        "/Users/macbookair/Documents/Work/godot_ANGE",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-record-cancel-20261104/runtime/typed_probe.cpp",
+        "-o",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-record-cancel-20261104/runtime/omit_cancel_control.dylib"
+      ],
+      "returncode": 0,
+      "dso_sha256": "70fae7823ee79418140879229c4367f6eae1199448526fb7fae089138562d2a6"
+    },
+    {
+      "case": "after_record_cancel",
+      "command": [
+        "clang++",
+        "-std=c++17",
+        "-dynamiclib",
+        "-arch",
+        "arm64",
+        "-mmacosx-version-min=11.0",
+        "-O2",
+        "-Wall",
+        "-Wextra",
+        "-Wno-unused-parameter",
+        "-Wno-deprecated-declarations",
+        "-DTICKET_MODE=3",
+        "-I",
+        "/Users/macbookair/Documents/Work/godot_ANGE",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-record-cancel-20261104/runtime/typed_probe.cpp",
+        "-o",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-record-cancel-20261104/runtime/after_record_cancel.dylib"
+      ],
+      "returncode": 0,
+      "dso_sha256": "1d1a207f1c155897fd697cc35eaef18d276671f6fd4c97aea64572aa78d9e803"
+    }
+  ],
+  "runs": [
+    {
+      "case": "containers",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/particle-render-exit-seal-audit-20261105/seal-wait-clean-pair/editor.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-record-cancel-20261104/runtime/containers",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "safe",
+        "--script",
+        "generate.gd"
+      ],
+      "cwd": "/Users/macbookair/Documents/Work/godot_ANGE",
+      "timeout_seconds": 60,
+      "returncode": 0,
+      "log_sha256": "dc1c0ee0cd0c20176168da81f4916f8a6b08f756c67e3e3c8e9e33c9d048a5a8",
+      "checks": {
+        "exit_zero": true,
+        "generated": true,
+        "real_metal": true,
+        "clean": true
+      }
+    },
+    {
+      "case": "omit_cancel_control",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/particle-render-exit-seal-audit-20261105/seal-wait-clean-pair/editor.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-record-cancel-20261104/runtime/omit_cancel_control",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "safe",
+        "--script",
+        "probe.gd"
+      ],
+      "cwd": "/Users/macbookair/Documents/Work/godot_ANGE",
+      "timeout_seconds": 60,
+      "returncode": 180,
+      "log_sha256": "a69f4ffa2473fe8242f734b172217f81c0918bdf6c457ec5ffe9b0adc383a112",
+      "checks": {
+        "target_assertion": true
+      }
+    },
+    {
+      "case": "after_record_cancel",
+      "command": [
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/particle-render-exit-seal-audit-20261105/seal-wait-clean-pair/editor.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Work/godot_ANGE/work/native-record-cancel-20261104/runtime/after_record_cancel",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "safe",
+        "--script",
+        "probe.gd"
+      ],
+      "cwd": "/Users/macbookair/Documents/Work/godot_ANGE",
+      "timeout_seconds": 60,
+      "returncode": 0,
+      "log_sha256": "8139e4f275c5feecabdf58d1b7ec6dcdbb38e2f6ba6f6fe6e204042322467038",
+      "checks": {
+        "exit_zero": true,
+        "real_metal": true,
+        "record_before_result": true,
+        "cancelled_drain": true,
+        "physical_events": true,
+        "terminal": true,
+        "unload": true,
+        "clean": true
+      }
+    }
+  ],
+  "containers": {
+    "capture": "aa29e1ca243f40997f40e698a9cfab1f9b789a6cb84efa871fee2ca6062ec70d",
+    "body": "c6ef4b3831d60b12f0e6ac4803df3e7a107ec5dbba8a197d407e0da5f084c825"
+  },
+  "inputs_unchanged": true,
+  "host_unchanged": true
+}

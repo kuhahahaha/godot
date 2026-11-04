@@ -1,0 +1,43 @@
+Godot Engine v4.7.2.stable.custom_build.f3cacf1ce (2026-11-02 17:07:07 UTC) - https://godotengine.org
+Metal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M3 Pro (Apple9)
+
+PHS1_EARLY_ACK tag=one level=2
+PHS1_EARLY_ACK tag=one level=3
+QRT_NATIVE_RETURN kind=2 operation=2 slot=3 result=72 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=1 operation=3 slot=7 result=48 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=2 operation=4 slot=8 result=72 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=1 operation=5 slot=12 result=48 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=2 operation=6 slot=13 result=72 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=1 operation=7 slot=17 result=48 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=2 operation=8 slot=18 result=72 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=1 operation=9 slot=22 result=48 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=4 operation=10 slot=23 result=96 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=4 operation=11 slot=27 result=96 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=11 operation=12 slot=31 result=344 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=11 operation=13 slot=36 result=344 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=8 operation=14 slot=37 result=120 segments=1 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=8 operation=15 slot=38 result=120 segments=1 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=8 operation=16 slot=39 result=120 segments=1 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=8 operation=17 slot=40 result=120 segments=1 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=12 operation=18 slot=41 result=112 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=12 operation=19 slot=45 result=112 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=13 operation=20 slot=46 result=112 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=13 operation=21 slot=50 result=112 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=14 operation=22 slot=51 result=120 segments=0 error=30 reply_ack=1
+QRT_NATIVE_RETURN kind=14 operation=23 slot=52 result=120 segments=2 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=14 operation=24 slot=53 result=120 segments=2 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=15 operation=25 slot=54 result=112 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=15 operation=26 slot=58 result=112 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=15 operation=27 slot=59 result=112 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=15 operation=28 slot=63 result=112 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=15 operation=29 slot=64 result=112 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=15 operation=30 slot=68 result=112 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=15 operation=31 slot=69 result=112 segments=0 error=4 reply_ack=1
+QRT_NATIVE_RETURN kind=15 operation=32 slot=70 result=112 segments=0 error=30 reply_ack=1
+QRT_NATIVE_RETURN kind=15 operation=34 slot=71 result=112 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=15 operation=35 slot=75 result=112 segments=0 error=0 reply_ack=1
+TYPED_ADMITTED original_children=6 phase_sets=4 image_bytes=64 actual_row_segments=2 busy_suffix_returns=0 admission_is_gpu_evidence=0 binding_negatives=3 payload_digest_negative=1
+QRT_NATIVE_RETURN kind=10 operation=36 slot=76 result=328 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=10 operation=37 slot=77 result=328 segments=0 error=0 reply_ack=1
+AFTER_RECORD_CANCEL before_state=2 before_phase=2 owned=0 readbacks=3
+MULTI_V2_ASSERT where=after_record_cancel_closes_upload mode=3
