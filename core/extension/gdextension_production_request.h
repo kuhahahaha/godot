@@ -49,6 +49,7 @@ class ProductionRequest;
 // A copied DTO or address never enrolls a cell into the Registry.
 class ProductionResourceSlot {
 	friend class Registry;
+	friend class ::RenderingDevice;
 #ifdef TESTS_ENABLED
 	friend class ::TestProductionResourceUseAccess;
 	friend struct ::TestProductionRequest::Access;
@@ -67,9 +68,21 @@ class ProductionResourceSlot {
 	uint32_t shader_set = UINT32_MAX;
 	uint32_t first_binding = UINT32_MAX, binding_count = 0;
 	bool imported = false;
+	uint32_t transfer_worker = UINT32_MAX;
+	uint64_t transfer_operation = 0, transfer_canonical = 0;
+	bool transfer_pending = false, transfer_staged = false;
+	QualificationPhysicalReturn owned_physical;
+	GDExtensionStorageCreateRequestV1 create_origin = {};
+	GDExtensionStorageBackingV1 owned_backing = {};
+	GDExtensionStorageRetireRequestV1 retire_origin = {};
+	GDExtensionStorageRetireReportV1 retire_report = {};
+	uint64_t owned_serial = 0, retire_serial = 0;
+	bool creating = false, retiring = false, returned = false;
+	Error handoff_error = OK;
 };
 class ProductionActionCell {
 	friend class Registry;
+	friend class ::RenderingDevice;
 #ifdef TESTS_ENABLED
 	friend struct ::TestProductionRequest::Access;
 	friend struct ::TestProductionNativeObserve::Access;
@@ -81,11 +94,13 @@ class ProductionActionCell {
 	GDExtensionProductionCopyV1 copy = {};
 	GDExtensionProductionUploadV1 upload = {};
 	uint64_t payload_offset = 0, payload_bytes = 0;
+	uint32_t recorded_bytes = 0;
 	uint32_t readback_slot = UINT32_MAX;
 	bool prepared = false;
 };
 class ProductionUseCell {
 	friend class Registry;
+	friend class ::RenderingDevice;
 #ifdef TESTS_ENABLED
 	friend struct ::TestProductionRequest::Access;
 	friend struct ::TestProductionNativeObserve::Access;
@@ -99,6 +114,7 @@ class ProductionUseCell {
 };
 class ProductionReadbackCell {
 	friend class Registry;
+	friend class ::RenderingDevice;
 #ifdef TESTS_ENABLED
 	friend struct ::TestProductionRequest::Access;
 	friend struct ::TestProductionNativeObserve::Access;
@@ -107,10 +123,12 @@ class ProductionReadbackCell {
 	ProductionRequest *request = nullptr;
 	GDExtensionProductionReadbackV1 declaration = {};
 	ReadbackSourceState source;
+	BufferReadbackSourceCapture capture;
 	uint64_t bytes_offset = 0;
 };
 class ProductionGraphCell {
 	friend class Registry;
+	friend class ::RenderingDevice;
 #ifdef TESTS_ENABLED
 	friend struct ::TestProductionRequest::Access;
 	friend struct ::TestProductionNativeObserve::Access;
@@ -118,11 +136,15 @@ class ProductionGraphCell {
 	ProductionGraphCell() = default;
 	ProductionRequest *request = nullptr;
 	RDG::RecordHandle handle;
+	BufferUploadSourceSegment captured;
 	GDExtensionProductionFactV1 fact = {};
+	uint32_t device_frame = UINT32_MAX;
+	uint64_t device_epoch = 0;
 	bool pending = false;
 };
 class ProductionNativeCell {
 	friend class Registry;
+	friend class ::RenderingDevice;
 #ifdef TESTS_ENABLED
 	friend struct ::TestProductionRequest::Access;
 	friend struct ::TestProductionNativeObserve::Access;
@@ -139,6 +161,7 @@ class ProductionNativeCell {
 };
 class ProductionReturnCell {
 	friend class Registry;
+	friend class ::RenderingDevice;
 #ifdef TESTS_ENABLED
 	friend struct ::TestProductionRequest::Access;
 	friend struct ::TestProductionNativeObserve::Access;
@@ -150,6 +173,7 @@ class ProductionReturnCell {
 };
 class ProductionCaptureCell {
 	friend class Registry;
+	friend class ::RenderingDevice;
 #ifdef TESTS_ENABLED
 	friend struct ::TestProductionRequest::Access;
 	friend struct ::TestProductionNativeObserve::Access;
@@ -162,7 +186,9 @@ class ProductionCaptureCell {
 // Core-owned maintenance only; this is not an extension ABI or execution grant.
 enum class ProductionControlKind : uint32_t { OBSERVE,
 	CANCEL,
-	RELEASE };
+	RELEASE,
+	STORAGE_CREATE,
+	SET_CREATE };
 enum class ProductionControlState : uint32_t { OWNER_CONSUMED,
 	PENDING,
 	QUEUED,
@@ -173,6 +199,7 @@ struct ProductionControlInput {
 	uint64_t record_generation;
 	ProductionControlKind kind;
 	GDExtensionProductionServiceBudgetV1 budget;
+	uint32_t resource_slot;
 };
 struct ProductionServiceUsage {
 	uint32_t controls, receipts, passes;
@@ -195,6 +222,7 @@ struct ProductionControlCell {
 };
 class ProductionRequest {
 	friend class Registry;
+	friend class ::RenderingDevice;
 #ifdef TESTS_ENABLED
 	friend struct ::TestProductionRequest::Access;
 	friend struct ::TestProductionNativeObserve::Access;
@@ -221,15 +249,24 @@ class ProductionRequest {
 	uint32_t graph_count = 0, native_count = 0;
 	uint32_t observe_cursor = 0, release_cursor = 0;
 	bool source_device_lost = false, release_started = false;
+	uint32_t capture_inflight = 0;
 	// One fixed mailbox per request, included by sizeof(ProductionRequest) in
 	// the checked arena Quote. Never aliases retained payload or return cells.
 	ProductionControlCell control = {};
+	uint32_t retire_cursor = 0;
 	uint64_t next_control_serial = 1;
 	bool frozen = false, cancelled = false, effects_pending = false;
+	bool compute_list_open = false;
+	uint32_t next_action = 0;
+	uint32_t native_workers_bound = 0;
+	GDExtensionProductionSegmentV1 segment = {};
+	uint64_t acknowledged_segment = 0;
+	uint32_t segment_graph_begin = 0, segment_action_begin = 0;
 	// No numeric field or DTO populates original scope/window/K03 authority.
 };
 class ProductionAttachment {
 	friend class Registry;
+	friend class ::RenderingDevice;
 #ifdef TESTS_ENABLED
 	friend struct ::TestProductionRequest::Access;
 	friend struct ::TestProductionNativeObserve::Access;

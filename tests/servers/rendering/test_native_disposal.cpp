@@ -28,6 +28,7 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
+#include "core/os/os.h"
 #include "servers/rendering/rendering_device.h"
 #include "tests/servers/rendering/transfer_test_driver_base.h"
 #include "tests/test_macros.h"
@@ -52,6 +53,17 @@ public:
 	static Error release(RenderingDevice &p_rd, const NativeDisposalWitness &p_witness) { return p_rd._native_disposal_free(p_witness); }
 	static Error observe(RenderingDevice &p_rd, const NativeDisposalWitness &p_witness, NativeDisposalWitness::Report &r_report) { return p_rd._native_disposal_observe(p_witness, r_report); }
 	static void dispose(RenderingDevice &p_rd) { p_rd._free_pending_resources(0); }
+	static Error step(RenderingDevice &p_rd, uint32_t p_receipts, uint32_t p_passes, uint64_t p_deadline, uint32_t &r_receipts) {
+		RenderingDevice::NativeDisposalBudget budget{ p_receipts, p_passes, p_deadline };
+		RenderingDevice::NativeDisposalUsage usage;
+		const Error error = p_rd._free_pending_resources_step(0, budget, usage);
+		r_receipts = usage.polls + usage.frees + usage.issues + usage.retains + usage.releases + usage.recycles;
+		CHECK(r_receipts <= p_receipts);
+		CHECK(usage.passes <= p_passes);
+		return error;
+	}
+	static bool draining(RenderingDevice &p_rd) { return p_rd.frames[0].disposal.active; }
+	static void enqueue_shader(RenderingDevice &p_rd, RID p_shader) { p_rd.free_rid(p_shader); }
 	static Error unconfigured_maintenance(RenderingDevice &p_rd) {
 		p_rd.frames.clear();
 		const Error result = p_rd._native_disposal_maintenance();
@@ -104,11 +116,15 @@ public:
 	NativeDisposalWitness *set_witness = nullptr;
 	int creates = 0, frees = 0, set_creates = 0, set_frees = 0, shader_frees = 0;
 	bool fail_create = false;
+	bool unique_buffers = false;
+	bool shader_ready = false;
+	RenderingDevice *enqueue_rd = nullptr;
+	NativeDisposalWitness *enqueue_witness = nullptr;
 	uint32_t buffer_names = 0, set_names = 0;
 	String last_buffer_name, last_set_name;
 	BufferID buffer_create(uint64_t, BitField<BufferUsageBits>, MemoryAllocationType, uint64_t) override {
 		++creates;
-		return fail_create ? BufferID() : BufferID(19);
+		return fail_create ? BufferID() : BufferID(unique_buffers ? 19 + creates : 19);
 	}
 	void set_object_name(ObjectType p_type, ID p_driver_id, const String &p_name) override {
 		// Only the real DEV buffer/set naming calls belong to this fixture.
@@ -116,7 +132,7 @@ public:
 		if (p_type == OBJECT_TYPE_BUFFER) {
 			CHECK(creates > 0);
 			CHECK_FALSE(fail_create);
-			CHECK(p_driver_id.id == 19);
+			CHECK((unique_buffers ? (p_driver_id.id > 19 && p_driver_id.id <= uint64_t(19 + creates)) : p_driver_id.id == 19));
 			++buffer_names;
 			last_buffer_name = p_name;
 		} else {
@@ -128,12 +144,17 @@ public:
 		}
 	}
 	void buffer_free(BufferID p_id) override {
-		CHECK(p_id.id == 19);
+		CHECK((unique_buffers ? (p_id.id > 19 && p_id.id <= uint64_t(19 + creates)) : p_id.id == 19));
 		if (buffer_witness) {
 			CHECK(TestNativeDisposalAccess::state(*buffer_witness) == NativeDisposalWitness::State::ENQUEUED);
 			CHECK(TestNativeDisposalAccess::refs(*buffer_witness) >= 2);
 		}
 		++frees;
+		if (enqueue_witness) {
+			auto *witness = enqueue_witness;
+			enqueue_witness = nullptr;
+			CHECK(TestNativeDisposalAccess::release(*enqueue_rd, *witness) == OK);
+		}
 	}
 	UniformSetID uniform_set_create(VectorView<BoundUniform>, ShaderID, uint32_t, int p_pool) override {
 		CHECK(p_pool == -1);
@@ -145,11 +166,90 @@ public:
 		CHECK(TestNativeDisposalAccess::refs(*set_witness) >= 2);
 		++set_frees;
 	}
+	bool shader_retire_ready_nonblocking(ShaderID) const override { return shader_ready; }
 	void shader_free(ShaderID p_id) override {
 		CHECK(p_id.id == 31);
 		++shader_frees;
 	}
 };
+
+TEST_CASE("[RenderingDevice][NativeDisposal] large accepted queue drains with single-call turns") {
+	RenderingDevice rd;
+	Driver driver;
+	driver.unique_buffers = true;
+	TestNativeDisposalAccess::attach(rd, driver);
+	NativeDisposalWitness witnesses[257];
+	for (auto &witness : witnesses) {
+		RID rid;
+		REQUIRE(TestNativeDisposalAccess::create(rd, rid, witness) == OK);
+		REQUIRE(TestNativeDisposalAccess::release(rd, witness) == OK);
+	}
+	uint32_t used = 99;
+	CHECK(TestNativeDisposalAccess::step(rd, 0, 0, 0, used) == ERR_BUSY);
+	CHECK(used == 0);
+	CHECK_FALSE(TestNativeDisposalAccess::draining(rd));
+	CHECK(TestNativeDisposalAccess::step(rd, 1, 1, OS::get_singleton()->get_ticks_usec(), used) == ERR_BUSY);
+	CHECK(driver.frees == 0);
+	CHECK_FALSE(TestNativeDisposalAccess::draining(rd));
+	for (uint32_t i = 0; i < 257; ++i) {
+		const Error error = TestNativeDisposalAccess::step(rd, 1, 1, UINT64_MAX, used);
+		CHECK(error == (i == 256 ? OK : ERR_BUSY));
+		CHECK(used == 1);
+		CHECK(driver.frees == int(i + 1));
+		CHECK(TestNativeDisposalAccess::state(witnesses[i]) == NativeDisposalWitness::State::RETURNED);
+		if (i + 1 < 257) {
+			CHECK(TestNativeDisposalAccess::state(witnesses[i + 1]) == NativeDisposalWitness::State::ENQUEUED);
+		}
+	}
+	CHECK_FALSE(TestNativeDisposalAccess::draining(rd));
+	TestNativeDisposalAccess::detach(rd);
+}
+
+TEST_CASE("[RenderingDevice][NativeDisposal] reentrant enqueue stays beyond the original cutoff") {
+	RenderingDevice rd;
+	Driver driver;
+	driver.unique_buffers = true;
+	TestNativeDisposalAccess::attach(rd, driver);
+	NativeDisposalWitness witnesses[4];
+	for (uint32_t i = 0; i < 4; ++i) {
+		RID rid;
+		REQUIRE(TestNativeDisposalAccess::create(rd, rid, witnesses[i]) == OK);
+		if (i < 3) {
+			REQUIRE(TestNativeDisposalAccess::release(rd, witnesses[i]) == OK);
+		}
+	}
+	driver.enqueue_rd = &rd;
+	driver.enqueue_witness = &witnesses[3];
+	uint32_t used = 0;
+	CHECK(TestNativeDisposalAccess::step(rd, 8, 8, UINT64_MAX, used) == OK);
+	CHECK(used == 3);
+	CHECK(driver.frees == 3);
+	CHECK(TestNativeDisposalAccess::state(witnesses[3]) == NativeDisposalWitness::State::ENQUEUED);
+	CHECK(TestNativeDisposalAccess::step(rd, 1, 1, UINT64_MAX, used) == OK);
+	CHECK(used == 1);
+	CHECK(driver.frees == 4);
+	CHECK(TestNativeDisposalAccess::state(witnesses[3]) == NativeDisposalWitness::State::RETURNED);
+	TestNativeDisposalAccess::detach(rd);
+}
+
+TEST_CASE("[RenderingDevice][NativeDisposal] pending shader readiness never signs a physical return") {
+	RenderingDevice rd;
+	Driver driver;
+	TestNativeDisposalAccess::attach(rd, driver);
+	TestNativeDisposalAccess::enqueue_shader(rd, TestNativeDisposalAccess::shader(rd));
+	uint32_t used = 0;
+	CHECK(TestNativeDisposalAccess::step(rd, 1, 1, UINT64_MAX, used) == ERR_BUSY);
+	CHECK(used == 1);
+	CHECK(driver.shader_frees == 0);
+	driver.shader_ready = true;
+	CHECK(TestNativeDisposalAccess::step(rd, 1, 1, UINT64_MAX, used) == ERR_BUSY);
+	CHECK(used == 1);
+	CHECK(driver.shader_frees == 0);
+	CHECK(TestNativeDisposalAccess::step(rd, 1, 1, UINT64_MAX, used) == OK);
+	CHECK(used == 1);
+	CHECK(driver.shader_frees == 1);
+	TestNativeDisposalAccess::detach(rd);
+}
 
 TEST_CASE("[RenderingDevice][NativeDisposal] real buffer queue retains metadata until driver free returns") {
 	RenderingDevice rd;

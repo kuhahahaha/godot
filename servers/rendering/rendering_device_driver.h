@@ -186,6 +186,9 @@ public:
 	};
 
 	struct QueueCallReport {
+		// Actual new native issue calls in this API invocation; transferred
+		// observations of older wrapper submissions are deliberately excluded.
+		uint32_t native_issue_count = 0;
 		Vector<NativeCallFact> calls;
 		Error error = OK;
 		bool issued = false;
@@ -556,6 +559,12 @@ public:
 		r_report = {};
 		return ERR_UNAVAILABLE;
 	}
+	enum class NativeIssueKind : uint8_t { MAIN_SLOT,
+		TRANSFER_WORKER,
+		PREPARE_SEGMENT };
+	// An atomic call's new native-issue bound, not retained fact capacity. A
+	// supported no-issue preparation returns true with zero, not unsupported.
+	virtual bool native_issue_bound(NativeIssueKind p_kind, uint32_t p_commands, uint32_t &r_bound) const { return false; }
 	virtual uint32_t qualification_native_call_bound(uint32_t p_slots) const { return 0; }
 	// Original RD profile: main slots may wait and signal; transfer-worker
 	// submissions never wait. Backends without a tighter proof keep their old bound.

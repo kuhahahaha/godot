@@ -56,11 +56,14 @@ bool RenderingDeviceGraph::contains_record(const RecordHandle &p_handle) const {
 	if (!p_handle.is_valid() || p_handle.graph_instance != graph_instance || p_handle.graph_frame != uint64_t(tracking_frame)) {
 		return false;
 	}
-	if (p_handle.kind == 1) {
+	if (p_handle.kind == 1 || p_handle.kind == 4) {
 		if (p_handle.index >= command_count || p_handle.index >= command_data_offsets.size() || p_handle.offset != 0 || command_data_offsets[p_handle.index] >= command_data.size()) {
 			return false;
 		}
 		const auto *command = reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offsets[p_handle.index]]);
+		if (p_handle.kind == 4) {
+			return command->type == RecordedCommand::TYPE_COMPUTE_LIST;
+		}
 		return command->type == RecordedCommand::TYPE_BUFFER_UPDATE || command->type == RecordedCommand::TYPE_BUFFER_GET_DATA || command->type == RecordedCommand::TYPE_BUFFER_COPY ||
 				command->type == RecordedCommand::TYPE_TEXTURE_CLEAR_COLOR || command->type == RecordedCommand::TYPE_TEXTURE_UPDATE;
 	}
@@ -120,7 +123,7 @@ bool RenderingDeviceGraph::_resolve_record_command_index(const RecordHandle &p_h
 	if (!contains_record(p_handle)) {
 		return false;
 	}
-	if (p_handle.kind == 1) {
+	if ((p_handle.kind == 1 || p_handle.kind == 4)) {
 		r_index = p_handle.index;
 		return true;
 	}
@@ -2424,7 +2427,7 @@ void RenderingDeviceGraph::add_compute_list_usages(VectorView<ResourceTracker *>
 	}
 }
 
-void RenderingDeviceGraph::add_compute_list_end() {
+RenderingDeviceGraph::RecordHandle RenderingDeviceGraph::add_compute_list_end() {
 	int32_t command_index;
 	uint32_t instruction_data_size = compute_instruction_list.data.size();
 	uint32_t command_size = sizeof(RecordedComputeListCommand) + instruction_data_size;
@@ -2437,6 +2440,7 @@ void RenderingDeviceGraph::add_compute_list_end() {
 		memcpy(command->instruction_data(), compute_instruction_list.data.ptr(), instruction_data_size);
 	}
 	_add_command_to_graph(compute_instruction_list.command_trackers.ptr(), compute_instruction_list.command_tracker_usages.ptr(), compute_instruction_list.command_trackers.size(), command_index, command);
+	return { graph_instance, uint64_t(tracking_frame), 4, uint32_t(command_index), 0 };
 }
 
 void RenderingDeviceGraph::add_draw_list_begin(FramebufferCache *p_framebuffer_cache, Rect2i p_region, VectorView<AttachmentOperation> p_attachment_operations, VectorView<RDD::RenderPassClearValue> p_attachment_clear_values, BitField<RDD::PipelineStageBits> p_stages, uint32_t p_breadcrumb, bool p_split_cmd_buffer) {

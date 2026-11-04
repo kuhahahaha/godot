@@ -73,6 +73,9 @@ struct NativeSourceMember {
 	int64_t completion_native_code = 0;
 	Error retention_error = OK;
 };
+struct NativeSourceIssueView {
+	const RDD::QueueCallReport &report;
+};
 struct NativeSourceObservation {
 	enum class State : uint8_t { Pending,
 		Complete,
@@ -120,15 +123,60 @@ struct ReadbackSourceState {
 	uint64_t owned_bytes = 0;
 	Error error = OK;
 	bool delivered = false;
+	// Actual original Frame delivery-entry returns, after any map/unmap work.
+	// Errors may return an entry without establishing CPU byte readiness.
+	uint64_t returned = 0;
 };
 bool same_request_readback_complete(const ReadbackSourceState &, uint64_t p_request, uint64_t p_backing, uint64_t p_offset, uint64_t p_size);
+// Bounded original source capture. Caller supplies arena cells before any
+// staging/transfer effect; these fields never grant recording permission.
+struct BufferUploadSourceSegment {
+	RDG::RecordHandle handle;
+	uint32_t begin = 0, end = 0;
+};
+struct BufferUploadSourceCapture {
+	BufferUploadSourceSegment *segments = nullptr;
+	uint32_t segment_stride = sizeof(BufferUploadSourceSegment);
+	BufferUploadSourceSegment &segment(uint32_t index) const {
+		return *reinterpret_cast<BufferUploadSourceSegment *>(reinterpret_cast<uint8_t *>(segments) + uint64_t(index) * segment_stride);
+	}
+	uint32_t capacity = 0, count = 0, consumed = 0;
+	uint32_t transfer_worker = UINT32_MAX;
+	uint64_t transfer_operation = 0;
+	bool became_mutable = false, prefix_possible = false;
+};
+struct BufferReadbackSourceCapture {
+	Registry *registry = nullptr;
+	uint64_t request_serial = 0;
+	ReadbackSourceState *state = nullptr;
+	uint8_t *bytes = nullptr;
+	uint64_t byte_capacity = 0;
+	BufferUploadSourceSegment *segments = nullptr;
+	uint32_t segment_stride = sizeof(BufferUploadSourceSegment);
+	BufferUploadSourceSegment &segment(uint32_t index) const {
+		return *reinterpret_cast<BufferUploadSourceSegment *>(reinterpret_cast<uint8_t *>(segments) + uint64_t(index) * segment_stride);
+	}
+	uint32_t capacity = 0, count = 0;
+	uint32_t transfer_worker = UINT32_MAX;
+	uint64_t transfer_operation = 0;
+	bool became_mutable = false;
+	int64_t native_code = 0;
+};
 struct CheckedRecordAppend {
 	enum class State : uint8_t { Rejected,
 		Appended,
-		Unknown };
+		Unknown,
+		KnownPrefix };
 	State state = State::Rejected;
 	Error error = OK;
 	RDG::RecordHandle handle;
+	struct Transfer {
+		uint32_t worker = 0;
+		uint64_t operation = 0;
+	};
+	Transfer transfers[2];
+	uint32_t transfer_count = 0;
+	bool became_mutable = false;
 	OriginalOperationIdentity operation;
 	bool operation_bound = false;
 };

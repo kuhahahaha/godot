@@ -74,6 +74,10 @@ namespace TestProductionRequest {
 struct Access;
 }
 namespace GDExtensionDeviceExit {
+struct CheckedRecordAppend;
+struct OriginalOperationIdentity;
+struct BufferReadbackSourceCapture;
+struct NativeSourceIssueView;
 class ProductionAttachment;
 class ProductionRequest;
 class ProductionResourceSlot;
@@ -828,8 +832,25 @@ private:
 	Error production_request_locked(GDExtensionProductionRequestRefV1, bool, ProductionRequest *&, RenderingDevice *&);
 	Error production_resource_slot_locked(ProductionRequest &, uint32_t, ProductionResourceSlot *&);
 	Error production_action_locked(ProductionRequest &, uint64_t, uint32_t, ProductionActionCell *&);
+	Error production_membership_bound_locked(RenderingDevice &, uint32_t, uint32_t, uint32_t &) const;
+	Error production_dispatch_closure_locked(const ProductionRequest &, RenderingDevice &, const ProductionActionCell &, const GDExtensionProductionDispatchV1 &) const;
 	bool production_use_matches_locked(const ProductionRequest &, const ProductionActionCell &, uint32_t, uint64_t, uint64_t, uint32_t) const;
 	Error production_freeze_locked(ProductionRequest &);
+	Error production_maintenance_locked(ProductionRequest &, RenderingDevice &, const GDExtensionProductionServiceBudgetV1 &, ProductionServiceUsage &);
+	Error production_create_service(GDExtensionProductionRequestRefV1, ProductionControlKind, uint32_t);
+	Error production_create_accept_locked(ProductionRequest &, ProductionControlKind, uint32_t);
+	Error production_create_execute_locked(ProductionRequest &, RenderingDevice &, ProductionControlKind, uint32_t);
+	Error production_observe_service(GDExtensionProductionRequestRefV1, const GDExtensionProductionServiceBudgetV1 &);
+	Error production_sets_step_locked(ProductionRequest &, RenderingDevice &, const GDExtensionProductionServiceBudgetV1 &, ProductionServiceUsage &);
+	Error production_readback_delivery(BufferReadbackSourceCapture &, bool);
+	Error production_close_lists_locked(ProductionRequest &, RenderingDevice &);
+	Error production_close_segment_locked(ProductionRequest &, GDExtensionProductionSegmentV1 &);
+	Error production_ack_segment_locked(ProductionRequest &, uint64_t, uint64_t);
+	CheckedRecordAppend production_record_effect_locked(ProductionRequest &, RenderingDevice &, uint32_t, const OriginalOperationIdentity &);
+	Error production_capture_graph_locked(ProductionRequest &, RenderingDevice &, uint64_t, const CheckedRecordAppend &);
+	void production_seal_graphs_locked(RenderingDevice &);
+	Error production_retain_sources_locked(RenderingDevice &, uint32_t, uint64_t, const NativeSourceIssueView * = nullptr);
+	void production_capture_issue_locked(RenderingDevice &, uint32_t, const NativeSourceIssueView &, Error, uint32_t = UINT32_MAX, uint64_t = 0, uint64_t = 0);
 	GDExtensionDeviceSessionResultV1 production_prepare_upload_locked(ProductionRequest &, const GDExtensionProductionUploadV1 &, const void *, uint64_t);
 	Error production_unpin_resources_locked(ProductionRequest &);
 	Error production_entity_return_locked(ProductionAttachment &);
@@ -899,6 +920,11 @@ public:
 	GDExtensionDeviceSessionResultV1 production_quote(const GDExtensionDeviceExitAbi *, GDExtensionDeviceExitSceneReadyContextRef, GDExtensionProducerRegistrationRefV1, GDExtensionDeviceRegistryContextRef, GDExtensionOriginalDeviceSessionRef, const GDExtensionProductionCapacityV1 *, GDExtensionProductionMetadataQuoteV1 *);
 	GDExtensionDeviceSessionResultV1 production_accept(const GDExtensionDeviceExitAbi *, GDExtensionDeviceExitSceneReadyContextRef, GDExtensionProducerRegistrationRefV1, GDExtensionDeviceRegistryContextRef, GDExtensionOriginalDeviceSessionRef, GDExtensionDeviceExitLibraryCodeHoldRef, const GDExtensionProductionMetadataQuoteV1 *, GDExtensionProductionAttachmentRefV1 *, GDExtensionProductionInstallationReportV1 *);
 	GDExtensionDeviceSessionResultV1 production_open(GDExtensionDeviceExitSceneReadyContextRef, GDExtensionProductionAttachmentRefV1);
+	GDExtensionDeviceSessionResultV1 production_set_create(GDExtensionProductionRequestRefV1, uint32_t, uint32_t, uint32_t, const GDExtensionProductionSetBindingV1 *, uint32_t);
+	GDExtensionDeviceSessionResultV1 production_storage_create(GDExtensionProductionRequestRefV1, uint32_t, const GDExtensionStorageCreateRequestV1 *, GDExtensionStorageBackingV1 *);
+	GDExtensionDeviceSessionResultV1 production_storage_retire(GDExtensionProductionRequestRefV1, uint32_t, const GDExtensionStorageRetireRequestV1 *, GDExtensionStorageRetireRefV1 *, GDExtensionStorageRetireReportV1 *);
+	GDExtensionDeviceSessionResultV1 production_storage_observe(GDExtensionProductionRequestRefV1, GDExtensionStorageRetireRefV1, const GDExtensionProductionServiceBudgetV1 *, GDExtensionStorageRetireReportV1 *);
+	GDExtensionDeviceSessionResultV1 production_storage_release(GDExtensionProductionRequestRefV1, GDExtensionStorageRetireRefV1);
 	GDExtensionDeviceSessionResultV1 production_import_unit(GDExtensionProductionRequestRefV1, uint32_t, const GDExtensionNativeUnitBackingV1 *);
 	GDExtensionDeviceSessionResultV1 production_import_storage(GDExtensionProductionRequestRefV1, uint32_t, const GDExtensionStorageBackingV1 *);
 	GDExtensionDeviceSessionResultV1 production_import_set(GDExtensionProductionRequestRefV1, uint32_t, const GDExtensionQualificationResourceBackingV1 *, uint32_t, uint32_t, const GDExtensionProductionSetBindingV1 *, uint32_t);
@@ -908,6 +934,7 @@ public:
 	GDExtensionDeviceSessionResultV1 production_prepare_readback(GDExtensionProductionRequestRefV1, uint64_t, uint32_t);
 	GDExtensionDeviceSessionResultV1 production_observe(GDExtensionProductionRequestRefV1, const GDExtensionProductionServiceBudgetV1 *, GDExtensionProductionReportV1 *);
 	GDExtensionDeviceSessionResultV1 production_facts(GDExtensionProductionRequestRefV1, uint64_t, uint32_t, GDExtensionProductionFactV1 *, uint32_t, uint32_t *);
+	GDExtensionDeviceSessionResultV1 production_copy(GDExtensionProductionRequestRefV1, uint64_t, uint32_t, void *, uint64_t, uint64_t *);
 	GDExtensionDeviceSessionResultV1 production_cancel(GDExtensionProductionRequestRefV1);
 	GDExtensionDeviceSessionResultV1 production_release(GDExtensionProductionRequestRefV1);
 	GDExtensionDeviceSessionResultV1 production_close(GDExtensionProductionAttachmentRefV1);

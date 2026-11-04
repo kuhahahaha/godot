@@ -42,6 +42,7 @@ class ProductionRequest;
 // This retains physical metadata; it neither admits work nor proves completion.
 class ProductionResourceUse {
 	friend class Registry;
+	friend class ::RenderingDevice;
 	friend class ProductionRequest;
 #ifdef TESTS_ENABLED
 	friend class ::TestProductionResourceUseAccess;
