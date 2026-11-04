@@ -1,1 +1,0 @@
-/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64 --path /Users/macbookair/Documents/Work/godot_ANGE/work/u01-vfx-current-pair-20261030/runtime-vfx --display-driver macos --rendering-driver metal --rendering-method mobile --render-thread safe --script res://probe.gd

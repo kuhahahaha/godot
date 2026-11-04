@@ -1,5 +1,0 @@
-{
-  "servers/rendering/renderer_rd/storage_rd/mesh_storage.h": "91aa4eca5d1f1c688ec447156d1e82eff0726e7ffaa6fedeb1e0004c02f90d19",
-  "servers/rendering/renderer_rd/storage_rd/mesh_storage.cpp": "e2b1453ead9ade871c708ffd079f3ac36c96d8dd137266f74b32c6ee924fbd61",
-  "tests/servers/rendering/test_mesh_storage_external.cpp": "eeeeffd6e30ee30d21d7ea68e6664f768f34cedccf46861bcc61e68db041aead"
-}

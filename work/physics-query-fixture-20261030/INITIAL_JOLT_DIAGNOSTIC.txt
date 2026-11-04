@@ -1,8 +1,0 @@
-ERROR: Jolt Physics assertion 'mNumFreeObjects.load(memory_order_relaxed) == mNumPages * mPageSize' failed with message '' at 'thirdparty/jolt_physics/Jolt/Core/FixedSizeFreeList.inl:14'
-   at: jolt_assert (modules/jolt_physics/jolt_globals.cpp:88)
-[doctest] doctest version is "2.4.12"
-[doctest] run with "--help" for options
-===============================================================================
-[doctest] test cases:  1 |  1 passed | 0 failed | 1965 skipped
-[doctest] assertions: 17 | 17 passed | 0 failed |
-[doctest] Status: SUCCESS!

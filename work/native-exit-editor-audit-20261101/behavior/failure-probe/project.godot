@@ -1,5 +1,0 @@
-config_version=5
-[application]
-config/name="Ordinary editor script failure entrypoint control"
-[rendering]
-renderer/rendering_method="gl_compatibility"

@@ -1,3 +1,0 @@
-qualification_filter=*[Qualification]* rc=0 cases=27 assertions=357 failures=0
-qualification_rt_filter=*[QualificationRt]* rc=0 cases=4 assertions=378 failures=0
-fresh_build_this_turn=false

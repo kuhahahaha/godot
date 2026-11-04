@@ -1,7 +1,0 @@
-{
-  "binary": "/Users/macbookair/Documents/Work/godot_ANGE/work/particle-gpu-runtime-continuation-20261101/bin/godot-particles-runtime-current.arm64",
-  "sha256": "19f8c9f542fb64db713a03a31413c8df9622100f50d81969254195f9527760e4",
-  "controlled_build": "/Users/macbookair/Documents/Work/godot_ANGE/work/particle-gpu-runtime-continuation-20261101/bin/godot-particles-runtime-current.arm64.controlled_build.json",
-  "controlled_build_sha256": "3ef8b748c7777311d20168050828c33939f35ca3897e7c29d5076a83cfe68df2",
-  "source_window": "current dirty working tree; tests-only module-enabled build"
-}

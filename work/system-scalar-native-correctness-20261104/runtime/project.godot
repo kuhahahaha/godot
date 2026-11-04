@@ -1,5 +1,0 @@
-config_version=5
-[application]
-config/name="System scalar identity self-test only"
-[rendering]
-renderer/rendering_method="mobile"

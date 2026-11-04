@@ -1,5 +1,0 @@
-version: 1
-kind: invalid_ingestion_control
-emitters:
-  Sparks:
-    ref: ./emitter.vfx

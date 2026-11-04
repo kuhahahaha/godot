@@ -1,9 +1,0 @@
-{
-  "godot_head": "632bede3018d7614bc4d47ad4bbd1359af0110ad",
-  "godot_dirty": " M drivers/metal/SCsub\n D work/skin-palette-commit-package/native-core-production/ACCEPTANCE_EVIDENCE_AUDIT_20261024.json\n D work/skin-palette-commit-package/native-core-production/FR_core_interface.md\n D work/skin-palette-commit-package/native-core-production/FR_core_interface_PLAN.md\n D work/skin-palette-commit-package/native-core-production/code-holder/FR_library_close.md\n M work/typed-lifecycle-abi-v1/gdextension_interface.h\n",
-  "sdk_source_head_observed": "83d88acfb0c45dc78170a273bb193910baaec5c7",
-  "archive_provenance": "existing original Debug archive, hash unchanged from old validated controls; not rebuilt here, no new SDK source/archive matched-build claim",
-  "production_source_modified": false,
-  "source_unit_and_profile_unchanged": true,
-  "containers_equal_original_despite_new_compilation": true
-}

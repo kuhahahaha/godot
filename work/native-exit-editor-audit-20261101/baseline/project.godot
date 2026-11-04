@@ -1,5 +1,0 @@
-config_version=5
-[application]
-config/name="ANGE editor capability"
-[rendering]
-renderer/rendering_method="gl_compatibility"

@@ -1,1 +1,0 @@
-qrt_upload/safe: rc=0; failed=[]

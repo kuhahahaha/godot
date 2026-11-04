@@ -1,3 +1,0 @@
-scene_ready_v2_filter=*[SceneReady]* rc=0 cases=2 assertions=52 failures=0
-scene_ready_all_filter=*scene-ready* rc=0 cases=11 assertions=145 failures=0
-fresh_build_this_turn=false

@@ -1,7 +1,0 @@
-# Zero-radius ring emission, 2026-11-03
-
-Both CPU 3D ring emission and the generated `ParticleProcessMaterial` shader used the denominator guard `max(0.001, emission_ring_radius)` as the sampled outer radius. Public setters accept outer = inner = 0, but the real CPU 3D MultiMesh then contained nonzero radial positions. Before the fix, `ring_zero_positions_3d.gd` exited 1 on OpenGL Compatibility with four radii between roughly 0.00019 and 0.00078.
-
-The CPU and generated shader sampling expressions now use `emission_ring_radius` for the squared outer bound; the existing guarded value remains in the cone and division calculations. The fixture fixes seed 12345, zero initial velocity and gravity, requests processing, and reads the public MultiMesh buffer. After `scons platform=macos target=editor tests=yes -j4` exited 0, the fixture returned four zero radii and exit 0 on both OpenGL Compatibility and Metal Forward+ on Apple M3 Pro. The existing nonzero `[5,10]` CPU 3D ring position control exited 0 on Metal Forward+. Focused native `*Particles*ring*` passed 3 cases / 11 assertions, and the four-node PackedScene roundtrip exited 0. Rebuilt editor SHA-256: `5de85061df3e2befd0366aef7d16625c88e48d4f9beba28a86d4356690c5116c`.
-
-The live buffer evidence covers CPU 3D emission. The shader edit is compiled and source checked here; live GPU emitted positions and pixels remain unverified by this receipt.

@@ -1,1 +1,0 @@
-qrt_ticket/safe: rc=0; failed=[]

@@ -1,7 +1,0 @@
-[configuration]
-entry_symbol="numeric_control_init"
-compatibility_minimum="4.7"
-reloadable=false
-device_exit_guard_version=1
-[libraries]
-macos.debug.arm64="/Users/macbookair/Documents/Work/godot_ANGE/work/e06-loaded-core-shared-20261028-r1/pending_guard.dylib"

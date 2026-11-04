@@ -1,7 +1,0 @@
-[configuration]
-entry_symbol="numeric_control_init"
-compatibility_minimum="4.7"
-device_exit_guard_version=1
-[libraries]
-macos.debug.arm64="res://probe.dylib"
-macos.release.arm64="res://probe.dylib"

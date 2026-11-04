@@ -1,6 +1,0 @@
-[configuration]
-entry_symbol="phs1_probe_init"
-compatibility_minimum="4.7"
-device_exit_guard_version=1
-[libraries]
-macos="/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/results/20261104-024433-850901-metal/native_fact_capacity.dylib"

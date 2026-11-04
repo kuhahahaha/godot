@@ -1,5 +1,0 @@
-# Missing point texture emission guard
-
-ParticleProcessMaterial POINTS and DIRECTED_POINTS shaders previously sampled the default black texture when no emission point texture was assigned. This left a point-shaped material in the active path with an invalid source texture. The generated shader now has an `emission_texture_points_valid` uniform, is explicitly updated when the point texture is assigned or cleared, and deactivates the particle on restart while the texture is absent. The uniform is independent of the shader cache key, so adding or removing the texture updates the existing shader material state.
-
-The source fixture passed after the change and failed against the previous commit because the validity uniform and start guard were absent. A mixed-worktree `scons tests=yes platform=macos target=editor -j4` rebuild passed. The rebuilt binary passed particle conversion doctests (11 cases / 59 assertions), the empty-point conversion fixture, and the zero-ratio GPU-to-CPU fixture. The dummy renderer does not expose generated shader source or live particle output, so this item has not received a live RD/GLES3 emission check.

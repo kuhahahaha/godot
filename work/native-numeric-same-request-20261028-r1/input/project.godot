@@ -1,5 +1,0 @@
-[application]
-config/name="Original Numeric Unit Native Control"
-[rendering]
-renderer/rendering_method="mobile"
-renderer/rendering_method.mobile="mobile"

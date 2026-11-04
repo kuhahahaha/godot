@@ -1,2 +1,0 @@
-c306a2946f204dc73485f5746f350506ad665fed8eca0a0f0f8ab8d3dbc73379  scene/resources/gradient_texture.cpp
-a10165390536f5d20bd19733adcdd83aa2654137144628dc9b0a332f60485ac5  tests/scene/test_gradient_texture.cpp

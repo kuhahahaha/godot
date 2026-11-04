@@ -1,2 +1,0 @@
-servers/rendering/renderer_rd/storage_rd/mesh_storage.cpp:537:Error MeshStorage::mesh_add_external_surface(RID p_mesh, const ExternalSurfaceDescriptor &p_surface, uint32_t &r_surface_index, uint64_t &r_generation) {
-servers/rendering/renderer_rd/storage_rd/mesh_storage.h:447:	Error mesh_add_external_surface(RID p_mesh, const ExternalSurfaceDescriptor &p_surface, uint32_t &r_surface_index, uint64_t &r_generation);

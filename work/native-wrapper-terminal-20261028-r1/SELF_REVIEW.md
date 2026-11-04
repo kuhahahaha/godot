@@ -1,5 +1,0 @@
-# Author self-review
-
-The lookup observer forwards the original object_free_instance_binding call first, then logs the original core ObjectID. It does not create holders, schedules, permits or receipts. Current SDK godot.cpp and class_db.cpp are compiled directly so the archive cannot substitute older implementations of these two files. The same original Ready frame schedules Tree through retain_guarded_scene_binding; Engine is created early and scheduled by the original SDK singleton pass. Negative differs only by omitting Tree schedule while still constructing its live wrapper. Core refuses before frees.
-
-The preflight has no user-owned work and publishes an empty user diagnostic through the real SDK guard. It cannot satisfy missing cleanup enrollment: the negative verifies the core still refuses. No E05/native numeric work is requested. This is a bounded actual SDK consumer, not the full canonical ANGE cohort. DSO destructor timing after manager return is retained as an unresolved image-lifetime observation. This review is by the author, not independent.

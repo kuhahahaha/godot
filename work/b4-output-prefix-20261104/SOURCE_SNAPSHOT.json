@@ -1,7 +1,0 @@
-{
-  "servers/rendering/renderer_rd/storage_rd/external_output_storage.h": "d6cd8b1a497e585b62222497b424de406cc6e21ddf5565b55080cfe4ee562455",
-  "servers/rendering/renderer_rd/storage_rd/external_output_storage.cpp": "dd8dadcf424597a8dfefa67da32a89f06abc1105e31021c2cfa88d25c55f8beb",
-  "tests/servers/rendering/test_external_output_prefix.cpp": "10345b00e4aca848e996003d410c9bb64e2f591ae3a297e4b4c8819ebeaf0a0a",
-  "servers/rendering/rendering_device.h": "98317655047401647c122f17de877d885922f4ff59bd8e34b8cc641d4c06135c",
-  "servers/rendering/native_disposal_witness.h": "fa05d752539c3f1ebb54851c6a4da55ee356aee1ba01a041fe0dbe376af31689"
-}

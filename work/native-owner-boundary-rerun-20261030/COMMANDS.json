@@ -1,7 +1,0 @@
-{
-  "commands": [
-    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64 --headless --test --test-case='[Qualification][E05]*'",
-    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64 --headless --test --test-case='[QualificationRt]*'",
-    "/Users/macbookair/Documents/Work/godot_ANGE/bin/godot.macos.editor.dev.arm64 --headless --test --test-case='[DeviceExit][TypedABI]*'"
-  ]
-}

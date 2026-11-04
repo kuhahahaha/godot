@@ -1,5 +1,0 @@
-{
-  "processes": "failed test hosts terminal and subprocess.run reaped; TemporaryDirectory cleaned private binaries/configs automatically",
-  "retained": "raw default RED, rejected HOT_RELOAD profile logs, source fixture and replay runner only",
-  "temporary_bytes_deleted": "not counted on exception; no shared files removed"
-}
