@@ -1,0 +1,57 @@
+{
+  "source_revision": "94b06dc4876d153492aa0c0e2f3457d2f5afc92e",
+  "groups": [
+    {
+      "name": "NativeDisposal",
+      "expected_count": 4,
+      "source_file": "tests/servers/rendering/test_native_disposal.cpp",
+      "source_sha256": "da060fcee35f9c2022164d9ca096148aa245c6a5762b9b391dea9f5a307edb89",
+      "cases": [
+        "[RenderingDevice][NativeDisposal] real buffer queue retains metadata until driver free returns",
+        "[RenderingDevice][NativeDisposal] set cascade reports each actual free independently",
+        "[RenderingDevice][NativeDisposal] preflight and serial mismatch cannot manufacture returned",
+        "[RenderingDevice][NativeDisposal] failed native creation leaves no witness or hidden pending resource"
+      ]
+    },
+    {
+      "name": "Guard",
+      "expected_count": 5,
+      "source_file": "tests/servers/rendering/test_external_output_guard.cpp",
+      "source_sha256": "157d727d8ab8bee9e92fdc2a1cf705fba361020a607f6dec683e2e476993127a",
+      "cases": [
+        "[ExternalOutputGuard] bounded chunks cover every capacity lane once before separate finalize",
+        "[ExternalOutputGuard] zero capacity retains actual source validation without dummy records",
+        "[ExternalOutputGuard] every binding has exact protected extent and separate retained RID",
+        "[ExternalOutputGuard] source accessor and reserved header fields reject before producing a plan",
+        "[ExternalOutputGuard] invalid shape cannot enlarge dispatch or expose partial plan"
+      ]
+    },
+    {
+      "name": "Config",
+      "expected_count": 6,
+      "source_file": "tests/servers/rendering/test_external_output_config.cpp",
+      "source_sha256": "daf2ac497b99ca311e08b51c53df46ac7255963c4c2bd32bcb4ebf4b477aeb73",
+      "cases": [
+        "[ExternalOutputConfig] strict create schema rejects malformed fields without publishing partial config",
+        "[ExternalOutputConfig] profile limits and conditional fields are exact",
+        "[ExternalOutputConfig] every accepted bound is finite and nonempty",
+        "[ExternalOutputConfig] checked buffer sizing rejects wrap and respects actual device limit",
+        "[ExternalOutputConfig] schema1 pass namespace accepts every known combination and rejects reserved bits",
+        "[ExternalOutputConfig] u64 identities decode exactly from eight little endian bytes"
+      ]
+    },
+    {
+      "name": "InverseModel",
+      "expected_count": 2,
+      "source_file": "tests/servers/rendering/test_spatial_inverse_model.cpp",
+      "source_sha256": "12ecedb22d70a15ddb6157dc2a38eb90636a53c2c82fe977d2ee74e5c88a58d3",
+      "cases": [
+        "[ShaderLanguage] spatial inverse model is a readonly matrix in vertex and fragment",
+        "[ShaderLanguage] inverse model cannot be assigned or borrowed by canvas shaders"
+      ]
+    }
+  ],
+  "total": 17,
+  "inventory_note": "Canonical source94b06dc includes root test-only shader cleanup. All17 test names match baseline40a7. NativeDisposal current file hash da060f...; older run snapshots remain immutable.",
+  "names_baseline_revision": "40a7caa58ab880d83a8708d5a67673555e295df6"
+}

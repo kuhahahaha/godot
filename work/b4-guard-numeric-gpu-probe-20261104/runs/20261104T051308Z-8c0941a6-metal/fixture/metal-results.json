@@ -1,0 +1,444 @@
+{
+  "backend": "metal",
+  "host": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-native-build-20261104/attempt-03/host/editor.arm64",
+  "host_sha256": "965cb0ef6e137dcf17298d504f404a6f53aaa0421d03d080ef36e9b5b9b24eb6",
+  "production_shader_sha256": "4570c3136e27a3beb699593d1e496119fa677d44c3cc5abfe31c5e2712c982d7",
+  "compiled_snapshot_sha256": "4570c3136e27a3beb699593d1e496119fa677d44c3cc5abfe31c5e2712c982d7",
+  "source_matches_compiled_snapshot": true,
+  "artifacts": {
+    "INIT": {
+      "glsl_sha256": "6c8c55006f14463d52dd3da72fa85da8d020b0e1d9901445642c720ab69d122d",
+      "spirv_sha256": "4d59dacdb2436d3dac0b04e37efa8f508f8d0a83c0b464c02097438be68f8c7c"
+    },
+    "VALIDATE": {
+      "glsl_sha256": "978fa135b4da0b75954dc7db7d18924d89ae4a418014fb307e4fddf3bdfd006d",
+      "spirv_sha256": "6eba90daa98a7894d902658b207ecce02740f55ea907c0b361ac146f4c7fb353"
+    },
+    "FINALIZE": {
+      "glsl_sha256": "1bf18b5e9fac80974b1796333808d52c0152ca036e79bf81a5304c24a81a6bf2",
+      "spirv_sha256": "77f66af021ecf57da26ea13669b0c949807ad7503b6239df9bfb1a751bb22483"
+    },
+    "INIT_EMPTY": {
+      "glsl_sha256": "fd6427c475837f98418c3c69db3d6c4040f652d483f236c4173aba2106b5573a",
+      "spirv_sha256": "5db0fdc8525e5fdf34a880673ecd2ecb16edfdf8fa1d947a1be2b2aefc673c0c"
+    },
+    "FINALIZE_EMPTY": {
+      "glsl_sha256": "16301a89d8ed2a9dc47aac48bb0d25fb2849f182d70a18ef01f510e93dbf33f1",
+      "spirv_sha256": "8f1e7f0f0d0d502dfb96c187a53a02f1a54f31e7f80c6a85eab4e4f5a95121c8"
+    },
+    "INIT_MUTANT": {
+      "glsl_sha256": "3f98ddc8adaecb7be835ef843358c0678cb78b03ef5bd4ce880fc0e8baaadbb8",
+      "spirv_sha256": "09e59d6cd0795da0f74af9935c98e5f2dd5e408d0addfe02d59aeb1e11ee5358"
+    }
+  },
+  "cases": 9,
+  "runs": [
+    {
+      "phase": "numeric-production",
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-native-build-20261104/attempt-03/host/editor.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-guard-numeric-gpu-probe-20261104/runs/20261104T051308Z-8c0941a6-metal/fixture/project",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "safe",
+        "--resolution",
+        "64x64",
+        "--audio-driver",
+        "Dummy",
+        "--disable-crash-handler"
+      ],
+      "rc": 0,
+      "duration_seconds": 0.6720943339751102,
+      "log": "metal-numeric-production.log",
+      "log_sha256": "5b54b6dce91cb686ca83110380c670be674569aee2bd223041cf6119a24a2999",
+      "oracle_pass": true,
+      "targeted_expected_red": false,
+      "errors": [],
+      "report": {
+        "cleanup_free_requested_only": true,
+        "main_rd": true,
+        "mutant": false,
+        "pass": true,
+        "physical_disposal_observed": false,
+        "production_authority": false,
+        "rows": [
+          {
+            "completed_readback_callbacks": 2,
+            "expected_commands": [
+              6.0,
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "expected_status": [
+              0.0,
+              1.0,
+              0.0,
+              0.0,
+              55.0,
+              0.0,
+              1.0,
+              0.0
+            ],
+            "name": "healthy_control",
+            "observed": {
+              "commands": [
+                6,
+                1,
+                0,
+                0,
+                0
+              ],
+              "status": [
+                0,
+                1,
+                0,
+                0,
+                55,
+                0,
+                1,
+                0
+              ]
+            },
+            "pass": true
+          },
+          {
+            "completed_readback_callbacks": 2,
+            "expected_commands": [
+              6.0,
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "expected_status": [
+              0.0,
+              1.0,
+              0.0,
+              0.0,
+              55.0,
+              0.0,
+              1.0,
+              0.0
+            ],
+            "name": "largest_finite_custom",
+            "observed": {
+              "commands": [
+                6,
+                1,
+                0,
+                0,
+                0
+              ],
+              "status": [
+                0,
+                1,
+                0,
+                0,
+                55,
+                0,
+                1,
+                0
+              ]
+            },
+            "pass": true
+          },
+          {
+            "completed_readback_callbacks": 2,
+            "expected_commands": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "expected_status": [
+              16.0,
+              0.0,
+              0.0,
+              0.0,
+              55.0,
+              0.0,
+              1.0,
+              0.0
+            ],
+            "name": "quiet_nan_custom",
+            "observed": {
+              "commands": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "status": [
+                16,
+                0,
+                0,
+                0,
+                55,
+                0,
+                1,
+                0
+              ]
+            },
+            "pass": true
+          },
+          {
+            "completed_readback_callbacks": 2,
+            "expected_commands": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "expected_status": [
+              16.0,
+              0.0,
+              0.0,
+              0.0,
+              55.0,
+              0.0,
+              1.0,
+              0.0
+            ],
+            "name": "positive_infinity_custom",
+            "observed": {
+              "commands": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "status": [
+                16,
+                0,
+                0,
+                0,
+                55,
+                0,
+                1,
+                0
+              ]
+            },
+            "pass": true
+          },
+          {
+            "completed_readback_callbacks": 2,
+            "expected_commands": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "expected_status": [
+              16.0,
+              0.0,
+              0.0,
+              0.0,
+              55.0,
+              0.0,
+              1.0,
+              0.0
+            ],
+            "name": "negative_infinity_custom",
+            "observed": {
+              "commands": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "status": [
+                16,
+                0,
+                0,
+                0,
+                55,
+                0,
+                1,
+                0
+              ]
+            },
+            "pass": true
+          },
+          {
+            "completed_readback_callbacks": 2,
+            "expected_commands": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "expected_status": [
+              16.0,
+              0.0,
+              0.0,
+              0.0,
+              55.0,
+              0.0,
+              1.0,
+              0.0
+            ],
+            "name": "positive_subnormal_custom",
+            "observed": {
+              "commands": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "status": [
+                16,
+                0,
+                0,
+                0,
+                55,
+                0,
+                1,
+                0
+              ]
+            },
+            "pass": true
+          },
+          {
+            "completed_readback_callbacks": 2,
+            "expected_commands": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "expected_status": [
+              16.0,
+              0.0,
+              0.0,
+              0.0,
+              55.0,
+              0.0,
+              1.0,
+              0.0
+            ],
+            "name": "negative_subnormal_custom",
+            "observed": {
+              "commands": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "status": [
+                16,
+                0,
+                0,
+                0,
+                55,
+                0,
+                1,
+                0
+              ]
+            },
+            "pass": true
+          },
+          {
+            "completed_readback_callbacks": 2,
+            "expected_commands": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "expected_status": [
+              16.0,
+              0.0,
+              0.0,
+              0.0,
+              55.0,
+              0.0,
+              1.0,
+              0.0
+            ],
+            "name": "finite_multiply_overflow",
+            "observed": {
+              "commands": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "status": [
+                16,
+                0,
+                0,
+                0,
+                55,
+                0,
+                1,
+                0
+              ]
+            },
+            "pass": true
+          },
+          {
+            "completed_readback_callbacks": 2,
+            "expected_commands": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "expected_status": [
+              16.0,
+              0.0,
+              0.0,
+              0.0,
+              55.0,
+              0.0,
+              1.0,
+              0.0
+            ],
+            "name": "finite_add_overflow",
+            "observed": {
+              "commands": [
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "status": [
+                16,
+                0,
+                0,
+                0,
+                55,
+                0,
+                1,
+                0
+              ]
+            },
+            "pass": true
+          }
+        ],
+        "wrapper_execution": false
+      }
+    }
+  ],
+  "scope": "finite numeric guard GPU probe, default compile policy; not complete numeric/material qualification or production authority"
+}

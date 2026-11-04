@@ -1,0 +1,13 @@
+{
+  "pass": false,
+  "stage": "all",
+  "host": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-native-build-20261104/attempt-02/host/editor.arm64",
+  "host_sha256": "159fcc04ab3da17cb71dea76d9733d2c2972976b53e6d3ad7a70cba530bd711d",
+  "canonical_source_revision": "2578a541f19ad123af988ceec9ecb9e68c731f37",
+  "test_names_baseline_revision": "40a7caa58ab880d83a8708d5a67673555e295df6",
+  "build_identity_original": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-native-build-20261104/attempt-02/BUILD_IDENTITY.json",
+  "build_identity_sha256": "a5262504f23ba2390b1bd5d6832a4d0909316e42b4092fd4f3fcac807f247138",
+  "build_identity_schema": "preserved verbatim, identity acceptance supplied by root",
+  "rows": [],
+  "validation_error": "Engine discovery/exact-case validation failed: NativeDisposal"
+}

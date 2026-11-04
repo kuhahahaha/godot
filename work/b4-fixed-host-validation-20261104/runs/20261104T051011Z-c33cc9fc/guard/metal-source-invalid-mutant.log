@@ -1,0 +1,5 @@
+Godot Engine v4.7.2.stable.custom_build.94b06dc48 (2026-11-04 05:03:08 UTC) - https://godotengine.org
+Metal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M3 Pro (Apple9)
+
+GUARD_DEVICE Apple M3 Pro (Apple9) vendor=Apple main_rd=true mutant=true
+GUARD_RESULT {"cleanup_free_requested_only":true,"main_rd":true,"mutant":true,"pass":false,"physical_disposal_observed":false,"production_authority":false,"rows":[{"completed_readback_callbacks":2,"expected_commands":[0.0,0.0,0.0,0.0,0.0],"expected_status":[1.0,0.0,0.0,0.0,55.0,0.0,1.0,0.0],"name":"source_invalid","observed":{"commands":[6,1,0,0,0],"status":[0,1,0,0,55,0,1,0]},"pass":false}],"wrapper_execution":false}

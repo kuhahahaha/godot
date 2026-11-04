@@ -1,0 +1,14 @@
+{
+  "exit_code": 0,
+  "duration_seconds": 15.763715167006012,
+  "source_commit": "94b06dc4876d153492aa0c0e2f3457d2f5afc92e",
+  "command": [
+    "scons",
+    "-Q",
+    "tests=yes",
+    "platform=macos",
+    "target=editor",
+    "-j6"
+  ],
+  "build_log_sha256": "5fd7ec1587c8e2023773b21fef79d8e1a855f41864507946761d7f1fc7d84a85"
+}

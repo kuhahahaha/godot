@@ -1,0 +1,16 @@
+{
+  "command": [
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-native-build-20261104/attempt-02/host/editor.arm64",
+    "--test",
+    "--reporters=xml",
+    "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-fixed-host-validation-20261104/runs/20261104T045812Z-native-isolation-and-independent/Guard/doctest.xml",
+    "--no-colors=true",
+    "--no-skipped-summary=true",
+    "--case-sensitive=true",
+    "--test-case=[ExternalOutputGuard] bounded chunks cover every capacity lane once before separate finalize,[ExternalOutputGuard] zero capacity retains actual source validation without dummy records,[ExternalOutputGuard] every binding has exact protected extent and separate retained RID,[ExternalOutputGuard] source accessor and reserved header fields reject before producing a plan,[ExternalOutputGuard] invalid shape cannot enlarge dispatch or expose partial plan"
+  ],
+  "rc": 0,
+  "duration_seconds": 0.06517366599291563,
+  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

@@ -1,0 +1,126 @@
+{
+  "RESULTS.json": {
+    "bytes": 13056,
+    "sha256": "f0048b036fcece76c6f9b16aadcfbf81003e9011bf9ac0e6b4b6b96532755a95"
+  },
+  "BUILD_IDENTITY.json": {
+    "bytes": 1888,
+    "sha256": "a5262504f23ba2390b1bd5d6832a4d0909316e42b4092fd4f3fcac807f247138"
+  },
+  "EXPECTED_TESTS.json": {
+    "bytes": 2837,
+    "sha256": "660c5613c356e3642cb1db252ffeba33b238ebee26a3b3db2a4da0a9ba42caea"
+  },
+  "Config/stderr.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "Config/doctest.xml": {
+    "bytes": 2292,
+    "sha256": "36e4f8eea81d063fbd7f5afa57c5a12c224d9315d63ca77ad207c13b2d061021"
+  },
+  "Config/stdout.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "Config/PROCESS.json": {
+    "bytes": 1310,
+    "sha256": "088610c4c2ca6891b525f0e25601c56d3a29289e8d0c759a3f7052ae8a64608b"
+  },
+  "NativeDisposal-case-2/stderr.log": {
+    "bytes": 113,
+    "sha256": "482a373415cfea93e93744e6861082077fe238426d4fca952c4b75c1f6b616ab"
+  },
+  "NativeDisposal-case-2/doctest.xml": {
+    "bytes": 846,
+    "sha256": "819ee397010d07a6a202fcf33927e8efe113d82f944fb3aa6d02b537afa435e0"
+  },
+  "NativeDisposal-case-2/stdout.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "NativeDisposal-case-2/PROCESS.json": {
+    "bytes": 890,
+    "sha256": "6f00b04b2b1bbf61f82cd7351ff8d7f22272128cc7d72b34073152ea44be49b8"
+  },
+  "NativeDisposal-case-4/stderr.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "NativeDisposal-case-4/doctest.xml": {
+    "bytes": 861,
+    "sha256": "8cf04c4ca794c445d2612d49742715cfd451294d8d9e4e1206852a00fc3ccafc"
+  },
+  "NativeDisposal-case-4/stdout.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "NativeDisposal-case-4/PROCESS.json": {
+    "bytes": 907,
+    "sha256": "03c4889d1d15d9108325f220942ec47ab9b62ddf1322e00f742822446c853b92"
+  },
+  "NativeDisposal-case-3/stderr.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "NativeDisposal-case-3/doctest.xml": {
+    "bytes": 853,
+    "sha256": "55a467997f51a43e1032443e608f0c5097ecf6a32f50bc9a039789d001fdc49e"
+  },
+  "NativeDisposal-case-3/stdout.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "NativeDisposal-case-3/PROCESS.json": {
+    "bytes": 897,
+    "sha256": "e58ec7c7cce051c836b63d3c4ff0bdcbd8828fcb8bdca8733422f0c17e20430e"
+  },
+  "NativeDisposal-case-1/stderr.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "NativeDisposal-case-1/doctest.xml": {
+    "bytes": 855,
+    "sha256": "b1eb9a39fff396a1dcc3def7171f2bb2efd05712c97d51493ad0473268187d82"
+  },
+  "NativeDisposal-case-1/stdout.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "NativeDisposal-case-1/PROCESS.json": {
+    "bytes": 900,
+    "sha256": "0d53877101c34a5a77379f34d76478003cb2b1e5eb32ec7fd8d8a17832d1e84b"
+  },
+  "Guard/stderr.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "Guard/doctest.xml": {
+    "bytes": 2015,
+    "sha256": "3c4e5a5003af2eb2e826834786c9300bd897fb79a9392e2ac764ce6ed971d906"
+  },
+  "Guard/stdout.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "Guard/PROCESS.json": {
+    "bytes": 1241,
+    "sha256": "c944e28c2acada7acf87fcdab83b2aba28b218ab4cc700a9b725f96bf80ae4f6"
+  },
+  "InverseModel/stderr.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "InverseModel/doctest.xml": {
+    "bytes": 1126,
+    "sha256": "f263ebf604d0552c3260ea94340474ece8438d57e0295e9c49cb9598178b5468"
+  },
+  "InverseModel/stdout.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "InverseModel/PROCESS.json": {
+    "bytes": 958,
+    "sha256": "5a4488b2d5e28104ba8d782bc4f8622417f35b58d59853ee96d6f924de9e8da8"
+  }
+}

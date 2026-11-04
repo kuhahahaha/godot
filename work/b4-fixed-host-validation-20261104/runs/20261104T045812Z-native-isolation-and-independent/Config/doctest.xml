@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<doctest binary="/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-native-build-20261104/attempt-02/host/editor.arm64" version="2.4.12">
+  <Options order_by="file" rand_seed="0" first="0" last="4294967295" abort_after="0" subcase_filter_levels="2147483647" case_sensitive="true" no_throw="false" no_skip="false"/>
+  <TestSuite>
+    <TestCase name="[ExternalOutputConfig] strict create schema rejects malformed fields without publishing partial config" filename="tests/servers/rendering/test_external_output_config.cpp" line="63">
+      <OverallResultsAsserts successes="320" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[ExternalOutputConfig] profile limits and conditional fields are exact" filename="tests/servers/rendering/test_external_output_config.cpp" line="105">
+      <OverallResultsAsserts successes="188" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[ExternalOutputConfig] every accepted bound is finite and nonempty" filename="tests/servers/rendering/test_external_output_config.cpp" line="171">
+      <OverallResultsAsserts successes="60" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[ExternalOutputConfig] checked buffer sizing rejects wrap and respects actual device limit" filename="tests/servers/rendering/test_external_output_config.cpp" line="185">
+      <OverallResultsAsserts successes="11" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[ExternalOutputConfig] schema1 pass namespace accepts every known combination and rejects reserved bits" filename="tests/servers/rendering/test_external_output_config.cpp" line="200">
+      <OverallResultsAsserts successes="514" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[ExternalOutputConfig] u64 identities decode exactly from eight little endian bytes" filename="tests/servers/rendering/test_external_output_config.cpp" line="228">
+      <OverallResultsAsserts successes="10" failures="0" test_case_success="true"/>
+    </TestCase>
+  </TestSuite>
+  <OverallResultsAsserts successes="1103" failures="0"/>
+  <OverallResultsTestCases successes="6" failures="0"/>
+</doctest>

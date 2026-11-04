@@ -1,0 +1,17 @@
+{
+  "old_revision": "40a7caa58ab880d83a8708d5a67673555e295df6",
+  "template_bytes_unchanged": true,
+  "template_sha256": "a1f21e4bf4d4b5099235918e76e67cce4d70b986880f2a1cc689b14593fbff60",
+  "actual_SCsub_glob": "glob.glob(\"*/**/*.cpp\", recursive=True), relative to tests/",
+  "template_excluded_from_actual_glob": true,
+  "test_translation_units_matched": 224,
+  "source_root": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104",
+  "engine_build_started": false,
+  "fixture_command": [
+    "python3",
+    "tests/servers/rendering/fixtures/particle_external_guard/run.py",
+    "--mutations"
+  ],
+  "fixture_rc": 0,
+  "fixture_log_sha256": "d1d456a6b12e1764e28610f7a47f426632e098c746d3d73660794b7aa6296db3"
+}

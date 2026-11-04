@@ -1,0 +1,2 @@
+{"backend": "metal", "phase": "numeric-production", "rc": 0, "oracle_pass": true, "errors": []}
+All production and targeted mutation mechanism checks passed

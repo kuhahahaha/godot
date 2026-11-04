@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<doctest binary="/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-native-build-20261104/attempt-02/host/editor.arm64" version="2.4.12">
+  <Options order_by="file" rand_seed="0" first="0" last="4294967295" abort_after="0" subcase_filter_levels="2147483647" case_sensitive="true" no_throw="false" no_skip="false"/>
+  <TestSuite>
+    <TestCase name="[ShaderLanguage] spatial inverse model is a readonly matrix in vertex and fragment" filename="tests/servers/rendering/test_spatial_inverse_model.cpp" line="22">
+      <OverallResultsAsserts successes="10" failures="0" test_case_success="true"/>
+    </TestCase>
+    <TestCase name="[ShaderLanguage] inverse model cannot be assigned or borrowed by canvas shaders" filename="tests/servers/rendering/test_spatial_inverse_model.cpp" line="36">
+      <OverallResultsAsserts successes="4" failures="0" test_case_success="true"/>
+    </TestCase>
+  </TestSuite>
+  <OverallResultsAsserts successes="14" failures="0"/>
+  <OverallResultsTestCases successes="2" failures="0"/>
+</doctest>

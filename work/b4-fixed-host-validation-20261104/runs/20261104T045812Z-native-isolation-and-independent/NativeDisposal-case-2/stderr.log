@@ -1,0 +1,2 @@
+ERROR: Condition "dependency_map.size()" is true.
+   at: finalize (servers/rendering/rendering_device.cpp:10963)

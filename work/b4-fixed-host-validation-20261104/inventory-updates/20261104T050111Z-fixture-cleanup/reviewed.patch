@@ -1,0 +1,49 @@
+diff --git a/tests/servers/rendering/test_native_disposal.cpp b/tests/servers/rendering/test_native_disposal.cpp
+index b5825cf0df..5464238756 100644
+--- a/tests/servers/rendering/test_native_disposal.cpp
++++ b/tests/servers/rendering/test_native_disposal.cpp
+@@ -48,7 +48,12 @@ public:
+ 		shader.set_formats.push_back(1);
+ 		return p_rd.shader_owner.make_rid(shader);
+ 	}
+-	static void erase_shader(RenderingDevice &p_rd, RID p_shader) { p_rd.shader_owner.free(p_shader); }
++	static void release_shader(RenderingDevice &p_rd, RID p_shader) {
++		p_rd.free_rid(p_shader);
++		dispose(p_rd);
++		CHECK(p_rd.dependency_map.is_empty());
++		CHECK(p_rd.reverse_dependency_map.is_empty());
++	}
+ 	static Error set(RenderingDevice &p_rd, RID p_buffer, RID p_shader, RID &r_set, NativeDisposalWitness &r_witness, bool p_unsupported = false) {
+ 		RenderingDevice::Uniform uniform;
+ 		uniform.uniform_type = p_unsupported ? RenderingDevice::UNIFORM_TYPE_UNIFORM_BUFFER : RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER;
+@@ -63,7 +68,7 @@ class Driver : public TransferTestDriverBase {
+ public:
+ 	NativeDisposalWitness *buffer_witness = nullptr;
+ 	NativeDisposalWitness *set_witness = nullptr;
+-	int creates = 0, frees = 0, set_creates = 0, set_frees = 0;
++	int creates = 0, frees = 0, set_creates = 0, set_frees = 0, shader_frees = 0;
+ 	bool fail_create = false;
+ 	BufferID buffer_create(uint64_t, BitField<BufferUsageBits>, MemoryAllocationType, uint64_t) override { ++creates; return fail_create ? BufferID() : BufferID(19); }
+ 	void buffer_free(BufferID p_id) override {
+@@ -80,6 +85,10 @@ public:
+ 		CHECK(TestNativeDisposalAccess::refs(*set_witness) >= 2);
+ 		++set_frees;
+ 	}
++	void shader_free(ShaderID p_id) override {
++		CHECK(p_id.id == 31);
++		++shader_frees;
++	}
+ };
+ 
+ TEST_CASE("[RenderingDevice][NativeDisposal] real buffer queue retains metadata until driver free returns") {
+@@ -133,7 +142,9 @@ TEST_CASE("[RenderingDevice][NativeDisposal] set cascade reports each actual fre
+ 	CHECK(driver.frees == 1);
+ 	CHECK(TestNativeDisposalAccess::state(set) == NativeDisposalWitness::State::RETURNED);
+ 	CHECK(TestNativeDisposalAccess::state(buffer) == NativeDisposalWitness::State::RETURNED);
+-	TestNativeDisposalAccess::erase_shader(rd, shader);
++	CHECK(driver.shader_frees == 0);
++	TestNativeDisposalAccess::release_shader(rd, shader);
++	CHECK(driver.shader_frees == 1);
+ 	TestNativeDisposalAccess::detach(rd);
+ }
+ 

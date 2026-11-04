@@ -1,0 +1,28 @@
+{
+  "source_commit": "94b06dc4876d153492aa0c0e2f3457d2f5afc92e",
+  "metal_implementation_commit": "40a7caa58ab880d83a8708d5a67673555e295df6",
+  "host": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-native-build-20261104/attempt-03/host/editor.arm64",
+  "host_sha256": "965cb0ef6e137dcf17298d504f404a6f53aaa0421d03d080ef36e9b5b9b24eb6",
+  "host_bytes": 148765880,
+  "version_stdout": "4.7.2.stable.custom_build.94b06dc48\n",
+  "selection": {
+    "schema": 1,
+    "core_stamp": "3f023fca7d5298002cd39f9dc8f1ef76dd2127b29b5344c0fa421c938059aa95",
+    "compiler_route": "BuiltinGlslangV1",
+    "compiler_stamp": "cd5f0271d623e824d623d222c6e03e451449c9416ac5e13f280b1ecbea10755c",
+    "platform": "macos",
+    "architecture": "arm64",
+    "target_kind": "Executable"
+  },
+  "controlled_build_metadata": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-native-build-20261104/attempt-03/host/editor.arm64.controlled_build.json",
+  "controlled_build_metadata_sha256": "b0a8d4d7bf5e907ddaab9e08070857670c7d2345540defec1b078060e9dc2e0c",
+  "sdk": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-native-build-20261104/attempt-03/sdk/gdextension_interface.gen.h",
+  "sdk_sha256": "ec25549317a591c3009de34f217bcb835f1d3cc52ba2d8782bde2af15d5dbad7",
+  "selection_file": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-native-build-20261104/attempt-03/CoreBuildSelection.schema1.json",
+  "selection_sha256": "6dbeb80c7159785c5edaad0dfb9ae7d16ecb2438bda9f68f8f767144f5586c19",
+  "build_result_sha256": "c8851c6af903fc90c104eb1a084a53437b1b6fc82125ed0f77dd8790570c064f",
+  "validation_at_pin": {
+    "engine_tests_run": false,
+    "repaired_metal_gpu_run": false
+  }
+}

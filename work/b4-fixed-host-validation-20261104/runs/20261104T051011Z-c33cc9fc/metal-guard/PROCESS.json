@@ -1,0 +1,18 @@
+{
+  "command": [
+    "python3",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-fixed-host-validation-20261104/runs/20261104T051011Z-c33cc9fc/guard/run.py",
+    "--backend",
+    "metal",
+    "--godot",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-metal-native-build-20261104/attempt-03/host/editor.arm64",
+    "--expected-sha256",
+    "965cb0ef6e137dcf17298d504f404a6f53aaa0421d03d080ef36e9b5b9b24eb6",
+    "--source-root",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104"
+  ],
+  "rc": 0,
+  "duration_seconds": 3.7077263749670237,
+  "stdout_sha256": "1d99d16cf34925a20e02565e03a815788e4ad53b5cd051bab51899480c13a1cd",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

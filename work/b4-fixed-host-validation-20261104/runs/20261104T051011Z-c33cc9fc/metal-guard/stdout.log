@@ -1,0 +1,4 @@
+{"backend": "metal", "phase": "baseline", "rc": 0, "oracle_pass": true, "errors": []}
+{"backend": "metal", "phase": "source-invalid-mutant", "rc": 1, "oracle_pass": true, "errors": []}
+{"backend": "metal", "phase": "restored-production", "rc": 0, "oracle_pass": true, "errors": []}
+All production and targeted mutation mechanism checks passed

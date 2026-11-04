@@ -1,0 +1,197 @@
+{
+  "host_sha256": "965cb0ef6e137dcf17298d504f404a6f53aaa0421d03d080ef36e9b5b9b24eb6",
+  "canonical_source": "94b06dc4876d153492aa0c0e2f3457d2f5afc92e",
+  "compile_policy": "default only, no force-safe option",
+  "fixed_before_gpu": true,
+  "cases": [
+    {
+      "name": "healthy_control",
+      "custom40_bits": null,
+      "expected_status": [
+        0,
+        1,
+        0,
+        0,
+        55,
+        0,
+        1,
+        0
+      ],
+      "expected_commands": [
+        6,
+        1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "largest_finite_custom",
+      "custom40_bits": 2139095039,
+      "expected_status": [
+        0,
+        1,
+        0,
+        0,
+        55,
+        0,
+        1,
+        0
+      ],
+      "expected_commands": [
+        6,
+        1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "quiet_nan_custom",
+      "custom40_bits": 2143289345,
+      "expected_status": [
+        16,
+        0,
+        0,
+        0,
+        55,
+        0,
+        1,
+        0
+      ],
+      "expected_commands": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "positive_infinity_custom",
+      "custom40_bits": 2139095040,
+      "expected_status": [
+        16,
+        0,
+        0,
+        0,
+        55,
+        0,
+        1,
+        0
+      ],
+      "expected_commands": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "negative_infinity_custom",
+      "custom40_bits": 4286578688,
+      "expected_status": [
+        16,
+        0,
+        0,
+        0,
+        55,
+        0,
+        1,
+        0
+      ],
+      "expected_commands": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "positive_subnormal_custom",
+      "custom40_bits": 1,
+      "expected_status": [
+        16,
+        0,
+        0,
+        0,
+        55,
+        0,
+        1,
+        0
+      ],
+      "expected_commands": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "negative_subnormal_custom",
+      "custom40_bits": 2147483649,
+      "expected_status": [
+        16,
+        0,
+        0,
+        0,
+        55,
+        0,
+        1,
+        0
+      ],
+      "expected_commands": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "finite_multiply_overflow",
+      "custom40_bits": null,
+      "expected_status": [
+        16,
+        0,
+        0,
+        0,
+        55,
+        0,
+        1,
+        0
+      ],
+      "expected_commands": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "finite_add_overflow",
+      "custom40_bits": null,
+      "expected_status": [
+        16,
+        0,
+        0,
+        0,
+        55,
+        0,
+        1,
+        0
+      ],
+      "expected_commands": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}

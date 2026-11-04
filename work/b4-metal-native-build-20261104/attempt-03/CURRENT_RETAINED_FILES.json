@@ -1,0 +1,39 @@
+{
+  "files": {
+    "BUILD_IDENTITY.json": {
+      "bytes": 1921,
+      "sha256": "fc14b573c22ab260dfaab7eacbe7ca8c0f7accde3d5617b28e3ee8eeab371ddb"
+    },
+    "BUILD_RESULT.json": {
+      "bytes": 329,
+      "sha256": "c8851c6af903fc90c104eb1a084a53437b1b6fc82125ed0f77dd8790570c064f"
+    },
+    "BUILD_SOURCE.json": {
+      "bytes": 1551,
+      "sha256": "f48852dff1dd39c0c54998fcf99aa0aae47afdb9087e3a5f5b97e59d247f7f28"
+    },
+    "CoreBuildSelection.schema1.json": {
+      "bytes": 311,
+      "sha256": "6dbeb80c7159785c5edaad0dfb9ae7d16ecb2438bda9f68f8f767144f5586c19"
+    },
+    "SHARE_RECEIPT.md": {
+      "bytes": 2477,
+      "sha256": "06bbafe07cf8f8b0fa71c17fd0548ae981d093b1c07818e882878b4f02b2f7fe"
+    },
+    "build.log": {
+      "bytes": 2119,
+      "sha256": "5fd7ec1587c8e2023773b21fef79d8e1a855f41864507946761d7f1fc7d84a85"
+    },
+    "host/editor.arm64.controlled_build.json": {
+      "bytes": 530,
+      "sha256": "b0a8d4d7bf5e907ddaab9e08070857670c7d2345540defec1b078060e9dc2e0c"
+    },
+    "sdk/gdextension_interface.gen.h": {
+      "bytes": 240161,
+      "sha256": "ec25549317a591c3009de34f217bcb835f1d3cc52ba2d8782bde2af15d5dbad7"
+    }
+  },
+  "excluded_executables": [
+    "work/b4-metal-native-build-20261104/attempt-03/host/editor.arm64"
+  ]
+}
