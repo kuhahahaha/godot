@@ -25,6 +25,7 @@ def main():
     setter = body(source, 'void ParticlesStorage::particles_collision_set_box_extents(')
     prefix = r'''
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <vector>
 #define ERR_FAIL_NULL(p) if (!(p)) return
@@ -33,7 +34,7 @@ struct RID { int id=0; bool is_valid() const { return id!=0; } };
 struct Vector3 { float x,y,z; bool is_finite() const { return std::isfinite(x)&&std::isfinite(y)&&std::isfinite(z); } };
 namespace RSE { enum { PARTICLES_COLLISION_TYPE_HEIGHTFIELD_COLLIDE=1 }; }
 struct Dependency { enum { DEPENDENCY_CHANGED_AABB }; int changes=0; void changed_notify(int) { changes++; } };
-struct ParticlesCollision { int type=1; Vector3 extents{1,1,1}; RID heightfield_fb{7}, heightfield_texture{8}; Dependency dependency; };
+struct ParticlesCollision { int type=1; Vector3 extents{1,1,1}; RID heightfield_fb{7}, heightfield_texture{8}; uint64_t scene_shape_revision=1; Dependency dependency; };
 struct Owner { ParticlesCollision value; ParticlesCollision *get_or_null(RID rid) { return rid.id==1?&value:nullptr; } } particles_collision_owner;
 struct RD { std::vector<int> freed; static RD *get_singleton() { static RD rd; return &rd; } void free_rid(RID rid) { freed.push_back(rid.id); } };
 void set_extents(RID p_particles_collision, const Vector3 &p_extents)

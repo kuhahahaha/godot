@@ -215,6 +215,43 @@ bool RendererSceneCull::scene_sphere_snapshot_pairs(RID p_receiver, uint32_t p_m
 	return true;
 }
 
+bool RendererSceneCull::scene_heightfield_snapshot_pair(RID p_receiver, SceneHeightfieldSource &r_source, bool &r_present) const {
+	r_present = false;
+	const Instance *receiver = instance_owner.get_or_null(p_receiver);
+	if (!receiver || receiver->base_type != RSE::INSTANCE_PARTICLES || !receiver->scenario) {
+		return false;
+	}
+	if (!receiver->visible) {
+		return true;
+	}
+	RendererRD::ParticlesStorage *storage = RendererRD::ParticlesStorage::get_singleton();
+	if (!storage) {
+		return false;
+	}
+	for (const SelfList<InstancePair> *link = receiver->pairs.first(); link; link = link->next()) {
+		const InstancePair *pair = link->self();
+		const Instance *source = pair->a == receiver ? pair->b : pair->a;
+		if (source->base_type != RSE::INSTANCE_PARTICLES_COLLISION || !source->visible || source->scenario != receiver->scenario) {
+			continue;
+		}
+		const InstanceParticlesCollisionData *collision = static_cast<const InstanceParticlesCollisionData *>(source->base_data);
+		if (!(collision->cull_mask & receiver->layer_mask)) {
+			continue;
+		}
+		SceneHeightfieldSource value;
+		if (!storage->particles_collision_instance_get_scene_heightfield(collision->instance, value.source_key, value.shape_revision, value.transform, value.extents, value.resolution)) {
+			continue;
+		}
+		if (r_present) {
+			r_present = false;
+			return false;
+		}
+		r_source = value;
+		r_present = true;
+	}
+	return true;
+}
+
 void RendererSceneCull::_instance_pair(Instance *p_A, Instance *p_B) {
 	RendererSceneCull *self = (RendererSceneCull *)singleton;
 	Instance *A = p_A;

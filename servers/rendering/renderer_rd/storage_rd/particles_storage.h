@@ -657,6 +657,7 @@ public:
 	virtual void particles_collision_instance_set_transform(RID p_collision_instance, const Transform3D &p_transform) override;
 	virtual void particles_collision_instance_set_active(RID p_collision_instance, bool p_active) override;
 	bool particles_collision_instance_get_scene_sphere(RID p_collision_instance, uint64_t &r_source_key, uint64_t &r_shape_revision, Transform3D &r_transform, float &r_radius) const;
+	bool particles_collision_instance_get_scene_heightfield(RID p_collision_instance, uint64_t &r_source_key, uint64_t &r_shape_revision, Transform3D &r_transform, Vector3 &r_extents, RSE::ParticlesCollisionHeightfieldResolution &r_resolution) const;
 };
 
 } // namespace RendererRD
