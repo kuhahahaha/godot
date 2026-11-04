@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  test_device_exit_library_close.cpp                                       */
+/*  test_device_exit_library_close.cpp                                    */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
