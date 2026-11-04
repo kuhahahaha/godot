@@ -1,0 +1,297 @@
+{
+  "source_head": "a2f009e6cd5251abea5a611eaf9edac50b8749b3",
+  "host_sha256": "4e99d8df4482f596ee892944a38d9bff28bf8f622c8a4b2cd4e7081a33e6c528",
+  "native_named_case_count": 10,
+  "entries": [
+    {
+      "driver": "metal",
+      "case": "positive",
+      "status": "passed_observed_named_case",
+      "result": "results/20261104-021819-919314-metal/results.json",
+      "results_sha256": "de7617c158f3d34c9d05d40b937562dbea13bdcee49b3421c80e6b3c0c04d3d5",
+      "checks": {
+        "expected_exit": true,
+        "actual_backend": true,
+        "actual_selection": true,
+        "forbidden_patterns_absent": true,
+        "unload": true,
+        "native_scalar": true
+      },
+      "whole_resultset_status": "failed",
+      "bound_inputs_unchanged_flag": "not emitted: suite later failed on different close case",
+      "fresh_artifact_and_bound_input_hashes_verified": true,
+      "scope": "System native component only"
+    },
+    {
+      "driver": "metal",
+      "case": "post_submit_close",
+      "status": "passed_observed_named_case",
+      "result": "results/20261104-024428-038945-metal/results.json",
+      "results_sha256": "3ebe394c54f334286523307811388203a3f878352eceb2c23db662a85e8c01b4",
+      "checks": {
+        "expected_exit": true,
+        "actual_backend": true,
+        "actual_selection": true,
+        "forbidden_patterns_absent": true,
+        "unload": true,
+        "native_close": true,
+        "actual_body_issue_before_close": true,
+        "original_ticket_drain": true
+      },
+      "whole_resultset_status": "passed_selected_native_case",
+      "bound_inputs_unchanged_flag": true,
+      "fresh_artifact_and_bound_input_hashes_verified": true,
+      "scope": "System native component only",
+      "actual_body_submission": {
+        "status": "matched_actual_body_native_tuple",
+        "body": {
+          "graph": 1,
+          "frame": 3,
+          "kind": 2,
+          "index": 1,
+          "offset": 56,
+          "command_slot": 0,
+          "issue": 1,
+          "completion": 2,
+          "native": 12,
+          "completion_serial": 12,
+          "queue": 1,
+          "native_row": 3,
+          "native_semantic": 5,
+          "native_issue": 1,
+          "native_completion": 2,
+          "state": 8,
+          "native_code": 4,
+          "body_native_code": 0
+        },
+        "original_ticket": 12,
+        "tracked_pending_sources_returned": 2,
+        "inflight_claim": false
+      }
+    },
+    {
+      "driver": "metal",
+      "case": "native_unknown",
+      "status": "passed_observed_named_case",
+      "result": "results/20261104-024431-458836-metal/results.json",
+      "results_sha256": "965ddbe3ee375542c2a41f4a034ab4021984b6acc04d8c3e23e4205b169a6bfc",
+      "checks": {
+        "expected_exit": true,
+        "actual_backend": true,
+        "actual_selection": true,
+        "forbidden_patterns_absent": true,
+        "required_observations": true,
+        "no_false_unload": true
+      },
+      "whole_resultset_status": "passed_selected_native_case",
+      "bound_inputs_unchanged_flag": true,
+      "fresh_artifact_and_bound_input_hashes_verified": true,
+      "scope": "System native component only",
+      "retirement_claim": false,
+      "control_kind": "TESTS-only injection; explicit process isolation, no retirement claim"
+    },
+    {
+      "driver": "metal",
+      "case": "native_fact_capacity",
+      "status": "passed_observed_named_case",
+      "result": "results/20261104-024433-850901-metal/results.json",
+      "results_sha256": "d0ece73747db9c5946fbb20644fb2d5c65470d42129d5b3720ba1e9edec40928",
+      "checks": {
+        "expected_exit": true,
+        "actual_backend": true,
+        "actual_selection": true,
+        "forbidden_patterns_absent": true,
+        "actual_source_slot_precondition": true,
+        "required_observations": true,
+        "unload": true
+      },
+      "whole_resultset_status": "passed_selected_native_case",
+      "bound_inputs_unchanged_flag": true,
+      "fresh_artifact_and_bound_input_hashes_verified": true,
+      "scope": "System native component only",
+      "actual_capacity": {
+        "current_commands": 0,
+        "workers": 11,
+        "bytes": 16384,
+        "graph_bound": 513,
+        "frame_bound": 514,
+        "required_slots": 6168,
+        "source_slot_capacity": 4096,
+        "actual_error": 5,
+        "expected_error": 5,
+        "expected_reason": 19,
+        "status": "satisfied_shared_pre_driver_slot_refusal"
+      },
+      "retirement_claim": true
+    },
+    {
+      "driver": "metal",
+      "case": "set_retire_error",
+      "status": "passed_observed_named_case",
+      "result": "results/20261104-024436-422742-metal/results.json",
+      "results_sha256": "eef99eaaaefb599e055239de6cb855f372cd97fa0d54688c872bdbb4ccd8c98f",
+      "checks": {
+        "expected_exit": true,
+        "actual_backend": true,
+        "actual_selection": true,
+        "forbidden_patterns_absent": true,
+        "required_observations": true,
+        "no_false_unload": true
+      },
+      "whole_resultset_status": "passed_selected_native_case",
+      "bound_inputs_unchanged_flag": true,
+      "fresh_artifact_and_bound_input_hashes_verified": true,
+      "scope": "System native component only",
+      "retirement_claim": false,
+      "control_kind": "TESTS-only injection; explicit process isolation, no retirement claim"
+    },
+    {
+      "driver": "vulkan",
+      "case": "positive",
+      "status": "passed_observed_named_case",
+      "result": "results/20261104-024751-252413-vulkan/results.json",
+      "results_sha256": "b577e90bb5b35cf0e31240e19ac5a3f8b57530f2fa8f7accccc11f143ebad4f2",
+      "checks": {
+        "expected_exit": true,
+        "actual_backend": true,
+        "actual_selection": true,
+        "forbidden_patterns_absent": true,
+        "unload": true,
+        "native_scalar": true
+      },
+      "whole_resultset_status": "passed_original_native_component_and_three_controls",
+      "bound_inputs_unchanged_flag": true,
+      "fresh_artifact_and_bound_input_hashes_verified": true,
+      "scope": "System native component only"
+    },
+    {
+      "driver": "vulkan",
+      "case": "post_submit_close",
+      "status": "passed_observed_named_case",
+      "result": "results/20261104-024751-252413-vulkan/results.json",
+      "results_sha256": "b577e90bb5b35cf0e31240e19ac5a3f8b57530f2fa8f7accccc11f143ebad4f2",
+      "checks": {
+        "expected_exit": true,
+        "actual_backend": true,
+        "actual_selection": true,
+        "forbidden_patterns_absent": true,
+        "unload": true,
+        "native_close": true,
+        "actual_body_issue_before_close": true,
+        "original_ticket_drain": true
+      },
+      "whole_resultset_status": "passed_original_native_component_and_three_controls",
+      "bound_inputs_unchanged_flag": true,
+      "fresh_artifact_and_bound_input_hashes_verified": true,
+      "scope": "System native component only",
+      "actual_body_submission": {
+        "status": "matched_actual_body_native_tuple",
+        "body": {
+          "graph": 1,
+          "frame": 3,
+          "kind": 2,
+          "index": 1,
+          "offset": 56,
+          "command_slot": 0,
+          "issue": 2,
+          "completion": 1,
+          "native": 7,
+          "completion_serial": 7,
+          "queue": 1,
+          "native_row": 2,
+          "native_semantic": 5,
+          "native_issue": 1,
+          "native_completion": 1,
+          "state": 4,
+          "native_code": 0,
+          "body_native_code": 0
+        },
+        "original_ticket": 12,
+        "tracked_pending_sources_returned": 0,
+        "inflight_claim": false
+      }
+    },
+    {
+      "driver": "vulkan",
+      "case": "native_unknown",
+      "status": "passed_observed_named_case",
+      "result": "results/20261104-024751-252413-vulkan/results.json",
+      "results_sha256": "b577e90bb5b35cf0e31240e19ac5a3f8b57530f2fa8f7accccc11f143ebad4f2",
+      "checks": {
+        "expected_exit": true,
+        "actual_backend": true,
+        "actual_selection": true,
+        "forbidden_patterns_absent": true,
+        "required_observations": true,
+        "no_false_unload": true
+      },
+      "whole_resultset_status": "passed_original_native_component_and_three_controls",
+      "bound_inputs_unchanged_flag": true,
+      "fresh_artifact_and_bound_input_hashes_verified": true,
+      "scope": "System native component only",
+      "retirement_claim": false,
+      "control_kind": "TESTS-only injection; explicit process isolation, no retirement claim"
+    },
+    {
+      "driver": "vulkan",
+      "case": "native_fact_capacity",
+      "status": "passed_observed_named_case",
+      "result": "results/20261104-024751-252413-vulkan/results.json",
+      "results_sha256": "b577e90bb5b35cf0e31240e19ac5a3f8b57530f2fa8f7accccc11f143ebad4f2",
+      "checks": {
+        "expected_exit": true,
+        "actual_backend": true,
+        "actual_selection": true,
+        "forbidden_patterns_absent": true,
+        "actual_source_slot_precondition": true,
+        "required_observations": true,
+        "unload": true
+      },
+      "whole_resultset_status": "passed_original_native_component_and_three_controls",
+      "bound_inputs_unchanged_flag": true,
+      "fresh_artifact_and_bound_input_hashes_verified": true,
+      "scope": "System native component only",
+      "actual_capacity": {
+        "current_commands": 0,
+        "workers": 11,
+        "bytes": 16384,
+        "graph_bound": 513,
+        "frame_bound": 514,
+        "required_slots": 6168,
+        "source_slot_capacity": 4096,
+        "actual_error": 5,
+        "expected_error": 5,
+        "expected_reason": 19,
+        "status": "satisfied_shared_pre_driver_slot_refusal"
+      },
+      "retirement_claim": true
+    },
+    {
+      "driver": "vulkan",
+      "case": "set_retire_error",
+      "status": "passed_observed_named_case",
+      "result": "results/20261104-024751-252413-vulkan/results.json",
+      "results_sha256": "b577e90bb5b35cf0e31240e19ac5a3f8b57530f2fa8f7accccc11f143ebad4f2",
+      "checks": {
+        "expected_exit": true,
+        "actual_backend": true,
+        "actual_selection": true,
+        "forbidden_patterns_absent": true,
+        "required_observations": true,
+        "no_false_unload": true
+      },
+      "whole_resultset_status": "passed_original_native_component_and_three_controls",
+      "bound_inputs_unchanged_flag": true,
+      "fresh_artifact_and_bound_input_hashes_verified": true,
+      "scope": "System native component only",
+      "retirement_claim": false,
+      "control_kind": "TESTS-only injection; explicit process isolation, no retirement claim"
+    }
+  ],
+  "scope_exclusions": [
+    "full ANGE/Host",
+    "full System/U1/U05/lifecycle/phase1",
+    "B4 renderer output",
+    "real GPU/device failure injection"
+  ]
+}

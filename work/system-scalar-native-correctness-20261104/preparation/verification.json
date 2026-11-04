@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "status": "prepared_not_native_run",
-  "recorded_utc": "2026-11-04T02:09:31.466842+00:00",
+  "status": "native_diagnostic_code_fix_prepared_runtime_frozen",
+  "recorded_utc": "2026-11-04T02:43:27.098259+00:00",
   "commands": [
     {
       "command": [
@@ -10,71 +10,111 @@
       ],
       "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange",
       "returncode": 0,
-      "stdout": "constructor-fatal-tests.stdout.log",
-      "stderr": "constructor-fatal-tests.stderr.log"
+      "stdout": "native-diagnostic-code-tests.stdout.log",
+      "stderr": "native-diagnostic-code-tests.stderr.log"
     },
     {
       "command": [
-        "/opt/homebrew/opt/python@3.14/bin/python3.14",
-        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/run.py",
-        "--help"
+        "clang++",
+        "-std=c++17",
+        "-fsyntax-only",
+        "-Wall",
+        "-Wextra",
+        "-Wno-unused-parameter",
+        "-Wno-deprecated-declarations",
+        "-DSCALAR_EXPECTED_WORD=0x40400000",
+        "-I",
+        "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/system-native-diagnostic-code-8_r5_8xw",
+        "-I",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/include",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/post_submit_close.cpp"
       ],
       "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange",
       "returncode": 0,
-      "stdout": "constructor-fatal-help.stdout.log",
-      "stderr": "constructor-fatal-help.stderr.log"
+      "stdout": "native-diagnostic-code-system-cpp-syntax.stdout.log",
+      "stderr": "native-diagnostic-code-system-cpp-syntax.stderr.log"
     },
     {
       "command": [
-        "/opt/homebrew/opt/python@3.14/bin/python3.14",
-        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/verify_identity_order.py",
-        "--source-root",
-        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104"
+        "clang++",
+        "-std=c++17",
+        "-Wall",
+        "-Wextra",
+        "-pedantic",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/post_submit_observation_test.cpp",
+        "-o",
+        "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/system-native-diagnostic-code-8_r5_8xw/observation-test"
       ],
       "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange",
       "returncode": 0,
-      "stdout": "identity-constructor-source-order.json",
-      "stderr": "identity-constructor-source-order.stderr.log"
+      "stdout": "native-diagnostic-code-cpu-build.stdout.log",
+      "stderr": "native-diagnostic-code-cpu-build.stderr.log"
+    },
+    {
+      "command": [
+        "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/system-native-diagnostic-code-8_r5_8xw/observation-test"
+      ],
+      "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange",
+      "returncode": 0,
+      "stdout": "native-diagnostic-code-cpu-run.stdout.log",
+      "stderr": "native-diagnostic-code-cpu-run.stderr.log"
     }
   ],
   "python_ast": "passed",
-  "python_validation_groups": 9,
-  "constructor_identity": "probe _init before synchronous SceneReady; _initialize keeps ordinary loop quit",
-  "global_fatal_checks": "always merged with negative extra patterns, never replaced",
-  "static_source_order_checks": 11,
-  "static_source_files": 10,
-  "capacity_drivers": [
-    "metal",
-    "vulkan"
-  ],
-  "capacity_precondition": "actual trace current+(graphs+1)*(workers+1)>4096, graphs513, native_error5/reason19; false premise fails explicitly",
-  "host_executed": false,
-  "gpu_executed": false,
-  "dso_compiled": false,
-  "engine_built": false,
-  "new_host_sdk_pair": "pending root single builder",
-  "cxx_and_gdscript_for_new_pair": "not yet checked against generated new SDK/host",
-  "old_results_reused": false,
-  "prior_preparation_records": [
-    "verification-before-metal-capacity.json",
-    "verification-before-constructor-identity.json"
-  ],
+  "test_groups": 13,
+  "cpp_syntax_sdk": {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/sdk/gdextension_interface.gen.h",
+    "sha256": "ec25549317a591c3009de34f217bcb835f1d3cc52ba2d8782bde2af15d5dbad7",
+    "bytes": 240161
+  },
+  "cpp_syntax_host_binding": {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/host/editor.arm64",
+    "sha256": "4e99d8df4482f596ee892944a38d9bff28bf8f622c8a4b2cd4e7081a33e6c528",
+    "bytes": 148666568
+  },
+  "actual_diagnostic": {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/results/20261104-023647-000699-metal/post_submit_close.stderr.log",
+    "sha256": "4cde47a9834c245d68ea9364b812004a8761aabc0504bcf08c3f0e3c8f0e4d0e",
+    "terminal_report": {
+      "state": 8,
+      "native_error": 0,
+      "native_code": 0,
+      "possible_count": 0
+    },
+    "successful_native_facts": {
+      "issue": 1,
+      "completion": 2,
+      "error": 0,
+      "native_code": 4
+    },
+    "meaning": "Metal raw MTLCommandBufferStatus Completed=4 is a diagnostic, not an Error boolean"
+  },
+  "policy": "Fact diagnostics preserved and printed; success/refinement/return use issue/completion/error and exact original identities. Report error/native_code refusal unchanged. State5/6/7 and native completion3/4 remain refused.",
+  "body_tuple_and_final_original_sources": "unchanged exact retained associations; hidden preparation cannot qualify",
+  "independent_review": {
+    "agent": "/root/b4_parser_review",
+    "result": "stable raw-code fix: no definite remaining finding",
+    "scope": "source only; reviewer did not run harness/engine/GPU"
+  },
+  "host_executed_by_this_preparation": false,
+  "gpu_executed_by_this_preparation": false,
+  "dso_built_by_this_preparation": false,
+  "engine_built_by_this_preparation": false,
+  "standalone_cpu_helper_built_and_run": true,
+  "prior_preparation_record": "verification-before-native-diagnostic-code.json",
+  "old_native_logs_inputs": "retained untouched",
   "files": {
     "runtime/README.md": {
-      "sha256": "808d809f8bcf5bd5528494dc8b001b0d35578cb7a7fb6c87312a1fc23995c7e3",
-      "bytes": 6993
+      "sha256": "18462097599fb2fc584f31c7b0b2082b11569622c832e3e2b878120c01ad2328",
+      "bytes": 11246
     },
     "runtime/SOURCE_PROVENANCE.json": {
-      "sha256": "6bc8bc94c28b02b49fe91a9c824eec30bdef7d043e8c666e97759329b485cbdd",
-      "bytes": 1987
-    },
-    "runtime/__pycache__/test_runner.cpython-314.pyc": {
-      "sha256": "bb78bc7b3f880ade9e1c5be97db86ad66f68dc1f8eb2705db58c64ade9b35070",
-      "bytes": 10556
+      "sha256": "804398da5a7efd148c7b6db314a4d71b9f987a97afc2f33bac5cf037a3c2e448",
+      "bytes": 2717
     },
     "runtime/generate.gd": {
-      "sha256": "623c1bdee9ed858a687d3a79d35e04bad71015ff807c5053b2dd752093c26d9d",
-      "bytes": 1305
+      "sha256": "b2614836a75c213a0e077434e40548b8f1a2bd31bfb773573af6ae57d39cb085",
+      "bytes": 1400
     },
     "runtime/include/core/error/error_list.h": {
       "sha256": "f0dde7784ec40f043a3c0b37fd0965a1e871b2ccd2fe67f3517a200c1952653d",
@@ -93,54 +133,82 @@
       "bytes": 28598
     },
     "runtime/post_submit_close.cpp": {
-      "sha256": "40a958775f936e4a50b01697e1241eaa22bfa1ea1379e2630126b3d5dc918a82",
-      "bytes": 32569
+      "sha256": "80f9dbb3a39e9767053b16b8fd0717e797be33b35da7d3ac4a2accecf721b923",
+      "bytes": 35670
     },
     "runtime/post_submit_close.original.cpp": {
       "sha256": "6340583673cf290e8aca4778b7d31e9b5cac2c5b04343f7696e259a48e3fb820",
       "bytes": 30248
     },
+    "runtime/post_submit_observation.h": {
+      "sha256": "dbb7cec5083072bedbfc9ebf0c77121b53a17e356b03f3f3abd7f23196caf2e2",
+      "bytes": 7260
+    },
+    "runtime/post_submit_observation_test.cpp": {
+      "sha256": "dd6c10e74e6715e47601ca22070da54fc992bcd159a085ed746cc1ef084f0fbe",
+      "bytes": 8626
+    },
     "runtime/probe.gd": {
-      "sha256": "d45346f1a77ec025d3ef0c23f4f354dc30f25762341e4efd55707d00f357a9f9",
-      "bytes": 476
+      "sha256": "2c6816ae472ab1801a206d48e7f79409856a900d685b2e40dfe42b87f1dfa03f",
+      "bytes": 571
+    },
+    "runtime/project.godot": {
+      "sha256": "14bc1c674c7a34f2276ebb0843cd89fccc12fba00c40e4dde72842dff82de080",
+      "bytes": 130
     },
     "runtime/run.py": {
-      "sha256": "7150005ec26764d4fac0f0a2f3e992272d022b4c5b5ee23df0535c9d0741d474",
-      "bytes": 22935
+      "sha256": "635cc6ad312e382e5cec0631584cbb7d905f03aa2f123d963a9a1f60d3c87010",
+      "bytes": 26992
     },
     "runtime/scalar.glsl": {
       "sha256": "59430bc2675ea4413eaca299ad95d2a9e4dfc7bcef6ada43b717ee3b8b893bc4",
       "bytes": 201
     },
+    "runtime/selection_identity.gd": {
+      "sha256": "18fa49e38a7898765e9cc8ba9966ef50b5f6ccad9f714524de73649beffbf164",
+      "bytes": 1486
+    },
+    "runtime/selection_identity_self_test.gd": {
+      "sha256": "1fbd71d4c629542f0c9c1c72c320b07b0dabe962b7e5bc4576a3b89c16bb28f9",
+      "bytes": 3518
+    },
     "runtime/test_runner.py": {
-      "sha256": "f261c87331940f631b40efc67b6b1a3a00a195c864cc9f4883f668f8de20be2a",
-      "bytes": 7068
+      "sha256": "b644f007db729c251477214073f41054c266a594c8e53a6b4b7692449d618386",
+      "bytes": 10600
     },
     "runtime/verify_identity_order.py": {
       "sha256": "978910b346b193e03f557ea80c2ecca939b95c16f64f85e93a9315feacdf4de8",
       "bytes": 4707
     },
-    "preparation/constructor-fatal-tests.stdout.log": {
+    "preparation/native-diagnostic-code-tests.stdout.log": {
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "bytes": 0
     },
-    "preparation/constructor-fatal-tests.stderr.log": {
-      "sha256": "5f0635b83af38a6c5d516fcb60dc3fa63c9c6ca4854e51a6a29ca33c92ccef16",
-      "bytes": 107
+    "preparation/native-diagnostic-code-tests.stderr.log": {
+      "sha256": "75400386a11a826d0752a03c9a287252f7121ec3e9ccc8876c07505ac004e019",
+      "bytes": 112
     },
-    "preparation/constructor-fatal-help.stdout.log": {
-      "sha256": "a7911789b1c38b54e35e912d3c44556d7c6441e7ff493b97618f6aed846a095c",
-      "bytes": 727
-    },
-    "preparation/constructor-fatal-help.stderr.log": {
+    "preparation/native-diagnostic-code-system-cpp-syntax.stdout.log": {
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "bytes": 0
     },
-    "preparation/identity-constructor-source-order.json": {
-      "sha256": "c1852dee3c011727894142853f6ef5a2d8a3298a5476948043c4bd4b6dd78a2b",
-      "bytes": 6931
+    "preparation/native-diagnostic-code-system-cpp-syntax.stderr.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
     },
-    "preparation/identity-constructor-source-order.stderr.log": {
+    "preparation/native-diagnostic-code-cpu-build.stdout.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "preparation/native-diagnostic-code-cpu-build.stderr.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "preparation/native-diagnostic-code-cpu-run.stdout.log": {
+      "sha256": "dfb0380902a0b757f82c86103903cc5e1c81e3e71a85e3f3952726ef6a105761",
+      "bytes": 64
+    },
+    "preparation/native-diagnostic-code-cpu-run.stderr.log": {
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "bytes": 0
     }

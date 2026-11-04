@@ -1,0 +1,9 @@
+{
+  "all_resultsets_including_failures": 9,
+  "all_artifacts_checked": 348,
+  "issues": [],
+  "source_input_snapshots": "all match",
+  "bound_inputs": "all match",
+  "selected_named_native_cases": 10,
+  "failed_results_retained": true
+}

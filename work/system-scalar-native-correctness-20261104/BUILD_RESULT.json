@@ -1,0 +1,14 @@
+{
+  "command": [
+    "scons",
+    "-Q",
+    "tests=yes",
+    "platform=macos",
+    "target=editor",
+    "-j2"
+  ],
+  "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104",
+  "source_head": "a2f009e6cd5251abea5a611eaf9edac50b8749b3",
+  "exit_code": 0,
+  "elapsed_seconds": 1025.961
+}

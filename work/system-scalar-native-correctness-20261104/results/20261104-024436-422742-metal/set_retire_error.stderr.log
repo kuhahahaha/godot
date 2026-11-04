@@ -1,0 +1,7 @@
+PHS1_EARLY_ACK tag=one level=2
+PHS1_EARLY_ACK tag=one level=3
+QRT_NATIVE_RETURN kind=2 operation=2 slot=3 result=72 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=1 operation=3 slot=7 result=48 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=4 operation=4 slot=8 result=96 segments=0 error=0 reply_ack=1
+SYSTEM_SCALAR_RECORD actual_render_thread=1 error=0 ticket=12 state=2
+SYSTEM_SCALAR_NEGATIVE mode=set_retire_error state=8 observe_error=1 release_error=1 exact_word=40400000 report_unchanged=1 native_complete=1 release_refused=1 bridge_close_refused=1 quarantined=1 process_isolation=1

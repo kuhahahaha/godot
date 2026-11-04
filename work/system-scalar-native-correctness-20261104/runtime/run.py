@@ -156,7 +156,7 @@ def validate_probe_constructor(script):
     functions = dict(re.findall(r'^func (_init|_initialize)\(\):\n((?:[ \t].*|\n)*)', script, re.M))
     constructor = functions.get('_init', '')
     initialize = functions.get('_initialize', '')
-    required = ('Engine.get_version_info()', 'SYSTEM_SCALAR_HOST_IDENTITY=', 'SYSTEM_SCALAR_SELECTION_JSON', 'if identity != expected:')
+    required = ('Engine.get_version_info()', 'SYSTEM_SCALAR_HOST_IDENTITY=', 'SYSTEM_SCALAR_SELECTION_JSON', 'if not SelectionIdentity.matches(identity, expected):')
     if any(marker not in constructor for marker in required) or script.count('SYSTEM_SCALAR_HOST_IDENTITY=') != 1:
         raise ValueError('probe actual identity must be printed and checked in _init before synchronous SceneReady')
     if any(marker in initialize for marker in required) or 'quit(0)' not in initialize:
@@ -165,6 +165,40 @@ def validate_probe_constructor(script):
 
 def forbidden_patterns_for(control=None):
     return list(GLOBAL_FATAL_PATTERNS) + (list(control['forbidden_patterns']) if control else [])
+
+
+def select_case_names(mode, only_case=None):
+    names = [name for name, _source in CASES]
+    if mode == 'all':
+        names += ['native_unknown', 'native_fact_capacity', 'set_retire_error']
+    if only_case is not None:
+        if only_case not in names:
+            raise ValueError('requested case is not included by --cases ' + mode)
+        return [only_case]
+    return names
+
+
+def actual_body_submission(text):
+    body_pattern = r'^SYSTEM_SCALAR_POST_SUBMIT_BODY graph=(\d+) frame=(\d+) kind=(\d+) index=(\d+) offset=(\d+) command_slot=(\d+) issue=(\d+) completion=(\d+) native=(\d+) completion_serial=(\d+) queue=(\d+) native_row=(\d+) native_semantic=(\d+) native_issue=(\d+) native_completion=(\d+) state=(\d+) native_code=(-?\d+) body_native_code=(-?\d+)$'
+    observed_pattern = r'^SYSTEM_SCALAR_POST_SUBMIT_OBSERVED semantic=(\d+) issue=(\d+) native=(\d+) completion=(\d+) queue=(\d+) ticket=(\d+) state=(\d+) command_slot=(\d+) body_native=(\d+) body_completion=(\d+) body_queue=(\d+)$'
+    bodies = list(re.finditer(body_pattern, text, re.M))
+    observed = list(re.finditer(observed_pattern, text, re.M))
+    returned = list(re.finditer(r'^SYSTEM_SCALAR_POST_SUBMIT_ORIGINAL_RETURN sources=(\d+) body_native=(\d+) completion_serial=(\d+) queue=(\d+) command_slot=(\d+) graph=(\d+) frame=(\d+)$', text, re.M))
+    if len(bodies) != 1 or len(observed) != 1 or len(returned) != 1:
+        return {'status': 'missing_or_ambiguous_body_submission'}
+    fields = ('graph', 'frame', 'kind', 'index', 'offset', 'command_slot', 'issue', 'completion', 'native', 'completion_serial', 'queue', 'native_row', 'native_semantic', 'native_issue', 'native_completion', 'state', 'native_code', 'body_native_code')
+    body = dict(zip(fields, map(int, bodies[0].groups())))
+    values = list(map(int, observed[0].groups()))
+    semantic, issue, serial, completion, queue, ticket, state, slot, body_serial, body_completion, body_queue = values
+    original_return = tuple(map(int, returned[0].groups()))
+    valid = (body['graph'] > 0 and body['command_slot'] < 0xffffffff and body['native'] > 0 and body['completion_serial'] > 0 and body['queue'] > 0 and
+             body['native_semantic'] == 5 and body['native_issue'] == 1 and body['native_completion'] in (1, 2) and
+             (semantic, issue, serial, completion, queue, state, slot) == (body['native_semantic'], 1, body['native'], body['completion_serial'], body['queue'], body['state'], body['command_slot']) and
+             (body_serial, body_completion, body_queue) == (serial, completion, queue) and ticket > 0 and
+             bodies[0].start() < observed[0].start() < text.find('SYSTEM_SCALAR_POST_SUBMIT_CLOSE') < returned[0].start() and
+             original_return[1:] == (body['native'], body['completion_serial'], body['queue'], body['command_slot'], body['graph'], body['frame']))
+    return {'status': 'matched_actual_body_native_tuple' if valid else 'body_native_tuple_mismatch', 'body': body,
+            'original_ticket': ticket, 'tracked_pending_sources_returned': original_return[0], 'inflight_claim': False}
 
 
 def main():
@@ -176,8 +210,13 @@ def main():
     parser.add_argument('--metadata', type=Path, help='defaults to HOST.controlled_build.json')
     parser.add_argument('--output', type=Path, help='fresh output directory; existing directory is refused')
     parser.add_argument('--cases', choices=('all', 'original'), default='all')
+    parser.add_argument('--only-case', choices=('positive', 'post_submit_close', 'native_unknown', 'native_fact_capacity', 'set_retire_error'), help='run one unchanged named case after fresh container generation; default runs the complete requested suite')
     parser.add_argument('--prepare-only', action='store_true', help='bind and snapshot inputs; no host execution, GPU or DSO compilation')
     args = parser.parse_args()
+    try:
+        selected_names = select_case_names(args.cases, args.only_case)
+    except ValueError as exc:
+        parser.error(str(exc))
     validate_probe_constructor((HERE / 'probe.gd').read_text())
     host, sdk, selected = (p.resolve(strict=True) for p in (args.host, args.sdk_header, args.selection))
     metadata_path = (args.metadata or Path(str(host) + '.controlled_build.json')).resolve(strict=True)
@@ -197,7 +236,7 @@ def main():
     out = (args.output or HERE.parent / 'results' / (datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S-%f') + '-' + args.driver)).resolve()
     out.mkdir(parents=True, exist_ok=False)
     result = {'schema': 1, 'status': 'preparing', 'driver': args.driver, 'selection': selection,
-              'requested_cases': args.cases, 'bound_inputs': identities, 'controlled_metadata': metadata, 'builds': [], 'runs': [],
+              'requested_cases': args.cases, 'only_case': args.only_case, 'selected_cases': selected_names, 'bound_inputs': identities, 'controlled_metadata': metadata, 'builds': [], 'runs': [],
               'pending_controls': {key: {'status': 'unsupported_not_run', 'reason': 'No original-owner controlled injection adapter was supplied.'}
                                    for key in ('native_unknown', 'native_fact_capacity', 'set_retire_error')},
               'scope': 'Original System scalar native positive/post-submit bridge close plus explicitly observed original-owner controls; not ANGE Host/U1/B4 acceptance.'}
@@ -205,6 +244,9 @@ def main():
         result['pending_controls'] = {key: {'status': 'not_requested'} for key in CONTROL_NAMES}
     for control in negative_cases:
         result['pending_controls'][control['name']] = {'status': 'prepared_not_run' if control.get('requires_driver') in (None, args.driver) else 'unsupported_driver_not_run', 'requires_driver': control.get('requires_driver')}
+
+    for name in CONTROL_NAMES - set(selected_names):
+        result['pending_controls'][name] = {'status': 'not_requested_by_selector' if args.only_case else 'not_requested'}
 
     def save():
         result['artifacts'] = {str(p.relative_to(out)): {'sha256': sha(p), 'bytes': p.stat().st_size}
@@ -222,7 +264,7 @@ def main():
     try:
         snapshot = out / 'inputs'
         snapshot.mkdir()
-        names = ('run.py', 'positive.cpp', 'post_submit_close.cpp', 'post_submit_close.original.cpp', 'generate.gd', 'probe.gd', 'scalar.glsl', 'SOURCE_PROVENANCE.json', 'include/core/error/error_list.h')
+        names = ('run.py', 'positive.cpp', 'post_submit_close.cpp', 'post_submit_close.original.cpp', 'post_submit_observation.h', 'generate.gd', 'probe.gd', 'selection_identity.gd', 'selection_identity_self_test.gd', 'scalar.glsl', 'SOURCE_PROVENANCE.json', 'include/core/error/error_list.h')
         result['source_inputs'] = {name: file_identity(HERE / name) for name in names}
         if negative_cases:
             names += ('negative_probe.cpp', 'negative_cases.json')
@@ -253,7 +295,7 @@ def main():
         env = clean_environment(env)
         generator = out / 'containers'
         generator.mkdir()
-        for name in ('scalar.glsl', 'generate.gd'):
+        for name in ('scalar.glsl', 'generate.gd', 'selection_identity.gd'):
             shutil.copyfile(snapshot / name, generator / name)
         (generator / 'project.godot').write_text(PROJECT)
         env['SYSTEM_SCALAR_CONTAINER'] = str(generator / 'scalar.bin')
@@ -299,10 +341,13 @@ def main():
             raise RuntimeError('container generation checks failed: ' + repr(row['checks']))
         cases = [(name, source, None) for name, source in CASES]
         for control in negative_cases:
+            if control['name'] not in selected_names:
+                continue
             if control.get('requires_driver') not in (None, args.driver):
                 result['pending_controls'][control['name']] = {'status': 'unsupported_driver_not_run', 'requires_driver': control['requires_driver']}
                 continue
             cases.append((control['name'], 'negative_probe.cpp', control))
+        cases = [case for case in cases if case[0] in selected_names]
         for case, source_name, control in cases:
             unchanged()
             dso = out / (case + '.dylib')
@@ -321,6 +366,7 @@ def main():
             (project / '.godot').mkdir(parents=True)
             (project / 'project.godot').write_text(PROJECT)
             shutil.copyfile(snapshot / 'probe.gd', project / 'probe.gd')
+            shutil.copyfile(snapshot / 'selection_identity.gd', project / 'selection_identity.gd')
             (project / 'probe.gdextension').write_text('[configuration]\nentry_symbol="phs1_probe_init"\ncompatibility_minimum="4.7"\ndevice_exit_guard_version=1\n[libraries]\nmacos=' + json.dumps(str(dso)) + '\n')
             (project / '.godot/extension_list.cfg').write_text('res://probe.gdextension\n')
             text, row = launch(case, project, 'probe.gd', control)
@@ -338,7 +384,8 @@ def main():
                 row['checks']['native_scalar'] = 'SYSTEM_SCALAR_COMPLETE exact_word=40400000 bytes=4 native_complete=1 physical_free=1 ack=1' in text
             else:
                 row['checks']['native_close'] = 'SYSTEM_SCALAR_CLOSE_COMPLETE post_submit=1 admission_refused=1 native_complete=1 physical_free=1 ack=1' in text
-                row['checks']['actual_issue_before_close'] = bool(re.search(r'SYSTEM_SCALAR_POST_SUBMIT_OBSERVED semantic=[45] issue=1 native=[1-9][0-9]* completion=[1-9][0-9]* queue=[1-9][0-9]* ticket=[1-9][0-9]* state=[0-9]+', text)) and text.find('SYSTEM_SCALAR_POST_SUBMIT_OBSERVED') < text.find('SYSTEM_SCALAR_POST_SUBMIT_CLOSE')
+                row['actual_body_submission'] = actual_body_submission(text)
+                row['checks']['actual_body_issue_before_close'] = row['actual_body_submission']['status'] == 'matched_actual_body_native_tuple'
                 row['checks']['original_ticket_drain'] = bool(re.search(r'SYSTEM_SCALAR_POST_SUBMIT_DRAIN state=(?:7 phase=6|8 phase=5) facts=[1-9][0-9]* returned_bytes=4 owned=[04] copied=[04] cancel_error=(?:0|44) result=(?:completed|cancelled)', text))
             save()
             print(case, row['returncode'], row['checks'], flush=True)
@@ -346,7 +393,7 @@ def main():
                 raise RuntimeError('native case checks failed: ' + case)
         unchanged()
         result['bound_inputs_unchanged'] = True
-        result['status'] = 'passed_original_native_component' if args.cases == 'original' else ('passed_available_native_controls_driver_limits_recorded' if any(value['status'] != 'observed_passed' for value in result['pending_controls'].values()) else 'passed_original_native_component_and_three_controls')
+        result['status'] = 'passed_selected_native_case' if args.only_case else 'passed_original_native_component' if args.cases == 'original' else ('passed_available_native_controls_driver_limits_recorded' if any(value['status'] != 'observed_passed' for value in result['pending_controls'].values()) else 'passed_original_native_component_and_three_controls')
         save()
         print(out / 'results.json', flush=True)
         return 0

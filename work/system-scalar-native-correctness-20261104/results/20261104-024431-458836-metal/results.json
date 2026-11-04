@@ -1,0 +1,387 @@
+{
+  "schema": 1,
+  "status": "passed_selected_native_case",
+  "driver": "metal",
+  "selection": {
+    "schema": 1,
+    "core_stamp": "b9cdbb652249045e525f1276dc78869a134ff8e03f9d8082a37a5c4efb173d0c",
+    "compiler_route": "BuiltinGlslangV1",
+    "compiler_stamp": "61913a1a11b3f57d6a1ac8efa90c760b01d03ce819d4e19a0e2e845753edad0c",
+    "platform": "macos",
+    "architecture": "arm64",
+    "target_kind": "Executable"
+  },
+  "requested_cases": "all",
+  "only_case": "native_unknown",
+  "selected_cases": [
+    "native_unknown"
+  ],
+  "bound_inputs": {
+    "host": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/host/editor.arm64",
+      "sha256": "4e99d8df4482f596ee892944a38d9bff28bf8f622c8a4b2cd4e7081a33e6c528",
+      "bytes": 148666568
+    },
+    "metadata": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/host/editor.arm64.controlled_build.json",
+      "sha256": "1286dd4abfdc667c52d028790925b2a87bfee4d726a6fe39d649eed7ff824530",
+      "bytes": 530
+    },
+    "sdk_header": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/sdk/gdextension_interface.gen.h",
+      "sha256": "ec25549317a591c3009de34f217bcb835f1d3cc52ba2d8782bde2af15d5dbad7",
+      "bytes": 240161
+    },
+    "selection": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/CoreBuildSelection.schema1.json",
+      "sha256": "5ba0059df4861c2c9b4edead3cc9fa683eac7308a2e92e0cf336cd541bfd555a",
+      "bytes": 311
+    }
+  },
+  "controlled_metadata": {
+    "schema": 1,
+    "selection": {
+      "schema": 1,
+      "core_stamp": "b9cdbb652249045e525f1276dc78869a134ff8e03f9d8082a37a5c4efb173d0c",
+      "compiler_route": "BuiltinGlslangV1",
+      "compiler_stamp": "61913a1a11b3f57d6a1ac8efa90c760b01d03ce819d4e19a0e2e845753edad0c",
+      "platform": "macos",
+      "architecture": "arm64",
+      "target_kind": "Executable"
+    },
+    "status": "available",
+    "reason": null,
+    "artifact": {
+      "bytes": 148666568,
+      "sha256": "4e99d8df4482f596ee892944a38d9bff28bf8f622c8a4b2cd4e7081a33e6c528"
+    }
+  },
+  "builds": [
+    {
+      "case": "native_unknown",
+      "command": [
+        "clang++",
+        "-DSYSTEM_NEGATIVE_KIND=1",
+        "-std=c++17",
+        "-dynamiclib",
+        "-arch",
+        "arm64",
+        "-mmacosx-version-min=11.0",
+        "-O2",
+        "-Wall",
+        "-Wextra",
+        "-Wno-unused-parameter",
+        "-Wno-deprecated-declarations",
+        "-DSCALAR_EXPECTED_WORD=0x40400000",
+        "-I",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/results/20261104-024431-458836-metal/inputs",
+        "-I",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/results/20261104-024431-458836-metal/inputs/include",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/results/20261104-024431-458836-metal/inputs/negative_probe.cpp",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/results/20261104-024431-458836-metal/native_unknown.dylib"
+      ],
+      "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/results/20261104-024431-458836-metal",
+      "returncode": 0,
+      "dso": {
+        "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/results/20261104-024431-458836-metal/native_unknown.dylib",
+        "sha256": "db50b91e538e34a0660b4a26ea7f9c6bea33e6ff53979ecee720295d6b024802",
+        "bytes": 79224
+      }
+    }
+  ],
+  "runs": [
+    {
+      "case": "containers",
+      "controlled_environment": {},
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/host/editor.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/results/20261104-024431-458836-metal/containers",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "safe",
+        "--script",
+        "generate.gd"
+      ],
+      "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/results/20261104-024431-458836-metal/containers",
+      "timeout_seconds": 60,
+      "checks": {
+        "expected_exit": true,
+        "actual_backend": true,
+        "actual_selection": true,
+        "forbidden_patterns_absent": true,
+        "native_container": true
+      },
+      "returncode": 0
+    },
+    {
+      "case": "native_unknown",
+      "controlled_environment": {
+        "GODOT_SYSTEM_SCALAR_TEST_APPEND_UNKNOWN": "1"
+      },
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/host/editor.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/results/20261104-024431-458836-metal/native_unknown",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "safe",
+        "--script",
+        "probe.gd"
+      ],
+      "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/results/20261104-024431-458836-metal/native_unknown",
+      "timeout_seconds": 60,
+      "checks": {
+        "expected_exit": true,
+        "actual_backend": true,
+        "actual_selection": true,
+        "forbidden_patterns_absent": true,
+        "required_observations": true,
+        "no_false_unload": true
+      },
+      "returncode": 0,
+      "expected_process_termination": true,
+      "retirement_claim": false
+    }
+  ],
+  "pending_controls": {
+    "native_unknown": {
+      "status": "observed_passed",
+      "retirement_claim": false
+    },
+    "native_fact_capacity": {
+      "status": "not_requested_by_selector"
+    },
+    "set_retire_error": {
+      "status": "not_requested_by_selector"
+    }
+  },
+  "scope": "Original System scalar native positive/post-submit bridge close plus explicitly observed original-owner controls; not ANGE Host/U1/B4 acceptance.",
+  "source_inputs": {
+    "run.py": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/run.py",
+      "sha256": "635cc6ad312e382e5cec0631584cbb7d905f03aa2f123d963a9a1f60d3c87010",
+      "bytes": 26992
+    },
+    "positive.cpp": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/positive.cpp",
+      "sha256": "09560511cffa3bb566e6b9c5d84a0aa147272d3ca9565e1f5676928764fb62e8",
+      "bytes": 28598
+    },
+    "post_submit_close.cpp": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/post_submit_close.cpp",
+      "sha256": "80f9dbb3a39e9767053b16b8fd0717e797be33b35da7d3ac4a2accecf721b923",
+      "bytes": 35670
+    },
+    "post_submit_close.original.cpp": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/post_submit_close.original.cpp",
+      "sha256": "6340583673cf290e8aca4778b7d31e9b5cac2c5b04343f7696e259a48e3fb820",
+      "bytes": 30248
+    },
+    "post_submit_observation.h": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/post_submit_observation.h",
+      "sha256": "dbb7cec5083072bedbfc9ebf0c77121b53a17e356b03f3f3abd7f23196caf2e2",
+      "bytes": 7260
+    },
+    "generate.gd": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/generate.gd",
+      "sha256": "b2614836a75c213a0e077434e40548b8f1a2bd31bfb773573af6ae57d39cb085",
+      "bytes": 1400
+    },
+    "probe.gd": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/probe.gd",
+      "sha256": "2c6816ae472ab1801a206d48e7f79409856a900d685b2e40dfe42b87f1dfa03f",
+      "bytes": 571
+    },
+    "selection_identity.gd": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/selection_identity.gd",
+      "sha256": "18fa49e38a7898765e9cc8ba9966ef50b5f6ccad9f714524de73649beffbf164",
+      "bytes": 1486
+    },
+    "selection_identity_self_test.gd": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/selection_identity_self_test.gd",
+      "sha256": "1fbd71d4c629542f0c9c1c72c320b07b0dabe962b7e5bc4576a3b89c16bb28f9",
+      "bytes": 3518
+    },
+    "scalar.glsl": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/scalar.glsl",
+      "sha256": "59430bc2675ea4413eaca299ad95d2a9e4dfc7bcef6ada43b717ee3b8b893bc4",
+      "bytes": 201
+    },
+    "SOURCE_PROVENANCE.json": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/SOURCE_PROVENANCE.json",
+      "sha256": "804398da5a7efd148c7b6db314a4d71b9f987a97afc2f33bac5cf037a3c2e448",
+      "bytes": 2717
+    },
+    "include/core/error/error_list.h": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/include/core/error/error_list.h",
+      "sha256": "f0dde7784ec40f043a3c0b37fd0965a1e871b2ccd2fe67f3517a200c1952653d",
+      "bytes": 4676
+    },
+    "negative_probe.cpp": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/negative_probe.cpp",
+      "sha256": "69e2aac09c946e147b57a58b24e96beccaaa17acd8563904075f5f7401c73283",
+      "bytes": 34992
+    },
+    "negative_cases.json": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/negative_cases.json",
+      "sha256": "69542b784bdb1fe14e473df16dfb3cb33f397c297bf7c410f3d80c8c01a6112f",
+      "bytes": 2583
+    }
+  },
+  "linkage_command": [
+    "otool",
+    "-L",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/host/editor.arm64"
+  ],
+  "artifacts": {
+    "containers/generate.gd": {
+      "sha256": "b2614836a75c213a0e077434e40548b8f1a2bd31bfb773573af6ae57d39cb085",
+      "bytes": 1400
+    },
+    "containers/project.godot": {
+      "sha256": "e980e6ebe823d6972e81204dbe15cfe215eead45a3df7ea1f2b4c11ec74df577",
+      "bytes": 127
+    },
+    "containers/scalar.bin": {
+      "sha256": "11f8f6c478398d70916f8694e4d6c4899daed4ae3af9f4d8deb323ffd647056d",
+      "bytes": 508
+    },
+    "containers/scalar.glsl": {
+      "sha256": "59430bc2675ea4413eaca299ad95d2a9e4dfc7bcef6ada43b717ee3b8b893bc4",
+      "bytes": 201
+    },
+    "containers/selection_identity.gd": {
+      "sha256": "18fa49e38a7898765e9cc8ba9966ef50b5f6ccad9f714524de73649beffbf164",
+      "bytes": 1486
+    },
+    "containers.stderr.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "containers.stdout.log": {
+      "sha256": "bbb71a48bfe52f763d637292afe02d9b773a80112da9816bd6b1eb3c96dacb81",
+      "bytes": 523
+    },
+    "host-linkage.log": {
+      "sha256": "e4bb7002b0abb8dd94e8d9b68e1bc8dec6cfdfa1119d024fbdae9313e80c6ee7",
+      "bytes": 3728
+    },
+    "inputs/CoreBuildSelection.schema1.json": {
+      "sha256": "5ba0059df4861c2c9b4edead3cc9fa683eac7308a2e92e0cf336cd541bfd555a",
+      "bytes": 311
+    },
+    "inputs/SOURCE_PROVENANCE.json": {
+      "sha256": "804398da5a7efd148c7b6db314a4d71b9f987a97afc2f33bac5cf037a3c2e448",
+      "bytes": 2717
+    },
+    "inputs/gdextension_interface_v2.pinned.h": {
+      "sha256": "ec25549317a591c3009de34f217bcb835f1d3cc52ba2d8782bde2af15d5dbad7",
+      "bytes": 240161
+    },
+    "inputs/generate.gd": {
+      "sha256": "b2614836a75c213a0e077434e40548b8f1a2bd31bfb773573af6ae57d39cb085",
+      "bytes": 1400
+    },
+    "inputs/host.controlled_build.json": {
+      "sha256": "1286dd4abfdc667c52d028790925b2a87bfee4d726a6fe39d649eed7ff824530",
+      "bytes": 530
+    },
+    "inputs/include/core/error/error_list.h": {
+      "sha256": "f0dde7784ec40f043a3c0b37fd0965a1e871b2ccd2fe67f3517a200c1952653d",
+      "bytes": 4676
+    },
+    "inputs/negative_cases.json": {
+      "sha256": "69542b784bdb1fe14e473df16dfb3cb33f397c297bf7c410f3d80c8c01a6112f",
+      "bytes": 2583
+    },
+    "inputs/negative_probe.cpp": {
+      "sha256": "69e2aac09c946e147b57a58b24e96beccaaa17acd8563904075f5f7401c73283",
+      "bytes": 34992
+    },
+    "inputs/positive.cpp": {
+      "sha256": "09560511cffa3bb566e6b9c5d84a0aa147272d3ca9565e1f5676928764fb62e8",
+      "bytes": 28598
+    },
+    "inputs/post_submit_close.cpp": {
+      "sha256": "80f9dbb3a39e9767053b16b8fd0717e797be33b35da7d3ac4a2accecf721b923",
+      "bytes": 35670
+    },
+    "inputs/post_submit_close.original.cpp": {
+      "sha256": "6340583673cf290e8aca4778b7d31e9b5cac2c5b04343f7696e259a48e3fb820",
+      "bytes": 30248
+    },
+    "inputs/post_submit_observation.h": {
+      "sha256": "dbb7cec5083072bedbfc9ebf0c77121b53a17e356b03f3f3abd7f23196caf2e2",
+      "bytes": 7260
+    },
+    "inputs/probe.gd": {
+      "sha256": "2c6816ae472ab1801a206d48e7f79409856a900d685b2e40dfe42b87f1dfa03f",
+      "bytes": 571
+    },
+    "inputs/run.py": {
+      "sha256": "635cc6ad312e382e5cec0631584cbb7d905f03aa2f123d963a9a1f60d3c87010",
+      "bytes": 26992
+    },
+    "inputs/scalar.glsl": {
+      "sha256": "59430bc2675ea4413eaca299ad95d2a9e4dfc7bcef6ada43b717ee3b8b893bc4",
+      "bytes": 201
+    },
+    "inputs/selection_identity.gd": {
+      "sha256": "18fa49e38a7898765e9cc8ba9966ef50b5f6ccad9f714524de73649beffbf164",
+      "bytes": 1486
+    },
+    "inputs/selection_identity_self_test.gd": {
+      "sha256": "1fbd71d4c629542f0c9c1c72c320b07b0dabe962b7e5bc4576a3b89c16bb28f9",
+      "bytes": 3518
+    },
+    "native_unknown/.godot/extension_list.cfg": {
+      "sha256": "8c8438bfd3af88694b08ff4933cb670649c0a59fc33a5745547ba6660c01d6e2",
+      "bytes": 24
+    },
+    "native_unknown/probe.gd": {
+      "sha256": "2c6816ae472ab1801a206d48e7f79409856a900d685b2e40dfe42b87f1dfa03f",
+      "bytes": 571
+    },
+    "native_unknown/probe.gdextension": {
+      "sha256": "2b40ebcf5c97f020c75b110bd5954b10a5023e94dbdc133c3e40cd1743ef9199",
+      "bytes": 284
+    },
+    "native_unknown/project.godot": {
+      "sha256": "e980e6ebe823d6972e81204dbe15cfe215eead45a3df7ea1f2b4c11ec74df577",
+      "bytes": 127
+    },
+    "native_unknown/selection_identity.gd": {
+      "sha256": "18fa49e38a7898765e9cc8ba9966ef50b5f6ccad9f714524de73649beffbf164",
+      "bytes": 1486
+    },
+    "native_unknown-build.stderr.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "native_unknown-build.stdout.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "native_unknown.dylib": {
+      "sha256": "db50b91e538e34a0660b4a26ea7f9c6bea33e6ff53979ecee720295d6b024802",
+      "bytes": 79224
+    },
+    "native_unknown.stderr.log": {
+      "sha256": "d73400cc806f1e1dbee70e1fdc1f9b7cea8ff361cded56bc63919c52267a2e08",
+      "bytes": 551
+    },
+    "native_unknown.stdout.log": {
+      "sha256": "e3cedadbea675d7f6ec9b120ec8f5e741c7f7a2f2462900bf6cd33c61103752e",
+      "bytes": 575
+    }
+  },
+  "bound_inputs_unchanged": true
+}

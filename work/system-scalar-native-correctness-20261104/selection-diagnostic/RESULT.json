@@ -1,0 +1,16 @@
+{
+  "command": [
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/host/editor.arm64",
+    "--path",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/selection-diagnostic",
+    "--rendering-driver",
+    "metal",
+    "--rendering-method",
+    "mobile",
+    "--render-thread",
+    "safe",
+    "--script",
+    "probe.gd"
+  ],
+  "exit_code": 0
+}

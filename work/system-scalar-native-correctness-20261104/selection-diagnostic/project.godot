@@ -1,0 +1,5 @@
+config_version=5
+[application]
+config/name="System identity diagnostic"
+[rendering]
+renderer/rendering_method="mobile"

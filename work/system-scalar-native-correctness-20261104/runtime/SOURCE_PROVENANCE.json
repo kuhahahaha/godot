@@ -9,9 +9,9 @@
     },
     "post_submit_close.cpp": {
       "source": "/Users/macbookair/Documents/Work/godot_ANGE/work/native-system-scalar-early-close-20261104/runtime/system_probe.cpp",
-      "sha256": "40a958775f936e4a50b01697e1241eaa22bfa1ea1379e2630126b3d5dc918a82",
-      "bytes": 32569,
-      "modification": "Wait for an actual native issue fact before close; preserve naturally completed immutable result or drain original cancelled ticket. Baseline preserved as post_submit_close.original.cpp.",
+      "sha256": "80f9dbb3a39e9767053b16b8fd0717e797be33b35da7d3ac4a2accecf721b923",
+      "bytes": 35670,
+      "modification": "Baseline preserved separately. Observe exact original pending source refinements; refuse final/error states. Only sealed semantic2 Body command slot and exactly matching real native source tuple can qualify submission before close; hidden-copy UINT32_MAX slot cannot. Natural completed result uses original immutable rules. Original report/facts/selected Body diagnostics retained.",
       "source_sha256": "6340583673cf290e8aca4778b7d31e9b5cac2c5b04343f7696e259a48e3fb820"
     },
     "scalar.glsl": {
@@ -31,6 +31,12 @@
       "sha256": "6340583673cf290e8aca4778b7d31e9b5cac2c5b04343f7696e259a48e3fb820",
       "bytes": 30248,
       "modification": "verbatim original baseline; never compiled as another case"
+    },
+    "post_submit_observation.h": {
+      "source": "new private native driver observation helper",
+      "sha256": "dbb7cec5083072bedbfc9ebf0c77121b53a17e356b03f3f3abd7f23196caf2e2",
+      "bytes": 7260,
+      "modification": "Exact retained pending native source refinement, actual sealed Body/native tuple admission, and same original identities through terminal return. No engine or ABI changes. Native fact raw backend diagnostic codes are preserved, not treated as Error booleans; report native_code refusal is unchanged."
     }
   },
   "old_results_reused": false,

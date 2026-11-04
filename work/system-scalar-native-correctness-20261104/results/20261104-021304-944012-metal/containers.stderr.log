@@ -1,0 +1,4 @@
+ERROR: SYSTEM_SCALAR actual host selection mismatch
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] _initialize (res://generate.gd:8)

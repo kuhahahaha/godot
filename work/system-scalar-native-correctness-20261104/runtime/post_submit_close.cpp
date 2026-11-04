@@ -2,6 +2,7 @@
 #define TICKET_MODE 1
 #endif
 #include "gdextension_interface_v2.pinned.h"
+#include "post_submit_observation.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -193,27 +194,34 @@ int32_t ready(void *userdata,GDExtensionDeviceExitSceneReadyContextRef context) 
  uint32_t value=0xdeadbeef,written=99;
  // record() publishes graph appends, not native submission. Observe the same
  // original ticket until an actual driver issue fact exists before closing.
- bool issued=false;GDExtensionQualificationFactV1 issued_fact{};
+ bool issued=false;GDExtensionQualificationFactV1 issued_fact{},issued_body{};uint32_t issued_index=0;
+ std::vector<GDExtensionQualificationFactV1> pending_sources;
  for(uint32_t pass=0;pass<5000 && !issued;++pass){
   require(scalar_observe(bridge,job.ticket,&budget,&report).native_error,"post_submit_observe");
-  check(report.state!=5 && report.state!=6 && report.state!=7 && !report.native_error && !report.possible_count,"post_submit_no_failed_unknown");
+  std::fprintf(stderr,"SYSTEM_SCALAR_POST_SUBMIT_REPORT pass=%u state=%u phase=%u error=%d native_code=%lld possible=%u known=%u issue_fact=%u revision=%llu fact_count=%u owned=%u\n",pass,report.state,report.phase,report.native_error,(long long)report.native_code,report.possible_count,report.known_count,report.issue_fact,(unsigned long long)report.revision,report.fact_count,report.owned_size);
+  // Final/real errors remain refusals. The actual Metal diagnostic proved a
+  // different case: state2/error0 with an exact issue2/completion1 native row.
+  check(report.state!=5 && report.state!=6 && report.state!=7 && !report.native_error && !report.native_code,"post_submit_no_failed_unknown");
   check(report.fact_count && report.fact_count<=64,"post_submit_fact_count");
   std::vector<GDExtensionQualificationFactV1> observed(report.fact_count);uint32_t observed_count=0;
   auto fact_result=scalar_facts(bridge,job.ticket,report.revision,0,observed.size(),observed.data(),&observed_count);
+  std::fprintf(stderr,"SYSTEM_SCALAR_POST_SUBMIT_FACTS revision=%llu error=%d reason=%u written=%u\n",(unsigned long long)report.revision,fact_result.native_error,fact_result.reason,observed_count);
   if(fact_result.native_error==ERR_INVALID_DATA && fact_result.reason==17){
    std::this_thread::sleep_for(std::chrono::milliseconds(1));continue; // same ticket, new immutable revision
   }
   require(fact_result.native_error,"post_submit_facts");
   check(observed_count==observed.size(),"post_submit_all_facts");
-  for(const auto &fact:observed){
-   if((fact.semantic_kind==4 || fact.semantic_kind==5) && fact.issue==1 && !fact.error && fact.native_serial && fact.completion_serial && fact.backend_queue && (fact.completion==1 || fact.completion==2)){
-    issued=true;issued_fact=fact;break;
-   }
+  for(uint32_t index=0;index<observed_count;++index){
+   const auto &fact=observed[index];
+   std::fprintf(stderr,"SYSTEM_SCALAR_POST_SUBMIT_FACT index=%u semantic=%u phase=%u issue=%u completion=%u error=%u native_code=%lld native=%llu completion_serial=%llu queue=%u graph=%llu frame=%llu command_slot=%u parent=%u\n",index,fact.semantic_kind,fact.phase,fact.issue,fact.completion,fact.error,(long long)fact.native_code,(unsigned long long)fact.native_serial,(unsigned long long)fact.completion_serial,fact.backend_queue,(unsigned long long)fact.graph_instance,(unsigned long long)fact.graph_frame,fact.command_slot,fact.parent_fact);
   }
+  check(SystemScalarPostSubmit::observe_pending(report,observed,pending_sources),"post_submit_possible_exact_original_pending");
+  issued=SystemScalarPostSubmit::issued_body(report,observed,issued_body,issued_fact,issued_index);
   if(!issued)std::this_thread::sleep_for(std::chrono::milliseconds(1));
  }
- check(issued,"post_submit_actual_native_issue");
- std::fprintf(stderr,"SYSTEM_SCALAR_POST_SUBMIT_OBSERVED semantic=%u issue=%u native=%llu completion=%llu queue=%u ticket=%llu state=%u\n",issued_fact.semantic_kind,issued_fact.issue,(unsigned long long)issued_fact.native_serial,(unsigned long long)issued_fact.completion_serial,issued_fact.backend_queue,(unsigned long long)job.ticket.handle_serial,report.state);
+ check(issued,"post_submit_actual_body_native_issue");
+ std::fprintf(stderr,"SYSTEM_SCALAR_POST_SUBMIT_BODY graph=%llu frame=%llu kind=%u index=%u offset=%u command_slot=%u issue=%u completion=%u native=%llu completion_serial=%llu queue=%u native_row=%u native_semantic=%u native_issue=%u native_completion=%u state=%u native_code=%lld body_native_code=%lld\n",(unsigned long long)issued_body.graph_instance,(unsigned long long)issued_body.graph_frame,issued_body.graph_kind,issued_body.graph_index,issued_body.graph_offset,issued_body.command_slot,issued_body.issue,issued_body.completion,(unsigned long long)issued_body.native_serial,(unsigned long long)issued_body.completion_serial,issued_body.backend_queue,issued_index,issued_fact.semantic_kind,issued_fact.issue,issued_fact.completion,report.state,(long long)issued_fact.native_code,(long long)issued_body.native_code);
+ std::fprintf(stderr,"SYSTEM_SCALAR_POST_SUBMIT_OBSERVED semantic=%u issue=%u native=%llu completion=%llu queue=%u ticket=%llu state=%u command_slot=%u body_native=%llu body_completion=%llu body_queue=%u\n",issued_fact.semantic_kind,issued_fact.issue,(unsigned long long)issued_fact.native_serial,(unsigned long long)issued_fact.completion_serial,issued_fact.backend_queue,(unsigned long long)job.ticket.handle_serial,report.state,issued_fact.command_slot,(unsigned long long)issued_body.native_serial,(unsigned long long)issued_body.completion_serial,issued_body.backend_queue);
 #ifndef OMIT_EARLY_BRIDGE_CLOSE
  auto closing=close_bridge(bridge);check(closing.native_error==ERR_BUSY && closing.reason==16,"bridge_close_retains_live_children");
  closing=close_bridge(bridge);check(closing.native_error==ERR_BUSY && closing.reason==16,"bridge_close_live_replay");
@@ -247,6 +255,8 @@ int32_t ready(void *userdata,GDExtensionDeviceExitSceneReadyContextRef context) 
   std::fprintf(stderr,"SYSTEM_SCALAR_FACT semantic=%u source=%llu offset=%llu bytes=%llu native=%llu completed=%llu queue=%llu\n",fact.semantic_kind,(unsigned long long)fact.source_backing_serial,(unsigned long long)fact.source_offset,(unsigned long long)fact.source_size,(unsigned long long)fact.native_serial,(unsigned long long)fact.completion_serial,(unsigned long long)fact.backend_queue);
  }
  check(body_facts==1 && copy_facts==1 && copy_bytes==4,"scalar_exact_native_work");
+ check(SystemScalarPostSubmit::original_sources_returned(facts,pending_sources,issued_body,issued_fact),"post_submit_exact_original_sources_returned");
+ std::fprintf(stderr,"SYSTEM_SCALAR_POST_SUBMIT_ORIGINAL_RETURN sources=%u body_native=%llu completion_serial=%llu queue=%u command_slot=%u graph=%llu frame=%llu\n",(unsigned)pending_sources.size(),(unsigned long long)issued_body.native_serial,(unsigned long long)issued_body.completion_serial,issued_body.backend_queue,issued_body.command_slot,(unsigned long long)issued_body.graph_instance,(unsigned long long)issued_body.graph_frame);
  value=0xdeadbeef;written=99;
  auto copied=scalar_copy(bridge,job.ticket,report.revision,&value,sizeof(value),&written);
  if(completed_result){

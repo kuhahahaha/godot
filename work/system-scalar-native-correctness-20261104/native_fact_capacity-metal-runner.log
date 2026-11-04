@@ -1,0 +1,2 @@
+native_fact_capacity 0 {'expected_exit': True, 'actual_backend': True, 'actual_selection': True, 'forbidden_patterns_absent': True, 'actual_source_slot_precondition': True, 'required_observations': True, 'unload': True}
+/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/results/20261104-024433-850901-metal/results.json

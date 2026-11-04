@@ -1,0 +1,5 @@
+config_version=5
+[application]
+config/name="Original System scalar correctness"
+[rendering]
+renderer/rendering_method="mobile"

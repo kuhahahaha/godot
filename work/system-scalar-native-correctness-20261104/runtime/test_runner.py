@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 import tempfile
 import unittest
+import subprocess
 import sys
 sys.dont_write_bytecode = True
 import run
@@ -111,6 +112,52 @@ class RunnerValidation(unittest.TestCase):
                 with self.subTest(control=control, diagnostic=diagnostic):
                     self.assertTrue(any(re.search(pattern, diagnostic) for pattern in patterns))
         self.assertIn('CASE_SPECIFIC_FATAL', run.forbidden_patterns_for({'forbidden_patterns': ['CASE_SPECIFIC_FATAL']}))
+
+    def test_generator_and_probe_share_closed_selection_comparison(self):
+        for name in ('generate.gd', 'probe.gd'):
+            script = Path(__file__).with_name(name).read_text()
+            with self.subTest(script=name):
+                self.assertIn('preload("res://selection_identity.gd")', script)
+                self.assertIn('if not SelectionIdentity.matches(identity, expected):', script)
+                self.assertNotIn('if identity != expected:', script)
+        helper = Path(__file__).with_name('selection_identity.gd')
+        self.assertTrue(helper.is_file())
+        self.assertTrue(Path(__file__).with_name('selection_identity_self_test.gd').is_file())
+
+    def test_only_case_selector_keeps_default_complete_suite(self):
+        names = ['positive', 'post_submit_close', 'native_unknown', 'native_fact_capacity', 'set_retire_error']
+        self.assertEqual(run.select_case_names('all'), names)
+        for name in names:
+            self.assertEqual(run.select_case_names('all', name), [name])
+        self.assertEqual(run.select_case_names('original'), names[:2])
+        with self.assertRaises(ValueError):
+            run.select_case_names('original', 'native_unknown')
+
+    def test_exact_original_pending_and_body_tuple_cpp(self):
+        root = Path(__file__).resolve().parent
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / 'post-submit-observation'
+            subprocess.run(['clang++', '-std=c++17', '-Wall', '-Wextra', '-pedantic', str(root / 'post_submit_observation_test.cpp'), '-o', str(binary)], check=True)
+            result = subprocess.run([str(binary)], check=True, text=True, capture_output=True)
+            self.assertIn('post-submit original-source/Body tuple cases PASS (CPU only)', result.stdout)
+
+    def test_actual_body_tuple_cannot_be_hidden_copy(self):
+        text = ('SYSTEM_SCALAR_POST_SUBMIT_BODY graph=1 frame=3 kind=1 index=0 offset=0 command_slot=4 issue=1 completion=2 native=21 completion_serial=21 queue=1 native_row=2 native_semantic=5 native_issue=1 native_completion=2 state=8 native_code=4 body_native_code=0\n'
+                'SYSTEM_SCALAR_POST_SUBMIT_OBSERVED semantic=5 issue=1 native=21 completion=21 queue=1 ticket=12 state=8 command_slot=4 body_native=21 body_completion=21 body_queue=1\n'
+                'SYSTEM_SCALAR_POST_SUBMIT_CLOSE error=44 reason=16 original_ticket=12\n'
+                'SYSTEM_SCALAR_POST_SUBMIT_ORIGINAL_RETURN sources=1 body_native=21 completion_serial=21 queue=1 command_slot=4 graph=1 frame=3\n')
+        evidence = run.actual_body_submission(text)
+        self.assertEqual(evidence['status'], 'matched_actual_body_native_tuple')
+        self.assertEqual(evidence['body']['state'], 8)
+        self.assertFalse(evidence['inflight_claim'])
+        self.assertEqual(evidence['body']['native_code'], 4)
+        self.assertEqual(evidence['body']['body_native_code'], 0)
+        for before, after in (('command_slot=4', 'command_slot=4294967295'),
+                              ('body_native=21', 'body_native=22'), ('native_issue=1', 'native_issue=2'),
+                              ('native_semantic=5', 'native_semantic=2'),
+                              ('sources=1 body_native=21', 'sources=1 body_native=22')):
+            self.assertEqual(run.actual_body_submission(text.replace(before, after))['status'], 'body_native_tuple_mismatch')
+        self.assertEqual(run.actual_body_submission(text + text)['status'], 'missing_or_ambiguous_body_submission')
 
     def test_duplicate_json_keys(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -1,0 +1,166 @@
+{
+  "schema": 1,
+  "status": "tools_prepared_runtime_frozen_for_root_native_runs",
+  "recorded_utc": "2026-11-04T02:18:39.962463+00:00",
+  "commands": [
+    {
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/test_runner.py"
+      ],
+      "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange",
+      "returncode": 0,
+      "stdout": "closed-selection-identity-tests.stdout.log",
+      "stderr": "closed-selection-identity-tests.stderr.log"
+    },
+    {
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/run.py",
+        "--help"
+      ],
+      "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange",
+      "returncode": 0,
+      "stdout": "closed-selection-identity-help.stdout.log",
+      "stderr": "closed-selection-identity-help.stderr.log"
+    },
+    {
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/verify_identity_order.py",
+        "--source-root",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104"
+      ],
+      "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange",
+      "returncode": 0,
+      "stdout": "closed-selection-source-order.json",
+      "stderr": "closed-selection-source-order.stderr.log"
+    }
+  ],
+  "python_ast": "passed",
+  "python_validation_groups": 10,
+  "constructor_identity": "probe _init before synchronous SceneReady; _initialize keeps ordinary loop quit",
+  "closed_selection_helper": "Engine schema INT1, expected INT/FLOAT exactly1; exact seven String keys and six String values; reject unknown/missing/wrong types or unequal fields",
+  "global_fatal_checks": "always merged with negative extra patterns, never replaced",
+  "static_source_order_checks": 11,
+  "static_source_files": 10,
+  "capacity_drivers": [
+    "metal",
+    "vulkan"
+  ],
+  "capacity_precondition": "actual trace current+(graphs+1)*(workers+1)>4096, graphs513, native_error5/reason19; false premise fails explicitly",
+  "host_executed_by_this_preparation": false,
+  "gpu_executed_by_this_preparation": false,
+  "dso_compiled_by_this_preparation": false,
+  "engine_built_by_this_preparation": false,
+  "root_reported_actual_gdscript_self_test": {
+    "exit_code": 0,
+    "checks": 54,
+    "failures": 0,
+    "actual_schema_type": 2,
+    "expected_json_schema_type": 3,
+    "evidence_directory": "identity-comparison-regression/",
+    "source": "parent root message; no logs copied or altered by this preparation"
+  },
+  "native_metal_vulkan": "root sequential runs in progress; no outcome claimed here",
+  "old_failed_native_and_diagnostic_results": "retained untouched; not reused as new-host passing evidence",
+  "prior_preparation_records": [
+    "verification-before-metal-capacity.json",
+    "verification-before-constructor-identity.json",
+    "verification-before-closed-selection-helper.json"
+  ],
+  "files": {
+    "runtime/README.md": {
+      "sha256": "fa5b3f50a1a422973e2a09846d5beff395f36d1b214a29d47c1095ca47e6d4e4",
+      "bytes": 8239
+    },
+    "runtime/SOURCE_PROVENANCE.json": {
+      "sha256": "6bc8bc94c28b02b49fe91a9c824eec30bdef7d043e8c666e97759329b485cbdd",
+      "bytes": 1987
+    },
+    "runtime/generate.gd": {
+      "sha256": "b2614836a75c213a0e077434e40548b8f1a2bd31bfb773573af6ae57d39cb085",
+      "bytes": 1400
+    },
+    "runtime/include/core/error/error_list.h": {
+      "sha256": "f0dde7784ec40f043a3c0b37fd0965a1e871b2ccd2fe67f3517a200c1952653d",
+      "bytes": 4676
+    },
+    "runtime/negative_cases.json": {
+      "sha256": "69542b784bdb1fe14e473df16dfb3cb33f397c297bf7c410f3d80c8c01a6112f",
+      "bytes": 2583
+    },
+    "runtime/negative_probe.cpp": {
+      "sha256": "69e2aac09c946e147b57a58b24e96beccaaa17acd8563904075f5f7401c73283",
+      "bytes": 34992
+    },
+    "runtime/positive.cpp": {
+      "sha256": "09560511cffa3bb566e6b9c5d84a0aa147272d3ca9565e1f5676928764fb62e8",
+      "bytes": 28598
+    },
+    "runtime/post_submit_close.cpp": {
+      "sha256": "40a958775f936e4a50b01697e1241eaa22bfa1ea1379e2630126b3d5dc918a82",
+      "bytes": 32569
+    },
+    "runtime/post_submit_close.original.cpp": {
+      "sha256": "6340583673cf290e8aca4778b7d31e9b5cac2c5b04343f7696e259a48e3fb820",
+      "bytes": 30248
+    },
+    "runtime/probe.gd": {
+      "sha256": "2c6816ae472ab1801a206d48e7f79409856a900d685b2e40dfe42b87f1dfa03f",
+      "bytes": 571
+    },
+    "runtime/project.godot": {
+      "sha256": "14bc1c674c7a34f2276ebb0843cd89fccc12fba00c40e4dde72842dff82de080",
+      "bytes": 130
+    },
+    "runtime/run.py": {
+      "sha256": "028b2b57b9088e5626b6e1510765e22f03dea170c51f0d2271bc4e9efabb4403",
+      "bytes": 23148
+    },
+    "runtime/scalar.glsl": {
+      "sha256": "59430bc2675ea4413eaca299ad95d2a9e4dfc7bcef6ada43b717ee3b8b893bc4",
+      "bytes": 201
+    },
+    "runtime/selection_identity.gd": {
+      "sha256": "18fa49e38a7898765e9cc8ba9966ef50b5f6ccad9f714524de73649beffbf164",
+      "bytes": 1486
+    },
+    "runtime/selection_identity_self_test.gd": {
+      "sha256": "1fbd71d4c629542f0c9c1c72c320b07b0dabe962b7e5bc4576a3b89c16bb28f9",
+      "bytes": 3518
+    },
+    "runtime/test_runner.py": {
+      "sha256": "ce705371f7d9721bc528866e7a56dd3891d8fec5a186a35884bf630460431352",
+      "bytes": 7748
+    },
+    "runtime/verify_identity_order.py": {
+      "sha256": "978910b346b193e03f557ea80c2ecca939b95c16f64f85e93a9315feacdf4de8",
+      "bytes": 4707
+    },
+    "preparation/closed-selection-identity-tests.stdout.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "preparation/closed-selection-identity-tests.stderr.log": {
+      "sha256": "ceea5e339bfb84b2653af263ee2fe0a0e2de2bfaed2f3efd00a6d42b42fde502",
+      "bytes": 109
+    },
+    "preparation/closed-selection-identity-help.stdout.log": {
+      "sha256": "a7911789b1c38b54e35e912d3c44556d7c6441e7ff493b97618f6aed846a095c",
+      "bytes": 727
+    },
+    "preparation/closed-selection-identity-help.stderr.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "preparation/closed-selection-source-order.json": {
+      "sha256": "e7b5e140e88f227de9f8aa140cb537d7d39ee32d858b47b9046a208aa0c3d714",
+      "bytes": 6931
+    },
+    "preparation/closed-selection-source-order.stderr.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+}

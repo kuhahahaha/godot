@@ -1,0 +1,12 @@
+{
+  "command": [
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/host/editor.arm64",
+    "--headless",
+    "--path",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime",
+    "--script",
+    "selection_identity_self_test.gd"
+  ],
+  "exit_code": 0,
+  "scope": "Real fresh host GDScript fixture regression; no GPU"
+}
