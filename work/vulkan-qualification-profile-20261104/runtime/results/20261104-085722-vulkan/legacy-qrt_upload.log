@@ -1,0 +1,34 @@
+Godot Engine v4.7.2.stable.custom_build.8404d1272 (2026-11-04 00:46:29 UTC) - https://godotengine.org
+Vulkan 1.2.357 - Forward Mobile - Using Device #0: Apple - Apple M3 Pro
+
+PHS1_EARLY_ACK tag=one level=2
+PHS1_EARLY_ACK tag=one level=3
+QCHILD kind=storage stage=pre_native_reserved bridge=1 error=0 reason=0 children=3 storage_hot=1 storage_cold=0 storage_credits=1 unit_hot=0 unit_cold=0 unit_credits=0 untracked_cells=0 arena_request_bytes=92176 tracked_request_bytes=98960
+QRT_NATIVE_RETURN kind=2 operation=2 slot=3 result=72 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=1 operation=3 slot=7 result=48 segments=0 error=0 reply_ack=1
+QCHILD kind=unit stage=pre_native_reserved bridge=1 error=0 reason=0 children=4 storage_hot=1 storage_cold=0 storage_credits=1 unit_hot=1 unit_cold=0 unit_credits=1 untracked_cells=0 arena_request_bytes=122912 tracked_request_bytes=130432
+QRT_NATIVE_RETURN kind=4 operation=4 slot=8 result=96 segments=0 error=0 reply_ack=1
+QCHILD kind=unit stage=pre_native_reserved bridge=1 error=0 reason=0 children=5 storage_hot=1 storage_cold=0 storage_credits=1 unit_hot=2 unit_cold=0 unit_credits=2 untracked_cells=0 arena_request_bytes=122912 tracked_request_bytes=131168
+QRT_NATIVE_RETURN kind=4 operation=5 slot=12 result=96 segments=0 error=0 reply_ack=1
+QCAP destination plan=0 role=7 bytes=64 native_error=0
+QCAP native current=0 graphs=5 workers=11 frames=6 main_slots=6 worker_slots=66 total_slots=72 generic_bound=72 profile_bound=72 capacity=4096
+QRT_NATIVE_RETURN kind=7 operation=8 slot=16 result=200 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=7 operation=9 slot=19 result=200 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=8 operation=11 slot=20 result=120 segments=0 error=30 reply_ack=1
+QRT_NATIVE_RETURN kind=8 operation=12 slot=21 result=120 segments=1 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=8 operation=13 slot=22 result=120 segments=1 error=0 reply_ack=1
+QCAP native current=1 graphs=5 workers=11 frames=6 main_slots=7 worker_slots=66 total_slots=73 generic_bound=73 profile_bound=73 capacity=4096
+QCAP native current=1 graphs=3 workers=11 frames=4 main_slots=5 worker_slots=44 total_slots=49 generic_bound=49 profile_bound=49 capacity=4096
+QRT_NATIVE_RETURN kind=9 operation=14 slot=23 result=184 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=9 operation=15 slot=24 result=184 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=5 operation=16 slot=25 result=184 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=5 operation=17 slot=26 result=184 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=3 operation=18 slot=27 result=136 segments=0 error=0 reply_ack=1
+QCHILD kind=bridge stage=close bridge=1 error=0 reason=0 children=0 storage_hot=1 storage_cold=0 storage_credits=1 unit_hot=2 unit_cold=0 unit_credits=2 untracked_cells=0 arena_request_bytes=122912 tracked_request_bytes=131328
+U1_TICKET_NATIVE mode=1 actual_main=1 same_ticket=1 facts=5 prefix_settled=1 physical_free=1 ack=1
+QB1_TICKET_LOOP_INITIALIZED
+PHS1_USER_BODY tag=one level=3
+PHS1_BINDING_BODY tag=one level=3
+PHS1_USER_BODY tag=one level=2
+PHS1_BINDING_BODY tag=one level=2
+PHS1_DSO_UNLOAD tag=one

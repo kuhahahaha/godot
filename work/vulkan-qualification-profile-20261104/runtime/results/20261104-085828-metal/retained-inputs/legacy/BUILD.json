@@ -1,0 +1,54 @@
+{
+  "scope": "V1 Record312/Report184/kinds1-9 native neighbor controls; no ANGE acceptance",
+  "header_sha256": "e2273bc588a8810ba545214731380cfd9f831842b70f4d62f354c815e339115b",
+  "builds": [
+    {
+      "case": "qrt_ticket",
+      "command": [
+        "clang++",
+        "-std=c++17",
+        "-dynamiclib",
+        "-arch",
+        "arm64",
+        "-mmacosx-version-min=11.0",
+        "-O2",
+        "-Wall",
+        "-Wextra",
+        "-Wno-unused-parameter",
+        "-Wno-deprecated-declarations",
+        "-I",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/runtime/legacy/qrt_ticket_probe.cpp",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/runtime/legacy/qrt_ticket_probe.dylib"
+      ],
+      "rc": 0,
+      "source_sha256": "d61e6782b051198dac6f326a572d32e11f2081391c3ac5031bdff5af7d4d32f1",
+      "sha256": "650b67473849bde9f66f27bd5ac94065d5e03426b6e416d84df847acde1ad351"
+    },
+    {
+      "case": "qrt_upload",
+      "command": [
+        "clang++",
+        "-std=c++17",
+        "-dynamiclib",
+        "-arch",
+        "arm64",
+        "-mmacosx-version-min=11.0",
+        "-O2",
+        "-Wall",
+        "-Wextra",
+        "-Wno-unused-parameter",
+        "-Wno-deprecated-declarations",
+        "-I",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/runtime/legacy/qrt_upload_probe.cpp",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/runtime/legacy/qrt_upload_probe.dylib"
+      ],
+      "rc": 0,
+      "source_sha256": "3fe22b9e63dc3cff1af6d651cc897c9419c0ef5bcce44fd6e2a987a095c637ab",
+      "sha256": "0493e4723ee9c7c9dd6379655d3ac8308abf1872aa530e1a68b5864a2f57c01c"
+    }
+  ]
+}

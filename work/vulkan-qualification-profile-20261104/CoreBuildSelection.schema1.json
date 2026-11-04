@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "core_stamp": "3a0dec39f4e5b21f8a72978e1a9511dab902760b4ff2cbf5f7cee6e565ddb79b",
+  "compiler_route": "BuiltinGlslangV1",
+  "compiler_stamp": "cc306155087a831eef7585c213281fa00e0363aceae82bf80aa895fa19e894fa",
+  "platform": "macos",
+  "architecture": "arm64",
+  "target_kind": "Executable"
+}

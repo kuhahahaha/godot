@@ -1,0 +1,102 @@
+Godot Engine v4.7.2.stable.custom_build.8404d1272 (2026-11-04 00:46:29 UTC) - https://godotengine.org
+Metal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M3 Pro (Apple9)
+
+PHS1_EARLY_ACK tag=one level=2
+PHS1_EARLY_ACK tag=one level=3
+QCHILD kind=storage stage=pre_native_reserved bridge=1 error=0 reason=0 children=3 storage_hot=1 storage_cold=0 storage_credits=1 unit_hot=0 unit_cold=0 unit_credits=0 untracked_cells=0 arena_request_bytes=92176 tracked_request_bytes=98960
+QRT_NATIVE_RETURN kind=2 operation=2 slot=3 result=72 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=1 operation=3 slot=7 result=48 segments=0 error=0 reply_ack=1
+QCHILD kind=storage stage=pre_native_reserved bridge=1 error=0 reason=0 children=4 storage_hot=2 storage_cold=0 storage_credits=2 unit_hot=0 unit_cold=0 unit_credits=0 untracked_cells=0 arena_request_bytes=92176 tracked_request_bytes=99504
+QRT_NATIVE_RETURN kind=2 operation=4 slot=8 result=72 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=1 operation=5 slot=12 result=48 segments=0 error=0 reply_ack=1
+QCHILD kind=storage stage=pre_native_reserved bridge=1 error=0 reason=0 children=5 storage_hot=3 storage_cold=0 storage_credits=3 unit_hot=0 unit_cold=0 unit_credits=0 untracked_cells=0 arena_request_bytes=92176 tracked_request_bytes=100048
+QRT_NATIVE_RETURN kind=2 operation=6 slot=13 result=72 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=1 operation=7 slot=17 result=48 segments=0 error=0 reply_ack=1
+QCHILD kind=storage stage=pre_native_reserved bridge=1 error=0 reason=0 children=6 storage_hot=4 storage_cold=0 storage_credits=4 unit_hot=0 unit_cold=0 unit_credits=0 untracked_cells=0 arena_request_bytes=92176 tracked_request_bytes=100592
+QRT_NATIVE_RETURN kind=2 operation=8 slot=18 result=72 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=1 operation=9 slot=22 result=48 segments=0 error=0 reply_ack=1
+QCHILD kind=unit stage=pre_native_reserved bridge=1 error=0 reason=0 children=7 storage_hot=4 storage_cold=0 storage_credits=4 unit_hot=1 unit_cold=0 unit_credits=1 untracked_cells=0 arena_request_bytes=122912 tracked_request_bytes=132064
+QRT_NATIVE_RETURN kind=4 operation=10 slot=23 result=96 segments=0 error=0 reply_ack=1
+QCHILD kind=unit stage=pre_native_reserved bridge=1 error=0 reason=0 children=8 storage_hot=4 storage_cold=0 storage_credits=4 unit_hot=2 unit_cold=0 unit_credits=2 untracked_cells=0 arena_request_bytes=122912 tracked_request_bytes=132800
+QRT_NATIVE_RETURN kind=4 operation=11 slot=27 result=96 segments=0 error=0 reply_ack=1
+QCAP destination plan=0 role=18 bytes=24 native_error=0
+QCAP destination plan=1 role=9 bytes=16 native_error=0
+QCAP destination plan=2 role=16 bytes=4 native_error=0
+QCAP destination plan=3 role=14 bytes=16 native_error=0
+QCAP backend=MTL3 sync_mode=1 main_slots=316 worker_slots=3476 frames=316 pending=0 raw_profile_bound=8216
+QCAP native current=0 graphs=315 workers=11 frames=316 main_slots=316 worker_slots=3476 total_slots=3792 generic_bound=0 profile_bound=0 capacity=4096
+QRT_NATIVE_RETURN kind=11 operation=12 slot=31 result=344 segments=0 error=2 reply_ack=1
+PROFILE_CAPACITY_REFUSED native_error=2 zero_ticket=1 zero_facts=1
+QCAP destination plan=0 role=18 bytes=24 native_error=0
+QCAP destination plan=1 role=9 bytes=16 native_error=0
+QCAP destination plan=2 role=16 bytes=4 native_error=0
+QCAP destination plan=3 role=14 bytes=16 native_error=0
+QCAP backend=MTL3 sync_mode=1 main_slots=11 worker_slots=121 frames=11 pending=0 raw_profile_bound=286
+QCAP native current=0 graphs=10 workers=11 frames=11 main_slots=11 worker_slots=121 total_slots=132 generic_bound=397 profile_bound=286 capacity=4096
+QRT_NATIVE_RETURN kind=11 operation=13 slot=32 result=344 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=11 operation=14 slot=37 result=344 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=8 operation=15 slot=38 result=120 segments=1 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=8 operation=16 slot=39 result=120 segments=1 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=8 operation=17 slot=40 result=120 segments=1 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=8 operation=18 slot=41 result=120 segments=1 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=12 operation=19 slot=42 result=112 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=12 operation=20 slot=46 result=112 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=13 operation=21 slot=47 result=112 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=13 operation=22 slot=51 result=112 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=14 operation=23 slot=52 result=120 segments=0 error=30 reply_ack=1
+QCAP backend=MTL3 sync_mode=1 main_slots=17 worker_slots=143 frames=13 pending=0 raw_profile_bound=350
+QCAP native current=4 graphs=12 workers=11 frames=13 main_slots=17 worker_slots=143 total_slots=160 generic_bound=481 profile_bound=350 capacity=4096
+QRT_NATIVE_RETURN kind=14 operation=24 slot=53 result=120 segments=2 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=14 operation=25 slot=54 result=120 segments=2 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=15 operation=26 slot=55 result=112 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=15 operation=27 slot=59 result=112 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=15 operation=28 slot=60 result=112 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=15 operation=29 slot=64 result=112 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=15 operation=30 slot=65 result=112 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=15 operation=31 slot=69 result=112 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=15 operation=32 slot=70 result=112 segments=0 error=4 reply_ack=1
+QRT_NATIVE_RETURN kind=15 operation=33 slot=71 result=112 segments=0 error=30 reply_ack=1
+QRT_NATIVE_RETURN kind=15 operation=35 slot=72 result=112 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=15 operation=36 slot=76 result=112 segments=0 error=0 reply_ack=1
+TYPED_ADMITTED original_children=6 phase_sets=4 image_bytes=64 actual_row_segments=2 busy_suffix_returns=0 admission_is_gpu_evidence=0 binding_negatives=3 payload_digest_negative=1
+TYPED_FACT semantic=6 graph=1/3/1/0/0 source=13 offset=0 bytes=24 issue=1 completion=2 native=12 completed=12 queue=1
+TYPED_FACT semantic=6 graph=1/3/1/1/0 source=14 offset=0 bytes=16 issue=1 completion=2 native=12 completed=12 queue=1
+TYPED_FACT semantic=6 graph=1/3/1/2/0 source=15 offset=0 bytes=4 issue=1 completion=2 native=12 completed=12 queue=1
+TYPED_FACT semantic=6 graph=1/3/1/3/0 source=16 offset=0 bytes=16 issue=1 completion=2 native=12 completed=12 queue=1
+TYPED_FACT semantic=6 graph=1/3/1/4/0 source=5 offset=0 bytes=32 issue=1 completion=2 native=12 completed=12 queue=1
+TYPED_FACT semantic=6 graph=1/3/1/5/0 source=5 offset=32 bytes=32 issue=1 completion=2 native=12 completed=12 queue=1
+TYPED_FACT semantic=4 graph=0/0/0/0/0 source=0 offset=0 bytes=0 issue=1 completion=2 native=11 completed=11 queue=2
+TYPED_FACT semantic=5 graph=0/0/0/0/0 source=0 offset=0 bytes=0 issue=1 completion=2 native=12 completed=12 queue=1
+TYPED_IMAGE_NATIVE facts=2 exact_returned_bytes=64 busy_suffix_returns=0
+QRT_NATIVE_RETURN kind=16 operation=39 slot=77 result=120 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=16 operation=40 slot=78 result=120 segments=0 error=0 reply_ack=1
+TYPED_PHYSICAL kind=3 object=7 frame_epoch=3 event_seq=3 dependency=58 revision=4 exact_ack=1
+QRT_NATIVE_RETURN kind=16 operation=41 slot=79 result=120 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=16 operation=42 slot=80 result=120 segments=0 error=0 reply_ack=1
+TYPED_PHYSICAL kind=3 object=8 frame_epoch=5 event_seq=4 dependency=63 revision=4 exact_ack=1
+QRT_NATIVE_RETURN kind=16 operation=43 slot=81 result=120 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=16 operation=44 slot=82 result=120 segments=0 error=0 reply_ack=1
+TYPED_PHYSICAL kind=3 object=9 frame_epoch=7 event_seq=5 dependency=68 revision=4 exact_ack=1
+QRT_NATIVE_RETURN kind=16 operation=45 slot=83 result=120 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=16 operation=46 slot=84 result=120 segments=0 error=0 reply_ack=1
+TYPED_PHYSICAL kind=3 object=10 frame_epoch=9 event_seq=6 dependency=75 revision=4 exact_ack=1
+QRT_NATIVE_RETURN kind=16 operation=47 slot=85 result=120 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=16 operation=48 slot=86 result=120 segments=0 error=0 reply_ack=1
+TYPED_PHYSICAL kind=1 object=5 frame_epoch=11 event_seq=7 dependency=45 revision=4 exact_ack=1
+QRT_NATIVE_RETURN kind=16 operation=49 slot=87 result=120 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=16 operation=50 slot=88 result=120 segments=0 error=0 reply_ack=1
+TYPED_PHYSICAL kind=2 object=6 frame_epoch=13 event_seq=8 dependency=50 revision=4 exact_ack=1
+QRT_NATIVE_RETURN kind=5 operation=51 slot=89 result=184 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=5 operation=52 slot=90 result=184 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=3 operation=53 slot=91 result=136 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=3 operation=54 slot=92 result=136 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=3 operation=55 slot=93 result=136 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=3 operation=56 slot=94 result=136 segments=0 error=0 reply_ack=1
+QCHILD kind=bridge stage=close bridge=1 error=0 reason=0 children=0 storage_hot=4 storage_cold=0 storage_credits=4 unit_hot=2 unit_cold=0 unit_credits=2 untracked_cells=0 arena_request_bytes=122912 tracked_request_bytes=132928
+TYPED_NATIVE mode=2 actual_main=1 same_ticket=1 set_count=2 upload_plans=4 readbacks=0 actual_async_distinct=0 exact_bytes=0 guards=0 native_complete=1 facts=8 physical_free=1 ack=1 typed_sets=4 texture_bytes=64 texture_sampled=0 typed_physical_acks=6 ange_product_acceptance=0
+MULTI_V2_LOOP_INITIALIZED
+PHS1_USER_BODY tag=one level=3
+PHS1_BINDING_BODY tag=one level=3
+PHS1_USER_BODY tag=one level=2
+PHS1_BINDING_BODY tag=one level=2
+PHS1_DSO_UNLOAD tag=one

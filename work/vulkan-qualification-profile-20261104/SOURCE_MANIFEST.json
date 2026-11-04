@@ -1,0 +1,37 @@
+{
+  "scope": "Vulkan checked bound production candidate and original mapping/retention sources",
+  "base_revision": "c3f59ef3aa",
+  "prerequisite_revision": "8404d12720f3700e38e4c2c48b7f8a75d6541fb6",
+  "build_command": [
+    "scons",
+    "-Q",
+    "tests=yes",
+    "platform=macos",
+    "target=editor",
+    "-j4"
+  ],
+  "files": {
+    "drivers/vulkan/rendering_device_driver_vulkan.h": "c435f2efa94875fd062ddb75b5103b70662af5c5ac56d459598efb298d22d09a",
+    "drivers/vulkan/rendering_device_driver_vulkan.cpp": "b755d7c8556c3310814d9f2767e161686441bb882a245dbe6215e03bb50bebf8",
+    "servers/rendering/rendering_device_driver.h": "64049b12bff0a4ca4dac77c4241c8a3d7e943f6c50c00c7bdbe1e4763b4e8063",
+    "servers/rendering/rendering_device.cpp": "6707e651ac37944a13e19ad4b90c0f324d3b8a6e30c7bd0733fc03f80e6965b1",
+    "servers/rendering/rendering_device_graph.cpp": "779102b04e27a5507f1ebb2199d4914af3794167c54420a939ec8966cb40730f",
+    "core/extension/gdextension_record_source.cpp": "4b5a28934fc0d669f3fdcdd96b14b51dd091ac7bf75451244d8b9ac3750963aa",
+    "core/extension/gdextension_qualification_ticket.cpp": "0b2cbca92056711cd9535a27fb0e1dc777591b4c3fd8533e2d31b4012c71cd91",
+    "core/extension/gdextension_qualification_rd.cpp": "18fd7d101acd44732e417d6c32f3aad7fed744559d557424187b602c678f37b6",
+    "tests/servers/rendering/test_vulkan_completion.cpp": "56364cbf1a49adcbb4979ba11e8bf5448ffbfaf4d6ef4facaffccfb320cb0807",
+    "tests/servers/rendering/test_qualification_ticket.cpp": "825fdfde63ea6da88e0437a115d337f5f2b8de7193640a8915974e432f0b4679"
+  },
+  "artifact": {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/bin/godot.macos.editor.arm64",
+    "sha256": "b173b2b13e82b9919bd6c0154258c6900e532c018bc3b58de70d2fad81b8f1b3",
+    "bytes": 148600440,
+    "controlled_build_sha256": "9bbddbd136412337946b2fc977bf1f5a12f095332d20341916787dad022a23ee",
+    "interface_json_sha256": "ff15055d80992295d546b88e4a77d8f6741c6e1f9f06a6023a05fea890a8f784",
+    "sdk_sha256": "d5ed173d160be54958031efb9c4e18a7e4d4806dd0d1e40fd33002cfe6d637ce",
+    "system_scalar_abi_present": false,
+    "immutable_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/host/editor.arm64",
+    "immutable_controlled_build_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/host/editor.arm64.controlled_build.json"
+  },
+  "production_commit": "0b43072494"
+}

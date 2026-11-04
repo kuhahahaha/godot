@@ -1,0 +1,396 @@
+{
+  "runtime_source_hashes": {
+    "typed_probe.cpp": "2c7e80bac9a19b50a428a62d3f23f1c6eee83bfd291502f38bbf2110a2ec5b9a",
+    "typed_setup.inc": "c16bb0b13a6a6c222d475517445d429dafef9d4cd2d9bf65cdbfb98d2fcde504",
+    "typed_retire.inc": "3174e64f1b4867a704e7ecd0eac585eeb5e483ed75316df476c79a07819e67b9",
+    "gdextension_interface_v2.pinned.h": "e2273bc588a8810ba545214731380cfd9f831842b70f4d62f354c815e339115b",
+    "run.py": "5ed81e68204ec3f457658afcef47547711bfd4bd9bbf9b6d3867741e24045ff7",
+    "prepare.py": "84441210c8cd0c8f25dcf46b75566bc57fabaacee4613c240d843e4fadc48ab3",
+    "legacy/control.py": "9cd6cec2aafa94dbe94eb35a07bb12994cb54e339de416c309a2c4e9c006b265",
+    "legacy/prepare.py": "738ef119ee5db21a6c967462d635a08515be5807a0d163f5f151b0f97f369aaf",
+    "containers/project.godot": "901288ffea13eed3e3760b9a09b6e874c38815e2aa64b0d1b86fbf716bb1cac5",
+    "positive/probe.gd": "906abac40162ec1ac1f1d1610e0f4c26b5cb3bb36d6fb046227486a1c596649a",
+    "positive/probe.gdextension": "32673720b4d16d1ac6c9154bc324001327491510199d9a0cf574a4b606593f0b",
+    "positive/project.godot": "6d2aee469454990a6721aae2486a9ec547a55ffc716a0221878ffcfadf7ca21a",
+    "cancel_prefix/probe.gd": "906abac40162ec1ac1f1d1610e0f4c26b5cb3bb36d6fb046227486a1c596649a",
+    "cancel_prefix/probe.gdextension": "ac530d061b3ff5401df3c78ab9c725ecc6f50065cc4dc0a0ea0d28ebf75559cc",
+    "cancel_prefix/project.godot": "6d2aee469454990a6721aae2486a9ec547a55ffc716a0221878ffcfadf7ca21a"
+  },
+  "scope": "Godot original SceneReady/guard/QRT/native/physical control; not an ANGE product request, Method verification, or owner acceptance",
+  "host": {
+    "rendering_driver": "vulkan",
+    "binary": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/bin/godot.macos.editor.arm64",
+    "binary_sha256": "b173b2b13e82b9919bd6c0154258c6900e532c018bc3b58de70d2fad81b8f1b3",
+    "controlled_build": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/bin/godot.macos.editor.arm64.controlled_build.json",
+    "controlled_build_sha256": "9bbddbd136412337946b2fc977bf1f5a12f095332d20341916787dad022a23ee",
+    "controlled_build_selection": {
+      "schema": 1,
+      "core_stamp": "3a0dec39f4e5b21f8a72978e1a9511dab902760b4ff2cbf5f7cee6e565ddb79b",
+      "compiler_route": "BuiltinGlslangV1",
+      "compiler_stamp": "cc306155087a831eef7585c213281fa00e0363aceae82bf80aa895fa19e894fa",
+      "platform": "macos",
+      "architecture": "arm64",
+      "target_kind": "Executable"
+    },
+    "linkage": [
+      "/System/Library/Frameworks/ForceFeedback.framework/Versions/A/ForceFeedback",
+      "/System/Library/Frameworks/Cocoa.framework/Versions/A/Cocoa",
+      "/System/Library/Frameworks/Carbon.framework/Versions/A/Carbon",
+      "/System/Library/Frameworks/AudioUnit.framework/Versions/A/AudioUnit",
+      "/System/Library/Frameworks/CoreAudio.framework/Versions/A/CoreAudio",
+      "/System/Library/Frameworks/CoreMIDI.framework/Versions/A/CoreMIDI",
+      "/System/Library/Frameworks/IOKit.framework/Versions/A/IOKit",
+      "/System/Library/Frameworks/GameController.framework/Versions/A/GameController",
+      "/System/Library/Frameworks/CoreHaptics.framework/Versions/A/CoreHaptics",
+      "/System/Library/Frameworks/CoreVideo.framework/Versions/A/CoreVideo",
+      "/System/Library/Frameworks/AVFoundation.framework/Versions/A/AVFoundation",
+      "/System/Library/Frameworks/CoreMedia.framework/Versions/A/CoreMedia",
+      "/System/Library/Frameworks/QuartzCore.framework/Versions/A/QuartzCore",
+      "/System/Library/Frameworks/Security.framework/Versions/A/Security",
+      "/System/Library/Frameworks/UniformTypeIdentifiers.framework/Versions/A/UniformTypeIdentifiers",
+      "/System/Library/Frameworks/IOSurface.framework/Versions/A/IOSurface",
+      "/System/Library/Frameworks/Metal.framework/Versions/A/Metal",
+      "/System/Library/Frameworks/MetalFX.framework/Versions/A/MetalFX",
+      "/System/Library/Frameworks/MetalKit.framework/Versions/A/MetalKit",
+      "/usr/lib/libSystem.B.dylib",
+      "/usr/lib/libz.1.dylib",
+      "/usr/lib/libc++.1.dylib",
+      "/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit",
+      "/System/Library/Frameworks/ApplicationServices.framework/Versions/A/ApplicationServices",
+      "/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation",
+      "/System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics",
+      "/System/Library/Frameworks/CoreServices.framework/Versions/A/CoreServices",
+      "/System/Library/Frameworks/CoreText.framework/Versions/A/CoreText",
+      "/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation",
+      "/usr/lib/libobjc.A.dylib"
+    ],
+    "core_model": "monolithic"
+  },
+  "build": {
+    "scope": "standalone Godot native control; not an ANGE owner/request acceptance",
+    "header_sha256": "e2273bc588a8810ba545214731380cfd9f831842b70f4d62f354c815e339115b",
+    "source_sha256": "2c7e80bac9a19b50a428a62d3f23f1c6eee83bfd291502f38bbf2110a2ec5b9a",
+    "builds": [
+      {
+        "case": "positive",
+        "mode": 1,
+        "command": [
+          "clang++",
+          "-std=c++17",
+          "-dynamiclib",
+          "-arch",
+          "arm64",
+          "-mmacosx-version-min=11.0",
+          "-O2",
+          "-Wall",
+          "-Wextra",
+          "-Wno-unused-parameter",
+          "-Wno-deprecated-declarations",
+          "-DTICKET_MODE=1",
+          "-I",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/runtime/typed_probe.cpp",
+          "-o",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/runtime/v2_positive.dylib"
+        ],
+        "rc": 0,
+        "sha256": "290ddb19b9ff66daad80216e06bb0a02c8e1a69491f9d4685f69d6d1c59dd410"
+      },
+      {
+        "case": "cancel_prefix",
+        "mode": 2,
+        "command": [
+          "clang++",
+          "-std=c++17",
+          "-dynamiclib",
+          "-arch",
+          "arm64",
+          "-mmacosx-version-min=11.0",
+          "-O2",
+          "-Wall",
+          "-Wextra",
+          "-Wno-unused-parameter",
+          "-Wno-deprecated-declarations",
+          "-DTICKET_MODE=2",
+          "-I",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/runtime/typed_probe.cpp",
+          "-o",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/runtime/v2_cancel_prefix.dylib"
+        ],
+        "rc": 0,
+        "sha256": "df4f8b64d7290f93f0f7189bccf0d1a384d93ebd93e8896f23d1181ceb49e474"
+      }
+    ],
+    "include_sha256": {
+      "typed_setup.inc": "c16bb0b13a6a6c222d475517445d429dafef9d4cd2d9bf65cdbfb98d2fcde504",
+      "typed_retire.inc": "3174e64f1b4867a704e7ecd0eac585eeb5e483ed75316df476c79a07819e67b9"
+    }
+  },
+  "source_hashes": {
+    "capture.glsl": "c4e9a997d936d6edebdd1b079b1ebbea5a7bf521b184f2b94b8662f20104e2dc",
+    "body.glsl": "643016f04ba7c8f46a8be96ac9928e1a3dfd53efa227351a2ac83a77650b9832",
+    "generate.gd": "56dde143f130d12a0714151e7ae093e99665868780b87d6dc1a68911ea83cb4a"
+  },
+  "runs": [
+    {
+      "case": "containers",
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/bin/godot.macos.editor.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/runtime/containers",
+        "--rendering-driver",
+        "vulkan",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "safe",
+        "--script",
+        "generate.gd"
+      ],
+      "returncode": 0,
+      "log": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/runtime/results/20261104-085722-vulkan/containers.log",
+      "checks": {
+        "exit_zero": true,
+        "actual_backend": true,
+        "clean": true,
+        "both_generated": true
+      }
+    },
+    {
+      "case": "positive",
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/bin/godot.macos.editor.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/runtime/positive",
+        "--rendering-driver",
+        "vulkan",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "safe",
+        "--script",
+        "probe.gd"
+      ],
+      "returncode": 0,
+      "log": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/runtime/results/20261104-085722-vulkan/positive.log",
+      "checks": {
+        "exit_zero": true,
+        "actual_backend": true,
+        "clean": true,
+        "original_kinds": true,
+        "loop": true,
+        "unload": true,
+        "terminal_2": true,
+        "terminal_3": true,
+        "same_ticket_native_result": true,
+        "actual_sampled_words": true,
+        "actual_async_serials": true,
+        "texture_returned_facts": true,
+        "typed_physical_events": true,
+        "over_capacity_refused": true,
+        "typed_admission": true
+      },
+      "kinds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        8,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16
+      ]
+    },
+    {
+      "case": "cancel_prefix",
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/bin/godot.macos.editor.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/runtime/cancel_prefix",
+        "--rendering-driver",
+        "vulkan",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "safe",
+        "--script",
+        "probe.gd"
+      ],
+      "returncode": 0,
+      "log": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/runtime/results/20261104-085722-vulkan/cancel_prefix.log",
+      "checks": {
+        "exit_zero": true,
+        "actual_backend": true,
+        "clean": true,
+        "original_kinds": true,
+        "loop": true,
+        "unload": true,
+        "terminal_2": true,
+        "terminal_3": true,
+        "same_ticket_native_result": true,
+        "texture_returned_facts": true,
+        "typed_physical_events": true,
+        "over_capacity_refused": true,
+        "typed_admission": true
+      },
+      "kinds": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        8,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16
+      ]
+    },
+    {
+      "case": "legacy-containers",
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/bin/godot.macos.editor.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/runtime/legacy/ticket_containers",
+        "--rendering-driver",
+        "vulkan",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "safe",
+        "--script",
+        "generate.gd"
+      ],
+      "returncode": 0,
+      "log": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/runtime/results/20261104-085722-vulkan/legacy-containers.log",
+      "checks": {
+        "exit_zero": true,
+        "actual_backend": true,
+        "clean": true,
+        "both_generated": true
+      }
+    },
+    {
+      "case": "legacy-qrt_ticket",
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/bin/godot.macos.editor.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/runtime/legacy/qrt_ticket",
+        "--rendering-driver",
+        "vulkan",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "safe",
+        "--script",
+        "probe.gd"
+      ],
+      "returncode": 0,
+      "log": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/runtime/results/20261104-085722-vulkan/legacy-qrt_ticket.log",
+      "checks": {
+        "exit_zero": true,
+        "actual_backend": true,
+        "clean": true,
+        "original_v1_kinds": true,
+        "loop": true,
+        "unload": true,
+        "terminal_2": true,
+        "terminal_3": true,
+        "exact_original_result": true
+      }
+    },
+    {
+      "case": "legacy-qrt_upload",
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/bin/godot.macos.editor.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/runtime/legacy/qrt_upload",
+        "--rendering-driver",
+        "vulkan",
+        "--rendering-method",
+        "mobile",
+        "--render-thread",
+        "safe",
+        "--script",
+        "probe.gd"
+      ],
+      "returncode": 0,
+      "log": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/runtime/results/20261104-085722-vulkan/legacy-qrt_upload.log",
+      "checks": {
+        "exit_zero": true,
+        "actual_backend": true,
+        "clean": true,
+        "original_v1_kinds": true,
+        "loop": true,
+        "unload": true,
+        "terminal_2": true,
+        "terminal_3": true,
+        "original_uploaded_ticket": true
+      }
+    }
+  ],
+  "legacy_build": {
+    "scope": "V1 Record312/Report184/kinds1-9 native neighbor controls; no ANGE acceptance",
+    "header_sha256": "e2273bc588a8810ba545214731380cfd9f831842b70f4d62f354c815e339115b",
+    "builds": [
+      {
+        "case": "qrt_ticket",
+        "command": [
+          "clang++",
+          "-std=c++17",
+          "-dynamiclib",
+          "-arch",
+          "arm64",
+          "-mmacosx-version-min=11.0",
+          "-O2",
+          "-Wall",
+          "-Wextra",
+          "-Wno-unused-parameter",
+          "-Wno-deprecated-declarations",
+          "-I",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/runtime/legacy/qrt_ticket_probe.cpp",
+          "-o",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/runtime/legacy/qrt_ticket_probe.dylib"
+        ],
+        "rc": 0,
+        "source_sha256": "d61e6782b051198dac6f326a572d32e11f2081391c3ac5031bdff5af7d4d32f1",
+        "sha256": "650b67473849bde9f66f27bd5ac94065d5e03426b6e416d84df847acde1ad351"
+      },
+      {
+        "case": "qrt_upload",
+        "command": [
+          "clang++",
+          "-std=c++17",
+          "-dynamiclib",
+          "-arch",
+          "arm64",
+          "-mmacosx-version-min=11.0",
+          "-O2",
+          "-Wall",
+          "-Wextra",
+          "-Wno-unused-parameter",
+          "-Wno-deprecated-declarations",
+          "-I",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/runtime/legacy/qrt_upload_probe.cpp",
+          "-o",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/runtime/legacy/qrt_upload_probe.dylib"
+        ],
+        "rc": 0,
+        "source_sha256": "3fe22b9e63dc3cff1af6d651cc897c9419c0ef5bcce44fd6e2a987a095c637ab",
+        "sha256": "0493e4723ee9c7c9dd6379655d3ac8308abf1872aa530e1a68b5864a2f57c01c"
+      }
+    ]
+  },
+  "runtime_source_unchanged": true,
+  "host_unchanged": true
+}

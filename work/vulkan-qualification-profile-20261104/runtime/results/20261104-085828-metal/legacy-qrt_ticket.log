@@ -1,0 +1,27 @@
+Godot Engine v4.7.2.stable.custom_build.8404d1272 (2026-11-04 00:46:29 UTC) - https://godotengine.org
+Metal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M3 Pro (Apple9)
+
+PHS1_EARLY_ACK tag=one level=2
+PHS1_EARLY_ACK tag=one level=3
+QCHILD kind=storage stage=pre_native_reserved bridge=1 error=0 reason=0 children=3 storage_hot=1 storage_cold=0 storage_credits=1 unit_hot=0 unit_cold=0 unit_credits=0 untracked_cells=0 arena_request_bytes=92176 tracked_request_bytes=98960
+QRT_NATIVE_RETURN kind=2 operation=2 slot=3 result=72 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=1 operation=3 slot=7 result=48 segments=0 error=0 reply_ack=1
+QCHILD kind=unit stage=pre_native_reserved bridge=1 error=0 reason=0 children=4 storage_hot=1 storage_cold=0 storage_credits=1 unit_hot=1 unit_cold=0 unit_credits=1 untracked_cells=0 arena_request_bytes=122912 tracked_request_bytes=130432
+QRT_NATIVE_RETURN kind=4 operation=4 slot=8 result=96 segments=0 error=0 reply_ack=1
+QCHILD kind=unit stage=pre_native_reserved bridge=1 error=0 reason=0 children=5 storage_hot=1 storage_cold=0 storage_credits=1 unit_hot=2 unit_cold=0 unit_credits=2 untracked_cells=0 arena_request_bytes=122912 tracked_request_bytes=131168
+QRT_NATIVE_RETURN kind=4 operation=5 slot=12 result=96 segments=0 error=0 reply_ack=1
+QCAP backend=MTL3 sync_mode=1 main_slots=4 worker_slots=44 frames=4 pending=0 raw_profile_bound=104
+QCAP native current=0 graphs=3 workers=11 frames=4 main_slots=4 worker_slots=44 total_slots=48 generic_bound=145 profile_bound=104 capacity=4096
+QRT_NATIVE_RETURN kind=6 operation=7 slot=16 result=200 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=6 operation=8 slot=19 result=200 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=5 operation=9 slot=20 result=184 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=5 operation=10 slot=21 result=184 segments=0 error=0 reply_ack=1
+QRT_NATIVE_RETURN kind=3 operation=11 slot=22 result=136 segments=0 error=0 reply_ack=1
+QCHILD kind=bridge stage=close bridge=1 error=0 reason=0 children=0 storage_hot=1 storage_cold=0 storage_credits=1 unit_hot=2 unit_cold=0 unit_credits=2 untracked_cells=0 arena_request_bytes=122912 tracked_request_bytes=131328
+QB1_TICKET_NATIVE_COMPLETE actual_main=1 same_ticket=1 facts=5 readback=7,8,9,10 exact_bytes=16 native_sources=1 physical_free=1 ack=1
+QB1_TICKET_LOOP_INITIALIZED
+PHS1_USER_BODY tag=one level=3
+PHS1_BINDING_BODY tag=one level=3
+PHS1_USER_BODY tag=one level=2
+PHS1_BINDING_BODY tag=one level=2
+PHS1_DSO_UNLOAD tag=one

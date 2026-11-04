@@ -1,0 +1,61 @@
+{
+  "scope": "standalone Godot native control; not an ANGE owner/request acceptance",
+  "header_sha256": "e2273bc588a8810ba545214731380cfd9f831842b70f4d62f354c815e339115b",
+  "source_sha256": "2c7e80bac9a19b50a428a62d3f23f1c6eee83bfd291502f38bbf2110a2ec5b9a",
+  "builds": [
+    {
+      "case": "positive",
+      "mode": 1,
+      "command": [
+        "clang++",
+        "-std=c++17",
+        "-dynamiclib",
+        "-arch",
+        "arm64",
+        "-mmacosx-version-min=11.0",
+        "-O2",
+        "-Wall",
+        "-Wextra",
+        "-Wno-unused-parameter",
+        "-Wno-deprecated-declarations",
+        "-DTICKET_MODE=1",
+        "-I",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/runtime/typed_probe.cpp",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/runtime/v2_positive.dylib"
+      ],
+      "rc": 0,
+      "sha256": "290ddb19b9ff66daad80216e06bb0a02c8e1a69491f9d4685f69d6d1c59dd410"
+    },
+    {
+      "case": "cancel_prefix",
+      "mode": 2,
+      "command": [
+        "clang++",
+        "-std=c++17",
+        "-dynamiclib",
+        "-arch",
+        "arm64",
+        "-mmacosx-version-min=11.0",
+        "-O2",
+        "-Wall",
+        "-Wextra",
+        "-Wno-unused-parameter",
+        "-Wno-deprecated-declarations",
+        "-DTICKET_MODE=2",
+        "-I",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/runtime/typed_probe.cpp",
+        "-o",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/runtime/v2_cancel_prefix.dylib"
+      ],
+      "rc": 0,
+      "sha256": "df4f8b64d7290f93f0f7189bccf0d1a384d93ebd93e8896f23d1181ceb49e474"
+    }
+  ],
+  "include_sha256": {
+    "typed_setup.inc": "c16bb0b13a6a6c222d475517445d429dafef9d4cd2d9bf65cdbfb98d2fcde504",
+    "typed_retire.inc": "3174e64f1b4867a704e7ecd0eac585eeb5e483ed75316df476c79a07819e67b9"
+  }
+}

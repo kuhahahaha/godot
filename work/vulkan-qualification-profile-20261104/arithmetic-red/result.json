@@ -1,0 +1,16 @@
+{
+  "scope": "Exact header-body arithmetic only; engine native regression is separate",
+  "inputs": {
+    "servers/rendering/rendering_device_driver.h": "64049b12bff0a4ca4dac77c4241c8a3d7e943f6c50c00c7bdbe1e4763b4e8063",
+    "drivers/vulkan/rendering_device_driver_vulkan.h": "770f7b71128dcb178bdcf297e57f8d49abc86297cd9d0b130a8b8bab1e38f0fc"
+  },
+  "compile_command": [
+    "clang++",
+    "-std=c++17",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/arithmetic-red/source.cpp",
+    "-o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/work/vulkan-qualification-profile-20261104/arithmetic-red/check"
+  ],
+  "returncode": 1,
+  "output": "one: expected=1 actual=0\npolicy-limit: expected=4096 actual=0\nr12-profile: expected=1740 actual=0\nprofile-limit: expected=4096 actual=0\n"
+}

@@ -1,0 +1,90 @@
+[
+  {
+    "case": "vulkan-profile",
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=*VulkanQualification*",
+      "--no-colors"
+    ],
+    "returncode": 0,
+    "log_sha256": "8debeda74132faa0d90e442fe2eaf0867b07f5310b417750de6c986a844bb4e4",
+    "cases": [
+      2,
+      2,
+      0
+    ],
+    "assertions": [
+      25,
+      25,
+      0
+    ]
+  },
+  {
+    "case": "vulkan-native",
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=*VulkanCompletion*,*VulkanNativeCall*",
+      "--no-colors"
+    ],
+    "returncode": 0,
+    "log_sha256": "0ff94693a62c2597de242f2c8220f46bf8fb7e560cc81827379facb1bbe5c326",
+    "cases": [
+      12,
+      12,
+      0
+    ],
+    "assertions": [
+      373,
+      373,
+      0
+    ]
+  },
+  {
+    "case": "metal-native",
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=*MetalCompletion*",
+      "--no-colors"
+    ],
+    "returncode": 0,
+    "log_sha256": "84b181d7259dedee1d0bae190d9bb2bb2be10d28bceb724528b56748cb686611",
+    "cases": [
+      6,
+      6,
+      0
+    ],
+    "assertions": [
+      402,
+      402,
+      0
+    ]
+  },
+  {
+    "case": "qualification",
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104/bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=*Qualification*",
+      "--no-colors"
+    ],
+    "returncode": 0,
+    "log_sha256": "8a49f1be43261f85bff0f3527486346522114878a1a74e20cbf55882f42bb7c5",
+    "cases": [
+      208,
+      208,
+      0
+    ],
+    "assertions": [
+      44014,
+      44014,
+      0
+    ]
+  }
+]

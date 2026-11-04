@@ -1,0 +1,5 @@
+config_version=5
+[application]
+config/name="Original Metal V2 native control"
+[rendering]
+renderer/rendering_method="mobile"
