@@ -22,6 +22,20 @@ struct ScalarUnlock {
 void scalar_report(const QualificationTicket *ticket, GDExtensionSystemScalarReportV1 *out) { *out = ticket->system_report; }
 } // namespace
 
+Error system_scalar_native_capacity(RenderingDeviceDriver &driver, uint32_t current_commands, uint32_t workers, uint32_t bytes, uint32_t staging_block_bytes) {
+	// _buffer_get_data_async asks _staging_buffer_allocate for alignment 32.
+	// With blocks >=32, every nonfinal region consumes at least 32 bytes;
+	// publish records exactly one graph per region and advances issued_size.
+	// ERR_BUSY publishes only the existing prefix; continuation resumes that
+	// same issued_size, so empty retries cannot increase this graph bound.
+	if (staging_block_bytes < 32) return ERR_UNAVAILABLE;
+	if (!bytes || bytes > 16384) return ERR_PARAMETER_RANGE_ERROR;
+	const uint64_t graph_bound = 1 + (uint64_t(bytes) + 31) / 32;
+	// One dispatch plus all copy regions, with the existing owner policy's
+	// initial failure frame and hidden workers in every continuation frame.
+	return qualification_native_capacity(driver, current_commands, graph_bound, workers);
+}
+
 GDExtensionDeviceSessionResultV1 Registry::system_scalar_record(GDExtensionQualificationBridgeRefV1 ref, const GDExtensionSystemScalarRecordV1 *q, GDExtensionSystemScalarTicketRefV1 *out_ticket, GDExtensionSystemScalarReportV1 *out_report) {
 	if (!scalar_aligned(q) || !scalar_aligned(out_ticket) || !scalar_aligned(out_report) ||
 			!scalar_separate(q, sizeof(*q), out_ticket, sizeof(*out_ticket)) ||
@@ -69,6 +83,8 @@ GDExtensionDeviceSessionResultV1 Registry::system_scalar_record(GDExtensionQuali
 		for (; slot < QualificationBridge::CHILD_CAPACITY && bridge->tickets[slot]; ++slot) {}
 		const uint32_t refs_needed = bridge->cleanup_refs_reserved ? 1 : 3;
 		if (slot == QualificationBridge::CHILD_CAPACITY || private_limit < refs_needed || records[bridge->library].private_refs > private_limit - refs_needed || !qualification_serial_capacity(2) || !rd->next_qualification_object_serial || rd->next_qualification_object_serial == UINT64_MAX) return scalar_result(ERR_PARAMETER_RANGE_ERROR, 19);
+		error = system_scalar_native_capacity(*rd->driver, rd->draw_graph.qualification_command_count(), rd->transfer_worker_pool_max_size, uint32_t(bytes), rd->download_staging_buffers.block_size);
+		if (error != OK) return scalar_result(error, error == ERR_UNAVAILABLE ? 18 : 19);
 		ticket = memnew(QualificationTicket(true));
 		ticket->system_origin = *q;
 		ticket->bridge_serial = bridge->serial;
@@ -173,8 +189,7 @@ GDExtensionDeviceSessionResultV1 Registry::system_scalar_record(GDExtensionQuali
 	rd->qualification_recording = false;
 	{
 		MutexLock lock(mutex);
-		ticket->recording = false;
-		if (append_error != OK) { ticket->append_failed = true; if (ticket->report.native_error == OK) ticket->report.native_error = append_error; }
+		ticket->finish_system_append(append_error);
 		qualification_ticket_publish(ticket, rd);
 		*out_ticket = { instance, ticket->serial };
 		scalar_report(ticket, out_report);

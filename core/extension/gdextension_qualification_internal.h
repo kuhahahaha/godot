@@ -99,6 +99,10 @@ inline Error validate_qualification_record_v3(const GDExtensionQualificationReco
  if (q.abi.abi_version != 3 || q.abi.struct_size != sizeof(q) || q.abi.reserved || !valid_original_operation_identity(qualification_operation_identity(q))) return ERR_INVALID_PARAMETER;
  return validate_qualification_record_v2(q.record);
 }
+// Shared bounded-source admission. This does not authorize a caller or issue
+// an operation; both consumers retain their original bridge admission gates.
+Error qualification_native_capacity(RenderingDeviceDriver &driver, uint32_t current_commands, uint64_t graph_bound, uint32_t workers);
+Error system_scalar_native_capacity(RenderingDeviceDriver &driver, uint32_t current_commands, uint32_t workers, uint32_t bytes, uint32_t staging_block_bytes);
 struct QualificationResource;
 // One original bridge child, shared by graph/frame, native source observations,
 // the original async result and physical-return reverse indices. C facts are
@@ -153,6 +157,22 @@ struct QualificationTicket {
  uint32_t ordering_path_length=0;
  bool ordering_closed=false,append_failed=false,mapping_failed=false,observation_dirty=false;
  bool resources_returned=false;
+ void finish_system_append(Error p_error) {
+  recording = false;
+  if (body_append.state == CheckedRecordAppend::State::Unknown) {
+   // No recoverable graph handle does not prove no native effect. Keep the
+   // original physical pins quarantined; publish exposes possible_count and
+   // Unknown without inventing a graph/native completion member.
+   mapping_failed = true;
+   observation_dirty = true;
+   if (p_error == OK) p_error = FAILED;
+  }
+  if (p_error != OK) {
+   append_failed = true;
+   if (report.native_error == OK) report.native_error = p_error;
+  }
+ }
+
  uint32_t readback_count() const { return multi_readback ? range_origin.readback_count : 1; }
  Ref<RenderingDevice::BufferGetDataResult> &readback_result(uint32_t index) { return index ? additional_results[index - 1] : result; }
  const Ref<RenderingDevice::BufferGetDataResult> &readback_result(uint32_t index) const { return index ? additional_results[index - 1] : result; }

@@ -43,6 +43,14 @@ bool separate(const void *a,size_t as,const void *b,size_t bs){auto x=uintptr_t(
 struct RdUnlock {Mutex *mutex=nullptr;~RdUnlock(){if(mutex)mutex->unlock();}};
 bool valid_abi(const GDExtensionDeviceExitAbi &abi){return abi.abi_version==1 && abi.struct_size==sizeof(abi) && !abi.reserved;}
 bool add_resource(LocalVector<RID> &resources,RID rid){for(RID existing:resources)if(existing==rid)return true;if(resources.size()>=128)return false;resources.push_back(rid);return true;}
+
+void add_graph(QualificationTicket *ticket,const RDG::RecordHandle &handle,uint32_t semantic,uint32_t frame,uint64_t epoch,uint64_t backing=0,uint64_t offset=0,uint64_t size=0) {
+ if(!handle.is_valid() || ticket->facts.size()>=QualificationTicket::FACT_CAPACITY){ticket->mapping_failed=true;return;}
+ GDExtensionQualificationFactV1 fact={};fact.graph_instance=handle.graph_instance;fact.graph_frame=handle.graph_frame;fact.graph_kind=handle.kind;fact.graph_index=handle.index;fact.graph_offset=handle.offset;
+ fact.semantic_kind=semantic;fact.command_slot=UINT32_MAX;fact.parent_fact=UINT32_MAX;fact.phase=1;fact.source_backing_serial=backing;fact.source_offset=offset;fact.source_size=size;
+ ticket->graphs.push_back({handle,ticket->facts.size(),frame,0,epoch,false,false});ticket->facts.push_back(fact);ticket->observation_dirty=true;
+}
+} //namespace
 Error qualification_native_capacity(RenderingDeviceDriver &driver, uint32_t current_commands, uint64_t graph_bound, uint32_t workers) {
 	const uint64_t capacity = QualificationTicket::FACT_CAPACITY;
 	if (graph_bound > capacity) return ERR_PARAMETER_RANGE_ERROR;
@@ -69,13 +77,6 @@ Error qualification_native_capacity(RenderingDeviceDriver &driver, uint32_t curr
 	return OK;
 }
 
-void add_graph(QualificationTicket *ticket,const RDG::RecordHandle &handle,uint32_t semantic,uint32_t frame,uint64_t epoch,uint64_t backing=0,uint64_t offset=0,uint64_t size=0) {
- if(!handle.is_valid() || ticket->facts.size()>=QualificationTicket::FACT_CAPACITY){ticket->mapping_failed=true;return;}
- GDExtensionQualificationFactV1 fact={};fact.graph_instance=handle.graph_instance;fact.graph_frame=handle.graph_frame;fact.graph_kind=handle.kind;fact.graph_index=handle.index;fact.graph_offset=handle.offset;
- fact.semantic_kind=semantic;fact.command_slot=UINT32_MAX;fact.parent_fact=UINT32_MAX;fact.phase=1;fact.source_backing_serial=backing;fact.source_offset=offset;fact.source_size=size;
- ticket->graphs.push_back({handle,ticket->facts.size(),frame,0,epoch,false,false});ticket->facts.push_back(fact);ticket->observation_dirty=true;
-}
-} //namespace
 Error Registry::qualification_typed_upload_capacity(QualificationTicket *ticket, RenderingDevice *rd, uint32_t rows) {
 	uint64_t bound = 4 + (ticket->preparation.expected_result_bytes + 31) / 32 + rows;
 	for (const auto &upload : ticket->uploads) {
