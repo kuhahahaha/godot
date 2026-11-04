@@ -1,18 +1,8 @@
 [
   {
-    "path": "work/system-scalar-native-correctness-20261104/runtime/probe.gd",
-    "sha256": "e2fa2e69c83d3de31f512a1354424bbc118254e8ad89dc7e1f9d986ef00f2084",
-    "bytes": 461
-  },
-  {
-    "path": "work/system-scalar-native-correctness-20261104/runtime/run.py",
-    "sha256": "2eb78141509de89d0f0a0b776c80e27c4db9c9bf69477ee6696338033732c89b",
-    "bytes": 21928
-  },
-  {
-    "path": "work/system-scalar-native-correctness-20261104/runtime/positive.cpp",
-    "sha256": "09560511cffa3bb566e6b9c5d84a0aa147272d3ca9565e1f5676928764fb62e8",
-    "bytes": 28598
+    "path": "work/system-scalar-native-correctness-20261104/runtime/README.md",
+    "sha256": "808d809f8bcf5bd5528494dc8b001b0d35578cb7a7fb6c87312a1fc23995c7e3",
+    "bytes": 6993
   },
   {
     "path": "work/system-scalar-native-correctness-20261104/runtime/SOURCE_PROVENANCE.json",
@@ -20,44 +10,9 @@
     "bytes": 1987
   },
   {
-    "path": "work/system-scalar-native-correctness-20261104/runtime/negative_probe.cpp",
-    "sha256": "69e2aac09c946e147b57a58b24e96beccaaa17acd8563904075f5f7401c73283",
-    "bytes": 34992
-  },
-  {
-    "path": "work/system-scalar-native-correctness-20261104/runtime/post_submit_close.original.cpp",
-    "sha256": "6340583673cf290e8aca4778b7d31e9b5cac2c5b04343f7696e259a48e3fb820",
-    "bytes": 30248
-  },
-  {
-    "path": "work/system-scalar-native-correctness-20261104/runtime/negative_cases.json",
-    "sha256": "69542b784bdb1fe14e473df16dfb3cb33f397c297bf7c410f3d80c8c01a6112f",
-    "bytes": 2583
-  },
-  {
-    "path": "work/system-scalar-native-correctness-20261104/runtime/README.md",
-    "sha256": "0642e31883ab85a5bb866f8069a3ccb1dd87369a82950c7539ea1d5dfa625e78",
-    "bytes": 6126
-  },
-  {
-    "path": "work/system-scalar-native-correctness-20261104/runtime/post_submit_close.cpp",
-    "sha256": "40a958775f936e4a50b01697e1241eaa22bfa1ea1379e2630126b3d5dc918a82",
-    "bytes": 32569
-  },
-  {
-    "path": "work/system-scalar-native-correctness-20261104/runtime/test_runner.py",
-    "sha256": "89e1a5b2e9f20b1a930c8ab6e1fc4279d176fd772939ef85706ecc6dbca9c0aa",
-    "bytes": 5917
-  },
-  {
     "path": "work/system-scalar-native-correctness-20261104/runtime/generate.gd",
     "sha256": "623c1bdee9ed858a687d3a79d35e04bad71015ff807c5053b2dd752093c26d9d",
     "bytes": 1305
-  },
-  {
-    "path": "work/system-scalar-native-correctness-20261104/runtime/scalar.glsl",
-    "sha256": "59430bc2675ea4413eaca299ad95d2a9e4dfc7bcef6ada43b717ee3b8b893bc4",
-    "bytes": 201
   },
   {
     "path": "work/system-scalar-native-correctness-20261104/runtime/include/core/error/error_list.h",
@@ -65,24 +20,54 @@
     "bytes": 4676
   },
   {
-    "path": "work/system-scalar-native-correctness-20261104/preparation/capacity-both-drivers-help.stdout.log",
-    "sha256": "a7911789b1c38b54e35e912d3c44556d7c6441e7ff493b97618f6aed846a095c",
-    "bytes": 727
+    "path": "work/system-scalar-native-correctness-20261104/runtime/negative_cases.json",
+    "sha256": "69542b784bdb1fe14e473df16dfb3cb33f397c297bf7c410f3d80c8c01a6112f",
+    "bytes": 2583
   },
   {
-    "path": "work/system-scalar-native-correctness-20261104/preparation/command-1.stderr.log",
-    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "bytes": 0
+    "path": "work/system-scalar-native-correctness-20261104/runtime/negative_probe.cpp",
+    "sha256": "69e2aac09c946e147b57a58b24e96beccaaa17acd8563904075f5f7401c73283",
+    "bytes": 34992
   },
   {
-    "path": "work/system-scalar-native-correctness-20261104/preparation/capacity-both-drivers-tests.stderr.log",
-    "sha256": "0797a603f79e55a5612211749887a547eca16fda33260dc9b3baf57657cc4f17",
-    "bytes": 105
+    "path": "work/system-scalar-native-correctness-20261104/runtime/positive.cpp",
+    "sha256": "09560511cffa3bb566e6b9c5d84a0aa147272d3ca9565e1f5676928764fb62e8",
+    "bytes": 28598
   },
   {
-    "path": "work/system-scalar-native-correctness-20261104/preparation/command-0.stdout.log",
-    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "bytes": 0
+    "path": "work/system-scalar-native-correctness-20261104/runtime/post_submit_close.cpp",
+    "sha256": "40a958775f936e4a50b01697e1241eaa22bfa1ea1379e2630126b3d5dc918a82",
+    "bytes": 32569
+  },
+  {
+    "path": "work/system-scalar-native-correctness-20261104/runtime/post_submit_close.original.cpp",
+    "sha256": "6340583673cf290e8aca4778b7d31e9b5cac2c5b04343f7696e259a48e3fb820",
+    "bytes": 30248
+  },
+  {
+    "path": "work/system-scalar-native-correctness-20261104/runtime/probe.gd",
+    "sha256": "d45346f1a77ec025d3ef0c23f4f354dc30f25762341e4efd55707d00f357a9f9",
+    "bytes": 476
+  },
+  {
+    "path": "work/system-scalar-native-correctness-20261104/runtime/run.py",
+    "sha256": "7150005ec26764d4fac0f0a2f3e992272d022b4c5b5ee23df0535c9d0741d474",
+    "bytes": 22935
+  },
+  {
+    "path": "work/system-scalar-native-correctness-20261104/runtime/scalar.glsl",
+    "sha256": "59430bc2675ea4413eaca299ad95d2a9e4dfc7bcef6ada43b717ee3b8b893bc4",
+    "bytes": 201
+  },
+  {
+    "path": "work/system-scalar-native-correctness-20261104/runtime/test_runner.py",
+    "sha256": "f261c87331940f631b40efc67b6b1a3a00a195c864cc9f4883f668f8de20be2a",
+    "bytes": 7068
+  },
+  {
+    "path": "work/system-scalar-native-correctness-20261104/runtime/verify_identity_order.py",
+    "sha256": "978910b346b193e03f557ea80c2ecca939b95c16f64f85e93a9315feacdf4de8",
+    "bytes": 4707
   },
   {
     "path": "work/system-scalar-native-correctness-20261104/preparation/capacity-both-drivers-help.stderr.log",
@@ -90,19 +75,14 @@
     "bytes": 0
   },
   {
-    "path": "work/system-scalar-native-correctness-20261104/preparation/verification.json",
-    "sha256": "bacbffc6d4a12279e4b5100554ed2f8a540baeef029954ff349f067e8eb67233",
-    "bytes": 4419
-  },
-  {
-    "path": "work/system-scalar-native-correctness-20261104/preparation/command-1.stdout.log",
+    "path": "work/system-scalar-native-correctness-20261104/preparation/capacity-both-drivers-help.stdout.log",
     "sha256": "a7911789b1c38b54e35e912d3c44556d7c6441e7ff493b97618f6aed846a095c",
     "bytes": 727
   },
   {
-    "path": "work/system-scalar-native-correctness-20261104/preparation/verification-before-metal-capacity.json",
-    "sha256": "132a0e9049280cda92dfab07f131ec7c487ad61c2d466cbf82efa0e2f5c64ea1",
-    "bytes": 3798
+    "path": "work/system-scalar-native-correctness-20261104/preparation/capacity-both-drivers-tests.stderr.log",
+    "sha256": "0797a603f79e55a5612211749887a547eca16fda33260dc9b3baf57657cc4f17",
+    "bytes": 105
   },
   {
     "path": "work/system-scalar-native-correctness-20261104/preparation/capacity-both-drivers-tests.stdout.log",
@@ -113,5 +93,65 @@
     "path": "work/system-scalar-native-correctness-20261104/preparation/command-0.stderr.log",
     "sha256": "1e43b905e11ca028139fe5078016515111aaf7cebf8d6a3e224b7d03b9cb6ac9",
     "bytes": 104
+  },
+  {
+    "path": "work/system-scalar-native-correctness-20261104/preparation/command-0.stdout.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  {
+    "path": "work/system-scalar-native-correctness-20261104/preparation/command-1.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  {
+    "path": "work/system-scalar-native-correctness-20261104/preparation/command-1.stdout.log",
+    "sha256": "a7911789b1c38b54e35e912d3c44556d7c6441e7ff493b97618f6aed846a095c",
+    "bytes": 727
+  },
+  {
+    "path": "work/system-scalar-native-correctness-20261104/preparation/constructor-fatal-help.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  {
+    "path": "work/system-scalar-native-correctness-20261104/preparation/constructor-fatal-help.stdout.log",
+    "sha256": "a7911789b1c38b54e35e912d3c44556d7c6441e7ff493b97618f6aed846a095c",
+    "bytes": 727
+  },
+  {
+    "path": "work/system-scalar-native-correctness-20261104/preparation/constructor-fatal-tests.stderr.log",
+    "sha256": "5f0635b83af38a6c5d516fcb60dc3fa63c9c6ca4854e51a6a29ca33c92ccef16",
+    "bytes": 107
+  },
+  {
+    "path": "work/system-scalar-native-correctness-20261104/preparation/constructor-fatal-tests.stdout.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  {
+    "path": "work/system-scalar-native-correctness-20261104/preparation/identity-constructor-source-order.json",
+    "sha256": "c1852dee3c011727894142853f6ef5a2d8a3298a5476948043c4bd4b6dd78a2b",
+    "bytes": 6931
+  },
+  {
+    "path": "work/system-scalar-native-correctness-20261104/preparation/identity-constructor-source-order.stderr.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  {
+    "path": "work/system-scalar-native-correctness-20261104/preparation/verification-before-constructor-identity.json",
+    "sha256": "bacbffc6d4a12279e4b5100554ed2f8a540baeef029954ff349f067e8eb67233",
+    "bytes": 4419
+  },
+  {
+    "path": "work/system-scalar-native-correctness-20261104/preparation/verification-before-metal-capacity.json",
+    "sha256": "132a0e9049280cda92dfab07f131ec7c487ad61c2d466cbf82efa0e2f5c64ea1",
+    "bytes": 3798
+  },
+  {
+    "path": "work/system-scalar-native-correctness-20261104/preparation/verification.json",
+    "sha256": "fe612cd91d49095cd9e75834372e0e3a97e75538aabd268953ceb3eb72e70612",
+    "bytes": 5771
   }
 ]

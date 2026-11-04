@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "status": "prepared_not_native_run",
-  "recorded_utc": "2026-11-04T01:58:03.780958+00:00",
+  "recorded_utc": "2026-11-04T02:09:31.466842+00:00",
   "commands": [
     {
       "command": [
@@ -10,8 +10,8 @@
       ],
       "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange",
       "returncode": 0,
-      "stdout": "capacity-both-drivers-tests.stdout.log",
-      "stderr": "capacity-both-drivers-tests.stderr.log"
+      "stdout": "constructor-fatal-tests.stdout.log",
+      "stderr": "constructor-fatal-tests.stderr.log"
     },
     {
       "command": [
@@ -21,12 +21,28 @@
       ],
       "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange",
       "returncode": 0,
-      "stdout": "capacity-both-drivers-help.stdout.log",
-      "stderr": "capacity-both-drivers-help.stderr.log"
+      "stdout": "constructor-fatal-help.stdout.log",
+      "stderr": "constructor-fatal-help.stderr.log"
+    },
+    {
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/verify_identity_order.py",
+        "--source-root",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104"
+      ],
+      "cwd": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange",
+      "returncode": 0,
+      "stdout": "identity-constructor-source-order.json",
+      "stderr": "identity-constructor-source-order.stderr.log"
     }
   ],
   "python_ast": "passed",
-  "python_validation_groups": 7,
+  "python_validation_groups": 9,
+  "constructor_identity": "probe _init before synchronous SceneReady; _initialize keeps ordinary loop quit",
+  "global_fatal_checks": "always merged with negative extra patterns, never replaced",
+  "static_source_order_checks": 11,
+  "static_source_files": 10,
   "capacity_drivers": [
     "metal",
     "vulkan"
@@ -39,11 +55,14 @@
   "new_host_sdk_pair": "pending root single builder",
   "cxx_and_gdscript_for_new_pair": "not yet checked against generated new SDK/host",
   "old_results_reused": false,
-  "prior_preparation_record": "verification-before-metal-capacity.json (historical, no current-source claim)",
+  "prior_preparation_records": [
+    "verification-before-metal-capacity.json",
+    "verification-before-constructor-identity.json"
+  ],
   "files": {
     "runtime/README.md": {
-      "sha256": "0642e31883ab85a5bb866f8069a3ccb1dd87369a82950c7539ea1d5dfa625e78",
-      "bytes": 6126
+      "sha256": "808d809f8bcf5bd5528494dc8b001b0d35578cb7a7fb6c87312a1fc23995c7e3",
+      "bytes": 6993
     },
     "runtime/SOURCE_PROVENANCE.json": {
       "sha256": "6bc8bc94c28b02b49fe91a9c824eec30bdef7d043e8c666e97759329b485cbdd",
@@ -82,34 +101,46 @@
       "bytes": 30248
     },
     "runtime/probe.gd": {
-      "sha256": "e2fa2e69c83d3de31f512a1354424bbc118254e8ad89dc7e1f9d986ef00f2084",
-      "bytes": 461
+      "sha256": "d45346f1a77ec025d3ef0c23f4f354dc30f25762341e4efd55707d00f357a9f9",
+      "bytes": 476
     },
     "runtime/run.py": {
-      "sha256": "2eb78141509de89d0f0a0b776c80e27c4db9c9bf69477ee6696338033732c89b",
-      "bytes": 21928
+      "sha256": "7150005ec26764d4fac0f0a2f3e992272d022b4c5b5ee23df0535c9d0741d474",
+      "bytes": 22935
     },
     "runtime/scalar.glsl": {
       "sha256": "59430bc2675ea4413eaca299ad95d2a9e4dfc7bcef6ada43b717ee3b8b893bc4",
       "bytes": 201
     },
     "runtime/test_runner.py": {
-      "sha256": "89e1a5b2e9f20b1a930c8ab6e1fc4279d176fd772939ef85706ecc6dbca9c0aa",
-      "bytes": 5917
+      "sha256": "f261c87331940f631b40efc67b6b1a3a00a195c864cc9f4883f668f8de20be2a",
+      "bytes": 7068
     },
-    "preparation/capacity-both-drivers-help.stderr.log": {
+    "runtime/verify_identity_order.py": {
+      "sha256": "978910b346b193e03f557ea80c2ecca939b95c16f64f85e93a9315feacdf4de8",
+      "bytes": 4707
+    },
+    "preparation/constructor-fatal-tests.stdout.log": {
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "bytes": 0
     },
-    "preparation/capacity-both-drivers-help.stdout.log": {
+    "preparation/constructor-fatal-tests.stderr.log": {
+      "sha256": "5f0635b83af38a6c5d516fcb60dc3fa63c9c6ca4854e51a6a29ca33c92ccef16",
+      "bytes": 107
+    },
+    "preparation/constructor-fatal-help.stdout.log": {
       "sha256": "a7911789b1c38b54e35e912d3c44556d7c6441e7ff493b97618f6aed846a095c",
       "bytes": 727
     },
-    "preparation/capacity-both-drivers-tests.stderr.log": {
-      "sha256": "0797a603f79e55a5612211749887a547eca16fda33260dc9b3baf57657cc4f17",
-      "bytes": 105
+    "preparation/constructor-fatal-help.stderr.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
     },
-    "preparation/capacity-both-drivers-tests.stdout.log": {
+    "preparation/identity-constructor-source-order.json": {
+      "sha256": "c1852dee3c011727894142853f6ef5a2d8a3298a5476948043c4bd4b6dd78a2b",
+      "bytes": 6931
+    },
+    "preparation/identity-constructor-source-order.stderr.log": {
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "bytes": 0
     }

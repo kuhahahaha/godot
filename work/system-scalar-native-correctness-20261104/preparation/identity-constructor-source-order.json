@@ -1,0 +1,218 @@
+{
+  "schema": 1,
+  "status": "passed_static_source_order_only",
+  "source_root": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/vulkan-qualification-profile-20261104",
+  "checks": [
+    {
+      "check": "script attachment precedes synchronous SceneReady dispatch",
+      "status": "passed_source_order",
+      "anchors": [
+        {
+          "path": "main/main.cpp",
+          "line": 4571,
+          "source": "script_loop->set_script(script_res);"
+        },
+        {
+          "path": "main/main.cpp",
+          "line": 4620,
+          "source": "GDExtensionManager::get_singleton()->scene_materialized();"
+        }
+      ]
+    },
+    {
+      "check": "Object script attachment directly creates script instance",
+      "status": "passed_source_order",
+      "anchors": [
+        {
+          "path": "core/object/object.cpp",
+          "line": 1153,
+          "source": "created = s->instance_create(this);"
+        }
+      ]
+    },
+    {
+      "check": "GDScript instance_create passes nonnegative zero argument count",
+      "status": "passed_source_order",
+      "anchors": [
+        {
+          "path": "modules/gdscript/gdscript.cpp",
+          "line": 424,
+          "source": "return _create_instance(nullptr, 0, p_this, unchecked_error);"
+        }
+      ]
+    },
+    {
+      "check": "nonnegative instance path calls selected _init synchronously before returning",
+      "status": "passed_source_order",
+      "anchors": [
+        {
+          "path": "modules/gdscript/gdscript.cpp",
+          "line": 188,
+          "source": "if (p_argcount < 0)"
+        },
+        {
+          "path": "modules/gdscript/gdscript.cpp",
+          "line": 192,
+          "source": "GDScriptFunction *applicable_initializer = _super_constructor(this);"
+        },
+        {
+          "path": "modules/gdscript/gdscript.cpp",
+          "line": 194,
+          "source": "applicable_initializer->call(instance, p_args, p_argcount, r_error);"
+        },
+        {
+          "path": "modules/gdscript/gdscript.cpp",
+          "line": 206,
+          "source": "//@TODO make thread safe"
+        },
+        {
+          "path": "modules/gdscript/gdscript.cpp",
+          "line": 207,
+          "source": "return instance;"
+        }
+      ]
+    },
+    {
+      "check": "compiler recognizes _init and installs its initializer function",
+      "status": "passed_source_order",
+      "anchors": [
+        {
+          "path": "modules/gdscript/gdscript_compiler.cpp",
+          "line": 2362,
+          "source": "p_func->identifier->name == GDScriptLanguage::get_singleton()->strings._init"
+        },
+        {
+          "path": "modules/gdscript/gdscript_compiler.cpp",
+          "line": 2504,
+          "source": "if (is_initializer)"
+        },
+        {
+          "path": "modules/gdscript/gdscript_compiler.cpp",
+          "line": 2505,
+          "source": "p_script->initializer = gd_function;"
+        }
+      ]
+    },
+    {
+      "check": "manager dispatches SceneReady synchronously",
+      "status": "passed_source_order",
+      "anchors": [
+        {
+          "path": "core/extension/gdextension_manager.cpp",
+          "line": 364,
+          "source": "item.extension->dispatch_scene_ready_if_materialized();"
+        }
+      ]
+    },
+    {
+      "check": "SceneReady wrapper directly enters original Registry",
+      "status": "passed_source_order",
+      "anchors": [
+        {
+          "path": "core/extension/gdextension_scene_ready.cpp",
+          "line": 114,
+          "source": "registry.dispatch_scene_ready(library_exit_ref);"
+        }
+      ]
+    },
+    {
+      "check": "Registry directly invokes native callback before returning",
+      "status": "passed_source_order",
+      "anchors": [
+        {
+          "path": "core/extension/gdextension_guard_enrollment.cpp",
+          "line": 481,
+          "source": "callback_v2 ? callback_v2(userdata, ready, &plan) : callback(userdata, ready);"
+        }
+      ]
+    },
+    {
+      "check": "macOS MainLoop initialization occurs only after Main::start returns",
+      "status": "passed_source_order",
+      "anchors": [
+        {
+          "path": "platform/macos/os_macos.mm",
+          "line": 1131,
+          "source": "ret = Main::start();"
+        },
+        {
+          "path": "platform/macos/os_macos.mm",
+          "line": 1137,
+          "source": "main_loop->initialize();"
+        }
+      ]
+    },
+    {
+      "check": "SceneTree initialize enters MainLoop initialize",
+      "status": "passed_source_order",
+      "anchors": [
+        {
+          "path": "scene/main/scene_tree.cpp",
+          "line": 589,
+          "source": "MainLoop::initialize();"
+        }
+      ]
+    },
+    {
+      "check": "MainLoop initialization invokes script _initialize",
+      "status": "passed_source_order",
+      "anchors": [
+        {
+          "path": "core/os/main_loop.cpp",
+          "line": 58,
+          "source": "GDVIRTUAL_CALL(_initialize);"
+        }
+      ]
+    }
+  ],
+  "probe": {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/work/system-scalar-native-correctness-20261104/runtime/probe.gd",
+    "sha256": "d45346f1a77ec025d3ef0c23f4f354dc30f25762341e4efd55707d00f357a9f9"
+  },
+  "source_files": {
+    "main/main.cpp": {
+      "sha256": "ee9e9cc51309eaeb36f2a832b1035ed0c390865bedf1b48e34da7aeffcf162e7",
+      "bytes": 220359
+    },
+    "core/object/object.cpp": {
+      "sha256": "ab720040fa332f3e370e6937007763f6165831909709def86ba3e952e826d7a8",
+      "bytes": 109772
+    },
+    "modules/gdscript/gdscript.cpp": {
+      "sha256": "ef7b737fbbd142d5f612293d309b5cda873ec3d195b11c732acc381c450b8d51",
+      "bytes": 87385
+    },
+    "modules/gdscript/gdscript_compiler.cpp": {
+      "sha256": "882cf3947a4cd2b643ef268e8fa760f38993ca85e8bc27baf04b5ea4c66e26ac",
+      "bytes": 132148
+    },
+    "core/extension/gdextension_manager.cpp": {
+      "sha256": "57a8ecf158d56bff068b9d714dc37e1082247c4ffc99a91732dd10048c3c926c",
+      "bytes": 27392
+    },
+    "core/extension/gdextension_scene_ready.cpp": {
+      "sha256": "4eea1745796490fc8d5ed5191d9eb526d7beffb97db9b76d3ec6e3a341a1df01",
+      "bytes": 7968
+    },
+    "core/extension/gdextension_guard_enrollment.cpp": {
+      "sha256": "c0d427d4a7d6f4d4749f82ba9e9c53eeec8a3e8d44b222a71d11303f4a7d27c0",
+      "bytes": 53083
+    },
+    "platform/macos/os_macos.mm": {
+      "sha256": "47939c0918fe2dd391ce2d1a7aed9b6d33ea0dddf839bfc393412b7f213a1a06",
+      "bytes": 43312
+    },
+    "scene/main/scene_tree.cpp": {
+      "sha256": "eed6dbff323344efff19f2de6763705aff062a76e00fd7cbe42a4ee849b7e5a4",
+      "bytes": 75907
+    },
+    "core/os/main_loop.cpp": {
+      "sha256": "0c258821e904788dab1bd243ec7445157259589265e36c24dcdd8b49293a4466",
+      "bytes": 3645
+    }
+  },
+  "host_executed": false,
+  "gpu_executed": false,
+  "engine_built": false,
+  "limitation": "Read-only source call/order check; GDScript parsing and actual new-host runtime remain pending."
+}

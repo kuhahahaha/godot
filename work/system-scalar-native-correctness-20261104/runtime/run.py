@@ -15,6 +15,7 @@ HERE = Path(__file__).resolve().parent
 SELECTION_FIELDS = frozenset(('schema', 'core_stamp', 'compiler_route', 'compiler_stamp', 'platform', 'architecture', 'target_kind'))
 PROJECT = 'config_version=5\n[application]\nconfig/name="Original System scalar correctness"\n[rendering]\nrenderer/rendering_method="mobile"\n'
 CASES = (('positive', 'positive.cpp'), ('post_submit_close', 'post_submit_close.cpp'))
+GLOBAL_FATAL_PATTERNS = (r'ERROR:|ASSERT|CrashHandler|leaked at exit|FIXTURE_FATAL',)
 CONTROL_NAMES = frozenset(('native_unknown', 'native_fact_capacity', 'set_retire_error'))
 CONTROL_ENVIRONMENT = frozenset(('GODOT_SYSTEM_SCALAR_TEST_APPEND_UNKNOWN', 'GODOT_SYSTEM_SCALAR_TEST_SET_RETURN_ERROR', 'GODOT_QUALIFICATION_CAPACITY_TRACE'))
 
@@ -151,6 +152,21 @@ def actual_capacity_evidence(text):
     return evidence
 
 
+def validate_probe_constructor(script):
+    functions = dict(re.findall(r'^func (_init|_initialize)\(\):\n((?:[ \t].*|\n)*)', script, re.M))
+    constructor = functions.get('_init', '')
+    initialize = functions.get('_initialize', '')
+    required = ('Engine.get_version_info()', 'SYSTEM_SCALAR_HOST_IDENTITY=', 'SYSTEM_SCALAR_SELECTION_JSON', 'if identity != expected:')
+    if any(marker not in constructor for marker in required) or script.count('SYSTEM_SCALAR_HOST_IDENTITY=') != 1:
+        raise ValueError('probe actual identity must be printed and checked in _init before synchronous SceneReady')
+    if any(marker in initialize for marker in required) or 'quit(0)' not in initialize:
+        raise ValueError('probe _initialize must keep only ordinary loop initialization/quit')
+
+
+def forbidden_patterns_for(control=None):
+    return list(GLOBAL_FATAL_PATTERNS) + (list(control['forbidden_patterns']) if control else [])
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--host', required=True, type=Path)
@@ -162,6 +178,7 @@ def main():
     parser.add_argument('--cases', choices=('all', 'original'), default='all')
     parser.add_argument('--prepare-only', action='store_true', help='bind and snapshot inputs; no host execution, GPU or DSO compilation')
     args = parser.parse_args()
+    validate_probe_constructor((HERE / 'probe.gd').read_text())
     host, sdk, selected = (p.resolve(strict=True) for p in (args.host, args.sdk_header, args.selection))
     metadata_path = (args.metadata or Path(str(host) + '.controlled_build.json')).resolve(strict=True)
     selection = validate_selection(load_json(selected))
@@ -259,7 +276,7 @@ def main():
             (out / (case + '.stderr.log')).write_text(stderr)
             text = stdout + stderr
             row['returncode'] = code
-            forbidden = control['forbidden_patterns'] if control else [r'ERROR:|ASSERT|CrashHandler|leaked at exit|FIXTURE_FATAL']
+            forbidden = forbidden_patterns_for(control)
             row['checks'] = {'expected_exit': code == (control['expected_returncode'] if control else 0), 'actual_backend': actual_backend(text, args.driver),
                              'actual_selection': actual_identity(text, selection),
                              'forbidden_patterns_absent': not any(re.search(pattern, text, re.M) for pattern in forbidden)}
