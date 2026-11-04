@@ -1,0 +1,31 @@
+{
+  "command": [
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/particle-render-exit-seal-audit-20261105/seal-wait-clean-pair/editor.arm64",
+    "--path",
+    "/Users/macbookair/Documents/Work/godot_ANGE/work/native-record-cancel-vulkan-20261104/runtime/omit_cancel_control",
+    "--rendering-driver",
+    "vulkan",
+    "--rendering-method",
+    "mobile",
+    "--render-thread",
+    "safe",
+    "--script",
+    "probe.gd"
+  ],
+  "cwd": "/Users/macbookair/Documents/Work/godot_ANGE",
+  "environment_override": {
+    "GODOT_QUALIFICATION_CAPACITY_TRACE": "1"
+  },
+  "returncode": 91,
+  "before": {
+    "host": "887bff69ab84ab6f35a88f2f2bb9cd46d5970bb7e4ca7a230ea5c94761130392",
+    "source": "7a806873b4a6a4a63b877a0f46dce6d3df5bb617109412910065fb922e6739e8",
+    "dso": "4db361ff54373aae4fb75830d2bd21f05a51e8304258efebe94ee5cdfd6103d4"
+  },
+  "after": {
+    "host": "887bff69ab84ab6f35a88f2f2bb9cd46d5970bb7e4ca7a230ea5c94761130392",
+    "source": "7a806873b4a6a4a63b877a0f46dce6d3df5bb617109412910065fb922e6739e8",
+    "dso": "4db361ff54373aae4fb75830d2bd21f05a51e8304258efebe94ee5cdfd6103d4"
+  },
+  "log_sha256": "682ddee86bd9c3eb8cba9c2a8144700da9e63ae5da147ac5880116e9831758fa"
+}
