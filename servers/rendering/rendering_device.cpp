@@ -1638,6 +1638,10 @@ uint64_t RenderingDevice::_reserve_backing_serial() {
 }
 
 RID RenderingDevice::storage_buffer_create(uint32_t p_size_bytes, Span<uint8_t> p_data, BitField<StorageBufferUsage> p_usage, BitField<BufferCreationBits> p_creation_bits) {
+	return _storage_buffer_create_internal(p_size_bytes, p_data, p_usage, p_creation_bits, nullptr);
+}
+
+RID RenderingDevice::_storage_buffer_create_internal(uint32_t p_size_bytes, Span<uint8_t> p_data, BitField<StorageBufferUsage> p_usage, BitField<BufferCreationBits> p_creation_bits, const NativeDisposalWitness *p_native_disposal) {
 	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	ERR_FAIL_COND_V(p_data.size() && (uint32_t)p_data.size() != p_size_bytes, RID());
 
@@ -1675,12 +1679,37 @@ RID RenderingDevice::storage_buffer_create(uint32_t p_size_bytes, Span<uint8_t> 
 		buffer.usage.set_flag(RDD::BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT);
 	}
 
+	RID reserved_storage;
+	if (p_native_disposal) {
+		// The Core factory has no upload prefix. Reserve the actual RID, tracker
+		// and observation cell before the first native allocation.
+		ERR_FAIL_COND_V(!p_data.is_empty(), RID());
+		reserved_storage = storage_buffer_owner.allocate_rid();
+		ERR_FAIL_COND_V(reserved_storage.is_null(), RID());
+		buffer.draw_tracker = RDG::resource_tracker_create();
+		buffer.native_disposal = *p_native_disposal;
+		buffer.native_disposal_rid = reserved_storage.get_id();
+		p_native_disposal->cell->rid = reserved_storage.get_id();
+		p_native_disposal->cell->serial = backing_serial;
+	}
 	buffer.driver_id = driver->buffer_create(buffer.size, buffer.usage, RDD::MEMORY_ALLOCATION_TYPE_GPU, frames_drawn);
-	ERR_FAIL_COND_V(!buffer.driver_id, RID());
+	if (!buffer.driver_id) {
+		if (reserved_storage.is_valid()) {
+			RDG::resource_tracker_free(buffer.draw_tracker);
+			storage_buffer_owner.initialize_rid(reserved_storage, Buffer());
+			storage_buffer_owner.free(reserved_storage);
+		}
+		ERR_FAIL_V(RID());
+	}
 
 	// Storage buffers are assumed to be mutable.
-	buffer.draw_tracker = RDG::resource_tracker_create();
+	if (!buffer.draw_tracker) {
+		buffer.draw_tracker = RDG::resource_tracker_create();
+	}
 	buffer.draw_tracker->buffer_driver_id = buffer.driver_id;
+	if (p_native_disposal) {
+		p_native_disposal->cell->backing = buffer.driver_id.id;
+	}
 
 	if (p_data.size()) {
 		Error initialize_error = _buffer_initialize(&buffer, p_data);
@@ -1696,14 +1725,19 @@ RID RenderingDevice::storage_buffer_create(uint32_t p_size_bytes, Span<uint8_t> 
 	_THREAD_SAFE_UNLOCK_
 
 #if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
-	RID id = storage_buffer_owner.allocate_rid();
+	RID id = reserved_storage.is_valid() ? reserved_storage : storage_buffer_owner.allocate_rid();
 	buffer.capture_test_allocation_serial = capture_test_allocation_registry.allocate(buffer.driver_id.id, id.get_id());
 	if (buffer.capture_test_allocation_serial == 0) {
 		capture_test_coverage_failed.store(true);
 	}
 	storage_buffer_owner.initialize_rid(id, buffer);
 #else
-	RID id = storage_buffer_owner.make_rid(buffer);
+	RID id = reserved_storage;
+	if (id.is_valid()) {
+		storage_buffer_owner.initialize_rid(id, buffer);
+	} else {
+		id = storage_buffer_owner.make_rid(buffer);
+	}
 #endif
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
 	RenderCaptureTestHooks::observe_buffer_allocation(id.get_id(), uint64_t(get_instance_id()), buffer.driver_id.id, buffer.capture_test_allocation_serial);
@@ -4970,7 +5004,7 @@ RID RenderingDevice::_qualification_uniform_set_create(const VectorView<Uniform>
 	}
 	return result;
 }
-RID RenderingDevice::_uniform_set_create_qualification(const VectorView<RD::Uniform> &p_uniforms, RID p_shader, uint32_t p_shader_set, bool p_linear_pool, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, const LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> *p_children) {
+RID RenderingDevice::_uniform_set_create_qualification(const VectorView<RD::Uniform> &p_uniforms, RID p_shader, uint32_t p_shader_set, bool p_linear_pool, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, const LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> *p_children, const NativeDisposalWitness *p_native_disposal) {
 	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Recording is suspended after a frame fence wait failure.");
 	_THREAD_SAFE_METHOD_
 
@@ -5398,7 +5432,7 @@ RID RenderingDevice::_uniform_set_create_qualification(const VectorView<RD::Unif
 	}
 
  RID reserved_set;
- if(!qualification_dependencies.is_empty()) { reserved_set=uniform_set_owner.allocate_rid();ERR_FAIL_COND_V(reserved_set.is_null(),RID()); }
+ if(p_native_disposal || !qualification_dependencies.is_empty()) { reserved_set=uniform_set_owner.allocate_rid();ERR_FAIL_COND_V(reserved_set.is_null(),RID()); }
 	RDD::UniformSetID driver_uniform_set = driver->uniform_set_create(driver_uniforms, shader->driver_id, p_shader_set, p_linear_pool ? frame : -1);
  if(!driver_uniform_set) {
   if(reserved_set.is_valid()){uniform_set_owner.initialize_rid(reserved_set,UniformSet());uniform_set_owner.free(reserved_set);}
@@ -5410,6 +5444,13 @@ RID RenderingDevice::_uniform_set_create_qualification(const VectorView<RD::Unif
  uniform_set.qualification_return = p_cell;
  for(auto *cell:qualification_dependencies)cell->dependent_children.fetch_add(1);
 	uniform_set.driver_id = driver_uniform_set;
+	if (p_native_disposal) {
+		uniform_set.native_disposal = *p_native_disposal;
+		uniform_set.native_disposal_rid = reserved_set.get_id();
+		uniform_set.native_disposal_serial = p_native_disposal->cell->serial;
+		p_native_disposal->cell->rid = reserved_set.get_id();
+		p_native_disposal->cell->backing = driver_uniform_set.id;
+	}
 	uniform_set.format = shader->set_formats[p_shader_set];
 	uniform_set.attachable_textures = attachable_textures;
 	uniform_set.draw_trackers = draw_trackers;
@@ -8714,8 +8755,152 @@ bool RenderingDevice::_dependencies_make_mutable(RID p_id, RDG::ResourceTracker 
 /**** FRAME MANAGEMENT ****/
 /**************************/
 
+Error RenderingDevice::_native_disposal_preflight() const {
+	if (!is_main_instance || render_thread_id != Thread::get_caller_id() || !driver || native_finalization_returned) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (frames.is_empty() || frame >= frames.size() || draw_list.active || compute_list.active || raytracing_list.active) {
+		return ERR_BUSY;
+	}
+	return _recording_error();
+}
+
+Error RenderingDevice::_native_disposal_storage_create(uint32_t p_bytes, BitField<StorageBufferUsage> p_usage, RID &r_rid, NativeDisposalWitness &r_witness) {
+	const Error ready = _native_disposal_preflight();
+	if (ready != OK) {
+		return ready;
+	}
+	if (!p_bytes || r_rid.is_valid() || r_witness.cell.is_valid()) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (uint64_t(p_usage) & ~uint64_t(STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT)) {
+		return ERR_UNAVAILABLE;
+	}
+	NativeDisposalWitness reserved;
+	reserved.cell.instantiate(); // Entire observation storage exists before native creation.
+	reserved.cell->device = uint64_t(get_instance_id());
+	// No initial upload: a failed factory cannot hide a recorded upload prefix.
+	const RID rid = _storage_buffer_create_internal(p_bytes, Span<uint8_t>(), p_usage, {}, &reserved);
+	if (rid.is_null()) {
+		return ERR_CANT_CREATE;
+	}
+	r_rid = rid;
+	r_witness = reserved;
+	return OK;
+}
+
+Error RenderingDevice::_native_disposal_uniform_set_create(const VectorView<Uniform> &p_uniforms, RID p_shader, uint32_t p_set, RID &r_rid, NativeDisposalWitness &r_witness) {
+	const Error ready = _native_disposal_preflight();
+	if (ready != OK) {
+		return ready;
+	}
+	if (r_rid.is_valid() || r_witness.cell.is_valid() || p_uniforms.size() == 0) {
+		return ERR_INVALID_PARAMETER;
+	}
+	const Shader *shader = shader_owner.get_or_null(p_shader);
+	if (!shader || !shader->driver_id || shader->qualification_return) {
+		return ERR_UNAVAILABLE;
+	}
+	// This batch supports only mutable, Core-created storage buffers. Texture,
+	// VA/IA, shader/pipeline disposal and arbitrary existing resources have no
+	// production observation contract here. Reject before synchronization work.
+	for (uint32_t uniform_index = 0; uniform_index < p_uniforms.size(); ++uniform_index) {
+		const Uniform &uniform = p_uniforms[uniform_index];
+		if (uniform.uniform_type != UNIFORM_TYPE_STORAGE_BUFFER || uniform.get_id_count() != 1) {
+			return ERR_UNAVAILABLE;
+		}
+		const Buffer *buffer = storage_buffer_owner.get_or_null(uniform.get_id(0));
+		if (!buffer || buffer->qualification_return || !buffer->draw_tracker || buffer->transfer_worker_index >= 0 || buffer->native_disposal.cell.is_null()) {
+			return ERR_UNAVAILABLE;
+		}
+		const auto &cell = buffer->native_disposal.cell;
+		if (cell->device != uint64_t(get_instance_id()) || cell->state != NativeDisposalWitness::State::LIVE || !cell->matches(uniform.get_id(0).get_id(), buffer->backing_serial, buffer->driver_id.id)) {
+			return ERR_INVALID_DATA;
+		}
+	}
+	const uint64_t serial = _reserve_backing_serial();
+	if (!serial) {
+		return ERR_OUT_OF_MEMORY;
+	}
+	NativeDisposalWitness reserved;
+	reserved.cell.instantiate();
+	reserved.cell->device = uint64_t(get_instance_id());
+	reserved.cell->serial = serial;
+	const RID rid = _uniform_set_create_qualification(p_uniforms, p_shader, p_set, false, nullptr, nullptr, &reserved);
+	if (rid.is_null()) {
+		return ERR_CANT_CREATE;
+	}
+	r_rid = rid;
+	r_witness = reserved;
+	return OK;
+}
+
+Error RenderingDevice::_native_disposal_observe(const NativeDisposalWitness &p_witness, NativeDisposalWitness::Report &r_report) const {
+	// Observation is possible during recovery, but never from a foreign RD/RT.
+	if (!is_main_instance || render_thread_id != Thread::get_caller_id() || p_witness.cell.is_null() || p_witness.cell->device != uint64_t(get_instance_id())) {
+		return ERR_UNAUTHORIZED;
+	}
+	const auto &cell = p_witness.cell;
+	r_report = { cell->state, cell->rid, cell->serial };
+	return cell->state == NativeDisposalWitness::State::UNKNOWN ? ERR_INVALID_DATA : OK;
+}
+
+Error RenderingDevice::_native_disposal_free(const NativeDisposalWitness &p_witness) {
+	const Error ready = _native_disposal_preflight();
+	if (ready != OK) {
+		return ready;
+	}
+	NativeDisposalWitness::Report report;
+	const Error observed = _native_disposal_observe(p_witness, report);
+	if (observed != OK) {
+		return observed;
+	}
+	if (report.state == NativeDisposalWitness::State::ENQUEUED || report.state == NativeDisposalWitness::State::RETURNED) {
+		return OK; // Idempotent request; OK does not mean driver-free returned.
+	}
+	const RID rid = RID::from_uint64(report.rid);
+	const Buffer *buffer = storage_buffer_owner.get_or_null(rid);
+	const UniformSet *set = uniform_set_owner.get_or_null(rid);
+	const auto &cell = p_witness.cell;
+	if ((!buffer || buffer->native_disposal.cell != cell || !cell->matches(rid.get_id(), buffer->backing_serial, buffer->driver_id.id)) &&
+			(!set || set->native_disposal.cell != cell || !cell->matches(rid.get_id(), set->native_disposal_serial, set->driver_id.id))) {
+		cell->state = NativeDisposalWitness::State::UNKNOWN;
+		return ERR_INVALID_DATA;
+	}
+	// Original dependency recursion, invalidation and pending-free queue own
+	// disposal. No logical free, elapsed frame count or sync writes RETURNED.
+	free_rid(rid);
+	return cell->state == NativeDisposalWitness::State::ENQUEUED || cell->state == NativeDisposalWitness::State::RETURNED ? OK : ERR_BUSY;
+}
+
+bool RenderingDevice::_native_disposal_enqueue(NativeDisposalWitness &p_witness, uint64_t p_rid, uint64_t p_serial, uint64_t p_backing) {
+	if (p_witness.cell.is_null()) {
+		return true;
+	}
+	if (p_witness.cell->device != uint64_t(get_instance_id())) {
+		p_witness.cell->state = NativeDisposalWitness::State::UNKNOWN;
+		return false;
+	}
+	return p_witness.cell->enqueue(p_rid, p_serial, p_backing);
+}
+
+void RenderingDevice::_native_disposal_returned(NativeDisposalWitness &p_witness, uint64_t p_rid, uint64_t p_serial, uint64_t p_backing) {
+	if (p_witness.cell.is_valid()) {
+		if (p_witness.cell->device != uint64_t(get_instance_id())) {
+			p_witness.cell->state = NativeDisposalWitness::State::UNKNOWN;
+			return;
+		}
+		p_witness.cell->returned(p_rid, p_serial, p_backing);
+	}
+}
+
 Error RenderingDevice::_qualification_maintenance() {
+ return _native_disposal_maintenance();
+}
+
+Error RenderingDevice::_native_disposal_maintenance() {
  if(render_thread_id!=Thread::get_caller_id() || !is_main_instance || !driver || native_finalization_returned)return ERR_UNAUTHORIZED;
+ if(frames.is_empty() || frame >= frames.size())return ERR_UNCONFIGURED;
  if(draw_list.active || compute_list.active || raytracing_list.active || frame_wait_draining)return ERR_BUSY;
  if(!_thread_safe_.try_lock())return ERR_BUSY;
  struct Unlock { Mutex &mutex; ~Unlock(){mutex.unlock();} } unlock{_thread_safe_};
@@ -8957,6 +9142,7 @@ void RenderingDevice::_free_internal(RID p_id) {
 	} else if (storage_buffer_owner.owns(p_id)) {
 		Buffer *storage_buffer = storage_buffer_owner.get_or_null(p_id);
 		ERR_FAIL_COND(_qualification_enqueue(storage_buffer->qualification_return)!=OK);
+		ERR_FAIL_COND(!_native_disposal_enqueue(storage_buffer->native_disposal, p_id.get_id(), storage_buffer->backing_serial, storage_buffer->driver_id.id));
 		_check_transfer_worker_buffer(storage_buffer);
 
 		RDG::resource_tracker_free(storage_buffer->draw_tracker);
@@ -8977,6 +9163,7 @@ void RenderingDevice::_free_internal(RID p_id) {
 	} else if (uniform_set_owner.owns(p_id)) {
 		UniformSet *uniform_set = uniform_set_owner.get_or_null(p_id);
 		ERR_FAIL_COND(_qualification_enqueue(uniform_set->qualification_return) != OK);
+		ERR_FAIL_COND(!_native_disposal_enqueue(uniform_set->native_disposal, p_id.get_id(), uniform_set->native_disposal_serial, uniform_set->driver_id.id));
 		// The RID owner destroys the set before the synchronous callback.
 		InvalidationCallback invalidated_callback = uniform_set->invalidated_callback;
 		void *invalidated_callback_userdata = uniform_set->invalidated_callback_userdata;
@@ -9284,6 +9471,7 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 		UniformSet *uniform_set = &frames[p_frame].uniform_sets_to_dispose_of.front()->get();
 
 		driver->uniform_set_free(uniform_set->driver_id);
+		_native_disposal_returned(uniform_set->native_disposal, uniform_set->native_disposal_rid, uniform_set->native_disposal_serial, uniform_set->driver_id.id);
 		for(auto *cell:uniform_set->qualification_dependencies) { CRASH_COND(!cell->dependent_children.load());cell->dependent_children.fetch_sub(1); }
 		_qualification_freed(uniform_set->qualification_return);
 #if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
@@ -9346,6 +9534,7 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 	while (frames[p_frame].buffers_to_dispose_of.front()) {
 		Buffer &buffer = frames[p_frame].buffers_to_dispose_of.front()->get();
 		driver->buffer_free(buffer.driver_id);
+		_native_disposal_returned(buffer.native_disposal, buffer.native_disposal_rid, buffer.backing_serial, buffer.driver_id.id);
 		_qualification_freed(buffer.qualification_return);
 #if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
 		if (buffer.capture_test_allocation_serial) {

@@ -31,7 +31,12 @@
 #pragma once
 
 #include "core/extension/gdextension_qualification_physical.h"
+#include "servers/rendering/native_disposal_witness.h"
 #include "modules/modules_enabled.gen.h"
+
+namespace RendererRD {
+class ExternalOutputStorage;
+}
 
 #ifdef TESTS_ENABLED
 namespace RendererRD {
@@ -110,6 +115,7 @@ private:
  friend struct GDExtensionDeviceExit::QualificationTicket;
  friend struct GDExtensionDeviceExit::QualificationResource;
  friend class RenderingServerDefault;
+	friend class RendererRD::ExternalOutputStorage;
 #ifdef TESTS_ENABLED
 	friend class TestExternalOutputAccess;
 	friend class TestIndexed144DeviceAccess;
@@ -120,6 +126,7 @@ private:
 	friend class TestQualificationSerialAccess;
 	friend class TestQualificationFinalizeAccess;
 	friend class TestQualificationPhysicalAccess;
+	friend class TestNativeDisposalAccess;
  friend class TestQualificationAckAccess;
  friend class TestQualificationStagingAccess;
  friend class TestQualificationTicketAccess;
@@ -301,6 +308,8 @@ private:
  RID _qualification_storage_create(uint32_t p_bytes, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
 
 	struct Buffer {
+		NativeDisposalWitness native_disposal;
+		uint64_t native_disposal_rid = 0;
   uint32_t qualification_users = 0;
 		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
 		uint64_t backing_serial = 0;
@@ -1376,6 +1385,9 @@ private:
 	// the above restriction is not too serious.
 
 	struct UniformSet {
+		NativeDisposalWitness native_disposal;
+		uint64_t native_disposal_rid = 0;
+		uint64_t native_disposal_serial = 0;
 		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
 		uint32_t qualification_users = 0;
 		LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> qualification_dependencies;
@@ -1404,8 +1416,21 @@ private:
 		void *invalidated_callback_userdata = nullptr;
 	};
 
+	// Mechanical ports for an original Core owner; deliberately private. No
+	// arbitrary-RID enrollment or qualification ticket authorizes these calls.
+	Error _native_disposal_preflight() const;
+	RID _storage_buffer_create_internal(uint32_t p_bytes, Span<uint8_t> p_data, BitField<StorageBufferUsage> p_usage, BitField<BufferCreationBits> p_creation_bits, const NativeDisposalWitness *p_native_disposal);
+	Error _native_disposal_storage_create(uint32_t p_bytes, BitField<StorageBufferUsage> p_usage, RID &r_rid, NativeDisposalWitness &r_witness);
+	Error _native_disposal_uniform_set_create(const VectorView<Uniform> &p_uniforms, RID p_shader, uint32_t p_set, RID &r_rid, NativeDisposalWitness &r_witness);
+	Error _native_disposal_free(const NativeDisposalWitness &p_witness);
+	Error _native_disposal_observe(const NativeDisposalWitness &p_witness, NativeDisposalWitness::Report &r_report) const;
+	Error _native_disposal_maintenance();
+	bool _native_disposal_enqueue(NativeDisposalWitness &p_witness, uint64_t p_rid, uint64_t p_serial, uint64_t p_backing);
+	void _native_disposal_returned(NativeDisposalWitness &p_witness, uint64_t p_rid, uint64_t p_serial, uint64_t p_backing);
+
+
 	RID _qualification_uniform_set_create(const VectorView<Uniform> &, RID, uint32_t, GDExtensionDeviceExit::QualificationPhysicalReturn *, const LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> &);
-	RID _uniform_set_create_qualification(const VectorView<Uniform> &, RID, uint32_t, bool, GDExtensionDeviceExit::QualificationPhysicalReturn *, const LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> *);
+	RID _uniform_set_create_qualification(const VectorView<Uniform> &, RID, uint32_t, bool, GDExtensionDeviceExit::QualificationPhysicalReturn *, const LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> *, const NativeDisposalWitness *p_native_disposal = nullptr);
 	Error _qualification_texture_upload(RID, const uint8_t *, uint32_t, QualificationUploadProgress &);
 	RID_Owner<UniformSet, true> uniform_set_owner;
 
