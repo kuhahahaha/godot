@@ -39,7 +39,9 @@
 #include "core/typedefs.h"
 
 #ifdef TESTS_ENABLED
-namespace TestCommandQueueBounded { class Access; }
+namespace TestCommandQueueBounded {
+class Access;
+}
 namespace TestCommandQueue {
 class LockAccessor;
 }
@@ -244,29 +246,39 @@ class CommandQueueMT {
 	void _no_op() {}
 
 public:
- // Narrow maintenance path: scalar values cannot run a copying destructor or
- // reenter the queue while its short publication lock is held. Full/contended
- // refusal constructs nothing and preserves the caller's retained work.
- template <typename T, typename M, typename... Args>
- bool try_push_bounded(uint64_t p_max_pending_bytes, T *p_instance, M p_method, Args... p_args) {
-  static_assert(((std::is_integral_v<Args> || std::is_enum_v<Args>) && ...), "Bounded maintenance commands carry only scalar identities.");
-  using CommandType = Command<T, M, false, Args...>;
-  constexpr uint64_t bytes=((sizeof(CommandType)+7U)&~uint64_t(7U))+sizeof(uint64_t);
-  static_assert(sizeof(CommandType)<=MAX_COMMAND_SIZE);
-  if (bytes>p_max_pending_bytes || !mutex.try_lock()) return false;
-  const uint64_t used=command_mem.size();
-  if (used>p_max_pending_bytes-bytes) { mutex.unlock();return false; }
-  alignas(CommandType) char staged_mem[sizeof(CommandType)];
-  CommandType *staged=memnew_placement(staged_mem,CommandType(p_instance,p_method,p_args...));
-  create_command(staged);
-  const auto task=pump_task_id;
-  mutex.unlock();
-  if (task!=WorkerThreadPool::INVALID_TASK_ID) WorkerThreadPool::get_singleton()->notify_yield_over(task);
-  return true;
- }
+	// Narrow maintenance path: scalar values cannot run a copying destructor or
+	// reenter the queue while its short publication lock is held. Full/contended
+	// refusal constructs nothing and preserves the caller's retained work.
+	// Admission is also capped by existing storage, so this path never grows it.
+	template <typename T, typename M, typename... Args>
+	bool try_push_bounded(uint64_t p_max_pending_bytes, T *p_instance, M p_method, Args... p_args) {
+		static_assert(((std::is_integral_v<Args> || std::is_enum_v<Args>) && ...), "Bounded maintenance commands carry only scalar identities.");
+		using CommandType = Command<T, M, false, Args...>;
+		constexpr uint64_t bytes = ((sizeof(CommandType) + 7U) & ~uint64_t(7U)) + sizeof(uint64_t);
+		static_assert(sizeof(CommandType) <= MAX_COMMAND_SIZE);
+		if (bytes > p_max_pending_bytes || !mutex.try_lock()) {
+			return false;
+		}
+		const uint64_t capacity = command_mem.get_capacity();
+		const uint64_t limit = p_max_pending_bytes < capacity ? p_max_pending_bytes : capacity;
+		const uint64_t used = command_mem.size();
+		if (bytes > limit || used > limit - bytes) {
+			mutex.unlock();
+			return false;
+		}
+		alignas(CommandType) char staged_mem[sizeof(CommandType)];
+		CommandType *staged = memnew_placement(staged_mem, CommandType(p_instance, p_method, p_args...));
+		create_command(staged);
+		const auto task = pump_task_id;
+		mutex.unlock();
+		if (task != WorkerThreadPool::INVALID_TASK_ID) {
+			WorkerThreadPool::get_singleton()->notify_yield_over(task);
+		}
+		return true;
+	}
 
- template <typename T, typename M, typename... Args>
- void push(T *p_instance, M p_method, Args &&...p_args) {
+	template <typename T, typename M, typename... Args>
+	void push(T *p_instance, M p_method, Args &&...p_args) {
 		// Standard command, no sync.
 		using CommandType = Command<T, M, false, Args...>;
 		static_assert(sizeof(CommandType) <= MAX_COMMAND_SIZE);

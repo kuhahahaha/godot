@@ -29,6 +29,7 @@
 /**************************************************************************/
 
 #include "core/extension/gdextension_library_exit_guard.h"
+#include "core/extension/gdextension_production_request.h"
 #include "core/object/object.h"
 #include "core/os/memory.h"
 #include "core/os/thread.h"
@@ -142,6 +143,15 @@ void Registry::service_started(uint32_t service) {
 }
 Error Registry::service_stopping(uint32_t service) {
 	MutexLock lock(mutex);
+	if (service & (1u << 5)) {
+		// Keep the original renderer service until every actual RD entity edge
+		// returns, including a quiesced/revoked owner's outstanding cleanup.
+		for (const auto *attachment : production_attachments) {
+			if (attachment && attachment->held_device) {
+				return ERR_BUSY;
+			}
+		}
+	}
 	for (const auto &record : records) {
 		if (!record.occupied || record.guard_enrollment != GuardEnrollment::QUALIFIED) {
 			continue;

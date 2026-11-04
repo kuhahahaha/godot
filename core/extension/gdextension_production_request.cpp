@@ -187,8 +187,15 @@ Error Registry::production_installation_locked(GDExtensionDeviceExitSceneReadyCo
 	auto &d = device_records[device];
 	auto *rd = Object::cast_to<RenderingDevice>(d.object);
 	// Physical main-device comparison is independent of qualification_main.
-	if (!d.live || !d.epoch || !d.session || !rd || rd != RenderingDevice::get_singleton() || !rd->is_main_instance || d.execution_thread != rd->render_thread_id) {
+	if (!d.live || !d.epoch || !d.session || !rd || rd != RenderingDevice::get_singleton() || !rd->is_main_instance || d.execution_thread != rd->render_thread_id || rd->production_finalization_started.load(std::memory_order_acquire) || rd->native_finalization_returned) {
 		return ERR_UNAVAILABLE;
+	}
+	if (!(live_services & (1u << 5))) {
+		return ERR_UNAVAILABLE;
+	}
+	Registry *entity_owner = rd->production_entity_registry.load(std::memory_order_acquire);
+	if (entity_owner && entity_owner != this) {
+		return ERR_UNAUTHORIZED;
 	}
 	holder = nullptr;
 	for (auto *h = record.holders; h; h = h->record_next) {
@@ -196,8 +203,21 @@ Error Registry::production_installation_locked(GDExtensionDeviceExitSceneReadyCo
 			continue;
 		}
 		const auto &scene = record.levels[GDEXTENSION_INITIALIZATION_SCENE];
-		if ((scene.binding_action.serial && h->terminal_action == scene.binding_action.serial && !scene.binding_action.returned) || (scene.user_action.serial && h->terminal_action == scene.user_action.serial && !scene.user_action.returned)) {
-			holder = h;
+		if (!scene.initialized || scene.finalized) {
+			continue;
+		}
+		// The original Host currently acquires its SCENE USER terminal hold.
+		// Either original action is valid only with its own declared RD service.
+		for (const auto *action : { &scene.user_action, &scene.binding_action }) {
+			if (action->serial && h->terminal_action == action->serial && !action->returned &&
+					action->generation == h->generation && action->owner_thread == record.owner_thread &&
+					action->level == GDEXTENSION_INITIALIZATION_SCENE &&
+					action->kind == (action == &scene.user_action ? TerminalActionKind::LEVEL_USER : TerminalActionKind::LEVEL_BINDING) &&
+					(action->services & (1u << 5)) &&
+					action->wrapper && action->wrapper == record.original_initialization.deinitialize &&
+					action->userdata == record.original_initialization.userdata) {
+				holder = h;
+			}
 		}
 	}
 	return holder ? OK : ERR_UNAUTHORIZED;
@@ -295,6 +315,14 @@ GDExtensionDeviceSessionResultV1 Registry::production_accept(const GDExtensionDe
 	attachment->holder = holder;
 	attachment->quote = quote;
 	attachment->arena = arena;
+	attachment->held_device = Object::cast_to<RenderingDevice>(d.object);
+	attachment->terminal_action = holder->terminal_action;
+	attachment->entity_next = attachment->held_device->production_entity_holds;
+	if (attachment->entity_next) {
+		attachment->entity_next->entity_previous = attachment;
+	}
+	attachment->held_device->production_entity_holds = attachment;
+	attachment->held_device->production_entity_registry.store(this, std::memory_order_release);
 	++record.private_refs;
 	++d.refs;
 	++holder->production_children;
@@ -332,6 +360,9 @@ Error Registry::production_attachment_locked(GDExtensionProductionAttachmentRefV
 		rd = Object::cast_to<RenderingDevice>(d.object);
 		if (admit && (!d.live || !rd || rd != RenderingDevice::get_singleton() || !rd->is_main_instance)) {
 			return ERR_UNAVAILABLE;
+		}
+		if (admit && rd->production_finalization_started.load(std::memory_order_acquire)) {
+			return ERR_BUSY;
 		}
 		out = a;
 		return OK;
@@ -395,8 +426,8 @@ GDExtensionDeviceSessionResultV1 Registry::production_open(GDExtensionDeviceExit
 	if (view->record != a->library || !RegistrationContext::current || RegistrationContext::current->level_phase != LevelPhase::SCENE_READY || records[a->library].scene_ready_state != Record::SceneReadyState::IN_FRAME) {
 		return result(ERR_UNAUTHORIZED, 14);
 	}
-	// Session refs retain metadata, not the original K03 entity holder or
-	// operation-window receiver. The accepted allocation remains closeable.
+	// The accepted attachment holds the original entity. That lifetime edge
+	// does not supply B's original scope or the operation-window receiver.
 	return result(ERR_UNAVAILABLE, GDEXTENSION_DEVICE_SESSION_REASON_NATIVE_UNSUPPORTED_V1);
 }
 Error Registry::production_reserve_metadata_locked(ProductionAttachment &a, const GDExtensionProductionOperationV1 &op, const GDExtensionProductionCapacityV1 &c, const GDExtensionProductionActionV1 *actions, uint32_t action_count, const GDExtensionProductionResourceV1 *resources, uint32_t resource_count, const GDExtensionProductionUseV1 *uses, uint32_t use_count, const GDExtensionProductionReadbackV1 *readbacks, uint32_t readback_count, ProductionRequest *&out) {
@@ -904,6 +935,38 @@ GDExtensionDeviceSessionResultV1 Registry::production_installation_observe(GDExt
 	*out = { ABI, uint32_t(a->closing ? GDEXTENSION_PRODUCTION_INSTALL_RETURN_PENDING_V1 : GDEXTENSION_PRODUCTION_INSTALL_ACCEPTED_V1), 0, a->quote.allocation_bytes, 0, result(a->children ? ERR_BUSY : OK) };
 	return result(OK);
 }
+Error Registry::production_entity_return_locked(ProductionAttachment &attachment) {
+	auto *rd = attachment.held_device;
+	if (attachment.children) {
+		return ERR_BUSY;
+	}
+	if (!rd || device_records[attachment.device].object != rd || device_records[attachment.device].epoch != attachment.epoch ||
+			rd->production_entity_registry.load(std::memory_order_acquire) != this || !attachment.holder ||
+			attachment.holder->generation != attachment.library_generation || attachment.holder->terminal_action != attachment.terminal_action ||
+			!attachment.holder->production_children) {
+		return ERR_INVALID_DATA;
+	}
+	if ((attachment.entity_previous && attachment.entity_previous->entity_next != &attachment) ||
+			(!attachment.entity_previous && rd->production_entity_holds != &attachment) ||
+			(attachment.entity_next && attachment.entity_next->entity_previous != &attachment)) {
+		return ERR_INVALID_DATA;
+	}
+	if (attachment.entity_previous) {
+		attachment.entity_previous->entity_next = attachment.entity_next;
+	} else {
+		rd->production_entity_holds = attachment.entity_next;
+	}
+	if (attachment.entity_next) {
+		attachment.entity_next->entity_previous = attachment.entity_previous;
+	}
+	if (!rd->production_entity_holds) {
+		rd->production_entity_registry.store(nullptr, std::memory_order_release);
+	}
+	attachment.held_device = nullptr;
+	attachment.entity_previous = nullptr;
+	attachment.entity_next = nullptr;
+	return OK;
+}
 GDExtensionDeviceSessionResultV1 Registry::production_close(GDExtensionProductionAttachmentRefV1 ref) {
 	MutexLock lock(mutex);
 	ProductionAttachment *a = nullptr;
@@ -928,6 +991,10 @@ GDExtensionDeviceSessionResultV1 Registry::production_close(GDExtensionProductio
 	}
 	if (a->children) {
 		return result(ERR_BUSY, 16);
+	}
+	e = production_entity_return_locked(*a);
+	if (e != OK) {
+		return result(e, 16);
 	}
 	const uint32_t library = a->library, device = a->device;
 	auto &record = records[library];

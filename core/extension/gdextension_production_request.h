@@ -166,6 +166,11 @@ class ProductionAttachment {
 	uint64_t serial = 0, epoch = 0, producer_serial = 0, library_generation = 0;
 	uint32_t library = 0, device = 0;
 	HolderRetirement *holder = nullptr;
+	// Intrusive entity edge owned by this same accepted arena. RD destructive
+	// finalize and Object destruction consult the reverse link before teardown.
+	RenderingDevice *held_device = nullptr;
+	ProductionAttachment *entity_previous = nullptr, *entity_next = nullptr;
+	uint64_t terminal_action = 0;
 	GDExtensionProductionMetadataQuoteV1 quote = {};
 	void *arena = nullptr;
 	ProductionRequest *requests = nullptr;
