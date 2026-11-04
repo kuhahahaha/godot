@@ -1,0 +1,8 @@
+INIT: SPIR-V compile/validate/layout PASS
+VALIDATE: SPIR-V compile/validate/layout PASS
+FINALIZE: SPIR-V compile/validate/layout PASS
+40 CPU production-control/interval cases PASS (sequential, no GPU claim)
+ignore_source_validity: expected RED confirmed
+ignore_bounds: expected RED confirmed
+ignore_history: expected RED confirmed
+{"gpu_execution": false, "provenance_bridge": false, "component_only": true}
