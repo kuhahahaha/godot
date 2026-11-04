@@ -641,11 +641,11 @@ void main() {
 							vec3 pos2 = (vec3(uvw_pos.x + DELTA, texture(sampler2D(height_field_texture, SAMPLER_LINEAR_CLAMP), uvw_pos.xz + vec2(DELTA, 0)).r, uvw_pos.z) * 2.0 - 1.0) * FRAME.colliders[i].extents;
 							vec3 pos3 = (vec3(uvw_pos.x, texture(sampler2D(height_field_texture, SAMPLER_LINEAR_CLAMP), uvw_pos.xz + vec2(0, DELTA)).r, uvw_pos.z + DELTA) * 2.0 - 1.0) * FRAME.colliders[i].extents;
 
-							normal = normalize(cross(pos1 - pos2, pos1 - pos3));
-							float local_y = (vec3(local_pos / FRAME.colliders[i].extents) * 0.5 + 0.5).y;
+							vec3 local_normal = normalize(cross(pos1 - pos3, pos1 - pos2));
 
 							col = true;
-							depth = dot(normal, pos1) - dot(normal, local_pos_bottom);
+							depth = dot(local_normal, pos1 - local_pos_bottom);
+							normal = normalize(mat3(FRAME.colliders[i].transform) * local_normal);
 						}
 
 					} break;
