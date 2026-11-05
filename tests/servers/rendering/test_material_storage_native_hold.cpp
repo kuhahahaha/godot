@@ -220,18 +220,18 @@ class TestMaterialStorageNativeHoldAccess {
 				CHECK(sets[0][2].type == UNIFORM_TYPE_SAMPLER);
 				CHECK(sets[0][2].binding == 2);
 			}
-			const uint32_t bytes = sets[0][0].length;
+			const uint32_t ubo_bytes = sets[0][0].length;
 			++shader_creates;
 			if (shader_creates == 1) {
-				CHECK(bytes == 16);
+				CHECK(ubo_bytes == 16);
 				return ShaderID(80);
 			}
 			if (shader_creates == 2) {
-				CHECK(bytes == 32);
+				CHECK(ubo_bytes == 32);
 				return ShaderID(86);
 			}
 			CHECK(shader_creates == 3);
-			CHECK(bytes == 16);
+			CHECK(ubo_bytes == 16);
 			return ShaderID(88);
 		}
 		uint32_t shader_get_layout_hash(ShaderID id) override {
