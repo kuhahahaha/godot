@@ -1,0 +1,216 @@
+{
+  "scope": "Detached complete Mesh Surface directory custody through the original accepted request and bounded OBSERVE executor; private component fixture only",
+  "base_commit": "3a013cc17abef284f3784a4983b75ad032462ed7",
+  "source": {
+    "base_commit": "3a013cc17abef284f3784a4983b75ad032462ed7",
+    "patch_sha256": "6874e8b74026c1719bd6b62327feddb076ea57e1bcace1a253cf84946af2120d",
+    "files": [
+      {
+        "path": "servers/rendering/rendering_device.h",
+        "baseline_sha256": "d7928b3a37f7396f099238da1698a52c04dd6b0c5e73982078e1b5efb8a72b5a",
+        "final_sha256": "f29b7a239eca8ec269191ee1bb482e0d4be9af067df3d7f9e9c22fde76f16f0d"
+      },
+      {
+        "path": "servers/rendering/rendering_device_immutable_hold.cpp",
+        "baseline_sha256": "cd6c633a09502b3078e0ba17dec4e8e44e6815ac0f16c24a31defa902a179a3d",
+        "final_sha256": "e670882f4423505da92abb9058b4b0543f24e27e5d83658eeed723991fe3a2c9"
+      },
+      {
+        "path": "servers/rendering/renderer_rd/storage_rd/mesh_storage.h",
+        "baseline_sha256": "3db128654c8f1444afe88c50cb292e8912e17f35abe0d93e1dbf8bb1eacdcb3c",
+        "final_sha256": "50dbc3d2be3684c1fe7a51518145c595dfca97f1c4482823abdea495671f56d4"
+      },
+      {
+        "path": "servers/rendering/renderer_rd/storage_rd/mesh_storage.cpp",
+        "baseline_sha256": "b0cf8bc72d5d882efdec22f19d5bd15e1c58d14d2dcdebdc8302a69f754b37b8",
+        "final_sha256": "8f1c2b579994adf1f107ff57cbb14fb567a38c87dcb50c431efd89965bc4588d"
+      },
+      {
+        "path": "tests/core/extension/test_production_request.cpp",
+        "baseline_sha256": "c92c37ff5deacaa08aa4407b1d44e0c69fde9f5d464811d817b21e18afc3d19b",
+        "final_sha256": "abeda652d4600fdcea191225d2cde44c12cae844ae9878841b905920e727772b"
+      },
+      {
+        "path": "core/extension/gdextension_production_request.h",
+        "baseline_sha256": "bb296b5dd65f8645f2516ed864b5adf1b3b67b8efe3c6c4061536332257bbb88",
+        "final_sha256": "6d218556e16cc6b24ebb334ded9127001059bf3906fa7f2441f851eb2a2fa631"
+      },
+      {
+        "path": "core/extension/gdextension_production_owned.cpp",
+        "baseline_sha256": "e13c8ec7152439842fcabb7b098eba5655ad814de876a3e297449925214e9b4e",
+        "final_sha256": "44d9d7954a8d46349c690fdaa08ae051160f890f9ab6fa116cd316cdfe5fff54"
+      },
+      {
+        "path": "tests/servers/rendering/test_mesh_storage_external.cpp",
+        "baseline_sha256": "63f09bf680adcb5b89d185fdef4f908eb51466253610bbb38718c9b381e36d95",
+        "final_sha256": "1ddaf32dfd788780e1b14ad0398edd0c5e93c07eebed30441ac6480359a96711"
+      },
+      {
+        "path": "core/extension/gdextension_library_exit_guard.h",
+        "baseline_sha256": "c9262ee5ba542a8804171a115b1dc99324be65796d051bc7a12a745cabb1c050",
+        "final_sha256": "9e1c5a44bff0c9b61c99bdbea64b7fb4fef6e4865449f1ef2cd20be1a4f0b4ac"
+      },
+      {
+        "path": "core/extension/gdextension_production_request.cpp",
+        "baseline_sha256": "50576c230db1c99db77b035c74f9592ef32bf5c7f5b25b48b0c191f4bec08dbf",
+        "final_sha256": "84b4afca5f292fdb9be381747524c2691f2ad48ebdb3f35c886d14a5becfe9dc"
+      }
+    ]
+  },
+  "red": {
+    "exit": 1,
+    "host_sha256": "c8e7c83cbf692a2e7189d1efd13e0c6ce39331c28f5e34552bd0492ffc07244a",
+    "counts": {
+      "OverallResultsAsserts": {
+        "successes": "2806",
+        "failures": "4"
+      },
+      "OverallResultsTestCases": {
+        "successes": "0",
+        "failures": "1"
+      }
+    },
+    "parse_error": null,
+    "stdout_bytes": 0,
+    "stderr_bytes": 0
+  },
+  "green": {
+    "host_sha256": "02f5a8f85722e0a6b20ba4927e6b761528f9ed1493f7244073842c9cd48df2fb",
+    "results": {
+      "closure": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "2790",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "1",
+            "failures": "0"
+          }
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "request": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "15134",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "22",
+            "failures": "0"
+          }
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "material": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "983",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "3",
+            "failures": "0"
+          }
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "mesh": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "371",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "2",
+            "failures": "0"
+          }
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "public": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "875",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "2",
+            "failures": "0"
+          }
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "full": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "520607",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "2071",
+            "failures": "0"
+          }
+        },
+        "stdout_bytes": 571,
+        "stderr_bytes": 4017
+      }
+    }
+  },
+  "build_command": [
+    "/Users/macbookair/.local/bin/scons",
+    "-Q",
+    "tests=yes",
+    "platform=macos",
+    "target=editor",
+    "module_particles_runtime_tests_enabled=yes",
+    "-j3"
+  ],
+  "physics_environment": {
+    "GODOT_TEST_PHYSICS_3D_BACKEND": "GodotPhysics3D",
+    "GODOT_TEST_PHYSICS_3D_THREADED": "0"
+  },
+  "reviews": [
+    {
+      "path": "/tmp/b4-mesh-directory-review-20261105/V3_REVIEW.json",
+      "sha256": "d8fde419cf3c623bfac89092ffa508d13ea414081b4fc069e8bca02716c08c07"
+    },
+    {
+      "path": "/tmp/b4-mesh-v3-hook-dispatch/INDEPENDENT_REVIEW.json",
+      "sha256": "c1d64b0e4b4212057142f9ce5b67ba0aec2107a3ecadafca8db7df895c24e061"
+    },
+    {
+      "path": "/tmp/b4-mesh-v3-capacity-boundary/INDEPENDENT_REVIEW.json",
+      "sha256": "82ad5e5d2752e8c94aeac1a80d0ec284f7d48c27d42dfb29146c8ed78aecb4e1"
+    }
+  ],
+  "style": {
+    "checks": 10,
+    "exit": 0,
+    "receipt_sha256": "ff41c3114ac28cbc9d471d60b4297cadb24f41163f34adc88ae2e1d0674c2b06"
+  },
+  "failed_investigations": [
+    "V1 runtime self-deadlock from recursively acquiring binary Registry mutex; terminated -15, not expected RED",
+    "V3 ordinary directory return blocked by test driver phase and service reachability; runtime78 and incomplete XML retained",
+    "Intermediate forced-maintenance/fixture callback and capacity assumptions failed; not accepted or committed"
+  ],
+  "evidence_directory": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-mesh-directory-runtime-20261105",
+  "limits": [
+    "No full Parts/P4 owner or public Mesh production factory acceptance",
+    "No live-before-RECORD binding, late-VA integration, source seal, Host receiver or GPU grant",
+    "Full suite exits0 but retains stdout571/stderr4017; no diagnostic-clean claim",
+    "Existing arena layout/capacity and external borrowed backing ownership remain authoritative"
+  ]
+}

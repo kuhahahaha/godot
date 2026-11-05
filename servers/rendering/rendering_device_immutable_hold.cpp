@@ -492,13 +492,232 @@ Error RenderingDevice::native_immutable_hold_release(NativeImmutableHold &hold) 
 	return OK;
 }
 
+Error RenderingDevice::_production_output_directory_capture(GDExtensionProductionPhysicalContextRefV1 physical_context, GDExtensionDeviceExit::ProductionOutputPin &pin, const VectorView<RID> &roots, uint32_t limit, NativeOutputGroupBinding &binding) {
+	using namespace GDExtensionDeviceExit;
+	if (!pin.registry || !binding.is_empty()) {
+		return ERR_INVALID_PARAMETER;
+	}
+	Registry &registry = *pin.registry;
+	MutexLock registry_lock(registry.mutex);
+	if (!registry.production_output_pin_matches_locked(pin, { registry.instance, pin.request_serial }, *this)) {
+		return ERR_UNAUTHORIZED;
+	}
+	ProductionRequest *actual_request = nullptr;
+	RenderingDevice *actual_device = nullptr;
+	const Error source = registry.production_physical_request_locked(physical_context, { registry.instance, pin.request_serial }, actual_request, actual_device, true);
+	if (source != OK || actual_request != pin.request || actual_device != this) {
+		return source == OK ? ERR_UNAUTHORIZED : source;
+	}
+	// Registry-held RD acquisition must never block. Registry is binary;
+	// locked helpers retain that original lock, while RD alone is recursive.
+	if (!_thread_safe_.try_lock()) {
+		return ERR_BUSY;
+	}
+	struct Unlock {
+		Mutex &mutex;
+		~Unlock() { mutex.unlock(); }
+	} unlock{ _thread_safe_ };
+	NativeImmutableHold physical;
+	const Error acquired = native_immutable_hold_acquire(roots, physical, limit);
+	if (acquired != OK) {
+		return acquired;
+	}
+	uint64_t group = 0;
+	const Error captured = _production_output_hold_capture_locked(physical_context, pin, physical, group);
+	if (captured != OK) {
+		// Acquisition rejected every retiring root. The continuous RD lock and
+		// callback-free capture prevent any new retirement before rollback, so
+		// this returns only the just-added shares and invokes no native cleanup.
+		const Error released = native_immutable_hold_release(physical);
+		CRASH_COND(released != OK);
+		return captured;
+	}
+	binding.registry_instance = registry.instance;
+	binding.request_serial = pin.request_serial;
+	binding.pin_serial = pin.serial;
+	binding.group_serial = group;
+	return OK;
+}
+
+Error RenderingDevice::_production_output_directory_return(GDExtensionDeviceExit::ProductionOutputPin &pin, NativeOutputGroupBinding &binding, const GDExtensionProductionServiceBudgetV1 &budget, GDExtensionDeviceExit::ProductionServiceUsage &usage) {
+	using namespace GDExtensionDeviceExit;
+	if (!pin.registry || binding.is_empty()) {
+		return ERR_INVALID_PARAMETER;
+	}
+	Registry &registry = *pin.registry;
+	MutexLock registry_lock(registry.mutex);
+	if (binding.registry_instance != registry.instance || binding.request_serial != pin.request_serial || binding.pin_serial != pin.serial || !registry.production_output_pin_matches_locked(pin, { registry.instance, pin.request_serial }, *this)) {
+		return ERR_UNAUTHORIZED;
+	}
+	auto &request = *pin.request;
+	auto &control = request.control;
+	if (control.state != ProductionControlState::EXECUTING || control.input.kind != ProductionControlKind::OBSERVE || control.input.request_serial != request.serial || &budget != &control.input.budget || &usage != &control.output.service_usage) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (!budget.controls || !budget.passes || !budget.receipts || usage.passes >= MIN(budget.passes, 64u) || usage.receipts >= MIN(budget.receipts, 128u) || !budget.deadline_micros || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros || request.source_device_lost) {
+		return ERR_BUSY;
+	}
+	const uint32_t begin = request.use_count + request.binding_used;
+	ProductionUseCell *group = nullptr;
+	for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+		auto &cell = request.uses[i];
+		if (cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && cell.disposal_group_serial == binding.group_serial && cell.disposal_group_pin_serial == pin.serial) {
+			group = &cell;
+			break;
+		}
+	}
+	if (!group) {
+		return ERR_INVALID_DATA;
+	}
+	if (!group->disposal_group_release) {
+		if (request.capture_inflight != 1) {
+			return ERR_BUSY;
+		}
+		GDExtensionProductionReportV1 source = {};
+		const Error projected = registry.production_report_contents_locked(request, source);
+		if (projected != OK) {
+			return projected;
+		}
+		// The one original executor capture pin retains this boundary; another
+		// callback/capture cannot begin a second return on top of it.
+		if (request.capture_inflight != 1 || request.compute_list_open || (!request.cancelled && request.next_action != request.action_count) || source.possible_obligations || source.known_obligations != source.complete_obligations) {
+			return ERR_BUSY;
+		}
+		if (!_thread_safe_.try_lock()) {
+			return ERR_BUSY;
+		}
+		struct Unlock {
+			Mutex &mutex;
+			~Unlock() { mutex.unlock(); }
+		} unlock{ _thread_safe_ };
+		for (uint32_t command = 0; command < draw_graph.qualification_command_count(); ++command) {
+			bool captured = false;
+			for (uint32_t i = 0; i < request.graph_count; ++i) {
+				captured |= registry.production_output_graph_command_locked(request, *this, i, command);
+			}
+			if (!captured) {
+				return ERR_BUSY;
+			}
+		}
+		if (OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros) {
+			return ERR_BUSY;
+		}
+		++usage.passes;
+		usage.controls = 1;
+		group->disposal_group_release = true;
+	}
+	ProductionDisposalObservation observation;
+	const Error observed = _production_output_hold_returned_locked(pin, binding.group_serial, observation);
+	if (observed != OK || !observation.settled) {
+		return observed == OK ? ERR_BUSY : observed;
+	}
+	if (usage.passes >= MIN(budget.passes, 64u) || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros) {
+		return ERR_BUSY;
+	}
+	++usage.passes;
+	usage.controls = 1;
+	binding.registry_instance = binding.request_serial = binding.pin_serial = binding.group_serial = 0;
+	return OK;
+}
+
+Error RenderingDevice::_production_output_directory_mark_root(GDExtensionDeviceExit::ProductionOutputPin &pin, const NativeOutputGroupBinding &binding, RID rid, bool owned, const GDExtensionProductionServiceBudgetV1 &budget, GDExtensionDeviceExit::ProductionServiceUsage &usage) {
+	using namespace GDExtensionDeviceExit;
+	if (!pin.registry || binding.is_empty()) {
+		return ERR_INVALID_PARAMETER;
+	}
+	Registry &registry = *pin.registry;
+	MutexLock registry_lock(registry.mutex);
+	if (binding.registry_instance != registry.instance || binding.request_serial != pin.request_serial || binding.pin_serial != pin.serial || !registry.production_output_pin_matches_locked(pin, { registry.instance, pin.request_serial }, *this)) {
+		return ERR_UNAUTHORIZED;
+	}
+	auto &request = *pin.request;
+	auto &control = request.control;
+	// A copied budget or a separate usage object cannot authorize another pass.
+	if (control.state != ProductionControlState::EXECUTING || control.input.kind != ProductionControlKind::OBSERVE || control.input.request_serial != request.serial || &budget != &control.input.budget || &usage != &control.output.service_usage) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (!budget.controls || !budget.passes || !budget.receipts || usage.passes >= MIN(budget.passes, 64u) || usage.receipts >= MIN(budget.receipts, 128u) || !budget.deadline_micros || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros || request.source_device_lost) {
+		return ERR_BUSY;
+	}
+	if (rid.is_null()) {
+		if (request.capture_inflight != 1 || request.compute_list_open || (!request.cancelled && request.next_action != request.action_count)) {
+			return ERR_BUSY;
+		}
+		GDExtensionProductionReportV1 source = {};
+		const Error projected = registry.production_report_contents_locked(request, source);
+		if (projected != OK) {
+			return projected;
+		}
+		if (source.possible_obligations || source.known_obligations != source.complete_obligations) {
+			return ERR_BUSY;
+		}
+	}
+	if (!_thread_safe_.try_lock()) {
+		return ERR_BUSY;
+	}
+	struct Unlock {
+		Mutex &mutex;
+		~Unlock() { mutex.unlock(); }
+	} unlock{ _thread_safe_ };
+	if (native_disposal_budget || native_disposal_active || draw_list.active || compute_list.active || raytracing_list.active) {
+		return ERR_BUSY;
+	}
+	const uint32_t begin = request.use_count + request.binding_used;
+	bool original_group = false;
+	for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+		const auto &cell = request.uses[i];
+		if (cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && cell.disposal_group_serial == binding.group_serial && cell.disposal_group_pin_serial == pin.serial && !cell.disposal_group_release && !cell.disposal_group_dropped) {
+			original_group = true;
+		}
+	}
+	if (!original_group) {
+		return ERR_UNAUTHORIZED;
+	}
+	bool *retiring = nullptr;
+	if (rid.is_valid()) {
+		uint32_t kind;
+		uint64_t serial, driver_id;
+		auto **head = _production_disposal_head(rid, kind, serial, driver_id);
+		const auto *counter = _native_immutable_counter(rid, &retiring);
+		if (!head || !counter || !*counter || !retiring) {
+			return ERR_INVALID_DATA;
+		}
+		bool original_member = false;
+		for (const auto *node = *head; node; node = node->next) {
+			original_member |= node->request == &request && node->request_serial == request.serial && node->group == binding.group_serial && node->rid == rid.get_id() && node->kind == kind && node->serial == serial && node->native_driver_id == driver_id && node->state.load(std::memory_order_acquire) == 1 && !node->counter_dropped && (!owned || !node->qualified_borrow);
+		}
+		if (!original_member || (owned && !_production_output_callback_supported(rid))) {
+			return ERR_UNAVAILABLE;
+		}
+	}
+	if (OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros) {
+		return ERR_BUSY;
+	}
+	// Each actual directory ordinal consumes one admitted work pass, including
+	// null/borrowed entries. Only a genuine owned root changes its retire flag.
+	// No traversal, callback, native free or return publication happens here.
+	++usage.passes;
+	usage.controls = 1;
+	if (rid.is_valid() && owned) {
+		*retiring = true;
+	}
+	return OK;
+}
+
 Error RenderingDevice::_production_output_hold_capture(GDExtensionProductionPhysicalContextRefV1 physical_context, GDExtensionDeviceExit::ProductionOutputPin &pin, NativeImmutableHold &hold, uint64_t &group_serial) {
+	if (!pin.registry) {
+		return ERR_INVALID_PARAMETER;
+	}
+	MutexLock registry_lock(pin.registry->mutex);
+	return _production_output_hold_capture_locked(physical_context, pin, hold, group_serial);
+}
+
+Error RenderingDevice::_production_output_hold_capture_locked(GDExtensionProductionPhysicalContextRefV1 physical_context, GDExtensionDeviceExit::ProductionOutputPin &pin, NativeImmutableHold &hold, uint64_t &group_serial) {
 	using namespace GDExtensionDeviceExit;
 	if (group_serial || hold.device != this || hold.pins_returned || hold.resources.is_empty() || !pin.registry) {
 		return ERR_INVALID_PARAMETER;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock registry_lock(registry.mutex);
 	if (!registry.production_output_pin_matches_locked(pin, { registry.instance, pin.request_serial }, *this)) {
 		return ERR_UNAUTHORIZED;
 	}
@@ -708,13 +927,21 @@ Error RenderingDevice::_production_output_hold_begin_return(GDExtensionDeviceExi
 	return ERR_DOES_NOT_EXIST;
 }
 Error RenderingDevice::_production_output_hold_returned(GDExtensionDeviceExit::ProductionOutputPin &pin, uint64_t serial, GDExtensionDeviceExit::ProductionDisposalObservation &observation) {
+	if (!pin.registry) {
+		observation = {};
+		return ERR_INVALID_PARAMETER;
+	}
+	MutexLock registry_lock(pin.registry->mutex);
+	return _production_output_hold_returned_locked(pin, serial, observation);
+}
+
+Error RenderingDevice::_production_output_hold_returned_locked(GDExtensionDeviceExit::ProductionOutputPin &pin, uint64_t serial, GDExtensionDeviceExit::ProductionDisposalObservation &observation) {
 	using namespace GDExtensionDeviceExit;
 	observation = {};
 	if (!pin.registry || !serial) {
 		return ERR_INVALID_PARAMETER;
 	}
 	Registry &registry = *pin.registry;
-	MutexLock lock(registry.mutex);
 	if (!registry.production_output_pin_matches_locked(pin, { registry.instance, pin.request_serial }, *this)) {
 		return ERR_UNAUTHORIZED;
 	}

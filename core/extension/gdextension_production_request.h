@@ -77,6 +77,12 @@ public:
 	bool is_empty() const { return registry == nullptr; }
 };
 
+#ifdef TESTS_ENABLED
+// Component fixture only, on the genuine original OBSERVE dispatch. The
+// original arena capture pin remains held across this callback boundary.
+extern thread_local Error (*test_production_before_maintenance)(ProductionRequest &, RenderingDevice &);
+#endif
+
 class ProductionAttachment;
 class ProductionRequest;
 

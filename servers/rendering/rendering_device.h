@@ -526,6 +526,33 @@ public:
 		bool is_valid() const { return device && !pins_returned; }
 		bool is_active() const { return device != nullptr; }
 	};
+	// Bound only by the original private Mesh directory capture transaction.
+	// The numeric projections cannot create custody; the actual accepted group
+	// retains the physical shares and the same original output pin retains it.
+	class NativeOutputGroupBinding {
+		friend class RenderingDevice;
+		friend class RendererRD::MeshStorage;
+		uint64_t registry_instance = 0, request_serial = 0, pin_serial = 0, group_serial = 0;
+
+	public:
+		NativeOutputGroupBinding() = default;
+		NativeOutputGroupBinding(const NativeOutputGroupBinding &) = delete;
+		NativeOutputGroupBinding &operator=(const NativeOutputGroupBinding &) = delete;
+		NativeOutputGroupBinding(NativeOutputGroupBinding &&other) { *this = static_cast<NativeOutputGroupBinding &&>(other); }
+		NativeOutputGroupBinding &operator=(NativeOutputGroupBinding &&other) {
+			if (this != &other) {
+				CRASH_COND(group_serial);
+				registry_instance = other.registry_instance;
+				request_serial = other.request_serial;
+				pin_serial = other.pin_serial;
+				group_serial = other.group_serial;
+				other.registry_instance = other.request_serial = other.pin_serial = other.group_serial = 0;
+			}
+			return *this;
+		}
+		~NativeOutputGroupBinding() { CRASH_COND(group_serial); }
+		bool is_empty() const { return group_serial == 0; }
+	};
 	Error native_immutable_hold_acquire(const VectorView<RID> &p_roots, NativeImmutableHold &r_hold, uint32_t p_max_resources = 256);
 	Error native_immutable_hold_release(NativeImmutableHold &r_hold);
 	bool native_immutable_is_render_thread() const;
@@ -1553,6 +1580,11 @@ private:
 	Error _production_output_owned_cancel_unbound(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t);
 	bool _production_output_callback_supported(RID);
 	void _production_output_set_material_origin(RID, RID, uint64_t);
+	Error _production_output_directory_capture(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, const VectorView<RID> &, uint32_t, NativeOutputGroupBinding &);
+	Error _production_output_directory_return(GDExtensionDeviceExit::ProductionOutputPin &, NativeOutputGroupBinding &, const GDExtensionProductionServiceBudgetV1 &, GDExtensionDeviceExit::ProductionServiceUsage &);
+	Error _production_output_directory_mark_root(GDExtensionDeviceExit::ProductionOutputPin &, const NativeOutputGroupBinding &, RID, bool, const GDExtensionProductionServiceBudgetV1 &, GDExtensionDeviceExit::ProductionServiceUsage &);
+	Error _production_output_hold_capture_locked(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, NativeImmutableHold &, uint64_t &);
+	Error _production_output_hold_returned_locked(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, GDExtensionDeviceExit::ProductionDisposalObservation &);
 	Error _production_output_hold_capture(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, NativeImmutableHold &, uint64_t &);
 	bool _production_output_hold_contains(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, RID);
 	Error _production_output_hold_begin_return(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t);

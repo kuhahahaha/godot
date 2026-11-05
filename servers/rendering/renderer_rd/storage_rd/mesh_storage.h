@@ -47,7 +47,10 @@ class RenderCaptureTestAccess;
 
 namespace RendererRD {
 
+class ParticlesStorage;
+
 class MeshStorage : public RendererMeshStorage {
+	friend class ParticlesStorage;
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
 	friend class ::RenderCaptureTestAccess;
 #endif
@@ -76,8 +79,12 @@ private:
 #ifdef TESTS_ENABLED
 	friend class TestMultimeshRebuildAccess;
 	friend class TestMeshStorageExternalAccess;
+	friend struct ::TestProductionRequest::Access;
 #endif
 	static MeshStorage *singleton;
+#ifdef TESTS_ENABLED
+	bool native_hold_test_minimal = false;
+#endif
 
 	RID default_rd_storage_buffer;
 
@@ -93,6 +100,7 @@ private:
 			RSE::PrimitiveType primitive = RSE::PRIMITIVE_POINTS;
 			bool external = false;
 			uint32_t immutable_holds = 0;
+			uint32_t output_directory_holds = 0;
 			bool immutable_retired = false;
 			uint64_t external_generation = 0;
 			uint64_t current_allocation_generation = 0;
@@ -408,6 +416,10 @@ public:
 	static MeshStorage *get_singleton();
 
 	MeshStorage();
+#ifdef TESTS_ENABLED
+	struct NativeHoldTestTag {};
+	explicit MeshStorage(NativeHoldTestTag);
+#endif
 	virtual ~MeshStorage();
 
 	bool free(RID p_rid);
@@ -450,6 +462,11 @@ public:
 	// A strong original native geometry owner, not an output or material grant.
 	// Return explicitly only after the packet's original accepted uses close.
 	class NativeSurfaceHold {
+		bool physical_transferred = false, metadata_returned = false, metadata_return_active = false;
+		bool directory_frozen = false;
+		RD::NativeOutputGroupBinding retirement_group;
+		uint32_t retirement_root_count = 0, retirement_mark_cursor = 0;
+		bool retirement_directory_returned = false;
 		friend class MeshStorage;
 		Mesh::Surface *surface = nullptr;
 		RenderingDevice *device = nullptr;
@@ -458,6 +475,9 @@ public:
 		RD::VertexFormatID vertex_format = 0;
 		RSE::PrimitiveType primitive = RSE::PRIMITIVE_TRIANGLES;
 		uint32_t vertex_count = 0, index_count = 0;
+		uint64_t surface_format = 0;
+		AABB surface_aabb;
+		Vector4 surface_uv_scale;
 		RID material; // Selection only; requires the independent native material hold.
 		uint64_t current_generation = 0, previous_generation = 0;
 
@@ -480,8 +500,23 @@ public:
 			primitive = other.primitive;
 			vertex_count = other.vertex_count;
 			index_count = other.index_count;
+			surface_format = other.surface_format;
+			surface_aabb = other.surface_aabb;
+			surface_uv_scale = other.surface_uv_scale;
 			material = other.material;
 			current_generation = other.current_generation;
+			physical_transferred = other.physical_transferred;
+			metadata_returned = other.metadata_returned;
+			metadata_return_active = other.metadata_return_active;
+			directory_frozen = other.directory_frozen;
+			other.directory_frozen = false;
+			retirement_group = static_cast<RD::NativeOutputGroupBinding &&>(other.retirement_group);
+			retirement_root_count = other.retirement_root_count;
+			retirement_mark_cursor = other.retirement_mark_cursor;
+			other.retirement_root_count = other.retirement_mark_cursor = 0;
+			retirement_directory_returned = other.retirement_directory_returned;
+			other.retirement_directory_returned = false;
+			other.physical_transferred = other.metadata_returned = other.metadata_return_active = false;
 			previous_generation = other.previous_generation;
 			other.surface = nullptr;
 			other.device = nullptr;
@@ -496,12 +531,39 @@ public:
 		uint32_t get_vertex_count() const { return is_valid() ? vertex_count : 0; }
 		uint32_t get_index_count() const { return is_valid() ? index_count : 0; }
 		RID get_material_selection() const { return is_valid() ? material : RID(); }
+		uint64_t get_format() const { return is_valid() ? surface_format : 0; }
+		AABB get_aabb() const { return is_valid() ? surface_aabb : AABB(); }
+		Vector4 get_uv_scale() const { return is_valid() ? surface_uv_scale : Vector4(); }
 	};
-	Error mesh_surface_hold_acquire(RID p_mesh, uint32_t p_surface, uint64_t p_input_mask, bool p_motion, bool p_point_size_emulated, uint32_t p_lod, NativeSurfaceHold &r_hold);
-	static Error mesh_surface_hold_release(NativeSurfaceHold &r_hold);
 
 private:
-	static Error _mesh_surface_hold_acquire(Mesh::Surface *p_surface, uint64_t p_input_mask, bool p_motion, bool p_point_size_emulated, uint32_t p_lod, NativeSurfaceHold &r_hold);
+	// Only synchronous original Core group capture may borrow this address.
+	// Core must move the actual hold, never save a wrapper pointer or clone RIDs.
+	static RD::NativeImmutableHold *_native_hold_transfer_source(NativeSurfaceHold &);
+	static Error _native_hold_mark_transferred(NativeSurfaceHold &);
+	static Error _native_hold_begin_return(NativeSurfaceHold &);
+	// Freeze only a detached old Surface, outside Registry/RD locks. Live
+	// Native consumers must still prepare new input-mask Versions.
+	static Error _native_hold_freeze_directory(NativeSurfaceHold &);
+	static Error _native_hold_capture_directory(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, NativeSurfaceHold &, uint32_t);
+	static Error _native_hold_mark_next_retirement_root(GDExtensionDeviceExit::ProductionOutputPin &, NativeSurfaceHold &, const GDExtensionProductionServiceBudgetV1 &, GDExtensionDeviceExit::ProductionServiceUsage &, bool &);
+	static Error _native_hold_return_directory(GDExtensionDeviceExit::ProductionOutputPin &, NativeSurfaceHold &, const GDExtensionProductionServiceBudgetV1 &, GDExtensionDeviceExit::ProductionServiceUsage &);
+	static Error _native_hold_thaw_directory(NativeSurfaceHold &);
+	static Error _native_hold_finish_return(NativeSurfaceHold &);
+	// Finite original Surface directory, not a grant or a captured physical hold.
+	// Caller must reserve and capture the complete set before metadata disposal.
+	static Error _native_hold_retirement_root_count(const NativeSurfaceHold &, uint32_t &);
+	static Error _native_hold_retirement_root_at(const NativeSurfaceHold &, uint32_t, RID &);
+
+public:
+	Error mesh_surface_hold_acquire(RID p_mesh, uint32_t p_surface, uint64_t p_input_mask, bool p_motion, bool p_point_size_emulated, uint32_t p_lod, NativeSurfaceHold &r_hold);
+	static Error mesh_surface_hold_release(NativeSurfaceHold &r_hold);
+	// Prepare only before transfer/seal, from the exact retained Surface, including
+	// one detached by COW. Never resolve the current mesh RID to replace it.
+	static Error mesh_surface_hold_derive(const NativeSurfaceHold &p_source, uint64_t p_input_mask, bool p_motion, bool p_point_size_emulated, uint32_t p_lod, NativeSurfaceHold &r_hold);
+
+private:
+	static Error _mesh_surface_hold_acquire(Mesh::Surface *p_surface, uint64_t p_input_mask, bool p_motion, bool p_point_size_emulated, uint32_t p_lod, NativeSurfaceHold &r_hold, bool p_retained_surface = false);
 
 public:
 	Error mesh_add_external_surface(RID p_mesh, const ExternalSurfaceDescriptor &p_surface, uint32_t &r_surface_index, uint64_t &r_generation);
@@ -661,6 +723,13 @@ public:
 			//we have this version, hooray
 			r_vertex_format = s->versions[i].vertex_format;
 			r_vertex_array_rd = s->versions[i].vertex_array;
+			s->version_lock.unlock();
+			return;
+		}
+
+		if (s->output_directory_holds) {
+			r_vertex_array_rd = RID();
+			r_vertex_format = 0;
 			s->version_lock.unlock();
 			return;
 		}

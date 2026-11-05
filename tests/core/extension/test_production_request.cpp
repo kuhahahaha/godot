@@ -37,6 +37,7 @@
 #include "core/os/os.h"
 #include "core/os/semaphore.h"
 #include "core/os/thread.h"
+#include "servers/rendering/renderer_rd/storage_rd/mesh_storage.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_default.h"
 #include "servers/rendering/rendering_shader_container.h"
@@ -134,6 +135,10 @@ struct Access {
 			CHECK(Thread::get_caller_id() == execution_thread);
 			CHECK((serial > 0 && serial < 128));
 			++polls;
+			if (directory_pending_polls) {
+				--directory_pending_polls;
+				return { false, false, 0, 0, IssueFact::KnownAccepted };
+			}
 			return { true, false, serial + 1000, 0, IssueFact::KnownAccepted };
 		}
 		uint32_t release_attempts = 0, release_busy_remaining = 0, release_error_remaining = 0;
@@ -151,10 +156,14 @@ struct Access {
 			++releases;
 			return OK;
 		}
-		uint32_t allocations = 0, buffer_frees = 0;
+		uint32_t allocations = 0, buffer_frees = 0, directory_pending_polls = 0;
 		bool buffer_live = false;
 		bool upload_mode = false, staging_live = false;
 		bool auxiliary_factory = false, auxiliary_buffer_live = false, auxiliary_set_live = false;
+		bool mesh_directory_factory = false, mesh_directory_buffer_live = false;
+		uint32_t mesh_directory_buffer_frees = 0, mesh_directory_buffer_count = 0;
+		bool mesh_directory_buffers_live[4] = {};
+		VertexFormatID vertex_format_create(Span<VertexAttribute>, const VertexAttributeBindingsMap &) override { return VertexFormatID(40); }
 		uint32_t auxiliary_buffer_frees = 0, auxiliary_set_frees = 0, auxiliary_shader_frees = 0, auxiliary_pipeline_frees = 0;
 		uint8_t upload_memory[3][128] = {};
 		uint32_t upload_copies = 0;
@@ -177,6 +186,14 @@ struct Access {
 
 		BufferID buffer_create(uint64_t bytes, BitField<BufferUsageBits> usage, MemoryAllocationType allocation, uint64_t) override {
 			CHECK(Thread::get_caller_id() == execution_thread);
+			if (mesh_directory_factory) {
+				CHECK(((bytes == 36 && usage.has_flag(BUFFER_USAGE_VERTEX_BIT)) || (bytes == 12 && usage.has_flag(BUFFER_USAGE_INDEX_BIT))));
+				CHECK((allocation == MEMORY_ALLOCATION_TYPE_GPU && mesh_directory_buffer_count < 4));
+				const uint32_t index = mesh_directory_buffer_count++;
+				mesh_directory_buffers_live[index] = true;
+				mesh_directory_buffer_live = true;
+				return BufferID(40 + index);
+			}
 			if (auxiliary_factory) {
 				CHECK((bytes == 16 && allocation == MEMORY_ALLOCATION_TYPE_GPU && usage.has_flag(BUFFER_USAGE_STORAGE_BIT) && !auxiliary_buffer_live));
 				auxiliary_buffer_live = true;
@@ -197,6 +214,17 @@ struct Access {
 		}
 		void buffer_free(BufferID id) override {
 			CHECK(Thread::get_caller_id() == execution_thread);
+			if (id.id >= 40 && id.id <= 43) {
+				const uint32_t index = uint32_t(id.id - 40);
+				CHECK(mesh_directory_buffers_live[index]);
+				mesh_directory_buffers_live[index] = false;
+				mesh_directory_buffer_live = false;
+				for (uint32_t i = 0; i < 4; ++i) {
+					mesh_directory_buffer_live |= mesh_directory_buffers_live[i];
+				}
+				++mesh_directory_buffer_frees;
+				return;
+			}
 			if (id == BufferID(3)) {
 				CHECK((auxiliary_buffer_live && !auxiliary_set_live));
 				auxiliary_buffer_live = false;
@@ -735,7 +763,7 @@ struct Access {
 			const Error error = prepare_device(p_server);
 			return error == OK ? initialize_owner(loader_kind) : error;
 		}
-		Error initialize_owner(uint32_t loader_kind = 1, bool owned_storage = false, bool owned_set = false, GDExtensionDeviceExit::ProductionRecordReceiver receiver = nullptr, void *userdata = nullptr, bool keep_list = false, uint32_t record_actions = 1, bool upload_prefix = false, GDExtensionDeviceExit::ProductionMetadataReceiver metadata_receiver = nullptr, bool output_closure = false, bool output_borrow = false) {
+		Error initialize_owner(uint32_t loader_kind = 1, bool owned_storage = false, bool owned_set = false, GDExtensionDeviceExit::ProductionRecordReceiver receiver = nullptr, void *userdata = nullptr, bool keep_list = false, uint32_t record_actions = 1, bool upload_prefix = false, GDExtensionDeviceExit::ProductionMetadataReceiver metadata_receiver = nullptr, bool output_closure = false, bool output_borrow = false, bool mesh_directory = false, bool directory_external = false) {
 			using namespace GDExtensionDeviceExit;
 			if (public_port && !port.load()) {
 				return ERR_UNAVAILABLE;
@@ -831,7 +859,7 @@ struct Access {
 				whole.retained_payload_bytes = 128;
 			}
 			if (output_closure) {
-				whole.resource_uses += 16;
+				whole.resource_uses += 16 + (mesh_directory ? (directory_external ? 48 : 16) : 0);
 			}
 			if (output_borrow) {
 				whole.resource_uses += 2;
@@ -879,7 +907,7 @@ struct Access {
 				single.resource_uses = 3;
 			}
 			if (output_closure) {
-				single.resource_uses += 16;
+				single.resource_uses += 16 + (mesh_directory ? (directory_external ? 48 : 16) : 0);
 			}
 			if (output_borrow) {
 				single.resource_uses += 2;
@@ -1457,6 +1485,17 @@ struct Access {
 		bool record_window = false, keep_list = false, close_before_ack = false, budget_pause = false, upload_prefix = false;
 		bool public_port = false, output_closure = false, closure_retired = false, groups_settled = false, closure_rollback = false, output_borrow = false;
 		uint64_t borrowed_group = 0, owned_group = 0, qualified_group = 0;
+		bool directory_external = false;
+		RID directory_external_roots[4], directory_owned_roots[3];
+		bool mesh_directory = false, mesh_directory_returned = false, directory_capacity_failure = false;
+		bool directory_return_started = false;
+		bool directory_service_paused = false;
+		RendererRD::MeshStorage::Mesh directory_mesh;
+		RendererRD::MeshStorage::NativeSurfaceHold directory_hold, directory_neighbor;
+		uint64_t directory_selected_group = 0, neighbor_selected_group = 0;
+		bool directory_neighbor_returned = false, directory_neighbor_metadata = false, directory_marked = false;
+		uint32_t directory_component_turn = 0, directory_premature_finish_checks = 0, directory_pending_checks = 0;
+		static inline thread_local SplitSet *directory_component = nullptr;
 		uint32_t nested_disposal_probes = 0, foreign_callback_calls = 0;
 		RID auxiliary_shader, auxiliary_pipeline, auxiliary_buffer, auxiliary_set;
 		NativeDisposalWitness auxiliary_buffer_witness, auxiliary_set_witness;
@@ -1636,6 +1675,105 @@ struct Access {
 				test.check(__LINE__, registry.production_output_unpin(test.output_pin) == ERR_BUSY && request.binding_used == used && request.revision == revision);
 			}
 
+			if (test.mesh_directory) {
+				using MeshStorage = RendererRD::MeshStorage;
+				auto &rd = fixture.rd;
+				if (!test.directory_capacity_failure) {
+					fixture.driver.directory_pending_polls = 4;
+				}
+				fixture.driver.mesh_directory_factory = true;
+				auto *surface = memnew(MeshStorage::Mesh::Surface);
+				surface->format = RSE::ARRAY_FORMAT_VERTEX;
+				surface->vertex_count = 3;
+				surface->primitive = RSE::PRIMITIVE_TRIANGLES;
+				surface->vertex_buffer_size = 36;
+				surface->vertex_buffer = rd.vertex_buffer_create(36, {}, RD::BUFFER_CREATION_AS_STORAGE_BIT);
+				if (test.directory_external) {
+					surface->external = true;
+					surface->previous_vertex_buffer = rd.vertex_buffer_create(36, {}, RD::BUFFER_CREATION_AS_STORAGE_BIT);
+					surface->index_buffer = rd.index_buffer_create(3, RD::INDEX_BUFFER_FORMAT_UINT32);
+					surface->index_count = 3;
+					surface->index_array = rd.index_array_create(surface->index_buffer, 0, 3);
+					surface->lod_count = 1;
+					surface->lods = memnew_arr(MeshStorage::Mesh::Surface::LOD, 1);
+					surface->lods[0].index_buffer = rd.index_buffer_create(3, RD::INDEX_BUFFER_FORMAT_UINT32);
+					surface->lods[0].index_count = 3;
+					surface->lods[0].index_array = rd.index_array_create(surface->lods[0].index_buffer, 0, 3);
+					test.directory_external_roots[0] = surface->vertex_buffer;
+					test.directory_external_roots[1] = surface->previous_vertex_buffer;
+					test.directory_external_roots[2] = surface->index_buffer;
+					test.directory_external_roots[3] = surface->index_array;
+					test.directory_owned_roots[1] = surface->lods[0].index_buffer;
+					test.directory_owned_roots[2] = surface->lods[0].index_array;
+				}
+				fixture.driver.mesh_directory_factory = false;
+				RD::VertexAttribute position;
+				position.location = 0;
+				position.format = RD::DATA_FORMAT_R32G32B32_SFLOAT;
+				position.stride = 12;
+				Vector<RD::VertexAttribute> attributes;
+				attributes.push_back(position);
+				const RD::VertexFormatID format = rd.vertex_format_create(attributes);
+				Vector<RID> buffers;
+				buffers.push_back(surface->vertex_buffer);
+				// The capacity negative uses a genuine complete directory larger
+				// than the accepted arena, independent of other closure spare cells.
+				surface->version_count = test.directory_capacity_failure ? request.capacity.resource_uses : 1;
+				const uint32_t directory_limit = test.directory_capacity_failure ? surface->version_count + 1 : 8;
+				surface->versions = static_cast<MeshStorage::Mesh::Surface::Version *>(memalloc(sizeof(MeshStorage::Mesh::Surface::Version) * surface->version_count));
+				for (uint32_t i = 0; i < surface->version_count; ++i) {
+					new (&surface->versions[i]) MeshStorage::Mesh::Surface::Version;
+					surface->versions[i].input_mask = 1;
+					surface->versions[i].vertex_format = format;
+					surface->versions[i].vertex_array = rd.vertex_array_create(3, format, buffers);
+					test.check(__LINE__, surface->versions[i].vertex_array.is_valid());
+				}
+				test.directory_owned_roots[0] = surface->versions[0].vertex_array;
+				test.directory_mesh.surfaces = static_cast<MeshStorage::Mesh::Surface **>(memalloc(sizeof(MeshStorage::Mesh::Surface *)));
+				test.directory_mesh.surfaces[0] = surface;
+				test.directory_mesh.surface_count = 1;
+				MeshStorage::NativeSurfaceHold original;
+				test.check(__LINE__, MeshStorage::_mesh_surface_hold_acquire(surface, 1, false, false, 0, original) == OK);
+				test.check(__LINE__, MeshStorage::_mesh_surface_hold_acquire(surface, 1, false, false, 0, test.directory_neighbor) == OK);
+				test.check(__LINE__, MeshStorage::_native_hold_capture_directory(context, test.output_pin, original, directory_limit) == ERR_BUSY);
+				MeshStorage::_mesh_surface_clear(&test.directory_mesh, 0);
+				test.directory_mesh.surface_count = 0;
+				test.check(__LINE__, MeshStorage::_native_hold_freeze_directory(original) == OK);
+				const uint32_t original_holds = rd.native_immutable_hold_count;
+				const uint64_t original_group_serial = request.next_disposal_group_serial;
+				const uint32_t original_shares = *rd._native_immutable_counter(surface->vertex_buffer);
+				test.check(__LINE__, MeshStorage::_native_hold_capture_directory(context, test.output_pin, original, 1) == ERR_OUT_OF_MEMORY);
+				auto foreign_context = context;
+				++foreign_context.frame_serial;
+				test.check(__LINE__, MeshStorage::_native_hold_capture_directory(foreign_context, test.output_pin, original, directory_limit) == ERR_UNAUTHORIZED);
+				test.check(__LINE__, rd.native_immutable_hold_count == original_holds && request.next_disposal_group_serial == original_group_serial && *rd._native_immutable_counter(surface->vertex_buffer) == original_shares);
+				if (test.directory_capacity_failure) {
+					// All Version arrays and their shared backing fit the capture
+					// limit, but their real closure cannot fit the accepted arena.
+					// Genuine new physical shares must roll back.
+					test.check(__LINE__, MeshStorage::_native_hold_capture_directory(context, test.output_pin, original, directory_limit) == ERR_OUT_OF_MEMORY);
+					test.check(__LINE__, rd.native_immutable_hold_count == original_holds && request.next_disposal_group_serial == original_group_serial && *rd._native_immutable_counter(surface->vertex_buffer) == original_shares);
+				} else {
+					test.check(__LINE__, MeshStorage::_native_hold_capture_directory(context, test.output_pin, original, 8) == OK);
+					test.check(__LINE__, rd.native_immutable_hold_count == original_holds + 1 && *rd._native_immutable_counter(surface->vertex_buffer) == original_shares + 1);
+					test.check(__LINE__, MeshStorage::_native_hold_capture_directory(context, test.output_pin, original, 8) == ERR_BUSY);
+					test.check(__LINE__, MeshStorage::_native_hold_thaw_directory(original) == ERR_BUSY);
+					test.check(__LINE__, rd._production_output_hold_capture(context, test.output_pin, *MeshStorage::_native_hold_transfer_source(original), test.directory_selected_group) == OK);
+					test.check(__LINE__, MeshStorage::_native_hold_mark_transferred(original) == OK);
+				}
+				if (!test.directory_capacity_failure) {
+					test.check(__LINE__, MeshStorage::_native_hold_freeze_directory(test.directory_neighbor) == OK);
+					test.check(__LINE__, MeshStorage::_native_hold_capture_directory(context, test.output_pin, test.directory_neighbor, 8) == OK);
+					test.check(__LINE__, rd._production_output_hold_capture(context, test.output_pin, *MeshStorage::_native_hold_transfer_source(test.directory_neighbor), test.neighbor_selected_group) == OK);
+					test.check(__LINE__, MeshStorage::_native_hold_mark_transferred(test.directory_neighbor) == OK);
+				}
+				test.directory_hold = static_cast<MeshStorage::NativeSurfaceHold &&>(original);
+				test.check(__LINE__, MeshStorage::_native_hold_begin_return(test.directory_hold) == ERR_BUSY);
+				if (!test.directory_capacity_failure) {
+					directory_component = &test;
+				}
+			}
+
 			if (test.closure_rollback) {
 				return; // Actual buffer allocation prefix; no record/native effect.
 			}
@@ -1758,6 +1896,87 @@ struct Access {
 			done = true;
 			owner_ready.post();
 		}
+		static Error directory_service(GDExtensionDeviceExit::ProductionRequest &request, RenderingDevice &rd) {
+			using MeshStorage = RendererRD::MeshStorage;
+			auto *test = directory_component;
+			if (!test || &request != test->setup.fixture->request || &rd != &test->setup.fixture->rd || request.control.input.kind != GDExtensionDeviceExit::ProductionControlKind::OBSERVE) {
+				return ERR_INVALID_DATA;
+			}
+			if (test->directory_service_paused) {
+				return ERR_BUSY; // Preserve the original callback rejection slice.
+			}
+			auto &budget = request.control.input.budget;
+			auto &usage = request.control.output.service_usage;
+			const uint32_t before = usage.passes;
+			// Rendezvous phase is a message kind (every control uses 6),
+			// so retain the actual owner-return boundary independently.
+			if (!test->directory_return_started) {
+				GDExtensionProductionReportV1 actual = {};
+				{
+					MutexLock lock(test->setup.fixture->registry.mutex);
+					test->check(__LINE__, test->setup.fixture->registry.production_report_contents_locked(request, actual) == OK);
+				}
+				if (actual.possible_obligations || actual.known_obligations != actual.complete_obligations) {
+					const uint32_t receipts = usage.receipts;
+					test->check(__LINE__, MeshStorage::_native_hold_return_directory(test->output_pin, test->directory_hold, budget, usage) == ERR_BUSY);
+					test->check(__LINE__, usage.passes == before && usage.receipts == receipts);
+					++test->directory_pending_checks;
+				}
+				return ERR_BUSY; // Original maintenance must still get its turn.
+			}
+			if (test->directory_component_turn++ == 0) {
+				// A malformed original captured graph cannot be projected as a
+				// zero-obligation completion. Restore before any positive service.
+				auto *const owner = request.graphs[0].request;
+				request.graphs[0].request = nullptr;
+				const uint32_t passes = usage.passes, receipts = usage.receipts;
+				test->check(__LINE__, MeshStorage::_native_hold_return_directory(test->output_pin, test->directory_hold, budget, usage) == ERR_INVALID_DATA);
+				test->check(__LINE__, usage.passes == passes && usage.receipts == receipts);
+				request.graphs[0].request = owner;
+				const auto copied_budget = budget;
+				GDExtensionDeviceExit::ProductionServiceUsage copied_usage = {};
+				test->check(__LINE__, MeshStorage::_native_hold_return_directory(test->output_pin, test->directory_hold, copied_budget, copied_usage) == ERR_UNAUTHORIZED && copied_usage.passes == 0);
+			}
+			if (test->directory_component_turn == 1 || test->directory_component_turn > 2) {
+				if (!test->mesh_directory_returned) {
+					const Error returned = MeshStorage::_native_hold_return_directory(test->output_pin, test->directory_hold, budget, usage);
+					test->check(__LINE__, returned == OK || returned == ERR_BUSY);
+					test->mesh_directory_returned = returned == OK;
+					if (test->directory_component_turn == 1) {
+						test->check(__LINE__, returned == ERR_BUSY && usage.passes == before + 1);
+						test->check(__LINE__, MeshStorage::_native_hold_finish_return(test->directory_hold) == ERR_BUSY);
+						++test->directory_premature_finish_checks;
+					}
+				}
+			}
+			if (usage.passes != before) {
+				return OK;
+			}
+			if (!test->directory_marked) {
+				const Error marked = MeshStorage::_native_hold_mark_next_retirement_root(test->output_pin, test->directory_neighbor, budget, usage, test->directory_marked);
+				test->check(__LINE__, marked == OK || marked == ERR_BUSY);
+				return marked;
+			}
+			if (!test->directory_neighbor_returned) {
+				const Error returned = MeshStorage::_native_hold_return_directory(test->output_pin, test->directory_neighbor, budget, usage);
+				test->check(__LINE__, returned == OK || returned == ERR_BUSY);
+				test->directory_neighbor_returned = returned == OK;
+				return OK;
+			}
+			if (!test->directory_neighbor_metadata) {
+				// The component executor spends a separate original work pass on
+				// pure Surface metadata finalization, after all native group facts.
+				if (usage.passes >= MIN(budget.passes, 64u) || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros) {
+					return ERR_BUSY;
+				}
+				++usage.passes;
+				usage.controls = 1;
+				test->check(__LINE__, MeshStorage::_native_hold_begin_return(test->directory_neighbor) == OK);
+				test->check(__LINE__, MeshStorage::_native_hold_finish_return(test->directory_neighbor) == OK);
+				test->directory_neighbor_metadata = true;
+			}
+			return OK;
+		}
 		void finish_closure_rollback(const GDExtensionStorageBackingV1 &backing, GDExtensionProductionRequestRefV1 ref) {
 			using namespace GDExtensionDeviceExit;
 			auto &fixture = *setup.fixture;
@@ -1803,7 +2022,7 @@ struct Access {
 			using namespace GDExtensionDeviceExit;
 			fixture.driver.upload_mode = test.upload_prefix;
 			fixture.public_port = test.public_port;
-			test.initialized = fixture.initialize_owner(1, false, true, test.record_window ? &record_receiver : nullptr, &test, test.keep_list, test.budget_pause ? 65u : 1u, test.upload_prefix, (test.close_before_ack || test.public_port) ? &metadata_receiver : nullptr, test.output_closure, test.output_borrow);
+			test.initialized = fixture.initialize_owner(1, false, true, test.record_window ? &record_receiver : nullptr, &test, test.keep_list, test.budget_pause ? 65u : 1u, test.upload_prefix, (test.close_before_ack || test.public_port) ? &metadata_receiver : nullptr, test.output_closure, test.output_borrow, test.mesh_directory && !test.directory_capacity_failure, test.directory_external);
 			if (test.initialized != OK) {
 				fixture.cleanup_owner();
 				test.done = true;
@@ -2059,12 +2278,15 @@ struct Access {
 					if (request.control.state == ProductionControlState::OWNER_CONSUMED) {
 						budget.deadline_micros = OS::get_singleton()->get_ticks_usec() + 10000000;
 					}
+					if (test.mesh_directory && !test.directory_capacity_failure) {
+						budget.passes = budget.receipts = test.directory_pending_checks ? 1 : 3;
+					}
 					const Error scheduled = Error(registry.production_observe(ref, &budget, &report).native_error);
 					test.check(__LINE__, scheduled == OK || scheduled == ERR_BUSY);
 					if (request.control.state != ProductionControlState::OWNER_CONSUMED) {
 						test.rendezvous(6); // Same original RS FIFO, never inline execution.
 						if (request.control.state == ProductionControlState::RETURNED) {
-							test.check(__LINE__, request.control.output.service_usage.receipts <= 1 && request.control.output.service_usage.passes <= 1);
+							test.check(__LINE__, request.control.output.service_usage.receipts <= budget.receipts && request.control.output.service_usage.passes <= budget.passes);
 						}
 						const Error consumed = Error(registry.production_observe(ref, &budget, &report).native_error);
 						test.check(__LINE__, consumed == OK || consumed == ERR_BUSY);
@@ -2078,6 +2300,10 @@ struct Access {
 				}
 				INFO("Record turns=", record_turns, "/", record_turn_limit, " known=", report.known_obligations, " possible=", report.possible_obligations, " complete=", report.complete_obligations, " facts=", report.fact_count, " physical=", report.physical_returns_pending, " cause=", report.cause.native_error, " cell=", uint32_t(request.control.state));
 				test.check(__LINE__, recorded_complete());
+				if (test.mesh_directory && !test.directory_capacity_failure) {
+					test.check(__LINE__, test.directory_pending_checks > 0);
+					budget.passes = budget.receipts = 1;
+				}
 				test.check(__LINE__, fixture.driver.set_creates == 1 && fixture.driver.buffer_frees == 0);
 			} else if (!test.close_before_ack) {
 				test.check(__LINE__, registry.production_observe(ref, &zero, &report).native_error == OK && fixture.driver.set_creates == 1);
@@ -2285,11 +2511,15 @@ struct Access {
 					// The old implementation only drops its first buffer counter in this
 					// bounded turn, so this RED retains a safe real cleanup path.
 					const GDExtensionProductionServiceBudgetV1 callback_slice = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+					// Isolate this existing one-pass callback negative from private
+					// directory work; the original native maintenance must reject it.
+					test.directory_service_paused = true;
 					const Error callback_scheduled = Error(registry.production_observe(ref, &callback_slice, &closure_report).native_error);
 					test.check(__LINE__, callback_scheduled == ERR_BUSY && request.control.state == ProductionControlState::QUEUED);
 					test.rendezvous(6);
 					test.check(__LINE__, request.control.state == ProductionControlState::RETURNED && request.control.output.result.native_error == ERR_UNAVAILABLE && request.control.output.service_usage.passes <= 1 && request.control.output.service_usage.receipts <= 1);
 					test.check(__LINE__, registry.production_observe(ref, &callback_slice, &closure_report).native_error == ERR_UNAVAILABLE && request.control.state == ProductionControlState::OWNER_CONSUMED);
+					test.directory_service_paused = false;
 					test.rendezvous(16); // Actual null replacement permits the original retry.
 				}
 				const uint64_t limit = 64 + uint64_t(request.capacity.resource_uses) * 16 + uint64_t(request.capacity.native_memberships) * 4;
@@ -2371,6 +2601,9 @@ struct Access {
 				}
 				fixture.driver.disposal_probe = nullptr;
 				fixture.driver.disposal_probe_data = nullptr;
+			}
+			if (test.mesh_directory) {
+				test.rendezvous(17); // Original ordinary Mesh owner frees after request release.
 			}
 			test.rendezvous(7); // Actual unit dependency returns before owner closes.
 			if (test.output_closure) {
@@ -2541,7 +2774,7 @@ struct Access {
 		}
 		return OK;
 	}
-	static void singleton_split_owner_set(bool record_window = false, bool keep_list = false, bool close_before_ack = false, bool budget_pause = false, bool upload_prefix = false, bool public_port = false, bool output_closure = false, bool closure_retired = false, bool closure_rollback = false, bool output_borrow = false) {
+	static void singleton_split_owner_set(bool record_window = false, bool keep_list = false, bool close_before_ack = false, bool budget_pause = false, bool upload_prefix = false, bool public_port = false, bool output_closure = false, bool closure_retired = false, bool closure_rollback = false, bool output_borrow = false, bool mesh_directory = false, bool directory_capacity_failure = false, bool directory_external = false) {
 		auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
 		if (!check_step(server && !server->create_thread && server->server_thread == Thread::get_caller_id() && !RenderingDevice::get_singleton())) {
 			return;
@@ -2557,6 +2790,9 @@ struct Access {
 		test.output_closure = output_closure;
 		test.closure_retired = closure_retired;
 		test.closure_rollback = closure_rollback;
+		test.mesh_directory = mesh_directory;
+		test.directory_capacity_failure = directory_capacity_failure;
+		test.directory_external = directory_external;
 		test.output_borrow = output_borrow;
 		test.setup.server = server;
 		Thread owner;
@@ -2597,6 +2833,15 @@ struct Access {
 				CHECK(fixture.rd._production_output_hold_begin_return(test.output_pin, test.owned_group) == OK);
 				CHECK(fixture.rd._production_output_hold_begin_return(test.output_pin, test.qualified_group) == OK);
 				CHECK(fixture.registry.production_output_unpin(test.output_pin) == ERR_BUSY);
+				if (test.mesh_directory && !test.directory_capacity_failure) {
+					CHECK(fixture.rd._production_output_hold_begin_return(test.output_pin, test.directory_selected_group) == OK);
+					CHECK(fixture.rd._production_output_hold_begin_return(test.output_pin, test.neighbor_selected_group) == OK);
+					GDExtensionDeviceExit::ProductionServiceUsage copied_usage = {};
+					const GDExtensionProductionServiceBudgetV1 copied_budget = { GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+					CHECK(RendererRD::MeshStorage::_native_hold_return_directory(test.output_pin, test.directory_hold, copied_budget, copied_usage) == ERR_UNAUTHORIZED);
+					CHECK((copied_usage.passes == 0 && copied_usage.receipts == 0));
+					test.directory_return_started = true;
+				}
 				if (!test.closure_rollback && !test.closure_retired) {
 					CHECK((fixture.rd._native_immutable_counter(test.auxiliary_set) && *fixture.rd._native_immutable_counter(test.auxiliary_set) == 1));
 					const auto foreign_callback = +[](void *data) { ++static_cast<SplitSet *>(data)->foreign_callback_calls; };
@@ -2617,6 +2862,12 @@ struct Access {
 				CHECK(fixture.rd._production_output_hold_returned(test.output_pin, test.owned_group, owned) == OK);
 				CHECK(fixture.rd._production_output_hold_returned(test.output_pin, test.qualified_group, qualified) == OK);
 				test.groups_settled = borrowed.settled && owned.settled && qualified.settled;
+				if (test.mesh_directory && !test.directory_capacity_failure) {
+					GDExtensionDeviceExit::ProductionDisposalObservation selected;
+					CHECK(fixture.rd._production_output_hold_returned(test.output_pin, test.directory_selected_group, selected) == OK);
+					test.groups_settled &= test.mesh_directory_returned && test.directory_neighbor_returned && test.directory_neighbor_metadata && selected.settled;
+					CHECK(fixture.driver.mesh_directory_buffer_frees <= 1);
+				}
 				if (test.groups_settled) {
 					// The unrecorded prefix returns all four qualified borrows before
 					// its original storage retirement; this group owns no physical free.
@@ -2646,6 +2897,12 @@ struct Access {
 					fixture.rd.free_rid(test.auxiliary_shader);
 				}
 
+				if (test.mesh_directory && !test.directory_capacity_failure) {
+					CHECK(test.mesh_directory_returned);
+					CHECK((test.directory_component_turn >= 3 && test.directory_marked && test.directory_premature_finish_checks == 1));
+					CHECK(RendererRD::MeshStorage::_native_hold_begin_return(test.directory_hold) == OK);
+					CHECK(RendererRD::MeshStorage::_native_hold_finish_return(test.directory_hold) == OK);
+				}
 				if (test.output_borrow) {
 					output_pin_borrow_checks(fixture, test);
 				}
@@ -2654,6 +2911,52 @@ struct Access {
 				}
 				CHECK(test.output_pin.is_empty());
 				CHECK(fixture.registry.production_output_unpin(test.output_pin) == ERR_DOES_NOT_EXIST);
+			} else if (test.phase == 17) {
+				CHECK(fixture.request->serial == 0);
+				if (test.directory_capacity_failure) {
+					CHECK(RendererRD::MeshStorage::mesh_surface_hold_release(test.directory_hold) == OK);
+				}
+				if (test.directory_capacity_failure) {
+					CHECK(RendererRD::MeshStorage::mesh_surface_hold_release(test.directory_neighbor) == OK);
+				}
+				for (uint32_t f = 0; f < fixture.rd.frames.size(); ++f) {
+					fixture.rd._free_pending_resources(f);
+				}
+				CHECK(fixture.driver.mesh_directory_buffer_frees == 1);
+				CHECK_FALSE(fixture.rd.vertex_array_owner.owns(test.directory_owned_roots[0]));
+				if (test.directory_external) {
+					// Only original Surface-owned Version/LOD objects may retire.
+					CHECK_FALSE(fixture.rd.index_buffer_owner.owns(test.directory_owned_roots[1]));
+					CHECK_FALSE(fixture.rd.index_array_owner.owns(test.directory_owned_roots[2]));
+					// Mutation controls preserve the failed assertions above, then
+					// clean any still-live fixture-owned roots through ordinary RD.
+					if (fixture.rd.vertex_array_owner.owns(test.directory_owned_roots[0])) {
+						fixture.rd.free_rid(test.directory_owned_roots[0]);
+					}
+					if (fixture.rd.index_array_owner.owns(test.directory_owned_roots[2])) {
+						fixture.rd.free_rid(test.directory_owned_roots[2]);
+					}
+					if (fixture.rd.index_buffer_owner.owns(test.directory_owned_roots[1])) {
+						fixture.rd.free_rid(test.directory_owned_roots[1]);
+					}
+					CHECK(fixture.rd.vertex_buffer_owner.owns(test.directory_external_roots[0]));
+					CHECK(fixture.rd.vertex_buffer_owner.owns(test.directory_external_roots[1]));
+					CHECK(fixture.rd.index_buffer_owner.owns(test.directory_external_roots[2]));
+					CHECK(fixture.rd.index_array_owner.owns(test.directory_external_roots[3]));
+					for (uint32_t i = 0; i < 4; ++i) {
+						fixture.rd.free_rid(test.directory_external_roots[3 - i]);
+					}
+					for (uint32_t f = 0; f < fixture.rd.frames.size(); ++f) {
+						fixture.rd._free_pending_resources(f);
+					}
+					CHECK(fixture.driver.mesh_directory_buffer_frees == 4);
+				}
+				CHECK_FALSE(fixture.driver.mesh_directory_buffer_live);
+				SplitSet::directory_component = nullptr;
+				fixture.rd.vertex_formats.clear();
+				fixture.rd.vertex_format_cache.clear();
+				memfree(test.directory_mesh.surfaces);
+				test.directory_mesh.surfaces = nullptr;
 			} else if (test.phase == 12) {
 				fixture.rd.upload_staging_buffers.block_size = fixture.rd.upload_staging_buffers.max_size = 64;
 				fixture.rd.upload_staging_buffers.usage_bits = RDD::BUFFER_USAGE_TRANSFER_FROM_BIT;
@@ -2694,6 +2997,13 @@ struct Access {
 				QuoteDriver::QualificationCleanupScope cleanup_scope(fixture.driver);
 				server->sync();
 			} else {
+				struct ComponentHookScope {
+					decltype(GDExtensionDeviceExit::test_production_before_maintenance) previous = GDExtensionDeviceExit::test_production_before_maintenance;
+					~ComponentHookScope() { GDExtensionDeviceExit::test_production_before_maintenance = previous; }
+				} component_hook_scope;
+				if (test.mesh_directory && !test.directory_capacity_failure) {
+					GDExtensionDeviceExit::test_production_before_maintenance = &SplitSet::directory_service;
+				}
 				server->sync();
 			}
 			test.rt_returned.post();
@@ -3807,6 +4117,15 @@ TEST_CASE("[SceneTree][ProductionRequest] exact native output closure returns th
 	}
 	SUBCASE("Live borrowed owners detach without claiming physical return") {
 		TestProductionRequest::Access::singleton_split_owner_set(true, false, false, false, false, false, true, false);
+	}
+	SUBCASE("Actual detached Mesh directory binds and moves with original accepted request") {
+		TestProductionRequest::Access::singleton_split_owner_set(true, false, false, false, false, false, true, false, false, false, true);
+	}
+	SUBCASE("External directory preserves borrowed backing and retires owned Version and LOD roots") {
+		TestProductionRequest::Access::singleton_split_owner_set(true, false, false, false, false, false, true, false, false, false, true, false, true);
+	}
+	SUBCASE("Actual quoted directory capacity refuses before retaining new shares") {
+		TestProductionRequest::Access::singleton_split_owner_set(true, false, false, false, false, false, true, false, false, false, true, true);
 	}
 	SUBCASE("Unrecorded actual factory prefix returns after explicit owner cancellation") {
 		TestProductionRequest::Access::singleton_split_owner_set(true, false, false, false, false, false, true, false, true);

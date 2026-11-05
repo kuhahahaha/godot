@@ -998,13 +998,28 @@ GDExtensionDeviceSessionResultV1 Registry::production_observe(GDExtensionProduct
 	return result(service);
 }
 void Registry::production_report_locked(const ProductionRequest &r, GDExtensionProductionReportV1 &report) const {
+	if (r.capture_inflight) {
+		report = {};
+		report.abi = production_dto_abi<GDExtensionProductionReportV1>();
+		report.operation = r.operation;
+		report.revision = r.revision;
+		report.cause = result(ERR_BUSY, 16);
+		return;
+	}
+	production_report_contents_locked(r, report);
+}
+
+Error Registry::production_report_contents_locked(const ProductionRequest &r, GDExtensionProductionReportV1 &report) const {
 	report = {};
 	report.abi = production_dto_abi<GDExtensionProductionReportV1>();
 	report.operation = r.operation;
 	report.revision = r.revision;
-	if (r.capture_inflight) {
-		report.cause = result(ERR_BUSY, 16);
-		return;
+	// Private contents projection returns structural validity separately from
+	// native diagnostics. Its caller retains the original Registry lock and,
+	// when capture is nonzero, authenticates the one executing OBSERVE frame.
+	if (r.resource_count > r.capacity.resources || (r.resource_count && !r.resources) || r.readback_count > r.capacity.readbacks || (r.readback_count && !r.readbacks) || (r.capacity.return_cells && !r.returns)) {
+		report.cause = result(ERR_INVALID_DATA, 16);
+		return ERR_INVALID_DATA;
 	}
 	// Recording/segment/ACK frontiers remain owned by the original record window.
 	report.recorded_end = r.operation.canonical_begin + r.next_action;
@@ -1014,7 +1029,7 @@ void Registry::production_report_locked(const ProductionRequest &r, GDExtensionP
 	report.possible_obligations = uint32_t(r.effects_pending) + uint32_t(r.source_device_lost);
 	if (r.graph_count > r.capacity.graph_memberships || r.native_count > r.capacity.native_memberships || uint64_t(r.graph_count) + r.native_count > UINT32_MAX) {
 		report.cause = result(ERR_INVALID_DATA, 16);
-		return;
+		return ERR_INVALID_DATA;
 	}
 	report.fact_count = r.graph_count + r.native_count;
 	for (uint32_t i = 0; i < r.resource_count; ++i) {
@@ -1024,7 +1039,7 @@ void Registry::production_report_locked(const ProductionRequest &r, GDExtensionP
 	for (uint32_t i = 0; i < r.graph_count; ++i) {
 		if (!r.graphs || r.graphs[i].request != &r) {
 			report.cause = result(ERR_INVALID_DATA, 16);
-			return;
+			return ERR_INVALID_DATA;
 		}
 		report.possible_obligations += r.graphs[i].pending;
 	}
@@ -1033,7 +1048,7 @@ void Registry::production_report_locked(const ProductionRequest &r, GDExtensionP
 		const Error error = production_native_owner_locked(r, i, owner);
 		if (error != OK) {
 			report.cause = result(error, 16);
-			return;
+			return error;
 		}
 		if (r.natives[i].owner_index != i) {
 			continue;
@@ -1071,6 +1086,7 @@ void Registry::production_report_locked(const ProductionRequest &r, GDExtensionP
 		cause = ERR_BUSY;
 	}
 	report.cause = result(cause);
+	return OK;
 }
 Error Registry::production_native_owner_locked(const ProductionRequest &r, uint32_t index, const ProductionNativeCell *&out) const {
 	out = nullptr;
@@ -2097,6 +2113,35 @@ void Registry::production_control_execute_locked(ProductionRequest &request, Ren
 			}
 			if (rd && service_budget_active(cell.input.budget) && rd->_thread_safe_.try_lock()) {
 				RdUnlock unlock{ rd->_thread_safe_ };
+#ifdef TESTS_ENABLED
+				// The private component fixture has directory/metadata work after
+				// native sources settle. Invoke only its original OBSERVE service;
+				// do not turn its presence into an empty native disposal cursor.
+				if (test_production_before_maintenance && cell.input.budget.controls && cell.output.service_usage.passes < MIN(cell.input.budget.passes, 64u) && cell.output.service_usage.receipts < MIN(cell.input.budget.receipts, 128u) && cell.input.budget.deadline_micros && OS::get_singleton()->get_ticks_usec() < cell.input.budget.deadline_micros && !request.capture_inflight && !request.source_device_lost && request.revision <= UINT64_MAX - uint64_t(request.capacity.graph_memberships) * 2 - uint64_t(request.capacity.native_memberships) * 2 - request.capacity.readbacks - request.capacity.resources - 8) {
+					const uint64_t request_serial = request.serial, control_serial = request.control.serial;
+					auto *const attachment = request.attachment;
+					const uint64_t epoch = attachment->epoch;
+					++request.capture_inflight;
+					rd->_thread_safe_.unlock();
+					mutex.unlock();
+					const Error component = test_production_before_maintenance(request, *rd);
+					rd->_thread_safe_.lock();
+					mutex.lock();
+					CRASH_COND(!request.capture_inflight);
+					--request.capture_inflight;
+					if (request.serial != request_serial || request.control.serial != control_serial || request.control.state != ProductionControlState::EXECUTING || request.attachment != attachment || attachment->held_device != rd || attachment->epoch != epoch || device_records[attachment->device].epoch != epoch || device_records[attachment->device].object != rd) {
+						cell.output.result = result(ERR_INVALID_DATA);
+						break;
+					}
+					if (component != OK && component != ERR_BUSY) {
+						cell.output.result = result(component);
+						break;
+					}
+					if (cell.output.service_usage.passes >= MIN(cell.input.budget.passes, 64u) || cell.output.service_usage.receipts >= MIN(cell.input.budget.receipts, 128u)) {
+						error = ERR_BUSY;
+					}
+				}
+#endif
 				bool progress = request.maintenance_serial && rd->native_disposal_active && request.maintenance_serial == rd->native_disposal_continuation.serial;
 				for (uint32_t i = 0; i < request.resource_count; ++i) {
 					const auto &slot = request.resources[i];

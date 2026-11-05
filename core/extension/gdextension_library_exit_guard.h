@@ -901,6 +901,7 @@ private:
 	Error production_native_owner_locked(const ProductionRequest &, uint32_t, const ProductionNativeCell *&) const;
 	Error production_poll_native_locked(ProductionRequest &, RenderingDeviceDriver &, const GDExtensionProductionServiceBudgetV1 &, bool, ProductionServiceUsage &);
 	Error production_native_fact_locked(const ProductionRequest &, uint32_t, GDExtensionProductionFactV1 &) const;
+	Error production_report_contents_locked(const ProductionRequest &, GDExtensionProductionReportV1 &) const;
 	void production_report_locked(const ProductionRequest &, GDExtensionProductionReportV1 &) const;
 	void production_control_execute_locked(ProductionRequest &, RenderingDevice *);
 	// Private metadata staging; cannot issue source scope or open native recording.

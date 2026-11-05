@@ -211,6 +211,16 @@ public:
 		mesh.surface_count = 1;
 		mesh.surfaces[0] = surface(device, external);
 		auto *old = mesh.surfaces[0];
+		// Independent LOD/attribute/blend roots do not follow the selected VA.
+		old->attribute_buffer = device.vertex_buffer_create(16, {}, RD::BUFFER_CREATION_AS_STORAGE_BIT);
+		old->blend_shape_buffer = device.vertex_buffer_create(16, {}, RD::BUFFER_CREATION_AS_STORAGE_BIT);
+		old->lods = memnew_arr(MeshStorage::Mesh::Surface::LOD, 1);
+		old->lod_count = 1;
+		old->lods[0].index_count = 3;
+		old->lods[0].index_buffer = device.index_buffer_create(3, RD::INDEX_BUFFER_FORMAT_UINT32, {}, false);
+		old->lods[0].index_array = device.index_array_create(old->lods[0].index_buffer, 0, 3);
+		old->aabb = AABB(Vector3(-1, -2, -3), Vector3(4, 5, 6));
+		old->uv_scale = Vector4(2, 3, 4, 5);
 		const RID backing = old->vertex_buffer;
 		const RID previous = old->previous_vertex_buffer;
 		const RID index = old->index_buffer;
@@ -226,11 +236,33 @@ public:
 		CHECK(MeshStorage::_mesh_surface_hold_acquire(old, 1, false, false, 0, second) == OK);
 		CHECK(first.is_valid());
 		const RID accepted_array = first.get_vertex_array();
+		CHECK(MeshStorage::_native_hold_freeze_directory(first) == ERR_BUSY);
+		CHECK(old->output_directory_holds == 0);
 		const auto original_byte = TestIndexed144DeviceAccess::fetch(device, driver, accepted_array, 0);
 		Hold moved(static_cast<Hold &&>(first));
 		CHECK_FALSE(first.is_valid());
 		CHECK(first.get_vertex_array().is_null());
 		CHECK(moved.get_vertex_array() == accepted_array);
+		uint32_t retirement_roots = 0;
+		CHECK(MeshStorage::_native_hold_retirement_root_count(moved, retirement_roots) == OK);
+		CHECK(retirement_roots == 7 + old->version_count + 2 * old->lod_count);
+		bool saw_attribute = false, saw_blend = false, saw_lod_buffer = false, saw_lod_array = false;
+		for (uint32_t ordinal = 0; ordinal < retirement_roots; ++ordinal) {
+			RID actual_root;
+			CHECK(MeshStorage::_native_hold_retirement_root_at(moved, ordinal, actual_root) == OK);
+			saw_attribute |= actual_root == old->attribute_buffer;
+			saw_blend |= actual_root == old->blend_shape_buffer;
+			saw_lod_buffer |= actual_root == old->lods[0].index_buffer;
+			saw_lod_array |= actual_root == old->lods[0].index_array;
+		}
+		CHECK(saw_attribute);
+		CHECK(saw_blend);
+		CHECK(saw_lod_buffer);
+		CHECK(saw_lod_array);
+		RID beyond(accepted_array);
+		CHECK(MeshStorage::_native_hold_retirement_root_at(moved, retirement_roots, beyond) == ERR_INVALID_PARAMETER);
+		CHECK(beyond.is_null());
+
 		// Original direct RD writers also reject before staging/native effects.
 		uint8_t changed = 255;
 		CHECK(device.buffer_update(backing, 0, 1, &changed) == ERR_BUSY);
@@ -261,6 +293,63 @@ public:
 		CHECK(MeshStorage::_mesh_surface_hold_acquire(mesh.surfaces[0], 1, false, false, 0, replacement) == OK);
 		CHECK(TestIndexed144DeviceAccess::fetch(device, driver, replacement.get_vertex_array(), 0) != original_byte);
 		CHECK(TestIndexed144DeviceAccess::fetch(device, driver, moved.get_vertex_array(), 0) == original_byte);
+		// Derive from the actual retained old Surface after COW. A current-mesh
+		// lookup would select replacement's distinct bytes and fail this check.
+		Hold derived;
+		CHECK(MeshStorage::mesh_surface_hold_derive(moved, 1, false, false, 0, derived) == OK);
+		CHECK(derived.is_valid());
+		CHECK(derived.get_vertex_array() == accepted_array);
+		CHECK(derived.get_format() == moved.get_format());
+		CHECK(derived.get_aabb() == AABB(Vector3(-1, -2, -3), Vector3(4, 5, 6)));
+		CHECK(derived.get_uv_scale() == Vector4(2, 3, 4, 5));
+		CHECK(derived.get_vertex_array() != replacement.get_vertex_array());
+		CHECK(TestIndexed144DeviceAccess::fetch(device, driver, derived.get_vertex_array(), 0) == original_byte);
+		CHECK(old->immutable_holds == 3);
+		CHECK(MeshStorage::_native_hold_freeze_directory(moved) == OK);
+		CHECK(MeshStorage::_native_hold_freeze_directory(moved) == OK);
+		CHECK(old->output_directory_holds == 1);
+		CHECK(MeshStorage::_native_hold_freeze_directory(derived) == OK);
+		CHECK(old->output_directory_holds == 2);
+		// Moving a frozen hold transfers exactly one shared directory claim.
+		Hold frozen(static_cast<Hold &&>(derived));
+		CHECK(MeshStorage::_native_hold_thaw_directory(derived) == ERR_UNAUTHORIZED);
+		CHECK(old->output_directory_holds == 2);
+		Hold existing;
+		CHECK(MeshStorage::mesh_surface_hold_derive(moved, 1, false, false, 0, existing) == OK);
+		CHECK(existing.get_vertex_array() == accepted_array);
+		CHECK(MeshStorage::mesh_surface_hold_release(existing) == OK);
+		if (external) {
+			const uint32_t prepared = old->version_count;
+			RID refused_array = accepted_array;
+			RD::VertexFormatID refused_format = moved.get_vertex_format();
+			MeshStorage::_mesh_surface_get_external_arrays(old, 1 | (1 << 4), false, false, refused_array, refused_format);
+			CHECK(refused_array.is_null());
+			CHECK(refused_format == 0);
+			CHECK(old->version_count == prepared);
+			MeshStorage::_mesh_surface_get_external_arrays(old, 1, false, false, refused_array, refused_format);
+			CHECK(refused_array == accepted_array);
+			CHECK(refused_format == moved.get_vertex_format());
+		}
+		CHECK(MeshStorage::mesh_surface_hold_release(frozen) == OK);
+		CHECK(old->output_directory_holds == 1);
+		CHECK(MeshStorage::_native_hold_thaw_directory(moved) == OK);
+		CHECK(MeshStorage::_native_hold_thaw_directory(moved) == OK);
+		CHECK(old->output_directory_holds == 0);
+		if (external) {
+			const uint32_t prepared = old->version_count;
+			RID resumed_array;
+			RD::VertexFormatID resumed_format = 0;
+			MeshStorage::_mesh_surface_get_external_arrays(old, 1 | (1 << 4), false, false, resumed_array, resumed_format);
+			CHECK(resumed_array.is_valid());
+			CHECK(resumed_format != 0);
+			CHECK(old->version_count == prepared + 1);
+		}
+		CHECK(MeshStorage::_native_hold_freeze_directory(second) == OK);
+		CHECK(old->output_directory_holds == 1);
+		CHECK(old->immutable_holds == 2);
+		Hold no_source;
+		CHECK(MeshStorage::mesh_surface_hold_derive(first, 1, false, false, 0, no_source) != OK);
+		CHECK_FALSE(no_source.is_valid());
 		CHECK(MeshStorage::mesh_surface_hold_release(replacement) == OK);
 		const RID replacement_current = mesh.surfaces[0]->vertex_buffer;
 		const RID replacement_previous = mesh.surfaces[0]->previous_vertex_buffer;
@@ -275,6 +364,7 @@ public:
 		TestIndexed144DeviceAccess::dispose(device);
 		CHECK(TestIndexed144DeviceAccess::fetch(device, driver, accepted_array, 0) == original_byte);
 		CHECK(MeshStorage::mesh_surface_hold_release(second) == OK);
+		CHECK(old->output_directory_holds == 0);
 		CHECK(device.native_immutable_resource_is_held(backing));
 		if (external) {
 			// The actual external backing owner can request close while retained.
@@ -296,6 +386,114 @@ public:
 			device.free_rid(index);
 			// Original index-array ownership follows its borrowed index backing.
 			CHECK_FALSE(device.native_immutable_resource_is_held(index_array));
+		}
+		TestIndexed144DeviceAccess::dispose(device);
+		CHECK(driver.frees == driver.allocations);
+		memfree(mesh.surfaces);
+		TestIndexed144DeviceAccess::end_native(device);
+	}
+	static void ordinary_directory() {
+		// Initialize the actual storage object without unrelated Skeleton shader
+		// startup. Every getter input used here has an actual original RD buffer.
+		RenderingDevice device;
+		Indexed144FormatDriver driver;
+		TestIndexed144DeviceAccess::begin_native(device, driver);
+		auto *previous_storage = MeshStorage::get_singleton();
+		auto *storage = memnew(MeshStorage(MeshStorage::NativeHoldTestTag{}));
+		const RID normal = device.vertex_buffer_create(16, {}, RD::BUFFER_CREATION_AS_STORAGE_BIT);
+		storage->mesh_default_rd_buffers[MeshStorage::DEFAULT_RD_BUFFER_NORMAL] = normal;
+		MeshStorage::Mesh mesh;
+		mesh.surfaces = static_cast<MeshStorage::Mesh::Surface **>(memalloc(sizeof(MeshStorage::Mesh::Surface *)));
+		mesh.surface_count = 1;
+		auto *original = surface(device, false);
+		mesh.surfaces[0] = original;
+		Hold retained;
+		CHECK(MeshStorage::_mesh_surface_hold_acquire(original, 1, false, false, 0, retained) == OK);
+		CHECK(MeshStorage::_native_hold_freeze_directory(retained) == ERR_BUSY);
+		const uint64_t neighbor_mask = 1 | (1 << RSE::ARRAY_NORMAL);
+		RID neighbor;
+		RD::VertexFormatID format = 0;
+		const uint32_t initial = original->version_count;
+		storage->mesh_surface_get_vertex_arrays_and_format(original, neighbor_mask, false, false, neighbor, format);
+		CHECK(neighbor.is_valid());
+		CHECK(format != 0);
+		CHECK(original->version_count == initial + 1);
+		MeshStorage::_mesh_surface_clear(&mesh, 0);
+		mesh.surface_count = 0;
+		CHECK(MeshStorage::_native_hold_freeze_directory(retained) == OK);
+		const RID prepared = neighbor;
+		const RD::VertexFormatID prepared_format = format;
+		storage->mesh_surface_get_vertex_arrays_and_format(original, neighbor_mask, false, false, neighbor, format);
+		CHECK(neighbor == prepared);
+		CHECK(format == prepared_format);
+		Hold derived;
+		CHECK(MeshStorage::mesh_surface_hold_derive(retained, neighbor_mask, false, false, 0, derived) == OK);
+		CHECK(derived.get_vertex_array() == prepared);
+		const uint32_t frozen = original->version_count;
+		storage->mesh_surface_get_vertex_arrays_and_format(original, neighbor_mask, true, false, neighbor, format);
+		CHECK(neighbor.is_null());
+		CHECK(format == 0);
+		CHECK(original->version_count == frozen);
+		CHECK(MeshStorage::_native_hold_thaw_directory(retained) == OK);
+		storage->mesh_surface_get_vertex_arrays_and_format(original, neighbor_mask, true, false, neighbor, format);
+		CHECK(neighbor.is_valid());
+		CHECK(format != 0);
+		CHECK(original->version_count == frozen + 1);
+		CHECK(MeshStorage::_native_hold_freeze_directory(retained) == OK);
+		CHECK(MeshStorage::mesh_surface_hold_release(derived) == OK);
+		CHECK(MeshStorage::mesh_surface_hold_release(retained) == OK);
+		device.free_rid(normal);
+		memdelete(storage);
+		MeshStorage::singleton = previous_storage;
+		TestIndexed144DeviceAccess::dispose(device);
+		CHECK(driver.frees == driver.allocations);
+		memfree(mesh.surfaces);
+		TestIndexed144DeviceAccess::end_native(device);
+	}
+	static void incremental_surface(bool external) {
+		// Actual local holds exercise metadata steps, not Core pin/packet authority.
+		RenderingDevice device;
+		Indexed144FormatDriver driver;
+		TestIndexed144DeviceAccess::begin_native(device, driver);
+		MeshStorage::Mesh mesh;
+		mesh.surfaces = static_cast<MeshStorage::Mesh::Surface **>(memalloc(sizeof(MeshStorage::Mesh::Surface *)));
+		mesh.surface_count = 1;
+		auto *original = surface(device, external);
+		mesh.surfaces[0] = original;
+		const RID current = original->vertex_buffer, previous = original->previous_vertex_buffer, index = original->index_buffer;
+		Hold exact;
+		CHECK(MeshStorage::_mesh_surface_hold_acquire(original, 1, false, false, 0, exact) == OK);
+		MeshStorage::_mesh_surface_clear(&mesh, 0);
+		mesh.surface_count = 0;
+		CHECK(MeshStorage::_native_hold_freeze_directory(exact) == OK);
+		CHECK(original->output_directory_holds == 1);
+		uint32_t count = 0;
+		CHECK(MeshStorage::_native_hold_retirement_root_count(exact, count) == OK);
+		LocalVector<RID> roots;
+		for (uint32_t i = 0; i < count; ++i) {
+			RID root;
+			CHECK(MeshStorage::_native_hold_retirement_root_at(exact, i, root) == OK);
+			if (root.is_valid()) {
+				roots.push_back(root);
+			}
+		}
+		RD::NativeImmutableHold complete;
+		CHECK(device.native_immutable_hold_acquire(VectorView<RID>(roots.ptr(), roots.size()), complete) == OK);
+		// A locally held directory is not an original accepted Core binding.
+		// Unsupported selected-only transfer refuses without moving custody.
+		CHECK(MeshStorage::_native_hold_transfer_source(exact) == nullptr);
+		CHECK(MeshStorage::_native_hold_mark_transferred(exact) == ERR_INVALID_DATA);
+		CHECK(exact.is_valid());
+		CHECK(original->output_directory_holds == 1);
+		CHECK(MeshStorage::_native_hold_begin_return(exact) == ERR_BUSY);
+		CHECK(MeshStorage::_native_hold_finish_return(exact) == ERR_BUSY);
+		CHECK(driver.frees == 0);
+		CHECK(device.native_immutable_hold_release(complete) == OK);
+		CHECK(MeshStorage::mesh_surface_hold_release(exact) == OK);
+		if (external) {
+			device.free_rid(current);
+			device.free_rid(previous);
+			device.free_rid(index);
 		}
 		TestIndexed144DeviceAccess::dispose(device);
 		CHECK(driver.frees == driver.allocations);
@@ -425,8 +623,11 @@ TEST_CASE("[B4][K05] original renderer pipeline keys distinguish Indexed144 from
 
 TEST_CASE("[B4][NativeSurfaceHold] ordinary native surface survives mesh replacement and explicit last return") {
 	RendererRD::TestMeshStorageExternalAccess::immutable_surface(false);
+	RendererRD::TestMeshStorageExternalAccess::incremental_surface(false);
+	RendererRD::TestMeshStorageExternalAccess::ordinary_directory();
 }
 
 TEST_CASE("[B4][NativeSurfaceHold] Indexed144 surface keeps exact borrowed native backings and deferred owner free") {
 	RendererRD::TestMeshStorageExternalAccess::immutable_surface(true);
+	RendererRD::TestMeshStorageExternalAccess::incremental_surface(true);
 }

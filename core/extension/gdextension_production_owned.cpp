@@ -36,6 +36,9 @@
 #include <cstring>
 
 namespace GDExtensionDeviceExit {
+#ifdef TESTS_ENABLED
+thread_local Error (*test_production_before_maintenance)(ProductionRequest &, RenderingDevice &) = nullptr;
+#endif
 namespace {
 constexpr GDExtensionDeviceExitAbi ABI = { 1, sizeof(GDExtensionDeviceExitAbi), 0 };
 GDExtensionDeviceSessionResultV1 result(Error error) {

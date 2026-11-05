@@ -46,6 +46,13 @@ MeshStorage *MeshStorage::get_singleton() {
 	return singleton;
 }
 
+#ifdef TESTS_ENABLED
+MeshStorage::MeshStorage(NativeHoldTestTag) {
+	singleton = this;
+	native_hold_test_minimal = true;
+}
+#endif
+
 MeshStorage::MeshStorage() {
 	singleton = this;
 
@@ -192,6 +199,12 @@ MeshStorage::MeshStorage() {
 }
 
 MeshStorage::~MeshStorage() {
+#ifdef TESTS_ENABLED
+	if (native_hold_test_minimal) {
+		singleton = nullptr;
+		return;
+	}
+#endif
 	//def buffers
 	for (int i = 0; i < DEFAULT_RD_BUFFER_MAX; i++) {
 		RD::get_singleton()->free_rid(mesh_default_rd_buffers[i]);
@@ -607,6 +620,10 @@ void MeshStorage::_mesh_surface_get_external_arrays(Mesh::Surface *s, uint64_t p
 			return;
 		}
 	}
+	if (s->output_directory_holds) {
+		s->version_lock.unlock();
+		return;
+	}
 	if (s->version_count == UINT32_MAX || uint64_t(s->version_count + 1) > SIZE_MAX / sizeof(Mesh::Surface::Version)) {
 		s->version_lock.unlock();
 		return;
@@ -707,12 +724,42 @@ Error MeshStorage::mesh_surface_hold_acquire(RID mesh_rid, uint32_t index, uint6
 	return _mesh_surface_hold_acquire(mesh->surfaces[index], mask, motion, point_size, lod, out);
 }
 
-Error MeshStorage::_mesh_surface_hold_acquire(Mesh::Surface *surface, uint64_t mask, bool motion, bool point_size, uint32_t lod, NativeSurfaceHold &out) {
+Error MeshStorage::mesh_surface_hold_derive(const NativeSurfaceHold &source, uint64_t mask, bool motion, bool point_size, uint32_t lod, NativeSurfaceHold &out) {
+	RenderingDevice *device = source.device;
+	if (!device || device != RD::get_singleton() || !device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (!source.is_valid() || source.physical_transferred || source.metadata_returned || source.metadata_return_active || out.device || !source.surface->immutable_holds || point_size || lod > source.surface->lod_count) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (device->draw_list.active || device->compute_list.active || device->raytracing_list.active || device->draw_graph.has_driver_callbacks() || device->production_finalization_started.load(std::memory_order_acquire)) {
+		return ERR_BUSY;
+	}
+	// Existing prepared Versions need no new factory. A different input mask
+	// may be prepared only while the original metadata and physical holds live.
+	const Error existing = _mesh_surface_hold_acquire(source.surface, mask, motion, point_size, lod, out, true);
+	if (existing != ERR_UNAVAILABLE) {
+		return existing;
+	}
+	MeshStorage *storage = get_singleton();
+	if (!storage) {
+		return ERR_UNAVAILABLE;
+	}
+	RID array;
+	RD::VertexFormatID format = 0;
+	storage->mesh_surface_get_vertex_arrays_and_format(source.surface, mask, motion, point_size, array, format);
+	if (array.is_null() || !format) {
+		return ERR_CANT_CREATE;
+	}
+	return _mesh_surface_hold_acquire(source.surface, mask, motion, point_size, lod, out, true);
+}
+
+Error MeshStorage::_mesh_surface_hold_acquire(Mesh::Surface *surface, uint64_t mask, bool motion, bool point_size, uint32_t lod, NativeSurfaceHold &out, bool retained_surface) {
 	auto *device = RD::get_singleton();
 	if (!device || !device->native_immutable_is_render_thread()) {
 		return ERR_UNAUTHORIZED;
 	}
-	if (!surface || out.device || surface->immutable_retired || surface->immutable_holds == UINT32_MAX || point_size || lod > surface->lod_count) {
+	if (!surface || out.device || (surface->immutable_retired && !retained_surface) || surface->immutable_holds == UINT32_MAX || point_size || lod > surface->lod_count) {
 		return ERR_INVALID_PARAMETER;
 	}
 	RID vertex_array;
@@ -765,6 +812,9 @@ Error MeshStorage::_mesh_surface_hold_acquire(Mesh::Surface *surface, uint64_t m
 	out.vertex_format = format;
 	out.vertex_count = surface->vertex_count;
 	out.index_count = indices;
+	out.surface_format = surface->format;
+	out.surface_aabb = surface->aabb;
+	out.surface_uv_scale = surface->uv_scale;
 	out.primitive = surface->primitive;
 	out.material = surface->material;
 	out.current_generation = surface->current_allocation_generation;
@@ -772,12 +822,338 @@ Error MeshStorage::_mesh_surface_hold_acquire(Mesh::Surface *surface, uint64_t m
 	return OK;
 }
 
+Error MeshStorage::_native_hold_retirement_root_count(const NativeSurfaceHold &hold, uint32_t &count) {
+	count = 0;
+	if (!hold.device || !hold.device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (!hold.surface || !hold.surface->immutable_holds || hold.metadata_returned || hold.metadata_return_active || (!hold.physical_transferred && !hold.physical.is_valid())) {
+		return ERR_BUSY;
+	}
+	Mesh::Surface &surface = *hold.surface;
+	surface.version_lock.lock();
+	struct VersionUnlock {
+		SpinLock &spin;
+		~VersionUnlock() { spin.unlock(); }
+	} unlock{ surface.version_lock };
+	const uint64_t total = uint64_t(7) + surface.version_count + uint64_t(2) * surface.lod_count;
+	if (total > UINT32_MAX) {
+		return ERR_OUT_OF_MEMORY;
+	}
+	count = uint32_t(total);
+	return OK;
+}
+
+Error MeshStorage::_native_hold_retirement_root_at(const NativeSurfaceHold &hold, uint32_t ordinal, RID &root) {
+	root = RID();
+	uint32_t count = 0;
+	const Error error = _native_hold_retirement_root_count(hold, count);
+	if (error != OK) {
+		return error;
+	}
+	if (ordinal >= count) {
+		return ERR_INVALID_PARAMETER;
+	}
+	Mesh::Surface &surface = *hold.surface;
+	surface.version_lock.lock();
+	struct VersionUnlock {
+		SpinLock &spin;
+		~VersionUnlock() { spin.unlock(); }
+	} unlock{ surface.version_lock };
+	switch (ordinal) {
+		case 0:
+			root = surface.vertex_buffer;
+			return OK;
+		case 1:
+			root = surface.previous_vertex_buffer;
+			return OK;
+		case 2:
+			root = surface.attribute_buffer;
+			return OK;
+		case 3:
+			root = surface.skin_buffer;
+			return OK;
+		case 4:
+			root = surface.index_buffer;
+			return OK;
+		case 5:
+			root = surface.index_array;
+			return OK;
+		case 6:
+			root = surface.blend_shape_buffer;
+			return OK;
+	}
+	ordinal -= 7;
+	if (ordinal < surface.version_count) {
+		root = surface.versions[ordinal].vertex_array;
+	} else {
+		ordinal -= surface.version_count;
+		const auto &lod = surface.lods[ordinal / 2];
+		root = ordinal % 2 ? lod.index_array : lod.index_buffer;
+	}
+	return OK;
+}
+
+RD::NativeImmutableHold *MeshStorage::_native_hold_transfer_source(NativeSurfaceHold &hold) {
+	if (!hold.device || !hold.device->native_immutable_is_render_thread() || hold.physical_transferred || hold.metadata_return_active || !hold.physical.is_valid() || hold.retirement_group.is_empty() || !hold.directory_frozen || !hold.surface || !hold.surface->immutable_retired) {
+		return nullptr;
+	}
+	return &hold.physical;
+}
+
+Error MeshStorage::_native_hold_mark_transferred(NativeSurfaceHold &hold) {
+	if (!hold.device || !hold.device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (hold.physical_transferred || hold.physical.is_active() || hold.metadata_return_active || hold.retirement_group.is_empty() || !hold.directory_frozen || !hold.surface || !hold.surface->immutable_retired) {
+		return ERR_INVALID_DATA;
+	}
+	hold.physical_transferred = true;
+	return OK;
+}
+
+Error MeshStorage::_native_hold_freeze_directory(NativeSurfaceHold &hold) {
+	if (!hold.device || !hold.device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (!hold.is_valid() || hold.physical_transferred || hold.metadata_returned || hold.metadata_return_active) {
+		return ERR_BUSY;
+	}
+	if (hold.directory_frozen) {
+		return OK;
+	}
+	// The VA factory takes version_lock before RD. This handshake must run
+	// outside Registry/RD locks, before complete original-root capture.
+	auto *surface = hold.surface;
+	surface->version_lock.lock();
+	if (!surface->immutable_retired || !surface->immutable_holds) {
+		surface->version_lock.unlock();
+		return ERR_BUSY;
+	}
+	if (surface->output_directory_holds == UINT32_MAX) {
+		surface->version_lock.unlock();
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	++surface->output_directory_holds;
+	hold.directory_frozen = true;
+	surface->version_lock.unlock();
+	return OK;
+}
+
+Error MeshStorage::_native_hold_capture_directory(GDExtensionProductionPhysicalContextRefV1 context, GDExtensionDeviceExit::ProductionOutputPin &pin, NativeSurfaceHold &hold, uint32_t limit) {
+	if (!hold.device || !hold.device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (!hold.surface || !hold.directory_frozen || !hold.surface->immutable_retired || !hold.surface->immutable_holds || hold.metadata_return_active || hold.metadata_returned || hold.retirement_directory_returned || !hold.retirement_group.is_empty()) {
+		return ERR_BUSY;
+	}
+	uint32_t count = 0;
+	const Error counted = _native_hold_retirement_root_count(hold, count);
+	if (counted != OK) {
+		return counted;
+	}
+	Vector<RID> roots;
+	for (uint32_t i = 0; i < count; ++i) {
+		RID root;
+		const Error resolved = _native_hold_retirement_root_at(hold, i, root);
+		if (resolved != OK) {
+			return resolved;
+		}
+		if (root.is_valid() && !roots.has(root)) {
+			if (uint32_t(roots.size()) == limit) {
+				return ERR_OUT_OF_MEMORY;
+			}
+			if (roots.push_back(root)) {
+				return ERR_OUT_OF_MEMORY;
+			}
+		}
+	}
+	if (roots.is_empty()) {
+		return ERR_UNAVAILABLE;
+	}
+	// Only this original frozen Surface can supply the roots. The RD
+	// transaction stamps the exact pin/request/group after real capture.
+	const Error captured = hold.device->_production_output_directory_capture(context, pin, roots, limit, hold.retirement_group);
+	if (captured == OK) {
+		hold.retirement_root_count = count;
+		hold.retirement_mark_cursor = 0;
+	}
+	return captured;
+}
+
+Error MeshStorage::_native_hold_mark_next_retirement_root(GDExtensionDeviceExit::ProductionOutputPin &pin, NativeSurfaceHold &hold, const GDExtensionProductionServiceBudgetV1 &budget, GDExtensionDeviceExit::ProductionServiceUsage &usage, bool &done) {
+	done = false;
+	if (!hold.device || !hold.device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (!hold.surface || !hold.directory_frozen || !hold.surface->immutable_retired || hold.surface->immutable_holds != 1 || hold.retirement_group.is_empty() || !hold.physical_transferred || hold.metadata_return_active || hold.metadata_returned) {
+		return ERR_BUSY;
+	}
+	uint32_t count = 0;
+	const Error counted = _native_hold_retirement_root_count(hold, count);
+	if (counted != OK || count != hold.retirement_root_count) {
+		return counted == OK ? ERR_INVALID_DATA : counted;
+	}
+	if (hold.retirement_mark_cursor == count) {
+		done = true;
+		return OK;
+	}
+	const uint32_t ordinal = hold.retirement_mark_cursor;
+	RID root;
+	const Error resolved = _native_hold_retirement_root_at(hold, ordinal, root);
+	if (resolved != OK) {
+		return resolved;
+	}
+	// External current/previous/index buffers and its supplied index array
+	// belong to their original producer. Versions and LOD objects are ours.
+	const bool owned = ordinal != 1 && !(hold.surface->external && (ordinal == 0 || ordinal == 4 || ordinal == 5));
+	const Error marked = hold.device->_production_output_directory_mark_root(pin, hold.retirement_group, root, owned, budget, usage);
+	if (marked != OK) {
+		return marked;
+	}
+	++hold.retirement_mark_cursor;
+	done = hold.retirement_mark_cursor == count;
+	return OK;
+}
+
+Error MeshStorage::_native_hold_return_directory(GDExtensionDeviceExit::ProductionOutputPin &pin, NativeSurfaceHold &hold, const GDExtensionProductionServiceBudgetV1 &budget, GDExtensionDeviceExit::ProductionServiceUsage &usage) {
+	if (!hold.device || !hold.device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (hold.retirement_group.is_empty() || hold.metadata_return_active || (!hold.surface && !hold.metadata_returned)) {
+		return ERR_BUSY;
+	}
+	if (!hold.physical_transferred) {
+		// An uncommitted preparation prefix returns only its new directory
+		// shares after original cancellation/completion. The selected original
+		// Mesh hold stays intact for its ordinary explicit owner return.
+		const Error returned = hold.device->_production_output_directory_return(pin, hold.retirement_group, budget, usage);
+		if (returned == OK) {
+			hold.retirement_root_count = hold.retirement_mark_cursor = 0;
+		}
+		return returned;
+	}
+	if (hold.surface) {
+		auto *surface = hold.surface;
+		if (!hold.directory_frozen || !surface->immutable_retired || !surface->immutable_holds) {
+			return ERR_BUSY;
+		}
+		if (surface->immutable_holds > 1) {
+			// Authenticate and admit the original metadata-share return before
+			// changing custody. The group is still held and cannot yet retire.
+			const Error admitted = hold.device->_production_output_directory_mark_root(pin, hold.retirement_group, RID(), false, budget, usage);
+			if (admitted != OK) {
+				return admitted;
+			}
+			surface->version_lock.lock();
+			CRASH_COND(!surface->output_directory_holds || surface->immutable_holds <= 1);
+			--surface->output_directory_holds;
+			hold.directory_frozen = false;
+			--surface->immutable_holds;
+			hold.surface = nullptr;
+			hold.metadata_returned = true;
+			surface->version_lock.unlock();
+			// A later turn uses only the exact accepted group. Another wrapper
+			// may now be last owner and delete this Surface before we return.
+		} else if (hold.retirement_mark_cursor != hold.retirement_root_count) {
+			return ERR_BUSY;
+		}
+	}
+	const Error returned = hold.device->_production_output_directory_return(pin, hold.retirement_group, budget, usage);
+	if (returned == OK) {
+		hold.retirement_directory_returned = hold.surface != nullptr;
+		hold.retirement_root_count = hold.retirement_mark_cursor = 0;
+	}
+	return returned;
+}
+
+Error MeshStorage::_native_hold_thaw_directory(NativeSurfaceHold &hold) {
+	if (!hold.device || !hold.device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (!hold.retirement_group.is_empty()) {
+		return ERR_BUSY;
+	}
+	if (!hold.directory_frozen) {
+		return OK;
+	}
+	auto *surface = hold.surface;
+	if (!surface || hold.metadata_return_active) {
+		return ERR_BUSY;
+	}
+	surface->version_lock.lock();
+	if (!surface->output_directory_holds) {
+		surface->version_lock.unlock();
+		return ERR_INVALID_DATA;
+	}
+	--surface->output_directory_holds;
+	hold.directory_frozen = false;
+	surface->version_lock.unlock();
+	return OK;
+}
+
+Error MeshStorage::_native_hold_begin_return(NativeSurfaceHold &hold) {
+	if (!hold.device || !hold.device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (!hold.retirement_group.is_empty() || !hold.physical_transferred || hold.physical.is_active() || hold.metadata_return_active) {
+		return ERR_BUSY;
+	}
+	if (hold.metadata_returned) {
+		return OK;
+	}
+	// The last wrapper may delete metadata only after its exact complete
+	// directory group has observed every owned native root return.
+	if (!hold.surface || !hold.retirement_directory_returned || !hold.directory_frozen || !hold.surface->immutable_retired || hold.surface->immutable_holds != 1) {
+		return ERR_BUSY;
+	}
+	const Error thaw = _native_hold_thaw_directory(hold);
+	if (thaw != OK) {
+		return thaw;
+	}
+	auto *surface = hold.surface;
+	hold.surface = nullptr;
+	--surface->immutable_holds;
+	if (surface->versions) {
+		memfree(surface->versions);
+	}
+	if (surface->lod_count) {
+		memdelete_arr(surface->lods);
+	}
+	memdelete(surface);
+	hold.metadata_returned = true;
+	return OK;
+}
+
+Error MeshStorage::_native_hold_finish_return(NativeSurfaceHold &hold) {
+	if (!hold.device || !hold.device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (!hold.physical_transferred || !hold.metadata_returned || hold.metadata_return_active || hold.physical.is_active() || hold.directory_frozen || !hold.retirement_group.is_empty()) {
+		return ERR_BUSY;
+	}
+	// Caller first consumes the exact original Core group completion. Emptying
+	// the wrapper alone never proves physical disposal, source or code return.
+	hold.device = nullptr;
+	hold.physical_transferred = hold.metadata_returned = false;
+	hold.retirement_directory_returned = false;
+	return OK;
+}
+
 Error MeshStorage::mesh_surface_hold_release(NativeSurfaceHold &hold) {
+	if (hold.physical_transferred) {
+		return ERR_BUSY; // The original finite Core group owns physical custody.
+	}
+
 	if (!hold.device || !hold.device->native_immutable_is_render_thread()) {
 		return ERR_UNAUTHORIZED;
 	}
 	if (hold.device->draw_list.active || hold.device->compute_list.active || hold.device->raytracing_list.active) {
 		return ERR_BUSY;
+	}
+	const Error thaw = _native_hold_thaw_directory(hold);
+	if (thaw != OK) {
+		return thaw;
 	}
 	if (hold.surface) {
 		auto *surface = hold.surface;
