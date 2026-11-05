@@ -31,6 +31,7 @@
 #include "class_db.h"
 
 #include "core/config/engine.h"
+#include "core/extension/gdextension_library_exit_guard.h"
 #include "core/io/resource_loader.h"
 #include "core/object/script_language.h"
 #include "core/templates/sort_array.h"
@@ -548,6 +549,7 @@ StringName ClassDB::get_compatibility_class(const StringName &p_class) {
 }
 
 Object *ClassDB::_instantiate_from_gdextension(ObjectGDExtension *p_object_gd_extension, bool p_notify_postinitialize, bool p_with_refcount) {
+	ERR_FAIL_COND_V_MSG(GDExtensionDeviceExit::Registry::is_production_metadata_entry(), nullptr, "Accepted production metadata entry cannot construct engine objects.");
 	// This frame also spans the original init_ref/deinit_ref adjustment below.
 	// ClassDB placeholders contain only core callbacks and need no DSO permit.
 	std::optional<GDExtensionDeviceExit::CallbackScope> constructor_frame;
@@ -595,6 +597,7 @@ Object *ClassDB::_instantiate_from_gdextension(ObjectGDExtension *p_object_gd_ex
 }
 
 Object *ClassDB::_instantiate_internal(const StringName &p_class, bool p_require_real_class, bool p_notify_postinitialize, bool p_exposed_only, bool p_with_refcount) {
+	ERR_FAIL_COND_V_MSG(GDExtensionDeviceExit::Registry::is_production_metadata_entry(), nullptr, "Accepted production metadata entry cannot construct engine objects.");
 	ClassInfo *ti;
 	{
 		Locker::Lock lock(Locker::STATE_READ);

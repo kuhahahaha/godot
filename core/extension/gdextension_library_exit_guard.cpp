@@ -417,6 +417,9 @@ CallbackIdentityScope::~CallbackIdentityScope() {
 	context.leave();
 }
 Error Registry::authenticate_registration(const RecordRef &p_ref) {
+	if (is_production_metadata_entry()) {
+		return ERR_UNAUTHORIZED;
+	}
 	const RegistrationContext *context = RegistrationContext::current;
 	if (p_ref.registry != this || !context || !context->registration_allowed ||
 			context->reference->registry != this || context->reference->slot != p_ref.slot) {
@@ -1397,6 +1400,9 @@ Error Registry::reserve_open(uint32_t p_kind, RecordRef &r_wrapper, RecordRef &r
 }
 
 Error Registry::retain_binding_owner(void *p_token, RecordRef &r_ref) {
+	if (is_production_metadata_entry()) {
+		return ERR_UNAUTHORIZED;
+	}
 	if (r_ref.is_valid()) {
 		return ERR_INVALID_DATA;
 	}

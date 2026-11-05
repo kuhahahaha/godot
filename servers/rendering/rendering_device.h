@@ -1549,7 +1549,10 @@ private:
 		RECYCLE,
 		WORK };
 	std::atomic<bool> native_disposal_active = false;
+	uint64_t next_native_disposal_serial = 1;
 	struct NativeDisposalContinuation {
+		uint64_t serial = 0;
+		const GDExtensionDeviceExit::ProductionRequest *production_owner = nullptr;
 		uint32_t phase = 0;
 		uint32_t target = 0;
 		uint32_t end_phase = 0;
@@ -1564,7 +1567,8 @@ private:
 	bool _native_disposal_admit(NativeDisposalWork p_work, uint32_t p_count = 1);
 	Error _native_disposal_stall_step(uint32_t p_frame);
 	bool _native_disposal_charge(const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage, NativeDisposalWork p_work);
-	Error _native_disposal_maintenance_step(const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage);
+	Error _native_disposal_maintenance_step(const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage, const GDExtensionDeviceExit::ProductionRequest *p_production_owner = nullptr);
+	void _capture_disposal_cutoff(uint32_t p_frame);
 	Error _free_pending_resources_step(int p_frame, const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage);
 
 	bool _native_disposal_enqueue(NativeDisposalWitness &p_witness, uint64_t p_rid, uint64_t p_serial, uint64_t p_backing);

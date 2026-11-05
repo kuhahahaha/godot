@@ -35,6 +35,7 @@
 #include "core/templates/local_vector.h"
 #include "core/templates/rid.h"
 
+class StringName;
 class RenderingDevice;
 class RenderingServerDefault;
 class TestProductionResourceUseAccess;
@@ -78,6 +79,14 @@ struct CheckedRecordAppend;
 struct OriginalOperationIdentity;
 struct BufferReadbackSourceCapture;
 struct NativeSourceIssueView;
+// Core physical call-frame identity only. Its serial is issued by the actual
+// protected RT entry and expires on return; no Runtime/source authority.
+struct ProductionPhysicalContextRef {
+	uint64_t registry_instance = 0, frame_serial = 0;
+};
+using ProductionRecordReceiver = void (*)(void *, ProductionPhysicalContextRef,
+		GDExtensionProductionRequestRefV1, const GDExtensionProductionOperationV1 *);
+using ProductionMetadataReceiver = void (*)(void *, GDExtensionProductionAttachmentRefV1);
 class ProductionAttachment;
 class ProductionRequest;
 class ProductionResourceSlot;
@@ -276,7 +285,8 @@ enum class LevelPhase { NONE,
 	INITIALIZE,
 	DEINITIALIZE,
 	PREFLIGHT,
-	SCENE_READY };
+	SCENE_READY,
+	PRODUCTION_METADATA };
 enum class SceneReadyFailureReason { NO_SCENE_TREE,
 	NO_ROOT_WORLD,
 	NO_PUBLISHED_RENDERING_SERVER,
@@ -550,6 +560,8 @@ class Registry {
 
 public:
 	static constexpr uint32_t MAX_LIVE_GENERATIONS = 1024;
+	static bool is_production_metadata_entry();
+	static bool production_metadata_engine_call_allowed(const StringName &, const StringName &);
 
 private:
 	friend class NativeCloseScope;
@@ -823,6 +835,11 @@ private:
 	void qualification_trim_cleanup_ref_credits_locked(QualificationBridge *);
 	Error qualification_rt_ticket_locked(QualificationBridge *, const GDExtensionQualificationRtRequestV1 &, const uint8_t *, const uint8_t *, QualificationTicket *&);
 
+	void production_metadata_pump();
+	struct ProductionPhysicalFrame;
+	static thread_local ProductionPhysicalFrame *production_physical_frame;
+	Error production_physical_request_locked(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, ProductionRequest *&, RenderingDevice *&, bool);
+	Error production_record_receive_locked(ProductionRequest &, RenderingDevice &);
 	ProductionAttachment *production_attachments[RECORD_CAPACITY] = {};
 	Sequence production_serials;
 	static Error production_layout(const GDExtensionProductionCapacityV1 &, GDExtensionProductionMetadataQuoteV1 &, uint32_t = 0, uint32_t = 0);
@@ -844,7 +861,7 @@ private:
 	Error production_sets_step_locked(ProductionRequest &, RenderingDevice &, const GDExtensionProductionServiceBudgetV1 &, ProductionServiceUsage &);
 	Error production_readback_delivery(BufferReadbackSourceCapture &, bool);
 	Error production_close_lists_locked(ProductionRequest &, RenderingDevice &);
-	Error production_close_segment_locked(ProductionRequest &, GDExtensionProductionSegmentV1 &);
+	Error production_close_segment_locked(ProductionRequest &, GDExtensionProductionSegmentV1 &, bool = false);
 	Error production_ack_segment_locked(ProductionRequest &, uint64_t, uint64_t);
 	CheckedRecordAppend production_record_effect_locked(ProductionRequest &, RenderingDevice &, uint32_t, const OriginalOperationIdentity &);
 	Error production_capture_graph_locked(ProductionRequest &, RenderingDevice &, uint64_t, const CheckedRecordAppend &);
@@ -919,6 +936,12 @@ public:
 	// Production metadata handlers. Public ABI registration is deliberately separate.
 	GDExtensionDeviceSessionResultV1 production_quote(const GDExtensionDeviceExitAbi *, GDExtensionDeviceExitSceneReadyContextRef, GDExtensionProducerRegistrationRefV1, GDExtensionDeviceRegistryContextRef, GDExtensionOriginalDeviceSessionRef, const GDExtensionProductionCapacityV1 *, GDExtensionProductionMetadataQuoteV1 *);
 	GDExtensionDeviceSessionResultV1 production_accept(const GDExtensionDeviceExitAbi *, GDExtensionDeviceExitSceneReadyContextRef, GDExtensionProducerRegistrationRefV1, GDExtensionDeviceRegistryContextRef, GDExtensionOriginalDeviceSessionRef, GDExtensionDeviceExitLibraryCodeHoldRef, const GDExtensionProductionMetadataQuoteV1 *, GDExtensionProductionAttachmentRefV1 *, GDExtensionProductionInstallationReportV1 *);
+	Error production_install_record_receiver(GDExtensionDeviceExitSceneReadyContextRef, GDExtensionProductionAttachmentRefV1, ProductionRecordReceiver, void *, ProductionMetadataReceiver = nullptr);
+	GDExtensionDeviceSessionResultV1 production_reserve(GDExtensionProductionAttachmentRefV1, const GDExtensionProductionOperationV1 *, const GDExtensionProductionCapacityV1 *, const GDExtensionProductionActionV1 *, uint32_t, const GDExtensionProductionResourceV1 *, uint32_t, const GDExtensionProductionUseV1 *, uint32_t, const GDExtensionProductionReadbackV1 *, uint32_t, GDExtensionProductionRequestRefV1 *);
+	Error production_record_schedule(GDExtensionProductionRequestRefV1, uint64_t *);
+	GDExtensionDeviceSessionResultV1 production_append(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, uint64_t, uint64_t, GDExtensionProductionAppendV1 *);
+	GDExtensionDeviceSessionResultV1 production_close_segment(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, GDExtensionProductionSegmentV1 *);
+	GDExtensionDeviceSessionResultV1 production_ack_segment(GDExtensionProductionRequestRefV1, uint64_t, uint64_t);
 	GDExtensionDeviceSessionResultV1 production_open(GDExtensionDeviceExitSceneReadyContextRef, GDExtensionProductionAttachmentRefV1);
 	GDExtensionDeviceSessionResultV1 production_set_create(GDExtensionProductionRequestRefV1, uint32_t, uint32_t, uint32_t, const GDExtensionProductionSetBindingV1 *, uint32_t);
 	GDExtensionDeviceSessionResultV1 production_storage_create(GDExtensionProductionRequestRefV1, uint32_t, const GDExtensionStorageCreateRequestV1 *, GDExtensionStorageBackingV1 *);

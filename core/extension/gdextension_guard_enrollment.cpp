@@ -59,6 +59,9 @@ bool empty_output(T *p) {
 } //namespace
 
 Error Registry::check_entry_classes(const RecordRef &ref, uint64_t classes) {
+	if (is_production_metadata_entry()) {
+		return ERR_UNAUTHORIZED;
+	}
 	if (!ref.is_valid()) {
 		return OK;
 	}
@@ -81,6 +84,9 @@ Error Registry::check_current_entry_classes(uint64_t classes) {
 }
 
 Error Registry::retain_callable_owner(void *token, RecordRef &out) {
+	if (is_production_metadata_entry()) {
+		return ERR_UNAUTHORIZED;
+	}
 	if (out.is_valid()) {
 		return ERR_INVALID_DATA;
 	}
@@ -1001,6 +1007,9 @@ struct CodeHolder : HolderRetirement {
 };
 } //namespace
 Error Registry::acquire_code_hold(const GDExtensionDeviceExitAbi *abi, GuardedLibraryRef library, RegisteredCleanupRef terminal, LibraryCodeHoldRef *out) {
+	if (is_production_metadata_entry()) {
+		return ERR_UNAUTHORIZED;
+	}
 	if (!abi_valid(abi) || !empty_output(out)) {
 		return ERR_INVALID_DATA;
 	}
@@ -1040,6 +1049,9 @@ Error Registry::acquire_code_hold(const GDExtensionDeviceExitAbi *abi, GuardedLi
 	return OK;
 }
 Error Registry::clone_code_hold(const GDExtensionDeviceExitAbi *abi, LibraryCodeHoldRef source, LibraryCodeHoldRef *out) {
+	if (is_production_metadata_entry()) {
+		return ERR_UNAUTHORIZED;
+	}
 	if (!abi_valid(abi) || !empty_output(out) || source.registry_instance != instance || !source.handle_serial) {
 		return ERR_INVALID_DATA;
 	}

@@ -64,6 +64,9 @@ bool valid_abi(const GDExtensionDeviceExitAbi *abi) {
 }
 } //namespace
 Error Registry::qualification_bridge_locked(GDExtensionQualificationBridgeRefV1 ref, bool execution, bool admit, QualificationBridge *&out, RenderingDevice *&rd, uint32_t accepted_kind) {
+	if (admit && is_production_metadata_entry()) {
+		return ERR_UNAUTHORIZED;
+	}
 	if (ref.registry_instance != instance || !ref.handle_serial) {
 		return ERR_INVALID_DATA;
 	}

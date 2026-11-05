@@ -32,6 +32,7 @@
 
 #include "core/config/engine.h"
 #include "core/extension/gdextension_function_loader.h"
+#include "core/extension/gdextension_library_exit_guard.h"
 #include "core/extension/gdextension_library_loader.h"
 #include "core/extension/gdextension_special_compat_hashes.h"
 #include "core/io/dir_access.h"
@@ -74,7 +75,9 @@ GDExtensionManager::LoadStatus GDExtensionManager::_load_extension_internal(cons
 
 GDExtensionManager::LoadStatus GDExtensionManager::_finish_guarded_scene_ready_or_abort(const Ref<GDExtension> &extension, bool reloading) {
 	(void)reloading; // The caller retains/removes its existing map entry.
-	if (!scene_materialization_seam_reached || extension->loader->get_device_exit_guard_version() != 1) { return LOAD_STATUS_OK; }
+	if (!scene_materialization_seam_reached || extension->loader->get_device_exit_guard_version() != 1) {
+		return LOAD_STATUS_OK;
+	}
 	Error error = scene_materialization_error;
 	if (error != OK) {
 		auto &registry = GDExtensionDeviceExit::Registry::get_singleton();
@@ -84,10 +87,14 @@ GDExtensionManager::LoadStatus GDExtensionManager::_finish_guarded_scene_ready_o
 	} else {
 		error = extension->dispatch_scene_ready_if_materialized();
 	}
-	if (error == OK) { return LOAD_STATUS_OK; }
+	if (error == OK) {
+		return LOAD_STATUS_OK;
+	}
 	for (const KeyValue<String, String> &icon : extension->class_icon_paths) {
 		const auto *current = gdextension_class_icon_paths.getptr(icon.key);
-		if (current && *current == icon.value) { gdextension_class_icon_paths.erase(icon.key); }
+		if (current && *current == icon.value) {
+			gdextension_class_icon_paths.erase(icon.key);
+		}
 	}
 	extension->abort_scene_ready_load(error); // The local Ref stays live through the exact INIT_ABORT close.
 	return LOAD_STATUS_FAILED;
@@ -121,8 +128,7 @@ GDExtensionManager::LoadStatus GDExtensionManager::_unload_extension_internal(co
 
 	if (level >= 0) { // Already initialized up to some level.
 		// Deinitialize down from current level.
-		const int32_t minimum_level = p_extension->loader->get_device_exit_guard_version() == 1 ?
-				p_extension->get_minimum_library_initialization_level() : GDExtension::INITIALIZATION_LEVEL_CORE;
+		const int32_t minimum_level = p_extension->loader->get_device_exit_guard_version() == 1 ? p_extension->get_minimum_library_initialization_level() : GDExtension::INITIALIZATION_LEVEL_CORE;
 		for (int32_t i = level; i >= minimum_level; i--) {
 			GDExtensionDeviceExit::require_level_dispatch_success(p_extension->deinitialize_library(GDExtension::InitializationLevel(i)), i, false);
 		}
@@ -177,7 +183,9 @@ GDExtensionManager::LoadStatus GDExtensionManager::load_extension_with_loader(co
 		return status;
 	}
 	status = _finish_guarded_scene_ready_or_abort(extension, false);
-	if (status != LOAD_STATUS_OK) { return status; }
+	if (status != LOAD_STATUS_OK) {
+		return status;
+	}
 
 	_finish_load_extension(extension);
 
@@ -234,7 +242,9 @@ GDExtensionManager::LoadStatus GDExtensionManager::reload_extension(const String
 		return status;
 	}
 	status = _finish_guarded_scene_ready_or_abort(extension, true);
-	if (status != LOAD_STATUS_OK) { return status; }
+	if (status != LOAD_STATUS_OK) {
+		return status;
+	}
 
 	extension->finish_reload();
 
@@ -314,7 +324,9 @@ Error GDExtensionManager::initialize_extensions(GDExtension::InitializationLevel
 	ERR_FAIL_COND_V(int32_t(p_level) - 1 != level, ERR_INVALID_PARAMETER);
 	level = p_level; // Partial startup unwinds each extension's actual initialized level.
 	for (KeyValue<String, Ref<GDExtension>> &E : gdextension_map) {
-		if (E.value->loader->get_device_exit_guard_version() == 1 && p_level < E.value->get_minimum_library_initialization_level()) { continue; }
+		if (E.value->loader->get_device_exit_guard_version() == 1 && p_level < E.value->get_minimum_library_initialization_level()) {
+			continue;
+		}
 		const Error error = E.value->initialize_library(p_level);
 		if (error != OK && E.value->loader->get_device_exit_guard_version() == 1 && E.value->scene_ready_load_error == error) {
 			E.value->abort_scene_ready_load(error);
@@ -332,11 +344,17 @@ Error GDExtensionManager::initialize_extensions(GDExtension::InitializationLevel
 }
 
 Error GDExtensionManager::scene_materialized() {
-	if (!Thread::is_main_thread()) { return ERR_UNAUTHORIZED; }
-	if (scene_materialization_dispatch_active) { return ERR_BUSY; }
+	if (!Thread::is_main_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (scene_materialization_dispatch_active) {
+		return ERR_BUSY;
+	}
 	// Record actual Main order before prechecks or any extension entry.
 	scene_materialization_seam_reached = true;
-	if (scene_materialization_error != OK) { return scene_materialization_error; }
+	if (scene_materialization_error != OK) {
+		return scene_materialization_error;
+	}
 	scene_materialization_dispatch_active = true;
 	struct DispatchReturn {
 		bool &active;
@@ -362,12 +380,16 @@ Error GDExtensionManager::scene_materialized() {
 			GDExtensionDeviceExit::require_close_success(ERR_INVALID_DATA, GDExtensionDeviceExit::CloseRoute::SHUTDOWN);
 		}
 		const Error error = item.extension->dispatch_scene_ready_if_materialized();
-		if (error == OK) { continue; }
+		if (error == OK) {
+			continue;
+		}
 		scene_materialization_error = error;
 		// Include generations added by an earlier callback; never hold a map
 		// iterator across DSO entry. Cancellation enters no extension code.
 		for (const KeyValue<String, Ref<GDExtension>> &entry : gdextension_map) {
-			if (!registry.scene_ready_pending(entry.value->library_exit_ref)) { continue; }
+			if (!registry.scene_ready_pending(entry.value->library_exit_ref)) {
+				continue;
+			}
 			GDExtensionDeviceExit::require_close_success(
 					registry.cancel_pending_scene_ready(entry.value->library_exit_ref, GDExtensionDeviceExit::CloseRoute::SHUTDOWN),
 					GDExtensionDeviceExit::CloseRoute::SHUTDOWN);
@@ -378,23 +400,37 @@ Error GDExtensionManager::scene_materialized() {
 }
 
 Error GDExtensionManager::cancel_pending_scene_ready_for_start_abort(GDExtensionDeviceExit::CloseRoute route) {
-	if (!Thread::is_main_thread()) { return ERR_UNAUTHORIZED; }
-	if (route != GDExtensionDeviceExit::CloseRoute::SETUP_ABORT && route != GDExtensionDeviceExit::CloseRoute::SHUTDOWN) { return ERR_INVALID_DATA; }
-	if (scene_materialization_seam_reached || scene_materialization_dispatch_active) { return ERR_UNAUTHORIZED; }
+	if (!Thread::is_main_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (route != GDExtensionDeviceExit::CloseRoute::SETUP_ABORT && route != GDExtensionDeviceExit::CloseRoute::SHUTDOWN) {
+		return ERR_INVALID_DATA;
+	}
+	if (scene_materialization_seam_reached || scene_materialization_dispatch_active) {
+		return ERR_UNAUTHORIZED;
+	}
 	auto &registry = GDExtensionDeviceExit::Registry::get_singleton();
 	for (const KeyValue<String, Ref<GDExtension>> &entry : gdextension_map) {
-		if (!registry.scene_ready_pending(entry.value->library_exit_ref)) { continue; }
+		if (!registry.scene_ready_pending(entry.value->library_exit_ref)) {
+			continue;
+		}
 		const Error error = registry.cancel_pending_scene_ready(entry.value->library_exit_ref, route);
-		if (error != OK) { return error; }
+		if (error != OK) {
+			return error;
+		}
 	}
 	return OK;
 }
 
 Error GDExtensionManager::preflight_exit(GDExtensionDeviceExit::CloseRoute p_route) {
 	for (const KeyValue<String, Ref<GDExtension>> &E : gdextension_map) {
-		if (E.value->loader->get_device_exit_guard_version() != 1 || !E.value->is_library_open()) { continue; }
+		if (E.value->loader->get_device_exit_guard_version() != 1 || !E.value->is_library_open()) {
+			continue;
+		}
 		const Error result = E.value->preflight_exit(p_route);
-		if (result != OK) { return result; }
+		if (result != OK) {
+			return result;
+		}
 	}
 	exit_route = p_route;
 	return OK;
@@ -402,15 +438,21 @@ Error GDExtensionManager::preflight_exit(GDExtensionDeviceExit::CloseRoute p_rou
 
 Error GDExtensionManager::deinitialize_guarded_extensions_before_main_loop() {
 	const Error preflight = preflight_exit(exit_route);
-	if (preflight != OK) { return preflight; }
-	if (guarded_levels_deinitialized_before_main_loop) { return OK; }
+	if (preflight != OK) {
+		return preflight;
+	}
+	if (guarded_levels_deinitialized_before_main_loop) {
+		return OK;
+	}
 	// A guarded SCENE binding may belong to the main loop itself. Retire its
 	// exact BINDING action while the SceneTree is still alive; legacy libraries
 	// retain the established module and ScriptServer teardown order.
 	for (int32_t current_level = GDExtension::INITIALIZATION_LEVEL_EDITOR; current_level >= GDExtension::INITIALIZATION_LEVEL_SCENE; current_level--) {
 		for (KeyValue<String, Ref<GDExtension>> &E : gdextension_map) {
 			if (E.value->loader->get_device_exit_guard_version() != 1 || !E.value->is_library_open() || E.value->level_initialized != current_level ||
-					current_level < E.value->get_minimum_library_initialization_level()) { continue; }
+					current_level < E.value->get_minimum_library_initialization_level()) {
+				continue;
+			}
 			GDExtensionDeviceExit::require_level_dispatch_success(
 					E.value->deinitialize_library(GDExtension::InitializationLevel(current_level)), current_level, false);
 		}
@@ -421,14 +463,18 @@ Error GDExtensionManager::deinitialize_guarded_extensions_before_main_loop() {
 
 Error GDExtensionManager::deinitialize_guarded_core_for_setup_abort() {
 	const Error error = preflight_exit(GDExtensionDeviceExit::CloseRoute::SETUP_ABORT);
-	if (error != OK) { return error; }
+	if (error != OK) {
+		return error;
+	}
 	// Main must first unwind native services interleaved with their owning
 	// extension levels. In particular Navigation precedes SERVERS teardown.
 	ERR_FAIL_COND_V(level > GDExtension::INITIALIZATION_LEVEL_CORE, ERR_INVALID_DATA);
 	// Guarded CORE terminals also run while globals/core services remain live;
 	// legacy CORE retains its established unregister_core_extensions boundary.
 	for (const KeyValue<String, Ref<GDExtension>> &entry : gdextension_map) {
-		if (entry.value->loader->get_device_exit_guard_version() != 1 || !entry.value->is_library_open() || entry.value->level_initialized != GDExtension::INITIALIZATION_LEVEL_CORE) { continue; }
+		if (entry.value->loader->get_device_exit_guard_version() != 1 || !entry.value->is_library_open() || entry.value->level_initialized != GDExtension::INITIALIZATION_LEVEL_CORE) {
+			continue;
+		}
 		GDExtensionDeviceExit::require_level_dispatch_success(entry.value->deinitialize_library(GDExtension::INITIALIZATION_LEVEL_CORE), GDExtension::INITIALIZATION_LEVEL_CORE, false);
 	}
 	return OK;
@@ -441,12 +487,20 @@ Error GDExtensionManager::deinitialize_extensions(GDExtension::InitializationLev
 
 	ERR_FAIL_COND_V(int32_t(p_level) != level, ERR_INVALID_PARAMETER);
 	const Error preflight = preflight_exit(exit_route);
-	if (preflight != OK) { return preflight; }
+	if (preflight != OK) {
+		return preflight;
+	}
 	for (KeyValue<String, Ref<GDExtension>> &E : gdextension_map) {
-		if (!E.value->is_library_open() || E.value->level_initialized < p_level) { continue; }
-		if (E.value->loader->get_device_exit_guard_version() == 1 && p_level < E.value->get_minimum_library_initialization_level()) { continue; }
+		if (!E.value->is_library_open() || E.value->level_initialized < p_level) {
+			continue;
+		}
+		if (E.value->loader->get_device_exit_guard_version() == 1 && p_level < E.value->get_minimum_library_initialization_level()) {
+			continue;
+		}
 		if (guarded_levels_deinitialized_before_main_loop &&
-				E.value->loader->get_device_exit_guard_version() == 1 && p_level >= GDExtension::INITIALIZATION_LEVEL_SCENE) { continue; }
+				E.value->loader->get_device_exit_guard_version() == 1 && p_level >= GDExtension::INITIALIZATION_LEVEL_SCENE) {
+			continue;
+		}
 		GDExtensionDeviceExit::require_level_dispatch_success(E.value->deinitialize_library(p_level), p_level, false);
 	}
 	level = int32_t(p_level) - 1;
@@ -603,7 +657,9 @@ void GDExtensionManager::startup() {
 
 Error GDExtensionManager::shutdown() {
 	const Error preflight = preflight_exit(GDExtensionDeviceExit::CloseRoute::SHUTDOWN);
-	if (preflight != OK) { return preflight; }
+	if (preflight != OK) {
+		return preflight;
+	}
 	shutdown_callback_called = true;
 
 	for (const KeyValue<String, Ref<GDExtension>> &E : gdextension_map) {
@@ -614,6 +670,8 @@ Error GDExtensionManager::shutdown() {
 }
 
 void GDExtensionManager::frame() {
+	// Accepted owner metadata must keep returning after normal entry is sealed.
+	GDExtensionDeviceExit::Registry::get_singleton().production_metadata_pump();
 	for (const KeyValue<String, Ref<GDExtension>> &E : gdextension_map) {
 		const Ref<GDExtension> &extension = E.value;
 		extension->_call_main_loop_callback(GDExtension::MainLoopCallback::FRAME);

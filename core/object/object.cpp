@@ -32,6 +32,7 @@
 #include "object.compat.inc"
 
 #include "core/config/engine.h"
+#include "core/extension/gdextension_library_exit_guard.h"
 #include "core/extension/gdextension_manager.h"
 #include "core/io/resource.h"
 #include "core/object/class_db.h"
@@ -340,6 +341,12 @@ void Object::_postinitialize() {
 }
 
 void Object::set(const StringName &p_name, const Variant &p_value, bool *r_valid) {
+	if (GDExtensionDeviceExit::Registry::is_production_metadata_entry()) {
+		if (r_valid) {
+			*r_valid = false;
+		}
+		return;
+	}
 #ifdef TOOLS_ENABLED
 
 	_edited = true;
@@ -901,6 +908,11 @@ Variant Object::callv(const StringName &p_method, const Array &p_args) {
 }
 
 Variant Object::callp(const StringName &p_method, const Variant **p_args, int p_argcount, Callable::CallError &r_error) {
+	const StringName metadata_class = p_method == "unreference" && is_ref_counted() ? StringName("RefCounted") : get_class_name();
+	if (!GDExtensionDeviceExit::Registry::production_metadata_engine_call_allowed(metadata_class, p_method)) {
+		r_error.error = Callable::CallError::CALL_ERROR_INVALID_METHOD;
+		return Variant();
+	}
 	r_error.error = Callable::CallError::CALL_OK;
 
 	if (p_method == CoreStringName(free_)) {
@@ -1047,7 +1059,9 @@ bool Object::_gdvirtual_init_method_ptr(uint32_t p_compat_hash, void *&r_fn_ptr,
 
 void Object::_notification_forward(int p_notification) {
 	const uint64_t predelete_thread = _predelete_callback_thread == Thread::get_caller_id() &&
-			(p_notification == NOTIFICATION_PREDELETE || p_notification == NOTIFICATION_PREDELETE_CLEANUP) ? _predelete_callback_thread : 0;
+					(p_notification == NOTIFICATION_PREDELETE || p_notification == NOTIFICATION_PREDELETE_CLEANUP)
+			? _predelete_callback_thread
+			: 0;
 	if (predelete_thread) {
 		// Consume inheritance before script/core/DSO code can reenter dispatch.
 		_predelete_callback_thread = 0;
@@ -1079,7 +1093,9 @@ void Object::_notification_forward(int p_notification) {
 
 void Object::_notification_backward(int p_notification) {
 	const uint64_t predelete_thread = _predelete_callback_thread == Thread::get_caller_id() &&
-			(p_notification == NOTIFICATION_PREDELETE || p_notification == NOTIFICATION_PREDELETE_CLEANUP) ? _predelete_callback_thread : 0;
+					(p_notification == NOTIFICATION_PREDELETE || p_notification == NOTIFICATION_PREDELETE_CLEANUP)
+			? _predelete_callback_thread
+			: 0;
 	if (predelete_thread) {
 		_predelete_callback_thread = 0;
 	}
@@ -1368,6 +1384,9 @@ Error Object::_emit_signal(const Variant **p_args, int p_argcount, Callable::Cal
 }
 
 Error Object::emit_signalp(const StringName &p_name, const Variant **p_args, int p_argcount) {
+	if (GDExtensionDeviceExit::Registry::is_production_metadata_entry()) {
+		return ERR_UNAUTHORIZED;
+	}
 	NativeContinuation continuation(this);
 	if (!continuation.is_valid()) {
 		return ERR_UNAVAILABLE;
@@ -1720,6 +1739,9 @@ void Object::get_signals_connected_to_this(List<Connection> *p_connections) cons
 }
 
 Error Object::connect(const StringName &p_signal, const Callable &p_callable, uint32_t p_flags) {
+	if (GDExtensionDeviceExit::Registry::is_production_metadata_entry()) {
+		return ERR_UNAUTHORIZED;
+	}
 	ERR_FAIL_COND_V_MSG(p_callable.is_null(), ERR_INVALID_PARAMETER, vformat("Cannot connect to '%s': the provided callable is null.", p_signal));
 	Object *target_object = p_callable.get_object();
 	ObjectSignalLock signal_lock(this, target_object);
@@ -2396,7 +2418,9 @@ void Object::set_instance_binding(void *p_token, void *p_binding, const GDExtens
 	}
 	if (binding.owner.get_reference().is_valid() && (binding.free_callback || binding.reference_callback)) {
 		const Error holder = binding.lifetime.acquire_core(binding.owner.get_reference());
-		if (holder == OK) { binding.lifetime.bind_core_action(uint64_t(_instance_id)); }
+		if (holder == OK) {
+			binding.lifetime.bind_core_action(uint64_t(_instance_id));
+		}
 		if (holder != OK) {
 			GDExtensionDeviceExit::stop_lifetime_entry(holder == ERR_PARAMETER_RANGE_ERROR ? GDExtensionDeviceExit::LifetimeFailure::LIMIT : GDExtensionDeviceExit::LifetimeFailure::UNREGISTERED);
 		}
@@ -2756,12 +2780,14 @@ void *Object::get_instance_binding(void *p_token, const GDExtensionInstanceBindi
 	if (result == OK && frame && frame->get_error() != OK) {
 		result = frame->get_error() == ERR_PARAMETER_RANGE_ERROR ? ERR_PARAMETER_RANGE_ERROR : ERR_UNAVAILABLE;
 	}
-	if (result == OK) { result = GDExtensionDeviceExit::Registry::get_singleton().check_entry_classes(candidate.owner.get_reference(), 1u << 6); }
+	if (result == OK) {
+		result = GDExtensionDeviceExit::Registry::get_singleton().check_entry_classes(candidate.owner.get_reference(), 1u << 6);
+	}
 	bool admitted = result == OK;
 	GDExtensionDeviceExit::CleanupAction *created_cleanup = nullptr;
 	if (admitted && enrolled == OK) {
 		const Error cleanup_registration = register_core_release_lifetime(
-			candidate.owner.get_reference(), Thread::get_caller_id(), uint64_t(_instance_id), &created_cleanup);
+				candidate.owner.get_reference(), Thread::get_caller_id(), uint64_t(_instance_id), &created_cleanup);
 		if (cleanup_registration != OK && cleanup_registration != ERR_ALREADY_EXISTS) {
 			result = cleanup_registration == ERR_PARAMETER_RANGE_ERROR ? ERR_PARAMETER_RANGE_ERROR : ERR_UNAVAILABLE;
 			admitted = false;
@@ -2769,7 +2795,9 @@ void *Object::get_instance_binding(void *p_token, const GDExtensionInstanceBindi
 	}
 	if (admitted && enrolled == OK && (candidate.free_callback || candidate.reference_callback)) {
 		result = candidate.lifetime.acquire_core(candidate.owner.get_reference());
-		if (result == OK) { candidate.lifetime.bind_core_action(uint64_t(_instance_id)); }
+		if (result == OK) {
+			candidate.lifetime.bind_core_action(uint64_t(_instance_id));
+		}
 		if (result != OK && result != ERR_PARAMETER_RANGE_ERROR) {
 			result = ERR_UNAVAILABLE;
 		}
@@ -2814,7 +2842,9 @@ void *Object::get_instance_binding(void *p_token, const GDExtensionInstanceBindi
 		MutexLock lock(_instance_binding_mutex);
 		_binding_mutation = false;
 	}
-	if (!published) { candidate.lifetime.record_core_disposal(); }
+	if (!published) {
+		candidate.lifetime.record_core_disposal();
+	}
 	if (rollback_action) {
 		rollback_action->record_core_disposal();
 		memdelete(rollback_action);

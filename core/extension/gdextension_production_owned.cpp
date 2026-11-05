@@ -586,6 +586,12 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 	if (!rd.driver || rd.frames.is_empty() || rd.draw_list.active || rd.compute_list.active || rd.raytracing_list.active || rd.frame_wait_draining || rd.draw_graph.has_driver_callbacks()) {
 		return ERR_BUSY;
 	}
+	if (request.maintenance_serial && (!rd.native_disposal_active || request.maintenance_serial != rd.native_disposal_continuation.serial)) {
+		request.maintenance_serial = 0;
+	}
+	if (rd.native_disposal_active && !request.maintenance_serial) {
+		return ERR_BUSY; // Never adopt another request's or qualification lane's cursor.
+	}
 	// Every graph command must be covered by an actual original production
 	// capture. Other renderer/qualification work waits for its original lane;
 	// this owner service cannot turn that work into a production receipt.
@@ -632,19 +638,42 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 		}
 		return false;
 	};
-	for (const auto &frame : rd.frames) {
-		if (!frame.qualification_tickets.is_empty() || !frame.download_texture_get_data_requests.is_empty() || !frame.swap_chains_to_present.is_empty() || !frame.textures_to_dispose_of.is_empty() || !frame.framebuffers_to_dispose_of.is_empty() || !frame.samplers_to_dispose_of.is_empty() || !frame.shaders_to_dispose_of.is_empty() || !frame.render_pipelines_to_dispose_of.is_empty() || !frame.compute_pipelines_to_dispose_of.is_empty() || !frame.acceleration_structures_to_dispose_of.is_empty() || !frame.raytracing_pipelines_to_dispose_of.is_empty()) {
+	const bool resuming = rd.native_disposal_active && request.maintenance_serial == rd.native_disposal_continuation.serial;
+	for (uint32_t frame_index = 0; frame_index < rd.frames.size(); ++frame_index) {
+		const auto &frame = rd.frames[frame_index];
+		if (!frame.qualification_tickets.is_empty() || !frame.download_texture_get_data_requests.is_empty() || !frame.swap_chains_to_present.is_empty() || (!resuming && (!frame.textures_to_dispose_of.is_empty() || !frame.framebuffers_to_dispose_of.is_empty() || !frame.samplers_to_dispose_of.is_empty() || !frame.shaders_to_dispose_of.is_empty() || !frame.render_pipelines_to_dispose_of.is_empty() || !frame.compute_pipelines_to_dispose_of.is_empty() || !frame.acceleration_structures_to_dispose_of.is_empty() || !frame.raytracing_pipelines_to_dispose_of.is_empty()))) {
 			return ERR_BUSY;
 		}
-		for (const auto &buffer : frame.buffers_to_dispose_of) {
-			if (!owned_physical(buffer.qualification_return)) {
-				return ERR_BUSY;
+		uint32_t buffers = frame.buffers_to_dispose_of.size();
+		uint32_t sets = frame.uniform_sets_to_dispose_of.size();
+		if (resuming) {
+			buffers = sets = 0;
+			if (frame_index == rd.native_disposal_continuation.target && rd.native_disposal_continuation.phase < 5) {
+				if (!frame.disposal.active) {
+					return ERR_INVALID_DATA;
+				}
+				for (uint32_t kind = 0; kind < 10; ++kind) {
+					if (kind != 4 && kind != 9 && frame.disposal.remaining[kind]) {
+						return ERR_INVALID_DATA;
+					}
+				}
+				buffers = frame.disposal.remaining[9];
+				sets = frame.disposal.remaining[4];
 			}
 		}
-		for (const auto &set : frame.uniform_sets_to_dispose_of) {
-			if (!owned_physical(set.qualification_return)) {
+		const auto *buffer = frame.buffers_to_dispose_of.front();
+		for (uint32_t i = 0; i < buffers; ++i) {
+			if (!buffer || !owned_physical(buffer->get().qualification_return)) {
 				return ERR_BUSY;
 			}
+			buffer = buffer->next();
+		}
+		const auto *set = frame.uniform_sets_to_dispose_of.front();
+		for (uint32_t i = 0; i < sets; ++i) {
+			if (!set || !owned_physical(set->get().qualification_return)) {
+				return ERR_BUSY;
+			}
+			set = set->next();
 		}
 		for (const auto &readback : frame.download_buffer_get_data_requests) {
 			if (!readback.capture || readback.capture->registry != this) {
@@ -660,8 +689,14 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 	usage.controls = 1;
 	++request.capture_inflight;
 	mutex.unlock();
-	const Error error = rd._native_disposal_maintenance_step(service, actual);
+	const bool starting = !rd.native_disposal_active;
+	const Error error = rd._native_disposal_maintenance_step(service, actual, &request);
 	mutex.lock();
+	if (starting && rd.native_disposal_active) {
+		request.maintenance_serial = rd.native_disposal_continuation.serial;
+	} else if (!rd.native_disposal_active) {
+		request.maintenance_serial = 0;
+	}
 	CRASH_COND(!request.capture_inflight);
 	--request.capture_inflight;
 	usage.receipts += actual.polls + actual.frees + actual.issues + actual.retains + actual.releases + actual.recycles;

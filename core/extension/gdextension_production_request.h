@@ -188,7 +188,8 @@ enum class ProductionControlKind : uint32_t { OBSERVE,
 	CANCEL,
 	RELEASE,
 	STORAGE_CREATE,
-	SET_CREATE };
+	SET_CREATE,
+	RECORD };
 enum class ProductionControlState : uint32_t { OWNER_CONSUMED,
 	PENDING,
 	QUEUED,
@@ -204,11 +205,18 @@ struct ProductionControlInput {
 struct ProductionServiceUsage {
 	uint32_t controls, receipts, passes;
 };
+enum class ProductionRecordPause : uint32_t { NONE,
+	SCOPE_RETURN,
+	APPEND_LIMIT,
+	UPLOAD_PREFIX };
 struct ProductionControlOutput {
 	uint64_t request_serial;
 	uint64_t control_serial;
 	GDExtensionDeviceSessionResultV1 result;
 	GDExtensionProductionReportV1 report;
+	GDExtensionProductionSegmentV1 segment;
+	GDExtensionProductionAppendV1 append;
+	ProductionRecordPause record_pause;
 	ProductionServiceUsage service_usage;
 	// Owner reference return is distinct from the immutable RT result.
 	GDExtensionDeviceSessionResultV1 owner_return;
@@ -253,6 +261,8 @@ class ProductionRequest {
 	// One fixed mailbox per request, included by sizeof(ProductionRequest) in
 	// the checked arena Quote. Never aliases retained payload or return cells.
 	ProductionControlCell control = {};
+	// Only an original inactive-to-active maintenance call owns this cursor.
+	uint64_t maintenance_serial = 0;
 	uint32_t retire_cursor = 0;
 	uint64_t next_control_serial = 1;
 	bool frozen = false, cancelled = false, effects_pending = false;
@@ -294,6 +304,13 @@ class ProductionAttachment {
 	ProductionCaptureCell *commands = nullptr, *frames = nullptr;
 	uint8_t *payload = nullptr, *readback_bytes = nullptr;
 	uint32_t children = 0;
+	ProductionRecordReceiver record_receiver = nullptr;
+	ProductionMetadataReceiver metadata_receiver = nullptr;
+	RecordRef metadata_reference;
+	uint64_t metadata_frame = 0;
+	bool metadata_active = false, metadata_pending = false;
+	void *record_receiver_userdata = nullptr;
+	bool opened = false;
 	bool closing = false;
 	// Open must acquire the original device holder and operation-window receiver.
 	// Metadata reservations do not satisfy those two obligations.

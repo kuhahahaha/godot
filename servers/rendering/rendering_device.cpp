@@ -9314,7 +9314,7 @@ Error RenderingDevice::_qualification_maintenance() {
 	return _native_disposal_maintenance();
 }
 
-Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage) {
+Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage, const GDExtensionDeviceExit::ProductionRequest *p_production_owner) {
 	if (!p_budget.receipts || !p_budget.passes || !p_budget.deadline_usec || OS::get_singleton()->get_ticks_usec() >= p_budget.deadline_usec) {
 		return ERR_BUSY;
 	}
@@ -9341,6 +9341,9 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
 			rd._thread_safe_.unlock();
 		}
 	} unlock{ *this };
+	if (native_disposal_active && native_disposal_continuation.production_owner != p_production_owner) {
+		return ERR_BUSY; // A foreign lane cannot resume the original owner's cursor.
+	}
 	native_disposal_budget = &p_budget;
 	native_disposal_usage = &r_usage;
 	if (!_native_disposal_available(NativeDisposalWork::WORK)) {
@@ -9351,8 +9354,23 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
 		if (draw_graph.has_driver_callbacks()) {
 			return ERR_BUSY;
 		}
+		if (!next_native_disposal_serial) {
+			return ERR_PARAMETER_RANGE_ERROR;
+		}
+		const uint32_t target = qualification_frame_advance_pending ? uint32_t(frame) : (frame + 1) % frames.size();
+		if (p_production_owner && frames[target].disposal.active) {
+			return ERR_BUSY; // A pre-existing ordinary drain keeps its original cutoff.
+		}
 		cursor = {};
-		cursor.target = qualification_frame_advance_pending ? uint32_t(frame) : (frame + 1) % frames.size();
+		cursor.production_owner = p_production_owner;
+		cursor.serial = next_native_disposal_serial;
+		next_native_disposal_serial = cursor.serial == UINT64_MAX ? 0 : cursor.serial + 1;
+		cursor.target = target;
+		if (p_production_owner) {
+			// The original production preflight covered this exact prefix. Late
+			// logical frees remain appended for a later ordinary safe-frame drain.
+			_capture_disposal_cutoff(target);
+		}
 		// An ordinary advance already issued its old frame. Resume only this
 		// exact target, never execute the preceding graph again.
 		cursor.phase = qualification_frame_advance_pending ? 3 : 0;
@@ -10552,6 +10570,23 @@ bool RenderingDevice::_native_disposal_charge(const NativeDisposalBudget &p_budg
 	return admitted;
 }
 
+void RenderingDevice::_capture_disposal_cutoff(uint32_t p_frame) {
+	auto &f = frames[p_frame];
+	auto &cursor = f.disposal;
+	cursor = {};
+	cursor.active = true;
+	cursor.remaining[0] = f.render_pipelines_to_dispose_of.size();
+	cursor.remaining[1] = f.compute_pipelines_to_dispose_of.size();
+	cursor.remaining[2] = f.raytracing_pipelines_to_dispose_of.size();
+	cursor.remaining[3] = f.acceleration_structures_to_dispose_of.size();
+	cursor.remaining[4] = f.uniform_sets_to_dispose_of.size();
+	cursor.remaining[5] = f.shaders_to_dispose_of.size();
+	cursor.remaining[6] = f.samplers_to_dispose_of.size();
+	cursor.remaining[7] = f.framebuffers_to_dispose_of.size();
+	cursor.remaining[8] = f.textures_to_dispose_of.size();
+	cursor.remaining[9] = f.buffers_to_dispose_of.size();
+}
+
 Error RenderingDevice::_free_pending_resources_step(int p_frame, const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage) {
 	// Admission precedes even the cutoff capture: a zero query cannot advance it.
 	if (!p_budget.receipts || !p_budget.passes || !p_budget.deadline_usec || OS::get_singleton()->get_ticks_usec() >= p_budget.deadline_usec) {
@@ -10564,18 +10599,7 @@ Error RenderingDevice::_free_pending_resources_step(int p_frame, const NativeDis
 		return ERR_BUSY;
 	}
 	if (!cursor.active) {
-		cursor = {};
-		cursor.active = true;
-		cursor.remaining[0] = f.render_pipelines_to_dispose_of.size();
-		cursor.remaining[1] = f.compute_pipelines_to_dispose_of.size();
-		cursor.remaining[2] = f.raytracing_pipelines_to_dispose_of.size();
-		cursor.remaining[3] = f.acceleration_structures_to_dispose_of.size();
-		cursor.remaining[4] = f.uniform_sets_to_dispose_of.size();
-		cursor.remaining[5] = f.shaders_to_dispose_of.size();
-		cursor.remaining[6] = f.samplers_to_dispose_of.size();
-		cursor.remaining[7] = f.framebuffers_to_dispose_of.size();
-		cursor.remaining[8] = f.textures_to_dispose_of.size();
-		cursor.remaining[9] = f.buffers_to_dispose_of.size();
+		_capture_disposal_cutoff(p_frame);
 	}
 	auto admit = [&](NativeDisposalWork p_work) { return _native_disposal_charge(p_budget, r_usage, p_work); };
 	while (cursor.kind < 10) {
@@ -10848,7 +10872,11 @@ Error RenderingDevice::_free_pending_resources_step(int p_frame, const NativeDis
 		cursor.allocation_size = 0;
 	}
 	cursor = {};
-	if (frames_pending_resources_for_processing > 0u) {
+	if (!f.render_pipelines_to_dispose_of.is_empty() || !f.compute_pipelines_to_dispose_of.is_empty() || !f.raytracing_pipelines_to_dispose_of.is_empty() || !f.acceleration_structures_to_dispose_of.is_empty() || !f.uniform_sets_to_dispose_of.is_empty() || !f.shaders_to_dispose_of.is_empty() || !f.samplers_to_dispose_of.is_empty() || !f.framebuffers_to_dispose_of.is_empty() || !f.textures_to_dispose_of.is_empty() || !f.buffers_to_dispose_of.is_empty()) {
+		// Appended rows were outside this original cutoff. Keep their ordinary
+		// safe-frame maintenance obligation visible after this prefix returns.
+		frames_pending_resources_for_processing = uint32_t(frames.size());
+	} else if (frames_pending_resources_for_processing > 0u) {
 		--frames_pending_resources_for_processing;
 	}
 	return OK;

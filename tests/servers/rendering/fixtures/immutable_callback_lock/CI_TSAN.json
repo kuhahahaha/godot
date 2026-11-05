@@ -1,0 +1,14 @@
+{
+  "run": 41973622411,
+  "job": 127067525286,
+  "head": "8dbf961e9ba899affb988d972bc5636f2a3447e3",
+  "job_status": "success",
+  "unit_tests": 1972,
+  "assertions": 501915,
+  "failures": 0,
+  "tsan_warnings": 0,
+  "log_sha256": "c58533ff39795a6b6764ae4a196f62e803bbbcbe313e1cb42b22f7085d025fe1",
+  "url": "https://github.com/kuhahahaha/godot/actions/runs/41973622411/job/127067525286",
+  "whole_matrix": "not green: Mono editor log guard exit56 under owner triage; remaining jobs pending at observation",
+  "scope": "the pushed callback lock and pipeline delivery; not the later private Core metadata/cursor commit"
+}

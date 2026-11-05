@@ -7297,6 +7297,13 @@
                 {
                     "name": "GDEXTENSION_PRODUCTION_UNKNOWN_V1",
                     "value": 2
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_KNOWN_PREFIX_V1",
+                    "value": 3,
+                    "description": [
+                        "Known physical child prefix of the same registered canonical parent, distinct from Unknown."
+                    ]
                 }
             ]
         },
@@ -7330,6 +7337,22 @@
                 {
                     "name": "cause",
                     "type": "GDExtensionDeviceSessionResultV1"
+                },
+                {
+                    "name": "recorded_bytes",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "parent_bytes",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "first_graph_fact",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "graph_fact_count",
+                    "type": "uint32_t"
                 }
             ]
         },

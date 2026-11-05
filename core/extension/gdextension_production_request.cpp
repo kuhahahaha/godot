@@ -137,7 +137,7 @@ Error Registry::production_layout(const GDExtensionProductionCapacityV1 &c, GDEx
 	LAYOUT(uint8_t, c.retained_payload_bytes);
 	LAYOUT(uint8_t, c.readback_bytes);
 #undef LAYOUT
-	out = { ABI, c, bytes, alignof(std::max_align_t), commands, frames, c.return_cells };
+	out = { ABI, c, bytes, alignof(std::max_align_t), commands, frames, uint64_t(c.return_cells) + 1 }; // One accepted metadata entry credit.
 	return OK;
 }
 Error Registry::production_membership_bound_locked(RenderingDevice &rd, uint32_t graphs, uint32_t workers, uint32_t &out) const {
@@ -315,7 +315,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_accept(const GDExtensionDe
 	}
 	auto &record = records[library];
 	auto &d = device_records[device];
-	if (slot == INVALID_SLOT || production_serials.exhausted || record.private_refs >= private_limit || d.refs == UINT32_MAX || holder->production_children == UINT32_MAX || quote.cleanup_slots > UINT32_MAX - record.cleanup_reservations || uint64_t(record.active_callbacks) + record.cleanup_reservations + quote.cleanup_slots > UINT32_MAX || quote.cleanup_slots > UINT32_MAX - record.cleanup_by_phase[uint8_t(CleanupPhase::BINDING)]) {
+	if (slot == INVALID_SLOT || production_serials.exhausted || frame_serials.exhausted || record.private_refs >= private_limit || d.refs == UINT32_MAX || holder->production_children == UINT32_MAX || quote.cleanup_slots > UINT32_MAX - record.cleanup_reservations || uint64_t(record.active_callbacks) + record.cleanup_reservations + quote.cleanup_slots > UINT32_MAX || quote.cleanup_slots > UINT32_MAX - record.cleanup_by_phase[uint8_t(CleanupPhase::BINDING)]) {
 		return result(ERR_PARAMETER_RANGE_ERROR, 19);
 	}
 	void *arena = Memory::alloc_static(quote.allocation_bytes);
@@ -354,6 +354,8 @@ GDExtensionDeviceSessionResultV1 Registry::production_accept(const GDExtensionDe
 	attachment->producer_serial = record.producer_registration_serial;
 	attachment->library_generation = record.snapshot.library_generation;
 	attachment->holder = holder;
+	attachment->metadata_reference = RecordRef(this, library);
+	CRASH_COND(!frame_serials.take(attachment->metadata_frame));
 	attachment->quote = quote;
 	attachment->arena = arena;
 	attachment->held_device = Object::cast_to<RenderingDevice>(d.object);
@@ -390,6 +392,9 @@ Error Registry::production_attachment_locked(GDExtensionProductionAttachmentRefV
 			return ERR_INVALID_DATA;
 		}
 		if (r.owner_thread != Thread::get_caller_id()) {
+			return ERR_UNAUTHORIZED;
+		}
+		if (admit && is_production_metadata_entry()) {
 			return ERR_UNAUTHORIZED;
 		}
 		if (admit && (a->closing || !r.attached || r.quiescing || r.close_started || r.close_error != OK || r.guard_enrollment != GuardEnrollment::QUALIFIED)) {
@@ -467,9 +472,14 @@ GDExtensionDeviceSessionResultV1 Registry::production_open(GDExtensionDeviceExit
 	if (view->record != a->library || !RegistrationContext::current || RegistrationContext::current->level_phase != LevelPhase::SCENE_READY || records[a->library].scene_ready_state != Record::SceneReadyState::IN_FRAME) {
 		return result(ERR_UNAUTHORIZED, 14);
 	}
-	// The accepted attachment holds the original entity. That lifetime edge
-	// does not supply B's original scope or the operation-window receiver.
-	return result(ERR_UNAVAILABLE, GDEXTENSION_DEVICE_SESSION_REASON_NATIVE_UNSUPPORTED_V1);
+	if (!a->record_receiver) {
+		return result(ERR_UNAVAILABLE, GDEXTENSION_DEVICE_SESSION_REASON_NATIVE_UNSUPPORTED_V1);
+	}
+	// This opens only the installed native transport. The original logical
+	// operation and Runtime record window remain the receiver owner's duty.
+	a->opened = true;
+	a->metadata_pending = a->metadata_receiver != nullptr;
+	return result(OK);
 }
 Error Registry::production_reserve_metadata_locked(ProductionAttachment &a, const GDExtensionProductionOperationV1 &op, const GDExtensionProductionCapacityV1 &c, const GDExtensionProductionActionV1 *actions, uint32_t action_count, const GDExtensionProductionResourceV1 *resources, uint32_t resource_count, const GDExtensionProductionUseV1 *uses, uint32_t use_count, const GDExtensionProductionReadbackV1 *readbacks, uint32_t readback_count, ProductionRequest *&out) {
 	out = nullptr;
@@ -1406,6 +1416,17 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 	if (usage) {
 		*usage = {};
 	}
+	if (r->maintenance_serial) {
+		if (!rd || !rd->_thread_safe_.try_lock()) {
+			return result(ERR_BUSY, 16);
+		}
+		const bool active = rd->native_disposal_active && r->maintenance_serial == rd->native_disposal_continuation.serial;
+		rd->_thread_safe_.unlock();
+		if (active) {
+			return result(ERR_BUSY, 16); // Finish the original accepted cursor before reclaim.
+		}
+		r->maintenance_serial = 0;
+	}
 	if (r->capture_inflight || r->effects_pending || r->source_device_lost) {
 		return result(ERR_BUSY, 16);
 	}
@@ -1611,6 +1632,9 @@ GDExtensionDeviceSessionResultV1 Registry::production_close(GDExtensionProductio
 	if (e != OK) {
 		return result(e, 16);
 	}
+	if (a->metadata_active) {
+		return result(ERR_BUSY, 16);
+	}
 	for (uint32_t i = 0; i < a->quote.capacity.requests; ++i) {
 		if (a->requests[i].control.state != ProductionControlState::OWNER_CONSUMED) {
 			return result(ERR_BUSY, 16);
@@ -1650,6 +1674,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_close(GDExtensionProductio
 	auto &d = device_records[device];
 	CRASH_COND(!record.private_refs || !d.refs || !a->holder->production_children || record.cleanup_reservations < a->quote.cleanup_slots || record.cleanup_by_phase[uint8_t(CleanupPhase::BINDING)] < a->quote.cleanup_slots);
 	--record.private_refs;
+	a->metadata_reference.registry = nullptr; // Same original counted edge was returned above.
 	--d.refs;
 	--a->holder->production_children;
 	record.cleanup_reservations -= uint32_t(a->quote.cleanup_slots);
@@ -1763,6 +1788,9 @@ void Registry::production_control_execute_locked(ProductionRequest &request, Ren
 	cell.output.request_serial = request.serial;
 	cell.output.control_serial = cell.serial;
 	switch (cell.input.kind) {
+		case ProductionControlKind::RECORD:
+			cell.output.result = result(rd ? production_record_receive_locked(request, *rd) : ERR_UNAVAILABLE);
+			break;
 		case ProductionControlKind::OBSERVE: {
 			Error error = OK;
 			if (request.native_count && service_budget_active(cell.input.budget)) {
@@ -1777,7 +1805,7 @@ void Registry::production_control_execute_locked(ProductionRequest &request, Ren
 			}
 			if (rd && service_budget_active(cell.input.budget) && rd->_thread_safe_.try_lock()) {
 				RdUnlock unlock{ rd->_thread_safe_ };
-				bool progress = false;
+				bool progress = request.maintenance_serial && rd->native_disposal_active && request.maintenance_serial == rd->native_disposal_continuation.serial;
 				for (uint32_t i = 0; i < request.resource_count; ++i) {
 					const auto &slot = request.resources[i];
 					MutexLock physical(slot.owned_physical.mutex);
@@ -1823,6 +1851,7 @@ void Registry::production_control_execute_locked(ProductionRequest &request, Ren
 	}
 	production_report_locked(request, cell.output.report);
 	cell.state = ProductionControlState::RETURNED;
+	request.attachment->metadata_pending = request.attachment->metadata_receiver != nullptr;
 	// No recursive schedule, driver wait, native completion, or source ACK here.
 }
 

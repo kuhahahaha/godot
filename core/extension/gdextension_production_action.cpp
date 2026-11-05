@@ -563,7 +563,7 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 	return observed;
 }
 
-Error Registry::production_close_segment_locked(ProductionRequest &request, GDExtensionProductionSegmentV1 &out) {
+Error Registry::production_close_segment_locked(ProductionRequest &request, GDExtensionProductionSegmentV1 &out, bool physical_scope_exit) {
 	if (request.capture_inflight || request.compute_list_open || request.effects_pending || request.source_device_lost || request.cancelled || request.segment.segment != request.acknowledged_segment) {
 		return ERR_BUSY;
 	}
@@ -573,7 +573,7 @@ Error Registry::production_close_segment_locked(ProductionRequest &request, GDEx
 	const bool incomplete = request.next_action < request.action_count && request.actions[request.next_action].recorded_bytes != 0;
 	const uint32_t cutoff = incomplete ? request.next_action : request.next_action ? request.next_action - 1
 																				   : UINT32_MAX;
-	if (cutoff == UINT32_MAX || request.actions[cutoff].declaration.list_boundary != GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1) {
+	if (cutoff == UINT32_MAX || (!physical_scope_exit && request.actions[cutoff].declaration.list_boundary != GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1)) {
 		return ERR_INVALID_DATA;
 	}
 	request.segment.abi = { 1, sizeof(GDExtensionDeviceExitAbi), 0 };

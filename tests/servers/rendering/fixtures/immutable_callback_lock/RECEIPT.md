@@ -6,4 +6,6 @@ Actual RED: the original lock implementation failed all three callback mutex pro
 
 DELIVERY.json records staged source hashes and the one separately uncommitted metadata admission gate excluded from this delivery. The tested host also contains other Core metadata and pipeline changes. Independent source review found no additional issue in these lock boundaries.
 
-The callback probes establish the actual RD mutex boundary on CPU. Actual platform CI and TSAN must still run; this receipt does not close the previous CI TSAN failure or establish live GPU qualification. A separate request fixture release-sequence failure remains outside this delivery.
+The callback probes establish the actual RD mutex boundary on CPU. At the initial local run, platform CI and TSAN were pending; the follow-up below supplies actual TSAN evidence. The initial request fixture failure was outside this lock delivery. Live GPU qualification remains unproven.
+
+Follow-up CI on 8dbf961e9b: the actual ThreadSanitizer job and Unit tests step passed, with 1972 cases, 501915 assertions and no ThreadSanitizer warnings in the downloaded raw job log. CI_TSAN.json records its hash and URL. This validates the pushed lock delivery; the full matrix has a separate Mono editor failure under owner triage, and this evidence does not cover later uncommitted Core changes.

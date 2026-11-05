@@ -14,5 +14,5 @@
   "host_sha256": "e5c614f4deae461fd4eac140f1c27f5be5737de3ca597372e700eaf4f30f4663",
   "green": "work/b4-core-window-lock-pipeline-green-20261105/runtime/material/PROCESS.json",
   "red": "work/b4-actual-lock-pipeline-red-20261105/VERIFIED_RED.json",
-  "platform_tsan": "pending actual CI; CPU probe is not TSAN qualification"
+  "platform_tsan": "CI_TSAN.json: actual pushed-source job and unit tests passed; CPU probe alone is not TSAN qualification"
 }

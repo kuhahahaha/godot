@@ -60,14 +60,28 @@ struct Access {
 		bool hidden_mode = false, hidden_pending = false, hidden_busy_seen = false, hidden_ready = false;
 		uint64_t hidden_serial = 0;
 		uint32_t hidden_issues = 0;
-		uint32_t legacy_end_segments = 0;
+		uint32_t legacy_end_segments = 0, shader_frees = 0;
+		bool ordinary_shader_free_allowed = false;
+		mutable uint32_t shader_polls = 0;
 		bool budget_call_active = false;
 		uint32_t receipt_calls() const {
-			uint32_t total = queue_issues + fence_polls + fence_recycles + native_recycles + buffer_frees + set_frees;
+			uint32_t total = queue_issues + fence_polls + fence_recycles + native_recycles + buffer_frees + set_frees + shader_frees + shader_polls;
 			for (uint32_t i = 0; i < 128; ++i) {
 				total += retains[i] + polls[i] + releases[i];
 			}
 			return total;
+		}
+		bool shader_retire_ready_nonblocking(ShaderID shader) const override {
+			CHECK(budget_call_active);
+			CHECK(shader == ShaderID(80));
+			++shader_polls;
+			return true; // This finite CPU shader has no asynchronous compiler.
+		}
+		void shader_free(ShaderID shader) override {
+			CHECK(ordinary_shader_free_allowed);
+			CHECK(budget_call_active);
+			CHECK(shader == ShaderID(80));
+			++shader_frees;
 		}
 		Error native_call_recycle(uint64_t serial) override {
 			CHECK((serial > 0 && serial < 128));
@@ -640,7 +654,7 @@ struct Access {
 			if (production_quote_error != OK) {
 				return {};
 			}
-			CHECK(quote.graph_slots == uint64_t(capacity.suboperations) * 2 + 2);
+			CHECK(quote.graph_slots == uint64_t(capacity.graph_memberships) * 2 + uint64_t(capacity.requests) * 2);
 			GDExtensionProductionAttachmentRefV1 attachment = {};
 			GDExtensionProductionInstallationReportV1 report = {};
 			const auto production_accept_error = registry->production_accept(&ABI, { INSTANCE, 5 }, { INSTANCE, 9 }, { INSTANCE, 6 }, { INSTANCE, 7 }, { INSTANCE, 3 }, &quote, &attachment, &report).native_error;
@@ -1295,6 +1309,24 @@ struct Access {
 		CHECK(error == OK);
 		return error == OK;
 	}
+	static bool finish_owned_maintenance(Enrollment &e, Request &r, const GDExtensionProductionServiceBudgetV1 &limit) {
+		using namespace GDExtensionDeviceExit;
+		uint32_t turns = 0;
+		for (; turns < 128 && r.maintenance_serial && e.rd.native_disposal_active && r.maintenance_serial == e.rd.native_disposal_continuation.serial; ++turns) {
+			auto fresh = limit;
+			fresh.deadline_micros = OS::get_singleton()->get_ticks_usec() + 10000000;
+			const auto calls = e.driver.receipt_calls();
+			const auto output = turn(e, r, ProductionControlKind::OBSERVE, fresh);
+			CHECK(output.service_usage.receipts <= limit.receipts);
+			CHECK(output.service_usage.passes <= limit.passes);
+			CHECK(e.driver.receipt_calls() - calls <= limit.receipts);
+			CHECK((output.result.native_error == OK || output.result.native_error == ERR_BUSY));
+		}
+		const bool pending = r.maintenance_serial && e.rd.native_disposal_active && r.maintenance_serial == e.rd.native_disposal_continuation.serial;
+		INFO("Original cursor tail turns=", turns, "/128 serial=", r.maintenance_serial, " active=", e.rd.native_disposal_active.load(), " phase=", e.rd.native_disposal_continuation.phase);
+		CHECK_FALSE(pending);
+		return !pending;
+	}
 	static bool return_owned_storage(Enrollment &e, Request &r, uint32_t slot) {
 		GDExtensionStorageRetireRefV1 retire = {};
 		if (!retire_storage(e, r, slot, retire)) {
@@ -1318,7 +1350,7 @@ struct Access {
 		}
 		const auto error = e.registry->production_storage_release(ref, retire).native_error;
 		CHECK(error == OK);
-		return error == OK;
+		return error == OK && finish_owned_maintenance(e, r, small);
 	}
 	static void storage_retirement_turns() {
 		Enrollment e;
@@ -1373,6 +1405,9 @@ struct Access {
 		CHECK(released[1]);
 		CHECK(e.driver.buffer_frees == 2);
 		if (!released[0] || !released[1]) {
+			return;
+		}
+		if (!finish_owned_maintenance(e, *r, small)) {
 			return;
 		}
 		CHECK(e.registry->production_release(ref).native_error == OK);
@@ -1477,6 +1512,9 @@ struct Access {
 		}
 		CHECK(e.registry->production_storage_release(ref, retire).native_error == OK);
 		const auto attachment = GDExtensionProductionAttachmentRefV1{ Enrollment::INSTANCE, r->attachment->serial };
+		if (!finish_owned_maintenance(e, *r, small)) {
+			return;
+		}
 		const auto release = turn(e, *r, ProductionControlKind::RELEASE, budget());
 		CHECK(release.owner_return.native_error == OK);
 		CHECK(r->serial == 0);
@@ -2152,6 +2190,9 @@ struct Access {
 			CHECK(bytes[i] == uint8_t(i ^ 0x5a));
 		}
 		const auto attachment = GDExtensionProductionAttachmentRefV1{ Enrollment::INSTANCE, r->attachment->serial };
+		if (!finish_owned_maintenance(e, *r, budget(e.driver.sources_per_issue, 1))) {
+			return;
+		}
 		const auto returned = turn(e, *r, ProductionControlKind::RELEASE, budget());
 		CHECK(returned.owner_return.native_error == OK);
 		CHECK(r->serial == 0);
@@ -2178,6 +2219,123 @@ struct Access {
 		e.rd._free_pending_resources(0);
 		CHECK(e.driver.buffer_frees == frees_before + 1);
 		CHECK(physical.free_event != 0);
+	}
+	static void maintenance_cursor_owner() {
+		using namespace GDExtensionDeviceExit;
+		Enrollment e;
+		e.driver.complete = true; // Original CPU driver polls report actual issued calls ready.
+		auto c = capacity(6); // Two independent three-row reservation slices.
+		c.requests = 2;
+		auto attachment = e.accept(c);
+		REQUIRE(attachment.handle_serial != 0);
+		if (!attachment.handle_serial) {
+			return;
+		}
+		const auto single = capacity(3); // Reserve always requests exactly one cell.
+		Request *first = nullptr, *second = nullptr;
+		const Error first_reserved = e.reserve(attachment, single, 31, first);
+		CHECK(first_reserved == OK);
+		if (first_reserved != OK || !first) {
+			return;
+		}
+		const Error second_reserved = e.reserve(attachment, single, 32, second);
+		CHECK(second_reserved == OK);
+		if (second_reserved != OK || !second) {
+			return;
+		}
+		REQUIRE(first != nullptr);
+		REQUIRE(second != nullptr);
+		graph_initialize(e);
+		auto b = budget(1, 1);
+		auto maintenance = [&](Request &request, ProductionServiceUsage &usage) {
+			MutexLock registry_lock(e.registry->mutex);
+			MutexLock device_lock(e.rd._thread_safe_);
+			BudgetDriverGuard guard(e.driver);
+			return e.registry->production_maintenance_locked(request, e.rd, b, usage);
+		};
+		RenderingDevice::NativeDisposalBudget native_budget{ 1, 1, b.deadline_micros };
+		auto native_step = [&]() {
+			RenderingDevice::NativeDisposalUsage usage;
+			BudgetDriverGuard guard(e.driver);
+			const Error error = e.rd._native_disposal_maintenance_step(native_budget, usage);
+			CHECK(usage.passes <= 1);
+			CHECK(usage.polls + usage.frees + usage.issues + usage.retains + usage.releases + usage.recycles <= 1);
+			return error;
+		};
+		ProductionServiceUsage used = {};
+		CHECK(maintenance(*first, used) == ERR_BUSY);
+		REQUIRE(e.rd.native_disposal_active);
+		const uint64_t first_serial = e.rd.native_disposal_continuation.serial;
+		CHECK(first_serial != 0);
+		CHECK(first->maintenance_serial == first_serial);
+		CHECK((used.passes <= 1 && used.receipts <= 1));
+		const auto children = first->attachment->children;
+		CHECK(e.registry->production_release({ Enrollment::INSTANCE, first->serial }).native_error == ERR_BUSY);
+		CHECK(first->attachment->children == children);
+		used = {};
+		const auto calls = e.driver.receipt_calls();
+		CHECK(maintenance(*second, used) == ERR_BUSY);
+		CHECK(second->maintenance_serial == 0);
+		CHECK((used.passes == 0 && used.receipts == 0));
+		CHECK(native_step() == ERR_BUSY); // Ordinary/qualification owner zero cannot borrow it.
+		CHECK(e.driver.receipt_calls() == calls);
+		CHECK(e.rd.native_disposal_continuation.serial == first_serial);
+		RenderingDevice::Shader ordinary_shader;
+		ordinary_shader.driver_id = RDD::ShaderID(80);
+		const RID ordinary_rid = e.rd.shader_owner.make_rid(ordinary_shader);
+		e.rd.free_rid(ordinary_rid); // Legal RT logical free between original owner turns.
+		CHECK_FALSE(e.rd.shader_owner.owns(ordinary_rid));
+		CHECK(e.rd.frames[0].shaders_to_dispose_of.size() == 1);
+		const auto ordinary_frees = e.driver.shader_frees;
+		// No pending graph, retiring resource or readback triggers these turns.
+		// Only the original accepted cursor permits bounded continuation.
+		CHECK((first->graph_count == 0 && first->readback_count == 0));
+		for (uint32_t i = 0; i < 64 && e.rd.native_disposal_active; ++i) {
+			auto output = turn(e, *first, ProductionControlKind::OBSERVE, b);
+			CHECK((output.service_usage.passes <= 1 && output.service_usage.receipts <= 1));
+		}
+		REQUIRE_FALSE(e.rd.native_disposal_active);
+		CHECK(first->maintenance_serial == 0);
+		CHECK(e.driver.shader_frees == ordinary_frees);
+		CHECK(e.rd.frames[0].shaders_to_dispose_of.size() == 1);
+		CHECK(e.rd.has_pending_resources_for_processing());
+		// A different original lane starts another real cursor on this same RD.
+		e.driver.ordinary_shader_free_allowed = true;
+		CHECK(native_step() == ERR_BUSY);
+		REQUIRE(e.rd.native_disposal_active);
+		CHECK(e.rd.native_disposal_continuation.serial > first_serial);
+		used = {};
+		const auto foreign_calls = e.driver.receipt_calls();
+		CHECK(maintenance(*first, used) == ERR_BUSY);
+		CHECK(first->maintenance_serial == 0);
+		CHECK(e.driver.receipt_calls() == foreign_calls);
+		for (uint32_t i = 0; i < 64 && e.rd.native_disposal_active; ++i) {
+			const Error error = native_step();
+			CHECK((error == OK || error == ERR_BUSY));
+		}
+		REQUIRE_FALSE(e.rd.native_disposal_active);
+		CHECK(e.driver.shader_frees == ordinary_frees + 1);
+		CHECK(e.rd.frames[0].shaders_to_dispose_of.is_empty());
+		// Counter boundary only: the actual starter allocates the final serial;
+		// no numeric fixture write supplies a request ownership token.
+		e.rd.next_native_disposal_serial = UINT64_MAX;
+		used = {};
+		CHECK(maintenance(*first, used) == ERR_BUSY);
+		CHECK(first->maintenance_serial == UINT64_MAX);
+		CHECK(e.rd.next_native_disposal_serial == 0);
+		for (uint32_t i = 0; i < 64 && e.rd.native_disposal_active; ++i) {
+			auto output = turn(e, *first, ProductionControlKind::OBSERVE, b);
+			CHECK((output.service_usage.passes <= 1 && output.service_usage.receipts <= 1));
+		}
+		REQUIRE_FALSE(e.rd.native_disposal_active);
+		used = {};
+		const auto exhausted_calls = e.driver.receipt_calls();
+		CHECK(maintenance(*first, used) == ERR_PARAMETER_RANGE_ERROR);
+		CHECK_FALSE(e.rd.native_disposal_active);
+		CHECK(first->maintenance_serial == 0);
+		CHECK(e.driver.receipt_calls() == exhausted_calls);
+		CHECK(e.registry->production_release({ Enrollment::INSTANCE, first->serial }).native_error == OK);
+		CHECK(e.registry->production_release({ Enrollment::INSTANCE, second->serial }).native_error == OK);
 	}
 	static void hard_ceiling() {
 		using namespace GDExtensionDeviceExit;
@@ -2272,3 +2430,7 @@ TEST_CASE("[ProductionNativeObserve][ProductionActions] unit and set metadata as
 }
 
 } //namespace TestProductionNativeObserve
+
+TEST_CASE("[ProductionNativeObserve] accepted maintenance cursor resumes only its original request and never reuses serials") {
+	TestProductionNativeObserve::Access::maintenance_cursor_owner();
+}

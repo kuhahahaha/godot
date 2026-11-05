@@ -31,6 +31,7 @@
 #include "message_queue.h"
 
 #include "core/config/project_settings.h"
+#include "core/extension/gdextension_library_exit_guard.h"
 
 #include <cstdio>
 
@@ -107,6 +108,9 @@ Error CallQueue::push_set(Object *p_object, const StringName &p_prop, const Vari
 }
 
 Error CallQueue::push_callablep(const Callable &p_callable, const Variant **p_args, int p_argcount, bool p_show_error) {
+	if (GDExtensionDeviceExit::Registry::is_production_metadata_entry()) {
+		return ERR_UNAUTHORIZED;
+	}
 	uint32_t room_needed = sizeof(Message) + sizeof(Variant) * p_argcount;
 
 	ERR_FAIL_COND_V_MSG(room_needed > uint32_t(PAGE_SIZE_BYTES), ERR_INVALID_PARAMETER, "Message is too large to fit on a page (" + itos(PAGE_SIZE_BYTES) + " bytes), consider passing less arguments.");
@@ -163,6 +167,9 @@ Error CallQueue::push_callablep(const Callable &p_callable, const Variant **p_ar
 }
 
 Error CallQueue::push_set(ObjectID p_id, const StringName &p_prop, const Variant &p_value) {
+	if (GDExtensionDeviceExit::Registry::is_production_metadata_entry()) {
+		return ERR_UNAUTHORIZED;
+	}
 	LOCK_MUTEX;
 	if (closing) {
 		UNLOCK_MUTEX;
@@ -204,6 +211,9 @@ Error CallQueue::push_set(ObjectID p_id, const StringName &p_prop, const Variant
 }
 
 Error CallQueue::push_notification(ObjectID p_id, int p_notification) {
+	if (GDExtensionDeviceExit::Registry::is_production_metadata_entry()) {
+		return ERR_UNAUTHORIZED;
+	}
 	ERR_FAIL_COND_V(p_notification < 0, ERR_INVALID_PARAMETER);
 	LOCK_MUTEX;
 	if (closing) {
