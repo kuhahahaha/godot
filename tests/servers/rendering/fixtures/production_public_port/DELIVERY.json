@@ -154,7 +154,7 @@
     "fix": "Semaphore ready{} default member initializer; same default construction",
     "source_file": "tests/core/extension/test_production_native_observe.cpp",
     "source_sha256": "dc9be21b94e0785f85f47b82f1dfd72e23ccd046394701f026bc6c6d0257d85d",
-    "strict": "actual warning RED reproduced, Wall/Wextra/Wmissing-field-initializers ±DEV fullTU GREEN",
+    "strict": "actual warning RED reproduced, Wall/Wextra/Wmissing-field-initializers \u00b1DEV fullTU GREEN",
     "build": {
       "exit_code": 0,
       "seconds": 18.633499291026965,
@@ -898,6 +898,43 @@
       "asan_error_lines": 0,
       "lsan_error_lines": 1,
       "notes": "original CI check_ci_log accepted job while headless import logs include UBSan findings in core/string, thirdparty, style_box_flat/view_3d_controller and fontconfig 288-byte LeakSanitizer report; preserved without suppression changes"
+    }
+  },
+  "ci_actual_23b_final": {
+    "run": 42005031739,
+    "source": "23b6815116a3b02f537ff1e364fe6201fd3309fa",
+    "status": "completed",
+    "conclusion": "success",
+    "success": 20,
+    "scope": "CI source23b only, not current closure workingtree",
+    "logs": {
+      "scu": {
+        "sha256": "8dc26800110a8e00d44dce1278409970c292f491b0cad7c1f89912aa2e69a692",
+        "bytes": 7862177,
+        "runtime_error_lines": 105,
+        "lsan_summaries": [
+          "2026-11-05T10:33:25.0415798Z SUMMARY: AddressSanitizer: 288 byte(s) leaked in 2 allocation(s).",
+          "2026-11-05T10:36:28.7786685Z SUMMARY: AddressSanitizer: 1233 byte(s) leaked in 17 allocation(s).",
+          "2026-11-05T10:37:54.9052208Z SUMMARY: AddressSanitizer: 1064 byte(s) leaked in 7 allocation(s).",
+          "2026-11-05T10:39:26.4718393Z SUMMARY: AddressSanitizer: 680 byte(s) leaked in 5 allocation(s)."
+        ],
+        "unit_lines": [
+          "2026-11-05T10:31:58.1793739Z [doctest] test cases:   1979 |   1979 passed | 0 failed | 3 skipped",
+          "2026-11-05T10:31:58.1794397Z [doctest] assertions: 516733 | 516733 passed | 0 failed |"
+        ],
+        "mono_marker": false
+      },
+      "mono": {
+        "sha256": "207b746449a55340871b51136452fba09f9e827f269424fa5e9278e173f54c08",
+        "bytes": 4511495,
+        "runtime_error_lines": 0,
+        "lsan_summaries": [],
+        "unit_lines": [
+          "2026-11-05T10:21:32.4964051Z [doctest] test cases:   1980 |   1980 passed | 0 failed | 3 skipped",
+          "2026-11-05T10:21:32.4964949Z [doctest] assertions: 515167 | 515167 passed | 0 failed |"
+        ],
+        "mono_marker": true
+      }
     }
   }
 }

@@ -52,5 +52,35 @@
     "Triangle mirror facing GPU calibration and full P2/P4 native output integration remain pending",
     "Full suite reports 0 assertion failures but retains stdout571/stderr4017; not clean output",
     "Initial full-suite run lacked required physics environment and failed1; original log retained; incorrectInstance192 filter selected0cases and does not count as coverage"
-  ]
+  ],
+  "native_metal_helper_component": {
+    "scope": "source-extracted helper mapped to native Metal function constants4/5 with standalone vertex and fragment harness; component only, not generated Godot shader/driver/Owner/P4 qualification",
+    "evidence": "work/b4-instance192-primitive-metal-20261105",
+    "source_freeze_sha256": "9662564f868c57660979bbfc4a5121e0f32788bbd147d3454fa3ad01f6b8ae59",
+    "device": "Apple M3 Pro",
+    "cases": 84,
+    "green_failures": 0,
+    "old23b_red_failures": 24,
+    "root_green_process": {
+      "exit": 0,
+      "binary_sha256": "50793292f968d0ffa2f8956d12fef599ac149cab50a5c91309304db75e0312b9",
+      "result_sha256": "72c5498ae3655619fb78bd10d3cce9500b4bf1febfb848274d5e8141692cdf6a",
+      "stderr_bytes": 0
+    },
+    "root_red_process": {
+      "exit": 1,
+      "binary_sha256": "50793292f968d0ffa2f8956d12fef599ac149cab50a5c91309304db75e0312b9",
+      "result_sha256": "12a3d56c08e62b4394dac4e308018a88975d9f66c2d5ab2a958d8a1075704694",
+      "stderr_bytes": 0
+    },
+    "source_input": {
+      "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/servers/rendering/renderer_rd/shaders/instance192_inc.glsl",
+      "source_sha256": "fb8ae293898c468eaf356dc79ad7595dfa089afa4dbeda6b6ab1510cb6d55712",
+      "extraction": "exact facing/discard helper scalar body; inactive UBERSHADER branch removed, declarations mapped to Metal function constants4/5; standalone vertex and fragment harness",
+      "helper_sha256": "42fb23b3ce524f04eac23cb14897053189fdedf186a1fb055ac9d0e375c53b3b",
+      "metal_sha256": "ed79478540fc94b4e11ae7b2e681e6c2ff07b55afa13be959bb494efae9393cb",
+      "scope": "source-bound native Metal component calibration; no Godot driver pipeline/Owner/P4 completion claim"
+    },
+    "coverage": "triangles/triangle-strip/points/lines/line-strip; two windings, three cull modes, mirror on/off; wireframe triangles"
+  }
 }
