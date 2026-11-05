@@ -45,6 +45,14 @@ ParticlesStorage *ParticlesStorage::get_singleton() {
 	return singleton;
 }
 
+#ifdef TESTS_ENABLED
+ParticlesStorage::ParticlesStorage(ExternalLinkedOwnerTest *) {
+	CRASH_COND(singleton != nullptr);
+	singleton = this;
+	external_output_component_test = true;
+}
+#endif
+
 ParticlesStorage::ParticlesStorage() {
 	singleton = this;
 
@@ -191,6 +199,12 @@ void process() {
 }
 
 ParticlesStorage::~ParticlesStorage() {
+#ifdef TESTS_ENABLED
+	if (external_output_component_test) {
+		singleton = nullptr;
+		return;
+	}
+#endif
 	for (int i = 0; i <= ParticlesShader::MAX_USERDATAS; i++) {
 		for (int j = 0; j < ParticlesShader::COPY_MODE_MAX; j++) {
 			particles_shader.copy_pipelines[i][j].free();

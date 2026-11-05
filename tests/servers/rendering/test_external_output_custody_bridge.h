@@ -34,6 +34,27 @@
 #include "servers/rendering/renderer_rd/storage_rd/mesh_storage.h"
 
 namespace RendererRD {
+class ParticlesStorage;
+class ExternalOutputOwner;
+// Explicit private component setup only. Pins are still issued by the original
+// protected RECORD; this helper creates no source grant, completion, or admission.
+class ExternalLinkedOwnerTest {
+	ParticlesStorage *storage = nullptr;
+	ExternalOutputOwner *owner = nullptr;
+	RID particles;
+
+public:
+	explicit ExternalLinkedOwnerTest(RenderingDevice &);
+	~ExternalLinkedOwnerTest();
+	GDExtensionDeviceExit::ProductionOutputPin &pin(uint32_t);
+	void install(uint32_t, GDExtensionDeviceExit::Registry &, GDExtensionProductionRequestRefV1);
+	RID particle_rid() const { return particles; }
+	static constexpr uint64_t generation = 33;
+	static uint64_t lease(uint32_t slot) { return 11 + slot; }
+	void withdraw();
+	bool history_cleared() const;
+	bool released() const;
+};
 enum class ExternalCustodyTestMode { VIEW_RETURN,
 	READ_CANCEL,
 	READ_UNKNOWN,

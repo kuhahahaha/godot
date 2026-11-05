@@ -52,6 +52,7 @@ class ExternalOutputOwner {
 	friend class ExternalPacketBinding;
 #ifdef TESTS_ENABLED
 	friend class TestExternalOutputOwnerStateAccess;
+	friend class ExternalLinkedOwnerTest;
 #endif
 	static constexpr uint32_t MAX_VIEWS = 8;
 	static constexpr uint32_t MAX_INFLIGHT = 4;

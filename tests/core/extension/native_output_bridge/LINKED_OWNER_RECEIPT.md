@@ -1,0 +1,11 @@
+# Linked owner metadata runtime regression
+
+The new component case executes the original accepted V2 request, protected RECORD callback, output-pin issuance, actual Particles RID lookup and native owner bind. One owner retains two root slots in two originally quoted use cells. No source permission is manufactured: private test setup installs metadata only, with actual empty physical work.
+
+A zero-budget OBSERVE leaves the cursor/history unchanged. Three original one-pass OBSERVE controls then clear a closed logical history marker, return the second slot, and return the final slot through the actual native service and Registry unpin. Assertions verify exactly one pass/control per turn, zero native receipts, capture restoration, repaired head/prev/next/cursor, actual metadata owner RELEASED and original request RELEASE. The test would detect the previous synthetic wrapper-pass accounting error.
+
+The explicitly TESTS_ENABLED private storage constructor initializes normal C++ members and RID_Owner while skipping GPU shader/material/effect setup. Production construction remains unchanged. Test teardown refuses leaked custody instead of inventing release. The synthetic history marker is not a consumed native tuple, and this case exercises no geometry/material/storage physical return, shader execution, completion injection or Unknown recovery.
+
+Actual targeted execution passed 51 cases and 33,579 assertions. The full original-bin suite passed 2,090 cases and 523,835 assertions, zero failures. Full-suite raw diagnostic output is retained and not claimed empty. A separate actual main-Metal particle regression on the same fixed host passed all 390 checks, eight readbacks, 31 allocation observations and 29 native resource returns; it verifies the normal runtime constructor path, not output source admission.
+
+Exact seven-file combined build source pins and raw-result hashes are in LINKED_OWNER_RECEIPT.json. The combined build includes the separately committed GCC alignment fix. clang-format/codespell passed with unchanged source. Local evidence under `work/b4-linked-owner-test-20261106/` retains the initial compile failure, repaired source pins, final build, XML/logs, native command and immutable host. This closes the metadata bind/service runtime witness only; genuine output admission and the full native output queue remain open.

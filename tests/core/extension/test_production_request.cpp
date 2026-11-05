@@ -38,6 +38,7 @@
 #include "core/os/semaphore.h"
 #include "core/os/thread.h"
 #include "servers/rendering/renderer_rd/storage_rd/mesh_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_default.h"
 #include "servers/rendering/rendering_shader_container.h"
@@ -4141,6 +4142,133 @@ struct Access {
 			CHECK(std::memcmp(&segment, &before_segment, sizeof(segment)) == 0);
 		}
 	};
+	struct LinkedOwnerProbe {
+		SingletonEnrollment *fixture = nullptr;
+		RendererRD::ExternalLinkedOwnerTest *native = nullptr;
+		uint32_t calls = 0;
+		static void receive(void *userdata, GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionOperationV1 *) {
+			auto &probe = *static_cast<LinkedOwnerProbe *>(userdata);
+			auto &fixture = *probe.fixture;
+			auto &native = *probe.native;
+			++probe.calls;
+			for (uint32_t i = 0; i < 2; ++i) {
+				native.install(i, fixture.registry, ref);
+				REQUIRE(fixture.registry.production_output_pin_current(fixture.rd, native.pin(i)) == OK);
+				CHECK(fixture.registry.production_output_owner_bind(native.pin(i), fixture.rd, native.particle_rid(), native.generation + 1, i, native.lease(i)) == ERR_UNAUTHORIZED);
+				REQUIRE(fixture.registry.production_output_owner_bind(native.pin(i), fixture.rd, native.particle_rid(), native.generation, i, native.lease(i)) == OK);
+			}
+		}
+	};
+	static void linked_owner_observe() {
+		using namespace GDExtensionDeviceExit;
+		auto *server = ordinal_server();
+		if (!server || !check_step(RendererRD::ParticlesStorage::get_singleton() == nullptr)) {
+			return;
+		}
+		const auto consume = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRecordConsumeV2>("device_session_production_record_consume_v2");
+		const auto release = ordinal_port<GDExtensionInterfaceDeviceSessionProductionReleaseV2>("device_session_production_release_v2");
+		if (!consume || !release) {
+			return;
+		}
+		OrdinalPlan plan;
+		plan.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, 0, 2, 0, 0, 0, 0, 0, 0 };
+		plan.action_count = plan.resource_count = plan.use_count = plan.readback_count = 0;
+		SingletonEnrollment fixture;
+		fixture.public_port = true;
+		LinkedOwnerProbe probe;
+		probe.fixture = &fixture;
+		if (!check_step(ordinal_initialize(fixture, server, plan, &LinkedOwnerProbe::receive, &probe) == OK)) {
+			return;
+		}
+		RendererRD::ExternalLinkedOwnerTest native(fixture.rd);
+		probe.native = &native;
+		auto &request = *fixture.request;
+		const GDExtensionProductionRequestRefV1 ref = { fixture.instance, request.serial };
+		uint64_t control = 0;
+		REQUIRE(fixture.port.record_schedule(ref, &control) == OK);
+		server->sync();
+		REQUIRE(probe.calls == 1);
+		GDExtensionProductionRecordReportV2 recorded = {};
+		REQUIRE(consume(ref, control, &recorded).native_error == OK);
+		CHECK(request.action_count == 0);
+		CHECK(request.graph_count == 0);
+		CHECK(request.native_count == 0); // Empty source is real; no completion is injected.
+		uint32_t first = UINT32_MAX, second = UINT32_MAX;
+		for (uint32_t i = 0; i < request.capacity.resource_uses; ++i) {
+			if (request.uses[i].output_consumer == &native.pin(0)) {
+				first = i;
+			}
+			if (request.uses[i].output_consumer == &native.pin(1)) {
+				second = i;
+			}
+		}
+		REQUIRE(first != UINT32_MAX);
+		REQUIRE(second != UINT32_MAX);
+		REQUIRE(first != second);
+		CHECK(request.output_owner_head == second);
+		CHECK(request.output_owner_cursor == first);
+		CHECK(request.uses[second].output_next == first);
+		CHECK(request.uses[first].output_prev == second);
+		native.withdraw();
+		auto observe_turn = [&](const GDExtensionProductionServiceBudgetV1 &budget) {
+			ProductionControlOutput output = {};
+			uint64_t serial = 0;
+			REQUIRE(fixture.registry.production_control_accept(ref, ProductionControlKind::OBSERVE, &serial, &budget) == OK);
+			REQUIRE(fixture.registry.production_control_schedule(ref, serial) == OK);
+			server->sync();
+			REQUIRE(fixture.registry.production_control_consume(ref, serial, &output) == OK);
+			CHECK(output.result.native_error == OK);
+			CHECK(request.serial == ref.handle_serial);
+			CHECK(request.capture_inflight == 0);
+			return output.service_usage;
+		};
+		const GDExtensionProductionServiceBudgetV1 zero = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), 0, 0, 0, 0, 0 };
+		const auto idle = observe_turn(zero);
+		CHECK(idle.passes == 0);
+		CHECK(request.output_owner_cursor == first);
+		CHECK_FALSE(native.history_cleared());
+		const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+		for (uint32_t turn = 0; turn < 3; ++turn) {
+			const auto usage = observe_turn(budget);
+			CHECK(usage.controls == 1);
+			CHECK(usage.passes == 1); // Locator dispatch consumes no second pass.
+			CHECK(usage.receipts == 0); // Metadata work creates no native witness.
+			CHECK(native.history_cleared());
+			if (turn == 0) {
+				CHECK_FALSE(native.pin(0).is_empty());
+				CHECK_FALSE(native.pin(1).is_empty());
+				CHECK(request.output_owner_cursor == second);
+			} else if (turn == 1) {
+				CHECK_FALSE(native.pin(0).is_empty());
+				CHECK(native.pin(1).is_empty());
+				CHECK(request.uses[second].output_consumer == nullptr);
+				CHECK(request.uses[second].output_pin_serial == 0);
+				CHECK(request.uses[second].output_generation == 0);
+				CHECK(request.output_owner_head == first);
+				CHECK(request.output_owner_cursor == first);
+				CHECK(request.uses[first].output_prev == UINT32_MAX);
+				CHECK(request.uses[first].output_next == UINT32_MAX);
+			}
+		}
+		CHECK(native.released());
+		CHECK(request.uses[first].output_consumer == nullptr);
+		CHECK(request.uses[first].output_pin_serial == 0);
+		CHECK(request.uses[first].output_generation == 0);
+		CHECK(request.output_owner_head == UINT32_MAX);
+		CHECK(request.output_owner_cursor == UINT32_MAX);
+		for (uint32_t turn = 0; turn < 8 && request.serial; ++turn) {
+			GDExtensionProductionServiceBudgetV1 remaining = {};
+			GDExtensionProductionReportV2 report = {};
+			const Error result = Error(release(ref, &budget, &remaining, &report).native_error);
+			CHECK((result == OK || result == ERR_BUSY));
+			if (request.serial) {
+				server->sync();
+			}
+		}
+		CHECK(request.serial == 0);
+		fixture.cleanup_owner();
+		CHECK(fixture.owner_cleaned);
+	}
 	static void ordinal_zero_control() {
 		using namespace GDExtensionDeviceExit;
 		auto *server = ordinal_server();
@@ -4568,6 +4696,9 @@ TEST_CASE("[ProductionRequest] forged metadata never resolves an original attach
 
 TEST_CASE("[SceneTree][ProductionRequest][OrdinalV2] repeated canonical rows preserve original logical gaps and exact prepare identity") {
 	Access::ordinal_rows_and_prepare();
+}
+TEST_CASE("[SceneTree][ProductionRequest][LinkedOwnerComponent] original OBSERVE traverses and unlinks two real roots within one-pass slices") {
+	Access::linked_owner_observe();
 }
 TEST_CASE("[SceneTree][ProductionRequest][OrdinalV2] zero arena returns actual protected FIFO control without V1 consumption") {
 	Access::ordinal_zero_control();

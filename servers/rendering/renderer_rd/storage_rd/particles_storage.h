@@ -54,6 +54,9 @@ class ParticlesRuntimeTestFixture;
 namespace RendererRD {
 
 class SortEffects;
+#ifdef TESTS_ENABLED
+class ExternalLinkedOwnerTest;
+#endif
 class ExternalOutputOwner;
 class ExternalSurfaceSelection;
 class ExternalPacketBinding;
@@ -67,6 +70,10 @@ private:
 	friend class ::ParticlesRuntimeTestFixture;
 #endif
 #ifdef TESTS_ENABLED
+	friend class ExternalLinkedOwnerTest;
+	// Private CPU component construction: normal fields and RID_Owner only.
+	explicit ParticlesStorage(ExternalLinkedOwnerTest *);
+	bool external_output_component_test = false;
 	friend class TestParticlesTrailAccess;
 	friend class TestParticlesReadbackAccess;
 	friend class TestParticlesProcessRetryAccess;

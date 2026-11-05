@@ -30,12 +30,57 @@
 
 #include "servers/rendering/renderer_rd/storage_rd/external_output_owner.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_packet.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "tests/servers/rendering/test_external_output_custody_bridge.h"
 #include "tests/test_macros.h"
 
 TEST_FORCE_LINK(test_external_output_owner_state)
 
 namespace RendererRD {
+ExternalLinkedOwnerTest::ExternalLinkedOwnerTest(RenderingDevice &rd) {
+	storage = memnew(ParticlesStorage(this));
+	ExternalOutputConfig config;
+	config.max_views = 1;
+	config.max_inflight = 2;
+	owner = memnew(ExternalOutputOwner(config, generation));
+	owner->device = &rd;
+	particles = storage->particles_owner.allocate_rid();
+	storage->particles_owner.initialize_rid(particles);
+	storage->particles_owner.get_or_null(particles)->external = owner;
+}
+ExternalLinkedOwnerTest::~ExternalLinkedOwnerTest() {
+	// Fail closed on leaked custody; never manufacture RELEASED during cleanup.
+	CRASH_COND(!released());
+	storage->particles_owner.get_or_null(particles)->external = nullptr;
+	memdelete(owner);
+	storage->particles_owner.free(particles);
+	memdelete(storage);
+}
+GDExtensionDeviceExit::ProductionOutputPin &ExternalLinkedOwnerTest::pin(uint32_t slot) {
+	CRASH_COND(slot >= 2);
+	return owner->slots[slot].original_pin;
+}
+void ExternalLinkedOwnerTest::install(uint32_t index, GDExtensionDeviceExit::Registry &registry, GDExtensionProductionRequestRefV1 request) {
+	CRASH_COND(index >= 2);
+	auto &slot = owner->slots[index];
+	slot.original_registry = &registry;
+	slot.original_request = request;
+	slot.lease_serial = lease(index);
+	slot.state = ExternalOutputOwner::LeaseState::RESERVED;
+}
+void ExternalLinkedOwnerTest::withdraw() {
+	// Synthetic logical-history marker only, never a consumed native tuple.
+	owner->views[0].history_slot = 0;
+	owner->withdraw();
+}
+bool ExternalLinkedOwnerTest::history_cleared() const {
+	return owner->views[0].history_slot == UINT32_MAX;
+}
+bool ExternalLinkedOwnerTest::released() const {
+	return owner->state == ExternalOutputOwner::GenerationState::RELEASED &&
+			owner->slots[0].original_pin.is_empty() && owner->slots[1].original_pin.is_empty();
+}
+
 // CPU finite-table policy only. No native owner was admitted, no Core pin was
 // acquired, no RID/lease/packet was published, and no return is being attested.
 class TestExternalOutputOwnerStateAccess {
