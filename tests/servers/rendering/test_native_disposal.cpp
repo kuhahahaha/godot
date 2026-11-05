@@ -30,6 +30,7 @@
 
 #include "core/os/os.h"
 #include "servers/rendering/rendering_device.h"
+#include "servers/rendering/rendering_shader_container.h"
 #include "tests/servers/rendering/transfer_test_driver_base.h"
 #include "tests/test_macros.h"
 
@@ -37,6 +38,7 @@ TEST_FORCE_LINK(test_native_disposal)
 
 class TestNativeDisposalAccess {
 public:
+	static void pipeline_rid_capacity();
 	static void attach(RenderingDevice &p_rd, RenderingDeviceDriver &p_driver) {
 		p_rd.driver = &p_driver;
 		p_rd.is_main_instance = true;
@@ -172,6 +174,95 @@ public:
 		++shader_frees;
 	}
 };
+
+// Real public shader/pipeline factories with deterministic CPU driver objects.
+// These objects carry no GPU execution or source-admission claim.
+class RasterContainer : public RenderingShaderContainer {
+protected:
+	uint32_t _format() const override { return 0x52504350; }
+	uint32_t _format_version() const override { return 1; }
+	bool _set_code_from_spirv(const ReflectShader &) override { return false; }
+
+public:
+	void initialize() {
+		reflection_data.pipeline_type = RenderingDeviceCommons::PIPELINE_TYPE_RASTERIZATION;
+		reflection_data.stage_count = 2;
+		for (auto stage : { RenderingDeviceCommons::SHADER_STAGE_VERTEX, RenderingDeviceCommons::SHADER_STAGE_FRAGMENT }) {
+			reflection_shader_stages.push_back(stage);
+			Shader shader;
+			shader.shader_stage = stage;
+			shader.code_compressed_bytes.push_back(42);
+			shader.code_decompressed_size = 1;
+			shaders.push_back(shader);
+		}
+	}
+};
+class RasterFormat : public RenderingShaderContainerFormat {
+public:
+	Ref<RenderingShaderContainer> create_container() const override { return memnew(RasterContainer); }
+	ShaderLanguageVersion get_shader_language_version() const override { return SHADER_LANGUAGE_VULKAN_VERSION_1_1; }
+	ShaderSpirvVersion get_shader_spirv_version() const override { return SHADER_SPIRV_VERSION_1_3; }
+};
+class RasterCapacityDriver : public TransferTestDriverBase {
+public:
+	RasterFormat format;
+	bool fail_pipeline = false, quiet_failure = false, cleanup_orphan = false;
+	uint32_t pipeline_calls = 0, pipeline_frees = 0, orphan_cleanup_frees = 0, shader_frees = 0;
+	uint64_t next_pipeline = 400;
+	PipelineID live_pipeline;
+	const RenderingShaderContainerFormat &get_shader_container_format() const override { return format; }
+	ShaderID shader_create_from_container(const Ref<RenderingShaderContainer> &container, const Vector<ImmutableSampler> &) override {
+		CHECK(container->get_shader_reflection().pipeline_type == PIPELINE_TYPE_RASTERIZATION);
+		return ShaderID(301);
+	}
+	uint32_t shader_get_layout_hash(ShaderID id) override {
+		CHECK(id == ShaderID(301));
+		return 123;
+	}
+	void shader_free(ShaderID id) override {
+		CHECK(id == ShaderID(301));
+		++shader_frees;
+	}
+	bool shader_retire_ready_nonblocking(ShaderID) const override { return true; }
+	RenderPassID render_pass_create(VectorView<Attachment>, VectorView<Subpass>, VectorView<SubpassDependency>, uint32_t, AttachmentReference) override { return RenderPassID(302); }
+	void render_pass_free(RenderPassID id) override { CHECK(id == RenderPassID(302)); }
+	void set_object_name(ObjectType type, ID id, const String &name) override {
+		CHECK(name.begins_with("RID:"));
+		CHECK(((type == OBJECT_TYPE_SHADER && id.id == 301) || (type == OBJECT_TYPE_PIPELINE && live_pipeline && id.id == live_pipeline.id)));
+	}
+	DriverWorkarounds get_driver_workarounds() const override {
+		DriverWorkarounds value;
+		value.dont_print_on_render_pipeline_creation_failure = quiet_failure;
+		return value;
+	}
+	PipelineID render_pipeline_create(ShaderID shader, VertexFormatID, RenderPrimitive, PipelineRasterizationState, PipelineMultisampleState, PipelineDepthStencilState, PipelineColorBlendState, VectorView<int32_t>, BitField<PipelineDynamicStateFlags>, RenderPassID pass, uint32_t, VectorView<PipelineSpecializationConstant>) override {
+		CHECK(shader == ShaderID(301));
+		CHECK(pass == RenderPassID(302));
+		++pipeline_calls;
+		if (fail_pipeline) {
+			return {};
+		}
+		CHECK_FALSE(bool(live_pipeline));
+		live_pipeline = PipelineID(next_pipeline++);
+		return live_pipeline;
+	}
+	void pipeline_free(PipelineID id) override {
+		CHECK(bool(live_pipeline));
+		CHECK(id == live_pipeline);
+		live_pipeline = {};
+		if (cleanup_orphan) {
+			++orphan_cleanup_frees;
+		} else {
+			++pipeline_frees;
+		}
+	}
+};
+
+TEST_CASE("[RenderingDevice][NativeDisposal][PipelineRIDCapacity] ordinary factory retains a real RID before native creation") {
+	ERR_PRINT_OFF;
+	TestNativeDisposalAccess::pipeline_rid_capacity();
+	ERR_PRINT_ON;
+}
 
 TEST_CASE("[RenderingDevice][NativeDisposal] large accepted queue drains with single-call turns") {
 	RenderingDevice rd;
@@ -372,3 +463,141 @@ TEST_CASE("[RenderingDevice][NativeDisposal] failed native creation leaves no wi
 }
 
 } // namespace TestNativeDisposal
+
+void TestNativeDisposalAccess::pipeline_rid_capacity() {
+	using namespace TestNativeDisposal;
+	RenderingDevice rd;
+	RasterCapacityDriver driver;
+	attach(rd, driver);
+	Ref<RasterContainer> container;
+	container.instantiate();
+	container->initialize();
+	const RID shader = rd.shader_create_from_bytecode(container->to_bytes());
+	CHECK(shader.is_valid());
+	if (shader.is_null()) {
+		detach(rd);
+		return;
+	}
+	const auto format = rd.framebuffer_format_create(Vector<RenderingDevice::AttachmentFormat>());
+	auto create_pipeline = [&]() {
+		return rd.render_pipeline_create(shader, format, RenderingDevice::INVALID_ID, RenderingDevice::RENDER_PRIMITIVE_TRIANGLES,
+				RenderingDevice::PipelineRasterizationState(), RenderingDevice::PipelineMultisampleState(), RenderingDevice::PipelineDepthStencilState(), RenderingDevice::PipelineColorBlendState());
+	};
+
+	// Exercise the unchanged default thread-safe RID_Owner constructor. Its
+	// last chunk is rounded UP, so 262144 is not necessarily the real capacity.
+	constexpr uint32_t chunk_elements = sizeof(RenderingDevice::RenderPipeline) > 65536 ? 1 : 65536 / sizeof(RenderingDevice::RenderPipeline);
+	constexpr uint32_t arena_capacity = (262144 / chunk_elements + 1) * chunk_elements;
+	INFO("Default pipeline arena slots=", arena_capacity, ", sizeof pipeline=", sizeof(RenderingDevice::RenderPipeline));
+	LocalVector<RID> fillers;
+	for (uint32_t i = 0; i < arena_capacity; ++i) {
+		const RID rid = rd.render_pipeline_owner.make_rid(RenderingDevice::RenderPipeline());
+		if (rid.is_null()) {
+			break;
+		}
+		fillers.push_back(rid);
+	}
+	CHECK(fillers.size() == arena_capacity);
+	CHECK(rd.render_pipeline_owner.get_rid_count() == arena_capacity);
+	const RID beyond = rd.render_pipeline_owner.allocate_rid();
+	CHECK(beyond.is_null());
+	if (beyond.is_valid()) {
+		// A changed constructor contract is a failed test, not a leaked slot.
+		rd.render_pipeline_owner.initialize_rid(beyond, RenderingDevice::RenderPipeline());
+		fillers.push_back(beyond);
+	}
+	const uint32_t before_full = driver.pipeline_calls;
+	const RID refused = create_pipeline();
+	CHECK(refused.is_null());
+	// RED: original code calls the driver once and then loses the RID root.
+	// GREEN: actual RID reservation refuses before any driver allocation.
+	CHECK_MESSAGE(driver.pipeline_calls == before_full, "Full actual RID owner must refuse before native pipeline creation");
+	CHECK(rd.render_pipeline_owner.get_rid_count() == fillers.size());
+	CHECK(rd.frames[0].render_pipelines_to_dispose_of.is_empty());
+	if (refused.is_valid()) {
+		rd.free_rid(refused);
+		dispose(rd);
+	}
+	if (driver.live_pipeline) {
+		// Retain the exact failed-prefix object in the CPU backend solely for
+		// negative-fixture teardown. Do not fabricate a replacement RID/receipt.
+		CHECK(refused.is_null());
+		CHECK(driver.pipeline_calls == before_full + 1);
+		bool rooted = false;
+		for (RID rid : fillers) {
+			const auto *pipeline = rd.render_pipeline_owner.get_or_null(rid);
+			rooted |= pipeline && pipeline->driver_id == driver.live_pipeline;
+		}
+		CHECK_FALSE(rooted);
+		driver.cleanup_orphan = true;
+		driver.pipeline_free(driver.live_pipeline);
+		driver.cleanup_orphan = false;
+		// RED also inserts an empty-RID dependency after make_rid fails.
+		// Remove that exact failed edge through the original dependency cleanup;
+		// this is test teardown after assertions, never successful factory work.
+		MutexLock lock(rd._thread_safe_);
+		CHECK(rd._free_dependencies(RID(), lock));
+	}
+	CHECK_FALSE(bool(driver.live_pipeline));
+	const uint32_t frees_before = driver.pipeline_frees;
+
+	if (!fillers.is_empty()) {
+		const RID last = fillers[fillers.size() - 1];
+		rd.render_pipeline_owner.free(last);
+		fillers.resize(fillers.size() - 1);
+		CHECK(rd.render_pipeline_owner.get_rid_count() == arena_capacity - 1);
+		driver.fail_pipeline = true;
+		for (uint32_t quiet = 0; quiet < 2; ++quiet) {
+			driver.quiet_failure = quiet != 0;
+			for (uint32_t attempt = 0; attempt < 3; ++attempt) {
+				const uint32_t calls = driver.pipeline_calls;
+				CHECK(create_pipeline().is_null());
+				CHECK(driver.pipeline_calls == calls + 1);
+				CHECK(rd.render_pipeline_owner.get_rid_count() == arena_capacity - 1);
+				CHECK_FALSE(bool(driver.live_pipeline));
+				CHECK(driver.pipeline_frees == frees_before);
+				CHECK(rd.frames[0].render_pipelines_to_dispose_of.is_empty());
+			}
+		}
+		driver.fail_pipeline = driver.quiet_failure = false;
+		const uint32_t calls = driver.pipeline_calls;
+		const RID pipeline = create_pipeline();
+		CHECK(pipeline.is_valid());
+		CHECK(driver.pipeline_calls == calls + 1);
+		CHECK(rd.render_pipeline_owner.get_rid_count() == arena_capacity);
+		if (pipeline.is_valid()) {
+			const auto *actual = rd.render_pipeline_owner.get_or_null(pipeline);
+			CHECK(actual != nullptr);
+			if (actual) {
+				CHECK(actual->driver_id == driver.live_pipeline);
+				CHECK(actual->shader == shader);
+			}
+			CHECK(rd.render_pipeline_is_valid(pipeline));
+			// The only available slot was reused by the real public factory.
+			CHECK(uint32_t(pipeline.get_id()) == uint32_t(last.get_id()));
+			rd.free_rid(pipeline);
+			CHECK_FALSE(rd.render_pipeline_owner.owns(pipeline));
+			CHECK(rd.frames[0].render_pipelines_to_dispose_of.size() == 1);
+			CHECK(driver.pipeline_frees == frees_before);
+			dispose(rd); // Actual normal pending-free path, not orphan teardown.
+			CHECK(driver.pipeline_frees == frees_before + 1);
+			CHECK_FALSE(bool(driver.live_pipeline));
+			CHECK(rd.frames[0].render_pipelines_to_dispose_of.is_empty());
+		}
+	}
+	for (RID rid : fillers) {
+		rd.render_pipeline_owner.free(rid);
+	}
+	CHECK(rd.render_pipeline_owner.get_rid_count() == 0);
+	rd.free_rid(shader);
+	dispose(rd);
+	CHECK(driver.shader_frees == 1);
+	CHECK(rd.dependency_map.is_empty());
+	CHECK(rd.reverse_dependency_map.is_empty());
+	for (auto &entry : rd.framebuffer_formats) {
+		driver.render_pass_free(entry.value.render_pass);
+	}
+	rd.framebuffer_formats.clear();
+	rd.framebuffer_format_cache.clear();
+	detach(rd);
+}

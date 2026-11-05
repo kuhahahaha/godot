@@ -5952,6 +5952,14 @@ RID RenderingDevice::_qualification_render_pipeline_create_internal(RID p_shader
 		}
 	}
 
+	// Ordinary creation must own its RID before the driver can create a native
+	// pipeline. A thread-safe RID owner can refuse when its finite arena is full.
+	RID ordinary_reserved;
+	if (!p_cell) {
+		ordinary_reserved = render_pipeline_owner.allocate_rid();
+		ERR_FAIL_COND_V(ordinary_reserved.is_null(), RID());
+	}
+
 	RenderPipeline pipeline;
 	pipeline.qualification_return = p_cell;
 	pipeline.qualification_dependency = p_cell ? shader->qualification_return : nullptr;
@@ -5968,6 +5976,13 @@ RID RenderingDevice::_qualification_render_pipeline_create_internal(RID p_shader
 			fb_format.render_pass,
 			p_for_render_pass,
 			p_specialization_constants);
+
+	if (!pipeline.driver_id && ordinary_reserved.is_valid()) {
+		// RID_Owner::free requires an initialized slot, even when no driver
+		// object was created. Return this ordinary reservation on both exits.
+		render_pipeline_owner.initialize_rid(ordinary_reserved, RenderPipeline());
+		render_pipeline_owner.free(ordinary_reserved);
+	}
 
 	// Don't print error when it's expected.
 	if (unlikely(!pipeline.driver_id && driver->get_driver_workarounds().dont_print_on_render_pipeline_creation_failure)) {
@@ -6021,7 +6036,8 @@ RID RenderingDevice::_qualification_render_pipeline_create_internal(RID p_shader
 		render_pipeline_owner.initialize_rid(id, pipeline);
 		pipeline.qualification_dependency->dependent_children.fetch_add(1);
 	} else {
-		id = render_pipeline_owner.make_rid(pipeline);
+		id = ordinary_reserved;
+		render_pipeline_owner.initialize_rid(id, pipeline);
 	}
 	{
 		_THREAD_SAFE_METHOD_
