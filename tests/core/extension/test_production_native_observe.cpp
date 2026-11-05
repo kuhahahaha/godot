@@ -2263,7 +2263,7 @@ struct Access {
 		struct Contention {
 			RenderingDevice *device;
 			Registry *registry;
-			Semaphore ready;
+			Semaphore ready{};
 			std::atomic<bool> attempt_finished{ false }, holding{ false };
 			bool timeout = false, acquired_registry = false;
 			static void run(void *data) {

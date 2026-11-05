@@ -143,5 +143,38 @@
     "Mono managed compile/runtime and original PCK export"
   ],
   "scope": "installed public physical transport and explicit-budget cleanup CPU proof; not Runtime logical authorization, real GPU or full six-chain acceptance",
-  "host_composition": "also contains separately reviewed Mono common Object cleanup; no Mono module or managed validation in this local host"
+  "host_composition": "also contains separately reviewed Mono common Object cleanup; no Mono module or managed validation in this local host",
+  "initializer_followup": {
+    "ci_run": 41986561968,
+    "jobs": [
+      127108813337,
+      127108813589
+    ],
+    "failure": "Clang Wall/Wextra missing ready aggregate member initializer",
+    "fix": "Semaphore ready{} default member initializer; same default construction",
+    "source_file": "tests/core/extension/test_production_native_observe.cpp",
+    "source_sha256": "dc9be21b94e0785f85f47b82f1dfd72e23ccd046394701f026bc6c6d0257d85d",
+    "strict": "actual warning RED reproduced, Wall/Wextra/Wmissing-field-initializers \u00b1DEV fullTU GREEN",
+    "build": {
+      "exit_code": 0,
+      "seconds": 18.633499291026965,
+      "input_unchanged": true,
+      "host_sha256": "ae02bd31bea07ae92c077f0744311c902a04cf5d071cc9fc8067429ff7ced3bf"
+    },
+    "cursor_runtime": {
+      "exit_code": 0,
+      "cases": {
+        "successes": "1",
+        "failures": "0"
+      },
+      "assertions": {
+        "successes": "320",
+        "failures": "0"
+      },
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "expected_names_match": true
+    },
+    "scope": "same production/lock/scope/watchdog behavior; platformClangCI still must rerun"
+  }
 }
