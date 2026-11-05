@@ -30,6 +30,7 @@
 
 #pragma once
 
+#include "core/extension/gdextension_external_output_typed.h"
 #include "core/templates/local_vector.h"
 #include "core/templates/rid_owner.h"
 #include "core/templates/self_list.h"
@@ -76,6 +77,10 @@ private:
 	// row after return; no owner/wrapper pointer is persisted in the Core arena.
 	static bool _production_output_owner_matches(RID, uint64_t, uint32_t, uint64_t, const GDExtensionDeviceExit::ProductionOutputPin &, RenderingDevice &, GDExtensionProductionRequestRefV1);
 	static Error _production_output_service(RID p_particles, uint64_t p_generation, uint32_t p_slot, uint64_t p_lease_serial, GDExtensionDeviceExit::ProductionOutputPin &p_pin, const GDExtensionProductionServiceBudgetV1 &p_budget, GDExtensionDeviceExit::ProductionServiceUsage &r_usage);
+	static Error _external_typed_context(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, bool);
+	GDExtensionOutputStatusV1 _external_seal_body(RID, const uint8_t *, const GDExtensionOutputCommonInputV1 &, const uint8_t *);
+	Error _external_cancel_body(RID, const uint8_t *);
+	Error _external_withdraw_body(RID, uint64_t);
 	static ParticlesStorage *singleton;
 
 	/* EFFECTS */
@@ -503,6 +508,11 @@ public:
 	virtual RID particles_allocate() override;
 	virtual void particles_initialize(RID p_rid) override;
 
+	// Synchronous typed bodies only. Registration/Host anchor is not supplied here.
+	void particles_external_create_typed(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionOutputCreateInputV1 &, GDExtensionOutputCreateResultV1 &);
+	void particles_external_seal_typed(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionOutputSealInputV1 &, GDExtensionOutputSealResultV1 &);
+	GDExtensionOutputStatusV1 particles_external_cancel_typed(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionOutputCancelInputV1 &);
+	GDExtensionOutputStatusV1 particles_external_withdraw_typed(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionOutputGenerationInputV1 &);
 	virtual Dictionary particles_external_create(const Dictionary &p_config) override;
 	virtual Dictionary particles_external_acquire(RID p_particles, const Dictionary &p_request) override;
 	virtual Dictionary particles_external_seal(RID p_particles, const PackedByteArray &p_lease_token, const Dictionary &p_seal) override;
