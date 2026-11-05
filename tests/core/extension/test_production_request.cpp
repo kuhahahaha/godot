@@ -1738,6 +1738,7 @@ struct Access {
 				test.directory_mesh.surface_count = 1;
 				MeshStorage::NativeSurfaceHold original;
 				test.check(__LINE__, MeshStorage::_mesh_surface_hold_acquire(surface, 1, false, false, 0, original) == OK);
+				test.check(__LINE__, original.is_valid() && original.is_external() == test.directory_external);
 				{
 					GDExtensionDeviceExit::ProductionOutputPin surface_pin;
 					test.check(__LINE__, registry.production_output_pin_borrow(test.output_pin, rd, surface_pin) == OK);
@@ -1749,6 +1750,27 @@ struct Access {
 				MeshStorage::_mesh_surface_clear(&test.directory_mesh, 0);
 				test.directory_mesh.surface_count = 0;
 				test.check(__LINE__, MeshStorage::_native_hold_freeze_directory(original) == OK);
+				if (test.directory_external) {
+					// Existing genuine Version remains observable after freeze; no
+					// new factory or source authority is introduced by this getter.
+					RID selected;
+					RD::VertexFormatID selected_format = 0;
+					MeshStorage::_mesh_surface_get_external_arrays(surface, 1, false, false, selected, selected_format);
+					test.check(__LINE__, selected == surface->versions[0].vertex_array && selected_format == format);
+					const uint32_t versions_before = surface->version_count;
+					const uint32_t holds_before = rd.native_immutable_hold_count;
+					const uint32_t shares_before = *rd._native_immutable_counter(surface->vertex_buffer);
+					const uint64_t groups_before = request.next_disposal_group_serial;
+					const uint64_t revision_before = request.revision;
+					// Missing mask and previous-input Version must remain absent.
+					MeshStorage::_mesh_surface_get_external_arrays(surface, 2, false, false, selected, selected_format);
+					test.check(__LINE__, selected.is_null() && selected_format == 0);
+					MeshStorage::_mesh_surface_get_external_arrays(surface, 1, true, false, selected, selected_format);
+					test.check(__LINE__, selected.is_null() && selected_format == 0);
+					test.check(__LINE__, surface->version_count == versions_before && rd.native_immutable_hold_count == holds_before);
+					test.check(__LINE__, *rd._native_immutable_counter(surface->vertex_buffer) == shares_before && request.next_disposal_group_serial == groups_before && request.revision == revision_before);
+					test.check(__LINE__, original.is_external());
+				}
 				const uint32_t original_holds = rd.native_immutable_hold_count;
 				const uint64_t original_group_serial = request.next_disposal_group_serial;
 				const uint32_t original_shares = *rd._native_immutable_counter(surface->vertex_buffer);
@@ -1770,6 +1792,7 @@ struct Access {
 					test.check(__LINE__, MeshStorage::_native_hold_thaw_directory(original) == ERR_BUSY);
 					test.check(__LINE__, rd._production_output_hold_capture(context, test.output_pin, *MeshStorage::_native_hold_transfer_source(original), test.directory_selected_group) == OK);
 					test.check(__LINE__, MeshStorage::_native_hold_mark_transferred(original) == OK);
+					test.check(__LINE__, !original.is_valid() && !original.is_external());
 				}
 				if (!test.directory_capacity_failure) {
 					test.check(__LINE__, MeshStorage::_native_hold_freeze_directory(test.directory_neighbor) == OK);
@@ -1778,6 +1801,8 @@ struct Access {
 					test.check(__LINE__, MeshStorage::_native_hold_mark_transferred(test.directory_neighbor) == OK);
 				}
 				test.directory_hold = static_cast<MeshStorage::NativeSurfaceHold &&>(original);
+				test.check(__LINE__, !original.is_active() && !original.is_external());
+				test.check(__LINE__, test.directory_hold.is_external() == (test.directory_capacity_failure && test.directory_external));
 				test.check(__LINE__, MeshStorage::_native_hold_begin_return(test.directory_hold) == ERR_BUSY);
 				if (!test.directory_capacity_failure) {
 					directory_component = &test;

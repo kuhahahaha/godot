@@ -526,6 +526,7 @@ public:
 		bool is_active() const { return device != nullptr; }
 		bool has_retirement_directory() const { return !retirement_group.is_empty(); }
 		bool is_valid() const { return surface && physical.is_valid(); }
+		bool is_external() const { return is_valid() && surface->external; }
 		RID get_vertex_array() const { return is_valid() ? vertex_array : RID(); }
 		RID get_index_array() const { return is_valid() ? index_array : RID(); }
 		RD::VertexFormatID get_vertex_format() const { return is_valid() ? vertex_format : 0; }

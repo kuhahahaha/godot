@@ -1,0 +1,128 @@
+{
+  "scope": "NativeSurfaceHold external observer and original RECORD frozen-directory regression only",
+  "base_commit": "966e74c78c65276d8bd249cd1464fcd92f3ec823",
+  "manifest": {
+    "scope": "approved indexed144 observer getter and original RECORD directory invariants only",
+    "patch_sha256": "a6b65e00453818fc11d5057367c811fb3d46e04c69f15a8de99b6483c81c8e12",
+    "files": [
+      {
+        "path": "servers/rendering/renderer_rd/storage_rd/mesh_storage.h",
+        "baseline_sha256": "576ef2feb82e3dfa86a2ee3cfe9a03611e5a9203fe55bb8c0808abb500bfa999",
+        "candidate_sha256": "5790518a58a62f0c9f45faf758516f7011b754bf460347e971a8e81a7243b976"
+      },
+      {
+        "path": "tests/core/extension/test_production_request.cpp",
+        "baseline_sha256": "cee39b960270f5fd797a0dae90f5d5a2dd973af2d68ad1b8d1e33ca2fa08a808",
+        "candidate_sha256": "f40fa9243b9970af1385349e63c4c10468ddfb169879e29f833904e2d0fe8492"
+      }
+    ],
+    "strict_count": 4,
+    "strict_failures": 0,
+    "candidate_mesh_header_loaded_all": true,
+    "baseline_negative": "new fixture against exact baseline header fails missing is_external, expected",
+    "style_count": 5,
+    "style_failures": 0,
+    "unchanged_context_cpp": {
+      "path": "servers/rendering/renderer_rd/storage_rd/mesh_storage.cpp",
+      "sha256": "8f1c2b579994adf1f107ff57cbb14fb567a38c87dcb50c431efd89965bc4588d",
+      "apply": false
+    },
+    "runtime": "NOT RUN; Root sole D writer/builder; use exact test filter"
+  },
+  "build": {
+    "exit": 0,
+    "elapsed": 497.29270237497985
+  },
+  "runtime": {
+    "host_sha256": "548fa2e9d823c2ca29cadc2ea00aed105a8ccea7df15f0582ca234fa0bcbdc36",
+    "results": {
+      "closure": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "2864",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "1",
+            "failures": "0"
+          }
+        },
+        "accepted": true,
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "request": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "15256",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "22",
+            "failures": "0"
+          }
+        },
+        "accepted": true,
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "mesh": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "472",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "6",
+            "failures": "0"
+          }
+        },
+        "accepted": true,
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      }
+    }
+  },
+  "style": [
+    {
+      "command": [
+        "/tmp/b4-ci-style-tools/bin/clang-format",
+        "--dry-run",
+        "--Werror",
+        "servers/rendering/renderer_rd/storage_rd/mesh_storage.h",
+        "tests/core/extension/test_production_request.cpp"
+      ],
+      "exit": 0,
+      "diagnostic": ""
+    },
+    {
+      "command": [
+        "/tmp/b4-ci-style-tools/bin/codespell",
+        "servers/rendering/renderer_rd/storage_rd/mesh_storage.h",
+        "tests/core/extension/test_production_request.cpp"
+      ],
+      "exit": 0,
+      "diagnostic": ""
+    }
+  ],
+  "independent_review": {
+    "source": "/tmp/b4-indexed144-observer-leaf-20261105/INDEPENDENT_REVIEW.json",
+    "sha256": "c7d1c17fe10a4c37c3bf6e9f0ce1ae634b151e93e6278f83a7dc466f05d54c12"
+  },
+  "evidence_directory": "work/b4-indexed144-observer-runtime-20261105",
+  "observations": [
+    "is_external is false after physical transfer or move and reflects the retained original Surface only while valid.",
+    "An already selected Version remains accessible after original detached-directory freeze.",
+    "A missing input-mask or motion Version is refused while the directory is frozen; version count, actual native shares, hold count and original request group/revision remain unchanged."
+  ],
+  "limitations": [
+    "No late-created VA authorization or factory added.",
+    "No renderer prepare/view checkpoint, production owner/source/Host issuer, full writer, GPU rendering or full product acceptance claim.",
+    "Targeted real request fixture uses the controlled native driver; no actual GPU run.",
+    "No repeated full engine matrix for this narrow observer/test change; prior full K run is a separate source identity.",
+    "MoltenVK target-version linker warning retained."
+  ]
+}
