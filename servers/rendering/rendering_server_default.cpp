@@ -51,6 +51,59 @@
 
 int RenderingServerDefault::changes = 0;
 
+/* EXTERNAL PARTICLE OUTPUT */
+
+namespace {
+Dictionary external_output_wrong_thread() {
+	Dictionary result;
+	result["error"] = ERR_UNAVAILABLE;
+	result["detail"] = StringName("render_thread_required");
+	return result;
+}
+} // namespace
+
+Dictionary RenderingServerDefault::particles_external_create(const Dictionary &p_config) {
+	if (!is_on_render_thread()) {
+		return external_output_wrong_thread();
+	}
+	return RSG::particles_storage->particles_external_create(p_config);
+}
+
+Dictionary RenderingServerDefault::particles_external_acquire(RID p_particles, const Dictionary &p_request) {
+	if (!is_on_render_thread()) {
+		return external_output_wrong_thread();
+	}
+	return RSG::particles_storage->particles_external_acquire(p_particles, p_request);
+}
+
+Dictionary RenderingServerDefault::particles_external_seal(RID p_particles, const PackedByteArray &p_lease_token, const Dictionary &p_seal) {
+	if (!is_on_render_thread()) {
+		return external_output_wrong_thread();
+	}
+	return RSG::particles_storage->particles_external_seal(p_particles, p_lease_token, p_seal);
+}
+
+Error RenderingServerDefault::particles_external_cancel(RID p_particles, const PackedByteArray &p_lease_token) {
+	if (!is_on_render_thread()) {
+		return ERR_UNAVAILABLE;
+	}
+	return RSG::particles_storage->particles_external_cancel(p_particles, p_lease_token);
+}
+
+Error RenderingServerDefault::particles_external_withdraw(RID p_particles, const PackedByteArray &p_generation) {
+	if (!is_on_render_thread()) {
+		return ERR_UNAVAILABLE;
+	}
+	return RSG::particles_storage->particles_external_withdraw(p_particles, p_generation);
+}
+
+Dictionary RenderingServerDefault::particles_external_poll(RID p_particles, const PackedByteArray &p_generation) {
+	if (!is_on_render_thread()) {
+		return external_output_wrong_thread();
+	}
+	return RSG::particles_storage->particles_external_poll(p_particles, p_generation);
+}
+
 /* FREE */
 
 void RenderingServerDefault::_free(RID p_rid) {

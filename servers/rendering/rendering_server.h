@@ -432,6 +432,14 @@ public:
 
 	/* PARTICLES API */
 
+	// Synchronous render-thread output surface; callers schedule the outer callback.
+	virtual Dictionary particles_external_create(const Dictionary &p_config) = 0;
+	virtual Dictionary particles_external_acquire(RID p_particles, const Dictionary &p_request) = 0;
+	virtual Dictionary particles_external_seal(RID p_particles, const PackedByteArray &p_lease_token, const Dictionary &p_seal) = 0;
+	virtual Error particles_external_cancel(RID p_particles, const PackedByteArray &p_lease_token) = 0;
+	virtual Error particles_external_withdraw(RID p_particles, const PackedByteArray &p_generation) = 0;
+	virtual Dictionary particles_external_poll(RID p_particles, const PackedByteArray &p_generation) = 0;
+
 	virtual RID particles_create() = 0;
 	virtual void particles_set_mode(RID p_particles, RSE::ParticlesMode p_mode) = 0;
 
@@ -633,7 +641,6 @@ public:
 	virtual Dictionary sky_get_physical_source_status(RID p_sky) const = 0;
 	virtual Dictionary get_physical_sky_capabilities() const = 0;
 	virtual String get_sky_view_shader_source() const = 0;
-
 
 	virtual Ref<Image> sky_bake_panorama(RID p_sky, float p_energy, bool p_bake_irradiance, const Size2i &p_size) = 0;
 

@@ -3174,6 +3174,54 @@
 				Manually emits particles from the [param particles] instance.
 			</description>
 		</method>
+		<method name="particles_external_acquire">
+			<return type="Dictionary" />
+			<param index="0" name="particles" type="RID" />
+			<param index="1" name="request" type="Dictionary" />
+			<description>
+				Passes an external particle output acquisition request to the renderer storage. Acquisition remains unavailable while the original output source, mapping, and retained host interfaces are unavailable. Call synchronously from a render-thread callback scheduled with [method call_on_render_thread]. Calls from another thread return [constant @GlobalScope.ERR_UNAVAILABLE] before storage access and do not enqueue work. Unsupported renderers return [constant @GlobalScope.ERR_UNAVAILABLE]. The returned dictionary contains [code]error[/code] as an [int] and [code]detail[/code] as a [StringName].
+			</description>
+		</method>
+		<method name="particles_external_cancel">
+			<return type="int" enum="Error" />
+			<param index="0" name="particles" type="RID" />
+			<param index="1" name="lease_token" type="PackedByteArray" />
+			<description>
+				Passes cancellation of an external particle output lease to the renderer storage. A stale or invalid lease is rejected by storage. Call synchronously from a render-thread callback scheduled with [method call_on_render_thread]. Calls from another thread return [constant @GlobalScope.ERR_UNAVAILABLE] before storage access and do not enqueue work. Unsupported renderers return [constant @GlobalScope.ERR_UNAVAILABLE].
+			</description>
+		</method>
+		<method name="particles_external_create">
+			<return type="Dictionary" />
+			<param index="0" name="config" type="Dictionary" />
+			<description>
+				Passes an external particle output configuration to the renderer storage. Creation remains unavailable while original output admission is unavailable and does not allocate a particle RID. Call synchronously from a render-thread callback scheduled with [method call_on_render_thread]. Calls from another thread return [constant @GlobalScope.ERR_UNAVAILABLE] before storage access and do not enqueue work. Unsupported renderers return [constant @GlobalScope.ERR_UNAVAILABLE]. The returned dictionary contains [code]error[/code] as an [int] and [code]detail[/code] as a [StringName].
+			</description>
+		</method>
+		<method name="particles_external_poll">
+			<return type="Dictionary" />
+			<param index="0" name="particles" type="RID" />
+			<param index="1" name="generation" type="PackedByteArray" />
+			<description>
+				Passes an external particle output retirement query to the renderer storage. This call does not infer completion or release from elapsed time or absent draws. Call synchronously from a render-thread callback scheduled with [method call_on_render_thread]. Calls from another thread return [constant @GlobalScope.ERR_UNAVAILABLE] before storage access and do not enqueue work. Unsupported renderers return [constant @GlobalScope.ERR_UNAVAILABLE]. The returned dictionary contains [code]error[/code] as an [int] and [code]detail[/code] as a [StringName].
+			</description>
+		</method>
+		<method name="particles_external_seal">
+			<return type="Dictionary" />
+			<param index="0" name="particles" type="RID" />
+			<param index="1" name="lease_token" type="PackedByteArray" />
+			<param index="2" name="seal" type="Dictionary" />
+			<description>
+				Passes an external particle output seal request to the renderer storage. Recording remains unavailable while the original producer record bridge is unavailable. Call synchronously from a render-thread callback scheduled with [method call_on_render_thread]. Calls from another thread return [constant @GlobalScope.ERR_UNAVAILABLE] before storage access and do not enqueue work. Unsupported renderers return [constant @GlobalScope.ERR_UNAVAILABLE]. The returned dictionary contains [code]error[/code] as an [int] and [code]detail[/code] as a [StringName].
+			</description>
+		</method>
+		<method name="particles_external_withdraw">
+			<return type="int" enum="Error" />
+			<param index="0" name="particles" type="RID" />
+			<param index="1" name="generation" type="PackedByteArray" />
+			<description>
+				Passes withdrawal of an external particle output generation to the renderer storage. Storage validates the original generation before changing its admission state. Call synchronously from a render-thread callback scheduled with [method call_on_render_thread]. Calls from another thread return [constant @GlobalScope.ERR_UNAVAILABLE] before storage access and do not enqueue work. Unsupported renderers return [constant @GlobalScope.ERR_UNAVAILABLE].
+			</description>
+		</method>
 		<method name="particles_get_current_aabb">
 			<return type="AABB" />
 			<param index="0" name="particles" type="RID" />

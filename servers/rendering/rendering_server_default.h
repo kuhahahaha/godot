@@ -632,6 +632,14 @@ public:
 #define ServerName RendererParticlesStorage
 #define server_name RSG::particles_storage
 
+	// These result-returning calls never enqueue or synchronize across threads.
+	virtual Dictionary particles_external_create(const Dictionary &p_config) override;
+	virtual Dictionary particles_external_acquire(RID p_particles, const Dictionary &p_request) override;
+	virtual Dictionary particles_external_seal(RID p_particles, const PackedByteArray &p_lease_token, const Dictionary &p_seal) override;
+	virtual Error particles_external_cancel(RID p_particles, const PackedByteArray &p_lease_token) override;
+	virtual Error particles_external_withdraw(RID p_particles, const PackedByteArray &p_generation) override;
+	virtual Dictionary particles_external_poll(RID p_particles, const PackedByteArray &p_generation) override;
+
 	FUNCRIDSPLIT(particles)
 
 	FUNC2(particles_set_mode, RID, RSE::ParticlesMode)

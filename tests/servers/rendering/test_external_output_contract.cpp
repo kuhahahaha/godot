@@ -29,8 +29,15 @@
 /**************************************************************************/
 
 #include "core/extension/gdextension_qualification_physical.h"
+#include "core/object/callable_mp.h"
+#include "core/object/class_db.h"
+#include "core/object/method_bind.h"
+#include "core/os/thread.h"
+#include "servers/rendering/dummy/storage/particles_storage.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_device_graph.h"
+#include "servers/rendering/rendering_server.h"
+#include "servers/rendering/rendering_server_globals.h"
 #include "tests/servers/rendering/transfer_test_driver_base.h"
 #include "tests/test_macros.h"
 
@@ -664,3 +671,144 @@ TEST_CASE("[RenderingDevice] compute barrier rejects invalid lists before state 
 	TestExternalOutputAccess::barrier_guards(device);
 	TestExternalOutputAccess::detach(device);
 }
+
+// Public ExternalOutput surface: synchronous RT result forwarding only.
+
+namespace {
+class ExternalOutputSurfaceSpy : public RendererDummy::ParticlesStorage {
+public:
+	uint32_t calls[6] = {};
+	uint32_t allocations = 0;
+	RID particles_allocate() override {
+		allocations++;
+		return RendererDummy::ParticlesStorage::particles_allocate();
+	}
+	Dictionary particles_external_create(const Dictionary &p_config) override {
+		calls[0]++;
+		return RendererDummy::ParticlesStorage::particles_external_create(p_config);
+	}
+	Dictionary particles_external_acquire(RID p_particles, const Dictionary &p_request) override {
+		calls[1]++;
+		return RendererDummy::ParticlesStorage::particles_external_acquire(p_particles, p_request);
+	}
+	Dictionary particles_external_seal(RID p_particles, const PackedByteArray &p_token, const Dictionary &p_seal) override {
+		calls[2]++;
+		return RendererDummy::ParticlesStorage::particles_external_seal(p_particles, p_token, p_seal);
+	}
+	Error particles_external_cancel(RID p_particles, const PackedByteArray &p_token) override {
+		calls[3]++;
+		return RendererDummy::ParticlesStorage::particles_external_cancel(p_particles, p_token);
+	}
+	Error particles_external_withdraw(RID p_particles, const PackedByteArray &p_generation) override {
+		calls[4]++;
+		return RendererDummy::ParticlesStorage::particles_external_withdraw(p_particles, p_generation);
+	}
+	Dictionary particles_external_poll(RID p_particles, const PackedByteArray &p_generation) override {
+		calls[5]++;
+		return RendererDummy::ParticlesStorage::particles_external_poll(p_particles, p_generation);
+	}
+};
+struct ExternalOutputSurfaceCalls : public Object {
+	Dictionary dictionaries[4];
+	Error cancel = OK, withdraw = OK;
+	bool on_rt = false;
+	void run() {
+		RenderingServer *rs = RenderingServer::get_singleton();
+		on_rt = rs->is_on_render_thread();
+		dictionaries[0] = rs->particles_external_create(Dictionary());
+		dictionaries[1] = rs->particles_external_acquire(RID(), Dictionary());
+		dictionaries[2] = rs->particles_external_seal(RID(), PackedByteArray(), Dictionary());
+		cancel = rs->particles_external_cancel(RID(), PackedByteArray());
+		withdraw = rs->particles_external_withdraw(RID(), PackedByteArray());
+		dictionaries[3] = rs->particles_external_poll(RID(), PackedByteArray());
+	}
+	static void worker(void *p_data) { static_cast<ExternalOutputSurfaceCalls *>(p_data)->run(); }
+};
+struct ExternalOutputSurfaceStorageScope {
+	RendererParticlesStorage *previous = RSG::particles_storage;
+	ExternalOutputSurfaceSpy spy;
+	ExternalOutputSurfaceStorageScope() { RSG::particles_storage = &spy; }
+	~ExternalOutputSurfaceStorageScope() { RSG::particles_storage = previous; }
+};
+void check_external_output_refusal(const ExternalOutputSurfaceCalls &p_calls, const StringName &p_detail) {
+	for (const Dictionary &result : p_calls.dictionaries) {
+		REQUIRE(result.size() == 2);
+		CHECK(int(result["error"]) == ERR_UNAVAILABLE);
+		CHECK(result["detail"].get_type() == Variant::STRING_NAME);
+		CHECK(StringName(result["detail"]) == p_detail);
+		CHECK_FALSE(result.has("particles"));
+		CHECK_FALSE(result.has("lease_token"));
+		CHECK_FALSE(result.has("packet_token"));
+	}
+	CHECK(p_calls.cancel == ERR_UNAVAILABLE);
+	CHECK(p_calls.withdraw == ERR_UNAVAILABLE);
+}
+} // namespace
+
+TEST_CASE("[RenderingServer][ExternalOutputSurface] Exact six ClassDB methods") {
+	struct Expected {
+		const char *name;
+		int count;
+		Variant::Type result;
+		Variant::Type args[3];
+	};
+	const Expected expected[] = {
+		{ "particles_external_create", 1, Variant::DICTIONARY, { Variant::DICTIONARY } },
+		{ "particles_external_acquire", 2, Variant::DICTIONARY, { Variant::RID, Variant::DICTIONARY } },
+		{ "particles_external_seal", 3, Variant::DICTIONARY, { Variant::RID, Variant::PACKED_BYTE_ARRAY, Variant::DICTIONARY } },
+		{ "particles_external_cancel", 2, Variant::INT, { Variant::RID, Variant::PACKED_BYTE_ARRAY } },
+		{ "particles_external_withdraw", 2, Variant::INT, { Variant::RID, Variant::PACKED_BYTE_ARRAY } },
+		{ "particles_external_poll", 2, Variant::DICTIONARY, { Variant::RID, Variant::PACKED_BYTE_ARRAY } },
+	};
+	for (const Expected &item : expected) {
+		INFO(item.name);
+		MethodBind *method = ClassDB::get_method("RenderingServer", item.name);
+		REQUIRE(method != nullptr);
+		REQUIRE(method->get_argument_count() == item.count);
+		CHECK(method->get_return_info().type == item.result);
+		for (int i = 0; i < item.count; ++i) {
+			CHECK(method->get_argument_type(i) == item.args[i]);
+		}
+	}
+}
+
+TEST_CASE("[RenderingServer][ExternalOutputSurface] RT callback forwards Dummy refusal without RID allocation") {
+	RenderingServer *rs = RenderingServer::get_singleton();
+	REQUIRE(rs != nullptr);
+	REQUIRE(rs->is_on_render_thread()); // Existing standalone test-host contract.
+	rs->sync();
+	ExternalOutputSurfaceStorageScope storage;
+	ExternalOutputSurfaceCalls calls;
+	rs->call_on_render_thread(callable_mp(&calls, &ExternalOutputSurfaceCalls::run));
+	REQUIRE(calls.on_rt);
+	check_external_output_refusal(calls, "backend_unsupported");
+	for (uint32_t count : storage.spy.calls) {
+		CHECK(count == 1);
+	}
+	CHECK(storage.spy.allocations == 0);
+}
+
+#ifdef THREADS_ENABLED
+TEST_CASE("[RenderingServer][ExternalOutputSurface] Outside RT rejects all six without queued storage calls") {
+	RenderingServer *rs = RenderingServer::get_singleton();
+	REQUIRE(rs != nullptr);
+	REQUIRE(rs->is_on_render_thread());
+	rs->sync();
+	ExternalOutputSurfaceStorageScope storage;
+	ExternalOutputSurfaceCalls calls;
+	Thread worker;
+	worker.start(&ExternalOutputSurfaceCalls::worker, &calls);
+	worker.wait_to_finish();
+	REQUIRE_FALSE(calls.on_rt);
+	check_external_output_refusal(calls, "render_thread_required");
+	for (uint32_t count : storage.spy.calls) {
+		CHECK(count == 0);
+	}
+	// Drain pending callbacks too: a deferred forward is a contract violation.
+	rs->sync();
+	for (uint32_t count : storage.spy.calls) {
+		CHECK(count == 0);
+	}
+	CHECK(storage.spy.allocations == 0);
+}
+#endif

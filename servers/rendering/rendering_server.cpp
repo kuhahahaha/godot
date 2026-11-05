@@ -2706,6 +2706,12 @@ void RenderingServer::_bind_methods() {
 
 	/* PARTICLES API */
 
+	ClassDB::bind_method(D_METHOD("particles_external_create", "config"), &RenderingServer::particles_external_create);
+	ClassDB::bind_method(D_METHOD("particles_external_acquire", "particles", "request"), &RenderingServer::particles_external_acquire);
+	ClassDB::bind_method(D_METHOD("particles_external_seal", "particles", "lease_token", "seal"), &RenderingServer::particles_external_seal);
+	ClassDB::bind_method(D_METHOD("particles_external_cancel", "particles", "lease_token"), &RenderingServer::particles_external_cancel);
+	ClassDB::bind_method(D_METHOD("particles_external_withdraw", "particles", "generation"), &RenderingServer::particles_external_withdraw);
+	ClassDB::bind_method(D_METHOD("particles_external_poll", "particles", "generation"), &RenderingServer::particles_external_poll);
 	ClassDB::bind_method(D_METHOD("particles_create"), &RenderingServer::particles_create);
 	ClassDB::bind_method(D_METHOD("particles_set_mode", "particles", "mode"), &RenderingServer::particles_set_mode);
 	ClassDB::bind_method(D_METHOD("particles_set_emitting", "particles", "emitting"), &RenderingServer::particles_set_emitting);
