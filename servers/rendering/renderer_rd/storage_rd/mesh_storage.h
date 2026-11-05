@@ -464,6 +464,10 @@ public:
 	class NativeSurfaceHold {
 		bool physical_transferred = false, metadata_returned = false, metadata_return_active = false;
 		bool directory_frozen = false;
+		// Actual selected physical hold transferred to the original Core group
+		// while MeshStorage still owned the live Surface. Its cached values no
+		// longer reference Surface metadata; group retirement owns the use.
+		bool live_snapshot_transferred = false, live_snapshot_external = false;
 		RD::NativeOutputGroupBinding retirement_group;
 		uint32_t retirement_root_count = 0, retirement_mark_cursor = 0;
 		bool retirement_directory_returned = false;
@@ -508,6 +512,9 @@ public:
 			physical_transferred = other.physical_transferred;
 			metadata_returned = other.metadata_returned;
 			metadata_return_active = other.metadata_return_active;
+			live_snapshot_transferred = other.live_snapshot_transferred;
+			live_snapshot_external = other.live_snapshot_external;
+			other.live_snapshot_transferred = other.live_snapshot_external = false;
 			directory_frozen = other.directory_frozen;
 			other.directory_frozen = false;
 			retirement_group = static_cast<RD::NativeOutputGroupBinding &&>(other.retirement_group);
@@ -525,8 +532,9 @@ public:
 		~NativeSurfaceHold() { CRASH_COND(device); }
 		bool is_active() const { return device != nullptr; }
 		bool has_retirement_directory() const { return !retirement_group.is_empty(); }
-		bool is_valid() const { return surface && physical.is_valid(); }
-		bool is_external() const { return is_valid() && surface->external; }
+		bool is_valid() const { return (surface && physical.is_valid()) || (device && live_snapshot_transferred && physical_transferred && metadata_returned && !metadata_return_active); }
+		bool is_external() const { return is_valid() && (surface ? surface->external : live_snapshot_external); }
+		bool is_transferred_live_snapshot() const { return live_snapshot_transferred; }
 		RID get_vertex_array() const { return is_valid() ? vertex_array : RID(); }
 		RID get_index_array() const { return is_valid() ? index_array : RID(); }
 		RD::VertexFormatID get_vertex_format() const { return is_valid() ? vertex_format : 0; }

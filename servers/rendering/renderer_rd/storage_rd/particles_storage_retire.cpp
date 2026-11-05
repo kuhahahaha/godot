@@ -127,6 +127,19 @@ Error ParticlesStorage::_production_output_service(RID p_particles, uint64_t p_g
 			if (!surface.geometry_group_returned) {
 				return ERR_INVALID_DATA;
 			}
+			if (surface.geometry.is_transferred_live_snapshot()) {
+				// The original group has observed actual use closure and returned
+				// this native reference. Still-live borrowed objects can report
+				// borrowed_detached; they remain owned by MeshStorage. No complete
+				// Surface retirement directory was captured or is being claimed.
+				if (surface.geometry.has_retirement_directory()) {
+					return ERR_INVALID_DATA;
+				}
+				if (!spend()) {
+					return ERR_BUSY;
+				}
+				return MeshStorage::_native_hold_finish_return(surface.geometry);
+			}
 			if (!surface.geometry_directory_returned) {
 				if (!surface.geometry.has_retirement_directory()) {
 					return ERR_INVALID_DATA;

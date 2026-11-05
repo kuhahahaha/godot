@@ -1,0 +1,7 @@
+# Live selected geometry custody
+
+Original live MeshStorage geometry can now move its actual selected native physical hold into the accepted request’s charged Core group. After successful capture, the wrapper returns its live Surface metadata share and retains cached geometry facts. Original OBSERVE finishes it only after the real group settles; still-live borrowed objects remain distinguished from physically returned objects. Retired whole-directory behavior remains guarded by the original directory requirements.
+
+The same three component tests failed against the old gate (3 cases failed, 279 successful / 5 failed assertions), then passed with this implementation (3 cases / 647 assertions). Full engine tests passed: 2093 cases / 524482 assertions. Existing ordinary and Indexed144 native Surface hold cases executed. Separate actual Metal native390 regression passed all runner checks. Exact source, host and raw evidence hashes are in LIVE_GEOMETRY_RECEIPT.json. The host was built from base 2cbe2271ec plus the six pinned source edits; its embedded revision is not relabeled as this eventual commit.
+
+These component tests use existing CPU QuoteDriver factories, real native resource objects and original request/group/callback paths. They do not issue public admission or prove shader execution. Missing Pending/Unknown and artificial split-prefix coverage, generation-wide directory/admission, material preparation and successful public create/seal remain outstanding. The separate Metal regression is normal-runtime evidence only.

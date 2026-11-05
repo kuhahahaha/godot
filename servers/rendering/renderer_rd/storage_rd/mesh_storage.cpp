@@ -895,7 +895,15 @@ Error MeshStorage::_native_hold_retirement_root_at(const NativeSurfaceHold &hold
 }
 
 RD::NativeImmutableHold *MeshStorage::_native_hold_transfer_source(NativeSurfaceHold &hold) {
-	if (!hold.device || !hold.device->native_immutable_is_render_thread() || hold.physical_transferred || hold.metadata_return_active || !hold.physical.is_valid() || hold.retirement_group.is_empty() || !hold.directory_frozen || !hold.surface || !hold.surface->immutable_retired) {
+	if (!hold.device || !hold.device->native_immutable_is_render_thread() || hold.physical_transferred || hold.metadata_return_active || !hold.physical.is_valid() || !hold.surface || !hold.surface->immutable_holds) {
+		return nullptr;
+	}
+	if (hold.surface->immutable_retired) {
+		// A detached Surface can be the last owner of its entire directory.
+		if (hold.retirement_group.is_empty() || !hold.directory_frozen) {
+			return nullptr;
+		}
+	} else if (!hold.retirement_group.is_empty() || hold.directory_frozen) {
 		return nullptr;
 	}
 	return &hold.physical;
@@ -905,8 +913,27 @@ Error MeshStorage::_native_hold_mark_transferred(NativeSurfaceHold &hold) {
 	if (!hold.device || !hold.device->native_immutable_is_render_thread()) {
 		return ERR_UNAUTHORIZED;
 	}
-	if (hold.physical_transferred || hold.physical.is_active() || hold.metadata_return_active || hold.retirement_group.is_empty() || !hold.directory_frozen || !hold.surface || !hold.surface->immutable_retired) {
+	if (hold.physical_transferred || hold.physical.is_active() || hold.metadata_return_active || !hold.surface || !hold.surface->immutable_holds) {
 		return ERR_INVALID_DATA;
+	}
+	if (hold.surface->immutable_retired) {
+		if (hold.retirement_group.is_empty() || !hold.directory_frozen) {
+			return ERR_INVALID_DATA;
+		}
+	} else {
+		if (!hold.retirement_group.is_empty() || hold.directory_frozen || hold.metadata_returned) {
+			return ERR_INVALID_DATA;
+		}
+		// The original Core capture has moved the actual selected physical
+		// counters, not copied their RIDs. Cache values were frozen at acquire.
+		// Return this live metadata share now: MeshStorage still owns Surface,
+		// and later ordinary owner mutation/free remains its responsibility.
+		// This snapshot cannot derive another Version after transfer.
+		hold.live_snapshot_external = hold.surface->external;
+		--hold.surface->immutable_holds;
+		hold.surface = nullptr;
+		hold.metadata_returned = true;
+		hold.live_snapshot_transferred = true;
 	}
 	hold.physical_transferred = true;
 	return OK;
@@ -1137,6 +1164,7 @@ Error MeshStorage::_native_hold_finish_return(NativeSurfaceHold &hold) {
 	hold.device = nullptr;
 	hold.physical_transferred = hold.metadata_returned = false;
 	hold.retirement_directory_returned = false;
+	hold.live_snapshot_transferred = hold.live_snapshot_external = false;
 	return OK;
 }
 

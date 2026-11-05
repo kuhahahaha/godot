@@ -4142,6 +4142,336 @@ struct Access {
 			CHECK(std::memcmp(&segment, &before_segment, sizeof(segment)) == 0);
 		}
 	};
+	struct LiveGeometryProbe {
+		using MeshStorage = RendererRD::MeshStorage;
+		SingletonEnrollment *fixture = nullptr;
+		RendererRD::ExternalLinkedOwnerTest *native = nullptr;
+		MeshStorage::Mesh mesh;
+		MeshStorage::NativeSurfaceHold neighbor;
+		RID array, buffer;
+		RD::VertexFormatID format = 0;
+		uint64_t group = 0;
+		bool cow = false, capacity_failure = false, transferred = false;
+		Error capture_result = FAILED;
+		static void
+		receive(void *userdata,
+				GDExtensionDeviceExit::ProductionPhysicalContextRef context,
+				GDExtensionProductionRequestRefV1 ref,
+				const GDExtensionProductionOperationV1 *) {
+			auto &test = *static_cast<LiveGeometryProbe *>(userdata);
+			auto &fixture = *test.fixture;
+			auto &rd = fixture.rd;
+			auto &native = *test.native;
+			native.install(0, fixture.registry, ref);
+			REQUIRE(fixture.registry.production_output_pin_current(
+							rd, native.pin(0)) == OK);
+			REQUIRE(fixture.registry.production_output_owner_bind(
+							native.pin(0), rd, native.particle_rid(),
+							native.generation, 0, native.lease(0)) == OK);
+			// Explicit component metadata, backed by actual original RD
+			// factories.
+			auto *surface = memnew(MeshStorage::Mesh::Surface);
+			surface->format = RSE::ARRAY_FORMAT_VERTEX;
+			surface->vertex_count = 3;
+			surface->vertex_buffer_size = 36;
+			surface->primitive = RSE::PRIMITIVE_TRIANGLES;
+			surface->aabb = AABB(Vector3(1, 2, 3), Vector3(4, 5, 6));
+			surface->uv_scale = Vector4(1, 2, 3, 4);
+			fixture.driver.mesh_directory_factory = true;
+			test.buffer = surface->vertex_buffer = rd.vertex_buffer_create(
+					36, {}, RD::BUFFER_CREATION_AS_STORAGE_BIT);
+			fixture.driver.mesh_directory_factory = false;
+			RD::VertexAttribute position;
+			position.location = 0;
+			position.format = RD::DATA_FORMAT_R32G32B32_SFLOAT;
+			position.stride = 12;
+			Vector<RD::VertexAttribute> attributes;
+			attributes.push_back(position);
+			test.format = rd.vertex_format_create(attributes);
+			Vector<RID> buffers;
+			buffers.push_back(test.buffer);
+			test.array = rd.vertex_array_create(3, test.format, buffers);
+			surface->version_count = 1;
+			surface->versions =
+					static_cast<MeshStorage::Mesh::Surface::Version *>(
+							memalloc(sizeof(MeshStorage::Mesh::Surface::Version)));
+			::new (surface->versions) MeshStorage::Mesh::Surface::Version;
+			surface->versions[0].input_mask = 1;
+			surface->versions[0].vertex_format = test.format;
+			surface->versions[0].vertex_array = test.array;
+			test.mesh.surfaces = static_cast<MeshStorage::Mesh::Surface **>(
+					memalloc(sizeof(MeshStorage::Mesh::Surface *)));
+			test.mesh.surfaces[0] = surface;
+			test.mesh.surface_count = 1;
+			MeshStorage::NativeSurfaceHold selected;
+			REQUIRE(MeshStorage::_mesh_surface_hold_acquire(
+							surface, 1, false, false, 0, selected) == OK);
+			if (test.cow) {
+				REQUIRE(MeshStorage::_mesh_surface_hold_acquire(
+								surface, 1, false, false, 0, test.neighbor) == OK);
+			}
+			const uint32_t shares = surface->immutable_holds,
+						   physical_holds = rd.native_immutable_hold_count;
+			const uint32_t buffer_holds =
+					*rd._native_immutable_counter(test.buffer);
+			const uint64_t next_group =
+					fixture.request->next_disposal_group_serial;
+			auto *physical =
+					MeshStorage::_native_hold_transfer_source(selected);
+			CHECK(physical !=
+					nullptr); // RED on the old retired-only transfer gate.
+			if (!physical) {
+				REQUIRE(MeshStorage::mesh_surface_hold_release(selected) == OK);
+				return; // Preserve a clean, reviewable RED without fake custody
+						// return.
+			}
+			auto wrong = context;
+			++wrong.frame_serial;
+			CHECK(rd._production_output_hold_capture(wrong, native.pin(0),
+						  *physical, test.group) ==
+					ERR_UNAUTHORIZED);
+			CHECK(test.group == 0);
+			CHECK(selected.is_valid());
+			CHECK(surface->immutable_holds == shares);
+			CHECK(rd.native_immutable_hold_count == physical_holds);
+			CHECK(*rd._native_immutable_counter(test.buffer) == buffer_holds);
+			CHECK(MeshStorage::_native_hold_mark_transferred(selected) ==
+					ERR_INVALID_DATA);
+			test.capture_result = rd._production_output_hold_capture(
+					context, native.pin(0), *physical, test.group);
+			if (test.capacity_failure) {
+				CHECK(test.capture_result == ERR_OUT_OF_MEMORY);
+				CHECK(test.group == 0);
+				CHECK(fixture.request->next_disposal_group_serial == next_group);
+				CHECK(selected.is_valid());
+				CHECK(surface->immutable_holds == shares);
+				CHECK(rd.native_immutable_hold_count == physical_holds);
+				CHECK(*rd._native_immutable_counter(test.buffer) == buffer_holds);
+				for (uint32_t i = 0; i < fixture.request->capacity.resource_uses;
+						++i) {
+					CHECK(fixture.request->uses[i].output_role !=
+							GDExtensionDeviceExit::ProductionUseCell::OutputRole::
+									DISPOSAL_STAGED);
+				}
+				REQUIRE(MeshStorage::mesh_surface_hold_release(selected) == OK);
+				return;
+			}
+			REQUIRE(test.capture_result == OK);
+			REQUIRE(MeshStorage::_native_hold_mark_transferred(selected) == OK);
+			test.transferred = true;
+			CHECK(surface->immutable_holds == shares - 1);
+			CHECK(rd.native_immutable_hold_count == physical_holds);
+			CHECK(*rd._native_immutable_counter(test.buffer) == buffer_holds);
+			CHECK(MeshStorage::_native_hold_mark_transferred(selected) ==
+					ERR_INVALID_DATA);
+			CHECK(surface->immutable_holds ==
+					shares - 1); // Cannot decrement twice.
+			if (test.cow) {
+				MeshStorage::_mesh_surface_clear(&test.mesh, 0);
+				test.mesh.surface_count = 0;
+				CHECK(surface->immutable_retired);
+				CHECK(surface->immutable_holds ==
+						1); // Neighbor owns old COW metadata.
+			}
+			// Read after pointer clear and, in COW mode, after original mesh
+			// detach.
+			CHECK(selected.is_valid());
+			CHECK_FALSE(selected.is_external());
+			CHECK(selected.get_vertex_array() == test.array);
+			CHECK(selected.get_vertex_format() == test.format);
+			CHECK(selected.get_index_array().is_null());
+			CHECK(selected.get_vertex_count() == 3);
+			CHECK(selected.get_index_count() == 0);
+			CHECK(selected.get_material_selection().is_null());
+			CHECK(selected.get_aabb() ==
+					AABB(Vector3(1, 2, 3), Vector3(4, 5, 6)));
+			CHECK(selected.get_uv_scale() == Vector4(1, 2, 3, 4));
+			MeshStorage::NativeSurfaceHold refused;
+			CHECK(MeshStorage::mesh_surface_hold_derive(selected, 1, false,
+						  false, 0, refused) ==
+					ERR_INVALID_PARAMETER);
+			CHECK_FALSE(refused.is_active());
+			MeshStorage::NativeSurfaceHold moved(std::move(selected));
+			CHECK_FALSE(selected.is_active());
+			CHECK_FALSE(selected.is_valid());
+			CHECK(moved.is_valid());
+			CHECK(moved.get_vertex_array() == test.array);
+			native.install_geometry(moved, test.group);
+			CHECK_FALSE(moved.is_active());
+		}
+	};
+	static void live_geometry_observe(bool cow = false,
+			bool capacity_failure = false) {
+		using namespace GDExtensionDeviceExit;
+		auto *server = ordinal_server();
+		if (!server ||
+				!check_step(RendererRD::ParticlesStorage::get_singleton() ==
+						nullptr)) {
+			return;
+		}
+		const auto consume = ordinal_port<
+				GDExtensionInterfaceDeviceSessionProductionRecordConsumeV2>(
+				"device_session_production_record_consume_v2");
+		const auto release = ordinal_port<
+				GDExtensionInterfaceDeviceSessionProductionReleaseV2>(
+				"device_session_production_release_v2");
+		if (!consume || !release) {
+			return;
+		}
+		OrdinalPlan plan;
+		plan.capacity = {
+			production_dto_abi<GDExtensionProductionCapacityV1>(),
+			1,
+			0,
+			0,
+			capacity_failure ? 3u : 16u,
+			0,
+			0,
+			0,
+			0,
+			0,
+			0
+		};
+		plan.action_count = plan.resource_count = plan.use_count =
+				plan.readback_count = 0;
+		SingletonEnrollment fixture;
+		fixture.public_port = true;
+		LiveGeometryProbe probe;
+		probe.fixture = &fixture;
+		probe.cow = cow;
+		probe.capacity_failure = capacity_failure;
+		if (!check_step(ordinal_initialize(fixture, server, plan,
+								&LiveGeometryProbe::receive,
+								&probe) == OK)) {
+			return;
+		}
+		// Same original CPU-native frame setup used by existing custody
+		// cases.
+		fixture.rd.draw_graph.initialize(
+				&fixture.driver,
+				[](RenderingDeviceDriver *,
+						VectorView<RenderingDeviceDriver::AttachmentLoadOp>,
+						VectorView<RenderingDeviceDriver::AttachmentStoreOp>,
+						void *) { return RenderingDeviceDriver::RenderPassID(); },
+				1, RDD::CommandQueueFamilyID(1), 0);
+		fixture.rd.draw_graph.begin();
+		fixture.rd.frames[0].fence = RDD::FenceID(93);
+		fixture.rd.frames[0].command_buffer = RDD::CommandBufferID(90);
+		fixture.rd.frames[0].command_pool = RDD::CommandPoolID(94);
+		fixture.rd.main_queue = RDD::CommandQueueID(1);
+		RendererRD::ExternalLinkedOwnerTest native(fixture.rd);
+		probe.native = &native;
+		auto &request = *fixture.request;
+		const GDExtensionProductionRequestRefV1 ref = { fixture.instance,
+			request.serial };
+		uint64_t control = 0;
+		REQUIRE(fixture.port.record_schedule(ref, &control) == OK);
+		server->sync();
+		GDExtensionProductionRecordReportV2 record = {};
+		REQUIRE(consume(ref, control, &record).native_error == OK);
+		CHECK(probe.transferred == !capacity_failure);
+		CHECK(request.action_count == 0);
+		CHECK(request.native_count ==
+				0); // No native submission or completion injected.
+		CHECK(request.graph_count == 0);
+		native.withdraw();
+		bool saw_borrowed = false, saw_finish_after_group = false;
+		for (uint32_t turn = 0; turn < 64 && !native.released(); ++turn) {
+			const GDExtensionProductionServiceBudgetV1 budget = {
+				production_dto_abi<GDExtensionProductionServiceBudgetV1>(),
+				OS::get_singleton()->get_ticks_usec() + 10000000,
+				1,
+				1,
+				1,
+				0
+			};
+			ProductionControlOutput output = {};
+			uint64_t serial = 0;
+			const bool before_group = native.geometry_group_returned();
+			const bool before_active = native.geometry_active();
+			REQUIRE(fixture.registry.production_control_accept(
+							ref, ProductionControlKind::OBSERVE, &serial,
+							&budget) == OK);
+			REQUIRE(fixture.registry.production_control_schedule(ref, serial) ==
+					OK);
+			server->sync();
+			REQUIRE(fixture.registry.production_control_consume(ref, serial,
+							&output) == OK);
+			CHECK((output.result.native_error == OK ||
+					output.result.native_error == ERR_BUSY));
+			CHECK(output.service_usage.passes <= 1);
+			CHECK(output.service_usage.receipts == 0);
+			CHECK(fixture.driver.issues == 0);
+			CHECK(fixture.driver.polls == 0);
+			CHECK(request.capture_inflight == 0);
+			if (probe.transferred && !native.pin(0).is_empty()) {
+				ProductionDisposalObservation actual;
+				REQUIRE(fixture.rd._production_output_hold_returned(
+								native.pin(0), probe.group, actual) == OK);
+				if (actual.settled) {
+					CHECK(actual.dropped);
+					CHECK(actual.borrowed_detached ==
+							2); // Actual VA and backing shares.
+					CHECK(actual.physical_returned == 0);
+					CHECK(actual.unknown == 0);
+					saw_borrowed = true;
+				}
+				if (before_active && !native.geometry_active()) {
+					CHECK(before_group);
+					CHECK(saw_borrowed);
+					saw_finish_after_group = true;
+				}
+			}
+			CHECK(fixture.driver.mesh_directory_buffer_frees == 0);
+			CHECK(fixture.rd.vertex_array_owner.owns(probe.array));
+			CHECK(fixture.rd.vertex_buffer_owner.owns(probe.buffer));
+		}
+		CHECK(native.released());
+		if (probe.transferred) {
+			CHECK(saw_borrowed);
+			CHECK(saw_finish_after_group);
+		}
+		// Free the real mesh only after this External use returned. This
+		// ordinary owner cleanup is not the witness used by the assertions
+		// above.
+		if (probe.neighbor.is_active()) {
+			REQUIRE(RendererRD::MeshStorage::mesh_surface_hold_release(
+							probe.neighbor) == OK);
+		}
+		if (probe.mesh.surface_count) {
+			RendererRD::MeshStorage::_mesh_surface_clear(&probe.mesh, 0);
+			probe.mesh.surface_count = 0;
+		}
+		memfree(probe.mesh.surfaces);
+		probe.mesh.surfaces = nullptr;
+		fixture.rd._free_pending_resources(0);
+		CHECK(fixture.driver.mesh_directory_buffer_frees == 1);
+		CHECK_FALSE(fixture.rd.vertex_array_owner.owns(probe.array));
+		CHECK_FALSE(fixture.rd.vertex_buffer_owner.owns(probe.buffer));
+		fixture.rd.vertex_formats.clear();
+		fixture.rd.vertex_format_cache.clear();
+		for (uint32_t turn = 0; turn < 16 && request.serial; ++turn) {
+			const GDExtensionProductionServiceBudgetV1 budget = {
+				production_dto_abi<GDExtensionProductionServiceBudgetV1>(),
+				OS::get_singleton()->get_ticks_usec() + 10000000,
+				1,
+				1,
+				1,
+				0
+			};
+			GDExtensionProductionServiceBudgetV1 remaining = {};
+			GDExtensionProductionReportV2 report = {};
+			const Error result =
+					Error(release(ref, &budget, &remaining, &report).native_error);
+			CHECK((result == OK || result == ERR_BUSY));
+			if (request.serial) {
+				server->sync();
+			}
+		}
+		CHECK(request.serial == 0);
+		fixture.cleanup_owner();
+		CHECK(fixture.owner_cleaned);
+	}
 	struct LinkedOwnerProbe {
 		SingletonEnrollment *fixture = nullptr;
 		RendererRD::ExternalLinkedOwnerTest *native = nullptr;
@@ -4696,6 +5026,15 @@ TEST_CASE("[ProductionRequest] forged metadata never resolves an original attach
 
 TEST_CASE("[SceneTree][ProductionRequest][OrdinalV2] repeated canonical rows preserve original logical gaps and exact prepare identity") {
 	Access::ordinal_rows_and_prepare();
+}
+TEST_CASE("[SceneTree][ProductionRequest][LiveGeometryComponent] live selected group returns borrowed custody before wrapper finish") {
+	Access::live_geometry_observe();
+}
+TEST_CASE("[SceneTree][ProductionRequest][LiveGeometryComponent] original mesh detach preserves selected cached snapshot and COW neighbor") {
+	Access::live_geometry_observe(true);
+}
+TEST_CASE("[SceneTree][ProductionRequest][LiveGeometryComponent] failed Core capture retains live metadata and physical source") {
+	Access::live_geometry_observe(false, true);
 }
 TEST_CASE("[SceneTree][ProductionRequest][LinkedOwnerComponent] original OBSERVE traverses and unlinks two real roots within one-pass slices") {
 	Access::linked_owner_observe();

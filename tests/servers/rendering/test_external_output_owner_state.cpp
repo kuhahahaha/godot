@@ -68,6 +68,24 @@ void ExternalLinkedOwnerTest::install(uint32_t index, GDExtensionDeviceExit::Reg
 	slot.lease_serial = lease(index);
 	slot.state = ExternalOutputOwner::LeaseState::RESERVED;
 }
+void ExternalLinkedOwnerTest::install_geometry(
+		MeshStorage::NativeSurfaceHold &hold, uint64_t group) {
+	CRASH_COND(!group || !hold.is_active() || owner->slots[0].surfaces);
+	auto &slot = owner->slots[0];
+	slot.surfaces = memnew_arr(ExternalOutputOwner::SurfaceBinding, 1);
+	slot.surface_count = 1;
+	slot.surfaces[0].geometry = std::move(hold);
+	slot.surfaces[0].geometry_group = group;
+	slot.surfaces[0].geometry_transferred = true;
+}
+bool ExternalLinkedOwnerTest::geometry_group_returned() const {
+	const auto &slot = owner->slots[0];
+	return slot.surfaces && slot.surfaces[0].geometry_group_returned;
+}
+bool ExternalLinkedOwnerTest::geometry_active() const {
+	const auto &slot = owner->slots[0];
+	return slot.surfaces && slot.surfaces[0].geometry.is_active();
+}
 void ExternalLinkedOwnerTest::withdraw() {
 	// Synthetic logical-history marker only, never a consumed native tuple.
 	owner->views[0].history_slot = 0;

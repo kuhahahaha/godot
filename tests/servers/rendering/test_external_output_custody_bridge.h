@@ -51,6 +51,9 @@ public:
 	RID particle_rid() const { return particles; }
 	static constexpr uint64_t generation = 33;
 	static uint64_t lease(uint32_t slot) { return 11 + slot; }
+	void install_geometry(MeshStorage::NativeSurfaceHold &, uint64_t);
+	bool geometry_group_returned() const;
+	bool geometry_active() const;
 	void withdraw();
 	bool history_cleared() const;
 	bool released() const;
