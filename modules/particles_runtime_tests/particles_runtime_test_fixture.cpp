@@ -34,6 +34,7 @@
 #include "core/object/class_db.h"
 #include "core/os/os.h"
 #include "core/os/thread.h"
+#include "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.h"
 #include "servers/rendering/renderer_rd/renderer_compositor_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
@@ -269,6 +270,60 @@ bool ParticlesRuntimeTestFixture::run_sdf_history_retry() {
 	}
 	return params_read == OK && particle_read == OK;
 }
+bool ParticlesRuntimeTestFixture::run_mobile_instance_recovery() {
+	using Mobile = RendererSceneRenderImplementation::RenderForwardMobile;
+	auto *mobile = Mobile::get_singleton();
+	auto *p = storage->particles_owner.get_or_null(sdf_particle);
+	if (!check(mobile && p && p->frame_counter > 0, "Mobile recovery actual renderer and processed particle exist")) {
+		return false;
+	}
+	RenderGeometryInstance *base = mobile->geometry_instance_create(sdf_particle);
+	if (!check(base != nullptr, "Mobile recovery creates actual geometry instance")) {
+		return false;
+	}
+	// geometry_instance_create pushes its new instance at the front. Deduce the
+	// existing private nested type without adding another test access interface.
+	auto *geometry = mobile->geometry_instance_dirty_list.first()->self();
+	if (!check(geometry == base, "Mobile recovery owns newly queued geometry")) {
+		mobile->geometry_instance_free(base);
+		return false;
+	}
+	// Match the culler initialization that enrolls the original dependencies.
+	base->set_material_override(RID());
+	mobile->_geometry_instance_update(base);
+	const RID simulation = p->particle_buffer;
+	const RID old_instances = p->particle_instance_buffer;
+	const RID old_copy = p->particles_copy_uniform_set;
+	const RID old_transforms = geometry->transforms_uniform_set;
+	check(rd->uniform_set_is_valid(old_transforms) && !geometry->dirty_list_element.in_list(), "Mobile recovery initial geometry caches valid transforms");
+	const auto *old_dependencies = rd->reverse_dependency_map.getptr(old_transforms);
+	check(old_dependencies && old_dependencies->has(old_instances), "Mobile recovery initial descriptor references original instances");
+	// Observe every resource before the production rebuild can invalidate it.
+	track_buffer(old_instances);
+	track_set(old_copy);
+	track_set(old_transforms);
+	// Enter the existing missing-copy-resource recovery branch. No generic
+	// failure hook, replacement buffer, or synthetic dependency notification.
+	rd->free_rid(old_copy);
+	storage->_particles_update_buffers(p);
+	check(!rd->uniform_set_is_valid(old_transforms), "Mobile recovery retires stale cached transform descriptor");
+	check(p->particle_instance_buffer.is_valid() && p->particle_instance_buffer != old_instances && rd->uniform_set_is_valid(p->particles_copy_uniform_set), "Mobile recovery rebuilds original instance resources");
+	check(p->particle_buffer == simulation, "Mobile recovery retains original simulation buffer");
+	check(geometry->dirty_list_element.in_list(), "Mobile recovery notification queues existing geometry");
+	// Follow the renderer's dirty-list gate. An ignored notification must not
+	// be hidden by calling the geometry updater unconditionally in the test.
+	if (geometry->dirty_list_element.in_list()) {
+		mobile->_geometry_instance_update(base);
+	}
+	const RID recovered = geometry->transforms_uniform_set;
+	check(recovered != old_transforms && rd->uniform_set_is_valid(recovered), "Mobile recovery refreshes cached native descriptor");
+	const auto *new_dependencies = rd->reverse_dependency_map.getptr(recovered);
+	check(new_dependencies && new_dependencies->has(p->particle_instance_buffer), "Mobile recovery descriptor references rebuilt instances");
+	storage->_particles_update_buffers(p);
+	check(!geometry->dirty_list_element.in_list() && geometry->transforms_uniform_set == recovered && p->particle_buffer == simulation, "Mobile recovery ordinary unchanged update sends no repeated invalidation");
+	mobile->geometry_instance_free(base);
+	return true;
+}
 bool ParticlesRuntimeTestFixture::run_progress(int p_kind) {
 	RID &rid = progress[p_kind];
 	rid = storage->particles_allocate();
@@ -470,6 +525,7 @@ Error ParticlesRuntimeTestFixture::begin() {
 	rd->test_arm_buffer_update_fault(RID(), 0);
 	check(success && readbacks_queued == 6, "all fixed actual Metal workloads accepted");
 	check(run_sdf_history_retry() && sdf_readbacks_queued == 2, "SDF extension two actual Metal readbacks accepted");
+	check(run_mobile_instance_recovery(), "Mobile recovery extension completed actual native path");
 	return OK;
 }
 void ParticlesRuntimeTestFixture::release_resources() {

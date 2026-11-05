@@ -54,3 +54,32 @@ original owner and delayed acknowledgment rules. The two added expected upload
 errors explicitly extend the original eleven diagnostics to thirteen; all other
 errors still fail. Apply the regression alone first for RED, then the production
 fix for GREEN, using independently pinned hosts and controlled metadata for each.
+
+## Additive Mobile instance-resource recovery extension
+
+The fixed native Metal entry additionally executes `run_mobile_instance_recovery()`
+on the existing processed SDF particle. It creates a real Forward Mobile geometry
+instance, initializes its dependencies through the culler's public material setter,
+caches its actual native transforms descriptor, and invalidates the
+copy descriptor to enter `_particles_update_buffers()`' existing missing-instance
+resource recovery branch. It observes the actual dependency notification via the
+geometry dirty-list gate, then requires a replacement cached descriptor whose RD
+reverse-dependency graph references the rebuilt instance buffer. The simulation
+buffer must remain unchanged; another ordinary update must not queue geometry or
+replace the recovered descriptor. No synthetic notification or unconditional
+geometry refresh can hide the missing callback. Geometry is freed explicitly
+before particle close, so its dependency tracker cannot outlive the fixture.
+
+`MOBILE_RECOVERY_CHECKS` explicitly adds 28 checks to the previous 362, for 390.
+The old instance allocation and both old copy/transforms sets are observed before
+rebuild. Final sets enter the existing `track_particles()` path. Together the
+replacement adds one allocation observation and three native set observations,
+for 31 allocations and 29 native resources. Existing asynchronous readbacks stay
+six original plus two SDF; expected diagnostics stay thirteen. The shared native
+registry must physically acknowledge all old and final resources. Counts are
+source-based expectations for the pending RED/GREEN experiment, not claimed GPU
+results. The source manifest now includes the Mobile renderer implementation and
+header. Use the same pinned-host `run_native.py` entry documented above: regression
+only for RED; add the one-case Mobile callback fix and rebuild a separately pinned
+host for GREEN. This verifies native descriptor recovery, not a rendered pixel or
+motion-vector result.

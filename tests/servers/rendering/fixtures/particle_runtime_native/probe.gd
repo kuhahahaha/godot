@@ -32,11 +32,11 @@ func _run() -> void:
 		data["advance_error"] = advance_error
 		data["rendered_frames"] = frames + 1
 		var checks: Array = data.get("checks", [])
-		# Original fixed 292 plus the reviewed additive SDF extension 70.
-		var native_checks_ok := checks.size() == 292 + 70
+		# Original fixed 292, SDF extension 70, Mobile recovery extension 28.
+		var native_checks_ok := checks.size() == 292 + 70 + 28
 		for row in checks:
 			native_checks_ok = native_checks_ok and typeof(row) == TYPE_DICTIONARY and row.get("ok") == true
-		data["gpu_pass"] = advance_error == OK and data.get("done", false) and data.get("released", false) and data.get("driver", "") == "metal" and data.get("renderer", "") == "mobile" and data.get("failures", ["missing"]).is_empty() and data.get("readbacks_queued", 0) == 6 and data.get("readbacks_completed", 0) == 6 and data.get("sdf_readbacks_queued", 0) == 2 and data.get("sdf_readbacks_completed", 0) == 2 and data.get("allocation_count", 0) == 30 and data.get("native_resource_count", 0) == 26 and native_checks_ok
+		data["gpu_pass"] = advance_error == OK and data.get("done", false) and data.get("released", false) and data.get("driver", "") == "metal" and data.get("renderer", "") == "mobile" and data.get("failures", ["missing"]).is_empty() and data.get("readbacks_queued", 0) == 6 and data.get("readbacks_completed", 0) == 6 and data.get("sdf_readbacks_queued", 0) == 2 and data.get("sdf_readbacks_completed", 0) == 2 and data.get("allocation_count", 0) == 31 and data.get("native_resource_count", 0) == 29 and native_checks_ok
 		_finish(data, 0 if data["gpu_pass"] else 43)
 		return
 	var data: Dictionary = fixture.call("result")

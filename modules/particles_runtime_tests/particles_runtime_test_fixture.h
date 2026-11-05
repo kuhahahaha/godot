@@ -69,6 +69,7 @@ class ParticlesRuntimeTestFixture : public RefCounted {
 	void track_particles(RID p_rid);
 	bool run_upload_boundaries();
 	bool run_sdf_history_retry();
+	bool run_mobile_instance_recovery();
 	bool run_progress(int p_kind);
 	bool run_trail();
 	void readback(const PackedByteArray &p_bytes, int p_kind);

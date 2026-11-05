@@ -112,7 +112,33 @@ SDF_EXTENSION_CHECKS = Counter({
     "SDF extension both async readbacks physically completed": 1,
 })
 SDF_EXTENSION_ERRORS = Counter({"Failed to update particle frame parameters buffer.": 2})
+# Additive Mobile instance-only resource-recovery coverage. Original 292 and
+# reviewed SDF 70 checks remain unchanged and mandatory.
+MOBILE_RECOVERY_CHECKS = Counter({
+    "original allocation owner authenticated": 1,
+    "original buffer allocation identity": 1,
+    "owner release removes original buffer RID": 1,
+    "bounded native resource observation": 3,
+    "original native resource identity": 3,
+    "original native physical return acknowledged": 3,
+    "original uniform owner exists": 3,
+    "Mobile recovery actual renderer and processed particle exist": 1,
+    "Mobile recovery creates actual geometry instance": 1,
+    "Mobile recovery owns newly queued geometry": 1,
+    "Mobile recovery initial geometry caches valid transforms": 1,
+    "Mobile recovery initial descriptor references original instances": 1,
+    "Mobile recovery retires stale cached transform descriptor": 1,
+    "Mobile recovery rebuilds original instance resources": 1,
+    "Mobile recovery retains original simulation buffer": 1,
+    "Mobile recovery notification queues existing geometry": 1,
+    "Mobile recovery refreshes cached native descriptor": 1,
+    "Mobile recovery descriptor references rebuilt instances": 1,
+    "Mobile recovery ordinary unchanged update sends no repeated invalidation": 1,
+    "Mobile recovery extension completed actual native path": 1,
+})
 SOURCES = (
+    "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp",
+    "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.h",
     "modules/particles_runtime_tests/particles_runtime_test_fixture.h",
     "modules/particles_runtime_tests/particles_runtime_test_fixture.cpp",
     "modules/particles_runtime_tests/config.py",
@@ -188,20 +214,20 @@ def valid_report(report: object) -> bool:
         "advance_error": 0,
         "readbacks_queued": 6,
         "readbacks_completed": 6,
-        "allocation_count": 30,
+        "allocation_count": 31,
         "sdf_readbacks_queued": 2,
         "sdf_readbacks_completed": 2,
-        "native_resource_count": 26,
+        "native_resource_count": 29,
     }
     if any(type(report.get(key)) is not int or report[key] != value for key, value in integers.items()):
         return False
     checks = report.get("checks")
-    if not isinstance(checks, list) or len(checks) != 292 + sum(SDF_EXTENSION_CHECKS.values()):
+    if not isinstance(checks, list) or len(checks) != 292 + sum(SDF_EXTENSION_CHECKS.values()) + sum(MOBILE_RECOVERY_CHECKS.values()):
         return False
     if not all(isinstance(row, dict) and isinstance(row.get("check"), str) and row.get("ok") is True for row in checks):
         return False
     return (
-        Counter(row["check"] for row in checks) == EXPECTED_NATIVE_CHECKS + SDF_EXTENSION_CHECKS
+        Counter(row["check"] for row in checks) == EXPECTED_NATIVE_CHECKS + SDF_EXTENSION_CHECKS + MOBILE_RECOVERY_CHECKS
         and all(report.get(key) is True for key in ("gpu_pass", "done", "released"))
         and report.get("failures") == []
         and report.get("driver") == "metal"
