@@ -283,8 +283,8 @@ public:
 			CHECK(device.native_immutable_resource_is_retiring(backing));
 			CHECK(TestIndexed144DeviceAccess::fetch(device, driver, accepted_array, 0) == original_byte);
 			RD::NativeImmutableHold new_physical;
-			RID root = accepted_array;
-			CHECK(device.native_immutable_hold_acquire(VectorView<RID>(&root, 1), new_physical) == ERR_BUSY);
+			RID retiring_root = accepted_array;
+			CHECK(device.native_immutable_hold_acquire(VectorView<RID>(&retiring_root, 1), new_physical) == ERR_BUSY);
 		}
 		CHECK(MeshStorage::mesh_surface_hold_release(moved) == OK);
 		CHECK_FALSE(moved.is_valid());
