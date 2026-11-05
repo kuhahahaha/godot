@@ -29,6 +29,7 @@
 /**************************************************************************/
 
 #include "core/extension/gdextension.h"
+#include "core/extension/gdextension_external_output_interface.h"
 #include "core/extension/gdextension_production_request.h"
 
 #include <type_traits>
@@ -217,6 +218,15 @@ static_assert(std::is_same_v<decltype(&device_session_production_release_v2), GD
 // Installed by the original device-session aggregator after fixed B source review.
 // This publishes checked physical mechanics, not Runtime logical authority.
 void register_production_interfaces() {
+	static_assert(std::is_same_v<decltype(&device_session_output_create_v1), GDExtensionInterfaceDeviceSessionOutputCreateV1>);
+	GDExtension::register_interface_function("device_session_output_create_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_output_create_v1));
+	static_assert(std::is_same_v<decltype(&device_session_output_seal_v1), GDExtensionInterfaceDeviceSessionOutputSealV1>);
+	GDExtension::register_interface_function("device_session_output_seal_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_output_seal_v1));
+	static_assert(std::is_same_v<decltype(&device_session_output_cancel_v1), GDExtensionInterfaceDeviceSessionOutputCancelV1>);
+	GDExtension::register_interface_function("device_session_output_cancel_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_output_cancel_v1));
+	static_assert(std::is_same_v<decltype(&device_session_output_withdraw_v1), GDExtensionInterfaceDeviceSessionOutputWithdrawV1>);
+	GDExtension::register_interface_function("device_session_output_withdraw_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_output_withdraw_v1));
+
 	GDExtension::register_interface_function("device_session_production_reserve_v2", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_reserve_v2));
 	GDExtension::register_interface_function("device_session_production_prepare_dispatch_v2", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_prepare_dispatch_v2));
 	GDExtension::register_interface_function("device_session_production_prepare_copy_v2", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_prepare_copy_v2));

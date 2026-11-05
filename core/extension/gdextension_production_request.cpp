@@ -1865,6 +1865,28 @@ Error Registry::production_output_owner_bind(ProductionOutputPin &pin, Rendering
 	return OK;
 }
 
+// Authenticate existing exact owner custody only. A different request, even
+// from the same attachment, needs an original successor association that this
+// leaf cannot manufacture. Cleanup keeps the original non-new-work gate.
+Error Registry::production_output_cleanup_context(ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, const ProductionOutputPin &pin, RenderingDevice &rd, RID particles, uint64_t generation, uint32_t slot, uint64_t lease) {
+	MutexLock lock(mutex);
+	ProductionRequest *request = nullptr;
+	RenderingDevice *device = nullptr;
+	const Error error = production_physical_request_locked(context, ref, request, device, false);
+	if (error != OK) {
+		return error;
+	}
+	if (device != &rd || !production_output_pin_matches_locked(pin, ref, rd) || pin.request != request) {
+		return ERR_UNAUTHORIZED;
+	}
+	const auto &row = request->uses[pin.cell_index];
+	if (!generation || !lease || row.output_particles != particles || row.output_generation != generation || row.output_slot != slot || row.output_lease != lease ||
+			!rd._production_output_owner_matches(particles, generation, slot, lease, pin, ref)) {
+		return ERR_UNAUTHORIZED;
+	}
+	return OK;
+}
+
 // Enter and return holding Registry and RD locks, within original OBSERVE.
 // One exact linked root row per dispatch; no arena scan or callback registry.
 Error Registry::production_output_owners_service_locked(ProductionRequest &request, RenderingDevice &rd) {

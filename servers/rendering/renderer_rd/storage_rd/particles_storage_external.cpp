@@ -323,8 +323,31 @@ GDExtensionOutputStatusV1 ParticlesStorage::particles_external_cancel_typed(GDEx
 	if (!valid_abi(p_input.abi, sizeof(p_input))) {
 		return output_status(ERR_INVALID_PARAMETER, "CONTRACT");
 	}
-	const Error result = _external_cancel_body(RID::from_uint64(p_input.particles), p_input.lease_token.bytes);
-	return result == OK ? output_status(OK, "") : output_status(result, "output_cancel");
+	const RID particles_rid = RID::from_uint64(p_input.particles);
+	Particles *particles = particles_owner.get_or_null(particles_rid);
+	if (!particles || !particles->external) {
+		return output_status(ERR_INVALID_PARAMETER, "output_cancel");
+	}
+	auto &owner = *particles->external;
+	auto &registry = GDExtensionDeviceExit::Registry::get_singleton();
+	for (uint32_t i = 0; i < owner.slot_count; ++i) {
+		auto &slot = owner.slots[i];
+		if (!token_matches(slot.lease_token, p_input.lease_token.bytes)) {
+			continue;
+		}
+		if (slot.original_registry != &registry || owner.device != RenderingDevice::get_singleton() || !owner.device) {
+			return output_status(ERR_UNAUTHORIZED, "original_output_owner_required");
+		}
+		const Error owner_error = registry.production_output_cleanup_context(p_context, p_request, slot.original_pin, *owner.device, particles_rid, owner.generation, i, slot.lease_serial);
+		if (owner_error != OK) {
+			return output_status(owner_error, "original_output_owner_required");
+		}
+		// The original body still owns the state transition. Nothing above
+		// changes publication, custody, reservations or retirement counters.
+		const Error result = _external_cancel_body(particles_rid, p_input.lease_token.bytes);
+		return result == OK ? output_status(OK, "") : output_status(result, "output_cancel");
+	}
+	return output_status(ERR_INVALID_PARAMETER, "output_cancel");
 }
 GDExtensionOutputStatusV1 ParticlesStorage::particles_external_withdraw_typed(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputGenerationInputV1 &p_input) {
 	const Error context_error = _external_typed_context(p_context, p_request, false);
@@ -334,8 +357,15 @@ GDExtensionOutputStatusV1 ParticlesStorage::particles_external_withdraw_typed(GD
 	if (!valid_abi(p_input.abi, sizeof(p_input))) {
 		return output_status(ERR_INVALID_PARAMETER, "CONTRACT");
 	}
-	const Error result = _external_withdraw_body(RID::from_uint64(p_input.particles), p_input.generation);
-	return result == OK ? output_status(OK, "") : output_status(result, "stale_generation");
+	const Particles *particles = particles_owner.get_or_null(RID::from_uint64(p_input.particles));
+	if (!particles || !particles->external || !p_input.generation || p_input.generation != particles->external->generation) {
+		return output_status(ERR_INVALID_PARAMETER, "stale_generation");
+	}
+	// A protected request and a matching scalar generation are not the
+	// original generation owner association. No such retained root exists
+	// yet; a packet slot or a shared attachment must not stand in for it.
+	// The existing public facade keeps its original cleanup behavior.
+	return output_status(ERR_UNAVAILABLE, "original_output_generation_owner_required");
 }
 bool ParticlesStorage::particles_is_external(RID p_particles) const {
 	const Particles *particles = particles_owner.get_or_null(p_particles);

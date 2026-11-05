@@ -68,6 +68,29 @@ void ExternalLinkedOwnerTest::install(uint32_t index, GDExtensionDeviceExit::Reg
 	slot.lease_serial = lease(index);
 	slot.state = ExternalOutputOwner::LeaseState::RESERVED;
 }
+void ExternalLinkedOwnerTest::prepare_lease_tokens() {
+	// Private test metadata, not an admitted lease issuer. Allocate before RECORD.
+	for (uint32_t i = 0; i < 2; ++i) {
+		auto &token = owner->slots[i].lease_token;
+		token.resize(32);
+		memset(token.ptrw(), 17 + i, 32);
+	}
+}
+void ExternalLinkedOwnerTest::copy_lease_token(uint32_t index, uint8_t *bytes) const {
+	CRASH_COND(index >= 2 || owner->slots[index].lease_token.size() != 32);
+	memcpy(bytes, owner->slots[index].lease_token.ptr(), 32);
+}
+bool ExternalLinkedOwnerTest::slot_reserved(uint32_t index) const {
+	CRASH_COND(index >= 2);
+	const auto &slot = owner->slots[index];
+	return slot.state == ExternalOutputOwner::LeaseState::RESERVED && !slot.publication_closed && !slot.pass_uses_closed;
+}
+bool ExternalLinkedOwnerTest::withdrawing() const {
+	return owner->state == ExternalOutputOwner::GenerationState::WITHDRAWING;
+}
+bool ExternalLinkedOwnerTest::view_open() const {
+	return !owner->views[0].closed;
+}
 void ExternalLinkedOwnerTest::install_geometry(
 		MeshStorage::NativeSurfaceHold &hold, uint64_t group) {
 	CRASH_COND(!group || !hold.is_active() || owner->slots[0].surfaces);

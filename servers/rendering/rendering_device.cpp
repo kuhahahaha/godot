@@ -33,6 +33,7 @@
 
 #include "core/config/engine.h"
 #include "core/config/project_settings.h"
+#include "core/extension/gdextension_external_output_interface.h"
 #include "core/extension/gdextension_library_exit_guard.h"
 #include "core/extension/gdextension_production_request.h"
 #include "core/extension/gdextension_record_source.h"
@@ -14362,3 +14363,108 @@ Error RenderingDevice::_production_output_owner_service(
 	return RendererRD::ParticlesStorage::_production_output_service(
 			p_particles, p_generation, p_slot, p_lease, p_pin, p_budget, r_usage);
 }
+
+// The four original output leaves live in this already rooted server object,
+// keeping Core registration independent of static server archive link order.
+namespace GDExtensionDeviceExit {
+namespace {
+struct OutputMemoryRange {
+	uintptr_t begin = 0, end = 0;
+};
+bool output_range(const void *p_data, uint64_t p_count, size_t p_stride, size_t p_alignment, OutputMemoryRange &r_range) {
+	r_range = {};
+	if (!p_count) {
+		return true;
+	}
+	const uintptr_t begin = reinterpret_cast<uintptr_t>(p_data);
+	if (!begin || begin % p_alignment || p_count > (UINTPTR_MAX - begin) / p_stride) {
+		return false;
+	}
+	r_range = { begin, begin + uintptr_t(p_count * p_stride) };
+	return true;
+}
+bool output_overlaps(const OutputMemoryRange &p_a, const OutputMemoryRange &p_b) {
+	return p_a.begin < p_b.end && p_b.begin < p_a.end;
+}
+template <typename T>
+bool output_object(const T *p_value, OutputMemoryRange &r_range) {
+	return output_range(p_value, 1, sizeof(T), alignof(T), r_range);
+}
+template <size_t N>
+GDExtensionOutputStatusV1 output_interface_status(Error p_error, const char (&p_detail)[N]) {
+	return { int32_t(p_error), uint32_t(N - 1), p_detail };
+}
+template <typename T>
+void output_interface_failure(T &r_result, Error p_error, const char *p_detail, uint32_t p_length) {
+	r_result = {};
+	r_result.abi = { 1, sizeof(T), 0 };
+	r_result.status = { int32_t(p_error), p_length, p_detail };
+}
+} // namespace
+
+void device_session_output_create_v1(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputCreateInputV1 *p_input, GDExtensionOutputCreateResultV1 *r_result) {
+	OutputMemoryRange input, output, surfaces, materials;
+	if (!output_object(r_result, output)) {
+		return;
+	}
+	if (!output_object(p_input, input)) {
+		return; // Invalid input extent cannot establish nonaliasing output.
+	}
+	if (output_overlaps(input, output)) {
+		return; // Do not overwrite borrowed input through an aliased output.
+	}
+	if (!output_range(p_input->surfaces.data, p_input->surfaces.count, sizeof(uint64_t), alignof(uint64_t), surfaces) ||
+			!output_range(p_input->surface_materials.data, p_input->surface_materials.count, sizeof(uint64_t), alignof(uint64_t), materials)) {
+		// An invalid span may designate the output: no write until all extents
+		// have been proven disjoint. This is a caller contract failure.
+		return;
+	}
+	if (output_overlaps(output, surfaces) || output_overlaps(output, materials)) {
+		return;
+	}
+	if (output_overlaps(input, surfaces) || output_overlaps(input, materials) || output_overlaps(surfaces, materials)) {
+		output_interface_failure(*r_result, ERR_INVALID_PARAMETER, "CONTRACT", 8);
+		return;
+	}
+	auto *storage = RendererRD::ParticlesStorage::get_singleton();
+	if (!storage) {
+		output_interface_failure(*r_result, ERR_UNAVAILABLE, "renderer_unavailable", 20);
+		return;
+	}
+	storage->particles_external_create_typed(p_context, p_request, *p_input, *r_result);
+}
+void device_session_output_seal_v1(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputSealInputV1 *p_input, GDExtensionOutputSealResultV1 *r_result) {
+	OutputMemoryRange input, output;
+	if (!output_object(r_result, output)) {
+		return;
+	}
+	if (!output_object(p_input, input)) {
+		return; // Invalid input extent cannot establish nonaliasing output.
+	}
+	if (output_overlaps(input, output)) {
+		return;
+	}
+	auto *storage = RendererRD::ParticlesStorage::get_singleton();
+	if (!storage) {
+		output_interface_failure(*r_result, ERR_UNAVAILABLE, "renderer_unavailable", 20);
+		return;
+	}
+	storage->particles_external_seal_typed(p_context, p_request, *p_input, *r_result);
+}
+GDExtensionOutputStatusV1 device_session_output_cancel_v1(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputCancelInputV1 *p_input) {
+	OutputMemoryRange input;
+	if (!output_object(p_input, input)) {
+		return output_interface_status(ERR_INVALID_PARAMETER, "CONTRACT");
+	}
+	auto *storage = RendererRD::ParticlesStorage::get_singleton();
+	return storage ? storage->particles_external_cancel_typed(p_context, p_request, *p_input) : output_interface_status(ERR_UNAVAILABLE, "renderer_unavailable");
+}
+GDExtensionOutputStatusV1 device_session_output_withdraw_v1(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputGenerationInputV1 *p_input) {
+	OutputMemoryRange input;
+	if (!output_object(p_input, input)) {
+		return output_interface_status(ERR_INVALID_PARAMETER, "CONTRACT");
+	}
+	auto *storage = RendererRD::ParticlesStorage::get_singleton();
+	return storage ? storage->particles_external_withdraw_typed(p_context, p_request, *p_input) : output_interface_status(ERR_UNAVAILABLE, "renderer_unavailable");
+}
+} // namespace GDExtensionDeviceExit

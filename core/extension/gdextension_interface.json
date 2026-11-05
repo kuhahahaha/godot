@@ -8945,6 +8945,475 @@
                     "type": "GDExtensionProductionSegmentV2"
                 }
             ]
+        },
+        {
+            "name": "GDExtensionOutputTokenV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "bytes[32]",
+                    "type": "uint8_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputBoundsV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "position[3]",
+                    "type": "double"
+                },
+                {
+                    "name": "size[3]",
+                    "type": "double"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputCameraV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "view_id",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "view_epoch",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "capture_ordinal",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputRidSpanV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "data",
+                    "type": "const uint64_t*"
+                },
+                {
+                    "name": "count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputCreateInputV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "profile",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "capacity",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "max_views",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "max_inflight",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "space",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "pass_mask",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "motion",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "query_enabled",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "surfaces",
+                    "type": "GDExtensionOutputRidSpanV1"
+                },
+                {
+                    "name": "surface_materials",
+                    "type": "GDExtensionOutputRidSpanV1"
+                },
+                {
+                    "name": "bounds",
+                    "type": "GDExtensionOutputBoundsV1"
+                },
+                {
+                    "name": "geometry_bounds",
+                    "type": "GDExtensionOutputBoundsV1"
+                },
+                {
+                    "name": "query_bounds",
+                    "type": "GDExtensionOutputBoundsV1"
+                },
+                {
+                    "name": "producer_tag",
+                    "type": "GDExtensionOutputTokenV1"
+                },
+                {
+                    "name": "device_tag",
+                    "type": "GDExtensionOutputTokenV1"
+                },
+                {
+                    "name": "layout_digest",
+                    "type": "GDExtensionOutputTokenV1"
+                },
+                {
+                    "name": "mapping_digest",
+                    "type": "GDExtensionOutputTokenV1"
+                },
+                {
+                    "name": "numeric_profile_digest",
+                    "type": "GDExtensionOutputTokenV1"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputCommonInputV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "present_seq",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "output_tag",
+                    "type": "GDExtensionOutputTokenV1"
+                },
+                {
+                    "name": "view_tag",
+                    "type": "GDExtensionOutputTokenV1"
+                },
+                {
+                    "name": "bounds",
+                    "type": "GDExtensionOutputBoundsV1"
+                },
+                {
+                    "name": "history_reset",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "has_actual_previous_camera",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "has_previous_consumed_tuple",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "current_camera",
+                    "type": "GDExtensionOutputCameraV1"
+                },
+                {
+                    "name": "actual_previous_camera",
+                    "type": "GDExtensionOutputCameraV1"
+                },
+                {
+                    "name": "current_host_token",
+                    "type": "GDExtensionOutputTokenV1"
+                },
+                {
+                    "name": "previous_consumed_tuple_token",
+                    "type": "GDExtensionOutputTokenV1"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputAcquireInputV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "particles",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "common",
+                    "type": "GDExtensionOutputCommonInputV1"
+                },
+                {
+                    "name": "content_version",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "view_epoch",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "pass_mask",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "layout_digest",
+                    "type": "GDExtensionOutputTokenV1"
+                },
+                {
+                    "name": "mapping_digest",
+                    "type": "GDExtensionOutputTokenV1"
+                },
+                {
+                    "name": "source_token",
+                    "type": "GDExtensionOutputTokenV1"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputSealInputV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "particles",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "lease_token",
+                    "type": "GDExtensionOutputTokenV1"
+                },
+                {
+                    "name": "common",
+                    "type": "GDExtensionOutputCommonInputV1"
+                },
+                {
+                    "name": "record_token",
+                    "type": "GDExtensionOutputTokenV1"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputCancelInputV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "particles",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "lease_token",
+                    "type": "GDExtensionOutputTokenV1"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputGenerationInputV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "particles",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "generation",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputStatusV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "error",
+                    "type": "int32_t"
+                },
+                {
+                    "name": "detail_length",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "detail",
+                    "type": "const char*"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputCreateResultV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "status",
+                    "type": "GDExtensionOutputStatusV1"
+                },
+                {
+                    "name": "particles",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "capabilities",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputWritableV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "role",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "access",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "rid",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "allocation_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "byte_length",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "stride",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputSealResultV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "status",
+                    "type": "GDExtensionOutputStatusV1"
+                },
+                {
+                    "name": "state",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "packet_token",
+                    "type": "GDExtensionOutputTokenV1"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputConstantsV1",
+            "kind": "enum",
+            "description": [
+                "Fixed symbolic constants. All corresponding DTO fields remain uint32_t."
+            ],
+            "values": [
+                {
+                    "name": "GDEXTENSION_OUTPUT_ROLE_INVALID_V1",
+                    "value": 0
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_ROLE_CURRENT_RECORDS_V1",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_ROLE_ALIGNED_PREVIOUS_RECORDS_V1",
+                    "value": 2
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_ROLE_CURRENT_VERTICES_V1",
+                    "value": 3
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_ROLE_ALIGNED_PREVIOUS_VERTICES_V1",
+                    "value": 4
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_ROLE_VERTEX_HISTORY_VALIDITY_V1",
+                    "value": 5
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_ROLE_INDEX_STAGING_V1",
+                    "value": 6
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_ROLE_OUTPUT_META_V1",
+                    "value": 7
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_ACCESS_INVALID_V1",
+                    "value": 0
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_ACCESS_WRITE_ONLY_V1",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_SEAL_INVALID_V1",
+                    "value": 0
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_SEAL_RECORDED_ORDERED_V1",
+                    "value": 1
+                }
+            ]
         }
     ],
     "interface": [
@@ -19953,6 +20422,160 @@
                 "type": "GDExtensionDeviceSessionResultV1",
                 "description": [
                     "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_output_create_v1",
+            "since": "4.7",
+            "description": [
+                "Synchronous original native ExternalOutput create body. Symbol availability grants no source, Host, charge, phase or completion authority.",
+                "All pointer extents must be live and accessible for this call. Nonempty RID spans must be aligned and pairwise disjoint from the input and output. No input pointer is retained. Detail strings have static engine lifetime.",
+                "Create and seal preserve the current original admission/record-bridge refusal. Cancel and withdraw use the existing native state transitions. Acquire and poll are not exported by this subset."
+            ],
+            "arguments": [
+                {
+                    "name": "physical_context",
+                    "type": "GDExtensionProductionPhysicalContextRefV1",
+                    "description": [
+                        "Actual synchronous protected RECORD callback context; expires when that callback returns."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "The original admitted request of that same callback."
+                    ]
+                },
+                {
+                    "name": "input",
+                    "type": "const GDExtensionOutputCreateInputV1*",
+                    "description": [
+                        "Aligned readable input, borrowed only until this call returns; its ABI size is sizeof this DTO."
+                    ]
+                },
+                {
+                    "name": "out_result",
+                    "type": "GDExtensionOutputCreateResultV1*",
+                    "description": [
+                        "Aligned writable result, disjoint from input and all input spans. If either DTO pointer or a RID span is null (when nonempty), misaligned, overflowing or overlaps the output, the result is left untouched. Other checked contract failures write a static CONTRACT status."
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "device_session_output_seal_v1",
+            "since": "4.7",
+            "description": [
+                "Synchronous original native ExternalOutput seal body. Symbol availability grants no source, Host, charge, phase or completion authority.",
+                "All pointer extents must be live and accessible for this call. Nonempty RID spans must be aligned and pairwise disjoint from the input and output. No input pointer is retained. Detail strings have static engine lifetime.",
+                "Create and seal preserve the current original admission/record-bridge refusal. Cancel and withdraw use the existing native state transitions. Acquire and poll are not exported by this subset."
+            ],
+            "arguments": [
+                {
+                    "name": "physical_context",
+                    "type": "GDExtensionProductionPhysicalContextRefV1",
+                    "description": [
+                        "Actual synchronous protected RECORD callback context; expires when that callback returns."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "The original admitted request of that same callback."
+                    ]
+                },
+                {
+                    "name": "input",
+                    "type": "const GDExtensionOutputSealInputV1*",
+                    "description": [
+                        "Aligned readable input, borrowed only until this call returns; its ABI size is sizeof this DTO."
+                    ]
+                },
+                {
+                    "name": "out_result",
+                    "type": "GDExtensionOutputSealResultV1*",
+                    "description": [
+                        "Aligned writable result, disjoint from input and all input spans. If either DTO pointer or a RID span is null (when nonempty), misaligned, overflowing or overlaps the output, the result is left untouched. Other checked contract failures write a static CONTRACT status."
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "device_session_output_cancel_v1",
+            "since": "4.7",
+            "description": [
+                "Synchronous original native ExternalOutput cancel body. Symbol availability grants no source, Host, charge, phase or completion authority.",
+                "All pointer extents must be live and accessible for this call. Nonempty RID spans must be aligned and pairwise disjoint from the input and output. No input pointer is retained. Detail strings have static engine lifetime.",
+                "Create and seal preserve the current original admission/record-bridge refusal. Cancel and withdraw use the existing native state transitions. Acquire and poll are not exported by this subset."
+            ],
+            "arguments": [
+                {
+                    "name": "physical_context",
+                    "type": "GDExtensionProductionPhysicalContextRefV1",
+                    "description": [
+                        "Actual synchronous protected RECORD callback context; expires when that callback returns."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "The original admitted request of that same callback."
+                    ]
+                },
+                {
+                    "name": "input",
+                    "type": "const GDExtensionOutputCancelInputV1*",
+                    "description": [
+                        "Aligned readable input, borrowed only until this call returns; its ABI size is sizeof this DTO."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionOutputStatusV1",
+                "description": [
+                    "Original static-detail status, or CONTRACT for an invalid input pointer."
+                ]
+            }
+        },
+        {
+            "name": "device_session_output_withdraw_v1",
+            "since": "4.7",
+            "description": [
+                "Synchronous original native ExternalOutput withdraw body. Symbol availability grants no source, Host, charge, phase or completion authority.",
+                "All pointer extents must be live and accessible for this call. Nonempty RID spans must be aligned and pairwise disjoint from the input and output. No input pointer is retained. Detail strings have static engine lifetime.",
+                "Create and seal preserve the current original admission/record-bridge refusal. Cancel and withdraw use the existing native state transitions. Acquire and poll are not exported by this subset."
+            ],
+            "arguments": [
+                {
+                    "name": "physical_context",
+                    "type": "GDExtensionProductionPhysicalContextRefV1",
+                    "description": [
+                        "Actual synchronous protected RECORD callback context; expires when that callback returns."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "The original admitted request of that same callback."
+                    ]
+                },
+                {
+                    "name": "input",
+                    "type": "const GDExtensionOutputGenerationInputV1*",
+                    "description": [
+                        "Aligned readable input, borrowed only until this call returns; its ABI size is sizeof this DTO."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionOutputStatusV1",
+                "description": [
+                    "Original static-detail status, or CONTRACT for an invalid input pointer."
                 ]
             }
         }
