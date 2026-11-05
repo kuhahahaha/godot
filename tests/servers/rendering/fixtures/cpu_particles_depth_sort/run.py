@@ -39,7 +39,7 @@ def sha(path: Path) -> str:
     return h.hexdigest()
 
 
-def manifest() -> dict:
+def manifest() -> dict[str, dict[str, int | str]]:
     return {name: {"bytes": (ROOT / name).stat().st_size, "sha256": sha(ROOT / name)} for name in SOURCES}
 
 
@@ -58,7 +58,7 @@ def strict_json(text: str):
     return json.loads(text, object_pairs_hook=unique, parse_constant=invalid_constant)
 
 
-def evaluate(stdout: str, stderr: str, returncode: int, expect_red: bool) -> tuple[dict, object]:
+def evaluate(stdout: str, stderr: str, returncode: int, expect_red: bool) -> tuple[dict[str, bool], object]:
     text = stdout + "\n" + stderr
     matches = re.findall(r"^CPU_PARTICLES_DEPTH_RESULT (\{[^\n]+\})$", stdout, re.M)
     report = None
@@ -92,7 +92,7 @@ def evaluate(stdout: str, stderr: str, returncode: int, expect_red: bool) -> tup
     )
     checks["exact_failures"] = report.get("failures") == (RED_FAILURES if expect_red else [])
     checks["expected_pass_boolean"] = report.get("pass") is (not expect_red)
-    if not checks["exact_case_order"]:
+    if not isinstance(rows, list) or not checks["exact_case_order"]:
         return checks, report
     for row in rows:
         name = row["case"]
