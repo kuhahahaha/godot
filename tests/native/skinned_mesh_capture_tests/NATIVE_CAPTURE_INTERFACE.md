@@ -77,5 +77,5 @@ phase evidence admission so poison/overflow does not suppress retirement.
 K01/K03 completion is not supplied by this interface. Original RD issue/wait
 Errors now poison P01 evidence, but the legacy engine control flow remains
 unchanged. Zero-wait poll/recycle, quiet-window admission, exact slot/cutoff
-retirement, native callback-holder acknowledgement and actual library OS close
+retirement, native callback-holder acknowledgment and actual library OS close
 remain required under their original contracts.
