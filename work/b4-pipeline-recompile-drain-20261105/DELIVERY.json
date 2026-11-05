@@ -1,0 +1,16 @@
+{
+  "base": "d85afdead7857d1cccd3f7a42d79f266c0917a73",
+  "files": {
+    "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.cpp": "bcd5b649319b63b96092649b8e7eab1e9400460950d333a1062186d23664c262",
+    "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.cpp": "0af12bf4fe780f7678fa05d145a60f412c861a49e9550acd1b07633a224cccd4",
+    "servers/rendering/renderer_rd/pipeline_hash_map_rd.h": "d08974678542b276662edfef2d9080e30b3228d94ecc4a011fea6426e7eb615a",
+    "tests/servers/rendering/test_pipeline_hash_map_recompile.cpp": "187556d68dc926d0bcff3bb0f062d87e6f254b64e475c03e28008f96857ecf57"
+  },
+  "build_exit": 0,
+  "build_input_unchanged": true,
+  "host_sha256": "e5c614f4deae461fd4eac140f1c27f5be5737de3ca597372e700eaf4f30f4663",
+  "red": "work/b4-actual-lock-pipeline-red-20261105/VERIFIED_RED.json",
+  "green": "work/b4-core-window-lock-pipeline-green-20261105/runtime/pipeline/PROCESS.json",
+  "scope": "actual WorkerThreadPool CPU cache lifetime; not live GPU or TSAN qualification",
+  "host_composition": "host also includes uncommitted Core metadata, immutable callback locks and fixture changes; four delivered source bytes match frozen build inputs"
+}

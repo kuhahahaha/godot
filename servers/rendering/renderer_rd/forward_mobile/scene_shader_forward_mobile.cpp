@@ -41,6 +41,10 @@ using namespace RendererSceneRenderImplementation;
 /* ShaderData */
 
 void SceneShaderForwardMobile::ShaderData::set_code(const String &p_code) {
+	// Accepted original workers read this ShaderData until their task returns.
+	// Join and retire their cache before changing inputs, including early exits.
+	pipeline_hash_map.clear_pipelines();
+
 	//compile
 
 	code = p_code;
@@ -252,8 +256,6 @@ void SceneShaderForwardMobile::ShaderData::set_code(const String &p_code) {
 	ubo_size = gen_code.uniform_total_size;
 	ubo_offsets = gen_code.uniform_offsets;
 	texture_uniforms = gen_code.texture_uniforms;
-
-	pipeline_hash_map.clear_pipelines();
 
 	// If any form of Alpha Antialiasing is enabled, set the blend mode to alpha to coverage.
 	if (alpha_antialiasing_mode != ALPHA_ANTIALIASING_OFF) {
@@ -538,7 +540,8 @@ uint64_t SceneShaderForwardMobile::ShaderData::get_vertex_input_mask(ShaderVersi
 	ERR_FAIL_COND_V(p_instance192 && !instance192_shader_supported(), 0);
 	// Vertex input masks require knowledge of the shader. Since querying the shader can be expensive due to high contention and the necessary mutex, we cache the result instead.
 	// It is intentional for the range of the input masks to be different than the versions available in the shaders as it'll only ever use the regular variants or the FP16 ones.
-	uint32_t input_mask_index = p_shader_version + (p_ubershader ? SHADER_VERSION_MAX : 0) + (p_instance192 ? SHADER_VERSION_MAX * 4 : p_indexed144 ? SHADER_VERSION_MAX * 2 : 0);
+	uint32_t input_mask_index = p_shader_version + (p_ubershader ? SHADER_VERSION_MAX : 0) + (p_instance192 ? SHADER_VERSION_MAX * 4 : p_indexed144 ? SHADER_VERSION_MAX * 2
+																																					: 0);
 	uint64_t input_mask = vertex_input_masks[input_mask_index].load(std::memory_order_relaxed);
 	if (input_mask == 0) {
 		RID shader_rid = get_shader_variant(p_shader_version, p_ubershader, p_indexed144, p_instance192);
