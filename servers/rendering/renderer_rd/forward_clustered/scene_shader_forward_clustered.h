@@ -35,6 +35,10 @@
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/rendering_server_types.h"
 
+namespace RendererRD {
+class ExternalPipelinePreparation;
+}
+
 namespace RendererSceneRenderImplementation {
 
 class SceneShaderForwardClustered {
@@ -225,6 +229,8 @@ public:
 		};
 
 		void _create_pipeline(PipelineKey p_pipeline_key);
+		// Exact uncached pipeline; caller owns the original RD retirement root.
+		RID create_native_pipeline(PipelineKey p_pipeline_key, RendererRD::ExternalPipelinePreparation *p_output = nullptr);
 		PipelineHashMapRD<PipelineKey, ShaderData, void (ShaderData::*)(PipelineKey)> pipeline_hash_map;
 
 		RID version;

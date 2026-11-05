@@ -2908,6 +2908,24 @@ uint64_t MaterialStorage::material_get_generation(RID p_material) const {
 	return material->generation;
 }
 
+Error MaterialStorage::material_get_native_preparation_data(RID p_material, uint64_t p_expected_generation, MaterialData *&r_data) {
+	r_data = nullptr;
+	const Material *material = material_owner.get_or_null(p_material);
+	if (!material || material->shader_type != SHADER_TYPE_3D || !material->data ||
+			!material->shader || !material->shader->data || material->generation != p_expected_generation || material->generation == UINT64_MAX) {
+		return ERR_INVALID_DATA;
+	}
+	// Preparation consumes a serviced original material, never a dirty fallback.
+	if (material->uniform_dirty || material->texture_dirty) {
+		return ERR_BUSY;
+	}
+	if (material->next_pass.is_valid()) {
+		return ERR_UNAVAILABLE;
+	}
+	r_data = material->data;
+	return OK;
+}
+
 bool MaterialStorage::material_is_animated(RID p_material) {
 	Material *material = material_owner.get_or_null(p_material);
 	ERR_FAIL_NULL_V(material, false);

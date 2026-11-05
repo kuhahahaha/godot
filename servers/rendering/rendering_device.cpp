@@ -5830,7 +5830,8 @@ RID RenderingDevice::_qualification_render_pipeline_create(RID p_shader, Framebu
 	return _qualification_render_pipeline_create_internal(p_shader, p_format, INVALID_ID, RENDER_PRIMITIVE_TRIANGLES, PipelineRasterizationState(), PipelineMultisampleState(), depth, PipelineColorBlendState(), 0, 0, Vector<PipelineSpecializationConstant>(), p_cell, p_reserved);
 }
 
-RID RenderingDevice::_qualification_render_pipeline_create_internal(RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState &p_rasterization_state, const PipelineMultisampleState &p_multisample_state, const PipelineDepthStencilState &p_depth_stencil_state, const PipelineColorBlendState &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const Vector<PipelineSpecializationConstant> &p_specialization_constants, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, RID p_reserved) {
+RID RenderingDevice::_qualification_render_pipeline_create_internal(RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState &p_rasterization_state, const PipelineMultisampleState &p_multisample_state, const PipelineDepthStencilState &p_depth_stencil_state, const PipelineColorBlendState &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const Vector<PipelineSpecializationConstant> &p_specialization_constants, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, RID p_reserved, GDExtensionDeviceExit::ProductionUseCell *p_output_cell) {
+	ERR_FAIL_COND_V(p_cell && p_output_cell, RID());
 	ERR_FAIL_COND_V(native_immutable_resource_is_retiring(p_shader), RID());
 	// Needs a shader.
 	Shader *shader = shader_owner.get_or_null(p_shader);
@@ -5961,6 +5962,7 @@ RID RenderingDevice::_qualification_render_pipeline_create_internal(RID p_shader
 	}
 
 	RenderPipeline pipeline;
+	pipeline.production_disposal_uses = p_output_cell ? &p_output_cell->disposal : nullptr;
 	pipeline.qualification_return = p_cell;
 	pipeline.qualification_dependency = p_cell ? shader->qualification_return : nullptr;
 	pipeline.driver_id = driver->render_pipeline_create(
@@ -6039,6 +6041,18 @@ RID RenderingDevice::_qualification_render_pipeline_create_internal(RID p_shader
 		id = ordinary_reserved;
 		render_pipeline_owner.initialize_rid(id, pipeline);
 	}
+	if (p_output_cell) {
+		// The exact original reserved cell exists before the driver allocation.
+		// Publish its identity in the factory before any created RID escapes.
+		auto &node = p_output_cell->disposal;
+		node.rid = id.get_id();
+		node.serial = id.get_id();
+		node.native_driver_id = pipeline.driver_id.id;
+		node.kind = 0;
+		node.next = nullptr;
+		node.state.store(1, std::memory_order_release);
+		p_output_cell->output_role = GDExtensionDeviceExit::ProductionUseCell::OutputRole::DISPOSAL_MEMBER;
+	}
 	{
 		_THREAD_SAFE_METHOD_
 
@@ -6061,7 +6075,8 @@ bool RenderingDevice::render_pipeline_is_valid(RID p_pipeline) {
 RID RenderingDevice::compute_pipeline_create(RID p_shader, const Vector<PipelineSpecializationConstant> &p_specialization_constants) {
 	return _qualification_pipeline_create(p_shader, p_specialization_constants, nullptr, RID());
 }
-RID RenderingDevice::_qualification_pipeline_create(RID p_shader, const Vector<PipelineSpecializationConstant> &p_specialization_constants, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, RID p_reserved) {
+RID RenderingDevice::_qualification_pipeline_create(RID p_shader, const Vector<PipelineSpecializationConstant> &p_specialization_constants, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, RID p_reserved, GDExtensionDeviceExit::ProductionUseCell *p_output_cell) {
+	ERR_FAIL_COND_V(p_cell && p_output_cell, RID());
 	ERR_FAIL_COND_V(native_immutable_resource_is_retiring(p_shader), RID());
 	Shader *shader;
 

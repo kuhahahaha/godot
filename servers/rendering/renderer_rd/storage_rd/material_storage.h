@@ -568,6 +568,8 @@ public:
 	virtual void material_set_next_pass(RID p_material, RID p_next_material) override;
 	virtual void material_set_render_priority(RID p_material, int priority) override;
 	uint64_t material_get_generation(RID p_material) const;
+	// Borrowed only for synchronous render-thread preparation; no source admission or lifetime grant.
+	Error material_get_native_preparation_data(RID p_material, uint64_t p_expected_generation, MaterialData *&r_data);
 
 	virtual bool material_is_animated(RID p_material) override;
 	virtual bool material_casts_shadows(RID p_material) override;

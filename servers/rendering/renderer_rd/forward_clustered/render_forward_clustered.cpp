@@ -4509,8 +4509,7 @@ void RenderForwardClustered::_geometry_instance_update(RenderGeometryInstance *p
 			ginstance->base_flags |= INSTANCE_DATA_FLAG_MULTIMESH_INDIRECT;
 		}
 
-		ginstance->transforms_uniform_set = mesh_storage->_multimesh_get_buffer_rd_rid(ginstance->data->base).is_valid() ?
-				mesh_storage->multimesh_get_3d_uniform_set(ginstance->data->base, scene_shader.default_shader_rd, TRANSFORMS_UNIFORM_SET) : RID();
+		ginstance->transforms_uniform_set = mesh_storage->_multimesh_get_buffer_rd_rid(ginstance->data->base).is_valid() ? mesh_storage->multimesh_get_3d_uniform_set(ginstance->data->base, scene_shader.default_shader_rd, TRANSFORMS_UNIFORM_SET) : RID();
 
 	} else if (ginstance->data->base_type == RSE::INSTANCE_PARTICLES) {
 		ginstance->base_flags |= INSTANCE_DATA_FLAG_PARTICLES;
@@ -5361,4 +5360,144 @@ RenderForwardClustered::~RenderForwardClustered() {
 		RD::get_singleton()->free_rid(sdfgi_framebuffer_size_cache.begin()->value);
 		sdfgi_framebuffer_size_cache.remove(sdfgi_framebuffer_size_cache.begin());
 	}
+}
+
+Error RenderForwardClustered::external_pipeline_prepare(const RendererRD::ExternalSurfaceSelection &p_surface, RendererRD::ExternalPipelinePreparation &r_preparation) {
+	using namespace RendererRD;
+	auto *rd = RD::get_singleton();
+	if (!rd || !rd->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	auto fail = [&](Error p_error) { r_preparation.last_error = p_error; return p_error; };
+	// Owner must open this finite row only after accepting the original source,
+	// charge and preparation opportunity. This method never creates that grant.
+	if (!r_preparation.owner || r_preparation.owner != p_surface.owner || r_preparation.source_sealed ||
+			!r_preparation.serial || r_preparation.generation != p_surface.generation || !r_preparation.max_resources ||
+			!r_preparation.pipeline_pin || !r_preparation.pipeline_owned_group || !r_preparation.pipeline_original_root ||
+			!p_surface.geometry_source || !p_surface.geometry_source->is_valid()) {
+		return fail(ERR_UNCONFIGURED);
+	}
+	if (r_preparation.created_pipeline.is_valid() || r_preparation.material.is_active() ||
+			r_preparation.geometry[0].is_active() || r_preparation.geometry[1].is_active()) {
+		return fail(ERR_ALREADY_IN_USE);
+	}
+	const Error prefix_ready = r_preparation._pipeline_preflight();
+	if (prefix_ready != OK) {
+		return fail(prefix_ready);
+	}
+	const ExternalPacketPipelineRequest &request = r_preparation.selection;
+	if (request.backend != ExternalPacketPipelineRequest::Backend::CLUSTERED || request.view_count != 1 ||
+			request.version >= SceneShaderForwardClustered::PIPELINE_VERSION_MAX ||
+			p_surface.primitive >= RSE::PRIMITIVE_MAX) {
+		return fail(ERR_INVALID_PARAMETER);
+	}
+	auto *storage = MaterialStorage::get_singleton();
+	MaterialStorage::MaterialData *original = nullptr;
+	const Error selected = storage->material_get_native_preparation_data(p_surface.material_selection, p_surface.material_generation, original);
+	if (selected != OK) {
+		return fail(selected);
+	}
+	auto *material = static_cast<SceneShaderForwardClustered::MaterialData *>(original);
+	auto *shader = material->shader_data;
+	const bool instance192 = p_surface.profile == ExternalOutputConfig::INSTANCE_192;
+	const bool indexed144 = p_surface.profile == ExternalOutputConfig::INDEXED_144;
+	if ((!instance192 && !indexed144) || indexed144 != p_surface.geometry_source->is_external() || !shader || !shader->is_valid() ||
+			(instance192 && !shader->instance192_shader_supported()) || shader->uses_point_size || shader->uses_particle_trails) {
+		return fail(ERR_UNAVAILABLE);
+	}
+	// This is the original shader classifier, not a product qualification claim.
+	ExternalMaterialPassClassification classification;
+	classification.transparent = shader->uses_alpha_pass();
+	classification.opaque = !classification.transparent;
+	classification.depth = classification.opaque || shader->uses_depth_in_alpha_pass();
+	classification.shadow = classification.depth;
+	classification.subsurface = shader->uses_sss;
+	classification.screen_texture = shader->uses_screen_texture;
+	classification.depth_texture = shader->uses_depth_texture;
+	classification.normal_texture = shader->uses_normal_texture;
+	classification.stencil = shader->stencil_enabled;
+	classification.uses_time = shader->uses_time;
+	classification.motion = shader->is_animated();
+	classification.double_sided_shadow = request.double_sided_shadow;
+	bool eligible = false;
+	switch (request.pass) {
+		case ExternalPacketPass::OPAQUE:
+			eligible = classification.opaque && (p_surface.pass_mask & ExternalOutputConfig::PASS_OPAQUE);
+			break;
+		case ExternalPacketPass::TRANSPARENT:
+			eligible = classification.transparent && (p_surface.pass_mask & ExternalOutputConfig::PASS_TRANSPARENT);
+			break;
+		case ExternalPacketPass::DEPTH:
+			eligible = classification.depth && (p_surface.pass_mask & ExternalOutputConfig::PASS_DEPTH);
+			break;
+		case ExternalPacketPass::SHADOW:
+			eligible = classification.shadow && (p_surface.pass_mask & ExternalOutputConfig::PASS_SHADOW);
+			break;
+		case ExternalPacketPass::PROBE:
+			eligible = (p_surface.pass_mask & ExternalOutputConfig::PASS_PROBE);
+			break;
+		case ExternalPacketPass::MOTION:
+			return fail(ERR_UNAVAILABLE);
+	}
+	if (!eligible) {
+		return fail(ERR_UNAVAILABLE);
+	}
+	SceneShaderForwardClustered::ShaderData::PipelineKey key = {};
+	key.version = static_cast<SceneShaderForwardClustered::PipelineVersion>(request.version);
+	key.framebuffer_format_id = request.framebuffer_format;
+	key.primitive_type = p_surface.primitive;
+	key.wireframe = request.wireframe;
+	key.instance192 = instance192;
+	key.indexed144 = indexed144;
+	// Compile the exact specialized pipeline synchronously. No hash-only cache
+	// hit, no fallback can silently change the frozen variant or vertex layout.
+	key.ubershader = false;
+	key.shader_specialization.packed_0 = request.specialization[0];
+	key.shader_specialization.packed_1 = request.specialization[1];
+
+	if (request.subpass != 0 || request.color_flags >= SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_COMBINATIONS ||
+			(request.color_flags & (SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_MULTIVIEW | SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_MOTION_VECTORS))) {
+		return fail(ERR_INVALID_PARAMETER);
+	}
+	const bool color = request.pass == ExternalPacketPass::OPAQUE || request.pass == ExternalPacketPass::TRANSPARENT || request.pass == ExternalPacketPass::PROBE;
+	if (color) {
+		if (key.version != SceneShaderForwardClustered::PIPELINE_VERSION_COLOR_PASS ||
+				bool(request.color_flags & SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_TRANSPARENT) != classification.transparent ||
+				((request.color_flags & SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_TRANSPARENT) && (request.color_flags & SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_SEPARATE_SPECULAR))) {
+			return fail(ERR_INVALID_PARAMETER);
+		}
+	} else if (request.color_flags != 0 || (key.version != SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS && key.version != SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_DP && key.version != SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_WITH_NORMAL_AND_ROUGHNESS && key.version != SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_WITH_NORMAL_AND_ROUGHNESS_AND_VOXEL_GI)) {
+		return fail(ERR_INVALID_PARAMETER);
+	}
+	key.shader_specialization.packed_2 = request.specialization[2];
+	key.color_pass_flags = request.color_flags;
+	const auto cull = request.pass == ExternalPacketPass::SHADOW && request.double_sided_shadow ? SceneShaderForwardClustered::ShaderData::CULL_VARIANT_DOUBLE_SIDED : (request.reverse_cull ? SceneShaderForwardClustered::ShaderData::CULL_VARIANT_REVERSED : SceneShaderForwardClustered::ShaderData::CULL_VARIANT_NORMAL);
+	key.cull_mode = shader->get_cull_mode_from_cull_variant(cull);
+	RID native_shader = shader->get_shader_variant(key.version, key.color_pass_flags, false, indexed144, instance192);
+	if (native_shader.is_null()) {
+		return fail(ERR_CANT_CREATE);
+	}
+	const uint64_t input_mask = shader->get_vertex_input_mask(key.version, key.color_pass_flags, false, indexed144, instance192);
+	Error error = MeshStorage::mesh_surface_hold_derive(*p_surface.geometry_source, input_mask, false, false, 0, r_preparation.geometry[0]);
+	if (error != OK) {
+		return fail(error);
+	}
+	key.vertex_format_id = r_preparation.geometry[0].get_vertex_format();
+	r_preparation.last_error = ERR_CANT_CREATE;
+	r_preparation.created_pipeline = shader->create_native_pipeline(key, &r_preparation);
+	if (r_preparation.created_pipeline.is_null()) {
+		return fail(r_preparation.last_error);
+	}
+	// Keep both prefixes in the admitted row on every failure. Its original
+	// service path, not this stack frame, owns retirement and resource charges.
+	error = storage->material_native_hold_acquire(p_surface.material_selection, native_shader,
+			r_preparation.created_pipeline, material->uniform_set, r_preparation.material, r_preparation.max_resources, p_surface.material_generation);
+	if (error != OK) {
+		return fail(error);
+	}
+	r_preparation.selected_geometry = 0;
+	r_preparation.classification = classification;
+	r_preparation.ubershader = false;
+	r_preparation.cull_mode = key.cull_mode;
+	return fail(OK);
 }

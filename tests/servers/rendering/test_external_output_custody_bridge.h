@@ -31,6 +31,7 @@
 #pragma once
 
 #include "core/extension/gdextension_production_request.h"
+#include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/mesh_storage.h"
 
 namespace RendererRD {
@@ -59,10 +60,21 @@ public:
 	void install_geometry(MeshStorage::NativeSurfaceHold &, uint64_t);
 	bool geometry_group_returned() const;
 	bool geometry_active() const;
+	void install_pipeline(uint64_t);
+	RID &pipeline_root();
+	bool pipeline_returned() const;
+	MaterialStorage::NativeMaterialHold &material_hold();
+	void install_material(uint64_t);
+	bool material_active() const;
 	void withdraw();
 	bool history_cleared() const;
 	bool released() const;
 };
+// Opaque original MaterialStorage/ShaderRD test profile; creates no admission.
+void *pipeline_material_profile_create(RID);
+Error pipeline_material_profile_acquire(void *, RID, uint32_t, MaterialStorage::NativeMaterialHold &);
+Error pipeline_material_profile_capture(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, MaterialStorage::NativeMaterialHold &, uint64_t &);
+void pipeline_material_profile_destroy(void *);
 enum class ExternalCustodyTestMode { VIEW_RETURN,
 	READ_CANCEL,
 	READ_UNKNOWN,

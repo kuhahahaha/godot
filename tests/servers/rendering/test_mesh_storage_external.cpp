@@ -631,3 +631,23 @@ TEST_CASE("[B4][NativeSurfaceHold] Indexed144 surface keeps exact borrowed nativ
 	RendererRD::TestMeshStorageExternalAccess::immutable_surface(true);
 	RendererRD::TestMeshStorageExternalAccess::incremental_surface(true);
 }
+
+TEST_CASE("[B4][MaterialPreparation] Mobile color preparation preserves transparent blending") {
+	using Shader = RendererSceneRenderImplementation::SceneShaderForwardMobile;
+	// This is the production predicate used before derive/pipeline allocation
+	// for OPAQUE, TRANSPARENT and PROBE. No mirrored test-only admission rule.
+	SUBCASE("transparent surfaces never select opaque fog-mask variants") {
+		CHECK_FALSE(Shader::ShaderData::external_color_version_supported(Shader::SHADER_VERSION_COLOR_FOG_MASK, true));
+		CHECK_FALSE(Shader::ShaderData::external_color_version_supported(Shader::SHADER_VERSION_LIGHTMAP_FOG_MASK, true));
+		CHECK(Shader::ShaderData::external_color_version_supported(Shader::SHADER_VERSION_COLOR_PASS, true));
+		CHECK(Shader::ShaderData::external_color_version_supported(Shader::SHADER_VERSION_LIGHTMAP_COLOR_PASS, true));
+	}
+	SUBCASE("opaque and alpha-clipped classifier result retains fog-mask support") {
+		CHECK(Shader::ShaderData::external_color_version_supported(Shader::SHADER_VERSION_COLOR_FOG_MASK, false));
+		CHECK(Shader::ShaderData::external_color_version_supported(Shader::SHADER_VERSION_LIGHTMAP_FOG_MASK, false));
+	}
+	SUBCASE("noncolor and unadmitted multiview variants remain refused") {
+		CHECK_FALSE(Shader::ShaderData::external_color_version_supported(Shader::SHADER_VERSION_SHADOW_PASS, false));
+		CHECK_FALSE(Shader::ShaderData::external_color_version_supported(Shader::SHADER_VERSION_COLOR_PASS_MULTIVIEW, true));
+	}
+}

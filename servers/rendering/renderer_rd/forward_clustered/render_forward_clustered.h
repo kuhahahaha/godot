@@ -41,6 +41,7 @@
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
 #include "servers/rendering/renderer_rd/shaders/forward_clustered/best_fit_normal.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/forward_clustered/integrate_dfg.glsl.gen.h"
+#include "servers/rendering/renderer_rd/storage_rd/external_output_packet.h"
 
 #ifdef METAL_ENABLED
 #include "servers/rendering/renderer_rd/effects/metal_fx.h"
@@ -809,6 +810,9 @@ protected:
 	virtual void _render_particle_collider_heightfield(RID p_fb, const Transform3D &p_cam_transform, const Projection &p_cam_projection, const PagedArray<RenderGeometryInstance *> &p_instances) override;
 
 public:
+	// Native preparation only; does not qualify source, bounds, history or GPU support.
+	Error external_pipeline_prepare(const RendererRD::ExternalSurfaceSelection &p_surface, RendererRD::ExternalPipelinePreparation &r_preparation);
+
 	static RenderForwardClustered *get_singleton() { return singleton; }
 
 	ClusterBuilderSharedDataRD *get_cluster_builder_shared() { return &cluster_builder_shared; }

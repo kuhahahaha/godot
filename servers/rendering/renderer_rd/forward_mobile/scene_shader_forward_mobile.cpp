@@ -34,6 +34,7 @@
 #include "core/math/math_defs.h"
 #include "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.h"
 #include "servers/rendering/renderer_rd/renderer_compositor_rd.h"
+#include "servers/rendering/renderer_rd/storage_rd/external_output_packet.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 
 using namespace RendererSceneRenderImplementation;
@@ -296,7 +297,14 @@ Pair<ShaderRD *, RID> SceneShaderForwardMobile::ShaderData::get_native_shader_an
 }
 
 void SceneShaderForwardMobile::ShaderData::_create_pipeline(PipelineKey p_pipeline_key) {
-	ERR_FAIL_COND(p_pipeline_key.instance192 && p_pipeline_key.cull_mode > RD::POLYGON_CULL_BACK);
+	RID pipeline = create_native_pipeline(p_pipeline_key);
+	if (pipeline.is_valid()) {
+		pipeline_hash_map.add_compiled_pipeline(p_pipeline_key.hash(), pipeline);
+	}
+}
+
+RID SceneShaderForwardMobile::ShaderData::create_native_pipeline(PipelineKey p_pipeline_key, RendererRD::ExternalPipelinePreparation *p_output) {
+	ERR_FAIL_COND_V(p_pipeline_key.instance192 && p_pipeline_key.cull_mode > RD::POLYGON_CULL_BACK, RID());
 #if PRINT_PIPELINE_COMPILATION_KEYS
 	print_line(
 			"HASH:", p_pipeline_key.hash(),
@@ -480,18 +488,18 @@ void SceneShaderForwardMobile::ShaderData::_create_pipeline(PipelineKey p_pipeli
 	}
 
 	RID shader_rid = get_shader_variant(p_pipeline_key.version, p_pipeline_key.ubershader, p_pipeline_key.indexed144, p_pipeline_key.instance192);
-	ERR_FAIL_COND(shader_rid.is_null());
+	ERR_FAIL_COND_V(shader_rid.is_null(), RID());
 
-	RID pipeline = RD::get_singleton()->render_pipeline_create(shader_rid, p_pipeline_key.framebuffer_format_id, p_pipeline_key.vertex_format_id, primitive_rd, raster_state, multisample_state, depth_stencil_state, blend_state, 0, p_pipeline_key.render_pass, specialization_constants);
+	RID pipeline = p_output ? p_output->_create_pipeline(shader_rid, p_pipeline_key.framebuffer_format_id, p_pipeline_key.vertex_format_id, primitive_rd, raster_state, multisample_state, depth_stencil_state, blend_state, 0, p_pipeline_key.render_pass, specialization_constants) : RD::get_singleton()->render_pipeline_create(shader_rid, p_pipeline_key.framebuffer_format_id, p_pipeline_key.vertex_format_id, primitive_rd, raster_state, multisample_state, depth_stencil_state, blend_state, 0, p_pipeline_key.render_pass, specialization_constants);
 
 	// Don't print error when it's expected.
 	if (unlikely(pipeline.is_null() && RD::get_singleton()->get_driver_workarounds().dont_print_on_render_pipeline_creation_failure)) {
-		return;
+		return RID();
 	}
 
-	ERR_FAIL_COND(pipeline.is_null());
+	ERR_FAIL_COND_V(pipeline.is_null(), RID());
 
-	pipeline_hash_map.add_compiled_pipeline(p_pipeline_key.hash(), pipeline);
+	return pipeline;
 }
 
 bool SceneShaderForwardMobile::ShaderData::instance192_shader_supported() const {

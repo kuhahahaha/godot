@@ -1,0 +1,104 @@
+{
+  "schema": 1,
+  "component": "Original material pipeline prefix custody and backend builders",
+  "base_commit": "b53af1983e959adba40344fb2dd1837beca44ac0",
+  "source_pins": {
+    "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.cpp": "bd398a2c0c9926abb7e582fe9e31fd74e0d54d2ad2f75cc198c84b72c3691c8a",
+    "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h": "be246b5e7246abcfe05b3cbf049dcec682967b4202bb6c15313028247b0a8114",
+    "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.cpp": "0c2abbe644fa187c4cfcca26ec47eafe046c49f100976afde9fb6e1e79f8fd60",
+    "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h": "72b27f380d98d03e6c83f6ef7744bcf363411d5b951f2c5a99c58e1dd46a3d6a",
+    "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp": "f6f43491cc5e4418eefccb72fa541c86819ce1203c3bcb11231bc96bf0978a28",
+    "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.h": "f3da73b3d265e0a5e9afddc8c7d8b1600e8625ff9e68df2a2f8608204e629db8",
+    "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.cpp": "910bc9ed3f096f95d66de0985619f562b1e1e97aabc0bd891533b42ca178c882",
+    "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.h": "d98c3f1fe3b3eef4a23ac684f9c30484402520f8b60e828c7bcf05c8a246955d",
+    "servers/rendering/renderer_rd/storage_rd/external_output_owner.h": "bbab082f41b56884d7861b0bf1ff454ece683da377a3fab7bf473071007a078c",
+    "servers/rendering/renderer_rd/storage_rd/external_output_packet.cpp": "ead5804ad6ba7e06ebaefcd2aa387fe66eef9a010b9dd24191d7cc34c9e72170",
+    "servers/rendering/renderer_rd/storage_rd/external_output_packet.h": "437d0d7ef56568a6fa7f4e742a025a87c2fe6855893ccdad60966ab9072e313d",
+    "servers/rendering/renderer_rd/storage_rd/material_storage.cpp": "42c076e7626c29b0c6bd43818469ba8bcecad7fbee4339185739926ae2e40889",
+    "servers/rendering/renderer_rd/storage_rd/material_storage.h": "6e3af94efb17eb6793b2001ea9c2d4b2b9aff578e308b4f17abcd19392afca99",
+    "servers/rendering/renderer_rd/storage_rd/particles_storage.h": "9287950489684d77351848b71b25f97cab42c16cd1da23daa387f0ab5382a1fb",
+    "servers/rendering/renderer_rd/storage_rd/particles_storage_retire.cpp": "2ba10508dc9967328ac32106c9a022de9e4f9b4eac8c7a49f9520038d162a685",
+    "servers/rendering/rendering_device.cpp": "9d40597b8f09873a4da61c94b6083bf1942c78c3e5a32e3bd7d29381f10096ee",
+    "servers/rendering/rendering_device.h": "f22fe9bad2927fc4cc1d04d9b75f7c4a045177f4ac7327c481d954a41a04a5e4",
+    "servers/rendering/rendering_device_immutable_hold.cpp": "7a3df44c6905da1f11e855c318acd6f75b09865f1b9d5c5f764e13b2fa2a00d4",
+    "tests/core/extension/test_production_request.cpp": "a94ba706b51a62a8b4a7a570a193e3d4bba7d6b918ebee202d4ddb3e25dfede8",
+    "tests/servers/rendering/test_external_output_custody_bridge.h": "2d68950f84b8d01df8b56440b9151154a28acb8a9db3d841c02e121b45e36674",
+    "tests/servers/rendering/test_external_output_owner_state.cpp": "ce2cd78d4831204a74ee4312b6135a08ea1308d26f2317676023e2c61246408b",
+    "tests/servers/rendering/test_material_storage_native_hold.cpp": "d33970ebd089aad5c0eef010d220dc1f5d465ebe44179ffa540f4870ab97575f",
+    "tests/servers/rendering/test_mesh_storage_external.cpp": "4426ad0adf5d3a7af9ccd18cc9b757c0040a940e3b96b81eca624adf3148adf4"
+  },
+  "host_sha256": "b874c63b4bedf14fcd235abf1ffcce7c734a2bd5ae2377edcaa2ad06cd9f6405",
+  "controlled_metadata_sha256": "31915a346361b1c4269e28b2915204354053a00c2de6a6adfe9eb4ec36f3a3c9",
+  "results": {
+    "targeted": {
+      "path": "work/b4-material-prefix-20261106/targeted-fixed/RESULT.json",
+      "sha256": "b99e132692b9737c05cdafea81d69d1240c20e0f7ae464f457f328495d676e45",
+      "exit": 0,
+      "test_cases": {
+        "successes": "6",
+        "failures": "0"
+      },
+      "asserts": {
+        "successes": "1653",
+        "failures": "0"
+      },
+      "validation_pass": true
+    },
+    "full": {
+      "path": "work/b4-material-prefix-20261106/full/RESULT.json",
+      "sha256": "514d2a72e88bb2e9927146c2991d6cd08df0a938b81316d918ac4d48a9536f9a",
+      "exit": 0,
+      "test_cases": {
+        "successes": "2105",
+        "failures": "0"
+      },
+      "asserts": {
+        "successes": "529144",
+        "failures": "0"
+      },
+      "validation_pass": true
+    },
+    "metal": {
+      "path": "work/b4-material-prefix-20261106/native390/RESULT.json",
+      "sha256": "7ac7d5567c59e5dcae6e98d0dae06d8b14d5bf8b1f9487760daf24582332bd35",
+      "gpu_pass": true,
+      "checks": {
+        "one_result": true,
+        "not_timeout": true,
+        "no_fatal_or_exit_leaks": true,
+        "exact_expected_engine_errors": true,
+        "actual_metal_startup": true,
+        "native_and_outer_success": true,
+        "host_and_metadata_unchanged": true,
+        "source_unchanged": true
+      }
+    }
+  },
+  "verified_behavior": [
+    "Both ordinary backend cache wrappers use their original extracted exact native builders; output creation publishes into the original reserved Core cell before RID escapes.",
+    "Ordinary/output share actual RID reservation; driver refusal returns capacity in quiet and ordinary modes; original Core exhaustion refuses before driver creation.",
+    "Real pipeline survives later material capacity failure; original owned and borrowed groups retire through bounded OBSERVE with every receipt matching actual driver operations.",
+    "Original owned release precedes material release while pipeline and both native groups remain retained; actual pipeline physical return precedes logical metadata return.",
+    "MaterialStorage narrow lookup preserves invalid-data, dirty BUSY, next-pass Unavailable ordering and clears failed output without native work.",
+    "Mobile shared color predicate refuses transparent fog-mask variants; full PROBE preparation is not exercised."
+  ],
+  "attempts": [
+    "Original test namespace build failure preserved.",
+    "Private MaterialStorage getter build failure preserved; fixed by source-owned validated accessor.",
+    "Initial target exit78/incompleteXML and diagnostic attempts preserved as test fixture failures; no production RED claim.",
+    "Zero issue/poll expectations replaced by exact finite receipt accounting; late retiring sample replaced by original release-order witness.",
+    "Original v2 request maintenance cursor drained before ordinary frame cleanup; v1 helper attempt refused and is preserved."
+  ],
+  "limits": [
+    "No original source/GPU-charge/preparation admission caller exists yet; no public Create/Acquire/Poll/Seal success or complete six-output claim.",
+    "New custody tests use actual Core/RD objects with deterministic CPU driver, not real external output GPU preparation.",
+    "Separate actual Metal390 regression covers existing normal runtime; it is not external preparation or full material qualification.",
+    "Remote platform CI is still running on previous e291 head; this local batch has not been pushed yet."
+  ],
+  "evidence": "work/b4-material-prefix-20261106",
+  "independent_final_review": {
+    "path": "work/b4-material-prefix-20261106/FINAL_INDEPENDENT_REVIEW.md",
+    "sha256": "45745e26368fefd0e93097d7e959f59d7efbfc88f12d3d3a9366fccfded45175",
+    "disposition": "accepted bounded source, targeted/full raw and existing Metal390 regression; no blocker"
+  }
+}

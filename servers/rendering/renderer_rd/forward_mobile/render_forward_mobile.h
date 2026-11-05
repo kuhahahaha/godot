@@ -35,6 +35,7 @@
 #include "servers/rendering/renderer_rd/environment/aerial_perspective.h"
 #include "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.h"
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
+#include "servers/rendering/renderer_rd/storage_rd/external_output_packet.h"
 
 #define RB_SCOPE_MOBILE SNAME("mobile")
 
@@ -644,6 +645,9 @@ protected:
 	};
 
 public:
+	// Native preparation only; does not qualify source, bounds, history or GPU support.
+	Error external_pipeline_prepare(const RendererRD::ExternalSurfaceSelection &p_surface, RendererRD::ExternalPipelinePreparation &r_preparation);
+
 	static RenderForwardMobile *get_singleton() { return singleton; }
 
 	virtual RID reflection_probe_create_framebuffer(RID p_color, RID p_depth) override;

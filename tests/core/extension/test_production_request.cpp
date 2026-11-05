@@ -66,6 +66,18 @@ struct Access {
 		bool _set_code_from_spirv(const ReflectShader &) override { return false; }
 
 	public:
+		void initialize_raster() {
+			reflection_data.pipeline_type = RenderingDeviceCommons::PIPELINE_TYPE_RASTERIZATION;
+			reflection_data.stage_count = 2;
+			for (auto stage : { RenderingDeviceCommons::SHADER_STAGE_VERTEX, RenderingDeviceCommons::SHADER_STAGE_FRAGMENT }) {
+				reflection_shader_stages.push_back(stage);
+				Shader shader;
+				shader.shader_stage = stage;
+				shader.code_compressed_bytes.push_back(42);
+				shader.code_decompressed_size = 1;
+				shaders.push_back(shader);
+			}
+		}
 		void initialize(uint32_t p_storage_bytes) {
 			reflection_data.pipeline_type = RenderingDeviceCommons::PIPELINE_TYPE_COMPUTE;
 			reflection_data.stage_count = 1;
@@ -292,10 +304,37 @@ struct Access {
 		UnitFormat format;
 		uint32_t shader_creates = 0, pipeline_creates = 0, set_creates = 0, set_frees = 0, shader_frees = 0, pipeline_frees = 0;
 		bool set_live = false;
+		bool raster_fail = false, raster_quiet = false, raster_live = false;
+		RenderingDevice *raster_device = nullptr;
+		uint32_t raster_budgeted_frees = 0;
+		uint32_t raster_attempts = 0, raster_frees = 0, raster_shader_frees = 0;
+		DriverWorkarounds get_driver_workarounds() const override {
+			DriverWorkarounds value;
+			value.dont_print_on_render_pipeline_creation_failure = raster_quiet;
+			return value;
+		}
+		RenderPassID render_pass_create(VectorView<Attachment>, VectorView<Subpass>, VectorView<SubpassDependency>, uint32_t, AttachmentReference) override { return RenderPassID(280); }
+		void render_pass_free(RenderPassID id) override { CHECK(id == RenderPassID(280)); }
+		PipelineID render_pipeline_create(ShaderID shader, VertexFormatID, RenderPrimitive, PipelineRasterizationState, PipelineMultisampleState, PipelineDepthStencilState, PipelineColorBlendState, VectorView<int32_t>, BitField<PipelineDynamicStateFlags>, RenderPassID pass, uint32_t, VectorView<PipelineSpecializationConstant>) override {
+			CHECK(Thread::get_caller_id() == execution_thread);
+			CHECK(shader == ShaderID(280));
+			CHECK(pass == RenderPassID(280));
+			++raster_attempts;
+			if (raster_fail) {
+				return {};
+			}
+			CHECK_FALSE(raster_live);
+			raster_live = true;
+			return PipelineID(281);
+		}
 		const RenderingShaderContainerFormat &get_shader_container_format() const override { return format; }
 		ShaderID shader_create_from_container(const Ref<RenderingShaderContainer> &container, const Vector<ImmutableSampler> &) override {
 			CHECK(Thread::get_caller_id() == execution_thread);
 			const auto reflection = container->get_shader_reflection();
+			if (reflection.pipeline_type == PIPELINE_TYPE_RASTERIZATION) {
+				CHECK(reflection.uniform_sets.is_empty());
+				return ShaderID(280);
+			}
 			CHECK(reflection.pipeline_type == PIPELINE_TYPE_COMPUTE);
 			CHECK(uint64_t(container->get_compile_flags()) == 0);
 			CHECK(reflection.uniform_sets.size() == 1);
@@ -321,10 +360,14 @@ struct Access {
 			return PipelineID(81);
 		}
 		uint32_t shader_get_layout_hash(ShaderID id) override {
-			CHECK((id == ShaderID(80) || id == ShaderID(180)));
+			CHECK((id == ShaderID(80) || id == ShaderID(180) || id == ShaderID(280)));
 			return 123;
 		}
 		void shader_free(ShaderID id) override {
+			if (id == ShaderID(280)) {
+				++raster_shader_frees;
+				return;
+			}
 			if (id == ShaderID(180)) {
 				++auxiliary_shader_frees;
 				return;
@@ -333,6 +376,18 @@ struct Access {
 			++shader_frees;
 		}
 		void pipeline_free(PipelineID id) override {
+			if (id == PipelineID(281)) {
+				REQUIRE(raster_device != nullptr);
+				REQUIRE(raster_device->native_disposal_budget != nullptr);
+				REQUIRE(raster_device->native_disposal_usage != nullptr);
+				CHECK(raster_device->native_disposal_budget->passes == 1);
+				CHECK(raster_device->native_disposal_usage->passes <= 1);
+				++raster_budgeted_frees;
+				CHECK(raster_live);
+				raster_live = false;
+				++raster_frees;
+				return;
+			}
 			if (id == PipelineID(181)) {
 				++auxiliary_pipeline_frees;
 				return;
@@ -4638,6 +4693,294 @@ struct Access {
 		fixture.cleanup_owner();
 		CHECK(fixture.owner_cleaned);
 	}
+	struct PipelinePrefixProbe {
+		SingletonEnrollment *fixture = nullptr;
+		RendererRD::ExternalLinkedOwnerTest *native = nullptr;
+		void *material_profile = nullptr;
+		RID shader, created;
+		uint64_t owned_group = 0, material_group = 0;
+		uint32_t mode = 0, calls = 0;
+		// 0: pipeline success, real material capacity failure; 1: material borrow;
+		// 2/3: driver failure (ordinary/quiet); 4: original Core capacity failure.
+		static void receive(void *userdata, GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionOperationV1 *) {
+			using namespace GDExtensionDeviceExit;
+			auto &test = *static_cast<PipelinePrefixProbe *>(userdata);
+			auto &fixture = *test.fixture;
+			auto &rd = fixture.rd;
+			auto &native = *test.native;
+			++test.calls;
+			native.install(0, fixture.registry, ref);
+			REQUIRE(fixture.registry.production_output_pin_current(rd, native.pin(0)) == OK);
+			REQUIRE(fixture.registry.production_output_owner_bind(native.pin(0), rd, native.particle_rid(), native.generation, 0, native.lease(0)) == OK);
+			const uint32_t attempts = fixture.driver.raster_attempts;
+			const uint32_t owner_count = rd.render_pipeline_owner.get_rid_count();
+			const Error reserved = rd._production_output_owned_reserve(context, native.pin(0), 1, test.owned_group);
+			if (test.mode == 4) {
+				CHECK(reserved == ERR_OUT_OF_MEMORY);
+				CHECK(test.owned_group == 0);
+				CHECK(fixture.driver.raster_attempts == attempts);
+				CHECK(rd.render_pipeline_owner.get_rid_count() == owner_count);
+				return;
+			}
+			REQUIRE(reserved == OK);
+			// Real SurfaceBinding holds the group and output RID before factory
+			// entry. This is private component directory setup, not admission.
+			native.install_pipeline(test.owned_group);
+			ProductionDisposalUse *original_member = nullptr;
+			for (uint32_t i = 0; i < fixture.request->capacity.resource_uses; ++i) {
+				auto &cell = fixture.request->uses[i];
+				if (cell.disposal_group_serial == test.owned_group && cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_RESERVED) {
+					REQUIRE(original_member == nullptr);
+					original_member = &cell.disposal;
+				}
+			}
+			REQUIRE(original_member != nullptr);
+			Ref<UnitContainer> container;
+			container.instantiate();
+			container->initialize_raster();
+			test.shader = rd.shader_create_from_bytecode(container->to_bytes());
+			REQUIRE(test.shader.is_valid());
+			fixture.driver.raster_fail = test.mode == 2 || test.mode == 3;
+			fixture.driver.raster_quiet = test.mode == 3;
+			const auto format = rd.framebuffer_format_create(Vector<RD::AttachmentFormat>());
+			const uint32_t repetitions = fixture.driver.raster_fail ? 3 : 1;
+			for (uint32_t i = 0; i < repetitions; ++i) {
+				const Error made = rd._production_output_owned_render_pipeline_create(context, native.pin(0), test.owned_group, 0,
+						test.shader, format, RD::INVALID_ID, RD::RENDER_PRIMITIVE_TRIANGLES,
+						RD::PipelineRasterizationState(), RD::PipelineMultisampleState(), RD::PipelineDepthStencilState(), RD::PipelineColorBlendState(), 0, 0, {}, native.pipeline_root());
+				if (fixture.driver.raster_fail) {
+					CHECK(made == ERR_CANT_CREATE);
+					CHECK(native.pipeline_root().is_null());
+					CHECK(rd.render_pipeline_owner.get_rid_count() == owner_count);
+					CHECK_FALSE(fixture.driver.raster_live);
+					CHECK(fixture.driver.raster_frees == 0);
+				} else {
+					REQUIRE(made == OK);
+					test.created = native.pipeline_root();
+					REQUIRE(test.created.is_valid());
+					REQUIRE(rd.render_pipeline_owner.get_rid_count() == owner_count + 1);
+					const auto *actual = rd.render_pipeline_owner.get_or_null(test.created);
+					REQUIRE(actual != nullptr);
+					CHECK(actual->driver_id == RDD::PipelineID(281));
+					REQUIRE(actual->production_disposal_uses != nullptr);
+					CHECK(actual->production_disposal_uses == original_member);
+					CHECK(actual->shader == test.shader);
+					ProductionDisposalObservation observed;
+					REQUIRE(rd._production_output_hold_returned(native.pin(0), test.owned_group, observed) == OK);
+					CHECK(observed.held == 1);
+					CHECK((observed.queued == 0 && observed.physical_returned == 0 && observed.uncreated == 0 && observed.unknown == 0));
+					CHECK_FALSE(observed.dropped);
+					CHECK_FALSE(observed.settled);
+				}
+			}
+			CHECK(fixture.driver.raster_attempts == attempts + repetitions);
+			uint32_t members = 0, reserved_members = 0;
+			for (uint32_t i = 0; i < fixture.request->capacity.resource_uses; ++i) {
+				const auto &cell = fixture.request->uses[i];
+				if (cell.disposal_group_serial == test.owned_group) {
+					members += cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_MEMBER;
+					reserved_members += cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_RESERVED;
+				}
+			}
+			CHECK(members == (fixture.driver.raster_fail ? 0u : 1u));
+			CHECK(reserved_members == (fixture.driver.raster_fail ? 1u : 0u));
+			if (fixture.driver.raster_fail) {
+				return;
+			}
+			test.material_profile = RendererRD::pipeline_material_profile_create(test.shader);
+			REQUIRE(test.material_profile != nullptr);
+			// Non-movable logical custody is acquired in its actual owner slot.
+			auto &hold = native.material_hold();
+			const Error acquired = RendererRD::pipeline_material_profile_acquire(test.material_profile, test.created, test.mode == 0 ? 1u : 2u, hold);
+			if (test.mode == 0) {
+				CHECK(acquired == ERR_PARAMETER_RANGE_ERROR);
+				CHECK_FALSE(hold.is_active());
+				CHECK(native.pipeline_root() == test.created);
+				CHECK(rd.render_pipeline_is_valid(test.created));
+				CHECK(fixture.driver.raster_live);
+				CHECK(fixture.driver.raster_frees == 0);
+			} else {
+				REQUIRE(acquired == OK);
+				CHECK(hold.is_active());
+				CHECK(hold.get_snapshot().pipeline == test.created);
+				CHECK(hold.get_snapshot().shader == test.shader);
+				REQUIRE(RendererRD::pipeline_material_profile_capture(context, native.pin(0), hold, test.material_group) == OK);
+				CHECK(hold.is_active()); // Logical hold survives physical move.
+				CHECK(rd._production_output_hold_contains(native.pin(0), test.material_group, test.created));
+				native.install_material(test.material_group);
+				CHECK(native.material_active());
+				CHECK(&hold == &native.material_hold());
+			}
+		}
+	};
+	static void pipeline_prefix_observe(uint32_t mode) {
+		using namespace GDExtensionDeviceExit;
+		auto *server = ordinal_server();
+		if (!server || !check_step(RendererRD::ParticlesStorage::get_singleton() == nullptr)) {
+			return;
+		}
+		const auto consume = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRecordConsumeV2>("device_session_production_record_consume_v2");
+		const auto release = ordinal_port<GDExtensionInterfaceDeviceSessionProductionReleaseV2>("device_session_production_release_v2");
+		REQUIRE(consume != nullptr);
+		REQUIRE(release != nullptr);
+		OrdinalPlan plan;
+		plan.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, 0, mode == 4 ? 1u : 12u, 0, 0, 0, 0, 0, 0 };
+		plan.action_count = plan.resource_count = plan.use_count = plan.readback_count = 0;
+		SingletonEnrollment fixture;
+		fixture.public_port = true;
+		PipelinePrefixProbe probe;
+		probe.fixture = &fixture;
+		probe.mode = mode;
+		REQUIRE(ordinal_initialize(fixture, server, plan, &PipelinePrefixProbe::receive, &probe) == OK);
+		fixture.driver.raster_device = &fixture.rd;
+		fixture.rd.draw_graph.initialize(&fixture.driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RDD::CommandQueueFamilyID(1), 0);
+		fixture.rd.draw_graph.begin();
+		fixture.rd.frames[0].fence = RDD::FenceID(93);
+		fixture.rd.frames[0].command_buffer = RDD::CommandBufferID(90);
+		fixture.rd.frames[0].command_pool = RDD::CommandPoolID(94);
+		fixture.rd.main_queue = RDD::CommandQueueID(1);
+		RendererRD::ExternalLinkedOwnerTest native(fixture.rd);
+		probe.native = &native;
+		auto &request = *fixture.request;
+		const GDExtensionProductionRequestRefV1 ref = { fixture.instance, request.serial };
+		uint64_t control = 0;
+		REQUIRE(fixture.port.record_schedule(ref, &control) == OK);
+		server->sync();
+		REQUIRE(probe.calls == 1);
+		GDExtensionProductionRecordReportV2 recorded{};
+		REQUIRE(consume(ref, control, &recorded).native_error == OK);
+		CHECK(request.action_count == 0);
+		CHECK(request.graph_count == 0);
+		CHECK(request.native_count == 0);
+		native.withdraw();
+		bool saw_owned = false, saw_borrowed = false, saw_owned_before_borrow = false, saw_material_return = false;
+		uint32_t turns = 0;
+		for (; turns < 128 && !native.released(); ++turns) {
+			const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+			const uint32_t frees_before = fixture.driver.raster_frees;
+			const uint32_t receipts_before = fixture.driver.observed_disposal_receipts() + frees_before;
+			const bool material_before = native.material_active();
+			ProductionControlOutput output{};
+			uint64_t serial = 0;
+			REQUIRE(fixture.registry.production_control_accept(ref, ProductionControlKind::OBSERVE, &serial, &budget) == OK);
+			REQUIRE(fixture.registry.production_control_schedule(ref, serial) == OK);
+			server->sync();
+			REQUIRE(fixture.registry.production_control_consume(ref, serial, &output) == OK);
+			CHECK((output.result.native_error == OK || output.result.native_error == ERR_BUSY));
+			CHECK(output.service_usage.passes <= 1);
+			CHECK(output.service_usage.receipts <= 1);
+			CHECK(fixture.driver.raster_frees - frees_before <= 1);
+			CHECK(output.service_usage.receipts == fixture.driver.observed_disposal_receipts() + fixture.driver.raster_frees - receipts_before);
+			if (!native.pin(0).is_empty() && probe.owned_group) {
+				ProductionDisposalObservation owned;
+				REQUIRE(fixture.rd._production_output_hold_returned(native.pin(0), probe.owned_group, owned) == OK);
+				CHECK(owned.unknown == 0);
+				if (owned.settled) {
+					CHECK(owned.physical_returned == (mode < 2 ? 1u : 0u));
+					CHECK(owned.uncreated == (mode < 2 ? 0u : 1u));
+					CHECK(owned.borrowed_detached == 0);
+					saw_owned = true;
+				}
+				if (probe.material_group) {
+					ProductionDisposalObservation borrowed;
+					REQUIRE(fixture.rd._production_output_hold_returned(native.pin(0), probe.material_group, borrowed) == OK);
+					CHECK(borrowed.unknown == 0);
+					bool owned_release = false, borrowed_release = false;
+					for (uint32_t i = 0; i < request.capacity.resource_uses; ++i) {
+						const auto &cell = request.uses[i];
+						if (cell.output_role != ProductionUseCell::OutputRole::DISPOSAL_GROUP) {
+							continue;
+						}
+						if (cell.disposal_group_serial == probe.owned_group) {
+							owned_release = cell.disposal_group_release;
+						} else if (cell.disposal_group_serial == probe.material_group) {
+							borrowed_release = cell.disposal_group_release;
+						}
+					}
+					// The one-pass owned release precedes release of its material borrow.
+					// A retiring RID need not survive a whole OBSERVE dispatch.
+					if (owned_release && !borrowed_release) {
+						CHECK(owned.held == 1);
+						CHECK_FALSE(owned.dropped);
+						CHECK_FALSE(owned.settled);
+						CHECK(borrowed.held == 2);
+						CHECK_FALSE(borrowed.dropped);
+						CHECK_FALSE(borrowed.settled);
+						CHECK(native.material_active());
+						CHECK(fixture.rd.render_pipeline_is_valid(probe.created));
+						CHECK(fixture.driver.raster_live);
+						CHECK(fixture.driver.raster_frees == 0);
+						saw_owned_before_borrow = true;
+					}
+					if (borrowed.settled) {
+						CHECK(borrowed.borrowed_detached == 1); // Shader remains live.
+						CHECK(borrowed.physical_returned == 1); // Shared pipeline really freed.
+						saw_borrowed = true;
+					}
+				}
+			}
+			if (material_before && !native.material_active()) {
+				CHECK(saw_borrowed);
+				saw_material_return = true;
+			}
+		}
+		CHECK(native.released());
+		CHECK(turns > 1);
+		CHECK(saw_owned == (mode != 4));
+		if (mode == 1) {
+			CHECK(saw_owned_before_borrow);
+			CHECK(saw_borrowed);
+			CHECK(saw_material_return);
+		}
+		CHECK(fixture.driver.raster_frees == (mode < 2 ? 1u : 0u));
+		CHECK(fixture.driver.raster_budgeted_frees == fixture.driver.raster_frees);
+		CHECK_FALSE(fixture.driver.raster_live);
+		CHECK(fixture.rd.render_pipeline_owner.get_rid_count() == 0);
+		// Finish the exact original v2 OBSERVE cursor before ordinary cleanup.
+		// An unbounded frame drain would invalidate its retained disposal iterator.
+		for (uint32_t turn = 0; turn < 128 && request.maintenance_serial; ++turn) {
+			const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+			const uint32_t receipts_before = fixture.driver.observed_disposal_receipts() + fixture.driver.raster_frees;
+			ProductionControlOutput output{};
+			uint64_t serial = 0;
+			REQUIRE(fixture.registry.production_control_accept(ref, ProductionControlKind::OBSERVE, &serial, &budget) == OK);
+			REQUIRE(fixture.registry.production_control_schedule(ref, serial) == OK);
+			server->sync();
+			REQUIRE(fixture.registry.production_control_consume(ref, serial, &output) == OK);
+			CHECK((output.result.native_error == OK || output.result.native_error == ERR_BUSY));
+			CHECK(output.service_usage.passes <= 1);
+			CHECK(output.service_usage.receipts <= 1);
+			CHECK(output.service_usage.receipts == fixture.driver.observed_disposal_receipts() + fixture.driver.raster_frees - receipts_before);
+		}
+		CHECK(request.maintenance_serial == 0);
+		// Ordinary shader/profile cleanup follows the proven output and cursor return.
+		if (probe.material_profile) {
+			RendererRD::pipeline_material_profile_destroy(probe.material_profile);
+		} else if (probe.shader.is_valid()) {
+			fixture.rd.free_rid(probe.shader);
+		}
+		fixture.rd._free_pending_resources(0);
+		CHECK(fixture.driver.raster_shader_frees == (mode == 4 ? 0u : 1u));
+		for (auto &entry : fixture.rd.framebuffer_formats) {
+			fixture.driver.render_pass_free(entry.value.render_pass);
+		}
+		fixture.rd.framebuffer_formats.clear();
+		fixture.rd.framebuffer_format_cache.clear();
+		for (uint32_t turn = 0; turn < 16 && request.serial; ++turn) {
+			const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+			GDExtensionProductionServiceBudgetV1 remaining{};
+			GDExtensionProductionReportV2 report{};
+			const Error error = Error(release(ref, &budget, &remaining, &report).native_error);
+			INFO("mode=", mode, " error=", error, " cause=", report.cause.native_error, " control_result=", request.control.output.result.native_error, " state=", uint32_t(request.control.state));
+			CHECK((error == OK || error == ERR_BUSY));
+			if (request.serial) {
+				server->sync();
+			}
+		}
+		CHECK(request.serial == 0);
+		fixture.cleanup_owner();
+		CHECK(fixture.owner_cleaned);
+	}
 	struct OutputLeafProbe {
 		SingletonEnrollment *fixture = nullptr;
 		RendererRD::ExternalLinkedOwnerTest *native = nullptr;
@@ -5725,6 +6068,28 @@ TEST_CASE("[SceneTree][ProductionRequest] public Observe hands owner maintenance
 #endif
 
 #ifdef THREADS_ENABLED
+TEST_CASE("[SceneTree][ProductionRequest][PipelinePrefix] actual pipeline survives material capacity failure") {
+	ERR_PRINT_OFF;
+	TestProductionRequest::Access::pipeline_prefix_observe(0);
+	ERR_PRINT_ON;
+}
+TEST_CASE("[SceneTree][ProductionRequest][PipelinePrefix] owned pipeline and material borrow return in one pass slices") {
+	ERR_PRINT_OFF;
+	TestProductionRequest::Access::pipeline_prefix_observe(1);
+	ERR_PRINT_ON;
+}
+TEST_CASE("[SceneTree][ProductionRequest][PipelinePrefix] driver refusal returns real RID reservation in both reporting modes") {
+	ERR_PRINT_OFF;
+	TestProductionRequest::Access::pipeline_prefix_observe(2);
+	TestProductionRequest::Access::pipeline_prefix_observe(3);
+	ERR_PRINT_ON;
+}
+TEST_CASE("[SceneTree][ProductionRequest][PipelinePrefix] Core capacity refuses before pipeline driver create") {
+	ERR_PRINT_OFF;
+	TestProductionRequest::Access::pipeline_prefix_observe(4);
+	ERR_PRINT_ON;
+}
+
 TEST_CASE("[SceneTree][ProductionRequest] owned storage creates on RT and retires across bounded owner turns") {
 	TestProductionRequest::Access::singleton_split_owner_storage();
 }

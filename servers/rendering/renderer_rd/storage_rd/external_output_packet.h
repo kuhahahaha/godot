@@ -38,6 +38,8 @@ class RenderDataRD;
 namespace RendererSceneRenderImplementation {
 class RenderForwardClustered;
 class RenderForwardMobile;
+class SceneShaderForwardClustered;
+class SceneShaderForwardMobile;
 } //namespace RendererSceneRenderImplementation
 
 namespace RendererRD {
@@ -161,6 +163,8 @@ public:
 // preparation opportunity and metadata/backing reservations before native work.
 class ExternalPipelinePreparation {
 	friend class ParticlesStorage;
+	friend class RendererSceneRenderImplementation::SceneShaderForwardClustered;
+	friend class RendererSceneRenderImplementation::SceneShaderForwardMobile;
 	friend class ExternalOutputOwner;
 	friend class RendererSceneRenderImplementation::RenderForwardClustered;
 	friend class RendererSceneRenderImplementation::RenderForwardMobile;
@@ -177,12 +181,21 @@ class ExternalPipelinePreparation {
 	RenderingDevice::PolygonCullMode cull_mode = RenderingDevice::POLYGON_CULL_DISABLED;
 	Error last_error = ERR_UNCONFIGURED;
 	bool native_cache_queried = false;
+	// Selected RID copy only. The original SurfaceBinding owns the actual
+	// pipeline root and group, including failed material-hold prefixes.
+	RID created_pipeline;
+	GDExtensionProductionPhysicalContextRefV1 pipeline_context{};
+	GDExtensionDeviceExit::ProductionOutputPin *pipeline_pin = nullptr;
+	uint64_t pipeline_owned_group = 0;
+	RID *pipeline_original_root = nullptr;
+	Error _pipeline_preflight();
+	RID _create_pipeline(RID p_shader, RenderingDevice::FramebufferFormatID p_framebuffer_format, RenderingDevice::VertexFormatID p_vertex_format, RenderingDevice::RenderPrimitive p_render_primitive, const RenderingDevice::PipelineRasterizationState &p_rasterization_state, const RenderingDevice::PipelineMultisampleState &p_multisample_state, const RenderingDevice::PipelineDepthStencilState &p_depth_stencil_state, const RenderingDevice::PipelineColorBlendState &p_blend_state, BitField<RenderingDevice::PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const Vector<RenderingDevice::PipelineSpecializationConstant> &p_specialization_constants);
 	ExternalPipelinePreparation() = default;
 
 public:
 	ExternalPipelinePreparation(const ExternalPipelinePreparation &) = delete;
 	ExternalPipelinePreparation &operator=(const ExternalPipelinePreparation &) = delete;
-	~ExternalPipelinePreparation() = default; // Actual holds require explicit service.
+	~ExternalPipelinePreparation(); // Original owner service must detach the row first.
 };
 
 // Short borrow of one actual sealed packet's preaccepted native read cell.

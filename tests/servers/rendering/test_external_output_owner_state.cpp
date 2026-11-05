@@ -109,6 +109,33 @@ bool ExternalLinkedOwnerTest::geometry_active() const {
 	const auto &slot = owner->slots[0];
 	return slot.surfaces && slot.surfaces[0].geometry.is_active();
 }
+void ExternalLinkedOwnerTest::install_pipeline(uint64_t group) {
+	CRASH_COND(!group || owner->slots[0].surfaces);
+	auto &slot = owner->slots[0];
+	slot.surfaces = memnew_arr(ExternalOutputOwner::SurfaceBinding, 1);
+	slot.surface_count = 1;
+	slot.surfaces[0].pipeline_owned_group = group;
+}
+RID &ExternalLinkedOwnerTest::pipeline_root() {
+	CRASH_COND(!owner->slots[0].surfaces);
+	return owner->slots[0].surfaces[0].created_pipeline;
+}
+bool ExternalLinkedOwnerTest::pipeline_returned() const {
+	return owner->slots[0].surfaces && owner->slots[0].surfaces[0].pipeline_group_returned;
+}
+MaterialStorage::NativeMaterialHold &ExternalLinkedOwnerTest::material_hold() {
+	CRASH_COND(!owner->slots[0].surfaces);
+	return owner->slots[0].surfaces[0].material;
+}
+void ExternalLinkedOwnerTest::install_material(uint64_t group) {
+	CRASH_COND(!owner->slots[0].surfaces || !group || !owner->slots[0].surfaces[0].material.is_active());
+	auto &surface = owner->slots[0].surfaces[0];
+	surface.material_group = group;
+	surface.material_transferred = true;
+}
+bool ExternalLinkedOwnerTest::material_active() const {
+	return owner->slots[0].surfaces && owner->slots[0].surfaces[0].material.is_active();
+}
 void ExternalLinkedOwnerTest::withdraw() {
 	// Synthetic logical-history marker only, never a consumed native tuple.
 	owner->views[0].history_slot = 0;

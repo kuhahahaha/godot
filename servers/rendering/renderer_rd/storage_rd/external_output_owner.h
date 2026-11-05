@@ -77,6 +77,10 @@ class ExternalOutputOwner {
 		RELEASED,
 	};
 	struct SurfaceBinding {
+		ExternalPipelinePreparation *preparation = nullptr;
+		RID created_pipeline;
+		uint64_t pipeline_owned_group = 0;
+		bool pipeline_group_returned = false;
 		MeshStorage::NativeSurfaceHold geometry;
 		MaterialStorage::NativeMaterialHold material;
 		uint64_t command_offset = 0;

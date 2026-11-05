@@ -35,6 +35,10 @@
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/rendering_server_types.h"
 
+namespace RendererRD {
+class ExternalPipelinePreparation;
+}
+
 namespace RendererSceneRenderImplementation {
 
 class SceneShaderForwardMobile {
@@ -234,6 +238,22 @@ public:
 		};
 
 		void _create_pipeline(PipelineKey p_pipeline_key);
+		// Exact uncached pipeline; caller owns the original RD retirement root.
+		RID create_native_pipeline(PipelineKey p_pipeline_key, RendererRD::ExternalPipelinePreparation *p_output = nullptr);
+		// Shared by all external color-pass preparation, including probes.
+		// Fog-mask variants force disabled blending in the original builder.
+		static bool external_color_version_supported(ShaderVersion p_version, bool p_transparent) {
+			switch (p_version) {
+				case SHADER_VERSION_COLOR_PASS:
+				case SHADER_VERSION_LIGHTMAP_COLOR_PASS:
+					return true;
+				case SHADER_VERSION_COLOR_FOG_MASK:
+				case SHADER_VERSION_LIGHTMAP_FOG_MASK:
+					return !p_transparent;
+				default:
+					return false;
+			}
+		}
 		PipelineHashMapRD<PipelineKey, ShaderData, void (ShaderData::*)(PipelineKey)> pipeline_hash_map;
 
 		RID version;

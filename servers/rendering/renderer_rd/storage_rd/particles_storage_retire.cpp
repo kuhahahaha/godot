@@ -34,6 +34,44 @@
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 
 namespace RendererRD {
+Error ParticlesStorage::_external_pipeline_prepare_owned_prefix(GDExtensionProductionPhysicalContextRefV1 context, RID particle_rid, uint32_t slot_index, uint32_t surface_index, ExternalPipelinePreparation &preparation) {
+	Particles *particles = particles_owner.get_or_null(particle_rid);
+	if (!particles || !particles->external) {
+		return ERR_INVALID_PARAMETER;
+	}
+	auto &owner = *particles->external;
+	if (preparation.owner != &owner || preparation.generation != owner.generation || !preparation.serial || !preparation.max_resources || preparation.source_sealed ||
+			preparation.pipeline_pin || preparation.created_pipeline.is_valid() || preparation.geometry[0].is_active() || preparation.geometry[1].is_active() || preparation.material.is_active() ||
+			!owner.device || owner.device != RenderingDevice::get_singleton() || slot_index >= owner.slot_count) {
+		return ERR_UNCONFIGURED;
+	}
+	auto &slot = owner.slots[slot_index];
+	if (!slot.original_registry || !slot.surfaces || surface_index >= slot.surface_count || slot.publication_closed ||
+			!_production_output_owner_matches(particle_rid, owner.generation, slot_index, slot.lease_serial, slot.original_pin, *owner.device, slot.original_request)) {
+		return ERR_UNAUTHORIZED;
+	}
+	auto &surface = slot.surfaces[surface_index];
+	if (surface.preparation || surface.pipeline_owned_group || surface.created_pipeline.is_valid() || surface.pipeline_group_returned) {
+		return ERR_ALREADY_IN_USE;
+	}
+	// Idempotent original locator bind. This never manufactures source/charge
+	// admission: owner/row/directory must already be installed by that caller.
+	Error error = slot.original_registry->production_output_owner_bind(slot.original_pin, *owner.device, particle_rid, owner.generation, slot_index, slot.lease_serial);
+	if (error != OK) {
+		return error;
+	}
+	error = owner.device->_production_output_owned_reserve(context, slot.original_pin, 1, surface.pipeline_owned_group);
+	if (error != OK) {
+		return error; // No pipeline allocation or geometry derivation occurred.
+	}
+	surface.preparation = &preparation;
+	preparation.pipeline_context = context;
+	preparation.pipeline_pin = &slot.original_pin;
+	preparation.pipeline_owned_group = surface.pipeline_owned_group;
+	preparation.pipeline_original_root = &surface.created_pipeline;
+	return OK;
+}
+
 bool ParticlesStorage::_production_output_owner_matches(RID particle_rid, uint64_t generation, uint32_t slot, uint64_t lease_serial, const GDExtensionDeviceExit::ProductionOutputPin &pin, RenderingDevice &device, GDExtensionProductionRequestRefV1 request) {
 	ParticlesStorage *storage = get_singleton();
 	if (!storage || !generation || !lease_serial || pin.is_empty()) {
@@ -107,6 +145,25 @@ Error ParticlesStorage::_production_output_service(RID p_particles, uint64_t p_g
 			return ERR_INVALID_DATA;
 		}
 		auto &surface = slot.surfaces[slot.retire_surface];
+		if (surface.pipeline_owned_group) {
+			const uint32_t before = r_usage.passes;
+			error = owner.device->_production_output_retire_service(p_pin, surface.pipeline_owned_group, p_budget, r_usage, observation);
+			if (error == OK) {
+				surface.pipeline_owned_group = 0;
+				surface.created_pipeline = RID();
+				surface.pipeline_group_returned = true;
+				return OK;
+			}
+			if (error != ERR_BUSY || r_usage.passes != before) {
+				return error;
+			}
+			// The owned group must start release before its material borrow.
+			// Once waiting, allow the original borrow group below to release;
+			// neither gets an extra budget or a hidden maintenance sweep.
+		}
+		if (surface.created_pipeline.is_valid() && !surface.pipeline_owned_group) {
+			return ERR_INVALID_DATA;
+		}
 		if (!surface.geometry.is_active() && (surface.geometry_group || surface.geometry.has_retirement_directory())) {
 			return ERR_INVALID_DATA;
 		}
@@ -198,8 +255,30 @@ Error ParticlesStorage::_production_output_service(RID p_particles, uint64_t p_g
 			}
 			return MaterialStorage::_native_hold_finish_return(surface.material);
 		}
+		if (surface.pipeline_owned_group) {
+			return ERR_BUSY; // Preserve this pass for original native progress.
+		}
+		if (surface.preparation) {
+			const auto &row = *surface.preparation;
+			if (row.owner != &owner || row.generation != owner.generation || row.pipeline_pin != &slot.original_pin || row.pipeline_original_root != &surface.created_pipeline) {
+				return ERR_INVALID_DATA;
+			}
+			if (row.geometry[0].is_active() || row.geometry[1].is_active() || row.material.is_active()) {
+				return ERR_BUSY; // Original capture/return of the row's other prefixes is still required.
+			}
+		}
 		if (!spend()) {
 			return ERR_BUSY;
+		}
+		if (surface.preparation) {
+			auto &row = *surface.preparation;
+			row.pipeline_pin = nullptr;
+			row.pipeline_original_root = nullptr;
+			row.pipeline_owned_group = 0;
+			row.pipeline_context = {};
+			row.created_pipeline = RID();
+			row.source_sealed = true;
+			surface.preparation = nullptr;
 		}
 		++slot.retire_surface;
 		return OK;

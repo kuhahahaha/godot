@@ -1144,7 +1144,7 @@ Error RenderingDevice::_production_output_drop_step(GDExtensionDeviceExit::Produ
 		if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
 			return ERR_BUSY;
 		}
-		if (node.owned) {
+		if (node.owned && node.kind != 0) {
 			NativeDisposalWitness witness;
 			if (auto *buffer = storage_buffer_owner.get_or_null(rid)) {
 				witness = buffer->native_disposal;
@@ -1608,4 +1608,54 @@ Error RenderingDevice::_production_output_owned_seal(GDExtensionProductionPhysic
 	++native_immutable_hold_count;
 	group->disposal_group_native_hold = true;
 	return OK;
+}
+
+Error RenderingDevice::_production_output_owned_pipeline_preflight(GDExtensionProductionPhysicalContextRefV1 context, GDExtensionDeviceExit::ProductionOutputPin &pin, uint64_t group) {
+	if (!pin.registry || !group) {
+		return ERR_INVALID_PARAMETER;
+	}
+	MutexLock lock(pin.registry->mutex);
+	GDExtensionDeviceExit::ProductionRequest *request = nullptr;
+	const Error ready = _production_output_owned_create_preflight_locked(context, pin, group, 0, request);
+	return ready == OK ? _native_disposal_preflight() : ready;
+}
+
+Error RenderingDevice::_production_output_owned_render_pipeline_create(GDExtensionProductionPhysicalContextRefV1 context, GDExtensionDeviceExit::ProductionOutputPin &pin, uint64_t group, uint32_t ordinal, RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState &p_rasterization_state, const PipelineMultisampleState &p_multisample_state, const PipelineDepthStencilState &p_depth_stencil_state, const PipelineColorBlendState &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const Vector<PipelineSpecializationConstant> &p_specialization_constants, RID &r_pipeline) {
+	using namespace GDExtensionDeviceExit;
+	if (!pin.registry || !group || r_pipeline.is_valid()) {
+		return ERR_INVALID_PARAMETER;
+	}
+	Registry &registry = *pin.registry;
+	MutexLock lock(registry.mutex);
+	ProductionRequest *request = nullptr;
+	const Error ready = _production_output_owned_create_preflight_locked(context, pin, group, ordinal, request);
+	if (ready != OK) {
+		return ready;
+	}
+	ProductionUseCell *reserved = nullptr;
+	for (uint32_t i = request->use_count + request->binding_used; i < request->capacity.resource_uses; ++i) {
+		auto &cell = request->uses[i];
+		if (cell.disposal_group_serial == group && cell.disposal_ordinal == ordinal && cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_RESERVED) {
+			reserved = &cell;
+			break;
+		}
+	}
+	if (!reserved) {
+		return ERR_INVALID_DATA;
+	}
+	if (!_thread_safe_.try_lock()) {
+		return ERR_BUSY;
+	}
+	struct Unlock {
+		Mutex &mutex;
+		~Unlock() { mutex.unlock(); }
+	} unlock{ _thread_safe_ };
+	const Error native_ready = _native_disposal_preflight();
+	if (native_ready != OK) {
+		return native_ready;
+	}
+	// Factory publishes directly into this original cell; there is no fallible
+	// post-creation capture/bind and no stack-owned created-pipeline prefix.
+	r_pipeline = _qualification_render_pipeline_create_internal(p_shader, p_framebuffer_format, p_vertex_format, p_render_primitive, p_rasterization_state, p_multisample_state, p_depth_stencil_state, p_blend_state, p_dynamic_state_flags, p_for_render_pass, p_specialization_constants, nullptr, RID(), reserved);
+	return r_pipeline.is_valid() ? OK : ERR_CANT_CREATE;
 }

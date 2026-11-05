@@ -42,6 +42,7 @@ class ProductionAttachment;
 
 namespace RendererRD {
 class ExternalOutputStorage;
+class ExternalPipelinePreparation;
 class ParticlesStorage;
 class MaterialStorage;
 class MeshStorage;
@@ -105,7 +106,8 @@ class RDHitGroup;
 
 namespace GDExtensionDeviceExit {
 class ProductionOutputPin;
-}
+class ProductionUseCell;
+} //namespace GDExtensionDeviceExit
 class RenderingDevice : public RenderingDeviceCommons {
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
 	friend class RenderCaptureTestAccess;
@@ -137,6 +139,7 @@ private:
 	friend struct GDExtensionDeviceExit::QualificationResource;
 	friend class RenderingServerDefault;
 	friend class RendererRD::ExternalOutputStorage;
+	friend class RendererRD::ExternalPipelinePreparation;
 	friend class RendererRD::ParticlesStorage;
 	friend class RendererRD::MaterialStorage;
 #ifdef TESTS_ENABLED
@@ -1546,7 +1549,7 @@ public:
 
 private:
 	RID _qualification_shader_create(const Vector<uint8_t> &, RID, const Vector<PipelineImmutableSampler> &, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID);
-	RID _qualification_pipeline_create(RID, const Vector<PipelineSpecializationConstant> &, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID);
+	RID _qualification_pipeline_create(RID, const Vector<PipelineSpecializationConstant> &, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID, GDExtensionDeviceExit::ProductionUseCell *p_output_cell = nullptr);
 	static const uint32_t MAX_UNIFORM_SETS = 16;
 	static const uint32_t MAX_PUSH_CONSTANT_SIZE = 128;
 
@@ -1601,6 +1604,8 @@ private:
 	// arbitrary-RID enrollment or qualification ticket authorizes these calls.
 	bool _production_output_owner_matches(RID, uint64_t, uint32_t, uint64_t, const GDExtensionDeviceExit::ProductionOutputPin &, GDExtensionProductionRequestRefV1);
 	Error _production_output_owner_service(RID, uint64_t, uint32_t, uint64_t, GDExtensionDeviceExit::ProductionOutputPin &, const GDExtensionProductionServiceBudgetV1 &, GDExtensionDeviceExit::ProductionServiceUsage &);
+	Error _production_output_owned_pipeline_preflight(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t);
+	Error _production_output_owned_render_pipeline_create(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState &p_rasterization_state, const PipelineMultisampleState &p_multisample_state, const PipelineDepthStencilState &p_depth_stencil_state, const PipelineColorBlendState &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const Vector<PipelineSpecializationConstant> &p_specialization_constants, RID &);
 	Error _production_output_owned_reserve(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint32_t, uint64_t &);
 	Error _production_output_owned_storage_create(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, uint32_t, BitField<StorageBufferUsage>, RID &, NativeDisposalWitness &);
 	Error _production_output_owned_uniform_set_create(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, const VectorView<Uniform> &, RID, uint32_t, RID &, NativeDisposalWitness &);
@@ -1755,7 +1760,7 @@ private:
 	};
 
 	RID_Owner<RenderPipeline, true> render_pipeline_owner;
-	RID _qualification_render_pipeline_create_internal(RID, FramebufferFormatID, VertexFormatID, RenderPrimitive, const PipelineRasterizationState &, const PipelineMultisampleState &, const PipelineDepthStencilState &, const PipelineColorBlendState &, BitField<PipelineDynamicStateFlags>, uint32_t, const Vector<PipelineSpecializationConstant> &, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID);
+	RID _qualification_render_pipeline_create_internal(RID, FramebufferFormatID, VertexFormatID, RenderPrimitive, const PipelineRasterizationState &, const PipelineMultisampleState &, const PipelineDepthStencilState &, const PipelineColorBlendState &, BitField<PipelineDynamicStateFlags>, uint32_t, const Vector<PipelineSpecializationConstant> &, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID, GDExtensionDeviceExit::ProductionUseCell *p_output_cell = nullptr);
 	RID _qualification_render_pipeline_create(RID, FramebufferFormatID, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID);
 
 	bool pipeline_cache_enabled = false;

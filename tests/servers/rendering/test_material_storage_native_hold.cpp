@@ -32,6 +32,7 @@
 #include "servers/rendering/renderer_rd/shader_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/rendering_shader_container.h"
+#include "tests/servers/rendering/test_external_output_custody_bridge.h"
 #include "tests/servers/rendering/transfer_test_driver_base.h"
 #include "tests/test_macros.h"
 
@@ -97,6 +98,9 @@ public:
 
 class TestMaterialStorageNativeHoldDeviceAccess {
 public:
+	static Error capture_pipeline_profile(GDExtensionProductionPhysicalContextRefV1 context, GDExtensionDeviceExit::ProductionOutputPin &pin, RenderingDevice::NativeImmutableHold &hold, uint64_t &group) {
+		return RenderingDevice::get_singleton()->_production_output_hold_capture(context, pin, hold, group);
+	}
 #ifdef THREADS_ENABLED
 	struct MutexProbe {
 		RenderingDevice *device = nullptr;
@@ -793,6 +797,185 @@ private:
 	}
 
 public:
+	static void run_preparation_data_boundary() {
+		class PreparationShaderData : public MaterialStorage::ShaderData {
+		public:
+			mutable uint32_t native_queries = 0;
+			void set_code(const String &) override {}
+			bool is_animated() const override { return false; }
+			bool casts_shadows() const override { return false; }
+			RenderingServerTypes::ShaderNativeSourceCode get_native_source_code() const override { return {}; }
+			Pair<ShaderRD *, RID> get_native_shader_and_version() const override {
+				++native_queries;
+				return {};
+			}
+		};
+		class PreparationMaterialData : public MaterialStorage::MaterialData {
+		public:
+			uint32_t updates = 0;
+			void set_render_priority(int) override {}
+			void set_next_pass(RID) override {}
+			bool update_parameters(const HashMap<StringName, Variant> &, bool, bool) override {
+				++updates;
+				return true;
+			}
+		};
+		auto *previous = MaterialStorage::get_singleton();
+		{
+			// Original test-only storage and actual RID owners, no native factories.
+			MaterialStorage storage(MaterialStorage::NativeHoldTestTag{});
+			PreparationShaderData shader_data;
+			PreparationMaterialData original_data;
+			const RID shader_rid = storage.shader_allocate();
+			storage.shader_initialize(shader_rid, false);
+			const RID material_rid = storage.material_allocate();
+			storage.material_initialize(material_rid);
+			auto *shader = storage.shader_owner.get_or_null(shader_rid);
+			auto *material = storage.material_owner.get_or_null(material_rid);
+			CHECK(shader != nullptr);
+			CHECK(material != nullptr);
+			if (shader && material) {
+				// Private boundary metadata only; no preparation/hold/source grant.
+				shader->data = &shader_data;
+				material->shader = shader;
+				material->data = &original_data;
+				material->shader_type = MaterialStorage::SHADER_TYPE_3D;
+				const uint64_t generation = material->generation;
+				auto expect = [&](RID target, uint64_t expected_generation, Error expected) {
+					// A valid stale output pointer must be cleared on EVERY failure.
+					MaterialStorage::MaterialData *result = &original_data;
+					const uint64_t before_generation = material->generation;
+					const auto before_type = material->shader_type;
+					auto *before_data = material->data;
+					auto *before_shader = material->shader;
+					const bool before_uniform = material->uniform_dirty, before_texture = material->texture_dirty;
+					const RID before_next = material->next_pass;
+					CHECK(storage.material_get_native_preparation_data(target, expected_generation, result) == expected);
+					CHECK(result == (expected == OK ? &original_data : nullptr));
+					CHECK(material->generation == before_generation);
+					CHECK(material->shader_type == before_type);
+					CHECK(material->data == before_data);
+					CHECK(material->shader == before_shader);
+					CHECK(material->uniform_dirty == before_uniform);
+					CHECK(material->texture_dirty == before_texture);
+					CHECK(material->next_pass == before_next);
+					CHECK(material->native_immutable_holds == 0);
+				};
+				expect(material_rid, generation, OK);
+				expect(RID(), generation, ERR_INVALID_DATA);
+				expect(material_rid, generation + 1, ERR_INVALID_DATA);
+				expect(material_rid, 0, ERR_INVALID_DATA); // No wildcard generation.
+				expect(material_rid, UINT64_MAX, ERR_INVALID_DATA);
+				material->generation = UINT64_MAX;
+				expect(material_rid, UINT64_MAX, ERR_INVALID_DATA); // Matching sentinel still refuses.
+				material->generation = generation;
+				material->shader_type = MaterialStorage::SHADER_TYPE_2D;
+				expect(material_rid, generation, ERR_INVALID_DATA);
+				material->shader_type = MaterialStorage::SHADER_TYPE_3D;
+				material->data = nullptr;
+				expect(material_rid, generation, ERR_INVALID_DATA);
+				material->data = &original_data;
+				material->shader = nullptr;
+				expect(material_rid, generation, ERR_INVALID_DATA);
+				material->shader = shader;
+				shader->data = nullptr;
+				expect(material_rid, generation, ERR_INVALID_DATA);
+				shader->data = &shader_data;
+				material->uniform_dirty = true;
+				expect(material_rid, generation, ERR_BUSY);
+				material->next_pass = material_rid;
+				expect(material_rid, generation, ERR_BUSY); // Dirty precedes next pass.
+				expect(material_rid, generation + 1, ERR_INVALID_DATA); // Invalid precedes both.
+				material->shader_type = MaterialStorage::SHADER_TYPE_2D;
+				expect(material_rid, generation, ERR_INVALID_DATA);
+				material->shader_type = MaterialStorage::SHADER_TYPE_3D;
+				material->uniform_dirty = false;
+				material->texture_dirty = true;
+				expect(material_rid, generation, ERR_BUSY); // Texture dirty also precedes next pass.
+				material->next_pass = RID();
+				expect(material_rid, generation, ERR_BUSY);
+				material->texture_dirty = false;
+				material->next_pass = material_rid;
+				expect(material_rid, generation, ERR_UNAVAILABLE);
+				material->next_pass = RID();
+				expect(material_rid, generation, OK);
+				CHECK(shader_data.native_queries == 0);
+				CHECK(original_data.updates == 0);
+				// Stack-owned test data never goes through material_free deletion.
+				material->data = nullptr;
+				material->shader = nullptr;
+				shader->data = nullptr;
+			}
+			storage.material_free(material_rid);
+			storage.shader_free(shader_rid);
+			CHECK(storage.material_owner.get_rid_count() == 0);
+			CHECK(storage.shader_owner.get_rid_count() == 0);
+		}
+		MaterialStorage::singleton = previous;
+	}
+	class EmptyPipelineMaterialData : public MaterialStorage::MaterialData {
+	public:
+		RID native_shader, set;
+		void set_render_priority(int) override {}
+		void set_next_pass(RID) override {}
+		bool update_parameters(const HashMap<StringName, Variant> &parameters, bool, bool) override {
+			return update_parameters_uniform_set(parameters, false, false, {}, nullptr, {}, {}, 0, set, native_shader, 0, false, false);
+		}
+		~EmptyPipelineMaterialData() { free_parameters_uniform_set(set); }
+	};
+	struct PipelineMaterialProfile {
+		ShaderOwner shader_owner;
+		MaterialStorage *previous = nullptr, *storage = nullptr;
+		RID material, shader, native_shader;
+	};
+	static MaterialStorage::MaterialData *make_empty_pipeline_material(MaterialStorage::ShaderData *) { return memnew(EmptyPipelineMaterialData); }
+	static void *create_pipeline_profile(RID native_shader) {
+		auto *profile = memnew(PipelineMaterialProfile);
+		profile->previous = MaterialStorage::get_singleton();
+		profile->storage = memnew(MaterialStorage(MaterialStorage::NativeHoldTestTag{}));
+		auto &storage = *profile->storage;
+		profile->native_shader = native_shader;
+		profile->shader = storage.shader_allocate();
+		storage.shader_initialize(profile->shader, false);
+		auto *shader = storage.shader_owner.get_or_null(profile->shader);
+		auto *data = memnew(ShaderData);
+		data->owner = &profile->shader_owner;
+		Vector<RID> variants;
+		variants.push_back(native_shader);
+		data->version = version(profile->shader_owner, variants);
+		shader->data = data;
+		shader->type = MaterialStorage::SHADER_TYPE_3D;
+		storage.material_data_request_func[MaterialStorage::SHADER_TYPE_3D] = &make_empty_pipeline_material;
+		profile->material = storage.material_allocate();
+		storage.material_initialize(profile->material);
+		storage.material_set_shader(profile->material, profile->shader);
+		auto *material = storage.material_owner.get_or_null(profile->material);
+		static_cast<EmptyPipelineMaterialData *>(material->data)->native_shader = native_shader;
+		storage._update_queued_materials(); // Original empty-profile capture path.
+
+		CHECK(material->data->native_uniform_sets[0].supported);
+		return profile;
+	}
+	static Error acquire_pipeline_profile(void *opaque, RID pipeline, uint32_t max_resources, MaterialStorage::NativeMaterialHold &hold) {
+		auto &p = *static_cast<PipelineMaterialProfile *>(opaque);
+		return p.storage->material_native_hold_acquire(p.material, p.native_shader, pipeline, RID(), hold, max_resources);
+	}
+	static Error capture_pipeline_profile(GDExtensionProductionPhysicalContextRefV1 context, GDExtensionDeviceExit::ProductionOutputPin &pin, MaterialStorage::NativeMaterialHold &hold, uint64_t &group) {
+		auto *source = MaterialStorage::_native_hold_transfer_source(hold);
+		if (!source) {
+			return ERR_INVALID_DATA;
+		}
+		const Error captured = TestMaterialStorageNativeHoldDeviceAccess::capture_pipeline_profile(context, pin, *source, group);
+		return captured == OK ? MaterialStorage::_native_hold_mark_transferred(hold) : captured;
+	}
+	static void destroy_pipeline_profile(void *opaque) {
+		auto *p = static_cast<PipelineMaterialProfile *>(opaque);
+		p->storage->material_free(p->material);
+		p->storage->shader_free(p->shader);
+		memdelete(p->storage);
+		MaterialStorage::singleton = p->previous;
+		memdelete(p);
+	}
 	static void run(bool unsupported, bool cross_variants = false, uint32_t callback_lifetime = 0, bool generation_regression = false) {
 		RenderingDevice *previous = RD::get_singleton();
 		RD rd;
@@ -1122,6 +1305,19 @@ public:
 		TestMaterialStorageNativeHoldDeviceAccess::restore(previous);
 	}
 };
+void *pipeline_material_profile_create(RID shader) {
+	return TestMaterialStorageNativeHoldAccess::create_pipeline_profile(shader);
+}
+Error pipeline_material_profile_acquire(void *profile, RID pipeline, uint32_t max_resources, MaterialStorage::NativeMaterialHold &hold) {
+	return TestMaterialStorageNativeHoldAccess::acquire_pipeline_profile(profile, pipeline, max_resources, hold);
+}
+Error pipeline_material_profile_capture(GDExtensionProductionPhysicalContextRefV1 context, GDExtensionDeviceExit::ProductionOutputPin &pin, MaterialStorage::NativeMaterialHold &hold, uint64_t &group) {
+	return TestMaterialStorageNativeHoldAccess::capture_pipeline_profile(context, pin, hold, group);
+}
+void pipeline_material_profile_destroy(void *profile) {
+	TestMaterialStorageNativeHoldAccess::destroy_pipeline_profile(profile);
+}
+
 } // namespace RendererRD
 
 TEST_CASE("[MaterialNativeHold] exact native inputs survive original owner free until last hold") {
@@ -1172,4 +1368,8 @@ TEST_CASE("[MaterialNativeHold] unsupported dynamic profile rejects before nativ
 
 TEST_CASE("[MaterialNativeHold] shader edits invalidate selected material generation before native hold") {
 	RendererRD::TestMaterialStorageNativeHoldAccess::run(false, false, 0, true);
+}
+
+TEST_CASE("[MaterialNativeHold][PreparationData] original material lookup preserves validation order and clears failed output") {
+	RendererRD::TestMaterialStorageNativeHoldAccess::run_preparation_data_boundary();
 }
