@@ -78,6 +78,40 @@ EXPECTED_NATIVE_CHECKS = Counter({
     "trail readback exact bytes": 1,
     "trail subsequent use retains original buffer and uniform": 1,
 })
+# Additive SDF extension; the original 292 checks above remain required.
+SDF_EXTENSION_CHECKS = Counter({
+    "original allocation owner authenticated": 4,
+    "original buffer allocation identity": 4,
+    "bounded native resource observation": 4,
+    "original native resource identity": 4,
+    "original native physical return acknowledged": 4,
+    "original uniform owner exists": 4,
+    "owner release removes original buffer RID": 4,
+    "original particle owner exists before close": 1,
+    "SDF extension native buffers and borrowed texture exist": 1,
+    "SDF extension primes actual native trail producer": 1,
+    "SDF extension rejects exact native frame upload": 2,
+    "SDF extension exact upload fault observed": 2,
+    "SDF extension rejected frame records no dispatch": 2,
+    "SDF extension rejected frame retains pending state": 2,
+    "SDF extension rejected frame restores original collider history": 8,
+    "SDF extension rejected frame restores original trail samples": 6,
+    "SDF extension recovery GPU sentinel uploaded": 1,
+    "SDF extension recovers after canvas SDF removal": 1,
+    "SDF extension recovery records two native trail passes once": 1,
+    "SDF extension recovered current frame has no SDF collider": 1,
+    "SDF extension recovery retains unmodified historical collider": 3,
+    "SDF extension trail parameter async readback queued": 1,
+    "SDF extension particle async readback queued": 1,
+    "SDF extension async completion belongs to original main RD": 2,
+    "SDF extension trail parameter readback exact bytes": 1,
+    "SDF extension original trail history reaches actual device buffer": 1,
+    "SDF extension particle readback exact bytes": 1,
+    "SDF extension actual native particle shader produces active output": 1,
+    "SDF extension two actual Metal readbacks accepted": 1,
+    "SDF extension both async readbacks physically completed": 1,
+})
+SDF_EXTENSION_ERRORS = Counter({"Failed to update particle frame parameters buffer.": 2})
 SOURCES = (
     "modules/particles_runtime_tests/particles_runtime_test_fixture.h",
     "modules/particles_runtime_tests/particles_runtime_test_fixture.cpp",
@@ -154,18 +188,20 @@ def valid_report(report: object) -> bool:
         "advance_error": 0,
         "readbacks_queued": 6,
         "readbacks_completed": 6,
-        "allocation_count": 26,
-        "native_resource_count": 22,
+        "allocation_count": 30,
+        "sdf_readbacks_queued": 2,
+        "sdf_readbacks_completed": 2,
+        "native_resource_count": 26,
     }
     if any(type(report.get(key)) is not int or report[key] != value for key, value in integers.items()):
         return False
     checks = report.get("checks")
-    if not isinstance(checks, list) or len(checks) != 292:
+    if not isinstance(checks, list) or len(checks) != 292 + sum(SDF_EXTENSION_CHECKS.values()):
         return False
     if not all(isinstance(row, dict) and isinstance(row.get("check"), str) and row.get("ok") is True for row in checks):
         return False
     return (
-        Counter(row["check"] for row in checks) == EXPECTED_NATIVE_CHECKS
+        Counter(row["check"] for row in checks) == EXPECTED_NATIVE_CHECKS + SDF_EXTENSION_CHECKS
         and all(report.get(key) is True for key in ("gpu_pass", "done", "released"))
         and report.get("failures") == []
         and report.get("driver") == "metal"
@@ -211,7 +247,9 @@ def evaluate(
         }
         checks["no_engine_errors"] = not diagnostics and "ERROR:" not in text
     else:
-        checks["exact_expected_engine_errors"] = diagnostics == EXPECTED_ERRORS and text.count("ERROR:") == 11
+        checks["exact_expected_engine_errors"] = (
+            diagnostics == EXPECTED_ERRORS + SDF_EXTENSION_ERRORS and text.count("ERROR:") == 13
+        )
         checks["actual_metal_startup"] = (
             len(re.findall(r"^Metal [0-9.]+ - Forward Mobile - Using Device #[0-9]+: .+$", text, re.M)) == 1
         )

@@ -1207,6 +1207,16 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 	for (uint32_t i = 0; i < ParticlesFrameParams::MAX_3D_TEXTURES; i++) {
 		previous_collision_3d_textures[i] = p_particles->collision_3d_textures[i];
 	}
+	const bool update_sdf_collision = p_particles->has_sdf_collision && RD::get_singleton()->texture_is_valid(p_particles->sdf_collision_texture);
+	LocalVector<ParticlesFrameParams::Collider> previous_sdf_colliders;
+	if (update_sdf_collision && p_particles->frame_history.size() > 2) {
+		// First and last frames already have full snapshots. Save only the
+		// interior colliders before shifting or rewriting any history entry.
+		previous_sdf_colliders.resize(p_particles->frame_history.size() - 2);
+		for (uint32_t i = 0; i < previous_sdf_colliders.size(); i++) {
+			previous_sdf_colliders[i] = p_particles->frame_history[i + 1].colliders[0];
+		}
+	}
 	bool history_shifted = false;
 	bool collision_set_rebuilt = false;
 	auto fail_process = [&]() -> bool {
@@ -1223,6 +1233,11 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 		p_particles->cycle_number = previous_cycle_number;
 		p_particles->frame_counter = previous_frame_counter;
 		if (history_shifted) {
+			// Interior frames are still shifted right by one. Undo their SDF
+			// rewrite before reversing the shift and rebuilding trail samples.
+			for (uint32_t i = 0; i < previous_sdf_colliders.size(); i++) {
+				p_particles->frame_history[i + 2].colliders[0] = previous_sdf_colliders[i];
+			}
 			_particles_restore_process_history(p_particles, previous_frame_history_first, previous_frame_history_last, previous_trail_speed_scale);
 		}
 		p_particles->clear = previous_clear;
@@ -1298,7 +1313,7 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 			to_particles = p_particles->emission_transform.affine_inverse();
 		}
 
-		if (p_particles->has_sdf_collision && RD::get_singleton()->texture_is_valid(p_particles->sdf_collision_texture)) {
+		if (update_sdf_collision) {
 			//2D collision
 
 			Transform2D xform = p_particles->sdf_collision_transform; //will use dotproduct manually so invert beforehand

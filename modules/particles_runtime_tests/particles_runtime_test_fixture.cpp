@@ -36,6 +36,7 @@
 #include "core/os/thread.h"
 #include "servers/rendering/renderer_rd/renderer_compositor_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server.h"
 #include "servers/rendering/rendering_server_globals.h"
@@ -186,6 +187,88 @@ bool ParticlesRuntimeTestFixture::run_upload_boundaries() {
 	}
 	return read == OK;
 }
+bool ParticlesRuntimeTestFixture::run_sdf_history_retry() {
+	sdf_particle = storage->particles_allocate();
+	storage->particles_initialize(sdf_particle);
+	auto *p = storage->particles_owner.get_or_null(sdf_particle);
+	p->amount = 4;
+	p->trails_enabled = true;
+	p->trail_bind_poses.resize(3);
+	p->emitting = true;
+	p->use_local_coords = true;
+	p->has_sdf_collision = true;
+	p->sdf_collision_texture = RendererRD::TextureStorage::get_singleton()->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_WHITE);
+	storage->_particles_update_buffers(p);
+	p->frame_history.resize(4);
+	p->trail_params.resize(3);
+	p->frame_params_buffer = rd->storage_buffer_create(3 * sizeof(Storage::ParticlesFrameParams));
+	if (!check(p->particle_buffer.is_valid() && p->particle_instance_buffer.is_valid() && p->frame_params_buffer.is_valid() && rd->texture_is_valid(p->sdf_collision_texture), "SDF extension native buffers and borrowed texture exist")) {
+		return false;
+	}
+	for (auto &params : p->frame_history) {
+		params = Storage::ParticlesFrameParams();
+	}
+	// Establish a real descriptor tuple first. Failed attempts below retain it,
+	// so no transient descriptor can escape the physical-return observations.
+	if (!check(storage->_particles_process(p, 1.0 / 60.0), "SDF extension primes actual native trail producer")) {
+		return false;
+	}
+	track_set(p->collision_textures_uniform_set);
+	p->frame_counter = 0;
+	p->phase = 0;
+	p->clear = true;
+	for (uint32_t i = 0; i < p->frame_history.size(); i++) {
+		p->frame_history[i] = Storage::ParticlesFrameParams();
+		p->frame_history[i].frame = 10 + i;
+		p->frame_history[i].collider_count = 1;
+		p->frame_history[i].colliders[0].type = Storage::ParticlesFrameParams::COLLISION_TYPE_2D_SDF;
+		p->frame_history[i].colliders[0].transform[3] = 100 + i;
+	}
+	for (int attempt = 0; attempt < 2; attempt++) {
+		p->sdf_collision_transform.set_origin(Vector2(200 + attempt, 300));
+		rd->test_arm_buffer_update_fault(p->frame_params_buffer, 1);
+		rd->test_reset_compute_dispatch_count();
+		check(!storage->_particles_process(p, 1.0 / 60.0), "SDF extension rejects exact native frame upload");
+		check(rd->test_get_buffer_update_fault_hits() == 1, "SDF extension exact upload fault observed");
+		check(rd->test_get_compute_dispatch_count() == 0, "SDF extension rejected frame records no dispatch");
+		check(p->frame_counter == 0 && p->phase == 0 && p->clear, "SDF extension rejected frame retains pending state");
+		for (uint32_t i = 0; i < p->frame_history.size(); i++) {
+			check(p->frame_history[i].frame == 10 + i && p->frame_history[i].colliders[0].transform[3] == 100 + i, "SDF extension rejected frame restores original collider history");
+		}
+		for (uint32_t i = 0; i < p->trail_params.size(); i++) {
+			check(p->trail_params[i].frame == 10 + i && p->trail_params[i].colliders[0].transform[3] == 100 + i, "SDF extension rejected frame restores original trail samples");
+		}
+	}
+	rd->test_arm_buffer_update_fault(RID(), 0);
+	p->has_sdf_collision = false;
+	std::array<Storage::ParticleData, 12> sentinel{};
+	for (auto &entry : sentinel) {
+		for (float &color : entry.color) {
+			color = -7.0f;
+		}
+	}
+	if (!check(rd->buffer_update(p->particle_buffer, 0, sizeof(sentinel), sentinel.data()) == OK, "SDF extension recovery GPU sentinel uploaded")) {
+		return false;
+	}
+	rd->test_reset_compute_dispatch_count();
+	if (!check(storage->_particles_process(p, 1.0 / 60.0), "SDF extension recovers after canvas SDF removal")) {
+		return false;
+	}
+	check(rd->test_get_compute_dispatch_count() == 2 && p->frame_counter == 1 && !p->clear, "SDF extension recovery records two native trail passes once");
+	check(p->frame_history[0].collider_count == 0, "SDF extension recovered current frame has no SDF collider");
+	for (uint32_t i = 1; i < p->frame_history.size(); i++) {
+		check(p->frame_history[i].frame == 9 + i && p->frame_history[i].colliders[0].transform[3] == 99 + i, "SDF extension recovery retains unmodified historical collider");
+	}
+	const Error params_read = rd->buffer_get_data_async(p->frame_params_buffer, callable_mp(this, &ParticlesRuntimeTestFixture::readback).bind(6), 0, 3 * sizeof(Storage::ParticlesFrameParams));
+	if (check(params_read == OK, "SDF extension trail parameter async readback queued")) {
+		sdf_readbacks_queued++;
+	}
+	const Error particle_read = rd->buffer_get_data_async(p->particle_buffer, callable_mp(this, &ParticlesRuntimeTestFixture::readback).bind(7), 0, 12 * sizeof(Storage::ParticleData));
+	if (check(particle_read == OK, "SDF extension particle async readback queued")) {
+		sdf_readbacks_queued++;
+	}
+	return params_read == OK && particle_read == OK;
+}
 bool ParticlesRuntimeTestFixture::run_progress(int p_kind) {
 	RID &rid = progress[p_kind];
 	rid = storage->particles_allocate();
@@ -313,6 +396,28 @@ bool ParticlesRuntimeTestFixture::run_trail() {
 	return read == OK;
 }
 void ParticlesRuntimeTestFixture::readback(const PackedByteArray &p_bytes, int p_kind) {
+	if (p_kind == 6 || p_kind == 7) {
+		check(on_owner(), "SDF extension async completion belongs to original main RD");
+		sdf_readbacks_completed++;
+		if (p_kind == 6) {
+			std::array<Storage::ParticlesFrameParams, 3> data{};
+			if (check(p_bytes.size() == sizeof(data), "SDF extension trail parameter readback exact bytes")) {
+				std::memcpy(data.data(), p_bytes.ptr(), sizeof(data));
+				check(data[0].collider_count == 0 && data[1].frame == 10 && data[1].colliders[0].transform[3] == 100 && data[2].frame == 11 && data[2].colliders[0].transform[3] == 101, "SDF extension original trail history reaches actual device buffer");
+			}
+		} else {
+			std::array<Storage::ParticleData, 12> data{};
+			if (check(p_bytes.size() == sizeof(data), "SDF extension particle readback exact bytes")) {
+				std::memcpy(data.data(), p_bytes.ptr(), sizeof(data));
+				bool active_shader_output = false;
+				for (const auto &entry : data) {
+					active_shader_output = active_shader_output || ((entry.active & 1u) && entry.color[0] == 1.0f && entry.color[1] == 1.0f && entry.color[2] == 1.0f && entry.color[3] == 1.0f);
+				}
+				check(active_shader_output, "SDF extension actual native particle shader produces active output");
+			}
+		}
+		return;
+	}
 	check(on_owner(), "async completion belongs to original main RD");
 	readbacks_completed++;
 	if (p_kind == 0) {
@@ -364,20 +469,22 @@ Error ParticlesRuntimeTestFixture::begin() {
 	success = run_trail() && success;
 	rd->test_arm_buffer_update_fault(RID(), 0);
 	check(success && readbacks_queued == 6, "all fixed actual Metal workloads accepted");
+	check(run_sdf_history_retry() && sdf_readbacks_queued == 2, "SDF extension two actual Metal readbacks accepted");
 	return OK;
 }
 void ParticlesRuntimeTestFixture::release_resources() {
 	rd->test_arm_buffer_update_fault(RID(), 0);
-	for (RID rid : { particle, sub, progress[0], progress[1], progress[2], progress[3] }) {
+	for (RID rid : { particle, sub, progress[0], progress[1], progress[2], progress[3], sdf_particle }) {
 		track_particles(rid);
 	}
-	for (RID rid : { particle, sub, progress[0], progress[1], progress[2], progress[3] }) {
+	for (RID rid : { particle, sub, progress[0], progress[1], progress[2], progress[3], sdf_particle }) {
 		if (rid.is_valid()) {
 			storage->particles_free(rid);
 		}
 	}
 	particle = RID();
 	sub = RID();
+	sdf_particle = RID();
 	for (RID &rid : progress) {
 		rid = RID();
 	}
@@ -406,7 +513,7 @@ Error ParticlesRuntimeTestFixture::advance() {
 		return OK;
 	}
 	if (!released) {
-		if (readbacks_completed != readbacks_queued) {
+		if (readbacks_completed != readbacks_queued || sdf_readbacks_completed != sdf_readbacks_queued) {
 			return ERR_BUSY;
 		}
 		release_resources();
@@ -436,6 +543,7 @@ Error ParticlesRuntimeTestFixture::advance() {
 	}
 	retired = true;
 	check(readbacks_completed == 6, "all six original async readbacks physically completed");
+	check(sdf_readbacks_completed == 2, "SDF extension both async readbacks physically completed");
 	return failures.is_empty() ? OK : FAILED;
 }
 Dictionary ParticlesRuntimeTestFixture::result() const {
@@ -446,6 +554,8 @@ Dictionary ParticlesRuntimeTestFixture::result() const {
 	d["checks"] = observations;
 	d["readbacks_queued"] = readbacks_queued;
 	d["readbacks_completed"] = readbacks_completed;
+	d["sdf_readbacks_queued"] = sdf_readbacks_queued;
+	d["sdf_readbacks_completed"] = sdf_readbacks_completed;
 	d["allocation_count"] = allocation_count;
 	d["native_resource_count"] = resource_count;
 	d["driver"] = OS::get_singleton()->get_current_rendering_driver_name();

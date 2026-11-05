@@ -21,3 +21,36 @@ Exactly eleven deliberately injected `ERROR:` messages are permitted: reset sub-
 `--entry-negative` instead uses headless mode and requires exit41 with the exact missing-module result and no engine errors. It never reports GPU success. Use only an independently pinned module-off/older host for this control. The negative mode is not a way to accept an unavailable native device.
 
 Each output directory must be new. The runner preserves controlled metadata, commands, actual return code, separate raw logs, expected/observed diagnostics, native result, source hashes and a file manifest. The runner itself performs no build. Passing evidence is limited to this fixed native retry/trail/readback/physical-return experiment; it does not qualify an ANGE producer/product, K03 holder, external output release, P3/P4 or an arbitrary renderer workload. No native execution is implied by static/parser controls alone.
+
+## Additive SDF history rollback extension
+
+The native module now also runs `run_sdf_history_retry()` on the same actual
+main Metal RD. The original six readbacks and exact 292-check Counter remain
+required. `SDF_EXTENSION_CHECKS` explicitly adds 70 observations, including the
+additional allocation/resource identity and physical-return checks, for 362 total.
+The extension separately queues and completes two SDF readbacks. `probe.gd` and
+`run_native.py` both require those two completions; the runner additionally checks
+the exact combined label/multiplicity Counter. These are intentional source-based
+expectations awaiting the new native RED/GREEN experiment, not historical GPU
+results or a change inferred from whatever output happens to appear.
+
+A separate native particle owns four additional allocations: simulation, instance,
+frame parameters, and fallback emission buffers. It adds four tracked uniform-set
+observations: copy, material, the primed SDF collision set, and the final SDF-off
+collision set. The primed collision set is explicitly tracked before replacement;
+all final particle resources enter `track_particles()` and the existing release
+and physical-return acknowledgment loops. Totals become 30 allocations and 26
+native resources. The default white SDF texture is borrowed from TextureStorage,
+so this fixture neither owns nor retires it.
+
+The extension primes the production particle shader, rejects two exact frame
+parameter uploads with zero simulation dispatches, and requires all historical
+colliders and trail samples to remain original. It then removes the canvas SDF,
+uploads a particle sentinel, and requires one successful two-pass native trail
+process. Separate async readbacks require the retained collider samples to reach
+the actual device buffer and the actual native particle shader to replace the
+sentinel with active white output. Completion and physical retirement retain the
+original owner and delayed acknowledgment rules. The two added expected upload
+errors explicitly extend the original eleven diagnostics to thirteen; all other
+errors still fail. Apply the regression alone first for RED, then the production
+fix for GREEN, using independently pinned hosts and controlled metadata for each.

@@ -52,12 +52,13 @@ class ParticlesRuntimeTestFixture : public RefCounted {
 	RenderingDevice *rd = nullptr;
 	RendererRD::ParticlesStorage *storage = nullptr;
 	ObjectID device;
-	RID particle, sub, progress[4], trail_shader, trail_pipeline;
+	RID particle, sub, progress[4], sdf_particle, trail_shader, trail_pipeline;
 	RID trail_buffer, trail_set;
 	std::array<Allocation, 48> allocations{};
 	std::array<uint64_t, 48> resources{};
 	uint32_t allocation_count = 0, resource_count = 0;
 	uint32_t readbacks_queued = 0, readbacks_completed = 0;
+	uint32_t sdf_readbacks_queued = 0, sdf_readbacks_completed = 0;
 	bool started = false, released = false, retired = false;
 	Array failures, observations;
 	bool check(bool p_ok, const String &p_label);
@@ -67,6 +68,7 @@ class ParticlesRuntimeTestFixture : public RefCounted {
 	bool track_resource(RenderCaptureTestResourceKind p_kind, uint64_t p_driver);
 	void track_particles(RID p_rid);
 	bool run_upload_boundaries();
+	bool run_sdf_history_retry();
 	bool run_progress(int p_kind);
 	bool run_trail();
 	void readback(const PackedByteArray &p_bytes, int p_kind);
