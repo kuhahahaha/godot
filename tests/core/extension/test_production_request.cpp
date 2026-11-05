@@ -1597,17 +1597,17 @@ struct Access {
 				fixture.driver.disposal_probe_data = &test;
 				fixture.driver.disposal_probe = +[](void *data) {
 					auto &actual = *static_cast<SplitSet *>(data);
-					auto &rd = actual.setup.fixture->rd;
-					if (!rd.native_disposal_budget) {
+					auto &probe_device = actual.setup.fixture->rd;
+					if (!probe_device.native_disposal_budget) {
 						return; // Original qualification's later unmetered owner lane.
 					}
-					const auto *original_budget = rd.native_disposal_budget;
-					auto *original_usage = rd.native_disposal_usage;
-					const auto *original_owner = rd.production_disposal_drop_owner;
+					const auto *original_budget = probe_device.native_disposal_budget;
+					auto *original_usage = probe_device.native_disposal_usage;
+					const auto *original_owner = probe_device.production_disposal_drop_owner;
 					RenderingDevice::NativeDisposalUsage rejected;
 					const RenderingDevice::NativeDisposalBudget offered{ 1, 1, OS::get_singleton()->get_ticks_usec() + 10000000 };
-					actual.check(__LINE__, rd._production_output_drop_step(*actual.setup.fixture->request, offered, rejected) == ERR_UNAUTHORIZED);
-					actual.check(__LINE__, rd.native_disposal_budget == original_budget && rd.native_disposal_usage == original_usage && rd.production_disposal_drop_owner == original_owner && rejected.passes == 0 && rejected.polls == 0 && rejected.frees == 0);
+					actual.check(__LINE__, probe_device._production_output_drop_step(*actual.setup.fixture->request, offered, rejected) == ERR_UNAUTHORIZED);
+					actual.check(__LINE__, probe_device.native_disposal_budget == original_budget && probe_device.native_disposal_usage == original_usage && probe_device.production_disposal_drop_owner == original_owner && rejected.passes == 0 && rejected.polls == 0 && rejected.frees == 0);
 					++actual.nested_disposal_probes;
 				};
 
