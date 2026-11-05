@@ -425,6 +425,9 @@ private:
 	friend struct ObjectSignalLock;
 	friend bool predelete_handler(Object *);
 	friend void postinitialize_handler(Object *);
+	friend class CSharpInstance;
+	// Only the original native cleanup notification supplies this dynamic scope.
+	static thread_local Object *_predelete_cleanup_owner;
 
 	ObjectGDExtension *_extension = nullptr;
 	GDExtensionClassInstancePtr _extension_instance = nullptr;
@@ -904,7 +907,6 @@ private:
 	Error register_core_release_lifetime(const GDExtensionDeviceExit::RecordRef &p_owner, uint64_t p_destructor_thread, uint64_t p_action_id, GDExtensionDeviceExit::CleanupAction **r_created = nullptr);
 
 public:
-
 #ifdef TOOLS_ENABLED
 	void clear_internal_extension();
 	void reset_internal_extension(ObjectGDExtension *p_extension);

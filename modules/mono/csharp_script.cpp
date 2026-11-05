@@ -1771,6 +1771,16 @@ bool CSharpInstance::_internal_new_managed() {
 	return true;
 }
 
+bool CSharpInstance::is_owner_predelete_cleanup() const {
+	// The native cleanup scope is thread-local and cannot be supplied by an
+	// external notification or another thread disposing the same managed object.
+	if (!owner || Object::_predelete_cleanup_owner != owner) {
+		return false;
+	}
+	MutexLock lock(owner->_instance_binding_mutex);
+	return predelete_notified && owner->_deletion_in_progress && owner->_binding_mutation && owner->script_instance == this && owner->_binding_read_cohorts == 0;
+}
+
 void CSharpInstance::mono_object_disposed(GCHandleIntPtr p_gchandle_to_free) {
 	// Must make sure event signals are not left dangling
 	disconnect_event_signals();

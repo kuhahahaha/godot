@@ -92,6 +92,8 @@ struct _ObjectDebugLock {
 
 #endif
 
+thread_local Object *Object::_predelete_cleanup_owner = nullptr;
+
 struct ObjectSignalLock {
 	Mutex *mutex1 = nullptr;
 	Mutex *mutex2 = nullptr;
@@ -279,7 +281,17 @@ bool Object::_predelete() {
 	_invalidate_native_continuations();
 
 	_gdtype_ptr = nullptr; // Must restore, so constructors/destructors have proper class name access at each stage.
-	notification(NOTIFICATION_PREDELETE_CLEANUP, true);
+	{
+		struct PredeleteCleanupScope {
+			Object *&current;
+			Object *previous;
+			PredeleteCleanupScope(Object *&p_current, Object *p_owner) : current(p_current), previous(p_current) {
+				current = p_owner;
+			}
+			~PredeleteCleanupScope() { current = previous; }
+		} cleanup_scope(_predelete_cleanup_owner, this);
+		notification(NOTIFICATION_PREDELETE_CLEANUP, true);
+	}
 
 	// Destruction order starts with the most derived class, and progresses towards the base Object class:
 	// Script subclasses -> GDExtension subclasses -> C++ subclasses -> Object

@@ -1,0 +1,35 @@
+{
+  "base": "d5e6a59f0c3a84d840814170777691a9dc58f133",
+  "files": {
+    "core/object/object.h": "938fb89cfbfb9f51111e3097e2c380f69f9efbe023ca0bd91d0b88a3c89ac7b6",
+    "core/object/object.cpp": "7507c4fa01fb0b36b903447875290fb1f95c9aa40d83601af35a94c00e2c839b",
+    "modules/mono/csharp_script.h": "ab38d85e15eac1eacf812cef4697f060f78b8fa45d8dcdbbe6dddf7c8aadbd78",
+    "modules/mono/csharp_script.cpp": "9269cf45ad0aa7dfa8a4fe5b01ad1cb8c78061a6d099fd5bcfe203b53eb392b8",
+    "modules/mono/glue/runtime_interop.cpp": "7e2d0b95846001b5cc2a29be94084bfd93287f436dec860aac4930da2aa8167f",
+    ".github/workflows/linux_builds.yml": "35e3318b25469c3932b07853c570484dddd4c419b35856edb786083d0523a91d",
+    "tests/scene/fixtures/mono_predelete_dispose/project.godot": "b2eaed7012ae7eb5ed6d03dcc8462347556c3ace52954d2a13ac6180c2f925de",
+    "tests/scene/fixtures/mono_predelete_dispose/main.tscn": "446c5fab9b89c68e827b8c94e1284384b24e22c7124b063c3e530e028a091335",
+    "tests/scene/fixtures/mono_predelete_dispose/MonoPredeleteDispose.csproj": "f353a4002aa23220680f014eb2ac8f6f74eacb8d2b63352f64fe97b1ac632941",
+    "tests/scene/fixtures/mono_predelete_dispose/DisposeProbe.cs": "c0ba65bdd4f1c0f621c9e771acfc1d25acdbf841ac77d3627de53f3f814464fd",
+    "tests/scene/fixtures/mono_predelete_dispose/RefDisposeProbe.cs": "3452930ea3358a07c1262fc03fee5fdb741b577da414871efeb6626512ecd5c9",
+    "tests/scene/fixtures/mono_predelete_dispose/Controller.cs": "ebadeeeb92d9893d483a5823e1a1f8374f67f9ff61182efc46613771163860a4",
+    "tests/scene/fixtures/mono_predelete_dispose/Runner.gd": "c13ec3f4a6905abfa9c46815dfc24202ddc9272ffcc5ca41cb60dbc8dd2f2809",
+    "tests/scene/fixtures/mono_predelete_dispose/run.sh": "e9754d691d1a752fa0de914708738fdcc0b90219fd509ff259f7f32757b7c1bb",
+    "tests/scene/fixtures/mono_predelete_dispose/.gitignore": "14abbf84cc6a134c70b221e056fa95fbb88e3a4ac00aab34da599384fa29747f",
+    "tests/scene/fixtures/mono_predelete_dispose/README.md": "01d399855de0c809cd4e376fb28e3a02932da679392885d9dd7f9585e440e065"
+  },
+  "original_ci_run": 41973622411,
+  "original_mono_job": 127067525203,
+  "original_log_sha256": "2adf8129dd0f4f553821ae4850cf449e213f6c5b828602ebb45c821f49adc0a4",
+  "original_failure": "PCK savepack succeeded; six real Dispose guard errors then strict checker exit56",
+  "local_common_cpp": "frozen host430e50e4\u20262070cases516960assert passed; also includes uncommitted public port changes",
+  "not_run": [
+    "dotnet-format",
+    "C# compilation",
+    "Mono-enabled engine compilation",
+    "managed runtime fixture",
+    "original Mono PCK export regression"
+  ],
+  "independent_review": "2b71 reviewed by separate peer after A/Astra actual-log source triage",
+  "scope": "skip only the redundant same-instance detach during actual native predelete cleanup; generic cohort/null replacement guard and RefCounted path unchanged"
+}

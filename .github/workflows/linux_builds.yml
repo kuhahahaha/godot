@@ -256,6 +256,10 @@ jobs:
         run: |
           dotnet test modules/mono/editor/Godot.NET.Sdk/Godot.SourceGenerators.Tests
 
+      - name: C# native predelete and explicit Dispose regression
+        if: matrix.build-mono
+        run: bash tests/scene/fixtures/mono_predelete_dispose/run.sh "${{ matrix.bin }}"
+
       # Check class reference
       - name: Check for class reference updates
         if: matrix.doc-test
