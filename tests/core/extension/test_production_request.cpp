@@ -98,6 +98,7 @@ struct Access {
 		// They prove Core caller/retention behavior, never Runtime or GPU grant.
 		uint64_t next_source = 1, execution_thread = 0;
 		uint32_t issues = 0, retains = 0, polls = 0, releases = 0;
+		uint32_t fence_polls = 0, fence_recycles = 0, native_recycles = 0;
 		bool qualification_cleanup_active = false;
 		uint32_t qualification_legacy_end_segments = 0;
 		struct QualificationCleanupScope {
@@ -168,6 +169,7 @@ struct Access {
 		bool upload_mode = false, staging_live = false;
 		bool auxiliary_factory = false, auxiliary_buffer_live = false, auxiliary_set_live = false;
 		bool mesh_directory_factory = false, mesh_directory_buffer_live = false;
+		bool mesh_directory_indexed144 = false;
 		uint32_t mesh_directory_buffer_frees = 0, mesh_directory_buffer_count = 0;
 		bool mesh_directory_buffers_live[4] = {};
 		VertexFormatID vertex_format_create(Span<VertexAttribute>, const VertexAttributeBindingsMap &) override { return VertexFormatID(40); }
@@ -194,7 +196,7 @@ struct Access {
 		BufferID buffer_create(uint64_t bytes, BitField<BufferUsageBits> usage, MemoryAllocationType allocation, uint64_t) override {
 			CHECK(Thread::get_caller_id() == execution_thread);
 			if (mesh_directory_factory) {
-				CHECK(((bytes == 36 && usage.has_flag(BUFFER_USAGE_VERTEX_BIT)) || (bytes == 12 && usage.has_flag(BUFFER_USAGE_INDEX_BIT))));
+				CHECK((mesh_directory_indexed144 ? ((mesh_directory_buffer_count < 2 && bytes == 432 && usage.has_flag(BUFFER_USAGE_VERTEX_BIT)) || (mesh_directory_buffer_count == 2 && bytes == 12 && usage.has_flag(BUFFER_USAGE_INDEX_BIT))) : ((bytes == 36 && usage.has_flag(BUFFER_USAGE_VERTEX_BIT)) || (bytes == 12 && usage.has_flag(BUFFER_USAGE_INDEX_BIT)))));
 				CHECK((allocation == MEMORY_ALLOCATION_TYPE_GPU && mesh_directory_buffer_count < 4));
 				const uint32_t index = mesh_directory_buffer_count++;
 				mesh_directory_buffers_live[index] = true;
@@ -420,17 +422,24 @@ struct Access {
 			return OK;
 		}
 		FencePollResult fence_poll(FenceID id, uint64_t serial) override {
+			++fence_polls;
 			CHECK(id == FenceID(93));
 			return { true, false, serial, 0 };
 		}
 		Error fence_recycle(FenceID id, uint64_t) override {
+			++fence_recycles;
 			CHECK(id == FenceID(93));
 			return OK;
 		}
 		Error native_call_recycle(uint64_t serial) override {
+			++native_recycles;
 			CHECK(serial > 0);
 			return OK;
 		}
+		uint32_t observed_disposal_receipts() const {
+			return issues + polls + retains + release_attempts + fence_polls + fence_recycles + native_recycles + mesh_directory_buffer_frees;
+		}
+
 		// This metadata-only driver prepares no hidden work. Real native
 		// operations retain the strict base's fail-fast behavior.
 		bool native_issue_bound(NativeIssueKind kind, uint32_t commands, uint32_t &bound) const override {
@@ -4154,10 +4163,11 @@ struct Access {
 		RendererRD::ExternalLinkedOwnerTest *native = nullptr;
 		MeshStorage::Mesh mesh;
 		MeshStorage::NativeSurfaceHold neighbor;
-		RID array, buffer;
+		RID array, buffer, previous_buffer, index_buffer, index_array;
 		RD::VertexFormatID format = 0;
 		uint64_t group = 0;
 		bool cow = false, capacity_failure = false, transferred = false;
+		bool clear_early = false, indexed144 = false;
 		Error capture_result = FAILED;
 		static void
 		receive(void *userdata,
@@ -4179,18 +4189,31 @@ struct Access {
 			auto *surface = memnew(MeshStorage::Mesh::Surface);
 			surface->format = RSE::ARRAY_FORMAT_VERTEX;
 			surface->vertex_count = 3;
-			surface->vertex_buffer_size = 36;
+			surface->vertex_buffer_size = test.indexed144 ? 432 : 36;
 			surface->primitive = RSE::PRIMITIVE_TRIANGLES;
 			surface->aabb = AABB(Vector3(1, 2, 3), Vector3(4, 5, 6));
 			surface->uv_scale = Vector4(1, 2, 3, 4);
 			fixture.driver.mesh_directory_factory = true;
+			fixture.driver.mesh_directory_indexed144 = test.indexed144;
 			test.buffer = surface->vertex_buffer = rd.vertex_buffer_create(
-					36, {}, RD::BUFFER_CREATION_AS_STORAGE_BIT);
+					surface->vertex_buffer_size, {}, RD::BUFFER_CREATION_AS_STORAGE_BIT);
+			if (test.indexed144) {
+				// Explicit Indexed144 component metadata. Original RD factories own
+				// all physical buffers; this does not invoke an external issuer.
+				surface->external = true;
+				surface->current_allocation_generation = 7;
+				surface->previous_allocation_generation = 8;
+				test.previous_buffer = surface->previous_vertex_buffer = rd.vertex_buffer_create(432, {}, RD::BUFFER_CREATION_AS_STORAGE_BIT);
+				test.index_buffer = surface->index_buffer = rd.index_buffer_create(3, RD::INDEX_BUFFER_FORMAT_UINT32);
+				surface->index_count = 3;
+				test.index_array = surface->index_array = rd.index_array_create(test.index_buffer, 0, 3);
+			}
 			fixture.driver.mesh_directory_factory = false;
+			fixture.driver.mesh_directory_indexed144 = false;
 			RD::VertexAttribute position;
 			position.location = 0;
 			position.format = RD::DATA_FORMAT_R32G32B32_SFLOAT;
-			position.stride = 12;
+			position.stride = test.indexed144 ? 144 : 12;
 			Vector<RD::VertexAttribute> attributes;
 			attributes.push_back(position);
 			test.format = rd.vertex_format_create(attributes);
@@ -4205,11 +4228,23 @@ struct Access {
 			surface->versions[0].input_mask = 1;
 			surface->versions[0].vertex_format = test.format;
 			surface->versions[0].vertex_array = test.array;
+			surface->versions[0].current_allocation_generation = surface->current_allocation_generation;
+			surface->versions[0].previous_allocation_generation = surface->previous_allocation_generation;
 			test.mesh.surfaces = static_cast<MeshStorage::Mesh::Surface **>(
 					memalloc(sizeof(MeshStorage::Mesh::Surface *)));
 			test.mesh.surfaces[0] = surface;
 			test.mesh.surface_count = 1;
 			MeshStorage::NativeSurfaceHold selected;
+			if (test.indexed144) {
+				// A stale external Version cannot acquire another metadata/physical share.
+				surface->versions[0].previous_allocation_generation = 9;
+				MeshStorage::NativeSurfaceHold stale;
+				CHECK(MeshStorage::_mesh_surface_hold_acquire(surface, 1, false, false, 0, stale) == ERR_UNAVAILABLE);
+				CHECK_FALSE(stale.is_active());
+				CHECK(surface->immutable_holds == 0);
+				CHECK(rd.native_immutable_hold_count == 0);
+				surface->versions[0].previous_allocation_generation = 8;
+			}
 			REQUIRE(MeshStorage::_mesh_surface_hold_acquire(
 							surface, 1, false, false, 0, selected) == OK);
 			if (test.cow) {
@@ -4265,6 +4300,13 @@ struct Access {
 			REQUIRE(test.capture_result == OK);
 			REQUIRE(MeshStorage::_native_hold_mark_transferred(selected) == OK);
 			test.transferred = true;
+			if (test.indexed144) {
+				CHECK(rd._production_output_hold_contains(native.pin(0), test.group, test.array));
+				CHECK(rd._production_output_hold_contains(native.pin(0), test.group, test.buffer));
+				CHECK(rd._production_output_hold_contains(native.pin(0), test.group, test.previous_buffer));
+				CHECK(rd._production_output_hold_contains(native.pin(0), test.group, test.index_buffer));
+				CHECK(rd._production_output_hold_contains(native.pin(0), test.group, test.index_array));
+			}
 			CHECK(surface->immutable_holds == shares - 1);
 			CHECK(rd.native_immutable_hold_count == physical_holds);
 			CHECK(*rd._native_immutable_counter(test.buffer) == buffer_holds);
@@ -4279,15 +4321,32 @@ struct Access {
 				CHECK(surface->immutable_holds ==
 						1); // Neighbor owns old COW metadata.
 			}
+			if (test.clear_early) {
+				// No neighbor metadata share remains. Original owner clear deletes
+				// Surface now and requests actual RD retirement while Core holds it.
+				CHECK(surface->immutable_holds == 0);
+				MeshStorage::_mesh_surface_clear(&test.mesh, 0);
+				test.mesh.surface_count = 0;
+				bool *retiring = nullptr;
+				const auto *counter = rd._native_immutable_counter(test.buffer, &retiring);
+				REQUIRE(counter != nullptr);
+				REQUIRE(retiring != nullptr);
+				CHECK(*counter == buffer_holds);
+				CHECK(*retiring);
+				CHECK(rd.vertex_array_owner.owns(test.array));
+				CHECK(fixture.driver.mesh_directory_buffer_frees == 0);
+			}
 			// Read after pointer clear and, in COW mode, after original mesh
 			// detach.
 			CHECK(selected.is_valid());
-			CHECK_FALSE(selected.is_external());
+			CHECK(selected.is_external() == test.indexed144);
 			CHECK(selected.get_vertex_array() == test.array);
 			CHECK(selected.get_vertex_format() == test.format);
-			CHECK(selected.get_index_array().is_null());
+			CHECK(selected.get_index_array() == test.index_array);
 			CHECK(selected.get_vertex_count() == 3);
-			CHECK(selected.get_index_count() == 0);
+			CHECK(selected.get_index_count() == (test.indexed144 ? 3u : 0u));
+			CHECK(selected.get_primitive() == RSE::PRIMITIVE_TRIANGLES);
+			CHECK(selected.get_format() == RSE::ARRAY_FORMAT_VERTEX);
 			CHECK(selected.get_material_selection().is_null());
 			CHECK(selected.get_aabb() ==
 					AABB(Vector3(1, 2, 3), Vector3(4, 5, 6)));
@@ -4307,7 +4366,7 @@ struct Access {
 		}
 	};
 	static void live_geometry_observe(bool cow = false,
-			bool capacity_failure = false) {
+			bool capacity_failure = false, bool clear_early = false, bool indexed144 = false, uint32_t pending_polls = 0) {
 		using namespace GDExtensionDeviceExit;
 		auto *server = ordinal_server();
 		if (!server ||
@@ -4346,6 +4405,8 @@ struct Access {
 		probe.fixture = &fixture;
 		probe.cow = cow;
 		probe.capacity_failure = capacity_failure;
+		probe.clear_early = clear_early;
+		probe.indexed144 = indexed144;
 		if (!check_step(ordinal_initialize(fixture, server, plan,
 								&LiveGeometryProbe::receive,
 								&probe) == OK)) {
@@ -4378,10 +4439,22 @@ struct Access {
 		CHECK(probe.transferred == !capacity_failure);
 		CHECK(request.action_count == 0);
 		CHECK(request.native_count ==
-				0); // No native submission or completion injected.
+				0); // RECORD issued no request native members; later disposal may issue a frame source.
 		CHECK(request.graph_count == 0);
+		if (probe.transferred) {
+			ProductionDisposalObservation held;
+			REQUIRE(fixture.rd._production_output_hold_returned(native.pin(0), probe.group, held) == OK);
+			CHECK(held.held == (indexed144 ? 5u : 2u));
+			CHECK(held.queued == 0);
+			CHECK(held.physical_returned == 0);
+			CHECK(held.owner_returned == 0);
+			CHECK_FALSE(held.settled);
+		}
+		fixture.driver.directory_pending_polls = pending_polls;
 		native.withdraw();
-		bool saw_borrowed = false, saw_finish_after_group = false;
+		bool saw_settled = false, saw_finish_after_group = false;
+		bool saw_queued = false, saw_physical = false;
+		uint32_t pending_seen = 0;
 		for (uint32_t turn = 0; turn < 64 && !native.released(); ++turn) {
 			const GDExtensionProductionServiceBudgetV1 budget = {
 				production_dto_abi<GDExtensionProductionServiceBudgetV1>(),
@@ -4393,6 +4466,8 @@ struct Access {
 			};
 			ProductionControlOutput output = {};
 			uint64_t serial = 0;
+			const uint32_t before_receipts = fixture.driver.observed_disposal_receipts();
+			const uint32_t before_pending = fixture.driver.directory_pending_polls;
 			const bool before_group = native.geometry_group_returned();
 			const bool before_active = native.geometry_active();
 			REQUIRE(fixture.registry.production_control_accept(
@@ -4406,36 +4481,108 @@ struct Access {
 			CHECK((output.result.native_error == OK ||
 					output.result.native_error == ERR_BUSY));
 			CHECK(output.service_usage.passes <= 1);
-			CHECK(output.service_usage.receipts == 0);
-			CHECK(fixture.driver.issues == 0);
-			CHECK(fixture.driver.polls == 0);
+			CHECK(output.service_usage.receipts <= 1);
+			CHECK(output.service_usage.receipts == fixture.driver.observed_disposal_receipts() - before_receipts);
+			if (clear_early) {
+				CHECK(fixture.driver.issues <= 1);
+				CHECK(fixture.driver.polls <= pending_polls + 1);
+			} else {
+				CHECK(output.service_usage.receipts == 0);
+				CHECK(fixture.driver.issues == 0);
+				CHECK(fixture.driver.polls == 0);
+			}
 			CHECK(request.capture_inflight == 0);
 			if (probe.transferred && !native.pin(0).is_empty()) {
 				ProductionDisposalObservation actual;
 				REQUIRE(fixture.rd._production_output_hold_returned(
 								native.pin(0), probe.group, actual) == OK);
+				if (before_pending > fixture.driver.directory_pending_polls) {
+					// The original maintenance cursor polled its actual issued source.
+					// A CPU-driver Pending answer must retain this exact native prefix.
+					CHECK(before_pending == fixture.driver.directory_pending_polls + 1);
+					++pending_seen;
+					CHECK(fixture.driver.issues == 1);
+					CHECK(actual.queued == 1);
+					CHECK(actual.physical_returned == 0);
+					CHECK(actual.owner_returned == 1);
+					CHECK(actual.borrowed_detached == 0);
+					CHECK(actual.uncreated == 0);
+					CHECK(actual.unknown == 0);
+					CHECK_FALSE(actual.settled);
+					CHECK(native.geometry_active());
+					CHECK_FALSE(native.geometry_group_returned());
+					CHECK_FALSE(native.pin(0).is_empty());
+					CHECK(fixture.driver.mesh_directory_buffers_live[0]);
+					CHECK(fixture.driver.mesh_directory_buffer_frees == 0);
+					CHECK(fixture.rd.frames[0].buffers_to_dispose_of.size() == 1);
+					CHECK(fixture.rd.frames[0].maintenance_wait.phase == 0);
+					CHECK(fixture.rd.frames[0].maintenance_wait.report == 0);
+					CHECK(fixture.rd.frames[0].maintenance_wait.call == 0);
+					REQUIRE(fixture.rd.frames[0].chain_reports.size() == 1);
+					REQUIRE(fixture.rd.frames[0].chain_reports[0].calls.size() == 1);
+					const auto &source = fixture.rd.frames[0].chain_reports[0].calls[0];
+					CHECK(source.serial != 0);
+					CHECK(source.completion_serial == source.serial + 1000);
+					CHECK(source.issue == RDD::IssueFact::KnownAccepted);
+				}
+				if (clear_early && actual.queued) {
+					CHECK(actual.queued == 1);
+					CHECK(actual.physical_returned == 0);
+					CHECK(actual.borrowed_detached == 0);
+					CHECK(fixture.driver.mesh_directory_buffer_frees == 0);
+					CHECK_FALSE(actual.settled);
+					CHECK(native.geometry_active());
+					CHECK_FALSE(native.geometry_group_returned());
+					saw_queued = true;
+				}
 				if (actual.settled) {
 					CHECK(actual.dropped);
-					CHECK(actual.borrowed_detached ==
-							2); // Actual VA and backing shares.
-					CHECK(actual.physical_returned == 0);
+					CHECK(actual.borrowed_detached == (clear_early ? 0u : (indexed144 ? 5u : 2u)));
+					// VA/IA are CPU owner metadata: kind>=10 returns state 7.
+					// Only the actual backing-buffer driver free returns state 3.
+					CHECK(actual.physical_returned == (clear_early ? 1u : 0u));
+					CHECK(actual.owner_returned == (clear_early ? 1u : 0u));
+					CHECK(actual.uncreated == 0);
+					if (clear_early) {
+						CHECK(fixture.driver.mesh_directory_buffer_frees == 1);
+						CHECK_FALSE(fixture.rd.vertex_array_owner.owns(probe.array));
+						CHECK_FALSE(fixture.rd.vertex_buffer_owner.owns(probe.buffer));
+						saw_physical = true;
+					}
 					CHECK(actual.unknown == 0);
-					saw_borrowed = true;
+					saw_settled = true;
 				}
 				if (before_active && !native.geometry_active()) {
 					CHECK(before_group);
-					CHECK(saw_borrowed);
+					CHECK(saw_settled);
 					saw_finish_after_group = true;
 				}
 			}
-			CHECK(fixture.driver.mesh_directory_buffer_frees == 0);
-			CHECK(fixture.rd.vertex_array_owner.owns(probe.array));
-			CHECK(fixture.rd.vertex_buffer_owner.owns(probe.buffer));
+			if (!clear_early) {
+				CHECK(fixture.driver.mesh_directory_buffer_frees == 0);
+				CHECK(fixture.rd.vertex_array_owner.owns(probe.array));
+				CHECK(fixture.rd.vertex_buffer_owner.owns(probe.buffer));
+				if (indexed144) {
+					CHECK(fixture.rd.vertex_buffer_owner.owns(probe.previous_buffer));
+					CHECK(fixture.rd.index_buffer_owner.owns(probe.index_buffer));
+					CHECK(fixture.rd.index_array_owner.owns(probe.index_array));
+				}
+			}
 		}
 		CHECK(native.released());
 		if (probe.transferred) {
-			CHECK(saw_borrowed);
+			CHECK(saw_settled);
 			CHECK(saw_finish_after_group);
+		}
+		if (clear_early) {
+			CHECK(saw_queued);
+			CHECK(saw_physical);
+			CHECK(fixture.driver.issues == 1);
+			CHECK(fixture.driver.polls == pending_polls + 1);
+			CHECK(pending_seen == pending_polls);
+			CHECK(fixture.driver.directory_pending_polls == 0);
+			CHECK(fixture.driver.fence_polls == 1);
+			CHECK(fixture.driver.fence_recycles == 1);
 		}
 		// Free the real mesh only after this External use returned. This
 		// ordinary owner cleanup is not the witness used by the assertions
@@ -4448,10 +4595,23 @@ struct Access {
 			RendererRD::MeshStorage::_mesh_surface_clear(&probe.mesh, 0);
 			probe.mesh.surface_count = 0;
 		}
+		if (indexed144) {
+			// Indexed144 original owner retains external backing after mesh clear.
+			// Free only after its actual borrowed Core group returned.
+			CHECK(fixture.driver.mesh_directory_buffer_frees == 0);
+			fixture.rd.free_rid(probe.buffer);
+			fixture.rd.free_rid(probe.previous_buffer);
+			fixture.rd.free_rid(probe.index_buffer);
+		}
 		memfree(probe.mesh.surfaces);
 		probe.mesh.surfaces = nullptr;
 		fixture.rd._free_pending_resources(0);
-		CHECK(fixture.driver.mesh_directory_buffer_frees == 1);
+		CHECK(fixture.driver.mesh_directory_buffer_frees == (indexed144 ? 3u : 1u));
+		if (indexed144) {
+			CHECK_FALSE(fixture.rd.vertex_buffer_owner.owns(probe.previous_buffer));
+			CHECK_FALSE(fixture.rd.index_buffer_owner.owns(probe.index_buffer));
+			CHECK_FALSE(fixture.rd.index_array_owner.owns(probe.index_array));
+		}
 		CHECK_FALSE(fixture.rd.vertex_array_owner.owns(probe.array));
 		CHECK_FALSE(fixture.rd.vertex_buffer_owner.owns(probe.buffer));
 		fixture.rd.vertex_formats.clear();
@@ -5460,6 +5620,15 @@ TEST_CASE("[SceneTree][ProductionRequest][LiveGeometryComponent] live selected g
 }
 TEST_CASE("[SceneTree][ProductionRequest][LiveGeometryComponent] original mesh detach preserves selected cached snapshot and COW neighbor") {
 	Access::live_geometry_observe(true);
+}
+TEST_CASE("[SceneTree][ProductionRequest][LiveGeometryComponent] original owner clear without neighbor observes queued then physical return") {
+	Access::live_geometry_observe(false, false, true);
+}
+TEST_CASE("[SceneTree][ProductionRequest][LiveGeometryComponent] original disposal source Pending retains queued backing before matching completion") {
+	Access::live_geometry_observe(false, false, true, false, 3);
+}
+TEST_CASE("[SceneTree][ProductionRequest][LiveGeometryComponent] live Indexed144 snapshot returns all five actual borrowed roots") {
+	Access::live_geometry_observe(false, false, false, true);
 }
 TEST_CASE("[SceneTree][ProductionRequest][LiveGeometryComponent] failed Core capture retains live metadata and physical source") {
 	Access::live_geometry_observe(false, true);

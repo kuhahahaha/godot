@@ -1,0 +1,70 @@
+{
+  "schema": 1,
+  "component": "Live geometry original owner-return, physical return and Pending custody regression",
+  "base_commit": "d1ffd3c5664fbd564dce0e3a8fdf822933de7b1a",
+  "source_pins": {
+    "tests/core/extension/test_production_request.cpp": "0228ecb077489adc9c9c3a842c9efe5617d9a3cebdc9c6823a010c7c4ec242bf"
+  },
+  "host_sha256": "d3bd507409d48ada4a3a8604843e4eea9908ce049953b953e958e0d2450e6cf5",
+  "controlled_metadata_sha256": "8d9f999f10a43c540534699b71bc84d94830ae0a8969bcb8848e31db3291e5c9",
+  "results": {
+    "targeted": {
+      "path": "work/b4-live-geometry-neighbors-20261106/targeted-pending/RESULT.json",
+      "sha256": "765f5eb064df316c64d9c8a3a3a88841c84a9415fc4d722b7062891b3d0723bd",
+      "exit": 0,
+      "test_cases": {
+        "successes": "6",
+        "failures": "0"
+      },
+      "asserts": {
+        "successes": "2278",
+        "failures": "0"
+      },
+      "validation_pass": true
+    },
+    "full": {
+      "path": "work/b4-live-geometry-neighbors-20261106/full/RESULT.json",
+      "sha256": "ac28e7e80d3a8dccdfc507891c43a673ae7a502c48a7706e6b94d8f1a413daba",
+      "exit": 0,
+      "test_cases": {
+        "successes": "2098",
+        "failures": "0"
+      },
+      "asserts": {
+        "successes": "527406",
+        "failures": "0"
+      },
+      "validation_pass": true
+    }
+  },
+  "verified_behavior": [
+    "Original Surface clear without a neighbor preserves retained group/wrapper/root while the actual buffer is queued.",
+    "VA kind10 returns original owner metadata (owner_returned1); buffer kind9 reports physical_returned1 only after original driver free.",
+    "Original maintenance source issue/poll/retain/release/recycle/fence/free deltas exactly equal each finite turn receipt charge, at most one.",
+    "Three Pending polls of the original issued source retain actual queued buffer, wrapper and original pin; later original matching completion closes normally.",
+    "Live Indexed144 five selected roots preserve cached current/history/index facts and stale version refuses; all five borrowed counters return before ordinary owner cleanup."
+  ],
+  "limits": [
+    "Test-only change; no production semantics changed.",
+    "Existing CPU QuoteDriver facts exercise original Core/RD paths; no GPU or public source admission qualification.",
+    "Unknown actual-source branch remains uncovered.",
+    "Separate Metal regression was last executed on d1ffd source host345426...; not rerun for this test-only update.",
+    "Initial compile failure used nonexistent Surface snapshot field; initial29 runtime failures came from wrong test expectations about maintenance receipts and owner-return classification. Both are preserved and are not production RED proof."
+  ],
+  "historical_attempts": [
+    "BUILD_RESULT.json",
+    "BUILD.log",
+    "FIXED_BUILD_RESULT.json",
+    "targeted/RESULT.json",
+    "targeted/FAILURES.json"
+  ],
+  "source_review": {
+    "path": "work/b4-live-geometry-neighbors-20261106/FINAL_INDEPENDENT_REVIEW.md",
+    "sha256": "9d74a92de66d4190407585cf8e2c9355d8b865542a30c24f6111f60969a36c15"
+  },
+  "independent_final_review": {
+    "source_checks": 18,
+    "raw_runtime_reconciliations": 16,
+    "disposition": "accepted bounded CPU lifetime component; no blocker"
+  }
+}
