@@ -247,7 +247,7 @@ private:
 
 	void _add_dependency(RID p_id, RID p_depends_on);
 	void _remove_dependency(RID p_id, RID p_depends_on);
-	bool _free_dependencies(RID p_id);
+	bool _free_dependencies(RID p_id, const MutexLock<Mutex> &p_outer_lock);
 
 private:
 	/***************************/
@@ -2361,7 +2361,7 @@ protected:
 			RenderingDeviceDriver::SemaphoreID p_dst_draw_semaphore_to_signal);
 
 public:
-	void _free_internal(RID p_id);
+	void _free_internal(RID p_id, const MutexLock<Mutex> &p_lock);
 	Error _begin_frame(bool p_presented = false, bool p_nonblocking = false);
 	Error _end_frame(bool p_nonblocking = false);
 	Error _execute_frame(bool p_present);

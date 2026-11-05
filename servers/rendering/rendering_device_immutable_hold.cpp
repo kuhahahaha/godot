@@ -53,6 +53,7 @@ void RenderingDevice::_native_immutable_retire_dependents(RID rid) {
 	LocalVector<RID> retiring;
 	retiring.push_back(rid);
 	for (uint32_t i = 0; i < retiring.size(); ++i) {
+		MutexLock lock(_thread_safe_);
 		const RID current = retiring[i];
 		const auto *buffer = _native_immutable_buffer(current);
 		const auto *texture = texture_owner.get_or_null(current);
@@ -79,7 +80,11 @@ void RenderingDevice::_native_immutable_retire_dependents(RID rid) {
 			void *userdata = set->invalidated_callback_userdata;
 			set->invalidated_callback = nullptr;
 			set->invalidated_callback_userdata = nullptr;
+			// Consume just this live callback, then run it synchronously without
+			// an RD lock. A callback may clear/destroy another dependency's owner.
+			lock.temp_unlock();
 			callback(userdata);
+			lock.temp_relock();
 		}
 	}
 }
@@ -166,12 +171,12 @@ bool RenderingDevice::native_immutable_pipeline_matches_shader(RID pipeline, RID
 
 bool RenderingDevice::native_immutable_uniform_set_matches_pipeline(RID set_rid, RID pipeline_rid, uint32_t set_index) const {
 	MutexLock lock(_thread_safe_);
-	auto *device = const_cast<RenderingDevice *>(this);
+	auto *self = const_cast<RenderingDevice *>(this);
 	const Vector<uint32_t> *formats = nullptr;
-	if (const auto *pipeline = device->render_pipeline_owner.get_or_null(pipeline_rid); pipeline && pipeline->driver_id) {
+	if (const auto *pipeline = self->render_pipeline_owner.get_or_null(pipeline_rid); pipeline && pipeline->driver_id) {
 		formats = &pipeline->set_formats;
 	}
-	if (const auto *pipeline = device->compute_pipeline_owner.get_or_null(pipeline_rid); pipeline && pipeline->driver_id) {
+	if (const auto *pipeline = self->compute_pipeline_owner.get_or_null(pipeline_rid); pipeline && pipeline->driver_id) {
 		formats = &pipeline->set_formats;
 	}
 	if (!formats) {
@@ -181,7 +186,7 @@ bool RenderingDevice::native_immutable_uniform_set_matches_pipeline(RID set_rid,
 	if (set_rid.is_null()) {
 		return expected == 0;
 	}
-	const auto *set = device->uniform_set_owner.get_or_null(set_rid);
+	const auto *set = self->uniform_set_owner.get_or_null(set_rid);
 	return set && set->driver_id && set->format && set->format == expected;
 }
 
@@ -372,7 +377,9 @@ Error RenderingDevice::native_immutable_hold_release(NativeImmutableHold &hold) 
 			}
 			continue;
 		}
+		lock.temp_unlock();
 		free_rid(rid);
+		lock.temp_relock();
 		if (_native_immutable_counter(rid)) {
 			pending = true;
 		}

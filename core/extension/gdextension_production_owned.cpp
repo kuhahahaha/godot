@@ -541,7 +541,11 @@ Error Registry::production_sets_step_locked(ProductionRequest &request, Renderin
 			mutex.unlock();
 			const bool previous = rd.qualification_retiring;
 			rd.qualification_retiring = true;
+			// The executing cell/capture pin retains this slot while free runs
+			// its synchronous callbacks. Do not inherit the service RD lock.
+			rd._thread_safe_.unlock();
 			rd.free_rid(slot.primary);
+			rd._thread_safe_.lock();
 			rd.qualification_retiring = previous;
 			mutex.lock();
 			CRASH_COND(!request.capture_inflight);

@@ -742,9 +742,14 @@ void Registry::qualification_resource_retire_step(QualificationBridge *b, Render
 			} else if (rd->_recording_error() != OK || rd->frame_wait_draining || rd->draw_list.active || rd->compute_list.active || rd->raytracing_list.active || rd->draw_graph.has_driver_callbacks()) {
 				reason = 1;
 			} else {
+				const bool previous_retiring = rd->qualification_retiring;
 				rd->qualification_retiring = true;
+				// qualification_retire_step owns one outer RD lock; the retained
+				// original child survives synchronous callbacks without that lock.
+				rd->_thread_safe_.unlock();
 				rd->free_rid(rid);
-				rd->qualification_retiring = false;
+				rd->_thread_safe_.lock();
+				rd->qualification_retiring = previous_retiring;
 				if (!c->physical.enqueued) {
 					reason = 5;
 				}

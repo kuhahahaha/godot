@@ -1180,8 +1180,9 @@ public:
 				CHECK_FALSE(device.reverse_dependency_map.has(RID::from_uint64(set.rid)));
 				auto *remaining = device.dependency_map.getptr(shader_rid);
 				CHECK((!remaining || remaining->is_empty()));
-				CHECK(device._free_dependencies(pipeline_rid));
-				CHECK(device._free_dependencies(shader_rid));
+				MutexLock rd_lock(device._thread_safe_);
+				CHECK(device._free_dependencies(pipeline_rid, rd_lock));
+				CHECK(device._free_dependencies(shader_rid, rd_lock));
 				device.compute_pipeline_owner.free(pipeline_rid);
 				device.shader_owner.free(shader_rid);
 			}
@@ -2729,7 +2730,10 @@ public:
 		CHECK(storage->physical.uses.is_empty());
 		CHECK(ticket.physically_retired.load());
 		storage->physical.use_closed = true;
-		device._free_internal(rid);
+		{
+			MutexLock rd_lock(device._thread_safe_);
+			device._free_internal(rid, rd_lock);
+		}
 		device._free_pending_resources(0);
 		registry->qualification_bridges[0] = registry->qualification_bridges[1] = nullptr;
 		memdelete(storage);
@@ -4304,7 +4308,8 @@ public:
 		CHECK(child->report.reason == 5);
 		// Explicit fixture cleanup follows the assertion and is not an owner ack.
 		if (device.storage_buffer_owner.owns(rid)) {
-			device._free_internal(rid);
+			MutexLock rd_lock(device._thread_safe_);
+			device._free_internal(rid, rd_lock);
 		}
 		device._free_pending_resources(0);
 		memdelete(child);
@@ -4464,7 +4469,8 @@ public:
 		CHECK(registry->qualification_close({ 71, 11 }).native_error == ERR_BUSY);
 		// The test fixture performs explicit cleanup after observing the service result.
 		if (device.shader_owner.owns(rid)) {
-			device._free_internal(rid);
+			MutexLock rd_lock(device._thread_safe_);
+			device._free_internal(rid, rd_lock);
 		}
 		device._free_pending_resources(0);
 		device.frames[0].chain_reports.clear();
@@ -4502,7 +4508,8 @@ public:
 		CHECK_FALSE(child->shader.enqueued);
 		CHECK(memcmp(&original, &child->report, sizeof(original)) == 0);
 		if (device.shader_owner.owns(rid)) {
-			device._free_internal(rid);
+			MutexLock rd_lock(device._thread_safe_);
+			device._free_internal(rid, rd_lock);
 		}
 		device._free_pending_resources(0);
 		memdelete(child);
@@ -4581,10 +4588,12 @@ public:
 		}
 		// Keep fixture-owned return cells alive until any failed-path RID is disposed.
 		if (native && device.shader_owner.owns(rid)) {
-			device._free_internal(rid);
+			MutexLock rd_lock(device._thread_safe_);
+			device._free_internal(rid, rd_lock);
 		}
 		if (!native && device.storage_buffer_owner.owns(rid)) {
-			device._free_internal(rid);
+			MutexLock rd_lock(device._thread_safe_);
+			device._free_internal(rid, rd_lock);
 		}
 		device._free_pending_resources(0);
 		memdelete(storage);
@@ -4627,7 +4636,8 @@ public:
 		// The missing pipeline is an intentionally invalid fixture identity, not a native child.
 		child->shader.dependent_children = 0;
 		if (device.shader_owner.owns(rid)) {
-			device._free_internal(rid);
+			MutexLock rd_lock(device._thread_safe_);
+			device._free_internal(rid, rd_lock);
 		}
 		device._free_pending_resources(0);
 		memdelete(child);
@@ -4671,7 +4681,8 @@ public:
 		CHECK(child->report.freed_mask == 0);
 		// Independent fixture cleanup does not assert that the unknown pipeline returned.
 		if (device.shader_owner.owns(rid)) {
-			device._free_internal(rid);
+			MutexLock rd_lock(device._thread_safe_);
+			device._free_internal(rid, rd_lock);
 		}
 		device._free_pending_resources(0);
 		memdelete(child);
@@ -4982,7 +4993,10 @@ public:
 		CHECK(live.event_capacity_reserved);
 		CHECK(device.qualification_free_event_reservations == 1);
 		live.use_closed = true;
-		device._free_internal(rid);
+		{
+			MutexLock rd_lock(device._thread_safe_);
+			device._free_internal(rid, rd_lock);
+		}
 		device._free_pending_resources(0);
 		CHECK(live.free_event == UINT64_MAX);
 		CHECK(device.qualification_free_event_reservations == 0);
@@ -5129,7 +5143,8 @@ public:
 	}
 	static void enqueue(RenderingDevice &device, RID rid, GDExtensionDeviceExit::QualificationPhysicalReturn &cell) {
 		cell.use_closed = true;
-		device._free_internal(rid);
+		MutexLock rd_lock(device._thread_safe_);
+		device._free_internal(rid, rd_lock);
 	}
 	static uint64_t event(const GDExtensionDeviceExit::QualificationPhysicalReturn &cell) { return cell.free_event; }
 	static void dispose(RenderingDevice &device) { device._free_pending_resources(0); }

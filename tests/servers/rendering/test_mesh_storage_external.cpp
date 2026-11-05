@@ -143,7 +143,8 @@ public:
 			p_device.free_rid(rid);
 		}
 		for (RID rid : p_device.vertex_buffer_owner.get_owned_list()) {
-			p_device._free_dependencies(rid);
+			MutexLock rd_lock(p_device._thread_safe_);
+			p_device._free_dependencies(rid, rd_lock);
 			p_device.vertex_buffer_owner.free(rid);
 		}
 		// These format IDs are test-double metadata, not driver allocations.

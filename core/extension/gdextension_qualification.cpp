@@ -694,9 +694,13 @@ void Registry::qualification_retire_step(QualificationBridge *bridge, RenderingD
 		if (rd->_recording_error() != OK || rd->draw_list.active || rd->compute_list.active || rd->raytracing_list.active || rd->frame_wait_draining || rd->draw_graph.has_driver_callbacks()) {
 			return 1;
 		}
+		const bool previous_retiring = rd->qualification_retiring;
 		rd->qualification_retiring = true;
+		// The original child/cleanup reference remains retained across free.
+		rd->_thread_safe_.unlock();
 		rd->free_rid(RID::from_uint64(cell.rid));
-		rd->qualification_retiring = false;
+		rd->_thread_safe_.lock();
+		rd->qualification_retiring = previous_retiring;
 		return cell.enqueued ? 0 : 5;
 	};
 	if (kind == 4) {

@@ -97,6 +97,36 @@ public:
 
 class TestMaterialStorageNativeHoldDeviceAccess {
 public:
+#ifdef THREADS_ENABLED
+	struct MutexProbe {
+		RenderingDevice *device = nullptr;
+		bool acquired = false;
+	};
+	static void mutex_probe_run(void *data) {
+		auto &probe = *static_cast<MutexProbe *>(data);
+		probe.acquired = probe.device->_thread_safe_.try_lock();
+		if (probe.acquired) {
+			probe.device->_thread_safe_.unlock();
+		}
+	}
+	static bool mutex_available_on_worker(RenderingDevice &device) {
+		MutexProbe probe{ &device };
+		Thread worker;
+		const Thread::ID started = worker.start(&mutex_probe_run, &probe);
+		CHECK(started != 0);
+		if (started == 0) {
+			return false;
+		}
+		worker.wait_to_finish();
+		return probe.acquired;
+	}
+	static void check_mutex_probe_control(RenderingDevice &device) {
+		CHECK(mutex_available_on_worker(device));
+		device._thread_safe_.lock();
+		CHECK_FALSE(mutex_available_on_worker(device));
+		device._thread_safe_.unlock();
+	}
+#endif
 	static void prepare(RenderingDevice &rd, RenderingDeviceDriver &driver) {
 		rd.singleton = &rd;
 		rd.driver = &driver;
@@ -419,12 +449,16 @@ class TestMaterialStorageNativeHoldAccess {
 	};
 	struct CallbackOwner {
 		CallbackTrace *trace;
-		explicit CallbackOwner(CallbackTrace &p_trace) : trace(&p_trace) {}
+		RD *device;
+		CallbackOwner(CallbackTrace &p_trace, RD &p_device) : trace(&p_trace), device(&p_device) {}
 		~CallbackOwner() { trace->alive = false; }
 	};
 	static void invalidated_probe(void *userdata) {
 		auto *owner = static_cast<CallbackOwner *>(userdata);
 		CHECK(owner->trace->alive);
+#ifdef THREADS_ENABLED
+		CHECK(TestMaterialStorageNativeHoldDeviceAccess::mutex_available_on_worker(*owner->device));
+#endif
 		++owner->trace->calls;
 	}
 	struct LastReturnTrace {
@@ -458,6 +492,9 @@ class TestMaterialStorageNativeHoldAccess {
 		auto *packet = static_cast<LastReturnOwner *>(userdata);
 		auto *trace = packet->trace;
 		++trace->calls;
+#ifdef THREADS_ENABLED
+		CHECK(TestMaterialStorageNativeHoldDeviceAccess::mutex_available_on_worker(*packet->device));
+#endif
 		CHECK(packet->hold.is_valid());
 		CHECK(TestMaterialStorageNativeHoldDeviceAccess::set_uses_buffer(*packet->device, packet->set, trace->uniform_buffer));
 		trace->returned = MaterialStorage::material_native_hold_release(packet->hold);
@@ -483,6 +520,9 @@ class TestMaterialStorageNativeHoldAccess {
 		CHECK(trace->buffer_retiring);
 	}
 	static void last_return_from_callback(MaterialStorage &storage, RD &rd, Driver &driver, RID material, RID shader, RID pipeline, RID set) {
+#ifdef THREADS_ENABLED
+		TestMaterialStorageNativeHoldDeviceAccess::check_mutex_probe_control(rd);
+#endif
 		LastReturnTrace trace;
 		auto *packet = memnew(LastReturnOwner(trace, rd, storage, material, set));
 		const Error acquired = storage.material_native_hold_acquire(material, shader, pipeline, set, packet->hold);
@@ -837,7 +877,23 @@ public:
 		CHECK_FALSE(rd.native_immutable_resource_is_held(ubo));
 #endif
 		MaterialStorage::NativeMaterialHold first, second;
-		if (callback_lifetime == 3) {
+		if (callback_lifetime == 4) {
+#ifdef THREADS_ENABLED
+			TestMaterialStorageNativeHoldDeviceAccess::check_mutex_probe_control(rd);
+#endif
+			CallbackTrace callback_trace;
+			auto *callback_owner = memnew(CallbackOwner(callback_trace, rd));
+			rd.uniform_set_set_invalidation_callback(data->set, &invalidated_probe, callback_owner);
+			rd.free_rid(data->set); // Original unheld callback path, independently of immutable retirement.
+			CHECK(callback_trace.calls == 1);
+			CHECK_FALSE(TestMaterialStorageNativeHoldDeviceAccess::set_exists(rd, data->set));
+			CHECK(driver.set_frees == 0);
+			if (TestMaterialStorageNativeHoldDeviceAccess::set_exists(rd, data->set)) {
+				rd.uniform_set_set_invalidation_callback(data->set, nullptr, nullptr);
+			}
+			memdelete(callback_owner);
+			CHECK_FALSE(callback_trace.alive);
+		} else if (callback_lifetime == 3) {
 			last_return_from_callback(*storage, rd, driver, material, native_shader, pipeline, data->set);
 		} else if (unsupported) {
 			CHECK(storage->material_native_hold_acquire(material, native_shader, pipeline, data->set, first) == ERR_UNAVAILABLE);
@@ -891,7 +947,7 @@ public:
 					CHECK(shader_data->changes == 0);
 					CallbackTrace callback_trace;
 					if (callback_lifetime == 2) {
-						auto *callback_owner = memnew(CallbackOwner(callback_trace));
+						auto *callback_owner = memnew(CallbackOwner(callback_trace, rd));
 						rd.uniform_set_set_invalidation_callback(snapshot.uniform_set, &invalidated_probe, callback_owner);
 						rd.free_rid(snapshot.uniform_set);
 						CHECK(callback_trace.calls == 1);
@@ -975,6 +1031,9 @@ TEST_CASE("[MaterialNativeHold] exact native inputs survive original owner free 
 	}
 	SUBCASE("direct held set free consumes callback before userdata destruction") {
 		RendererRD::TestMaterialStorageNativeHoldAccess::run(false, false, 2);
+	}
+	SUBCASE("ordinary unheld invalidation callback runs outside the actual RD mutex") {
+		RendererRD::TestMaterialStorageNativeHoldAccess::run(false, false, 4);
 	}
 	SUBCASE("callback returns its last hold and destroys packet before outer physical free") {
 		RendererRD::TestMaterialStorageNativeHoldAccess::run(false, false, 3);

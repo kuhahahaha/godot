@@ -197,8 +197,8 @@ void RenderingDevice::_remove_dependency(RID p_id, RID p_depends_on) {
 	}
 }
 
-bool RenderingDevice::_free_dependencies(RID p_id) {
-	_THREAD_SAFE_METHOD_
+bool RenderingDevice::_free_dependencies(RID p_id, const MutexLock<Mutex> &p_outer_lock) {
+	MutexLock lock(_thread_safe_);
 
 	// Direct dependencies must be freed.
 	while (true) {
@@ -214,7 +214,13 @@ bool RenderingDevice::_free_dependencies(RID p_id) {
 		if (resource_frees_in_progress.has(dependent)) {
 			return false; // The enclosing original free owns this edge until its callback returns.
 		}
+		// Each child owns its own lock. Its synchronous callback must not inherit
+		// this dependency traversal's recursive RD lock. Re-find the map afterward.
+		lock.temp_unlock();
+		p_outer_lock.temp_unlock();
 		free_rid(dependent);
+		p_outer_lock.temp_relock();
+		lock.temp_relock();
 		// A synchronous invalidation callback can mutate the dependency map.
 		E = dependency_map.find(p_id);
 		ERR_FAIL_COND_V_MSG(E && E->value.has(dependent), false, "A dependent resource could not be freed.");
@@ -4866,8 +4872,8 @@ RID RenderingDevice::index_buffer_create(uint32_t p_index_count, IndexBufferForm
 }
 
 RID RenderingDevice::index_array_create(RID p_index_buffer, uint32_t p_index_offset, uint32_t p_index_count) {
-	ERR_FAIL_COND_V(native_immutable_resource_is_retiring(p_index_buffer), RID());
 	_THREAD_SAFE_METHOD_
+	ERR_FAIL_COND_V(native_immutable_resource_is_retiring(p_index_buffer), RID());
 
 	ERR_FAIL_COND_V(!index_buffer_owner.owns(p_index_buffer), RID());
 
@@ -5210,9 +5216,9 @@ RID RenderingDevice::_qualification_uniform_set_create(const VectorView<Uniform>
 	return result;
 }
 RID RenderingDevice::_uniform_set_create_qualification(const VectorView<RD::Uniform> &p_uniforms, RID p_shader, uint32_t p_shader_set, bool p_linear_pool, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, const LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> *p_children, const NativeDisposalWitness *p_native_disposal, const GDExtensionDeviceExit::ProductionRequest *p_production) {
-	ERR_FAIL_COND_V(native_immutable_resource_is_retiring(p_shader), RID());
 	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Recording is suspended after a frame fence wait failure.");
 	_THREAD_SAFE_METHOD_
+	ERR_FAIL_COND_V(native_immutable_resource_is_retiring(p_shader), RID());
 
 	ERR_FAIL_COND_V(p_uniforms.size() == 0, RID());
 
@@ -10033,16 +10039,17 @@ void RenderingDevice::free_rid(RID p_rid) {
 	resource_frees_in_progress.insert(p_rid);
 	struct ResourceFreeScope {
 		RenderingDevice &device;
+		const MutexLock<Mutex> &lock;
 		NativeImmutableFreeFrame frame;
 		RID rid;
-		ResourceFreeScope(RenderingDevice &p_device, RID p_rid) : device(p_device), rid(p_rid) {
+		ResourceFreeScope(RenderingDevice &p_device, RID p_rid, const MutexLock<Mutex> &p_lock) : device(p_device), lock(p_lock), rid(p_rid) {
 			frame.previous = device.native_immutable_free_frame;
 			device.native_immutable_free_frame = &frame;
 		}
 		~ResourceFreeScope() {
 			device.resource_frees_in_progress.erase(rid);
-			device.native_immutable_free_frame = frame.previous;
 			if (frame.previous) {
+				device.native_immutable_free_frame = frame.previous;
 				for (RID pending : frame.returned) {
 					if (!frame.previous->returned.has(pending)) {
 						frame.previous->returned.push_back(pending);
@@ -10052,15 +10059,21 @@ void RenderingDevice::free_rid(RID p_rid) {
 			}
 			// Callback returns belong to this original synchronous free frame.
 			// Once its recursion guard closes, only original pending frees resume.
-			for (RID pending : frame.returned) {
+			// Keep the actual outer stack frame visible until all synchronous
+			// retries return, including intervals with no RID recursion guard.
+			for (uint32_t i = 0; i < frame.returned.size(); ++i) {
+				const RID pending = frame.returned[i];
 				bool *retiring = nullptr;
 				const auto *holds = device._native_immutable_counter(pending, &retiring);
 				if (holds && !*holds && *retiring) {
+					lock.temp_unlock();
 					device.free_rid(pending);
+					lock.temp_relock();
 				}
 			}
+			device.native_immutable_free_frame = nullptr;
 		}
-	} free_scope{ *this, p_rid };
+	} free_scope{ *this, p_rid, immutable_lock };
 
 	auto *buffer = storage_buffer_owner.get_or_null(p_rid);
 	auto *shader = shader_owner.get_or_null(p_rid);
@@ -10075,7 +10088,9 @@ void RenderingDevice::free_rid(RID p_rid) {
 		// Close future physical acquisition before dependency callbacks can run.
 		*retiring = true;
 		if (*holds) {
+			immutable_lock.temp_unlock();
 			_native_immutable_retire_dependents(p_rid);
+			immutable_lock.temp_relock();
 			// A callback may return the last hold or delete a dependent. Re-resolve
 			// the actual owner; never dereference its pre-callback pointer again.
 			const auto *remaining = _native_immutable_counter(p_rid);
@@ -10085,7 +10100,7 @@ void RenderingDevice::free_rid(RID p_rid) {
 		}
 	}
 
-	if (!_free_dependencies(p_rid)) { // Recursively erase dependencies first, to avoid potential API problems.
+	if (!_free_dependencies(p_rid, immutable_lock)) { // Keep the original guard through dependency removal and RID free.
 		// A callback can return the last pin, then destroy an owner whose
 		// dependency is this outer free. Resume that original zero-pin free
 		// after the outer recursion guard closes.
@@ -10095,14 +10110,14 @@ void RenderingDevice::free_rid(RID p_rid) {
 		}
 		return;
 	}
-	_free_internal(p_rid);
+	_free_internal(p_rid, immutable_lock);
 }
 
 #ifdef TESTS_ENABLED
 thread_local void (*test_uniform_set_after_rid_free)(RenderingDevice *) = nullptr;
 #endif
 
-void RenderingDevice::_free_internal(RID p_id) {
+void RenderingDevice::_free_internal(RID p_id, const MutexLock<Mutex> &p_lock) {
 	ERR_FAIL_COND(_qualification_resource_busy(p_id));
 	auto *qualified_texture = texture_owner.get_or_null(p_id);
 	ERR_FAIL_COND(qualified_texture && qualified_texture->qualification_return && qualified_texture->transfer_worker_index >= 0);
@@ -10151,7 +10166,9 @@ void RenderingDevice::_free_internal(RID p_id) {
 		framebuffer_owner.free(p_id);
 
 		if (invalidated_callback != nullptr) {
+			p_lock.temp_unlock();
 			invalidated_callback(invalidated_callback_userdata);
+			p_lock.temp_relock();
 		}
 	} else if (sampler_owner.owns(p_id)) {
 		Sampler *sampler = sampler_owner.get_or_null(p_id);
@@ -10247,7 +10264,9 @@ void RenderingDevice::_free_internal(RID p_id) {
 #endif
 
 		if (invalidated_callback != nullptr) {
+			p_lock.temp_unlock();
 			invalidated_callback(invalidated_callback_userdata);
+			p_lock.temp_relock();
 		}
 	} else if (render_pipeline_owner.owns(p_id)) {
 		RenderPipeline *pipeline = render_pipeline_owner.get_or_null(p_id);
@@ -12388,7 +12407,7 @@ Error RenderingDevice::_begin_production_finalization() {
 	{
 		MutexLock immutable_lock(_thread_safe_);
 		production_finalization_started.store(true, std::memory_order_release);
-		if (native_immutable_hold_count || !resource_frees_in_progress.is_empty()) {
+		if (native_immutable_hold_count || native_immutable_free_frame || !resource_frees_in_progress.is_empty()) {
 			return ERR_BUSY;
 		}
 	}
