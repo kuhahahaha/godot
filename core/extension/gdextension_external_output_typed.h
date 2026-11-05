@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  gdextension_external_output_typed.h                                    */
+/*  gdextension_external_output_typed.h                                   */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -27,6 +27,8 @@
 /* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
+
+#pragma once
 
 /* Four-operation payload subset. Acquire/poll results and external registration remain pending. */
 #ifndef GDEXTENSION_EXTERNAL_OUTPUT_TYPED_V1_H

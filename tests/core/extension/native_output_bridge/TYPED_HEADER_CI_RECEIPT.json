@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "component": "typed header CI formatting follow-up",
+  "ci_run": 42102942108,
+  "ci_job": 127510508993,
+  "old_header_sha256": "f1fe23eebc6b7b3806df5c7205f0eda09cbac803b76bd6365585d86e87f662ea",
+  "new_header_sha256": "b8803cf90953c97892be75a2265d90ef72c12e0577ac694d5a821a2f9a5e6912",
+  "changes": [
+    "copyright filename alignment only",
+    "pragma once before existing guard"
+  ],
+  "original_hooks_idempotent": true,
+  "prior_build_receipt": "TYPED_BODY_RECEIPT.json",
+  "prior_build_is_old_bytes": true,
+  "new_runtime_test": "not rerun; no payload/body/layout behavior changed",
+  "evidence": "/tmp/b4-ci-453/REVIEW.md",
+  "review_sha256": "8385147fce0ca4c14b58eb4904e62390404953b9d96cc5fd55eb6e091cba75c2"
+}
