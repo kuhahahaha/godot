@@ -49,11 +49,82 @@ template <class T>
 constexpr GDExtensionDeviceExitAbi production_dto_abi() {
 	return { 1, sizeof(T), 0 };
 }
+template <>
+constexpr GDExtensionDeviceExitAbi production_dto_abi<GDExtensionProductionDispatchV2>() {
+	return { 2, sizeof(GDExtensionProductionDispatchV2), 0 };
+}
+template <>
+constexpr GDExtensionDeviceExitAbi production_dto_abi<GDExtensionProductionCopyV2>() {
+	return { 2, sizeof(GDExtensionProductionCopyV2), 0 };
+}
+template <>
+constexpr GDExtensionDeviceExitAbi production_dto_abi<GDExtensionProductionUploadV2>() {
+	return { 2, sizeof(GDExtensionProductionUploadV2), 0 };
+}
+template <>
+constexpr GDExtensionDeviceExitAbi production_dto_abi<GDExtensionProductionAppendV2>() {
+	return { 2, sizeof(GDExtensionProductionAppendV2), 0 };
+}
+template <>
+constexpr GDExtensionDeviceExitAbi production_dto_abi<GDExtensionProductionReportV2>() {
+	return { 2, sizeof(GDExtensionProductionReportV2), 0 };
+}
+template <>
+constexpr GDExtensionDeviceExitAbi production_dto_abi<GDExtensionProductionSegmentV2>() {
+	return { 2, sizeof(GDExtensionProductionSegmentV2), 0 };
+}
+template <>
+constexpr GDExtensionDeviceExitAbi production_dto_abi<GDExtensionProductionRecordReportV2>() {
+	return { 2, sizeof(GDExtensionProductionRecordReportV2), 0 };
+}
 template <class T>
 bool production_dto_valid(const T &value) {
 	const auto expected = production_dto_abi<T>();
 	return value.abi.abi_version == expected.abi_version && value.abi.struct_size == expected.struct_size && value.abi.reserved == 0;
 }
+
+// Synchronous input views only. Rows copy into the original accepted arena.
+// V1 is explicitly normalized; no ordinal is stored in a V1 canonical field.
+struct ProductionActionRows {
+	const GDExtensionProductionActionV1 *legacy = nullptr;
+	const GDExtensionProductionActionV2 *ordinal = nullptr;
+	bool aligned() const {
+		const void *p = legacy ? static_cast<const void *>(legacy) : ordinal;
+		return p && uintptr_t(p) % (legacy ? alignof(GDExtensionProductionActionV1) : alignof(GDExtensionProductionActionV2)) == 0;
+	}
+	GDExtensionProductionActionV2 operator[](uint32_t index) const {
+		if (ordinal) {
+			return ordinal[index];
+		}
+		const auto &v = legacy[index];
+		GDExtensionProductionActionV2 r = {};
+		r.action_ordinal = index;
+		r.canonical_suboperation = v.canonical_suboperation;
+		r.action_kind = v.action_kind;
+		r.physical_unit = v.physical_unit;
+		r.first_use = v.first_use;
+		r.use_count = v.use_count;
+		r.list_boundary = v.list_boundary;
+		r.readback_slot = v.readback_slot;
+		return r;
+	}
+};
+struct ProductionReadbackRows {
+	const GDExtensionProductionReadbackV1 *legacy = nullptr;
+	const GDExtensionProductionReadbackV2 *ordinal = nullptr;
+	uint64_t canonical_begin = 0;
+	bool aligned() const {
+		const void *p = legacy ? static_cast<const void *>(legacy) : ordinal;
+		return p && uintptr_t(p) % (legacy ? alignof(GDExtensionProductionReadbackV1) : alignof(GDExtensionProductionReadbackV2)) == 0;
+	}
+	GDExtensionProductionReadbackV2 operator[](uint32_t index) const {
+		if (ordinal) {
+			return ordinal[index];
+		}
+		const auto &v = legacy[index];
+		return { v.resource_slot, v.reserved, v.canonical_producer >= canonical_begin ? v.canonical_producer - canonical_begin : UINT64_MAX, v.canonical_copy >= canonical_begin ? v.canonical_copy - canonical_begin : UINT64_MAX, v.byte_offset, v.byte_size };
+	}
+};
 
 class ProductionRequest;
 
@@ -110,7 +181,7 @@ class ProductionResourceSlot {
 	uint32_t first_binding = UINT32_MAX, binding_count = 0;
 	bool imported = false;
 	uint32_t transfer_worker = UINT32_MAX;
-	uint64_t transfer_operation = 0, transfer_canonical = 0;
+	uint64_t transfer_operation = 0, transfer_action_ordinal = 0;
 	bool transfer_pending = false, transfer_staged = false;
 	QualificationPhysicalReturn owned_physical;
 	GDExtensionStorageCreateRequestV1 create_origin = {};
@@ -130,10 +201,10 @@ class ProductionActionCell {
 #endif
 	ProductionActionCell() = default;
 	ProductionRequest *request = nullptr;
-	GDExtensionProductionActionV1 declaration = {};
-	GDExtensionProductionDispatchV1 dispatch = {};
-	GDExtensionProductionCopyV1 copy = {};
-	GDExtensionProductionUploadV1 upload = {};
+	GDExtensionProductionActionV2 declaration = {};
+	GDExtensionProductionDispatchV2 dispatch = {};
+	GDExtensionProductionCopyV2 copy = {};
+	GDExtensionProductionUploadV2 upload = {};
 	uint64_t payload_offset = 0, payload_bytes = 0;
 	uint32_t recorded_bytes = 0;
 	uint32_t readback_slot = UINT32_MAX;
@@ -177,7 +248,7 @@ class ProductionReadbackCell {
 #endif
 	ProductionReadbackCell() = default;
 	ProductionRequest *request = nullptr;
-	GDExtensionProductionReadbackV1 declaration = {};
+	GDExtensionProductionReadbackV2 declaration = {};
 	ReadbackSourceState source;
 	BufferReadbackSourceCapture capture;
 	uint64_t bytes_offset = 0;
@@ -193,7 +264,7 @@ class ProductionGraphCell {
 	ProductionRequest *request = nullptr;
 	RDG::RecordHandle handle;
 	BufferUploadSourceSegment captured;
-	GDExtensionProductionFactV1 fact = {};
+	GDExtensionProductionFactV2 fact = {};
 	uint32_t device_frame = UINT32_MAX;
 	uint64_t device_epoch = 0;
 	bool pending = false;
@@ -211,7 +282,7 @@ class ProductionNativeCell {
 	// Only original source capture populates these rows; no public numeric writer.
 	// Aliases retain each membership edge but only the first cell owns a ref.
 	uint32_t owner_index = UINT32_MAX;
-	GDExtensionProductionFactV1 fact = {};
+	GDExtensionProductionFactV2 fact = {};
 	NativeSourceObservation observation;
 	Error release_error = OK;
 };
@@ -269,9 +340,9 @@ struct ProductionControlOutput {
 	uint64_t request_serial;
 	uint64_t control_serial;
 	GDExtensionDeviceSessionResultV1 result;
-	GDExtensionProductionReportV1 report;
-	GDExtensionProductionSegmentV1 segment;
-	GDExtensionProductionAppendV1 append;
+	GDExtensionProductionReportV2 report;
+	GDExtensionProductionSegmentV2 segment;
+	GDExtensionProductionAppendV2 append;
 	ProductionRecordPause record_pause;
 	ProductionServiceUsage service_usage;
 	// Owner reference return is distinct from the immutable RT result.
@@ -296,6 +367,7 @@ class ProductionRequest {
 	ProductionAttachment *attachment = nullptr;
 	uint64_t serial = 0;
 	GDExtensionProductionOperationV1 operation = {};
+	uint32_t contract_version = 1;
 	GDExtensionProductionCapacityV1 capacity = {};
 	ProductionActionCell *actions = nullptr;
 	ProductionResourceSlot *resources = nullptr;
@@ -327,7 +399,7 @@ class ProductionRequest {
 	bool compute_list_open = false;
 	uint32_t next_action = 0;
 	uint32_t native_workers_bound = 0;
-	GDExtensionProductionSegmentV1 segment = {};
+	GDExtensionProductionSegmentV2 segment = {};
 	uint64_t acknowledged_segment = 0;
 	uint32_t segment_graph_begin = 0, segment_action_begin = 0;
 	// No numeric field or DTO populates original scope/window/K03 authority.

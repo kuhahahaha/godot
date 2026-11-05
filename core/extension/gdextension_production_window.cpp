@@ -28,6 +28,7 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
+#include "core/extension/gdextension_production_legacy_projection.h"
 #include "core/extension/gdextension_production_request.h"
 #include "core/extension/gdextension_record_source.h"
 #include "core/os/thread.h"
@@ -110,6 +111,27 @@ GDExtensionDeviceSessionResultV1 Registry::production_reserve(GDExtensionProduct
 	}
 	return window_result(error);
 }
+GDExtensionDeviceSessionResultV1 Registry::production_reserve_v2(GDExtensionProductionAttachmentRefV1 ref, const GDExtensionProductionOperationV1 *operation, const GDExtensionProductionCapacityV1 *capacity, const GDExtensionProductionActionV2 *actions, uint32_t action_count, const GDExtensionProductionResourceV1 *resources, uint32_t resource_count, const GDExtensionProductionUseV1 *uses, uint32_t use_count, const GDExtensionProductionReadbackV2 *readbacks, uint32_t readback_count, GDExtensionProductionRequestRefV1 *out) {
+	if (!window_aligned(operation) || !window_aligned(capacity) || !window_aligned(out) || out->registry_instance || out->handle_serial) {
+		return window_result(ERR_INVALID_PARAMETER);
+	}
+	MutexLock lock(mutex);
+	ProductionAttachment *attachment = nullptr;
+	RenderingDevice *device = nullptr;
+	Error error = production_attachment_locked(ref, true, attachment, device);
+	if (error != OK) {
+		return window_result(error);
+	}
+	if (!attachment->opened || !attachment->record_receiver) {
+		return window_result(ERR_UNAVAILABLE);
+	}
+	ProductionRequest *request = nullptr;
+	error = production_reserve_metadata_rows_locked(*attachment, *operation, *capacity, { nullptr, actions }, action_count, resources, resource_count, uses, use_count, { nullptr, readbacks, operation->canonical_begin }, readback_count, request, 2);
+	if (error == OK) {
+		*out = { instance, request->serial };
+	}
+	return window_result(error);
+}
 
 Error Registry::production_record_schedule(GDExtensionProductionRequestRefV1 ref, uint64_t *out) {
 	if (is_production_metadata_entry()) {
@@ -162,7 +184,11 @@ Error Registry::production_record_schedule(GDExtensionProductionRequestRefV1 ref
 	return production_control_schedule(ref, serial);
 }
 
-GDExtensionDeviceSessionResultV1 Registry::production_record_consume(GDExtensionProductionRequestRefV1 ref, uint64_t serial, GDExtensionProductionRecordReportV1 *out) {
+GDExtensionDeviceSessionResultV1 Registry::production_record_consume_v2(GDExtensionProductionRequestRefV1 ref, uint64_t serial, GDExtensionProductionRecordReportV2 *out, uint32_t expected_contract) {
+	const Error contract = production_contract_check(ref, expected_contract);
+	if (contract != OK) {
+		return { int32_t(contract), 0, 0, 0 };
+	}
 	if (!window_aligned(out)) {
 		return window_result(ERR_INVALID_PARAMETER);
 	}
@@ -184,7 +210,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_record_consume(GDExtension
 	if (error != OK) {
 		return window_result(error);
 	}
-	out->abi = production_dto_abi<GDExtensionProductionRecordReportV1>();
+	out->abi = production_dto_abi<GDExtensionProductionRecordReportV2>();
 	out->request_serial = returned.request_serial;
 	out->control_serial = returned.control_serial;
 	out->result = returned.result;
@@ -348,7 +374,34 @@ GDExtensionDeviceSessionResultV1 Registry::production_append(ProductionPhysicalC
 	if (!window_aligned(out)) {
 		return window_result(ERR_INVALID_PARAMETER);
 	}
-	*out = {};
+	uint64_t begin = 0;
+	{
+		MutexLock lock(mutex);
+		ProductionRequest *request = nullptr;
+		RenderingDevice *device = nullptr;
+		const Error error = production_physical_request_locked(context, ref, request, device, true);
+		if (error != OK) {
+			*out = {};
+			return window_result(error);
+		}
+		if (request->contract_version != 1) {
+			return window_result(ERR_INVALID_DATA);
+		}
+		begin = request->operation.canonical_begin;
+	}
+	GDExtensionProductionAppendV2 value = {};
+	const auto result = production_append_v2(context, ref, canonical >= begin ? canonical - begin : UINT64_MAX, revision, &value, 1);
+	*out = production_legacy_projection(value, begin);
+	if (value.abi.abi_version) {
+		out->canonical_suboperation = canonical;
+	}
+	return result;
+}
+
+GDExtensionDeviceSessionResultV1 Registry::production_append_v2(ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, uint64_t ordinal, uint64_t revision, GDExtensionProductionAppendV2 *out, uint32_t expected_contract) {
+	if (!window_aligned(out)) {
+		return window_result(ERR_INVALID_PARAMETER);
+	}
 	MutexLock lock(mutex);
 	ProductionRequest *request = nullptr;
 	RenderingDevice *device = nullptr;
@@ -356,12 +409,18 @@ GDExtensionDeviceSessionResultV1 Registry::production_append(ProductionPhysicalC
 	if (error != OK) {
 		return window_result(error);
 	}
-	out->abi = production_dto_abi<GDExtensionProductionAppendV1>();
-	out->canonical_suboperation = canonical;
+	if (request->contract_version != expected_contract) {
+		return window_result(ERR_INVALID_DATA);
+	}
+	*out = {};
+	out->abi = production_dto_abi<GDExtensionProductionAppendV2>();
+	out->action_ordinal = ordinal;
 	out->revision = request->revision;
-	if (revision != request->revision || request->next_action >= request->action_count || canonical != request->operation.canonical_begin + request->next_action) {
+	if (revision != request->revision || request->next_action >= request->action_count || ordinal != request->next_action) {
 		return out->cause = window_result(ERR_INVALID_DATA);
 	}
+	out->canonical_suboperation = request->actions[ordinal].declaration.canonical_suboperation;
+	out->source_recipe_substep = request->actions[ordinal].declaration.source_recipe_substep;
 	if (!device->_thread_safe_.try_lock()) {
 		return out->cause = window_result(ERR_BUSY);
 	}
@@ -390,10 +449,39 @@ GDExtensionDeviceSessionResultV1 Registry::production_close_segment(ProductionPh
 	if (!window_aligned(out)) {
 		return window_result(ERR_INVALID_PARAMETER);
 	}
+	uint64_t begin = 0;
+	{
+		MutexLock lock(mutex);
+		ProductionRequest *request = nullptr;
+		RenderingDevice *device = nullptr;
+		const Error error = production_physical_request_locked(context, ref, request, device, false);
+		if (error != OK) {
+			return window_result(error);
+		}
+		if (request->contract_version != 1) {
+			return window_result(ERR_INVALID_DATA);
+		}
+		begin = request->operation.canonical_begin;
+	}
+	GDExtensionProductionSegmentV2 value = {};
+	const auto result = production_close_segment_v2(context, ref, &value, 1);
+	if (value.abi.abi_version) {
+		*out = production_legacy_projection(value, begin);
+	}
+	return result;
+}
+
+GDExtensionDeviceSessionResultV1 Registry::production_close_segment_v2(ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, GDExtensionProductionSegmentV2 *out, uint32_t expected_contract) {
+	if (!window_aligned(out)) {
+		return window_result(ERR_INVALID_PARAMETER);
+	}
 	MutexLock lock(mutex);
 	ProductionRequest *request = nullptr;
 	RenderingDevice *device = nullptr;
 	Error error = production_physical_request_locked(context, ref, request, device, false);
+	if (error == OK && request->contract_version != expected_contract) {
+		return window_result(ERR_INVALID_DATA);
+	}
 	if (error == OK) {
 		if (!device->_thread_safe_.try_lock()) {
 			return window_result(ERR_BUSY);

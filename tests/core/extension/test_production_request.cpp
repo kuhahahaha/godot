@@ -45,6 +45,8 @@
 #include "tests/servers/rendering/transfer_test_driver_base.h"
 #include "tests/test_macros.h"
 
+#include <cstring>
+
 TEST_FORCE_LINK(test_production_request)
 
 namespace TestProductionRequest {
@@ -690,6 +692,29 @@ struct Access {
 			return available;
 		}
 	};
+	// Only fixture inputs: all identities and request storage still come from
+	// the existing original enrollment, quote/accept/open and installed port.
+	struct OrdinalPlan {
+		GDExtensionProductionCapacityV1 capacity = { GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 3, 3, 3, 3, 2048, 1, 3, 8, 4 };
+		GDExtensionProductionOperationV1 operation = { GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionOperationV1>(), 91, 1, 10, 13 };
+		GDExtensionProductionActionV2 actions[3] = {
+			{ 0, 11, 7, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, 0, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
+			{ 1, 11, 2, 0, GDEXTENSION_PRODUCTION_DISPATCH_V1, 0, 1, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
+			{ 2, 11, 9, 0, GDEXTENSION_PRODUCTION_READBACK_V1, 0, 2, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, 0 }
+		};
+		GDExtensionProductionResourceV1 resources[3] = {
+			{ GDEXTENSION_PRODUCTION_UNIT_V1, 4, 5, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 6, 0, 0 },
+			{ GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 16, 0 },
+			{ GDEXTENSION_PRODUCTION_STORAGE_V1, 2, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 16, 0 }
+		};
+		GDExtensionProductionUseV1 uses[3] = {
+			{ 1, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 4, 0 },
+			{ 1, GDEXTENSION_PRODUCTION_READ_WRITE_V1, 0, 16, 0 },
+			{ 1, GDEXTENSION_PRODUCTION_READ_V1, 0, 4, 0 }
+		};
+		GDExtensionProductionReadbackV2 readback = { 1, 0, 1, 2, 0, 4 };
+		uint32_t action_count = 3, resource_count = 3, use_count = 3, readback_count = 1;
+	};
 	struct SingletonEnrollment {
 		Registry &registry = Registry::get_singleton();
 		RenderingServerDefault *server = nullptr;
@@ -764,7 +789,7 @@ struct Access {
 			const Error error = prepare_device(p_server);
 			return error == OK ? initialize_owner(loader_kind) : error;
 		}
-		Error initialize_owner(uint32_t loader_kind = 1, bool owned_storage = false, bool owned_set = false, GDExtensionDeviceExit::ProductionRecordReceiver receiver = nullptr, void *userdata = nullptr, bool keep_list = false, uint32_t record_actions = 1, bool upload_prefix = false, GDExtensionDeviceExit::ProductionMetadataReceiver metadata_receiver = nullptr, bool output_closure = false, bool output_borrow = false, bool mesh_directory = false, bool directory_external = false) {
+		Error initialize_owner(uint32_t loader_kind = 1, bool owned_storage = false, bool owned_set = false, GDExtensionDeviceExit::ProductionRecordReceiver receiver = nullptr, void *userdata = nullptr, bool keep_list = false, uint32_t record_actions = 1, bool upload_prefix = false, GDExtensionDeviceExit::ProductionMetadataReceiver metadata_receiver = nullptr, bool output_closure = false, bool output_borrow = false, bool mesh_directory = false, bool directory_external = false, const OrdinalPlan *ordinal_plan = nullptr) {
 			using namespace GDExtensionDeviceExit;
 			if (public_port && !port.load()) {
 				return ERR_UNAVAILABLE;
@@ -865,6 +890,9 @@ struct Access {
 			if (output_borrow) {
 				whole.resource_uses += 2;
 			}
+			if (ordinal_plan) {
+				whole = ordinal_plan->capacity;
+			}
 			GDExtensionProductionMetadataQuoteV1 quote = {};
 			if (public_port) {
 				CHECK(port.quote(&Enrollment::ABI, ready, { instance, UINT64_MAX }, context, session, &whole, &quote).native_error != OK);
@@ -889,6 +917,21 @@ struct Access {
 				if (Error error = Error((public_port ? port.open(ready, attachment) : registry.production_open(ready, attachment)).native_error); error != OK) {
 					return error;
 				}
+			}
+			if (ordinal_plan) {
+				const auto reserve_v2 = reinterpret_cast<GDExtensionInterfaceDeviceSessionProductionReserveV2>(GDExtension::get_interface_function("device_session_production_reserve_v2"));
+				if (!reserve_v2) {
+					return ERR_UNAVAILABLE;
+				}
+				GDExtensionProductionRequestRefV1 reserved = {};
+				const auto &p = *ordinal_plan;
+				const Error error = Error(reserve_v2(attachment, &p.operation, &p.capacity, p.action_count ? p.actions : nullptr, p.action_count, p.resource_count ? p.resources : nullptr, p.resource_count, p.use_count ? p.uses : nullptr, p.use_count, p.readback_count ? &p.readback : nullptr, p.readback_count, &reserved).native_error);
+				if (error != OK) {
+					return error;
+				}
+				MutexLock lock(registry.mutex);
+				RenderingDevice *device = nullptr;
+				return registry.production_request_locked(reserved, false, request, device);
 			}
 			auto single = whole;
 			single.requests = single.suboperations = single.resources = single.resource_uses = single.graph_memberships = single.return_cells = 1;
@@ -1483,6 +1526,7 @@ struct Access {
 		CHECK(test.setup.owner_cleaned);
 	}
 	struct SplitSet {
+		bool v1_compat_probe = false;
 		bool record_window = false, keep_list = false, close_before_ack = false, budget_pause = false, upload_prefix = false;
 		bool public_port = false, output_closure = false, closure_retired = false, groups_settled = false, closure_rollback = false, output_borrow = false;
 		uint64_t borrowed_group = 0, owned_group = 0, qualified_group = 0;
@@ -1582,6 +1626,28 @@ struct Access {
 			++test.receiver_calls;
 			test.receiver_thread = Thread::get_caller_id();
 			test.expired_context = context;
+			if (test.v1_compat_probe) {
+				const auto append_v1 = Access::ordinal_port<GDExtensionInterfaceDeviceSessionProductionAppendV1>("device_session_production_append_v1");
+				if (!test.check(__LINE__, append_v1 != nullptr)) {
+					return;
+				}
+				const uint64_t before_revision = request.revision;
+				const uint32_t before_next = request.next_action;
+				GDExtensionProductionAppendV1 rejected;
+				std::memset(&rejected, 0x5a, sizeof(rejected));
+				const auto result = append_v1(context, ref, operation->canonical_begin, request.revision ^ 1, &rejected);
+				test.check(__LINE__, Access::v1_result(result, ERR_INVALID_DATA, 0));
+				test.check(__LINE__, rejected.abi.abi_version == 1 && rejected.abi.struct_size == sizeof(rejected));
+				test.check(__LINE__, rejected.canonical_suboperation == operation->canonical_begin && rejected.revision == before_revision);
+				test.check(__LINE__, Access::v1_result(rejected.cause, ERR_INVALID_DATA, 0));
+				test.check(__LINE__, request.next_action == before_next && request.revision == before_revision);
+				std::memset(&rejected, 0x5a, sizeof(rejected));
+				test.check(__LINE__, Access::v1_result(append_v1(context, ref, operation->canonical_begin - 1, request.revision, &rejected), ERR_INVALID_DATA, 0));
+				test.check(__LINE__, rejected.canonical_suboperation == operation->canonical_begin - 1 && rejected.revision == before_revision);
+				test.check(__LINE__, rejected.abi.abi_version == 1 && Access::v1_result(rejected.cause, ERR_INVALID_DATA, 0));
+				test.check(__LINE__, request.next_action == before_next && request.revision == before_revision);
+			}
+
 			test.check(__LINE__, test.receiver_thread == fixture.driver.execution_thread && test.receiver_thread != registry.records[fixture.reference.slot].owner_thread);
 			test.check(__LINE__, operation && operation->owner_request_nonce == request.operation.owner_request_nonce);
 			test.check(__LINE__, registry.records[fixture.reference.slot].active_callbacks > 0);
@@ -2201,6 +2267,22 @@ struct Access {
 				test.check(__LINE__, test.receiver_calls == 1 && request.control.state == ProductionControlState::RETURNED);
 				GDExtensionProductionRecordReportV1 returned = {};
 				test.check(__LINE__, test.consume(ref, control, &returned).native_error == OK && returned.result.native_error == OK);
+				if (test.v1_compat_probe) {
+					const auto append_v1 = Access::ordinal_port<GDExtensionInterfaceDeviceSessionProductionAppendV1>("device_session_production_append_v1");
+					const auto prepare_v1 = Access::ordinal_port<GDExtensionInterfaceDeviceSessionProductionPrepareUploadV1>("device_session_production_prepare_upload_v1");
+					if (append_v1 && prepare_v1) {
+						GDExtensionProductionAppendV1 expired;
+						std::memset(&expired, 0x5a, sizeof(expired));
+						test.check(__LINE__, Access::v1_result(append_v1(test.expired_context, ref, 10, request.revision, &expired), ERR_UNAUTHORIZED, 0));
+						test.check(__LINE__, expired.abi.abi_version == 0 && expired.canonical_suboperation == 0 && expired.revision == 0 && expired.state == 0);
+						test.check(__LINE__, expired.recorded_bytes == 0 && expired.parent_bytes == 0 && expired.graph_fact_count == 0 && Access::v1_result(expired.cause, OK, 0));
+						const uint8_t payload[4] = { 1, 2, 3, 4 };
+						const GDExtensionProductionUploadV1 below_begin = { GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionUploadV1>(), 9, 1, 0, 0, 4 };
+						test.check(__LINE__, request.frozen && request.control.state == GDExtensionDeviceExit::ProductionControlState::OWNER_CONSUMED);
+						test.check(__LINE__, Access::v1_result(prepare_v1(ref, &below_begin, payload, 4), ERR_BUSY, 16));
+					}
+				}
+
 				if (test.closure_rollback) {
 					test.finish_closure_rollback(backing, ref);
 					return;
@@ -2845,13 +2927,14 @@ struct Access {
 		}
 		return OK;
 	}
-	static void singleton_split_owner_set(bool record_window = false, bool keep_list = false, bool close_before_ack = false, bool budget_pause = false, bool upload_prefix = false, bool public_port = false, bool output_closure = false, bool closure_retired = false, bool closure_rollback = false, bool output_borrow = false, bool mesh_directory = false, bool directory_capacity_failure = false, bool directory_external = false) {
+	static void singleton_split_owner_set(bool record_window = false, bool keep_list = false, bool close_before_ack = false, bool budget_pause = false, bool upload_prefix = false, bool public_port = false, bool output_closure = false, bool closure_retired = false, bool closure_rollback = false, bool output_borrow = false, bool mesh_directory = false, bool directory_capacity_failure = false, bool directory_external = false, bool v1_compat_probe = false) {
 		auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
 		if (!check_step(server && !server->create_thread && server->server_thread == Thread::get_caller_id() && !RenderingDevice::get_singleton())) {
 			return;
 		}
 		server->sync();
 		SplitSet test;
+		test.v1_compat_probe = v1_compat_probe;
 		test.record_window = record_window;
 		test.keep_list = keep_list;
 		test.close_before_ack = close_before_ack;
@@ -3876,6 +3959,8 @@ struct Access {
 		request.serial = 9;
 		request.actions = actions;
 		request.action_count = 2;
+		request.operation.canonical_begin = 10;
+		request.operation.canonical_end = 12;
 		request.resources = &resource;
 		request.resource_count = 1;
 		request.capacity.retained_payload_bytes = sizeof(storage);
@@ -3886,6 +3971,7 @@ struct Access {
 		resource.imported = true; // Pure metadata test: no physical/native call occurs.
 		for (uint32_t i = 0; i < 2; ++i) {
 			actions[i].request = &request;
+			actions[i].declaration.action_ordinal = i;
 			actions[i].declaration.canonical_suboperation = i + 10;
 			actions[i].declaration.action_kind = GDEXTENSION_PRODUCTION_UPLOAD_V1;
 			actions[i].declaration.use_count = 1;
@@ -3912,6 +3998,414 @@ struct Access {
 		upload.canonical_suboperation = 10;
 		CHECK(registry.production_prepare_upload_locked(request, upload, original, 4).native_error == ERR_BUSY);
 		CHECK(storage[3] == 8);
+	}
+	template <class T>
+	static T ordinal_port(const char *name) {
+		const auto entry = reinterpret_cast<T>(GDExtension::get_interface_function(name));
+		CHECK_MESSAGE(entry != nullptr, "Missing installed ordinal procedure: ", name);
+		return entry;
+	}
+	static RenderingServerDefault *ordinal_server() {
+		auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
+		if (!check_step(server && !server->create_thread && server->server_thread == Thread::get_caller_id() && !RenderingDevice::get_singleton())) {
+			return nullptr;
+		}
+		server->sync();
+		return server;
+	}
+	static Error ordinal_initialize(SingletonEnrollment &fixture, RenderingServerDefault *server, const OrdinalPlan &plan, GDExtensionDeviceExit::ProductionRecordReceiver receiver = nullptr, void *userdata = nullptr) {
+		if (!receiver) {
+			receiver = +[](void *, GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const GDExtensionProductionOperationV1 *) {};
+		}
+		const Error device = fixture.prepare_device(server);
+		return device == OK ? fixture.initialize_owner(1, false, false, receiver, userdata, false, 1, false, +[](void *, GDExtensionProductionAttachmentRefV1) {}, false, false, false, false, &plan) : device;
+	}
+	static void ordinal_rows_and_prepare() {
+		using namespace GDExtensionDeviceExit;
+		auto *server = ordinal_server();
+		if (!server) {
+			return;
+		}
+		const auto upload = ordinal_port<GDExtensionInterfaceDeviceSessionProductionPrepareUploadV2>("device_session_production_prepare_upload_v2");
+		const auto readback = ordinal_port<GDExtensionInterfaceDeviceSessionProductionPrepareReadbackV2>("device_session_production_prepare_readback_v2");
+		const auto observe = ordinal_port<GDExtensionInterfaceDeviceSessionProductionObserveV2>("device_session_production_observe_v2");
+		if (!upload || !readback || !observe) {
+			return;
+		}
+		{
+			OrdinalPlan plan;
+			SingletonEnrollment fixture;
+			if (!check_step(ordinal_initialize(fixture, server, plan) == OK)) {
+				return;
+			}
+			auto &request = *fixture.request;
+			const GDExtensionProductionRequestRefV1 ref = { fixture.instance, request.serial };
+			CHECK(request.contract_version == 2);
+			CHECK(request.action_count == 3);
+			CHECK(request.operation.canonical_begin == 10);
+			CHECK(request.operation.canonical_end == 13);
+			CHECK(request.actions[0].declaration.action_kind == GDEXTENSION_PRODUCTION_UPLOAD_V1);
+			CHECK(request.actions[1].declaration.action_kind == GDEXTENSION_PRODUCTION_DISPATCH_V1);
+			CHECK(request.actions[2].declaration.action_kind == GDEXTENSION_PRODUCTION_READBACK_V1);
+			for (uint32_t i = 0; i < 3; ++i) {
+				CHECK(request.actions[i].declaration.action_ordinal == i);
+				CHECK(request.actions[i].declaration.canonical_suboperation == 11);
+			}
+			CHECK(request.readbacks[0].declaration.producer_action_ordinal == 1);
+			CHECK(request.readbacks[0].declaration.copy_action_ordinal == 2);
+			const uint8_t payload[4] = { 1, 3, 5, 7 };
+			GDExtensionProductionUploadV2 prepared = { production_dto_abi<GDExtensionProductionUploadV2>(), 0, 11, 7, 0, 1, 0, 0, 4 };
+			++prepared.source_recipe_substep;
+			CHECK(upload(ref, &prepared, payload, sizeof(payload)).native_error == ERR_INVALID_DATA);
+			CHECK_FALSE(request.actions[0].prepared);
+			--prepared.source_recipe_substep;
+			CHECK(upload(ref, &prepared, payload, sizeof(payload)).native_error == OK);
+			CHECK(readback(ref, 1, 0).native_error != OK); // Dispatch cannot masquerade as the copy row.
+			CHECK(readback(ref, 2, 0).native_error == OK);
+			const auto no_service = GDExtensionProductionServiceBudgetV1{ production_dto_abi<GDExtensionProductionServiceBudgetV1>(), 0, 0, 0, 0, 0 };
+			GDExtensionProductionReportV2 report = {};
+			CHECK(observe(ref, &no_service, &report).native_error == OK);
+			CHECK(report.action_count == 3);
+			CHECK(report.recorded_action_end == 0);
+			CHECK(report.operation.canonical_begin == 10);
+			CHECK(report.operation.canonical_end == 13);
+			CHECK_FALSE(request.frozen); // No native unit is fabricated/imported by this mapping test.
+			fixture.cleanup_owner();
+			CHECK(fixture.owner_cleaned);
+		}
+		{
+			// Same kind and canonical: a first-canonical lookup would select row0
+			// when preparing row1 and fail the valid substep/destination below.
+			OrdinalPlan plan;
+			plan.action_count = 2;
+			plan.readback_count = 0;
+			plan.actions[1] = plan.actions[0];
+			plan.actions[1].action_ordinal = 1;
+			plan.actions[1].source_recipe_substep = 2;
+			SingletonEnrollment fixture;
+			if (!check_step(ordinal_initialize(fixture, server, plan) == OK)) {
+				return;
+			}
+			const GDExtensionProductionRequestRefV1 ref = { fixture.instance, fixture.request->serial };
+			const uint8_t payload[4] = { 2, 4, 6, 8 };
+			GDExtensionProductionUploadV2 prepared = { production_dto_abi<GDExtensionProductionUploadV2>(), 1, 11, 7, 0, 1, 0, 0, 4 };
+			CHECK(upload(ref, &prepared, payload, sizeof(payload)).native_error == ERR_INVALID_DATA);
+			prepared.source_recipe_substep = 2;
+			CHECK(upload(ref, &prepared, payload, sizeof(payload)).native_error == OK);
+			CHECK_FALSE(fixture.request->actions[0].prepared);
+			CHECK(fixture.request->actions[1].prepared);
+			fixture.cleanup_owner();
+			CHECK(fixture.owner_cleaned);
+		}
+	}
+	struct OrdinalEmptyProbe {
+		SingletonEnrollment *fixture = nullptr;
+		uint32_t calls = 0;
+		static void receive(void *data, GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionOperationV1 *operation) {
+			auto &probe = *static_cast<OrdinalEmptyProbe *>(data);
+			auto &fixture = *probe.fixture;
+			++probe.calls;
+			CHECK(operation != nullptr);
+			CHECK(operation->canonical_begin == 10);
+			CHECK(operation->canonical_end == 13);
+			CHECK(GDExtensionDeviceExit::RegistrationContext::current != nullptr);
+			CHECK(fixture.request->control.state == GDExtensionDeviceExit::ProductionControlState::EXECUTING);
+			CHECK(fixture.request->action_count == 0);
+			GDExtensionProductionAppendV1 append;
+			std::memset(&append, 0x5a, sizeof(append));
+			const auto before_append = append;
+			CHECK(fixture.port.append(context, ref, 10, fixture.request->revision, &append).native_error == ERR_INVALID_DATA);
+			CHECK(std::memcmp(&append, &before_append, sizeof(append)) == 0);
+			GDExtensionProductionSegmentV1 segment;
+			std::memset(&segment, 0x5a, sizeof(segment));
+			const auto before_segment = segment;
+			CHECK(fixture.port.close_segment(context, ref, &segment).native_error == ERR_INVALID_DATA);
+			CHECK(std::memcmp(&segment, &before_segment, sizeof(segment)) == 0);
+		}
+	};
+	static void ordinal_zero_control() {
+		using namespace GDExtensionDeviceExit;
+		auto *server = ordinal_server();
+		if (!server) {
+			return;
+		}
+		const auto release = ordinal_port<GDExtensionInterfaceDeviceSessionProductionReleaseV2>("device_session_production_release_v2");
+		const auto consume = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRecordConsumeV2>("device_session_production_record_consume_v2");
+		const auto facts = ordinal_port<GDExtensionInterfaceDeviceSessionProductionFactsV2>("device_session_production_facts_v2");
+		const auto observe = ordinal_port<GDExtensionInterfaceDeviceSessionProductionObserveV2>("device_session_production_observe_v2");
+		if (!release || !consume || !facts || !observe) {
+			return;
+		}
+		OrdinalPlan plan;
+		plan.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+		plan.action_count = plan.resource_count = plan.use_count = plan.readback_count = 0;
+		SingletonEnrollment fixture;
+		fixture.public_port = true;
+		OrdinalEmptyProbe probe;
+		probe.fixture = &fixture;
+		if (!check_step(ordinal_initialize(fixture, server, plan, &OrdinalEmptyProbe::receive, &probe) == OK)) {
+			return;
+		}
+		auto &request = *fixture.request;
+		const GDExtensionProductionRequestRefV1 ref = { fixture.instance, request.serial };
+		CHECK(request.capacity.suboperations == 0);
+		CHECK(request.capacity.graph_memberships == 0);
+		CHECK(request.capacity.resources == 0);
+		CHECK(request.capacity.resource_uses == 0);
+		uint64_t control = 0;
+		CHECK(fixture.port.record_schedule(ref, &control) == OK);
+		server->sync(); // Actual original RS dispatch and protected receiver.
+		CHECK(probe.calls == 1);
+		CHECK(request.control.state == ProductionControlState::RETURNED);
+		CHECK(request.control.serial == control);
+		const GDExtensionProductionDispatchV1 legacy_dispatch = { production_dto_abi<GDExtensionProductionDispatchV1>(), 10, 0, 0, 0, 1, 1, 1, 0, 0 };
+		const GDExtensionProductionCopyV1 legacy_copy = { production_dto_abi<GDExtensionProductionCopyV1>(), 10, 0, 0, 0, 0, 4 };
+		const GDExtensionProductionUploadV1 legacy_upload = { production_dto_abi<GDExtensionProductionUploadV1>(), 10, 0, 0, 0, 4 };
+		const uint8_t payload[4] = { 1, 2, 3, 4 };
+		CHECK(fixture.port.prepare_dispatch(ref, &legacy_dispatch, nullptr, 0).native_error == ERR_INVALID_DATA);
+		CHECK(fixture.port.prepare_copy(ref, &legacy_copy).native_error == ERR_INVALID_DATA);
+		CHECK(fixture.port.prepare_upload(ref, &legacy_upload, payload, sizeof(payload)).native_error == ERR_INVALID_DATA);
+		CHECK(fixture.port.prepare_readback(ref, 10, 0).native_error == ERR_INVALID_DATA);
+		const auto state = request.control.state;
+		const uint64_t next = request.next_control_serial;
+		GDExtensionProductionRecordReportV1 old_record;
+		std::memset(&old_record, 0x5a, sizeof(old_record));
+		const auto old_record_before = old_record;
+		CHECK(fixture.port.record_consume(ref, control, &old_record).native_error == ERR_INVALID_DATA);
+		CHECK(std::memcmp(&old_record, &old_record_before, sizeof(old_record)) == 0);
+		const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+		GDExtensionProductionReportV1 old_report;
+		std::memset(&old_report, 0x5a, sizeof(old_report));
+		const auto old_report_before = old_report;
+		CHECK(fixture.port.observe(ref, &budget, &old_report).native_error == ERR_INVALID_DATA);
+		CHECK(std::memcmp(&old_report, &old_report_before, sizeof(old_report)) == 0);
+		GDExtensionProductionServiceBudgetV1 remaining;
+		std::memset(&remaining, 0x5a, sizeof(remaining));
+		const auto remaining_before = remaining;
+		CHECK(fixture.port.release(ref, &budget, &remaining, &old_report).native_error == ERR_INVALID_DATA);
+		CHECK(std::memcmp(&remaining, &remaining_before, sizeof(remaining)) == 0);
+		CHECK(std::memcmp(&old_report, &old_report_before, sizeof(old_report)) == 0);
+		GDExtensionProductionFactV1 old_fact;
+		std::memset(&old_fact, 0x5a, sizeof(old_fact));
+		const auto old_fact_before = old_fact;
+		uint32_t written = 0x12345678;
+		CHECK(fixture.port.facts(ref, request.revision, 0, &old_fact, 1, &written).native_error == ERR_INVALID_DATA);
+		CHECK(written == 0x12345678);
+		CHECK(std::memcmp(&old_fact, &old_fact_before, sizeof(old_fact)) == 0);
+		CHECK(request.control.state == state);
+		CHECK(request.control.serial == control);
+		CHECK(request.next_control_serial == next);
+		GDExtensionProductionRecordReportV2 returned = {};
+		CHECK(consume(ref, control, &returned).native_error == OK);
+		CHECK(request.control.state == ProductionControlState::OWNER_CONSUMED);
+		CHECK(returned.report.operation.canonical_begin == 10);
+		CHECK(returned.report.operation.canonical_end == 13);
+		CHECK(returned.report.action_count == 0);
+		CHECK(returned.report.recorded_action_end == 0);
+		CHECK((returned.flags & (GDEXTENSION_PRODUCTION_RECORD_HAS_APPEND_V1 | GDEXTENSION_PRODUCTION_RECORD_HAS_SEGMENT_V1)) == 0);
+		CHECK(request.graph_count == 0);
+		CHECK(request.native_count == 0);
+		written = UINT32_MAX;
+		CHECK(facts(ref, request.revision, 0, nullptr, 0, &written).native_error == OK);
+		CHECK(written == 0);
+		const GDExtensionProductionServiceBudgetV1 zero = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), 0, 0, 0, 0, 0 };
+		GDExtensionProductionReportV2 report = {};
+		CHECK(observe(ref, &zero, &report).native_error == OK);
+		CHECK(report.action_count == 0);
+		CHECK(report.recorded_action_end == 0);
+		CHECK(report.operation.canonical_end == 13); // No physical count substitutes for logical publication.
+		for (uint32_t turn = 0; turn < 8 && request.serial; ++turn) {
+			GDExtensionProductionServiceBudgetV1 returned_budget = {};
+			GDExtensionProductionReportV2 released = {};
+			const Error result = Error(release(ref, &budget, &returned_budget, &released).native_error);
+			CHECK((result == OK || result == ERR_BUSY));
+			if (request.serial) {
+				server->sync();
+			}
+		}
+		CHECK(request.serial == 0); // Actual versioned RELEASE, without canceling the empty plan.
+		fixture.cleanup_owner();
+		CHECK(fixture.owner_cleaned);
+	}
+	static void ordinal_readback_producer() {
+		// The valid control and each invalid request go through original accepted
+		// arenas and the installed reserve_v2 entry, before any native effects.
+		for (uint32_t mutation = 0; mutation < 5; ++mutation) {
+			auto *server = ordinal_server();
+			if (!server) {
+				return;
+			}
+			OrdinalPlan plan;
+			if (mutation == 1) {
+				plan.readback.producer_action_ordinal = 2;
+			}
+			if (mutation == 2) {
+				plan.uses[1].access = GDEXTENSION_PRODUCTION_READ_V1;
+			}
+			if (mutation == 3) {
+				plan.uses[1].resource_slot = 2;
+			} // Producer writes a different slot.
+			if (mutation == 4) {
+				plan.uses[1].byte_offset = 4;
+				plan.uses[1].byte_size = 12;
+			}
+			SingletonEnrollment fixture;
+			const Error error = ordinal_initialize(fixture, server, plan);
+			CHECK_MESSAGE(error == (mutation == 0 ? OK : ERR_INVALID_DATA), "readback producer mutation=", mutation);
+			if (mutation == 0) {
+				CHECK(fixture.request != nullptr);
+			} else {
+				CHECK(fixture.request == nullptr);
+			}
+			fixture.cleanup_owner();
+			CHECK(fixture.owner_cleaned);
+		}
+	}
+	static bool v1_result(const GDExtensionDeviceSessionResultV1 &result, Error error, uint32_t reason) {
+		return result.native_error == error && result.reason == reason && result.expected == 0 && result.actual == 0;
+	}
+	static void v1_compat_owner_errors() {
+		using namespace GDExtensionDeviceExit;
+		auto *server = ordinal_server();
+		if (!server) {
+			return;
+		}
+		SingletonEnrollment fixture;
+		fixture.public_port = true;
+		if (!check_step(fixture.prepare_device(server) == OK)) {
+			return;
+		}
+		const auto unused_receiver = +[](void *, ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const GDExtensionProductionOperationV1 *) {};
+		if (!check_step(fixture.initialize_owner(1, false, false, unused_receiver, nullptr, false, 1, true, +[](void *, GDExtensionProductionAttachmentRefV1) {}) == OK)) {
+			return;
+		}
+		auto &request = *fixture.request;
+		auto &port = fixture.port;
+		const GDExtensionProductionRequestRefV1 ref = { fixture.instance, request.serial };
+		const GDExtensionProductionRequestRefV1 foreign = { UINT64_MAX, 1 };
+		GDExtensionProductionDispatchV1 dispatch = { production_dto_abi<GDExtensionProductionDispatchV1>(), 9, 0, 0, 0, 1, 1, 1, 0, 0 };
+		GDExtensionProductionCopyV1 copy = { production_dto_abi<GDExtensionProductionCopyV1>(), 9, 0, 0, 0, 0, 4 };
+		GDExtensionProductionUploadV1 upload = { production_dto_abi<GDExtensionProductionUploadV1>(), 9, 0, 0, 0, 4 };
+		const uint8_t payload[4] = { 2, 3, 5, 7 };
+		const GDExtensionProductionServiceBudgetV1 zero_budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), 0, 0, 0, 0, 0 };
+		GDExtensionProductionReportV1 report;
+		std::memset(&report, 0x5a, sizeof(report));
+		const auto report_sentinel = report;
+		GDExtensionProductionFactV1 fact = {};
+		uint32_t written = 0x12345678;
+		// Payload/buffer validation wins over an unrelated reference failure.
+		dispatch.groups_x = 0;
+		CHECK(v1_result(port.prepare_dispatch(foreign, &dispatch, nullptr, 0), ERR_INVALID_PARAMETER, 2));
+		dispatch.groups_x = 1;
+		copy.bytes = 0;
+		CHECK(v1_result(port.prepare_copy(foreign, &copy), ERR_INVALID_PARAMETER, 2));
+		copy.bytes = 4;
+		CHECK(v1_result(port.prepare_upload(foreign, &upload, nullptr, 4), ERR_INVALID_PARAMETER, 2));
+		auto bad_budget = zero_budget;
+		bad_budget.reserved = 1;
+		CHECK(v1_result(port.observe(foreign, &bad_budget, &report), ERR_INVALID_PARAMETER, 2));
+		CHECK(std::memcmp(&report, &report_sentinel, sizeof(report)) == 0);
+		CHECK(v1_result(port.facts(foreign, 0, 0, &fact, 1, nullptr), ERR_INVALID_PARAMETER, 2));
+		// Once arguments are sound, original request-resolution diagnostics use16.
+		CHECK(v1_result(port.prepare_dispatch(foreign, &dispatch, nullptr, 0), ERR_INVALID_DATA, 16));
+		CHECK(v1_result(port.prepare_copy(foreign, &copy), ERR_INVALID_DATA, 16));
+		CHECK(v1_result(port.prepare_upload(foreign, &upload, payload, 4), ERR_INVALID_DATA, 16));
+		CHECK(v1_result(port.prepare_readback(foreign, 9, 0), ERR_INVALID_DATA, 16));
+		CHECK(v1_result(port.observe(foreign, &zero_budget, &report), ERR_INVALID_DATA, 16));
+		CHECK(std::memcmp(&report, &report_sentinel, sizeof(report)) == 0);
+		CHECK(v1_result(port.facts(foreign, 0, 0, &fact, 1, &written), ERR_INVALID_DATA, 16));
+		CHECK(written == 0x12345678);
+		// A missing canonical is different from a malformed physical declaration.
+		CHECK(v1_result(port.prepare_dispatch(ref, &dispatch, nullptr, 0), ERR_DOES_NOT_EXIST, 16));
+		CHECK(v1_result(port.prepare_copy(ref, &copy), ERR_DOES_NOT_EXIST, 16));
+		CHECK(v1_result(port.prepare_upload(ref, &upload, payload, 4), ERR_DOES_NOT_EXIST, 16));
+		CHECK(v1_result(port.prepare_readback(ref, 9, 0), ERR_DOES_NOT_EXIST, 16));
+		CHECK(request.payload_used == 0);
+		CHECK_FALSE(request.actions[0].prepared);
+		// Installed reserve retains PARAMETER0 for malformed op on real attachment.
+		auto bad_operation = request.operation;
+		bad_operation.owner_request_nonce = 0;
+		const GDExtensionProductionActionV1 action = { 10, GDEXTENSION_PRODUCTION_UPLOAD_V1, 0, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX };
+		const auto resource = request.resources[0].declaration;
+		const auto use = request.uses[0].declaration;
+		GDExtensionProductionRequestRefV1 rejected = {};
+		CHECK(v1_result(port.reserve(fixture.attachment, &bad_operation, &request.capacity, &action, 1, &resource, 1, &use, 1, nullptr, 0, &rejected), ERR_INVALID_PARAMETER, 0));
+		CHECK(rejected.handle_serial == 0);
+		GDExtensionProductionRecordReportV1 record;
+		std::memset(&record, 0x5a, sizeof(record));
+		CHECK(v1_result(port.record_consume(foreign, 1, &record), ERR_INVALID_DATA, 0));
+		CHECK(record.abi.abi_version == 0);
+		CHECK(record.request_serial == 0);
+		CHECK(record.control_serial == 0);
+		CHECK(record.flags == 0);
+		CHECK(record.report.abi.abi_version == 0);
+		CHECK(record.append.abi.abi_version == 0);
+		CHECK(record.segment.abi.abi_version == 0);
+		GDExtensionProductionServiceBudgetV1 remaining;
+		std::memset(&remaining, 0x5a, sizeof(remaining));
+		const auto remaining_sentinel = remaining;
+		CHECK(v1_result(port.release(foreign, &bad_budget, &remaining, &report), ERR_INVALID_PARAMETER, 19));
+		CHECK(std::memcmp(&remaining, &remaining_sentinel, sizeof(remaining)) == 0);
+		CHECK(std::memcmp(&report, &report_sentinel, sizeof(report)) == 0);
+		CHECK(v1_result(port.release(foreign, &zero_budget, &remaining, &report), ERR_INVALID_DATA, 16));
+		CHECK(std::memcmp(&remaining, &zero_budget, sizeof(remaining)) == 0);
+		CHECK(report.abi.abi_version == 0);
+		CHECK(report.operation.canonical_begin == 0);
+		CHECK(report.recorded_end == 0);
+		CHECK(report.revision == 0);
+		CHECK(report.cause.native_error == OK);
+		// Explicit cancellation is real owner state, not a fabricated request.
+		CHECK(port.cancel(ref).native_error == OK);
+		CHECK(v1_result(port.prepare_dispatch(ref, &dispatch, nullptr, 0), ERR_BUSY, 16));
+		CHECK(v1_result(port.prepare_copy(ref, &copy), ERR_BUSY, 16));
+		CHECK(v1_result(port.prepare_upload(ref, &upload, payload, 4), ERR_BUSY, 16));
+		CHECK(v1_result(port.prepare_readback(ref, 9, 0), ERR_BUSY, 16));
+		fixture.cleanup_owner();
+		CHECK(fixture.owner_cleaned);
+	}
+	static void v1_compat_partial_report() {
+		using namespace GDExtensionDeviceExit;
+		auto *server = ordinal_server();
+		if (!server) {
+			return;
+		}
+		SingletonEnrollment fixture;
+		fixture.public_port = true;
+		if (!check_step(fixture.initialize(server) == OK)) {
+			return;
+		}
+		auto &request = *fixture.request;
+		const GDExtensionProductionRequestRefV1 ref = { fixture.instance, request.serial };
+		const GDExtensionProductionServiceBudgetV1 query = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), 0, 0, 0, 0, 0 };
+		GDExtensionProductionReportV1 report;
+		// Friend fixture scope only: exercise diagnostic branches which public
+		// callers cannot construct. Original identity/enrollment is kept intact;
+		// restore every field before cleanup, with no scheduling/native effects.
+		const auto captures = request.capture_inflight;
+		request.capture_inflight = 1;
+		std::memset(&report, 0x5a, sizeof(report));
+		const auto capture_result = fixture.port.observe(ref, &query, &report);
+		request.capture_inflight = captures;
+		CHECK(v1_result(capture_result, OK, 0));
+		CHECK(report.abi.abi_version == 1);
+		CHECK(report.operation.canonical_begin == 10);
+		CHECK(report.operation.canonical_end == 11);
+		CHECK(report.revision == request.revision);
+		CHECK(v1_result(report.cause, ERR_BUSY, 16));
+		CHECK(report.recorded_end == 0);
+		const auto resources = request.resource_count;
+		request.resource_count = request.capacity.resources + 1;
+		std::memset(&report, 0x5a, sizeof(report));
+		const auto structural_result = fixture.port.observe(ref, &query, &report);
+		request.resource_count = resources;
+		CHECK(v1_result(structural_result, OK, 0));
+		CHECK(report.abi.abi_version == 1);
+		CHECK(report.operation.canonical_begin == 10);
+		CHECK(report.operation.canonical_end == 11);
+		CHECK(v1_result(report.cause, ERR_INVALID_DATA, 16));
+		CHECK(report.recorded_end == 0);
+		fixture.cleanup_owner();
+		CHECK(fixture.owner_cleaned);
 	}
 	static void installed_port_rejects_foreign_refs() {
 		PublicProductionPort port;
@@ -4053,6 +4547,29 @@ TEST_CASE("[ProductionRequest] forged metadata never resolves an original attach
 	CHECK(registry.production_cancel({ UINT64_MAX, 1 }).native_error != OK);
 	CHECK(registry.production_release({ UINT64_MAX, 1 }).native_error != OK);
 }
+
+TEST_CASE("[SceneTree][ProductionRequest][OrdinalV2] repeated canonical rows preserve original logical gaps and exact prepare identity") {
+	Access::ordinal_rows_and_prepare();
+}
+TEST_CASE("[SceneTree][ProductionRequest][OrdinalV2] zero arena returns actual protected FIFO control without V1 consumption") {
+	Access::ordinal_zero_control();
+}
+TEST_CASE("[SceneTree][ProductionRequest][OrdinalV2] readback producer must cover exact target storage access and bytes") {
+	Access::ordinal_readback_producer();
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][V1Compatibility] installed owner port preserves error priority reasons and failure outputs") {
+	Access::v1_compat_owner_errors();
+}
+TEST_CASE("[SceneTree][ProductionRequest][V1Compatibility] partial diagnostic reports do not manufacture a canonical frontier") {
+	Access::v1_compat_partial_report();
+}
+#ifdef THREADS_ENABLED
+TEST_CASE("[SceneTree][ProductionRequest][V1Compatibility] protected append echoes invalid canonical and clears expired context output") {
+	Access::singleton_split_owner_set(true, false, false, false, false, false, false, false, false, false, false, false, false, true);
+}
+#endif
+
 } // namespace TestProductionRequest
 
 TEST_CASE("[ProductionRequest] payload retry is exact and the finite batch freezes before effects") {

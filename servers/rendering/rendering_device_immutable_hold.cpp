@@ -573,7 +573,7 @@ Error RenderingDevice::_production_output_directory_return(GDExtensionDeviceExit
 		if (request.capture_inflight != 1) {
 			return ERR_BUSY;
 		}
-		GDExtensionProductionReportV1 source = {};
+		GDExtensionProductionReportV2 source = {};
 		const Error projected = registry.production_report_contents_locked(request, source);
 		if (projected != OK) {
 			return projected;
@@ -643,7 +643,7 @@ Error RenderingDevice::_production_output_directory_mark_root(GDExtensionDeviceE
 		if (request.capture_inflight != 1 || request.compute_list_open || (!request.cancelled && request.next_action != request.action_count)) {
 			return ERR_BUSY;
 		}
-		GDExtensionProductionReportV1 source = {};
+		GDExtensionProductionReportV2 source = {};
 		const Error projected = registry.production_report_contents_locked(request, source);
 		if (projected != OK) {
 			return projected;
@@ -896,7 +896,7 @@ Error RenderingDevice::_production_output_hold_begin_return(GDExtensionDeviceExi
 		return ERR_UNAUTHORIZED;
 	}
 	auto &request = *pin.request;
-	GDExtensionProductionReportV1 source = {};
+	GDExtensionProductionReportV2 source = {};
 	registry.production_report_locked(request, source);
 	if (request.capture_inflight || request.compute_list_open || (!request.cancelled && request.next_action != request.action_count) || source.possible_obligations || source.known_obligations != source.complete_obligations) {
 		return ERR_BUSY;

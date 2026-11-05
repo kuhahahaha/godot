@@ -33,7 +33,7 @@
 #include "servers/rendering/rendering_device.h"
 
 namespace GDExtensionDeviceExit {
-Error Registry::production_dispatch_closure_locked(const ProductionRequest &request, RenderingDevice &rd, const ProductionActionCell &action, const GDExtensionProductionDispatchV1 &dispatch) const {
+Error Registry::production_dispatch_closure_locked(const ProductionRequest &request, RenderingDevice &rd, const ProductionActionCell &action, const GDExtensionProductionDispatchV2 &dispatch) const {
 	if (dispatch.unit_slot >= request.resource_count || dispatch.first_set_slot > request.resource_count || dispatch.set_count > request.resource_count - dispatch.first_set_slot || dispatch.set_count > RenderingDevice::MAX_UNIFORM_SETS) {
 		return ERR_INVALID_DATA;
 	}
@@ -110,7 +110,7 @@ Error Registry::production_dispatch_closure_locked(const ProductionRequest &requ
 	return OK;
 }
 
-Error Registry::production_capture_graph_locked(ProductionRequest &request, RenderingDevice &rd, uint64_t canonical, const CheckedRecordAppend &append) {
+Error Registry::production_capture_graph_locked(ProductionRequest &request, RenderingDevice &rd, uint64_t ordinal, const CheckedRecordAppend &append) {
 	const auto &handle = append.handle;
 	if (!append.operation_bound || append.operation.owner_request_nonce != request.operation.owner_request_nonce || append.operation.library_generation != request.attachment->library_generation || append.operation.record_generation != request.operation.record_generation || append.operation.record_range_begin != request.operation.canonical_begin || append.operation.record_range_end != request.operation.canonical_end) {
 		return ERR_INVALID_DATA;
@@ -118,17 +118,14 @@ Error Registry::production_capture_graph_locked(ProductionRequest &request, Rend
 	if (!request.frozen || !handle.is_valid() || request.graph_count >= request.capacity.graph_memberships || uint32_t(rd.frame) >= rd.frames.size() || !rd.frames[rd.frame].qualification_epoch || !rd.draw_graph.contains_record(handle)) {
 		return ERR_INVALID_DATA;
 	}
-	bool declared = false;
-	for (uint32_t i = 0; i < request.action_count; ++i) {
-		declared |= request.actions[i].declaration.canonical_suboperation == canonical;
-	}
-	if (!declared) {
+	if (ordinal >= request.action_count || request.actions[ordinal].request != &request || request.actions[ordinal].declaration.action_ordinal != ordinal) {
 		return ERR_INVALID_DATA;
 	}
+	const auto &declaration = request.actions[ordinal].declaration;
 	for (uint32_t i = 0; i < request.graph_count; ++i) {
 		const auto &old = request.graphs[i];
 		if (old.handle.graph_instance == handle.graph_instance && old.handle.graph_frame == handle.graph_frame && old.handle.kind == handle.kind && old.handle.index == handle.index && old.handle.offset == handle.offset) {
-			return old.fact.canonical_suboperation == canonical ? OK : ERR_INVALID_DATA;
+			return old.fact.action_ordinal == ordinal && old.fact.canonical_suboperation == declaration.canonical_suboperation && old.fact.source_recipe_substep == declaration.source_recipe_substep ? OK : ERR_INVALID_DATA;
 		}
 	}
 	auto &cell = request.graphs[request.graph_count++];
@@ -136,7 +133,9 @@ Error Registry::production_capture_graph_locked(ProductionRequest &request, Rend
 	cell.device_frame = uint32_t(rd.frame);
 	cell.device_epoch = rd.frames[rd.frame].qualification_epoch;
 	cell.pending = true;
-	cell.fact.canonical_suboperation = canonical;
+	cell.fact.action_ordinal = ordinal;
+	cell.fact.canonical_suboperation = declaration.canonical_suboperation;
+	cell.fact.source_recipe_substep = declaration.source_recipe_substep;
 	cell.fact.graph_instance = handle.graph_instance;
 	cell.fact.graph_frame = handle.graph_frame;
 	cell.fact.graph_kind = handle.kind;
@@ -201,7 +200,7 @@ void Registry::production_capture_issue_locked(RenderingDevice &rd, uint32_t slo
 				if (worker != UINT32_MAX) {
 					for (uint32_t u = 0; u < request.resource_count; ++u) {
 						const auto &resource = request.resources[u];
-						transfer |= resource.transfer_pending && resource.transfer_worker == worker && resource.transfer_operation >= first_operation && resource.transfer_operation <= last_operation && resource.transfer_canonical == graph.fact.canonical_suboperation;
+						transfer |= resource.transfer_pending && resource.transfer_worker == worker && resource.transfer_operation >= first_operation && resource.transfer_operation <= last_operation && resource.transfer_action_ordinal == graph.fact.action_ordinal;
 					}
 				}
 				const bool hidden = worker == UINT32_MAX && slot == UINT32_MAX;
@@ -264,7 +263,7 @@ void Registry::production_capture_issue_locked(RenderingDevice &rd, uint32_t slo
 				} else if (transfer && captured) {
 					for (uint32_t u = 0; u < request.resource_count; ++u) {
 						auto &resource = request.resources[u];
-						if (resource.transfer_worker == worker && resource.transfer_operation >= first_operation && resource.transfer_operation <= last_operation && resource.transfer_canonical == graph.fact.canonical_suboperation) {
+						if (resource.transfer_worker == worker && resource.transfer_operation >= first_operation && resource.transfer_operation <= last_operation && resource.transfer_action_ordinal == graph.fact.action_ordinal) {
 							resource.transfer_pending = false;
 						}
 					}
@@ -462,7 +461,7 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 			resource.transfer_staged = !resource.transfer_pending;
 			resource.transfer_worker = uint32_t(buffer->transfer_worker_index);
 			resource.transfer_operation = buffer->transfer_worker_operation;
-			resource.transfer_canonical = action.declaration.canonical_suboperation;
+			resource.transfer_action_ordinal = action.declaration.action_ordinal;
 			resource.transfer_pending = true;
 		}
 	}
@@ -540,11 +539,11 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 	for (uint32_t i = 0; i < captures; ++i) {
 		CheckedRecordAppend segment = observed;
 		segment.handle = readback ? readback->segment(i).handle : upload.segment(i).handle;
-		if (production_capture_graph_locked(request, rd, action.declaration.canonical_suboperation, segment) != OK) {
+		if (production_capture_graph_locked(request, rd, action.declaration.action_ordinal, segment) != OK) {
 			observed.state = CheckedRecordAppend::State::Unknown;
 		}
 	}
-	if (!captures && observed.handle.is_valid() && production_capture_graph_locked(request, rd, action.declaration.canonical_suboperation, observed) != OK) {
+	if (!captures && observed.handle.is_valid() && production_capture_graph_locked(request, rd, action.declaration.action_ordinal, observed) != OK) {
 		observed.state = CheckedRecordAppend::State::Unknown;
 	}
 	if (action.declaration.action_kind == GDEXTENSION_PRODUCTION_UPLOAD_V1) {
@@ -564,7 +563,7 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 	return observed;
 }
 
-Error Registry::production_close_segment_locked(ProductionRequest &request, GDExtensionProductionSegmentV1 &out, bool physical_scope_exit) {
+Error Registry::production_close_segment_locked(ProductionRequest &request, GDExtensionProductionSegmentV2 &out, bool physical_scope_exit) {
 	if (request.capture_inflight || request.compute_list_open || request.effects_pending || request.source_device_lost || request.cancelled || request.segment.segment != request.acknowledged_segment) {
 		return ERR_BUSY;
 	}
@@ -577,12 +576,12 @@ Error Registry::production_close_segment_locked(ProductionRequest &request, GDEx
 	if (cutoff == UINT32_MAX || (!physical_scope_exit && request.actions[cutoff].declaration.list_boundary != GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1)) {
 		return ERR_INVALID_DATA;
 	}
-	request.segment.abi = production_dto_abi<GDExtensionProductionSegmentV1>();
+	request.segment.abi = production_dto_abi<GDExtensionProductionSegmentV2>();
 	++request.segment.segment;
 	request.segment.segment_revision = ++request.revision;
-	request.segment.first_canonical = request.operation.canonical_begin + request.segment_action_begin;
-	request.segment.end_canonical = request.operation.canonical_begin + request.next_action;
-	request.segment.incomplete_upload_parent = incomplete ? request.actions[cutoff].declaration.canonical_suboperation : UINT64_MAX;
+	request.segment.first_action_ordinal = request.segment_action_begin;
+	request.segment.end_action_ordinal = request.next_action;
+	request.segment.incomplete_upload_action_ordinal = incomplete ? cutoff : UINT64_MAX;
 	request.segment_graph_begin = request.graph_count;
 	request.segment_action_begin = request.next_action;
 	out = request.segment;

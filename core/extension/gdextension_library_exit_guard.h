@@ -103,6 +103,8 @@ public:
 class ProductionOutputPin;
 class ProductionAttachment;
 class ProductionRequest;
+struct ProductionActionRows;
+struct ProductionReadbackRows;
 class ProductionResourceSlot;
 class ProductionActionCell;
 class ProductionNativeCell;
@@ -877,7 +879,7 @@ private:
 	Error production_resource_slot_locked(ProductionRequest &, uint32_t, ProductionResourceSlot *&);
 	Error production_action_locked(ProductionRequest &, uint64_t, uint32_t, ProductionActionCell *&);
 	Error production_membership_bound_locked(RenderingDevice &, uint32_t, uint32_t, uint32_t &) const;
-	Error production_dispatch_closure_locked(const ProductionRequest &, RenderingDevice &, const ProductionActionCell &, const GDExtensionProductionDispatchV1 &) const;
+	Error production_dispatch_closure_locked(const ProductionRequest &, RenderingDevice &, const ProductionActionCell &, const GDExtensionProductionDispatchV2 &) const;
 	bool production_use_matches_locked(const ProductionRequest &, const ProductionActionCell &, uint32_t, uint64_t, uint64_t, uint32_t) const;
 	Error production_freeze_locked(ProductionRequest &);
 	Error production_maintenance_locked(ProductionRequest &, RenderingDevice &, const GDExtensionProductionServiceBudgetV1 &, ProductionServiceUsage &);
@@ -888,6 +890,7 @@ private:
 	Error production_sets_step_locked(ProductionRequest &, RenderingDevice &, const GDExtensionProductionServiceBudgetV1 &, ProductionServiceUsage &);
 	Error production_readback_delivery(BufferReadbackSourceCapture &, bool);
 	Error production_close_lists_locked(ProductionRequest &, RenderingDevice &);
+	Error production_close_segment_locked(ProductionRequest &, GDExtensionProductionSegmentV2 &, bool = false);
 	Error production_close_segment_locked(ProductionRequest &, GDExtensionProductionSegmentV1 &, bool = false);
 	Error production_ack_segment_locked(ProductionRequest &, uint64_t, uint64_t);
 	CheckedRecordAppend production_record_effect_locked(ProductionRequest &, RenderingDevice &, uint32_t, const OriginalOperationIdentity &);
@@ -895,6 +898,7 @@ private:
 	void production_seal_graphs_locked(RenderingDevice &);
 	Error production_retain_sources_locked(RenderingDevice &, uint32_t, uint64_t, const NativeSourceIssueView * = nullptr);
 	void production_capture_issue_locked(RenderingDevice &, uint32_t, const NativeSourceIssueView &, Error, uint32_t = UINT32_MAX, uint64_t = 0, uint64_t = 0);
+	GDExtensionDeviceSessionResultV1 production_prepare_upload_locked(ProductionRequest &, const GDExtensionProductionUploadV2 &, const void *, uint64_t);
 	GDExtensionDeviceSessionResultV1 production_prepare_upload_locked(ProductionRequest &, const GDExtensionProductionUploadV1 &, const void *, uint64_t);
 	Error production_unpin_resources_locked(ProductionRequest &);
 	Error production_entity_return_locked(ProductionAttachment &);
@@ -902,12 +906,16 @@ private:
 	GDExtensionDeviceSessionResultV1 production_release_locked(ProductionRequest &, RenderingDevice *, bool, const GDExtensionProductionServiceBudgetV1 * = nullptr, ProductionServiceUsage * = nullptr);
 	Error production_native_owner_locked(const ProductionRequest &, uint32_t, const ProductionNativeCell *&) const;
 	Error production_poll_native_locked(ProductionRequest &, RenderingDeviceDriver &, const GDExtensionProductionServiceBudgetV1 &, bool, ProductionServiceUsage &);
-	Error production_native_fact_locked(const ProductionRequest &, uint32_t, GDExtensionProductionFactV1 &) const;
+	Error production_native_fact_locked(const ProductionRequest &, uint32_t, GDExtensionProductionFactV2 &) const;
+	Error production_report_contents_locked(const ProductionRequest &, GDExtensionProductionReportV2 &) const;
 	Error production_report_contents_locked(const ProductionRequest &, GDExtensionProductionReportV1 &) const;
+	void production_report_locked(const ProductionRequest &, GDExtensionProductionReportV2 &) const;
 	void production_report_locked(const ProductionRequest &, GDExtensionProductionReportV1 &) const;
 	void production_control_execute_locked(ProductionRequest &, RenderingDevice *);
 	// Private metadata staging; cannot issue source scope or open native recording.
 	Error production_reserve_metadata_locked(ProductionAttachment &, const GDExtensionProductionOperationV1 &, const GDExtensionProductionCapacityV1 &, const GDExtensionProductionActionV1 *, uint32_t, const GDExtensionProductionResourceV1 *, uint32_t, const GDExtensionProductionUseV1 *, uint32_t, const GDExtensionProductionReadbackV1 *, uint32_t, ProductionRequest *&);
+	Error production_reserve_metadata_rows_locked(ProductionAttachment &, const GDExtensionProductionOperationV1 &, const GDExtensionProductionCapacityV1 &, const ProductionActionRows &, uint32_t, const GDExtensionProductionResourceV1 *, uint32_t, const GDExtensionProductionUseV1 *, uint32_t, const ProductionReadbackRows &, uint32_t, ProductionRequest *&, uint32_t);
+	Error production_contract_check(GDExtensionProductionRequestRefV1, uint32_t, uint64_t * = nullptr, bool * = nullptr, bool = false);
 	Sequence qualification_serials;
 	// Capacity owed to accepted storage/native-unit cleanup, protected under mutex.
 	uint64_t qualification_cleanup_serial_reservations = 0;
@@ -967,6 +975,17 @@ public:
 	GDExtensionDeviceSessionResultV1 production_quote(const GDExtensionDeviceExitAbi *, GDExtensionDeviceExitSceneReadyContextRef, GDExtensionProducerRegistrationRefV1, GDExtensionDeviceRegistryContextRef, GDExtensionOriginalDeviceSessionRef, const GDExtensionProductionCapacityV1 *, GDExtensionProductionMetadataQuoteV1 *);
 	GDExtensionDeviceSessionResultV1 production_accept(const GDExtensionDeviceExitAbi *, GDExtensionDeviceExitSceneReadyContextRef, GDExtensionProducerRegistrationRefV1, GDExtensionDeviceRegistryContextRef, GDExtensionOriginalDeviceSessionRef, GDExtensionDeviceExitLibraryCodeHoldRef, const GDExtensionProductionMetadataQuoteV1 *, GDExtensionProductionAttachmentRefV1 *, GDExtensionProductionInstallationReportV1 *);
 	Error production_install_record_receiver(GDExtensionDeviceExitSceneReadyContextRef, GDExtensionProductionAttachmentRefV1, ProductionRecordReceiver, void *, ProductionMetadataReceiver = nullptr);
+	GDExtensionDeviceSessionResultV1 production_prepare_dispatch_v2(GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionDispatchV2 *input, const void *push, uint32_t bytes, uint32_t expected_contract = 2);
+	GDExtensionDeviceSessionResultV1 production_prepare_copy_v2(GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionCopyV2 *input, uint32_t expected_contract = 2);
+	GDExtensionDeviceSessionResultV1 production_prepare_upload_v2(GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionUploadV2 *input, const void *data, uint64_t bytes, uint32_t expected_contract = 2);
+	GDExtensionDeviceSessionResultV1 production_prepare_readback_v2(GDExtensionProductionRequestRefV1 ref, uint64_t ordinal, uint32_t slot, uint32_t expected_contract = 2);
+	GDExtensionDeviceSessionResultV1 production_append_v2(ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, uint64_t ordinal, uint64_t revision, GDExtensionProductionAppendV2 *out, uint32_t expected_contract = 2);
+	GDExtensionDeviceSessionResultV1 production_close_segment_v2(ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, GDExtensionProductionSegmentV2 *out, uint32_t expected_contract = 2);
+	GDExtensionDeviceSessionResultV1 production_record_consume_v2(GDExtensionProductionRequestRefV1 ref, uint64_t serial, GDExtensionProductionRecordReportV2 *out, uint32_t expected_contract = 2);
+	GDExtensionDeviceSessionResultV1 production_observe_v2(GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionServiceBudgetV1 *budget, GDExtensionProductionReportV2 *out, uint32_t expected_contract = 2);
+	GDExtensionDeviceSessionResultV1 production_facts_v2(GDExtensionProductionRequestRefV1 ref, uint64_t revision, uint32_t first, GDExtensionProductionFactV2 *out, uint32_t capacity, uint32_t *written, uint32_t expected_contract = 2);
+	GDExtensionDeviceSessionResultV1 production_release_v2(GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionServiceBudgetV1 *input, GDExtensionProductionServiceBudgetV1 *remaining, GDExtensionProductionReportV2 *report, uint32_t expected_contract = 2);
+	GDExtensionDeviceSessionResultV1 production_reserve_v2(GDExtensionProductionAttachmentRefV1 ref, const GDExtensionProductionOperationV1 *operation, const GDExtensionProductionCapacityV1 *capacity, const GDExtensionProductionActionV2 *actions, uint32_t action_count, const GDExtensionProductionResourceV1 *resources, uint32_t resource_count, const GDExtensionProductionUseV1 *uses, uint32_t use_count, const GDExtensionProductionReadbackV2 *readbacks, uint32_t readback_count, GDExtensionProductionRequestRefV1 *out);
 	GDExtensionDeviceSessionResultV1 production_reserve(GDExtensionProductionAttachmentRefV1, const GDExtensionProductionOperationV1 *, const GDExtensionProductionCapacityV1 *, const GDExtensionProductionActionV1 *, uint32_t, const GDExtensionProductionResourceV1 *, uint32_t, const GDExtensionProductionUseV1 *, uint32_t, const GDExtensionProductionReadbackV1 *, uint32_t, GDExtensionProductionRequestRefV1 *);
 	Error production_record_schedule(GDExtensionProductionRequestRefV1, uint64_t *);
 	GDExtensionDeviceSessionResultV1 production_record_consume(GDExtensionProductionRequestRefV1, uint64_t, GDExtensionProductionRecordReportV1 *);

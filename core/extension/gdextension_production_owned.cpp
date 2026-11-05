@@ -489,7 +489,7 @@ Error Registry::production_sets_step_locked(ProductionRequest &request, Renderin
 	if (request.capture_inflight || !budget.controls || !budget.receipts || !budget.passes || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros) {
 		return OK;
 	}
-	GDExtensionProductionReportV1 report;
+	GDExtensionProductionReportV2 report;
 	production_report_locked(request, report);
 	if (report.possible_obligations || report.known_obligations != report.complete_obligations || request.compute_list_open) {
 		return ERR_BUSY;

@@ -60,7 +60,7 @@ Error RenderingDevice::_production_output_retire_service(GDExtensionDeviceExit::
 			OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros || request.source_device_lost) {
 		return ERR_BUSY;
 	}
-	GDExtensionProductionReportV1 source = {};
+	GDExtensionProductionReportV2 source = {};
 	const Error projected = registry.production_report_contents_locked(request, source);
 	if (projected != OK) {
 		return projected;
