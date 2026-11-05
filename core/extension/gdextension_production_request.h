@@ -54,6 +54,27 @@ bool production_dto_valid(const T &value) {
 	return value.abi.abi_version == expected.abi_version && value.abi.struct_size == expected.struct_size && value.abi.reserved == 0;
 }
 
+class ProductionRequest;
+
+// Core-only custody of one original accepted arena cell, never a record grant.
+// Explicit last-use return is mandatory; destruction cannot invent it.
+class ProductionOutputPin {
+	friend class Registry;
+	Registry *registry = nullptr;
+	ProductionRequest *request = nullptr;
+	uint64_t request_serial = 0, serial = 0;
+	uint32_t cell_index = UINT32_MAX;
+
+public:
+	ProductionOutputPin() = default;
+	ProductionOutputPin(const ProductionOutputPin &) = delete;
+	ProductionOutputPin &operator=(const ProductionOutputPin &) = delete;
+	ProductionOutputPin(ProductionOutputPin &&) noexcept;
+	ProductionOutputPin &operator=(ProductionOutputPin &&) noexcept;
+	~ProductionOutputPin();
+	bool is_empty() const { return registry == nullptr; }
+};
+
 class ProductionAttachment;
 class ProductionRequest;
 
@@ -123,6 +144,13 @@ class ProductionUseCell {
 	GDExtensionProductionUseV1 declaration = {};
 	GDExtensionProductionSetBindingV1 binding = {};
 	ProductionResourceUse dependency;
+	// Spare resource-use cells may retain one exact native consumer after
+	// immutable preparation freezes. Declaration and binding rows stay intact.
+	enum class OutputRole : uint8_t { UNUSED,
+		NATIVE_CONSUMER };
+	OutputRole output_role = OutputRole::UNUSED;
+	ProductionOutputPin *output_consumer = nullptr;
+	uint64_t output_pin_serial = 0;
 };
 class ProductionReadbackCell {
 	friend class Registry;
@@ -277,6 +305,7 @@ class ProductionRequest {
 	uint64_t maintenance_serial = 0;
 	uint32_t retire_cursor = 0;
 	uint64_t next_control_serial = 1;
+	uint64_t next_output_pin_serial = 1;
 	bool frozen = false, cancelled = false, effects_pending = false;
 	bool compute_list_open = false;
 	uint32_t next_action = 0;

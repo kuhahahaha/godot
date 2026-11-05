@@ -35,6 +35,9 @@
 #include "core/templates/local_vector.h"
 #include "core/templates/rid.h"
 
+namespace RendererRD {
+class ParticlesStorage;
+}
 class StringName;
 class RenderingDevice;
 class RenderingServerDefault;
@@ -84,6 +87,7 @@ struct NativeSourceIssueView;
 using ProductionPhysicalContextRef = GDExtensionProductionPhysicalContextRefV1;
 using ProductionRecordReceiver = GDExtensionProductionRecordReceiverV1;
 using ProductionMetadataReceiver = GDExtensionProductionMetadataReceiverV1;
+class ProductionOutputPin;
 class ProductionAttachment;
 class ProductionRequest;
 class ProductionResourceSlot;
@@ -805,6 +809,8 @@ private:
 #endif
 	friend class ::RenderingDevice;
 	friend class ::RenderingDeviceDriver;
+	friend class ::RendererRD::ParticlesStorage;
+	friend class ProductionOutputPin;
 	struct DeviceRecord {
 		Object *object = nullptr;
 		uint64_t epoch = 0, session = 0, thread = 0, execution_thread = 0;
@@ -835,6 +841,10 @@ private:
 	void production_metadata_pump();
 	struct ProductionPhysicalFrame;
 	static thread_local ProductionPhysicalFrame *production_physical_frame;
+	Error production_output_pin(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, RenderingDevice &, ProductionOutputPin &);
+	Error production_output_unpin(ProductionOutputPin &);
+	bool production_output_pin_matches(const ProductionOutputPin &, GDExtensionProductionRequestRefV1, RenderingDevice &);
+	void production_output_pin_move(ProductionOutputPin &, ProductionOutputPin &);
 	Error production_physical_request_locked(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, ProductionRequest *&, RenderingDevice *&, bool);
 	Error production_record_receive_locked(ProductionRequest &, RenderingDevice &);
 	ProductionAttachment *production_attachments[RECORD_CAPACITY] = {};

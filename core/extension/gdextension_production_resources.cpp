@@ -175,6 +175,11 @@ GDExtensionDeviceSessionResultV1 Registry::production_import_unit(GDExtensionPro
 }
 
 Error Registry::production_unpin_resources_locked(ProductionRequest &p_request) {
+	for (uint32_t i = 0; i < p_request.capacity.resource_uses; ++i) {
+		if (p_request.uses[i].output_consumer) {
+			return ERR_BUSY;
+		}
+	}
 	if (p_request.effects_pending) {
 		return ERR_BUSY;
 	}

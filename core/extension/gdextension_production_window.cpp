@@ -267,6 +267,43 @@ Error Registry::production_record_receive_locked(ProductionRequest &request, Ren
 	return error;
 }
 
+Error Registry::production_output_pin(ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, RenderingDevice &expected_device, ProductionOutputPin &pin) {
+	MutexLock lock(mutex);
+	if (!pin.is_empty()) {
+		return ERR_ALREADY_IN_USE;
+	}
+	ProductionRequest *request = nullptr;
+	RenderingDevice *device = nullptr;
+	const Error error = production_physical_request_locked(context, ref, request, device, true);
+	if (error != OK) {
+		return error;
+	}
+	// Schedule already froze all prepared rows before entering this callback.
+	// This reservation precedes the first native effect; no graph fact is needed.
+	if (device != &expected_device || !request->frozen || request->next_action || request->graph_count || request->native_count || request->capture_inflight || !request->next_output_pin_serial || request->use_count > request->capacity.resource_uses || request->binding_used > request->capacity.resource_uses - request->use_count) {
+		return ERR_BUSY;
+	}
+	const uint32_t begin = request->use_count + request->binding_used;
+	for (uint32_t i = begin; i < request->capacity.resource_uses; ++i) {
+		auto &cell = request->uses[i];
+		if (cell.request != request || cell.dependency.physical || cell.output_role != ProductionUseCell::OutputRole::UNUSED || cell.output_consumer || cell.output_pin_serial) {
+			continue;
+		}
+		const uint64_t serial = request->next_output_pin_serial;
+		request->next_output_pin_serial = serial == UINT64_MAX ? 0 : serial + 1;
+		pin.registry = this;
+		pin.request = request;
+		pin.request_serial = request->serial;
+		pin.serial = serial;
+		pin.cell_index = i;
+		cell.output_role = ProductionUseCell::OutputRole::NATIVE_CONSUMER;
+		cell.output_consumer = &pin;
+		cell.output_pin_serial = serial;
+		return OK;
+	}
+	return ERR_OUT_OF_MEMORY; // No spare prequoted use cell; never allocate or borrow payload.
+}
+
 Error Registry::production_physical_request_locked(ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, ProductionRequest *&out, RenderingDevice *&device, bool append) {
 	out = nullptr;
 	device = nullptr;

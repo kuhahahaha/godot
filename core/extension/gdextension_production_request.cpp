@@ -1424,6 +1424,14 @@ GDExtensionDeviceSessionResultV1 Registry::production_release(GDExtensionProduct
 			}
 			return result(ERR_BUSY, 16);
 		}
+		for (uint32_t i = 0; i < request->capacity.resource_uses; ++i) {
+			if (request->uses[i].output_consumer) {
+				if (report->cause.native_error == OK) {
+					report->cause = result(ERR_BUSY, 16);
+				}
+				return result(ERR_BUSY, 16); // Do not publish cleanup while native last-use owns the arena.
+			}
+		}
 		auto &cell = request->control;
 		if (cell.state != ProductionControlState::OWNER_CONSUMED) {
 			if (cell.input.kind != ProductionControlKind::RELEASE) {
@@ -1524,6 +1532,79 @@ GDExtensionDeviceSessionResultV1 Registry::production_release(GDExtensionProduct
 	return result(ERR_BUSY, 16); // Actual FIFO return is consumed on a later call.
 }
 
+ProductionOutputPin::ProductionOutputPin(ProductionOutputPin &&other) noexcept {
+	if (other.registry) {
+		other.registry->production_output_pin_move(*this, other);
+	}
+}
+ProductionOutputPin &ProductionOutputPin::operator=(ProductionOutputPin &&other) noexcept {
+	if (this != &other) {
+		CRASH_COND(registry); // An existing last-use obligation cannot be overwritten.
+		if (other.registry) {
+			other.registry->production_output_pin_move(*this, other);
+		}
+	}
+	return *this;
+}
+ProductionOutputPin::~ProductionOutputPin() {
+	CRASH_COND(registry);
+}
+void Registry::production_output_pin_move(ProductionOutputPin &to, ProductionOutputPin &from) {
+	MutexLock lock(mutex);
+	CRASH_COND(to.registry || from.registry != this || !from.request || from.request->serial != from.request_serial || from.cell_index >= from.request->capacity.resource_uses);
+	auto &cell = from.request->uses[from.cell_index];
+	CRASH_COND(cell.request != from.request || cell.output_role != ProductionUseCell::OutputRole::NATIVE_CONSUMER || cell.output_consumer != &from || cell.output_pin_serial != from.serial);
+	to.registry = this;
+	to.request = from.request;
+	to.request_serial = from.request_serial;
+	to.serial = from.serial;
+	to.cell_index = from.cell_index;
+	cell.output_consumer = &to;
+	from.registry = nullptr;
+	from.request = nullptr;
+	from.request_serial = from.serial = 0;
+	from.cell_index = UINT32_MAX;
+}
+bool Registry::production_output_pin_matches(const ProductionOutputPin &pin, GDExtensionProductionRequestRefV1 ref, RenderingDevice &device) {
+	MutexLock lock(mutex);
+	if (pin.registry != this || ref.registry_instance != instance || !pin.request || !pin.serial || pin.request_serial != ref.handle_serial || pin.request->serial != pin.request_serial || pin.cell_index >= pin.request->capacity.resource_uses) {
+		return false;
+	}
+	const auto &request = *pin.request;
+	const auto &attachment = *request.attachment;
+	const auto &native = device_records[attachment.device];
+	const auto &cell = request.uses[pin.cell_index];
+	return native.object == &device && native.epoch == attachment.epoch && native.execution_thread == Thread::get_caller_id() && attachment.held_device == &device && cell.request == &request && cell.output_role == ProductionUseCell::OutputRole::NATIVE_CONSUMER && cell.output_consumer == &pin && cell.output_pin_serial == pin.serial && pin.cell_index >= request.use_count + request.binding_used;
+}
+Error Registry::production_output_unpin(ProductionOutputPin &pin) {
+	MutexLock lock(mutex);
+	if (!pin.registry) {
+		return ERR_DOES_NOT_EXIST;
+	}
+	if (pin.registry != this || !pin.request || pin.request->serial != pin.request_serial || !pin.serial || pin.cell_index >= pin.request->capacity.resource_uses) {
+		return ERR_INVALID_DATA;
+	}
+	auto &request = *pin.request;
+	auto &attachment = *request.attachment;
+	const auto &native = device_records[attachment.device];
+	if (native.execution_thread != Thread::get_caller_id()) {
+		return ERR_UNAUTHORIZED;
+	}
+	auto &cell = request.uses[pin.cell_index];
+	if (cell.request != &request || cell.output_role != ProductionUseCell::OutputRole::NATIVE_CONSUMER || cell.output_consumer != &pin || cell.output_pin_serial != pin.serial || pin.cell_index < request.use_count + request.binding_used) {
+		return ERR_INVALID_DATA;
+	}
+	// Return only this custody edge. No request/native completion, driver call,
+	// unpin of backing resources, new admission or metadata refund is implied.
+	cell.output_role = ProductionUseCell::OutputRole::UNUSED;
+	cell.output_consumer = nullptr;
+	cell.output_pin_serial = 0;
+	pin.registry = nullptr;
+	pin.request = nullptr;
+	pin.request_serial = pin.serial = 0;
+	pin.cell_index = UINT32_MAX;
+	return OK;
+}
 GDExtensionDeviceSessionResultV1 Registry::production_release(GDExtensionProductionRequestRefV1 ref) {
 	MutexLock lock(mutex);
 	ProductionRequest *r = nullptr;
@@ -1541,6 +1622,13 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 	auto *r = &request;
 	if (usage) {
 		*usage = {};
+	}
+	if (r->uses) {
+		for (uint32_t i = 0; i < r->capacity.resource_uses; ++i) {
+			if (r->uses[i].output_consumer) {
+				return result(ERR_BUSY, 16); // Actual consumer last-use still owns this arena.
+			}
+		}
 	}
 	if (r->maintenance_serial) {
 		if (!rd || !rd->_thread_safe_.try_lock()) {

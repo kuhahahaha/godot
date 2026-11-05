@@ -1399,6 +1399,7 @@ struct Access {
 	struct SplitSet {
 		bool record_window = false, keep_list = false, close_before_ack = false, budget_pause = false, upload_prefix = false;
 		bool public_port = false;
+		GDExtensionDeviceExit::ProductionOutputPin output_pin;
 		GDExtensionProductionAppendV1 upload_append = {};
 		uint32_t metadata_calls = 0;
 		bool metadata_returned = false, metadata_release = false;
@@ -1482,6 +1483,29 @@ struct Access {
 			test.check(__LINE__, test.receiver_thread == fixture.driver.execution_thread && test.receiver_thread != registry.records[fixture.reference.slot].owner_thread);
 			test.check(__LINE__, operation && operation->owner_request_nonce == request.operation.owner_request_nonce);
 			test.check(__LINE__, registry.records[fixture.reference.slot].active_callbacks > 0);
+			if (test.public_port) {
+				using GDExtensionDeviceExit::ProductionOutputPin;
+				test.check(__LINE__, request.frozen && request.next_action == 0 && request.graph_count == 0 && request.native_count == 0);
+				ProductionOutputPin refused;
+				auto wrong = context;
+				++wrong.frame_serial;
+				test.check(__LINE__, registry.production_output_pin(wrong, ref, fixture.rd, refused) == ERR_UNAUTHORIZED && refused.is_empty());
+				test.check(__LINE__, registry.production_output_pin(context, { ref.registry_instance, UINT64_MAX }, fixture.rd, refused) == ERR_UNAUTHORIZED && refused.is_empty());
+				const uint32_t binding_used = request.binding_used;
+				const uint64_t revision = request.revision;
+				test.check(__LINE__, registry.production_output_pin(context, ref, fixture.rd, test.output_pin) == OK && !test.output_pin.is_empty());
+				test.check(__LINE__, registry.production_output_pin_matches(test.output_pin, ref, fixture.rd));
+				test.check(__LINE__, !registry.production_output_pin_matches(test.output_pin, { ref.registry_instance, UINT64_MAX }, fixture.rd));
+				test.check(__LINE__, registry.production_output_pin(context, ref, fixture.rd, test.output_pin) == ERR_ALREADY_IN_USE);
+				test.check(__LINE__, registry.production_output_pin(context, ref, fixture.rd, refused) == ERR_OUT_OF_MEMORY && refused.is_empty());
+				ProductionOutputPin moved(std::move(test.output_pin));
+				test.check(__LINE__, test.output_pin.is_empty() && !moved.is_empty());
+				test.output_pin = std::move(moved);
+				const uint64_t old_pin_serial = request.next_output_pin_serial - 1;
+				test.check(__LINE__, registry.production_output_unpin(test.output_pin) == OK && test.output_pin.is_empty());
+				test.check(__LINE__, registry.production_output_pin(context, ref, fixture.rd, test.output_pin) == OK && request.next_output_pin_serial == old_pin_serial + 2);
+				test.check(__LINE__, moved.is_empty() && !test.output_pin.is_empty() && request.binding_used == binding_used && request.revision == revision && request.graph_count == 0);
+			}
 
 			if (test.upload_prefix) {
 				const Error error = Error(test.append(context, ref, 10, request.revision, &test.upload_append).native_error);
@@ -1517,6 +1541,10 @@ struct Access {
 			test.check(__LINE__, request.next_action == 0 && request.graph_count == 0);
 			test.check(__LINE__, test.append(context, ref, 10, request.revision, &appended).native_error == OK);
 			test.check(__LINE__, appended.state == GDEXTENSION_PRODUCTION_APPENDED_V1 && request.next_action == 1 && request.graph_count == 1);
+			if (test.public_port) {
+				GDExtensionDeviceExit::ProductionOutputPin too_late;
+				test.check(__LINE__, registry.production_output_pin(context, ref, fixture.rd, too_late) == ERR_BUSY && too_late.is_empty());
+			}
 			if (test.keep_list) {
 				test.check(__LINE__, request.compute_list_open && fixture.rd.compute_list.active);
 				return; // Actual protected scope return must close and seal this prefix.
@@ -1911,6 +1939,19 @@ struct Access {
 				// One explicit Core maintenance pass/receipt is authorized per slice.
 				// This is not the Runtime's outer service_children pass or a grant.
 				const uint64_t limit = 64 + uint64_t(request.capacity.native_memberships) * 4 + uint64_t(request.capacity.graph_memberships) * 16 + uint64_t(request.resource_count) * 8;
+				// A real native consumer retains this same request arena even after
+				// Complete/ACK and storage return. No release preflight may unpin it.
+				const uint64_t pinned_serial = request.serial, pinned_revision = request.revision, pinned_next = request.next_control_serial;
+				const uint32_t pinned_unit_uses = request.resources[0].use_count;
+				const auto blocked_budget = GDExtensionProductionServiceBudgetV1{ production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+				test.check(__LINE__, registry.production_output_unpin(test.output_pin) == ERR_UNAUTHORIZED && !test.output_pin.is_empty());
+				test.check(__LINE__, fixture.port.release(ref, &blocked_budget, &test.release_remaining, &test.release_report).native_error == ERR_BUSY);
+				test.check(__LINE__, request.serial == pinned_serial && request.revision == pinned_revision && request.next_control_serial == pinned_next && request.resources[0].use_count == pinned_unit_uses && request.control.state == ProductionControlState::OWNER_CONSUMED && test.release_report.service_pending == 0);
+				if (test.close_before_ack) {
+					test.check(__LINE__, registry.production_close(fixture.attachment).native_error == ERR_BUSY && !test.output_pin.is_empty());
+				}
+				test.rendezvous(13); // Actual RT consumer's explicit final use return precedes request RELEASE.
+				test.check(__LINE__, test.output_pin.is_empty());
 				const auto release_zero = GDExtensionProductionServiceBudgetV1{ production_dto_abi<GDExtensionProductionServiceBudgetV1>(), 0, 0, 0, 0, 0 };
 				const uint64_t initial_next = request.next_control_serial;
 				const uint32_t initial_attempts = fixture.driver.release_attempts;
@@ -2187,6 +2228,16 @@ struct Access {
 					++filled;
 				}
 				CHECK((filled > 0 && filled < (1u << 20)));
+			} else if (test.phase == 13) {
+				GDExtensionDeviceExit::ProductionOutputPin expired_refused;
+				const uint64_t before_pin_serial = fixture.request->next_output_pin_serial;
+				CHECK(fixture.registry.production_output_pin(test.expired_context, { fixture.instance, fixture.request->serial }, fixture.rd, expired_refused) == ERR_UNAUTHORIZED);
+				CHECK(expired_refused.is_empty());
+				CHECK(fixture.request->next_output_pin_serial == before_pin_serial);
+				CHECK(fixture.registry.production_output_pin(test.expired_context, { fixture.instance, fixture.request->serial }, fixture.rd, test.output_pin) == ERR_ALREADY_IN_USE);
+				CHECK(fixture.registry.production_output_unpin(test.output_pin) == OK);
+				CHECK(test.output_pin.is_empty());
+				CHECK(fixture.registry.production_output_unpin(test.output_pin) == ERR_DOES_NOT_EXIST);
 			} else if (test.phase == 12) {
 				fixture.rd.upload_staging_buffers.block_size = fixture.rd.upload_staging_buffers.max_size = 64;
 				fixture.rd.upload_staging_buffers.usage_bits = RDD::BUFFER_USAGE_TRANSFER_FROM_BIT;

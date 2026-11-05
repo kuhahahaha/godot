@@ -279,5 +279,98 @@
     },
     "local_evidence": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-ci-shadow-loader-20261105",
     "scope": "CPU actual-loader and original FIFO only; new platform run, Mono managed execution and live GPU still pending"
+  },
+  "private_output_custody": {
+    "base": "413f32b65b (source baseline a638a36536)",
+    "frozen_candidate": "e214f2c2238db5d92d35c58c41edf97abfc484214a0c54f32cb5ad949da37ca3",
+    "source_files": {
+      "core/extension/gdextension_library_exit_guard.h": "262502ba5aee05bcbd502f22b5efba787ca123754979ac2a2ada4d4e86028607",
+      "core/extension/gdextension_production_request.h": "61bfa5f9bc96bd680b7a3991b8926b9b136e28c0c060d0e641c5620024b7a70c",
+      "core/extension/gdextension_production_request.cpp": "430669d303478eac0de27e4707b546018f16ff1816bdff01956ba343fac1c7e6",
+      "core/extension/gdextension_production_window.cpp": "173540c343e4ea3362e3dd8775dccd58a007fab0277ea2ade638a73cef9fb3c8",
+      "tests/core/extension/test_production_request.cpp": "5de98e5ec52b887da0eb8970f95c524a198d0d09697ec3d9af40bccd3148bf1e",
+      "core/extension/gdextension_production_resources.cpp": "b441e6b4c503d856e4732fe7110e993ca1facf31ee81ac85a290cac70b868b3d"
+    },
+    "build": {
+      "exit_code": 0,
+      "seconds": 612.1628047089907,
+      "input_unchanged": true,
+      "host_sha256": "325c28a273215222084c47795988ebbff3753fbdaff469623675a15473e8a8a7"
+    },
+    "runtime": {
+      "public": {
+        "exit_code": 0,
+        "seconds": 2.0853875419707038,
+        "cases": {
+          "successes": "2",
+          "failures": "0"
+        },
+        "assertions": {
+          "successes": "456",
+          "failures": "0"
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "request": {
+        "exit_code": 0,
+        "seconds": 0.8400121250306256,
+        "cases": {
+          "successes": "21",
+          "failures": "0"
+        },
+        "assertions": {
+          "successes": "11925",
+          "failures": "0"
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "native": {
+        "exit_code": 0,
+        "seconds": 0.0787209160043858,
+        "cases": {
+          "successes": "21",
+          "failures": "0"
+        },
+        "assertions": {
+          "successes": "15912",
+          "failures": "0"
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "resource": {
+        "exit_code": 0,
+        "seconds": 0.06828154204413295,
+        "cases": {
+          "successes": "2",
+          "failures": "0"
+        },
+        "assertions": {
+          "successes": "234",
+          "failures": "0"
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "full": {
+        "exit_code": 0,
+        "seconds": 16.999136625032406,
+        "cases": {
+          "successes": "2070",
+          "failures": "0"
+        },
+        "assertions": {
+          "successes": "517049",
+          "failures": "0"
+        },
+        "stdout_bytes": 571,
+        "stderr_bytes": 4017
+      }
+    },
+    "scope": "Core-only move-only arena custody in spare finite UseCells; no public ABI, source/Scene/U08 grant, backing disposal or P2 completion",
+    "review": "independent source review; missing role and expiry-negative short-circuit found before freeze and fixed",
+    "evidence": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-production-output-pin-runtime-20261105"
   }
 }
