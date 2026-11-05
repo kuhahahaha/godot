@@ -1981,9 +1981,10 @@ struct Access {
 					test.check(__LINE__, test.release_report.service_control_serial == pending_serial && test.release_remaining.deadline_micros == pending_budget.deadline_micros);
 					if (test.release_report.service_pending) {
 						test.check(__LINE__, request.control.state == ProductionControlState::PENDING && test.release_remaining.controls == 0 && test.release_remaining.passes == 0 && test.release_remaining.receipts == 0);
-						const uint64_t pending_now = OS::get_singleton()->get_ticks_usec();
-						if (pending_now <= pending_budget.deadline_micros) {
-							OS::get_singleton()->delay_usec(pending_budget.deadline_micros - pending_now + 1);
+						// delay_usec may round down to milliseconds on Windows.
+						// Expiry is the actual monotonic-clock predicate, not a sleep return.
+						while (OS::get_singleton()->get_ticks_usec() <= pending_budget.deadline_micros) {
+							OS::get_singleton()->delay_usec(1000);
 						}
 						test.check(__LINE__, fixture.port.release(ref, &sibling_offer, &test.release_remaining, &test.release_report).native_error == ERR_BUSY);
 					}
@@ -2031,9 +2032,8 @@ struct Access {
 					if (expire_this_return) {
 						// Expire a real returned turn, then offer a fresh deadline. The
 						// response must still belong to the old slice, with no owner driver work.
-						const uint64_t now = OS::get_singleton()->get_ticks_usec();
-						if (now <= original.deadline_micros) {
-							OS::get_singleton()->delay_usec(original.deadline_micros - now + 1);
+						while (OS::get_singleton()->get_ticks_usec() <= original.deadline_micros) {
+							OS::get_singleton()->delay_usec(1000);
 						}
 						test.release_budget.deadline_micros = OS::get_singleton()->get_ticks_usec() + 10000000;
 					}

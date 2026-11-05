@@ -372,5 +372,120 @@
     "scope": "Core-only move-only arena custody in spare finite UseCells; no public ABI, source/Scene/U08 grant, backing disposal or P2 completion",
     "review": "independent source review; missing role and expiry-negative short-circuit found before freeze and fixed",
     "evidence": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-production-output-pin-runtime-20261105"
+  },
+  "windows_deadline_followup": {
+    "actual_ci_run": 41988992429,
+    "raw_failed_jobs": {
+      "msvc": {
+        "job": 127117217504,
+        "sha256": "494d3c891ab8f47454cebfd7a0974b1856ef0f6c289f66aa6ea6883682c12979",
+        "bytes": 2883714
+      },
+      "clang": {
+        "job": 127117217554,
+        "sha256": "df8d9be7ebaf1f25b883701e5a8de7267f649399c00a8fa439204e06ed1c3340",
+        "bytes": 3269539
+      },
+      "template": {
+        "job": 127117217363,
+        "sha256": "e0fc7018f087183bdafe293079e97b3ce87b3cbdca7f0ce10555ef6dbe3511f6",
+        "bytes": 2080563
+      }
+    },
+    "failure": "single actual FIFO test, both subcases fail Pending expiry1951/1952 then old serial/deadline mismatch1967/2011; eight assertions in each Windows job",
+    "source_cause": "OS_Windows::delay_usec >=1000 calls Sleep(p_usec/1000); single sleep may round down and return before original deadline",
+    "fix": "both test expiry waits observe actual get_ticks_usec()>original deadline; unchanged serial/budget/native cleanup assertions and production code",
+    "source_sha256": "2484a48ea7b292158c3f526c79b1663e492a7f0b5945fc45cbf71d50768c47a6",
+    "incremental_build_exit": 0,
+    "strict_tus": [
+      {
+        "dev": true,
+        "command": [
+          "/opt/homebrew/opt/llvm/bin/clang++",
+          "-std=c++17",
+          "-DDEBUG_ENABLED",
+          "-DTHREADS_ENABLED",
+          "-DTESTS_ENABLED",
+          "-DTOOLS_ENABLED",
+          "-fno-exceptions",
+          "-Wall",
+          "-Wextra",
+          "-Wno-unused-parameter",
+          "-Werror",
+          "-Wshadow",
+          "-Wmissing-field-initializers",
+          "-fsyntax-only",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/core/extension",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/platform/macos",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/thirdparty",
+          "tests/core/extension/test_production_request.cpp",
+          "-DDEV_ENABLED"
+        ],
+        "exit": 0,
+        "diagnostic": ""
+      },
+      {
+        "dev": false,
+        "command": [
+          "/opt/homebrew/opt/llvm/bin/clang++",
+          "-std=c++17",
+          "-DDEBUG_ENABLED",
+          "-DTHREADS_ENABLED",
+          "-DTESTS_ENABLED",
+          "-DTOOLS_ENABLED",
+          "-fno-exceptions",
+          "-Wall",
+          "-Wextra",
+          "-Wno-unused-parameter",
+          "-Werror",
+          "-Wshadow",
+          "-Wmissing-field-initializers",
+          "-fsyntax-only",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/core/extension",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/platform/macos",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/thirdparty",
+          "tests/core/extension/test_production_request.cpp"
+        ],
+        "exit": 0,
+        "diagnostic": ""
+      }
+    ],
+    "runtime": {
+      "host_sha256": "a4b8e7aa575690393d4afce582f7ab8f6c662ddea8587a15c3aaa947a9e76184",
+      "source_sha256": "2484a48ea7b292158c3f526c79b1663e492a7f0b5945fc45cbf71d50768c47a6",
+      "runtime": {
+        "public": {
+          "exit": 0,
+          "cases": {
+            "successes": "2",
+            "failures": "0"
+          },
+          "assertions": {
+            "successes": "456",
+            "failures": "0"
+          },
+          "stdout_bytes": 0,
+          "stderr_bytes": 0
+        },
+        "request": {
+          "exit": 0,
+          "cases": {
+            "successes": "21",
+            "failures": "0"
+          },
+          "assertions": {
+            "successes": "11925",
+            "failures": "0"
+          },
+          "stdout_bytes": 0,
+          "stderr_bytes": 0
+        }
+      },
+      "scope": "macOS runtime; actual Windows platform recheck pending"
+    },
+    "review": "independent source and raw-log review clean",
+    "windows_actual_recheck": "pending, no local Windows execution or green CI claim"
   }
 }
