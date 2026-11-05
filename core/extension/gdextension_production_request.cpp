@@ -30,7 +30,6 @@
 
 #include "core/extension/gdextension_production_request.h"
 
-#include "core/extension/gdextension_production_registration.h"
 #include "core/os/os.h"
 #include "core/os/thread.h"
 #include "servers/rendering/rendering_device.h"

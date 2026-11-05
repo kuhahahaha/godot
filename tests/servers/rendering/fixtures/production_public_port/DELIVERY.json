@@ -669,5 +669,215 @@
       }
     ],
     "scope": "actual original generator RED missing7; GREEN includes all7 exactly once and all original force-link source files; five generated full SCU TUs strict double DEV syntax0; actual Linux link/runtime recheck pending"
+  },
+  "clangd_include_followup": {
+    "actual_ci_run": 41996276774,
+    "job": 127140385046,
+    "failed_step": "Style checks via clangd-tidy",
+    "diagnostic": "gdextension_production_request.cpp33 gdextension_production_registration.h not used directly [unused-includes]",
+    "raw_log_sha256": "f93e02c615092e267fc9fa5b578bd943cf45d3a84e547bbf12789b5cb033cc97",
+    "fix": "remove only that unused direct include; no ABI or behavior change",
+    "strict": [
+      {
+        "tests": true,
+        "dev": true,
+        "command": [
+          "/opt/homebrew/opt/llvm/bin/clang++",
+          "-std=c++17",
+          "-DDEBUG_ENABLED",
+          "-DTHREADS_ENABLED",
+          "-DTOOLS_ENABLED",
+          "-fno-exceptions",
+          "-Wall",
+          "-Wextra",
+          "-Wno-unused-parameter",
+          "-Werror",
+          "-Wshadow",
+          "-Wmissing-field-initializers",
+          "-fsyntax-only",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/platform/macos",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/thirdparty",
+          "core/extension/gdextension_production_request.cpp",
+          "-DTESTS_ENABLED",
+          "-DDEV_ENABLED"
+        ],
+        "exit": 0,
+        "diagnostic": ""
+      },
+      {
+        "tests": true,
+        "dev": false,
+        "command": [
+          "/opt/homebrew/opt/llvm/bin/clang++",
+          "-std=c++17",
+          "-DDEBUG_ENABLED",
+          "-DTHREADS_ENABLED",
+          "-DTOOLS_ENABLED",
+          "-fno-exceptions",
+          "-Wall",
+          "-Wextra",
+          "-Wno-unused-parameter",
+          "-Werror",
+          "-Wshadow",
+          "-Wmissing-field-initializers",
+          "-fsyntax-only",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/platform/macos",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/thirdparty",
+          "core/extension/gdextension_production_request.cpp",
+          "-DTESTS_ENABLED"
+        ],
+        "exit": 0,
+        "diagnostic": ""
+      },
+      {
+        "tests": false,
+        "dev": true,
+        "command": [
+          "/opt/homebrew/opt/llvm/bin/clang++",
+          "-std=c++17",
+          "-DDEBUG_ENABLED",
+          "-DTHREADS_ENABLED",
+          "-DTOOLS_ENABLED",
+          "-fno-exceptions",
+          "-Wall",
+          "-Wextra",
+          "-Wno-unused-parameter",
+          "-Werror",
+          "-Wshadow",
+          "-Wmissing-field-initializers",
+          "-fsyntax-only",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/platform/macos",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/thirdparty",
+          "core/extension/gdextension_production_request.cpp",
+          "-DDEV_ENABLED"
+        ],
+        "exit": 0,
+        "diagnostic": ""
+      },
+      {
+        "tests": false,
+        "dev": false,
+        "command": [
+          "/opt/homebrew/opt/llvm/bin/clang++",
+          "-std=c++17",
+          "-DDEBUG_ENABLED",
+          "-DTHREADS_ENABLED",
+          "-DTOOLS_ENABLED",
+          "-fno-exceptions",
+          "-Wall",
+          "-Wextra",
+          "-Wno-unused-parameter",
+          "-Werror",
+          "-Wshadow",
+          "-Wmissing-field-initializers",
+          "-fsyntax-only",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/platform/macos",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/thirdparty",
+          "core/extension/gdextension_production_request.cpp"
+        ],
+        "exit": 0,
+        "diagnostic": ""
+      }
+    ],
+    "normal_editor_build_exit": 0,
+    "runtime": {
+      "host_sha256": "0b1d03416b332abf4dd72e4d4e77cd9f7550d28226c0bfdcdafb38acf8120fa4",
+      "results": {
+        "public": {
+          "exit": 0,
+          "cases": {
+            "successes": "2",
+            "failures": "0"
+          },
+          "assertions": {
+            "successes": "456",
+            "failures": "0"
+          },
+          "stdout_bytes": 0,
+          "stderr_bytes": 0
+        },
+        "request": {
+          "exit": 0,
+          "cases": {
+            "successes": "21",
+            "failures": "0"
+          },
+          "assertions": {
+            "successes": "11925",
+            "failures": "0"
+          },
+          "stdout_bytes": 0,
+          "stderr_bytes": 0
+        }
+      }
+    },
+    "actual_clangd_tidy_recheck": "pending; local check-mode was not an equivalent passing lint result",
+    "local_evidence": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-ci-537-unused-include-20261105"
+  },
+  "matched_trimmed_server": {
+    "manifest": {
+      "core_head": "6e6cb02dd9e1fe5444a7ff4073e319a0b20ef795",
+      "original_linked_sha256": "051c03d90c223fcede1dea40f118ff7bfc2fa934b9cfe7ea818a8a61388d3381",
+      "packaged_sha256": "03939e2ebb17a741342d77d0c4293cdebf2d31004884a6e84dee506e7675bff7",
+      "packaged_bytes": 56623536,
+      "binary": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-matching-trimmed-server-20261105/handoff/ange_server",
+      "selection": {
+        "schema": 1,
+        "core_stamp": "6864becee12f610346aa03b08e6e25708ec9981c2ef286c8ba78acf0980942cf",
+        "compiler_route": "BuiltinGlslangV1",
+        "compiler_stamp": "95bee6ce3fff32c6f9e47e1e82edc614090f1f32caab372082be316ebc3b1848",
+        "platform": "macos",
+        "architecture": "arm64",
+        "target_kind": "Executable"
+      },
+      "module_match": true,
+      "module_definitions": "modules_enabled.gen.h copied before later profile reconfiguration",
+      "known_legacy_ignored": [
+        "navigation"
+      ],
+      "runtime": [
+        {
+          "name": "version",
+          "command": [
+            "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-matching-trimmed-server-20261105/handoff/ange_server",
+            "--headless",
+            "--version"
+          ],
+          "exit": 0,
+          "stdout": "4.7.2.stable.custom_build.6e6cb02dd\n",
+          "stderr": ""
+        },
+        {
+          "name": "native-smoke",
+          "command": [
+            "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-matching-trimmed-server-20261105/handoff/ange_server",
+            "--headless",
+            "--path",
+            "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-matching-trimmed-server-20261105/native-smoke",
+            "--quit-after",
+            "2"
+          ],
+          "exit": 0,
+          "stdout": "Godot Engine v4.7.2.stable.custom_build.6e6cb02dd (2026-11-05 08:59:21 UTC) - https://godotengine.org\n\n",
+          "stderr": ""
+        }
+      ],
+      "smoke_project": "native Node only, explicit actual Jolt3D/Dummy2D selection and empty exported global-class cache, no script or DSO",
+      "scope": "matched original A template_release profile and no-script headless startup/shutdown only; no actual ANGE DSO/SceneReady/producer/Runtime/GPU qualification",
+      "source_json_sha256": "d206dbf4631a43563f968a93ac06108f830b7cfac044b921316fdf37056decc0"
+    },
+    "build": {
+      "exit_code": 0,
+      "seconds": 358.5395419159904,
+      "head": "6e6cb02dd9e1fe5444a7ff4073e319a0b20ef795",
+      "input_unchanged": true,
+      "artifact": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.template_release.arm64",
+      "sha256": "051c03d90c223fcede1dea40f118ff7bfc2fa934b9cfe7ea818a8a61388d3381"
+    },
+    "A_received": "copied packaged binary and sidecar, exactSHA preserved, actual --headless --version0; DSO/SceneReady/producer/GPU integration still A-owned pending"
   }
 }
