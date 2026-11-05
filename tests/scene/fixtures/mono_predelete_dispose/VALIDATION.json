@@ -10,9 +10,9 @@
     "tests/scene/fixtures/mono_predelete_dispose/project.godot": "b2eaed7012ae7eb5ed6d03dcc8462347556c3ace52954d2a13ac6180c2f925de",
     "tests/scene/fixtures/mono_predelete_dispose/main.tscn": "446c5fab9b89c68e827b8c94e1284384b24e22c7124b063c3e530e028a091335",
     "tests/scene/fixtures/mono_predelete_dispose/MonoPredeleteDispose.csproj": "f353a4002aa23220680f014eb2ac8f6f74eacb8d2b63352f64fe97b1ac632941",
-    "tests/scene/fixtures/mono_predelete_dispose/DisposeProbe.cs": "c0ba65bdd4f1c0f621c9e771acfc1d25acdbf841ac77d3627de53f3f814464fd",
-    "tests/scene/fixtures/mono_predelete_dispose/RefDisposeProbe.cs": "3452930ea3358a07c1262fc03fee5fdb741b577da414871efeb6626512ecd5c9",
-    "tests/scene/fixtures/mono_predelete_dispose/Controller.cs": "ebadeeeb92d9893d483a5823e1a1f8374f67f9ff61182efc46613771163860a4",
+    "tests/scene/fixtures/mono_predelete_dispose/DisposeProbe.cs": "b3ab5274a29e7b6447bbd76feb84fede0d13f422b8faf61f3e78d7ea062fcb3d",
+    "tests/scene/fixtures/mono_predelete_dispose/RefDisposeProbe.cs": "52c229758ccc318ced8b26c079724e9869b1b89cc0bd2ff2c0c55e2e3385b1bd",
+    "tests/scene/fixtures/mono_predelete_dispose/Controller.cs": "b0329838be011d64fcfa64e9ec0281d6e391583ae6e4c691a02e0727ee0d9c4c",
     "tests/scene/fixtures/mono_predelete_dispose/Runner.gd": "c13ec3f4a6905abfa9c46815dfc24202ddc9272ffcc5ca41cb60dbc8dd2f2809",
     "tests/scene/fixtures/mono_predelete_dispose/run.sh": "e9754d691d1a752fa0de914708738fdcc0b90219fd509ff259f7f32757b7c1bb",
     "tests/scene/fixtures/mono_predelete_dispose/.gitignore": "14abbf84cc6a134c70b221e056fa95fbb88e3a4ac00aab34da599384fa29747f",
@@ -31,5 +31,15 @@
     "original Mono PCK export regression"
   ],
   "independent_review": "2b71 reviewed by separate peer after A/Astra actual-log source triage",
-  "scope": "skip only the redundant same-instance detach during actual native predelete cleanup; generic cohort/null replacement guard and RefCounted path unchanged"
+  "scope": "skip only the redundant same-instance detach during actual native predelete cleanup; generic cohort/null replacement guard and RefCounted path unchanged",
+  "format_followup": {
+    "ci_run": 41985861701,
+    "job": 127106307359,
+    "hook": "actual dotnet-format modified indentation only",
+    "patch_sha256": "375eb5510fa49083c938787859d4d5a79de9e0afcc0748cf7cc03245a5d2a1b7",
+    "log_sha256": "7a3dcb13c8c218c92af779b66c1bbe4e0fee902e454af106fe7e14290d3bfd4d",
+    "line_content_unchanged": true,
+    "local_dotnet_format": "unavailable; exact actual CI diff applied",
+    "managed_compile_runtime": "still not run locally; new CI required"
+  }
 }
