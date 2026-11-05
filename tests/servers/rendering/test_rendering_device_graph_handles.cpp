@@ -1,3 +1,33 @@
+/**************************************************************************/
+/*  test_rendering_device_graph_handles.cpp                               */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
 #include "servers/rendering/rendering_device_graph.h"
 #include "tests/servers/rendering/transfer_test_driver_base.h"
 #include "tests/test_macros.h"
@@ -7,9 +37,7 @@ TEST_FORCE_LINK(test_rendering_device_graph_handles)
 TEST_CASE("[R02][Graph] append returns distinct original graph handles") {
 	RenderingDeviceGraph graph;
 	TransferTestDriverBase driver;
-	graph.initialize(&driver,
-			[](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); },
-			1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+	graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
 	graph.begin();
 	graph.add_compute_list_begin();
 	const auto first = graph.add_compute_list_dispatch(1, 2, 3);
@@ -27,9 +55,7 @@ TEST_CASE("[R02][Graph] append returns distinct original graph handles") {
 	CHECK(graph.contains_record(first));
 	CHECK(graph.contains_record(second));
 	RenderingDeviceGraph foreign;
-	foreign.initialize(&driver,
-			[](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); },
-			1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+	foreign.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
 	foreign.begin();
 	foreign.add_compute_list_begin();
 	const auto foreign_record = foreign.add_compute_list_dispatch(1, 2, 3);
@@ -57,9 +83,7 @@ TEST_CASE("[R02][Graph] append returns distinct original graph handles") {
 TEST_CASE("[R02][Graph] texture update and clear return graph command handles") {
 	RenderingDeviceGraph graph;
 	TransferTestDriverBase driver;
-	graph.initialize(&driver,
-			[](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); },
-			1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+	graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
 	graph.begin();
 	RenderingDeviceGraph::ResourceTracker source;
 	source.buffer_driver_id = RenderingDeviceDriver::BufferID(71);
@@ -82,9 +106,7 @@ TEST_CASE("[R02][Graph] texture update and clear return graph command handles") 
 TEST_CASE("[R02][Graph] dependency path reports actual adjacency length") {
 	RenderingDeviceGraph graph;
 	TransferTestDriverBase driver;
-	graph.initialize(&driver,
-			[](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); },
-			1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+	graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
 	graph.begin();
 	RenderingDeviceGraph::ResourceTracker destination;
 	destination.buffer_driver_id = RenderingDeviceDriver::BufferID(72);
@@ -108,7 +130,11 @@ public:
 	bool begin_result = true;
 	uint32_t copy_calls = 0;
 	uint32_t failed_buffer_barriers = 0;
-	void command_pipeline_barrier(CommandBufferID p_buffer, BitField<PipelineStageBits>, BitField<PipelineStageBits>, VectorView<MemoryAccessBarrier>, VectorView<BufferBarrier>, VectorView<TextureBarrier>, VectorView<AccelerationStructureBarrier>) override { if (p_buffer == CommandBufferID(12)) { failed_buffer_barriers++; } }
+	void command_pipeline_barrier(CommandBufferID p_buffer, BitField<PipelineStageBits>, BitField<PipelineStageBits>, VectorView<MemoryAccessBarrier>, VectorView<BufferBarrier>, VectorView<TextureBarrier>, VectorView<AccelerationStructureBarrier>) override {
+		if (p_buffer == CommandBufferID(12)) {
+			failed_buffer_barriers++;
+		}
+	}
 	void command_copy_buffer(CommandBufferID, BufferID, BufferID, VectorView<BufferCopyRegion>) override { copy_calls++; }
 	void command_compute_dispatch(CommandBufferID, uint32_t, uint32_t, uint32_t) override {}
 	CommandBufferID command_buffer_create(CommandPoolID) override { return CommandBufferID(12); }
@@ -121,9 +147,7 @@ public:
 TEST_CASE("[R02][Graph] rejected primary begin cannot execute or resolve an upload") {
 	RenderingDeviceGraph graph;
 	RecordSlotTestDriver driver;
-	graph.initialize(&driver,
-			[](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); },
-			1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+	graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
 	graph.begin(false);
 	RenderingDeviceGraph::ResourceTracker destination;
 	destination.buffer_driver_id = RenderingDeviceDriver::BufferID(72);
@@ -147,9 +171,7 @@ TEST_CASE("[R02][Graph] rejected primary begin cannot execute or resolve an uplo
 TEST_CASE("[R02][Graph] actual graph execution maps recorded commands to the native command-buffer slot") {
 	RenderingDeviceGraph graph;
 	RecordSlotTestDriver driver;
-	graph.initialize(&driver,
-			[](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); },
-			1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+	graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
 	graph.begin();
 	RenderingDeviceGraph::ResourceTracker destination;
 	destination.buffer_driver_id = RenderingDeviceDriver::BufferID(72);
@@ -181,9 +203,7 @@ TEST_CASE("[R02][Graph] actual graph execution maps recorded commands to the nat
 	CHECK(graph.record_mapping_state(upload) == RenderingDeviceGraph::RecordMappingState::Recorded);
 	CHECK(graph.record_mapping_state(dispatch) == RenderingDeviceGraph::RecordMappingState::Recorded);
 	RenderingDeviceGraph foreign;
-	foreign.initialize(&driver,
-			[](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); },
-			1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+	foreign.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
 	foreign.begin();
 	CHECK_FALSE(foreign.resolve_record_command_buffer_slot(dispatch, slot));
 	graph.begin();
@@ -195,9 +215,7 @@ TEST_CASE("[R02][Graph] actual graph execution maps recorded commands to the nat
 TEST_CASE("[R02][Graph] rejected split-buffer begin does not resolve a later upload") {
 	RenderingDeviceGraph graph;
 	RecordSlotTestDriver driver;
-	graph.initialize(&driver,
-			[](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); },
-			1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+	graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
 	graph.begin();
 	RenderingDeviceGraph::ResourceTracker destination;
 	destination.buffer_driver_id = RenderingDeviceDriver::BufferID(72);
@@ -227,9 +245,7 @@ TEST_CASE("[R02][Graph] rejected split-buffer begin does not resolve a later upl
 TEST_CASE("[R02][Graph] split draw command puts later upload in the next native slot") {
 	RenderingDeviceGraph graph;
 	RecordSlotTestDriver driver;
-	graph.initialize(&driver,
-			[](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); },
-			1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+	graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
 	graph.begin();
 	RenderingDeviceGraph::ResourceTracker destination;
 	destination.buffer_driver_id = RenderingDeviceDriver::BufferID(72);
@@ -252,9 +268,7 @@ TEST_CASE("[R02][Graph] split draw command puts later upload in the next native 
 	CHECK(actual != primary);
 	CHECK(current == actual);
 	RenderingDeviceGraph foreign;
-	foreign.initialize(&driver,
-			[](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); },
-			1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+	foreign.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
 	foreign.begin();
 	CHECK_FALSE(foreign.resolve_record_command_buffer(after, actual));
 	uint32_t slot = UINT32_MAX;
@@ -269,9 +283,7 @@ TEST_CASE("[R02][Graph] readback copy handles map only their actual executed nat
 	for (int failure = 0; failure < 3; failure++) {
 		RenderingDeviceGraph graph;
 		RecordSlotTestDriver driver;
-		graph.initialize(&driver,
-				[](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); },
-				1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+		graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
 		graph.begin(failure != 2);
 		const auto before = graph.add_buffer_get_data(RenderingDeviceDriver::BufferID(71), nullptr, RenderingDeviceDriver::BufferID(81), { 8, 16, 32 });
 		graph.add_draw_list_begin(RenderingDeviceDriver::RenderPassID(), RenderingDeviceDriver::FramebufferID(), Rect2i(), {}, {}, {}, 0, true);
@@ -295,9 +307,58 @@ TEST_CASE("[R02][Graph] readback copy handles map only their actual executed nat
 		if (failure == 0) {
 			CHECK(actual == pool.buffers[0]);
 		}
-		CHECK(driver.copy_calls == (failure == 0 ? 2 : failure == 1 ? 1 : 0));
+		CHECK(driver.copy_calls == (failure == 0 ? 2 : failure == 1 ? 1
+																	: 0));
 		graph.begin();
 		CHECK_FALSE(graph.contains_record(before));
 		CHECK_FALSE(graph.resolve_record_command_buffer(after, actual));
 	}
+}
+
+TEST_CASE("[D32][Graph] depth draw records keep original storage and reject failed native mapping") {
+	RenderingDeviceGraph graph;
+	RecordSlotTestDriver driver;
+	graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+	graph.begin(false);
+	RenderingDeviceGraph::ResourceTracker target;
+	target.texture_driver_id = RenderingDeviceDriver::TextureID(72);
+	RenderingDeviceGraph::FramebufferCache framebuffer;
+	framebuffer.trackers.push_back(&target);
+	const RenderingDeviceGraph::AttachmentOperation operation = RenderingDeviceGraph::ATTACHMENT_OPERATION_CLEAR;
+	RenderingDeviceDriver::RenderPassClearValue clear;
+	clear.depth = 1.0f;
+	const auto begin = graph.add_draw_list_begin(&framebuffer, Rect2i(0, 0, 8, 8), VectorView(&operation, 1), VectorView(&clear, 1), {}, 0);
+	const auto depth_clear = graph.capture_draw_list_clear(0);
+	CHECK_FALSE(graph.capture_draw_list_clear(1).is_valid());
+	const auto viewport = graph.add_draw_list_set_viewport(Rect2i(0, 0, 8, 8));
+	const auto scissor = graph.add_draw_list_set_scissor(Rect2i(0, 0, 4, 4));
+	const auto bind = graph.add_draw_list_bind_pipeline(RenderingDeviceDriver::PipelineID(5), {});
+	const uint32_t push = 7;
+	const auto constant = graph.add_draw_list_set_push_constant(RenderingDeviceDriver::ShaderID(6), &push, sizeof(push));
+	const auto draw = graph.add_draw_list_draw(3, 1);
+	const RenderingDeviceGraph::RecordHandle records[] = { begin, depth_clear, viewport, scissor, bind, constant, draw };
+	for (const auto &record : records) {
+		CHECK(graph.contains_record(record));
+		CHECK(graph.record_mapping_state(record) == RenderingDeviceGraph::RecordMappingState::Pending);
+	}
+	const auto end = graph.add_draw_list_end();
+	CHECK(end.kind == 7);
+	CHECK(graph.contains_record(end));
+	for (const auto &record : records) {
+		CHECK(graph.contains_record(record));
+	}
+	RenderingDeviceGraph::CommandBufferPool pool;
+	RenderingDeviceDriver::CommandBufferID primary(11);
+	graph.end(false, false, primary, pool);
+	uint32_t slot = UINT32_MAX;
+	for (const auto &record : records) {
+		CHECK_FALSE(graph.resolve_record_command_buffer_slot(record, slot));
+		CHECK(graph.record_mapping_state(record) == RenderingDeviceGraph::RecordMappingState::Failed);
+	}
+	CHECK(graph.record_mapping_state(end) == RenderingDeviceGraph::RecordMappingState::Failed);
+	graph.begin();
+	for (const auto &record : records) {
+		CHECK_FALSE(graph.contains_record(record));
+	}
+	CHECK_FALSE(graph.contains_record(end));
 }

@@ -4365,12 +4365,35 @@ RID RenderingDevice::framebuffer_create(const Vector<RID> &p_texture_attachments
 }
 
 RID RenderingDevice::framebuffer_create_multipass(const Vector<RID> &p_texture_attachments, const Vector<FramebufferPass> &p_passes, FramebufferFormatID p_format_check, uint32_t p_view_count) {
+	return _qualification_framebuffer_create_multipass(p_texture_attachments, p_passes, p_format_check, p_view_count, nullptr, nullptr, RID());
+}
+
+RID RenderingDevice::_qualification_framebuffer_create(RID p_target, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, GDExtensionDeviceExit::QualificationPhysicalReturn *p_target_cell, RID p_reserved) {
+	ERR_FAIL_NULL_V(p_cell, RID());
+	ERR_FAIL_NULL_V(p_target_cell, RID());
+	Vector<RID> attachments;
+	attachments.push_back(p_target);
+	FramebufferPass pass;
+	pass.depth_attachment = 0;
+	Vector<FramebufferPass> passes;
+	passes.push_back(pass);
+	return _qualification_framebuffer_create_multipass(attachments, passes, INVALID_ID, 1, p_cell, p_target_cell, p_reserved);
+}
+
+RID RenderingDevice::_qualification_framebuffer_create_multipass(const Vector<RID> &p_texture_attachments, const Vector<FramebufferPass> &p_passes, FramebufferFormatID p_format_check, uint32_t p_view_count, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, GDExtensionDeviceExit::QualificationPhysicalReturn *p_target_cell, RID p_reserved) {
 	_THREAD_SAFE_METHOD_
 
+	// Authenticate the original target before worker waits or texture mutation.
+	if (p_cell) {
+		ERR_FAIL_COND_V(!p_reserved.is_valid() || !p_target_cell || p_texture_attachments.size() != 1 || p_passes.size() != 1 || p_view_count != 1, RID());
+		const Texture *target = texture_owner.get_or_null(p_texture_attachments[0]);
+		ERR_FAIL_COND_V(!target || target->qualification_return != p_target_cell || p_target_cell->bridge != p_cell->bridge || p_target_cell->rid != p_texture_attachments[0].get_id() || p_target_cell->use_closed.load() || p_target_cell->dependent_children.load() == UINT32_MAX, RID());
+		ERR_FAIL_COND_V(target->format != DATA_FORMAT_D32_SFLOAT || target->samples != TEXTURE_SAMPLES_1 || target->usage_flags != (TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT), RID());
+	}
 	// Preflight the entire attachment list before touching any prior worker.
 	for (RID attachment : p_texture_attachments) {
 		const Texture *texture = texture_owner.get_or_null(attachment);
-		ERR_FAIL_COND_V(texture && texture->qualification_return, RID());
+		ERR_FAIL_COND_V(texture && texture->qualification_return && !p_cell, RID());
 	}
 
 	Vector<AttachmentFormat> attachments;
@@ -4432,6 +4455,8 @@ RID RenderingDevice::framebuffer_create_multipass(const Vector<RID> &p_texture_a
 			"The format used to check this framebuffer differs from the intended framebuffer format.");
 
 	Framebuffer framebuffer;
+	framebuffer.qualification_return = p_cell;
+	framebuffer.qualification_dependency = p_target_cell;
 	framebuffer.format_id = format_id;
 	framebuffer.texture_ids = p_texture_attachments;
 	framebuffer.size = size;
@@ -4444,7 +4469,14 @@ RID RenderingDevice::framebuffer_create_multipass(const Vector<RID> &p_texture_a
 	framebuffer_cache->trackers = trackers;
 	framebuffer.framebuffer_cache = framebuffer_cache;
 
-	RID id = framebuffer_owner.make_rid(framebuffer);
+	RID id;
+	if (p_cell) {
+		id = p_reserved;
+		framebuffer_owner.initialize_rid(id, framebuffer);
+		p_target_cell->dependent_children.fetch_add(1);
+	} else {
+		id = framebuffer_owner.make_rid(framebuffer);
+	}
 #ifdef DEV_ENABLED
 	set_resource_name(id, "RID:" + itos(id.get_id()));
 #endif
@@ -4490,6 +4522,7 @@ void RenderingDevice::framebuffer_set_invalidation_callback(RID p_framebuffer, I
 
 	Framebuffer *framebuffer = framebuffer_owner.get_or_null(p_framebuffer);
 	ERR_FAIL_NULL(framebuffer);
+	ERR_FAIL_COND(framebuffer->qualification_return);
 
 	framebuffer->invalidated_callback = p_callback;
 	framebuffer->invalidated_callback_userdata = p_userdata;
@@ -5783,10 +5816,26 @@ bool RenderingDevice::uniform_sets_have_linear_pools() const {
 /*******************/
 
 RID RenderingDevice::render_pipeline_create(RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState &p_rasterization_state, const PipelineMultisampleState &p_multisample_state, const PipelineDepthStencilState &p_depth_stencil_state, const PipelineColorBlendState &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const Vector<PipelineSpecializationConstant> &p_specialization_constants) {
+	return _qualification_render_pipeline_create_internal(p_shader, p_framebuffer_format, p_vertex_format, p_render_primitive, p_rasterization_state, p_multisample_state, p_depth_stencil_state, p_blend_state, p_dynamic_state_flags, p_for_render_pass, p_specialization_constants, nullptr, RID());
+}
+
+RID RenderingDevice::_qualification_render_pipeline_create(RID p_shader, FramebufferFormatID p_format, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, RID p_reserved) {
+	ERR_FAIL_NULL_V(p_cell, RID());
+	PipelineDepthStencilState depth;
+	depth.enable_depth_test = true;
+	depth.enable_depth_write = true;
+	depth.depth_compare_operator = COMPARE_OP_ALWAYS;
+	return _qualification_render_pipeline_create_internal(p_shader, p_format, INVALID_ID, RENDER_PRIMITIVE_TRIANGLES, PipelineRasterizationState(), PipelineMultisampleState(), depth, PipelineColorBlendState(), 0, 0, Vector<PipelineSpecializationConstant>(), p_cell, p_reserved);
+}
+
+RID RenderingDevice::_qualification_render_pipeline_create_internal(RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState &p_rasterization_state, const PipelineMultisampleState &p_multisample_state, const PipelineDepthStencilState &p_depth_stencil_state, const PipelineColorBlendState &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const Vector<PipelineSpecializationConstant> &p_specialization_constants, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, RID p_reserved) {
 	ERR_FAIL_COND_V(native_immutable_resource_is_retiring(p_shader), RID());
 	// Needs a shader.
 	Shader *shader = shader_owner.get_or_null(p_shader);
 	ERR_FAIL_NULL_V(shader, RID());
+	ERR_FAIL_COND_V(shader->qualification_return && !p_cell, RID());
+	ERR_FAIL_COND_V(p_cell && (!p_reserved.is_valid() || !shader->qualification_return || shader->qualification_return->bridge != p_cell->bridge || shader->qualification_return->child != p_cell->child || shader->qualification_return->use_closed.load() || shader->qualification_return->dependent_children.load() == UINT32_MAX), RID());
+	ERR_FAIL_COND_V(p_cell && (!shader->set_formats.is_empty() || !shader->stage_bits.has_flag(RDD::PIPELINE_STAGE_FRAGMENT_SHADER_BIT)), RID());
 	ERR_FAIL_COND_V_MSG(shader->pipeline_type != PIPELINE_TYPE_RASTERIZATION, RID(),
 			"Only render shaders can be used in render pipelines");
 
@@ -5902,6 +5951,8 @@ RID RenderingDevice::render_pipeline_create(RID p_shader, FramebufferFormatID p_
 	}
 
 	RenderPipeline pipeline;
+	pipeline.qualification_return = p_cell;
+	pipeline.qualification_dependency = p_cell ? shader->qualification_return : nullptr;
 	pipeline.driver_id = driver->render_pipeline_create(
 			shader->driver_id,
 			driver_vertex_format,
@@ -5962,7 +6013,14 @@ RID RenderingDevice::render_pipeline_create(RID p_shader, FramebufferFormatID p_
 #endif
 
 	// Create ID to associate with this pipeline.
-	RID id = render_pipeline_owner.make_rid(pipeline);
+	RID id;
+	if (p_cell) {
+		id = p_reserved;
+		render_pipeline_owner.initialize_rid(id, pipeline);
+		pipeline.qualification_dependency->dependent_children.fetch_add(1);
+	} else {
+		id = render_pipeline_owner.make_rid(pipeline);
+	}
 	{
 		_THREAD_SAFE_METHOD_
 
@@ -6563,13 +6621,28 @@ RenderingDevice::DrawListID RenderingDevice::_draw_list_begin_bind(RID p_framebu
 }
 
 RenderingDevice::DrawListID RenderingDevice::draw_list_begin(RID p_framebuffer, BitField<DrawFlags> p_draw_flags, VectorView<Color> p_clear_color_values, float p_clear_depth_value, uint32_t p_clear_stencil_value, const Rect2 &p_region, uint32_t p_breadcrumb) {
-	ERR_RENDER_THREAD_GUARD_V(INVALID_ID);
-	ERR_FAIL_COND_V_MSG(_recording_error() != OK, INVALID_ID, "Recording is suspended after a frame fence wait failure.");
+	return _draw_list_begin_recorded(p_framebuffer, p_draw_flags, p_clear_color_values, p_clear_depth_value, p_clear_stencil_value, p_region, p_breadcrumb, false).list;
+}
 
-	ERR_FAIL_COND_V_MSG(draw_list.active, INVALID_ID, "Only one draw list can be active at the same time.");
+RenderingDevice::DrawListBeginResult RenderingDevice::_draw_list_begin_recorded(RID p_framebuffer, uint32_t p_draw_flags_bits, VectorView<Color> p_clear_color_values, float p_clear_depth_value, uint32_t p_clear_stencil_value, const Rect2 &p_region, uint32_t p_breadcrumb, bool p_capture) {
+	DrawListBeginResult result;
+	const BitField<DrawFlags> p_draw_flags = p_draw_flags_bits;
+	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
+
+	ERR_FAIL_COND_V_MSG(draw_list.active, result.failure(ERR_INVALID_PARAMETER), "Only one draw list can be active at the same time.");
 
 	Framebuffer *framebuffer = framebuffer_owner.get_or_null(p_framebuffer);
-	ERR_FAIL_NULL_V(framebuffer, INVALID_ID);
+	ERR_FAIL_NULL_V(framebuffer, result.failure(ERR_INVALID_PARAMETER));
+	ERR_FAIL_COND_V(framebuffer->qualification_return && (!qualification_recording || framebuffer->qualification_return->use_closed.load()), result.failure(ERR_UNAUTHORIZED));
+
+	if (p_capture) {
+		ERR_FAIL_COND_V(framebuffer->texture_ids.size() != 1 || !p_draw_flags.has_flag(DRAW_CLEAR_DEPTH), result.failure(ERR_UNAVAILABLE));
+		const Texture *target = texture_owner.get_or_null(framebuffer->texture_ids[0]);
+		ERR_FAIL_NULL_V(target, result.failure(ERR_INVALID_PARAMETER));
+		ERR_FAIL_COND_V(target->format != DATA_FORMAT_D32_SFLOAT || target->owner.is_valid() || target->shared_fallback || target->transfer_worker_index >= 0, result.failure(ERR_UNAVAILABLE));
+	}
+	const uint32_t preparation_begin = draw_graph.qualification_command_count();
 
 	const FramebufferFormatKey *framebuffer_key;
 	{
@@ -6586,7 +6659,7 @@ RenderingDevice::DrawListID RenderingDevice::draw_list_begin(RID p_framebuffer, 
 		if (!((regioni.position.x >= viewport.position.x) && (regioni.position.y >= viewport.position.y) &&
 					((regioni.position.x + regioni.size.x) <= (viewport.position.x + viewport.size.x)) &&
 					((regioni.position.y + regioni.size.y) <= (viewport.position.y + viewport.size.y)))) {
-			ERR_FAIL_V_MSG(INVALID_ID, "When supplying a custom region, it must be contained within the framebuffer rectangle");
+			ERR_FAIL_V_MSG(result.failure(ERR_INVALID_PARAMETER), "When supplying a custom region, it must be contained within the framebuffer rectangle");
 		}
 
 		viewport_offset = regioni.position;
@@ -6628,7 +6701,7 @@ RenderingDevice::DrawListID RenderingDevice::draw_list_begin(RID p_framebuffer, 
 			stages.set_flag(_vrs_stages_from_method(framebuffer_key->vrs_method));
 		} else if (texture->usage_flags & TEXTURE_USAGE_COLOR_ATTACHMENT_BIT) {
 			if (p_draw_flags.has_flag(DrawFlags(DRAW_CLEAR_COLOR_0 << color_index))) {
-				ERR_FAIL_COND_V_MSG(color_index >= p_clear_color_values.size(), INVALID_ID, vformat("Color texture (%d) was specified to be cleared but no color value was provided.", color_index));
+				ERR_FAIL_COND_V_MSG(color_index >= p_clear_color_values.size(), result.failure(ERR_INVALID_PARAMETER), vformat("Color texture (%d) was specified to be cleared but no color value was provided.", color_index));
 				operation = RDG::ATTACHMENT_OPERATION_CLEAR;
 				clear_value.color = p_clear_color_values[color_index];
 			} else if (p_draw_flags.has_flag(DrawFlags(DRAW_IGNORE_COLOR_0 << color_index))) {
@@ -6658,7 +6731,19 @@ RenderingDevice::DrawListID RenderingDevice::draw_list_begin(RID p_framebuffer, 
 		clear_values[i] = clear_value;
 	}
 
-	draw_graph.add_draw_list_begin(framebuffer->framebuffer_cache, Rect2i(viewport_offset, viewport_size), operations, clear_values, stages, p_breadcrumb);
+	result.begin_handle = draw_graph.add_draw_list_begin(framebuffer->framebuffer_cache, Rect2i(viewport_offset, viewport_size), operations, clear_values, stages, p_breadcrumb);
+	result.effect = NativeAppendEffect::NativePrefixOnly;
+	if (p_capture) {
+		const uint32_t preparation_end = draw_graph.qualification_command_count();
+		for (uint32_t i = preparation_begin; i < preparation_end; ++i) {
+			const auto handle = draw_graph.capture_command_record(i);
+			if (result.preparation_count == 1 || !handle.is_valid()) {
+				return result.failure(ERR_INVALID_DATA);
+			}
+			result.preparation_handles[result.preparation_count++] = handle;
+		}
+		result.clear_handle = draw_graph.capture_draw_list_clear(0);
+	}
 	draw_graph.add_draw_list_usages(resource_trackers, resource_usages);
 
 	// Mark textures as bound.
@@ -6682,10 +6767,13 @@ RenderingDevice::DrawListID RenderingDevice::draw_list_begin(RID p_framebuffer, 
 	draw_list_subpass_count = framebuffer_key->passes.size();
 
 	Rect2i viewport_rect(viewport_offset, viewport_size);
-	draw_graph.add_draw_list_set_viewport(viewport_rect);
-	draw_graph.add_draw_list_set_scissor(viewport_rect);
+	result.prefix_handles[result.prefix_count++] = draw_graph.add_draw_list_set_viewport(viewport_rect);
+	result.prefix_handles[result.prefix_count++] = draw_graph.add_draw_list_set_scissor(viewport_rect);
 
-	return int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT;
+	result.list = int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT;
+	result.effect = NativeAppendEffect::Recorded;
+	result.capture_complete = p_capture;
+	return result;
 }
 
 #ifndef DISABLE_DEPRECATED
@@ -6707,24 +6795,31 @@ void RenderingDevice::draw_list_set_blend_constants(DrawListID p_list, const Col
 }
 
 void RenderingDevice::draw_list_bind_render_pipeline(DrawListID p_list, RID p_render_pipeline) {
-	ERR_RENDER_THREAD_GUARD();
-	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
+	_draw_list_bind_render_pipeline_recorded(p_list, p_render_pipeline, false);
+}
 
-	ERR_FAIL_COND(!draw_list.active);
+RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_bind_render_pipeline_recorded(DrawListID p_list, RID p_render_pipeline, bool p_capture) {
+	DrawAppendResult result;
+	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
+
+	ERR_FAIL_COND_V(!draw_list.active, result.failure(ERR_INVALID_PARAMETER));
 
 	const RenderPipeline *pipeline = render_pipeline_owner.get_or_null(p_render_pipeline);
-	ERR_FAIL_NULL(pipeline);
+	ERR_FAIL_NULL_V(pipeline, result.failure(ERR_INVALID_PARAMETER));
+	ERR_FAIL_COND_V(pipeline->qualification_return && (!qualification_recording || pipeline->qualification_return->use_closed.load()), result.failure(ERR_UNAUTHORIZED));
 #ifdef DEBUG_ENABLED
-	ERR_FAIL_COND(pipeline->validation.framebuffer_format != draw_list_framebuffer_format && pipeline->validation.render_pass != draw_list_current_subpass);
+	ERR_FAIL_COND_V(pipeline->validation.framebuffer_format != draw_list_framebuffer_format && pipeline->validation.render_pass != draw_list_current_subpass, result.failure(ERR_INVALID_PARAMETER));
 #endif
 
 	if (p_render_pipeline == draw_list.state.pipeline) {
-		return; // Redundant state, return.
+		return result; // Redundant state, return.
 	}
 
 	draw_list.state.pipeline = p_render_pipeline;
+	draw_list.state.checked_push_constant_supplied = false;
 
-	draw_graph.add_draw_list_bind_pipeline(pipeline->driver_id, pipeline->stage_bits);
+	result.draw_handle = draw_graph.add_draw_list_bind_pipeline(pipeline->driver_id, pipeline->stage_bits);
 
 	if (draw_list.state.pipeline_shader != pipeline->shader) {
 		// Shader changed, so descriptor sets may become incompatible.
@@ -6792,6 +6887,10 @@ void RenderingDevice::draw_list_bind_render_pipeline(DrawListID p_list, RID p_re
 	draw_list.validation.pipeline_primitive_minimum = pipeline->validation.primitive_minimum;
 	draw_list.validation.pipeline_push_constant_size = pipeline->push_constant_size;
 #endif
+
+	result.effect = NativeAppendEffect::Recorded;
+	result.capture_complete = p_capture;
+	return result;
 }
 
 void RenderingDevice::draw_list_bind_uniform_set(DrawListID p_list, RID p_uniform_set, uint32_t p_index) {
@@ -7005,47 +7104,72 @@ void RenderingDevice::draw_list_set_line_width(DrawListID p_list, float p_width)
 }
 
 void RenderingDevice::draw_list_set_push_constant(DrawListID p_list, const void *p_data, uint32_t p_data_size) {
-	ERR_RENDER_THREAD_GUARD();
-	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
+	_draw_list_set_push_constant_recorded(p_list, p_data, p_data_size, false);
+}
 
-	ERR_FAIL_COND(!draw_list.active);
+RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_set_push_constant_recorded(DrawListID p_list, const void *p_data, uint32_t p_data_size, bool p_capture) {
+	DrawAppendResult result;
+	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
 
+	ERR_FAIL_COND_V(!draw_list.active, result.failure(ERR_INVALID_PARAMETER));
+
+	if (p_capture) {
+		ERR_FAIL_COND_V(p_list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT), result.failure(ERR_INVALID_PARAMETER));
+		ERR_FAIL_COND_V(!draw_list.state.pipeline.is_valid() || p_data_size != draw_list.state.pipeline_push_constant_size || (p_data_size && !p_data), result.failure(ERR_INVALID_PARAMETER));
+	}
 #ifdef DEBUG_ENABLED
-	ERR_FAIL_COND_MSG(p_data_size != draw_list.validation.pipeline_push_constant_size,
+	ERR_FAIL_COND_V_MSG(p_data_size != draw_list.validation.pipeline_push_constant_size, result.failure(ERR_INVALID_PARAMETER),
 			"This render pipeline requires (" + itos(draw_list.validation.pipeline_push_constant_size) + ") bytes of push constant data, supplied: (" + itos(p_data_size) + ")");
 #endif
 
-	draw_graph.add_draw_list_set_push_constant(draw_list.state.pipeline_shader_driver_id, p_data, p_data_size);
+	result.draw_handle = draw_graph.add_draw_list_set_push_constant(draw_list.state.pipeline_shader_driver_id, p_data, p_data_size);
 
 #ifdef DEBUG_ENABLED
 	draw_list.validation.pipeline_push_constant_supplied = true;
 #endif
+
+	draw_list.state.checked_push_constant_supplied = true;
+
+	result.effect = NativeAppendEffect::Recorded;
+	result.capture_complete = p_capture;
+	return result;
 }
 
 void RenderingDevice::draw_list_draw(DrawListID p_list, bool p_use_indices, uint32_t p_instances, uint32_t p_procedural_vertices) {
-	ERR_RENDER_THREAD_GUARD();
-	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
+	_draw_list_draw_recorded(p_list, p_use_indices, p_instances, p_procedural_vertices, false);
+}
 
-	ERR_FAIL_COND(!draw_list.active);
+RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_draw_recorded(DrawListID p_list, bool p_use_indices, uint32_t p_instances, uint32_t p_procedural_vertices, bool p_capture) {
+	DrawAppendResult result;
+	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
+
+	ERR_FAIL_COND_V(!draw_list.active, result.failure(ERR_INVALID_PARAMETER));
+
+	if (p_capture) {
+		ERR_FAIL_COND_V(p_list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT), result.failure(ERR_INVALID_PARAMETER));
+		ERR_FAIL_COND_V(!draw_list.state.pipeline.is_valid() || p_use_indices || p_instances != 1 || p_procedural_vertices != 3 || draw_list.state.vertex_array.is_valid() || draw_list.state.index_array.is_valid() || draw_list.state.set_count || (draw_list.state.pipeline_push_constant_size && !draw_list.state.checked_push_constant_supplied), result.failure(ERR_UNAVAILABLE));
+	}
 
 #ifdef DEBUG_ENABLED
-	ERR_FAIL_COND_MSG(!draw_list.validation.pipeline_active,
+	ERR_FAIL_COND_V_MSG(!draw_list.validation.pipeline_active, result.failure(ERR_INVALID_PARAMETER),
 			"No render pipeline was set before attempting to draw.");
 	if (draw_list.validation.pipeline_vertex_format != INVALID_ID) {
 		// Pipeline uses vertices, validate format.
-		ERR_FAIL_COND_MSG(draw_list.validation.vertex_format == INVALID_ID,
+		ERR_FAIL_COND_V_MSG(draw_list.validation.vertex_format == INVALID_ID, result.failure(ERR_INVALID_PARAMETER),
 				"No vertex array was bound, and render pipeline expects vertices.");
 		// Make sure format is right.
-		ERR_FAIL_COND_MSG(draw_list.validation.pipeline_vertex_format != draw_list.validation.vertex_format,
+		ERR_FAIL_COND_V_MSG(draw_list.validation.pipeline_vertex_format != draw_list.validation.vertex_format, result.failure(ERR_INVALID_PARAMETER),
 				"The vertex format used to create the pipeline does not match the vertex format bound.");
 		// Make sure number of instances is valid.
-		ERR_FAIL_COND_MSG(p_instances > draw_list.validation.vertex_max_instances_allowed,
+		ERR_FAIL_COND_V_MSG(p_instances > draw_list.validation.vertex_max_instances_allowed, result.failure(ERR_INVALID_PARAMETER),
 				"Number of instances requested (" + itos(p_instances) + " is larger than the maximum number supported by the bound vertex array (" + itos(draw_list.validation.vertex_max_instances_allowed) + ").");
 	}
 
 	if (draw_list.validation.pipeline_push_constant_size > 0) {
 		// Using push constants, check that they were supplied.
-		ERR_FAIL_COND_MSG(!draw_list.validation.pipeline_push_constant_supplied,
+		ERR_FAIL_COND_V_MSG(!draw_list.validation.pipeline_push_constant_supplied, result.failure(ERR_INVALID_PARAMETER),
 				"The shader in this pipeline requires a push constant to be set before drawing, but it's not present.");
 	}
 
@@ -7060,13 +7184,13 @@ void RenderingDevice::draw_list_draw(DrawListID p_list, bool p_use_indices, uint
 
 		if (draw_list.state.sets[i].pipeline_expected_format != draw_list.state.sets[i].uniform_set_format) {
 			if (draw_list.state.sets[i].uniform_set_format == 0) {
-				ERR_FAIL_MSG(vformat("Uniforms were never supplied for set (%d) at the time of drawing, which are required by the pipeline.", i));
+				ERR_FAIL_V_MSG(result.failure(ERR_INVALID_PARAMETER), vformat("Uniforms were never supplied for set (%d) at the time of drawing, which are required by the pipeline.", i));
 			} else if (uniform_set_owner.owns(draw_list.state.sets[i].uniform_set)) {
 				UniformSet *us = uniform_set_owner.get_or_null(draw_list.state.sets[i].uniform_set);
 				const String us_info = us ? vformat("(%d):\n%s\n", i, _shader_uniform_debug(us->shader_id, us->shader_set)) : vformat("(%d, which was just freed) ", i);
-				ERR_FAIL_MSG(vformat("Uniforms supplied for set %sare not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n%s", us_info, _shader_uniform_debug(draw_list.state.pipeline_shader)));
+				ERR_FAIL_V_MSG(result.failure(ERR_INVALID_PARAMETER), vformat("Uniforms supplied for set %sare not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n%s", us_info, _shader_uniform_debug(draw_list.state.pipeline_shader)));
 			} else {
-				ERR_FAIL_MSG(vformat("Uniforms supplied for set (%d, which was just freed) are not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n%s", i, _shader_uniform_debug(draw_list.state.pipeline_shader)));
+				ERR_FAIL_V_MSG(result.failure(ERR_INVALID_PARAMETER), vformat("Uniforms supplied for set (%d, which was just freed) are not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n%s", i, _shader_uniform_debug(draw_list.state.pipeline_shader)));
 			}
 		}
 	}
@@ -7090,7 +7214,13 @@ void RenderingDevice::draw_list_draw(DrawListID p_list, bool p_use_indices, uint
 		}
 		// Prepare descriptor sets if the API doesn't use pipeline barriers.
 		if (!driver->api_trait_get(RDD::API_TRAIT_HONORS_PIPELINE_BARRIERS)) {
-			draw_graph.add_draw_list_uniform_set_prepare_for_use(draw_list.state.pipeline_shader_driver_id, draw_list.state.sets[i].uniform_set_driver_id, i);
+			{
+				result.effect = NativeAppendEffect::NativePrefixOnly;
+				const auto prefix = draw_graph.add_draw_list_uniform_set_prepare_for_use(draw_list.state.pipeline_shader_driver_id, draw_list.state.sets[i].uniform_set_driver_id, i);
+				if (p_capture) {
+					result.prefix_handles[result.prefix_count++] = prefix;
+				}
+			}
 		}
 	}
 
@@ -7106,7 +7236,13 @@ void RenderingDevice::draw_list_draw(DrawListID p_list, bool p_use_indices, uint
 				// All good, see if this requires re-binding.
 				if (i - last_set_index > 1) {
 					// If the descriptor sets are not contiguous, bind the previous ones and start a new batch.
-					draw_graph.add_draw_list_bind_uniform_sets(draw_list.state.pipeline_shader_driver_id, valid_descriptor_ids, first_set_index, valid_set_count);
+					{
+						result.effect = NativeAppendEffect::NativePrefixOnly;
+						const auto prefix = draw_graph.add_draw_list_bind_uniform_sets(draw_list.state.pipeline_shader_driver_id, valid_descriptor_ids, first_set_index, valid_set_count);
+						if (p_capture) {
+							result.prefix_handles[result.prefix_count++] = prefix;
+						}
+					}
 
 					first_set_index = i;
 					valid_set_count = 1;
@@ -7118,7 +7254,7 @@ void RenderingDevice::draw_list_draw(DrawListID p_list, bool p_use_indices, uint
 				}
 
 				UniformSet *uniform_set = uniform_set_owner.get_or_null(draw_list.state.sets[i].uniform_set);
-				ERR_FAIL_NULL(uniform_set);
+				ERR_FAIL_NULL_V(uniform_set, result.failure(ERR_INVALID_PARAMETER));
 				_uniform_set_update_shared(uniform_set);
 				_uniform_set_update_clears(uniform_set);
 
@@ -7127,38 +7263,50 @@ void RenderingDevice::draw_list_draw(DrawListID p_list, bool p_use_indices, uint
 
 				last_set_index = i;
 			} else {
-				draw_graph.add_draw_list_bind_uniform_set(draw_list.state.pipeline_shader_driver_id, draw_list.state.sets[i].uniform_set_driver_id, i);
+				{
+					result.effect = NativeAppendEffect::NativePrefixOnly;
+					const auto prefix = draw_graph.add_draw_list_bind_uniform_set(draw_list.state.pipeline_shader_driver_id, draw_list.state.sets[i].uniform_set_driver_id, i);
+					if (p_capture) {
+						result.prefix_handles[result.prefix_count++] = prefix;
+					}
+				}
 			}
 		}
 	}
 
 	// Bind the remaining batch.
 	if (descriptor_set_batching && valid_set_count > 0) {
-		draw_graph.add_draw_list_bind_uniform_sets(draw_list.state.pipeline_shader_driver_id, valid_descriptor_ids, first_set_index, valid_set_count);
+		{
+			result.effect = NativeAppendEffect::NativePrefixOnly;
+			const auto prefix = draw_graph.add_draw_list_bind_uniform_sets(draw_list.state.pipeline_shader_driver_id, valid_descriptor_ids, first_set_index, valid_set_count);
+			if (p_capture) {
+				result.prefix_handles[result.prefix_count++] = prefix;
+			}
+		}
 	}
 
 	if (p_use_indices) {
 #ifdef DEBUG_ENABLED
-		ERR_FAIL_COND_MSG(p_procedural_vertices > 0,
+		ERR_FAIL_COND_V_MSG(p_procedural_vertices > 0, result.failure(ERR_INVALID_PARAMETER),
 				"Procedural vertices can't be used together with indices.");
 
-		ERR_FAIL_COND_MSG(!draw_list.validation.index_array_count,
+		ERR_FAIL_COND_V_MSG(!draw_list.validation.index_array_count, result.failure(ERR_INVALID_PARAMETER),
 				"Draw command requested indices, but no index buffer was set.");
 
-		ERR_FAIL_COND_MSG(draw_list.validation.pipeline_uses_restart_indices != draw_list.validation.index_buffer_uses_restart_indices,
+		ERR_FAIL_COND_V_MSG(draw_list.validation.pipeline_uses_restart_indices != draw_list.validation.index_buffer_uses_restart_indices, result.failure(ERR_INVALID_PARAMETER),
 				"The usage of restart indices in index buffer does not match the render primitive in the pipeline.");
 #endif
 		uint32_t to_draw = draw_list.validation.index_array_count;
 
 #ifdef DEBUG_ENABLED
-		ERR_FAIL_COND_MSG(to_draw < draw_list.validation.pipeline_primitive_minimum,
+		ERR_FAIL_COND_V_MSG(to_draw < draw_list.validation.pipeline_primitive_minimum, result.failure(ERR_INVALID_PARAMETER),
 				"Too few indices (" + itos(to_draw) + ") for the render primitive set in the render pipeline (" + itos(draw_list.validation.pipeline_primitive_minimum) + ").");
 
-		ERR_FAIL_COND_MSG((to_draw % draw_list.validation.pipeline_primitive_divisor) != 0,
+		ERR_FAIL_COND_V_MSG((to_draw % draw_list.validation.pipeline_primitive_divisor) != 0, result.failure(ERR_INVALID_PARAMETER),
 				"Index amount (" + itos(to_draw) + ") must be a multiple of the amount of indices required by the render primitive (" + itos(draw_list.validation.pipeline_primitive_divisor) + ").");
 #endif
 
-		draw_graph.add_draw_list_draw_indexed(to_draw, p_instances, 0);
+		result.draw_handle = draw_graph.add_draw_list_draw_indexed(to_draw, p_instances, 0);
 	} else {
 		uint32_t to_draw;
 
@@ -7166,21 +7314,21 @@ void RenderingDevice::draw_list_draw(DrawListID p_list, bool p_use_indices, uint
 			to_draw = p_procedural_vertices;
 		} else {
 #ifdef DEBUG_ENABLED
-			ERR_FAIL_COND_MSG(draw_list.validation.pipeline_vertex_format == INVALID_ID,
+			ERR_FAIL_COND_V_MSG(draw_list.validation.pipeline_vertex_format == INVALID_ID, result.failure(ERR_INVALID_PARAMETER),
 					"Draw command lacks indices, but pipeline format does not use vertices.");
 #endif
 			to_draw = draw_list.validation.vertex_array_size;
 		}
 
 #ifdef DEBUG_ENABLED
-		ERR_FAIL_COND_MSG(to_draw < draw_list.validation.pipeline_primitive_minimum,
+		ERR_FAIL_COND_V_MSG(to_draw < draw_list.validation.pipeline_primitive_minimum, result.failure(ERR_INVALID_PARAMETER),
 				"Too few vertices (" + itos(to_draw) + ") for the render primitive set in the render pipeline (" + itos(draw_list.validation.pipeline_primitive_minimum) + ").");
 
-		ERR_FAIL_COND_MSG((to_draw % draw_list.validation.pipeline_primitive_divisor) != 0,
+		ERR_FAIL_COND_V_MSG((to_draw % draw_list.validation.pipeline_primitive_divisor) != 0, result.failure(ERR_INVALID_PARAMETER),
 				"Vertex amount (" + itos(to_draw) + ") must be a multiple of the amount of vertices required by the render primitive (" + itos(draw_list.validation.pipeline_primitive_divisor) + ").");
 #endif
 
-		draw_graph.add_draw_list_draw(to_draw, p_instances);
+		result.draw_handle = draw_graph.add_draw_list_draw(to_draw, p_instances);
 	}
 
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
@@ -7193,6 +7341,10 @@ void RenderingDevice::draw_list_draw(DrawListID p_list, bool p_use_indices, uint
 	}
 #endif
 	draw_list.state.draw_count++;
+
+	result.effect = NativeAppendEffect::Recorded;
+	result.capture_complete = p_capture;
+	return result;
 }
 
 void RenderingDevice::draw_list_draw_indirect(DrawListID p_list, bool p_use_indices, RID p_buffer, uint32_t p_offset, uint32_t p_draw_count, uint32_t p_stride) {
@@ -7396,10 +7548,15 @@ void RenderingDevice::draw_list_set_viewport(DrawListID p_list, const Rect2 &p_r
 }
 
 void RenderingDevice::draw_list_enable_scissor(DrawListID p_list, const Rect2 &p_rect) {
-	ERR_RENDER_THREAD_GUARD();
-	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
+	_draw_list_enable_scissor_recorded(p_list, p_rect, false);
+}
 
-	ERR_FAIL_COND(!draw_list.active);
+RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_enable_scissor_recorded(DrawListID p_list, const Rect2 &p_rect, bool p_capture) {
+	DrawAppendResult result;
+	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
+
+	ERR_FAIL_COND_V(!draw_list.active, result.failure(ERR_INVALID_PARAMETER));
 
 	Rect2i rect = p_rect;
 	rect.position += draw_list.viewport.position;
@@ -7407,10 +7564,14 @@ void RenderingDevice::draw_list_enable_scissor(DrawListID p_list, const Rect2 &p
 	rect = draw_list.viewport.intersection(rect);
 
 	if (rect.get_area() == 0) {
-		return;
+		return result;
 	}
 
-	draw_graph.add_draw_list_set_scissor(rect);
+	result.draw_handle = draw_graph.add_draw_list_set_scissor(rect);
+
+	result.effect = NativeAppendEffect::Recorded;
+	result.capture_complete = p_capture;
+	return result;
 }
 
 void RenderingDevice::draw_list_disable_scissor(DrawListID p_list) {
@@ -7470,12 +7631,17 @@ void RenderingDevice::_draw_list_end(Rect2i *r_last_viewport) {
 }
 
 void RenderingDevice::draw_list_end() {
-	ERR_RENDER_THREAD_GUARD();
-	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
+	_draw_list_end_recorded(false);
+}
 
-	ERR_FAIL_COND_MSG(!draw_list.active, "Immediate draw list is already inactive.");
+RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_end_recorded(bool p_capture) {
+	DrawAppendResult result;
+	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
 
-	draw_graph.add_draw_list_end();
+	ERR_FAIL_COND_V_MSG(!draw_list.active, result.failure(ERR_INVALID_PARAMETER), "Immediate draw list is already inactive.");
+
+	result.draw_handle = draw_graph.add_draw_list_end();
 
 	_draw_list_end();
 
@@ -7494,6 +7660,10 @@ void RenderingDevice::draw_list_end() {
 	}
 
 	draw_list_bound_textures.clear();
+
+	result.effect = NativeAppendEffect::Recorded;
+	result.capture_complete = p_capture;
+	return result;
 }
 
 /***************************/
@@ -10123,7 +10293,9 @@ void RenderingDevice::free_rid(RID p_rid) {
 	auto *pipeline = compute_pipeline_owner.get_or_null(p_rid);
 	auto *texture = texture_owner.get_or_null(p_rid);
 	auto *sampler = sampler_owner.get_or_null(p_rid);
-	ERR_FAIL_COND_MSG(!qualification_retiring && ((buffer && buffer->qualification_return) || (shader && shader->qualification_return) || (pipeline && pipeline->qualification_return) || (texture && texture->qualification_return) || (sampler && sampler->qualification_return) || (uniform_set_owner.get_or_null(p_rid) && uniform_set_owner.get_or_null(p_rid)->qualification_return)), "Qualification resources require their original owner retirement acknowledgment.");
+	auto *raster_pipeline = render_pipeline_owner.get_or_null(p_rid);
+	auto *framebuffer = framebuffer_owner.get_or_null(p_rid);
+	ERR_FAIL_COND_MSG(!qualification_retiring && ((raster_pipeline && raster_pipeline->qualification_return) || (framebuffer && framebuffer->qualification_return) || (buffer && buffer->qualification_return) || (shader && shader->qualification_return) || (pipeline && pipeline->qualification_return) || (texture && texture->qualification_return) || (sampler && sampler->qualification_return) || (uniform_set_owner.get_or_null(p_rid) && uniform_set_owner.get_or_null(p_rid)->qualification_return)), "Qualification resources require their original owner retirement acknowledgment.");
 	ERR_FAIL_COND_MSG(texture && texture->qualification_return && texture->transfer_worker_index >= 0, "Qualification texture has an unsettled transfer worker.");
 	ERR_FAIL_COND_MSG(_qualification_resource_busy(p_rid), "Qualification ticket still owns this resource or one of its dependents.");
 	bool *retiring = nullptr;
@@ -10204,6 +10376,7 @@ void RenderingDevice::_free_internal(RID p_id, const MutexLock<Mutex> &p_lock) {
 		texture_owner.free(p_id);
 	} else if (framebuffer_owner.owns(p_id)) {
 		Framebuffer *framebuffer = framebuffer_owner.get_or_null(p_id);
+		ERR_FAIL_COND(_qualification_enqueue(framebuffer->qualification_return) != OK);
 		InvalidationCallback invalidated_callback = framebuffer->invalidated_callback;
 		void *invalidated_callback_userdata = framebuffer->invalidated_callback_userdata;
 		frames[frame].framebuffers_to_dispose_of.push_back(*framebuffer);
@@ -10331,6 +10504,7 @@ void RenderingDevice::_free_internal(RID p_id, const MutexLock<Mutex> &p_lock) {
 		}
 	} else if (render_pipeline_owner.owns(p_id)) {
 		RenderPipeline *pipeline = render_pipeline_owner.get_or_null(p_id);
+		ERR_FAIL_COND(_qualification_enqueue(pipeline->qualification_return) != OK);
 		_production_disposal_enqueued(pipeline->production_disposal_uses);
 		frames[frame].render_pipelines_to_dispose_of.push_back(*pipeline);
 		render_pipeline_owner.free(p_id);
@@ -10658,8 +10832,14 @@ Error RenderingDevice::_free_pending_resources_step(int p_frame, const NativeDis
 				if (!admit(NativeDisposalWork::FREE)) {
 					return ERR_BUSY;
 				}
-				driver->pipeline_free(f.render_pipelines_to_dispose_of.front()->get().driver_id);
-				_production_disposal_returned(f.render_pipelines_to_dispose_of.front()->get().production_disposal_uses);
+				auto &pipeline = f.render_pipelines_to_dispose_of.front()->get();
+				driver->pipeline_free(pipeline.driver_id);
+				_production_disposal_returned(pipeline.production_disposal_uses);
+				if (pipeline.qualification_dependency) {
+					CRASH_COND(!pipeline.qualification_dependency->dependent_children.load());
+					pipeline.qualification_dependency->dependent_children.fetch_sub(1);
+				}
+				_qualification_freed(pipeline.qualification_return);
 				f.render_pipelines_to_dispose_of.pop_front();
 			} break;
 			case 1: {
@@ -10801,7 +10981,8 @@ Error RenderingDevice::_free_pending_resources_step(int p_frame, const NativeDis
 				f.samplers_to_dispose_of.pop_front();
 			} break;
 			case 7: {
-				auto *cache = f.framebuffers_to_dispose_of.front()->get().framebuffer_cache;
+				auto &framebuffer = f.framebuffers_to_dispose_of.front()->get();
+				auto *cache = framebuffer.framebuffer_cache;
 				if (cache) {
 					while (!cache->storage_map.is_empty()) {
 						auto entry = cache->storage_map.begin();
@@ -10821,6 +11002,11 @@ Error RenderingDevice::_free_pending_resources_step(int p_frame, const NativeDis
 					}
 					memdelete(cache);
 				}
+				if (framebuffer.qualification_dependency) {
+					CRASH_COND(!framebuffer.qualification_dependency->dependent_children.load());
+					framebuffer.qualification_dependency->dependent_children.fetch_sub(1);
+				}
+				_qualification_freed(framebuffer.qualification_return);
 				f.framebuffers_to_dispose_of.pop_front();
 			} break;
 			case 8: {
@@ -10950,6 +11136,11 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 
 		driver->pipeline_free(pipeline->driver_id);
 		_production_disposal_returned(pipeline->production_disposal_uses);
+		if (pipeline->qualification_dependency) {
+			CRASH_COND(!pipeline->qualification_dependency->dependent_children.load());
+			pipeline->qualification_dependency->dependent_children.fetch_sub(1);
+		}
+		_qualification_freed(pipeline->qualification_return);
 
 		frames[p_frame].render_pipelines_to_dispose_of.pop_front();
 	}
@@ -11056,6 +11247,11 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 	while (frames[p_frame].framebuffers_to_dispose_of.front()) {
 		Framebuffer *framebuffer = &frames[p_frame].framebuffers_to_dispose_of.front()->get();
 		draw_graph.framebuffer_cache_free(driver, framebuffer->framebuffer_cache);
+		if (framebuffer->qualification_dependency) {
+			CRASH_COND(!framebuffer->qualification_dependency->dependent_children.load());
+			framebuffer->qualification_dependency->dependent_children.fetch_sub(1);
+		}
+		_qualification_freed(framebuffer->qualification_return);
 		frames[p_frame].framebuffers_to_dispose_of.pop_front();
 	}
 

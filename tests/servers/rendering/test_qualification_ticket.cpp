@@ -47,6 +47,96 @@ TEST_FORCE_LINK(test_qualification_ticket)
 // native dispatch; the actual Metal control remains separately required.
 class TestQualificationTicketAccess {
 public:
+	static void checked_depth_draw_records() {
+		RenderingDevice device;
+		TransferTestDriverBase driver;
+		device.driver = &driver;
+		device.render_thread_id = Thread::get_caller_id();
+		device.draw_graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RDD::AttachmentLoadOp>, VectorView<RDD::AttachmentStoreOp>, void *) { return RDD::RenderPassID(); }, 1, RDD::CommandQueueFamilyID(1), 0);
+		device.draw_graph.begin(false);
+		// Minimal original RD owners, not a new production injection endpoint.
+		RDG::ResourceTracker tracker;
+		tracker.texture_driver_id = RDD::TextureID(72);
+		RenderingDevice::Texture texture;
+		texture.format = RenderingDevice::DATA_FORMAT_D32_SFLOAT;
+		texture.usage_flags = RenderingDevice::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+		texture.draw_tracker = &tracker;
+		const RID target = device.texture_owner.make_rid(texture);
+		RenderingDevice::FramebufferFormatKey key;
+		key.passes.push_back(RenderingDevice::FramebufferPass());
+		key.passes.write[0].depth_attachment = 0;
+		RenderingDevice::FramebufferFormat format;
+		format.E = device.framebuffer_format_cache.insert(key, 1);
+		device.framebuffer_formats[1] = format;
+		RDG::FramebufferCache cache;
+		cache.trackers.push_back(&tracker);
+		RenderingDevice::Framebuffer framebuffer;
+		framebuffer.format_id = 1;
+		framebuffer.texture_ids.push_back(target);
+		framebuffer.framebuffer_cache = &cache;
+		framebuffer.size = Size2(8, 4);
+		const RID framebuffer_rid = device.framebuffer_owner.make_rid(framebuffer);
+		RenderingDevice::RenderPipeline pipeline;
+		pipeline.driver_id = RDD::PipelineID(5);
+#ifdef DEBUG_ENABLED
+		pipeline.validation.framebuffer_format = 1;
+		pipeline.validation.vertex_format = RenderingDevice::INVALID_ID;
+		pipeline.validation.primitive_minimum = pipeline.validation.primitive_divisor = 3;
+#endif
+		const RID pipeline_rid = device.render_pipeline_owner.make_rid(pipeline);
+		const auto begin = device._draw_list_begin_recorded(framebuffer_rid, RenderingDevice::DRAW_CLEAR_DEPTH, {}, 0.0f, 0, Rect2(), 0);
+		CHECK(begin.error == OK);
+		CHECK(begin.effect == RenderingDevice::NativeAppendEffect::Recorded);
+		CHECK(begin.capture_complete);
+		CHECK(begin.preparation_count == 0);
+		CHECK(begin.prefix_count == 2);
+		CHECK(device.draw_graph.contains_record(begin.begin_handle));
+		CHECK(device.draw_graph.contains_record(begin.clear_handle));
+		const auto bind = device._draw_list_bind_render_pipeline_recorded(begin.list, pipeline_rid);
+		CHECK(bind.error == OK);
+		CHECK(bind.effect == RenderingDevice::NativeAppendEffect::Recorded);
+		CHECK(bind.capture_complete);
+		const auto scissor = device._draw_list_enable_scissor_recorded(begin.list, Rect2(0, 0, 4, 4));
+		CHECK(scissor.effect == RenderingDevice::NativeAppendEffect::Recorded);
+		CHECK(scissor.capture_complete);
+		const auto empty = device._draw_list_enable_scissor_recorded(begin.list, Rect2(9, 9, 1, 1));
+		CHECK(empty.effect == RenderingDevice::NativeAppendEffect::NoNewEffect);
+		CHECK_FALSE(empty.capture_complete);
+		CHECK_FALSE(empty.draw_handle.is_valid());
+		const auto draw = device._draw_list_draw_recorded(begin.list, false, 1, 3);
+		CHECK(draw.error == OK);
+		CHECK(draw.effect == RenderingDevice::NativeAppendEffect::Recorded);
+		CHECK(draw.capture_complete);
+		ERR_PRINT_OFF;
+		const auto refused = device._draw_list_draw_recorded(begin.list, false, 2, 3);
+		ERR_PRINT_ON;
+		CHECK(refused.error == ERR_UNAVAILABLE);
+		CHECK(refused.effect == RenderingDevice::NativeAppendEffect::NoNewEffect);
+		CHECK_FALSE(refused.capture_complete);
+		CHECK_FALSE(refused.draw_handle.is_valid());
+		const auto end = device._draw_list_end_recorded();
+		CHECK(end.effect == RenderingDevice::NativeAppendEffect::Recorded);
+		CHECK(end.capture_complete);
+		CHECK_FALSE(device.draw_list.active);
+		CHECK_FALSE(device.texture_owner.get_or_null(target)->bound);
+		const RDG::RecordHandle records[] = { begin.begin_handle, begin.clear_handle, begin.prefix_handles[0], begin.prefix_handles[1], bind.draw_handle, scissor.draw_handle, draw.draw_handle, end.draw_handle };
+		for (const auto &record : records) {
+			CHECK(device.draw_graph.contains_record(record));
+			CHECK(device.draw_graph.record_mapping_state(record) == RDG::RecordMappingState::Pending);
+		}
+		// Actual graph records exist even though no native command buffer ran.
+		// Prefix retention here is not native issue/completion or GPU acceptance.
+		device.draw_graph.begin();
+		for (const auto &record : records) {
+			CHECK_FALSE(device.draw_graph.contains_record(record));
+		}
+		device.render_pipeline_owner.free(pipeline_rid);
+		device.framebuffer_owner.free(framebuffer_rid);
+		device.texture_owner.free(target);
+		device.framebuffer_formats.clear();
+		device.framebuffer_format_cache.clear();
+		device.driver = nullptr;
+	}
 	static Error original_upload_capacity(RenderingDeviceDriver &driver, uint32_t result_bytes, uint32_t workers) {
 		RenderingDevice device;
 		device.driver = &driver;
@@ -952,7 +1042,7 @@ public:
 		memdelete(registry);
 	}
 
-	static void unknown_native_error(uint32_t mode = 0) {
+	static void unknown_native_error(uint32_t mode = 0, bool p_depth = false) {
 		using namespace GDExtensionDeviceExit;
 		struct Driver : TransferTestDriverBase {
 			bool pending = false, finished = false;
@@ -980,6 +1070,66 @@ public:
 		QualificationTicket ticket;
 		ticket.report.revision = 1;
 		ticket.frame_refs = 1;
+		// These are explicit synthetic native inputs; only polling and the public
+		// depth projection are exercised here, never GPU acceptance.
+		auto *registry = p_depth ? memnew(Registry) : nullptr;
+		auto *previous = RenderingDevice::singleton;
+		struct Holder : HolderRetirement {
+			Holder() : HolderRetirement(RecordRef{}) {}
+			~Holder() = default;
+		} holder;
+		Registry::QualificationBridge *bridge = nullptr;
+		if (p_depth) {
+			RenderingDevice::singleton = &device;
+			device.is_main_instance = true;
+			registry->instance = 71;
+			auto &record = registry->records[0];
+			record.owner_thread = Thread::get_caller_id();
+			record.snapshot.library_generation = holder.generation = 1;
+			// Saturation makes observe schedule return without queue publication.
+			record.private_refs = registry->private_limit;
+			auto &native = registry->device_records[0];
+			native.object = &device;
+			native.live = true;
+			native.epoch = 1;
+			bridge = memnew(Registry::QualificationBridge);
+			bridge->serial = 11;
+			bridge->epoch = 1;
+			bridge->holder = &holder;
+			bridge->children = 1;
+			registry->qualification_bridges[0] = bridge;
+			ticket.serial = 23;
+			ticket.bridge_serial = 11;
+			ticket.multi_readback = ticket.depth_bound = true;
+			ticket.depth_report.state = 1;
+			bridge->tickets[0] = &ticket;
+		}
+		auto observe_depth = [&](RID p_rid) {
+			if (!p_depth) {
+				return;
+			}
+			GDExtensionQualificationBudgetV1 budget = {};
+			budget.abi = { 1, sizeof(GDExtensionDeviceExitAbi), 0 };
+			budget.max_passes = budget.max_micros = 1;
+			GDExtensionQualificationReportV3 report = {};
+			CHECK(registry->qualification_observe_v3({ 71, 11 }, { 71, 23 }, &budget, &report).native_error == OK);
+			CHECK(report.abi.abi_version == 3);
+			CHECK(report.record.state == ticket.report.state);
+			CHECK(report.depth.report_revision == ticket.report.revision);
+			const uint32_t expected = ticket.report.state == 6 ? 3 : ticket.report.state == 7 ? 2
+																							  : 1;
+			CHECK(report.depth.state == expected);
+			CHECK_FALSE(ticket.queued);
+			CHECK(bridge->children == 1);
+			CHECK(registry->records[0].private_refs == registry->private_limit);
+			CHECK(device.storage_buffer_owner.get_or_null(p_rid)->qualification_users == 1);
+			CHECK_FALSE(ticket.natives[0].owner_released);
+			CHECK_FALSE(ticket.physically_retired.load());
+			if (expected != 1) {
+				CHECK(report.depth.native_error == ticket.report.native_error);
+				CHECK(report.depth.phase == 3);
+			}
+		};
 		RDD::NativeCallFact source;
 		source.serial = source.completion_serial = 17;
 		source.queue_index = 3;
@@ -1023,6 +1173,7 @@ public:
 		CHECK_FALSE(ticket.physically_retired.load());
 		CHECK(device.storage_buffer_owner.get_or_null(rid)->qualification_users == 1);
 		CHECK_FALSE(ticket.natives[0].owner_released);
+		observe_depth(rid);
 		if (mode == 2) {
 			driver.finished = true;
 			CHECK(device._qualification_poll_tickets(0) == OK);
@@ -1030,12 +1181,22 @@ public:
 			CHECK(ticket.facts[0].completion == 2);
 			CHECK(ticket.report.possible_count == 0);
 			CHECK(ticket.report.known_count == 1);
+			observe_depth(rid);
+			CHECK(device.storage_buffer_owner.get_or_null(rid)->qualification_users == 1);
+			CHECK_FALSE(ticket.natives[0].owner_released);
 			CHECK_FALSE(ticket.physically_retired.load());
 		}
 		// Synthetic reducer inputs own no GPU work. This is fixture cleanup,
 		// never an acknowledgment or proof that an Unknown may retire.
 		device.frames.clear();
 		device.storage_buffer_owner.free(rid);
+		if (p_depth) {
+			registry->qualification_bridges[0] = nullptr;
+			RenderingDevice::singleton = previous;
+			device.is_main_instance = false;
+			memdelete(bridge);
+			memdelete(registry);
+		}
 		device.driver = nullptr;
 	}
 
@@ -1519,4 +1680,14 @@ TEST_CASE("[Qualification][VulkanQualification] original gate charges graphs and
 
 TEST_CASE("[Qualification] continuation capacity preserves main and waitless worker profiles") {
 	TestQualificationTicketAccess::continuation_profile_capacity();
+}
+
+TEST_CASE("[D32][Qualification] depth observe preserves actual native poll failure and unresolved pins") {
+	for (uint32_t mode = 0; mode < 4; ++mode) {
+		TestQualificationTicketAccess::unknown_native_error(mode, true);
+	}
+}
+
+TEST_CASE("[D32][Qualification] checked RD depth draw retains original graph prefix across refused suffix") {
+	TestQualificationTicketAccess::checked_depth_draw_records();
 }

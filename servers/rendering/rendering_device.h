@@ -486,6 +486,29 @@ private:
 		GDExtensionDeviceExit::CheckedRecordAppend observed;
 		DrawAppendResult native;
 	};
+	struct DrawListBeginResult {
+		Error error = OK;
+		NativeAppendEffect effect = NativeAppendEffect::NoNewEffect;
+		DrawListID list = INVALID_ID;
+		RDG::RecordHandle begin_handle;
+		RDG::RecordHandle clear_handle;
+		RDG::RecordHandle preparation_handles[1];
+		uint32_t preparation_count = 0;
+		RDG::RecordHandle prefix_handles[2];
+		uint32_t prefix_count = 0;
+		bool capture_complete = false;
+		DrawListBeginResult failure(Error p_error) const {
+			DrawListBeginResult result = *this;
+			result.error = p_error;
+			return result;
+		}
+	};
+	DrawListBeginResult _draw_list_begin_recorded(RID p_framebuffer, uint32_t p_draw_flags_bits, VectorView<Color> p_clear_color_values, float p_clear_depth_value, uint32_t p_clear_stencil_value, const Rect2 &p_region, uint32_t p_breadcrumb, bool p_capture = true);
+	DrawAppendResult _draw_list_bind_render_pipeline_recorded(DrawListID p_list, RID p_render_pipeline, bool p_capture = true);
+	DrawAppendResult _draw_list_set_push_constant_recorded(DrawListID p_list, const void *p_data, uint32_t p_data_size, bool p_capture = true);
+	DrawAppendResult _draw_list_draw_recorded(DrawListID p_list, bool p_use_indices, uint32_t p_instances, uint32_t p_procedural_vertices, bool p_capture = true);
+	DrawAppendResult _draw_list_enable_scissor_recorded(DrawListID p_list, const Rect2 &p_rect, bool p_capture = true);
+	DrawAppendResult _draw_list_end_recorded(bool p_capture = true);
 	CopyAppendResult _buffer_copy_recorded(RID p_src_buffer, RID p_dst_buffer, uint32_t p_src_offset, uint32_t p_dst_offset, uint32_t p_size);
 	DrawAppendResult _draw_list_draw_indirect_recorded(DrawListID p_list, bool p_use_indices, RID p_buffer, uint32_t p_offset, uint32_t p_draw_count, uint32_t p_stride, bool p_capture = true);
 
@@ -1039,6 +1062,10 @@ private:
 	HashMap<FramebufferFormatID, FramebufferFormat> framebuffer_formats;
 
 	struct Framebuffer {
+		uint32_t qualification_users = 0;
+		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
+		// This edge survives RID invalidation and returns after the actual driver free.
+		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_dependency = nullptr;
 		FramebufferFormatID format_id;
 		uint32_t storage_mask = 0;
 		Vector<RID> texture_ids;
@@ -1050,6 +1077,8 @@ private:
 	};
 
 	RID_Owner<Framebuffer, true> framebuffer_owner;
+	RID _qualification_framebuffer_create_multipass(const Vector<RID> &, const Vector<FramebufferPass> &, FramebufferFormatID, uint32_t, GDExtensionDeviceExit::QualificationPhysicalReturn *, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID);
+	RID _qualification_framebuffer_create(RID, GDExtensionDeviceExit::QualificationPhysicalReturn *, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID);
 
 public:
 	// This ID is warranted to be unique for the same formats, does not need to be freed
@@ -1692,6 +1721,10 @@ public:
 	// was not supplied as intended.
 private:
 	struct RenderPipeline {
+		uint32_t qualification_users = 0;
+		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
+		// This edge survives RID invalidation and returns after the actual driver free.
+		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_dependency = nullptr;
 		GDExtensionDeviceExit::ProductionDisposalUse *production_disposal_uses = nullptr;
 		uint32_t native_immutable_holds = 0;
 		bool native_immutable_retire_requested = false;
@@ -1719,6 +1752,8 @@ private:
 	};
 
 	RID_Owner<RenderPipeline, true> render_pipeline_owner;
+	RID _qualification_render_pipeline_create_internal(RID, FramebufferFormatID, VertexFormatID, RenderPrimitive, const PipelineRasterizationState &, const PipelineMultisampleState &, const PipelineDepthStencilState &, const PipelineColorBlendState &, BitField<PipelineDynamicStateFlags>, uint32_t, const Vector<PipelineSpecializationConstant> &, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID);
+	RID _qualification_render_pipeline_create(RID, FramebufferFormatID, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID);
 
 	bool pipeline_cache_enabled = false;
 	size_t pipeline_cache_size = 0;
@@ -1950,6 +1985,7 @@ private:
 			RDD::ShaderID pipeline_shader_driver_id;
 			uint32_t pipeline_shader_layout_hash = 0;
 			uint32_t pipeline_push_constant_size = 0;
+			bool checked_push_constant_supplied = false;
 			RID vertex_array;
 			RID index_array;
 			uint32_t draw_count = 0;

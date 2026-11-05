@@ -30,6 +30,7 @@
 
 #include "core/crypto/crypto_core.h"
 #include "core/extension/gdextension.h"
+#include "core/extension/gdextension_qualification_depth.h"
 #include "core/extension/gdextension_qualification_internal.h"
 
 #include <type_traits>
@@ -64,15 +65,7 @@ struct RdUnlock {
 		}
 	}
 };
-bool texture_shape(const GDExtensionQualificationTextureCreateV1 &q) {
-	if (!abi(q.abi) || !source(q.source) || !q.library_generation || !q.create_attempt || !q.width || !q.height || !q.depth || q.width > 4096 || q.height > 4096 || q.depth > 4096 || q.texture_type < 1 || q.texture_type > 3 || q.format < 1 || q.format > 2 || !q.usage || (q.usage & ~3U)) {
-		return false;
-	}
-	if ((q.texture_type == 1 && (q.height != 1 || q.depth != 1)) || (q.texture_type == 2 && q.depth != 1)) {
-		return false;
-	}
-	return uint64_t(q.height) * q.depth <= 4096 && uint64_t(q.width) * q.height * q.depth <= 4194304;
-}
+
 } //namespace
 Error Registry::qualification_resource_locked(QualificationBridge *b, GDExtensionQualificationResourceRefV1 ref, uint32_t kind, QualificationResource *&out) {
 	out = nullptr;
@@ -126,7 +119,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_texture_create(GDExtens
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
 	*out = {};
-	if (!texture_shape(*q)) {
+	if (validate_qualification_texture_shape(*q) != OK) {
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
 	QualificationBridge *b = nullptr;
@@ -189,13 +182,18 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_texture_create(GDExtens
 	f.height = q->height;
 	f.depth = q->depth;
 	f.array_layers = f.mipmaps = 1;
-	f.format = q->format == 1 ? RenderingDevice::DATA_FORMAT_R32G32B32A32_SFLOAT : RenderingDevice::DATA_FORMAT_R8G8B8A8_UNORM;
-	f.usage_bits = RenderingDevice::TEXTURE_USAGE_CAN_UPDATE_BIT;
+	const bool depth = q->format == GDEXTENSION_QUALIFICATION_TEXTURE_FORMAT_D32_SFLOAT_V1;
+	f.format = depth ? RenderingDevice::DATA_FORMAT_D32_SFLOAT : q->format == 1 ? RenderingDevice::DATA_FORMAT_R32G32B32A32_SFLOAT
+																				: RenderingDevice::DATA_FORMAT_R8G8B8A8_UNORM;
+	f.usage_bits = depth ? 0 : RenderingDevice::TEXTURE_USAGE_CAN_UPDATE_BIT;
 	if (q->usage & 1) {
 		f.usage_bits |= RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT;
 	}
 	if (q->usage & 2) {
 		f.usage_bits |= RenderingDevice::TEXTURE_USAGE_STORAGE_BIT;
+	}
+	if (depth) {
+		f.usage_bits |= RenderingDevice::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 	}
 	RID rid = rd->_qualification_texture_create(f, RenderingDevice::TextureView(), &c->physical);
 	MutexLock lock(mutex);
@@ -523,6 +521,9 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_texture_upload(GDExtens
 		if (q->record_generation != ticket->preparation.record_generation || q->parent_serial != ticket->preparation.parent_serial || q->object_serial != c->object_serial || c->source.session_serial != ticket->preparation.qualification_session_serial || c->source.generation != q->record_generation || q->byte_size != c->backing.byte_size) {
 			return result(ERR_INVALID_DATA, 16);
 		}
+		if (static_cast<QualificationBridge::Texture *>(c)->origin.format == GDEXTENSION_QUALIFICATION_TEXTURE_FORMAT_D32_SFLOAT_V1) {
+			return result(ERR_UNAUTHORIZED, 16); // Depth content comes only from its accepted raster producer.
+		}
 		const auto *texture = rd->texture_owner.get_or_null(RID::from_uint64(c->rid));
 		if (!texture || texture->qualification_return != &c->physical) {
 			return result(ERR_UNAUTHORIZED, 16);
@@ -635,10 +636,68 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_texture_upload(GDExtens
 	snapshot();
 	return result(OK);
 }
-Error Registry::qualification_typed_dependencies(QualificationBridge *b, RenderingDevice *rd, QualificationTicket *ticket, const GDExtensionQualificationRecordV2 &q, const LocalVector<RID> &resources) {
+
+Error Registry::qualification_depth_target_locked(QualificationBridge *b, RenderingDevice *rd, const QualificationResource *resource) {
+	// Authenticate the actual pointer before reading caller-selected metadata.
+	const QualificationBridge::Texture *c = nullptr;
+	for (auto *candidate : b->textures) {
+		if (candidate && candidate == resource) {
+			c = candidate;
+			break;
+		}
+	}
+	if (!c || c->kind != 1 || c->creating || c->retiring || c->acknowledged || c->maintenance_error != OK || !c->serial || !c->rid || !c->object_serial || c->physical.bridge != b->serial || c->physical.child != c->serial || c->physical.rid != c->rid || c->physical.serial != c->object_serial || c->physical.use_closed.load() || !abi(c->backing.abi) || c->backing.kind != 1 || c->backing.state != 1 || c->backing.resource.registry_instance != instance || c->backing.resource.handle_serial != c->serial || c->backing.rid != c->rid || c->backing.object_serial != c->object_serial || !same_source(c->source, c->backing.source) || !same_source(c->source, c->origin.source) || validate_qualification_texture_shape(c->origin) != OK || c->origin.format != GDEXTENSION_QUALIFICATION_TEXTURE_FORMAT_D32_SFLOAT_V1) {
+		return ERR_UNAUTHORIZED;
+	}
+	const auto *texture = rd->texture_owner.get_or_null(RID::from_uint64(c->rid));
+	if (!texture || !texture->driver_id || texture->qualification_return != &c->physical || texture->type != RenderingDevice::TEXTURE_TYPE_2D || texture->format != RenderingDevice::DATA_FORMAT_D32_SFLOAT || texture->samples != RenderingDevice::TEXTURE_SAMPLES_1 || texture->width != c->origin.width || texture->height != c->origin.height || texture->depth != 1 || texture->layers != 1 || texture->mipmaps != 1 || texture->usage_flags != (RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT | RenderingDevice::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) || texture->owner.is_valid() || texture->shared_fallback || texture->transfer_worker_index >= 0) {
+		return ERR_UNAVAILABLE;
+	}
+	if (c->upload_attempted || c->upload_failed || c->upload_ticket || c->upload.consumed) {
+		return ERR_UNAUTHORIZED;
+	}
+	return OK;
+}
+
+Error Registry::qualification_depth_content_locked(QualificationBridge *b, RenderingDevice *rd, QualificationTicket *ticket, const GDExtensionQualificationRecordV2 &q, const QualificationResource *resource, bool p_pending) {
+	Error error = qualification_depth_target_locked(b, rd, resource);
+	if (error != OK) {
+		return error;
+	}
+	const auto *c = static_cast<const QualificationBridge::Texture *>(resource);
+	if (!ticket || !ticket->serial || ticket->bridge_serial != b->serial || c->origin.library_generation != q.library_generation || c->source.session_serial != q.qualification_session_serial || c->source.generation != q.record_generation || memcmp(c->source.digest, q.body_map_digest, sizeof(c->source.digest)) || ticket->texture_uploads.has(const_cast<QualificationBridge::Texture *>(c))) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (p_pending) {
+		// Caller already authenticated source/raster/original operation. This is
+		// only a pending descriptor exception, never produced-content authority.
+		return OK;
+	}
+	const auto &depth = ticket->depth_report;
+	const auto *texture = rd->texture_owner.get_or_null(RID::from_uint64(c->rid));
+	if (!ticket->operation_bound || !valid_original_operation_identity(ticket->operation) || ticket->operation.owner_request_nonce != q.request_nonce || ticket->operation.library_generation != q.library_generation || ticket->operation.qualification_session_serial != q.qualification_session_serial || ticket->operation.record_generation != q.record_generation || !same_original_operation_identity(c->produced_operation, ticket->operation) || !ticket->depth_bound || !depth.content_revision || !c->content_revision || c->content_revision != depth.content_revision || c->produced_ticket != ticket->serial || !c->produced_raster || depth.raster.registry_instance != instance || c->produced_raster != depth.raster.handle_serial || depth.target.registry_instance != instance || depth.target.handle_serial != c->serial || depth.target_object_serial != c->object_serial || !same_source(depth.source, c->source) || texture->pending_clear) {
+		return ERR_UNAUTHORIZED;
+	}
+	return OK;
+}
+
+Error Registry::qualification_typed_dependencies(QualificationBridge *b, RenderingDevice *rd, QualificationTicket *ticket, const GDExtensionQualificationRecordV2 &q, const LocalVector<RID> &resources, const QualificationResource *p_pending_depth) {
+	if (p_pending_depth) {
+		Error error = qualification_depth_content_locked(b, rd, ticket, q, p_pending_depth, true);
+		if (error != OK) {
+			return error;
+		}
+	}
 	for (RID rid : resources) {
 		for (auto *c : b->textures) {
 			if (c && c->rid == rid.get_id()) {
+				if (c->origin.format == GDEXTENSION_QUALIFICATION_TEXTURE_FORMAT_D32_SFLOAT_V1) {
+					Error error = qualification_depth_content_locked(b, rd, ticket, q, c, c == p_pending_depth);
+					if (error != OK) {
+						return error;
+					}
+					continue;
+				}
 				if (c->creating || c->retiring || c->source.session_serial != q.qualification_session_serial || c->source.generation != q.record_generation || memcmp(c->source.digest, q.body_map_digest, 32) || !c->upload_attempted || c->upload_failed || c->upload_ticket != ticket->serial || c->upload.consumed != c->backing.byte_size) {
 					return ERR_UNAUTHORIZED;
 				}
@@ -920,6 +979,32 @@ Error Registry::qualification_rt_resource_refs_locked(QualificationBridge *b, co
 }if(c->creating||(!closing&&c->retiring)||c->rid!=rid||c->object_serial!=serial){return ERR_INVALID_DATA;
 }if(!refs.has(c)){if(refs.size()>=128){return ERR_PARAMETER_RANGE_ERROR;
 }refs.push_back(c);}return OK; };
+	if (h.kind == GDEXTENSION_QUALIFICATION_RT_RECORD_PREPARED_V4) {
+		GDExtensionQualificationRecordV4 q;
+		memcpy(&q, bytes, sizeof(q));
+		QualificationResource *c = nullptr;
+		Error e = qualification_resource_locked(b, q.depth.target, 1, c);
+		if (e != OK) {
+			return e;
+		}
+		if (memcmp(&c->source, &q.depth.source, sizeof(q.depth.source)) || static_cast<QualificationBridge::Texture *>(c)->origin.format != GDEXTENSION_QUALIFICATION_TEXTURE_FORMAT_D32_SFLOAT_V1) {
+			return ERR_INVALID_DATA;
+		}
+		return keep(q.depth.target, c->rid, q.depth.target_object_serial, 1, false);
+	}
+	if (h.kind == GDEXTENSION_QUALIFICATION_RT_RASTER_CREATE_V1) {
+		GDExtensionQualificationRasterCreateV1 q;
+		memcpy(&q, bytes, sizeof(q));
+		QualificationResource *c = nullptr;
+		Error e = qualification_resource_locked(b, q.target, 1, c);
+		if (e != OK) {
+			return e;
+		}
+		if (memcmp(&c->source, &q.source, sizeof(q.source)) || static_cast<QualificationBridge::Texture *>(c)->origin.format != GDEXTENSION_QUALIFICATION_TEXTURE_FORMAT_D32_SFLOAT_V1) {
+			return ERR_INVALID_DATA;
+		}
+		return keep(q.target, c->rid, q.target_object_serial, 1, false);
+	}
 	if (h.kind == 14) {
 		GDExtensionQualificationTextureUploadV1 q;
 		memcpy(&q, bytes, sizeof(q));

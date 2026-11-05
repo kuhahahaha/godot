@@ -84,17 +84,35 @@ bool RenderingDevice::_qualification_resource_busy(RID rid) {
 		}
 	}
 	const auto *pipeline = compute_pipeline_owner.get_or_null(rid);
+	const auto *raster_pipeline = render_pipeline_owner.get_or_null(rid);
+	const auto *framebuffer = framebuffer_owner.get_or_null(rid);
+	if ((raster_pipeline && raster_pipeline->qualification_users) || (framebuffer && framebuffer->qualification_users)) {
+		return true;
+	}
 	if (pipeline && pipeline->qualification_users) {
 		return true;
+	}
+	for (auto *cell : { raster_pipeline ? raster_pipeline->qualification_return : nullptr, framebuffer ? framebuffer->qualification_return : nullptr }) {
+		if (cell) {
+			if (!qualification_retiring || !cell->use_closed.load() || !_qualification_free_event_available(cell->event_capacity_reserved) || uint32_t(frame) >= frames.size() || !frames[frame].qualification_epoch) {
+				return true;
+			}
+			MutexLock lock(cell->mutex);
+			if (cell->enqueued || cell->reserved_event || cell->free_event) {
+				return true;
+			}
+		}
 	}
 	const auto *shader = shader_owner.get_or_null(rid);
 	const auto *physical = buffer ? buffer->qualification_return : texture ? texture->qualification_return
 			: sampler													   ? sampler->qualification_return
 			: set														   ? set->qualification_return
 			: pipeline													   ? pipeline->qualification_return
+			: raster_pipeline											   ? raster_pipeline->qualification_return
+			: framebuffer												   ? framebuffer->qualification_return
 			: shader													   ? shader->qualification_return
 																		   : nullptr;
-	if (physical && physical->production_uses) {
+	if (physical && (physical->production_uses || physical->dependent_children.load())) {
 		return true;
 	}
 	const auto *dependencies = dependency_map.getptr(rid);
@@ -102,6 +120,11 @@ bool RenderingDevice::_qualification_resource_busy(RID rid) {
 		for (RID child : *dependencies) {
 			// A qualified texture is returned by its original owner. Do not let a
 			// parent recursively consume it or exhaust an unreserved event sequence.
+			const auto *child_pipeline = render_pipeline_owner.get_or_null(child);
+			const auto *child_framebuffer = framebuffer_owner.get_or_null(child);
+			if ((child_pipeline && child_pipeline->qualification_return) || (child_framebuffer && child_framebuffer->qualification_return)) {
+				return true;
+			}
 			const auto *child_texture = texture_owner.get_or_null(child);
 			if (child_texture && child_texture->qualification_return) {
 				return true;
@@ -133,9 +156,11 @@ Error RenderingDevice::_qualification_pin_resources(QualificationTicket *ticket,
 		auto *texture = texture_owner.get_or_null(rid);
 		auto *sampler = sampler_owner.get_or_null(rid);
 		auto *set = uniform_set_owner.get_or_null(rid);
+		auto *raster_pipeline = render_pipeline_owner.get_or_null(rid);
+		auto *framebuffer = framebuffer_owner.get_or_null(rid);
 		// New admissions revalidate existing texture/sampler pins and count each
 		// new child only once within the incoming batch.
-		const bool typed_child = texture || sampler || (set && set->qualification_return);
+		const bool typed_child = texture || sampler || raster_pipeline || framebuffer || (set && set->qualification_return);
 		bool duplicate = false;
 		if (typed_child && !already) {
 			for (uint32_t prior = 0; prior < resource_index; ++prior) {
@@ -157,6 +182,9 @@ Error RenderingDevice::_qualification_pin_resources(QualificationTicket *ticket,
 		}
 		auto *pipeline = compute_pipeline_owner.get_or_null(rid);
 		auto *shader = shader_owner.get_or_null(rid);
+		if ((raster_pipeline && !raster_pipeline->qualification_return) || (framebuffer && !framebuffer->qualification_return)) {
+			return ERR_UNAUTHORIZED;
+		}
 		if (texture && !texture->qualification_return) {
 			return ERR_UNAUTHORIZED;
 		}
@@ -164,6 +192,8 @@ Error RenderingDevice::_qualification_pin_resources(QualificationTicket *ticket,
 			return ERR_UNAUTHORIZED;
 		}
 		auto *physical = buffer ? buffer->qualification_return : pipeline ? pipeline->qualification_return
+				: raster_pipeline										  ? raster_pipeline->qualification_return
+				: framebuffer											  ? framebuffer->qualification_return
 				: shader												  ? shader->qualification_return
 				: texture												  ? texture->qualification_return
 				: sampler												  ? sampler->qualification_return
@@ -176,6 +206,14 @@ Error RenderingDevice::_qualification_pin_resources(QualificationTicket *ticket,
 			auto &registry = Registry::get_singleton();
 			for (auto *bridge : registry.qualification_bridges) {
 				if (bridge && bridge->serial == ticket->bridge_serial) {
+					if (raster_pipeline || framebuffer) {
+						for (auto *child : bridge->units) {
+							if (child && child->raster && !child->creating && !child->retiring && !child->acknowledged && physical && physical->bridge == bridge->serial && physical->child == child->serial && physical->rid == rid.get_id() && physical->serial && ((raster_pipeline && physical == &child->pipeline && rid.get_id() == child->raster->backing.pipeline_rid && physical->serial == child->raster->backing.pipeline_serial) || (framebuffer && physical == &child->raster->framebuffer && rid.get_id() == child->raster->backing.framebuffer_rid && physical->serial == child->raster->backing.framebuffer_serial))) {
+								original = true;
+								break;
+							}
+						}
+					}
 					auto match = [&](const auto *child) { return child && &child->physical == physical && !child->creating && !child->retiring && !child->acknowledged && child->serial && child->rid == rid.get_id() && child->object_serial && child->object_serial == child->physical.serial && child->physical.rid == child->rid && child->physical.bridge == bridge->serial && child->physical.child == child->serial; };
 					if (texture) {
 						for (auto *child : bridge->textures) {
@@ -217,12 +255,14 @@ Error RenderingDevice::_qualification_pin_resources(QualificationTicket *ticket,
 		uint32_t *count = buffer ? &buffer->qualification_users : set ? &set->qualification_users
 				: pipeline											  ? &pipeline->qualification_users
 				: texture											  ? &texture->qualification_users
+				: raster_pipeline									  ? &raster_pipeline->qualification_users
+				: framebuffer										  ? &framebuffer->qualification_users
 				: sampler											  ? &sampler->qualification_users
 																	  : nullptr;
 		if (!already && !duplicate && count && *count == UINT32_MAX) {
 			return ERR_PARAMETER_RANGE_ERROR;
 		}
-		if (!buffer && !set && !pipeline && !shader && !texture && !sampler) {
+		if (!buffer && !set && !pipeline && !shader && !texture && !sampler && !raster_pipeline && !framebuffer) {
 			return ERR_INVALID_DATA;
 		}
 	}
@@ -243,12 +283,16 @@ Error RenderingDevice::_qualification_pin_resources(QualificationTicket *ticket,
 		}
 		auto *set = uniform_set_owner.get_or_null(rid);
 		auto *pipeline = compute_pipeline_owner.get_or_null(rid);
+		auto *raster_pipeline = render_pipeline_owner.get_or_null(rid);
+		auto *framebuffer = framebuffer_owner.get_or_null(rid);
 		auto *shader = shader_owner.get_or_null(rid);
 		auto *texture = texture_owner.get_or_null(rid);
 		auto *sampler = sampler_owner.get_or_null(rid);
 		uint32_t *count = buffer ? &buffer->qualification_users : set ? &set->qualification_users
 				: pipeline											  ? &pipeline->qualification_users
 				: texture											  ? &texture->qualification_users
+				: raster_pipeline									  ? &raster_pipeline->qualification_users
+				: framebuffer										  ? &framebuffer->qualification_users
 				: sampler											  ? &sampler->qualification_users
 																	  : nullptr;
 		if (count) {
@@ -256,6 +300,8 @@ Error RenderingDevice::_qualification_pin_resources(QualificationTicket *ticket,
 		}
 		ticket->resource_pins.push_back(rid);
 		auto *physical = buffer ? buffer->qualification_return : pipeline ? pipeline->qualification_return
+				: raster_pipeline										  ? raster_pipeline->qualification_return
+				: framebuffer											  ? framebuffer->qualification_return
 				: shader												  ? shader->qualification_return
 				: texture												  ? texture->qualification_return
 				: sampler												  ? sampler->qualification_return
@@ -290,11 +336,15 @@ void RenderingDevice::_qualification_unpin_resources(QualificationTicket *ticket
 		}
 		auto *set = uniform_set_owner.get_or_null(rid);
 		auto *pipeline = compute_pipeline_owner.get_or_null(rid);
+		auto *raster_pipeline = render_pipeline_owner.get_or_null(rid);
+		auto *framebuffer = framebuffer_owner.get_or_null(rid);
 		auto *texture = texture_owner.get_or_null(rid);
 		auto *sampler = sampler_owner.get_or_null(rid);
 		uint32_t *count = buffer ? &buffer->qualification_users : set ? &set->qualification_users
 				: pipeline											  ? &pipeline->qualification_users
 				: texture											  ? &texture->qualification_users
+				: raster_pipeline									  ? &raster_pipeline->qualification_users
+				: framebuffer										  ? &framebuffer->qualification_users
 				: sampler											  ? &sampler->qualification_users
 																	  : nullptr;
 		if (count) {

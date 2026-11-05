@@ -30,6 +30,7 @@
 
 #include "core/crypto/crypto_core.h"
 #include "core/extension/gdextension.h"
+#include "core/extension/gdextension_qualification_depth.h"
 #include "core/extension/gdextension_qualification_internal.h"
 #include "core/os/os.h"
 #include "core/os/thread.h"
@@ -153,12 +154,23 @@ Error Registry::qualification_ticket_locked(QualificationBridge *bridge, GDExten
 	}
 	return ERR_DOES_NOT_EXIST;
 }
-Error Registry::qualification_record_preflight(QualificationBridge *bridge, RenderingDevice *rd, const GDExtensionQualificationRecordV1 &request, LocalVector<RID> &resources, uint64_t capture_set1, uint64_t body_set1, bool p_allow_empty) {
+Error Registry::qualification_record_preflight(QualificationBridge *bridge, RenderingDevice *rd, const GDExtensionQualificationRecordV1 &request, LocalVector<RID> &resources, uint64_t capture_set1, uint64_t body_set1, bool p_allow_empty, const QualificationResource *p_pending_depth) {
 	if (!valid_abi(request.abi) || !request.record_generation || !request.request_nonce || request.library_generation != records[bridge->library].snapshot.library_generation || !request.qualification_session_serial || !request.attempt || (!p_allow_empty && !request.sample_count) || request.sample_count > 512 || request.range_end < request.range_begin || request.range_end - request.range_begin != request.sample_count || request.body_groups_x != (p_allow_empty ? MAX(1u, (request.sample_count + 63) / 64) : (request.sample_count + 63) / 64) || !request.readback_size || request.readback_size > 16384 || !request.source_allocation_generation) {
 		return ERR_INVALID_PARAMETER;
 	}
 	if (p_allow_empty && !request.sample_count && (request.range_begin || request.range_end)) {
 		return ERR_INVALID_PARAMETER;
+	}
+	RID pending_depth_rid;
+	if (p_pending_depth) {
+		const Error error = qualification_depth_target_locked(bridge, rd, p_pending_depth);
+		if (error != OK) {
+			return error;
+		}
+		if (p_pending_depth->source.session_serial != request.qualification_session_serial || p_pending_depth->source.generation != request.record_generation || memcmp(p_pending_depth->source.digest, request.body_map_digest, sizeof(p_pending_depth->source.digest))) {
+			return ERR_UNAUTHORIZED;
+		}
+		pending_depth_rid = RID::from_uint64(p_pending_depth->rid);
 	}
 	if (!rd->driver->native_call_observation_supported()) {
 		return ERR_UNAVAILABLE;
@@ -198,8 +210,13 @@ Error Registry::qualification_record_preflight(QualificationBridge *bridge, Rend
 			if (!set || !set->driver_id || !pipeline->set_formats[set_index] || pipeline->set_formats[set_index] != set->format || set->shader_set != set_index) {
 				return ERR_INVALID_DATA;
 			}
-			if (!set->shared_textures_to_update.is_empty() || !set->pending_clear_textures.is_empty() || !set->acceleration_structures.is_empty()) {
+			if (!set->shared_textures_to_update.is_empty() || !set->acceleration_structures.is_empty()) {
 				return ERR_UNAVAILABLE;
+			}
+			for (RID pending_clear : set->pending_clear_textures) {
+				if (!p_pending_depth || pending_clear != pending_depth_rid) {
+					return ERR_UNAVAILABLE;
+				}
 			}
 			if (!add_resource(resources, set_rid)) {
 				return ERR_PARAMETER_RANGE_ERROR;
@@ -245,7 +262,7 @@ Error Registry::qualification_record_preflight(QualificationBridge *bridge, Rend
 					}
 					// Shared fallback updates, pending clears, and legacy transfer workers
 					// require effects outside this original checked record operation.
-					if (texture && (!texture->driver_id || texture->owner.is_valid() || texture->shared_fallback || texture->pending_clear || texture->transfer_worker_index >= 0)) {
+					if (texture && (!texture->driver_id || texture->owner.is_valid() || texture->shared_fallback || (texture->pending_clear && (!p_pending_depth || dependency != pending_depth_rid)) || texture->transfer_worker_index >= 0)) {
 						return ERR_UNAVAILABLE;
 					}
 					if (sampler && !sampler->driver_id) {
@@ -941,7 +958,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_release(GDExtensionQual
 				}
 			}
 			for (auto *child : bridge->units) {
-				if (child && (&child->shader == cell || &child->pipeline == cell)) {
+				if (child && (&child->shader == cell || &child->pipeline == cell || (child->raster && &child->raster->framebuffer == cell))) {
 					original = true;
 				}
 			}
@@ -973,7 +990,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_release(GDExtensionQual
 			}
 		}
 		for (auto *child : bridge->units) {
-			if (child && (!check_cell(&child->shader, child->serial) || !check_cell(&child->pipeline, child->serial))) {
+			if (child && (!check_cell(&child->shader, child->serial) || !check_cell(&child->pipeline, child->serial) || (child->raster && !check_cell(&child->raster->framebuffer, child->serial)))) {
 				return false;
 			}
 		}
@@ -1498,6 +1515,9 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_prepare_uploads_v2(GDEx
 	return result(OK);
 }
 GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_v2(GDExtensionQualificationBridgeRefV1 ref, GDExtensionQualificationTicketRefV1 ticket_ref, const GDExtensionQualificationRecordV2 *request, GDExtensionQualificationReportV2 *out, const OriginalOperationIdentity *operation) {
+	return qualification_record_prepared_common(ref, ticket_ref, request, out, operation, nullptr, nullptr, nullptr);
+}
+GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_common(GDExtensionQualificationBridgeRefV1 ref, GDExtensionQualificationTicketRefV1 ticket_ref, const GDExtensionQualificationRecordV2 *request, GDExtensionQualificationReportV2 *out, const OriginalOperationIdentity *operation, const GDExtensionQualificationRecordV4 *depth, const LocalVector<GDExtensionQualificationDepthDrawV1> *depth_draws, const Vector<uint8_t> *depth_push) {
 	if (!aligned(request) || !aligned(out) || !separate(request, sizeof(*request), out, sizeof(*out))) {
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
@@ -1510,9 +1530,13 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_v2(GDEx
 	RenderingDevice *rd = nullptr;
 	QualificationTicket *ticket = nullptr;
 	RdUnlock rd_unlock;
+	QualificationBridge::NativeUnit *depth_raster = nullptr;
+	QualificationBridge::Texture *depth_target = nullptr;
+	LocalVector<RID> depth_resources;
 	{
 		MutexLock lock(mutex);
-		Error error = qualification_bridge_locked(ref, true, true, bridge, rd, operation ? 17 : 10);
+		Error error = qualification_bridge_locked(ref, true, true, bridge, rd, depth ? 20 : operation ? 17
+																									  : 10);
 		if (error != OK) {
 			return result(error, error == ERR_UNAUTHORIZED ? 15 : 16);
 		}
@@ -1524,6 +1548,18 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_v2(GDEx
 			return result(ERR_BUSY, 16);
 		}
 		if (ticket->operation_bound && (!operation || !same_original_operation_identity(ticket->operation, *operation))) {
+			return result(ERR_INVALID_DATA, 16);
+		}
+		if (ticket->depth_bound) {
+			if (!depth || !depth_draws || !depth_push || memcmp(&ticket->depth_origin, depth, sizeof(*depth)) || ticket->depth_draws.size() != depth_draws->size() || ticket->depth_push.size() != depth_push->size() || (depth_push->size() && memcmp(ticket->depth_push.ptr(), depth_push->ptr(), depth_push->size()))) {
+				return result(ERR_INVALID_DATA, 16);
+			}
+			for (uint32_t i = 0; i < depth_draws->size(); ++i) {
+				if (memcmp(&ticket->depth_draws[i].origin, &(*depth_draws)[i], sizeof((*depth_draws)[i]))) {
+					return result(ERR_INVALID_DATA, 16);
+				}
+			}
+		} else if (depth && ticket->recorded) {
 			return result(ERR_INVALID_DATA, 16);
 		}
 		if (ticket->recorded) {
@@ -1546,7 +1582,68 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_v2(GDEx
 			return result(ERR_BUSY, 19);
 		}
 		rd_unlock.mutex = &rd->_thread_safe_;
+		if (depth) {
+			if (!operation || !depth_draws || !depth_push || ticket->depth_bound || !valid_abi(depth->depth.abi) || depth->depth.raster.registry_instance != instance || !depth->depth.raster.handle_serial || depth->depth.target.registry_instance != instance || !depth->depth.target.handle_serial) {
+				return result(ERR_INVALID_DATA, 16);
+			}
+			for (auto *unit : bridge->units) {
+				if (unit && unit->serial == depth->depth.raster.handle_serial && unit->raster) {
+					depth_raster = unit;
+					break;
+				}
+			}
+			if (!depth_raster || depth_raster->creating || depth_raster->retiring || depth_raster->acknowledged || depth_raster->maintenance_error != OK) {
+				return result(ERR_UNAUTHORIZED, 16);
+			}
+			auto &raster = *depth_raster->raster;
+			auto same_source = [](const GDExtensionQualificationSourceV1 &a, const GDExtensionQualificationSourceV1 &b) { return a.session_serial == b.session_serial && a.generation == b.generation && memcmp(a.digest, b.digest, sizeof(a.digest)) == 0; };
+			if (!raster.target || !raster.target_held || raster.origin.profile != GDEXTENSION_QUALIFICATION_RASTER_PROFILE_PROCEDURAL_DEPTH_V1 || !same_source(depth->depth.source, raster.origin.source) || !same_source(depth->depth.source, raster.backing.source) || !same_source(depth->depth.source, raster.target->source) || depth->depth.source.session_serial != request->qualification_session_serial || depth->depth.source.generation != request->record_generation || memcmp(depth->depth.source.digest, request->body_map_digest, sizeof(depth->depth.source.digest)) || raster.origin.unit.library_generation != request->library_generation || raster.backing.raster.registry_instance != instance || raster.backing.raster.handle_serial != depth_raster->serial || raster.backing.target.registry_instance != instance || raster.backing.target.handle_serial != depth->depth.target.handle_serial || raster.origin.target.registry_instance != instance || raster.origin.target.handle_serial != depth->depth.target.handle_serial || raster.target->serial != depth->depth.target.handle_serial || raster.target->object_serial != depth->depth.target_object_serial || raster.origin.target_object_serial != depth->depth.target_object_serial || raster.backing.target_object_serial != depth->depth.target_object_serial || raster.backing.state != 1 || raster.backing.known_mask != 7 || raster.backing.possible_mask) {
+				return result(ERR_UNAUTHORIZED, 16);
+			}
+			depth_target = static_cast<QualificationBridge::Texture *>(raster.target);
+			error = qualification_depth_target_locked(bridge, rd, depth_target);
+			if (error != OK) {
+				return result(error, 16);
+			}
+			if (depth_target->content_revision != depth->depth.expected_content_revision || depth_target->content_revision == UINT64_MAX) {
+				return result(ERR_INVALID_DATA, 16);
+			}
+			const auto match_physical = [&](const QualificationPhysicalReturn &cell, uint64_t rid, uint64_t serial) {
+				return rid && serial && cell.bridge == bridge->serial && cell.child == depth_raster->serial && cell.rid == rid && cell.serial == serial && !cell.use_closed.load() && !cell.enqueued && !cell.free_event;
+			};
+			if (!match_physical(depth_raster->shader, raster.backing.shader_rid, raster.backing.shader_serial) || !match_physical(depth_raster->pipeline, raster.backing.pipeline_rid, raster.backing.pipeline_serial) || !match_physical(raster.framebuffer, raster.backing.framebuffer_rid, raster.backing.framebuffer_serial)) {
+				return result(ERR_UNAUTHORIZED, 16);
+			}
+			const auto *shader = rd->shader_owner.get_or_null(RID::from_uint64(raster.backing.shader_rid));
+			const auto *pipeline = rd->render_pipeline_owner.get_or_null(RID::from_uint64(raster.backing.pipeline_rid));
+			const auto *framebuffer = rd->framebuffer_owner.get_or_null(RID::from_uint64(raster.backing.framebuffer_rid));
+			if (!shader || shader->qualification_return != &depth_raster->shader || !pipeline || pipeline->qualification_return != &depth_raster->pipeline || pipeline->shader != RID::from_uint64(raster.backing.shader_rid) || !pipeline->driver_id || pipeline->set_formats.size() || pipeline->push_constant_size != raster.origin.push_constant_bytes || !framebuffer || framebuffer->qualification_return != &raster.framebuffer || framebuffer->qualification_dependency != &depth_target->physical || framebuffer->texture_ids.size() != 1 || framebuffer->texture_ids[0] != RID::from_uint64(depth_target->rid)) {
+				return result(ERR_UNAUTHORIZED, 16);
+			}
+			for (const auto *cell : { &depth_target->physical, &depth_raster->shader, &depth_raster->pipeline, &raster.framebuffer }) {
+				for (const auto *owner : cell->uses) {
+					if (owner && owner != ticket && !owner->physically_retired.load()) {
+						return result(ERR_BUSY, 16);
+					}
+				}
+				if (cell->production_uses) {
+					return result(ERR_BUSY, 16);
+				}
+			}
+			error = validate_qualification_depth_draws(depth_draws->ptr(), depth_draws->size(), depth_push->ptr(), depth_push->size(), depth_target->origin.width, depth_target->origin.height, pipeline->push_constant_size, (QualificationTicket::FACT_CAPACITY - 8) / 3, uint64_t(QualificationTicket::FACT_CAPACITY) * 128);
+			if (error != OK) {
+				return result(error, 2);
+			}
+			for (const auto &draw : *depth_draws) {
+				if (draw.procedural_vertices != 3 || draw.instances != 1) {
+					return result(ERR_UNAVAILABLE, 18);
+				}
+			}
+		}
 		uint64_t graph_bound = 2;
+		if (depth) {
+			graph_bound += 8 + uint64_t(depth_draws->size()) * 3;
+		}
 		for (uint32_t i = 0; i < request->readback_count; ++i) {
 			graph_bound += (request->readbacks[i].readback_size + 31) / 32;
 		}
@@ -1562,10 +1659,18 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_v2(GDEx
 		}
 		const auto legacy = qualification_record_v1(*request);
 		LocalVector<RID> resources;
-		error = qualification_record_preflight(bridge, rd, legacy, resources, request->capture_set1, request->body_set1, true);
+		error = qualification_record_preflight(bridge, rd, legacy, resources, request->capture_set1, request->body_set1, true, depth_target);
 		if (error != OK) {
 			return result(error, error == ERR_UNAVAILABLE ? 18 : error == ERR_PARAMETER_RANGE_ERROR ? 19
 																									: 2);
+		}
+		if (depth) {
+			const auto &raster = *depth_raster->raster;
+			for (uint64_t rid : { depth_target->rid, raster.backing.shader_rid, raster.backing.pipeline_rid, raster.backing.framebuffer_rid }) {
+				if (!add_resource(resources, RID::from_uint64(rid))) {
+					return result(ERR_PARAMETER_RANGE_ERROR, 19);
+				}
+			}
 		}
 		for (uint32_t i = 0; i < request->readback_count; ++i) {
 			const auto &range = request->readbacks[i];
@@ -1637,7 +1742,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_v2(GDEx
 				}
 			}
 		}
-		error = qualification_typed_dependencies(bridge, rd, ticket, *request, resources);
+		error = qualification_typed_dependencies(bridge, rd, ticket, *request, resources, depth_target);
 		if (error != OK) {
 			return result(error, 16);
 		}
@@ -1655,6 +1760,26 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_v2(GDEx
 		if (error != OK) {
 			return result(error, 16);
 		}
+		if (depth) {
+			ticket->depth_origin = *depth;
+			ticket->depth_draws.resize(depth_draws->size());
+			for (uint32_t i = 0; i < depth_draws->size(); ++i) {
+				ticket->depth_draws[i].origin = (*depth_draws)[i];
+			}
+			ticket->depth_push = *depth_push;
+			ticket->depth_bound = true;
+			depth_resources = resources;
+			auto &report = ticket->depth_report;
+			report = {};
+			report.abi = { 1, sizeof(GDExtensionDeviceExitAbi), 0 };
+			report.source = depth->depth.source;
+			report.raster = depth->depth.raster;
+			report.target = depth->depth.target;
+			report.target_object_serial = depth->depth.target_object_serial;
+			report.report_revision = 1;
+			report.required_draw_count = depth_draws->size();
+			report.begin_fact = report.clear_fact = report.end_fact = report.cleanup_end_fact = report.first_draw_fact = UINT32_MAX;
+		}
 		if (operation) {
 			ticket->operation = *operation;
 			ticket->operation_bound = true;
@@ -1671,6 +1796,204 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_v2(GDEx
 		ticket->recording = true;
 	}
 	rd->draw_graph.add_synchronization();
+	if (depth) {
+		rd->qualification_recording = true;
+		auto &report = ticket->depth_report;
+		bool invalidated = false;
+		Error depth_error = OK;
+		auto invalidate = [&]() {
+			if (!invalidated) {
+				MutexLock lock(mutex);
+				depth_target->produced_ticket = depth_target->produced_raster = 0;
+				depth_target->produced_operation = {};
+				invalidated = true;
+			}
+		};
+		auto fact = [&](const RDG::RecordHandle &handle, uint32_t semantic) -> uint32_t {
+			if (!handle.is_valid()) {
+				return UINT32_MAX;
+			}
+			invalidate();
+			MutexLock lock(mutex);
+			const uint32_t index = ticket->facts.size();
+			add_graph(ticket, handle, semantic, rd->frame, rd->frames[rd->frame].qualification_epoch, depth_target->object_serial);
+			const bool added = ticket->facts.size() == index + 1;
+			// Frame enrollment can append genuine hidden native sources. The
+			// graph fact index is fixed before those distinct obligations join.
+			rd->_qualification_add_frame_ticket(ticket);
+			return added ? index : UINT32_MAX;
+		};
+		auto join = [&](const RenderingDevice::DrawAppendResult &append, uint32_t semantic) -> uint32_t {
+			if (append.effect != RenderingDevice::NativeAppendEffect::NoNewEffect) {
+				invalidate();
+			}
+			for (uint32_t i = 0; i < append.prefix_count; ++i) {
+				fact(append.prefix_handles[i], semantic);
+			}
+			const uint32_t index = fact(append.draw_handle, semantic);
+			if ((semantic == 11 || semantic == 12) && append.effect != RenderingDevice::NativeAppendEffect::Recorded && depth_error == OK) {
+				depth_error = ERR_INVALID_DATA;
+			}
+
+			if (append.error != OK && depth_error == OK) {
+				depth_error = append.error;
+			}
+			if (append.effect == RenderingDevice::NativeAppendEffect::Unknown || (append.effect != RenderingDevice::NativeAppendEffect::NoNewEffect && (!append.capture_complete || !append.draw_handle.is_valid()))) {
+				MutexLock lock(mutex);
+				ticket->mapping_failed = true;
+				if (depth_error == OK) {
+					depth_error = ERR_INVALID_DATA;
+				}
+			}
+			if (append.effect == RenderingDevice::NativeAppendEffect::NativePrefixOnly && depth_error == OK) {
+				depth_error = ERR_INVALID_DATA;
+			}
+			return index;
+		};
+		RenderingDevice::DrawListBeginResult begun;
+		if (ticket->admission_closed.load()) {
+			begun.error = ERR_BUSY;
+		} else {
+			begun = rd->_draw_list_begin_recorded(RID::from_uint64(depth_raster->raster->backing.framebuffer_rid), RenderingDevice::DRAW_CLEAR_DEPTH, {}, 0.0f, 0, Rect2(), 0);
+		}
+		if (begun.effect != RenderingDevice::NativeAppendEffect::NoNewEffect) {
+			invalidate();
+		}
+		for (uint32_t i = 0; i < begun.preparation_count; ++i) {
+			fact(begun.preparation_handles[i], 7);
+		}
+		report.begin_fact = fact(begun.begin_handle, 8);
+		report.clear_fact = fact(begun.clear_handle, 9);
+		for (uint32_t i = 0; i < begun.prefix_count; ++i) {
+			fact(begun.prefix_handles[i], 10);
+		}
+		if (begun.error != OK || begun.effect != RenderingDevice::NativeAppendEffect::Recorded || !begun.capture_complete || report.begin_fact == UINT32_MAX || report.clear_fact == UINT32_MAX || begun.list == RenderingDevice::INVALID_ID) {
+			depth_error = begun.error == OK ? ERR_INVALID_DATA : begun.error;
+			if (begun.effect == RenderingDevice::NativeAppendEffect::Unknown || (begun.effect != RenderingDevice::NativeAppendEffect::NoNewEffect && !begun.capture_complete)) {
+				MutexLock lock(mutex);
+				ticket->mapping_failed = true;
+			}
+		}
+		report.list_state = rd->draw_list.active ? 1 : 0;
+		if (depth_error == OK) {
+			join(rd->_draw_list_bind_render_pipeline_recorded(begun.list, RID::from_uint64(depth_raster->raster->backing.pipeline_rid)), 10);
+		}
+		for (auto &draw : ticket->depth_draws) {
+			if (ticket->admission_closed.load() && depth_error == OK) {
+				depth_error = ERR_BUSY;
+			}
+			if (depth_error != OK) {
+				break;
+			}
+			draw.first_fact = ticket->facts.size();
+			if (report.first_draw_fact == UINT32_MAX) {
+				report.first_draw_fact = draw.first_fact;
+			}
+			const auto &q = draw.origin;
+			join(rd->_draw_list_enable_scissor_recorded(begun.list, Rect2(q.scissor_x, q.scissor_y, q.scissor_width, q.scissor_height)), 11);
+			if (depth_error == OK && q.push_size) {
+				join(rd->_draw_list_set_push_constant_recorded(begun.list, ticket->depth_push.ptr() + q.push_offset, q.push_size), 11);
+			}
+			uint32_t draw_fact = UINT32_MAX;
+			if (depth_error == OK) {
+				draw_fact = join(rd->_draw_list_draw_recorded(begun.list, false, q.instances, q.procedural_vertices), 11);
+			}
+			draw.fact_count = ticket->facts.size() - draw.first_fact;
+			if (depth_error == OK && draw_fact != UINT32_MAX && !ticket->mapping_failed) {
+				++report.known_draw_count;
+			} else if (draw.fact_count || ticket->mapping_failed) {
+				++report.possible_draw_count;
+			}
+		}
+		if (ticket->admission_closed.load() && depth_error == OK) {
+			depth_error = ERR_BUSY;
+		}
+		if (depth_error == OK && report.known_draw_count == report.required_draw_count) {
+			report.end_fact = join(rd->_draw_list_end_recorded(), 12);
+		}
+		if (depth_error != OK && rd->draw_list.active) {
+			// Cleanup closure is a different original fact; never business end.
+			report.cleanup_end_fact = join(rd->_draw_list_end_recorded(), 13);
+		}
+		report.list_state = rd->draw_list.active ? 1 : 2;
+		if (rd->draw_list.active) {
+			// An unclosed recording list still owns its framebuffer resources.
+			// Failed-prefix retirement must not return those physical pins.
+			MutexLock lock(mutex);
+			ticket->mapping_failed = true;
+			if (depth_error == OK) {
+				depth_error = ERR_BUSY;
+			}
+		}
+		rd->qualification_recording = false;
+		{
+			MutexLock lock(mutex);
+			const bool complete = depth_error == OK && !ticket->admission_closed.load() && !ticket->mapping_failed && report.end_fact != UINT32_MAX && report.cleanup_end_fact == UINT32_MAX && report.known_draw_count == report.required_draw_count && !report.possible_draw_count && !rd->draw_list.active;
+			if (complete) {
+				depth_target->produced_ticket = ticket->serial;
+				depth_target->produced_raster = depth_raster->serial;
+				depth_target->produced_operation = ticket->operation;
+				++depth_target->content_revision;
+				report.content_revision = depth_target->content_revision;
+				report.state = 1;
+				report.phase = 2;
+				// The second admission phase requires the genuine same-ticket
+				// produced credential; the pending target exception ends here.
+				depth_error = qualification_typed_dependencies(bridge, rd, ticket, *request, depth_resources);
+				if (depth_error == OK) {
+					// Set creation remembered the old pending-clear RID. The real
+					// producer has already returned that flag; remove only this stale
+					// ordinary set bookkeeping before checked compute admission.
+					const auto *target = rd->texture_owner.get_or_null(RID::from_uint64(depth_target->rid));
+					const uint64_t sets[] = { request->capture_set, request->capture_set1, request->body_set, request->body_set1 };
+					for (uint64_t rid : sets) {
+						if (!rid) {
+							continue;
+						}
+						auto *set = rd->uniform_set_owner.get_or_null(RID::from_uint64(rid));
+						if (!set || !target || target->pending_clear) {
+							depth_error = ERR_INVALID_DATA;
+							break;
+						}
+						for (RID pending : set->pending_clear_textures) {
+							if (pending != RID::from_uint64(depth_target->rid)) {
+								depth_error = ERR_INVALID_DATA;
+								break;
+							}
+						}
+						if (depth_error != OK) {
+							break;
+						}
+						const uint32_t commands = rd->draw_graph.qualification_command_count();
+						rd->_uniform_set_update_clears(set);
+						if (commands != rd->draw_graph.qualification_command_count()) {
+							ticket->mapping_failed = true;
+							depth_error = ERR_INVALID_DATA;
+							depth_target->produced_ticket = depth_target->produced_raster = 0;
+							depth_target->produced_operation = {};
+							break;
+						}
+					}
+				}
+
+			} else if (depth_error == OK) {
+				depth_error = ERR_INVALID_DATA;
+			}
+			++report.report_revision;
+			if (depth_error != OK) {
+				report.state = ticket->mapping_failed ? 3 : 2;
+				report.native_error = depth_error;
+				report.phase = 3;
+				ticket->append_failed = true;
+				ticket->recording = false;
+				ticket->report.native_error = depth_error;
+				qualification_ticket_publish(ticket, rd);
+				qualification_report_v2(ticket, *out);
+				return result(OK);
+			}
+		}
+		rd->draw_graph.add_synchronization();
+	}
 	qualification_record_append(ticket, rd);
 	MutexLock lock(mutex);
 	qualification_report_v2(ticket, *out);
@@ -1730,6 +2053,107 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_observe_v2(GDExtensionQ
 		return result(observed, 17);
 	}
 	qualification_report_v2(ticket, *out);
+	return result(OK);
+}
+GDExtensionDeviceSessionResultV1 Registry::qualification_record_prepared_v4(GDExtensionQualificationBridgeRefV1 ref, GDExtensionQualificationTicketRefV1 ticket_ref, const GDExtensionQualificationRecordV4 *request, const GDExtensionQualificationDepthDrawV1 *draws, uint32_t draw_count, const void *push_bytes, uint64_t push_byte_count, GDExtensionQualificationReportV3 *out) {
+	if (!aligned(request) || !aligned(out) || draw_count > (QualificationTicket::FACT_CAPACITY - 8) / 3 || push_byte_count > uint64_t(QualificationTicket::FACT_CAPACITY) * 128 || (draw_count && !aligned(draws)) || (push_byte_count && !push_bytes) || !separate(request, sizeof(*request), out, sizeof(*out)) || (draw_count && !separate(draws, sizeof(*draws) * draw_count, out, sizeof(*out))) || (push_byte_count && !separate(push_bytes, push_byte_count, out, sizeof(*out)))) {
+		return result(ERR_INVALID_PARAMETER, 2);
+	}
+	const auto original = *request;
+	*out = {};
+	if (original.abi.abi_version != 4 || original.abi.struct_size != sizeof(original) || original.abi.reserved || !valid_abi(original.depth.abi)) {
+		return result(ERR_INVALID_PARAMETER, 2);
+	}
+	const Error shape = validate_qualification_record_v3(original.record);
+	if (shape != OK) {
+		return result(shape, 2);
+	}
+	LocalVector<GDExtensionQualificationDepthDrawV1> copied_draws;
+	copied_draws.resize(draw_count);
+	for (uint32_t i = 0; i < draw_count; ++i) {
+		copied_draws[i] = draws[i];
+	}
+	Vector<uint8_t> copied_push;
+	const Error allocated = copied_push.resize(push_byte_count);
+	if (allocated != OK) {
+		return result(allocated, 19);
+	}
+	if (push_byte_count) {
+		memcpy(copied_push.ptrw(), push_bytes, push_byte_count);
+	}
+	const auto operation = qualification_operation_identity(original.record);
+	GDExtensionQualificationReportV2 record = {};
+	const auto status = qualification_record_prepared_common(ref, ticket_ref, &original.record.record, &record, &operation, &original, &copied_draws, &copied_push);
+	if (status.native_error != OK) {
+		return status;
+	}
+	MutexLock lock(mutex);
+	QualificationBridge *bridge = nullptr;
+	RenderingDevice *rd = nullptr;
+	QualificationTicket *ticket = nullptr;
+	Error error = qualification_bridge_locked(ref, false, false, bridge, rd);
+	if (error == OK) {
+		error = qualification_ticket_locked(bridge, ticket_ref, ticket);
+	}
+	if (error != OK) {
+		return result(error, 17);
+	}
+	out->abi = { 3, sizeof(GDExtensionDeviceExitAbi), 0 };
+	qualification_report_v2(ticket, out->record);
+	out->depth = ticket->depth_report;
+	out->depth.report_revision = ticket->report.revision;
+	return result(OK);
+}
+GDExtensionDeviceSessionResultV1 Registry::qualification_observe_v3(GDExtensionQualificationBridgeRefV1 ref, GDExtensionQualificationTicketRefV1 ticket_ref, const GDExtensionQualificationBudgetV1 *budget, GDExtensionQualificationReportV3 *out) {
+	if (!aligned(budget) || !aligned(out) || !separate(budget, sizeof(*budget), out, sizeof(*out))) {
+		return result(ERR_INVALID_PARAMETER, 2);
+	}
+	*out = {};
+	{
+		MutexLock lock(mutex);
+		QualificationBridge *bridge = nullptr;
+		RenderingDevice *rd = nullptr;
+		QualificationTicket *ticket = nullptr;
+		Error error = qualification_bridge_locked(ref, false, false, bridge, rd);
+		if (error == OK) {
+			error = qualification_ticket_locked(bridge, ticket_ref, ticket);
+		}
+		if (error != OK) {
+			return result(error, 17);
+		}
+		if (!ticket->depth_bound) {
+			return result(ERR_INVALID_DATA, 16);
+		}
+	}
+	GDExtensionQualificationReportV2 record = {};
+	const auto status = qualification_observe_v2(ref, ticket_ref, budget, &record);
+	if (status.native_error != OK) {
+		return status;
+	}
+	MutexLock lock(mutex);
+	QualificationBridge *bridge = nullptr;
+	RenderingDevice *rd = nullptr;
+	QualificationTicket *ticket = nullptr;
+	Error error = qualification_bridge_locked(ref, false, false, bridge, rd);
+	if (error == OK) {
+		error = qualification_ticket_locked(bridge, ticket_ref, ticket);
+	}
+	if (error != OK) {
+		return result(error, 17);
+	}
+	if (!ticket->depth_bound) {
+		return result(ERR_INVALID_DATA, 16);
+	}
+	out->abi = { 3, sizeof(GDExtensionDeviceExitAbi), 0 };
+	qualification_report_v2(ticket, out->record);
+	out->depth = ticket->depth_report;
+	out->depth.report_revision = ticket->report.revision;
+	// Native issue/completion still comes only from the original ticket ledger.
+	if (ticket->mapping_failed || ticket->report.state == 6 || ticket->report.state == 7) {
+		out->depth.state = ticket->mapping_failed || ticket->report.state == 6 ? 3 : 2;
+		out->depth.native_error = ticket->report.native_error;
+		out->depth.phase = 3;
+	}
 	return result(OK);
 }
 } // namespace GDExtensionDeviceExit

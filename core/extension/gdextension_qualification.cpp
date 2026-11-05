@@ -311,6 +311,10 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_close(GDExtensionQualif
 	for (auto *child : bridge->units) {
 		if (child) {
 			CRASH_COND(!child->acknowledged);
+			if (child->raster) {
+				CRASH_COND(child->raster->target_held);
+				memdelete(child->raster);
+			}
 			memdelete(child);
 		}
 	}
@@ -493,7 +497,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_native_unit_create(GDEx
 		bridge->collect_retired_children_locked();
 		for (auto *existing : bridge->units) {
 			if (existing && existing->origin.record_slot == request->record_slot && existing->origin.preparation_generation == request->preparation_generation && existing->origin.operation_serial == request->operation_serial && existing->origin.physical_unit == request->physical_unit) {
-				if (memcmp(&existing->origin, request, sizeof(*request))) {
+				if (existing->raster || memcmp(&existing->origin, request, sizeof(*request))) {
 					return result(ERR_INVALID_DATA, 16);
 				}
 				if (existing->acknowledged) {
@@ -512,6 +516,9 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_native_unit_create(GDEx
 			})) {
 			return memcmp(&old->origin, request, sizeof(*request)) ? result(ERR_INVALID_DATA, 16) : result(ERR_DOES_NOT_EXIST, 17);
 		}
+		if (bridge->raster_origins.find_retired([&](const auto &origin) { return origin.unit.record_slot == request->record_slot && origin.unit.preparation_generation == request->preparation_generation && origin.unit.operation_serial == request->operation_serial && origin.unit.physical_unit == request->physical_unit; })) {
+			return result(ERR_INVALID_DATA, 16);
+		}
 		if (rd->production_finalization_started.load(std::memory_order_acquire) && !accepted) {
 			return result(ERR_BUSY, GDEXTENSION_DEVICE_SESSION_REASON_NOT_ADMITTED_V1);
 		}
@@ -521,7 +528,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_native_unit_create(GDEx
 		for (; slot < QualificationBridge::CHILD_CAPACITY && bridge->units[slot]; ++slot) {
 		}
 		const uint32_t refs_needed = bridge->cleanup_refs_reserved ? 1 : 3;
-		if (slot == QualificationBridge::CHILD_CAPACITY || private_limit < refs_needed || records[bridge->library].private_refs > private_limit - refs_needed || !qualification_serial_capacity(4) || !rd->_qualification_free_event_available(false) || !rd->next_qualification_object_serial || rd->next_qualification_object_serial == UINT64_MAX) {
+		if (bridge->unit_origins.used_count() + bridge->raster_origins.used_count() >= QualificationBridge::UNIT_HISTORY_CAPACITY || slot == QualificationBridge::CHILD_CAPACITY || private_limit < refs_needed || records[bridge->library].private_refs > private_limit - refs_needed || !qualification_serial_capacity(4) || !rd->_qualification_free_event_available(false) || !rd->next_qualification_object_serial || rd->next_qualification_object_serial == UINT64_MAX) {
 			return result(ERR_PARAMETER_RANGE_ERROR, 19);
 		}
 		if (rd->_recording_error() != OK) {
@@ -770,6 +777,10 @@ void Registry::qualification_retire_step(QualificationBridge *bridge, RenderingD
 			}
 		}
 		if (!child || !child->retiring) {
+			return;
+		}
+		if (child->raster) {
+			qualification_raster_retire_step(bridge, rd, serial);
 			return;
 		}
 		bool failed = false;
@@ -1185,6 +1196,19 @@ Error Registry::qualification_cleanup_retire_matches_original_child_locked(Quali
 		}
 		return OK;
 	}
+	if (kind == 19) {
+		GDExtensionQualificationRasterRetireRequestV1 q;
+		memcpy(&q, bytes, sizeof(q));
+		if (q.raster.registry_instance != instance) {
+			return ERR_DOES_NOT_EXIST;
+		}
+		for (auto *child : bridge->units) {
+			if (child && child->raster && child->serial == q.raster.handle_serial && !child->creating && !child->acknowledged) {
+				return child->retiring && memcmp(&child->raster->retirement, &q, sizeof(q)) ? ERR_INVALID_DATA : OK;
+			}
+		}
+		return ERR_DOES_NOT_EXIST;
+	}
 	if (kind == 5) {
 		GDExtensionNativeUnitRetireRequestV1 request;
 		memcpy(&request, bytes, sizeof(request));
@@ -1197,7 +1221,7 @@ Error Registry::qualification_cleanup_retire_matches_original_child_locked(Quali
 				}
 			}
 		}
-		if (!child || child->creating || child->acknowledged) {
+		if (!child || child->raster || child->creating || child->acknowledged) {
 			return ERR_DOES_NOT_EXIST;
 		}
 		if (child->retiring && child->report.retire_operation != request.retire_operation) {
@@ -1390,7 +1414,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_native_unit_retire_obse
 		}
 		if (retire.registry_instance == instance) {
 			for (auto *child : bridge->units) {
-				if (child && child->retiring && !child->acknowledged && child->retire_serial && child->retire_serial == retire.handle_serial) {
+				if (child && !child->raster && child->retiring && !child->acknowledged && child->retire_serial && child->retire_serial == retire.handle_serial) {
 					serial = child->serial;
 					break;
 				}
@@ -1467,7 +1491,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_native_unit_retire_rele
 		return result(ERR_INVALID_DATA, 17);
 	}
 	for (auto *&child : bridge->units) {
-		if (child && child->retiring && !child->acknowledged && child->retire_serial == retire.handle_serial) {
+		if (child && !child->raster && child->retiring && !child->acknowledged && child->retire_serial == retire.handle_serial) {
 			if (child->maintenance_error != OK || child->report.state != 1 || child->report.return_status != 1 || child->report.reason || child->report.native_error || child->report.native_code || child->report.unresolved_mask || child->report.freed_mask != child->backing.known_mask || child->backing.possible_mask) {
 				return result(ERR_BUSY, 16);
 			}
@@ -1541,6 +1565,18 @@ static GDExtensionDeviceSessionResultV1 storage_retire_observe(GDExtensionQualif
 static GDExtensionDeviceSessionResultV1 storage_retire_release(GDExtensionQualificationBridgeRefV1 b, GDExtensionStorageRetireRefV1 r) {
 	return Registry::get_singleton().qualification_storage_retire_release(b, r);
 }
+static GDExtensionDeviceSessionResultV1 raster_unit_create(GDExtensionQualificationBridgeRefV1 b, const GDExtensionQualificationRasterCreateV1 *q, const void *p, uint64_t n, GDExtensionQualificationRasterBackingV1 *o) {
+	return Registry::get_singleton().qualification_raster_unit_create(b, q, p, n, o);
+}
+static GDExtensionDeviceSessionResultV1 raster_unit_retire(GDExtensionQualificationBridgeRefV1 b, const GDExtensionQualificationRasterRetireRequestV1 *q, GDExtensionQualificationRasterRetireRefV1 *r, GDExtensionQualificationRasterRetireReportV1 *o) {
+	return Registry::get_singleton().qualification_raster_unit_retire(b, q, r, o);
+}
+static GDExtensionDeviceSessionResultV1 raster_unit_retire_observe(GDExtensionQualificationBridgeRefV1 b, GDExtensionQualificationRasterRetireRefV1 r, const GDExtensionQualificationBudgetV1 *q, GDExtensionQualificationRasterRetireReportV1 *o) {
+	return Registry::get_singleton().qualification_raster_unit_retire_observe(b, r, q, o);
+}
+static GDExtensionDeviceSessionResultV1 raster_unit_retire_release(GDExtensionQualificationBridgeRefV1 b, GDExtensionQualificationRasterRetireRefV1 r) {
+	return Registry::get_singleton().qualification_raster_unit_retire_release(b, r);
+}
 static GDExtensionDeviceSessionResultV1 native_unit_create(GDExtensionQualificationBridgeRefV1 b, const GDExtensionNativeUnitCreateRequestV1 *q, const void *p, uint64_t n, GDExtensionNativeUnitBackingV1 *o) {
 	return Registry::get_singleton().qualification_native_unit_create(b, q, p, n, o);
 }
@@ -1604,6 +1640,14 @@ static GDExtensionDeviceSessionResultV1 record_prepared_v2(GDExtensionQualificat
 static GDExtensionDeviceSessionResultV1 record_prepared_v3(GDExtensionQualificationBridgeRefV1 b, GDExtensionQualificationTicketRefV1 t, const GDExtensionQualificationRecordV3 *q, GDExtensionQualificationReportV2 *o) {
 	return Registry::get_singleton().qualification_record_prepared_v3(b, t, q, o);
 }
+static GDExtensionDeviceSessionResultV1 record_prepared_v4(GDExtensionQualificationBridgeRefV1 b, GDExtensionQualificationTicketRefV1 t, const GDExtensionQualificationRecordV4 *q, const GDExtensionQualificationDepthDrawV1 *d, uint32_t n, const void *p, uint64_t z, GDExtensionQualificationReportV3 *o) {
+	return Registry::get_singleton().qualification_record_prepared_v4(b, t, q, d, n, p, z, o);
+}
+static GDExtensionDeviceSessionResultV1 observe_v3(GDExtensionQualificationBridgeRefV1 b, GDExtensionQualificationTicketRefV1 t, const GDExtensionQualificationBudgetV1 *q, GDExtensionQualificationReportV3 *o) {
+	return Registry::get_singleton().qualification_observe_v3(b, t, q, o);
+}
+static_assert(std::is_same_v<decltype(&record_prepared_v4), GDExtensionInterfaceDeviceSessionQualificationRecordPreparedV4>);
+static_assert(std::is_same_v<decltype(&observe_v3), GDExtensionInterfaceDeviceSessionQualificationObserveV3>);
 static GDExtensionDeviceSessionResultV1 observe_v2(GDExtensionQualificationBridgeRefV1 b, GDExtensionQualificationTicketRefV1 t, const GDExtensionQualificationBudgetV1 *q, GDExtensionQualificationReportV2 *o) {
 	return Registry::get_singleton().qualification_observe_v2(b, t, q, o);
 }
@@ -1649,6 +1693,8 @@ void register_qualification_interfaces() {
 	GDExtension::register_interface_function("device_session_qualification_prepare_uploads_v2", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&prepare_uploads_v2));
 	GDExtension::register_interface_function("device_session_qualification_record_prepared_v2", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&record_prepared_v2));
 	GDExtension::register_interface_function("device_session_qualification_record_prepared_v3", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&record_prepared_v3));
+	GDExtension::register_interface_function("device_session_qualification_record_prepared_v4", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&record_prepared_v4));
+	GDExtension::register_interface_function("device_session_qualification_observe_v3", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&observe_v3));
 	GDExtension::register_interface_function("device_session_qualification_observe_v2", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&observe_v2));
 	GDExtension::register_interface_function("device_session_qualification_upload_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&upload));
 	GDExtension::register_interface_function("device_session_qualification_record_prepared_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&record_prepared));
@@ -1658,6 +1704,10 @@ void register_qualification_interfaces() {
 	GDExtension::register_interface_function("device_session_qualification_storage_retire_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&storage_retire));
 	GDExtension::register_interface_function("device_session_qualification_storage_retire_observe_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&storage_retire_observe));
 	GDExtension::register_interface_function("device_session_qualification_storage_retire_release_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&storage_retire_release));
+	GDExtension::register_interface_function("device_session_qualification_raster_unit_create_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&raster_unit_create));
+	GDExtension::register_interface_function("device_session_qualification_raster_unit_retire_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&raster_unit_retire));
+	GDExtension::register_interface_function("device_session_qualification_raster_unit_retire_observe_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&raster_unit_retire_observe));
+	GDExtension::register_interface_function("device_session_qualification_raster_unit_retire_release_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&raster_unit_retire_release));
 	GDExtension::register_interface_function("device_session_qualification_native_unit_create_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&native_unit_create));
 	GDExtension::register_interface_function("device_session_qualification_native_unit_retire_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&native_unit_retire));
 	GDExtension::register_interface_function("device_session_qualification_native_unit_retire_observe_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&native_unit_retire_observe));

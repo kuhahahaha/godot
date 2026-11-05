@@ -6496,6 +6496,10 @@
                 {
                     "name": "GDEXTENSION_QUALIFICATION_TEXTURE_FORMAT_RGBA8_V1",
                     "value": 2
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_TEXTURE_FORMAT_D32_SFLOAT_V1",
+                    "value": 3
                 }
             ]
         },
@@ -7743,6 +7747,552 @@
                 {
                     "name": "segment",
                     "type": "GDExtensionProductionSegmentV1"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationTextureUsageV1",
+            "kind": "enum",
+            "values": [
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_TEXTURE_USAGE_SAMPLING_V1",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_TEXTURE_USAGE_STORAGE_V1",
+                    "value": 2
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_TEXTURE_USAGE_DEPTH_ATTACHMENT_V1",
+                    "value": 4
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationRasterProfileV1",
+            "kind": "enum",
+            "values": [
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_RASTER_PROFILE_INVALID_V1",
+                    "value": 0
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_RASTER_PROFILE_PROCEDURAL_DEPTH_V1",
+                    "value": 1
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationRasterPhysicalBitsV1",
+            "kind": "enum",
+            "values": [
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_RASTER_SHADER_BIT_V1",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_RASTER_PIPELINE_BIT_V1",
+                    "value": 2
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_RASTER_FRAMEBUFFER_BIT_V1",
+                    "value": 4
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationRtDepthKindV1",
+            "kind": "enum",
+            "values": [
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_RT_RASTER_CREATE_V1",
+                    "value": 18
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_RT_RASTER_RETIRE_V1",
+                    "value": 19
+                },
+                {
+                    "name": "GDEXTENSION_QUALIFICATION_RT_RECORD_PREPARED_V4",
+                    "value": 20
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationRasterRefV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "handle_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationRasterRetireRefV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "handle_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationRasterCreateV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "source",
+                    "type": "GDExtensionQualificationSourceV1"
+                },
+                {
+                    "name": "unit",
+                    "type": "GDExtensionNativeUnitCreateRequestV1"
+                },
+                {
+                    "name": "target",
+                    "type": "GDExtensionQualificationResourceRefV1"
+                },
+                {
+                    "name": "target_object_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "profile",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "push_constant_bytes",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationRasterBackingV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "raster",
+                    "type": "GDExtensionQualificationRasterRefV1"
+                },
+                {
+                    "name": "source",
+                    "type": "GDExtensionQualificationSourceV1"
+                },
+                {
+                    "name": "target",
+                    "type": "GDExtensionQualificationResourceRefV1"
+                },
+                {
+                    "name": "target_object_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "shader_rid",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "pipeline_rid",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "framebuffer_rid",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "shader_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "pipeline_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "framebuffer_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "known_mask",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "possible_mask",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "state",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "effective_flags",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "native_error",
+                    "type": "int32_t"
+                },
+                {
+                    "name": "phase",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "event_seq",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationRasterRetireRequestV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "raster",
+                    "type": "GDExtensionQualificationRasterRefV1"
+                },
+                {
+                    "name": "retire_operation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationRasterRetireReportV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "raster",
+                    "type": "GDExtensionQualificationRasterRefV1"
+                },
+                {
+                    "name": "state",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "return_status",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "enqueued_mask",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "freed_mask",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "absent_mask",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "unresolved_mask",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "shader_frame_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "pipeline_frame_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "framebuffer_frame_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "shader_rid",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "pipeline_rid",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "framebuffer_rid",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "shader_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "pipeline_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "framebuffer_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "shader_frame_epoch",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "pipeline_frame_epoch",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "framebuffer_frame_epoch",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "shader_free_event_seq",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "pipeline_free_event_seq",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "framebuffer_free_event_seq",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "dependency_set_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "report_revision",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "native_error",
+                    "type": "int32_t"
+                },
+                {
+                    "name": "reason",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "native_code",
+                    "type": "int64_t"
+                },
+                {
+                    "name": "retire_operation",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationDepthPassV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "source",
+                    "type": "GDExtensionQualificationSourceV1"
+                },
+                {
+                    "name": "raster",
+                    "type": "GDExtensionQualificationRasterRefV1"
+                },
+                {
+                    "name": "target",
+                    "type": "GDExtensionQualificationResourceRefV1"
+                },
+                {
+                    "name": "target_object_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "expected_content_revision",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationDepthDrawV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "scissor_x",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "scissor_y",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "scissor_width",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "scissor_height",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "procedural_vertices",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "instances",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "push_offset",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "push_size",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationRecordV4",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "record",
+                    "type": "GDExtensionQualificationRecordV3"
+                },
+                {
+                    "name": "depth",
+                    "type": "GDExtensionQualificationDepthPassV1"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationDepthReportV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "source",
+                    "type": "GDExtensionQualificationSourceV1"
+                },
+                {
+                    "name": "raster",
+                    "type": "GDExtensionQualificationRasterRefV1"
+                },
+                {
+                    "name": "target",
+                    "type": "GDExtensionQualificationResourceRefV1"
+                },
+                {
+                    "name": "target_object_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "content_revision",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "report_revision",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "state",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "native_error",
+                    "type": "int32_t"
+                },
+                {
+                    "name": "phase",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "list_state",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "begin_fact",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "clear_fact",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "end_fact",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "cleanup_end_fact",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "first_draw_fact",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "known_draw_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "possible_draw_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "required_draw_count",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionQualificationReportV3",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "record",
+                    "type": "GDExtensionQualificationReportV2"
+                },
+                {
+                    "name": "depth",
+                    "type": "GDExtensionQualificationDepthReportV1"
                 }
             ]
         }
@@ -17933,6 +18483,285 @@
                 "type": "GDExtensionDeviceSessionResultV1",
                 "description": [
                     "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_raster_unit_create_v1",
+            "since": "4.7",
+            "description": [
+                "Original finite bridge-owned depth raster child. Shader, render pipeline and internal framebuffer retain separate actual physical return facts; observed RIDs never authorize admission."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous in-process bridge."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "const GDExtensionQualificationRasterCreateV1*",
+                    "description": [
+                        "Synchronous in-process request."
+                    ]
+                },
+                {
+                    "name": "container_bytes",
+                    "type": "const void*",
+                    "description": [
+                        "Synchronous in-process container bytes."
+                    ]
+                },
+                {
+                    "name": "byte_count",
+                    "type": "uint64_t",
+                    "description": [
+                        "Synchronous in-process byte count."
+                    ]
+                },
+                {
+                    "name": "out_backing",
+                    "type": "GDExtensionQualificationRasterBackingV1*",
+                    "description": [
+                        "Synchronous in-process out backing."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_raster_unit_retire_v1",
+            "since": "4.7",
+            "description": [
+                "Original finite bridge-owned depth raster child. Shader, render pipeline and internal framebuffer retain separate actual physical return facts; observed RIDs never authorize admission."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous in-process bridge."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "const GDExtensionQualificationRasterRetireRequestV1*",
+                    "description": [
+                        "Synchronous in-process request."
+                    ]
+                },
+                {
+                    "name": "out_retire",
+                    "type": "GDExtensionQualificationRasterRetireRefV1*",
+                    "description": [
+                        "Synchronous in-process out retire."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionQualificationRasterRetireReportV1*",
+                    "description": [
+                        "Synchronous in-process out report."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_raster_unit_retire_observe_v1",
+            "since": "4.7",
+            "description": [
+                "Original finite bridge-owned depth raster child. Shader, render pipeline and internal framebuffer retain separate actual physical return facts; observed RIDs never authorize admission."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous in-process bridge."
+                    ]
+                },
+                {
+                    "name": "retire",
+                    "type": "GDExtensionQualificationRasterRetireRefV1",
+                    "description": [
+                        "Synchronous in-process retire."
+                    ]
+                },
+                {
+                    "name": "budget",
+                    "type": "const GDExtensionQualificationBudgetV1*",
+                    "description": [
+                        "Synchronous in-process budget."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionQualificationRasterRetireReportV1*",
+                    "description": [
+                        "Synchronous in-process out report."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_raster_unit_retire_release_v1",
+            "since": "4.7",
+            "description": [
+                "Original finite bridge-owned depth raster child. Shader, render pipeline and internal framebuffer retain separate actual physical return facts; observed RIDs never authorize admission."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous in-process bridge."
+                    ]
+                },
+                {
+                    "name": "retire",
+                    "type": "GDExtensionQualificationRasterRetireRefV1",
+                    "description": [
+                        "Synchronous in-process retire."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_record_prepared_v4",
+            "since": "4.7",
+            "description": [
+                "Atomically records the original same-ticket depth producer before compute/sample/readback. Original operation range authenticates provenance, independently of native fact/draw capacities; cleanup end never publishes produced content."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous in-process bridge."
+                    ]
+                },
+                {
+                    "name": "ticket",
+                    "type": "GDExtensionQualificationTicketRefV1",
+                    "description": [
+                        "Synchronous in-process ticket."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "const GDExtensionQualificationRecordV4*",
+                    "description": [
+                        "Synchronous in-process request."
+                    ]
+                },
+                {
+                    "name": "draws",
+                    "type": "const GDExtensionQualificationDepthDrawV1*",
+                    "description": [
+                        "Copied or synchronously borrowed within the original admitted finite payload."
+                    ]
+                },
+                {
+                    "name": "draw_count",
+                    "type": "uint32_t",
+                    "description": [
+                        "Copied or synchronously borrowed within the original admitted finite payload."
+                    ]
+                },
+                {
+                    "name": "push_bytes",
+                    "type": "const void*",
+                    "description": [
+                        "Copied or synchronously borrowed within the original admitted finite payload."
+                    ]
+                },
+                {
+                    "name": "push_byte_count",
+                    "type": "uint64_t",
+                    "description": [
+                        "Copied or synchronously borrowed within the original admitted finite payload."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionQualificationReportV3*",
+                    "description": [
+                        "Synchronous in-process out report."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
+                ]
+            }
+        },
+        {
+            "name": "device_session_qualification_observe_v3",
+            "since": "4.7",
+            "description": [
+                "Observes the same original ticket, depth report and original fact ledger. No separate completion or caller-supplied success state."
+            ],
+            "arguments": [
+                {
+                    "name": "bridge",
+                    "type": "GDExtensionQualificationBridgeRefV1",
+                    "description": [
+                        "Synchronous in-process bridge."
+                    ]
+                },
+                {
+                    "name": "ticket",
+                    "type": "GDExtensionQualificationTicketRefV1",
+                    "description": [
+                        "Synchronous in-process ticket."
+                    ]
+                },
+                {
+                    "name": "budget",
+                    "type": "const GDExtensionQualificationBudgetV1*",
+                    "description": [
+                        "Synchronous in-process budget."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionQualificationReportV3*",
+                    "description": [
+                        "Synchronous in-process out report."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original native Error/reason observation. A possible effect requires a retained original child/ticket, never an unowned bare error."
                 ]
             }
         }

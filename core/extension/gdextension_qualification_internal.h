@@ -125,6 +125,17 @@ struct QualificationTicket {
 	GDExtensionQualificationRecordV2 range_origin = {};
 	OriginalOperationIdentity operation;
 	bool operation_bound = false;
+	// Same original ticket owns the producer and every draw's real fact span.
+	GDExtensionQualificationRecordV4 depth_origin = {};
+	GDExtensionQualificationDepthReportV1 depth_report = {};
+	struct DepthDraw {
+		GDExtensionQualificationDepthDrawV1 origin = {};
+		uint32_t first_fact = UINT32_MAX, fact_count = 0;
+	};
+	LocalVector<DepthDraw> depth_draws;
+	Vector<uint8_t> depth_push;
+	bool depth_bound = false;
+
 	CheckedRecordAppend capture_append, body_append;
 	bool multi_readback = false;
 	uint64_t additional_readback_serials[2] = {};
@@ -303,6 +314,7 @@ struct QualificationRtCell {
 	Vector<uint8_t> request, payload, result;
 	Vector<GDExtensionQualificationUploadSegmentV1> segments;
 	uint64_t serial = 0, retired_operation = 0, cleanup_child_serial = 0;
+	uint64_t raster_serial = 0;
 	QualificationTicket *ticket = nullptr;
 	LocalVector<QualificationResource *> resource_refs;
 	GDExtensionDeviceSessionResultV1 call_result = {};
@@ -350,6 +362,7 @@ struct Registry::QualificationBridge {
 	static constexpr uint32_t UNIT_HISTORY_CAPACITY = CHILD_CAPACITY * 2;
 	QualificationChildHistory<GDExtensionStorageCreateRequestV1, STORAGE_HISTORY_CAPACITY> storage_origins;
 	QualificationChildHistory<GDExtensionNativeUnitCreateRequestV1, UNIT_HISTORY_CAPACITY> unit_origins;
+	QualificationChildHistory<GDExtensionQualificationRasterCreateV1, UNIT_HISTORY_CAPACITY> raster_origins;
 	struct Storage {
 		uint64_t serial = 0, retire_serial = 0, dependency_serial = 0;
 		uint32_t history_index = UINT32_MAX;
@@ -365,6 +378,10 @@ struct Registry::QualificationBridge {
 	// retire transaction must bind this cell before it can be admitted by wire.
 	struct Texture : QualificationResource {
 		GDExtensionQualificationTextureCreateV1 origin = {};
+		// Published only by the original complete known depth business end.
+		// Pending descriptor admission never writes these content observations.
+		uint64_t produced_ticket = 0, produced_raster = 0, content_revision = 0;
+		OriginalOperationIdentity produced_operation;
 	};
 	struct Sampler : QualificationResource {
 		GDExtensionQualificationSamplerCreateV1 origin = {};
@@ -373,7 +390,19 @@ struct Registry::QualificationBridge {
 		GDExtensionQualificationSetCreateV1 origin = {};
 		LocalVector<GDExtensionQualificationUniformBindingV1> bindings;
 	};
+	struct RasterPayload {
+		GDExtensionQualificationRasterCreateV1 origin = {};
+		GDExtensionQualificationRasterBackingV1 backing = {};
+		GDExtensionQualificationRasterRetireRequestV1 retirement = {};
+		GDExtensionQualificationRasterRetireReportV1 report = {};
+		QualificationPhysicalReturn framebuffer;
+		QualificationResource *target = nullptr;
+		bool target_held = false;
+	};
 	struct NativeUnit {
+		// Both profiles consume the original shared unit slot and origin envelope.
+		RasterPayload *raster = nullptr;
+		uint32_t accepted_rt_refs = 0;
 		uint64_t serial = 0, retire_serial = 0, dependency_serial = 0;
 		uint32_t history_index = UINT32_MAX;
 		GDExtensionNativeUnitCreateRequestV1 origin = {};
@@ -440,7 +469,7 @@ inline void Registry::QualificationBridge::collect_retired_children_locked() {
 		child = nullptr;
 	}
 	for (auto *&child : bridge->units) {
-		if (!child || !child->acknowledged || child->history_index == UINT32_MAX || (bridge->rt && bridge->rt->occupied && bridge->rt->cleanup_child_serial == child->serial) || child->creating || child->queued || child->queue_ref_credit || child->cleanup_serial_reserved || child->maintenance_error != OK || referenced(child->shader) || referenced(child->pipeline)) {
+		if (!child || !child->acknowledged || child->history_index == UINT32_MAX || (bridge->rt && bridge->rt->occupied && bridge->rt->cleanup_child_serial == child->serial) || child->creating || child->queued || child->queue_ref_credit || child->cleanup_serial_reserved || child->maintenance_error != OK || child->accepted_rt_refs || referenced(child->shader) || referenced(child->pipeline) || (child->raster && referenced(child->raster->framebuffer))) {
 			continue;
 		}
 		{
@@ -450,7 +479,18 @@ inline void Registry::QualificationBridge::collect_retired_children_locked() {
 				continue;
 			}
 		}
-		bridge->unit_origins.archive_retired_origin(child->history_index, child->serial, child->retire_serial);
+		if (child->raster) {
+			{
+				MutexLock framebuffer_lock(child->raster->framebuffer.mutex);
+				if (!returned(child->raster->framebuffer) || child->raster->target_held) {
+					continue;
+				}
+			}
+			bridge->raster_origins.archive_retired_origin(child->history_index, child->serial, child->retire_serial);
+			memdelete(child->raster);
+		} else {
+			bridge->unit_origins.archive_retired_origin(child->history_index, child->serial, child->retire_serial);
+		}
 		memdelete(child);
 		child = nullptr;
 	}
@@ -465,10 +505,10 @@ inline Registry::QualificationBridge::ChildMetadataStats Registry::Qualification
 #endif
 	stats.bridge_request_bytes = sizeof(*this) + allocator_header;
 	stats.storage_origin_credits = storage_origins.used_count();
-	stats.unit_origin_credits = unit_origins.used_count();
+	stats.unit_origin_credits = unit_origins.used_count() + raster_origins.used_count();
 	stats.storage_cold_origins = storage_origins.retired_count();
-	stats.unit_cold_origins = unit_origins.retired_count();
-	stats.origin_arena_request_bytes = storage_origins.allocated_bytes() + unit_origins.allocated_bytes();
+	stats.unit_cold_origins = unit_origins.retired_count() + raster_origins.retired_count();
+	stats.origin_arena_request_bytes = storage_origins.allocated_bytes() + unit_origins.allocated_bytes() + raster_origins.allocated_bytes();
 	const auto pin_bytes = [&](const QualificationPhysicalReturn &cell) {
 		const uint64_t capacity = cell.uses.get_capacity();
 		return capacity ? capacity * sizeof(QualificationTicket *) + allocator_header : 0;
@@ -496,6 +536,10 @@ inline Registry::QualificationBridge::ChildMetadataStats Registry::Qualification
 		++stats.unit_hot_cells;
 		stats.hot_cell_request_bytes += sizeof(*child) + allocator_header;
 		stats.physical_pin_request_bytes += pin_bytes(child->shader) + pin_bytes(child->pipeline);
+		if (child->raster) {
+			stats.hot_cell_request_bytes += sizeof(*child->raster) + allocator_header;
+			stats.physical_pin_request_bytes += pin_bytes(child->raster->framebuffer);
+		}
 	}
 	return stats;
 }
