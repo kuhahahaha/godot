@@ -387,6 +387,76 @@ static GDExtensionBool guarded_entry(GDExtensionInterfaceGetProcAddress get_proc
 	}
 	return entry(get_proc, p_library, result);
 }
+// Exercise the getter actually selected and passed by open_library, rather
+// than querying the internal interface map or selecting a getter in the test.
+static constexpr const char *production_lookup_names[] = {
+	"device_session_production_quote_v1",
+	"device_session_production_accept_v1",
+	"device_session_production_install_record_receiver_v1",
+	"device_session_production_reserve_v1",
+	"device_session_production_record_schedule_v1",
+	"device_session_production_record_consume_v1",
+	"device_session_production_append_v1",
+	"device_session_production_close_segment_v1",
+	"device_session_production_ack_segment_v1",
+	"device_session_production_open_v1",
+	"device_session_production_set_create_v1",
+	"device_session_production_storage_create_v1",
+	"device_session_production_storage_retire_v1",
+	"device_session_production_storage_observe_v1",
+	"device_session_production_storage_release_v1",
+	"device_session_production_import_unit_v1",
+	"device_session_production_import_storage_v1",
+	"device_session_production_import_set_v1",
+	"device_session_production_prepare_dispatch_v1",
+	"device_session_production_prepare_copy_v1",
+	"device_session_production_prepare_upload_v1",
+	"device_session_production_prepare_readback_v1",
+	"device_session_production_observe_v1",
+	"device_session_production_facts_v1",
+	"device_session_production_copy_v1",
+	"device_session_production_cancel_v1",
+	"device_session_production_release_v1",
+	"device_session_production_close_v1",
+	"device_session_production_installation_observe_v1",
+};
+static_assert(sizeof(production_lookup_names) / sizeof(production_lookup_names[0]) == 29);
+static constexpr const char *common_lookup_names[] = {
+	"get_godot_version2",
+	"variant_get_ptr_builtin_method",
+	"device_exit_bootstrap_library_v1",
+};
+static GDExtensionInterfaceFunctionPtr guarded_common_lookup[3] = {}, legacy_common_lookup[3] = {};
+static bool guarded_production_lookup_seen = false, legacy_production_lookup_seen = false;
+static bool check_production_lookup(GDExtensionInterfaceGetProcAddress get_proc, bool guarded) {
+	bool matches = true;
+	for (const char *name : production_lookup_names) {
+		const bool visible = get_proc(name) != nullptr;
+		CHECK_MESSAGE(visible == guarded, "Production getter profile mismatch: ", name);
+		matches &= visible == guarded;
+	}
+	for (uint32_t i = 0; i < 3; ++i) {
+		auto found = get_proc(common_lookup_names[i]);
+		CHECK_MESSAGE(found != nullptr, "Common lookup disappeared: ", common_lookup_names[i]);
+		matches &= found != nullptr;
+		(guarded ? guarded_common_lookup : legacy_common_lookup)[i] = found;
+	}
+	// These original nonproduction guarded procedures retain their policy.
+	CHECK((get_proc("device_exit_register_guard_v1") != nullptr) == guarded);
+	CHECK((get_proc("device_session_bind_v1") != nullptr) == guarded);
+	return matches;
+}
+static GDExtensionBool production_guarded_entry(GDExtensionInterfaceGetProcAddress get_proc, GDExtensionClassLibraryPtr owner, GDExtensionInitialization *out) {
+	guarded_production_lookup_seen = check_production_lookup(get_proc, true);
+	return guarded_entry(get_proc, owner, out); // Original actual guard registration is still required.
+}
+static void lookup_initialize(void *, GDExtensionInitializationLevel) {}
+static void lookup_terminate(void *, GDExtensionInitializationLevel) {}
+static GDExtensionBool production_legacy_entry(GDExtensionInterfaceGetProcAddress get_proc, GDExtensionClassLibraryPtr, GDExtensionInitialization *out) {
+	legacy_production_lookup_seen = check_production_lookup(get_proc, false);
+	*out = { GDEXTENSION_INITIALIZATION_SCENE, nullptr, lookup_initialize, lookup_terminate };
+	return true; // Original version-zero bootstrap, with no typed enrollment or work.
+}
 TEST_CASE("[DeviceExit][TypedABI] scheduled scene Object survives editor binding checkpoint") {
 	cross_level_frees = 0;
 	cross_level_object = nullptr;
@@ -637,20 +707,35 @@ TEST_CASE("[DeviceExit][TypedABI] original producer identity survives code close
 
 TEST_CASE("[DeviceExit][TypedABI] version one selects guarded lookup and requires enrollment") {
 	guarded_lookup_seen = false;
+	guarded_production_lookup_seen = legacy_production_lookup_seen = false;
 	token = {};
 	hold = {};
 	Ref<GDExtensionFunctionLoader> loader;
 	loader.instantiate();
-	loader->set_initialization_function(guarded_entry);
+	loader->set_initialization_function(production_guarded_entry);
 	loader->set_device_exit_guard_version(1);
 	Ref<GDExtension> extension;
 	extension.instantiate();
 	REQUIRE(extension->open_library("libgodot://typed-production", loader) == OK);
 	CHECK(guarded_lookup_seen);
+	CHECK(guarded_production_lookup_seen);
 	REQUIRE(extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE) == OK);
 	REQUIRE(extension->preflight_exit(GDExtensionDeviceExit::CloseRoute::EXPLICIT) == OK);
 	REQUIRE(extension->deinitialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE) == OK);
 	CHECK(extension->close_library() == OK);
+
+	Ref<GDExtensionFunctionLoader> legacy_loader;
+	legacy_loader.instantiate();
+	legacy_loader->set_initialization_function(production_legacy_entry);
+	legacy_loader->set_device_exit_guard_version(0);
+	Ref<GDExtension> legacy_extension;
+	legacy_extension.instantiate();
+	REQUIRE(legacy_extension->open_library("libgodot://typed-production-legacy-lookup", legacy_loader) == OK);
+	CHECK(legacy_production_lookup_seen);
+	for (uint32_t i = 0; i < 3; ++i) {
+		CHECK(guarded_common_lookup[i] == legacy_common_lookup[i]);
+	}
+	CHECK(legacy_extension->close_library() == OK);
 }
 static GDExtensionBool missing_guard_entry(GDExtensionInterfaceGetProcAddress get_proc, GDExtensionClassLibraryPtr, GDExtensionInitialization *result) {
 	guarded_lookup_seen = get_proc("device_exit_register_guard_v1") != nullptr;

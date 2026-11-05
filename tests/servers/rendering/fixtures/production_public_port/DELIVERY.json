@@ -176,5 +176,108 @@
       "expected_names_match": true
     },
     "scope": "same production/lock/scope/watchdog behavior; platformClangCI still must rerun"
+  },
+  "platform_shadow_and_loader_followup": {
+    "base": "1b761af71505eb65b7b2547ed785437aab71ae47",
+    "ci_run": 41987284289,
+    "failed_jobs": [
+      127111536302,
+      127111536341,
+      127111536498,
+      127111536543,
+      127111536568,
+      127111536699,
+      127111536708
+    ],
+    "failure": "test-local zero at 1914 shadows zero at 1817; GCC -Werror=shadow and MSVC C4456/C2220",
+    "fix": "rename only inner zero and its use to release_zero",
+    "red_green": "original full TU RED1 and candidate GREEN0 with -Wshadow, DEV and non-DEV; actual D complete TU strict Wall/Wextra/Wshadow/missing-field-initializers GREEN0",
+    "loader_coverage": "same actual version-one FunctionLoader testcase; actual supplied guarded and legacy getters check all29; common3 remain nonnull with equal pointers; original enrollment/init/preflight/deinit/close preserved",
+    "source_files": {
+      "tests/core/extension/test_production_request.cpp": "7f5a5bb84a2325831bea7517820ef2665aa82297042462be0257c6e8c9b44be4",
+      "tests/core/object/test_device_exit_typed_abi.cpp": "2f92ab3db8fabf2faceb8c23cb00400197974d2139930f19a8735e047e320860"
+    },
+    "build": {
+      "exit_code": 0,
+      "seconds": 15.223047791980207,
+      "input_unchanged": true,
+      "host_sha256": "d730518019a9382d78d7460a44d1f907d130aa264c88cd50023842b7ee21e6a9"
+    },
+    "runtime": {
+      "loader": {
+        "exit": 0,
+        "seconds": 2.5841181250289083,
+        "cases": {
+          "successes": "1",
+          "failures": "0"
+        },
+        "assertions": {
+          "successes": "97",
+          "failures": "0"
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0,
+        "names": [
+          "[DeviceExit][TypedABI] version one selects guarded lookup and requires enrollment"
+        ]
+      },
+      "public": {
+        "exit": 0,
+        "seconds": 0.8027069999952801,
+        "cases": {
+          "successes": "2",
+          "failures": "0"
+        },
+        "assertions": {
+          "successes": "442",
+          "failures": "0"
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0,
+        "names": [
+          "[SceneTree][ProductionRequest] installed typed production port follows original owner RT FIFO and late ACK",
+          "[ProductionRequest] installed typed production procedures reject foreign references without enrollment"
+        ]
+      },
+      "request": {
+        "exit": 0,
+        "seconds": 0.8565406670095399,
+        "cases": {
+          "successes": "21",
+          "failures": "0"
+        },
+        "assertions": {
+          "successes": "11911",
+          "failures": "0"
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0,
+        "names": [
+          "[ProductionRequest] quote checks dimensions before reserving real cells",
+          "[ProductionRequest] forged metadata never resolves an original attachment",
+          "[ProductionRequest] payload retry is exact and the finite batch freezes before effects",
+          "[ProductionRequest] attachment quote retains each request command prefix",
+          "[ProductionRequest] actual accepted arena reserves two requests and refunds on close",
+          "[ProductionRequest] original entity hold blocks actual finalize until exact return",
+          "[ProductionRequest] device loss invalidates work but preserves unknown entity obligation",
+          "[ProductionRequest] refused finalize preserves original qualification close on same device",
+          "[SceneTree][ProductionRequest] singleton RS FIFO returns retained control to original owner",
+          "[SceneTree][ProductionRequest] refused singleton fixture never claims default record zero",
+          "[SceneTree][ProductionRequest] public Observe hands owner maintenance to original RS FIFO",
+          "[SceneTree][ProductionRequest] owned storage creates on RT and retires across bounded owner turns",
+          "[SceneTree][ProductionRequest] create Busy return then owner seal rejects retry without losing request",
+          "[SceneTree][ProductionRequest] owner set bindings survive FIFO Busy and input lifetime through actual RT create",
+          "[SceneTree][ProductionRequest] protected original FIFO frame issues and expires physical record context",
+          "[SceneTree][ProductionRequest] KEEP scope return closes prefix and owner ACK survives actual seal and close",
+          "[SceneTree][ProductionRequest] actual 64 append frame pause preserves original suffix without cancellation",
+          "[SceneTree][ProductionRequest] protected upload KnownPrefix returns exact same-parent suffix in later FIFO frame",
+          "[SceneTree][ProductionRequest] fresh accepted metadata frame rejects ordinary ClassDB record and deferred escape",
+          "[SceneTree][ProductionRequest] installed typed production port follows original owner RT FIFO and late ACK",
+          "[ProductionRequest] installed typed production procedures reject foreign references without enrollment"
+        ]
+      }
+    },
+    "local_evidence": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-ci-shadow-loader-20261105",
+    "scope": "CPU actual-loader and original FIFO only; new platform run, Mono managed execution and live GPU still pending"
   }
 }

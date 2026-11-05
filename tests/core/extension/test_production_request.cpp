@@ -1911,11 +1911,11 @@ struct Access {
 				// One explicit Core maintenance pass/receipt is authorized per slice.
 				// This is not the Runtime's outer service_children pass or a grant.
 				const uint64_t limit = 64 + uint64_t(request.capacity.native_memberships) * 4 + uint64_t(request.capacity.graph_memberships) * 16 + uint64_t(request.resource_count) * 8;
-				const auto zero = GDExtensionProductionServiceBudgetV1{ production_dto_abi<GDExtensionProductionServiceBudgetV1>(), 0, 0, 0, 0, 0 };
+				const auto release_zero = GDExtensionProductionServiceBudgetV1{ production_dto_abi<GDExtensionProductionServiceBudgetV1>(), 0, 0, 0, 0, 0 };
 				const uint64_t initial_next = request.next_control_serial;
 				const uint32_t initial_attempts = fixture.driver.release_attempts;
 				const uint32_t initial_issues = fixture.driver.issues, initial_polls = fixture.driver.polls, initial_retains = fixture.driver.retains;
-				test.check(__LINE__, fixture.port.release(ref, &zero, &test.release_remaining, &test.release_report).native_error == ERR_BUSY);
+				test.check(__LINE__, fixture.port.release(ref, &release_zero, &test.release_remaining, &test.release_report).native_error == ERR_BUSY);
 				test.check(__LINE__, request.control.state == ProductionControlState::OWNER_CONSUMED && request.next_control_serial == initial_next && test.release_report.service_pending == 0 && test.release_report.service_control_serial == 0 && fixture.driver.release_attempts == initial_attempts && fixture.driver.issues == initial_issues && fixture.driver.polls == initial_polls && fixture.driver.retains == initial_retains);
 				test.rendezvous(10); // Fill first; each Pending deadline is anchored afterwards.
 				GDExtensionProductionServiceBudgetV1 pending_budget = {};
