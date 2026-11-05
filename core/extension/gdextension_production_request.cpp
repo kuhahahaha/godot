@@ -1578,6 +1578,55 @@ bool Registry::production_output_pin_matches_locked(const ProductionOutputPin &p
 	const auto &cell = request.uses[pin.cell_index];
 	return native.object == &device && native.epoch == attachment.epoch && native.execution_thread == Thread::get_caller_id() && attachment.held_device == &device && cell.request == &request && cell.output_role == ProductionUseCell::OutputRole::NATIVE_CONSUMER && cell.output_consumer == &pin && cell.output_pin_serial == pin.serial && pin.cell_index >= request.use_count + request.binding_used;
 }
+Error Registry::production_output_pin_borrow(const ProductionOutputPin &source, RenderingDevice &device, ProductionOutputPin &pin) {
+	MutexLock lock(mutex);
+	if (&source == &pin || !pin.is_empty()) {
+		return ERR_ALREADY_IN_USE;
+	}
+	if (source.registry != this || !source.request || !production_output_pin_matches_locked(source, { instance, source.request_serial }, device)) {
+		return ERR_UNAUTHORIZED;
+	}
+	auto &request = *source.request;
+	auto &attachment = *request.attachment;
+	const auto &native = device_records[attachment.device];
+	const auto &record = records[attachment.library];
+	if (!record.occupied || record.snapshot.library_generation != attachment.library_generation || record.producer_registration_serial != attachment.producer_serial || !attachment.holder || attachment.holder->pending || attachment.holder->generation != attachment.library_generation || attachment.holder->handle_serial != record.producer_code_holder || !record.producer_attachment_identity) {
+		return ERR_INVALID_DATA;
+	}
+	if (!native.live || !device.is_main_instance || RenderingDevice::get_singleton() != &device) {
+		return ERR_UNAVAILABLE;
+	}
+	if (phase != Phase::RUNNING || device.native_finalization_returned || !request.frozen || request.cancelled || request.release_started || request.source_device_lost || attachment.closing || !attachment.opened || !record.attached || record.quiescing || record.close_started || record.close_error != OK || record.guard_enrollment != GuardEnrollment::QUALIFIED || device.production_finalization_started.load(std::memory_order_acquire)) {
+		return ERR_BUSY;
+	}
+	if (!request.next_output_pin_serial) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	if (request.use_count > request.capacity.resource_uses || request.binding_used > request.capacity.resource_uses - request.use_count) {
+		return ERR_INVALID_DATA;
+	}
+	const uint32_t begin = request.use_count + request.binding_used;
+	for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
+		auto &cell = request.uses[i];
+		if (cell.request != &request || cell.dependency.physical || cell.output_role != ProductionUseCell::OutputRole::UNUSED || cell.output_consumer || cell.output_pin_serial || cell.disposal_group_serial) {
+			continue;
+		}
+		// Retain the same accepted arena and its existing code/device lifetime.
+		// No native/source record or accepted capacity is created by this edge.
+		const uint64_t serial = request.next_output_pin_serial;
+		request.next_output_pin_serial = serial == UINT64_MAX ? 0 : serial + 1;
+		pin.registry = this;
+		pin.request = &request;
+		pin.request_serial = request.serial;
+		pin.serial = serial;
+		pin.cell_index = i;
+		cell.output_role = ProductionUseCell::OutputRole::NATIVE_CONSUMER;
+		cell.output_consumer = &pin;
+		cell.output_pin_serial = serial;
+		return OK;
+	}
+	return ERR_OUT_OF_MEMORY; // Only original UNUSED quoted cells can retain metadata.
+}
 Error Registry::production_output_unpin(ProductionOutputPin &pin) {
 	MutexLock lock(mutex);
 	if (!pin.registry) {

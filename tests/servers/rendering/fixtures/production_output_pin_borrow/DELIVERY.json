@@ -1,0 +1,136 @@
+{
+  "scope": "Original accepted request metadata custody only; not physical record/source/native-use/Host or full P4 grant",
+  "base_commit": "aaece16597",
+  "source_sha256": {
+    "core/extension/gdextension_library_exit_guard.h": "c9262ee5ba542a8804171a115b1dc99324be65796d051bc7a12a745cabb1c050",
+    "core/extension/gdextension_production_request.cpp": "50576c230db1c99db77b035c74f9592ef32bf5c7f5b25b48b0c191f4bec08dbf",
+    "tests/core/extension/test_production_request.cpp": "c92c37ff5deacaa08aa4407b1d44e0c69fde9f5d464811d817b21e18afc3d19b"
+  },
+  "freeze_sha256": "c1b9784bf5f1b92b7053089d12f3e932a26d080b053f71dd573b6ac29434a617",
+  "independent_review_sha256": "7274461bb991087cec2ac0e642438e3c65af70309cd0bce960c0183c50f2b9af",
+  "evidence": "work/b4-output-pin-borrow-20261105",
+  "red": {
+    "control": "deliberate creation-time next_action/graph/native restriction in new borrow method; not absent old baseline method",
+    "build_exit": 0,
+    "runtime": {
+      "exit": 1,
+      "host_sha256": "464417bc2c9f83f15521063b9e8a2da91b40fb731bbafca6c47fd361a5e05cd2"
+    },
+    "counts": {
+      "OverallResultsAsserts": {
+        "successes": "837",
+        "failures": "8"
+      },
+      "OverallResultsTestCases": {
+        "successes": "1",
+        "failures": "1"
+      }
+    },
+    "stdout_bytes": 0,
+    "stderr_bytes": 0,
+    "cleanup": "complete XML; both expected subcases retain original pin cleanup; original shader/pipeline free counters complete"
+  },
+  "green": {
+    "host_sha256": "b267d3d42ad601042671af98be42f92107a896badf0437f62a4f2e056ae1ebe3",
+    "results": {
+      "closure": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "1261",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "1",
+            "failures": "0"
+          }
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "request": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "13605",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "22",
+            "failures": "0"
+          }
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "material": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "983",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "3",
+            "failures": "0"
+          }
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "mesh": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "134",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "2",
+            "failures": "0"
+          }
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "public": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "875",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "2",
+            "failures": "0"
+          }
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "full": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "518841",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "2071",
+            "failures": "0"
+          }
+        },
+        "stdout_bytes": 571,
+        "stderr_bytes": 4017
+      }
+    }
+  },
+  "green_build_exit": 0,
+  "limits": [
+    "CPU strict original enrolled fixture, not actual GPU or Parts/P4 acceptance",
+    "No new layout fields or capacity growth; only UNUSED prequoted UseCells",
+    "Full stdout571/stderr4017 retained; all five focused groups empty",
+    "GCC alpha-only followup already committed; actual target GCC recheck pending CI",
+    "Finite metadata scan, no hard real-time bound claim"
+  ]
+}

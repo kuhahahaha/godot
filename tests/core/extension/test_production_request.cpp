@@ -735,7 +735,7 @@ struct Access {
 			const Error error = prepare_device(p_server);
 			return error == OK ? initialize_owner(loader_kind) : error;
 		}
-		Error initialize_owner(uint32_t loader_kind = 1, bool owned_storage = false, bool owned_set = false, GDExtensionDeviceExit::ProductionRecordReceiver receiver = nullptr, void *userdata = nullptr, bool keep_list = false, uint32_t record_actions = 1, bool upload_prefix = false, GDExtensionDeviceExit::ProductionMetadataReceiver metadata_receiver = nullptr, bool output_closure = false) {
+		Error initialize_owner(uint32_t loader_kind = 1, bool owned_storage = false, bool owned_set = false, GDExtensionDeviceExit::ProductionRecordReceiver receiver = nullptr, void *userdata = nullptr, bool keep_list = false, uint32_t record_actions = 1, bool upload_prefix = false, GDExtensionDeviceExit::ProductionMetadataReceiver metadata_receiver = nullptr, bool output_closure = false, bool output_borrow = false) {
 			using namespace GDExtensionDeviceExit;
 			if (public_port && !port.load()) {
 				return ERR_UNAVAILABLE;
@@ -833,6 +833,9 @@ struct Access {
 			if (output_closure) {
 				whole.resource_uses += 16;
 			}
+			if (output_borrow) {
+				whole.resource_uses += 2;
+			}
 			GDExtensionProductionMetadataQuoteV1 quote = {};
 			if (public_port) {
 				CHECK(port.quote(&Enrollment::ABI, ready, { instance, UINT64_MAX }, context, session, &whole, &quote).native_error != OK);
@@ -877,6 +880,9 @@ struct Access {
 			}
 			if (output_closure) {
 				single.resource_uses += 16;
+			}
+			if (output_borrow) {
+				single.resource_uses += 2;
 			}
 			const GDExtensionProductionOperationV1 operation = { GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionOperationV1>(), 91, 1, 10, 10 + record_actions };
 			const GDExtensionProductionActionV1 action = { 10, uint32_t(receiver && !upload_prefix ? GDEXTENSION_PRODUCTION_DISPATCH_V1 : GDEXTENSION_PRODUCTION_UPLOAD_V1), 0, 0, 1, uint32_t(keep_list ? GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1 : GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1), UINT32_MAX };
@@ -1449,12 +1455,12 @@ struct Access {
 	}
 	struct SplitSet {
 		bool record_window = false, keep_list = false, close_before_ack = false, budget_pause = false, upload_prefix = false;
-		bool public_port = false, output_closure = false, closure_retired = false, groups_settled = false, closure_rollback = false;
+		bool public_port = false, output_closure = false, closure_retired = false, groups_settled = false, closure_rollback = false, output_borrow = false;
 		uint64_t borrowed_group = 0, owned_group = 0, qualified_group = 0;
 		uint32_t nested_disposal_probes = 0, foreign_callback_calls = 0;
 		RID auxiliary_shader, auxiliary_pipeline, auxiliary_buffer, auxiliary_set;
 		NativeDisposalWitness auxiliary_buffer_witness, auxiliary_set_witness;
-		GDExtensionDeviceExit::ProductionOutputPin output_pin;
+		GDExtensionDeviceExit::ProductionOutputPin output_pin, borrowed_pin;
 		GDExtensionProductionAppendV1 upload_append = {};
 		uint32_t metadata_calls = 0;
 		bool metadata_returned = false, metadata_release = false;
@@ -1552,7 +1558,9 @@ struct Access {
 				test.check(__LINE__, registry.production_output_pin_matches(test.output_pin, ref, fixture.rd));
 				test.check(__LINE__, !registry.production_output_pin_matches(test.output_pin, { ref.registry_instance, UINT64_MAX }, fixture.rd));
 				test.check(__LINE__, registry.production_output_pin(context, ref, fixture.rd, test.output_pin) == ERR_ALREADY_IN_USE);
-				test.check(__LINE__, registry.production_output_pin(context, ref, fixture.rd, refused) == ERR_OUT_OF_MEMORY && refused.is_empty());
+				if (!test.output_borrow) {
+					test.check(__LINE__, registry.production_output_pin(context, ref, fixture.rd, refused) == ERR_OUT_OF_MEMORY && refused.is_empty());
+				}
 				ProductionOutputPin moved(std::move(test.output_pin));
 				test.check(__LINE__, test.output_pin.is_empty() && !moved.is_empty());
 				test.output_pin = std::move(moved);
@@ -1669,6 +1677,12 @@ struct Access {
 			if (test.public_port) {
 				GDExtensionDeviceExit::ProductionOutputPin too_late;
 				test.check(__LINE__, registry.production_output_pin(context, ref, fixture.rd, too_late) == ERR_BUSY && too_late.is_empty());
+				if (test.output_borrow) {
+					// Real original pin, actual appended work, same accepted spare cells.
+					const uint64_t before = request.revision;
+					test.check(__LINE__, registry.production_output_pin_borrow(test.output_pin, fixture.rd, test.borrowed_pin) == OK && !test.borrowed_pin.is_empty());
+					test.check(__LINE__, registry.production_output_pin_matches(test.borrowed_pin, ref, fixture.rd) && request.revision == before);
+				}
 			}
 			if (test.keep_list) {
 				test.check(__LINE__, request.compute_list_open && fixture.rd.compute_list.active);
@@ -1789,7 +1803,7 @@ struct Access {
 			using namespace GDExtensionDeviceExit;
 			fixture.driver.upload_mode = test.upload_prefix;
 			fixture.public_port = test.public_port;
-			test.initialized = fixture.initialize_owner(1, false, true, test.record_window ? &record_receiver : nullptr, &test, test.keep_list, test.budget_pause ? 65u : 1u, test.upload_prefix, (test.close_before_ack || test.public_port) ? &metadata_receiver : nullptr, test.output_closure);
+			test.initialized = fixture.initialize_owner(1, false, true, test.record_window ? &record_receiver : nullptr, &test, test.keep_list, test.budget_pause ? 65u : 1u, test.upload_prefix, (test.close_before_ack || test.public_port) ? &metadata_receiver : nullptr, test.output_closure, test.output_borrow);
 			if (test.initialized != OK) {
 				fixture.cleanup_owner();
 				test.done = true;
@@ -2126,6 +2140,10 @@ struct Access {
 				const uint32_t pinned_unit_uses = request.resources[0].use_count;
 				const auto blocked_budget = GDExtensionProductionServiceBudgetV1{ production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
 				test.check(__LINE__, registry.production_output_unpin(test.output_pin) == ERR_UNAUTHORIZED && !test.output_pin.is_empty());
+				if (test.output_borrow) {
+					ProductionOutputPin wrong_thread;
+					test.check(__LINE__, registry.production_output_pin_borrow(test.output_pin, fixture.rd, wrong_thread) == ERR_UNAUTHORIZED && wrong_thread.is_empty());
+				}
 				test.check(__LINE__, fixture.port.release(ref, &blocked_budget, &test.release_remaining, &test.release_report).native_error == ERR_BUSY);
 				test.check(__LINE__, request.serial == pinned_serial && request.revision == pinned_revision && request.next_control_serial == pinned_next && request.resources[0].use_count == pinned_unit_uses && request.control.state == ProductionControlState::OWNER_CONSUMED && test.release_report.service_pending == 0);
 				if (test.close_before_ack) {
@@ -2380,6 +2398,96 @@ struct Access {
 			test.owner_ready.post();
 		}
 	};
+	static void output_pin_borrow_checks(SingletonEnrollment &fixture, SplitSet &test) {
+		using namespace GDExtensionDeviceExit;
+		auto &registry = fixture.registry;
+		auto &request = *fixture.request;
+		auto &device = fixture.rd;
+		const GDExtensionProductionRequestRefV1 ref = { fixture.instance, request.serial };
+		const uint64_t revision = request.revision, graphs = request.graph_count, natives = request.native_count;
+		const uint32_t issues = fixture.driver.issues, polls = fixture.driver.polls, retains = fixture.driver.retains, releases = fixture.driver.releases;
+		CHECK_FALSE(test.output_pin.is_empty());
+		CHECK_FALSE(test.borrowed_pin.is_empty());
+		if (test.borrowed_pin.is_empty()) {
+			return; // A refused borrow still returns the true original pin below.
+		}
+		ProductionOutputPin refused;
+		const uint64_t serial = request.next_output_pin_serial;
+		if (request.cancelled || request.attachment->closing) {
+			// Closing/cancellation is from the original owner path, not a fake slot.
+			CHECK(registry.production_output_pin_borrow(test.output_pin, device, refused) == ERR_BUSY);
+			CHECK((refused.is_empty() && request.next_output_pin_serial == serial));
+			CHECK(registry.production_output_unpin(test.borrowed_pin) == OK);
+			return;
+		}
+		CHECK(registry.production_output_pin_borrow(test.output_pin, device, test.output_pin) == ERR_ALREADY_IN_USE);
+		CHECK(registry.production_output_pin_borrow(test.output_pin, device, test.borrowed_pin) == ERR_ALREADY_IN_USE);
+		ProductionOutputPin empty;
+		CHECK(registry.production_output_pin_borrow(empty, device, refused) == ERR_UNAUTHORIZED);
+		static Registry foreign_registry;
+		CHECK(foreign_registry.production_output_pin_borrow(test.output_pin, device, refused) == ERR_UNAUTHORIZED);
+		// One-field negative corruption at the original native owner; no alternate
+		// issuer, fabricated positive pin, or device rebind is constructed.
+		auto &native = registry.device_records[request.attachment->device];
+		const uint64_t epoch = native.epoch;
+		native.epoch = epoch + 1;
+		CHECK(registry.production_output_pin_borrow(test.output_pin, device, refused) == ERR_UNAUTHORIZED);
+		native.epoch = epoch;
+		const bool live = native.live;
+		native.live = false;
+		CHECK(registry.production_output_pin_borrow(test.output_pin, device, refused) == ERR_UNAVAILABLE);
+		native.live = live;
+		CHECK((refused.is_empty() && request.next_output_pin_serial == serial));
+		CHECK(registry.production_output_pin_matches(test.borrowed_pin, ref, device));
+		CHECK(registry.production_output_unpin(test.output_pin) == OK);
+		CHECK((test.output_pin.is_empty() && !test.borrowed_pin.is_empty()));
+		{
+			MutexLock lock(registry.mutex);
+			CHECK(registry.production_release_locked(request, &device, false).native_error == ERR_BUSY);
+			CHECK((request.serial == ref.handle_serial && !request.release_started));
+		}
+		// Every success occupies a distinct original prequoted use cell. Finite
+		// exhaustion is a clean refusal, with no allocation or native operation.
+		ProductionOutputPin extra[8];
+		uint32_t count = 0;
+		Error result = OK;
+		while (count < 8) {
+			result = registry.production_output_pin_borrow(test.borrowed_pin, device, extra[count]);
+			if (result != OK) {
+				break;
+			}
+			CHECK(registry.production_output_pin_matches(extra[count], ref, device));
+			++count;
+		}
+		CHECK((count > 0 && count < 8 && result == ERR_OUT_OF_MEMORY));
+		if (count) {
+			ProductionOutputPin moved(std::move(extra[0]));
+			CHECK((extra[0].is_empty() && registry.production_output_pin_matches(moved, ref, device)));
+			CHECK(registry.production_output_pin_borrow(extra[0], device, refused) == ERR_UNAUTHORIZED);
+			extra[0] = std::move(moved);
+			CHECK((moved.is_empty() && registry.production_output_pin_matches(extra[0], ref, device)));
+		}
+		const uint64_t exhausted_serial = request.next_output_pin_serial;
+		CHECK(registry.production_output_pin_borrow(test.borrowed_pin, device, refused) == ERR_OUT_OF_MEMORY);
+		CHECK((refused.is_empty() && request.next_output_pin_serial == exhausted_serial));
+		for (uint32_t i = 0; i < count; ++i) {
+			CHECK(registry.production_output_unpin(extra[i]) == OK);
+		}
+		// The real allocator's exhaustion boundary is sticky, never wrapped or
+		// reset for another positive. Existing live custody can still return.
+		request.next_output_pin_serial = UINT64_MAX;
+		ProductionOutputPin last;
+		CHECK(registry.production_output_pin_borrow(test.borrowed_pin, device, last) == OK);
+		CHECK(request.next_output_pin_serial == 0);
+		CHECK(registry.production_output_pin_borrow(test.borrowed_pin, device, refused) == ERR_PARAMETER_RANGE_ERROR);
+		CHECK((refused.is_empty() && request.next_output_pin_serial == 0));
+		CHECK(registry.production_output_unpin(last) == OK);
+		CHECK(registry.production_output_unpin(test.borrowed_pin) == OK);
+		CHECK(registry.production_output_pin_borrow(test.borrowed_pin, device, refused) == ERR_UNAUTHORIZED);
+		CHECK((test.borrowed_pin.is_empty() && refused.is_empty()));
+		CHECK((request.revision == revision && request.graph_count == graphs && request.native_count == natives));
+		CHECK((fixture.driver.issues == issues && fixture.driver.polls == polls && fixture.driver.retains == retains && fixture.driver.releases == releases));
+	}
 	static Error create_split_unit(SingletonEnrollment &fixture, GDExtensionNativeUnitBackingV1 &unit, uint32_t p_storage_bytes) {
 		Ref<UnitContainer> container;
 		container.instantiate();
@@ -2433,7 +2541,7 @@ struct Access {
 		}
 		return OK;
 	}
-	static void singleton_split_owner_set(bool record_window = false, bool keep_list = false, bool close_before_ack = false, bool budget_pause = false, bool upload_prefix = false, bool public_port = false, bool output_closure = false, bool closure_retired = false, bool closure_rollback = false) {
+	static void singleton_split_owner_set(bool record_window = false, bool keep_list = false, bool close_before_ack = false, bool budget_pause = false, bool upload_prefix = false, bool public_port = false, bool output_closure = false, bool closure_retired = false, bool closure_rollback = false, bool output_borrow = false) {
 		auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
 		if (!check_step(server && !server->create_thread && server->server_thread == Thread::get_caller_id() && !RenderingDevice::get_singleton())) {
 			return;
@@ -2449,6 +2557,7 @@ struct Access {
 		test.output_closure = output_closure;
 		test.closure_retired = closure_retired;
 		test.closure_rollback = closure_rollback;
+		test.output_borrow = output_borrow;
 		test.setup.server = server;
 		Thread owner;
 		owner.start(&split_owner_start<SplitSet>, &test);
@@ -2537,7 +2646,12 @@ struct Access {
 					fixture.rd.free_rid(test.auxiliary_shader);
 				}
 
-				CHECK(fixture.registry.production_output_unpin(test.output_pin) == OK);
+				if (test.output_borrow) {
+					output_pin_borrow_checks(fixture, test);
+				}
+				if (!test.output_pin.is_empty()) {
+					CHECK(fixture.registry.production_output_unpin(test.output_pin) == OK);
+				}
 				CHECK(test.output_pin.is_empty());
 				CHECK(fixture.registry.production_output_unpin(test.output_pin) == ERR_DOES_NOT_EXIST);
 			} else if (test.phase == 12) {
@@ -3672,6 +3786,12 @@ TEST_CASE("[SceneTree][ProductionRequest] installed typed production port follow
 	}
 	SUBCASE("Completed uncancelled plan returns through its original owner frame") {
 		TestProductionRequest::Access::singleton_split_owner_set(true, false, false, false, false, true);
+	}
+	SUBCASE("Metadata borrow from a true original pin retains the accepted arena after native recording") {
+		TestProductionRequest::Access::singleton_split_owner_set(true, false, false, false, false, true, false, false, false, true);
+	}
+	SUBCASE("Actual owner close refuses new metadata borrows while old custody returns") {
+		TestProductionRequest::Access::singleton_split_owner_set(true, false, true, false, false, true, false, false, false, true);
 	}
 }
 #endif

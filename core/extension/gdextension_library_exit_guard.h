@@ -854,6 +854,9 @@ private:
 	struct ProductionPhysicalFrame;
 	static thread_local ProductionPhysicalFrame *production_physical_frame;
 	Error production_output_pin(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, RenderingDevice &, ProductionOutputPin &);
+	// Metadata custody only, from an existing original pin into a spare quoted cell.
+	// This never issues a physical context, source permission or native read use.
+	Error production_output_pin_borrow(const ProductionOutputPin &, RenderingDevice &, ProductionOutputPin &);
 	Error production_output_unpin(ProductionOutputPin &);
 	bool production_output_pin_matches(const ProductionOutputPin &, GDExtensionProductionRequestRefV1, RenderingDevice &);
 	bool production_output_graph_command_locked(const ProductionRequest &, const RenderingDevice &, uint32_t, uint32_t) const;
