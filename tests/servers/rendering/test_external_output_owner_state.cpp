@@ -41,7 +41,7 @@ namespace RendererRD {
 class TestExternalOutputOwnerStateAccess {
 	static PackedByteArray tag(uint32_t value) {
 		PackedByteArray bytes;
-		bytes.resize(32);
+		bytes.resize_initialized(32);
 		bytes.set(0, uint8_t(value));
 		return bytes;
 	}

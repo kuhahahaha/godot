@@ -1,0 +1,90 @@
+{
+  "source": "23bbd7080d1376e2429c41a518d3386dbdc33084",
+  "repository": "kuhahahaha/godot",
+  "run_id": 42064442735,
+  "patch_sha256": "2a7eca849b608be4ae0e5e7b198f8b5d01e23cb1dac1d4dd08a13e92777b45fb",
+  "base_files": {
+    "tests/servers/rendering/test_external_output_owner_state.cpp": "de3539e02ce85dc8100491515d50d19cd201718c72c18369c5c06476e9f94b49",
+    "tests/servers/rendering/test_qualification_ticket.cpp": "04bb9ee8a344683cbd7740b63c1f63412e52686edf673d037f55c722a65ec868"
+  },
+  "compiler": "x86_64-w64-mingw32-g++ (GCC) 15.2.0",
+  "red_exit": 1,
+  "green_exit": 0,
+  "local_compile_scope": "single test_qualification_ticket.cpp TU only; exact logged CI flags except paths normalized and output relocated to /tmp; green input candidate path",
+  "jobs": {
+    "127378035858": "MinGW release Compilation: Framebuffer::view_count may be used uninitialized",
+    "127378036580": "Linux minimal Unit tests: finite_policy selected_view/selected_slot mismatches then Bus error135",
+    "127378036424": "Linux Mono debug Unit tests: same finite_policy mismatches then Bus error135"
+  },
+  "tag_red": "Actual CI failures; no deterministic local poisoned allocator fixture run",
+  "engine_build_run_by_agent": false,
+  "remaining": "Full Windows/Linux/Apple/platform and GPU checks unresolved; local single-TU compile proves only reported compiler diagnostic fixed",
+  "final_source": [
+    {
+      "path": "tests/servers/rendering/test_external_output_owner_state.cpp",
+      "sha256": "1cee0ef0d2f939d022d62a81c98907c4390668a0d7ebef0dce2fd70ec03e3842"
+    },
+    {
+      "path": "tests/servers/rendering/test_qualification_ticket.cpp",
+      "sha256": "adb834a3cb687c630e62b4a8eee1c2937e92057ac0bc62ad08c1f811840df6b2"
+    }
+  ],
+  "build": {
+    "exit": 0,
+    "elapsed": 15.96900399995502
+  },
+  "runtime": {
+    "host_sha256": "3c91810bf133b9ae4fb9555141cefa6d1be7f5d5dcfe8905d8c094fbb5666de2",
+    "results": {
+      "finite": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "223",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "2",
+            "failures": "0",
+            "skipped": "2080"
+          }
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "ticket": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "45778",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "137",
+            "failures": "0",
+            "skipped": "1945"
+          }
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 776
+      },
+      "request": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "15256",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "22",
+            "failures": "0",
+            "skipped": "2060"
+          }
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      }
+    }
+  },
+  "limits": "Targeted host checks and actual GCC single-TU compile only; remote successor CI and other platforms remain unverified."
+}

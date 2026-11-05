@@ -75,6 +75,7 @@ public:
 		framebuffer.texture_ids.push_back(target);
 		framebuffer.framebuffer_cache = &cache;
 		framebuffer.size = Size2(8, 4);
+		framebuffer.view_count = 1;
 		const RID framebuffer_rid = device.framebuffer_owner.make_rid(framebuffer);
 		RenderingDevice::RenderPipeline pipeline;
 		pipeline.driver_id = RDD::PipelineID(5);
