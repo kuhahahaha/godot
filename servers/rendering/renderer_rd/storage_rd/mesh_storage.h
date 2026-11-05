@@ -92,6 +92,8 @@ private:
 		struct Surface {
 			RSE::PrimitiveType primitive = RSE::PRIMITIVE_POINTS;
 			bool external = false;
+			uint32_t immutable_holds = 0;
+			bool immutable_retired = false;
 			uint64_t external_generation = 0;
 			uint64_t current_allocation_generation = 0;
 			uint64_t previous_allocation_generation = 0;
@@ -248,6 +250,7 @@ private:
 	static void _mesh_surface_generate_external_version(Mesh::Surface::Version &v, Mesh::Surface *s, uint64_t p_input_mask, bool p_input_motion_vectors, bool p_point_size_emulated);
 	static void _mesh_surface_get_external_arrays(Mesh::Surface *s, uint64_t p_input_mask, bool p_input_motion_vectors, bool p_point_size_emulated, RID &r_vertex_array_rd, RD::VertexFormatID &r_vertex_format);
 	static void _mesh_surface_clear(Mesh *p_mesh, int p_surface);
+	static void _mesh_surface_dispose(Mesh::Surface *p_surface);
 
 	void _mesh_instance_clear(MeshInstance *mi);
 	void _mesh_instance_add_surface(MeshInstance *mi, Mesh *mesh, uint32_t p_surface);
@@ -444,6 +447,63 @@ public:
 		uint64_t previous_allocation_generation = 0;
 	};
 
+	// A strong original native geometry owner, not an output or material grant.
+	// Return explicitly only after the packet's original accepted uses close.
+	class NativeSurfaceHold {
+		friend class MeshStorage;
+		Mesh::Surface *surface = nullptr;
+		RenderingDevice *device = nullptr;
+		RD::NativeImmutableHold physical;
+		RID vertex_array, index_array;
+		RD::VertexFormatID vertex_format = 0;
+		RSE::PrimitiveType primitive = RSE::PRIMITIVE_TRIANGLES;
+		uint32_t vertex_count = 0, index_count = 0;
+		RID material; // Selection only; requires the independent native material hold.
+		uint64_t current_generation = 0, previous_generation = 0;
+
+	public:
+		NativeSurfaceHold() = default;
+		NativeSurfaceHold(const NativeSurfaceHold &) = delete;
+		NativeSurfaceHold &operator=(const NativeSurfaceHold &) = delete;
+		NativeSurfaceHold(NativeSurfaceHold &&other) { *this = static_cast<NativeSurfaceHold &&>(other); }
+		NativeSurfaceHold &operator=(NativeSurfaceHold &&other) {
+			if (this == &other) {
+				return *this;
+			}
+			CRASH_COND(device);
+			surface = other.surface;
+			device = other.device;
+			physical = static_cast<RD::NativeImmutableHold &&>(other.physical);
+			vertex_array = other.vertex_array;
+			index_array = other.index_array;
+			vertex_format = other.vertex_format;
+			primitive = other.primitive;
+			vertex_count = other.vertex_count;
+			index_count = other.index_count;
+			material = other.material;
+			current_generation = other.current_generation;
+			previous_generation = other.previous_generation;
+			other.surface = nullptr;
+			other.device = nullptr;
+			return *this;
+		}
+		~NativeSurfaceHold() { CRASH_COND(device); }
+		bool is_valid() const { return surface && physical.is_valid(); }
+		RID get_vertex_array() const { return is_valid() ? vertex_array : RID(); }
+		RID get_index_array() const { return is_valid() ? index_array : RID(); }
+		RD::VertexFormatID get_vertex_format() const { return is_valid() ? vertex_format : 0; }
+		RSE::PrimitiveType get_primitive() const { return primitive; }
+		uint32_t get_vertex_count() const { return is_valid() ? vertex_count : 0; }
+		uint32_t get_index_count() const { return is_valid() ? index_count : 0; }
+		RID get_material_selection() const { return is_valid() ? material : RID(); }
+	};
+	Error mesh_surface_hold_acquire(RID p_mesh, uint32_t p_surface, uint64_t p_input_mask, bool p_motion, bool p_point_size_emulated, uint32_t p_lod, NativeSurfaceHold &r_hold);
+	static Error mesh_surface_hold_release(NativeSurfaceHold &r_hold);
+
+private:
+	static Error _mesh_surface_hold_acquire(Mesh::Surface *p_surface, uint64_t p_input_mask, bool p_motion, bool p_point_size_emulated, uint32_t p_lod, NativeSurfaceHold &r_hold);
+
+public:
 	Error mesh_add_external_surface(RID p_mesh, const ExternalSurfaceDescriptor &p_surface, uint32_t &r_surface_index, uint64_t &r_generation);
 
 	virtual int mesh_get_blend_shape_count(RID p_mesh) const override;

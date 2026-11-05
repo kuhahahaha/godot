@@ -31,7 +31,6 @@
 #include "mesh_storage.h"
 
 #include "core/io/marshalls.h"
-
 #include "servers/rendering/render_capture_test_hooks.h"
 #include "servers/rendering/renderer_viewport.h"
 #include "servers/rendering/rendering_server.h"
@@ -681,8 +680,137 @@ void MeshStorage::_mesh_surface_generate_external_version(Mesh::Surface::Version
 	v.previous_allocation_generation = s->previous_allocation_generation;
 }
 
+Error MeshStorage::mesh_surface_hold_acquire(RID mesh_rid, uint32_t index, uint64_t mask, bool motion, bool point_size, uint32_t lod, NativeSurfaceHold &out) {
+	auto *device = RD::get_singleton();
+	if (!device || !device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (device->draw_list.active || device->compute_list.active || device->raytracing_list.active || device->draw_graph.has_driver_callbacks() || device->production_finalization_started.load(std::memory_order_acquire)) {
+		return ERR_BUSY;
+	}
+	auto *mesh = mesh_owner.get_or_null(mesh_rid);
+	if (!mesh || index >= mesh->surface_count) {
+		return ERR_DOES_NOT_EXIST;
+	}
+	if (out.device || mesh->surfaces[index]->immutable_retired || lod > mesh->surfaces[index]->lod_count) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (point_size || mesh->blend_shape_count || !mesh->instances.is_empty() || mesh->surfaces[index]->skin_buffer.is_valid()) {
+		return ERR_UNAVAILABLE;
+	}
+	RID array;
+	RD::VertexFormatID format = 0;
+	mesh_surface_get_vertex_arrays_and_format(mesh->surfaces[index], mask, motion, point_size, array, format);
+	if (array.is_null() || !format) {
+		return ERR_CANT_CREATE;
+	}
+	return _mesh_surface_hold_acquire(mesh->surfaces[index], mask, motion, point_size, lod, out);
+}
+
+Error MeshStorage::_mesh_surface_hold_acquire(Mesh::Surface *surface, uint64_t mask, bool motion, bool point_size, uint32_t lod, NativeSurfaceHold &out) {
+	auto *device = RD::get_singleton();
+	if (!device || !device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (!surface || out.device || surface->immutable_retired || surface->immutable_holds == UINT32_MAX || point_size || lod > surface->lod_count) {
+		return ERR_INVALID_PARAMETER;
+	}
+	RID vertex_array;
+	RD::VertexFormatID format = 0;
+	{
+		surface->version_lock.lock();
+		for (uint32_t i = 0; i < surface->version_count; ++i) {
+			const auto &version = surface->versions[i];
+			if (version.input_mask != mask || version.input_motion_vectors != motion || version.point_size_emulated != point_size) {
+				continue;
+			}
+			if (surface->external && (version.current_allocation_generation != surface->current_allocation_generation || version.previous_allocation_generation != surface->previous_allocation_generation)) {
+				continue;
+			}
+			vertex_array = version.vertex_array;
+			format = version.vertex_format;
+			break;
+		}
+		surface->version_lock.unlock();
+	}
+	if (vertex_array.is_null() || !format) {
+		return ERR_UNAVAILABLE;
+	}
+	RID index_array = lod ? surface->lods[lod - 1].index_array : surface->index_array;
+	const uint32_t indices = lod ? surface->lods[lod - 1].index_count : surface->index_count;
+	if (indices && index_array.is_null()) {
+		return ERR_INVALID_DATA;
+	}
+	LocalVector<RID> roots;
+	roots.push_back(vertex_array);
+	if (index_array.is_valid()) {
+		roots.push_back(index_array);
+	}
+	// Indexed144's history backing remains part of the same immutable surface,
+	// even if this selected material's input mask reads only current positions.
+	if (surface->external) {
+		roots.push_back(surface->vertex_buffer);
+		roots.push_back(surface->previous_vertex_buffer);
+		roots.push_back(surface->index_buffer);
+	}
+	const Error error = device->native_immutable_hold_acquire(VectorView<RID>(roots.ptr(), roots.size()), out.physical);
+	if (error != OK) {
+		return error;
+	}
+	++surface->immutable_holds;
+	out.surface = surface;
+	out.device = device;
+	out.vertex_array = vertex_array;
+	out.index_array = index_array;
+	out.vertex_format = format;
+	out.vertex_count = surface->vertex_count;
+	out.index_count = indices;
+	out.primitive = surface->primitive;
+	out.material = surface->material;
+	out.current_generation = surface->current_allocation_generation;
+	out.previous_generation = surface->previous_allocation_generation;
+	return OK;
+}
+
+Error MeshStorage::mesh_surface_hold_release(NativeSurfaceHold &hold) {
+	if (!hold.device || !hold.device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (hold.device->draw_list.active || hold.device->compute_list.active || hold.device->raytracing_list.active) {
+		return ERR_BUSY;
+	}
+	if (hold.surface) {
+		auto *surface = hold.surface;
+		CRASH_COND(!surface->immutable_holds);
+		--surface->immutable_holds;
+		hold.surface = nullptr;
+		if (!surface->immutable_holds && surface->immutable_retired) {
+			// Request normal owner frees while this final physical hold still pins
+			// the exact VA/IA/backings. RD records their original deferred retire.
+			_mesh_surface_dispose(surface);
+		}
+	}
+	const Error error = hold.device->native_immutable_hold_release(hold.physical);
+	if (error != OK) {
+		return error;
+	}
+	hold.device = nullptr;
+	return OK;
+}
+
 void MeshStorage::_mesh_surface_clear(Mesh *p_mesh, int p_surface) {
-	Mesh::Surface &s = *p_mesh->surfaces[p_surface];
+	auto *surface = p_mesh->surfaces[p_surface];
+	if (surface->immutable_holds) {
+		// Detach from the live mesh now; the original surface and all actual
+		// selected physical owners stay retained by the accepted holds.
+		surface->immutable_retired = true;
+		return;
+	}
+	_mesh_surface_dispose(surface);
+}
+
+void MeshStorage::_mesh_surface_dispose(Mesh::Surface *p_surface) {
+	Mesh::Surface &s = *p_surface;
 
 	if (s.vertex_buffer.is_valid() && !s.external) {
 		RD::get_singleton()->free_rid(s.vertex_buffer); // Clears arrays as dependency automatically, including all versions.
@@ -719,7 +847,7 @@ void MeshStorage::_mesh_surface_clear(Mesh *p_mesh, int p_surface) {
 		RD::get_singleton()->free_rid(s.blend_shape_buffer);
 	}
 
-	memdelete(p_mesh->surfaces[p_surface]);
+	memdelete(p_surface);
 }
 
 int MeshStorage::mesh_get_blend_shape_count(RID p_mesh) const {
@@ -747,6 +875,7 @@ void MeshStorage::mesh_surface_update_vertex_region(RID p_mesh, int p_surface, i
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL(mesh);
 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_surface, mesh->surface_count);
+	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->immutable_holds, "Immutable native surface holds must return before an in-place mutation.");
 	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->external, "Indexed144 external buffers must be updated through their original owner.");
 	ERR_FAIL_COND(mesh->surfaces[p_surface]->vertex_buffer.is_null());
 	// Until E25 COW source mirroring is installed, a region write invalidates
@@ -765,6 +894,7 @@ void MeshStorage::mesh_surface_update_attribute_region(RID p_mesh, int p_surface
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL(mesh);
 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_surface, mesh->surface_count);
+	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->immutable_holds, "Immutable native surface holds must return before an in-place mutation.");
 	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->external, "Indexed144 external buffers must be updated through their original owner.");
 	ERR_FAIL_COND(mesh->surfaces[p_surface]->attribute_buffer.is_null());
 	// Until E25 COW source mirroring is installed, a region write invalidates
@@ -783,6 +913,7 @@ void MeshStorage::mesh_surface_update_skin_region(RID p_mesh, int p_surface, int
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL(mesh);
 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_surface, mesh->surface_count);
+	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->immutable_holds, "Immutable native surface holds must return before an in-place mutation.");
 	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->external, "Indexed144 external buffers must be updated through their original owner.");
 	ERR_FAIL_COND(mesh->surfaces[p_surface]->skin_buffer.is_null());
 	// Skin writes do not advance a static geometry revision. They revoke new
@@ -801,6 +932,7 @@ void RendererRD::MeshStorage::mesh_surface_update_index_region(RID p_mesh, int p
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL(mesh);
 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_surface, mesh->surface_count);
+	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->immutable_holds, "Immutable native surface holds must return before an in-place mutation.");
 	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->external, "Indexed144 external buffers must be updated through their original owner.");
 	ERR_FAIL_COND(mesh->surfaces[p_surface]->index_buffer.is_null());
 	// Until E25 COW source mirroring is installed, a region write invalidates
@@ -818,6 +950,7 @@ void MeshStorage::mesh_surface_set_material(RID p_mesh, int p_surface, RID p_mat
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL(mesh);
 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_surface, mesh->surface_count);
+	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->immutable_holds, "Immutable native surface holds must return before an in-place mutation.");
 	mesh->surfaces[p_surface]->material = p_material;
 
 	mesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MATERIAL);
@@ -1982,7 +2115,6 @@ void MeshStorage::_multimesh_set_mesh(RID p_multimesh, RID p_mesh) {
 }
 
 void MeshStorage::_multimesh_refresh_mesh(MultiMesh *multimesh) {
-
 	_multimesh_rebuild_command_buffer(multimesh);
 
 	if (multimesh->instances == 0) {

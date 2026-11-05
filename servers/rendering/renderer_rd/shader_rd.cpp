@@ -830,6 +830,7 @@ void ShaderRD::version_set_code(RID p_version, const HashMap<String, String> &p_
 
 	Version *version = version_owner.get_or_null(p_version);
 	ERR_FAIL_NULL(version);
+	ERR_FAIL_COND_MSG(version_native_is_held(p_version), "Shader native inputs are immutable while retained.");
 
 	MutexLock lock(*version->mutex);
 
@@ -847,6 +848,7 @@ void ShaderRD::version_set_compute_code(RID p_version, const HashMap<String, Str
 
 	Version *version = version_owner.get_or_null(p_version);
 	ERR_FAIL_NULL(version);
+	ERR_FAIL_COND_MSG(version_native_is_held(p_version), "Shader native inputs are immutable while retained.");
 
 	MutexLock lock(*version->mutex);
 
@@ -863,6 +865,7 @@ void ShaderRD::version_set_raytracing_code(RID p_version, const HashMap<String, 
 
 	Version *version = version_owner.get_or_null(p_version);
 	ERR_FAIL_NULL(version);
+	ERR_FAIL_COND_MSG(version_native_is_held(p_version), "Shader native inputs are immutable while retained.");
 
 	version->raygen_globals = p_raygen_globals.utf8();
 	version->any_hit_globals = p_any_hit_globals.utf8();
@@ -872,6 +875,37 @@ void ShaderRD::version_set_raytracing_code(RID p_version, const HashMap<String, 
 	version->uniforms = p_uniforms.utf8();
 
 	_version_set(version, p_code, p_custom_defines);
+}
+
+bool ShaderRD::version_native_shader_is_ready(RID p_version, RID p_shader) {
+	Version *version = version_owner.get_or_null(p_version);
+	if (!version || p_shader.is_null()) {
+		return false;
+	}
+	MutexLock lock(*version->mutex);
+	if (version->dirty || !version->valid) {
+		return false;
+	}
+	for (auto task : version->group_compilation_tasks) {
+		if (task) {
+			return false;
+		}
+	}
+	return version->variants.has(p_shader);
+}
+
+bool ShaderRD::version_native_is_held(RID p_version) {
+	Version *version = version_owner.get_or_null(p_version);
+	if (!version || !RD::get_singleton()) {
+		return false;
+	}
+	MutexLock lock(*version->mutex);
+	for (RID shader : version->variants) {
+		if (RD::get_singleton()->native_immutable_resource_is_held(shader)) {
+			return true;
+		}
+	}
+	return false;
 }
 
 bool ShaderRD::version_is_valid(RID p_version) {

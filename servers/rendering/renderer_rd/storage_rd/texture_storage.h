@@ -46,6 +46,12 @@ class LightStorage;
 class MaterialStorage;
 
 class TextureStorage : public RendererTextureStorage {
+#ifdef TESTS_ENABLED
+	friend class TestMaterialStorageNativeHoldAccess;
+	struct NativeHoldTestTag {};
+	explicit TextureStorage(NativeHoldTestTag);
+	bool native_hold_test_minimal = false;
+#endif
 public:
 	const int SAMPLERS_BINDING_FIRST_INDEX = 4;
 
@@ -227,6 +233,7 @@ private:
 	};
 
 	Ref<Image> _validate_texture_format(const Ref<Image> &p_image, TextureToRDFormat &r_format);
+	static bool _native_immutable_busy(const Texture *p_texture);
 	void _texture_2d_update(RID p_texture, const Ref<Image> &p_image, int p_layer = 0, bool p_immediate = false);
 
 	struct TextureFromRDFormat {

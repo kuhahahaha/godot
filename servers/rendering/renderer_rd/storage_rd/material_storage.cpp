@@ -37,6 +37,7 @@
 #include "core/templates/local_vector.h"
 #include "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h"
 #include "servers/rendering/renderer_rd/forward_mobile/scene_shader_forward_mobile.h"
+#include "servers/rendering/renderer_rd/shader_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/storage/variant_converters.h"
 
@@ -1152,7 +1153,140 @@ void MaterialStorage::MaterialData::free_parameters_uniform_set(RID p_uniform_se
 	}
 }
 
+bool MaterialStorage::MaterialData::native_immutable_busy() const {
+	auto *rd = RD::get_singleton();
+	if (!rd) {
+		return false;
+	}
+	for (const auto &state : native_uniform_sets) {
+		if (rd->native_immutable_resource_is_held(state.uniform_set) || rd->native_immutable_resource_is_held(state.uniform_buffer)) {
+			return true;
+		}
+	}
+	auto *storage = MaterialStorage::get_singleton();
+	const auto *material = storage ? storage->get_material(self) : nullptr;
+	return material && material->native_immutable_holds != 0;
+}
+
+bool MaterialStorage::_shader_native_immutable_busy(const Shader *p_shader) {
+	if (!p_shader || !p_shader->data) {
+		return false;
+	}
+	const auto native = p_shader->data->get_native_shader_and_version();
+	return native.first && native.first->version_native_is_held(native.second);
+}
+
+Error MaterialStorage::material_native_hold_acquire(RID p_material, RID p_shader, RID p_pipeline, RID p_uniform_set, NativeMaterialHold &r_hold, uint32_t p_max_resources) {
+	auto *rd = RD::get_singleton();
+	if (!rd || !rd->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (r_hold.is_active()) {
+		return ERR_ALREADY_IN_USE;
+	}
+	Material *material = material_owner.get_or_null(p_material);
+	if (!material || !material->data || !material->shader || !material->shader->data) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (material->native_immutable_holds == UINT32_MAX) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	if (material->uniform_dirty || material->texture_dirty || material->next_pass.is_valid()) {
+		return ERR_UNAVAILABLE;
+	}
+	const auto native = material->shader->data->get_native_shader_and_version();
+	if (!native.first || !native.first->version_native_shader_is_ready(native.second, p_shader) || !rd->native_immutable_pipeline_matches_shader(p_pipeline, p_shader)) {
+		return ERR_INVALID_DATA;
+	}
+	const MaterialData::NativeUniformSetState *selected = nullptr;
+	for (const auto &state : material->data->native_uniform_sets) {
+		if (state.supported && state.uniform_set == p_uniform_set && native.first->version_native_shader_is_ready(native.second, state.shader)) {
+			selected = &state;
+			break;
+		}
+	}
+	if (!selected) {
+		return ERR_UNAVAILABLE;
+	}
+	if (selected->uniform_set.is_null() && (selected->uniform_buffer.is_valid() || !selected->uniform_bytes.is_empty() || !selected->textures.is_empty())) {
+		// Only a genuinely empty material profile can omit its native set.
+		return ERR_UNAVAILABLE;
+	}
+	// Same ShaderRD version does not imply compatible native descriptor layout.
+	// Compare the actual original set format with this exact pipeline/set slot.
+	if (!rd->native_immutable_uniform_set_matches_pipeline(selected->uniform_set, p_pipeline, selected->uniform_set_index)) {
+		return ERR_INVALID_DATA;
+	}
+	NativeMaterialSnapshot snapshot;
+	snapshot.shader = p_shader;
+	snapshot.pipeline = p_pipeline;
+	snapshot.uniform_set = selected->uniform_set;
+	snapshot.uniform_set_index = selected->uniform_set_index;
+	snapshot.uniform_buffer = selected->uniform_buffer;
+	snapshot.uniform_bytes = selected->uniform_bytes;
+	snapshot.textures = selected->textures;
+	snapshot.material_generation = material->generation;
+	snapshot.priority = material->priority;
+	Vector<RID> roots;
+	roots.push_back(p_shader);
+	roots.push_back(p_pipeline);
+	if (p_uniform_set.is_valid()) {
+		roots.push_back(p_uniform_set);
+	}
+	if (snapshot.uniform_buffer.is_valid()) {
+		roots.push_back(snapshot.uniform_buffer);
+	}
+	for (RID texture : snapshot.textures) {
+		roots.push_back(texture);
+	}
+	// This leaf supports the original default sampler profile only. A future
+	// packet with viewport/custom samplers must capture its own original owner.
+	for (const auto &filters : default_samplers.rids) {
+		for (RID sampler : filters) {
+			if (sampler.is_valid()) {
+				roots.push_back(sampler);
+				snapshot.samplers.push_back(sampler);
+			}
+		}
+	}
+	if (uint32_t(roots.size()) > p_max_resources) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	const Error error = rd->native_immutable_hold_acquire(roots, r_hold.native, p_max_resources);
+	if (error != OK) {
+		return error;
+	}
+	r_hold.snapshot = snapshot;
+	r_hold.material = p_material;
+	r_hold.device = rd;
+	++material->native_immutable_holds;
+	return OK;
+}
+
+Error MaterialStorage::material_native_hold_release(NativeMaterialHold &r_hold) {
+	if (!r_hold.device) {
+		return ERR_INVALID_PARAMETER;
+	}
+	const Error error = r_hold.device->native_immutable_hold_release(r_hold.native);
+	if (error != OK) {
+		return error;
+	}
+	// Material free may already have detached its logical RID. No pointer to
+	// the former MaterialData, ShaderData or Texture owner is retained here.
+	if (auto *storage = MaterialStorage::get_singleton()) {
+		if (auto *material = storage->material_owner.get_or_null(r_hold.material)) {
+			CRASH_COND(!material->native_immutable_holds);
+			--material->native_immutable_holds;
+		}
+	}
+	r_hold.snapshot = {};
+	r_hold.material = RID();
+	r_hold.device = nullptr;
+	return OK;
+}
+
 bool MaterialStorage::MaterialData::update_parameters_uniform_set(const HashMap<StringName, Variant> &p_parameters, bool p_uniform_dirty, bool p_textures_dirty, const HashMap<StringName, ShaderLanguage::ShaderNode::Uniform> &p_uniforms, const uint32_t *p_uniform_offsets, const Vector<ShaderCompiler::GeneratedCode::Texture> &p_texture_uniforms, const HashMap<StringName, HashMap<int, RID>> &p_default_texture_params, uint32_t p_ubo_size, RID &uniform_set, RID p_shader, uint32_t p_shader_uniform_set, bool p_use_linear_color, bool p_3d_material) {
+	ERR_FAIL_COND_V_MSG(native_immutable_busy(), false, "Material native inputs are immutable while retained.");
 	if ((uint32_t)ubo_data[p_use_linear_color].size() != p_ubo_size) {
 		p_uniform_dirty = true;
 		if (uniform_buffer[p_use_linear_color].is_valid()) {
@@ -1202,13 +1336,33 @@ bool MaterialStorage::MaterialData::update_parameters_uniform_set(const HashMap<
 		update_textures(p_parameters, p_default_texture_params, p_texture_uniforms, texture_cache.ptrw(), p_use_linear_color, p_3d_material);
 	}
 
+	auto capture_native = [&]() {
+		auto &state = native_uniform_sets[p_use_linear_color];
+		state = {};
+		state.shader = p_shader;
+		state.uniform_set = uniform_set;
+		state.uniform_set_index = p_shader_uniform_set;
+		state.uniform_buffer = uniform_buffer[p_use_linear_color];
+		state.uniform_bytes = ubo_data[p_use_linear_color];
+		state.textures = texture_cache;
+		state.supported = render_target_cache.is_empty() && !global_buffer_E && !global_texture_E && used_global_textures.is_empty();
+		for (const auto &entry : p_uniforms) {
+			state.supported &= entry.value.scope == ShaderLanguage::ShaderNode::Uniform::SCOPE_LOCAL;
+		}
+		for (const auto &texture : p_texture_uniforms) {
+			state.supported &= !texture.global && texture.hint != ShaderLanguage::ShaderNode::Uniform::HINT_SCREEN_TEXTURE && texture.hint != ShaderLanguage::ShaderNode::Uniform::HINT_DEPTH_TEXTURE && texture.hint != ShaderLanguage::ShaderNode::Uniform::HINT_NORMAL_ROUGHNESS_TEXTURE && texture.hint != ShaderLanguage::ShaderNode::Uniform::HINT_BLIT_SOURCE0 && texture.hint != ShaderLanguage::ShaderNode::Uniform::HINT_BLIT_SOURCE1 && texture.hint != ShaderLanguage::ShaderNode::Uniform::HINT_BLIT_SOURCE2 && texture.hint != ShaderLanguage::ShaderNode::Uniform::HINT_BLIT_SOURCE3;
+		}
+	};
+
 	if (p_ubo_size == 0 && (p_texture_uniforms.is_empty())) {
 		// This material does not require an uniform set, so don't create it.
+		capture_native();
 		return false;
 	}
 
 	if (!p_textures_dirty && uniform_set.is_valid() && RD::get_singleton()->uniform_set_is_valid(uniform_set)) {
 		//no reason to update uniform set, only UBO (or nothing) was needed to update
+		capture_native();
 		return false;
 	}
 
@@ -1245,6 +1399,7 @@ bool MaterialStorage::MaterialData::update_parameters_uniform_set(const HashMap<
 
 	RD::get_singleton()->uniform_set_set_invalidation_callback(uniform_set, MaterialStorage::_material_uniform_set_erased, &self);
 
+	capture_native();
 	return true;
 }
 
@@ -1467,6 +1622,17 @@ MaterialStorage *MaterialStorage::get_singleton() {
 	return singleton;
 }
 
+#ifdef TESTS_ENABLED
+MaterialStorage::MaterialStorage(NativeHoldTestTag) {
+	singleton = this;
+	native_hold_test_minimal = true;
+	for (int i = 0; i < SHADER_TYPE_MAX; ++i) {
+		shader_data_request_func[i] = nullptr;
+		material_data_request_func[i] = nullptr;
+	}
+}
+#endif
+
 MaterialStorage::MaterialStorage() {
 	singleton = this;
 
@@ -1508,6 +1674,12 @@ MaterialStorage::MaterialStorage() {
 }
 
 MaterialStorage::~MaterialStorage() {
+#ifdef TESTS_ENABLED
+	if (native_hold_test_minimal) {
+		singleton = nullptr;
+		return;
+	}
+#endif
 	memdelete_arr(global_shader_uniforms.buffer_values);
 	memdelete_arr(global_shader_uniforms.buffer_usage);
 	memdelete_arr(global_shader_uniforms.buffer_dirty_regions);
@@ -2185,7 +2357,7 @@ void MaterialStorage::shader_free(RID p_rid) {
 
 		//make material unreference this
 		while (shader->owners.size()) {
-			material_set_shader((*shader->owners.begin())->self, RID());
+			_material_set_shader((*shader->owners.begin())->self, RID(), true);
 		}
 
 		//clear data if exists
@@ -2208,6 +2380,7 @@ void MaterialStorage::shader_free(RID p_rid) {
 void MaterialStorage::shader_set_code(RID p_shader, const String &p_code) {
 	Shader *shader = shader_owner.get_or_null(p_shader);
 	ERR_FAIL_NULL(shader);
+	ERR_FAIL_COND_MSG(_shader_native_immutable_busy(shader), "Shader native inputs are immutable while retained.");
 
 	MutexLock lock(*shader->mutex);
 
@@ -2313,6 +2486,7 @@ void MaterialStorage::get_shader_parameter_list(RID p_shader, List<PropertyInfo>
 void MaterialStorage::shader_set_default_texture_parameter(RID p_shader, const StringName &p_name, RID p_texture, int p_index) {
 	Shader *shader = shader_owner.get_or_null(p_shader);
 	ERR_FAIL_NULL(shader);
+	ERR_FAIL_COND_MSG(_shader_native_immutable_busy(shader), "Shader native inputs are immutable while retained.");
 
 	if (p_texture.is_valid() && TextureStorage::get_singleton()->owns_texture(p_texture)) {
 		if (!shader->default_texture_parameter.has(p_name)) {
@@ -2434,6 +2608,10 @@ void MaterialStorage::_update_queued_materials() {
 	while (SelfList<Material> *E = copy.first()) {
 		Material *material = E->self();
 		copy.remove(E);
+		if (material->data && material->data->native_immutable_busy()) {
+			_material_queue_update(material, false, false);
+			continue;
+		}
 		bool uniforms_changed = false;
 
 		if (material->data) {
@@ -2472,15 +2650,20 @@ void MaterialStorage::material_free(RID p_rid) {
 		}
 	}
 
-	material_set_shader(p_rid, RID()); //clean up shader
+	_material_set_shader(p_rid, RID(), true); //clean up shader
 	material->dependency.deleted_notify(p_rid);
 
 	material_owner.free(p_rid);
 }
 
 void MaterialStorage::material_set_shader(RID p_material, RID p_shader) {
+	_material_set_shader(p_material, p_shader, false);
+}
+
+void MaterialStorage::_material_set_shader(RID p_material, RID p_shader, bool p_freeing) {
 	Material *material = material_owner.get_or_null(p_material);
 	ERR_FAIL_NULL(material);
+	ERR_FAIL_COND_MSG(!p_freeing && material->data && material->data->native_immutable_busy(), "Material native inputs are immutable while retained.");
 	if (material->generation != UINT64_MAX) {
 		material->generation++;
 	}
@@ -2544,6 +2727,7 @@ MaterialStorage::ShaderData *MaterialStorage::material_get_shader_data(RID p_mat
 void MaterialStorage::material_set_param(RID p_material, const StringName &p_param, const Variant &p_value) {
 	Material *material = material_owner.get_or_null(p_material);
 	ERR_FAIL_NULL(material);
+	ERR_FAIL_COND_MSG(material->data && material->data->native_immutable_busy(), "Material native inputs are immutable while retained.");
 	if (material->generation != UINT64_MAX) {
 		material->generation++;
 	}
@@ -2579,6 +2763,7 @@ Variant MaterialStorage::material_get_param(RID p_material, const StringName &p_
 void MaterialStorage::material_set_next_pass(RID p_material, RID p_next_material) {
 	Material *material = material_owner.get_or_null(p_material);
 	ERR_FAIL_NULL(material);
+	ERR_FAIL_COND_MSG(material->data && material->data->native_immutable_busy(), "Material native inputs are immutable while retained.");
 
 	if (material->next_pass == p_next_material) {
 		return;
@@ -2599,6 +2784,7 @@ void MaterialStorage::material_set_next_pass(RID p_material, RID p_next_material
 void MaterialStorage::material_set_render_priority(RID p_material, int priority) {
 	Material *material = material_owner.get_or_null(p_material);
 	ERR_FAIL_NULL(material);
+	ERR_FAIL_COND_MSG(material->data && material->data->native_immutable_busy(), "Material native inputs are immutable while retained.");
 	material->priority = priority;
 	if (material->generation != UINT64_MAX) {
 		material->generation++;

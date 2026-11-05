@@ -211,6 +211,9 @@ bool RenderingDevice::_free_dependencies(RID p_id) {
 			break;
 		}
 		const RID dependent = *E->value.begin();
+		if (resource_frees_in_progress.has(dependent)) {
+			return false; // The enclosing original free owns this edge until its callback returns.
+		}
 		free_rid(dependent);
 		// A synchronous invalidation callback can mutate the dependency map.
 		E = dependency_map.find(p_id);
@@ -220,6 +223,7 @@ bool RenderingDevice::_free_dependencies(RID p_id) {
 	// A dependent's synchronous invalidation callback can acquire this resource
 	// after the initial busy check. Preserve its parent edges if that happened.
 	ERR_FAIL_COND_V_MSG(_qualification_resource_busy(p_id), false, "The resource became busy during dependent cleanup.");
+	ERR_FAIL_COND_V(native_immutable_resource_is_held(p_id), false);
 
 	// Reverse dependencies must be unreferenced.
 	HashMap<RID, HashSet<RID>>::Iterator E = reverse_dependency_map.find(p_id);
@@ -1113,6 +1117,9 @@ RenderingDevice::CopyAppendResult RenderingDevice::_buffer_copy_recorded(RID p_s
 		ERR_FAIL_V_MSG(ERR_INVALID_PARAMETER, "Source buffer argument is not a valid buffer of any type.");
 	}
 
+	if (native_immutable_resource_is_held(p_dst_buffer) || native_immutable_resource_is_retiring(p_dst_buffer)) {
+		return ERR_BUSY;
+	}
 	Buffer *dst_buffer = _get_buffer_from_owner(p_dst_buffer);
 	if (!dst_buffer) {
 		ERR_FAIL_V_MSG(ERR_INVALID_PARAMETER, "Destination buffer argument is not a valid buffer of any type.");
@@ -1154,6 +1161,9 @@ RenderingDevice::CopyAppendResult RenderingDevice::_buffer_copy_recorded(RID p_s
 }
 
 Error RenderingDevice::_buffer_update(Buffer *p_buffer, RID p_buffer_id, uint32_t p_offset, uint32_t p_size, const void *p_data, QualificationUploadProgress *p_progress, GDExtensionDeviceExit::BufferUploadSourceCapture *p_source) {
+	if (native_immutable_resource_is_held(p_buffer_id) || native_immutable_resource_is_retiring(p_buffer_id)) {
+		return ERR_BUSY;
+	}
 	if (_recording_error() != OK) {
 		return _recording_error();
 	}
@@ -1310,6 +1320,9 @@ Error RenderingDevice::_buffer_update(Buffer *p_buffer, RID p_buffer_id, uint32_
 }
 
 Error RenderingDevice::buffer_update(RID p_buffer, uint32_t p_offset, uint32_t p_size, const void *p_data, bool p_skip_check) {
+	if (native_immutable_resource_is_held(p_buffer) || native_immutable_resource_is_retiring(p_buffer)) {
+		return ERR_BUSY;
+	}
 	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
 
 	ERR_FAIL_COND_V_MSG(draw_list.active && !p_skip_check, ERR_INVALID_PARAMETER,
@@ -1355,6 +1368,10 @@ Error RenderingDevice::driver_callback_add(RDD::DriverCallback p_callback, void 
 			"Driver callback is forbidden during creation of a raytracing list.");
 
 	for (uint32_t i = 0; i < p_resources.size(); ++i) {
+		const auto usage = p_resources[i].usage;
+		const bool read_only = usage == CALLBACK_RESOURCE_USAGE_COPY_FROM || usage == CALLBACK_RESOURCE_USAGE_RESOLVE_FROM || usage == CALLBACK_RESOURCE_USAGE_UNIFORM_BUFFER_READ || usage == CALLBACK_RESOURCE_USAGE_INDIRECT_BUFFER_READ || usage == CALLBACK_RESOURCE_USAGE_TEXTURE_BUFFER_READ || usage == CALLBACK_RESOURCE_USAGE_STORAGE_BUFFER_READ || usage == CALLBACK_RESOURCE_USAGE_VERTEX_BUFFER_READ || usage == CALLBACK_RESOURCE_USAGE_INDEX_BUFFER_READ || usage == CALLBACK_RESOURCE_USAGE_TEXTURE_SAMPLE || usage == CALLBACK_RESOURCE_USAGE_STORAGE_IMAGE_READ || usage == CALLBACK_RESOURCE_USAGE_ACCELERATION_STRUCTURE_READ;
+		ERR_FAIL_COND_V(!read_only && (native_immutable_resource_is_held(p_resources[i].rid) || native_immutable_resource_is_retiring(p_resources[i].rid)), ERR_BUSY);
+
 		if (p_resources[i].type == CALLBACK_RESOURCE_TYPE_BUFFER) {
 			auto *buffer = storage_buffer_owner.get_or_null(p_resources[i].rid);
 			ERR_FAIL_COND_V(buffer && buffer->qualification_return, ERR_UNAUTHORIZED);
@@ -1445,6 +1462,9 @@ void RenderingDevice::update_perf_report() {
 }
 
 Error RenderingDevice::buffer_clear(RID p_buffer, uint32_t p_offset, uint32_t p_size) {
+	if (native_immutable_resource_is_held(p_buffer) || native_immutable_resource_is_retiring(p_buffer)) {
+		return ERR_BUSY;
+	}
 	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
 	if (_recording_error() != OK) {
 		return _recording_error();
@@ -1726,6 +1746,8 @@ Error RenderingDevice::_buffer_get_data_async(RID p_buffer, const Callable &p_ca
 uint64_t RenderingDevice::buffer_get_device_address(RID p_buffer) {
 	ERR_RENDER_THREAD_GUARD_V(0);
 
+	MutexLock immutable_lock(_thread_safe_);
+	ERR_FAIL_COND_V(native_immutable_resource_is_held(p_buffer) || native_immutable_resource_is_retiring(p_buffer), 0);
 	Buffer *buffer = _get_buffer_from_owner(p_buffer);
 	ERR_FAIL_NULL_V_MSG(buffer, 0, "Buffer argument is not a valid buffer of any type.");
 	ERR_FAIL_COND_V(buffer->qualification_return, 0);
@@ -1736,10 +1758,15 @@ uint64_t RenderingDevice::buffer_get_device_address(RID p_buffer) {
 		capture_test_coverage_failed.store(true);
 	}
 #endif
-	return driver->buffer_get_device_address(buffer->driver_id);
+	const uint64_t address = driver->buffer_get_device_address(buffer->driver_id);
+	if (address) {
+		buffer->native_external_access = true;
+	}
+	return address;
 }
 
 uint8_t *RenderingDevice::buffer_persistent_map_advance(RID p_buffer) {
+	ERR_FAIL_COND_V(native_immutable_resource_is_held(p_buffer) || native_immutable_resource_is_retiring(p_buffer), nullptr);
 	ERR_RENDER_THREAD_GUARD_V(0);
 
 	Buffer *buffer = _get_buffer_from_owner(p_buffer);
@@ -1751,7 +1778,11 @@ uint8_t *RenderingDevice::buffer_persistent_map_advance(RID p_buffer) {
 		capture_test_coverage_failed.store(true);
 	}
 #endif
-	return driver->buffer_persistent_map_advance(buffer->driver_id, frames_drawn);
+	uint8_t *mapping = driver->buffer_persistent_map_advance(buffer->driver_id, frames_drawn);
+	if (mapping) {
+		buffer->native_external_access = true;
+	}
+	return mapping;
 }
 
 void RenderingDevice::buffer_flush(RID p_buffer) {
@@ -2223,6 +2254,7 @@ RID RenderingDevice::_texture_create_internal(const TextureFormat &p_format, con
 
 RID RenderingDevice::texture_create_shared(const TextureView &p_view, RID p_with_texture) {
 	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
+	ERR_FAIL_COND_V(native_immutable_resource_is_retiring(p_with_texture), RID());
 	Texture *src_texture = texture_owner.get_or_null(p_with_texture);
 	ERR_FAIL_NULL_V(src_texture, RID());
 	ERR_FAIL_COND_V(src_texture->qualification_return, RID());
@@ -2237,6 +2269,8 @@ RID RenderingDevice::texture_create_shared(const TextureView &p_view, RID p_with
 	// Create view.
 
 	Texture texture = *src_texture;
+	texture.native_immutable_holds = 0;
+	texture.native_immutable_retire_requested = false;
 	texture.slice_trackers = nullptr;
 	texture.shared_fallback = nullptr;
 
@@ -2328,6 +2362,7 @@ RID RenderingDevice::texture_create_from_extension(TextureType p_type, DataForma
 	// This method creates a texture object using a VkImage created by an extension, module or other external source (OpenXR uses this).
 
 	Texture texture;
+	texture.native_external_access = true;
 	texture.type = p_type;
 	texture.format = p_format;
 	texture.samples = p_samples;
@@ -2368,6 +2403,7 @@ RID RenderingDevice::texture_create_from_extension(TextureType p_type, DataForma
 
 RID RenderingDevice::texture_create_shared_from_slice(const TextureView &p_view, RID p_with_texture, uint32_t p_layer, uint32_t p_mipmap, uint32_t p_mipmaps, TextureSliceType p_slice_type, uint32_t p_layers) {
 	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
+	ERR_FAIL_COND_V(native_immutable_resource_is_retiring(p_with_texture), RID());
 	Texture *src_texture = texture_owner.get_or_null(p_with_texture);
 	ERR_FAIL_NULL_V(src_texture, RID());
 	ERR_FAIL_COND_V(src_texture->qualification_return, RID());
@@ -2407,6 +2443,8 @@ RID RenderingDevice::texture_create_shared_from_slice(const TextureView &p_view,
 	}
 
 	Texture texture = *src_texture;
+	texture.native_immutable_holds = 0;
+	texture.native_immutable_retire_requested = false;
 	texture.slice_trackers = nullptr;
 	texture.shared_fallback = nullptr;
 
@@ -2601,6 +2639,9 @@ uint32_t RenderingDevice::_normalize_staging_region_size(int64_t p_size) {
 }
 
 Error RenderingDevice::_texture_initialize(RID p_texture, uint32_t p_layer, const Vector<uint8_t> &p_data, RDD::TextureLayout p_dst_layout, bool p_immediate_flush) {
+	if (native_immutable_resource_is_held(p_texture) || native_immutable_resource_is_retiring(p_texture)) {
+		return ERR_BUSY;
+	}
 	Texture *texture = texture_owner.get_or_null(p_texture);
 	ERR_FAIL_NULL_V(texture, ERR_INVALID_PARAMETER);
 
@@ -2755,6 +2796,9 @@ Error RenderingDevice::_texture_initialize(RID p_texture, uint32_t p_layer, cons
 }
 
 Error RenderingDevice::texture_update(RID p_texture, uint32_t p_layer, const Vector<uint8_t> &p_data) {
+	if (native_immutable_resource_is_held(p_texture) || native_immutable_resource_is_retiring(p_texture)) {
+		return ERR_BUSY;
+	}
 	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
 	if (_recording_error() != OK) {
 		return _recording_error();
@@ -3565,6 +3609,9 @@ uint64_t RenderingDevice::texture_get_native_handle(RID p_texture) {
 #endif
 
 Error RenderingDevice::texture_copy(RID p_from_texture, RID p_to_texture, const Vector3 &p_from, const Vector3 &p_to, const Vector3 &p_size, uint32_t p_src_mipmap, uint32_t p_dst_mipmap, uint32_t p_src_layer, uint32_t p_dst_layer) {
+	if (native_immutable_resource_is_held(p_to_texture) || native_immutable_resource_is_retiring(p_to_texture)) {
+		return ERR_BUSY;
+	}
 	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
 	if (_recording_error() != OK) {
 		return _recording_error();
@@ -3651,6 +3698,9 @@ Error RenderingDevice::texture_copy(RID p_from_texture, RID p_to_texture, const 
 }
 
 Error RenderingDevice::texture_resolve_multisample(RID p_from_texture, RID p_to_texture) {
+	if (native_immutable_resource_is_held(p_to_texture) || native_immutable_resource_is_retiring(p_to_texture)) {
+		return ERR_BUSY;
+	}
 	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
 	if (_recording_error() != OK) {
 		return _recording_error();
@@ -3736,6 +3786,9 @@ bool RenderingDevice::texture_is_discardable(RID p_texture) {
 }
 
 Error RenderingDevice::texture_clear(RID p_texture, const Color &p_color, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers) {
+	if (native_immutable_resource_is_held(p_texture) || native_immutable_resource_is_retiring(p_texture)) {
+		return ERR_BUSY;
+	}
 	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
 	if (_recording_error() != OK) {
 		return _recording_error();
@@ -4638,6 +4691,7 @@ RID RenderingDevice::vertex_array_create(uint32_t p_vertex_count, VertexFormatID
 	for (const VertexAttribute &atf : vd.vertex_formats) {
 		ERR_FAIL_COND_V_MSG(atf.binding >= p_src_buffers.size(), RID(), vformat("Vertex attribute location (%d) is missing a buffer for binding (%d).", atf.location, atf.binding));
 		RID buf = p_src_buffers[atf.binding];
+		ERR_FAIL_COND_V(native_immutable_resource_is_retiring(buf), RID());
 		ERR_FAIL_COND_V(!vertex_buffer_owner.owns(buf), RID());
 
 		Buffer *buffer = vertex_buffer_owner.get_or_null(buf);
@@ -4812,6 +4866,7 @@ RID RenderingDevice::index_buffer_create(uint32_t p_index_count, IndexBufferForm
 }
 
 RID RenderingDevice::index_array_create(RID p_index_buffer, uint32_t p_index_offset, uint32_t p_index_count) {
+	ERR_FAIL_COND_V(native_immutable_resource_is_retiring(p_index_buffer), RID());
 	_THREAD_SAFE_METHOD_
 
 	ERR_FAIL_COND_V(!index_buffer_owner.owns(p_index_buffer), RID());
@@ -4922,6 +4977,16 @@ RID RenderingDevice::_qualification_shader_create(const Vector<uint8_t> &p_shade
 		ERR_FAIL_COND_V(placeholder->driver_id, RID());
 	}
 
+	// Freeze actual sampler owner identities before the first native effect.
+	// They join native holds without changing legacy dependency/free behavior.
+	uint64_t immutable_sampler_count = 0;
+	for (const PipelineImmutableSampler &source_sampler : p_immutable_samplers) {
+		immutable_sampler_count += source_sampler.get_id_count();
+		ERR_FAIL_COND_V(immutable_sampler_count > INT32_MAX, RID());
+	}
+	Vector<RID> immutable_sampler_owners;
+	ERR_FAIL_COND_V(immutable_sampler_owners.resize(immutable_sampler_count) != OK, RID());
+	uint32_t immutable_sampler_index = 0;
 	Vector<RDD::ImmutableSampler> driver_immutable_samplers;
 	for (const PipelineImmutableSampler &source_sampler : p_immutable_samplers) {
 		RDD::ImmutableSampler driver_sampler;
@@ -4932,6 +4997,8 @@ RID RenderingDevice::_qualification_shader_create(const Vector<uint8_t> &p_shade
 			Sampler *sampler = sampler_owner.get_or_null(source_sampler.get_id(j));
 			ERR_FAIL_NULL_V(sampler, RID());
 			ERR_FAIL_COND_V(sampler->qualification_return, RID());
+			ERR_FAIL_COND_V(native_immutable_resource_is_retiring(source_sampler.get_id(j)), RID());
+			immutable_sampler_owners.write[immutable_sampler_index++] = source_sampler.get_id(j);
 			driver_sampler.ids.push_back(sampler->driver_id);
 		}
 
@@ -4957,6 +5024,7 @@ RID RenderingDevice::_qualification_shader_create(const Vector<uint8_t> &p_shade
 	Shader *shader = shader_owner.get_or_null(id);
 	ERR_FAIL_NULL_V(shader, RID());
 	shader->qualification_return = p_cell;
+	shader->native_immutable_samplers = static_cast<Vector<RID> &&>(immutable_sampler_owners);
 
 	*((ShaderReflection *)shader) = shader_container->get_shader_reflection();
 	shader->name.clear();
@@ -5142,6 +5210,7 @@ RID RenderingDevice::_qualification_uniform_set_create(const VectorView<Uniform>
 	return result;
 }
 RID RenderingDevice::_uniform_set_create_qualification(const VectorView<RD::Uniform> &p_uniforms, RID p_shader, uint32_t p_shader_set, bool p_linear_pool, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, const LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> *p_children, const NativeDisposalWitness *p_native_disposal, const GDExtensionDeviceExit::ProductionRequest *p_production) {
+	ERR_FAIL_COND_V(native_immutable_resource_is_retiring(p_shader), RID());
 	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Recording is suspended after a frame fence wait failure.");
 	_THREAD_SAFE_METHOD_
 
@@ -5156,6 +5225,7 @@ RID RenderingDevice::_uniform_set_create_qualification(const VectorView<RD::Unif
 	}
 	for (uint32_t u = 0; u < p_uniforms.size(); ++u) {
 		for (uint32_t i = 0; i < p_uniforms[u].get_id_count(); ++i) {
+			ERR_FAIL_COND_V(native_immutable_resource_is_retiring(p_uniforms[u].get_id(i)), RID());
 			const auto &uniform = p_uniforms[u];
 			auto *texture = texture_owner.get_or_null(uniform.get_id(i));
 			ERR_FAIL_COND_V(texture && texture->qualification_return && (!p_children || !p_children->has(texture->qualification_return)), RID());
@@ -5601,6 +5671,19 @@ RID RenderingDevice::_uniform_set_create_qualification(const VectorView<RD::Unif
 	}
 
 	UniformSet uniform_set;
+	for (uint32_t uniform_index = 0; uniform_index < uniform_count; ++uniform_index) {
+		const Uniform &uniform = uniforms[uniform_index];
+		for (const ShaderUniform &reflected : shader->uniform_sets[p_shader_set]) {
+			if (reflected.binding == uniform.binding && reflected.writable) {
+				for (uint32_t i = 0; i < uniform.get_id_count(); ++i) {
+					const RID rid = uniform.get_id(i);
+					if (!uniform_set.writable_resources.has(rid)) {
+						uniform_set.writable_resources.push_back(rid);
+					}
+				}
+			}
+		}
+	}
 	uniform_set.qualification_dependencies = qualification_dependencies;
 	uniform_set.qualification_return = p_cell;
 	for (auto *cell : qualification_dependencies) {
@@ -5662,6 +5745,7 @@ void RenderingDevice::uniform_set_set_invalidation_callback(RID p_uniform_set, I
 	UniformSet *us = uniform_set_owner.get_or_null(p_uniform_set);
 	ERR_FAIL_NULL(us);
 	ERR_FAIL_COND(us->qualification_return);
+	ERR_FAIL_COND(p_callback && native_immutable_resource_is_retiring(p_uniform_set));
 	us->invalidated_callback = p_callback;
 	us->invalidated_callback_userdata = p_userdata;
 }
@@ -5675,6 +5759,7 @@ bool RenderingDevice::uniform_sets_have_linear_pools() const {
 /*******************/
 
 RID RenderingDevice::render_pipeline_create(RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState &p_rasterization_state, const PipelineMultisampleState &p_multisample_state, const PipelineDepthStencilState &p_depth_stencil_state, const PipelineColorBlendState &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const Vector<PipelineSpecializationConstant> &p_specialization_constants) {
+	ERR_FAIL_COND_V(native_immutable_resource_is_retiring(p_shader), RID());
 	// Needs a shader.
 	Shader *shader = shader_owner.get_or_null(p_shader);
 	ERR_FAIL_NULL_V(shader, RID());
@@ -5877,6 +5962,7 @@ RID RenderingDevice::compute_pipeline_create(RID p_shader, const Vector<Pipeline
 	return _qualification_pipeline_create(p_shader, p_specialization_constants, nullptr, RID());
 }
 RID RenderingDevice::_qualification_pipeline_create(RID p_shader, const Vector<PipelineSpecializationConstant> &p_specialization_constants, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, RID p_reserved) {
+	ERR_FAIL_COND_V(native_immutable_resource_is_retiring(p_shader), RID());
 	Shader *shader;
 
 	{
@@ -6697,6 +6783,7 @@ void RenderingDevice::draw_list_bind_uniform_set(DrawListID p_list, RID p_unifor
 
 	const UniformSet *uniform_set = uniform_set_owner.get_or_null(p_uniform_set);
 	ERR_FAIL_NULL(uniform_set);
+	ERR_FAIL_COND_MSG(_native_immutable_uniform_set_writes(*uniform_set), "An immutable native backing cannot be bound for shader writes.");
 	ERR_FAIL_COND((!uniform_set->qualification_dependencies.is_empty() || uniform_set->qualification_return) && !qualification_recording);
 
 	if (p_index > draw_list.state.set_count) {
@@ -7501,6 +7588,7 @@ void RenderingDevice::raytracing_list_bind_uniform_set(RaytracingListID p_list, 
 
 	UniformSet *uniform_set = uniform_set_owner.get_or_null(p_uniform_set);
 	ERR_FAIL_NULL(uniform_set);
+	ERR_FAIL_COND_MSG(_native_immutable_uniform_set_writes(*uniform_set), "An immutable native backing cannot be bound for shader writes.");
 	ERR_FAIL_COND((!uniform_set->qualification_dependencies.is_empty() || uniform_set->qualification_return) && !qualification_recording);
 
 #ifdef DEBUG_ENABLED
@@ -7789,6 +7877,7 @@ void RenderingDevice::compute_list_bind_uniform_set(ComputeListID p_list, RID p_
 
 	UniformSet *uniform_set = uniform_set_owner.get_or_null(p_uniform_set);
 	ERR_FAIL_NULL(uniform_set);
+	ERR_FAIL_COND_MSG(_native_immutable_uniform_set_writes(*uniform_set), "An immutable native backing cannot be bound for shader writes.");
 	ERR_FAIL_COND((!uniform_set->qualification_dependencies.is_empty() || uniform_set->qualification_return) && !qualification_recording && !_production_resource_permitted(p_uniform_set));
 
 	if (p_index > compute_list.state.set_count) {
@@ -9936,15 +10025,42 @@ RID RenderingDevice::_qualification_storage_create(uint32_t bytes, GDExtensionDe
 
 void RenderingDevice::free_rid(RID p_rid) {
 	ERR_RENDER_THREAD_GUARD();
+	MutexLock immutable_lock(_thread_safe_);
+
 	if (resource_frees_in_progress.has(p_rid)) {
 		return;
 	}
 	resource_frees_in_progress.insert(p_rid);
 	struct ResourceFreeScope {
-		HashSet<RID> &in_progress;
+		RenderingDevice &device;
+		NativeImmutableFreeFrame frame;
 		RID rid;
-		~ResourceFreeScope() { in_progress.erase(rid); }
-	} free_scope{ resource_frees_in_progress, p_rid };
+		ResourceFreeScope(RenderingDevice &p_device, RID p_rid) : device(p_device), rid(p_rid) {
+			frame.previous = device.native_immutable_free_frame;
+			device.native_immutable_free_frame = &frame;
+		}
+		~ResourceFreeScope() {
+			device.resource_frees_in_progress.erase(rid);
+			device.native_immutable_free_frame = frame.previous;
+			if (frame.previous) {
+				for (RID pending : frame.returned) {
+					if (!frame.previous->returned.has(pending)) {
+						frame.previous->returned.push_back(pending);
+					}
+				}
+				return;
+			}
+			// Callback returns belong to this original synchronous free frame.
+			// Once its recursion guard closes, only original pending frees resume.
+			for (RID pending : frame.returned) {
+				bool *retiring = nullptr;
+				const auto *holds = device._native_immutable_counter(pending, &retiring);
+				if (holds && !*holds && *retiring) {
+					device.free_rid(pending);
+				}
+			}
+		}
+	} free_scope{ *this, p_rid };
 
 	auto *buffer = storage_buffer_owner.get_or_null(p_rid);
 	auto *shader = shader_owner.get_or_null(p_rid);
@@ -9954,7 +10070,29 @@ void RenderingDevice::free_rid(RID p_rid) {
 	ERR_FAIL_COND_MSG(!qualification_retiring && ((buffer && buffer->qualification_return) || (shader && shader->qualification_return) || (pipeline && pipeline->qualification_return) || (texture && texture->qualification_return) || (sampler && sampler->qualification_return) || (uniform_set_owner.get_or_null(p_rid) && uniform_set_owner.get_or_null(p_rid)->qualification_return)), "Qualification resources require their original owner retirement acknowledgment.");
 	ERR_FAIL_COND_MSG(texture && texture->qualification_return && texture->transfer_worker_index >= 0, "Qualification texture has an unsettled transfer worker.");
 	ERR_FAIL_COND_MSG(_qualification_resource_busy(p_rid), "Qualification ticket still owns this resource or one of its dependents.");
+	bool *retiring = nullptr;
+	if (auto *holds = _native_immutable_counter(p_rid, &retiring)) {
+		// Close future physical acquisition before dependency callbacks can run.
+		*retiring = true;
+		if (*holds) {
+			_native_immutable_retire_dependents(p_rid);
+			// A callback may return the last hold or delete a dependent. Re-resolve
+			// the actual owner; never dereference its pre-callback pointer again.
+			const auto *remaining = _native_immutable_counter(p_rid);
+			if (!remaining || *remaining) {
+				return;
+			}
+		}
+	}
+
 	if (!_free_dependencies(p_rid)) { // Recursively erase dependencies first, to avoid potential API problems.
+		// A callback can return the last pin, then destroy an owner whose
+		// dependency is this outer free. Resume that original zero-pin free
+		// after the outer recursion guard closes.
+		const auto *remaining = _native_immutable_counter(p_rid, &retiring);
+		if (free_scope.frame.previous && remaining && !*remaining && *retiring && !free_scope.frame.returned.has(p_rid)) {
+			free_scope.frame.returned.push_back(p_rid);
+		}
 		return;
 	}
 	_free_internal(p_rid);
@@ -12061,6 +12199,12 @@ uint64_t RenderingDevice::get_driver_resource(DriverResource p_resource, RID p_r
 	}
 #endif
 
+	MutexLock immutable_lock(_thread_safe_);
+	const bool device_export = p_resource == DRIVER_RESOURCE_LOGICAL_DEVICE || p_resource == DRIVER_RESOURCE_COMMAND_QUEUE || p_resource == DRIVER_RESOURCE_TOPMOST_OBJECT || p_resource == DRIVER_RESOURCE_UNIFORM_SET;
+	ERR_FAIL_COND_V(device_export && native_immutable_hold_count, 0);
+	const bool native_export = p_resource != DRIVER_RESOURCE_TEXTURE_DATA_FORMAT && p_resource != DRIVER_RESOURCE_QUEUE_FAMILY && p_resource != DRIVER_RESOURCE_PHYSICAL_DEVICE;
+	ERR_FAIL_COND_V(native_export && (native_immutable_resource_is_held(p_rid) || native_immutable_resource_is_retiring(p_rid)), 0);
+
 	uint64_t driver_id = 0;
 	switch (p_resource) {
 		case DRIVER_RESOURCE_LOGICAL_DEVICE:
@@ -12137,7 +12281,25 @@ uint64_t RenderingDevice::get_driver_resource(DriverResource p_resource, RID p_r
 		} break;
 	}
 
-	return driver->get_resource_native_handle(p_resource, driver_id);
+	const uint64_t handle = driver->get_resource_native_handle(p_resource, driver_id);
+	if (handle && native_export) {
+		if (device_export) {
+			native_immutable_device_escaped = true;
+		}
+		RID escaped_rid = p_rid;
+		while (escaped_rid.is_valid()) {
+			bool *escaped = nullptr;
+			if (_native_immutable_counter(escaped_rid, nullptr, &escaped)) {
+				*escaped = true;
+			}
+			// A texture view exports the same mutable physical image as its
+			// original parent. Lost coverage belongs to that backing, including
+			// sibling views reached later through their actual owner closure.
+			const auto *texture = texture_owner.get_or_null(escaped_rid);
+			escaped_rid = texture ? texture->owner : RID();
+		}
+	}
+	return handle;
 }
 
 String RenderingDevice::get_driver_and_device_memory_report() const {
@@ -12223,6 +12385,13 @@ void RenderingDevice::_finalize_on_rendering_server_thread() {
 }
 
 Error RenderingDevice::_begin_production_finalization() {
+	{
+		MutexLock immutable_lock(_thread_safe_);
+		production_finalization_started.store(true, std::memory_order_release);
+		if (native_immutable_hold_count || !resource_frees_in_progress.is_empty()) {
+			return ERR_BUSY;
+		}
+	}
 	auto *registry = production_entity_registry.load(std::memory_order_acquire);
 	return (registry ? *registry : GDExtensionDeviceExit::Registry::get_singleton()).device_begin_finalization(this);
 }

@@ -82,6 +82,13 @@ TextureStorage *TextureStorage::get_singleton() {
 	return singleton;
 }
 
+#ifdef TESTS_ENABLED
+TextureStorage::TextureStorage(NativeHoldTestTag) {
+	singleton = this;
+	native_hold_test_minimal = true;
+}
+#endif
+
 TextureStorage::TextureStorage() {
 	singleton = this;
 
@@ -664,6 +671,12 @@ TextureStorage::TextureStorage() {
 }
 
 TextureStorage::~TextureStorage() {
+#ifdef TESTS_ENABLED
+	if (native_hold_test_minimal) {
+		singleton = nullptr;
+		return;
+	}
+#endif
 	rt_sdf.shader.version_free(rt_sdf.shader_version);
 
 	free_decal_data();
@@ -1622,11 +1635,28 @@ RID TextureStorage::texture_create_from_native_handle(RSE::TextureType p_type, I
 	return texture;
 }
 
+bool TextureStorage::_native_immutable_busy(const Texture *p_texture) {
+	if (!p_texture || !RD::get_singleton()) {
+		return false;
+	}
+	auto *rd = RD::get_singleton();
+	if (rd->native_immutable_resource_is_held(p_texture->rd_texture) || rd->native_immutable_resource_is_held(p_texture->rd_texture_srgb)) {
+		return true;
+	}
+	for (RID slice : p_texture->cached_rd_slices) {
+		if (rd->native_immutable_resource_is_held(slice)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 void TextureStorage::_texture_2d_update(RID p_texture, const Ref<Image> &p_image, int p_layer, bool p_immediate) {
 	ERR_FAIL_COND(p_image.is_null() || p_image->is_empty());
 
 	Texture *tex = texture_owner.get_or_null(p_texture);
 	ERR_FAIL_NULL(tex);
+	ERR_FAIL_COND_MSG(_native_immutable_busy(tex), "Texture native inputs are immutable while retained.");
 	ERR_FAIL_COND(tex->is_render_target);
 	ERR_FAIL_COND(p_image->get_width() != tex->width || p_image->get_height() != tex->height);
 	ERR_FAIL_COND(p_image->get_format() != tex->format);
@@ -1651,6 +1681,7 @@ void TextureStorage::texture_2d_update(RID p_texture, const Ref<Image> &p_image,
 void TextureStorage::texture_3d_update(RID p_texture, const Vector<Ref<Image>> &p_data) {
 	Texture *tex = texture_owner.get_or_null(p_texture);
 	ERR_FAIL_NULL(tex);
+	ERR_FAIL_COND_MSG(_native_immutable_busy(tex), "Texture native inputs are immutable while retained.");
 	ERR_FAIL_COND(tex->type != TextureStorage::TYPE_3D);
 
 	Image::Image3DValidateError verr = Image::validate_3d_image(tex->format, tex->width, tex->height, tex->depth, tex->mipmaps > 1, p_data);
@@ -1692,6 +1723,7 @@ void TextureStorage::texture_external_update(RID p_texture, int p_width, int p_h
 void TextureStorage::texture_proxy_update(RID p_texture, RID p_proxy_to) {
 	Texture *tex = texture_owner.get_or_null(p_texture);
 	ERR_FAIL_NULL(tex);
+	ERR_FAIL_COND_MSG(_native_immutable_busy(tex), "Texture native inputs are immutable while retained.");
 	ERR_FAIL_COND(!tex->is_proxy);
 	Texture *proxy_to = texture_owner.get_or_null(p_proxy_to);
 	ERR_FAIL_NULL(proxy_to);
@@ -1998,6 +2030,8 @@ Vector<Ref<Image>> TextureStorage::texture_3d_get(RID p_texture) const {
 
 void TextureStorage::texture_drawable_generate_mipmaps(RID p_texture) {
 	Texture *tex = get_texture(p_texture);
+	ERR_FAIL_NULL(tex);
+	ERR_FAIL_COND_MSG(_native_immutable_busy(tex), "Texture native inputs are immutable while retained.");
 	CopyEffects *copy_effects = CopyEffects::get_singleton();
 	ERR_FAIL_NULL(copy_effects);
 
@@ -2034,6 +2068,7 @@ void TextureStorage::texture_replace(RID p_texture, RID p_by_texture) {
 	ERR_FAIL_COND(tex->proxy_to.is_valid()); //can't replace proxy
 	Texture *by_tex = texture_owner.get_or_null(p_by_texture);
 	ERR_FAIL_NULL(by_tex);
+	ERR_FAIL_COND_MSG(_native_immutable_busy(tex) || _native_immutable_busy(by_tex), "Texture native inputs are immutable while retained.");
 	ERR_FAIL_COND(by_tex->proxy_to.is_valid()); //can't replace proxy
 
 	if (tex == by_tex) {

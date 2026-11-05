@@ -41,10 +41,17 @@
 #include "servers/rendering/storage/utilities.h"
 
 struct Projection;
+class ShaderRD;
 
 namespace RendererRD {
 
 class MaterialStorage : public RendererMaterialStorage {
+#ifdef TESTS_ENABLED
+	friend class TestMaterialStorageNativeHoldAccess;
+	struct NativeHoldTestTag {};
+	explicit MaterialStorage(NativeHoldTestTag);
+	bool native_hold_test_minimal = false;
+#endif
 public:
 	enum ShaderType {
 		SHADER_TYPE_2D,
@@ -90,6 +97,30 @@ public:
 		static bool blend_mode_uses_blend_alpha(BlendMode p_mode);
 	};
 
+	struct NativeMaterialSnapshot {
+		RID shader, pipeline, uniform_set, uniform_buffer;
+		uint32_t uniform_set_index = 0;
+		Vector<uint8_t> uniform_bytes;
+		Vector<RID> textures, samplers;
+		uint64_t material_generation = 0;
+		int32_t priority = 0;
+	};
+	// Explicit Core physical retention. No packet or Runtime authority is issued.
+	class NativeMaterialHold {
+		friend class MaterialStorage;
+		RenderingDevice *device = nullptr;
+		RID material;
+		RenderingDevice::NativeImmutableHold native;
+		NativeMaterialSnapshot snapshot;
+
+	public:
+		NativeMaterialHold() = default;
+		NativeMaterialHold(const NativeMaterialHold &) = delete;
+		NativeMaterialHold &operator=(const NativeMaterialHold &) = delete;
+		bool is_active() const { return device != nullptr; }
+		bool is_valid() const { return native.is_valid(); }
+		const NativeMaterialSnapshot &get_snapshot() const { return snapshot; }
+	};
 	struct MaterialData {
 		uint64_t generation = 0;
 		Vector<RendererRD::TextureStorage::RenderTarget *> render_target_cache;
@@ -109,7 +140,19 @@ public:
 
 	private:
 		friend class MaterialStorage;
+#ifdef TESTS_ENABLED
+		friend class TestMaterialStorageNativeHoldAccess;
+#endif
 
+		struct NativeUniformSetState {
+			RID uniform_set, shader, uniform_buffer;
+			uint32_t uniform_set_index = 0;
+			Vector<uint8_t> uniform_bytes;
+			Vector<RID> textures;
+			bool supported = false;
+		};
+		NativeUniformSetState native_uniform_sets[2];
+		bool native_immutable_busy() const;
 		RID self;
 		List<RID>::Element *global_buffer_E = nullptr;
 		List<RID>::Element *global_texture_E = nullptr;
@@ -291,6 +334,7 @@ private:
 	struct Material {
 		RID self;
 		uint64_t generation = 1;
+		uint32_t native_immutable_holds = 0;
 		MaterialData *data = nullptr;
 		Shader *shader = nullptr;
 		//shortcut to shader data and type
@@ -317,9 +361,13 @@ private:
 	Mutex material_update_list_mutex;
 
 	static void _material_uniform_set_erased(void *p_material);
+	static bool _shader_native_immutable_busy(const Shader *p_shader);
+	void _material_set_shader(RID p_material, RID p_shader, bool p_freeing);
 
 public:
 	static MaterialStorage *get_singleton();
+	Error material_native_hold_acquire(RID p_material, RID p_shader, RID p_pipeline, RID p_uniform_set, NativeMaterialHold &r_hold, uint32_t p_max_resources = 256);
+	static Error material_native_hold_release(NativeMaterialHold &r_hold);
 
 	MaterialStorage();
 	virtual ~MaterialStorage();

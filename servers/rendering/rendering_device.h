@@ -42,7 +42,8 @@ class ProductionAttachment;
 
 namespace RendererRD {
 class ExternalOutputStorage;
-}
+class MeshStorage;
+} //namespace RendererRD
 
 #ifdef TESTS_ENABLED
 namespace TestProductionRequest {
@@ -110,6 +111,7 @@ class RenderingDevice : public RenderingDeviceCommons {
 	friend class ParticlesExternalOutputTestFixture;
 #endif
 
+	friend class RendererRD::MeshStorage;
 	GDCLASS(RenderingDevice, Object)
 
 	_THREAD_SAFE_CLASS_
@@ -133,6 +135,7 @@ private:
 #ifdef TESTS_ENABLED
 	friend class TestExternalOutputAccess;
 	friend class TestIndexed144DeviceAccess;
+	friend class TestMaterialStorageNativeHoldDeviceAccess;
 	friend class TestShaderCompilePolicyAccess;
 	friend class TestTransferWorkerAccess;
 	friend class TestFrameWaitAccess;
@@ -338,6 +341,9 @@ private:
 	RID _qualification_storage_create(uint32_t p_bytes, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
 
 	struct Buffer {
+		uint32_t native_immutable_holds = 0;
+		bool native_immutable_retire_requested = false;
+		bool native_external_access = false;
 		NativeDisposalWitness native_disposal;
 		uint64_t native_disposal_rid = 0;
 		uint32_t qualification_users = 0;
@@ -476,6 +482,40 @@ private:
 	DrawAppendResult _draw_list_draw_indirect_recorded(DrawListID p_list, bool p_use_indices, RID p_buffer, uint32_t p_offset, uint32_t p_draw_count, uint32_t p_stride, bool p_capture = true);
 
 public:
+	// Core physical retention only: no source, packet, window or Runtime grant.
+	class NativeImmutableHold {
+		friend class RenderingDevice;
+		RenderingDevice *device = nullptr;
+		Vector<RID> resources;
+		bool pins_returned = false;
+
+	public:
+		NativeImmutableHold() = default;
+		NativeImmutableHold(const NativeImmutableHold &) = delete;
+		NativeImmutableHold &operator=(const NativeImmutableHold &) = delete;
+		NativeImmutableHold(NativeImmutableHold &&other) { *this = static_cast<NativeImmutableHold &&>(other); }
+		NativeImmutableHold &operator=(NativeImmutableHold &&other) {
+			if (this == &other) {
+				return *this;
+			}
+			CRASH_COND(device);
+			device = other.device;
+			resources = static_cast<Vector<RID> &&>(other.resources);
+			pins_returned = other.pins_returned;
+			other.device = nullptr;
+			other.pins_returned = false;
+			return *this;
+		}
+		~NativeImmutableHold() { CRASH_COND(device); } // Original owner must explicitly return it.
+		bool is_valid() const { return device && !pins_returned; }
+	};
+	Error native_immutable_hold_acquire(const VectorView<RID> &p_roots, NativeImmutableHold &r_hold, uint32_t p_max_resources = 256);
+	Error native_immutable_hold_release(NativeImmutableHold &r_hold);
+	bool native_immutable_is_render_thread() const;
+	bool native_immutable_resource_is_held(RID p_rid) const;
+	bool native_immutable_resource_is_retiring(RID p_rid) const;
+	bool native_immutable_pipeline_matches_shader(RID p_pipeline, RID p_shader) const;
+	bool native_immutable_uniform_set_matches_pipeline(RID p_set, RID p_pipeline, uint32_t p_set_index) const;
 	Error buffer_copy(RID p_src_buffer, RID p_dst_buffer, uint32_t p_src_offset, uint32_t p_dst_offset, uint32_t p_size);
 	/**
 	 * @brief Updates the given GPU buffer at offset and size with the given CPU data.
@@ -590,6 +630,9 @@ public:
 	// for a framebuffer to render into it.
 
 	struct Texture {
+		uint32_t native_immutable_holds = 0;
+		bool native_immutable_retire_requested = false;
+		bool native_external_access = false;
 		struct SharedFallback {
 			uint32_t revision = 1;
 			RDD::TextureID texture;
@@ -984,6 +1027,9 @@ public:
 	/*****************/
 private:
 	struct Sampler {
+		uint32_t native_immutable_holds = 0;
+		bool native_immutable_retire_requested = false;
+		bool native_external_access = false;
 		RDD::SamplerID driver_id;
 		uint32_t qualification_users = 0;
 		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
@@ -1085,6 +1131,9 @@ private:
 	HashMap<VertexFormatID, VertexDescriptionCache> vertex_formats;
 
 	struct VertexArray {
+		uint32_t native_immutable_holds = 0;
+		bool native_immutable_retire_requested = false;
+		bool native_external_access = false;
 		RID buffer;
 		VertexFormatID description;
 		int vertex_count = 0;
@@ -1110,6 +1159,9 @@ private:
 	RID_Owner<IndexBuffer, true> index_buffer_owner;
 
 	struct IndexArray {
+		uint32_t native_immutable_holds = 0;
+		bool native_immutable_retire_requested = false;
+		bool native_external_access = false;
 		uint32_t max_index = 0; // Remember the maximum index here too, for validation.
 		RDD::BufferID driver_id; // Not owned, inherited from index buffer.
 		RDG::ResourceTracker *draw_tracker = nullptr; // Not owned, inherited from index buffer.
@@ -1213,6 +1265,10 @@ private:
 	// does not submit something invalid.
 
 	struct Shader : public ShaderReflection {
+		Vector<RID> native_immutable_samplers;
+		uint32_t native_immutable_holds = 0;
+		bool native_immutable_retire_requested = false;
+		bool native_external_access = false;
 		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
 		BitField<ShaderCompileFlags> compile_flags = {};
 		String name; // Used for debug.
@@ -1425,6 +1481,9 @@ private:
 	// the above restriction is not too serious.
 
 	struct UniformSet {
+		uint32_t native_immutable_holds = 0;
+		bool native_immutable_retire_requested = false;
+		bool native_external_access = false;
 		NativeDisposalWitness native_disposal;
 		uint64_t native_disposal_rid = 0;
 		uint64_t native_disposal_serial = 0;
@@ -1445,6 +1504,7 @@ private:
 			RID texture;
 		};
 
+		LocalVector<RID> writable_resources; // Actual reflected writable bindings, never caller permission.
 		LocalVector<AttachableTexture> attachable_textures; // Used for validation.
 		Vector<RDG::ResourceTracker *> draw_trackers;
 		Vector<RDG::ResourceUsage> draw_trackers_usage;
@@ -1551,6 +1611,9 @@ public:
 	// was not supplied as intended.
 private:
 	struct RenderPipeline {
+		uint32_t native_immutable_holds = 0;
+		bool native_immutable_retire_requested = false;
+		bool native_external_access = false;
 		// Cached values for validation.
 #ifdef DEBUG_ENABLED
 		struct Validation {
@@ -1584,6 +1647,9 @@ private:
 	static void _save_pipeline_cache(void *p_data);
 
 	struct ComputePipeline {
+		uint32_t native_immutable_holds = 0;
+		bool native_immutable_retire_requested = false;
+		bool native_external_access = false;
 		uint32_t qualification_users = 0;
 		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
 		RID shader;
@@ -2094,6 +2160,17 @@ private:
 	/***********************/
 
 	bool _texture_make_mutable(Texture *p_texture, RID p_texture_id);
+	struct NativeImmutableFreeFrame {
+		NativeImmutableFreeFrame *previous = nullptr;
+		LocalVector<RID> returned;
+	};
+	NativeImmutableFreeFrame *native_immutable_free_frame = nullptr;
+	uint32_t native_immutable_hold_count = 0;
+	bool native_immutable_device_escaped = false;
+	Buffer *_native_immutable_buffer(RID p_rid);
+	void _native_immutable_retire_dependents(RID p_rid);
+	uint32_t *_native_immutable_counter(RID p_rid, bool **r_retiring = nullptr, bool **r_escaped = nullptr);
+	bool _native_immutable_uniform_set_writes(const UniformSet &p_set) const;
 	bool _buffer_make_mutable(Buffer *p_buffer, RID p_buffer_id);
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
 	void _capture_test_record_writable_uses(const Vector<RDG::ResourceTracker *> &p_trackers, const Vector<RDG::ResourceUsage> &p_usages, uint32_t p_operation);
