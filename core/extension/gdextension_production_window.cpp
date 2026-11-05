@@ -293,6 +293,35 @@ Error Registry::production_record_receive_locked(ProductionRequest &request, Ren
 	return error;
 }
 
+Error Registry::production_output_pin_current(RenderingDevice &expected_device, ProductionOutputPin &pin) {
+	if (!pin.is_empty()) {
+		return ERR_ALREADY_IN_USE;
+	}
+	const auto *frame = production_physical_frame;
+	if (!frame || frame->registry != this || !frame->request) {
+		return ERR_UNAUTHORIZED;
+	}
+	// This thread's original executing control retains the request across the
+	// callback. Do not acquire mutex here: production_output_pin owns its lock
+	// and authenticates the exact protected entry, control, device and thread.
+	return production_output_pin({ instance, frame->serial }, { instance, frame->request->serial }, expected_device, pin);
+}
+
+// Caller holds Registry mutex. Authenticate only; never mint another pin.
+Error Registry::production_output_owner_context_locked(const ProductionOutputPin &pin, RenderingDevice &expected_device) {
+	auto *frame = production_physical_frame;
+	if (!frame || frame->registry != this || !frame->request) {
+		return ERR_UNAUTHORIZED;
+	}
+	ProductionRequest *request = nullptr;
+	RenderingDevice *device = nullptr;
+	const Error error = production_physical_request_locked({ instance, frame->serial }, { instance, pin.request_serial }, request, device, true);
+	if (error != OK) {
+		return error;
+	}
+	return request == pin.request && device == &expected_device ? OK : ERR_UNAUTHORIZED;
+}
+
 Error Registry::production_output_pin(ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, RenderingDevice &expected_device, ProductionOutputPin &pin) {
 	MutexLock lock(mutex);
 	if (!pin.is_empty()) {

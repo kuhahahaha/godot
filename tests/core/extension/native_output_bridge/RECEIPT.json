@@ -1,0 +1,79 @@
+{
+  "schema": 1,
+  "component": "Private original RECORD ambient pin and linked OBSERVE owner service bridge",
+  "base_commit": "112d26b6cb153317af7939fe8dfe178976228476",
+  "source_pins": {
+    "core/extension/gdextension_library_exit_guard.h": "957f2b717fb794444b44666c1ab2e46774e5e9916a7958039ef1ec9dc809b868",
+    "core/extension/gdextension_production_request.cpp": "9d934cacb1fc6bc36bf2e1dbd9e622f05f49ab3617f5322de999604a46284478",
+    "core/extension/gdextension_production_request.h": "1465a520defe630a1de38e50e1125546f007c6b4de25e9a3115d782fc871f3f4",
+    "core/extension/gdextension_production_window.cpp": "520a5763a35081accbe1bf1ef903696d2f13a0f701c6db1de8dc9f9a4873263a",
+    "servers/rendering/rendering_device.cpp": "70cb94d31cb351d3d6b36170876f30a417687ecda299eef73a3bfdc6934c2b12",
+    "servers/rendering/rendering_device.h": "be6aae27ccaa5ba315db22bc4a68e3bb869ed6fa2232f657f39b163d29515df8",
+    "tests/core/extension/test_production_request.cpp": "0c7bb173f7ae40eb5aefa856983449f0e1299b067f729fc2a84e77e2acbedae7"
+  },
+  "host_sha256": "1fccf0b6e28670d085668d213bcdc170718d5178d230c77d9b7c8ed46f7a572a",
+  "controlled_metadata_sha256": "2491107db6e16ae96946acc600c81ad398427f9fbc41ca23d7ac1d220ffc2f3e",
+  "host_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-output-bridge-20261106/host/editor.arm64",
+  "results": {
+    "build": {
+      "path": "work/b4-output-bridge-20261106/BUILD_RESULT.json",
+      "sha256": "6f44e692bf67643fc7738b940273b9df5e660639581b4f091ff553491bb08b6a",
+      "exit": 0
+    },
+    "targeted": {
+      "path": "work/b4-output-bridge-20261106/targeted/RESULT.json",
+      "sha256": "be35da902e1c2ddb7aeb65d1405cad19e6c758f75a063add33c3a5aec0c05690",
+      "exit": 0,
+      "test_cases": {
+        "successes": "50",
+        "failures": "0"
+      },
+      "asserts": {
+        "successes": "33453",
+        "failures": "0"
+      },
+      "validation_pass": true
+    },
+    "full": {
+      "path": "work/b4-output-bridge-20261106/full/RESULT.json",
+      "sha256": "71c8b6282644a5cd2fa5f992a9bcc594e4fa0a8de84c539b5bd18f9f44c7d8bb",
+      "exit": 0,
+      "test_cases": {
+        "successes": "2089",
+        "failures": "0"
+      },
+      "asserts": {
+        "successes": "523709",
+        "failures": "0"
+      },
+      "validation_pass": true
+    },
+    "native390": {
+      "path": "work/b4-output-bridge-20261106/native390/RESULT.json",
+      "sha256": "88af2e644a9b095c35f86814d82f017b1d5c8046a6db761441854a7c6eaef000",
+      "exit": 0,
+      "gpu_pass": true,
+      "checks": {
+        "one_result": true,
+        "not_timeout": true,
+        "no_fatal_or_exit_leaks": true,
+        "exact_expected_engine_errors": true,
+        "actual_metal_startup": true,
+        "native_and_outer_success": true,
+        "host_and_metadata_unchanged": true,
+        "source_unchanged": true
+      }
+    }
+  },
+  "independent_review": {
+    "path": "/tmp/native-output-bridge-astra-review/REVIEW.md",
+    "sha256": "e6185d8564076dfd02156928c09de806b80fa2e4d59895c6f0212c9292d8e9b6"
+  },
+  "limits": [
+    "Original admission caller still missing; no positive owner_bind-to-native-service execution evidence.",
+    "Added regression assertions cover original/nested/expired/late ambient pin contexts, not linked-list runtime or budget debit.",
+    "Static linked-list/budget review is not hardware or full output qualification.",
+    "Only macOS editor link executed; other link configurations remain unverified.",
+    "Native generation closure does not sign source/history/code-close obligations."
+  ]
+}

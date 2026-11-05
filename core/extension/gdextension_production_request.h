@@ -234,6 +234,12 @@ class ProductionUseCell {
 	OutputRole output_role = OutputRole::UNUSED;
 	ProductionOutputPin *output_consumer = nullptr;
 	uint64_t output_pin_serial = 0;
+	// Exact native owner locator on the ORIGINAL root pin row. Borrow rows
+	// remain unlinked. No wrapper/owner address is retained here.
+	RID output_particles;
+	uint64_t output_generation = 0, output_lease = 0;
+	uint32_t output_slot = UINT32_MAX;
+	uint32_t output_prev = UINT32_MAX, output_next = UINT32_MAX;
 	ProductionDisposalUse disposal;
 	uint64_t disposal_group_serial = 0, disposal_group_pin_serial = 0;
 	uint32_t disposal_group_count = 0, disposal_ordinal = UINT32_MAX;
@@ -394,6 +400,7 @@ class ProductionRequest {
 	uint32_t retire_cursor = 0;
 	uint64_t next_control_serial = 1;
 	uint64_t next_output_pin_serial = 1;
+	uint32_t output_owner_head = UINT32_MAX, output_owner_cursor = UINT32_MAX;
 	uint64_t next_disposal_group_serial = 1;
 	bool frozen = false, cancelled = false, effects_pending = false;
 	bool compute_list_open = false;

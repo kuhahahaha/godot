@@ -43,6 +43,7 @@
 #include "core/profiling/profiling.h"
 #include "core/templates/fixed_vector.h"
 #include "servers/rendering/render_capture_test_hooks.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/rendering_device_binds.h"
 #include "servers/rendering/rendering_shader_container.h"
 #include "servers/rendering/shader_include_db.h"
@@ -14342,4 +14343,22 @@ bool RenderingDevice::_production_resource_permitted(RID rid) const {
 		}
 	}
 	return false;
+}
+
+// Keep the original Core-to-native service edge in this already rooted server
+// object, so static archive extraction does not depend on Core link order.
+bool RenderingDevice::_production_output_owner_matches(
+		RID p_particles, uint64_t p_generation, uint32_t p_slot, uint64_t p_lease,
+		const GDExtensionDeviceExit::ProductionOutputPin &p_pin,
+		GDExtensionProductionRequestRefV1 p_request) {
+	return RendererRD::ParticlesStorage::_production_output_owner_matches(
+			p_particles, p_generation, p_slot, p_lease, p_pin, *this, p_request);
+}
+Error RenderingDevice::_production_output_owner_service(
+		RID p_particles, uint64_t p_generation, uint32_t p_slot, uint64_t p_lease,
+		GDExtensionDeviceExit::ProductionOutputPin &p_pin,
+		const GDExtensionProductionServiceBudgetV1 &p_budget,
+		GDExtensionDeviceExit::ProductionServiceUsage &r_usage) {
+	return RendererRD::ParticlesStorage::_production_output_service(
+			p_particles, p_generation, p_slot, p_lease, p_pin, p_budget, r_usage);
 }

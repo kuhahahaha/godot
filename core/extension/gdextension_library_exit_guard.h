@@ -857,11 +857,19 @@ private:
 	void production_metadata_pump();
 	struct ProductionPhysicalFrame;
 	static thread_local ProductionPhysicalFrame *production_physical_frame;
+	// Core-only ambient bridge. Uses the original executing RECORD frame;
+	// never interprets Dictionary tokens or grants source/Host/mapping admission.
+	Error production_output_pin_current(RenderingDevice &, ProductionOutputPin &);
 	Error production_output_pin(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, RenderingDevice &, ProductionOutputPin &);
 	// Metadata custody only, from an existing original pin into a spare quoted cell.
 	// This never issues a physical context, source permission or native read use.
 	Error production_output_pin_borrow(const ProductionOutputPin &, RenderingDevice &, ProductionOutputPin &);
 	Error production_output_unpin(ProductionOutputPin &);
+	// Called only after the original accepted slot installs its root pin and
+	// exact locator. Does not grant source/mapping/Host admission.
+	Error production_output_owner_bind(ProductionOutputPin &, RenderingDevice &, RID, uint64_t, uint32_t, uint64_t);
+	Error production_output_owners_service_locked(ProductionRequest &, RenderingDevice &);
+	Error production_output_owner_context_locked(const ProductionOutputPin &, RenderingDevice &);
 	bool production_output_pin_matches(const ProductionOutputPin &, GDExtensionProductionRequestRefV1, RenderingDevice &);
 	bool production_output_graph_command_locked(const ProductionRequest &, const RenderingDevice &, uint32_t, uint32_t) const;
 	bool production_output_recorded_ordered_locked(const ProductionRequest &, const RenderingDevice &) const;

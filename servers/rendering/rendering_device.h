@@ -1599,6 +1599,8 @@ private:
 
 	// Mechanical ports for an original Core owner; deliberately private. No
 	// arbitrary-RID enrollment or qualification ticket authorizes these calls.
+	bool _production_output_owner_matches(RID, uint64_t, uint32_t, uint64_t, const GDExtensionDeviceExit::ProductionOutputPin &, GDExtensionProductionRequestRefV1);
+	Error _production_output_owner_service(RID, uint64_t, uint32_t, uint64_t, GDExtensionDeviceExit::ProductionOutputPin &, const GDExtensionProductionServiceBudgetV1 &, GDExtensionDeviceExit::ProductionServiceUsage &);
 	Error _production_output_owned_reserve(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint32_t, uint64_t &);
 	Error _production_output_owned_storage_create(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, uint32_t, BitField<StorageBufferUsage>, RID &, NativeDisposalWitness &);
 	Error _production_output_owned_uniform_set_create(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, const VectorView<Uniform> &, RID, uint32_t, RID &, NativeDisposalWitness &);

@@ -1661,12 +1661,24 @@ struct Access {
 				test.check(__LINE__, registry.production_output_pin(context, { ref.registry_instance, UINT64_MAX }, fixture.rd, refused) == ERR_UNAUTHORIZED && refused.is_empty());
 				const uint32_t binding_used = request.binding_used;
 				const uint64_t revision = request.revision;
-				test.check(__LINE__, registry.production_output_pin(context, ref, fixture.rd, test.output_pin) == OK && !test.output_pin.is_empty());
+				const uint64_t before_pin_serial = request.next_output_pin_serial;
+				{
+					// A nested admitted callback is not the original RECORD entry.
+					// The outer production TLS frame remains installed, so this
+					// distinguishes exact protected-entry validation from TLS-only.
+					GDExtensionDeviceExit::CallbackScope nested(fixture.reference);
+					test.check(__LINE__, nested.get_error() == OK);
+					test.check(__LINE__, registry.production_output_pin_current(fixture.rd, refused) == ERR_UNAUTHORIZED && refused.is_empty());
+					test.check(__LINE__, request.next_output_pin_serial == before_pin_serial && request.binding_used == binding_used && request.revision == revision && request.next_action == 0 && request.graph_count == 0 && request.native_count == 0);
+				}
+				// Unwinding the nested entry restores the original RECORD frame.
+				test.check(__LINE__, registry.production_output_pin_current(fixture.rd, test.output_pin) == OK && !test.output_pin.is_empty());
 				test.check(__LINE__, registry.production_output_pin_matches(test.output_pin, ref, fixture.rd));
 				test.check(__LINE__, !registry.production_output_pin_matches(test.output_pin, { ref.registry_instance, UINT64_MAX }, fixture.rd));
-				test.check(__LINE__, registry.production_output_pin(context, ref, fixture.rd, test.output_pin) == ERR_ALREADY_IN_USE);
+				test.check(__LINE__, registry.production_output_pin_current(fixture.rd, test.output_pin) == ERR_ALREADY_IN_USE);
+				test.check(__LINE__, registry.production_output_pin_matches(test.output_pin, ref, fixture.rd));
 				if (!test.output_borrow) {
-					test.check(__LINE__, registry.production_output_pin(context, ref, fixture.rd, refused) == ERR_OUT_OF_MEMORY && refused.is_empty());
+					test.check(__LINE__, registry.production_output_pin_current(fixture.rd, refused) == ERR_OUT_OF_MEMORY && refused.is_empty());
 				}
 				ProductionOutputPin moved(std::move(test.output_pin));
 				test.check(__LINE__, test.output_pin.is_empty() && !moved.is_empty());
@@ -1915,7 +1927,9 @@ struct Access {
 			test.check(__LINE__, appended.state == GDEXTENSION_PRODUCTION_APPENDED_V1 && request.next_action == 1 && request.graph_count == 1);
 			if (test.public_port) {
 				GDExtensionDeviceExit::ProductionOutputPin too_late;
-				test.check(__LINE__, registry.production_output_pin(context, ref, fixture.rd, too_late) == ERR_BUSY && too_late.is_empty());
+				const uint64_t before_pin_serial = request.next_output_pin_serial, before_revision = request.revision;
+				test.check(__LINE__, registry.production_output_pin_current(fixture.rd, too_late) == ERR_BUSY && too_late.is_empty());
+				test.check(__LINE__, request.next_output_pin_serial == before_pin_serial && request.revision == before_revision && request.next_action == 1 && request.graph_count == 1);
 				if (test.output_borrow) {
 					// Real original pin, actual appended work, same accepted spare cells.
 					const uint64_t before = request.revision;
@@ -3044,6 +3058,10 @@ struct Access {
 				const uint64_t before_pin_serial = fixture.request->next_output_pin_serial;
 				CHECK(fixture.registry.production_output_pin(test.expired_context, { fixture.instance, fixture.request->serial }, fixture.rd, expired_refused) == ERR_UNAUTHORIZED);
 				CHECK(expired_refused.is_empty());
+				CHECK(fixture.registry.production_output_pin_current(fixture.rd, expired_refused) == ERR_UNAUTHORIZED);
+				CHECK(expired_refused.is_empty());
+				CHECK(fixture.registry.production_output_pin_current(fixture.rd, test.output_pin) == ERR_ALREADY_IN_USE);
+				CHECK(fixture.registry.production_output_pin_matches(test.output_pin, { fixture.instance, fixture.request->serial }, fixture.rd));
 				CHECK(fixture.request->next_output_pin_serial == before_pin_serial);
 				CHECK(fixture.registry.production_output_pin(test.expired_context, { fixture.instance, fixture.request->serial }, fixture.rd, test.output_pin) == ERR_ALREADY_IN_USE);
 				if (test.output_closure && !test.closure_retired) {
