@@ -37,7 +37,8 @@
 
 namespace RendererRD {
 class ParticlesStorage;
-}
+class ExternalOutputOwner;
+} //namespace RendererRD
 class StringName;
 class RenderingDevice;
 class RenderingServerDefault;
@@ -822,6 +823,7 @@ private:
 	friend class ::RenderingDevice;
 	friend class ::RenderingDeviceDriver;
 	friend class ::RendererRD::ParticlesStorage;
+	friend class ::RendererRD::ExternalOutputOwner;
 	friend class ProductionOutputPin;
 	struct DeviceRecord {
 		Object *object = nullptr;

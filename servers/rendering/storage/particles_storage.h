@@ -31,6 +31,8 @@
 #pragma once
 
 #include "core/math/math_defs.h" // real_t
+#include "core/variant/dictionary.h"
+#include "core/variant/variant.h"
 #include "servers/rendering/rendering_server_enums.h"
 
 class RID;
@@ -51,6 +53,35 @@ public:
 	virtual RID particles_allocate() = 0;
 	virtual void particles_initialize(RID p_rid) = 0;
 	virtual void particles_free(RID p_rid) = 0;
+
+	// Compatibility and Dummy have no native ExternalOutput implementation.
+	// These defaults never allocate a RID, token, or output resource.
+	virtual Dictionary particles_external_create(const Dictionary &p_config) {
+		Dictionary result;
+		result["error"] = ERR_UNAVAILABLE;
+		result["detail"] = StringName("backend_unsupported");
+		return result;
+	}
+	virtual Dictionary particles_external_acquire(RID p_particles, const Dictionary &p_request) {
+		Dictionary result;
+		result["error"] = ERR_UNAVAILABLE;
+		result["detail"] = StringName("backend_unsupported");
+		return result;
+	}
+	virtual Dictionary particles_external_seal(RID p_particles, const PackedByteArray &p_lease_token, const Dictionary &p_seal) {
+		Dictionary result;
+		result["error"] = ERR_UNAVAILABLE;
+		result["detail"] = StringName("backend_unsupported");
+		return result;
+	}
+	virtual Error particles_external_cancel(RID p_particles, const PackedByteArray &p_lease_token) { return ERR_UNAVAILABLE; }
+	virtual Error particles_external_withdraw(RID p_particles, const PackedByteArray &p_generation) { return ERR_UNAVAILABLE; }
+	virtual Dictionary particles_external_poll(RID p_particles, const PackedByteArray &p_generation) {
+		Dictionary result;
+		result["error"] = ERR_UNAVAILABLE;
+		result["detail"] = StringName("backend_unsupported");
+		return result;
+	}
 
 	virtual void particles_set_mode(RID p_particles, RSE::ParticlesMode p_mode) = 0;
 
@@ -89,6 +120,7 @@ public:
 	virtual void particles_set_subemitter(RID p_particles, RID p_subemitter_particles) = 0;
 
 	virtual bool particles_is_inactive(RID p_particles) const = 0;
+	virtual bool particles_is_external(RID p_particles) const { return false; }
 
 	virtual void particles_set_draw_order(RID p_particles, RSE::ParticlesDrawOrder p_order) = 0;
 

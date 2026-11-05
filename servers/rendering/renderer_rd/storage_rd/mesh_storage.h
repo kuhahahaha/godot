@@ -523,6 +523,8 @@ public:
 			return *this;
 		}
 		~NativeSurfaceHold() { CRASH_COND(device); }
+		bool is_active() const { return device != nullptr; }
+		bool has_retirement_directory() const { return !retirement_group.is_empty(); }
 		bool is_valid() const { return surface && physical.is_valid(); }
 		RID get_vertex_array() const { return is_valid() ? vertex_array : RID(); }
 		RID get_index_array() const { return is_valid() ? index_array : RID(); }

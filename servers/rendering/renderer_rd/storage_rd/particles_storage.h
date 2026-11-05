@@ -42,11 +42,23 @@
 #include "servers/rendering/storage/particles_storage.h"
 #include "servers/rendering/storage/utilities.h"
 
+namespace GDExtensionDeviceExit {
+class ProductionOutputPin;
+}
+
+class RenderDataRD;
+
 class ParticlesRuntimeTestFixture;
 
 namespace RendererRD {
 
 class SortEffects;
+class ExternalOutputOwner;
+class ExternalSurfaceSelection;
+class ExternalPacketBinding;
+class ExternalPacketViewLease;
+enum class ExternalPacketPass : uint8_t;
+struct ExternalPacketPipelineRequest;
 
 class ParticlesStorage : public RendererParticlesStorage {
 private:
@@ -58,6 +70,12 @@ private:
 	friend class TestParticlesReadbackAccess;
 	friend class TestParticlesProcessRetryAccess;
 #endif
+	friend class ::GDExtensionDeviceExit::Registry;
+	friend class ::RenderingDevice;
+	// Fixed original Core -> native owner service. Core re-resolves its finite
+	// row after return; no owner/wrapper pointer is persisted in the Core arena.
+	static bool _production_output_owner_matches(RID, uint64_t, uint32_t, uint64_t, const GDExtensionDeviceExit::ProductionOutputPin &, RenderingDevice &, GDExtensionProductionRequestRefV1);
+	static Error _production_output_service(RID p_particles, uint64_t p_generation, uint32_t p_slot, uint64_t p_lease_serial, GDExtensionDeviceExit::ProductionOutputPin &p_pin, const GDExtensionProductionServiceBudgetV1 &p_budget, GDExtensionDeviceExit::ProductionServiceUsage &r_usage);
 	static ParticlesStorage *singleton;
 
 	/* EFFECTS */
@@ -170,6 +188,9 @@ private:
 	};
 
 	struct Particles {
+		// Immutable after creation; the original particle RID remains the owner.
+		// A non-null pointer must never enter native simulation or amount paths.
+		ExternalOutputOwner *external = nullptr;
 		RSE::ParticlesMode mode = RSE::PARTICLES_MODE_3D;
 		bool inactive = true;
 		double inactive_time = 0.0;
@@ -481,6 +502,22 @@ public:
 
 	virtual RID particles_allocate() override;
 	virtual void particles_initialize(RID p_rid) override;
+
+	virtual Dictionary particles_external_create(const Dictionary &p_config) override;
+	virtual Dictionary particles_external_acquire(RID p_particles, const Dictionary &p_request) override;
+	virtual Dictionary particles_external_seal(RID p_particles, const PackedByteArray &p_lease_token, const Dictionary &p_seal) override;
+	virtual Error particles_external_cancel(RID p_particles, const PackedByteArray &p_lease_token) override;
+	virtual Error particles_external_withdraw(RID p_particles, const PackedByteArray &p_generation) override;
+	virtual Dictionary particles_external_poll(RID p_particles, const PackedByteArray &p_generation) override;
+	bool particles_is_external(RID p_particles) const override;
+	// Core-only native cache/read providers. No ClassDB method or record grant.
+	uint32_t particles_external_surface_count(RID p_particles) const;
+	Error particles_external_surface_acquire(RID p_particles, uint32_t p_ordinal, ExternalSurfaceSelection &r_selection);
+	Error particles_external_surface_release(ExternalSurfaceSelection &p_selection);
+	Error particles_external_view_acquire(const ExternalSurfaceSelection &p_selection, const ::RenderDataRD *p_render_data, ExternalPacketViewLease &r_view);
+	Error particles_external_resolve(const ExternalPacketViewLease &p_view, const ExternalPacketPipelineRequest &p_pipeline, RD::DrawListID p_list, ExternalPacketBinding &r_binding);
+	Error particles_external_end_draw_list();
+
 	virtual void particles_free(RID p_rid) override;
 
 	virtual void particles_set_mode(RID p_particles, RSE::ParticlesMode p_mode) override;
@@ -543,18 +580,22 @@ public:
 	_FORCE_INLINE_ RSE::ParticlesMode particles_get_mode(RID p_particles) {
 		Particles *particles = particles_owner.get_or_null(p_particles);
 		ERR_FAIL_NULL_V(particles, RSE::PARTICLES_MODE_2D);
+		ERR_FAIL_COND_V(particles->external, RSE::PARTICLES_MODE_2D);
 		return particles->mode;
 	}
 
 	_FORCE_INLINE_ uint32_t particles_get_frame_counter(RID p_particles) {
 		Particles *particles = particles_owner.get_or_null(p_particles);
 		ERR_FAIL_NULL_V(particles, false);
+		ERR_FAIL_COND_V(particles->external, 0);
 		return particles->frame_counter;
 	}
 
 	_FORCE_INLINE_ uint32_t particles_get_amount(RID p_particles, uint32_t &r_trail_divisor) {
 		Particles *particles = particles_owner.get_or_null(p_particles);
 		ERR_FAIL_NULL_V(particles, 0);
+		r_trail_divisor = 1;
+		ERR_FAIL_COND_V(particles->external, 0);
 
 		if (particles->trails_enabled && particles->trail_bind_poses.size() > 1) {
 			r_trail_divisor = particles->trail_bind_poses.size();
@@ -572,6 +613,7 @@ public:
 	_FORCE_INLINE_ bool particles_has_collision(RID p_particles) {
 		Particles *particles = particles_owner.get_or_null(p_particles);
 		ERR_FAIL_NULL_V(particles, false);
+		ERR_FAIL_COND_V(particles->external, false);
 
 		return particles->has_collision_cache;
 	}
@@ -579,6 +621,7 @@ public:
 	_FORCE_INLINE_ uint32_t particles_is_using_local_coords(RID p_particles) {
 		Particles *particles = particles_owner.get_or_null(p_particles);
 		ERR_FAIL_NULL_V(particles, false);
+		ERR_FAIL_COND_V(particles->external, false);
 
 		return particles->use_local_coords;
 	}
@@ -586,6 +629,7 @@ public:
 	_FORCE_INLINE_ RID particles_get_instance_buffer_uniform_set(RID p_particles, RID p_shader, uint32_t p_set) {
 		Particles *particles = particles_owner.get_or_null(p_particles);
 		ERR_FAIL_NULL_V(particles, RID());
+		ERR_FAIL_COND_V(particles->external, RID());
 		if (particles->particles_transforms_buffer_uniform_set.is_null() || !RD::get_singleton()->uniform_set_is_valid(particles->particles_transforms_buffer_uniform_set)) {
 			_particles_update_buffers(particles);
 			Vector<RD::Uniform> uniforms;

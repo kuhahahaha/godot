@@ -1,0 +1,518 @@
+{
+  "scope": "Finite ExternalOutput custody and authenticated retirement substrate; ordinary particle external-owner isolation. Production issuer/Host/renderer joins remain incomplete.",
+  "base_commit": "86b470990a55815c074231f5e60938c38c18faa3",
+  "patches": [
+    {
+      "path": "/tmp/b4-k-over-d32-20261105/k-over-current-d32.patch",
+      "sha256": "19f81cc223678022bf25af0d53ab5063d4063a6f7ca079e5d14eb382d9646ef0"
+    },
+    {
+      "path": "/tmp/b4-particles-external-isolation-20261105/isolation.patch",
+      "sha256": "f39ce21d5484f977cf2b91f0a38377af54b72ff4f68987092b1ddf2294f7b980"
+    },
+    {
+      "path": "/tmp/b4-k-joint-selfcontained-20261105/header-self-containment.patch",
+      "sha256": "cd557ec0db0e13e42ee0a3d2dee200574eb14503441877060dcc666fdb94a136"
+    }
+  ],
+  "build": {
+    "exit": 0,
+    "elapsed": 520.2759301662445
+  },
+  "host_sha256": "479f8b4da4daef7ef61f19e63c20416b9202aa2f15d784387a8d4b04b5fb4f3e",
+  "tests": {
+    "finite_policy": {
+      "exit": 0,
+      "counts": {
+        "OverallResultsAsserts": {
+          "successes": "223",
+          "failures": "0"
+        },
+        "OverallResultsTestCases": {
+          "successes": "2",
+          "failures": "0"
+        }
+      },
+      "minimum_cases": 2,
+      "accepted": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    "actual_pin_port": {
+      "exit": 0,
+      "counts": {
+        "OverallResultsAsserts": {
+          "successes": "848",
+          "failures": "0"
+        },
+        "OverallResultsTestCases": {
+          "successes": "1",
+          "failures": "0"
+        }
+      },
+      "minimum_cases": 1,
+      "accepted": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    "closure": {
+      "exit": 0,
+      "counts": {
+        "OverallResultsAsserts": {
+          "successes": "2864",
+          "failures": "0"
+        },
+        "OverallResultsTestCases": {
+          "successes": "1",
+          "failures": "0"
+        }
+      },
+      "minimum_cases": 1,
+      "accepted": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    "request": {
+      "exit": 0,
+      "counts": {
+        "OverallResultsAsserts": {
+          "successes": "15256",
+          "failures": "0"
+        },
+        "OverallResultsTestCases": {
+          "successes": "22",
+          "failures": "0"
+        }
+      },
+      "minimum_cases": 22,
+      "accepted": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    "material": {
+      "exit": 0,
+      "counts": {
+        "OverallResultsAsserts": {
+          "successes": "983",
+          "failures": "0"
+        },
+        "OverallResultsTestCases": {
+          "successes": "3",
+          "failures": "0"
+        }
+      },
+      "minimum_cases": 3,
+      "accepted": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    "mesh": {
+      "exit": 0,
+      "counts": {
+        "OverallResultsAsserts": {
+          "successes": "371",
+          "failures": "0"
+        },
+        "OverallResultsTestCases": {
+          "successes": "2",
+          "failures": "0"
+        }
+      },
+      "minimum_cases": 2,
+      "accepted": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    "public": {
+      "exit": 0,
+      "counts": {
+        "OverallResultsAsserts": {
+          "successes": "923",
+          "failures": "0"
+        },
+        "OverallResultsTestCases": {
+          "successes": "2",
+          "failures": "0"
+        }
+      },
+      "minimum_cases": 2,
+      "accepted": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    "qualification": {
+      "exit": 0,
+      "counts": {
+        "OverallResultsAsserts": {
+          "successes": "45778",
+          "failures": "0"
+        },
+        "OverallResultsTestCases": {
+          "successes": "137",
+          "failures": "0"
+        }
+      },
+      "minimum_cases": 137,
+      "accepted": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 776
+    },
+    "full_wrong_host_location": {
+      "exit": -6,
+      "counts": {
+        "OverallResultsAsserts": {
+          "successes": "59022",
+          "failures": "8"
+        },
+        "OverallResultsTestCases": {
+          "successes": "41",
+          "failures": "2"
+        }
+      },
+      "minimum_cases": 2079,
+      "accepted": false,
+      "stdout_bytes": 0,
+      "stderr_bytes": 2891
+    },
+    "observe": {
+      "exit": 0,
+      "counts": {
+        "OverallResultsAsserts": {
+          "successes": "15912",
+          "failures": "0"
+        },
+        "OverallResultsTestCases": {
+          "successes": "21",
+          "failures": "0"
+        }
+      },
+      "minimum_cases": 21,
+      "accepted": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    "resource_use": {
+      "exit": 0,
+      "counts": {
+        "OverallResultsAsserts": {
+          "successes": "234",
+          "failures": "0"
+        },
+        "OverallResultsTestCases": {
+          "successes": "2",
+          "failures": "0"
+        }
+      },
+      "minimum_cases": 2,
+      "accepted": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    "mesh_complete": {
+      "exit": 0,
+      "counts": {
+        "OverallResultsAsserts": {
+          "successes": "472",
+          "failures": "0"
+        },
+        "OverallResultsTestCases": {
+          "successes": "6",
+          "failures": "0"
+        }
+      },
+      "minimum_cases": 6,
+      "accepted": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    "readback": {
+      "exit": 0,
+      "counts": {
+        "OverallResultsAsserts": {
+          "successes": "48",
+          "failures": "0"
+        },
+        "OverallResultsTestCases": {
+          "successes": "10",
+          "failures": "0"
+        }
+      },
+      "minimum_cases": 10,
+      "accepted": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    "trail": {
+      "exit": 0,
+      "counts": {
+        "OverallResultsAsserts": {
+          "successes": "5",
+          "failures": "0"
+        },
+        "OverallResultsTestCases": {
+          "successes": "1",
+          "failures": "0"
+        }
+      },
+      "minimum_cases": 1,
+      "accepted": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    "retry": {
+      "exit": 0,
+      "counts": {
+        "OverallResultsAsserts": {
+          "successes": "22",
+          "failures": "0"
+        },
+        "OverallResultsTestCases": {
+          "successes": "2",
+          "failures": "0"
+        }
+      },
+      "minimum_cases": 2,
+      "accepted": true,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    "full": {
+      "exit": 0,
+      "counts": {
+        "OverallResultsAsserts": {
+          "successes": "521251",
+          "failures": "0"
+        },
+        "OverallResultsTestCases": {
+          "successes": "2079",
+          "failures": "0"
+        }
+      },
+      "minimum_cases": 2079,
+      "accepted": true,
+      "stdout_bytes": 571,
+      "stderr_bytes": 4017
+    }
+  },
+  "evidence_directory": "work/b4-k-custody-runtime-20261105",
+  "strict_syntax": {
+    "clang_joint": {
+      "checks": 28,
+      "failures": 0,
+      "evidence": "/tmp/b4-k-joint-selfcontained-20261105/STRICT.json"
+    },
+    "gcc_windows_target": {
+      "checks": 16,
+      "failures": 0,
+      "evidence": "/tmp/b4-k-gcc-audit-20261105/STRICT_GCC.json"
+    }
+  },
+  "limitations": [
+    "No native output creation/source/mapping/Host issuer association; six public/native acquisition joins still reject missing authority.",
+    "No Core OBSERVE-to-owner association yet; retirement service is dormant until the original association is supplied.",
+    "Actual accepted Registry pins are exercised through original ProductionRequest fixtures; new ExternalOutput cases only prove CPU finite-table policy.",
+    "UNKNOWN read custody test retains an actual pin through a test mode; no native UNKNOWN settlement or physical completion is attested.",
+    "No actual production writer, renderer draw, Host receiver, late-VA authorization or full Parts/P4 acceptance claim.",
+    "Existing full-test stdout/stderr diagnostics and MoltenVK target-version linker warning retained.",
+    "Initial full run from archived host path failed due executable-relative test data; preserved, same bytes passed from original bin path.",
+    "Strict syntax and CPU engine tests do not establish new GPU acceptance.",
+    "External owner withdrawal requires the original service to reach RELEASED before the later free call can finish RID/metadata cleanup."
+  ],
+  "concurrent_host_followup": {
+    "path": "core/extension/gdextension_qualification_rt.cpp",
+    "sha256": "724e87529c7c62b93a0d9ce1687324ed37bbaef202a4b80a8d3b20b5ac925e24",
+    "patch_sha256": "365528c350d9bb7feda4fa45b5090cd5d1589e310577b21f60d03f950e72565e",
+    "scope": "Rename original_cell lambda parameter cell to physical; preserve its identity checks unchanged."
+  },
+  "compiled_source": [
+    {
+      "path": "core/extension/gdextension_library_exit_guard.h",
+      "sha256": "ab5f96a3233c017426963d1c2a46ca79d45a14e2e6675f3af4785ebffe41ebc7"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/external_output_owner.cpp",
+      "sha256": "98714bd5b93cb453db50709fa4bbf60b4845dfb01036fb4d3a11b46d93fdf4a9"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/external_output_owner.h",
+      "sha256": "d41f141ef8ecb55668d251cde1b503bdecd814ad6699ad18e6cd41477b8fcb5a"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/external_output_packet.cpp",
+      "sha256": "a8fa70421d4d474b5349ccc781f01b1c330b00cec617c3c492bf3ce6a45404a4"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/external_output_packet.h",
+      "sha256": "bd06c71e2138e993ebad3207c9cc93ac3370b615b60ba3a64abeec07971a9589"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/mesh_storage.h",
+      "sha256": "576ef2feb82e3dfa86a2ee3cfe9a03611e5a9203fe55bb8c0808abb500bfa999"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/particles_storage.cpp",
+      "sha256": "0fedf0155222b1ee132faa9b158880a94184f4d1259e6a8a006d19fc75b14436"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/particles_storage.h",
+      "sha256": "6f6d3cc9a657701fe88cdd37b249e5de22af56eb37073ebfdf43d8e914777520"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/particles_storage_external.cpp",
+      "sha256": "54dc759118497883a8bd6124f978ca1bd5b87116da5480b5a103e682da1dbda1"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/particles_storage_retire.cpp",
+      "sha256": "951594db19a16a3efc33de928e185de7073feb8d551f8132ea4f26e72467eb8d"
+    },
+    {
+      "path": "servers/rendering/rendering_device.h",
+      "sha256": "dfec31e16297e5b4169b59778c139a50291a112de2c7fcfab417ebc8b8b47abf"
+    },
+    {
+      "path": "servers/rendering/rendering_device_output_retire.cpp",
+      "sha256": "e3f29b91211c4b29cfb462778e542334193c99f4c7d7069843d4693e1e1277ad"
+    },
+    {
+      "path": "servers/rendering/storage/particles_storage.h",
+      "sha256": "a25883339936d716cb60e38b040fb5e925a204ceb44e1438e798b6110b582866"
+    },
+    {
+      "path": "tests/core/extension/test_production_request.cpp",
+      "sha256": "cee39b960270f5fd797a0dae90f5d5a2dd973af2d68ad1b8d1e33ca2fa08a808"
+    },
+    {
+      "path": "tests/servers/rendering/test_external_output_custody_bridge.h",
+      "sha256": "a4189ecc99d1267661907cc2f7d4a04025e962baf4a55b9bc122e6f6d9b3e3c9"
+    },
+    {
+      "path": "tests/servers/rendering/test_external_output_owner_state.cpp",
+      "sha256": "de3539e02ce85dc8100491515d50d19cd201718c72c18369c5c06476e9f94b49"
+    }
+  ],
+  "final_source": [
+    {
+      "path": "core/extension/gdextension_library_exit_guard.h",
+      "sha256": "705041fe0eb13120c8486294f3ea22a7258ceac27bc378d4cde0ef9e4c5d0a8a"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/external_output_owner.cpp",
+      "sha256": "98714bd5b93cb453db50709fa4bbf60b4845dfb01036fb4d3a11b46d93fdf4a9"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/external_output_owner.h",
+      "sha256": "d41f141ef8ecb55668d251cde1b503bdecd814ad6699ad18e6cd41477b8fcb5a"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/external_output_packet.cpp",
+      "sha256": "a8fa70421d4d474b5349ccc781f01b1c330b00cec617c3c492bf3ce6a45404a4"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/external_output_packet.h",
+      "sha256": "bd06c71e2138e993ebad3207c9cc93ac3370b615b60ba3a64abeec07971a9589"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/mesh_storage.h",
+      "sha256": "576ef2feb82e3dfa86a2ee3cfe9a03611e5a9203fe55bb8c0808abb500bfa999"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/particles_storage.cpp",
+      "sha256": "0fedf0155222b1ee132faa9b158880a94184f4d1259e6a8a006d19fc75b14436"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/particles_storage.h",
+      "sha256": "6f6d3cc9a657701fe88cdd37b249e5de22af56eb37073ebfdf43d8e914777520"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/particles_storage_external.cpp",
+      "sha256": "54dc759118497883a8bd6124f978ca1bd5b87116da5480b5a103e682da1dbda1"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/particles_storage_retire.cpp",
+      "sha256": "951594db19a16a3efc33de928e185de7073feb8d551f8132ea4f26e72467eb8d"
+    },
+    {
+      "path": "servers/rendering/rendering_device.h",
+      "sha256": "dfec31e16297e5b4169b59778c139a50291a112de2c7fcfab417ebc8b8b47abf"
+    },
+    {
+      "path": "servers/rendering/rendering_device_output_retire.cpp",
+      "sha256": "e3f29b91211c4b29cfb462778e542334193c99f4c7d7069843d4693e1e1277ad"
+    },
+    {
+      "path": "servers/rendering/storage/particles_storage.h",
+      "sha256": "a25883339936d716cb60e38b040fb5e925a204ceb44e1438e798b6110b582866"
+    },
+    {
+      "path": "tests/core/extension/test_production_request.cpp",
+      "sha256": "cee39b960270f5fd797a0dae90f5d5a2dd973af2d68ad1b8d1e33ca2fa08a808"
+    },
+    {
+      "path": "tests/servers/rendering/test_external_output_custody_bridge.h",
+      "sha256": "a4189ecc99d1267661907cc2f7d4a04025e962baf4a55b9bc122e6f6d9b3e3c9"
+    },
+    {
+      "path": "tests/servers/rendering/test_external_output_owner_state.cpp",
+      "sha256": "de3539e02ce85dc8100491515d50d19cd201718c72c18369c5c06476e9f94b49"
+    }
+  ],
+  "post_runtime_style_normalization": {
+    "path": "core/extension/gdextension_library_exit_guard.h",
+    "change": "clang-format21 adds only namespace closing comment; compiled declarations unchanged",
+    "patch_sha256": "989de9d9b62c99ba4434d56236fc7a42d9c9330a0235349e2ebd1f1a14dfa39f"
+  },
+  "independent_runtime_review": {
+    "path": "/tmp/b4-k-runtime-review-20261105/FINAL_RUNTIME_REVIEW.json",
+    "sha256": "5057463c40606f08f488c88cd0d30e5c64bfbead2a43cc035d48c489f844c0f5"
+  },
+  "style_checks": [
+    {
+      "command": [
+        "/tmp/b4-ci-style-tools/bin/clang-format",
+        "--dry-run",
+        "--Werror",
+        "core/extension/gdextension_library_exit_guard.h",
+        "servers/rendering/renderer_rd/storage_rd/external_output_owner.cpp",
+        "servers/rendering/renderer_rd/storage_rd/external_output_owner.h",
+        "servers/rendering/renderer_rd/storage_rd/external_output_packet.cpp",
+        "servers/rendering/renderer_rd/storage_rd/external_output_packet.h",
+        "servers/rendering/renderer_rd/storage_rd/mesh_storage.h",
+        "servers/rendering/renderer_rd/storage_rd/particles_storage.cpp",
+        "servers/rendering/renderer_rd/storage_rd/particles_storage.h",
+        "servers/rendering/renderer_rd/storage_rd/particles_storage_external.cpp",
+        "servers/rendering/renderer_rd/storage_rd/particles_storage_retire.cpp",
+        "servers/rendering/rendering_device.h",
+        "servers/rendering/rendering_device_output_retire.cpp",
+        "servers/rendering/storage/particles_storage.h",
+        "tests/core/extension/test_production_request.cpp",
+        "tests/servers/rendering/test_external_output_custody_bridge.h",
+        "tests/servers/rendering/test_external_output_owner_state.cpp"
+      ],
+      "exit": 0,
+      "diagnostics": ""
+    },
+    {
+      "command": [
+        "/tmp/b4-ci-style-tools/bin/codespell",
+        "core/extension/gdextension_library_exit_guard.h",
+        "servers/rendering/renderer_rd/storage_rd/external_output_owner.cpp",
+        "servers/rendering/renderer_rd/storage_rd/external_output_owner.h",
+        "servers/rendering/renderer_rd/storage_rd/external_output_packet.cpp",
+        "servers/rendering/renderer_rd/storage_rd/external_output_packet.h",
+        "servers/rendering/renderer_rd/storage_rd/mesh_storage.h",
+        "servers/rendering/renderer_rd/storage_rd/particles_storage.cpp",
+        "servers/rendering/renderer_rd/storage_rd/particles_storage.h",
+        "servers/rendering/renderer_rd/storage_rd/particles_storage_external.cpp",
+        "servers/rendering/renderer_rd/storage_rd/particles_storage_retire.cpp",
+        "servers/rendering/rendering_device.h",
+        "servers/rendering/rendering_device_output_retire.cpp",
+        "servers/rendering/storage/particles_storage.h",
+        "tests/core/extension/test_production_request.cpp",
+        "tests/servers/rendering/test_external_output_custody_bridge.h",
+        "tests/servers/rendering/test_external_output_owner_state.cpp"
+      ],
+      "exit": 0,
+      "diagnostics": ""
+    }
+  ]
+}

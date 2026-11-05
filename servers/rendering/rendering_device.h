@@ -1617,6 +1617,7 @@ private:
 	Error _production_output_hold_capture(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, NativeImmutableHold &, uint64_t &);
 	bool _production_output_hold_contains(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, RID);
 	Error _production_output_hold_begin_return(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t);
+	Error _production_output_retire_service(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, const GDExtensionProductionServiceBudgetV1 &, GDExtensionDeviceExit::ProductionServiceUsage &, GDExtensionDeviceExit::ProductionDisposalObservation &);
 	Error _production_output_hold_returned(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, GDExtensionDeviceExit::ProductionDisposalObservation &);
 	GDExtensionDeviceExit::ProductionDisposalUse **_production_disposal_head(RID, uint32_t &, uint64_t &, uint64_t &);
 	bool _production_disposal_belongs(RID, const GDExtensionDeviceExit::ProductionRequest *);

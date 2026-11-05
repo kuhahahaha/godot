@@ -32,6 +32,7 @@
 
 #include "servers/rendering/renderer_rd/effects/sort_effects.h"
 #include "servers/rendering/renderer_rd/renderer_compositor_rd.h"
+#include "servers/rendering/renderer_rd/storage_rd/external_output_owner.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/renderer_viewport.h"
 #include "servers/rendering/rendering_server_globals.h"
@@ -239,6 +240,24 @@ void ParticlesStorage::particles_free(RID p_rid) {
 	Particles *particles = particles_owner.get_or_null(p_rid);
 	ERR_FAIL_NULL(particles);
 
+	if (particles->external) {
+		ExternalOutputOwner *external = particles->external;
+		if (external->state != ExternalOutputOwner::GenerationState::RELEASED) {
+			external->withdraw();
+			// Preserve the RID and every original custody/native obligation.
+			particles->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_PARTICLES);
+			return;
+		}
+		// Original retirement has already returned all finite tables and slots.
+		// Ordinary simulation buffers never belong to an external owner.
+		particles->dependency.deleted_notify(p_rid);
+		particles->update_list.remove_from_list();
+		particles->external = nullptr;
+		memdelete(external);
+		particles_owner.free(p_rid);
+		return;
+	}
+
 	particles->dependency.deleted_notify(p_rid);
 	particles->update_list.remove_from_list();
 
@@ -249,6 +268,7 @@ void ParticlesStorage::particles_free(RID p_rid) {
 void ParticlesStorage::particles_set_mode(RID p_particles, RSE::ParticlesMode p_mode) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 	if (particles->mode == p_mode) {
 		return;
 	}
@@ -261,6 +281,7 @@ void ParticlesStorage::particles_set_mode(RID p_particles, RSE::ParticlesMode p_
 void ParticlesStorage::particles_set_emitting(RID p_particles, bool p_emitting) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 
 	particles->emitting = p_emitting;
 }
@@ -268,11 +289,13 @@ void ParticlesStorage::particles_set_emitting(RID p_particles, bool p_emitting) 
 bool ParticlesStorage::particles_get_emitting(RID p_particles) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL_V(particles, false);
+	ERR_FAIL_COND_V(particles->external, false);
 
 	return particles->emitting;
 }
 
 void ParticlesStorage::_particles_free_data(Particles *particles) {
+	ERR_FAIL_COND(particles->external);
 	particles->frame_remainder = 0.0;
 	particles->retry_pending = false;
 	particles->frame_delta_committed = false;
@@ -355,6 +378,7 @@ void ParticlesStorage::_particles_free_data(Particles *particles) {
 void ParticlesStorage::particles_set_amount(RID p_particles, int p_amount) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 	ERR_FAIL_COND_MSG(!_particles_amount_is_valid(p_amount), "Particle amount must be non-negative.");
 
 	if (particles->amount == p_amount) {
@@ -376,6 +400,7 @@ void ParticlesStorage::particles_set_amount(RID p_particles, int p_amount) {
 void ParticlesStorage::particles_set_amount_ratio(RID p_particles, float p_amount_ratio) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 	ERR_FAIL_COND_MSG(!_particles_ratio_is_valid(p_amount_ratio), "Particle amount ratio must be finite.");
 
 	particles->amount_ratio = p_amount_ratio;
@@ -384,6 +409,7 @@ void ParticlesStorage::particles_set_amount_ratio(RID p_particles, float p_amoun
 void ParticlesStorage::particles_set_lifetime(RID p_particles, double p_lifetime) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 	ERR_FAIL_COND_MSG(!_particles_lifetime_is_valid(p_lifetime), "Particle lifetime must be finite and greater than zero.");
 	particles->lifetime = p_lifetime;
 }
@@ -391,12 +417,14 @@ void ParticlesStorage::particles_set_lifetime(RID p_particles, double p_lifetime
 void ParticlesStorage::particles_set_one_shot(RID p_particles, bool p_one_shot) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 	particles->one_shot = p_one_shot;
 }
 
 void ParticlesStorage::particles_set_pre_process_time(RID p_particles, double p_time) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 	ERR_FAIL_COND_MSG(!_particles_process_time_is_valid(p_time), "Particle pre-process time must be finite and non-negative.");
 	particles->pre_process_time = p_time;
 }
@@ -404,6 +432,7 @@ void ParticlesStorage::particles_set_pre_process_time(RID p_particles, double p_
 void ParticlesStorage::particles_request_process_time(RID p_particles, real_t p_request_process_time, real_t p_request_process_time_residual) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 	ERR_FAIL_COND_MSG(!_particles_process_time_is_valid(p_request_process_time) || !_particles_process_time_is_valid(p_request_process_time_residual), "Particle process times must be finite and non-negative.");
 	particles->request_process_time = p_request_process_time;
 	particles->request_process_time_residual = p_request_process_time_residual;
@@ -412,12 +441,14 @@ void ParticlesStorage::particles_request_process_time(RID p_particles, real_t p_
 void ParticlesStorage::particles_set_explosiveness_ratio(RID p_particles, real_t p_ratio) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 	ERR_FAIL_COND_MSG(!_particles_ratio_is_valid(p_ratio), "Particle explosiveness ratio must be finite.");
 	particles->explosiveness = p_ratio;
 }
 void ParticlesStorage::particles_set_randomness_ratio(RID p_particles, real_t p_ratio) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 	ERR_FAIL_COND_MSG(!_particles_ratio_is_valid(p_ratio), "Particle randomness ratio must be finite.");
 	particles->randomness = p_ratio;
 }
@@ -425,6 +456,7 @@ void ParticlesStorage::particles_set_randomness_ratio(RID p_particles, real_t p_
 void ParticlesStorage::particles_set_custom_aabb(RID p_particles, const AABB &p_aabb) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 	particles->custom_aabb = p_aabb;
 	particles->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_AABB);
 }
@@ -432,6 +464,7 @@ void ParticlesStorage::particles_set_custom_aabb(RID p_particles, const AABB &p_
 void ParticlesStorage::particles_set_speed_scale(RID p_particles, double p_scale) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 	ERR_FAIL_COND_MSG(!_particles_speed_scale_is_valid(p_scale), "Particle speed scale must be finite and non-negative.");
 
 	particles->speed_scale = p_scale;
@@ -439,6 +472,7 @@ void ParticlesStorage::particles_set_speed_scale(RID p_particles, double p_scale
 void ParticlesStorage::particles_set_use_local_coordinates(RID p_particles, bool p_enable) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 
 	particles->use_local_coords = p_enable;
 	particles->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_PARTICLES);
@@ -447,6 +481,7 @@ void ParticlesStorage::particles_set_use_local_coordinates(RID p_particles, bool
 void ParticlesStorage::particles_set_fixed_fps(RID p_particles, int p_fps) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 	ERR_FAIL_COND_MSG(!_particles_fixed_fps_is_valid(p_fps), "Particle fixed FPS must be non-negative.");
 
 	particles->fixed_fps = p_fps;
@@ -464,6 +499,7 @@ void ParticlesStorage::particles_set_fixed_fps(RID p_particles, int p_fps) {
 void ParticlesStorage::particles_set_interpolate(RID p_particles, bool p_enable) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 
 	particles->interpolate = p_enable;
 }
@@ -471,6 +507,7 @@ void ParticlesStorage::particles_set_interpolate(RID p_particles, bool p_enable)
 void ParticlesStorage::particles_set_fractional_delta(RID p_particles, bool p_enable) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 
 	particles->fractional_delta = p_enable;
 }
@@ -478,6 +515,7 @@ void ParticlesStorage::particles_set_fractional_delta(RID p_particles, bool p_en
 void ParticlesStorage::particles_set_trails(RID p_particles, bool p_enable, double p_length) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 	ERR_FAIL_COND_MSG(!_particles_trail_lifetime_is_valid(p_length), "Particle trail lifetime must be finite and at least 0.01 seconds.");
 	p_length = MIN(10.0, p_length);
 
@@ -497,6 +535,7 @@ void ParticlesStorage::particles_set_trails(RID p_particles, bool p_enable, doub
 void ParticlesStorage::particles_set_trail_bind_poses(RID p_particles, const Vector<Transform3D> &p_bind_poses) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 	// The uniform set may currently reference the fallback trail buffer when
 	// no bind-pose buffer has been allocated yet. A change in pose count still
 	// changes the buffer layout, so invalidate all dependent resources even in
@@ -518,6 +557,7 @@ void ParticlesStorage::particles_set_trail_bind_poses(RID p_particles, const Vec
 void ParticlesStorage::particles_set_collision_base_size(RID p_particles, real_t p_size) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 	ERR_FAIL_COND_MSG(!_particles_collision_base_size_is_valid(p_size), "Particle collision base size must be finite and non-negative.");
 
 	particles->collision_base_size = p_size;
@@ -526,6 +566,7 @@ void ParticlesStorage::particles_set_collision_base_size(RID p_particles, real_t
 void ParticlesStorage::particles_set_transform_align(RID p_particles, RSE::ParticlesTransformAlign p_transform_align) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 	ERR_FAIL_INDEX(int(p_transform_align), RSE::PARTICLES_TRANSFORM_ALIGN_LOCAL_BILLBOARD + 1);
 
 	particles->transform_align = p_transform_align;
@@ -534,6 +575,7 @@ void ParticlesStorage::particles_set_transform_align(RID p_particles, RSE::Parti
 void ParticlesStorage::particles_set_transform_align_channel_filter(RID p_particles, RSE::ParticlesTransformAlignCustomSrc p_transform_align_channel_filter) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 	ERR_FAIL_INDEX(int(p_transform_align_channel_filter), RSE::PARTICLES_ALIGN_CHANNEL_FILTER_MAX);
 
 	particles->transform_align_src = p_transform_align_channel_filter;
@@ -542,6 +584,7 @@ void ParticlesStorage::particles_set_transform_align_channel_filter(RID p_partic
 void ParticlesStorage::particles_set_transform_align_axis(RID p_particles, RSE::ParticlesTransformAlignAxis p_rotation_axis) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 	ERR_FAIL_INDEX(int(p_rotation_axis), RSE::PARTICLES_ALIGN_AXIS_MAX);
 
 	particles->transform_align_axis = p_rotation_axis;
@@ -550,6 +593,7 @@ void ParticlesStorage::particles_set_transform_align_axis(RID p_particles, RSE::
 void ParticlesStorage::particles_set_process_material(RID p_particles, RID p_material) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 
 	particles->process_material = p_material;
 	particles->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_PARTICLES); //the instance buffer may have changed
@@ -565,6 +609,7 @@ RID ParticlesStorage::particles_get_process_material(RID p_particles) const {
 void ParticlesStorage::particles_set_draw_order(RID p_particles, RSE::ParticlesDrawOrder p_order) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 	ERR_FAIL_INDEX(int(p_order), RSE::PARTICLES_DRAW_ORDER_VIEW_DEPTH + 1);
 
 	particles->draw_order = p_order;
@@ -573,6 +618,7 @@ void ParticlesStorage::particles_set_draw_order(RID p_particles, RSE::ParticlesD
 void ParticlesStorage::particles_set_draw_passes(RID p_particles, int p_passes) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 	ERR_FAIL_COND(p_passes < 1);
 
 	particles->draw_passes.resize(p_passes);
@@ -581,6 +627,7 @@ void ParticlesStorage::particles_set_draw_passes(RID p_particles, int p_passes) 
 void ParticlesStorage::particles_set_draw_pass_mesh(RID p_particles, int p_pass, RID p_mesh) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 	ERR_FAIL_INDEX(p_pass, particles->draw_passes.size());
 	particles->draw_passes.write[p_pass] = p_mesh;
 }
@@ -588,6 +635,7 @@ void ParticlesStorage::particles_set_draw_pass_mesh(RID p_particles, int p_pass,
 void ParticlesStorage::particles_restart(RID p_particles) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 
 	particles->restart_request = true;
 }
@@ -595,10 +643,12 @@ void ParticlesStorage::particles_restart(RID p_particles) {
 void ParticlesStorage::particles_set_seed(RID p_particles, uint32_t p_seed) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 	particles->random_seed = p_seed;
 }
 
 void ParticlesStorage::_particles_allocate_emission_buffer(Particles *particles) {
+	ERR_FAIL_COND(particles->external);
 	ERR_FAIL_COND(particles->emission_buffer != nullptr);
 
 	uint32_t emission_buffer_size = 0;
@@ -627,6 +677,7 @@ void ParticlesStorage::_particles_allocate_emission_buffer(Particles *particles)
 }
 
 void ParticlesStorage::_particles_ensure_unused_emission_buffer(Particles *particles) {
+	ERR_FAIL_COND(particles->external);
 	if (particles->unused_emission_storage_buffer.is_null()) {
 		// For rendering devices that do not support empty arrays (like C++),
 		// we need to size the buffer with at least 1 element.
@@ -635,6 +686,7 @@ void ParticlesStorage::_particles_ensure_unused_emission_buffer(Particles *parti
 }
 
 bool ParticlesStorage::_particles_ensure_unused_trail_buffer(Particles *particles) {
+	ERR_FAIL_COND_V(particles->external, false);
 	if (particles->unused_trail_storage_buffer.is_null()) {
 #ifdef TESTS_ENABLED
 		if (particles->test_reject_trail_allocation_once) {
@@ -648,6 +700,7 @@ bool ParticlesStorage::_particles_ensure_unused_trail_buffer(Particles *particle
 }
 
 bool ParticlesStorage::_particles_ensure_trail_uniform(Particles *particles, RID p_shader) {
+	ERR_FAIL_COND_V(particles->external, false);
 	if (particles->trail_bind_pose_uniform_set.is_null()) {
 		Vector<RD::Uniform> uniforms;
 		{
@@ -681,7 +734,10 @@ bool ParticlesStorage::_particles_ensure_trail_uniform(Particles *particles, RID
 void ParticlesStorage::particles_set_subemitter(RID p_particles, RID p_subemitter_particles) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 	ERR_FAIL_COND(p_particles == p_subemitter_particles);
+	const Particles *sub_emitter = particles_owner.get_or_null(p_subemitter_particles);
+	ERR_FAIL_COND_MSG(sub_emitter && sub_emitter->external, "ExternalOutput cannot be a native sub-emitter.");
 
 	particles->sub_emitter = p_subemitter_particles;
 
@@ -694,6 +750,7 @@ void ParticlesStorage::particles_set_subemitter(RID p_particles, RID p_subemitte
 void ParticlesStorage::particles_emit(RID p_particles, const Transform3D &p_transform, const Vector3 &p_velocity, const Color &p_color, const Color &p_custom, uint32_t p_emit_flags) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 	ERR_FAIL_COND_MSG(!p_transform.is_finite() || !p_velocity.is_finite() || !Math::is_finite(p_color.r) || !Math::is_finite(p_color.g) || !Math::is_finite(p_color.b) || !Math::is_finite(p_color.a) || !Math::is_finite(p_custom.r) || !Math::is_finite(p_custom.g) || !Math::is_finite(p_custom.b) || !Math::is_finite(p_custom.a), "Particle emission inputs must contain only finite values.");
 	ERR_FAIL_COND(particles->amount == 0);
 
@@ -739,6 +796,7 @@ void ParticlesStorage::particles_emit(RID p_particles, const Transform3D &p_tran
 void ParticlesStorage::particles_request_process(RID p_particles) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 
 	if (!particles->dirty) {
 		particles->dirty = true;
@@ -750,7 +808,7 @@ void ParticlesStorage::particles_request_process(RID p_particles) {
 }
 
 bool ParticlesStorage::_particles_get_data_size(const Particles *p_particles, uint64_t &r_size) {
-	if (p_particles == nullptr || p_particles->amount <= 0) {
+	if (p_particles == nullptr || p_particles->external || p_particles->amount <= 0) {
 		r_size = 0;
 		return false;
 	}
@@ -789,6 +847,9 @@ bool ParticlesStorage::_particles_get_buffer_size(uint64_t p_count, uint64_t p_e
 AABB ParticlesStorage::particles_get_current_aabb(RID p_particles) {
 	const Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL_V(particles, AABB());
+	if (particles->external) {
+		return particles->external->config.bounds;
+	}
 
 	uint64_t expected_size = 0;
 	if (!_particles_get_data_size(particles, expected_size)) {
@@ -845,6 +906,7 @@ AABB ParticlesStorage::particles_get_current_aabb(RID p_particles) {
 Vector<uint8_t> ParticlesStorage::particles_get_current_data(RID p_particles) const {
 	const Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL_V(particles, Vector<uint8_t>());
+	ERR_FAIL_COND_V(particles->external, Vector<uint8_t>());
 	if (particles->particle_buffer.is_null() || particles->amount <= 0) {
 		return Vector<uint8_t>();
 	}
@@ -866,6 +928,9 @@ Vector<uint8_t> ParticlesStorage::particles_get_current_data(RID p_particles) co
 AABB ParticlesStorage::particles_get_aabb(RID p_particles) const {
 	const Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL_V(particles, AABB());
+	if (particles->external) {
+		return particles->external->config.bounds;
+	}
 
 	return particles->custom_aabb;
 }
@@ -873,6 +938,7 @@ AABB ParticlesStorage::particles_get_aabb(RID p_particles) const {
 void ParticlesStorage::particles_set_emission_transform(RID p_particles, const Transform3D &p_transform) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 
 	particles->emission_transform = p_transform;
 }
@@ -880,6 +946,7 @@ void ParticlesStorage::particles_set_emission_transform(RID p_particles, const T
 void ParticlesStorage::particles_set_emitter_velocity(RID p_particles, const Vector3 &p_velocity) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 
 	particles->emitter_velocity = p_velocity;
 }
@@ -887,6 +954,7 @@ void ParticlesStorage::particles_set_emitter_velocity(RID p_particles, const Vec
 void ParticlesStorage::particles_set_interp_to_end(RID p_particles, float p_interp) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 
 	particles->interp_to_end = p_interp;
 }
@@ -894,6 +962,7 @@ void ParticlesStorage::particles_set_interp_to_end(RID p_particles, float p_inte
 int ParticlesStorage::particles_get_draw_passes(RID p_particles) const {
 	const Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL_V(particles, 0);
+	ERR_FAIL_COND_V(particles->external, 0);
 
 	return particles->draw_passes.size();
 }
@@ -901,6 +970,7 @@ int ParticlesStorage::particles_get_draw_passes(RID p_particles) const {
 RID ParticlesStorage::particles_get_draw_pass_mesh(RID p_particles, int p_pass) const {
 	const Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL_V(particles, RID());
+	ERR_FAIL_COND_V(particles->external, RID());
 	ERR_FAIL_INDEX_V(p_pass, particles->draw_passes.size(), RID());
 
 	return particles->draw_passes[p_pass];
@@ -915,6 +985,10 @@ void ParticlesStorage::particles_update_dependency(RID p_particles, DependencyTr
 void ParticlesStorage::particles_get_instance_buffer_motion_vectors_offsets(RID p_particles, uint32_t &r_current_offset, uint32_t &r_prev_offset) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	if (particles->external) {
+		r_current_offset = r_prev_offset = 0;
+		ERR_FAIL_MSG("ExternalOutput uses packet-owned current and previous bindings.");
+	}
 	r_current_offset = particles->instance_motion_vectors_current_offset;
 	r_prev_offset = particles->instance_motion_vectors_previous_offset;
 }
@@ -922,18 +996,21 @@ void ParticlesStorage::particles_get_instance_buffer_motion_vectors_offsets(RID 
 void ParticlesStorage::particles_add_collision(RID p_particles, RID p_particles_collision_instance) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 	particles->collisions.insert(p_particles_collision_instance);
 }
 
 void ParticlesStorage::particles_remove_collision(RID p_particles, RID p_particles_collision_instance) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 	particles->collisions.erase(p_particles_collision_instance);
 }
 
 void ParticlesStorage::particles_set_canvas_sdf_collision(RID p_particles, bool p_enable, const Transform2D &p_xform, const Rect2 &p_to_screen, RID p_texture) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 	particles->has_sdf_collision = p_enable;
 	particles->sdf_collision_transform = p_xform;
 	particles->sdf_collision_to_screen = p_to_screen;
@@ -941,6 +1018,7 @@ void ParticlesStorage::particles_set_canvas_sdf_collision(RID p_particles, bool 
 }
 
 void ParticlesStorage::_particles_commit_process_state(Particles *p_particles, Particles *p_sub_emitter, bool p_sub_emitter_was_emitting, bool p_success) {
+	ERR_FAIL_COND(p_particles->external || (p_sub_emitter && p_sub_emitter->external));
 	if (!p_success) {
 		return;
 	}
@@ -961,6 +1039,7 @@ void ParticlesStorage::_particles_commit_process_state(Particles *p_particles, P
 }
 
 void ParticlesStorage::_particles_restore_process_history(Particles *p_particles, const ParticlesFrameParams &p_previous_first, const ParticlesFrameParams &p_previous_last, double p_previous_trail_speed_scale) {
+	ERR_FAIL_COND(p_particles->external);
 	if (p_particles->frame_history.is_empty()) {
 		return;
 	}
@@ -989,7 +1068,7 @@ void ParticlesStorage::_particles_restore_process_history(Particles *p_particles
 }
 
 bool ParticlesStorage::_particles_get_total_amount(const Particles *p_particles, uint32_t &r_total_amount) {
-	if (p_particles == nullptr || p_particles->amount <= 0) {
+	if (p_particles == nullptr || p_particles->external || p_particles->amount <= 0) {
 		r_total_amount = 0;
 		return false;
 	}
@@ -1039,6 +1118,9 @@ bool ParticlesStorage::_particles_collision_base_size_is_valid(real_t p_size) {
 }
 
 bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta) {
+	ERR_FAIL_COND_V(p_particles->external, false);
+	const Particles *sub_emitter_owner = particles_owner.get_or_null(p_particles->sub_emitter);
+	ERR_FAIL_COND_V(sub_emitter_owner && sub_emitter_owner->external, false);
 	TextureStorage *texture_storage = TextureStorage::get_singleton();
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
 
@@ -1599,6 +1681,7 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 void ParticlesStorage::particles_set_view_axis(RID p_particles, const Vector3 &p_axis, const Vector3 &p_up_axis) {
 	Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL(particles);
+	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 
 	if (particles->draw_order != RSE::PARTICLES_DRAW_ORDER_VIEW_DEPTH && particles->transform_align != RSE::PARTICLES_TRANSFORM_ALIGN_Z_BILLBOARD && particles->transform_align != RSE::PARTICLES_TRANSFORM_ALIGN_Z_BILLBOARD_Y_TO_VELOCITY && particles->transform_align != RSE::PARTICLES_TRANSFORM_ALIGN_LOCAL_BILLBOARD) {
 		return;
@@ -1737,6 +1820,7 @@ void ParticlesStorage::particles_set_view_axis(RID p_particles, const Vector3 &p
 }
 
 void ParticlesStorage::_particles_update_buffers(Particles *particles) {
+	ERR_FAIL_COND(particles->external);
 	uint32_t userdata_count = 0;
 
 	if (particles->process_material.is_valid()) {
@@ -1886,6 +1970,9 @@ void ParticlesStorage::update_particles() {
 		Particles *particles = particle_update_list.first()->self();
 
 		particles->update_list.remove_from_list();
+		if (particles->external) {
+			continue;
+		}
 		const bool retry_candidate = !particles->restart_request && particles->retry_pending && particles->frame_delta_committed && particles->frame_delta_committed_frame == frame;
 		const bool previous_inactive = particles->inactive;
 		const double previous_inactive_time = particles->inactive_time;
@@ -2341,6 +2428,9 @@ Dependency *ParticlesStorage::particles_get_dependency(RID p_particles) const {
 bool ParticlesStorage::particles_is_inactive(RID p_particles) const {
 	const Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL_V(particles, false);
+	if (particles->external) {
+		return particles->external->state == ExternalOutputOwner::GenerationState::RELEASED;
+	}
 	return !particles->emitting && particles->inactive;
 }
 

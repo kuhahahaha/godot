@@ -41,6 +41,7 @@
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_default.h"
 #include "servers/rendering/rendering_shader_container.h"
+#include "tests/servers/rendering/test_external_output_custody_bridge.h"
 #include "tests/servers/rendering/transfer_test_driver_base.h"
 #include "tests/test_macros.h"
 
@@ -1490,6 +1491,7 @@ struct Access {
 		bool mesh_directory = false, mesh_directory_returned = false, directory_capacity_failure = false;
 		bool directory_return_started = false;
 		bool directory_service_paused = false;
+		bool retirement_auth_checked = false;
 		RendererRD::MeshStorage::Mesh directory_mesh;
 		RendererRD::MeshStorage::NativeSurfaceHold directory_hold, directory_neighbor;
 		uint64_t directory_selected_group = 0, neighbor_selected_group = 0;
@@ -1673,6 +1675,8 @@ struct Access {
 				test.check(__LINE__, !rd._production_output_hold_contains(test.output_pin, test.owned_group, test.auxiliary_buffer));
 				test.check(__LINE__, rd._production_output_owned_seal(context, test.output_pin, test.owned_group) == ERR_BUSY);
 				test.check(__LINE__, registry.production_output_unpin(test.output_pin) == ERR_BUSY && request.binding_used == used && request.revision == revision);
+				RendererRD::external_custody_issued_pin_test(registry, ref, test.output_pin, RendererRD::ExternalCustodyTestMode::SLOT_PENDING);
+				test.check(__LINE__, registry.production_output_pin_matches(test.output_pin, ref, fixture.rd));
 			}
 
 			if (test.mesh_directory) {
@@ -1734,6 +1738,12 @@ struct Access {
 				test.directory_mesh.surface_count = 1;
 				MeshStorage::NativeSurfaceHold original;
 				test.check(__LINE__, MeshStorage::_mesh_surface_hold_acquire(surface, 1, false, false, 0, original) == OK);
+				{
+					GDExtensionDeviceExit::ProductionOutputPin surface_pin;
+					test.check(__LINE__, registry.production_output_pin_borrow(test.output_pin, rd, surface_pin) == OK);
+					RendererRD::external_custody_issued_pin_test(registry, ref, surface_pin, RendererRD::ExternalCustodyTestMode::SURFACE_RETURN, &original);
+					test.check(__LINE__, surface_pin.is_empty());
+				}
 				test.check(__LINE__, MeshStorage::_mesh_surface_hold_acquire(surface, 1, false, false, 0, test.directory_neighbor) == OK);
 				test.check(__LINE__, MeshStorage::_native_hold_capture_directory(context, test.output_pin, original, directory_limit) == ERR_BUSY);
 				MeshStorage::_mesh_surface_clear(&test.directory_mesh, 0);
@@ -1907,6 +1917,29 @@ struct Access {
 			}
 			auto &budget = request.control.input.budget;
 			auto &usage = request.control.output.service_usage;
+			if (!test->retirement_auth_checked) {
+				// This is the original EXECUTING OBSERVE callback and actual pin,
+				// not a forged positive control/source/owner association.
+				using namespace GDExtensionDeviceExit;
+				const auto initial_usage = usage;
+				const auto revision = request.revision;
+				const auto graphs = request.graph_count, natives = request.native_count;
+				const auto copied_budget = budget;
+				ProductionServiceUsage copied_usage = {};
+				ProductionDisposalObservation observation;
+				test->check(__LINE__, rd._production_output_retire_service(test->output_pin, 0, copied_budget, usage, observation) == ERR_UNAUTHORIZED);
+				test->check(__LINE__, rd._production_output_retire_service(test->output_pin, 0, budget, copied_usage, observation) == ERR_UNAUTHORIZED);
+				{
+					RenderingDevice foreign;
+					test->check(__LINE__, foreign._production_output_retire_service(test->output_pin, 0, budget, usage, observation) == ERR_UNAUTHORIZED);
+				}
+				test->check(__LINE__, usage.controls == initial_usage.controls && usage.passes == initial_usage.passes && usage.receipts == initial_usage.receipts);
+				test->check(__LINE__, copied_usage.controls == 0 && copied_usage.passes == 0 && copied_usage.receipts == 0);
+				test->check(__LINE__, request.revision == revision && request.graph_count == graphs && request.native_count == natives);
+				test->check(__LINE__, test->setup.fixture->registry.production_output_pin_matches(test->output_pin, { test->setup.fixture->instance, request.serial }, rd));
+				test->retirement_auth_checked = true;
+			}
+
 			const uint32_t before = usage.passes;
 			// Rendezvous phase is a message kind (every control uses 6),
 			// so retain the actual owner-return boundary independently.
@@ -2645,7 +2678,7 @@ struct Access {
 			return; // A refused borrow still returns the true original pin below.
 		}
 		ProductionOutputPin refused;
-		const uint64_t serial = request.next_output_pin_serial;
+		uint64_t serial = request.next_output_pin_serial;
 		if (request.cancelled || request.attachment->closing) {
 			// Closing/cancellation is from the original owner path, not a fake slot.
 			CHECK(registry.production_output_pin_borrow(test.output_pin, device, refused) == ERR_BUSY);
@@ -2653,6 +2686,18 @@ struct Access {
 			CHECK(registry.production_output_unpin(test.borrowed_pin) == OK);
 			return;
 		}
+		for (auto mode : { RendererRD::ExternalCustodyTestMode::VIEW_RETURN, RendererRD::ExternalCustodyTestMode::READ_CANCEL, RendererRD::ExternalCustodyTestMode::READ_UNKNOWN }) {
+			ProductionOutputPin custody_pin;
+			REQUIRE(registry.production_output_pin_borrow(test.output_pin, device, custody_pin) == OK);
+			RendererRD::external_custody_issued_pin_test(registry, ref, custody_pin, mode);
+			if (mode == RendererRD::ExternalCustodyTestMode::READ_UNKNOWN) {
+				CHECK(registry.production_output_pin_matches(custody_pin, ref, device));
+				CHECK(registry.production_output_unpin(custody_pin) == OK);
+			} else {
+				CHECK(custody_pin.is_empty());
+			}
+		}
+		serial = request.next_output_pin_serial; // New genuine borrows above advanced the allocator.
 		CHECK(registry.production_output_pin_borrow(test.output_pin, device, test.output_pin) == ERR_ALREADY_IN_USE);
 		CHECK(registry.production_output_pin_borrow(test.output_pin, device, test.borrowed_pin) == ERR_ALREADY_IN_USE);
 		ProductionOutputPin empty;
@@ -2672,7 +2717,8 @@ struct Access {
 		native.live = live;
 		CHECK((refused.is_empty() && request.next_output_pin_serial == serial));
 		CHECK(registry.production_output_pin_matches(test.borrowed_pin, ref, device));
-		CHECK(registry.production_output_unpin(test.output_pin) == OK);
+		RendererRD::external_custody_issued_pin_test(registry, ref, test.output_pin, RendererRD::ExternalCustodyTestMode::SLOT_RETURN);
+		CHECK(test.output_pin.is_empty());
 		CHECK((test.output_pin.is_empty() && !test.borrowed_pin.is_empty()));
 		{
 			MutexLock lock(registry.mutex);
@@ -2899,6 +2945,7 @@ struct Access {
 
 				if (test.mesh_directory && !test.directory_capacity_failure) {
 					CHECK(test.mesh_directory_returned);
+					CHECK(test.retirement_auth_checked);
 					CHECK((test.directory_component_turn >= 3 && test.directory_marked && test.directory_premature_finish_checks == 1));
 					CHECK(RendererRD::MeshStorage::_native_hold_begin_return(test.directory_hold) == OK);
 					CHECK(RendererRD::MeshStorage::_native_hold_finish_return(test.directory_hold) == OK);
