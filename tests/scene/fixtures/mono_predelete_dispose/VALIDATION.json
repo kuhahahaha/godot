@@ -23,13 +23,6 @@
   "original_log_sha256": "2adf8129dd0f4f553821ae4850cf449e213f6c5b828602ebb45c821f49adc0a4",
   "original_failure": "PCK savepack succeeded; six real Dispose guard errors then strict checker exit56",
   "local_common_cpp": "frozen host430e50e4\u20262070cases516960assert passed; also includes uncommitted public port changes",
-  "not_run": [
-    "dotnet-format",
-    "C# compilation",
-    "Mono-enabled engine compilation",
-    "managed runtime fixture",
-    "original Mono PCK export regression"
-  ],
   "independent_review": "2b71 reviewed by separate peer after A/Astra actual-log source triage",
   "scope": "skip only the redundant same-instance detach during actual native predelete cleanup; generic cohort/null replacement guard and RefCounted path unchanged",
   "format_followup": {
@@ -41,5 +34,33 @@
     "line_content_unchanged": true,
     "local_dotnet_format": "unavailable; exact actual CI diff applied",
     "managed_compile_runtime": "still not run locally; new CI required"
+  },
+  "not_run_locally": [
+    "dotnet-format",
+    "C# compilation",
+    "Mono-enabled engine compilation",
+    "managed runtime fixture",
+    "original Mono PCK export regression"
+  ],
+  "actual_ci": {
+    "run": 41988992429,
+    "job": 127117217485,
+    "head": "a638a36536d6713753d0713b22bec82a6aea87d1",
+    "job_conclusion": "success",
+    "steps": {
+      "Compilation": "success",
+      "Build .NET solutions": "success",
+      "Unit tests": "success",
+      ".NET source generators tests": "success",
+      "C# native predelete and explicit Dispose regression": "success",
+      "Test project export": "success"
+    },
+    "runtime_marker": "MONO_PREDELETE_DISPOSE_OK",
+    "marker_observed": true,
+    "log_sha256": "60f766e8fad79a61e35bff04eae0180d75e86d194147f1f7ff101236f3263d71",
+    "log_bytes": 4946791,
+    "url": "https://github.com/kuhahahaha/godot/actions/runs/41988992429/job/127117217485",
+    "local_evidence": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-ci-a638-mono-20261105",
+    "scope": "actual Linux Mono engine/managed build, fixture and original PCK export; not all platform matrix or native GPU qualification"
   }
 }

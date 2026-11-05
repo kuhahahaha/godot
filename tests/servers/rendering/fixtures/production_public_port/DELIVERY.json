@@ -487,5 +487,187 @@
     },
     "review": "independent source and raw-log review clean",
     "windows_actual_recheck": "pending, no local Windows execution or green CI claim"
+  },
+  "scu_test_collection_followup": {
+    "actual_ci_run": 41988992429,
+    "job": 127117217482,
+    "raw_log_sha256": "3599ea10f93254fe86eec2ab7d1bc64bcec88df11424cad8b582993fe1f12e34",
+    "failure": "Linux double/GCC SCU linked tests archive without seven ForceLink definitions because three source directories absent from original SCU test collection",
+    "fix": "include core/extension, servers/physics_2d and servers/physics_3d in existing tests process_folder list",
+    "collection": {
+      "red": {
+        "expected_include_counts": {
+          "tests/core/extension/test_production_request.cpp": 0,
+          "tests/core/extension/test_production_native_observe.cpp": 0,
+          "tests/servers/physics_2d/test_wrapper_r1_gates_2d.cpp": 0,
+          "tests/servers/physics_2d/test_wrapper_stop_2d.cpp": 0,
+          "tests/servers/physics_3d/test_query_retirement.cpp": 0,
+          "tests/servers/physics_3d/test_wrapper_stop.cpp": 0,
+          "tests/servers/physics_3d/test_wrapper_r1_gates.cpp": 0
+        },
+        "total_generated_sources": 228,
+        "all_generated_sources_unique": true
+      },
+      "green": {
+        "expected_include_counts": {
+          "tests/core/extension/test_production_request.cpp": 1,
+          "tests/core/extension/test_production_native_observe.cpp": 1,
+          "tests/servers/physics_2d/test_wrapper_r1_gates_2d.cpp": 1,
+          "tests/servers/physics_2d/test_wrapper_stop_2d.cpp": 1,
+          "tests/servers/physics_3d/test_query_retirement.cpp": 1,
+          "tests/servers/physics_3d/test_wrapper_stop.cpp": 1,
+          "tests/servers/physics_3d/test_wrapper_r1_gates.cpp": 1
+        },
+        "total_generated_sources": 235,
+        "all_generated_sources_unique": true
+      },
+      "all_force_link_sources": {
+        "count": 230,
+        "missing_from_generated": []
+      }
+    },
+    "strict": [
+      {
+        "unit": "scu_tests.gen.cpp",
+        "command": [
+          "/opt/homebrew/opt/llvm/bin/clang++",
+          "-std=c++17",
+          "-DDEBUG_ENABLED",
+          "-DTHREADS_ENABLED",
+          "-DTESTS_ENABLED",
+          "-DTOOLS_ENABLED",
+          "-DDEV_ENABLED",
+          "-DREAL_T_IS_DOUBLE",
+          "-DSCU_BUILD_ENABLED",
+          "-fno-exceptions",
+          "-Wall",
+          "-Wextra",
+          "-Wno-unused-parameter",
+          "-Werror",
+          "-Wshadow",
+          "-Wmissing-field-initializers",
+          "-fsyntax-only",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-scu-test-collection-20261105/green",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/platform/macos",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/thirdparty",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-scu-test-collection-20261105/green/tests/.scu/scu_tests.gen.cpp"
+        ],
+        "exit": 0
+      },
+      {
+        "unit": "scu_tests_exception.gen.cpp",
+        "command": [
+          "/opt/homebrew/opt/llvm/bin/clang++",
+          "-std=c++17",
+          "-DDEBUG_ENABLED",
+          "-DTHREADS_ENABLED",
+          "-DTESTS_ENABLED",
+          "-DTOOLS_ENABLED",
+          "-DDEV_ENABLED",
+          "-DREAL_T_IS_DOUBLE",
+          "-DSCU_BUILD_ENABLED",
+          "-fno-exceptions",
+          "-Wall",
+          "-Wextra",
+          "-Wno-unused-parameter",
+          "-Werror",
+          "-Wshadow",
+          "-Wmissing-field-initializers",
+          "-fsyntax-only",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-scu-test-collection-20261105/green",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/platform/macos",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/thirdparty",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-scu-test-collection-20261105/green/tests/.scu/scu_tests_exception.gen.cpp"
+        ],
+        "exit": 0
+      },
+      {
+        "unit": "scu_tests_exception_1.gen.cpp",
+        "command": [
+          "/opt/homebrew/opt/llvm/bin/clang++",
+          "-std=c++17",
+          "-DDEBUG_ENABLED",
+          "-DTHREADS_ENABLED",
+          "-DTESTS_ENABLED",
+          "-DTOOLS_ENABLED",
+          "-DDEV_ENABLED",
+          "-DREAL_T_IS_DOUBLE",
+          "-DSCU_BUILD_ENABLED",
+          "-fno-exceptions",
+          "-Wall",
+          "-Wextra",
+          "-Wno-unused-parameter",
+          "-Werror",
+          "-Wshadow",
+          "-Wmissing-field-initializers",
+          "-fsyntax-only",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-scu-test-collection-20261105/green",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/platform/macos",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/thirdparty",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-scu-test-collection-20261105/green/tests/.scu/scu_tests_exception_1.gen.cpp"
+        ],
+        "exit": 0
+      },
+      {
+        "unit": "scu_tests_exception_2.gen.cpp",
+        "command": [
+          "/opt/homebrew/opt/llvm/bin/clang++",
+          "-std=c++17",
+          "-DDEBUG_ENABLED",
+          "-DTHREADS_ENABLED",
+          "-DTESTS_ENABLED",
+          "-DTOOLS_ENABLED",
+          "-DDEV_ENABLED",
+          "-DREAL_T_IS_DOUBLE",
+          "-DSCU_BUILD_ENABLED",
+          "-fno-exceptions",
+          "-Wall",
+          "-Wextra",
+          "-Wno-unused-parameter",
+          "-Werror",
+          "-Wshadow",
+          "-Wmissing-field-initializers",
+          "-fsyntax-only",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-scu-test-collection-20261105/green",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/platform/macos",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/thirdparty",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-scu-test-collection-20261105/green/tests/.scu/scu_tests_exception_2.gen.cpp"
+        ],
+        "exit": 0
+      },
+      {
+        "unit": "scu_tests_exception_3.gen.cpp",
+        "command": [
+          "/opt/homebrew/opt/llvm/bin/clang++",
+          "-std=c++17",
+          "-DDEBUG_ENABLED",
+          "-DTHREADS_ENABLED",
+          "-DTESTS_ENABLED",
+          "-DTOOLS_ENABLED",
+          "-DDEV_ENABLED",
+          "-DREAL_T_IS_DOUBLE",
+          "-DSCU_BUILD_ENABLED",
+          "-fno-exceptions",
+          "-Wall",
+          "-Wextra",
+          "-Wno-unused-parameter",
+          "-Werror",
+          "-Wshadow",
+          "-Wmissing-field-initializers",
+          "-fsyntax-only",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-scu-test-collection-20261105/green",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/platform/macos",
+          "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/thirdparty",
+          "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-scu-test-collection-20261105/green/tests/.scu/scu_tests_exception_3.gen.cpp"
+        ],
+        "exit": 0
+      }
+    ],
+    "scope": "actual original generator RED missing7; GREEN includes all7 exactly once and all original force-link source files; five generated full SCU TUs strict double DEV syntax0; actual Linux link/runtime recheck pending"
   }
 }

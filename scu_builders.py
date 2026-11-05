@@ -440,6 +440,7 @@ def generate_scu_files(max_includes_per_scu):
             "/core",
             "/core/config",
             "/core/crypto",
+            "/core/extension",
             "/core/input",
             "/core/io",
             "/core/math",
@@ -452,6 +453,8 @@ def generate_scu_files(max_includes_per_scu):
             "/scene",
             "/servers",
             "/servers/rendering",
+            "/servers/physics_2d",
+            "/servers/physics_3d",
         ],
         ["test_macros", "test_main", "test_particles_trail_failure", "test_particles_process_retry"],
     )
