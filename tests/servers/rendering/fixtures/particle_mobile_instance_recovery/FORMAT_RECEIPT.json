@@ -1,0 +1,20 @@
+{
+  "source": "06d452e29d",
+  "ci_run": 42077727647,
+  "job": 127422531559,
+  "semantic_check": {
+    "python_ast_equal": true,
+    "cpp_nonwhitespace_bytes_equal": true
+  },
+  "files": {
+    "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp": {
+      "before": "a3c8eca1cfd7dc9f58d7fde221449f62a6792f897de299ea1c1ec040bd8bb5ec",
+      "after": "a0059ec2cf520376d3c9095140775af48881b7c761fac993e628faf2e3aa1e25"
+    },
+    "tests/servers/rendering/fixtures/particle_runtime_native/run_native.py": {
+      "before": "9b55ccebdf5a644457e8a2f42c6a6fe20ad203884bed816a5783eeb0d69a1ef4",
+      "after": "a0279c20af29828006661bc5ada812889df8429b841b34f0a50f9a2ef4319905"
+    }
+  },
+  "limitation": "Formatting-only follow-up; actual prior native/full hosts retain their original source hashes. No new GPU run claimed."
+}

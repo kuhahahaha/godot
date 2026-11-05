@@ -222,12 +222,15 @@ def valid_report(report: object) -> bool:
     if any(type(report.get(key)) is not int or report[key] != value for key, value in integers.items()):
         return False
     checks = report.get("checks")
-    if not isinstance(checks, list) or len(checks) != 292 + sum(SDF_EXTENSION_CHECKS.values()) + sum(MOBILE_RECOVERY_CHECKS.values()):
+    if not isinstance(checks, list) or len(checks) != 292 + sum(SDF_EXTENSION_CHECKS.values()) + sum(
+        MOBILE_RECOVERY_CHECKS.values()
+    ):
         return False
     if not all(isinstance(row, dict) and isinstance(row.get("check"), str) and row.get("ok") is True for row in checks):
         return False
     return (
-        Counter(row["check"] for row in checks) == EXPECTED_NATIVE_CHECKS + SDF_EXTENSION_CHECKS + MOBILE_RECOVERY_CHECKS
+        Counter(row["check"] for row in checks)
+        == EXPECTED_NATIVE_CHECKS + SDF_EXTENSION_CHECKS + MOBILE_RECOVERY_CHECKS
         and all(report.get(key) is True for key in ("gpu_pass", "done", "released"))
         and report.get("failures") == []
         and report.get("driver") == "metal"
