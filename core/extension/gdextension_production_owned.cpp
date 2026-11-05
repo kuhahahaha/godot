@@ -583,6 +583,45 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 	if (!budget.controls || usage.passes >= MIN(budget.passes, 64u) || usage.receipts >= MIN(budget.receipts, 128u) || !budget.deadline_micros || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros || request.capture_inflight || request.source_device_lost || request.revision > UINT64_MAX - uint64_t(request.capacity.graph_memberships) * 2 - uint64_t(request.capacity.native_memberships) * 2 - request.capacity.readbacks - request.capacity.resources - 8) {
 		return ERR_BUSY;
 	}
+	bool closure_drop = false;
+	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
+		const auto &cell = request.uses[i];
+		closure_drop |= cell.output_role == ProductionUseCell::OutputRole::DISPOSAL_GROUP && cell.disposal_group_release;
+	}
+	// Finish the original same-owner native cursor before another hold-drop
+	// step; drop preflight deliberately rejects an active cursor. Otherwise
+	// queued physical returns could never reach their original continuation.
+	if (closure_drop && !rd.native_disposal_active.load()) {
+		RenderingDevice::NativeDisposalBudget slice;
+		slice.receipts = MIN(budget.receipts, 128u) - usage.receipts;
+		slice.passes = MIN(budget.passes, 64u) - usage.passes;
+		slice.deadline_usec = budget.deadline_micros;
+		RenderingDevice::NativeDisposalUsage actual;
+		const uint64_t request_serial = request.serial, control_serial = request.control.serial;
+		auto *const attachment = request.attachment;
+		const uint64_t epoch = attachment->epoch;
+		++request.capture_inflight;
+		// Native owner callbacks must inherit neither Registry nor RD locks.
+		rd._thread_safe_.unlock();
+		mutex.unlock();
+		const Error dropped = rd._production_output_drop_step(request, slice, actual);
+		rd._thread_safe_.lock();
+		mutex.lock();
+		CRASH_COND(!request.capture_inflight);
+		--request.capture_inflight;
+		usage.controls = 1;
+		usage.passes += actual.passes;
+		usage.receipts += actual.polls + actual.frees + actual.issues + actual.retains + actual.releases + actual.recycles;
+		if (request.serial != request_serial || request.control.serial != control_serial || request.control.state != ProductionControlState::EXECUTING || request.attachment != attachment || attachment->held_device != &rd || attachment->epoch != epoch || device_records[attachment->device].epoch != epoch || device_records[attachment->device].object != &rd) {
+			return ERR_INVALID_DATA;
+		}
+		if (dropped != OK) {
+			return dropped;
+		}
+		if (usage.passes >= MIN(budget.passes, 64u) || usage.receipts >= MIN(budget.receipts, 128u)) {
+			return ERR_BUSY;
+		}
+	}
 	if (!rd.driver || rd.frames.is_empty() || rd.draw_list.active || rd.compute_list.active || rd.raytracing_list.active || rd.frame_wait_draining || rd.draw_graph.has_driver_callbacks()) {
 		return ERR_BUSY;
 	}
@@ -638,10 +677,18 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 		}
 		return false;
 	};
+	auto exact_closure = [&](const ProductionDisposalUse *node, uint32_t kind, uint64_t native_driver_id, uint64_t backing = 0) {
+		for (; node; node = node->next) {
+			if (node->request == &request && node->request_serial == request.serial && node->kind == kind && node->rid && node->serial && node->native_driver_id == native_driver_id && (!backing || node->serial == backing) && node->state.load(std::memory_order_acquire) == 2) {
+				return true;
+			}
+		}
+		return false;
+	};
 	const bool resuming = rd.native_disposal_active && request.maintenance_serial == rd.native_disposal_continuation.serial;
 	for (uint32_t frame_index = 0; frame_index < rd.frames.size(); ++frame_index) {
 		const auto &frame = rd.frames[frame_index];
-		if (!frame.qualification_tickets.is_empty() || !frame.download_texture_get_data_requests.is_empty() || !frame.swap_chains_to_present.is_empty() || (!resuming && (!frame.textures_to_dispose_of.is_empty() || !frame.framebuffers_to_dispose_of.is_empty() || !frame.samplers_to_dispose_of.is_empty() || !frame.shaders_to_dispose_of.is_empty() || !frame.render_pipelines_to_dispose_of.is_empty() || !frame.compute_pipelines_to_dispose_of.is_empty() || !frame.acceleration_structures_to_dispose_of.is_empty() || !frame.raytracing_pipelines_to_dispose_of.is_empty()))) {
+		if (!frame.qualification_tickets.is_empty() || !frame.download_texture_get_data_requests.is_empty() || !frame.swap_chains_to_present.is_empty() || (!resuming && (!frame.framebuffers_to_dispose_of.is_empty() || !frame.acceleration_structures_to_dispose_of.is_empty() || !frame.raytracing_pipelines_to_dispose_of.is_empty()))) {
 			return ERR_BUSY;
 		}
 		uint32_t buffers = frame.buffers_to_dispose_of.size();
@@ -653,7 +700,7 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 					return ERR_INVALID_DATA;
 				}
 				for (uint32_t kind = 0; kind < 10; ++kind) {
-					if (kind != 4 && kind != 9 && frame.disposal.remaining[kind]) {
+					if ((kind == 2 || kind == 3 || kind == 7) && frame.disposal.remaining[kind]) {
 						return ERR_INVALID_DATA;
 					}
 				}
@@ -663,17 +710,34 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 		}
 		const auto *buffer = frame.buffers_to_dispose_of.front();
 		for (uint32_t i = 0; i < buffers; ++i) {
-			if (!buffer || !owned_physical(buffer->get().qualification_return)) {
+			if (!buffer || (!owned_physical(buffer->get().qualification_return) && !exact_closure(buffer->get().production_disposal_uses, 9, buffer->get().driver_id.id, buffer->get().backing_serial))) {
 				return ERR_BUSY;
 			}
 			buffer = buffer->next();
 		}
 		const auto *set = frame.uniform_sets_to_dispose_of.front();
 		for (uint32_t i = 0; i < sets; ++i) {
-			if (!set || !owned_physical(set->get().qualification_return)) {
+			if (!set || (!owned_physical(set->get().qualification_return) && !exact_closure(set->get().production_disposal_uses, 4, set->get().driver_id.id))) {
 				return ERR_BUSY;
 			}
 			set = set->next();
+		}
+		auto closure_prefix = [&](const auto &list, uint32_t kind) {
+			uint32_t count = list.size();
+			if (resuming) {
+				count = frame_index == rd.native_disposal_continuation.target && rd.native_disposal_continuation.phase < 5 ? frame.disposal.remaining[kind] : 0;
+			}
+			auto *item = list.front();
+			for (uint32_t n = 0; n < count; ++n) {
+				if (!item || !exact_closure(item->get().production_disposal_uses, kind, item->get().driver_id.id)) {
+					return false;
+				}
+				item = item->next();
+			}
+			return true;
+		};
+		if (!closure_prefix(frame.render_pipelines_to_dispose_of, 0) || !closure_prefix(frame.compute_pipelines_to_dispose_of, 1) || !closure_prefix(frame.shaders_to_dispose_of, 5) || !closure_prefix(frame.samplers_to_dispose_of, 6) || !closure_prefix(frame.textures_to_dispose_of, 8)) {
+			return ERR_BUSY;
 		}
 		for (const auto &readback : frame.download_buffer_get_data_requests) {
 			if (!readback.capture || readback.capture->registry != this) {

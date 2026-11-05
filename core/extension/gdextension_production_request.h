@@ -33,6 +33,7 @@
 #include "core/extension/gdextension_library_exit_guard.h"
 #include "core/extension/gdextension_production_resource_use.h"
 #include "core/extension/gdextension_record_source.h"
+#include "servers/rendering/native_disposal_witness.h"
 
 class TestProductionResourceUseAccess;
 namespace TestProductionNativeObserve {
@@ -60,6 +61,7 @@ class ProductionRequest;
 // Explicit last-use return is mandatory; destruction cannot invent it.
 class ProductionOutputPin {
 	friend class Registry;
+	friend class ::RenderingDevice;
 	Registry *registry = nullptr;
 	ProductionRequest *request = nullptr;
 	uint64_t request_serial = 0, serial = 0;
@@ -147,10 +149,18 @@ class ProductionUseCell {
 	// Spare resource-use cells may retain one exact native consumer after
 	// immutable preparation freezes. Declaration and binding rows stay intact.
 	enum class OutputRole : uint8_t { UNUSED,
-		NATIVE_CONSUMER };
+		NATIVE_CONSUMER,
+		DISPOSAL_GROUP,
+		DISPOSAL_MEMBER,
+		DISPOSAL_STAGED,
+		DISPOSAL_RESERVED };
 	OutputRole output_role = OutputRole::UNUSED;
 	ProductionOutputPin *output_consumer = nullptr;
 	uint64_t output_pin_serial = 0;
+	ProductionDisposalUse disposal;
+	uint64_t disposal_group_serial = 0, disposal_group_pin_serial = 0;
+	uint32_t disposal_group_count = 0, disposal_ordinal = UINT32_MAX;
+	bool disposal_group_release = false, disposal_group_dropped = false, disposal_group_native_hold = false;
 };
 class ProductionReadbackCell {
 	friend class Registry;
@@ -306,6 +316,7 @@ class ProductionRequest {
 	uint32_t retire_cursor = 0;
 	uint64_t next_control_serial = 1;
 	uint64_t next_output_pin_serial = 1;
+	uint64_t next_disposal_group_serial = 1;
 	bool frozen = false, cancelled = false, effects_pending = false;
 	bool compute_list_open = false;
 	uint32_t next_action = 0;

@@ -1256,6 +1256,8 @@ Error MaterialStorage::material_native_hold_acquire(RID p_material, RID p_shader
 	if (error != OK) {
 		return error;
 	}
+	r_hold.native.material_origin = p_material;
+	r_hold.native.material_origin_generation = material->generation;
 	r_hold.snapshot = snapshot;
 	r_hold.material = p_material;
 	r_hold.device = rd;
@@ -1263,7 +1265,89 @@ Error MaterialStorage::material_native_hold_acquire(RID p_material, RID p_shader
 	return OK;
 }
 
+bool MaterialStorage::_native_hold_callback_is_owned(RID material_rid, uint64_t generation, RD::InvalidationCallback callback, void *userdata, RID uniform_set) {
+	if (callback != _material_uniform_set_erased || !userdata || !uniform_set.is_valid() || !generation) {
+		return false;
+	}
+	MaterialStorage *storage = get_singleton();
+	if (!storage) {
+		return false;
+	}
+	const Material *material = storage->material_owner.get_or_null(material_rid);
+	if (!material || !material->data || userdata != &material->data->self) {
+		return false;
+	}
+	// Never dereference arbitrary userdata or scan unrelated async materials.
+	// A later parameter revision cannot relabel this actual old set's capture.
+	for (const auto &state : material->data->native_uniform_sets) {
+		if (state.uniform_set == uniform_set && state.owner_generation == generation) {
+			return true;
+		}
+	}
+	return false;
+}
+
+RD::NativeImmutableHold *MaterialStorage::_native_hold_transfer_source(NativeMaterialHold &hold) {
+	if (!hold.device || !hold.device->native_immutable_is_render_thread() || hold.physical_transferred || hold.metadata_return_active || !hold.native.is_valid()) {
+		return nullptr;
+	}
+	return &hold.native;
+}
+
+Error MaterialStorage::_native_hold_mark_transferred(NativeMaterialHold &hold) {
+	if (!hold.device || !hold.device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (hold.physical_transferred || hold.native.is_active() || hold.metadata_return_active) {
+		return ERR_INVALID_DATA;
+	}
+	hold.physical_transferred = true;
+	return OK;
+}
+
+Error MaterialStorage::_native_hold_begin_return(NativeMaterialHold &hold) {
+	if (!hold.device || !hold.device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (!hold.physical_transferred || hold.native.is_active() || hold.metadata_return_active) {
+		return ERR_BUSY;
+	}
+	if (hold.metadata_returned) {
+		return OK;
+	}
+	// Material's original ordering differs from Surface: actual Core physical
+	// group drop is complete before the caller returns this logical metadata.
+	hold.metadata_return_active = true;
+	if (auto *storage = MaterialStorage::get_singleton()) {
+		if (auto *material = storage->material_owner.get_or_null(hold.material)) {
+			CRASH_COND(!material->native_immutable_holds);
+			--material->native_immutable_holds;
+		}
+	}
+	hold.metadata_returned = true;
+	hold.metadata_return_active = false;
+	return OK;
+}
+
+Error MaterialStorage::_native_hold_finish_return(NativeMaterialHold &hold) {
+	if (!hold.device || !hold.device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (!hold.physical_transferred || !hold.metadata_returned || hold.metadata_return_active || hold.native.is_active()) {
+		return ERR_BUSY;
+	}
+	hold.snapshot = {};
+	hold.material = RID();
+	hold.device = nullptr;
+	hold.physical_transferred = hold.metadata_returned = false;
+	return OK;
+}
+
 Error MaterialStorage::material_native_hold_release(NativeMaterialHold &r_hold) {
+	if (r_hold.physical_transferred) {
+		return ERR_BUSY; // The original finite Core group owns physical custody.
+	}
+
 	if (!r_hold.device) {
 		return ERR_INVALID_PARAMETER;
 	}
@@ -1339,6 +1423,7 @@ bool MaterialStorage::MaterialData::update_parameters_uniform_set(const HashMap<
 	auto capture_native = [&]() {
 		auto &state = native_uniform_sets[p_use_linear_color];
 		state = {};
+		state.owner_generation = generation;
 		state.shader = p_shader;
 		state.uniform_set = uniform_set;
 		state.uniform_set_index = p_shader_uniform_set;
@@ -1351,6 +1436,10 @@ bool MaterialStorage::MaterialData::update_parameters_uniform_set(const HashMap<
 		}
 		for (const auto &texture : p_texture_uniforms) {
 			state.supported &= !texture.global && texture.hint != ShaderLanguage::ShaderNode::Uniform::HINT_SCREEN_TEXTURE && texture.hint != ShaderLanguage::ShaderNode::Uniform::HINT_DEPTH_TEXTURE && texture.hint != ShaderLanguage::ShaderNode::Uniform::HINT_NORMAL_ROUGHNESS_TEXTURE && texture.hint != ShaderLanguage::ShaderNode::Uniform::HINT_BLIT_SOURCE0 && texture.hint != ShaderLanguage::ShaderNode::Uniform::HINT_BLIT_SOURCE1 && texture.hint != ShaderLanguage::ShaderNode::Uniform::HINT_BLIT_SOURCE2 && texture.hint != ShaderLanguage::ShaderNode::Uniform::HINT_BLIT_SOURCE3;
+		}
+		if (uniform_set.is_valid()) {
+			// State is initialized before publishing the original factory hint.
+			RD::get_singleton()->_production_output_set_material_origin(uniform_set, self, state.owner_generation);
 		}
 	};
 

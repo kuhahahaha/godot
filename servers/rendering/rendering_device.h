@@ -42,6 +42,8 @@ class ProductionAttachment;
 
 namespace RendererRD {
 class ExternalOutputStorage;
+class ParticlesStorage;
+class MaterialStorage;
 class MeshStorage;
 } //namespace RendererRD
 
@@ -101,6 +103,9 @@ class RDAccelerationStructureInstance;
 class RDPipelineShader;
 class RDHitGroup;
 
+namespace GDExtensionDeviceExit {
+class ProductionOutputPin;
+}
 class RenderingDevice : public RenderingDeviceCommons {
 #if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
 	friend class RenderCaptureTestAccess;
@@ -132,6 +137,8 @@ private:
 	friend struct GDExtensionDeviceExit::QualificationResource;
 	friend class RenderingServerDefault;
 	friend class RendererRD::ExternalOutputStorage;
+	friend class RendererRD::ParticlesStorage;
+	friend class RendererRD::MaterialStorage;
 #ifdef TESTS_ENABLED
 	friend class TestExternalOutputAccess;
 	friend class TestIndexed144DeviceAccess;
@@ -341,6 +348,7 @@ private:
 	RID _qualification_storage_create(uint32_t p_bytes, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
 
 	struct Buffer {
+		GDExtensionDeviceExit::ProductionDisposalUse *production_disposal_uses = nullptr;
 		uint32_t native_immutable_holds = 0;
 		bool native_immutable_retire_requested = false;
 		bool native_external_access = false;
@@ -485,6 +493,10 @@ public:
 	// Core physical retention only: no source, packet, window or Runtime grant.
 	class NativeImmutableHold {
 		friend class RenderingDevice;
+		friend class GDExtensionDeviceExit::Registry;
+		friend class RendererRD::MaterialStorage;
+		RID material_origin;
+		uint64_t material_origin_generation = 0;
 		RenderingDevice *device = nullptr;
 		Vector<RID> resources;
 		bool pins_returned = false;
@@ -502,12 +514,17 @@ public:
 			device = other.device;
 			resources = static_cast<Vector<RID> &&>(other.resources);
 			pins_returned = other.pins_returned;
+			material_origin = other.material_origin;
+			material_origin_generation = other.material_origin_generation;
+			other.material_origin = RID();
+			other.material_origin_generation = 0;
 			other.device = nullptr;
 			other.pins_returned = false;
 			return *this;
 		}
 		~NativeImmutableHold() { CRASH_COND(device); } // Original owner must explicitly return it.
 		bool is_valid() const { return device && !pins_returned; }
+		bool is_active() const { return device != nullptr; }
 	};
 	Error native_immutable_hold_acquire(const VectorView<RID> &p_roots, NativeImmutableHold &r_hold, uint32_t p_max_resources = 256);
 	Error native_immutable_hold_release(NativeImmutableHold &r_hold);
@@ -630,6 +647,7 @@ public:
 	// for a framebuffer to render into it.
 
 	struct Texture {
+		GDExtensionDeviceExit::ProductionDisposalUse *production_disposal_uses = nullptr;
 		uint32_t native_immutable_holds = 0;
 		bool native_immutable_retire_requested = false;
 		bool native_external_access = false;
@@ -1027,6 +1045,7 @@ public:
 	/*****************/
 private:
 	struct Sampler {
+		GDExtensionDeviceExit::ProductionDisposalUse *production_disposal_uses = nullptr;
 		uint32_t native_immutable_holds = 0;
 		bool native_immutable_retire_requested = false;
 		bool native_external_access = false;
@@ -1131,6 +1150,7 @@ private:
 	HashMap<VertexFormatID, VertexDescriptionCache> vertex_formats;
 
 	struct VertexArray {
+		GDExtensionDeviceExit::ProductionDisposalUse *production_disposal_uses = nullptr;
 		uint32_t native_immutable_holds = 0;
 		bool native_immutable_retire_requested = false;
 		bool native_external_access = false;
@@ -1159,6 +1179,7 @@ private:
 	RID_Owner<IndexBuffer, true> index_buffer_owner;
 
 	struct IndexArray {
+		GDExtensionDeviceExit::ProductionDisposalUse *production_disposal_uses = nullptr;
 		uint32_t native_immutable_holds = 0;
 		bool native_immutable_retire_requested = false;
 		bool native_external_access = false;
@@ -1265,6 +1286,7 @@ private:
 	// does not submit something invalid.
 
 	struct Shader : public ShaderReflection {
+		GDExtensionDeviceExit::ProductionDisposalUse *production_disposal_uses = nullptr;
 		Vector<RID> native_immutable_samplers;
 		uint32_t native_immutable_holds = 0;
 		bool native_immutable_retire_requested = false;
@@ -1481,12 +1503,15 @@ private:
 	// the above restriction is not too serious.
 
 	struct UniformSet {
+		GDExtensionDeviceExit::ProductionDisposalUse *production_disposal_uses = nullptr;
 		uint32_t native_immutable_holds = 0;
 		bool native_immutable_retire_requested = false;
 		bool native_external_access = false;
 		NativeDisposalWitness native_disposal;
 		uint64_t native_disposal_rid = 0;
 		uint64_t native_disposal_serial = 0;
+		RID production_material_origin;
+		uint64_t production_material_origin_generation = 0;
 		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
 		uint32_t qualification_users = 0;
 		LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> qualification_dependencies;
@@ -1518,6 +1543,25 @@ private:
 
 	// Mechanical ports for an original Core owner; deliberately private. No
 	// arbitrary-RID enrollment or qualification ticket authorizes these calls.
+	Error _production_output_owned_reserve(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint32_t, uint64_t &);
+	Error _production_output_owned_storage_create(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, uint32_t, BitField<StorageBufferUsage>, RID &, NativeDisposalWitness &);
+	Error _production_output_owned_uniform_set_create(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, const VectorView<Uniform> &, RID, uint32_t, RID &, NativeDisposalWitness &);
+	Error _production_output_owned_seal(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t);
+	Error _production_output_owned_create_preflight_locked(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, GDExtensionDeviceExit::ProductionRequest *&);
+	Error _production_output_owned_bind_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t, uint64_t, uint32_t, const NativeDisposalWitness &);
+	Error _production_output_owned_bind(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, const NativeDisposalWitness &);
+	Error _production_output_owned_cancel_unbound(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t);
+	bool _production_output_callback_supported(RID);
+	void _production_output_set_material_origin(RID, RID, uint64_t);
+	Error _production_output_hold_capture(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, NativeImmutableHold &, uint64_t &);
+	bool _production_output_hold_contains(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, RID);
+	Error _production_output_hold_begin_return(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t);
+	Error _production_output_hold_returned(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, GDExtensionDeviceExit::ProductionDisposalObservation &);
+	GDExtensionDeviceExit::ProductionDisposalUse **_production_disposal_head(RID, uint32_t &, uint64_t &, uint64_t &);
+	bool _production_disposal_belongs(RID, const GDExtensionDeviceExit::ProductionRequest *);
+	const GDExtensionDeviceExit::ProductionRequest *production_disposal_drop_owner = nullptr;
+	void _production_disposal_enqueued(GDExtensionDeviceExit::ProductionDisposalUse *&);
+	void _production_disposal_returned(GDExtensionDeviceExit::ProductionDisposalUse *&);
 	Error _native_disposal_preflight() const;
 	RID _storage_buffer_create_internal(uint32_t p_bytes, Span<uint8_t> p_data, BitField<StorageBufferUsage> p_usage, BitField<BufferCreationBits> p_creation_bits, const NativeDisposalWitness *p_native_disposal);
 	Error _native_disposal_storage_create(uint32_t p_bytes, BitField<StorageBufferUsage> p_usage, RID &r_rid, NativeDisposalWitness &r_witness);
@@ -1565,6 +1609,7 @@ private:
 	NativeDisposalUsage *native_disposal_usage = nullptr;
 	bool _native_disposal_available(NativeDisposalWork p_work, uint32_t p_count = 1) const;
 	bool _native_disposal_admit(NativeDisposalWork p_work, uint32_t p_count = 1);
+	Error _production_output_drop_step(GDExtensionDeviceExit::ProductionRequest &, const NativeDisposalBudget &, NativeDisposalUsage &);
 	Error _native_disposal_stall_step(uint32_t p_frame);
 	bool _native_disposal_charge(const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage, NativeDisposalWork p_work);
 	Error _native_disposal_maintenance_step(const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage, const GDExtensionDeviceExit::ProductionRequest *p_production_owner = nullptr);
@@ -1615,6 +1660,7 @@ public:
 	// was not supplied as intended.
 private:
 	struct RenderPipeline {
+		GDExtensionDeviceExit::ProductionDisposalUse *production_disposal_uses = nullptr;
 		uint32_t native_immutable_holds = 0;
 		bool native_immutable_retire_requested = false;
 		bool native_external_access = false;
@@ -1651,6 +1697,7 @@ private:
 	static void _save_pipeline_cache(void *p_data);
 
 	struct ComputePipeline {
+		GDExtensionDeviceExit::ProductionDisposalUse *production_disposal_uses = nullptr;
 		uint32_t native_immutable_holds = 0;
 		bool native_immutable_retire_requested = false;
 		bool native_external_access = false;

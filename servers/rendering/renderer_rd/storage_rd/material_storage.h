@@ -45,7 +45,11 @@ class ShaderRD;
 
 namespace RendererRD {
 
+class ParticlesStorage;
+
 class MaterialStorage : public RendererMaterialStorage {
+	friend class ParticlesStorage;
+	friend class ::RenderingDevice;
 #ifdef TESTS_ENABLED
 	friend class TestMaterialStorageNativeHoldAccess;
 	struct NativeHoldTestTag {};
@@ -107,6 +111,7 @@ public:
 	};
 	// Explicit Core physical retention. No packet or Runtime authority is issued.
 	class NativeMaterialHold {
+		bool physical_transferred = false, metadata_returned = false, metadata_return_active = false;
 		friend class MaterialStorage;
 		RenderingDevice *device = nullptr;
 		RID material;
@@ -117,6 +122,7 @@ public:
 		NativeMaterialHold() = default;
 		NativeMaterialHold(const NativeMaterialHold &) = delete;
 		NativeMaterialHold &operator=(const NativeMaterialHold &) = delete;
+		~NativeMaterialHold() { CRASH_COND(device); }
 		bool is_active() const { return device != nullptr; }
 		bool is_valid() const { return native.is_valid(); }
 		const NativeMaterialSnapshot &get_snapshot() const { return snapshot; }
@@ -145,6 +151,7 @@ public:
 #endif
 
 		struct NativeUniformSetState {
+			uint64_t owner_generation = 0;
 			RID uniform_set, shader, uniform_buffer;
 			uint32_t uniform_set_index = 0;
 			Vector<uint8_t> uniform_bytes;
@@ -366,6 +373,17 @@ private:
 
 public:
 	static MaterialStorage *get_singleton();
+
+private:
+	// Only synchronous original Core group capture may borrow this address.
+	// Core must move the actual hold, never save a wrapper pointer or clone RIDs.
+	static bool _native_hold_callback_is_owned(RID, uint64_t, RD::InvalidationCallback, void *, RID);
+	static RD::NativeImmutableHold *_native_hold_transfer_source(NativeMaterialHold &);
+	static Error _native_hold_mark_transferred(NativeMaterialHold &);
+	static Error _native_hold_begin_return(NativeMaterialHold &);
+	static Error _native_hold_finish_return(NativeMaterialHold &);
+
+public:
 	Error material_native_hold_acquire(RID p_material, RID p_shader, RID p_pipeline, RID p_uniform_set, NativeMaterialHold &r_hold, uint32_t p_max_resources = 256);
 	static Error material_native_hold_release(NativeMaterialHold &r_hold);
 

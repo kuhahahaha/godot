@@ -1,0 +1,137 @@
+{
+  "scope": "finite native output closure in original accepted Core request UseCells; ordinary borrowed owners versus packet-owned physical resources; not full Particles P2/P4 service",
+  "base_commit": "753c68e5c3a1c10f5b27b11a3f0d597681080f73",
+  "source_sha256": {
+    "core/extension/gdextension_library_exit_guard.h": "7d526dcce610e5af5488aee867d9f3f828d655ee9b080c39c79e0bc04a3ae021",
+    "core/extension/gdextension_production_owned.cpp": "e13c8ec7152439842fcabb7b098eba5655ad814de876a3e297449925214e9b4e",
+    "core/extension/gdextension_production_request.cpp": "77291e65b30f3b4eca709a576a0969fe2b42dff183558397b01d7b55fbee0888",
+    "core/extension/gdextension_production_request.h": "bb296b5dd65f8645f2516ed864b5adf1b3b67b8efe3c6c4061536332257bbb88",
+    "core/extension/gdextension_production_window.cpp": "f922e032dd10fa45d20b9bccb2e8409b2e9ccc2b7631b7088364b14e517525e0",
+    "servers/rendering/native_disposal_witness.h": "9cd38c9cf7518360fc7f2a0712e4730e72bdbbf174cb1fc01cce270e48b93b93",
+    "servers/rendering/renderer_rd/storage_rd/material_storage.cpp": "536718c5e81a8cc65fd8add7329d658e63d3f47792e766ea9dd6683319dec2e4",
+    "servers/rendering/renderer_rd/storage_rd/material_storage.h": "fcef5ed5a914025fe410e831575d272db853d9f521130e3e10f2a2e678c55bb6",
+    "servers/rendering/rendering_device.cpp": "450fc9e2e30cd467fe09f3a03a8b2544d156d144027b11641faedada7f326d43",
+    "servers/rendering/rendering_device.h": "d7928b3a37f7396f099238da1698a52c04dd6b0c5e73982078e1b5efb8a72b5a",
+    "servers/rendering/rendering_device_immutable_hold.cpp": "cd6c633a09502b3078e0ba17dec4e8e44e6815ac0f16c24a31defa902a179a3d",
+    "tests/core/extension/test_production_request.cpp": "e0783d3ddfcc99a182d40994e59b9ab517aa3ace65d31d0b1759a25ae208c9ed",
+    "tests/servers/rendering/test_material_storage_native_hold.cpp": "618be4568f2e9056c0252d833b3590a6cc074a91883dcd82af808b80f7ebd98b"
+  },
+  "evidence": "work/b4-native-closure-runtime-20261105",
+  "final_runtime": {
+    "host_sha256": "aab5b9cc0c4aa5d9f98b3a5fe410b5b889d286a4a60107f93cce6abff4d82794",
+    "results": {
+      "closure": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "1261",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "1",
+            "failures": "0"
+          }
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "request": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "13186",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "22",
+            "failures": "0"
+          }
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "material": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "983",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "3",
+            "failures": "0"
+          }
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "mesh": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "134",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "2",
+            "failures": "0"
+          }
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "public": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "456",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "2",
+            "failures": "0"
+          }
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "full": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "518422",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "2071",
+            "failures": "0"
+          }
+        },
+        "stdout_bytes": 571,
+        "stderr_bytes": 4017
+      }
+    },
+    "build_exit": 0
+  },
+  "verification": {
+    "cursor_red": "original actual closure timed out its finite432turn limit and exit78 in isolated run; original diagnostic activecursor1 phase1 target0 plus two queuedgroups preserved",
+    "cursor_fix": "resume original sameowner serial/cutoff cursor before trying another drop preflight",
+    "oracle_red": "rollback-only qualified4borrowdetach/0physical was incorrectly asserted2/2; final actual retirement state/event_seq/driverfree counters remain independently checked",
+    "latecallback_red": "live-only test against old production returned exit1 with4failedasserts, no stdout/stderr, no foreigncallback executed; original nullreplacement completed actual cleanup",
+    "latecallback_green": "currentcallback proof before any drop; pernode and physicalfree recheck; sole original RD lock spans proof to retirement",
+    "style": "all13production/test files and prior3Meshcandidate checked clangformat/include/copyright/headerguard/fileformat/codespell0 before exact Meshcandidate reverse; current13 bytes unchanged"
+  },
+  "reviews": {
+    "core_material_v2": "runtime_fixture_final_review plus dispatch_alias_fix; initial lock inversion/unsafehint findings corrected before runtime",
+    "cursor_and_oracle": "closure_review_resume; root source review and actualruntime",
+    "latecallback": "closure_review_resume found proof/retire lockgap; corrected3prod5542df66 peer-reviewed by p4_resume, precise freeze c39e3cbd66adf30f685d74661b898d7463c2dee63e1330bc6b91a47830c7e7bb"
+  },
+  "limits": [
+    "CPU strict fixtures are not actual GPU or source/Runtime grants",
+    "native call counts obey original budget; metadata scan is finite but no hard real-time deadline claim",
+    "concurrent ordinary callback replacement after admission may retain a safe partial dropped prefix; no foreign callback execution",
+    "actual Particles owner registration/service and complete Mesh retirement are still pending; Mesh candidate was removed byte-exact before final core-only build",
+    "public29 ABI and finite policy capacities unchanged; real size quote must be recomputed by B after new UseCell layout",
+    "full suite stdout571/stderr4017 retained; focusedclosure/request/material/mesh/public outputempty"
+  ]
+}

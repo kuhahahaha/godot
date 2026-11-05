@@ -154,6 +154,8 @@ struct Access {
 		uint32_t allocations = 0, buffer_frees = 0;
 		bool buffer_live = false;
 		bool upload_mode = false, staging_live = false;
+		bool auxiliary_factory = false, auxiliary_buffer_live = false, auxiliary_set_live = false;
+		uint32_t auxiliary_buffer_frees = 0, auxiliary_set_frees = 0, auxiliary_shader_frees = 0, auxiliary_pipeline_frees = 0;
 		uint8_t upload_memory[3][128] = {};
 		uint32_t upload_copies = 0;
 		uint8_t *buffer_map(BufferID id) override {
@@ -175,6 +177,11 @@ struct Access {
 
 		BufferID buffer_create(uint64_t bytes, BitField<BufferUsageBits> usage, MemoryAllocationType allocation, uint64_t) override {
 			CHECK(Thread::get_caller_id() == execution_thread);
+			if (auxiliary_factory) {
+				CHECK((bytes == 16 && allocation == MEMORY_ALLOCATION_TYPE_GPU && usage.has_flag(BUFFER_USAGE_STORAGE_BIT) && !auxiliary_buffer_live));
+				auxiliary_buffer_live = true;
+				return BufferID(3);
+			}
 			if (upload_mode && allocation == MEMORY_ALLOCATION_TYPE_CPU) {
 				CHECK((bytes == 64 && usage.has_flag(BUFFER_USAGE_TRANSFER_FROM_BIT) && !staging_live && allocations == 1));
 				++allocations;
@@ -190,6 +197,12 @@ struct Access {
 		}
 		void buffer_free(BufferID id) override {
 			CHECK(Thread::get_caller_id() == execution_thread);
+			if (id == BufferID(3)) {
+				CHECK((auxiliary_buffer_live && !auxiliary_set_live));
+				auxiliary_buffer_live = false;
+				++auxiliary_buffer_frees;
+				return;
+			}
 			if (upload_mode && id == BufferID(2)) {
 				CHECK(staging_live);
 				staging_live = false;
@@ -255,30 +268,56 @@ struct Access {
 			}
 			const auto &binding = reflection.uniform_sets[0][0];
 			CHECK((binding.binding == 0 && binding.type == UNIFORM_TYPE_STORAGE_BUFFER && binding.length == (upload_mode ? 128u : 16u) && binding.writable));
+			if (auxiliary_factory) {
+				return ShaderID(180);
+			}
 			++shader_creates;
 			return ShaderID(80);
 		}
 		PipelineID compute_pipeline_create(ShaderID shader, VectorView<PipelineSpecializationConstant>) override {
 			CHECK(Thread::get_caller_id() == execution_thread);
+			if (shader == ShaderID(180)) {
+				return PipelineID(181);
+			}
 			CHECK(shader == ShaderID(80));
 			++pipeline_creates;
 			return PipelineID(81);
 		}
 		uint32_t shader_get_layout_hash(ShaderID id) override {
-			CHECK(id == ShaderID(80));
+			CHECK((id == ShaderID(80) || id == ShaderID(180)));
 			return 123;
 		}
 		void shader_free(ShaderID id) override {
+			if (id == ShaderID(180)) {
+				++auxiliary_shader_frees;
+				return;
+			}
 			CHECK(id == ShaderID(80));
 			++shader_frees;
 		}
 		void pipeline_free(PipelineID id) override {
+			if (id == PipelineID(181)) {
+				++auxiliary_pipeline_frees;
+				return;
+			}
 			CHECK(id == PipelineID(81));
 			++pipeline_frees;
 		}
-		bool shader_retire_ready_nonblocking(ShaderID) const override { return true; }
+		void (*disposal_probe)(void *) = nullptr;
+		void *disposal_probe_data = nullptr;
+		bool shader_retire_ready_nonblocking(ShaderID) const override {
+			if (disposal_probe) {
+				disposal_probe(disposal_probe_data);
+			}
+			return true;
+		}
 		UniformSetID uniform_set_create(VectorView<BoundUniform> uniforms, ShaderID shader, uint32_t set, int pool) override {
 			CHECK(Thread::get_caller_id() == execution_thread);
+			if (shader == ShaderID(180)) {
+				CHECK((set == 0 && pool == -1 && !auxiliary_set_live && uniforms.size() == 1 && uniforms[0].ids.size() == 1 && uniforms[0].ids[0].id == 3));
+				auxiliary_set_live = true;
+				return UniformSetID(182);
+			}
 			CHECK((shader == ShaderID(80) && set == 0 && pool == -1 && !set_live));
 			CHECK(uniforms.size() == 1);
 			if (uniforms.size() != 1) {
@@ -295,6 +334,12 @@ struct Access {
 		}
 		void uniform_set_free(UniformSetID id) override {
 			CHECK(Thread::get_caller_id() == execution_thread);
+			if (id == UniformSetID(182)) {
+				CHECK(auxiliary_set_live);
+				auxiliary_set_live = false;
+				++auxiliary_set_frees;
+				return;
+			}
 			CHECK((id == UniformSetID(82) && set_live));
 			++set_frees;
 			set_live = false;
@@ -690,7 +735,7 @@ struct Access {
 			const Error error = prepare_device(p_server);
 			return error == OK ? initialize_owner(loader_kind) : error;
 		}
-		Error initialize_owner(uint32_t loader_kind = 1, bool owned_storage = false, bool owned_set = false, GDExtensionDeviceExit::ProductionRecordReceiver receiver = nullptr, void *userdata = nullptr, bool keep_list = false, uint32_t record_actions = 1, bool upload_prefix = false, GDExtensionDeviceExit::ProductionMetadataReceiver metadata_receiver = nullptr) {
+		Error initialize_owner(uint32_t loader_kind = 1, bool owned_storage = false, bool owned_set = false, GDExtensionDeviceExit::ProductionRecordReceiver receiver = nullptr, void *userdata = nullptr, bool keep_list = false, uint32_t record_actions = 1, bool upload_prefix = false, GDExtensionDeviceExit::ProductionMetadataReceiver metadata_receiver = nullptr, bool output_closure = false) {
 			using namespace GDExtensionDeviceExit;
 			if (public_port && !port.load()) {
 				return ERR_UNAVAILABLE;
@@ -785,6 +830,9 @@ struct Access {
 				whole.native_memberships = 256;
 				whole.retained_payload_bytes = 128;
 			}
+			if (output_closure) {
+				whole.resource_uses += 16;
+			}
 			GDExtensionProductionMetadataQuoteV1 quote = {};
 			if (public_port) {
 				CHECK(port.quote(&Enrollment::ABI, ready, { instance, UINT64_MAX }, context, session, &whole, &quote).native_error != OK);
@@ -826,6 +874,9 @@ struct Access {
 			if (owned_set) {
 				single.resources = single.return_cells = 3;
 				single.resource_uses = 3;
+			}
+			if (output_closure) {
+				single.resource_uses += 16;
 			}
 			const GDExtensionProductionOperationV1 operation = { GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionOperationV1>(), 91, 1, 10, 10 + record_actions };
 			const GDExtensionProductionActionV1 action = { 10, uint32_t(receiver && !upload_prefix ? GDEXTENSION_PRODUCTION_DISPATCH_V1 : GDEXTENSION_PRODUCTION_UPLOAD_V1), 0, 0, 1, uint32_t(keep_list ? GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1 : GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1), UINT32_MAX };
@@ -1398,7 +1449,11 @@ struct Access {
 	}
 	struct SplitSet {
 		bool record_window = false, keep_list = false, close_before_ack = false, budget_pause = false, upload_prefix = false;
-		bool public_port = false;
+		bool public_port = false, output_closure = false, closure_retired = false, groups_settled = false, closure_rollback = false;
+		uint64_t borrowed_group = 0, owned_group = 0, qualified_group = 0;
+		uint32_t nested_disposal_probes = 0, foreign_callback_calls = 0;
+		RID auxiliary_shader, auxiliary_pipeline, auxiliary_buffer, auxiliary_set;
+		NativeDisposalWitness auxiliary_buffer_witness, auxiliary_set_witness;
 		GDExtensionDeviceExit::ProductionOutputPin output_pin;
 		GDExtensionProductionAppendV1 upload_append = {};
 		uint32_t metadata_calls = 0;
@@ -1507,6 +1562,76 @@ struct Access {
 				test.check(__LINE__, moved.is_empty() && !test.output_pin.is_empty() && request.binding_used == binding_used && request.revision == revision && request.graph_count == 0);
 			}
 
+			if (test.output_closure) {
+				using namespace GDExtensionDeviceExit;
+				auto &rd = fixture.rd;
+				test.check(__LINE__, registry.production_output_pin(context, ref, rd, test.output_pin) == OK);
+				test.check(__LINE__, rd._production_output_owned_reserve(context, test.output_pin, 2, test.owned_group) == OK);
+				const uint32_t used = request.binding_used;
+				const uint64_t revision = request.revision;
+				uint64_t oversized = 0;
+				test.check(__LINE__, rd._production_output_owned_reserve(context, test.output_pin, request.capacity.resource_uses, oversized) == ERR_OUT_OF_MEMORY && !oversized);
+				fixture.driver.auxiliary_factory = true;
+				Ref<UnitContainer> native_container;
+				native_container.instantiate();
+				native_container->initialize(16);
+				test.auxiliary_shader = rd.shader_create_from_bytecode(native_container->to_bytes());
+				test.auxiliary_pipeline = rd.compute_pipeline_create(test.auxiliary_shader);
+				test.check(__LINE__, test.auxiliary_shader.is_valid() && test.auxiliary_pipeline.is_valid());
+				test.check(__LINE__, rd._production_output_owned_storage_create(context, test.output_pin, test.owned_group, 0, 16, {}, test.auxiliary_buffer, test.auxiliary_buffer_witness) == OK);
+				RenderingDevice::Uniform binding;
+				binding.uniform_type = RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER;
+				binding.binding = 0;
+				binding.append_id(test.auxiliary_buffer);
+				Vector<RenderingDevice::Uniform> bindings;
+				bindings.push_back(binding);
+				if (test.closure_rollback) {
+					bindings.write[0].uniform_type = RenderingDevice::UNIFORM_TYPE_SAMPLER;
+					test.check(__LINE__, rd._production_output_owned_uniform_set_create(context, test.output_pin, test.owned_group, 1, bindings, test.auxiliary_shader, 0, test.auxiliary_set, test.auxiliary_set_witness) == ERR_UNAVAILABLE);
+					test.check(__LINE__, test.auxiliary_set.is_null() && fixture.driver.auxiliary_buffer_live && !fixture.driver.auxiliary_set_live);
+					test.check(__LINE__, rd._production_output_owned_cancel_unbound(test.output_pin, test.owned_group) == OK);
+				} else {
+					test.check(__LINE__, rd._production_output_owned_uniform_set_create(context, test.output_pin, test.owned_group, 1, bindings, test.auxiliary_shader, 0, test.auxiliary_set, test.auxiliary_set_witness) == OK);
+				}
+				fixture.driver.auxiliary_factory = false;
+				fixture.driver.disposal_probe_data = &test;
+				fixture.driver.disposal_probe = +[](void *data) {
+					auto &actual = *static_cast<SplitSet *>(data);
+					auto &rd = actual.setup.fixture->rd;
+					if (!rd.native_disposal_budget) {
+						return; // Original qualification's later unmetered owner lane.
+					}
+					const auto *original_budget = rd.native_disposal_budget;
+					auto *original_usage = rd.native_disposal_usage;
+					const auto *original_owner = rd.production_disposal_drop_owner;
+					RenderingDevice::NativeDisposalUsage rejected;
+					const RenderingDevice::NativeDisposalBudget offered{ 1, 1, OS::get_singleton()->get_ticks_usec() + 10000000 };
+					actual.check(__LINE__, rd._production_output_drop_step(*actual.setup.fixture->request, offered, rejected) == ERR_UNAUTHORIZED);
+					actual.check(__LINE__, rd.native_disposal_budget == original_budget && rd.native_disposal_usage == original_usage && rd.production_disposal_drop_owner == original_owner && rejected.passes == 0 && rejected.polls == 0 && rejected.frees == 0);
+					++actual.nested_disposal_probes;
+				};
+
+				test.check(__LINE__, rd._production_output_owned_bind(context, test.output_pin, test.owned_group, 0, test.auxiliary_buffer_witness) == ERR_ALREADY_IN_USE);
+				test.check(__LINE__, rd._production_output_owned_bind(context, test.output_pin, test.owned_group, 1, test.auxiliary_buffer_witness) == ERR_UNAUTHORIZED);
+				const RID root = test.auxiliary_pipeline;
+				RenderingDevice::NativeImmutableHold physical;
+				test.check(__LINE__, rd.native_immutable_hold_acquire(VectorView<RID>(&root, 1), physical, 4) == OK);
+				test.check(__LINE__, rd._production_output_hold_capture(context, test.output_pin, physical, test.borrowed_group) == OK && !physical.is_active());
+				test.check(__LINE__, rd._production_output_hold_contains(test.output_pin, test.borrowed_group, test.auxiliary_pipeline));
+				const RID qualified_root = request.resources[0].primary;
+				RenderingDevice::NativeImmutableHold qualified_hold;
+				test.check(__LINE__, rd.native_immutable_hold_acquire(VectorView<RID>(&qualified_root, 1), qualified_hold, 8) == OK);
+				test.check(__LINE__, rd._production_output_hold_capture(context, test.output_pin, qualified_hold, test.qualified_group) == OK && !qualified_hold.is_active());
+				test.check(__LINE__, rd._production_output_hold_contains(test.output_pin, test.qualified_group, qualified_root));
+				test.check(__LINE__, !rd._production_output_hold_contains(test.output_pin, test.owned_group, test.auxiliary_buffer));
+				test.check(__LINE__, rd._production_output_owned_seal(context, test.output_pin, test.owned_group) == ERR_BUSY);
+				test.check(__LINE__, registry.production_output_unpin(test.output_pin) == ERR_BUSY && request.binding_used == used && request.revision == revision);
+			}
+
+			if (test.closure_rollback) {
+				return; // Actual buffer allocation prefix; no record/native effect.
+			}
+
 			if (test.upload_prefix) {
 				const Error error = Error(test.append(context, ref, 10, request.revision, &test.upload_append).native_error);
 				if (test.receiver_calls == 1) {
@@ -1551,6 +1676,19 @@ struct Access {
 			}
 			test.check(__LINE__, (test.public_port ? fixture.port.close_segment(context, ref, &test.recorded_segment) : registry.production_close_segment(context, ref, &test.recorded_segment)).native_error == OK);
 			test.check(__LINE__, test.recorded_segment.segment && request.acknowledged_segment == 0);
+			if (test.output_closure) {
+				auto &rd = fixture.rd;
+				test.check(__LINE__, request.native_count == 0 && request.graph_count == 1);
+				test.check(__LINE__, rd._production_output_owned_seal(context, test.output_pin, test.owned_group) == OK);
+				test.check(__LINE__, rd._production_output_hold_contains(test.output_pin, test.owned_group, test.auxiliary_buffer));
+				const uint32_t contents = 0;
+				const uint32_t graph_commands = rd.draw_graph.qualification_command_count();
+				test.check(__LINE__, rd._buffer_update(rd.storage_buffer_owner.get_or_null(test.auxiliary_buffer), test.auxiliary_buffer, 0, sizeof(contents), &contents) == ERR_BUSY && rd.draw_graph.qualification_command_count() == graph_commands);
+				if (test.closure_retired) {
+					rd.free_rid(test.auxiliary_shader);
+				}
+				test.check(__LINE__, fixture.driver.auxiliary_shader_frees == 0 && fixture.driver.auxiliary_pipeline_frees == 0 && fixture.driver.auxiliary_set_frees == 0 && fixture.driver.auxiliary_buffer_frees == 0);
+			}
 		}
 
 		SplitEnrollment setup;
@@ -1606,6 +1744,44 @@ struct Access {
 			done = true;
 			owner_ready.post();
 		}
+		void finish_closure_rollback(const GDExtensionStorageBackingV1 &backing, GDExtensionProductionRequestRefV1 ref) {
+			using namespace GDExtensionDeviceExit;
+			auto &fixture = *setup.fixture;
+			auto &registry = fixture.registry;
+			auto &request = *fixture.request;
+			check(__LINE__, request.graph_count == 0 && request.native_count == 0 && request.next_action == 0 && !request.cancelled);
+			check(__LINE__, registry.production_cancel(ref).native_error == OK);
+			const GDExtensionStorageRetireRequestV1 origin = { Enrollment::ABI, backing.backing, backing.rid, backing.backing_serial, 1, 0, 1, 1, 0 };
+			GDExtensionStorageRetireRefV1 retire = {};
+			GDExtensionStorageRetireReportV1 retired = {};
+			check(__LINE__, registry.production_storage_retire(ref, 1, &origin, &retire, &retired).native_error == OK);
+			rendezvous(14);
+			const uint64_t limit = 64 + uint64_t(request.capacity.resource_uses) * 16 + uint64_t(request.capacity.native_memberships) * 4;
+			for (uint64_t turn = 0; turn < limit && (!groups_settled || !retired.state); ++turn) {
+				const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+				const Error scheduled = Error(registry.production_storage_observe(ref, retire, &budget, &retired).native_error);
+				check(__LINE__, scheduled == OK || scheduled == ERR_BUSY);
+				if (request.control.state != ProductionControlState::OWNER_CONSUMED) {
+					rendezvous(6);
+					if (request.control.state == ProductionControlState::RETURNED) {
+						check(__LINE__, request.control.output.service_usage.passes <= 1 && request.control.output.service_usage.receipts <= 1);
+					}
+					const Error consumed = Error(registry.production_storage_observe(ref, retire, &budget, &retired).native_error);
+					check(__LINE__, consumed == OK || consumed == ERR_BUSY);
+				}
+				rendezvous(15);
+			}
+			check(__LINE__, groups_settled && retired.state == 1 && retired.event_seq && fixture.driver.buffer_frees == 1 && fixture.driver.set_frees == 1);
+			check(__LINE__, registry.production_storage_release(ref, retire).native_error == OK);
+			check(__LINE__, drain_request_cursor(fixture, ref, [&]() { rendezvous(6); }));
+			rendezvous(13);
+			check(__LINE__, output_pin.is_empty());
+			fixture.driver.disposal_probe = nullptr;
+			fixture.driver.disposal_probe_data = nullptr;
+			check(__LINE__, registry.production_release(ref).native_error == OK && !request.serial);
+			stop_before_storage();
+		}
+
 		static void run(void *data) {
 			auto &test = *static_cast<SplitSet *>(data);
 			auto &fixture = *test.setup.fixture;
@@ -1613,7 +1789,7 @@ struct Access {
 			using namespace GDExtensionDeviceExit;
 			fixture.driver.upload_mode = test.upload_prefix;
 			fixture.public_port = test.public_port;
-			test.initialized = fixture.initialize_owner(1, false, true, test.record_window ? &record_receiver : nullptr, &test, test.keep_list, test.budget_pause ? 65u : 1u, test.upload_prefix, (test.close_before_ack || test.public_port) ? &metadata_receiver : nullptr);
+			test.initialized = fixture.initialize_owner(1, false, true, test.record_window ? &record_receiver : nullptr, &test, test.keep_list, test.budget_pause ? 65u : 1u, test.upload_prefix, (test.close_before_ack || test.public_port) ? &metadata_receiver : nullptr, test.output_closure);
 			if (test.initialized != OK) {
 				fixture.cleanup_owner();
 				test.done = true;
@@ -1734,6 +1910,11 @@ struct Access {
 				test.check(__LINE__, test.receiver_calls == 1 && request.control.state == ProductionControlState::RETURNED);
 				GDExtensionProductionRecordReportV1 returned = {};
 				test.check(__LINE__, test.consume(ref, control, &returned).native_error == OK && returned.result.native_error == OK);
+				if (test.closure_rollback) {
+					test.finish_closure_rollback(backing, ref);
+					return;
+				}
+
 				test.check(__LINE__, returned.abi.struct_size == sizeof(returned) && returned.append.abi.struct_size == sizeof(returned.append) && returned.segment.abi.struct_size == sizeof(returned.segment) && returned.report.abi.struct_size == sizeof(returned.report) && returned.flags == 7);
 				GDExtensionProductionRecordReportV1 duplicate_record = {};
 				test.check(__LINE__, test.consume(ref, control, &duplicate_record).native_error == ERR_DOES_NOT_EXIST && duplicate_record.abi.abi_version == 0);
@@ -2066,6 +2247,67 @@ struct Access {
 				INFO("Public RELEASE turns=", turns, "/", limit, " error=", test.public_release_result.native_error, " retains=", fixture.driver.retains, " releases=", fixture.driver.releases);
 				test.check(__LINE__, test.public_release_result.native_error == OK && request.serial == 0 && fixture.driver.retains == fixture.driver.releases);
 				test.check(__LINE__, expired_returned && saw_driver_busy && saw_driver_error && fixture.driver.release_busy_remaining == 0 && fixture.driver.release_error_remaining == 0 && fixture.driver.release_attempts == fixture.driver.releases + 2);
+			} else if (test.output_closure) {
+				test.rendezvous(14);
+				GDExtensionProductionReportV1 closure_report = {};
+				const uint64_t next_control = request.next_control_serial;
+				const uint32_t before_frees = fixture.driver.auxiliary_buffer_frees + fixture.driver.auxiliary_set_frees + fixture.driver.auxiliary_shader_frees + fixture.driver.auxiliary_pipeline_frees;
+				const GDExtensionProductionServiceBudgetV1 closure_zero = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), 0, 0, 0, 0, 0 };
+				const GDExtensionProductionServiceBudgetV1 expired = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), 1, 1, 1, 1, 0 };
+				const Error queried = Error(registry.production_observe(ref, &closure_zero, &closure_report).native_error);
+				test.check(__LINE__, queried == OK || queried == ERR_BUSY);
+				const Error expired_query = Error(registry.production_observe(ref, &expired, &closure_report).native_error);
+				test.check(__LINE__, expired_query == OK || expired_query == ERR_BUSY);
+				test.check(__LINE__, request.control.state == ProductionControlState::OWNER_CONSUMED && request.next_control_serial == next_control && before_frees == fixture.driver.auxiliary_buffer_frees + fixture.driver.auxiliary_set_frees + fixture.driver.auxiliary_shader_frees + fixture.driver.auxiliary_pipeline_frees);
+				ProductionDisposalObservation wrong_thread;
+				test.check(__LINE__, fixture.rd._production_output_hold_returned(test.output_pin, test.owned_group, wrong_thread) == ERR_UNAUTHORIZED);
+
+				if (!test.closure_retired) {
+					// A later legal setter invalidates the capture-time callback proof.
+					// The old implementation only drops its first buffer counter in this
+					// bounded turn, so this RED retains a safe real cleanup path.
+					const GDExtensionProductionServiceBudgetV1 callback_slice = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+					const Error callback_scheduled = Error(registry.production_observe(ref, &callback_slice, &closure_report).native_error);
+					test.check(__LINE__, callback_scheduled == ERR_BUSY && request.control.state == ProductionControlState::QUEUED);
+					test.rendezvous(6);
+					test.check(__LINE__, request.control.state == ProductionControlState::RETURNED && request.control.output.result.native_error == ERR_UNAVAILABLE && request.control.output.service_usage.passes <= 1 && request.control.output.service_usage.receipts <= 1);
+					test.check(__LINE__, registry.production_observe(ref, &callback_slice, &closure_report).native_error == ERR_UNAVAILABLE && request.control.state == ProductionControlState::OWNER_CONSUMED);
+					test.rendezvous(16); // Actual null replacement permits the original retry.
+				}
+				const uint64_t limit = 64 + uint64_t(request.capacity.resource_uses) * 16 + uint64_t(request.capacity.native_memberships) * 4;
+				uint64_t turn = 0;
+				for (; turn < limit && !test.groups_settled; ++turn) {
+					const GDExtensionProductionServiceBudgetV1 slice = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+					const Error scheduled = Error(registry.production_observe(ref, &slice, &closure_report).native_error);
+					test.check(__LINE__, scheduled == OK || scheduled == ERR_BUSY);
+					if (request.control.state != ProductionControlState::OWNER_CONSUMED) {
+						test.rendezvous(6);
+						if (request.control.state == ProductionControlState::RETURNED) {
+							test.check(__LINE__, request.control.output.service_usage.passes <= 1 && request.control.output.service_usage.receipts <= 1);
+						}
+						const Error consumed = Error(registry.production_observe(ref, &slice, &closure_report).native_error);
+						test.check(__LINE__, consumed == OK || consumed == ERR_BUSY);
+					}
+					test.rendezvous(15);
+				}
+				INFO("Closure turns=", turn, "/", limit);
+				test.check(__LINE__, test.groups_settled && request.control.state == ProductionControlState::OWNER_CONSUMED);
+				test.check(__LINE__, drain_request_cursor(fixture, ref, [&]() { test.rendezvous(6); }));
+				test.rendezvous(13);
+				test.check(__LINE__, test.output_pin.is_empty());
+				test.check(__LINE__, registry.production_release(ref).native_error == ERR_BUSY);
+				for (uint32_t release_turn = 0; release_turn <= request.native_count && request.serial; ++release_turn) {
+					budget.deadline_micros = OS::get_singleton()->get_ticks_usec() + 10000000;
+					test.check(__LINE__, registry.production_control_accept(ref, ProductionControlKind::RELEASE, &test.release_control, &budget) == OK);
+					test.check(__LINE__, registry.production_control_schedule(ref, test.release_control) == OK);
+					test.rendezvous(6);
+					test.check(__LINE__, registry.production_control_consume(ref, test.release_control, &test.release_output) == OK);
+				}
+				test.check(__LINE__, request.serial == 0 && fixture.driver.auxiliary_buffer_frees == 1 && fixture.driver.auxiliary_set_frees == 1);
+				if (test.closure_retired) {
+					test.check(__LINE__, fixture.driver.auxiliary_shader_frees == 1 && fixture.driver.auxiliary_pipeline_frees == 1);
+				}
+
 			} else if (test.record_window) {
 				// Complete observation and physical set/storage return do not return
 				// the original native observer reference. Each RELEASE turn runs on
@@ -2105,7 +2347,17 @@ struct Access {
 			if (!test.close_before_ack) {
 				test.check(__LINE__, fixture.driver.qualification_legacy_end_segments == 0);
 			}
+			if (test.output_closure) {
+				if (test.closure_retired) {
+					test.check(__LINE__, test.nested_disposal_probes > 0);
+				}
+				fixture.driver.disposal_probe = nullptr;
+				fixture.driver.disposal_probe_data = nullptr;
+			}
 			test.rendezvous(7); // Actual unit dependency returns before owner closes.
+			if (test.output_closure) {
+				test.check(__LINE__, fixture.driver.auxiliary_shader_frees == 1 && fixture.driver.auxiliary_pipeline_frees == 1 && fixture.driver.auxiliary_buffer_frees == 1 && fixture.driver.auxiliary_set_frees == 1);
+			}
 			GDExtensionNativeUnitRetireReportV1 unit_report = {};
 			const GDExtensionQualificationBudgetV1 unit_budget = { Enrollment::ABI, 1, 5000, 0 };
 			// A one-pass service may enqueue a dependency or free only the
@@ -2181,7 +2433,7 @@ struct Access {
 		}
 		return OK;
 	}
-	static void singleton_split_owner_set(bool record_window = false, bool keep_list = false, bool close_before_ack = false, bool budget_pause = false, bool upload_prefix = false, bool public_port = false) {
+	static void singleton_split_owner_set(bool record_window = false, bool keep_list = false, bool close_before_ack = false, bool budget_pause = false, bool upload_prefix = false, bool public_port = false, bool output_closure = false, bool closure_retired = false, bool closure_rollback = false) {
 		auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
 		if (!check_step(server && !server->create_thread && server->server_thread == Thread::get_caller_id() && !RenderingDevice::get_singleton())) {
 			return;
@@ -2194,6 +2446,9 @@ struct Access {
 		test.budget_pause = budget_pause;
 		test.upload_prefix = upload_prefix;
 		test.public_port = public_port;
+		test.output_closure = output_closure;
+		test.closure_retired = closure_retired;
+		test.closure_rollback = closure_rollback;
 		test.setup.server = server;
 		Thread owner;
 		owner.start(&split_owner_start<SplitSet>, &test);
@@ -2228,6 +2483,48 @@ struct Access {
 					++filled;
 				}
 				CHECK((filled > 0 && filled < (1u << 20)));
+			} else if (test.phase == 14) {
+				CHECK(fixture.rd._production_output_hold_begin_return(test.output_pin, test.borrowed_group) == OK);
+				CHECK(fixture.rd._production_output_hold_begin_return(test.output_pin, test.owned_group) == OK);
+				CHECK(fixture.rd._production_output_hold_begin_return(test.output_pin, test.qualified_group) == OK);
+				CHECK(fixture.registry.production_output_unpin(test.output_pin) == ERR_BUSY);
+				if (!test.closure_rollback && !test.closure_retired) {
+					CHECK((fixture.rd._native_immutable_counter(test.auxiliary_set) && *fixture.rd._native_immutable_counter(test.auxiliary_set) == 1));
+					const auto foreign_callback = +[](void *data) { ++static_cast<SplitSet *>(data)->foreign_callback_calls; };
+					fixture.rd.uniform_set_set_invalidation_callback(test.auxiliary_set, foreign_callback, &test);
+					const auto *actual_set = fixture.rd.uniform_set_owner.get_or_null(test.auxiliary_set);
+					CHECK((actual_set && !actual_set->native_immutable_retire_requested && actual_set->invalidated_callback == foreign_callback && actual_set->invalidated_callback_userdata == &test));
+				}
+
+			} else if (test.phase == 16) {
+				CHECK((fixture.driver.auxiliary_buffer_frees == 0 && fixture.driver.auxiliary_set_frees == 0 && test.foreign_callback_calls == 0));
+				CHECK((fixture.rd._native_immutable_counter(test.auxiliary_buffer) && *fixture.rd._native_immutable_counter(test.auxiliary_buffer) == 1));
+				CHECK((fixture.rd._native_immutable_counter(test.auxiliary_set) && *fixture.rd._native_immutable_counter(test.auxiliary_set) == 1));
+				fixture.rd.uniform_set_set_invalidation_callback(test.auxiliary_set, nullptr, nullptr);
+
+			} else if (test.phase == 15) {
+				GDExtensionDeviceExit::ProductionDisposalObservation borrowed, owned, qualified;
+				CHECK(fixture.rd._production_output_hold_returned(test.output_pin, test.borrowed_group, borrowed) == OK);
+				CHECK(fixture.rd._production_output_hold_returned(test.output_pin, test.owned_group, owned) == OK);
+				CHECK(fixture.rd._production_output_hold_returned(test.output_pin, test.qualified_group, qualified) == OK);
+				test.groups_settled = borrowed.settled && owned.settled && qualified.settled;
+				if (test.groups_settled) {
+					// The unrecorded prefix returns all four qualified borrows before
+					// its original storage retirement; this group owns no physical free.
+					CHECK((qualified.borrowed_detached == (test.closure_rollback ? 4u : 2u) && qualified.physical_returned == (test.closure_rollback ? 0u : 2u) && !qualified.unknown));
+					CHECK((owned.physical_returned == (test.closure_rollback ? 1u : 2u) && owned.uncreated == (test.closure_rollback ? 1u : 0u) && owned.borrowed_detached == 0 && !owned.unknown));
+					CHECK(borrowed.physical_returned == (test.closure_rollback ? 0u : (test.closure_retired ? 4u : 2u)));
+					CHECK(borrowed.borrowed_detached == (test.closure_retired ? 0u : 2u));
+					CHECK((fixture.driver.auxiliary_buffer_frees == 1 && fixture.driver.auxiliary_set_frees == (test.closure_rollback ? 0u : 1u)));
+					NativeDisposalWitness::Report buffer_report, set_report;
+					CHECK(fixture.rd._native_disposal_observe(test.auxiliary_buffer_witness, buffer_report) == OK);
+					CHECK(buffer_report.state == NativeDisposalWitness::State::RETURNED);
+					if (!test.closure_rollback) {
+						CHECK(fixture.rd._native_disposal_observe(test.auxiliary_set_witness, set_report) == OK);
+						CHECK(set_report.state == NativeDisposalWitness::State::RETURNED);
+					}
+				}
+
 			} else if (test.phase == 13) {
 				GDExtensionDeviceExit::ProductionOutputPin expired_refused;
 				const uint64_t before_pin_serial = fixture.request->next_output_pin_serial;
@@ -2235,6 +2532,11 @@ struct Access {
 				CHECK(expired_refused.is_empty());
 				CHECK(fixture.request->next_output_pin_serial == before_pin_serial);
 				CHECK(fixture.registry.production_output_pin(test.expired_context, { fixture.instance, fixture.request->serial }, fixture.rd, test.output_pin) == ERR_ALREADY_IN_USE);
+				if (test.output_closure && !test.closure_retired) {
+					CHECK((fixture.driver.auxiliary_shader_frees == 0 && fixture.driver.auxiliary_pipeline_frees == 0));
+					fixture.rd.free_rid(test.auxiliary_shader);
+				}
+
 				CHECK(fixture.registry.production_output_unpin(test.output_pin) == OK);
 				CHECK(test.output_pin.is_empty());
 				CHECK(fixture.registry.production_output_unpin(test.output_pin) == ERR_DOES_NOT_EXIST);
@@ -3377,3 +3679,17 @@ TEST_CASE("[SceneTree][ProductionRequest] installed typed production port follow
 TEST_CASE("[ProductionRequest] installed typed production procedures reject foreign references without enrollment") {
 	TestProductionRequest::Access::installed_port_rejects_foreign_refs();
 }
+
+#ifdef THREADS_ENABLED
+TEST_CASE("[SceneTree][ProductionRequest] exact native output closure returns through bounded original FIFO") {
+	SUBCASE("Retired shader pipeline and owned buffer set each progress with one pass") {
+		TestProductionRequest::Access::singleton_split_owner_set(true, false, false, false, false, false, true, true);
+	}
+	SUBCASE("Live borrowed owners detach without claiming physical return") {
+		TestProductionRequest::Access::singleton_split_owner_set(true, false, false, false, false, false, true, false);
+	}
+	SUBCASE("Unrecorded actual factory prefix returns after explicit owner cancellation") {
+		TestProductionRequest::Access::singleton_split_owner_set(true, false, false, false, false, false, true, false, true);
+	}
+}
+#endif

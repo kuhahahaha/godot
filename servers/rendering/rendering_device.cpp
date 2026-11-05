@@ -210,7 +210,13 @@ bool RenderingDevice::_free_dependencies(RID p_id, const MutexLock<Mutex> &p_out
 			dependency_map.remove(E);
 			break;
 		}
+		if (native_disposal_budget && !_native_disposal_admit(NativeDisposalWork::WORK)) {
+			return false;
+		}
 		const RID dependent = *E->value.begin();
+		if (production_disposal_drop_owner && !_production_disposal_belongs(dependent, production_disposal_drop_owner)) {
+			return false;
+		}
 		if (resource_frees_in_progress.has(dependent)) {
 			return false; // The enclosing original free owns this edge until its callback returns.
 		}
@@ -223,6 +229,9 @@ bool RenderingDevice::_free_dependencies(RID p_id, const MutexLock<Mutex> &p_out
 		lock.temp_relock();
 		// A synchronous invalidation callback can mutate the dependency map.
 		E = dependency_map.find(p_id);
+		if (E && E->value.has(dependent) && native_disposal_budget) {
+			return false;
+		}
 		ERR_FAIL_COND_V_MSG(E && E->value.has(dependent), false, "A dependent resource could not be freed.");
 	}
 
@@ -634,6 +643,7 @@ Error RenderingDevice::_hit_sbt_buffer_update(HitShaderBindingTable *p_hit_sbt, 
 		ERR_FAIL_COND_V(!buffer, ERR_CANT_CREATE);
 
 		RDG::resource_tracker_free(p_hit_sbt->draw_tracker);
+		_production_disposal_enqueued(p_hit_sbt->production_disposal_uses);
 		frames[frame].buffers_to_dispose_of.push_back(*p_hit_sbt);
 
 		p_hit_sbt->driver_id = buffer;
@@ -1890,6 +1900,7 @@ RID RenderingDevice::_storage_buffer_create_internal(uint32_t p_size_bytes, Span
 		if (initialize_error != OK) {
 			RDG::resource_tracker_free(buffer.draw_tracker);
 			driver->buffer_free(buffer.driver_id);
+			_production_disposal_returned(buffer.production_disposal_uses);
 			return RID();
 		}
 	}
@@ -2234,6 +2245,7 @@ RID RenderingDevice::_texture_create_internal(const TextureFormat &p_format, con
 				failed_texture->qualification_return = nullptr;
 				p_cell->rid = 0;
 			}
+			_production_disposal_enqueued(failed_texture->production_disposal_uses);
 			frames[frame].textures_to_dispose_of.push_back(*failed_texture);
 			texture_owner.free(id);
 		};
@@ -2275,6 +2287,7 @@ RID RenderingDevice::texture_create_shared(const TextureView &p_view, RID p_with
 	// Create view.
 
 	Texture texture = *src_texture;
+	texture.production_disposal_uses = nullptr;
 	texture.native_immutable_holds = 0;
 	texture.native_immutable_retire_requested = false;
 	texture.slice_trackers = nullptr;
@@ -2449,6 +2462,7 @@ RID RenderingDevice::texture_create_shared_from_slice(const TextureView &p_view,
 	}
 
 	Texture texture = *src_texture;
+	texture.production_disposal_uses = nullptr;
 	texture.native_immutable_holds = 0;
 	texture.native_immutable_retire_requested = false;
 	texture.slice_trackers = nullptr;
@@ -4586,6 +4600,7 @@ RID RenderingDevice::vertex_buffer_create(uint32_t p_size_bytes, Span<uint8_t> p
 		if (initialize_error != OK) {
 			RDG::resource_tracker_free(buffer.draw_tracker);
 			driver->buffer_free(buffer.driver_id);
+			_production_disposal_returned(buffer.production_disposal_uses);
 			return RID();
 		}
 	}
@@ -5164,6 +5179,7 @@ RID RenderingDevice::uniform_buffer_create(uint32_t p_size_bytes, Span<uint8_t> 
 		if (initialize_error != OK) {
 			RDG::resource_tracker_free(buffer.draw_tracker);
 			driver->buffer_free(buffer.driver_id);
+			_production_disposal_returned(buffer.production_disposal_uses);
 			return RID();
 		}
 	}
@@ -5752,6 +5768,8 @@ void RenderingDevice::uniform_set_set_invalidation_callback(RID p_uniform_set, I
 	ERR_FAIL_NULL(us);
 	ERR_FAIL_COND(us->qualification_return);
 	ERR_FAIL_COND(p_callback && native_immutable_resource_is_retiring(p_uniform_set));
+	us->production_material_origin = RID();
+	us->production_material_origin_generation = 0;
 	us->invalidated_callback = p_callback;
 	us->invalidated_callback_userdata = p_userdata;
 }
@@ -10050,6 +10068,13 @@ RID RenderingDevice::_qualification_storage_create(uint32_t bytes, GDExtensionDe
 void RenderingDevice::free_rid(RID p_rid) {
 	ERR_RENDER_THREAD_GUARD();
 	MutexLock immutable_lock(_thread_safe_);
+	if (production_disposal_drop_owner) {
+		// Keep the current callback proof under the same lock that closes
+		// retirement; an ordinary setter must not replace it in between.
+		if (!_production_disposal_belongs(p_rid, production_disposal_drop_owner) || !_production_output_callback_supported(p_rid)) {
+			return;
+		}
+	}
 
 	if (resource_frees_in_progress.has(p_rid)) {
 		return;
@@ -10174,6 +10199,7 @@ void RenderingDevice::_free_internal(RID p_id, const MutexLock<Mutex> &p_lock) {
 			}
 		}
 
+		_production_disposal_enqueued(texture->production_disposal_uses);
 		frames[frame].textures_to_dispose_of.push_back(*texture);
 		texture_owner.free(p_id);
 	} else if (framebuffer_owner.owns(p_id)) {
@@ -10191,6 +10217,7 @@ void RenderingDevice::_free_internal(RID p_id, const MutexLock<Mutex> &p_lock) {
 	} else if (sampler_owner.owns(p_id)) {
 		Sampler *sampler = sampler_owner.get_or_null(p_id);
 		ERR_FAIL_COND(_qualification_enqueue(sampler->qualification_return) != OK);
+		_production_disposal_enqueued(sampler->production_disposal_uses);
 		frames[frame].samplers_to_dispose_of.push_back(*sampler);
 		sampler_owner.free(p_id);
 	} else if (vertex_buffer_owner.owns(p_id)) {
@@ -10198,6 +10225,7 @@ void RenderingDevice::_free_internal(RID p_id, const MutexLock<Mutex> &p_lock) {
 		_check_transfer_worker_buffer(vertex_buffer);
 
 		RDG::resource_tracker_free(vertex_buffer->draw_tracker);
+		_production_disposal_enqueued(vertex_buffer->production_disposal_uses);
 		frames[frame].buffers_to_dispose_of.push_back(*vertex_buffer);
 #if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
 		if (vertex_buffer->capture_test_allocation_serial) {
@@ -10213,21 +10241,32 @@ void RenderingDevice::_free_internal(RID p_id, const MutexLock<Mutex> &p_lock) {
 #endif
 		vertex_buffer_owner.free(p_id);
 	} else if (vertex_array_owner.owns(p_id)) {
+		auto *array = vertex_array_owner.get_or_null(p_id);
+		_production_disposal_enqueued(array->production_disposal_uses);
+		_production_disposal_returned(array->production_disposal_uses);
 		vertex_array_owner.free(p_id);
 	} else if (index_buffer_owner.owns(p_id)) {
 		IndexBuffer *index_buffer = index_buffer_owner.get_or_null(p_id);
 		_check_transfer_worker_buffer(index_buffer);
 
 		RDG::resource_tracker_free(index_buffer->draw_tracker);
+		_production_disposal_enqueued(index_buffer->production_disposal_uses);
 		frames[frame].buffers_to_dispose_of.push_back(*index_buffer);
 		index_buffer_owner.free(p_id);
 	} else if (index_array_owner.owns(p_id)) {
+		auto *array = index_array_owner.get_or_null(p_id);
+		_production_disposal_enqueued(array->production_disposal_uses);
+		_production_disposal_returned(array->production_disposal_uses);
 		index_array_owner.free(p_id);
 	} else if (shader_owner.owns(p_id)) {
 		Shader *shader = shader_owner.get_or_null(p_id);
+		if (shader->qualification_return && native_disposal_budget && !_native_disposal_admit(NativeDisposalWork::POLL)) {
+			return;
+		}
 		ERR_FAIL_COND(shader->qualification_return && !driver->shader_retire_ready_nonblocking(shader->driver_id));
 		ERR_FAIL_COND(_qualification_enqueue(shader->qualification_return) != OK);
 		if (shader->driver_id) { // Not placeholder?
+			_production_disposal_enqueued(shader->production_disposal_uses);
 			frames[frame].shaders_to_dispose_of.push_back(*shader);
 		}
 		shader_owner.free(p_id);
@@ -10236,6 +10275,7 @@ void RenderingDevice::_free_internal(RID p_id, const MutexLock<Mutex> &p_lock) {
 		_check_transfer_worker_buffer(uniform_buffer);
 
 		RDG::resource_tracker_free(uniform_buffer->draw_tracker);
+		_production_disposal_enqueued(uniform_buffer->production_disposal_uses);
 		frames[frame].buffers_to_dispose_of.push_back(*uniform_buffer);
 		uniform_buffer_owner.free(p_id);
 	} else if (texture_buffer_owner.owns(p_id)) {
@@ -10243,6 +10283,7 @@ void RenderingDevice::_free_internal(RID p_id, const MutexLock<Mutex> &p_lock) {
 		_check_transfer_worker_buffer(texture_buffer);
 
 		RDG::resource_tracker_free(texture_buffer->draw_tracker);
+		_production_disposal_enqueued(texture_buffer->production_disposal_uses);
 		frames[frame].buffers_to_dispose_of.push_back(*texture_buffer);
 		texture_buffer_owner.free(p_id);
 	} else if (storage_buffer_owner.owns(p_id)) {
@@ -10252,6 +10293,7 @@ void RenderingDevice::_free_internal(RID p_id, const MutexLock<Mutex> &p_lock) {
 		_check_transfer_worker_buffer(storage_buffer);
 
 		RDG::resource_tracker_free(storage_buffer->draw_tracker);
+		_production_disposal_enqueued(storage_buffer->production_disposal_uses);
 		frames[frame].buffers_to_dispose_of.push_back(*storage_buffer);
 #if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
 		if (storage_buffer->capture_test_allocation_serial) {
@@ -10273,6 +10315,7 @@ void RenderingDevice::_free_internal(RID p_id, const MutexLock<Mutex> &p_lock) {
 		// The RID owner destroys the set before the synchronous callback.
 		InvalidationCallback invalidated_callback = uniform_set->invalidated_callback;
 		void *invalidated_callback_userdata = uniform_set->invalidated_callback_userdata;
+		_production_disposal_enqueued(uniform_set->production_disposal_uses);
 		frames[frame].uniform_sets_to_dispose_of.push_back(*uniform_set);
 		uniform_set_owner.free(p_id);
 #ifdef TESTS_ENABLED
@@ -10288,11 +10331,13 @@ void RenderingDevice::_free_internal(RID p_id, const MutexLock<Mutex> &p_lock) {
 		}
 	} else if (render_pipeline_owner.owns(p_id)) {
 		RenderPipeline *pipeline = render_pipeline_owner.get_or_null(p_id);
+		_production_disposal_enqueued(pipeline->production_disposal_uses);
 		frames[frame].render_pipelines_to_dispose_of.push_back(*pipeline);
 		render_pipeline_owner.free(p_id);
 	} else if (compute_pipeline_owner.owns(p_id)) {
 		ComputePipeline *pipeline = compute_pipeline_owner.get_or_null(p_id);
 		ERR_FAIL_COND(_qualification_enqueue(pipeline->qualification_return) != OK);
+		_production_disposal_enqueued(pipeline->production_disposal_uses);
 		frames[frame].compute_pipelines_to_dispose_of.push_back(*pipeline);
 		compute_pipeline_owner.free(p_id);
 	} else if (acceleration_structure_owner.owns(p_id)) {
@@ -10312,6 +10357,7 @@ void RenderingDevice::_free_internal(RID p_id, const MutexLock<Mutex> &p_lock) {
 	} else if (hit_sbt_owner.owns(p_id)) {
 		HitShaderBindingTable *hit_sbt = hit_sbt_owner.get_or_null(p_id);
 		RDG::resource_tracker_free(hit_sbt->draw_tracker);
+		_production_disposal_enqueued(hit_sbt->production_disposal_uses);
 		frames[frame].buffers_to_dispose_of.push_back(*hit_sbt);
 		hit_sbt_owner.free(p_id);
 	} else {
@@ -10613,6 +10659,7 @@ Error RenderingDevice::_free_pending_resources_step(int p_frame, const NativeDis
 					return ERR_BUSY;
 				}
 				driver->pipeline_free(f.render_pipelines_to_dispose_of.front()->get().driver_id);
+				_production_disposal_returned(f.render_pipelines_to_dispose_of.front()->get().production_disposal_uses);
 				f.render_pipelines_to_dispose_of.pop_front();
 			} break;
 			case 1: {
@@ -10621,6 +10668,7 @@ Error RenderingDevice::_free_pending_resources_step(int p_frame, const NativeDis
 				}
 				ComputePipeline *pipeline = &f.compute_pipelines_to_dispose_of.front()->get();
 				driver->pipeline_free(pipeline->driver_id);
+				_production_disposal_returned(pipeline->production_disposal_uses);
 				_qualification_freed(pipeline->qualification_return);
 #if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
 				capture_test_resource_registry.observe_free(RenderCaptureTestResourceKind::ComputePipeline, pipeline->driver_id.id);
@@ -10706,6 +10754,7 @@ Error RenderingDevice::_free_pending_resources_step(int p_frame, const NativeDis
 				}
 				UniformSet *uniform_set = &f.uniform_sets_to_dispose_of.front()->get();
 				driver->uniform_set_free(uniform_set->driver_id);
+				_production_disposal_returned(uniform_set->production_disposal_uses);
 				_native_disposal_returned(uniform_set->native_disposal, uniform_set->native_disposal_rid, uniform_set->native_disposal_serial, uniform_set->driver_id.id);
 				for (auto *cell : uniform_set->qualification_dependencies) {
 					CRASH_COND(!cell->dependent_children.load());
@@ -10733,6 +10782,7 @@ Error RenderingDevice::_free_pending_resources_step(int p_frame, const NativeDis
 					return ERR_BUSY;
 				}
 				driver->shader_free(shader->driver_id);
+				_production_disposal_returned(shader->production_disposal_uses);
 				_qualification_freed(shader->qualification_return);
 #if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
 				capture_test_resource_registry.observe_free(RenderCaptureTestResourceKind::Shader, shader->driver_id.id);
@@ -10746,6 +10796,7 @@ Error RenderingDevice::_free_pending_resources_step(int p_frame, const NativeDis
 				}
 				auto &sampler = f.samplers_to_dispose_of.front()->get();
 				driver->sampler_free(sampler.driver_id);
+				_production_disposal_returned(sampler.production_disposal_uses);
 				_qualification_freed(sampler.qualification_return);
 				f.samplers_to_dispose_of.pop_front();
 			} break;
@@ -10834,6 +10885,7 @@ Error RenderingDevice::_free_pending_resources_step(int p_frame, const NativeDis
 					return ERR_BUSY;
 				}
 				driver->texture_free(texture->driver_id);
+				_production_disposal_returned(texture->production_disposal_uses);
 				texture_memory -= cursor.allocation_size;
 				_qualification_freed(texture->qualification_return);
 #if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
@@ -10848,6 +10900,7 @@ Error RenderingDevice::_free_pending_resources_step(int p_frame, const NativeDis
 				}
 				Buffer &buffer = f.buffers_to_dispose_of.front()->get();
 				driver->buffer_free(buffer.driver_id);
+				_production_disposal_returned(buffer.production_disposal_uses);
 				_native_disposal_returned(buffer.native_disposal, buffer.native_disposal_rid, buffer.backing_serial, buffer.driver_id.id);
 				_qualification_freed(buffer.qualification_return);
 #if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
@@ -10896,6 +10949,7 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 		RenderPipeline *pipeline = &frames[p_frame].render_pipelines_to_dispose_of.front()->get();
 
 		driver->pipeline_free(pipeline->driver_id);
+		_production_disposal_returned(pipeline->production_disposal_uses);
 
 		frames[p_frame].render_pipelines_to_dispose_of.pop_front();
 	}
@@ -10904,6 +10958,7 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 		ComputePipeline *pipeline = &frames[p_frame].compute_pipelines_to_dispose_of.front()->get();
 
 		driver->pipeline_free(pipeline->driver_id);
+		_production_disposal_returned(pipeline->production_disposal_uses);
 		_qualification_freed(pipeline->qualification_return);
 #if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
 		capture_test_resource_registry.observe_free(RenderCaptureTestResourceKind::ComputePipeline, pipeline->driver_id.id);
@@ -10958,6 +11013,7 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 		UniformSet *uniform_set = &frames[p_frame].uniform_sets_to_dispose_of.front()->get();
 
 		driver->uniform_set_free(uniform_set->driver_id);
+		_production_disposal_returned(uniform_set->production_disposal_uses);
 		_native_disposal_returned(uniform_set->native_disposal, uniform_set->native_disposal_rid, uniform_set->native_disposal_serial, uniform_set->driver_id.id);
 		for (auto *cell : uniform_set->qualification_dependencies) {
 			CRASH_COND(!cell->dependent_children.load());
@@ -10976,6 +11032,7 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 		Shader *shader = &frames[p_frame].shaders_to_dispose_of.front()->get();
 
 		driver->shader_free(shader->driver_id);
+		_production_disposal_returned(shader->production_disposal_uses);
 		_qualification_freed(shader->qualification_return);
 #if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
 		capture_test_resource_registry.observe_free(RenderCaptureTestResourceKind::Shader, shader->driver_id.id);
@@ -10989,6 +11046,7 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 		Sampler &sampler = frames[p_frame].samplers_to_dispose_of.front()->get();
 
 		driver->sampler_free(sampler.driver_id);
+		_production_disposal_returned(sampler.production_disposal_uses);
 		_qualification_freed(sampler.qualification_return);
 
 		frames[p_frame].samplers_to_dispose_of.pop_front();
@@ -11012,6 +11070,7 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 
 		texture_memory -= driver->texture_get_allocation_size(texture->driver_id);
 		driver->texture_free(texture->driver_id);
+		_production_disposal_returned(texture->production_disposal_uses);
 		_qualification_freed(texture->qualification_return);
 #if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
 		capture_test_resource_registry.observe_free(RenderCaptureTestResourceKind::Texture, texture->driver_id.id);
@@ -11024,6 +11083,7 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 	while (frames[p_frame].buffers_to_dispose_of.front()) {
 		Buffer &buffer = frames[p_frame].buffers_to_dispose_of.front()->get();
 		driver->buffer_free(buffer.driver_id);
+		_production_disposal_returned(buffer.production_disposal_uses);
 		_native_disposal_returned(buffer.native_disposal, buffer.native_disposal_rid, buffer.backing_serial, buffer.driver_id.id);
 		_qualification_freed(buffer.qualification_return);
 #if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))

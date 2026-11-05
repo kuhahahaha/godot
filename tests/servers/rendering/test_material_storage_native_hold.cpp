@@ -151,6 +151,14 @@ public:
 		}
 		return rd.shader_create_from_bytecode_with_samplers(container->to_bytes(), RID(), samplers);
 	}
+	static bool callback_origin_matches(RenderingDevice &rd, RID set, RID material, uint64_t generation) {
+		const auto *actual = rd.uniform_set_owner.get_or_null(set);
+		return actual && actual->production_material_origin == material && actual->production_material_origin_generation == generation;
+	}
+	static bool callback_origin_empty(RenderingDevice &rd, RID set) {
+		const auto *actual = rd.uniform_set_owner.get_or_null(set);
+		return actual && actual->production_material_origin.is_null() && actual->production_material_origin_generation == 0;
+	}
 	static bool callback_matches(RenderingDevice &rd, RID set, void *userdata) {
 		const auto *uniform_set = rd.uniform_set_owner.get_or_null(set);
 		return uniform_set && uniform_set->invalidated_callback && uniform_set->invalidated_callback_userdata == userdata;
@@ -848,6 +856,41 @@ public:
 		}
 		storage->_update_queued_materials(); // Actual original uniform-set creator/capture.
 		CHECK(data->set.is_valid());
+		// Actual original factory metadata, never a test-supplied callback grant.
+		const uint64_t set_generation = data->native_uniform_sets[0].owner_generation;
+		CHECK(set_generation != 0);
+		CHECK(TestMaterialStorageNativeHoldDeviceAccess::callback_origin_matches(rd, data->set, material, set_generation));
+		CHECK(MaterialStorage::_native_hold_callback_is_owned(material, set_generation, MaterialStorage::_material_uniform_set_erased, &data->self, data->set));
+		uint64_t unrelated_userdata = 0;
+		CHECK_FALSE(MaterialStorage::_native_hold_callback_is_owned(material, set_generation, MaterialStorage::_material_uniform_set_erased, &unrelated_userdata, data->set));
+		CHECK_FALSE(MaterialStorage::_native_hold_callback_is_owned(RID(), set_generation, MaterialStorage::_material_uniform_set_erased, &data->self, data->set));
+		CHECK_FALSE(MaterialStorage::_native_hold_callback_is_owned(material, set_generation + 1, MaterialStorage::_material_uniform_set_erased, &data->self, data->set));
+		CHECK_FALSE(MaterialStorage::_native_hold_callback_is_owned(material, set_generation, nullptr, &data->self, data->set));
+		// Ordinary UBO-only refresh keeps the actual set even after callback
+		// replacement. Such a refresh cannot acquire factory provenance.
+		const RID reused_set = data->set;
+		const uint32_t set_creates_before_refresh = driver.set_creates;
+		rd.uniform_set_set_invalidation_callback(reused_set, nullptr, nullptr);
+		storage->_material_queue_update(material_cell, false, false);
+		storage->_update_queued_materials();
+		CHECK(data->set == reused_set);
+		CHECK(driver.set_creates == set_creates_before_refresh);
+		CHECK(TestMaterialStorageNativeHoldDeviceAccess::callback_origin_empty(rd, reused_set));
+		const auto foreign_callback = +[](void *) {};
+		rd.uniform_set_set_invalidation_callback(reused_set, foreign_callback, &unrelated_userdata);
+		storage->_material_queue_update(material_cell, false, false);
+		storage->_update_queued_materials();
+		CHECK(data->set == reused_set);
+		CHECK(driver.set_creates == set_creates_before_refresh);
+		CHECK(TestMaterialStorageNativeHoldDeviceAccess::callback_origin_empty(rd, reused_set));
+		CHECK_FALSE(MaterialStorage::_native_hold_callback_is_owned(material, data->native_uniform_sets[0].owner_generation, foreign_callback, &unrelated_userdata, reused_set));
+		// Explicit callback replacement clears factory origin even if identical.
+		rd.uniform_set_set_invalidation_callback(data->set, MaterialStorage::_material_uniform_set_erased, &data->self);
+		CHECK(TestMaterialStorageNativeHoldDeviceAccess::callback_origin_empty(rd, data->set));
+		storage->_material_queue_update(material_cell, false, false);
+		storage->_update_queued_materials();
+		CHECK(TestMaterialStorageNativeHoldDeviceAccess::callback_origin_matches(rd, data->set, material, data->native_uniform_sets[0].owner_generation));
+
 #ifdef DEV_ENABLED
 		CHECK(driver.names.size() == (cross_variants ? 10 : 6));
 		CHECK(driver.names[80] == "RID:" + itos(native_shader.get_id()));

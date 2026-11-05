@@ -32,8 +32,35 @@
 
 #include "core/object/ref_counted.h"
 
+#include <atomic>
+
 class RenderingDevice;
 class TestNativeDisposalAccess;
+
+namespace GDExtensionDeviceExit {
+class Registry;
+class ProductionRequest;
+struct ProductionDisposalObservation {
+	uint32_t held = 0, queued = 0, physical_returned = 0, borrowed_detached = 0, uncreated = 0, owner_returned = 0, unknown = 0;
+	bool dropped = false, settled = false;
+};
+// Membership storage lives only in the already quoted request arena.
+class ProductionDisposalUse {
+	friend class Registry;
+	friend class ::RenderingDevice;
+	ProductionRequest *request = nullptr;
+	uint64_t request_serial = 0, group = 0;
+	uint64_t rid = 0, serial = 0, native_driver_id = 0;
+	uint32_t kind = UINT32_MAX;
+	ProductionDisposalUse *next = nullptr;
+	bool owned = false, counter_dropped = false, qualified_borrow = false;
+	std::atomic<uint8_t> state{ 0 }; // unused,held,queued,physical-return,detached-borrow,unknown
+public:
+	ProductionDisposalUse() = default;
+	ProductionDisposalUse(const ProductionDisposalUse &) = delete;
+	ProductionDisposalUse &operator=(const ProductionDisposalUse &) = delete;
+};
+} //namespace GDExtensionDeviceExit
 
 // Core-owned, single-object driver-free observation. This is neither a native
 // operation/source capability nor an aggregate OutputReleased acknowledgment.
@@ -64,6 +91,9 @@ private:
 		uint64_t rid = 0;
 		uint64_t serial = 0;
 		uint64_t backing = 0;
+		GDExtensionDeviceExit::ProductionRequest *production_request = nullptr;
+		uint64_t production_request_serial = 0, production_group_serial = 0, production_pin_serial = 0;
+		uint32_t production_ordinal = UINT32_MAX;
 		State state = State::LIVE;
 		// Both the actual RD resource/pending-free entry and the observer retain
 		// this cell. No pointer into K storage or DSO callback survives here.

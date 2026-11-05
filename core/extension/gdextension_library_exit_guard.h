@@ -87,6 +87,18 @@ struct NativeSourceIssueView;
 using ProductionPhysicalContextRef = GDExtensionProductionPhysicalContextRefV1;
 using ProductionRecordReceiver = GDExtensionProductionRecordReceiverV1;
 using ProductionMetadataReceiver = GDExtensionProductionMetadataReceiverV1;
+// Denial-only dynamic extent for Core native cleanup. It authenticates no
+// entry, adds no work/service permission and survives nested normal callbacks.
+class ProductionCleanupExtent {
+	friend class ::RenderingDevice;
+	ProductionCleanupExtent *previous = nullptr;
+	static thread_local ProductionCleanupExtent *current;
+	ProductionCleanupExtent();
+	~ProductionCleanupExtent();
+
+public:
+	static bool denies_new_work() { return current != nullptr; }
+};
 class ProductionOutputPin;
 class ProductionAttachment;
 class ProductionRequest;
@@ -844,6 +856,9 @@ private:
 	Error production_output_pin(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, RenderingDevice &, ProductionOutputPin &);
 	Error production_output_unpin(ProductionOutputPin &);
 	bool production_output_pin_matches(const ProductionOutputPin &, GDExtensionProductionRequestRefV1, RenderingDevice &);
+	bool production_output_graph_command_locked(const ProductionRequest &, const RenderingDevice &, uint32_t, uint32_t) const;
+	bool production_output_recorded_ordered_locked(const ProductionRequest &, const RenderingDevice &) const;
+	bool production_output_pin_matches_locked(const ProductionOutputPin &, GDExtensionProductionRequestRefV1, RenderingDevice &);
 	void production_output_pin_move(ProductionOutputPin &, ProductionOutputPin &);
 	Error production_physical_request_locked(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, ProductionRequest *&, RenderingDevice *&, bool);
 	Error production_record_receive_locked(ProductionRequest &, RenderingDevice &);

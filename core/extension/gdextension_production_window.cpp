@@ -304,6 +304,24 @@ Error Registry::production_output_pin(ProductionPhysicalContextRef context, GDEx
 	return ERR_OUT_OF_MEMORY; // No spare prequoted use cell; never allocate or borrow payload.
 }
 
+bool Registry::production_output_graph_command_locked(const ProductionRequest &request, const RenderingDevice &device, uint32_t graph, uint32_t command) const {
+	uint32_t actual = UINT32_MAX;
+	return graph < request.graph_count && device.draw_graph._resolve_record_command_index(request.graphs[graph].handle, actual) && actual == command;
+}
+
+bool Registry::production_output_recorded_ordered_locked(const ProductionRequest &request, const RenderingDevice &device) const {
+	if (request.cancelled || request.capture_inflight || request.next_action != request.action_count || !request.graph_count || request.compute_list_open || request.effects_pending) {
+		return false;
+	}
+	for (uint32_t i = 0; i < request.graph_count; ++i) {
+		uint32_t command = UINT32_MAX;
+		if (!device.draw_graph._resolve_record_command_index(request.graphs[i].handle, command)) {
+			return false;
+		}
+	}
+	return true;
+}
+
 Error Registry::production_physical_request_locked(ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, ProductionRequest *&out, RenderingDevice *&device, bool append) {
 	out = nullptr;
 	device = nullptr;
@@ -413,7 +431,19 @@ GDExtensionDeviceSessionResultV1 Registry::production_ack_segment(GDExtensionPro
 	return window_result(error);
 }
 
+thread_local ProductionCleanupExtent *ProductionCleanupExtent::current = nullptr;
+ProductionCleanupExtent::ProductionCleanupExtent() : previous(current) {
+	current = this;
+}
+ProductionCleanupExtent::~ProductionCleanupExtent() {
+	CRASH_COND(current != this);
+	current = previous;
+}
+
 bool Registry::is_production_metadata_entry() {
+	if (ProductionCleanupExtent::denies_new_work()) {
+		return true;
+	}
 	// A nested ordinary entry cannot erase this dynamic restriction; it is not
 	// tied to a target RD, so changing device cannot recover normal work access.
 	for (auto *frame = RegistrationContext::current; frame; frame = frame->previous) {
