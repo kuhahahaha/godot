@@ -1509,13 +1509,20 @@ RDD::ShaderID RenderingDeviceDriverMetal::shader_create_from_container(const Ref
 			SHA256Digest metallib_digest(reinterpret_cast<const char *>(decompressed_code.ptr() + shader_data.source_size), shader_data.library_size);
 			memcpy(key_input.metallib_sha256, metallib_digest.data, sizeof(key_input.metallib_sha256));
 		}
-		const PackedByteArray key_bytes = ShaderCompilePolicy::library_key(key_input);
-		ERR_FAIL_COND_V(key_bytes.size() != 32, RDD::ShaderID());
-		const SHA256Digest library_key(reinterpret_cast<const char *>(key_bytes.ptr()));
 		NS::SharedPtr<MTL::CompileOptions> options;
 		if (!shader_data.library_size) {
 			options = make_shader_compile_options(mtl_reflection_data.msl_version, mtl_reflection_data.needs_debug_logging(), shader_data.is_position_invariant, effective_disable);
 		}
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 150000 || __IPHONE_OS_VERSION_MAX_ALLOWED >= 180000 || __TV_OS_VERSION_MAX_ALLOWED >= 180000 || defined(VISIONOS_ENABLED)
+		if (__builtin_available(macOS 15.0, iOS 18.0, tvOS 18.0, visionOS 2.0, *)) {
+			if (options) {
+				key_input.math_floating_point_functions = uint32_t(options->mathFloatingPointFunctions());
+			}
+		}
+#endif
+		const PackedByteArray key_bytes = ShaderCompilePolicy::library_key(key_input);
+		ERR_FAIL_COND_V(key_bytes.size() != 32, RDD::ShaderID());
+		const SHA256Digest library_key(reinterpret_cast<const char *>(key_bytes.ptr()));
 #ifdef TESTS_ENABLED
 		Dictionary audit;
 		audit["shader_name"] = String::utf8(shader_name.get_data());

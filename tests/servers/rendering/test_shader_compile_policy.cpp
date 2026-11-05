@@ -1062,12 +1062,12 @@ TEST_CASE("policy_library_key [ShaderCompilePolicy]") {
 	input.profile_min_os_version = 140000;
 	input.actual_gpu_family = 1009;
 	input.actual_os_version = 150000;
-	const String expected = "d07836a6da961890cba3d6ec1717a85c8a805987e16476fa35d2d6fb07dcf75a";
+	const String expected = "ae84716f381d60c9046fcaa49ab16133dfb39e4281dd8fdf4fb6cafe4eaa0080";
 	const auto digest = ShaderCompilePolicy::library_key(input);
 	CHECK(String::hex_encode_buffer(digest.ptr(), digest.size()) == expected);
 	CHECK(ShaderCompilePolicy::library_key(input) == ShaderCompilePolicy::library_key(input));
 	const auto baseline = ShaderCompilePolicy::library_key(input);
-	for (int dimension = 0; dimension < 19; dimension++) {
+	for (int dimension = 0; dimension < 20; dimension++) {
 		CAPTURE(dimension);
 		auto changed = input;
 		switch (dimension) {
@@ -1127,6 +1127,9 @@ TEST_CASE("policy_library_key [ShaderCompilePolicy]") {
 				break;
 			case 18:
 				changed.metallib_sha256[0]++;
+				break;
+			case 19:
+				changed.math_floating_point_functions++;
 				break;
 		}
 		CHECK(ShaderCompilePolicy::library_key(changed) != baseline);
@@ -1581,6 +1584,8 @@ TEST_CASE("policy_options [ShaderCompilePolicy]") {
 		if (__builtin_available(macOS 15.0, *)) {
 			CHECK(safe->mathMode() == MTL::MathModeSafe);
 			CHECK(fast->mathMode() == MTL::MathModeFast);
+			CHECK(safe->mathFloatingPointFunctions() == MTL::MathFloatingPointFunctionsPrecise);
+			CHECK(fast->mathFloatingPointFunctions() == MTL::MathFloatingPointFunctionsFast);
 		} else
 #endif
 		{

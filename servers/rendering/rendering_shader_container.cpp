@@ -66,6 +66,7 @@ PackedByteArray ShaderCompilePolicy::library_key(const LibraryKeyInput &p_input)
 	append(p_input.source.ptr(), p_input.source.size());
 	u32(p_input.requested_flags);
 	u32(p_input.effective_disable);
+	u32(p_input.math_floating_point_functions);
 	u32(p_input.msl_version);
 	u32(p_input.position_invariance);
 	u32(p_input.enable_logging);

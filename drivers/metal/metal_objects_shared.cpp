@@ -785,6 +785,7 @@ Dictionary observe_shader_compile_options(MTL::CompileOptions *p_options) {
 	if (__builtin_available(macOS 15.0, iOS 18.0, tvOS 18.0, visionOS 2.0, *)) {
 		actual["api"] = "mathMode";
 		actual["math_mode"] = int(p_options->mathMode());
+		actual["math_floating_point_functions"] = int(p_options->mathFloatingPointFunctions());
 	} else
 #endif
 	{
@@ -812,6 +813,9 @@ NS::SharedPtr<MTL::CompileOptions> make_shader_compile_options(uint32_t p_msl_ve
 #if __MAC_OS_X_VERSION_MAX_ALLOWED >= 150000 || __IPHONE_OS_VERSION_MAX_ALLOWED >= 180000 || __TV_OS_VERSION_MAX_ALLOWED >= 180000 || defined(VISIONOS_ENABLED)
 	if (__builtin_available(macOS 15.0, iOS 18.0, tvOS 18.0, visionOS 2.0, *)) {
 		options->setMathMode(p_disable_fast_math ? MTL::MathModeSafe : MTL::MathModeFast);
+		if (p_disable_fast_math) {
+			options->setMathFloatingPointFunctions(MTL::MathFloatingPointFunctionsPrecise);
+		}
 	} else
 #endif
 	{

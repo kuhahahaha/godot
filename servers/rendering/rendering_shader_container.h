@@ -48,6 +48,7 @@ public:
 		PackedByteArray source;
 		uint32_t requested_flags = 0;
 		uint32_t effective_disable = 0;
+		uint32_t math_floating_point_functions = 0;
 		uint32_t msl_version = 0;
 		uint32_t position_invariance = 0;
 		uint32_t enable_logging = 0;
