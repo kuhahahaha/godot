@@ -8,7 +8,6 @@
 #include "../half_inc.glsl"
 
 #include "scene_forward_clustered_inc.glsl"
-
 #define SHADER_IS_SRGB false
 #define SHADER_SPACE_FAR 0.0
 
@@ -94,7 +93,6 @@ void axis_angle_to_tbn(vec3 axis, float angle, out vec3 tangent, out vec3 binorm
 
 /* Varyings */
 
-
 layout(location = 0) out vec3 vertex_interp;
 
 #ifdef NORMAL_USED
@@ -143,6 +141,10 @@ layout(location = 9) out float dp_clip;
 layout(location = 10) out flat uvec3 instance192_packet_interp;
 #define instance_index_interp instance192_packet_interp.x
 #define instance192_interp instance192_packet_interp.yz
+#elif defined(USE_INDEXED144_VERTEX_INPUT) && defined(MOTION_VECTORS)
+layout(location = 10) out flat uvec2 indexed144_packet_interp;
+#define instance_index_interp indexed144_packet_interp.x
+#define indexed144_history_interp indexed144_packet_interp.y
 #else
 layout(location = 10) out flat uint instance_index_interp;
 #endif
@@ -822,11 +824,14 @@ void _unpack_vertex_attributes(vec4 p_vertex_in, vec3 p_compressed_aabb_position
 }
 
 void main() {
+#if defined(USE_INDEXED144_VERTEX_INPUT) && defined(MOTION_VECTORS)
+	indexed144_history_interp = uint(indexed144_history_valid(gl_VertexIndex));
+#endif
 #ifdef USE_INSTANCE192_OUTPUT
 	instance192_interp = uvec2(uint(gl_InstanceIndex), instance192_flags(uint(gl_InstanceIndex)));
 #endif
 	uint instance_index = draw_call.instance_index;
-	#ifndef USE_INSTANCE192_OUTPUT
+#ifndef USE_INSTANCE192_OUTPUT
 	if (!sc_multimesh()) {
 		instance_index += INSTANCE_INDEX;
 	}
@@ -848,6 +853,8 @@ void main() {
 	_unpack_vertex_attributes(
 #ifdef USE_INSTANCE192_OUTPUT
 			vertex_angle_attrib,
+#elif defined(USE_INDEXED144_VERTEX_INPUT)
+			indexed144_history_interp != 0u ? previous_vertex_attrib : vertex_angle_attrib,
 #else
 			previous_vertex_attrib,
 #endif
@@ -857,12 +864,16 @@ void main() {
 #if defined(NORMAL_USED) || defined(TANGENT_USED)
 #ifdef USE_INSTANCE192_OUTPUT
 			axis_tangent_attrib,
+#elif defined(USE_INDEXED144_VERTEX_INPUT)
+			indexed144_history_interp != 0u ? previous_normal_attrib : axis_tangent_attrib,
 #else
 			previous_normal_attrib,
 #endif
 #ifdef USE_INDEXED144_VERTEX_INPUT
 #ifdef USE_INSTANCE192_OUTPUT
 			tangent_attrib,
+#elif defined(USE_INDEXED144_VERTEX_INPUT)
+			indexed144_history_interp != 0u ? previous_tangent_attrib : tangent_attrib,
 #else
 			previous_tangent_attrib,
 #endif
@@ -966,8 +977,6 @@ void main() {
 
 #include "scene_forward_clustered_inc.glsl"
 
-
-
 /* Varyings */
 
 layout(location = 0) in vec3 vertex_interp;
@@ -1008,6 +1017,10 @@ layout(location = 9) in float dp_clip;
 layout(location = 10) in flat uvec3 instance192_packet_interp;
 #define instance_index_interp instance192_packet_interp.x
 #define instance192_interp instance192_packet_interp.yz
+#elif defined(USE_INDEXED144_VERTEX_INPUT) && defined(MOTION_VECTORS)
+layout(location = 10) in flat uvec2 indexed144_packet_interp;
+#define instance_index_interp indexed144_packet_interp.x
+#define indexed144_history_interp indexed144_packet_interp.y
 #else
 layout(location = 10) in flat uint instance_index_interp;
 #endif
@@ -1193,7 +1206,6 @@ vec4 volumetric_fog_process(vec2 screen_uv, float z) {
 	return texture(sampler3D(volumetric_fog_texture, SAMPLER_LINEAR_CLAMP), fog_pos);
 }
 
-
 #ifdef USE_RADIANCE_OCTMAP_ARRAY
 vec4 sample_sky_radiance(vec3 uv, float lod) {
 	vec4 old_sample = textureLod(sampler2DArray(radiance_octmap, DEFAULT_SAMPLER_LINEAR_WITH_MIPMAPS_CLAMP), uv, lod);
@@ -1201,7 +1213,9 @@ vec4 sample_sky_radiance(vec3 uv, float lod) {
 vec4 sample_sky_radiance(vec2 uv, float lod) {
 	vec4 old_sample = textureLod(sampler2D(radiance_octmap, DEFAULT_SAMPLER_LINEAR_WITH_MIPMAPS_CLAMP), uv, lod);
 #endif
-	if (scene_data_block.data.sky_capture_data.x == 0.0) { return old_sample; }
+	if (scene_data_block.data.sky_capture_data.x == 0.0) {
+		return old_sample;
+	}
 	vec3 old_rgb = scene_data_block.data.sky_capture_data.z > 0.0 ? old_sample.rgb : scene_data_block.data.sky_capture_fallback.rgb;
 	vec3 result = old_rgb;
 	if (scene_data_block.data.sky_capture_data.y > 0.0) {
@@ -1457,7 +1471,6 @@ void fragment_shader(in SceneData scene_data) {
 #endif
 #endif
 
-
 	mat4 read_view_matrix = transpose(mat4(scene_data.view_matrix[0],
 			scene_data.view_matrix[1],
 			scene_data.view_matrix[2],
@@ -1526,7 +1539,7 @@ void fragment_shader(in SceneData scene_data) {
 
 // alpha hash can be used in unison with alpha antialiasing
 #ifdef ALPHA_HASH_USED
-	#ifdef USE_INSTANCE192_OUTPUT
+#ifdef USE_INSTANCE192_OUTPUT
 	vec3 object_pos = (instance192_record.inverse_model * inv_view_matrix * vec4(vertex, 1.0)).xyz;
 #else
 	vec3 object_pos = (inverse(read_model_matrix) * inv_view_matrix * vec4(vertex, 1.0)).xyz;
@@ -3244,6 +3257,11 @@ void fragment_shader(in SceneData scene_data) {
 	vec2 prev_position_uv = prev_position_clip * vec2(0.5, 0.5);
 
 	motion_vector = prev_position_uv - position_uv;
+#if defined(USE_INDEXED144_VERTEX_INPUT) && defined(MOTION_VECTORS)
+	if (indexed144_history_interp == 0u) {
+		motion_vector = vec2(0.0);
+	}
+#endif
 #ifdef USE_INSTANCE192_OUTPUT
 	if (!instance192_has_history(instance192_interp.y)) {
 		motion_vector = vec2(0.0);

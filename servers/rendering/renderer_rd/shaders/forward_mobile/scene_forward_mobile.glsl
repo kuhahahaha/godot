@@ -10,6 +10,10 @@
 /* Include our forward mobile UBOs definitions etc. */
 #include "scene_forward_mobile_inc.glsl"
 
+#if defined(USE_INDEXED144_VERTEX_INPUT) && defined(MODE_RENDER_MOTION_VECTORS)
+layout(location = 10) out flat uint indexed144_history_interp;
+#endif
+
 #define SHADER_IS_SRGB false
 #define SHADER_SPACE_FAR 0.0
 
@@ -103,7 +107,6 @@ void axis_angle_to_tbn(vec3 axis, float angle, out vec3 tangent, out vec3 binorm
 #ifdef USE_INSTANCE192_OUTPUT
 layout(location = 10) out flat uvec2 instance192_interp;
 #endif
-
 
 layout(location = 0) out vec3 vertex_interp;
 
@@ -748,6 +751,9 @@ void vertex_shader(in vec3 vertex,
 }
 
 void main() {
+#if defined(USE_INDEXED144_VERTEX_INPUT) && defined(MODE_RENDER_MOTION_VECTORS)
+	indexed144_history_interp = uint(indexed144_history_valid(gl_VertexIndex));
+#endif
 #ifdef USE_INSTANCE192_OUTPUT
 	instance192_interp = uvec2(uint(gl_InstanceIndex), instance192_flags(uint(gl_InstanceIndex)));
 #endif
@@ -764,6 +770,8 @@ void main() {
 	_unpack_vertex_attributes(
 #ifdef USE_INSTANCE192_OUTPUT
 			vertex_angle_attrib,
+#elif defined(USE_INDEXED144_VERTEX_INPUT)
+			indexed144_history_interp != 0u ? previous_vertex_attrib : vertex_angle_attrib,
 #else
 			previous_vertex_attrib,
 #endif
@@ -772,12 +780,16 @@ void main() {
 #if defined(NORMAL_USED) || defined(TANGENT_USED)
 #ifdef USE_INSTANCE192_OUTPUT
 			axis_tangent_attrib,
+#elif defined(USE_INDEXED144_VERTEX_INPUT)
+			indexed144_history_interp != 0u ? previous_normal_attrib : axis_tangent_attrib,
 #else
 			previous_normal_attrib,
 #endif
 #ifdef USE_INDEXED144_VERTEX_INPUT
 #ifdef USE_INSTANCE192_OUTPUT
 			tangent_attrib,
+#elif defined(USE_INDEXED144_VERTEX_INPUT)
+			indexed144_history_interp != 0u ? previous_tangent_attrib : tangent_attrib,
 #else
 			previous_tangent_attrib,
 #endif
@@ -924,10 +936,13 @@ void main() {
 
 /* Include our forward mobile UBOs definitions etc. */
 #include "scene_forward_mobile_inc.glsl"
+
+#if defined(USE_INDEXED144_VERTEX_INPUT) && defined(MODE_RENDER_MOTION_VECTORS)
+layout(location = 10) in flat uint indexed144_history_interp;
+#endif
 #ifdef USE_INSTANCE192_OUTPUT
 layout(location = 10) in flat uvec2 instance192_interp;
 #endif
-
 
 /* Varyings */
 
@@ -1132,7 +1147,6 @@ layout(location = 1) out float fog_eligibility;
 /*
 	Only supporting normal fog here.
 */
-
 
 #include "../environment/mobile_fog_transport_inc.glsl"
 
@@ -1352,7 +1366,6 @@ void main() {
 #endif
 #endif
 
-
 	mat4 read_view_matrix = transpose(mat4(scene_data.view_matrix[0],
 			scene_data.view_matrix[1],
 			scene_data.view_matrix[2],
@@ -1480,7 +1493,7 @@ void main() {
 
 // alpha hash can be used in unison with alpha antialiasing
 #ifdef ALPHA_HASH_USED
-	#ifdef USE_INSTANCE192_OUTPUT
+#ifdef USE_INSTANCE192_OUTPUT
 	vec3 object_pos = (instance192_record.inverse_model * inv_view_matrix * vec4(vertex, 1.0)).xyz;
 #else
 	vec3 object_pos = (inverse(read_model_matrix) * inv_view_matrix * vec4(vertex, 1.0)).xyz;
@@ -1592,17 +1605,19 @@ void main() {
 
 #endif //!CUSTOM_FOG_USED
 
- if(native_ap_enabled()) {
-  vec4 ap=native_ap_process(vertex);
-  if(!use_native_height_fog) {
-   // Preserve the native depth/custom fog layer, when present. Its source
-   // is already exposed; the shared tail expects canonical scene radiance.
-   native_height_fog=vec4(vec3(fog.rgb)*float(fog.a)/max(scene_data.emissive_exposure_normalization,1e-8),1.0-float(fog.a));
-  }
-  native_height_fog=vec4(native_height_fog.rgb+native_height_fog.a*ap.rgb,native_height_fog.a*clamp(ap.a,0.0,1.0));
-  if(scene_data.aerial_perspective.z>0.0) native_height_fog=ap;
-  use_native_height_fog=true;
- }
+	if (native_ap_enabled()) {
+		vec4 ap = native_ap_process(vertex);
+		if (!use_native_height_fog) {
+			// Preserve the native depth/custom fog layer, when present. Its source
+			// is already exposed; the shared tail expects canonical scene radiance.
+			native_height_fog = vec4(vec3(fog.rgb) * float(fog.a) / max(scene_data.emissive_exposure_normalization, 1e-8), 1.0 - float(fog.a));
+		}
+		native_height_fog = vec4(native_height_fog.rgb + native_height_fog.a * ap.rgb, native_height_fog.a * clamp(ap.a, 0.0, 1.0));
+		if (scene_data.aerial_perspective.z > 0.0) {
+			native_height_fog = ap;
+		}
+		use_native_height_fog = true;
+	}
 
 #endif // deferred native fog
 #endif //!FOG_DISABLED
@@ -1752,7 +1767,9 @@ void main() {
 		float lod = sqrt(roughness) * MAX_ROUGHNESS_LOD;
 		indirect_specular_light = hvec3(sample_sky_radiance(vec3(ref_vec), 0.0, lod).rgb);
 #endif //USE_RADIANCE_OCTMAP_ARRAY
-		if (scene_data.sky_capture_data.x == 0.0) { indirect_specular_light *= REFLECTION_MULTIPLIER; }
+		if (scene_data.sky_capture_data.x == 0.0) {
+			indirect_specular_light *= REFLECTION_MULTIPLIER;
+		}
 		indirect_specular_light *= half(scene_data.IBL_exposure_normalization);
 		indirect_specular_light *= horizon * horizon;
 		indirect_specular_light *= half(scene_data.ambient_light_color_energy.a);
@@ -1776,7 +1793,9 @@ void main() {
 			float roughness_lod = MAX_ROUGHNESS_LOD;
 			hvec3 octmap_ambient = hvec3(sample_sky_radiance(ambient_dir, 0.0, roughness_lod).rgb);
 #endif //USE_RADIANCE_OCTMAP_ARRAY
-			if (scene_data.sky_capture_data.x == 0.0) { octmap_ambient *= REFLECTION_MULTIPLIER; }
+			if (scene_data.sky_capture_data.x == 0.0) {
+				octmap_ambient *= REFLECTION_MULTIPLIER;
+			}
 			octmap_ambient *= half(scene_data.IBL_exposure_normalization);
 			ambient_light = mix(ambient_light, octmap_ambient * half(scene_data.ambient_light_color_energy.a), half(scene_data.ambient_color_sky_mix));
 		}
@@ -2499,36 +2518,36 @@ void main() {
 #endif
 
 #ifndef FOG_DISABLED
- if (use_native_height_fog) {
-  vec3 fog_L = native_height_fog.rgb * scene_data.emissive_exposure_normalization / sc_luminance_multiplier();
+	if (use_native_height_fog) {
+		vec3 fog_L = native_height_fog.rgb * scene_data.emissive_exposure_normalization / sc_luminance_multiplier();
 #ifdef HEIGHT_FOG_BLEND_MUL
-  out_color.rgb = hvec3(mix(vec3(1.0), vec3(out_color.rgb), native_height_fog.a));
+		out_color.rgb = hvec3(mix(vec3(1.0), vec3(out_color.rgb), native_height_fog.a));
 #else
-  out_color.rgb *= half(native_height_fog.a);
+		out_color.rgb *= half(native_height_fog.a);
 #if !defined(HEIGHT_FOG_BLEND_ADD_SUB)
 #ifdef HEIGHT_FOG_BLEND_PREMULTIPLIED
-  out_color.rgb += hvec3(fog_L * float(alpha));
+		out_color.rgb += hvec3(fog_L * float(alpha));
 #else
-  out_color.rgb += hvec3(fog_L);
+		out_color.rgb += hvec3(fog_L);
 #endif
 #endif
 #endif
-  float air_debug=scene_data.aerial_perspective.z>0.0?scene_data.aerial_perspective.z:scene_data.height_fog.options.y;
-  if (air_debug == 1.0) {
-   out_color.rgb = hvec3(vec3(native_height_fog.a) / sc_luminance_multiplier());
-  } else if (air_debug == 2.0) {
-   out_color.rgb = hvec3(native_height_fog.rgb / sc_luminance_multiplier());
-  }
- }
+		float air_debug = scene_data.aerial_perspective.z > 0.0 ? scene_data.aerial_perspective.z : scene_data.height_fog.options.y;
+		if (air_debug == 1.0) {
+			out_color.rgb = hvec3(vec3(native_height_fog.a) / sc_luminance_multiplier());
+		} else if (air_debug == 2.0) {
+			out_color.rgb = hvec3(native_height_fog.rgb / sc_luminance_multiplier());
+		}
+	}
 #endif
 
 #ifdef DEFER_OPAQUE_FOG
- fog_eligibility = 0.0;
+	fog_eligibility = 0.0;
 #ifdef DEFER_NATIVE_FOG
- fog_eligibility = 1.0;
+	fog_eligibility = 1.0;
 #endif
 #endif
- frag_color = out_color;
+	frag_color = out_color;
 
 	if (sc_use_material_debanding()) {
 		// From https://alex.vlachos.com/graphics/Alex_Vlachos_Advanced_VR_Rendering_GDC2015.pdf
@@ -2565,6 +2584,11 @@ void main() {
 	vec3 prev_ndc = prev_screen_position.xyz / prev_screen_position.w;
 	prev_ndc.y = -prev_ndc.y;
 	frag_color = vec4(ndc - prev_ndc, 0.0);
+#if defined(USE_INDEXED144_VERTEX_INPUT) && defined(MODE_RENDER_MOTION_VECTORS)
+	if (indexed144_history_interp == 0u) {
+		frag_color = vec4(0.0);
+	}
+#endif
 #ifdef USE_INSTANCE192_OUTPUT
 	if (!instance192_has_history(instance192_interp.y)) {
 		frag_color = vec4(0.0);

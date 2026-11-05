@@ -1,0 +1,131 @@
+{
+  "base": "53701c7e788f9f5d8e81b687512560310ebe2916",
+  "author_freeze_sha256": "61345d57b1fb5a3c9d10a5a82920ddfe1b207411c0183572f895aa655594913b",
+  "source_files": {
+    "servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered.glsl": "7ab72e779a75379787e10f0479a4cac35d6850d18f0a474ab3f5ebe21e2f33bf",
+    "servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered_inc.glsl": "f4143999ab0b7e3e35eaa9e6690715e702e682423b862d01daf118a050b29af6",
+    "servers/rendering/renderer_rd/shaders/forward_mobile/scene_forward_mobile.glsl": "cc4d25abf50a0f8cd9a7c55e2a429cbb29c22bf8985c786e732206334543763d",
+    "servers/rendering/renderer_rd/shaders/forward_mobile/scene_forward_mobile_inc.glsl": "1c7120fd0df9fa64604f44d954c7f6334ad1df8f021ec7823705d99a20b43b01",
+    "servers/rendering/renderer_rd/shaders/indexed144_history_inc.glsl": "bbba339e32cb2238eba559ad8a8b7d9d945e4a0e3cf9af61ebfd32a36c403680"
+  },
+  "shader_verification": {
+    "actual_tree_compile_commands": 42,
+    "actual_tree_failures": 0,
+    "actual_codegen_sha256": "9c3537bfc13418bb6cd47bae558d7b9c1932d5269752dceb56f5b8378d5e7fa8",
+    "actual_varying_red": 6,
+    "red_cause": "location15 overlap with real ShaderCompiler uservarying",
+    "actual_varying_green": 6,
+    "scope": "SPIRV full-template compile/link and declaration/zero-store evidence, not GPU numeric/render qualification"
+  },
+  "format_followup": {
+    "spirv_files": 42,
+    "spirv_changed": [],
+    "include_order_unchanged": {
+      "servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered.glsl": true,
+      "servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered_inc.glsl": true,
+      "servers/rendering/renderer_rd/shaders/forward_mobile/scene_forward_mobile.glsl": true,
+      "servers/rendering/renderer_rd/shaders/forward_mobile/scene_forward_mobile_inc.glsl": true,
+      "servers/rendering/renderer_rd/shaders/indexed144_history_inc.glsl": true
+    },
+    "current_source": {
+      "servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered.glsl": "7ab72e779a75379787e10f0479a4cac35d6850d18f0a474ab3f5ebe21e2f33bf",
+      "servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered_inc.glsl": "f4143999ab0b7e3e35eaa9e6690715e702e682423b862d01daf118a050b29af6",
+      "servers/rendering/renderer_rd/shaders/forward_mobile/scene_forward_mobile.glsl": "cc4d25abf50a0f8cd9a7c55e2a429cbb29c22bf8985c786e732206334543763d",
+      "servers/rendering/renderer_rd/shaders/forward_mobile/scene_forward_mobile_inc.glsl": "1c7120fd0df9fa64604f44d954c7f6334ad1df8f021ec7823705d99a20b43b01",
+      "servers/rendering/renderer_rd/shaders/indexed144_history_inc.glsl": "bbba339e32cb2238eba559ad8a8b7d9d945e4a0e3cf9af61ebfd32a36c403680"
+    }
+  },
+  "initial_build": {
+    "exit_code": 0,
+    "seconds": 27.18652154202573,
+    "input_unchanged": true,
+    "host_sha256": "88f0302ac485883a1470ca2d3d6695399a2f97e821caeae4ef7b0d1ce2a3a8c6"
+  },
+  "initial_runtime": {
+    "b4": {
+      "exit": 0,
+      "cases": {
+        "successes": "25",
+        "failures": "0"
+      },
+      "assertions": {
+        "successes": "647",
+        "failures": "0"
+      },
+      "stdout_bytes": 0,
+      "stderr_bytes": 420,
+      "diagnostics": "three existing camera-token rejection negatives; source test_viewport_camera_source and test_viewport_ordinary_history, not clean"
+    },
+    "guard": {
+      "exit": 0,
+      "cases": {
+        "successes": "6",
+        "failures": "0"
+      },
+      "assertions": {
+        "successes": "521",
+        "failures": "0"
+      },
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    "full": {
+      "exit": 0,
+      "cases": {
+        "successes": "2070",
+        "failures": "0"
+      },
+      "assertions": {
+        "successes": "517049",
+        "failures": "0"
+      },
+      "stdout_bytes": 571,
+      "stderr_bytes": 4017
+    }
+  },
+  "final_build": {
+    "exit_code": 0,
+    "seconds": 28.55718004202936,
+    "input_unchanged": true,
+    "host_sha256": "0c58c295f10ec94c3a638c758ae679ca3e2901bd69064d20298e5fc102ff619c"
+  },
+  "final_runtime": {
+    "pipeline-key": {
+      "exit": 0,
+      "cases": {
+        "successes": "1",
+        "failures": "0"
+      },
+      "assertions": {
+        "successes": "2",
+        "failures": "0"
+      },
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    "guard": {
+      "exit": 0,
+      "cases": {
+        "successes": "6",
+        "failures": "0"
+      },
+      "assertions": {
+        "successes": "521",
+        "failures": "0"
+      },
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    }
+  },
+  "independent_review": "first peer found real user-varying15 collision; next packs into reserved10, actual instance-index/history accesses and profile guards verified; not GPU qualification",
+  "material_codegen_scope": "real original ShaderCompiler::compile JSON, generic ALBEDO identifier adapted to native albedo_highp only in harness; original varying15 declarations untouched; not full production actions end-to-end",
+  "contract": "readonly vertex_capacity*u32 validity, canonical1; invalid previous selects current and motion stores literal0; same sealed packet must retain matching descriptor/backing/VA/material/source",
+  "not_implemented_by_this_slice": [
+    "actual packet/source admission and charged native lease",
+    "Forward+/Mobile actual sealed packet adoption and prepared pipelines",
+    "native aggregate use closure and physical retirement",
+    "retained current/previous Host integration for Indexed144",
+    "live GPU numerical/motion and complete Runtime chain qualification"
+  ],
+  "evidence": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-indexed144-history-integration-20261105"
+}
