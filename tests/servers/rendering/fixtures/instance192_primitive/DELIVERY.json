@@ -1,0 +1,56 @@
+{
+  "scope": "Instance192 native topology controls shader facing and polygon culling; ordinary/Indexed144 unchanged",
+  "source_freeze_sha256": "41b3070c6571ee18ee475d072f0e722d7ffc471f2e3d597933c9e2d353fbfe49",
+  "patch_sha256": "05136f38ec8c2229ca894713bf4a450c860f30bfe141ee51cfad84e4a4af3564",
+  "root_review": "SpecId5 from actual PipelineKey primitive, triangles/triangle strip true; points/lines/line strip raw facing and no polygon discard; wireframe triangle remains triangle topology; key already contains topology; no public ABI",
+  "evidence": "work/b4-instance192-primitive-20261105",
+  "template_validation": {
+    "commands": 92,
+    "failures": 0,
+    "red": "baseline actual template rejects missing SpecId5; preserved RED.json",
+    "coverage": "both backends ordinary/Indexed neighbors and Instance192 standard/motion/ubershader/multiview, unique SpecIds and freeze true/false validation"
+  },
+  "build_exit": 0,
+  "runtime": {
+    "host_sha256": "ee6629c1ab2e0ed8cba51cffabac8e1e9459a23f1dccbe73798a4e5eadf08520",
+    "initial_run": "full failed1 only requiredphysics env missing; incorrectInstance192 filter0cases not coverage, preserved",
+    "results": {
+      "guard-correct": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "521",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "6",
+            "failures": "0"
+          }
+        },
+        "stdout_bytes": 0,
+        "stderr_bytes": 0
+      },
+      "full-configured": {
+        "exit": 0,
+        "counts": {
+          "OverallResultsAsserts": {
+            "successes": "517049",
+            "failures": "0"
+          },
+          "OverallResultsTestCases": {
+            "successes": "2070",
+            "failures": "0"
+          }
+        },
+        "stdout_bytes": 571,
+        "stderr_bytes": 4017
+      }
+    }
+  },
+  "limits": [
+    "No actual driver pipeline creation or GPU primitive calibration in this evidence",
+    "Triangle mirror facing GPU calibration and full P2/P4 native output integration remain pending",
+    "Full suite reports 0 assertion failures but retains stdout571/stderr4017; not clean output",
+    "Initial full-suite run lacked required physics environment and failed1; original log retained; incorrectInstance192 filter selected0cases and does not count as coverage"
+  ]
+}

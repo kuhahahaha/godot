@@ -12,11 +12,14 @@
 
 layout(set = 2, binding = 1, std430) restrict readonly buffer Instance192Previous {
 	vec4 data[];
-} instance192_previous;
+}
+instance192_previous;
 
 // Match RD PolygonCullMode (disabled=0/front=1/back=2). Pipeline hardware cull
 // is disabled; this is the original material/pass cull request, never a bucket.
 layout(constant_id = 4) const uint instance192_cull_mode = 0u;
+// Derive from native topology, not polygon wireframe mode or producer flags.
+layout(constant_id = 5) const bool instance192_triangle_topology = true;
 
 struct Instance192Record {
 	mat4 model;
@@ -57,11 +60,17 @@ Instance192Record instance192_read(uint index, bool previous) {
 }
 
 bool instance192_front_facing(bool raster_front, uint flags) {
+	if (!instance192_triangle_topology) {
+		return raster_front; // Ordinary point/line material semantics.
+	}
 	return raster_front != ((flags & 4u) != 0u);
 }
 
 bool instance192_discard_face(bool logical_front) {
-	#ifdef UBERSHADER
+	if (!instance192_triangle_topology) {
+		return false; // Polygon culling does not discard native points/lines.
+	}
+#ifdef UBERSHADER
 	uint material_cull = uc_cull_mode();
 #else
 	uint material_cull = instance192_cull_mode;
