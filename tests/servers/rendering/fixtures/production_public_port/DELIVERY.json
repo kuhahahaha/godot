@@ -154,7 +154,7 @@
     "fix": "Semaphore ready{} default member initializer; same default construction",
     "source_file": "tests/core/extension/test_production_native_observe.cpp",
     "source_sha256": "dc9be21b94e0785f85f47b82f1dfd72e23ccd046394701f026bc6c6d0257d85d",
-    "strict": "actual warning RED reproduced, Wall/Wextra/Wmissing-field-initializers \u00b1DEV fullTU GREEN",
+    "strict": "actual warning RED reproduced, Wall/Wextra/Wmissing-field-initializers ±DEV fullTU GREEN",
     "build": {
       "exit_code": 0,
       "seconds": 18.633499291026965,
@@ -879,5 +879,25 @@
       "sha256": "051c03d90c223fcede1dea40f118ff7bfc2fa934b9cfe7ea818a8a61388d3381"
     },
     "A_received": "copied packaged binary and sidecar, exactSHA preserved, actual --headless --version0; DSO/SceneReady/producer/GPU integration still A-owned pending"
+  },
+  "scu_actual_ci_537": {
+    "run": 41996276774,
+    "source": "53701c7e788f9f5d8e81b687512560310ebe2916",
+    "job": 127140385096,
+    "conclusion": "success",
+    "raw_sha256": "e0c69b4b6dd93b57f51c1d91d09eccc64eededb4a8d9acf88376713a9ca04e2e",
+    "raw_bytes": 4821758,
+    "build": "scons: done building targets.",
+    "unit_cases": 1979,
+    "unit_assertions": 516733,
+    "unit_failed": 0,
+    "unit_skipped": 3,
+    "scope": "actual SCU link and unit runner success; not diagnostic-clean sanitizer/wholeGPU evidence",
+    "diagnostics": {
+      "runtime_error_lines": 42,
+      "asan_error_lines": 0,
+      "lsan_error_lines": 1,
+      "notes": "original CI check_ci_log accepted job while headless import logs include UBSan findings in core/string, thirdparty, style_box_flat/view_3d_controller and fontconfig 288-byte LeakSanitizer report; preserved without suppression changes"
+    }
   }
 }
