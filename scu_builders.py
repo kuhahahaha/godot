@@ -287,6 +287,7 @@ def generate_scu_files(max_includes_per_scu):
             "gdextension_production_resources",
             "gdextension_production_set",
             "gdextension_qualification",
+            "gdextension_qualification_raster",
             "gdextension_qualification_rt",
             "gdextension_qualification_ticket",
             "gdextension_qualification_typed",

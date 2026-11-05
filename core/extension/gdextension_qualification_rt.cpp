@@ -483,7 +483,7 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_rt_reserve(GDExtensionQ
 		if (raster->raster->target != target || !raster->raster->target_held || target->creating || target->retiring || target->acknowledged || target->physical.use_closed.load() || target->object_serial != q.depth.target_object_serial || memcmp(&target->source, &q.depth.source, sizeof(target->source))) {
 			return result(ERR_INVALID_DATA, 16);
 		}
-		auto original_cell = [&](const QualificationPhysicalReturn &cell, uint64_t rid, uint64_t serial) { return rid && serial && cell.bridge == bridge->serial && cell.child == raster->serial && cell.rid == rid && cell.serial == serial && !cell.use_closed.load() && !cell.enqueued && !cell.free_event; };
+		auto original_cell = [&](const QualificationPhysicalReturn &physical, uint64_t rid, uint64_t serial) { return rid && serial && physical.bridge == bridge->serial && physical.child == raster->serial && physical.rid == rid && physical.serial == serial && !physical.use_closed.load() && !physical.enqueued && !physical.free_event; };
 		if (!original_cell(raster->shader, backing.shader_rid, backing.shader_serial) || !original_cell(raster->pipeline, backing.pipeline_rid, backing.pipeline_serial) || !original_cell(raster->raster->framebuffer, backing.framebuffer_rid, backing.framebuffer_serial)) {
 			return result(ERR_INVALID_DATA, 16);
 		}
