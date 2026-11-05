@@ -489,7 +489,7 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 	switch (action.declaration.action_kind) {
 		case GDEXTENSION_PRODUCTION_DISPATCH_V1: {
 			const auto &dispatch = action.dispatch;
-			const auto list = list_open ? RenderingDevice::ID_TYPE_COMPUTE_LIST : rd.compute_list_begin();
+			const auto list = list_open ? RenderingDevice::ComputeListID(RenderingDevice::ID_TYPE_COMPUTE_LIST) : rd.compute_list_begin();
 			if (list == RenderingDevice::INVALID_ID) {
 				observed.error = ERR_CANT_CREATE;
 				break;

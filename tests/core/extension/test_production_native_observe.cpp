@@ -1113,7 +1113,7 @@ struct Access {
 		RenderingDevice *rd = nullptr;
 		Request *r = nullptr;
 		const GDExtensionProductionOperationV1 operation = { Enrollment::ABI, 171, 1, 10, 11 };
-		GDExtensionProductionActionV1 action = { 10, dispatch ? GDEXTENSION_PRODUCTION_DISPATCH_V1 : GDEXTENSION_PRODUCTION_UPLOAD_V1, 0, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX };
+		GDExtensionProductionActionV1 action = { 10, uint32_t(dispatch ? GDEXTENSION_PRODUCTION_DISPATCH_V1 : GDEXTENSION_PRODUCTION_UPLOAD_V1), 0, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX };
 		const GDExtensionProductionResourceV1 resources[] = {
 			{ GDEXTENSION_PRODUCTION_UNIT_V1, 4, 5, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 6, 0, 0 },
 			{ GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 128, 0 },
