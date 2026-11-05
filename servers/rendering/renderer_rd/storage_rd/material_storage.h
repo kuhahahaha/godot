@@ -384,7 +384,7 @@ private:
 	static Error _native_hold_finish_return(NativeMaterialHold &);
 
 public:
-	Error material_native_hold_acquire(RID p_material, RID p_shader, RID p_pipeline, RID p_uniform_set, NativeMaterialHold &r_hold, uint32_t p_max_resources = 256);
+	Error material_native_hold_acquire(RID p_material, RID p_shader, RID p_pipeline, RID p_uniform_set, NativeMaterialHold &r_hold, uint32_t p_max_resources = 256, uint64_t p_expected_generation = 0);
 	static Error material_native_hold_release(NativeMaterialHold &r_hold);
 
 	MaterialStorage();

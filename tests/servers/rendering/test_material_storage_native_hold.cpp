@@ -793,7 +793,7 @@ private:
 	}
 
 public:
-	static void run(bool unsupported, bool cross_variants = false, uint32_t callback_lifetime = 0) {
+	static void run(bool unsupported, bool cross_variants = false, uint32_t callback_lifetime = 0, bool generation_regression = false) {
 		RenderingDevice *previous = RD::get_singleton();
 		RD rd;
 		Driver driver;
@@ -919,6 +919,63 @@ public:
 		CHECK(wrong.error == ERR_UNAUTHORIZED);
 		CHECK_FALSE(rd.native_immutable_resource_is_held(ubo));
 #endif
+
+		if (generation_regression) {
+			const uint64_t selected_generation = storage->material_get_generation(material);
+			const String edited_code = "shader_type spatial; void fragment() { ALBEDO = vec3(0.5); }";
+			storage->shader_set_code(shader, edited_code);
+			CHECK(storage->shader_get_code(shader) == edited_code);
+			CHECK(shader_data->changes == 1);
+			storage->_update_queued_materials();
+			MaterialStorage::NativeMaterialHold stale;
+			CHECK(storage->material_native_hold_acquire(material, native_shader, pipeline, data->set, stale, 256, selected_generation) == ERR_INVALID_DATA);
+			CHECK_FALSE(stale.is_active());
+			if (stale.is_active()) {
+				CHECK(MaterialStorage::material_native_hold_release(stale) == OK);
+			}
+			const uint64_t reselected_generation = storage->material_get_generation(material);
+			CHECK(reselected_generation != selected_generation);
+			CHECK(storage->material_native_hold_acquire(material, native_shader, pipeline, data->set, stale, 256, reselected_generation) == OK);
+			CHECK(stale.is_active());
+			CHECK(stale.get_snapshot().material_generation == reselected_generation);
+			CHECK(rd.native_immutable_resource_is_held(ubo));
+			if (stale.is_active()) {
+				CHECK(MaterialStorage::material_native_hold_release(stale) == OK);
+			}
+			storage->shader_set_default_texture_parameter(shader, "new_default", texture, 0);
+			CHECK(storage->shader_get_default_texture_parameter(shader, "new_default", 0) == texture);
+			storage->_update_queued_materials();
+			CHECK(storage->material_native_hold_acquire(material, native_shader, pipeline, data->set, stale, 256, reselected_generation) == ERR_INVALID_DATA);
+			CHECK_FALSE(stale.is_active());
+			if (stale.is_active()) {
+				CHECK(MaterialStorage::material_native_hold_release(stale) == OK);
+			}
+			const uint64_t current_generation = storage->material_get_generation(material);
+			CHECK(current_generation != reselected_generation);
+			CHECK(storage->material_native_hold_acquire(material, native_shader, pipeline, data->set, stale, 256, current_generation) == OK);
+			CHECK(stale.is_active());
+			CHECK(stale.get_snapshot().material_generation == current_generation);
+			CHECK(rd.native_immutable_resource_is_held(ubo));
+			if (stale.is_active()) {
+				CHECK(MaterialStorage::material_native_hold_release(stale) == OK);
+			}
+			// Boundary injection only; the mutation and rejection remain original paths.
+			material_cell->generation = UINT64_MAX;
+			storage->shader_set_code(shader, "shader_type spatial;");
+			CHECK(storage->shader_get_code(shader) == "shader_type spatial;");
+			CHECK(storage->material_get_generation(material) == UINT64_MAX);
+			storage->shader_set_default_texture_parameter(shader, "max_default", texture, 0);
+			CHECK(storage->shader_get_default_texture_parameter(shader, "max_default", 0) == texture);
+			storage->_update_queued_materials();
+			CHECK(storage->material_get_generation(material) == UINT64_MAX);
+			CHECK(storage->material_native_hold_acquire(material, native_shader, pipeline, data->set, stale, 256, UINT64_MAX) == ERR_INVALID_DATA);
+			CHECK_FALSE(stale.is_active());
+			if (stale.is_active()) {
+				CHECK(MaterialStorage::material_native_hold_release(stale) == OK);
+			}
+			material_cell->generation = current_generation;
+			data->generation = current_generation;
+		}
 		MaterialStorage::NativeMaterialHold first, second;
 		if (callback_lifetime == 4) {
 #ifdef THREADS_ENABLED
@@ -978,16 +1035,21 @@ public:
 						CHECK(snapshot.uniform_bytes[i] == driver.bytes[i]);
 					}
 					const uint64_t generation = material_cell->generation;
+					const uint32_t shader_changes = shader_data->changes;
+					const String shader_code = storage->shader_get_code(shader);
 					ERR_PRINT_OFF;
 					uint8_t replacement[16] = {};
 					CHECK(rd.buffer_update(ubo, 0, 16, replacement) == ERR_BUSY);
 					storage->material_set_param(material, "new_value", 99);
-					storage->shader_set_code(shader, "shader_type spatial;");
+					storage->shader_set_code(shader, "shader_type spatial; void fragment() { ALBEDO = vec3(0.25); }");
+					storage->shader_set_default_texture_parameter(shader, "held_rejected", texture, 0);
 					textures->texture_2d_update(texture, Image::create_empty(1, 1, false, Image::FORMAT_L8));
 					ERR_PRINT_ON;
 					CHECK(material_cell->generation == generation);
 					CHECK_FALSE(material_cell->params.has("new_value"));
-					CHECK(shader_data->changes == 0);
+					CHECK(shader_data->changes == shader_changes);
+					CHECK(storage->shader_get_code(shader) == shader_code);
+					CHECK(storage->shader_get_default_texture_parameter(shader, "held_rejected", 0).is_null());
 					CallbackTrace callback_trace;
 					if (callback_lifetime == 2) {
 						auto *callback_owner = memnew(CallbackOwner(callback_trace, rd));
@@ -1106,4 +1168,8 @@ TEST_CASE("[MaterialNativeHold] exact native inputs survive original owner free 
 
 TEST_CASE("[MaterialNativeHold] unsupported dynamic profile rejects before native pins") {
 	RendererRD::TestMaterialStorageNativeHoldAccess::run(true);
+}
+
+TEST_CASE("[MaterialNativeHold] shader edits invalidate selected material generation before native hold") {
+	RendererRD::TestMaterialStorageNativeHoldAccess::run(false, false, 0, true);
 }

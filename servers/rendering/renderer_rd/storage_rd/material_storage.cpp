@@ -1176,7 +1176,7 @@ bool MaterialStorage::_shader_native_immutable_busy(const Shader *p_shader) {
 	return native.first && native.first->version_native_is_held(native.second);
 }
 
-Error MaterialStorage::material_native_hold_acquire(RID p_material, RID p_shader, RID p_pipeline, RID p_uniform_set, NativeMaterialHold &r_hold, uint32_t p_max_resources) {
+Error MaterialStorage::material_native_hold_acquire(RID p_material, RID p_shader, RID p_pipeline, RID p_uniform_set, NativeMaterialHold &r_hold, uint32_t p_max_resources, uint64_t p_expected_generation) {
 	auto *rd = RD::get_singleton();
 	if (!rd || !rd->native_immutable_is_render_thread()) {
 		return ERR_UNAUTHORIZED;
@@ -1187,6 +1187,9 @@ Error MaterialStorage::material_native_hold_acquire(RID p_material, RID p_shader
 	Material *material = material_owner.get_or_null(p_material);
 	if (!material || !material->data || !material->shader || !material->shader->data) {
 		return ERR_INVALID_PARAMETER;
+	}
+	if (p_expected_generation && (material->generation != p_expected_generation || p_expected_generation == UINT64_MAX)) {
+		return ERR_INVALID_DATA;
 	}
 	if (material->native_immutable_holds == UINT32_MAX) {
 		return ERR_PARAMETER_RANGE_ERROR;
@@ -2543,6 +2546,13 @@ void MaterialStorage::shader_set_code(RID p_shader, const String &p_code) {
 
 	for (Material *E : shader->owners) {
 		Material *material = E;
+		if (material->generation != UINT64_MAX) {
+			++material->generation;
+		}
+		if (material->data) {
+			material->data->generation = material->generation;
+		}
+
 		material->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MATERIAL);
 		_material_queue_update(material, true, true);
 	}
@@ -2600,6 +2610,13 @@ void MaterialStorage::shader_set_default_texture_parameter(RID p_shader, const S
 
 		for (Material *E : shader->owners) {
 			Material *material = E;
+			if (material->generation != UINT64_MAX) {
+				++material->generation;
+			}
+			if (material->data) {
+				material->data->generation = material->generation;
+			}
+
 			_material_queue_update(material, false, true);
 		}
 	}
