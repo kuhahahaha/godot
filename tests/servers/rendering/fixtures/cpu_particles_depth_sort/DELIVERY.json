@@ -1,0 +1,202 @@
+{
+  "base": "600fad0aa8",
+  "scope": "Public CPU3D local-space view-depth ordering through actual MultiMesh output, not GPU raster or physical-retirement acceptance",
+  "sources": [
+    {
+      "path": "scene/3d/cpu_particles_3d.cpp",
+      "sha256": "08fbdc7b1f3e9ef932ba6d3d1b7961d172ac8a6c36465db6c4f34841a30485e9"
+    },
+    {
+      "path": "tests/servers/rendering/fixtures/cpu_particles_depth_sort/probe.gd",
+      "sha256": "193d5e874458bfaa498a1f67ee2655d4e7c544863b1f176dcc74b26e67addc6b"
+    },
+    {
+      "path": "tests/servers/rendering/fixtures/cpu_particles_depth_sort/run.py",
+      "sha256": "911af0ee070d7c01c2a79b61e4b4c464e2d929289b680a23b1014d5e916897ae"
+    },
+    {
+      "path": "tests/servers/rendering/fixtures/cpu_particles_depth_sort/README.md",
+      "sha256": "81d9e7542fb7236d07f441393b3fdc8a8d51b82c0f169408d65b5be0d8df1f27"
+    },
+    {
+      "path": "tests/servers/rendering/fixtures/cpu_particles_depth_sort/project.godot",
+      "sha256": "efd3edc48ae7f8fc2edaaab746c44b11325a57ec0cacf9c27a6a5267e8ec38b6"
+    }
+  ],
+  "red": {
+    "process_exit": 43,
+    "validation_pass": true,
+    "failures": [
+      "translation",
+      "nonuniform_scale",
+      "shear"
+    ],
+    "host_sha256": "17cc42bfe1ae89e53cbc4827a4c38b73c5798a53e6c501b0c929e59a2e6be8e1",
+    "checks": {
+      "one_result": true,
+      "expected_exit": true,
+      "not_timeout": true,
+      "no_engine_or_exit_errors": true,
+      "actual_metal_mobile_startup": true,
+      "report_shape": true,
+      "exact_case_order": true,
+      "exact_failures": true,
+      "expected_pass_boolean": true,
+      "translation:1280_floats_and_both_points": true,
+      "translation:64_finite_world_depths": true,
+      "translation:expected_case_boolean": true,
+      "translation:independent_expected_depth_values": true,
+      "translation:independent_monotonic_or_target_inversion": true,
+      "rotation:1280_floats_and_both_points": true,
+      "rotation:64_finite_world_depths": true,
+      "rotation:expected_case_boolean": true,
+      "rotation:independent_expected_depth_values": true,
+      "rotation:independent_monotonic_or_target_inversion": true,
+      "nonuniform_scale:1280_floats_and_both_points": true,
+      "nonuniform_scale:64_finite_world_depths": true,
+      "nonuniform_scale:expected_case_boolean": true,
+      "nonuniform_scale:independent_expected_depth_values": true,
+      "nonuniform_scale:independent_monotonic_or_target_inversion": true,
+      "shear:1280_floats_and_both_points": true,
+      "shear:64_finite_world_depths": true,
+      "shear:expected_case_boolean": true,
+      "shear:independent_expected_depth_values": true,
+      "shear:independent_monotonic_or_target_inversion": true,
+      "host_hash_unchanged": true,
+      "input_hashes_unchanged": true
+    }
+  },
+  "green": {
+    "process_exit": 0,
+    "validation_pass": true,
+    "failures": [],
+    "host_sha256": "e54c76cecc3a4d23ec0adc6ddcd1ea887811ad9077a4db3b2965b501e32a6376",
+    "checks": {
+      "one_result": true,
+      "expected_exit": true,
+      "not_timeout": true,
+      "no_engine_or_exit_errors": true,
+      "actual_metal_mobile_startup": true,
+      "report_shape": true,
+      "exact_case_order": true,
+      "exact_failures": true,
+      "expected_pass_boolean": true,
+      "translation:1280_floats_and_both_points": true,
+      "translation:64_finite_world_depths": true,
+      "translation:expected_case_boolean": true,
+      "translation:independent_expected_depth_values": true,
+      "translation:independent_monotonic_or_target_inversion": true,
+      "rotation:1280_floats_and_both_points": true,
+      "rotation:64_finite_world_depths": true,
+      "rotation:expected_case_boolean": true,
+      "rotation:independent_expected_depth_values": true,
+      "rotation:independent_monotonic_or_target_inversion": true,
+      "nonuniform_scale:1280_floats_and_both_points": true,
+      "nonuniform_scale:64_finite_world_depths": true,
+      "nonuniform_scale:expected_case_boolean": true,
+      "nonuniform_scale:independent_expected_depth_values": true,
+      "nonuniform_scale:independent_monotonic_or_target_inversion": true,
+      "shear:1280_floats_and_both_points": true,
+      "shear:64_finite_world_depths": true,
+      "shear:expected_case_boolean": true,
+      "shear:independent_expected_depth_values": true,
+      "shear:independent_monotonic_or_target_inversion": true,
+      "host_hash_unchanged": true,
+      "input_hashes_unchanged": true
+    }
+  },
+  "full": {
+    "exit": 0,
+    "elapsed": 20.24033712502569,
+    "stdout_bytes": 571,
+    "stderr_bytes": 4017,
+    "counts": {
+      "OverallResultsAsserts": {
+        "successes": "521421",
+        "failures": "0"
+      },
+      "OverallResultsTestCases": {
+        "successes": "2082",
+        "failures": "0"
+      }
+    }
+  },
+  "native390_neighbor": {
+    "host_sha256": "e54c76cecc3a4d23ec0adc6ddcd1ea887811ad9077a4db3b2965b501e32a6376",
+    "gpu_pass": true,
+    "check_count": 390,
+    "allocation_count": 31,
+    "resource_count": 29,
+    "readbacks": 6,
+    "sdf_readbacks": 2,
+    "outer_checks": {
+      "one_result": true,
+      "not_timeout": true,
+      "no_fatal_or_exit_leaks": true,
+      "exact_expected_engine_errors": true,
+      "actual_metal_startup": true,
+      "native_and_outer_success": true,
+      "host_and_metadata_unchanged": true,
+      "source_unchanged": true
+    }
+  },
+  "independent_source_review": "/tmp/cpu-particles-depth-sort/independent-native-ci-review.txt",
+  "evidence": [
+    "work/b4-cpu3d-depth-red-runner-20261106",
+    "work/b4-cpu3d-depth-green-20261106"
+  ],
+  "limitations": [
+    "Depth reference uses actual returned positions and independent world projection. Public multimesh_get_buffer may return storage data_cache or device readback; this test does not assert raster pixels or physical GPU retirement.",
+    "Old and fixed sorting tested against identical probe/runner bytes; production CPU source is the only requested semantic change. GREEN host also includes preceding formatting-only commit.",
+    "Full-suite stdout571/stderr4017 existing negative diagnostics retained. Native390 neighbor retains all eight asynchronous readbacks,31allocations29resource physical closes and exact13injected errors."
+  ],
+  "independent_final_review": {
+    "review": "independent CPU3D final strict raw/source/neighbor review",
+    "status": "PASS",
+    "red_exit": 43,
+    "red_exact_failures": [
+      "translation",
+      "nonuniform_scale",
+      "shear"
+    ],
+    "red_rotation_control": true,
+    "green_exit": 0,
+    "green_all4cases_true": true,
+    "both_runs_exact1280float_bothpoints_64finite_depths_and_independent_expectedvalues": true,
+    "probe_runner_project_unchanged_between_red_green": true,
+    "only_source_change": "scene/3d/cpu_particles_3d.cpp: reviewed transpose fix; reverse-patch matches RED hash exactly",
+    "red_host_sha256": "17cc42bfe1ae89e53cbc4827a4c38b73c5798a53e6c501b0c929e59a2e6be8e1",
+    "green_host_sha256": "e54c76cecc3a4d23ec0adc6ddcd1ea887811ad9077a4db3b2965b501e32a6376",
+    "raw_hashes_host_bytes_and_current_source_delivery_hashes_verified": true,
+    "no_stderr_both": true,
+    "same_green_host_native390": {
+      "all390true": true,
+      "readbacks": 8,
+      "allocations": 31,
+      "resources_and_physicalacks": 29,
+      "exact_expected_diagnostics": {
+        "Failed to reset particle sub-emitter buffer.": 2,
+        "Failed to update particle emission buffer.": 2,
+        "Failed to update particle frame parameters buffer.": 8,
+        "Failed to create particle fallback trail buffer.": 1
+      },
+      "done": true,
+      "released": true
+    },
+    "same_green_host_full_xml": {
+      "OverallResultsTestCases": {
+        "successes": "2082",
+        "failures": "0"
+      },
+      "OverallResultsAsserts": {
+        "successes": "521421",
+        "failures": "0"
+      }
+    },
+    "DELIVERY_sha256": "1d9163140948637d623e48c9fab8349127a4bc9038dc92460c345b5047a7e22a",
+    "cpu_red_result_sha256": "3cc2dea54f87bdf38e74bf221dd5899dffc0da2eb376efeac228d0318c6b9f65",
+    "cpu_green_result_sha256": "e639d4dd80b3d35c172a77a8ad24b3eaf64c0094026fba9de41988466ad5c040",
+    "scope": "public CPU3D producer / MultiMesh order; no raster pixels or CPU fixture physical-retirement qualification",
+    "reviewer_build_GPU_or_Dwrites": false
+  }
+}

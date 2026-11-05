@@ -1357,7 +1357,9 @@ void CPUParticles3D::_update_particle_data_buffer() {
 				if (local_coords) {
 					// will look different from Particles in editor as this is based on the camera in the scenetree
 					// and not the editor camera
-					dir = inv_emission_transform.xform(dir).normalized();
+					// Local points are projected in world space: dot(d, B * p)
+					// equals dot(B.transposed() * d, p), including scale and shear.
+					dir = get_global_transform().basis.transposed().xform(dir).normalized();
 				} else {
 					dir = dir.normalized();
 				}
