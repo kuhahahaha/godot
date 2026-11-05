@@ -38,7 +38,7 @@ Error ExternalOutputStorage::allocate_instance192(uint32_t p_capacity, uint32_t 
 	if (attempted || retirement_requested) {
 		return ERR_ALREADY_IN_USE;
 	}
-	if (p_capacity > (1u << 20) || p_surface_count == 0 || p_surface_count > 8) {
+	if (p_capacity > (1u << 20) || p_surface_count == 0 || p_surface_count > ExternalOutputConfig::MAX_FLATTENED_SURFACES) {
 		return ERR_INVALID_PARAMETER;
 	}
 	const Error ready = device._native_disposal_preflight();

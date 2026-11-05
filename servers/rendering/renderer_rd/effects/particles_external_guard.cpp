@@ -1,9 +1,36 @@
 /**************************************************************************/
 /*  particles_external_guard.cpp                                          */
 /**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
 
 #include "particles_external_guard.h"
 
+#include "servers/rendering/renderer_rd/storage_rd/external_output_config.h"
 #include "servers/rendering/rendering_server.h"
 
 namespace RendererRD {
@@ -74,7 +101,7 @@ Error ParticlesExternalGuard::prepare_pipelines() {
 		modes.push_back("\n#define MODE_INIT\n#define MODE_EMPTY\n");
 		modes.push_back("\n#define MODE_FINALIZE\n#define MODE_EMPTY\n");
 		shader = memnew(ParticlesExternalGuardShaderRD);
-		shader->initialize(modes);
+		shader->initialize(modes, "\n#define EXTERNAL_MAX_SURFACES " + uitos(ExternalOutputConfig::MAX_FLATTENED_SURFACES) + "u\n");
 		initialized = true;
 	}
 	shader_version = shader->version_create();
@@ -125,7 +152,7 @@ Error ParticlesExternalGuard::release_pipelines() {
 }
 
 Error ParticlesExternalGuard::plan_layout(const PushConstant &p_request, const Bindings &p_bindings, const GeometryProofHeader &p_proof, uint32_t p_max_groups_x, LayoutPlan &r_plan) {
-	if (p_request.capacity > (1u << 20) || p_request.surface_count == 0 || p_request.surface_count > 8 ||
+	if (p_request.capacity > (1u << 20) || p_request.surface_count == 0 || p_request.surface_count > ExternalOutputConfig::MAX_FLATTENED_SURFACES ||
 			p_request.record_base != 0 || p_request.record_count != p_request.capacity || p_request.reserved0 != 0 || p_request.reserved1 != 0 || p_max_groups_x == 0) {
 		return ERR_INVALID_PARAMETER;
 	}
@@ -169,6 +196,9 @@ Error ParticlesExternalGuard::plan_layout(const PushConstant &p_request, const B
 	plan.finalize = plan.initialize;
 	// Each mode needs its own closed dispatch with an intervening compute
 	// barrier. No aggregate status may be finalized inside validation dispatch.
+	// Group limits bound lanes, not work credit: each lane checks every actual
+	// flattened surface (and its eight corners). The original owner must admit
+	// that capacity * surface_count work before recording these chunks.
 	const uint64_t chunk_capacity = MIN(uint64_t(p_max_groups_x) * 64, uint64_t(p_request.capacity));
 	for (uint32_t base = 0; base < p_request.capacity;) {
 		PushConstant chunk = p_request;

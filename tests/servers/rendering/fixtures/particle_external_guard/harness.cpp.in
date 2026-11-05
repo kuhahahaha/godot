@@ -93,6 +93,40 @@ void expect(uint bits,uint count,const char *name){
   }
  }
 }
+
+void add_surfaces(uint count){
+ SurfaceProof item=proof.surfaces[0];proof.surfaces.assign(count,item);params.surface_count=count;commands.words.assign(count*5u,0xdeadbeef);
+}
+void flattened_surfaces(){
+ healthy(0);add_surfaces(9);execute();
+ if(commands.words[40]!=0){std::cerr<<"ninth initialized command expected zero\n";std::abort();}
+ expect(0,0,"nine source zero");
+
+ for(uint surfaces:{9u,uint(EXTERNAL_MAX_SURFACES)}){
+  healthy();add_surfaces(surfaces);execute();expect(0,1,"flattened surface table");
+  healthy(0,0);add_surfaces(surfaces);execute();expect(0,0,"flattened capacity zero");
+ }
+ healthy();add_surfaces(9);proof.surfaces[8].command.y=0;execute();expect(4,0,"invalid ninth surface");
+ healthy();add_surfaces(9);proof.surfaces[8].current_displacement_min.x=2;proof.surfaces[8].current_displacement_max.x=2;execute();expect(64,0,"ninth surface bounds escape");
+ assert(scratch.words[9]==8u);
+ healthy();add_surfaces(9);current_records.words[46]|=2;previous_records.words[3]=floatBitsToUint(2);execute();expect(64,0,"nine surfaces previous failure disjoint");assert(scratch.words[9]==9u);
+ healthy(2);add_surfaces(9);current_records.words[48]=0x7fc00000;execute();expect(16,0,"nine surfaces next ordinal disjoint");assert(scratch.words[9]==18u);
+ params.surface_count=EXTERNAL_MAX_SURFACES;assert(failure_ordinal((1u<<20u)-1u,true)+(EXTERNAL_MAX_SURFACES-1u)==0xffffffffu); // Max owner-admitted encoding, no arithmetic wrap.
+
+ healthy();add_surfaces(9);proof.surfaces.resize(8);execute();expect(4,0,"truncated ninth proof clears all commands");
+ healthy();add_surfaces(9);commands.words.resize(44);execute();expect(4,0,"truncated ninth command");
+ for(uint count:{0u,uint(EXTERNAL_MAX_SURFACES)+1u,0xffffffffu/5u+1u,0xffffffffu}){
+  healthy();add_surfaces(9);params.surface_count=count;execute();expect(4,0,"malformed surface count bounded clear");
+ }
+ // Even another in-bounds table shape cannot reuse an earlier INIT.
+ for(uint initial:{1u,9u}){
+  healthy();add_surfaces(9);params.surface_count=initial;gl_GlobalInvocationID.x=0;shader_INIT();
+  params.surface_count=initial==1u?9u:1u;shader_VALIDATE();shader_FINALIZE();expect(4,0,"changed valid later-mode count");
+ }
+ // A differently shaped later mode cannot reuse healthy INIT metadata.
+ healthy();add_surfaces(9);gl_GlobalInvocationID.x=0;shader_INIT();params.surface_count=0xffffffffu;shader_VALIDATE();shader_FINALIZE();expect(4,0,"changed later-mode count");
+}
+
 int main(){
  healthy();execute();expect(0,1,"healthy");
  healthy(0);execute();expect(0,0,"source zero");
@@ -146,5 +180,6 @@ int main(){
  // The exact production interval routines must include exact-real products.
  bool valid=true;vec2 p=multiply_interval(vec2(.25),vec2(2),valid);assert(valid&&p.x<=.5&&p.y>=.5);checks++;
  valid=true;multiply_interval(vec2(std::numeric_limits<float>::max()),vec2(2),valid);assert(!valid);checks++;
+ flattened_surfaces();
  std::cout<<checks<<" CPU production-control/interval cases PASS (sequential, no GPU claim)\n";
 }

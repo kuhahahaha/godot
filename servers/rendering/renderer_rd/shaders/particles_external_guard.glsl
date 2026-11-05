@@ -1,8 +1,42 @@
+/**************************************************************************/
+/*  particles_external_guard.glsl                                         */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
 #[compute]
 
 #version 450
 
 #VERSION_DEFINES
+
+#ifndef EXTERNAL_MAX_SURFACES
+#error The original owner must supply the bounded flattened native surface limit.
+#endif
 
 #if defined(MODE_EMPTY) && defined(MODE_VALIDATE)
 #error Empty packets have no record validation dispatch.
@@ -15,14 +49,35 @@
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 #ifndef MODE_EMPTY
-layout(set = 0, binding = 0, std430) restrict readonly buffer CurrentRecords { uint words[]; } current_records;
-layout(set = 0, binding = 1, std430) restrict readonly buffer PreviousRecords { uint words[]; } previous_records;
+layout(set = 0, binding = 0, std430) restrict readonly buffer CurrentRecords {
+	uint words[];
+}
+current_records;
+layout(set = 0, binding = 1, std430) restrict readonly buffer PreviousRecords {
+	uint words[];
+}
+previous_records;
 #endif
-layout(set = 0, binding = 2, std430) restrict readonly buffer OutputMetadata { uint words[]; } output_meta;
-layout(set = 0, binding = 3, std430) restrict readonly buffer SourceBacking { uint words[]; } source;
-layout(set = 0, binding = 4, std430) restrict buffer GuardScratch { uint words[]; } scratch;
-layout(set = 0, binding = 5, std430) restrict buffer GuardStatus { uint words[]; } status;
-layout(set = 0, binding = 6, std430) restrict buffer ProtectedCommands { uint words[]; } commands;
+layout(set = 0, binding = 2, std430) restrict readonly buffer OutputMetadata {
+	uint words[];
+}
+output_meta;
+layout(set = 0, binding = 3, std430) restrict readonly buffer SourceBacking {
+	uint words[];
+}
+source;
+layout(set = 0, binding = 4, std430) restrict buffer GuardScratch {
+	uint words[];
+}
+scratch;
+layout(set = 0, binding = 5, std430) restrict buffer GuardStatus {
+	uint words[];
+}
+status;
+layout(set = 0, binding = 6, std430) restrict buffer ProtectedCommands {
+	uint words[];
+}
+commands;
 
 struct SurfaceProof {
 	vec4 current_mesh_min;
@@ -49,7 +104,8 @@ layout(set = 0, binding = 7, std430) restrict readonly buffer GeometryProof {
 	uvec4 source_accessor;
 	uvec4 options; // history permitted (0/1), three reserved zero words
 	SurfaceProof surfaces[];
-} proof;
+}
+proof;
 
 layout(push_constant, std430) uniform Params {
 	uint capacity;
@@ -60,7 +116,8 @@ layout(push_constant, std430) uniform Params {
 	uint record_count;
 	uint reserved0;
 	uint reserved1;
-} params;
+}
+params;
 
 const uint SOURCE_FAULT = 1u;
 const uint COUNT_FAULT = 2u;
@@ -156,6 +213,13 @@ bool contained(vec2 x, vec2 y, vec2 z, vec3 lower, vec3 upper) {
 			x.y <= upper.x && y.y <= upper.y && z.y <= upper.z;
 }
 
+// Preserve the existing <=8-surface diagnostic layout, while reserving a
+// disjoint current/previous span for every surface of larger native tables.
+uint failure_ordinal(uint ordinal, bool previous) {
+	uint stride = max(8u, params.surface_count);
+	return ordinal * (2u * stride) + (previous ? stride : 0u);
+}
+
 #ifndef MODE_EMPTY
 uint read_record(uint base, uint index, bool previous) {
 	return previous ? previous_records.words[base + index] : current_records.words[base + index];
@@ -168,7 +232,7 @@ vec4 read_row(uint base, uint offset, bool previous) {
 
 uint validate_record(uint ordinal, bool previous, out uint first_failure) {
 	first_failure = 0xffffffffu;
-	uint failure_base = ordinal * 16u + (previous ? 8u : 0u);
+	uint failure_base = failure_ordinal(ordinal, previous);
 	uint base = ordinal * RECORD_WORDS;
 	uint record_fault = 0u;
 	for (uint i = 0u; i < 44u; i++) {
@@ -181,8 +245,7 @@ uint validate_record(uint ordinal, bool previous, out uint first_failure) {
 			read_record(base, 15u, previous) != 0u || read_record(base, 19u, previous) != 0u || read_record(base, 23u, previous) != 0u) {
 		record_fault |= NUMERIC_FAULT;
 	}
-	if (previous && (read_record(base, 44u, true) != read_record(base, 44u, false) ||
-			read_record(base, 45u, true) != read_record(base, 45u, false))) {
+	if (previous && (read_record(base, 44u, true) != read_record(base, 44u, false) || read_record(base, 45u, true) != read_record(base, 45u, false))) {
 		record_fault |= HISTORY_FAULT;
 	}
 	if (record_fault != 0u) {
@@ -239,11 +302,19 @@ uint validate_record(uint ordinal, bool previous, out uint first_failure) {
 
 #endif
 
+bool valid_surface_span() {
+	// Divide the actual runtime command extent before comparing; never multiply
+	// an untrusted count. The same Core owner supplies EXTERNAL_MAX_SURFACES.
+	return params.surface_count > 0u && params.surface_count <= EXTERNAL_MAX_SURFACES &&
+			params.surface_count <= uint(commands.words.length()) / 5u && params.surface_count <= uint(proof.surfaces.length());
+}
+
 void initialize_guard() {
 	for (uint i = 0u; i < 16u; i++) {
 		scratch.words[i] = 0u;
 	}
 	scratch.words[9] = 0xffffffffu;
+	scratch.words[11] = params.surface_count; // Immutable physical table shape for later modes.
 	for (uint i = 0u; i < 8u; i++) {
 		status.words[i] = 0u;
 	}
@@ -251,8 +322,9 @@ void initialize_guard() {
 	status.words[5] = params.sequence_high;
 	status.words[6] = 1u;
 	// Extents are also preflighted by the owner; range guards prevent OOB if a
-	// malformed component caller violates that precondition.
-	for (uint i = 0u; i < min(params.surface_count, 8u) * 5u && i < uint(commands.words.length()); i++) {
+	// malformed component caller violates that precondition. Clear the entire
+	// bounded physical command table even when count/proof metadata is corrupt.
+	for (uint i = 0u; i < min(EXTERNAL_MAX_SURFACES * 5u, uint(commands.words.length())); i++) {
 		commands.words[i] = 0u;
 	}
 	uint initial_fault = 0u;
@@ -261,9 +333,8 @@ void initialize_guard() {
 		initial_fault |= COUNT_FAULT;
 	}
 #endif
-	if (params.surface_count == 0u || params.surface_count > 8u || params.capacity > (1u << 20u) ||
-			params.reserved0 != 0u || params.reserved1 != 0u ||
-			uint(commands.words.length()) < params.surface_count * 5u || uint(proof.surfaces.length()) < params.surface_count) {
+	if (!valid_surface_span() || params.capacity > (1u << 20u) ||
+			params.reserved0 != 0u || params.reserved1 != 0u) {
 		initial_fault |= META_FAULT;
 	}
 	if (uint(output_meta.words.length()) < 8u) {
@@ -308,7 +379,7 @@ void initialize_guard() {
 			initial_fault |= NUMERIC_FAULT;
 		}
 	}
-	for (uint i = 0u; i < min(min(params.surface_count, 8u), uint(proof.surfaces.length())); i++) {
+	for (uint i = 0u; i < min(min(params.surface_count, EXTERNAL_MAX_SURFACES), uint(proof.surfaces.length())); i++) {
 		SurfaceProof bound = proof.surfaces[i];
 		if (!bounds_shape(bound.current_mesh_min, bound.current_mesh_max, false) ||
 				!bounds_shape(bound.previous_mesh_min, bound.previous_mesh_max, false) ||
@@ -338,6 +409,15 @@ void main() {
 	}
 #endif
 #ifdef MODE_VALIDATE
+	// A later mode cannot rely on metadata from a differently shaped INIT.
+	if (!valid_surface_span() || params.surface_count != scratch.words[11]) {
+		if (gl_GlobalInvocationID.x == 0u) {
+			fault(META_FAULT, 0u);
+		}
+		return;
+	}
+#endif
+#ifdef MODE_VALIDATE
 	uint lane = gl_GlobalInvocationID.x;
 	if (params.record_base > params.capacity || params.record_count > params.capacity - params.record_base) {
 		if (lane == 0u) {
@@ -355,7 +435,7 @@ void main() {
 	}
 	uint current_capacity = uint(current_records.words.length()) / RECORD_WORDS;
 	if (ordinal >= current_capacity) {
-		fault(COUNT_FAULT, ordinal * 16u);
+		fault(COUNT_FAULT, failure_ordinal(ordinal, false));
 		return;
 	}
 	uint first_failure;
@@ -364,7 +444,7 @@ void main() {
 	if ((flags & 2u) != 0u) {
 		if (proof.options.x == 0u || ordinal >= uint(previous_records.words.length()) / RECORD_WORDS) {
 			bits |= HISTORY_FAULT;
-			first_failure = min(first_failure, ordinal * 16u + 8u);
+			first_failure = min(first_failure, failure_ordinal(ordinal, true));
 		} else {
 			uint previous_failure;
 			bits |= validate_record(ordinal, true, previous_failure);
@@ -378,6 +458,9 @@ void main() {
 #ifdef MODE_FINALIZE
 	if (gl_GlobalInvocationID.x != 0u) {
 		return;
+	}
+	if (!valid_surface_span() || params.surface_count != scratch.words[11]) {
+		fault(META_FAULT, 0u);
 	}
 	uint bits = scratch.words[8];
 	status.words[0] = bits;

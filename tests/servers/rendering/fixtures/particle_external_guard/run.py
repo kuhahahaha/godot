@@ -28,8 +28,16 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--shader', type=Path, default=SHADER)
     parser.add_argument('--mutations', action='store_true')
+    parser.add_argument('--native-source-root', type=Path, default=ROOT)
     args = parser.parse_args()
     source = args.shader.read_text()
+    # Derive the same bound as the original Core owner; no mesh-RID limit is
+    # substituted for the flattened surface count in either translation.
+    config = (SHADER.parent.parent / 'storage_rd/external_output_config.h').read_text()
+    enums = (args.native_source_root / 'servers/rendering/rendering_server_enums.h').read_text()
+    mesh_rids = int(re.search(r'MAX_MESH_RIDS = (\d+)', config)[1])
+    mesh_surfaces = int(re.search(r'MAX_MESH_SURFACES = (\d+)', enums)[1])
+    surface_limit = mesh_rids * mesh_surfaces
     glsl = source.replace('#[compute]\n', '').replace('#VERSION_DEFINES', '')
     tools = {name: shutil.which(name) for name in ('glslangValidator', 'spirv-val', 'spirv-dis', 'clang++')}
     if not all(tools.values()):
@@ -38,7 +46,7 @@ def main():
         temp = Path(directory)
         for mode in ('INIT', 'VALIDATE', 'FINALIZE', 'INIT_EMPTY', 'FINALIZE_EMPTY'):
             shader = temp / (mode + '.comp')
-            defines = '#define MODE_' + mode.removesuffix('_EMPTY') + '\n'
+            defines = '#define EXTERNAL_MAX_SURFACES ' + str(surface_limit) + 'u\n#define MODE_' + mode.removesuffix('_EMPTY') + '\n'
             if mode.endswith('_EMPTY'):
                 defines += '#define MODE_EMPTY\n'
             shader.write_text(glsl.replace('#version 450', '#version 450\n' + defines))
@@ -71,7 +79,7 @@ def main():
             for swizzle in ('xyz', 'yzw', 'zw'):
                 text = re.sub(r'\.' + swizzle + r'\b', '.' + swizzle + '()', text)
             return text
-        functions = translate(body)
+        functions = '#define EXTERNAL_MAX_SURFACES ' + str(surface_limit) + 'u\n' + translate(body)
         for mode in ('INIT', 'VALIDATE', 'FINALIZE'):
             selected = re.sub(r'#ifdef MODE_(INIT|VALIDATE|FINALIZE)\n(.*?)#endif',
                               lambda m: m[2] if m[1] == mode else '', main_body, flags=re.S)
@@ -85,6 +93,8 @@ def main():
         print(run([str(binary)]), end='')
     if args.mutations:
         mutations = (
+            ('init_first_eight_only', 'i < min(EXTERNAL_MAX_SURFACES * 5u, uint(commands.words.length()))', 'i < min(8u * 5u, uint(commands.words.length()))', 'ninth initialized command expected'),
+            ('check_first_eight_only', 'min(min(params.surface_count, EXTERNAL_MAX_SURFACES), uint(proof.surfaces.length()))', 'min(min(params.surface_count, 8u), uint(proof.surfaces.length()))', 'invalid ninth surface expected'),
             ('ignore_source_validity', 'uint raw_validity = source.words[proof.source_accessor.y];', 'uint raw_validity = 1u;', 'invalid source expected'),
             ('ignore_bounds', 'record_fault |= BOUNDS_FAULT;', 'record_fault |= 0u;', 'current bounds escape expected'),
             ('ignore_history', 'if ((flags & 2u) != 0u) {', 'if (false) {', 'valid previous escape expected'),
@@ -94,7 +104,7 @@ def main():
                 assert source.count(before) == 1, name
                 mutated = Path(directory) / (name + '.glsl')
                 mutated.write_text(source.replace(before, after))
-                result = subprocess.run([sys.executable, str(Path(__file__).resolve()), '--shader', str(mutated)], text=True, capture_output=True)
+                result = subprocess.run([sys.executable, str(Path(__file__).resolve()), '--shader', str(mutated), '--native-source-root', str(args.native_source_root)], text=True, capture_output=True)
                 assert result.returncode != 0 and diagnostic in result.stderr, (name, result.stdout, result.stderr)
                 print(name + ': expected RED confirmed')
     print(json.dumps({'gpu_execution': False, 'provenance_bridge': False, 'component_only': True}))

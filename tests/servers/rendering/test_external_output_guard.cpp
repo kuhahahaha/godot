@@ -1,8 +1,35 @@
 /**************************************************************************/
 /*  test_external_output_guard.cpp                                        */
 /**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
 
 #include "servers/rendering/renderer_rd/effects/particles_external_guard.h"
+#include "servers/rendering/renderer_rd/storage_rd/external_output_config.h"
 #include "tests/test_macros.h"
 
 TEST_FORCE_LINK(test_external_output_guard)
@@ -184,6 +211,33 @@ TEST_CASE("[ExternalOutputGuard] invalid shape cannot enlarge dispatch or expose
 	request.reserved1 = 1;
 	rejects_unchanged(request, bindings, source_header());
 	rejects_unchanged(valid, bindings, source_header(), 0);
+}
+
+TEST_CASE("[ExternalOutputGuard] flattened native surfaces exceed mesh RID count with exact protected extents") {
+	using Config = RendererRD::ExternalOutputConfig;
+	CHECK(Config::MAX_MESH_RIDS == 8);
+	CHECK(Config::MAX_FLATTENED_SURFACES == Config::MAX_MESH_RIDS * RenderingServerEnums::MAX_MESH_SURFACES);
+	for (uint32_t surfaces : { 9u, Config::MAX_FLATTENED_SURFACES }) {
+		for (uint32_t capacity : { 0u, 3u }) {
+			const auto request = request_for(capacity, surfaces);
+			const auto bindings = bindings_for(capacity, surfaces);
+			Guard::LayoutPlan plan;
+			REQUIRE(Guard::plan_layout(request, bindings, source_header(), 1, plan) == OK);
+			CHECK(plan.initialize.surface_count == surfaces);
+			CHECK(plan.finalize.surface_count == surfaces);
+			CHECK(plan.initialize_mode == (capacity == 0 ? Guard::INIT_EMPTY : Guard::INIT));
+			CHECK(plan.validation_chunks.size() == (capacity == 0 ? 0 : 1));
+			for (uint32_t binding : { uint32_t(Guard::PROTECTED_COMMANDS), uint32_t(Guard::GEOMETRY_PROOF) }) {
+				auto truncated = bindings;
+				truncated.buffers[binding].byte_length -= 4;
+				rejects_unchanged(request, truncated, source_header());
+			}
+		}
+	}
+	for (uint32_t count : { Config::MAX_FLATTENED_SURFACES + 1, UINT32_MAX / 5 + 1, UINT32_MAX }) {
+		// Correct u64 sizes cannot admit a table beyond the native owner bound.
+		rejects_unchanged(request_for(0, count), bindings_for(0, count), source_header());
+	}
 }
 
 } // namespace TestExternalOutputGuard

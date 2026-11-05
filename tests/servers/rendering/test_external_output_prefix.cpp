@@ -28,6 +28,7 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
+#include "servers/rendering/renderer_rd/storage_rd/external_output_config.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_storage.h"
 #include "tests/servers/rendering/transfer_test_driver_base.h"
 #include "tests/test_macros.h"
@@ -209,6 +210,7 @@ TEST_CASE("[RenderingDevice][ExternalOutputPrefix] all sizes preflight before na
 	driver.storage = storage;
 	CHECK(Access::allocate(*storage, UINT32_MAX) == ERR_INVALID_PARAMETER);
 	CHECK(Access::allocate(*storage, 1, UINT32_MAX) == ERR_INVALID_PARAMETER);
+	CHECK(Access::allocate(*storage, 1, RendererRD::ExternalOutputConfig::MAX_FLATTENED_SURFACES + 1) == ERR_INVALID_PARAMETER);
 	CHECK(Access::allocate(*storage, 1, 0) == ERR_INVALID_PARAMETER);
 	CHECK(driver.creates == 0);
 	CHECK(Access::destroy(storage) == OK);
@@ -318,4 +320,33 @@ TEST_CASE("[RenderingDevice][ExternalOutputPrefix] wrong device owner cannot clo
 	CHECK(Access::destroy(storage) == OK);
 	Access::detach(rd);
 }
+} // namespace TestExternalOutputPrefix
+
+namespace TestExternalOutputPrefix {
+TEST_CASE("[RenderingDevice][ExternalOutputPrefix] flattened surface table allocates beyond eight mesh RIDs") {
+	using Config = RendererRD::ExternalOutputConfig;
+	for (uint32_t surfaces : { 9u, Config::MAX_FLATTENED_SURFACES }) {
+		for (uint32_t capacity : { 0u, 1u }) {
+			RenderingDevice rd;
+			Driver driver;
+			Access::attach(rd, driver);
+			Storage *storage = Access::make(rd);
+			driver.storage = storage;
+			REQUIRE(Access::allocate(*storage, capacity, surfaces) == OK);
+			Access::Report report;
+			REQUIRE(Access::observe(*storage, report) == OK);
+			CHECK(report.resources[5].bytes == surfaces * 20);
+			CHECK(report.resources[6].bytes == 224 + surfaces * 144);
+			CHECK(driver.creates == (capacity == 0 ? 5u : 7u));
+			CHECK(Access::destroy(storage) == ERR_BUSY);
+			CHECK(Access::retire(*storage) == OK);
+			CHECK(driver.returned.is_empty());
+			Access::dispose(rd);
+			CHECK(driver.returned.size() == driver.creates);
+			CHECK(Access::destroy(storage) == OK);
+			Access::detach(rd);
+		}
+	}
+}
+
 } // namespace TestExternalOutputPrefix
