@@ -89,8 +89,10 @@ struct ProductionActionRows {
 	const GDExtensionProductionActionV1 *legacy = nullptr;
 	const GDExtensionProductionActionV2 *ordinal = nullptr;
 	bool aligned() const {
-		const void *p = legacy ? static_cast<const void *>(legacy) : ordinal;
-		return p && uintptr_t(p) % (legacy ? alignof(GDExtensionProductionActionV1) : alignof(GDExtensionProductionActionV2)) == 0;
+		if (legacy) {
+			return uintptr_t(legacy) % alignof(GDExtensionProductionActionV1) == 0;
+		}
+		return ordinal && uintptr_t(ordinal) % alignof(GDExtensionProductionActionV2) == 0;
 	}
 	GDExtensionProductionActionV2 operator[](uint32_t index) const {
 		if (ordinal) {
@@ -114,8 +116,10 @@ struct ProductionReadbackRows {
 	const GDExtensionProductionReadbackV2 *ordinal = nullptr;
 	uint64_t canonical_begin = 0;
 	bool aligned() const {
-		const void *p = legacy ? static_cast<const void *>(legacy) : ordinal;
-		return p && uintptr_t(p) % (legacy ? alignof(GDExtensionProductionReadbackV1) : alignof(GDExtensionProductionReadbackV2)) == 0;
+		if (legacy) {
+			return uintptr_t(legacy) % alignof(GDExtensionProductionReadbackV1) == 0;
+		}
+		return ordinal && uintptr_t(ordinal) % alignof(GDExtensionProductionReadbackV2) == 0;
 	}
 	GDExtensionProductionReadbackV2 operator[](uint32_t index) const {
 		if (ordinal) {
