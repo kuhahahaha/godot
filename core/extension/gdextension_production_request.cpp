@@ -57,7 +57,6 @@ bool separate(const void *a, size_t an, const void *b, size_t bn) {
 	auto x = uintptr_t(a), y = uintptr_t(b);
 	return x <= y ? an <= y - x : bn <= x - y;
 }
-constexpr GDExtensionDeviceExitAbi ABI = { 1, sizeof(GDExtensionDeviceExitAbi), 0 };
 bool add_layout(uint64_t &offset, uint64_t count, uint64_t bytes, uint64_t alignment) {
 	const uint64_t padding = (alignment - offset % alignment) % alignment;
 	if (padding > UINT64_MAX - offset) {
@@ -100,7 +99,7 @@ bool same_native_observation(const NativeSourceObservation &a, const NativeSourc
 }
 } //namespace
 Error Registry::production_layout(const GDExtensionProductionCapacityV1 &c, GDExtensionProductionMetadataQuoteV1 &out, uint32_t current_commands, uint32_t workers) {
-	if (!abi(c.abi) || !c.requests || !c.suboperations || !c.resources || c.requests > c.suboperations || c.requests > c.resources || c.resource_uses < c.resources || c.graph_memberships < c.suboperations || c.native_memberships < c.suboperations || c.return_cells < c.resources || c.readbacks > c.suboperations) {
+	if (!production_dto_valid(c) || !c.requests || !c.suboperations || !c.resources || c.requests > c.suboperations || c.requests > c.resources || c.resource_uses < c.resources || c.graph_memberships < c.suboperations || c.native_memberships < c.suboperations || c.return_cells < c.resources || c.readbacks > c.suboperations) {
 		return ERR_INVALID_PARAMETER;
 	}
 	// Report counters and the paged graph/native fact index use uint32_t.
@@ -137,7 +136,7 @@ Error Registry::production_layout(const GDExtensionProductionCapacityV1 &c, GDEx
 	LAYOUT(uint8_t, c.retained_payload_bytes);
 	LAYOUT(uint8_t, c.readback_bytes);
 #undef LAYOUT
-	out = { ABI, c, bytes, alignof(std::max_align_t), commands, frames, uint64_t(c.return_cells) + 1 }; // One accepted metadata entry credit.
+	out = { production_dto_abi<GDExtensionProductionMetadataQuoteV1>(), c, bytes, alignof(std::max_align_t), commands, frames, uint64_t(c.return_cells) + 1 }; // One accepted metadata entry credit.
 	return OK;
 }
 Error Registry::production_membership_bound_locked(RenderingDevice &rd, uint32_t graphs, uint32_t workers, uint32_t &out) const {
@@ -283,7 +282,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_quote(const GDExtensionDev
 	return result(OK);
 }
 GDExtensionDeviceSessionResultV1 Registry::production_accept(const GDExtensionDeviceExitAbi *a, GDExtensionDeviceExitSceneReadyContextRef frame, GDExtensionProducerRegistrationRefV1 producer, GDExtensionDeviceRegistryContextRef context, GDExtensionOriginalDeviceSessionRef session, GDExtensionDeviceExitLibraryCodeHoldRef code, const GDExtensionProductionMetadataQuoteV1 *input, GDExtensionProductionAttachmentRefV1 *out, GDExtensionProductionInstallationReportV1 *report) {
-	if (!aligned(a) || !abi(*a) || !aligned(input) || !abi(input->abi) || !aligned(out) || !aligned(report) || !separate(out, sizeof(*out), report, sizeof(*report)) || out->registry_instance || out->handle_serial) {
+	if (!aligned(a) || !abi(*a) || !aligned(input) || !production_dto_valid(*input) || !aligned(out) || !aligned(report) || !separate(out, sizeof(*out), report, sizeof(*report)) || out->registry_instance || out->handle_serial) {
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
 	MutexLock lock(mutex);
@@ -373,7 +372,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_accept(const GDExtensionDe
 	record.cleanup_by_phase[uint8_t(CleanupPhase::BINDING)] += uint32_t(quote.cleanup_slots);
 	production_attachments[slot] = attachment;
 	*out = { instance, attachment->serial };
-	*report = { ABI, GDEXTENSION_PRODUCTION_INSTALL_ACCEPTED_V1, 0, quote.allocation_bytes, 0, result(OK) };
+	*report = { production_dto_abi<GDExtensionProductionInstallationReportV1>(), GDEXTENSION_PRODUCTION_INSTALL_ACCEPTED_V1, 0, quote.allocation_bytes, 0, result(OK) };
 	return result(OK);
 }
 Error Registry::production_attachment_locked(GDExtensionProductionAttachmentRefV1 ref, bool admit, ProductionAttachment *&out, RenderingDevice *&rd) {
@@ -496,7 +495,7 @@ Error Registry::production_reserve_metadata_locked(ProductionAttachment &a, cons
 	if (e != OK) {
 		return e;
 	}
-	if (c.requests != 1 || !capacity_fits(c, a.quote.capacity) || !abi(op.abi) || !op.owner_request_nonce || !op.record_generation || op.canonical_end <= op.canonical_begin || !aligned(actions) || !aligned(resources) || (use_count && !aligned(uses)) || (readback_count && !aligned(readbacks)) || !action_count || op.canonical_end - op.canonical_begin != action_count || action_count > c.suboperations || !resource_count || resource_count > c.resources || use_count > c.resource_uses || readback_count > c.readbacks) {
+	if (!production_dto_valid(c) || c.requests != 1 || !capacity_fits(c, a.quote.capacity) || !production_dto_valid(op) || !op.owner_request_nonce || !op.record_generation || op.canonical_end <= op.canonical_begin || !aligned(actions) || !aligned(resources) || (use_count && !aligned(uses)) || (readback_count && !aligned(readbacks)) || !action_count || op.canonical_end - op.canonical_begin != action_count || action_count > c.suboperations || !resource_count || resource_count > c.resources || use_count > c.resource_uses || readback_count > c.readbacks) {
 		return ERR_INVALID_PARAMETER;
 	}
 	for (uint32_t i = 0; i < resource_count; ++i) {
@@ -763,7 +762,7 @@ Error Registry::production_freeze_locked(ProductionRequest &r) {
 	return OK;
 }
 GDExtensionDeviceSessionResultV1 Registry::production_prepare_dispatch(GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionDispatchV1 *input, const void *push, uint32_t bytes) {
-	if (!aligned(input) || !abi(input->abi) || input->reserved || input->push_bytes != bytes || (bytes && !push) || !input->groups_x || !input->groups_y || !input->groups_z) {
+	if (!aligned(input) || !production_dto_valid(*input) || input->reserved || input->push_bytes != bytes || (bytes && !push) || !input->groups_x || !input->groups_y || !input->groups_z) {
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
 	const auto value = *input;
@@ -817,7 +816,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_prepare_dispatch(GDExtensi
 	return result(OK);
 }
 GDExtensionDeviceSessionResultV1 Registry::production_prepare_copy(GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionCopyV1 *input) {
-	if (!aligned(input) || !abi(input->abi) || !input->bytes) {
+	if (!aligned(input) || !production_dto_valid(*input) || !input->bytes) {
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
 	const auto value = *input;
@@ -855,7 +854,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_prepare_copy(GDExtensionPr
 	return result(OK);
 }
 GDExtensionDeviceSessionResultV1 Registry::production_prepare_upload(GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionUploadV1 *input, const void *data, uint64_t bytes) {
-	if (!aligned(input) || !abi(input->abi) || input->reserved || !bytes || !data || bytes != input->bytes || bytes > SIZE_MAX) {
+	if (!aligned(input) || !production_dto_valid(*input) || input->reserved || !bytes || !data || bytes != input->bytes || bytes > SIZE_MAX) {
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
 	const auto value = *input;
@@ -870,7 +869,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_prepare_upload(GDExtension
 }
 GDExtensionDeviceSessionResultV1 Registry::production_prepare_upload_locked(ProductionRequest &request, const GDExtensionProductionUploadV1 &value, const void *data, uint64_t bytes) {
 	ProductionRequest *r = &request;
-	if (!abi(value.abi) || value.reserved || !bytes || !data || bytes != value.bytes || bytes > SIZE_MAX) {
+	if (!production_dto_valid(value) || value.reserved || !bytes || !data || bytes != value.bytes || bytes > SIZE_MAX) {
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
 	ProductionActionCell *a = nullptr;
@@ -985,7 +984,7 @@ Error Registry::production_observe_service(GDExtensionProductionRequestRefV1 ref
 }
 
 GDExtensionDeviceSessionResultV1 Registry::production_observe(GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionServiceBudgetV1 *budget, GDExtensionProductionReportV1 *out) {
-	if (!aligned(budget) || !abi(budget->abi) || budget->reserved || !aligned(out)) {
+	if (!aligned(budget) || !production_dto_valid(*budget) || budget->reserved || !aligned(out)) {
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
 	const Error service = production_observe_service(ref, *budget);
@@ -1001,7 +1000,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_observe(GDExtensionProduct
 }
 void Registry::production_report_locked(const ProductionRequest &r, GDExtensionProductionReportV1 &report) const {
 	report = {};
-	report.abi = ABI;
+	report.abi = production_dto_abi<GDExtensionProductionReportV1>();
 	report.operation = r.operation;
 	report.revision = r.revision;
 	if (r.capture_inflight) {
@@ -1398,6 +1397,133 @@ GDExtensionDeviceSessionResultV1 Registry::production_cancel_locked(ProductionRe
 	}
 	return result(r->effects_pending ? ERR_BUSY : OK);
 }
+GDExtensionDeviceSessionResultV1 Registry::production_release(GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionServiceBudgetV1 *input, GDExtensionProductionServiceBudgetV1 *remaining, GDExtensionProductionReportV1 *report) {
+	if (!aligned(input) || !production_dto_valid(*input) || input->reserved || !aligned(remaining) || !aligned(report) || !separate(input, sizeof(*input), remaining, sizeof(*remaining)) || !separate(input, sizeof(*input), report, sizeof(*report)) || !separate(remaining, sizeof(*remaining), report, sizeof(*report))) {
+		return result(ERR_INVALID_PARAMETER, 19);
+	}
+	const auto offered = *input;
+	*remaining = offered;
+	*report = {};
+	GDExtensionProductionServiceBudgetV1 held = {};
+	uint64_t serial = 0;
+	bool accept = false, publish = false, consume = false;
+	{
+		MutexLock lock(mutex);
+		ProductionRequest *request = nullptr;
+		RenderingDevice *rd = nullptr;
+		const Error error = production_request_locked(ref, false, request, rd);
+		if (error != OK) {
+			return result(error, 16);
+		}
+		production_report_locked(*request, *report);
+		// Release is cleanup of an exhausted or explicitly cancelled plan. No
+		// release preflight may unpin a still-declared, unrecorded suffix.
+		if (!request->cancelled && request->next_action != request->action_count) {
+			if (report->cause.native_error == OK) {
+				report->cause = result(ERR_BUSY, 16);
+			}
+			return result(ERR_BUSY, 16);
+		}
+		auto &cell = request->control;
+		if (cell.state != ProductionControlState::OWNER_CONSUMED) {
+			if (cell.input.kind != ProductionControlKind::RELEASE) {
+				return result(ERR_BUSY, 16); // Never overtake another immutable turn.
+			}
+			held = cell.input.budget;
+			serial = cell.serial;
+			if (cell.state == ProductionControlState::PENDING && !service_budget_active(held)) {
+				// This exact cell never published. Expiry returns only a proven
+				// no-effect metadata result; it does not renew the old authorization.
+				cell.output = {};
+				cell.output.request_serial = request->serial;
+				cell.output.control_serial = cell.serial;
+				cell.output.result = result(ERR_BUSY, 16);
+				cell.output.report = *report;
+				cell.state = ProductionControlState::RETURNED;
+			}
+			consume = cell.state == ProductionControlState::RETURNED;
+			publish = cell.state == ProductionControlState::PENDING && service_budget_active(offered);
+		} else {
+			if (!service_budget_active(offered)) {
+				return result(ERR_BUSY, 16); // Fresh zero/expired input is only metadata.
+			}
+			const auto ready = production_release_locked(*request, rd, false);
+			if (ready.native_error != OK) {
+				// A completed record can still own the original frame cursor.
+				// The accepted RELEASE cell services only that exact owned tail;
+				// the original reclaim preflight remains unchanged and strict.
+				bool own_tail = false;
+				if (rd && rd->_thread_safe_.try_lock()) {
+					own_tail = request->maintenance_serial && rd->native_disposal_active && request->maintenance_serial == rd->native_disposal_continuation.serial && rd->native_disposal_continuation.production_owner == request;
+					rd->_thread_safe_.unlock();
+				}
+				if (ready.native_error != ERR_BUSY || !own_tail || request->capture_inflight || request->compute_list_open || report->cause.native_error != OK || (!request->cancelled && request->next_action != request->action_count)) {
+					return ready;
+				}
+			}
+			accept = publish = true;
+		}
+		if (!consume && !accept) {
+			*remaining = held;
+			remaining->controls = remaining->receipts = remaining->passes = 0;
+			report->service_control_serial = serial;
+			report->service_pending = 1; // Entire immutable slice is still escrowed.
+		}
+	}
+	if (consume) {
+		ProductionControlOutput returned = {};
+		const Error error = production_control_consume(ref, serial, &returned);
+		if (error != OK) {
+			*remaining = held;
+			remaining->controls = remaining->receipts = remaining->passes = 0;
+			report->service_control_serial = serial;
+			report->service_pending = 1;
+			return result(error, 16);
+		}
+		*report = returned.report;
+		report->service_control_serial = serial;
+		report->service_pending = 0;
+		*remaining = held; // Only the old ABI/deadline/authorization is returned.
+		const auto &rt = returned.service_usage;
+		const auto &owner = returned.owner_usage;
+		const uint64_t passes = uint64_t(rt.passes) + owner.passes;
+		const uint64_t receipts = uint64_t(rt.receipts) + owner.receipts;
+		// The RT dispatch and owner continuation are the same unique scalar
+		// command. Owner controls is a continuation marker, never a second debit.
+		if (returned.request_serial != ref.handle_serial || returned.control_serial != serial || rt.controls > 1 || owner.controls > 1 || (owner.controls && rt.controls != 1) || rt.controls > held.controls || passes > MIN(held.passes, 64u) || receipts > MIN(held.receipts, 128u)) {
+			remaining->controls = remaining->receipts = remaining->passes = 0;
+			report->cause = result(ERR_INVALID_DATA, 19);
+			return report->cause;
+		}
+		remaining->controls -= rt.controls;
+		remaining->passes -= uint32_t(passes);
+		remaining->receipts -= uint32_t(receipts);
+		const auto completed = returned.result.native_error == OK ? returned.owner_return : returned.result;
+		if (completed.native_error != OK) {
+			report->cause = completed;
+		}
+		return completed; // Never accept offered as a new turn in this same call.
+	}
+	if (accept) {
+		const Error error = production_control_accept(ref, ProductionControlKind::RELEASE, &serial, &offered);
+		if (error != OK) {
+			return result(error, 16);
+		}
+		held = offered;
+	}
+	*remaining = held;
+	remaining->controls = remaining->receipts = remaining->passes = 0;
+	report->service_control_serial = serial;
+	report->service_pending = 1;
+	if (publish) {
+		const Error scheduled = production_control_schedule(ref, serial);
+		if (scheduled != OK && scheduled != ERR_BUSY && scheduled != ERR_UNAVAILABLE) {
+			return result(scheduled, 16);
+		}
+	}
+	return result(ERR_BUSY, 16); // Actual FIFO return is consumed on a later call.
+}
+
 GDExtensionDeviceSessionResultV1 Registry::production_release(GDExtensionProductionRequestRefV1 ref) {
 	MutexLock lock(mutex);
 	ProductionRequest *r = nullptr;
@@ -1579,7 +1705,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 	return result(OK);
 }
 GDExtensionDeviceSessionResultV1 Registry::production_installation_observe(GDExtensionProductionAttachmentRefV1 ref, const GDExtensionProductionServiceBudgetV1 *budget, GDExtensionProductionInstallationReportV1 *out) {
-	if (!aligned(budget) || !abi(budget->abi) || budget->reserved || !aligned(out)) {
+	if (!aligned(budget) || !production_dto_valid(*budget) || budget->reserved || !aligned(out)) {
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
 	MutexLock lock(mutex);
@@ -1589,7 +1715,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_installation_observe(GDExt
 	if (e != OK) {
 		return result(e, 16);
 	}
-	*out = { ABI, uint32_t(a->closing ? GDEXTENSION_PRODUCTION_INSTALL_RETURN_PENDING_V1 : GDEXTENSION_PRODUCTION_INSTALL_ACCEPTED_V1), 0, a->quote.allocation_bytes, 0, result(a->children ? ERR_BUSY : OK) };
+	*out = { production_dto_abi<GDExtensionProductionInstallationReportV1>(), uint32_t(a->closing ? GDEXTENSION_PRODUCTION_INSTALL_RETURN_PENDING_V1 : GDEXTENSION_PRODUCTION_INSTALL_ACCEPTED_V1), 0, a->quote.allocation_bytes, 0, result(a->children ? ERR_BUSY : OK) };
 	return result(OK);
 }
 Error Registry::production_entity_return_locked(ProductionAttachment &attachment) {
@@ -1711,9 +1837,9 @@ static_assert(std::is_trivially_copyable_v<ProductionControlOutput>);
 static_assert(std::is_trivially_copyable_v<ProductionControlCell>);
 
 Error Registry::production_control_accept(GDExtensionProductionRequestRefV1 ref, ProductionControlKind kind, uint64_t *out, const GDExtensionProductionServiceBudgetV1 *budget) {
-	GDExtensionProductionServiceBudgetV1 limit = { ABI, 0, 0, 0, 0, 0 };
+	GDExtensionProductionServiceBudgetV1 limit = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), 0, 0, 0, 0, 0 };
 	if (budget) {
-		if (!aligned(budget) || !abi(budget->abi) || budget->reserved) {
+		if (!aligned(budget) || !production_dto_valid(*budget) || budget->reserved) {
 			return ERR_INVALID_PARAMETER;
 		}
 		limit = *budget;
@@ -1844,10 +1970,21 @@ void Registry::production_control_execute_locked(ProductionRequest &request, Ren
 				}
 			}
 			break;
-		case ProductionControlKind::RELEASE:
-			// Only drop proven no-effect request edges; uncertain work remains retained.
-			cell.output.result = production_release_locked(request, rd, false);
-			break;
+		case ProductionControlKind::RELEASE: {
+			cell.output.service_usage.controls = cell.input.budget.controls ? 1 : 0; // One authorized dispatch; zero-budget internal metadata keeps its original path.
+			Error maintenance = OK;
+			if (rd && request.maintenance_serial) {
+				if (!service_budget_active(cell.input.budget) || !rd->_thread_safe_.try_lock()) {
+					maintenance = ERR_BUSY;
+				} else {
+					RdUnlock unlock{ rd->_thread_safe_ };
+					if (rd->native_disposal_active && request.maintenance_serial == rd->native_disposal_continuation.serial && rd->native_disposal_continuation.production_owner == &request) {
+						maintenance = production_maintenance_locked(request, *rd, cell.input.budget, cell.output.service_usage);
+					}
+				}
+			}
+			cell.output.result = maintenance == OK ? production_release_locked(request, rd, false) : result(maintenance, 16);
+		} break;
 	}
 	production_report_locked(request, cell.output.report);
 	cell.state = ProductionControlState::RETURNED;
@@ -1927,7 +2064,22 @@ Error Registry::production_control_consume(GDExtensionProductionRequestRefV1 ref
 	if (cell.input.kind == ProductionControlKind::RELEASE && retained.result.native_error == OK) {
 		// The RT has returned. Reclaim is now owned by the original owner; it must
 		// succeed before the result is consumed or the request slot becomes reusable.
-		const auto released = production_release_locked(*r, rd, true, &cell.input.budget, &retained.owner_usage);
+		auto owner_budget = cell.input.budget;
+		const auto &rt = retained.service_usage;
+		if (rt.controls > 1 || rt.controls > owner_budget.controls || rt.receipts > MIN(owner_budget.receipts, 128u) || rt.passes > MIN(owner_budget.passes, 64u)) {
+			retained.owner_return = result(ERR_INVALID_DATA, 19);
+			cell.state = ProductionControlState::OWNER_CONSUMED;
+			*out = retained;
+			return OK;
+		}
+		// One original authorization spans RT and its owner continuation. No
+		// refill or fresh deadline is permitted after the asynchronous return.
+		owner_budget.receipts = MIN(owner_budget.receipts, 128u) - rt.receipts;
+		owner_budget.passes = MIN(owner_budget.passes, 64u) - rt.passes;
+		if (!before_service_deadline(owner_budget)) {
+			owner_budget.controls = owner_budget.receipts = owner_budget.passes = 0;
+		}
+		const auto released = production_release_locked(*r, rd, true, &owner_budget, &retained.owner_usage);
 		retained.owner_return = released;
 		if (released.native_error != OK) {
 			// This owner's turn has consumed its bounded credit. Keep all unreturned

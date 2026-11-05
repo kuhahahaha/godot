@@ -342,7 +342,8 @@ Error Registry::production_retain_sources_locked(RenderingDevice &rd, uint32_t f
 }
 
 // Only the original authenticated record-window receiver may invoke this
-// private mechanical tail. No public ABI calls it before that issuer is installed.
+// private mechanical tail in its checked physical scope. Original B/Runtime
+// logical operation and window authority remain separate.
 CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest &request, RenderingDevice &rd, uint32_t index, const OriginalOperationIdentity &identity) {
 	CheckedRecordAppend observed;
 	observed.error = bind_checked_record_append(observed, identity);
@@ -576,7 +577,7 @@ Error Registry::production_close_segment_locked(ProductionRequest &request, GDEx
 	if (cutoff == UINT32_MAX || (!physical_scope_exit && request.actions[cutoff].declaration.list_boundary != GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1)) {
 		return ERR_INVALID_DATA;
 	}
-	request.segment.abi = { 1, sizeof(GDExtensionDeviceExitAbi), 0 };
+	request.segment.abi = production_dto_abi<GDExtensionProductionSegmentV1>();
 	++request.segment.segment;
 	request.segment.segment_revision = ++request.revision;
 	request.segment.first_canonical = request.operation.canonical_begin + request.segment_action_begin;

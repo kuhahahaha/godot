@@ -81,12 +81,9 @@ struct BufferReadbackSourceCapture;
 struct NativeSourceIssueView;
 // Core physical call-frame identity only. Its serial is issued by the actual
 // protected RT entry and expires on return; no Runtime/source authority.
-struct ProductionPhysicalContextRef {
-	uint64_t registry_instance = 0, frame_serial = 0;
-};
-using ProductionRecordReceiver = void (*)(void *, ProductionPhysicalContextRef,
-		GDExtensionProductionRequestRefV1, const GDExtensionProductionOperationV1 *);
-using ProductionMetadataReceiver = void (*)(void *, GDExtensionProductionAttachmentRefV1);
+using ProductionPhysicalContextRef = GDExtensionProductionPhysicalContextRefV1;
+using ProductionRecordReceiver = GDExtensionProductionRecordReceiverV1;
+using ProductionMetadataReceiver = GDExtensionProductionMetadataReceiverV1;
 class ProductionAttachment;
 class ProductionRequest;
 class ProductionResourceSlot;
@@ -939,6 +936,7 @@ public:
 	Error production_install_record_receiver(GDExtensionDeviceExitSceneReadyContextRef, GDExtensionProductionAttachmentRefV1, ProductionRecordReceiver, void *, ProductionMetadataReceiver = nullptr);
 	GDExtensionDeviceSessionResultV1 production_reserve(GDExtensionProductionAttachmentRefV1, const GDExtensionProductionOperationV1 *, const GDExtensionProductionCapacityV1 *, const GDExtensionProductionActionV1 *, uint32_t, const GDExtensionProductionResourceV1 *, uint32_t, const GDExtensionProductionUseV1 *, uint32_t, const GDExtensionProductionReadbackV1 *, uint32_t, GDExtensionProductionRequestRefV1 *);
 	Error production_record_schedule(GDExtensionProductionRequestRefV1, uint64_t *);
+	GDExtensionDeviceSessionResultV1 production_record_consume(GDExtensionProductionRequestRefV1, uint64_t, GDExtensionProductionRecordReportV1 *);
 	GDExtensionDeviceSessionResultV1 production_append(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, uint64_t, uint64_t, GDExtensionProductionAppendV1 *);
 	GDExtensionDeviceSessionResultV1 production_close_segment(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, GDExtensionProductionSegmentV1 *);
 	GDExtensionDeviceSessionResultV1 production_ack_segment(GDExtensionProductionRequestRefV1, uint64_t, uint64_t);
@@ -960,6 +958,7 @@ public:
 	GDExtensionDeviceSessionResultV1 production_copy(GDExtensionProductionRequestRefV1, uint64_t, uint32_t, void *, uint64_t, uint64_t *);
 	GDExtensionDeviceSessionResultV1 production_cancel(GDExtensionProductionRequestRefV1);
 	GDExtensionDeviceSessionResultV1 production_release(GDExtensionProductionRequestRefV1);
+	GDExtensionDeviceSessionResultV1 production_release(GDExtensionProductionRequestRefV1, const GDExtensionProductionServiceBudgetV1 *, GDExtensionProductionServiceBudgetV1 *, GDExtensionProductionReportV1 *);
 	GDExtensionDeviceSessionResultV1 production_close(GDExtensionProductionAttachmentRefV1);
 	GDExtensionDeviceSessionResultV1 production_installation_observe(GDExtensionProductionAttachmentRefV1, const GDExtensionProductionServiceBudgetV1 *, GDExtensionProductionInstallationReportV1 *);
 

@@ -226,7 +226,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_storage_retire(GDExtension
 }
 
 GDExtensionDeviceSessionResultV1 Registry::production_storage_observe(GDExtensionProductionRequestRefV1 ref, GDExtensionStorageRetireRefV1 retire, const GDExtensionProductionServiceBudgetV1 *budget, GDExtensionStorageRetireReportV1 *out) {
-	if (!valid(budget) || !valid(out) || !abi(budget->abi) || budget->reserved) {
+	if (!valid(budget) || !valid(out) || !production_dto_valid(*budget) || budget->reserved) {
 		return result(ERR_INVALID_PARAMETER);
 	}
 	// Validate the exact retire identity before any request-wide maintenance.
@@ -338,7 +338,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 			// Native shader reflection is checked on RT before the first effect.
 			for (uint32_t i = 0; i < count; ++i) {
 				const auto &binding = bindings[i];
-				if (!abi(binding.abi) || binding.set != shader_set || binding.array_element || binding.offset || binding.resource_slot >= request->resource_count || (i && bindings[i - 1].binding >= binding.binding)) {
+				if (!production_dto_valid(binding) || binding.set != shader_set || binding.array_element || binding.offset || binding.resource_slot >= request->resource_count || (i && bindings[i - 1].binding >= binding.binding)) {
 					return result(ERR_INVALID_DATA);
 				}
 				const auto &resource = request->resources[binding.resource_slot];

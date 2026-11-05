@@ -675,7 +675,7 @@ struct Access {
 			if (e != OK) {
 				return e;
 			}
-			const GDExtensionProductionOperationV1 operation = { ABI, nonce, 1, 10, 11 };
+			const GDExtensionProductionOperationV1 operation = { GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionOperationV1>(), nonce, 1, 10, 11 };
 			const GDExtensionProductionActionV1 action = { 10, GDEXTENSION_PRODUCTION_UPLOAD_V1, 0, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX };
 			const GDExtensionProductionResourceV1 resource = { GDEXTENSION_PRODUCTION_STORAGE_V1, 0, 0, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 1, 16, 0 };
 			const GDExtensionProductionUseV1 use = { 0, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 4, 0 };
@@ -685,7 +685,7 @@ struct Access {
 
 	static GDExtensionProductionCapacityV1 capacity(uint32_t n = 3) {
 		GDExtensionProductionCapacityV1 c = {};
-		c.abi = Enrollment::ABI;
+		c.abi = GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionCapacityV1>();
 		c.requests = 1;
 		c.suboperations = c.resources = c.resource_uses = c.graph_memberships = c.return_cells = n;
 		// This driver has one source per graph, no worker or hidden source.
@@ -693,7 +693,7 @@ struct Access {
 		c.native_memberships = n;
 		return c;
 	}
-	static GDExtensionProductionServiceBudgetV1 budget(uint32_t receipts = 128, uint32_t passes = 64) { return { Enrollment::ABI, OS::get_singleton()->get_ticks_usec() + 10000000, 1, receipts, passes, 0 }; }
+	static GDExtensionProductionServiceBudgetV1 budget(uint32_t receipts = 128, uint32_t passes = 64) { return { GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, receipts, passes, 0 }; }
 	static Request *setup(Enrollment &e, uint32_t n = 3) {
 		auto c = capacity(n);
 		auto a = e.accept(c);
@@ -1126,7 +1126,7 @@ struct Access {
 		ProductionAttachment *attachment = nullptr;
 		RenderingDevice *rd = nullptr;
 		Request *r = nullptr;
-		const GDExtensionProductionOperationV1 operation = { Enrollment::ABI, 171, 1, 10, 11 };
+		const GDExtensionProductionOperationV1 operation = { GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionOperationV1>(), 171, 1, 10, 11 };
 		GDExtensionProductionActionV1 action = { 10, uint32_t(dispatch ? GDEXTENSION_PRODUCTION_DISPATCH_V1 : GDEXTENSION_PRODUCTION_UPLOAD_V1), 0, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX };
 		const GDExtensionProductionResourceV1 resources[] = {
 			{ GDEXTENSION_PRODUCTION_UNIT_V1, 4, 5, GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1, 6, 0, 0 },
@@ -1218,8 +1218,8 @@ struct Access {
 				return nullptr;
 			}
 			const GDExtensionProductionSetBindingV1 bindings[] = {
-				{ Enrollment::ABI, 0, 0, 0, 1, 0, 128 },
-				{ Enrollment::ABI, 0, 1, 0, 1, 0, 128 }
+				{ GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionSetBindingV1>(), 0, 0, 0, 1, 0, 128 },
+				{ GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionSetBindingV1>(), 0, 1, 0, 1, 0, 128 }
 			};
 			e.driver.expected_set_bindings = aliases ? 2 : 1;
 			const auto set_error = create_set(e, ref, 2, 0, 0, bindings, e.driver.expected_set_bindings).native_error;
@@ -1237,7 +1237,7 @@ struct Access {
 			CHECK(e.driver.set_name.is_empty());
 #endif
 			const uint32_t push[4] = { 7, 11, 13, 17 };
-			const GDExtensionProductionDispatchV1 input = { Enrollment::ABI, 10, 0, 2, 1, 2, 3, 4, sizeof(push), 0 };
+			const GDExtensionProductionDispatchV1 input = { GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionDispatchV1>(), 10, 0, 2, 1, 2, 3, 4, sizeof(push), 0 };
 			const auto prepare_error = e.registry->production_prepare_dispatch(ref, &input, push, sizeof(push)).native_error;
 			if ((mismatch && mismatch <= 4) || mismatch == 9) {
 				CHECK(prepare_error == ERR_INVALID_DATA);
@@ -1579,7 +1579,7 @@ struct Access {
 		ProductionAttachment *attachment = nullptr;
 		RenderingDevice *rd = nullptr;
 		Request *request = nullptr;
-		const GDExtensionProductionOperationV1 operation = { Enrollment::ABI, 71, 1, 10, 13 };
+		const GDExtensionProductionOperationV1 operation = { GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionOperationV1>(), 71, 1, 10, 13 };
 		const GDExtensionProductionActionV1 actions[] = {
 			{ 10, GDEXTENSION_PRODUCTION_UPLOAD_V1, 0, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
 			{ 11, GDEXTENSION_PRODUCTION_COPY_V1, 0, 1, 2, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
@@ -1623,8 +1623,8 @@ struct Access {
 		for (uint32_t i = 0; i < 96; ++i) {
 			payload[i] = uint8_t(i ^ 0x5a);
 		}
-		const GDExtensionProductionUploadV1 upload = { Enrollment::ABI, 10, 0, 0, 0, partial ? 96u : 32u };
-		const GDExtensionProductionCopyV1 copy = { Enrollment::ABI, 11, 0, 1, 0, 0, partial ? 96u : 32u };
+		const GDExtensionProductionUploadV1 upload = { GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionUploadV1>(), 10, 0, 0, 0, partial ? 96u : 32u };
+		const GDExtensionProductionCopyV1 copy = { GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionCopyV1>(), 11, 0, 1, 0, 0, partial ? 96u : 32u };
 		const Error upload_error = Error(e.registry->production_prepare_upload(ref, &upload, payload, upload.bytes).native_error);
 		const Error copy_error = Error(e.registry->production_prepare_copy(ref, &copy).native_error);
 		const Error readback_error = Error(e.registry->production_prepare_readback(ref, 12, 0).native_error);
@@ -1878,7 +1878,7 @@ struct Access {
 			small.native_memberships = small.suboperations;
 			GDExtensionProductionMetadataQuoteV1 scalar_layout = {};
 			CHECK(e.registry->production_layout(small, scalar_layout) == OK);
-			const GDExtensionProductionOperationV1 op = { Enrollment::ABI, 201, 1, 10, 10 + small.suboperations };
+			const GDExtensionProductionOperationV1 op = { GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionOperationV1>(), 201, 1, 10, 10 + small.suboperations };
 			GDExtensionProductionActionV1 actions[2] = {
 				{ 10, GDEXTENSION_PRODUCTION_UPLOAD_V1, 0, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
 				{ 11, GDEXTENSION_PRODUCTION_UPLOAD_V1, 0, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX }
@@ -2050,7 +2050,7 @@ struct Access {
 		if (!attachment_ref.handle_serial) {
 			return nullptr;
 		}
-		const GDExtensionProductionOperationV1 op = { Enrollment::ABI, 251, 1, 10, 12 };
+		const GDExtensionProductionOperationV1 op = { GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionOperationV1>(), 251, 1, 10, 12 };
 		const GDExtensionProductionActionV1 actions[] = {
 			{ 10, GDEXTENSION_PRODUCTION_UPLOAD_V1, 0, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
 			{ 11, GDEXTENSION_PRODUCTION_READBACK_V1, 0, 1, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, 0 }
@@ -2103,7 +2103,7 @@ struct Access {
 		for (uint32_t i = 0; i < 16; ++i) {
 			payload[i] = uint8_t(i ^ 0x5a);
 		}
-		const GDExtensionProductionUploadV1 upload = { Enrollment::ABI, 10, 0, 0, 0, 16 };
+		const GDExtensionProductionUploadV1 upload = { GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionUploadV1>(), 10, 0, 0, 0, 16 };
 		const auto prepared = e.registry->production_prepare_upload(ref, &upload, payload, sizeof(payload)).native_error;
 		const auto copied = e.registry->production_prepare_readback(ref, 11, 0).native_error;
 		CHECK(prepared == OK);
@@ -2249,10 +2249,66 @@ struct Access {
 		auto b = budget(1, 1);
 		auto maintenance = [&](Request &request, ProductionServiceUsage &usage) {
 			MutexLock registry_lock(e.registry->mutex);
-			MutexLock device_lock(e.rd._thread_safe_);
+			if (!e.rd._thread_safe_.try_lock()) {
+				return ERR_BUSY; // Match original Registry service admission; never wait for RD here.
+			}
+			struct DeviceUnlock {
+				Mutex &mutex;
+				~DeviceUnlock() { mutex.unlock(); }
+			} device_unlock{ e.rd._thread_safe_ };
 			BudgetDriverGuard guard(e.driver);
 			return e.registry->production_maintenance_locked(request, e.rd, b, usage);
 		};
+#ifdef THREADS_ENABLED
+		struct Contention {
+			RenderingDevice *device;
+			Registry *registry;
+			Semaphore ready;
+			std::atomic<bool> attempt_finished{ false }, holding{ false };
+			bool timeout = false, acquired_registry = false;
+			static void run(void *data) {
+				auto &probe = *static_cast<Contention *>(data);
+				MutexLock device_lock(probe.device->_thread_safe_);
+				probe.holding.store(true, std::memory_order_release);
+				probe.ready.post();
+				// A broken blocking admission must fail boundedly, not hang the
+				// runner. The fixed path returns while this actual RD lock is held.
+				const uint64_t deadline = OS::get_singleton()->get_ticks_usec() + 5000000;
+				while (!probe.attempt_finished.load(std::memory_order_acquire) && OS::get_singleton()->get_ticks_usec() < deadline) {
+					OS::get_singleton()->delay_usec(100);
+				}
+				probe.timeout = !probe.attempt_finished.load(std::memory_order_acquire);
+				if (!probe.timeout) {
+					// Mirror the original RD -> Registry source-retention order only
+					// after the nonblocking admission has returned its Registry lock.
+					MutexLock registry_lock(probe.registry->mutex);
+					probe.acquired_registry = true;
+				}
+				probe.holding.store(false, std::memory_order_release);
+			}
+		} contention{ &e.rd, e.registry };
+		Thread contender;
+		const auto before_calls = e.driver.receipt_calls();
+		const auto before_preparations = e.driver.preparations;
+		const uint64_t before_cursor_serial = e.rd.next_native_disposal_serial;
+		contender.start(&Contention::run, &contention);
+		contention.ready.wait();
+		ProductionServiceUsage denied = {};
+		const Error blocked = maintenance(*first, denied);
+		const bool returned_while_held = contention.holding.load(std::memory_order_acquire);
+		contention.attempt_finished.store(true, std::memory_order_release);
+		contender.wait_to_finish(); // No Registry or RD lock is held by this caller.
+		CHECK(blocked == ERR_BUSY);
+		CHECK(returned_while_held);
+		CHECK_FALSE(contention.timeout);
+		CHECK(contention.acquired_registry);
+		CHECK((denied.controls == 0 && denied.receipts == 0 && denied.passes == 0));
+		CHECK(e.driver.receipt_calls() == before_calls);
+		CHECK(e.driver.preparations == before_preparations);
+		CHECK_FALSE(e.rd.native_disposal_active);
+		CHECK(e.rd.next_native_disposal_serial == before_cursor_serial);
+		CHECK(first->maintenance_serial == 0);
+#endif
 		RenderingDevice::NativeDisposalBudget native_budget{ 1, 1, b.deadline_micros };
 		auto native_step = [&]() {
 			RenderingDevice::NativeDisposalUsage usage;

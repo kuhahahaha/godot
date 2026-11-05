@@ -224,7 +224,7 @@ public:
 			slots[i][2].declaration.original_part = child->origin.shader_set;
 			slots[i][2].declaration.original_generation = child->source.generation;
 		}
-		const GDExtensionProductionSetBindingV1 binding{ { 1, 16, 0 }, 0, 0, 0, 1, 0, 64 };
+		const GDExtensionProductionSetBindingV1 binding{ GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionSetBindingV1>(), 0, 0, 0, 1, 0, 64 };
 		auto call = [&](uint32_t index, const GDExtensionQualificationResourceBackingV1 &backing, const GDExtensionProductionSetBindingV1 &expected) {
 			GDExtensionProductionSetBindingV1 bindings[2] = { expected, expected };
 			bindings[1].binding = 1;
@@ -339,6 +339,14 @@ public:
 			CHECK(child->physical.production_uses == nullptr);
 			child->bindings[0].binding = 1;
 		}
+		// Original storage/unit imports and rollback probes are restored here;
+		// only the Production binding header differs in this negative neighbor.
+		auto short_header = binding;
+		short_header.abi.struct_size = sizeof(GDExtensionDeviceExitAbi);
+		CHECK(call(0, child->backing, short_header) == ERR_INVALID_DATA);
+		CHECK_FALSE(slots[0][2].imported);
+		CHECK(child->physical.production_uses == nullptr);
+		CHECK(requests[0].binding_used == 0);
 		REQUIRE(call(0, child->backing, binding) == OK);
 		CHECK(slots[0][2].primary == set_rid);
 		CHECK(slots[0][2].use_count == 1);

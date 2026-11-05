@@ -162,6 +162,44 @@ Error Registry::production_record_schedule(GDExtensionProductionRequestRefV1 ref
 	return production_control_schedule(ref, serial);
 }
 
+GDExtensionDeviceSessionResultV1 Registry::production_record_consume(GDExtensionProductionRequestRefV1 ref, uint64_t serial, GDExtensionProductionRecordReportV1 *out) {
+	if (!window_aligned(out)) {
+		return window_result(ERR_INVALID_PARAMETER);
+	}
+	*out = {};
+	{
+		MutexLock lock(mutex);
+		ProductionRequest *request = nullptr;
+		RenderingDevice *device = nullptr;
+		Error error = production_request_locked(ref, false, request, device);
+		if (error != OK) {
+			return window_result(error);
+		}
+		if (!serial || request->control.serial != serial || request->control.input.kind != ProductionControlKind::RECORD) {
+			return window_result(ERR_DOES_NOT_EXIST);
+		}
+	}
+	ProductionControlOutput returned = {};
+	const Error error = production_control_consume(ref, serial, &returned);
+	if (error != OK) {
+		return window_result(error);
+	}
+	out->abi = production_dto_abi<GDExtensionProductionRecordReportV1>();
+	out->request_serial = returned.request_serial;
+	out->control_serial = returned.control_serial;
+	out->result = returned.result;
+	out->report = returned.report;
+	out->append = returned.append;
+	out->segment = returned.segment;
+	static_assert(uint32_t(ProductionRecordPause::NONE) == GDEXTENSION_PRODUCTION_RECORD_PAUSE_NONE_V1);
+	static_assert(uint32_t(ProductionRecordPause::SCOPE_RETURN) == GDEXTENSION_PRODUCTION_RECORD_PAUSE_SCOPE_RETURN_V1);
+	static_assert(uint32_t(ProductionRecordPause::APPEND_LIMIT) == GDEXTENSION_PRODUCTION_RECORD_PAUSE_APPEND_LIMIT_V1);
+	static_assert(uint32_t(ProductionRecordPause::UPLOAD_PREFIX) == GDEXTENSION_PRODUCTION_RECORD_PAUSE_UPLOAD_PREFIX_V1);
+	out->pause = uint32_t(returned.record_pause);
+	out->flags = (returned.append.abi.abi_version != 0 ? uint32_t(GDEXTENSION_PRODUCTION_RECORD_HAS_APPEND_V1) : 0u) | (returned.segment.segment != 0 ? uint32_t(GDEXTENSION_PRODUCTION_RECORD_HAS_SEGMENT_V1) : 0u) | (returned.report.abi.abi_version != 0 ? uint32_t(GDEXTENSION_PRODUCTION_RECORD_HAS_REPORT_V1) : 0u);
+	return window_result(OK);
+}
+
 Error Registry::production_record_receive_locked(ProductionRequest &request, RenderingDevice &device) {
 	auto &attachment = *request.attachment;
 	auto &record = records[attachment.library];
@@ -263,7 +301,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_append(ProductionPhysicalC
 	if (error != OK) {
 		return window_result(error);
 	}
-	out->abi = { 1, sizeof(GDExtensionDeviceExitAbi), 0 };
+	out->abi = production_dto_abi<GDExtensionProductionAppendV1>();
 	out->canonical_suboperation = canonical;
 	out->revision = request->revision;
 	if (revision != request->revision || request->next_action >= request->action_count || canonical != request->operation.canonical_begin + request->next_action) {

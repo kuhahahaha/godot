@@ -42,6 +42,18 @@ namespace TestProductionRequest {
 struct Access;
 }
 namespace GDExtensionDeviceExit {
+// Production candidate DTO headers describe the containing DTO. The installed
+// common DeviceExit header and qualification DTO rules are separate contracts.
+template <class T>
+constexpr GDExtensionDeviceExitAbi production_dto_abi() {
+	return { 1, sizeof(T), 0 };
+}
+template <class T>
+bool production_dto_valid(const T &value) {
+	const auto expected = production_dto_abi<T>();
+	return value.abi.abi_version == expected.abi_version && value.abi.struct_size == expected.struct_size && value.abi.reserved == 0;
+}
+
 class ProductionAttachment;
 class ProductionRequest;
 

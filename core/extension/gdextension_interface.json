@@ -6679,7 +6679,7 @@
             "name": "GDExtensionProductionAttachmentRefV1",
             "kind": "struct",
             "description": [
-                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+                "Checked Core production physical transport. Availability is not original Runtime logical source, operation or window authority."
             ],
             "members": [
                 {
@@ -6696,7 +6696,7 @@
             "name": "GDExtensionProductionRequestRefV1",
             "kind": "struct",
             "description": [
-                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+                "Checked Core production physical transport. Availability is not original Runtime logical source, operation or window authority."
             ],
             "members": [
                 {
@@ -6713,7 +6713,8 @@
             "name": "GDExtensionProductionCapacityV1",
             "kind": "struct",
             "description": [
-                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+                "Checked Core production physical transport. Availability is not original Runtime logical source, operation or window authority.",
+                "The abi header uses the original DeviceExit ABI version 1 and reserved zero; struct_size is sizeof(GDExtensionProductionCapacityV1), not sizeof(GDExtensionDeviceExitAbi). Header-size fallback is not supported."
             ],
             "members": [
                 {
@@ -6766,7 +6767,8 @@
             "name": "GDExtensionProductionMetadataQuoteV1",
             "kind": "struct",
             "description": [
-                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+                "Checked Core production physical transport. Availability is not original Runtime logical source, operation or window authority.",
+                "The abi header uses the original DeviceExit ABI version 1 and reserved zero; struct_size is sizeof(GDExtensionProductionMetadataQuoteV1), not sizeof(GDExtensionDeviceExitAbi). Header-size fallback is not supported."
             ],
             "members": [
                 {
@@ -6803,7 +6805,7 @@
             "name": "GDExtensionProductionInstallationStateV1",
             "kind": "enum",
             "description": [
-                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+                "Checked Core production physical transport. Availability is not original Runtime logical source, operation or window authority."
             ],
             "values": [
                 {
@@ -6824,7 +6826,8 @@
             "name": "GDExtensionProductionInstallationReportV1",
             "kind": "struct",
             "description": [
-                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+                "Checked Core production physical transport. Availability is not original Runtime logical source, operation or window authority.",
+                "The abi header uses the original DeviceExit ABI version 1 and reserved zero; struct_size is sizeof(GDExtensionProductionInstallationReportV1), not sizeof(GDExtensionDeviceExitAbi). Header-size fallback is not supported."
             ],
             "members": [
                 {
@@ -6857,7 +6860,8 @@
             "name": "GDExtensionProductionOperationV1",
             "kind": "struct",
             "description": [
-                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+                "Checked Core production physical transport. Availability is not original Runtime logical source, operation or window authority.",
+                "The abi header uses the original DeviceExit ABI version 1 and reserved zero; struct_size is sizeof(GDExtensionProductionOperationV1), not sizeof(GDExtensionDeviceExitAbi). Header-size fallback is not supported."
             ],
             "members": [
                 {
@@ -6886,7 +6890,7 @@
             "name": "GDExtensionProductionActionKindV1",
             "kind": "enum",
             "description": [
-                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+                "Checked Core production physical transport. Availability is not original Runtime logical source, operation or window authority."
             ],
             "values": [
                 {
@@ -6911,7 +6915,7 @@
             "name": "GDExtensionProductionResourceKindV1",
             "kind": "enum",
             "description": [
-                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+                "Checked Core production physical transport. Availability is not original Runtime logical source, operation or window authority."
             ],
             "values": [
                 {
@@ -6932,7 +6936,7 @@
             "name": "GDExtensionProductionAccessV1",
             "kind": "enum",
             "description": [
-                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+                "Checked Core production physical transport. Availability is not original Runtime logical source, operation or window authority."
             ],
             "values": [
                 {
@@ -6957,7 +6961,7 @@
             "name": "GDExtensionProductionResourceOwnershipV1",
             "kind": "enum",
             "description": [
-                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+                "Checked Core production physical transport. Availability is not original Runtime logical source, operation or window authority."
             ],
             "values": [
                 {
@@ -6974,7 +6978,7 @@
             "name": "GDExtensionProductionListBoundaryV1",
             "kind": "enum",
             "description": [
-                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+                "Checked Core production physical transport. Availability is not original Runtime logical source, operation or window authority."
             ],
             "values": [
                 {
@@ -6991,7 +6995,7 @@
             "name": "GDExtensionProductionActionV1",
             "kind": "struct",
             "description": [
-                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+                "Checked Core production physical transport. Availability is not original Runtime logical source, operation or window authority."
             ],
             "members": [
                 {
@@ -7028,7 +7032,7 @@
             "name": "GDExtensionProductionUseV1",
             "kind": "struct",
             "description": [
-                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+                "Checked Core production physical transport. Availability is not original Runtime logical source, operation or window authority."
             ],
             "members": [
                 {
@@ -7057,7 +7061,7 @@
             "name": "GDExtensionProductionResourceV1",
             "kind": "struct",
             "description": [
-                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+                "Checked Core production physical transport. Availability is not original Runtime logical source, operation or window authority."
             ],
             "members": [
                 {
@@ -7094,7 +7098,7 @@
             "name": "GDExtensionProductionReadbackV1",
             "kind": "struct",
             "description": [
-                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+                "Checked Core production physical transport. Availability is not original Runtime logical source, operation or window authority."
             ],
             "members": [
                 {
@@ -7127,7 +7131,8 @@
             "name": "GDExtensionProductionSetBindingV1",
             "kind": "struct",
             "description": [
-                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+                "Checked Core production physical transport. Availability is not original Runtime logical source, operation or window authority.",
+                "The abi header uses the original DeviceExit ABI version 1 and reserved zero; struct_size is sizeof(GDExtensionProductionSetBindingV1), not sizeof(GDExtensionDeviceExitAbi). Header-size fallback is not supported."
             ],
             "members": [
                 {
@@ -7164,7 +7169,8 @@
             "name": "GDExtensionProductionDispatchV1",
             "kind": "struct",
             "description": [
-                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+                "Checked Core production physical transport. Availability is not original Runtime logical source, operation or window authority.",
+                "The abi header uses the original DeviceExit ABI version 1 and reserved zero; struct_size is sizeof(GDExtensionProductionDispatchV1), not sizeof(GDExtensionDeviceExitAbi). Header-size fallback is not supported."
             ],
             "members": [
                 {
@@ -7213,7 +7219,8 @@
             "name": "GDExtensionProductionCopyV1",
             "kind": "struct",
             "description": [
-                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+                "Checked Core production physical transport. Availability is not original Runtime logical source, operation or window authority.",
+                "The abi header uses the original DeviceExit ABI version 1 and reserved zero; struct_size is sizeof(GDExtensionProductionCopyV1), not sizeof(GDExtensionDeviceExitAbi). Header-size fallback is not supported."
             ],
             "members": [
                 {
@@ -7250,7 +7257,8 @@
             "name": "GDExtensionProductionUploadV1",
             "kind": "struct",
             "description": [
-                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+                "Checked Core production physical transport. Availability is not original Runtime logical source, operation or window authority.",
+                "The abi header uses the original DeviceExit ABI version 1 and reserved zero; struct_size is sizeof(GDExtensionProductionUploadV1), not sizeof(GDExtensionDeviceExitAbi). Header-size fallback is not supported."
             ],
             "members": [
                 {
@@ -7283,7 +7291,7 @@
             "name": "GDExtensionProductionAppendStateV1",
             "kind": "enum",
             "description": [
-                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+                "Checked Core production physical transport. Availability is not original Runtime logical source, operation or window authority."
             ],
             "values": [
                 {
@@ -7311,7 +7319,8 @@
             "name": "GDExtensionProductionAppendV1",
             "kind": "struct",
             "description": [
-                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+                "Checked Core production physical transport. Availability is not original Runtime logical source, operation or window authority.",
+                "The abi header uses the original DeviceExit ABI version 1 and reserved zero; struct_size is sizeof(GDExtensionProductionAppendV1), not sizeof(GDExtensionDeviceExitAbi). Header-size fallback is not supported."
             ],
             "members": [
                 {
@@ -7360,7 +7369,7 @@
             "name": "GDExtensionProductionFactV1",
             "kind": "struct",
             "description": [
-                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+                "Checked Core production physical transport. Availability is not original Runtime logical source, operation or window authority."
             ],
             "members": [
                 {
@@ -7445,7 +7454,9 @@
             "name": "GDExtensionProductionReportV1",
             "kind": "struct",
             "description": [
-                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+                "Checked Core production physical transport. Availability is not original Runtime logical source, operation or window authority.",
+                "The abi header uses the original DeviceExit ABI version 1 and reserved zero; struct_size is sizeof(GDExtensionProductionReportV1), not sizeof(GDExtensionDeviceExitAbi). Header-size fallback is not supported.",
+                "release_v1 uses service_control_serial and service_pending to identify the original fixed cleanup cell and its full-slice escrow. A pending slice is not reusable; a returned old unused balance is diagnostic and must not credit a new OwnerServiceMeter or change deadline."
             ],
             "members": [
                 {
@@ -7507,6 +7518,14 @@
                 {
                     "name": "cause",
                     "type": "GDExtensionDeviceSessionResultV1"
+                },
+                {
+                    "name": "service_control_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "service_pending",
+                    "type": "uint32_t"
                 }
             ]
         },
@@ -7514,7 +7533,8 @@
             "name": "GDExtensionProductionSegmentV1",
             "kind": "struct",
             "description": [
-                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+                "Checked Core production physical transport. Availability is not original Runtime logical source, operation or window authority.",
+                "The abi header uses the original DeviceExit ABI version 1 and reserved zero; struct_size is sizeof(GDExtensionProductionSegmentV1), not sizeof(GDExtensionDeviceExitAbi). Header-size fallback is not supported."
             ],
             "members": [
                 {
@@ -7547,7 +7567,8 @@
             "name": "GDExtensionProductionServiceBudgetV1",
             "kind": "struct",
             "description": [
-                "Layout only for the production bridge candidate; not source authority or an available callable API. No production procedures are registered by this type declaration."
+                "Checked Core production physical transport. Availability is not original Runtime logical source, operation or window authority.",
+                "The abi header uses the original DeviceExit ABI version 1 and reserved zero; struct_size is sizeof(GDExtensionProductionServiceBudgetV1), not sizeof(GDExtensionDeviceExitAbi). Header-size fallback is not supported."
             ],
             "members": [
                 {
@@ -7573,6 +7594,155 @@
                 {
                     "name": "reserved",
                     "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionPhysicalContextRefV1",
+            "kind": "struct",
+            "description": [
+                "Checked Core production physical port. Original B/Runtime logical source, operation and window authority remain separate.",
+                "Core issues this opaque exact protected RT invocation identity and expires it at actual callback return. No caller phase number is accepted."
+            ],
+            "members": [
+                {
+                    "name": "registry_instance",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "frame_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionRecordReceiverV1",
+            "kind": "function",
+            "arguments": [
+                {
+                    "name": "userdata",
+                    "type": "void*"
+                },
+                {
+                    "name": "context",
+                    "type": "GDExtensionProductionPhysicalContextRefV1"
+                },
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1"
+                },
+                {
+                    "name": "operation",
+                    "type": "const GDExtensionProductionOperationV1*"
+                }
+            ],
+            "description": [
+                "Checked Core production physical port. Original B/Runtime logical source, operation and window authority remain separate.",
+                "The operation is an immutable synchronous borrow; owner retains original references. The receiver must not move owner controllers onto RT."
+            ]
+        },
+        {
+            "name": "GDExtensionProductionMetadataReceiverV1",
+            "kind": "function",
+            "arguments": [
+                {
+                    "name": "userdata",
+                    "type": "void*"
+                },
+                {
+                    "name": "attachment",
+                    "type": "GDExtensionProductionAttachmentRefV1"
+                }
+            ],
+            "description": [
+                "Checked Core production physical port. Original B/Runtime logical source, operation and window authority remain separate.",
+                "Fresh Core owner accepted-metadata entry; no physical record context is delivered. Existing authenticated ACK/returns survive new-work seal."
+            ]
+        },
+        {
+            "name": "GDExtensionProductionRecordPauseV1",
+            "kind": "enum",
+            "values": [
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_PAUSE_NONE_V1",
+                    "value": 0
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_PAUSE_SCOPE_RETURN_V1",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_PAUSE_APPEND_LIMIT_V1",
+                    "value": 2
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_PAUSE_UPLOAD_PREFIX_V1",
+                    "value": 3
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionRecordReportFlagsV1",
+            "kind": "enum",
+            "values": [
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HAS_APPEND_V1",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HAS_SEGMENT_V1",
+                    "value": 2
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HAS_REPORT_V1",
+                    "value": 4
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionRecordReportV1",
+            "kind": "struct",
+            "description": [
+                "Checked Core production physical port. Original B/Runtime logical source, operation and window authority remain separate.",
+                "One immutable fixed RECORD turn result. flags bit0 means append is present; bit1 means the latest actual sealed segment is present; bit2 means original request report is present. An older acknowledged sealed segment is not a claim that a new uncertain suffix sealed. pause 0 none, 1 scope return, 2 actual append limit, 3 known upload prefix.",
+                "The abi header uses original DeviceExit version 1, reserved zero, struct_size sizeof(GDExtensionProductionRecordReportV1)."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "request_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "control_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "pause",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "flags",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "result",
+                    "type": "GDExtensionDeviceSessionResultV1"
+                },
+                {
+                    "name": "report",
+                    "type": "GDExtensionProductionReportV1"
+                },
+                {
+                    "name": "append",
+                    "type": "GDExtensionProductionAppendV1"
+                },
+                {
+                    "name": "segment",
+                    "type": "GDExtensionProductionSegmentV1"
                 }
             ]
         }
@@ -16438,6 +16608,1331 @@
                 "type": "GDExtensionDeviceSessionResultV1",
                 "description": [
                     "Godot Error and reason for the original Registry action."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_quote_v1",
+            "since": "4.7",
+            "description": [
+                "Original checked Core production physical transport. Availability does not issue original Runtime logical source, operation or window grants.",
+                "Inputs are synchronous aligned nonaliasing native POD spans. Only the two explicitly installed callbacks and their userdata are retained under the original accepted CodeHold. Production DTO abi.struct_size is the containing DTO sizeof; reused installed qualification DTOs keep their original common header contract."
+            ],
+            "arguments": [
+                {
+                    "name": "abi",
+                    "type": "const GDExtensionDeviceExitAbi*",
+                    "description": [
+                        "Synchronous checked abi."
+                    ]
+                },
+                {
+                    "name": "scene_ready",
+                    "type": "GDExtensionDeviceExitSceneReadyContextRef",
+                    "description": [
+                        "Synchronous checked scene ready."
+                    ]
+                },
+                {
+                    "name": "producer",
+                    "type": "GDExtensionProducerRegistrationRefV1",
+                    "description": [
+                        "Synchronous checked producer."
+                    ]
+                },
+                {
+                    "name": "device_context",
+                    "type": "GDExtensionDeviceRegistryContextRef",
+                    "description": [
+                        "Synchronous checked device context."
+                    ]
+                },
+                {
+                    "name": "device_session",
+                    "type": "GDExtensionOriginalDeviceSessionRef",
+                    "description": [
+                        "Synchronous checked device session."
+                    ]
+                },
+                {
+                    "name": "capacity",
+                    "type": "const GDExtensionProductionCapacityV1*",
+                    "description": [
+                        "Synchronous checked capacity."
+                    ]
+                },
+                {
+                    "name": "out_quote",
+                    "type": "GDExtensionProductionMetadataQuoteV1*",
+                    "description": [
+                        "Synchronous checked out quote."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_accept_v1",
+            "since": "4.7",
+            "description": [
+                "Original checked Core production physical transport. Availability does not issue original Runtime logical source, operation or window grants.",
+                "Inputs are synchronous aligned nonaliasing native POD spans. Only the two explicitly installed callbacks and their userdata are retained under the original accepted CodeHold. Production DTO abi.struct_size is the containing DTO sizeof; reused installed qualification DTOs keep their original common header contract."
+            ],
+            "arguments": [
+                {
+                    "name": "abi",
+                    "type": "const GDExtensionDeviceExitAbi*",
+                    "description": [
+                        "Synchronous checked abi."
+                    ]
+                },
+                {
+                    "name": "scene_ready",
+                    "type": "GDExtensionDeviceExitSceneReadyContextRef",
+                    "description": [
+                        "Synchronous checked scene ready."
+                    ]
+                },
+                {
+                    "name": "producer",
+                    "type": "GDExtensionProducerRegistrationRefV1",
+                    "description": [
+                        "Synchronous checked producer."
+                    ]
+                },
+                {
+                    "name": "device_context",
+                    "type": "GDExtensionDeviceRegistryContextRef",
+                    "description": [
+                        "Synchronous checked device context."
+                    ]
+                },
+                {
+                    "name": "device_session",
+                    "type": "GDExtensionOriginalDeviceSessionRef",
+                    "description": [
+                        "Synchronous checked device session."
+                    ]
+                },
+                {
+                    "name": "code_hold",
+                    "type": "GDExtensionDeviceExitLibraryCodeHoldRef",
+                    "description": [
+                        "Synchronous checked code hold."
+                    ]
+                },
+                {
+                    "name": "quote",
+                    "type": "const GDExtensionProductionMetadataQuoteV1*",
+                    "description": [
+                        "Synchronous checked quote."
+                    ]
+                },
+                {
+                    "name": "out_attachment",
+                    "type": "GDExtensionProductionAttachmentRefV1*",
+                    "description": [
+                        "Synchronous checked out attachment."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionProductionInstallationReportV1*",
+                    "description": [
+                        "Synchronous checked out report."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_install_record_receiver_v1",
+            "since": "4.7",
+            "description": [
+                "Original checked Core production physical transport. Availability does not issue original Runtime logical source, operation or window grants.",
+                "Inputs are synchronous aligned nonaliasing native POD spans. Only the two explicitly installed callbacks and their userdata are retained under the original accepted CodeHold. Production DTO abi.struct_size is the containing DTO sizeof; reused installed qualification DTOs keep their original common header contract.",
+                "Both nonnull callbacks are frozen before Open, under the original accepted CodeHold; the metadata callback uses the same userdata and carries no recording context."
+            ],
+            "arguments": [
+                {
+                    "name": "scene_ready",
+                    "type": "GDExtensionDeviceExitSceneReadyContextRef",
+                    "description": [
+                        "Synchronous checked scene ready."
+                    ]
+                },
+                {
+                    "name": "attachment",
+                    "type": "GDExtensionProductionAttachmentRefV1",
+                    "description": [
+                        "Synchronous checked attachment."
+                    ]
+                },
+                {
+                    "name": "record_receiver",
+                    "type": "GDExtensionProductionRecordReceiverV1",
+                    "description": [
+                        "Synchronous checked record receiver."
+                    ]
+                },
+                {
+                    "name": "userdata",
+                    "type": "void*",
+                    "description": [
+                        "Synchronous checked userdata."
+                    ]
+                },
+                {
+                    "name": "metadata_receiver",
+                    "type": "GDExtensionProductionMetadataReceiverV1",
+                    "description": [
+                        "Synchronous checked metadata receiver."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "int32_t",
+                "description": [
+                    "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_reserve_v1",
+            "since": "4.7",
+            "description": [
+                "Original checked Core production physical transport. Availability does not issue original Runtime logical source, operation or window grants.",
+                "Inputs are synchronous aligned nonaliasing native POD spans. Only the two explicitly installed callbacks and their userdata are retained under the original accepted CodeHold. Production DTO abi.struct_size is the containing DTO sizeof; reused installed qualification DTOs keep their original common header contract.",
+                "Operation numbers, preparation and this physical transport are not original Runtime logical grants. The original B/Runtime operation/window exporter is a separate required authority before original business use."
+            ],
+            "arguments": [
+                {
+                    "name": "attachment",
+                    "type": "GDExtensionProductionAttachmentRefV1",
+                    "description": [
+                        "Synchronous checked attachment."
+                    ]
+                },
+                {
+                    "name": "operation",
+                    "type": "const GDExtensionProductionOperationV1*",
+                    "description": [
+                        "Synchronous checked operation."
+                    ]
+                },
+                {
+                    "name": "capacity",
+                    "type": "const GDExtensionProductionCapacityV1*",
+                    "description": [
+                        "Synchronous checked capacity."
+                    ]
+                },
+                {
+                    "name": "actions",
+                    "type": "const GDExtensionProductionActionV1*",
+                    "description": [
+                        "Synchronous checked actions."
+                    ]
+                },
+                {
+                    "name": "action_count",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous checked action count."
+                    ]
+                },
+                {
+                    "name": "resources",
+                    "type": "const GDExtensionProductionResourceV1*",
+                    "description": [
+                        "Synchronous checked resources."
+                    ]
+                },
+                {
+                    "name": "resource_count",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous checked resource count."
+                    ]
+                },
+                {
+                    "name": "uses",
+                    "type": "const GDExtensionProductionUseV1*",
+                    "description": [
+                        "Synchronous checked uses."
+                    ]
+                },
+                {
+                    "name": "use_count",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous checked use count."
+                    ]
+                },
+                {
+                    "name": "readbacks",
+                    "type": "const GDExtensionProductionReadbackV1*",
+                    "description": [
+                        "Synchronous checked readbacks."
+                    ]
+                },
+                {
+                    "name": "readback_count",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous checked readback count."
+                    ]
+                },
+                {
+                    "name": "out_request",
+                    "type": "GDExtensionProductionRequestRefV1*",
+                    "description": [
+                        "Synchronous checked out request."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_record_schedule_v1",
+            "since": "4.7",
+            "description": [
+                "Original checked Core production physical transport. Availability does not issue original Runtime logical source, operation or window grants.",
+                "Inputs are synchronous aligned nonaliasing native POD spans. Only the two explicitly installed callbacks and their userdata are retained under the original accepted CodeHold. Production DTO abi.struct_size is the containing DTO sizeof; reused installed qualification DTOs keep their original common header contract.",
+                "Operation numbers, preparation and this physical transport are not original Runtime logical grants. The original B/Runtime operation/window exporter is a separate required authority before original business use."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Synchronous checked request."
+                    ]
+                },
+                {
+                    "name": "out_control_serial",
+                    "type": "uint64_t*",
+                    "description": [
+                        "Synchronous checked out control serial."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "int32_t",
+                "description": [
+                    "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_record_consume_v1",
+            "since": "4.7",
+            "description": [
+                "Original checked Core production physical transport. Availability does not issue original Runtime logical source, operation or window grants.",
+                "Inputs are synchronous aligned nonaliasing native POD spans. Only the two explicitly installed callbacks and their userdata are retained under the original accepted CodeHold. Production DTO abi.struct_size is the containing DTO sizeof; reused installed qualification DTOs keep their original common header contract.",
+                "Consumes exactly one returned original RECORD control serial; Pending/Queued/Executing returns Busy without consuming. Duplicate consume fails; owner retains the copied immutable receipt."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Synchronous checked request."
+                    ]
+                },
+                {
+                    "name": "control_serial",
+                    "type": "uint64_t",
+                    "description": [
+                        "Synchronous checked control serial."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionProductionRecordReportV1*",
+                    "description": [
+                        "Synchronous checked out report."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_append_v1",
+            "since": "4.7",
+            "description": [
+                "Original checked Core production physical transport. Availability does not issue original Runtime logical source, operation or window grants.",
+                "Inputs are synchronous aligned nonaliasing native POD spans. Only the two explicitly installed callbacks and their userdata are retained under the original accepted CodeHold. Production DTO abi.struct_size is the containing DTO sizeof; reused installed qualification DTOs keep their original common header contract.",
+                "Operation numbers, preparation and this physical transport are not original Runtime logical grants. The original B/Runtime operation/window exporter is a separate required authority before original business use."
+            ],
+            "arguments": [
+                {
+                    "name": "physical_context",
+                    "type": "GDExtensionProductionPhysicalContextRefV1",
+                    "description": [
+                        "Synchronous checked physical context."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Synchronous checked request."
+                    ]
+                },
+                {
+                    "name": "canonical_suboperation",
+                    "type": "uint64_t",
+                    "description": [
+                        "Synchronous checked canonical suboperation."
+                    ]
+                },
+                {
+                    "name": "revision",
+                    "type": "uint64_t",
+                    "description": [
+                        "Synchronous checked revision."
+                    ]
+                },
+                {
+                    "name": "out_append",
+                    "type": "GDExtensionProductionAppendV1*",
+                    "description": [
+                        "Synchronous checked out append."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_close_segment_v1",
+            "since": "4.7",
+            "description": [
+                "Original checked Core production physical transport. Availability does not issue original Runtime logical source, operation or window grants.",
+                "Inputs are synchronous aligned nonaliasing native POD spans. Only the two explicitly installed callbacks and their userdata are retained under the original accepted CodeHold. Production DTO abi.struct_size is the containing DTO sizeof; reused installed qualification DTOs keep their original common header contract."
+            ],
+            "arguments": [
+                {
+                    "name": "physical_context",
+                    "type": "GDExtensionProductionPhysicalContextRefV1",
+                    "description": [
+                        "Synchronous checked physical context."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Synchronous checked request."
+                    ]
+                },
+                {
+                    "name": "out_segment",
+                    "type": "GDExtensionProductionSegmentV1*",
+                    "description": [
+                        "Synchronous checked out segment."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_ack_segment_v1",
+            "since": "4.7",
+            "description": [
+                "Original checked Core production physical transport. Availability does not issue original Runtime logical source, operation or window grants.",
+                "Inputs are synchronous aligned nonaliasing native POD spans. Only the two explicitly installed callbacks and their userdata are retained under the original accepted CodeHold. Production DTO abi.struct_size is the containing DTO sizeof; reused installed qualification DTOs keep their original common header contract.",
+                "Requires an actual authenticated original owner entry, including the fresh Core accepted-metadata lane after seal/cancel/quiesce; a request handle or owner thread alone is insufficient."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Synchronous checked request."
+                    ]
+                },
+                {
+                    "name": "segment",
+                    "type": "uint64_t",
+                    "description": [
+                        "Synchronous checked segment."
+                    ]
+                },
+                {
+                    "name": "segment_revision",
+                    "type": "uint64_t",
+                    "description": [
+                        "Synchronous checked segment revision."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_open_v1",
+            "since": "4.7",
+            "description": [
+                "Original checked Core production physical transport. Availability does not issue original Runtime logical source, operation or window grants.",
+                "Inputs are synchronous aligned nonaliasing native POD spans. Only the two explicitly installed callbacks and their userdata are retained under the original accepted CodeHold. Production DTO abi.struct_size is the containing DTO sizeof; reused installed qualification DTOs keep their original common header contract."
+            ],
+            "arguments": [
+                {
+                    "name": "scene_ready",
+                    "type": "GDExtensionDeviceExitSceneReadyContextRef",
+                    "description": [
+                        "Synchronous checked scene ready."
+                    ]
+                },
+                {
+                    "name": "attachment",
+                    "type": "GDExtensionProductionAttachmentRefV1",
+                    "description": [
+                        "Synchronous checked attachment."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_set_create_v1",
+            "since": "4.7",
+            "description": [
+                "Original checked Core production physical transport. Availability does not issue original Runtime logical source, operation or window grants.",
+                "Inputs are synchronous aligned nonaliasing native POD spans. Only the two explicitly installed callbacks and their userdata are retained under the original accepted CodeHold. Production DTO abi.struct_size is the containing DTO sizeof; reused installed qualification DTOs keep their original common header contract."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Synchronous checked request."
+                    ]
+                },
+                {
+                    "name": "resource_slot",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous checked resource slot."
+                    ]
+                },
+                {
+                    "name": "unit_slot",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous checked unit slot."
+                    ]
+                },
+                {
+                    "name": "shader_set",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous checked shader set."
+                    ]
+                },
+                {
+                    "name": "bindings",
+                    "type": "const GDExtensionProductionSetBindingV1*",
+                    "description": [
+                        "Synchronous checked bindings."
+                    ]
+                },
+                {
+                    "name": "binding_count",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous checked binding count."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_storage_create_v1",
+            "since": "4.7",
+            "description": [
+                "Original checked Core production physical transport. Availability does not issue original Runtime logical source, operation or window grants.",
+                "Inputs are synchronous aligned nonaliasing native POD spans. Only the two explicitly installed callbacks and their userdata are retained under the original accepted CodeHold. Production DTO abi.struct_size is the containing DTO sizeof; reused installed qualification DTOs keep their original common header contract."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Synchronous checked request."
+                    ]
+                },
+                {
+                    "name": "resource_slot",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous checked resource slot."
+                    ]
+                },
+                {
+                    "name": "origin",
+                    "type": "const GDExtensionStorageCreateRequestV1*",
+                    "description": [
+                        "Synchronous checked origin."
+                    ]
+                },
+                {
+                    "name": "out_backing",
+                    "type": "GDExtensionStorageBackingV1*",
+                    "description": [
+                        "Synchronous checked out backing."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_storage_retire_v1",
+            "since": "4.7",
+            "description": [
+                "Original checked Core production physical transport. Availability does not issue original Runtime logical source, operation or window grants.",
+                "Inputs are synchronous aligned nonaliasing native POD spans. Only the two explicitly installed callbacks and their userdata are retained under the original accepted CodeHold. Production DTO abi.struct_size is the containing DTO sizeof; reused installed qualification DTOs keep their original common header contract."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Synchronous checked request."
+                    ]
+                },
+                {
+                    "name": "resource_slot",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous checked resource slot."
+                    ]
+                },
+                {
+                    "name": "origin",
+                    "type": "const GDExtensionStorageRetireRequestV1*",
+                    "description": [
+                        "Synchronous checked origin."
+                    ]
+                },
+                {
+                    "name": "out_retire",
+                    "type": "GDExtensionStorageRetireRefV1*",
+                    "description": [
+                        "Synchronous checked out retire."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionStorageRetireReportV1*",
+                    "description": [
+                        "Synchronous checked out report."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_storage_observe_v1",
+            "since": "4.7",
+            "description": [
+                "Original checked Core production physical transport. Availability does not issue original Runtime logical source, operation or window grants.",
+                "Inputs are synchronous aligned nonaliasing native POD spans. Only the two explicitly installed callbacks and their userdata are retained under the original accepted CodeHold. Production DTO abi.struct_size is the containing DTO sizeof; reused installed qualification DTOs keep their original common header contract."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Synchronous checked request."
+                    ]
+                },
+                {
+                    "name": "retire",
+                    "type": "GDExtensionStorageRetireRefV1",
+                    "description": [
+                        "Synchronous checked retire."
+                    ]
+                },
+                {
+                    "name": "budget",
+                    "type": "const GDExtensionProductionServiceBudgetV1*",
+                    "description": [
+                        "Synchronous checked budget."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionStorageRetireReportV1*",
+                    "description": [
+                        "Synchronous checked out report."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_storage_release_v1",
+            "since": "4.7",
+            "description": [
+                "Original checked Core production physical transport. Availability does not issue original Runtime logical source, operation or window grants.",
+                "Inputs are synchronous aligned nonaliasing native POD spans. Only the two explicitly installed callbacks and their userdata are retained under the original accepted CodeHold. Production DTO abi.struct_size is the containing DTO sizeof; reused installed qualification DTOs keep their original common header contract."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Synchronous checked request."
+                    ]
+                },
+                {
+                    "name": "retire",
+                    "type": "GDExtensionStorageRetireRefV1",
+                    "description": [
+                        "Synchronous checked retire."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_import_unit_v1",
+            "since": "4.7",
+            "description": [
+                "Original checked Core production physical transport. Availability does not issue original Runtime logical source, operation or window grants.",
+                "Inputs are synchronous aligned nonaliasing native POD spans. Only the two explicitly installed callbacks and their userdata are retained under the original accepted CodeHold. Production DTO abi.struct_size is the containing DTO sizeof; reused installed qualification DTOs keep their original common header contract."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Synchronous checked request."
+                    ]
+                },
+                {
+                    "name": "resource_slot",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous checked resource slot."
+                    ]
+                },
+                {
+                    "name": "backing",
+                    "type": "const GDExtensionNativeUnitBackingV1*",
+                    "description": [
+                        "Synchronous checked backing."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_import_storage_v1",
+            "since": "4.7",
+            "description": [
+                "Original checked Core production physical transport. Availability does not issue original Runtime logical source, operation or window grants.",
+                "Inputs are synchronous aligned nonaliasing native POD spans. Only the two explicitly installed callbacks and their userdata are retained under the original accepted CodeHold. Production DTO abi.struct_size is the containing DTO sizeof; reused installed qualification DTOs keep their original common header contract."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Synchronous checked request."
+                    ]
+                },
+                {
+                    "name": "resource_slot",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous checked resource slot."
+                    ]
+                },
+                {
+                    "name": "backing",
+                    "type": "const GDExtensionStorageBackingV1*",
+                    "description": [
+                        "Synchronous checked backing."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_import_set_v1",
+            "since": "4.7",
+            "description": [
+                "Original checked Core production physical transport. Availability does not issue original Runtime logical source, operation or window grants.",
+                "Inputs are synchronous aligned nonaliasing native POD spans. Only the two explicitly installed callbacks and their userdata are retained under the original accepted CodeHold. Production DTO abi.struct_size is the containing DTO sizeof; reused installed qualification DTOs keep their original common header contract."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Synchronous checked request."
+                    ]
+                },
+                {
+                    "name": "resource_slot",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous checked resource slot."
+                    ]
+                },
+                {
+                    "name": "backing",
+                    "type": "const GDExtensionQualificationResourceBackingV1*",
+                    "description": [
+                        "Synchronous checked backing."
+                    ]
+                },
+                {
+                    "name": "unit_slot",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous checked unit slot."
+                    ]
+                },
+                {
+                    "name": "shader_set",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous checked shader set."
+                    ]
+                },
+                {
+                    "name": "bindings",
+                    "type": "const GDExtensionProductionSetBindingV1*",
+                    "description": [
+                        "Synchronous checked bindings."
+                    ]
+                },
+                {
+                    "name": "binding_count",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous checked binding count."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_prepare_dispatch_v1",
+            "since": "4.7",
+            "description": [
+                "Original checked Core production physical transport. Availability does not issue original Runtime logical source, operation or window grants.",
+                "Inputs are synchronous aligned nonaliasing native POD spans. Only the two explicitly installed callbacks and their userdata are retained under the original accepted CodeHold. Production DTO abi.struct_size is the containing DTO sizeof; reused installed qualification DTOs keep their original common header contract."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Synchronous checked request."
+                    ]
+                },
+                {
+                    "name": "dispatch",
+                    "type": "const GDExtensionProductionDispatchV1*",
+                    "description": [
+                        "Synchronous checked dispatch."
+                    ]
+                },
+                {
+                    "name": "push",
+                    "type": "const void*",
+                    "description": [
+                        "Synchronous checked push."
+                    ]
+                },
+                {
+                    "name": "push_bytes",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous checked push bytes."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_prepare_copy_v1",
+            "since": "4.7",
+            "description": [
+                "Original checked Core production physical transport. Availability does not issue original Runtime logical source, operation or window grants.",
+                "Inputs are synchronous aligned nonaliasing native POD spans. Only the two explicitly installed callbacks and their userdata are retained under the original accepted CodeHold. Production DTO abi.struct_size is the containing DTO sizeof; reused installed qualification DTOs keep their original common header contract."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Synchronous checked request."
+                    ]
+                },
+                {
+                    "name": "copy",
+                    "type": "const GDExtensionProductionCopyV1*",
+                    "description": [
+                        "Synchronous checked copy."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_prepare_upload_v1",
+            "since": "4.7",
+            "description": [
+                "Original checked Core production physical transport. Availability does not issue original Runtime logical source, operation or window grants.",
+                "Inputs are synchronous aligned nonaliasing native POD spans. Only the two explicitly installed callbacks and their userdata are retained under the original accepted CodeHold. Production DTO abi.struct_size is the containing DTO sizeof; reused installed qualification DTOs keep their original common header contract."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Synchronous checked request."
+                    ]
+                },
+                {
+                    "name": "upload",
+                    "type": "const GDExtensionProductionUploadV1*",
+                    "description": [
+                        "Synchronous checked upload."
+                    ]
+                },
+                {
+                    "name": "payload",
+                    "type": "const void*",
+                    "description": [
+                        "Synchronous checked payload."
+                    ]
+                },
+                {
+                    "name": "payload_bytes",
+                    "type": "uint64_t",
+                    "description": [
+                        "Synchronous checked payload bytes."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_prepare_readback_v1",
+            "since": "4.7",
+            "description": [
+                "Original checked Core production physical transport. Availability does not issue original Runtime logical source, operation or window grants.",
+                "Inputs are synchronous aligned nonaliasing native POD spans. Only the two explicitly installed callbacks and their userdata are retained under the original accepted CodeHold. Production DTO abi.struct_size is the containing DTO sizeof; reused installed qualification DTOs keep their original common header contract."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Synchronous checked request."
+                    ]
+                },
+                {
+                    "name": "canonical_suboperation",
+                    "type": "uint64_t",
+                    "description": [
+                        "Synchronous checked canonical suboperation."
+                    ]
+                },
+                {
+                    "name": "readback_slot",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous checked readback slot."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_observe_v1",
+            "since": "4.7",
+            "description": [
+                "Original checked Core production physical transport. Availability does not issue original Runtime logical source, operation or window grants.",
+                "Inputs are synchronous aligned nonaliasing native POD spans. Only the two explicitly installed callbacks and their userdata are retained under the original accepted CodeHold. Production DTO abi.struct_size is the containing DTO sizeof; reused installed qualification DTOs keep their original common header contract."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Synchronous checked request."
+                    ]
+                },
+                {
+                    "name": "budget",
+                    "type": "const GDExtensionProductionServiceBudgetV1*",
+                    "description": [
+                        "Synchronous checked budget."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionProductionReportV1*",
+                    "description": [
+                        "Synchronous checked out report."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_facts_v1",
+            "since": "4.7",
+            "description": [
+                "Original checked Core production physical transport. Availability does not issue original Runtime logical source, operation or window grants.",
+                "Inputs are synchronous aligned nonaliasing native POD spans. Only the two explicitly installed callbacks and their userdata are retained under the original accepted CodeHold. Production DTO abi.struct_size is the containing DTO sizeof; reused installed qualification DTOs keep their original common header contract."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Synchronous checked request."
+                    ]
+                },
+                {
+                    "name": "revision",
+                    "type": "uint64_t",
+                    "description": [
+                        "Synchronous checked revision."
+                    ]
+                },
+                {
+                    "name": "first",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous checked first."
+                    ]
+                },
+                {
+                    "name": "out_facts",
+                    "type": "GDExtensionProductionFactV1*",
+                    "description": [
+                        "Synchronous checked out facts."
+                    ]
+                },
+                {
+                    "name": "fact_capacity",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous checked fact capacity."
+                    ]
+                },
+                {
+                    "name": "out_written",
+                    "type": "uint32_t*",
+                    "description": [
+                        "Synchronous checked out written."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_copy_v1",
+            "since": "4.7",
+            "description": [
+                "Original checked Core production physical transport. Availability does not issue original Runtime logical source, operation or window grants.",
+                "Inputs are synchronous aligned nonaliasing native POD spans. Only the two explicitly installed callbacks and their userdata are retained under the original accepted CodeHold. Production DTO abi.struct_size is the containing DTO sizeof; reused installed qualification DTOs keep their original common header contract."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Synchronous checked request."
+                    ]
+                },
+                {
+                    "name": "revision",
+                    "type": "uint64_t",
+                    "description": [
+                        "Synchronous checked revision."
+                    ]
+                },
+                {
+                    "name": "readback_slot",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous checked readback slot."
+                    ]
+                },
+                {
+                    "name": "destination",
+                    "type": "void*",
+                    "description": [
+                        "Synchronous checked destination."
+                    ]
+                },
+                {
+                    "name": "destination_capacity",
+                    "type": "uint64_t",
+                    "description": [
+                        "Synchronous checked destination capacity."
+                    ]
+                },
+                {
+                    "name": "out_written",
+                    "type": "uint64_t*",
+                    "description": [
+                        "Synchronous checked out written."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_cancel_v1",
+            "since": "4.7",
+            "description": [
+                "Original checked Core production physical transport. Availability does not issue original Runtime logical source, operation or window grants.",
+                "Inputs are synchronous aligned nonaliasing native POD spans. Only the two explicitly installed callbacks and their userdata are retained under the original accepted CodeHold. Production DTO abi.struct_size is the containing DTO sizeof; reused installed qualification DTOs keep their original common header contract."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Synchronous checked request."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_release_v1",
+            "since": "4.7",
+            "description": [
+                "Original checked Core production physical transport. Availability does not issue original Runtime logical source, operation or window grants.",
+                "Inputs are synchronous aligned nonaliasing native POD spans. Only the two explicitly installed callbacks and their userdata are retained under the original accepted CodeHold. Production DTO abi.struct_size is the containing DTO sizeof; reused installed qualification DTOs keep their original common header contract.",
+                "Native aligned separate input/output spans are required. Zero/expired fresh input only queries and never publishes. Only actual one-cell controls and aggregate RT/owner passes/receipts are subtracted. Owned tail cursor maintenance shares this same explicit slice before final owner reclaim."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Original accepted request."
+                    ]
+                },
+                {
+                    "name": "input",
+                    "type": "const GDExtensionProductionServiceBudgetV1*",
+                    "description": [
+                        "Explicit physical service slice, copied into the same fixed cell before publication; never a Runtime logical grant."
+                    ]
+                },
+                {
+                    "name": "out_remaining",
+                    "type": "GDExtensionProductionServiceBudgetV1*",
+                    "description": [
+                        "Original ABI/header/deadline. Pending returns zero available counts while the full slice remains escrowed. Returned reports only the old cell actual remaining; discard unused old balance, never credit a new meter."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionProductionReportV1*",
+                    "description": [
+                        "Actual immutable original result/report plus fixed service serial/pending state. Returned never accepts a fresh turn in the same call."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_close_v1",
+            "since": "4.7",
+            "description": [
+                "Original checked Core production physical transport. Availability does not issue original Runtime logical source, operation or window grants.",
+                "Inputs are synchronous aligned nonaliasing native POD spans. Only the two explicitly installed callbacks and their userdata are retained under the original accepted CodeHold. Production DTO abi.struct_size is the containing DTO sizeof; reused installed qualification DTOs keep their original common header contract."
+            ],
+            "arguments": [
+                {
+                    "name": "attachment",
+                    "type": "GDExtensionProductionAttachmentRefV1",
+                    "description": [
+                        "Synchronous checked attachment."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_installation_observe_v1",
+            "since": "4.7",
+            "description": [
+                "Original checked Core production physical transport. Availability does not issue original Runtime logical source, operation or window grants.",
+                "Inputs are synchronous aligned nonaliasing native POD spans. Only the two explicitly installed callbacks and their userdata are retained under the original accepted CodeHold. Production DTO abi.struct_size is the containing DTO sizeof; reused installed qualification DTOs keep their original common header contract."
+            ],
+            "arguments": [
+                {
+                    "name": "attachment",
+                    "type": "GDExtensionProductionAttachmentRefV1",
+                    "description": [
+                        "Synchronous checked attachment."
+                    ]
+                },
+                {
+                    "name": "budget",
+                    "type": "const GDExtensionProductionServiceBudgetV1*",
+                    "description": [
+                        "Synchronous checked budget."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionProductionInstallationReportV1*",
+                    "description": [
+                        "Synchronous checked out report."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
                 ]
             }
         }

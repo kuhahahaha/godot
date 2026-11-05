@@ -283,9 +283,13 @@ def generate_scu_files(max_includes_per_scu):
         [
             "gdextension_device_session",
             "gdextension_guard_enrollment",
+            "gdextension_production_request",
+            "gdextension_production_resources",
+            "gdextension_production_set",
             "gdextension_qualification",
             "gdextension_qualification_rt",
             "gdextension_qualification_ticket",
+            "gdextension_qualification_typed",
             "gdextension_typed_lifecycle",
         ],
     )

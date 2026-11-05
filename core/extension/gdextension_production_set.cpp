@@ -138,7 +138,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_import_set(GDExtensionProd
 				return result(ERR_INVALID_DATA);
 			}
 			const auto &actual = *original;
-			if (!abi(binding.abi) || binding.set != p_shader_set || binding.array_element || binding.resource_slot >= request->resource_count || (i && p_bindings[i - 1].binding >= binding.binding)) {
+			if (!production_dto_valid(binding) || binding.set != p_shader_set || binding.array_element || binding.resource_slot >= request->resource_count || (i && p_bindings[i - 1].binding >= binding.binding)) {
 				return result(ERR_INVALID_DATA);
 			}
 			auto &resource = request->resources[binding.resource_slot];

@@ -1,0 +1,147 @@
+{
+  "base": "d5e6a59f0c3a84d840814170777691a9dc58f133",
+  "source_files": {
+    "core/extension/gdextension_production_request.h": "0b7cc29b8bc55eebeca7291936f19d5f18208375d70295f0f00a04b53831ced0",
+    "core/extension/gdextension_production_request.cpp": "5368360f7a08900dea4466443ea87fad7039696e0621a4dc0301ad48d06adad7",
+    "core/extension/gdextension_production_owned.cpp": "dd2e91b186d281db8278bb1df3b83befe8c6d60ae84b2885c567e5b24e539d67",
+    "core/extension/gdextension_production_set.cpp": "99e6b254c4761a55cc11874c865bf92201e5c20fa0764d78d77d59bc7ac22bc0",
+    "core/extension/gdextension_production_action.cpp": "bbe8f8175afdc689b2ce3a7994925b7c0a2deabdf2bbda3e56f713c3fd0aaa10",
+    "core/extension/gdextension_production_window.cpp": "9920324772b38dc102be2003e52997f995a6cd69f4bd8a6a89a322401cf66ac3",
+    "core/extension/gdextension_interface.json": "d206dbf4631a43563f968a93ac06108f830b7cfac044b921316fdf37056decc0",
+    "tests/core/extension/test_production_request.cpp": "46206e5ae02db4e023f70d3f7f24f0cdc2b229f74592c313f35ead526631f264",
+    "tests/core/extension/test_production_native_observe.cpp": "cbc490d20eb18000fc50157af2d51f920f793df225d236a766ac9246a6dac4bb",
+    "core/extension/gdextension_library_exit_guard.h": "2490d447075dd0f8d29d1fe48e9909727586fb39e3767084b2ab8a6614cabe06",
+    "core/extension/gdextension_production_interface.cpp": "3286e1838fb635b7f34e2979f07c88417f3f1dbd5093109c4f28d556dd6e9775",
+    "core/extension/gdextension_device_session.cpp": "f6636d21687e4fcfbc89d650540de42df7cbf6e0e0c56fb108742276334c4de1",
+    "tests/servers/rendering/test_production_resource_use.cpp": "93d66fd27cfca985ba1c126255f90544468b6c2214ba5772e826f682914161e9",
+    "scu_builders.py": "6a290cc0f1d1c6129d066a4813e814dca967640744d4d6da74ffd128aac0f22c"
+  },
+  "host_sha256": "430e50e49e8389867b97c48cb3e669e43f03e1a8a6f167b9e224f8d68605ab98",
+  "host_embedded_base": "d5e6a59f0c3a84d840814170777691a9dc58f133",
+  "generated_sdk_sha256": "e93903bc4ef2fa1a7bcda6fda60d267b0a169c4bf6fbe5dc9c58ca1c5f649341",
+  "generated_sdk_bytes": 291392,
+  "budget_bytes": 40,
+  "report_bytes": 168,
+  "record_report_bytes": 376,
+  "common_abi_bytes": 16,
+  "procedures": 29,
+  "build": {
+    "exit_code": 0,
+    "seconds": 20.37364029197488,
+    "input_unchanged": true,
+    "host_sha256": "430e50e49e8389867b97c48cb3e669e43f03e1a8a6f167b9e224f8d68605ab98"
+  },
+  "runtime": {
+    "typed-release": {
+      "exit_code": 0,
+      "seconds": 2.1118917500134557,
+      "cases": {
+        "successes": "2",
+        "failures": "0"
+      },
+      "assertions": {
+        "successes": "442",
+        "failures": "0"
+      },
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "expected_names_match": true,
+      "expected_count_match": null
+    },
+    "cursor-contention": {
+      "exit_code": 0,
+      "seconds": 0.07955383398802951,
+      "cases": {
+        "successes": "1",
+        "failures": "0"
+      },
+      "assertions": {
+        "successes": "320",
+        "failures": "0"
+      },
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "expected_names_match": true,
+      "expected_count_match": null
+    },
+    "request": {
+      "exit_code": 0,
+      "seconds": 0.8775342080043629,
+      "cases": {
+        "successes": "21",
+        "failures": "0"
+      },
+      "assertions": {
+        "successes": "11911",
+        "failures": "0"
+      },
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "expected_names_match": true,
+      "expected_count_match": null
+    },
+    "native": {
+      "exit_code": 0,
+      "seconds": 0.12762320798356086,
+      "cases": {
+        "successes": "21",
+        "failures": "0"
+      },
+      "assertions": {
+        "successes": "15912",
+        "failures": "0"
+      },
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "expected_names_match": true,
+      "expected_count_match": null
+    },
+    "resource-use": {
+      "exit_code": 0,
+      "seconds": 0.07750029204180464,
+      "cases": {
+        "successes": "2",
+        "failures": "0"
+      },
+      "assertions": {
+        "successes": "234",
+        "failures": "0"
+      },
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "expected_names_match": true,
+      "expected_count_match": null
+    },
+    "full": {
+      "exit_code": 0,
+      "seconds": 18.828036083024926,
+      "cases": {
+        "successes": "2070",
+        "failures": "0"
+      },
+      "assertions": {
+        "successes": "516960",
+        "failures": "0"
+      },
+      "stdout_bytes": 571,
+      "stderr_bytes": 4017,
+      "expected_names_match": null,
+      "expected_count_match": true
+    }
+  },
+  "raw_evidence": "work/b4-public-owner-final-20261105",
+  "release_red": "work/b4-release-budget-mono-red-20261105/VERIFIED_RED.json",
+  "independent_reviews": [
+    "installer aba690",
+    "budget6b037+terminal69f7+cause/profile950c+attempt0bd2",
+    "test-onlyTSAN19f251",
+    "SCU300e"
+  ],
+  "ci_pending": [
+    "Linux GCC double SCU",
+    "Linux ThreadSanitizer current source",
+    "Mono managed compile/runtime and original PCK export"
+  ],
+  "scope": "installed public physical transport and explicit-budget cleanup CPU proof; not Runtime logical authorization, real GPU or full six-chain acceptance",
+  "host_composition": "also contains separately reviewed Mono common Object cleanup; no Mono module or managed validation in this local host"
+}
