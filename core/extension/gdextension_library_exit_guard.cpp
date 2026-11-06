@@ -172,6 +172,15 @@ void Registry::unlink_holder_locked(HolderRetirement *p_holder) {
 		link = &(*link)->record_next;
 	}
 	CRASH_COND(!*link || record.binding_holders == 0);
+	// A relay observes this exact original holder's real retirement. Dropping
+	// the Registry copy, or merely returning from free_func, is insufficient.
+	if (p_holder->normal_relay_observed) {
+		for (auto &relay : normal_relays) {
+			if (relay.serial && relay.record == p_holder->reference.slot && relay.generation == p_holder->generation && relay.holder == p_holder->serial) {
+				relay.holder_closed = true;
+			}
+		}
+	}
 	*link = p_holder->record_next;
 	record.binding_holders--;
 	if (p_holder->cleanup) {
@@ -445,6 +454,155 @@ struct CleanupAction::Storage : HolderRetirement {
 		destroy = [](HolderRetirement *p_cell) { memdelete(static_cast<Storage *>(p_cell)); };
 	}
 };
+Registry::NormalRelay *Registry::find_normal_relay_locked(NormalRelayToken p_token) {
+	if (p_token.registry_instance != instance || !p_token.serial) {
+		return nullptr;
+	}
+	for (auto &relay : normal_relays) {
+		if (relay.serial == p_token.serial) {
+			return &relay;
+		}
+	}
+	return nullptr;
+}
+
+Error Registry::register_normal_relay_holder(const Callable &p_callback, const RecordRef &p_owner, const CleanupAction &p_cleanup, NormalRelayToken &r_token) {
+	if (p_owner.registry != this || !p_cleanup.storage) {
+		return ERR_INVALID_DATA;
+	}
+	MutexLock lock(mutex);
+	const auto &record = records[p_owner.slot];
+	auto *holder = p_cleanup.storage;
+	if (record.guard_enrollment != GuardEnrollment::QUALIFIED || !record.attached || record.quiescing || record.close_started || record.close_error != OK) {
+		return ERR_UNAVAILABLE;
+	}
+	if (holder->reference.registry != this || holder->reference.slot != p_owner.slot || holder->generation != record.snapshot.library_generation || holder->pending || holder->core_disposal_returned) {
+		return ERR_INVALID_DATA;
+	}
+	for (auto &relay : normal_relays) {
+		if (relay.serial) {
+			continue;
+		}
+		uint64_t serial = 0;
+		if (!serials.take(serial)) {
+			return ERR_PARAMETER_RANGE_ERROR;
+		}
+		relay.record = p_owner.slot;
+		relay.generation = holder->generation;
+		relay.holder = holder->serial;
+		relay.destruction_thread = holder->thread_id;
+		relay.callback = p_callback; // Core refcount only; never invokes DSO code.
+		relay.serial = serial;
+		holder->normal_relay_observed = true;
+		r_token = { instance, serial };
+		return OK;
+	}
+	return ERR_PARAMETER_RANGE_ERROR;
+}
+
+Error Registry::call_normal_relay(NormalRelayToken p_token, const Variant **p_arguments, int p_argcount, Variant &r_return_value, Callable::CallError &r_error) {
+	if (is_production_metadata_entry()) {
+		return ERR_UNAUTHORIZED;
+	}
+	r_return_value = Variant();
+	r_error.error = Callable::CallError::CALL_ERROR_INVALID_METHOD;
+	r_error.argument = r_error.expected = 0;
+	NormalRelay *relay = nullptr;
+	{
+		MutexLock lock(mutex);
+		relay = find_normal_relay_locked(p_token);
+		if (!relay) {
+			return ERR_INVALID_DATA;
+		}
+		if (relay->cancelled || relay->callback.is_null() || relay->releasing) {
+			return ERR_UNAVAILABLE;
+		}
+		const auto &record = records[relay->record];
+		if (!record.attached || record.quiescing || record.close_started || record.snapshot.library_generation != relay->generation || record.guard_enrollment != GuardEnrollment::QUALIFIED) {
+			return ERR_UNAVAILABLE;
+		}
+		if (relay->active_deliveries == UINT32_MAX) {
+			return ERR_PARAMETER_RANGE_ERROR;
+		}
+		relay->active_deliveries++;
+	}
+	// The active reservation prevents release/forget without copying a DSO
+	// Callable onto this possibly foreign thread. Its original call path takes
+	// CallbackScope at actual DSO entry, atomically against generation close.
+	relay->callback.callp(p_arguments, p_argcount, r_return_value, r_error);
+	{
+		MutexLock lock(mutex);
+		relay->active_deliveries--;
+	}
+	return r_error.error == Callable::CallError::CALL_OK ? OK : ERR_UNAVAILABLE;
+}
+
+Error Registry::cancel_normal_relay(NormalRelayToken p_token) {
+	MutexLock lock(mutex);
+	auto *relay = find_normal_relay_locked(p_token);
+	if (!relay) {
+		return ERR_INVALID_DATA;
+	}
+	relay->cancelled = true;
+	return OK;
+}
+
+Error Registry::release_normal_relay_holder(NormalRelayToken p_token) {
+	Callable releasing;
+	NormalRelay *relay = nullptr;
+	{
+		MutexLock lock(mutex);
+		relay = find_normal_relay_locked(p_token);
+		if (!relay) {
+			return ERR_INVALID_DATA;
+		}
+		if (relay->destruction_thread != Thread::get_caller_id()) {
+			return ERR_UNAUTHORIZED;
+		}
+		relay->cancelled = relay->release_requested = true;
+		if (relay->active_deliveries || relay->releasing) {
+			return ERR_BUSY;
+		}
+		if (relay->callback.is_null()) {
+			return OK;
+		}
+		relay->releasing = true;
+		releasing = relay->callback;
+		relay->callback = Callable();
+	}
+	// The original Callable destructor enters its existing CleanupScope and
+	// acknowledges the actual free return. No invented cleanup permit is used.
+	releasing = Callable();
+	{
+		MutexLock lock(mutex);
+		relay->releasing = false;
+	}
+	return OK;
+}
+
+Error Registry::observe_normal_relay(NormalRelayToken p_token, NormalRelaySnapshot &r_snapshot) {
+	MutexLock lock(mutex);
+	const auto *relay = find_normal_relay_locked(p_token);
+	if (!relay) {
+		return ERR_INVALID_DATA;
+	}
+	r_snapshot = { relay->generation, relay->destruction_thread, relay->active_deliveries, relay->cancelled, relay->release_requested, relay->callback.is_null() && !relay->releasing, relay->holder_closed };
+	return OK;
+}
+
+Error Registry::forget_normal_relay(NormalRelayToken p_token) {
+	MutexLock lock(mutex);
+	auto *relay = find_normal_relay_locked(p_token);
+	if (!relay) {
+		return ERR_INVALID_DATA;
+	}
+	if (!relay->holder_closed || !relay->callback.is_null() || relay->releasing || relay->active_deliveries) {
+		return ERR_BUSY;
+	}
+	*relay = NormalRelay(); // Empty core-only cell; no DSO code under mutex.
+	return OK;
+}
+
 void BindingLifetime::bind_core_action(uint64_t p_object) {
 	if (!storage) {
 		return;
@@ -1273,8 +1431,18 @@ Error Registry::begin_cycle(uint64_t &r_cycle) {
 	if (phase != Phase::FINALIZED) {
 		return ERR_BUSY;
 	}
+	// Closed relay observations do not pin a library record. The next engine
+	// instance invalidates their token domain and may reclaim only empty cells.
+	for (const auto &relay : normal_relays) {
+		if (relay.serial && (!relay.holder_closed || !relay.callback.is_null() || relay.releasing || relay.active_deliveries)) {
+			return ERR_BUSY;
+		}
+	}
 	if (!issue_instance(instance)) {
 		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	for (auto &relay : normal_relays) {
+		relay = NormalRelay();
 	}
 	device_epochs = Sequence{};
 	device_ref_serials = Sequence{};

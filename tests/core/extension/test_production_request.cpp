@@ -3378,6 +3378,17 @@ struct Access {
 		SingletonEnrollment *fixture = nullptr;
 		uint32_t calls = 0;
 		Callable existing;
+		Callable relay_callable;
+		GDExtensionDeviceExit::NormalRelayToken relay;
+		uint32_t relay_calls = 0, relay_frees = 0;
+		static void relay_call(void *opaque, const GDExtensionConstVariantPtr *, GDExtensionInt, GDExtensionVariantPtr returned, GDExtensionCallError *error) {
+			auto &probe = *static_cast<MetadataCallProbe *>(opaque);
+			++probe.relay_calls;
+			CHECK_FALSE(GDExtensionDeviceExit::Registry::is_production_metadata_entry());
+			*reinterpret_cast<Variant *>(returned) = 42;
+			*error = { GDEXTENSION_CALL_OK, 0, 0 };
+		}
+		static void relay_free(void *opaque) { ++static_cast<MetadataCallProbe *>(opaque)->relay_frees; }
 		Signal cached_signal;
 		GDExtensionPtrBuiltInMethod cached_signal_connect = nullptr;
 		Error connect_cached_signal() {
@@ -3433,6 +3444,28 @@ struct Access {
 			CHECK(Registry::is_production_metadata_entry());
 			CHECK(Thread::get_caller_id() == fixture.rd.render_thread_id);
 			CHECK(fixture.registry.records[fixture.reference.slot].active_callbacks == 1);
+			NormalRelaySnapshot relay_before, relay_after;
+			CHECK(fixture.registry.observe_normal_relay(probe.relay, relay_before) == OK);
+			const auto relay_calls_before = probe.relay_calls;
+			Variant relay_returned = "metadata relay output sentinel";
+			Callable::CallError relay_error;
+			relay_error.error = Callable::CallError::CALL_ERROR_INVALID_ARGUMENT;
+			relay_error.argument = 17;
+			relay_error.expected = 23;
+			CHECK(fixture.registry.call_normal_relay(probe.relay, nullptr, 0, relay_returned, relay_error) == ERR_UNAUTHORIZED);
+			CHECK(probe.relay_calls == relay_calls_before);
+			CHECK(relay_returned == Variant("metadata relay output sentinel"));
+			CHECK(relay_error.error == Callable::CallError::CALL_ERROR_INVALID_ARGUMENT);
+			CHECK(relay_error.argument == 17);
+			CHECK(relay_error.expected == 23);
+			CHECK(fixture.registry.observe_normal_relay(probe.relay, relay_after) == OK);
+			CHECK(relay_after.library_generation == relay_before.library_generation);
+			CHECK(relay_after.destruction_thread == relay_before.destruction_thread);
+			CHECK(relay_after.active_deliveries == relay_before.active_deliveries);
+			CHECK(relay_after.cancelled == relay_before.cancelled);
+			CHECK(relay_after.release_requested == relay_before.release_requested);
+			CHECK(relay_after.cell_released == relay_before.cell_released);
+			CHECK(relay_after.holder_closed == relay_before.holder_closed);
 			if (probe.previous_library.handle_serial) {
 				MutexLock lock(fixture.registry.mutex);
 				Registry::View *expired = nullptr;
@@ -3560,6 +3593,13 @@ struct Access {
 			create(reinterpret_cast<GDExtensionUninitializedTypePtr>(&probe.existing), &info);
 		}
 		CHECK(probe.existing.is_custom());
+		info.call_func = &MetadataCallProbe::relay_call;
+		info.free_func = &MetadataCallProbe::relay_free;
+		if (create) {
+			create(reinterpret_cast<GDExtensionUninitializedTypePtr>(&probe.relay_callable), &info);
+		}
+		CHECK(probe.relay_callable.is_custom());
+		CHECK(fixture.registry.register_normal_relay(probe.relay_callable, probe.relay) == OK);
 		probe.cached_signal = Signal(&fixture.rd, "property_list_changed");
 		const auto builtin = reinterpret_cast<GDExtensionInterfaceVariantGetPtrBuiltinMethod>(GDExtension::get_interface_function("variant_get_ptr_builtin_method"));
 		CHECK(builtin != nullptr);
@@ -3585,6 +3625,27 @@ struct Access {
 			}
 		}
 		CHECK_FALSE(GDExtensionDeviceExit::Registry::is_production_metadata_entry());
+		CHECK(probe.relay_calls == 0);
+		Variant relay_returned;
+		Callable::CallError relay_error;
+		CHECK(fixture.registry.call_normal_relay(probe.relay, nullptr, 0, relay_returned, relay_error) == OK);
+		CHECK(relay_error.error == Callable::CallError::CALL_OK);
+		CHECK(relay_returned == Variant(42));
+		CHECK(probe.relay_calls == 1);
+		CHECK(fixture.registry.release_normal_relay_holder(probe.relay) == OK);
+		GDExtensionDeviceExit::NormalRelaySnapshot relay_snapshot;
+		CHECK(fixture.registry.observe_normal_relay(probe.relay, relay_snapshot) == OK);
+		CHECK(relay_snapshot.cell_released);
+		CHECK_FALSE(relay_snapshot.holder_closed);
+		CHECK(probe.relay_frees == 0);
+		CHECK(fixture.registry.forget_normal_relay(probe.relay) == ERR_BUSY);
+		probe.relay_callable = Callable();
+		CHECK(probe.relay_frees == 1);
+		CHECK(fixture.registry.observe_normal_relay(probe.relay, relay_snapshot) == OK);
+		CHECK(relay_snapshot.holder_closed);
+		CHECK(relay_snapshot.active_deliveries == 0);
+		CHECK(fixture.registry.forget_normal_relay(probe.relay) == OK);
+		CHECK(fixture.registry.observe_normal_relay(probe.relay, relay_snapshot) == ERR_INVALID_DATA);
 		MessageQueue::get_singleton()->flush();
 		CHECK_FALSE(fixture.rd.compute_list.active);
 		fixture.cleanup_owner();

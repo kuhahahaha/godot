@@ -46,6 +46,7 @@
 #include <optional>
 
 class CallableCustomExtension : public CallableCustom {
+	friend class GDExtensionDeviceExit::Registry;
 	GDExtensionDeviceExit::RecordRef owner;
 	GDExtensionDeviceExit::CleanupAction cleanup;
 	uint64_t cleanup_serial = 0;
@@ -327,8 +328,24 @@ public:
 };
 
 namespace GDExtensionDeviceExit {
-bool is_typed_lifecycle_interface(const char *name);
+Error Registry::register_normal_relay(const Callable &p_callback, NormalRelayToken &r_token) {
+	if (is_production_metadata_entry()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (r_token.registry_instance || r_token.serial || !p_callback.is_custom()) {
+		return ERR_INVALID_DATA;
+	}
+	// Inspect only original core metadata. No is_valid/hash/other DSO callback
+	// participates in admission, including on a closed generation.
+	const auto *custom = dynamic_cast<const CallableCustomExtension *>(p_callback.get_custom());
+	if (!custom || !custom->adopted || !custom->owner.is_valid() || !custom->call_func) {
+		return ERR_UNAVAILABLE;
+	}
+	return register_normal_relay_holder(p_callback, custom->owner, custom->cleanup, r_token);
 }
+
+bool is_typed_lifecycle_interface(const char *name);
+} //namespace GDExtensionDeviceExit
 
 // Core interface functions.
 GDExtensionInterfaceFunctionPtr gdextension_get_proc_address(const char *p_name) {

@@ -149,6 +149,11 @@ static Callable retained_callable;
 static Callable equivalent_callable;
 static int callable_calls = 0;
 static int callable_frees = 0;
+static GDExtensionDeviceExit::NormalRelayToken observed_relay;
+static bool release_relay_in_call = false;
+static Error relay_release_in_call = OK;
+static bool relay_observed_active = false;
+static bool relay_observed_closed_in_free = false;
 static int callable_hashes = 0;
 static int callable_validations = 0;
 static int callable_strings = 0;
@@ -169,11 +174,23 @@ static GDExtensionInt callable_arguments(void *, GDExtensionBool *valid) {
 }
 static void callable_call(void *, const GDExtensionConstVariantPtr *, GDExtensionInt, GDExtensionVariantPtr result, GDExtensionCallError *error) {
 	callable_calls++;
+	if (release_relay_in_call) {
+		auto &registry = GDExtensionDeviceExit::Registry::get_singleton();
+		GDExtensionDeviceExit::NormalRelaySnapshot snapshot;
+		relay_observed_active = registry.observe_normal_relay(observed_relay, snapshot) == OK && snapshot.active_deliveries == 1;
+		relay_release_in_call = registry.release_normal_relay_holder(observed_relay);
+	}
 	*reinterpret_cast<Variant *>(result) = 42;
 	error->error = GDEXTENSION_CALL_OK;
 }
 static void callable_free(void *) {
 	callable_frees++;
+	if (observed_relay.serial) {
+		GDExtensionDeviceExit::NormalRelaySnapshot snapshot;
+		if (GDExtensionDeviceExit::Registry::get_singleton().observe_normal_relay(observed_relay, snapshot) == OK) {
+			relay_observed_closed_in_free = snapshot.holder_closed;
+		}
+	}
 }
 static uint32_t callable_hash(void *) {
 	callable_hashes++;
@@ -903,6 +920,130 @@ TEST_CASE("[DeviceExit][TypedABI] unavailable service refuses initializer before
 	CHECK(extension->deinitialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE) == OK);
 	CHECK(extension->close_library() == OK);
 }
+TEST_CASE("[DeviceExit][TypedABI] original normal relay observes exact Callable retirement") {
+	using namespace GDExtensionDeviceExit;
+	auto &registry = Registry::get_singleton();
+	exercise_callable = true;
+	callable_calls = callable_frees = 0;
+	observed_relay = {};
+	relay_observed_closed_in_free = false;
+	token = {};
+	hold = {};
+	Ref<GDExtensionFunctionLoader> loader;
+	loader.instantiate();
+	loader->set_initialization_function(entry);
+	Ref<GDExtension> extension;
+	extension.instantiate();
+	REQUIRE(extension->open_library("libgodot://typed-normal-relay", loader) == OK);
+	REQUIRE(extension->initialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE) == OK);
+
+	NormalRelayToken refused;
+	CHECK(registry.register_normal_relay(Callable(), refused) == ERR_INVALID_DATA);
+	CHECK(refused.serial == 0);
+	// Bind/unbind wrappers are not the direct enrolled holder domain.
+	CHECK(registry.register_normal_relay(retained_callable.unbind(1), refused) == ERR_UNAVAILABLE);
+	const int validations_before_relay = callable_validations;
+	const int hashes_before_relay = callable_hashes;
+	REQUIRE(registry.register_normal_relay(retained_callable, observed_relay) == OK);
+	CHECK(callable_validations == validations_before_relay);
+	CHECK(callable_hashes == hashes_before_relay);
+	const NormalRelayToken original = observed_relay;
+	CHECK(registry.register_normal_relay(equivalent_callable, observed_relay) == ERR_INVALID_DATA);
+	CHECK(observed_relay.serial == original.serial);
+	NormalRelayToken foreign = original;
+	foreign.registry_instance++;
+	NormalRelaySnapshot snapshot;
+	CHECK(registry.observe_normal_relay(foreign, snapshot) == ERR_INVALID_DATA);
+	REQUIRE(registry.observe_normal_relay(original, snapshot) == OK);
+	CHECK(snapshot.library_generation != 0);
+	CHECK_FALSE(snapshot.cancelled);
+	CHECK_FALSE(snapshot.cell_released);
+	CHECK_FALSE(snapshot.holder_closed);
+	CHECK(registry.forget_normal_relay(original) == ERR_BUSY);
+
+	Error wrong_thread = OK;
+	std::thread other([&] { wrong_thread = registry.release_normal_relay_holder(original); });
+	other.join();
+	CHECK(wrong_thread == ERR_UNAUTHORIZED);
+	REQUIRE(registry.observe_normal_relay(original, snapshot) == OK);
+	CHECK_FALSE(snapshot.cancelled);
+	Variant result;
+	Callable::CallError error;
+	CHECK(registry.call_normal_relay(original, nullptr, 0, result, error) == OK);
+	CHECK(callable_calls == 1);
+	CHECK(int(result) == 42);
+
+	SUBCASE("cancellation and one registry copy do not acknowledge queued external holder") {
+		CallQueue queue;
+		REQUIRE(queue.push_callable(retained_callable) == OK);
+		CHECK(registry.cancel_normal_relay(original) == OK);
+		CHECK(registry.cancel_normal_relay(original) == OK);
+		CHECK(registry.call_normal_relay(original, nullptr, 0, result, error) == ERR_UNAVAILABLE);
+		CHECK(callable_calls == 1);
+		CHECK(registry.release_normal_relay_holder(original) == OK);
+		REQUIRE(registry.observe_normal_relay(original, snapshot) == OK);
+		CHECK(snapshot.cell_released);
+		CHECK_FALSE(snapshot.holder_closed);
+		retained_callable = Callable();
+		equivalent_callable = Callable();
+		CHECK(callable_frees == 1);
+		CHECK(extension->preflight_exit(CloseRoute::EXPLICIT) == ERR_BUSY);
+		CHECK(queue.flush() == OK);
+		CHECK(callable_calls == 1);
+	}
+	SUBCASE("release inside admitted relay waits for actual entry return") {
+		release_relay_in_call = true;
+		relay_observed_active = false;
+		CHECK(registry.call_normal_relay(original, nullptr, 0, result, error) == OK);
+		release_relay_in_call = false;
+		CHECK(relay_observed_active);
+		CHECK(relay_release_in_call == ERR_BUSY);
+		REQUIRE(registry.observe_normal_relay(original, snapshot) == OK);
+		CHECK(snapshot.active_deliveries == 0);
+		CHECK(snapshot.release_requested);
+		CHECK_FALSE(snapshot.cell_released);
+		retained_callable = Callable();
+		equivalent_callable = Callable();
+		CHECK(registry.release_normal_relay_holder(original) == OK);
+	}
+	SUBCASE("holder acknowledgment does not borrow another Callable in the same generation") {
+		retained_callable = Callable();
+		CHECK(registry.release_normal_relay_holder(original) == OK);
+		REQUIRE(registry.observe_normal_relay(original, snapshot) == OK);
+		CHECK(snapshot.holder_closed);
+		CHECK(callable_frees == 1);
+		CHECK(extension->preflight_exit(CloseRoute::EXPLICIT) == ERR_BUSY);
+		observed_relay = {};
+		equivalent_callable = Callable();
+		observed_relay = original;
+	}
+	SUBCASE("original generation close suppresses delivery before explicit cancellation") {
+		CHECK(extension->preflight_exit(CloseRoute::EXPLICIT) == ERR_BUSY);
+		CHECK(registry.call_normal_relay(original, nullptr, 0, result, error) == ERR_UNAVAILABLE);
+		CHECK(callable_calls == 1);
+		CHECK(registry.register_normal_relay(retained_callable, refused) == ERR_UNAVAILABLE);
+		CHECK(refused.serial == 0);
+		retained_callable = Callable();
+		equivalent_callable = Callable();
+		CHECK(registry.release_normal_relay_holder(original) == OK);
+	}
+	CHECK(callable_frees == 2);
+	CHECK_FALSE(relay_observed_closed_in_free);
+	REQUIRE(registry.observe_normal_relay(original, snapshot) == OK);
+	CHECK(snapshot.cell_released);
+	CHECK(snapshot.holder_closed);
+	CHECK(snapshot.active_deliveries == 0);
+	CHECK(registry.forget_normal_relay(original) == OK);
+	CHECK(registry.observe_normal_relay(original, snapshot) == ERR_INVALID_DATA);
+	CHECK(registry.cancel_normal_relay(original) == ERR_INVALID_DATA);
+	CHECK(registry.release_normal_relay_holder(original) == ERR_INVALID_DATA);
+	observed_relay = {};
+	CHECK(extension->preflight_exit(CloseRoute::EXPLICIT) == OK);
+	CHECK(extension->deinitialize_library(GDExtension::INITIALIZATION_LEVEL_SCENE) == OK);
+	CHECK(extension->close_library() == OK);
+	exercise_callable = false;
+}
+
 TEST_CASE("[DeviceExit][TypedABI] Callable holder blocks close until actual final free") {
 	exercise_callable = true;
 	callable_calls = callable_frees = callable_hashes = 0;

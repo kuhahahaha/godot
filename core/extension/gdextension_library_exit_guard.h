@@ -34,6 +34,7 @@
 #include "core/os/mutex.h"
 #include "core/templates/local_vector.h"
 #include "core/templates/rid.h"
+#include "core/variant/callable.h"
 
 namespace RendererRD {
 class ParticlesStorage;
@@ -151,6 +152,21 @@ enum class LifetimeFailure { ASSOCIATION_BUSY,
 void record_binding_entry_result(Error p_error);
 const char *get_binding_entry_diagnostic();
 
+// Internal core relay domain. This is not the planned extension relay ABI.
+// Only an enrolled original Callable can issue a normal relay.
+struct NormalRelayToken {
+	uint64_t registry_instance = 0;
+	uint64_t serial = 0;
+};
+struct NormalRelaySnapshot {
+	uint64_t library_generation = 0;
+	uint64_t destruction_thread = 0;
+	uint32_t active_deliveries = 0;
+	bool cancelled = false;
+	bool release_requested = false;
+	bool cell_released = false;
+	bool holder_closed = false;
+};
 class Registry;
 class ProducerRegistrationRef;
 struct ProducerRegistrationIdentity;
@@ -221,6 +237,7 @@ struct HolderRetirement {
 	bool pending = false;
 	bool cleanup = false;
 	bool typed_code_hold = false;
+	bool normal_relay_observed = false;
 	uint32_t qualification_children = 0;
 	uint32_t production_children = 0;
 	bool core_owned = false;
@@ -760,6 +777,22 @@ private:
 	Record records[RECORD_CAPACITY];
 	View views[VIEW_CAPACITY];
 	BindingOwner binding_owners[RECORD_CAPACITY];
+	struct NormalRelay {
+		uint64_t serial = 0;
+		uint32_t record = INVALID_SLOT;
+		uint64_t generation = 0;
+		uint64_t holder = 0;
+		uint64_t destruction_thread = 0;
+		uint32_t active_deliveries = 0;
+		bool cancelled = false;
+		bool release_requested = false;
+		bool releasing = false;
+		bool holder_closed = false;
+		Callable callback;
+	};
+	NormalRelay normal_relays[PRIVATE_CAPACITY];
+	NormalRelay *find_normal_relay_locked(NormalRelayToken p_token);
+	Error register_normal_relay_holder(const Callable &p_callback, const RecordRef &p_owner, const CleanupAction &p_cleanup, NormalRelayToken &r_token);
 	uint32_t record_limit = RECORD_CAPACITY;
 	uint32_t view_limit = VIEW_CAPACITY;
 	uint32_t private_limit = PRIVATE_CAPACITY;
@@ -1110,6 +1143,14 @@ public:
 	Error retain_binding_owner(void *p_token, RecordRef &r_ref);
 	Error retain_callable_owner(void *p_token, RecordRef &r_ref);
 	Error register_callable_cleanup(const RecordRef &p_ref, uint64_t p_identity, CleanupAction &r_action, uint64_t &r_serial);
+	// Internal queue adapters may retain the token; the original Callable stays here.
+	// Release is fallible and must run on the original Callable destruction thread.
+	Error register_normal_relay(const Callable &p_callback, NormalRelayToken &r_token);
+	Error call_normal_relay(NormalRelayToken p_token, const Variant **p_arguments, int p_argcount, Variant &r_return_value, Callable::CallError &r_error);
+	Error cancel_normal_relay(NormalRelayToken p_token);
+	Error release_normal_relay_holder(NormalRelayToken p_token);
+	Error observe_normal_relay(NormalRelayToken p_token, NormalRelaySnapshot &r_snapshot);
+	Error forget_normal_relay(NormalRelayToken p_token);
 	void forget_binding_owner(GDExtension *p_owner);
 	void observe_initialize(const RecordRef &p_ref, Error p_error);
 	void detach(const RecordRef &p_ref);
