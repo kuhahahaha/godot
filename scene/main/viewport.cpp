@@ -4249,13 +4249,25 @@ Viewport::VRSUpdateMode Viewport::get_vrs_update_mode() const {
 	return vrs_update_mode;
 }
 
+void Viewport::_vrs_texture_changed() {
+	ERR_MAIN_THREAD_GUARD;
+	const RID tex = vrs_texture.is_valid() ? vrs_texture->get_rid() : RID();
+	RS::get_singleton()->viewport_set_vrs_texture(viewport, tex);
+}
+
 void Viewport::set_vrs_texture(Ref<Texture2D> p_texture) {
 	ERR_MAIN_THREAD_GUARD;
-	vrs_texture = p_texture;
-
-	// TODO need to add something here in case the RID changes
-	RID tex = p_texture.is_valid() ? p_texture->get_rid() : RID();
-	RS::get_singleton()->viewport_set_vrs_texture(viewport, tex);
+	if (vrs_texture != p_texture) {
+		if (vrs_texture.is_valid()) {
+			vrs_texture->disconnect_changed(callable_mp(this, &Viewport::_vrs_texture_changed));
+		}
+		vrs_texture = p_texture;
+		if (vrs_texture.is_valid()) {
+			// TextureRD resources can emit changed from the render thread.
+			vrs_texture->connect_changed(callable_mp(this, &Viewport::_vrs_texture_changed), CONNECT_DEFERRED);
+		}
+	}
+	_vrs_texture_changed();
 }
 
 Ref<Texture2D> Viewport::get_vrs_texture() const {

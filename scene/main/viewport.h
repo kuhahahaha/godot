@@ -373,6 +373,7 @@ private:
 	VRSMode vrs_mode = VRS_DISABLED;
 	VRSUpdateMode vrs_update_mode = VRS_UPDATE_ONCE;
 	Ref<Texture2D> vrs_texture;
+	void _vrs_texture_changed();
 
 	struct GUI {
 		bool mouse_in_viewport = false;

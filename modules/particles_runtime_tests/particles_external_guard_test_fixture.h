@@ -34,8 +34,10 @@
 #include "core/os/mutex.h"
 #include "core/variant/dictionary.h"
 
-// Fixed tests-only main-RD preparation test. No supplied RID, shader, source,
-// budget, holder or fault target; no dispatch and no physical-return claim.
+// run() is a fixed tests-only main-RD preparation test with no supplied RID,
+// shader, source, budget, holder or fault target; no dispatch/physical-return claim.
+// The read-only VRS observer accepts only an existing viewport RID, reads its
+// actual target association, and does not issue or create resources.
 class ParticlesExternalGuardTestFixture : public RefCounted {
 	GDCLASS(ParticlesExternalGuardTestFixture, RefCounted)
 
@@ -56,4 +58,5 @@ protected:
 public:
 	Error run();
 	Dictionary result() const;
+	Dictionary observe_viewport_vrs_texture(RID p_viewport) const;
 };

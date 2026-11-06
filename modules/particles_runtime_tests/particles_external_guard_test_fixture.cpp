@@ -33,6 +33,7 @@
 #include "core/object/class_db.h"
 #include "core/os/os.h"
 #include "servers/rendering/renderer_rd/effects/particles_external_guard.h"
+#include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server.h"
 
@@ -41,6 +42,7 @@
 void ParticlesExternalGuardTestFixture::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("run"), &ParticlesExternalGuardTestFixture::run);
 	ClassDB::bind_method(D_METHOD("result"), &ParticlesExternalGuardTestFixture::result);
+	ClassDB::bind_method(D_METHOD("observe_viewport_vrs_texture", "viewport"), &ParticlesExternalGuardTestFixture::observe_viewport_vrs_texture);
 }
 
 void ParticlesExternalGuardTestFixture::check(bool p_ok, const String &p_label) {
@@ -184,4 +186,24 @@ Dictionary ParticlesExternalGuardTestFixture::result() const {
 	report["source_authority_supplied"] = false;
 	report["physical_return_claimed"] = false;
 	return report;
+}
+
+Dictionary ParticlesExternalGuardTestFixture::observe_viewport_vrs_texture(RID p_viewport) const {
+	Dictionary observation;
+	RenderingServer *rs = RenderingServer::get_singleton();
+	RenderingDevice *rd = RenderingDevice::get_singleton();
+	RendererRD::TextureStorage *storage = RendererRD::TextureStorage::get_singleton();
+	const bool owner = rs && rd && storage && rs->is_on_render_thread() && rs->get_rendering_device() == rd && rd->is_main_instance;
+	observation["main_rd_render_thread"] = owner;
+	if (!owner) {
+		return observation;
+	}
+	const RID target = rs->viewport_get_render_target(p_viewport);
+	const bool target_valid = target.is_valid() && storage->owns_render_target(target);
+	observation["target_valid"] = target_valid;
+	if (target_valid) {
+		observation["render_target"] = target;
+		observation["vrs_texture"] = storage->render_target_get_vrs_texture(target);
+	}
+	return observation;
 }
