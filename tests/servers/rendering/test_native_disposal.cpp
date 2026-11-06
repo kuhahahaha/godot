@@ -287,7 +287,7 @@ public:
 		return TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 	}
 	uint64_t limit_get(Limit) override { return 8192; }
-	uint64_t api_trait_get(ApiTrait trait) override { return trait == API_TRAIT_HONORS_PIPELINE_BARRIERS || trait == API_TRAIT_TEXTURE_OUTPUTS_REQUIRE_CLEARS ? 1 : 0; }
+	uint64_t api_trait_get(ApiTrait trait) override { return trait == API_TRAIT_HONORS_PIPELINE_BARRIERS ? 1 : 0; }
 	void set_object_name(ObjectType type, ID id, const String &name) override {
 		CHECK(type == OBJECT_TYPE_TEXTURE);
 		CHECK((id.id == 51 || id.id == 52));
@@ -371,6 +371,7 @@ public:
 };
 class SampledDepthDriver : public DepthDisposalDriver {
 public:
+	uint64_t api_trait_get(ApiTrait p_trait) override { return p_trait == API_TRAIT_TEXTURE_OUTPUTS_REQUIRE_CLEARS ? 1 : DepthDisposalDriver::api_trait_get(p_trait); }
 	SampledDepthFormat format;
 	NativeDisposalWitness *sampler_witness = nullptr, *set_witness = nullptr;
 	bool fail_set = false;
