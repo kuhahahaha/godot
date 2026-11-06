@@ -72,6 +72,44 @@ TEST_CASE("[B4][E14][E16] pre-cull camera capture freezes the registered exact p
 		}
 		copy.main_transform.origin = Vector3(40, 41, 42);
 	}
+	for (uint32_t field = 0; field < 10; ++field) {
+		auto rewritten = frozen;
+		switch (field) {
+			case 0:
+				rewritten.main_transform.origin.x += 1;
+				break;
+			case 1:
+				rewritten.main_projection.columns[0][0] += 1;
+				break;
+			case 2:
+				rewritten.taa_jitter.x += 1;
+				break;
+			case 3:
+				rewritten.taa_frame_count += 1;
+				break;
+			case 4:
+				rewritten.visible_layers ^= 1;
+				break;
+			case 5:
+				rewritten.vaspect = !rewritten.vaspect;
+				break;
+			case 6:
+				rewritten.is_orthogonal = !rewritten.is_orthogonal;
+				break;
+			case 7:
+				rewritten.view_count += 1;
+				break;
+			case 8:
+				rewritten.view_offset[0].origin.x += 1;
+				break;
+			case 9:
+				rewritten.view_projection[0].columns[0][0] += 1;
+				break;
+		}
+		CHECK_FALSE(RSG::viewport->viewport_stage_camera_data(viewport, &rewritten, token));
+		CHECK_FALSE(RSG::viewport->viewport_adopt_camera_data(viewport));
+		CHECK_FALSE(RSG::viewport->viewport_get_previous_camera_token(viewport).is_valid());
+	}
 	REQUIRE(RSG::viewport->viewport_stage_camera_data(viewport, &frozen, token));
 	CHECK_FALSE(RSG::viewport->viewport_get_previous_camera_token(viewport).is_valid());
 	REQUIRE(RSG::viewport->viewport_adopt_camera_data(viewport));

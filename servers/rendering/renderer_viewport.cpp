@@ -1299,6 +1299,22 @@ bool RendererViewport::viewport_stage_camera_data(RID p_viewport, const Renderer
 	if (!p_token.is_valid() || p_token != viewport->current_camera_token || viewport->staged_camera_data_valid || p_camera_data->source_view_id != p_token.view_id || p_camera_data->source_view_epoch != p_token.view_epoch || p_camera_data->source_capture_ordinal != p_token.capture_ordinal) {
 		return false;
 	}
+	// The post-render stage must adopt the exact payload captured before culling.
+	// A matching token paired with a rewritten transform/projection is stale
+	// data and must not advance viewport history.
+	if (viewport->captured_camera_data_valid) {
+		const auto &captured = viewport->captured_camera_data;
+		if (captured.source_view_id != p_camera_data->source_view_id || captured.source_view_epoch != p_camera_data->source_view_epoch || captured.source_capture_ordinal != p_camera_data->source_capture_ordinal ||
+				captured.view_count != p_camera_data->view_count || captured.is_orthogonal != p_camera_data->is_orthogonal || captured.visible_layers != p_camera_data->visible_layers || captured.vaspect != p_camera_data->vaspect ||
+				captured.main_transform != p_camera_data->main_transform || captured.main_projection != p_camera_data->main_projection || captured.taa_jitter != p_camera_data->taa_jitter || captured.taa_frame_count != p_camera_data->taa_frame_count) {
+			return false;
+		}
+		for (uint32_t i = 0; i < captured.view_count && i < RendererSceneRender::MAX_RENDER_VIEWS; ++i) {
+			if (captured.view_offset[i] != p_camera_data->view_offset[i] || captured.view_projection[i] != p_camera_data->view_projection[i]) {
+				return false;
+			}
+		}
+	}
 	viewport->staged_camera_data = *p_camera_data;
 	viewport->staged_camera_token = p_token;
 	viewport->staged_camera_data_valid = true;
