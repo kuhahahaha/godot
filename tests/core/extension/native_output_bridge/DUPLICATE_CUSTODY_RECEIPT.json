@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "commit": "ae0867ae15",
+  "scope": "duplicate custody return lifecycle regression",
+  "changes": [
+    "VIEW_RETURN wrapper second release returns ERR_DOES_NOT_EXIST and leaves cell custody/accounting unchanged",
+    "READ_CANCEL wrapper second cancel returns ERR_DOES_NOT_EXIST and leaves returned cell unchanged"
+  ],
+  "verification": {
+    "single_object_compile": "passed",
+    "existing_binary_external_output": "27 cases, 5277 assertions, 0 failures (pre-change binary)",
+    "full_rebuild": "stopped intentionally due 449MB free disk after unrelated object compilation; not a test failure"
+  },
+  "limits": [
+    "Does not prove U04/source/Host production successor admission",
+    "Does not prove native/GPU completion"
+  ]
+}

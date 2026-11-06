@@ -1,0 +1,1537 @@
+{
+  "goal": "active; restored complete original Godot native non-security scope in replacement D; no schedules",
+  "worktree": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104",
+  "branch": "codex/b4-renderer-continuation-20261104",
+  "tip": "ae0867ae15",
+  "canonical_source": "da7684ea5ff70a074e4a88e510ce63e0f46eff5c",
+  "host": "work/b4-output-native-canonical-build-20261104/host/editor.arm64",
+  "host_sha256": "f2fea9df0ea2f2766bf80962ff39ae2c0b04e8d8bbb10b7ae4ec785ede15a794",
+  "p4_native": "27/27 actual Metal, 7buffers900B original driver-free return, 2 maintenance1357us, no next draw, no K03holder/wholeOutputRelease/source/budget",
+  "engine": "77cases8272assert XML-pass;73 group strictclean;policy4 strictFalse retained104B known invalidUTF8, matches a2/94b raw SHA879233f34750bb6f51774c59f4861fc2a06ee863a41aecb8fc6ca438c1698c37",
+  "sdk_packet": "work/b4-output-native-share-20261104",
+  "sdk_manifest_sha256": "918d532dfdf6f911633d0746e034cb59019e9e6199ecb5d7ed6d88b044036fa2",
+  "latest_ci": {
+    "run": "pending new push",
+    "head": "ae0867ae15",
+    "status": "awaiting GitHub Actions dispatch"
+  },
+  "main_thread": "01a13d8b-19aa-7ba3-acb5-f1fd387a6123",
+  "next": "Integrate independently reviewed generationroot +boundedtests; actualbuild/target/full/native then receipt+commit. Keep e291 CI pending and queue active.",
+  "limits": [
+    "no second Godot build",
+    "do not delete unknown artifacts",
+    "never force-add work/log/host evidence",
+    "old f8c16d,94b965,a24e99 pairs unchanged",
+    "d769 only one-line test header whitespace after da, never relabel da host as d769",
+    "tracked work/.superpowers stopped; local-only receipts preserved"
+  ],
+  "latest_fixes": {
+    "c60de24ff4": "3unsigned literal + upload local rename + remove redundant RDD alias",
+    "e7d573ad26": "reviewed qualification style; physical70brace pairs Astra;two CASE names acknowledgement→acknowledgment",
+    "5929511892": "D3D12 ordinary indexed/nonindexed padded stride honors u64offset;no new allocations;28mock casesgreen/old16targetred;actualWindowsGPU/count-buffer variants not validated",
+    "4e16ba802f": "one comment spelling follow-up;5929 static failed only codespell ticket comment",
+    "220d156ff6": "CPU2D emission local position->emission_position4 ids, inverse substitution bytes equal;GCC actualCI RED/Clang both old/new pass",
+    "1a75800ddb": "two explicit unsigned frame comparisons + remove side-effect-free unused D3D12 report local; actual multi-platform CI RED, full RD TU syntax green",
+    "4018ed90b6": "production RD clang21 normalization;86 brace pairs Astra-reviewed,326 directives unchanged;one diagnostic spelling acknowledged",
+    "4162554e30": "maintained4file pinned native particle runtime runner;strict duplicate JSON key rejection RED/GREEN4;preserved actualraw re-evaluated",
+    "31088e9ff6": "Android explicit uint64 ObjectID→ULL diagnostics; Linux nontrivial scene UBO valueinit. Target-specific RED/GREEN and fullTU syntax, platform CI pending",
+    "252b6265bc": "private SourceDrawAppendResult original draw companion;full prefix/transfer carrier,exactlist;independent review+TUgreen,actualcase pending active build"
+  },
+  "particle_runtime_native": {
+    "receipt": "work/b4-particle-runtime-native-migration-20261104/RECEIPT.md",
+    "actual_positive": "work/b4-particle-runtime-native-validation-20261104/metal",
+    "actual_module_off": "work/b4-particle-runtime-native-validation-20261104/module-off",
+    "scope": "original main-Metal particle retry/trail/readback/physical return only;292checks true,6/6readbacks,26allocations,22native resources;not ANGE product/K03 holder/wholeOutputReleased",
+    "actual_runner_sha256": "12ae68fecb4ca86f3b97e99c3f67f85e203ea107a98bae326170d4a6a48b0f88",
+    "committed_runner_sha256": "fc39f246950a5b0a60c174905fae9ad9b63e7ff3f639057db8840710e3795ab4",
+    "post_fix": "offline original raw re-evaluation only;no new host run",
+    "package_sha256": "eced5aa06a581cfb791006db4c928a87bfabdd598ed342100addaefae6669886"
+  },
+  "responsibility_switch": {
+    "taskbook": "/Users/macbookair/Documents/Work/Dev/ANGEParticleDesign/handoff/godot-fr/FOUR_SESSION_IMPLEMENTATION_PLAN.md#2026-11-04",
+    "scope": "D complete Godot native execution/completion/readback/physical retirement + production Sprite material/attribute binding/draw/exit + platform CI; ANGE adapters A/B",
+    "head": "4162554e303c6a40fda4fbdda30939efb254eda8",
+    "dirty": [
+      "?? .superpowers/",
+      "?? tests/core/object/fixtures/libtyped_dynamic.dylib",
+      "?? work/"
+    ],
+    "processes": [
+      "93013 /Users/macbookair/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 /Users/macbookair/.local/bin/scons --debug=explain test -j4"
+    ],
+    "subagents": "b4_core_style_astra_review,b4_guard_shader,b4_guard_wrapper_review completed; no active writers",
+    "conflict": "none identified at switch; real C frame/E14-16 packet integration requires owner data; do not replace with fixture",
+    "next": "audit production Sprite contract and renderer; parallel material/binding/draw/exit implementation, retain CI41801857664"
+  },
+  "sprite_package": {
+    "authority": "/Users/macbookair/Documents/Work/Dev/ANGEParticleDesign/work/b4-native-output-fr-convergence-20261026/FR_B4_native_consumer_join_PLAN.md P0-P6; current D taskbook 20261104",
+    "current": "P3/P4 private original-operation draw carrier committed252b6265;testdriver dynamicdescriptor query correctedcfc2b034;actual13tests540assertgreen,newcase73;full production source+packet consumption still open",
+    "next": "Native/External immutable ownership distinct from2D/3D;bounded per-generation view/request/lease slots; shared private per-pass resolve signature before assigning renderers; actual six RS calls and source attachment; original immutable material/surface holds",
+    "renderer_constraints": [
+      "sort elements before per-entry binding;no unsorted sidevector",
+      "fill_instance_data currently lacks real invocation/pass;same opaque list depth/color must reserve independent use",
+      "no scene-widepacket_identity authorization",
+      "full DrawAppendResult must survive rejected indexed draw after descriptor prefix",
+      "source admission is A/B real P3a begin/pause/register/cancel;OriginalOperationIdentity is copied identity only"
+    ],
+    "scope_open": "full native/Sprite/exit production remains incomplete; no fixture substitution",
+    "b_thread": "01a157d9-7d9f-7003-a3d6-b5d7bb48ff22",
+    "b_join": "one complete interface/write-ownership request sent after root new multi-action production mandate;D core+B ANGE;do not repeat while B prepares",
+    "source_frame_status": "C confirms no fixed PublishedGPUFrame/caller yet;B actualSnapshotWriteTargetView reservation.target() (attribute_storage.h:190) is Writing only,notPublished;do not use CPU LifecycleAttributeSnapshot/ParticleOutputRecord",
+    "ordered_gpu_consumption": "C06_E09_RECORD_PORT §6/142: same-step successor accepts actual RecordedOrdered PublishedSnapshotRef +E07ReadSeal+7provenance/window+R01 checked ordering/barrier;CompletionToken mayPending;keep readlease to true terminal;do not add CPUwait beforeSprite",
+    "inflight_implementation": [
+      "strict acquire18/seal13 parser+full frozen request equality",
+      "extract family-neutral checked compute dispatch;normal ProgramPush+nonbarrier descriptor preparation without qualification permission"
+    ]
+  },
+  "active_build": "work/b4-generation-root-20261106/BUILD_LOCK_FIX.log",
+  "sprite_build": {
+    "first_source": "252b6265bc70f5de376200363b15a98a513048f7",
+    "first_build": "rc0/63.17s",
+    "first_test": "rc-6 after45newcaseassertions;controlled driver missing uniform_sets_get_dynamic_offsets,raw/xml/crash retained;not production defect",
+    "source_commit": "cfc2b034e94e51394a5f110332cab4faadc49ba9",
+    "build": "descriptor-query-fix/BUILD_RESULT.json rc0/19.33s",
+    "host": "work/b4-sprite-native-continuation-20261104/descriptor-query-fix/host/editor.arm64",
+    "host_sha256": "1671bc3969ef4f7506e7d6199f1b5b108e77995d2698a48dc6a95a980f6772a7",
+    "metadata_sha256": "c1dc5b7d2a14bb0c995051e446b3e7a6e389ed8a5342a1aa34da3c19e6efcd9c",
+    "targeted": "exact13tests540assertallpass;stdout/stderr0;newcase73",
+    "scope": "CPU/graph original draw record association;no GPU/ANGE product/K03 holder qualification"
+  },
+  "b_cursor": "bb1cca55-7f1e-40d0-be3d-6afcd3d0b435:41",
+  "request_dispatch_batch": {
+    "commits": [
+      "0f714d8268",
+      "3a3a086f28",
+      "9ab7649842"
+    ],
+    "source_commit": "9ab76498423b3b32cc909e3cd870386e46353d72",
+    "root": "work/b4-sprite-native-continuation-20261104/request-dispatch",
+    "build": "rc0/42.92s -j6",
+    "host_sha256": "49fbfa0f042ade8c5c10980f738471ec18b1c07d823ea90adf938542ae87872c",
+    "metadata_sha256": "c31136bd2694821f3b24cd84d297b4333f20d840b3f024d6aed6532c8f91cf50",
+    "targeted": "exact21cases4611assert,rc0,stdout/stderr0;request2838assert,normaldispatch130assert",
+    "neighbors": "128cases43143assert rc0;five776Bnegative diagnostics reproduced byte-identically by isolated3cases;notstrictclean",
+    "source_scope": "strictacquire18/seal13 fullfieldcomparison;family-neutral dispatch +normalunmarkedProgramPush/backendprepare;markerisolation maintained,NUR1productionbridge stillnotimplemented",
+    "style": "ticket153newbracepairs Astra reviewed;onecomment spelling acknowledgment,not diagnostic change",
+    "push": "success via gh HTTPS credential helper after transient SSHnoagent/HTTPS500;normalremote config unchanged",
+    "receipt": "work/b4-sprite-native-continuation-20261104/request-dispatch/RECEIPT.md"
+  },
+  "b_production_candidate": {
+    "root": "/Users/macbookair/Documents/Work/ANGE_phase1_integration/work/ongoing-particle-chain-20261105/e09-production-bridge",
+    "revision": 3,
+    "header_sha256": "571a3a1f6ae416b990bce6fee0562750160f50040c3edc0cb0d1281fa166f437",
+    "packet_sha256": "719a867b0ab1e230a0b2a8b6d7b465f21278e1c2e7dcfa9a3182effe20d929eb",
+    "status": "Rev3received;26layouttypescanonicalcommitaed1b5a8d0;C/C++140fields21enumassertpass;NOinterfaceprocsregistered;NOpublicproductionhandlerimplemented",
+    "implementation": "D core originalRegistry productionfamily with real preparedunit/storage/setimports;B soleadaptercandidate;do notunitcreate;do notqualflag",
+    "open": "quote/grant actualreception;mainRD typed productionassociation+K03actualhold;U04realorigin;CpublishedGPUframe;fullSpriteconsumer",
+    "draw_scope": "Bconfirmed firstheaderdispatch/copy/upload only;drawtablefuture selectedhandler;SpriteusesoriginalKinternalconsumer,nopublicdrawinterpreter",
+    "quote_reception": "Bacceptedrealgap;Astrapreparingoncewholequote→acceptoriginalU08HostbudgetamendmentnotmetadataCapacitygrant",
+    "canonical_sha256": "9f823f56248bb60af06975601015f8a279155357af40e21af9be17d8063f261f",
+    "next": "implement originalRegistry privateproductionattachment/request+quotedbudgetreception+opaquechildimports+typedreverseuseedges+retire/reclaimgates,thenactualappend/segmentACK/native/readbackhandlers;originalU04window/producerpermissionnotsubstituted"
+  },
+  "compute_barrier": {
+    "production": "448ab9deac",
+    "testfix": "86255b8e00",
+    "receipt": "work/b4-sprite-native-continuation-20261104/compute-barrier/RECEIPT.md",
+    "source_commit": "86255b8e0097e0ca2391e856e407f85e539a4288",
+    "host_sha256": "10390c6f40665a02f85460228dec172404945ee9ae662747884dbbc2a5c32b4e",
+    "metadata_sha256": "2263d57395ed9cbb5105642a14575c6112d9b374c4eacd3019a62c5f1c136bbc",
+    "actual": "22cases4636assertpass,new25;stdoutstderr0;exclude1991skipped;initialmissingdriverquerycrashretained"
+  },
+  "ue_reference": {
+    "root": "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/work/ue-backend-reference-20261104",
+    "received": "P13Sprite/P14countdraw-countoffset/P07publishretire selectedspec/evidence/currentreview only;allpartial",
+    "use": "perviewfinalbuffer+currentpreviousnativefetch+GPUprotectedcountargs+publish/lastuse/physicalreturn separation;align existingInstance192/guard/Externalstorage;noUEframeworkcopy/newowner",
+    "differences": "consumedtupleexacthistory vsUEvelocityapprox;Godotnativeuse/fence/freewitness;U04E05E06originalsource;do notinvalidslotdirectdrawfallback"
+  },
+  "production_request_batch": {
+    "status": "implementing; private metadata and original-child import gates; public procs not registered; Open refuses missing original window/K03 hold",
+    "reviews": {
+      "imports": "one sorted-original-binding bug fixed; independent re-review clean",
+      "request_arena": "multi-request prefix underquote fixed; Astra re-review clean",
+      "unpin": "binding range preflight and per-request cleanup implemented"
+    },
+    "tests": "7cases1336assert rc0 clean;22record4636assert rc0 clean;128qualification43143assert rc0 with776B negative diagnostics reproduced byte-identically by3cases116assert",
+    "set_mapping": "strict B-confirmed absentarm mapping implemented and 3 identity-field negative tests independently reviewed",
+    "ci_style_commit": "06a7245f5e",
+    "ci_style_push": "success after one remote commit_refs transient failure",
+    "next": "finish actual storage/unit import tests; build once; run exact production and affected native neighbors; retain full native main-chain pending",
+    "next_local": "connect original renderer terminal-action/service obligation and device/entity retention/return plus installed typed receiver; d.refs is metadata only; original B source/window input remains distinct",
+    "commit": "9ae8d4e4c3ab713c8a56ce8fa8f2e569e457d8d3",
+    "receipt": "work/b4-sprite-native-continuation-20261104/production-request/RECEIPT.md",
+    "host_sha256": "8b164d4873f6d68074a510a0b49d421b9b86200ce8ef127933d3d8b6d8a4804c",
+    "build": "exit0;11m51.29s;frozen15hashes compiled from precommit06a worktree, now exact9ae commit",
+    "ci_followup": {
+      "commit": "1b1530f3bb18e763b856274bd9d79a0b518d2c7a",
+      "receipt": "work/b4-sprite-native-continuation-20261104/production-request/ci-followup/RECEIPT.md",
+      "build": "exit0 11.77s incremental",
+      "host_sha256": "dec4f2f38801008457a3f64fd2d0570c262f8c8c194b6151735c2a3a1bf8df1d",
+      "pump_red": "exit1;4assertpass1fail;actual3workers expected2;first REQUIRE-only harness crash retained",
+      "green": "4worker1051;23physics284;4CI173;7production1336;22record4636;128qualification43143;3diagnostics116;all exact selectors rc0;776B diagnostics exactly isolated",
+      "platform_ci": "new source pending",
+      "full_engine": {
+        "initial": "2018cases483894pass1fail; physicsquery explicit backend/thread input absent-or-invalid; before backend creation",
+        "explicit_godot_0": "2018cases483911assert rc0; stdout571B stderr4017B; notdiagnosticclean",
+        "four_query_modes": "GodotPhysics3D/Jolt Physics x0/1 each1case17assert rc0 clean",
+        "runner_commit": "d7633a3a7f;native3workflowenvpairs+physicalcomment spelling",
+        "push": "SSHsuccess;HTTPSworkflow-scope rejection;noauthchanges"
+      }
+    },
+    "push": "9ae8d4e4c3 and CI followup1b1530f3bb pushed"
+  },
+  "b_r01_fixed": {
+    "commit": "2f95dca3aecd2cd65fe759e71487d89baaec69a6",
+    "parent": "7f636faa934bdbcc7db078ffec29c72ce5054143",
+    "scope": "B originalR01 local/delegated quote/reserve/actualreturn;notD publicAccept",
+    "checkpoint": "/Users/macbookair/Documents/Work/ANGE_phase1_integration/work/ongoing-particle-chain-20261105/e09-production-bridge/r01-delegated/SOURCE_CHECKPOINT.json"
+  },
+  "b_unit_origin_fixed": {
+    "commit": "d2dade001c72ce845a949b680bbb9354c73048a9",
+    "parent": "2f95dca3aecd2cd65fe759e71487d89baaec69a6",
+    "checkpoint": "/Users/macbookair/Documents/Work/ANGE_phase1_integration/work/ongoing-particle-chain-20261105/native-unit-origin-allocator/SOURCE_CHECKPOINT.json",
+    "scope": "actual E06 Create origin/Carrier readport; original da/f2f match; notnewDproductionAPI"
+  },
+  "entity_hold_batch": {
+    "status": "committed,pushed,actualengineverified",
+    "commit": "81ac01100bb6ea8103c4d3ac7a064db76e4b9543",
+    "receipt": "work/b4-sprite-native-continuation-20261104/production-entity/RECEIPT.md",
+    "host_sha256": "47e30232cbb8d38180bfda870b19ea0d82a51e36a2434de392e80068bf0ff547",
+    "tests": "14cases3791assert clean;full2023cases486353assert explicitGodot0 rc0 (notdiagnosticclean);22record4636/128qual43143+3diag116 before final cosmetic includes",
+    "scope": "realoriginalRD entityedge/finalize/destructor guard+originalterminal renderer service;Busy cleanup P2 fixed;device loss/unknown retained;no publicOpen/window/nativeGPU qualification",
+    "commit_validation": {
+      "source": "81ac01100bb6ea8103c4d3ac7a064db76e4b9543",
+      "tracked_clean_at_build": true,
+      "build": "exit0/11.46s incremental",
+      "host_sha256": "47e30232cbb8d38180bfda870b19ea0d82a51e36a2434de392e80068bf0ff547",
+      "actual": "exact14cases3791assert rc0clean;full2023cases486353assert rc0 explicitGodot0,stdout571B/stderr4017B;CPUonly"
+    },
+    "source_checks": "fullclang21/codespell/includes idempotent; discarded erroneous cpp pragma; standalone test release TU-Werror0"
+  },
+  "production_fifo_no_grow": {
+    "status": "committed81ac;actual4 queue cases inside14targeted pass;source/header+tests reviewed",
+    "owner": "production_fifo_no_grow",
+    "scope": "command_queue_mt.h and its existing/new tests only; not production source/window permission"
+  },
+  "ci_latest": {
+    "run": 41964382227,
+    "source": "d85afdead7857d1cccd3f7a42d79f266c0917a73",
+    "status": "in_progress",
+    "url": "https://github.com/kuhahahaha/godot/actions/runs/41964382227",
+    "known_pending": "realimmutablecallback lock-order from41962031898 not yet fixed; runnerstaticfail41963998967 corrected in d85"
+  },
+  "production_rt_candidate": {
+    "status": "committed,pushed,actualoriginalRSFIFOtested",
+    "commit": "d5f2c69a2d25f8b4c72d2349bd755ce158e46287",
+    "receipt": "work/b4-sprite-native-continuation-20261104/production-rt/RECEIPT.md",
+    "host_sha256": "21f58f7a0d5a7d02ee67f1e4706387e9989050bf56a397b4724c5754f1649fbb",
+    "build": "exit0/5m07.94;frozen7files compiled from81ac+workingtree, nowexactD5commit",
+    "tests": "16cases3911assert clean;22record4636clean;128qual43143+3diag116 same776B;full2025cases486473assert explicitGodot0 rc0 notdiagnosticclean",
+    "scope": "internalmaintenanceOnly OBSERVE metadata/CANCEL/noeffectRELEASE;no publicOpen/procs/sourcegrant/nativeComplete/segmentACK",
+    "next": "actualboundednativeSource poll/retention/completionerror/facts throughsamefixedcontrolcell; originalrecordwindow/appendstillpending"
+  },
+  "scene_bone_handoff": {
+    "path": "work/scene-bone-handoff-20261104/D_BOUNDARY.md",
+    "source": "51ff682a05ee152368df04f72ea1d4fdb11d6e96",
+    "scope": "remoteE17/E18/P01scene producer/sampling/HeightFrame/COW/readrelease;sharedSceneCull/ParticlesStorage/raster minimalhunks Dmerge;core/K03/device/terminal/RSmaintenance remainsD;A sharedintegration/E34",
+    "unit_identity": "work/scene-bone-handoff-20261104/CURRENT_UNIT_HOST_IDENTITY.json",
+    "sdk": "same sourceCABIonly;oldarchivedda/f2f nativepairunchanged;P01moduleonunverified",
+    "delivery": "existingD_BOUNDARYupdated, D_GENERIC_NATIVE_FROM_D763.patch196620B reversecheckpassed, GENERIC_NATIVE_DELIVERY.json;CABIheaderJSONsamecurrent;originalda/f2fpairunchanged",
+    "next": "fixedgeneric d763patch+ports delivered main/B;newwholeactiongroupin/tmp remainsongoing"
+  },
+  "native_observe_batch": {
+    "owner": "native_observe_implementation Astra",
+    "status": "committed,pushed,CPU runtime verified; fullproductionactiongroupnotcomplete",
+    "budget_boundary": "privateCore maintenance bounds only; no B owner-turn credit export exists yet;0query no progress, exactretry/finitescancursor; originalBbudgetreceiver remainsinputgap",
+    "public_native_permission": "notgranted bycontrolbudget ormetadata; publicOpen/procsstilluninstalled",
+    "review": "shared completion Sol clean; original nativeobserve Astra P1 pending fix and exact re-review; design unlock/snapshot/relock lifetime pre-review passed",
+    "p1": "Vulkan poll DEVICE_LOST synchronous originalRegistry callback re-locks BinaryMutex; test-only lock probe RED then source fix GREEN planned after current valid build",
+    "p1_fix": "Astra scopedre-review clean; actualsynchronousRegistrylossreceiverGREEN; no guessedwindowgrant",
+    "initial_build": {
+      "exit_code": 0,
+      "seconds": 1457.9212345409906,
+      "inputs_unchanged": true,
+      "host_sha256": "3503fbe544a79ccf7f8db458f22b50f7a510b5169f93ae5645d3d620eeb3baad",
+      "initial_runtime": "6cases0pass6fail;6pass12failassert;quote.error5 capacity fixture setup;notP1red"
+    },
+    "commit": "51ff682a05ee152368df04f72ea1d4fdb11d6e96",
+    "ci_fixture_commit": "20775a4b8e8f88e2a3d4a5b3e3db92cf450cb602",
+    "receipt": "work/b4-sprite-native-continuation-20261104/production-native-observe/RECEIPT.md",
+    "host_sha256": "b3bc8325208634c568e82c58ed2221f0c6a2f87f4843696217626e0365ddabb1",
+    "final_build": "exit0/123.75s;tenfileSHAallmatchcommittedblobs;embeddedfd184precommitexplicit",
+    "tests": "P1RED30pass8fail/1case rc1 propercallbacklockboundary;GREEN35assert;23target4480;11disposal271;22record4655;128qual43143+3diag116 exact776B;finalfull2032cases487066assert explicitGodotPhysics3D/0 rc0 stdout571stderr4017",
+    "source_checks": "completecopyright/clang21/codespell/includes/headerguardsonlyh/fileformat/diffcheck0 idempotent;3format-onlyfilestokenequal"
+  },
+  "original_work_window_input": {
+    "Bconfirmed": "no ResolvedRecordOrigin/PhysicalRecordContextRef definition/productionissuer currently; mainoriginalRuntime package recognizednonemptyinit/retention/origin-window,no fixedSHA yet",
+    "Bconsumer_paths": [
+      "ordinary-prepared-accepted-bridge/A_ORDINARY_CALLER_DELTA.md",
+      "e09-production-bridge/r01-full-resource-seam/REVIEW.md"
+    ],
+    "Dnext": "source-grounded originaltypedPODport/version+actualphase callframe reception; A sealedwrapper; preserveR02/E16 phasesnotgenericPRE_OPAQUEgrant"
+  },
+  "ci_release_fixture": {
+    "commit": "fd184a59aef9b417d561c95d45dcb37ddb927fb0",
+    "push": "verified remote HEAD exact",
+    "change": "remove two DEBUG directives only; establish original indexed-draw validation prefix and index_array_count in release",
+    "evidence": "work/b4-sprite-native-continuation-20261104/ci-release-record-fixture",
+    "source_checks": "complete DEBUG/noDEBUG test TU strict rc0; full-file clang21 rc0; diffcheck rc0",
+    "runtime": "existing D5 debug host original onecase73assert rc0 clean; not newly linked release proof",
+    "invalid_build": "source overlap interrupted exit2; excluded; 607 own regenerable outputs cleaned exact manifest",
+    "release_engine": "exact fd184a59 run41841676277 Linux Minimal release job126617618283 success incl Unit tests; overall running"
+  },
+  "active_builder": {
+    "pid": 68906,
+    "supervisor_pid": 68679,
+    "command": [
+      "/Users/macbookair/.local/bin/scons",
+      "-Q",
+      "tests=yes",
+      "platform=macos",
+      "target=editor",
+      "module_particles_runtime_tests_enabled=yes",
+      "-j4"
+    ],
+    "started_epoch": 1793847853.3935528
+  },
+  "production_action_group": {
+    "owner": "production_action_group Astra",
+    "status": "committed and pushed f81be19d58, CPU full2052/500929 verified after exact pre-fix reproduction restore; actual26source blobs matched",
+    "input": "/Users/macbookair/Documents/Work/ANGE_phase1_integration/work/ongoing-particle-chain-20261105/e09-production-bridge/ACTION_HANDLER_INDEX.md",
+    "request": "B full sameRegistry production group inclimmutable originaloperation/action/resources preregistration, actualappend/close_segment/knownprefix/readback/facts/exactcopy/ack, requestownedresources+retire+release",
+    "boundary": "no qual/scalar substitution or guessedphase/windowgrant; Runtime issuer blocks admission only, not D mechanics implementation; notwholecomplete",
+    "tests_owner": "dispatch_alias_fix frozen20-case migration; independent Sol review scope clean; no runtime",
+    "bounded_maintenance_owner": "bounded_native_disposal Astra: originalfree/stall/begin/end/execute frame perphase cursor/privatebudget; sourceprimaryslicesmergeonly",
+    "maintenance_budget_ruling": "no crossturn piggybank then unboundeddrain; eachturn boundedrealnative issue/poll/retain/release/recycle/physicalfree receipts; descriptor/commandrecording notreceipt; capturedclosedoriginaldraw_graph.end atomicpasses1 withdeadline+quotebounds, no newlogicalwork; hiddenworkerissue splitcharged",
+    "atomic_bound": "approvedCoreonly preciseperissue getter distinctMetalcapacityprofile(pending included); defaultunsupported, zero newissuevalid; retain originalpending source owners/fence untilbudgetedhandoffcompleted",
+    "review": "v2aliasfix, migration, drivers, P1/P2 and SET increments independently reviewed clean; actual runtime pending",
+    "preflight": "No scons launched: include checker corrected Vulkan local header to repository-relative path and returned1; rerun complete idempotent checks after coalescing v3",
+    "model": "Astra quota unavailable; default Sol fallback continues",
+    "next": "push4localcommits in one source batch; CI+fixed generic delivery to B/main; independently review/combine frozen immutable owner candidates, formal production operation/window still open",
+    "initial_build": "exit2 linker INVALID_ID odr-use in two doctest comparisons; 26files compiled, input unchanged; changing only2 CHECK operand value casts",
+    "initial_runtime": {
+      "native": "13/20 cases;9031pass19fail assertions;494Bdiagnostics",
+      "request": "10/14cases;1350pass4failassert;split worker bind Unauthorized",
+      "disposal": "7/7cases2684assert clean",
+      "record": "9/9cases384assert clean"
+    },
+    "driver_fixture_green": "5/5cases4977assert clean; exact max-bound-set limit and real barrier/nonbarrier descriptor paths; host04196f53e0f557be346b220e5d1c298c12623006bc8575e72c6e602e0e198ca4",
+    "tests_latest": {
+      "host": "29928db7dcf65b97c1f1ff5b49957932466f40216a2102d9ca256bf7877361f3",
+      "native": "20cases11707assert rc0 but247B enqueue+bufferleak, isolated mapped only; not clean",
+      "request": "13cases passed;SET failed qualification_unit_create30 then crashed -6; earlier qualification_open false because plain rather than main session binding",
+      "disposal": "7cases2684assert clean on first-linked host",
+      "record": "9cases384assert clean on first-linked host"
+    },
+    "green_before_negative": {
+      "host": "9dde0d47a955bbde56f3b36e4f42eed1bd3b60f5f6d6634fd0de1ba906825560",
+      "target": "20/11640+14/1481+7/2684+9/384 clean;128/43143 expected776B",
+      "full": "2052cases500929assert exit0;stdout571 stderr4017 not diagnosticclean; expected count exact"
+    },
+    "receipt": "work/b4-production-actions-20261105/RECEIPT.md",
+    "host_sha256": "733049db8888383ee8d9dbfe4d14ef255d86ebbe54b2a696e232bd25868a6c9d",
+    "delivery": "work/scene-bone-handoff-20261104/NATIVE_ACTIONS_DELIVERY_20261105.json"
+  },
+  "p01_runner_audit": {
+    "receipt": "work/b4-p01-runner-audit-20261105/AUDIT.md",
+    "status": "source audited only; exact A bootstrap found; full adopted native replay not delivered; sent main original relay",
+    "runtime": "not executed"
+  },
+  "local_unpushed_commits": [
+    "6e6cb02dd9"
+  ],
+  "immutable_native_owner_candidates": {
+    "surface_base": "/tmp/b4-native-surface-hold/FREEZE.json +next callback +next2 mesh preflight +next4/final-shared-rd.patch (skip intermediate next3 reject profile)",
+    "surface_review": "runtime_fixture_final_review final next4 scopedclean;4findings closed; actualtests/build pending",
+    "material_base": "/tmp/b4-material-native-hold/next/material-native-hold-next-full.patch +next2 callbacktest +next3 actualUBOdtor +pendingnext4 alias/profile/sampler tests",
+    "material_review": "dispatch_alias_fix7source next clean; next2/3 integration review and addedactual tests pending",
+    "frozen_rule": "all source only /tmp; current D tracked clean f81, no builder; merge exact patches preserve ordinary3transferhelpers",
+    "pending": "Materialauthor adding actual shared view/native export/depthresolve/pendingworker/immutable sampler factory regressions; combined build once reviewed",
+    "status": "13 reviewed sources applied via9exactpatches; ordinary transfer helpers byte-identical; two13filechecks passes0 idempotent; unique fullbuild68906 running; no source mutations"
+  },
+  "ci_previous_340": {
+    "run": 41862597928,
+    "source": "340026ef624cb114db67fad8f564f4f2009b52e1",
+    "status": "completed",
+    "overall": "failure",
+    "tsan": "success",
+    "asan_ubsan": "success",
+    "static": "success",
+    "pending_fixes": "Windows/SCU compilation +5 XML classrefs fixed and independently reviewed, local commits awaiting combined push",
+    "receipt": "work/b4-ci-platform-followup-20261105/SOURCE_DIAGNOSIS.json"
+  },
+  "core_window_candidate": {
+    "path": "/tmp/b4-production-window-receiver",
+    "status": "5source frozen checkpoint reviewed2P1+P2; author correcting metadataACK afterseal, close own lists before scopeexit and exactKnownPrefix; no Dsource applied; B external ABI still pending",
+    "next": "non-author review fixed delta+real FIFO tests before integrating"
+  },
+  "immutable_native_owners": {
+    "commit": "04d6906af1f111d0d39bcd82f899be18e59f09f6",
+    "push": "verified normal origin59b..285 includes04d",
+    "receipt": "work/b4-native-immutable-owners-20261105/RECEIPT.md",
+    "host_sha256": "34ebfc90a13b9b4d3b82caf98728acb0b07142e5a2ef94b5c6d0c5a46a304d83",
+    "embedded_base": "59b8939022c74a6b301b629355579ca64e02ed95",
+    "source_compare": "13/13 committed input hashes match",
+    "tests": "2057cases501870assert rc0;2052 baseline retained+5;full stdout571/stderr4017 notdiagnosticclean;surface6/235 material3/807 strictclean",
+    "scope": "actual immutable native surface/material closures; CPU only, not fullSprite/K06/K03/product acceptance",
+    "delivery": "work/scene-bone-handoff-20261104/IMMUTABLE_DELIVERY_20261105.json"
+  },
+  "production_window_next": {
+    "owner": "production_owner_service",
+    "state": "15source reviewed mechanical scope+freshmetadata combination merged into D workingtree, build active; not committed/runtime",
+    "open": "new-record RD gate, real fresh Core metadata role after seal/quiesce, scope close/KnownPrefix/finiteturn regression, exactsizeof canonical productionDTO/procs jointABI",
+    "scope": "physical NoScene Core context only; originalRuntime logical operation/window exporter remains separate requirement",
+    "review": "dispatch_alias_fix finalmetadata2 scope clean; earlierKEEP/KnownPrefix review clean",
+    "checkpoint": "/tmp/b4-production-window-receiver/next/FREEZE.json",
+    "checkpoint_sha256": "063f92a12b56c77d5db6433db74d67262c88dca439a4d8d6d8609fd6243af4ac",
+    "final_freeze": "/tmp/b4-production-window-receiver/metadata-next2/FREEZE.json",
+    "final_freeze_sha256": "49d742d1c204fd0934634f4c99162d601cb6309478ee8798d748a4587308f34d",
+    "patch_sha256": "6bfb6cd698b631478788e9d4a951e250abdcb9e4069292dfa1773e5214a0b2de",
+    "source_checks": "root15file two applicable passes/schema0/idempotent",
+    "last_close": "B actualoriginalregular pair remains throughExitPreflight; SceneDeinit close_main_binding->attachmentclose->pair/context/session->CodeHold; Bconsumernotyetimplemented, failed/partialpathauditpending",
+    "next": "waitonlyactualbuild86834, no duplicate; request19 exact names, native20/disposal7/record9/neighbors; full2064 expected; runtimeprovebeforecommit"
+  },
+  "ci_enum_followup": {
+    "commit": "285376dbadadf4bbd77a6d546df9b8e87adb81b9",
+    "receipt": "work/b4-ci-explicit-enums-20261105/RECEIPT.md",
+    "build": "exit0/17.77 seconds/frozen3source",
+    "tests": "native20/11640+request14/1481 rc0 clean",
+    "postpushCI": "pending",
+    "push": "success"
+  },
+  "flattened_surface_followup": {
+    "owner": "dispatch_alias_fix",
+    "status": "committed,pushed; actualCPU+Metalprepare only",
+    "root_cause": "meshRID max8 was wrongly reused as flattened native surface max8 in storage/guard/GLSL",
+    "constraint": "actual permesh MAX_MESH_SURFACES256 => maxflattened2048; exact backing extents; no arbitrary count growth; actual work/budget remains required",
+    "consumer_boundary": "no standalone hold wrapper without actualpacket/nativepass use owner",
+    "commit": "7abadb08b1c576b6973856b83a8063bdf530f1d5",
+    "receipt": "work/b4-flattened-surfaces-20261105/RECEIPT.md",
+    "tests": "guard6/521+prefix8/396 clean; full2059/502136 rc0 notdiagnosticclean",
+    "native": "actualMetal5modeprepare90checks rc0 only; no dispatch/source/fullchain",
+    "review": "runtime_fixture_final_review frozen source scoped clean"
+  },
+  "ci_shadow_followup": {
+    "candidate": "/tmp/material-prefix-ci-shadow-fix/implementation.patch",
+    "scope": "2 RD parameter renames +MobileShader alias; inverse substitution exact; not Dapplied while frozen rebuild runs"
+  },
+  "ci_material_shadow": {
+    "commit": "7c6c2969b92650b5d8776b7e6c28b93542fd575a",
+    "receipt": "work/b4-ci-material-shadow-20261105/RECEIPT.md",
+    "verified": "rootactualfullTU WshadowWerror0; independentMinGW minimal oldRED/fixedGREEN;no extra runtime for localrename"
+  },
+  "immutable_callback_lock_order": {
+    "status": "open; actualCI TSAN exit66",
+    "receipt": "work/b4-ci-immutable-lock-order-20261105/STATUS.md",
+    "owner": "runtime_fixture_final_review /tmp implementation; dispatch_alias_fix independent read-only owner constraints",
+    "source": "285376dbadadf4bbd77a6d546df9b8e87adb81b9",
+    "job": 127030970824,
+    "next": "reviewer replacing broadunlock with atomic RDguard handoff into _free_dependencies; IA/set checks move inside existing lock; preserve nativepipelineparallel and originalowner cachewait; no Ready beforeactualtests",
+    "candidate": "/tmp/b4-immutable-callback-lock-fix/FREEZE.json",
+    "sha256": "18d36fbc98648238a23d5288a282cd3d9761a8a5b19fa0aa55320465262fbc87",
+    "patch_sha256": "7f6ccf486de7327769417db389d0782a5833edad0226336edb73ef5ee4bbe870",
+    "review": "dispatch_alias_fix scopedclean, actualoldprobeRED verified; actualLinuxTSANremaining"
+  },
+  "ci_runner_format": {
+    "commit": "d85afdead7857d1cccd3f7a42d79f266c0917a73",
+    "receipt": "work/b4-ci-guard-runner-format-20261105/RECEIPT.md",
+    "push": "success",
+    "newCI": "pending",
+    "verified": "Ruff0.15.8 check/format0; importedASTequivalent; 58scalar+5SPIRV+5namedRED root rerun0"
+  },
+  "latest_surface_delivery": "work/scene-bone-handoff-20261104/SURFACE_DELIVERY_20261105.json",
+  "active_agents": {
+    "production_owner_service": "freshacceptedmetadata lifecycle+role gates, then atomicproductionABI; /tmp only",
+    "runtime_fixture_final_review": "actualTSAN repair all recursiveRD freecallback layers; /tmp only",
+    "dispatch_alias_fix": "independentMaterial/Shader lock+callbacklifetime reviewer; read-only"
+  },
+  "metadata_actual_runtime": {
+    "status": "RED; rootfixedonlyfixture/diagnostics, no productionrelaxation",
+    "root": "work/b4-core-window-metadata-20261105",
+    "latest_diagnostic": "work/b4-actual-lock-pipeline-red-20261105/metadata-pause-diagnostic",
+    "first": "Observe44 known0 possible1 graphfact1; actualnativecontinuation progresses phase1/end2 throughissue/native1 thennewframe, no unowned preflightrejection",
+    "open": "record_window tests reused oldno-record fixedtwoObserve expectations; requireactualstate-based boundedturns and fully consume cells beforestagechange; finalretire/unitreturnstillfails",
+    "author": "production_owner_service preparingrecord-only fixtureloop/tmp delta; preserves oldneighbors",
+    "changes": "fiveactualimmutablelimits(Push128/others64), ownerquerynotRT-only, metadata phasecredit3, staticconstantprvaluecasts, sourcecallerline andstrictfatalmethodnames"
+  },
+  "actual_lock_pipeline_regressions": {
+    "root": "work/b4-actual-lock-pipeline-red-20261105",
+    "verified_red": "VERIFIED_RED.json: Material exact3cases/868pass3fail+Pipeline exact3cases/43pass7fail, exit1both,nocrash",
+    "red_host": "6915e8bc46003178ec19b7871b0cf3caf485fb4e527c1c25c58fd28037b617d4",
+    "source_state": "oldRDlocks/newactualtrylockprobe; oldtaskledger+independentnilguard/newactualWTPtests",
+    "current": "productionTSAN6source andpipeline4 nowmergedsurgically; notyetgreenbuilt",
+    "next": "combine metadatarecord-loop fixture fix thenfull26sourcebuild; runMaterial3/Pipeline3 toproveGREEN, originalneighbors/full2067, thenLinuxTSANactualCI"
+  },
+  "pipeline_recompile_drain": {
+    "freeze": "/tmp/b4-pipeline-recompile-drain/FREEZE.json",
+    "freeze_sha256": "f9d458950904998115d377ec1a2f0bda2990013284735772fc7a8799edec45fa",
+    "patch_sha256": "08dae3465e6a92fa784b01ee532ea3d2091f2448365567454136487c800112b6",
+    "scope": "F+/Mobile actualacceptedprewarmjoin BEFOREmutableShaderDatafields/empty/error; keepnativecompileparallel; originalcacheTaskIDretaineduntilrealjoin, failedIDsnotwaittwice,nilplaceholdernotfree;Canvasunchangednoactualparallelcaller",
+    "runtime": "realoldRED7assertions; fixedsourceappliednotbuilt"
+  },
+  "atomic_production_port": {
+    "freeze": "/tmp/b4-production-window-receiver/atomic-abi/FREEZE.json",
+    "freeze_sha256": "ff78c22a1dad24923f542f51f9554866cee5f7c45e580f745f1c17e495d8021e",
+    "patch_sha256": "6561684e35c9e0dee508bde2e0d576a93c77371b9c8d7c59df31c9077b7ea503",
+    "B_table_sha256": "5238560684b2eaa03c1f9719ceff024dc41986c711db764e2f17fe2987256b24",
+    "status": "B limitedsourceAPPROVE; dispatch_alias_fix independentreviewactive; NOTmerged/installed/runtime",
+    "next": "production_owner_service afterfixturefix implementsoriginalaggregatorinstall+realtypedCABIphysicalpositive; rootmergesatomicwithallactualsizeof andsharedinstalledE05common16preserved",
+    "logical": "Runtime f6b7c359 logicaloperation/window/canonical/RTexport notready, staysseparate; neverphysicalscope=logicalgrant"
+  },
+  "latest_combination_20261105": {
+    "state": "28 source build0; material/pipeline and neighbor groups green; request record fixture release sequence red",
+    "artifact": "work/b4-core-window-lock-pipeline-green-20261105/initial-test-api-compile-red",
+    "exit_code": 2,
+    "input_unchanged": true,
+    "diagnostic_removed": "temporary TESTS-only maintenance pause patch reversed; real TSAN production fix retained",
+    "tests_pending": [
+      "request19",
+      "material3",
+      "pipeline3",
+      "neighbors",
+      "full2067"
+    ],
+    "goal": "active",
+    "host_sha256": "e5c614f4deae461fd4eac140f1c27f5be5737de3ca597372e700eaf4f30f4663",
+    "request_first_failure_line": 1602,
+    "root_cause": "record fixture direct release lacks original budgeted RELEASE/FIFO owner return; production Busy correct",
+    "temporary_diagnostic_removed": true
+  },
+  "latest_delivery_20261105": {
+    "pushed_head": "ae52b97f59",
+    "pipeline_commit": "bde29217d8",
+    "callback_lock_commit": "ae52b97f59",
+    "actual_ci": "pending lookup",
+    "metadata_signal_red": "work/b4-record-release-signal-red-20261105/VERIFIED_SIGNAL_RED.json",
+    "metadata_signal_green": "work/b4-metadata-signal-green-20261105/VERIFIED_SIGNAL_GREEN.json",
+    "metadata_remaining": "record phase callback patch applied but not built; upload fixture128bytes/bounded4pass4receipt source correction candidate pending; public29proc installer candidate pending"
+  },
+  "latest_continuation_red_20261105": {
+    "artifact": "work/b4-upload-prefix-continuation-red-20261105/VERIFIED_RED.json",
+    "source_state": "actual matched physical128 prerequisites",
+    "exit": 1,
+    "failed_assertions": 37,
+    "known": 1,
+    "complete": 1,
+    "possible": 0,
+    "cursor_phase": 3,
+    "stdout_bytes": 0,
+    "stderr_bytes": 0,
+    "source_fix": "checked serial owner candidate in progress; not applied",
+    "other18request": "11000assert clean pass",
+    "ci": "41973622411 head8dbf staticpassed/platforms+TSANinprogress"
+  },
+  "public_release_decision_20261105": {
+    "final_owner_decision": "main superseded earlier single-ref default-slice preference: same unreleased release_v1 explicitly consumes existing ServiceBudget; B agreed",
+    "abi": "same29 procedures; noold-signature fallback/newDTO/newmeter/defaultquota",
+    "reporting": "author aligning actual usage via existingreport/budgetremaining; pending asynchronous credits may not be silently returned",
+    "owner": "production_owner_service with B review",
+    "installer": "independent candidate freeze pending; not installed"
+  },
+  "latest_ci_20261105": {
+    "run": 41973622411,
+    "head": "8dbf961e9b",
+    "tsan_job": 127067525286,
+    "tsan_job_and_unit_step": "success",
+    "raw_logs": "pending fullrun completion",
+    "static": "success",
+    "whole_matrix": "in_progress"
+  },
+  "cursor_candidate_review_20261105": {
+    "freeze8c4": "independently reviewed and applied",
+    "build": "0;29source frozen unchanged;hostfc3f41a8",
+    "runtime": "not GREEN; fixture input/tail completion fixes in progress",
+    "artifact": "work/b4-core-cursor-combination-green-20261105/INITIAL_RUNTIME_FAILURES.json",
+    "owners": "dispatch NativeObserve; runtimefixture Request; both tmp only"
+  },
+  "atomic_public_installer_candidate_20261105": {
+    "freeze": "aba690e87dfc3124c0840a860f44f92058d026301838daa79c6cb41404749a57",
+    "base": "d5e6a59f0c",
+    "applied_local": true,
+    "source_files": 13,
+    "sourcechecks": 33,
+    "build_exit": 0,
+    "host_sha256": "152ce4d8e25ed2e0cf50b9b277c11096e5085a9ad8131cafea932be2ab5b944c",
+    "targeted2": "288assert clean",
+    "request21": "11757assert clean",
+    "native21": "15902assert clean",
+    "resourceUse2": "234assert clean",
+    "full": "2070cases516796assert pass; stdout571/stderr4017 baseline negative diagnostics",
+    "public_release": "old1arg notqualified; explicitbudget6b037 overlay pending root P1 terminal-preflight guard review",
+    "canonical_delivery": "not committed/shipped yet"
+  },
+  "latest_core_delivery_20261105": {
+    "head": "d5e6a59f0c3a84d840814170777691a9dc58f133",
+    "pushed": true,
+    "source_files": 20,
+    "target_cases": {
+      "cursor": 1,
+      "native": 21,
+      "request": 19
+    },
+    "full_cases": 2068,
+    "full_assertions": 516497,
+    "failures": 0,
+    "target_logs": "clean",
+    "full_logs": {
+      "stdout": 571,
+      "stderr": 4017,
+      "interpretation": "existing negative diagnostics; not clean"
+    },
+    "host_sha256": "8cbe8cc5717161829e0d5e3a10157f7467929015adcdb52bdc5ce56c7252024f",
+    "host_embedded_base": "8dbf961e9b",
+    "canonical_receipt": "tests/servers/rendering/fixtures/production_owner_cursor/RECEIPT.md",
+    "next": "atomic public installer next must preserve current fixtures; explicit budget release author/B review; wholematrixCI followup"
+  },
+  "mono_triage_owner_20261105": {
+    "owner": "A with Astra independent review; Root read-only proof handoff only",
+    "actual_failure": "import/export PCK succeeded savepack then six normal Dispose guard errors; checker exit56",
+    "source_chain": "predelete binding_mutation -> PREDELETE_CLEANUP -> CSharp CallDispose -> set_script_instance(null) rejects own mutation",
+    "baseline": "six files same60193-to8dbf; baseline runtime not established"
+  },
+  "release_budget_red_preparation_20261105": {
+    "artifact": "work/b4-release-budget-mono-red-20261105",
+    "source_checks": "48files20checks2passes0/idempotent; executable runner",
+    "applied": "6b budget production +69/950/0bd tests only +reviewed Mono2b71",
+    "not_applied": "production terminal/cause guards069/ba874 (intentional actual RED first)",
+    "scope": "common native host; Mono disabled, no dotnet/C#compile/managedruntime/dotnetformat yet; actual Mono/PCK export validation requires CI",
+    "source_claim": "not green; build running"
+  },
+  "latest_ci_d5_20261105": {
+    "run": 41977178165,
+    "success_jobs": 16,
+    "failed_jobs": {
+      "gcc_scu": 127079107452,
+      "mono": 127079107513,
+      "tsan": 127079107516
+    },
+    "running": 1,
+    "gcc_log_sha256": "fdf8541f78564d4ffd192e3d8d357109554b3895b25a789ec5ac6a53f4c76f86",
+    "tsan_log_sha256": "ff876aac03d162837ab99b6f65172068c20d51031458235c2e7809e580b7b0d7",
+    "scu_owner": "runtime_fixture_final_review tmp candidate only",
+    "tsan_owner": "dispatch_alias_fix tmp candidate only",
+    "scope": "old8dbf TSANsuccess does not qualify d5; d5 new test blocking RD order and SCU helpers under repair; goal active"
+  },
+  "latest_public_physical_delivery_20261105": {
+    "pushed_head": "3ee2e0c50e3821c2abfe84131aa002449431a72f",
+    "public_port_commit": "87e55523f0",
+    "mono_commit": "3ee2e0c50e",
+    "source_status": "tracked tree clean;49 frozen files still exact after commits",
+    "full_cases": 2070,
+    "assertions": 516960,
+    "failures": 0,
+    "host_sha256": "430e50e49e8389867b97c48cb3e669e43f03e1a8a6f167b9e224f8d68605ab98",
+    "host_embedded_base": "d5e6a59f0c",
+    "targeted": {
+      "typed2": 442,
+      "request21": 11911,
+      "native21": 15912,
+      "cursor1": 320,
+      "resourceUse2": 234
+    },
+    "target_logs": "clean",
+    "full_logs": "stdout571/stderr4017 existing negatives, not clean",
+    "sdk_header_sha256": "e93903bc4ef2fa1a7bcda6fda60d267b0a169c4bf6fbe5dc9c58ca1c5f649341",
+    "handoff": "work/scene-bone-handoff-20261104/public-port-final-20261105/MANIFEST.json",
+    "layout": "actual strict C11 generated13DTO probe;Budget40/Report168/Record376/common16;29symbols",
+    "release": "fresh/partial terminal guard +cause retained +fulloldserialescrow+actualBusy/FAILED retry+expiredPending/Returned+freshzero+Completeduncancelled/postsealCancelled all realtypedpublic",
+    "ci_pending": "new head LinuxGCC SCU/TSAN/Mono actualPCK and managedfixture; do not relabel8dbf green ascurrent",
+    "mono_local": "commonObject compiled/pass; no dotnetformat,C#compile,runtime orMonoenabledengine build locally",
+    "coordination": "main/A/B informed fixedfetchablecohort; B productionWorldLoader/progress/meteradapter remains B responsibility; Runtime logicalgrant/liveGPU/fullsixchain not substituted bytest",
+    "latest_pushed_head": "1b761af71505eb65b7b2547ed785437aab71ae47"
+  },
+  "next_queue_20261105": [
+    "Verify latest15286783e6 CI static then actualplatform/GCCSCU/TSAN/MonoPCK+managedfixture; fix concrete failures",
+    "Receive B original29port/OwnerMeter/WorldLoader/progress integration results; avoid duplicate owner implementation",
+    "Keep Runtime logicalauthorization/GPU/sixchain pending separate; currentphysicalCPUproof is not substitute",
+    "Continue nonsecurityGodotFRqueue; no timer/automation, no whole-goal complete onpartialblock"
+  ],
+  "latest_format_followup_20261105": {
+    "commit": "15286783e6",
+    "pushed": true,
+    "failed_ci": 41985861701,
+    "job": 127106307359,
+    "actual_failure": "only dotnet-format fixture indentation; all other static hooks passed; platformjobs skipped",
+    "fix": "exact actualCI patch applied to3C# files; per-line nonindent content identical; VALIDATION.json updated",
+    "source_codegen_header": "unchanged e93903bc…",
+    "new_ci": "41986561968 staticpassed; laterplatformcompile failed ready initializer, now fixed1b761"
+  },
+  "latest_ci_init_fix_20261105": {
+    "commit": "1b761af71505eb65b7b2547ed785437aab71ae47",
+    "ci_run": 41986561968,
+    "jobs": [
+      127108813337,
+      127108813589
+    ],
+    "failure": "missing ready aggregate initializer under platform Wall/Wextra/Werror",
+    "fixed": "explicit Semaphore ready{}; no production/lock behavior change",
+    "strict": "oldactualwarning reproduced; DEV/nonDEV extra/missing-field syntax0",
+    "build_exit": 0,
+    "cursor_runtime": "1case320assert0fail;0stdout/stderr",
+    "artifact": "work/b4-ci-semaphore-initializer-20261105",
+    "pending": "newhead actualGCCSCU/TSAN/Mono/platforms"
+  },
+  "latest_shadow_loader_followup": {
+    "pushed_commit": "a638a36536d6713753d0713b22bec82a6aea87d1",
+    "ci_run": 41988992429,
+    "ci_status": "41988992429 latest actual13success4Windowsfailure3running(mac editor/doubleSCU/Mono editor); no wholematrix acceptance",
+    "prior_ci": {
+      "run": 41987284289,
+      "seven_failed_jobs_same_root": "GCC/MSVC shadowed test-local zero",
+      "other_platform_jobs": "not accepted as green"
+    },
+    "build": "work/b4-ci-shadow-loader-20261105/BUILD_RESULT.json",
+    "strict": "work/b4-ci-shadow-loader-20261105/STRICT.json and STRICT_LOADER.json",
+    "runtime": "work/b4-ci-shadow-loader-20261105/RUNTIME.json",
+    "local_results": "loader1/97 public2/442 request21/11911 all exit0, clean target logs",
+    "tracked_tree_clean": true,
+    "typed_abi_group": {
+      "cases": 14,
+      "assertions": 658,
+      "failures": 0,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "evidence": "work/b4-ci-shadow-loader-20261105/typed-abi/RESULT.json"
+    }
+  },
+  "native_output_join_current": {
+    "status": "in progress P2 original owner candidate, no runtime claim",
+    "authority": "FOUR_SESSION_IMPLEMENTATION_PLAN current complete D native/core scope; OUTPUT_CONTRACT semantic authority; native join PLAN is candidate not acceptance",
+    "missing_work": "original Particles External owner, six RS methods, finite <=32 lease slots; P3 native record bridge, P4 renderer packets, P5 aggregate native retirement",
+    "delegation": "runtime_fixture_final_review implementing /tmp P2 owner/interfaces; dispatch_alias_fix independent contract/test audit; production_owner_service original attachment admission reuse audit",
+    "interface_gaps_sent_to_main": [
+      "U08 actual reservation/charge association",
+      "producer/device PBA32 authenticated resolution",
+      "original record token to reserved native lease slot",
+      "capabilities bit assignment"
+    ],
+    "no_fake_success": "missing admission/bridge cannot be replaced by nonzero tags, unlimited allocations or invented capability bits",
+    "review_status": "independent P2 matrix sent to author; actual RD graph draw/copy capture already exists and must be reused; no duplicate capture work",
+    "review_evidence": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-native-output-owner-review-20261105",
+    "new_actionable_findings": [
+      "Slot request DTO is correlation only; actual reverse pin must prevent arena reclamation",
+      "Withdraw must drive original bounded retirement with no next draw and final ownerfree",
+      "External AABB requires query bounds and actual SceneOnly per-instance pairing",
+      "SceneCull must branch before Native inactive/request_process/queued axis",
+      "private owner destructor cannot be passed through memdelete template without accessible disposal",
+      "Native subemitter must reject External target before configuration mutation"
+    ],
+    "admission_audit": "actual Attachment arena does not account P2 owner/GPU bytes; true E05 move-only U08 Claim identified; original R01 delegated metadata currently has no production install/reserve caller",
+    "checkpoint": {
+      "freeze": "/tmp/b4-native-output-owner-p2/checkpoint-structure-mode/FREEZE.json",
+      "sha256": "3b2cb52f95eecf038e5a368015c8f5f60a0333c0e928c886d19cf94391008e52",
+      "peer": "scoped clean structure/mode; private dtor and cross-subemitter findings fixed; NOT mergeable P2"
+    },
+    "core_custody_candidate": {
+      "path": "/tmp/b4-production-output-pin",
+      "writer": "production_owner_service",
+      "state": "implemented peer-reviewed committed locally 7ea5e0d27c; build and full runtime GREEN",
+      "root_finding": "acquire missing OutputRole assignment conflicts with move/matches/unpin guards, sent author before freeze",
+      "scope": "pre-firsteffect true frozen receiver, finite spare UseCell custody; no new public29ABI/Scene/U08 authority",
+      "freeze_sha256": "e214f2c2238db5d92d35c58c41edf97abfc484214a0c54f32cb5ad949da37ca3",
+      "build_handle": null,
+      "evidence": "work/b4-production-output-pin-runtime-20261105"
+    },
+    "native_service_requirements": [
+      "original OBSERVE scheduling is reusable but current maintenance preflight only admits exact request owned buffer/set physical children",
+      "External NativeDisposalWitness and last material/surface holds need actual bounded closure/cutoff association before maintenance",
+      "do not bypass preflight or borrow owner0 cursor; no ordinary full queue drain",
+      "same immutable cell budget and per-resource progress; zero/expired credit makes no native effect",
+      "hold release must drop actual Registry/RD guards around sync callbacks and re-resolve original identities on return",
+      "actual closure and witness returns before output custody unpin; unpin before request RELEASE avoids self-dependency",
+      "borrowed live mesh/material roots return only the held share (DETACHED_BORROW); never actively free others RID or await unrelated future free",
+      "owned output resources require actual PHYSICAL_RETURNED; retired generations whose last hold queues free retain closure nodes until actual return"
+    ],
+    "writer_boundaries": {
+      "runtime_fixture_final_review": "ParticlesStorage finite owner/slots/hold consumer and state tests in/tmp",
+      "production_owner_service": "Core/RD exact native closure association and bounded maintenance in/tmp",
+      "dispatch_alias_fix": "Forward+/Mobile h/cpp actual packet consumption + same private binding with owner, in/tmp",
+      "root": "sole D mutator/builder/test runner, current62409/session94632"
+    },
+    "p4_verified_gap": "current actual shader variants Instance192/Indexed144 already exist; missing renderer instance192 selection and genuine packet surface/draw branch, do not duplicate shader leaf",
+    "native_typed_service_decision": "original OBSERVE samecell Core→ParticlesStorage fixed private method; soleCorewriter production_owner, Parts runtime; registered actual RID/gen/slot pin+group relationship; no arbitrary callback/queue/public POD grant; captureinflight retain arena, release real Registry/RD guards, re-resolve after sync reentry; quotas/refund/close unchanged",
+    "p4_candidate_review": "shader author corrected accidental C/C++ include-sort use on GLSL; rebuild minimal semantic diff and rerun42stage/link ordinary+Instance192+Indexed144 profile matrix before freeze; Indexed144 validity strictzero motion is genuine missing semantic leaf",
+    "shader_next": {
+      "old_rejected": "ac255flat15 collides actual ShaderCompiler userbase15",
+      "next_freeze": "/tmp/b4-native-output-renderer-consumer/indexed-history-next/FREEZE.json",
+      "sha256": "61345d57b1fb5a3c9d10a5a82920ddfe1b207411c0183572f895aa655594913b",
+      "state": "loc10packing next peer pending, not applied;4renderer consumers separate incomplete"
+    }
+  },
+  "next_queue": [
+    "resume actual matchingserver build44397/60596 toterminal then artifactSHA/moduleprofile/version and A handoff",
+    "newCI41996276774 actualWindows/SCU/pin platform verification",
+    "continue P2 Parts finite slots/chargedcreate + Core closure OBSERVE/physicalreturn + F/M packet providers and retainedHost",
+    "6e6shadercommit locallyverified; do not cancel currentCI merely to pushleaf",
+    "all original Godot/particle horizontal FR scope remains active"
+  ],
+  "active_agents_at_checkpoint": {
+    "runtime_fixture_final_review": "P2 finite slot owner+tests and actual OBSERVE retirement seam in/tmp; uses stable private pin",
+    "dispatch_alias_fix": "independent bounded service/locks/lastuse design review",
+    "production_owner_service": "pin delivered and completed"
+  },
+  "latest_actual_tsan": {
+    "run": 41988992429,
+    "job": 127117217701,
+    "head": "a638a36536d6713753d0713b22bec82a6aea87d1",
+    "job_status": "success",
+    "unit_tests": 1980,
+    "assertions": 516718,
+    "skipped_cases": 3,
+    "failures": 0,
+    "tsan_warnings": 0,
+    "existing_suppression_matches": 3331,
+    "log_sha256": "4fc759c04be782f4df653f0d9d55967deb5e980f9d3c294da6a58efab6303ea8",
+    "log_bytes": 957896,
+    "url": "https://github.com/kuhahahaha/godot/actions/runs/41988992429/job/127117217701",
+    "whole_matrix": "still running at observation; five jobs success and fifteen pending, no full matrix acceptance",
+    "scope": "actual current private Core cursor/metadata, installed physical port and mutex tests at a638; not P2 candidate, managed Mono or live GPU qualification",
+    "local_evidence": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-ci-a638-tsan-20261105",
+    "current_matrix": "41988992429 latest7success13running nofail; receipt local commit413f32b65b not pushed"
+  },
+  "pending_owned_receipt_edit": "none; actual TSAN receipt committed locally only, no push while CI41988992429 active",
+  "local_receipt_commit": "413f32b65bc7818d86353e98b17f6e4a05c1be7f",
+  "latest_private_pin_validation": {
+    "commit": "7ea5e0d27c",
+    "host_sha256": "325c28a273215222084c47795988ebbff3753fbdaff469623675a15473e8a8a7",
+    "public": "2/456clean",
+    "request": "21/11925clean",
+    "native": "21/15912clean",
+    "resource": "2/234clean",
+    "full": "2070/5170490fail;571stdout/4017stderr existing negative logs",
+    "build_exit": 0
+  },
+  "windows_expiry_followup": {
+    "commit": "16f5333b0a",
+    "source": "test_request only two sleep expiry predicates, no prod change",
+    "actual_red_jobs": [
+      127117217504,
+      127117217554,
+      127117217363
+    ],
+    "run": 41988992429,
+    "local_validation": "strict±DEV0/incrementalbuild0/public2/456/request21/11925clean",
+    "windows_recheck": "pending",
+    "evidence": "work/b4-production-output-pin-runtime-20261105/windows-expiry",
+    "fourth_job": {
+      "job": 127117217362,
+      "raw_log": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-production-output-pin-runtime-20261105/windows-expiry/windows-gcc-job.log",
+      "sha256": "17b29a9b238f7916994fe3a769d39e6aba752c584fb2995d8f22ea69c4105fa5"
+    },
+    "actual_new_green": {
+      "run": 41996276774,
+      "job": 127140384948,
+      "scope": "Windowsclangcl fulljob success; otherWindows pending",
+      "raw_sha256": "eefa1763af6f184c248769e39959b3ee0067f0a06658fa3599d307f2b7ce16a0",
+      "evidence": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-ci-537-windows-clang-20261105"
+    }
+  },
+  "A_formal_selected_sdk_handoff": {
+    "package": "work/scene-bone-handoff-20261104/public-port-source-json-20261105/MANIFEST.json",
+    "source_commit": "87e55523f0c8b73d2e18483b7774021d0c82f2af",
+    "json_blob": "68f39ec4f639ff7f38b2635b5b52d347eca28c18",
+    "json_sha": "d206dbf4631a43563f968a93ac06108f830b7cfac044b921316fdf37056decc0",
+    "A_selected_path": "thirdparty/godot_api/gdextension_interface.json",
+    "actual_A_generator_commit": "62b1b20c2ddeddaca0236e9651c66a2f5727e83e",
+    "sdk_header_sha": "175a2c5cf6d5798b0bdf1fca4923ee17b3e177471524f03c5f4f00765ffbf130",
+    "core_header_sha": "e93903bc4ef2fa1a7bcda6fda60d267b0a169c4bf6fbe5dc9c58ca1c5f649341",
+    "headers": "body byte-identical after #ifndef __cplusplus; wrapper/banner differ",
+    "validation": "C11 40/168/376/common16 exit0, A tree not modified"
+  },
+  "current_builder": null,
+  "original_godot_scope_not_replaced": [
+    "K01/K03 native identity/issue/completion/retirement/library lifecycle",
+    "CPU/GPU particle runtime/resource changes and lifecycle",
+    "P01/C4/ActiveReload/shutdown/physics/SkinReference original authorizations and remaining horizontal FRs"
+  ],
+  "latest_pushed_commit": "3a013cc17a",
+  "current_ci": {
+    "run": 41996276774,
+    "head": "53701c7e788f9f5d8e81b687512560310ebe2916",
+    "status": "completed:19success/1failure; Mono clangd unused include only, fixed locally23b",
+    "previous_run": 41988992429,
+    "previous_final": "15success5fail:4Windows exactexpiry fixture + doubleSCU missing7 ForceLink; fixes pushed",
+    "double_scu_job": 127140385096,
+    "double_scu_conclusion": "success",
+    "all_windows": "success",
+    "next_run": 42005031739,
+    "tsan_23b": {
+      "job": 127169840620,
+      "conclusion": "success",
+      "unit": "1980/5167320fail3skip",
+      "warning_lines": 0,
+      "evidence": "work/b4-ci-23b-tsan-20261105",
+      "scope": "not current16source"
+    }
+  },
+  "scu_collection_fix": {
+    "commit": "53701c7e78",
+    "source": "three original tests dirs added",
+    "actual_red": "7 missing ForceLink hidden symbols atLinuxSCU link",
+    "generator": "RED0/7→GREEN7/7 exactlyonce; all230forceLink sources present, total235unique",
+    "strict": "5 fullgeneratedSCU doubleDEV TU0",
+    "linux_actual_recheck": {
+      "run": 41996276774,
+      "source": "53701c7e788f9f5d8e81b687512560310ebe2916",
+      "job": 127140385096,
+      "conclusion": "success",
+      "raw_sha256": "e0c69b4b6dd93b57f51c1d91d09eccc64eededb4a8d9acf88376713a9ca04e2e",
+      "raw_bytes": 4821758,
+      "build": "scons: done building targets.",
+      "unit_cases": 1979,
+      "unit_assertions": 516733,
+      "unit_failed": 0,
+      "unit_skipped": 3,
+      "scope": "actual SCU link and unit runner success; not diagnostic-clean sanitizer/wholeGPU evidence",
+      "diagnostics": {
+        "runtime_error_lines": 42,
+        "asan_error_lines": 0,
+        "lsan_error_lines": 1,
+        "notes": "original CI check_ci_log accepted job while headless import logs include UBSan findings in core/string, thirdparty, style_box_flat/view_3d_controller and fontconfig 288-byte LeakSanitizer report; preserved without suppression changes"
+      }
+    },
+    "evidence": "work/b4-scu-test-collection-20261105"
+  },
+  "mono_actual_ci": {
+    "run": 41988992429,
+    "job": 127117217485,
+    "conclusion": "success",
+    "steps": "engine/.NET/sourcegen/Unit/managednativepredeletefixture/originalPCKexport all success",
+    "marker": "MONO_PREDELETE_DISPOSE_OK",
+    "raw_sha256": "60f766e8fad79a61e35bff04eae0180d75e86d194147f1f7ff101236f3263d71",
+    "evidence": "work/b4-ci-a638-mono-20261105",
+    "receipt": "tests/scene/fixtures/mono_predelete_dispose/VALIDATION.json"
+  },
+  "actual_shader_codegen": {
+    "evidence": "work/b4-actual-shader-and-pool-evidence-20261105/ACTUAL_SHADER_CODEGEN.json",
+    "result": "original ShaderCompiler emitted actual user m_foo at15; temporarycase1/4clean",
+    "restore": "source restored and transientfixture removed; normalpublic2/456clean and codegen filter0cases proves no residue",
+    "consumer": "dispatch uses actualJSON for old15RED/next10GREEN; macro albedo→albedo_highp adaptation disclosed, not fullproductionactions endtoend"
+  },
+  "actual_B_const_pool_quote": {
+    "policy_sha256": "2d31dffc127f07a5dfae85865972345996d4d301b4e56e17b590affa786df83c",
+    "evidence": "work/b4-actual-shader-and-pool-evidence-20261105/ACTUAL_POOL_QUOTE.json",
+    "result": "native_error0; allocation19426968 alignment8 graphslots1032 graphframes516 cleanup513",
+    "device": "strictCPUdriver;workerpool0,currentgraph1,frames1;not actualGPUtarget or combined64Mi sufficiency",
+    "probe": "original installedtypedquote SCENEINITproducer/typedhold/Readydevice; noaccept/noautosize/noBHostwrite",
+    "sent_to_B": true,
+    "latest_limit": "old measured16f only; closure16source changesUseCell size, B notified not reuse19,426,968B",
+    "current_quote": {
+      "source": "e066 plus tests-onlyalpha",
+      "allocation_bytes": 19639992,
+      "alignment": 8,
+      "graph_slots": 1032,
+      "graph_frames": 516,
+      "cleanup": 513,
+      "policy_unchanged": true,
+      "evidence": "work/b4-current-core-pool-quote-20261105",
+      "scope": "strictCPU originaltypedquote, not targetGPU or total64Mi sufficiency"
+    }
+  },
+  "indexed144_history_integrated": {
+    "commit": "6e6cb02dd9",
+    "receipt": "tests/servers/rendering/fixtures/indexed144_history_consumer/DELIVERY.json",
+    "evidence": "work/b4-indexed144-history-integration-20261105",
+    "peer": "61345loc10 accepted, rejectedac255loc15 not used",
+    "actual_shader": "42actualtreeSPIRV0 and actualgeneratedvarying6oldRED/6newGREEN",
+    "runtime": "preformatfull2070/5170490fail;B425/647 with3expectedcamera errors420stderr;guard6/521clean",
+    "final_format": "actualGLSL21utilitystyle,42SPIRVbyteidentical/includeorderunchanged;finalbuild0 pipeline1/2+guard6/521clean",
+    "final_host_sha256": "0c58c295f10ec94c3a638c758ae679ca3e2901bd69064d20298e5fc102ff619c",
+    "limits": "no liveGPU/nativepacket/source/retirement/Hostqualification"
+  },
+  "matching_trimmed_server": {
+    "source": "6e6cb02dd9e1fe5444a7ff4073e319a0b20ef795",
+    "evidence": "work/b4-matching-trimmed-server-20261105",
+    "build_exit": 0,
+    "packaged_sha256": "03939e2ebb17a741342d77d0c4293cdebf2d31004884a6e84dee506e7675bff7",
+    "A_received_same_hash": true,
+    "native_no_script_smoke": "exit0; empty stderr; not SceneReady/GPU qualification"
+  },
+  "basic_closure_review": {
+    "status": "committed10a3026674 after cursor/latecallback clean RED→GREEN; Mesh candidate excluded",
+    "freeze": "7dc553b77b4cce1bcc2378b10b2a879bea609841abd43ab6758ab08a11889265",
+    "Core_peer": "runtime_fixture_final_review",
+    "Material_peer": "dispatch_alias_fix",
+    "changes": "lock order RD→Registry, trylock no-effects, exact recheck, no-stamp ordinary callback reuse negatives, destructor invariant",
+    "late_core_finding": "dispatch source review: post-bind callback replacement on owned set may execute later unclassified callback; Core author validating/fixing in tmp; V2 remains actual-build snapshot, not final accepted",
+    "runtime": "coreonly build0/full2071/5184220fail stdout571stderr4017; closure1/1261 request22/13186 Material3/983 existingMesh2/134 public2/456 focusedalllogs empty",
+    "diagnosis": {
+      "actual": "turn430..432 error44 usage0/0 activecursor1 phase1 target0; two groups queued2/dropped1; qualified settled",
+      "cause": "new drop preflight rejects active cursor, starving original same-request/cutoff continuation",
+      "temporary_probe": "restored exact V2 source after actual exit78; probe compile corrections retained, no prod change",
+      "next": "independent1file fix scoped peer then actualbuild/closure/full"
+    }
+  },
+  "local_unpushed": [],
+  "instance192_primitive": {
+    "commit": "753c68e5c3",
+    "freeze": "41b3070c6571ee18ee475d072f0e722d7ffc471f2e3d597933c9e2d353fbfe49",
+    "evidence": "work/b4-instance192-primitive-20261105",
+    "root_checks": "actual template RED→92GREEN; build0; pipeline1/2 and guard6/521 empty; full2070/5170490fail with retained stdout571/stderr4017",
+    "initial_run": "missing requiredphysicsenv failed1; wrongfilter0cases no coverage, both preserved",
+    "limits": "no actual driverpipeline/GPU facing calibration or fullP2P4qualification"
+  },
+  "A_matching_server_live_attempt": {
+    "state": "A actualMetal reached bind_main_device; loader.compiled_identity absent in ordinary SCons accessor; A now using original controlled build selecting fixed D Core record",
+    "source": "A chat compact snapshot revision25",
+    "scope": "not live fullchain success"
+  },
+  "mesh_held_source": {
+    "status": "exact3source candidate reversedbyte-exact before accepted13sourcebuild; saved /tmp and work/core-only/MESH_SAVED.patch; incompletevoidfree not committed",
+    "freeze": "f56ca20c3241e6ba97144b56f86f5309f475c8aef90e7f07d7c8a67d91fc3a6e",
+    "peer": "dispatch_alias_fix",
+    "limits": "private primitive not actualCorebudget service nor fullP2"
+  },
+  "native_d32_delivery": "work/b4-scene-d32-native-interface-20261105/DELIVERY.json fixede066census; existing independent sampler implemented; D32profile/depthrecordcopy missing queued",
+  "E07_E08_fixed_native_delivery": "work/b4-e07-e08-native-interface-20261105/DELIVERY.json SHA2b0d83f94fdbbd5fb0af056b9e3a6edf8f4884de0b5f3566f63a630e9f6f74f0; sourceexports/nativeE07framejoin explicitlymissing",
+  "parallel_work": {
+    "native_ci_continue": "actuallatestCI fixture initialization fixes; no D writer",
+    "sprite_original_join": "current A05da0fbec0 original fullplan/publication/mapping/Host delta; no mathduplication",
+    "particle_native_changes": "original SDF2D trail history update versus failed-frame rollback candidate"
+  },
+  "pin_borrow": {
+    "freeze": "c1b9784bf5f1b92b7053089d12f3e932a26d080b053f71dd573b6ac29434a617",
+    "peer_review": "7274461bb991087cec2ac0e642438e3c65af70309cd0bce960c0183c50f2b9af",
+    "state": "committed and pushed3a013cc17a; actualRED1/8fail emptylogs completecleanup; GREENfull2071/5188410fail public2/875",
+    "scope": "actual originalacceptedfinite requestmetadata custody only; no physicalcontext/source/nativeusegrant",
+    "receipt": "tests/servers/rendering/fixtures/production_output_pin_borrow/DELIVERY.json",
+    "host_sha256": "b267d3d42ad601042671af98be42f92107a896badf0437f62a4f2e056ae1ebe3"
+  },
+  "native_d32_complete_intake": {
+    "packet": "work/b4-scene-d32-native-interface-20261105/complete-cohort-next",
+    "contract_sha256": "190681dab68bc90d78e2e35bbcf856c82c4571fadc5b26316ee19a0de7f5eb8a",
+    "status": "Mainadopted exact ROOT_ADOPTION0a277f +DECISION1da763; implementation underway noapprovalblock"
+  },
+  "indexed144_prepare_next": {
+    "freeze": "f1937f703affd3a3b940cf0944a11fcf1eae2d09ab9016b3c1318a950f8450a3",
+    "packet": "work/b4-indexed144-prepare-next-20261105",
+    "status": "Root source reviewed implementation overlay only, not merged because original fullOwner/ViewLease incomplete"
+  },
+  "C_thread": "01a1abc0-2129-78a1-a390-c374c5eecfcb",
+  "old_C_retired": "01a157d9-83d0-72e0-bf0f-b267dabe119a",
+  "d32_implementation": {
+    "root": "/tmp/b4-d32-native-cohort-20261105",
+    "wire": "15newtypes6exports generated,oldshapesunchanged,C11/C++syntax0; unmerged",
+    "split": "Root wire/V4ticket/RT; p4agent rasterchild/RDphysicalhooks",
+    "acceptance": "actualmainRDdepth/sample/readback/retirement pending",
+    "texture": "shareddirect/RT profile helper + D32mapping excludes CANUPDATE + explicituploadrefusal; typed/RT strictfullTU0; purehelper32checksGREEN0 vslegacyboundmutation4RED; wholecohortunmerged",
+    "wrappers": "four raster public wrappers/registration overlay; debug/DEV/double syntax0; unmerged",
+    "depth_draw_bounds": "shared pure descriptor helper actual23checks0; no source/GPU grant; unmerged",
+    "checked": "freeze82fd6d08c73780e48bc3f452a946b279ed5dfaf9d76f7badf530a22158d51dc0 actual handles kinds5..7,10syntax12style0; unmerged/no runtime",
+    "raster": "freeze3ee7bf10 lifecycle15syntax0; RT18/19 successor b36e6f1f9syntax0 includes source digest correction; independent limited source review /tmp/b4-d32-independent-review-20261105/REVIEW.json; unmerged/no link/GPU",
+    "rt20": "frozen3dd9edaabd737e89a1ce88939d62079d3a6822f10f3e980658e00ceab0e5dff0;6syntax+ASanUBSandecoder0;unmerged",
+    "v4": "actual common admission/append/report/observe candidate /tmp/b4-d32-v4-ticket-20261105,6syntax0; author/selfreview ongoing; independentreview/runtime/link/GPU pending",
+    "combined": {
+      "path": "/tmp/b4-d32-combined-20261105",
+      "strict_completed": 38,
+      "strict_failures": 0,
+      "style_failures": 0,
+      "state": "committed86b470990a; enginefull2077/5209060fail, actualMetal22checksalltrue RC0 inputsunchanged",
+      "freeze_sha256": "8e1d06bddcdd442e865e299deb5f05c2777d1a60a73d5a87938f3dec4b5b3a6f",
+      "runtime": "work/b4-d32-combined-runtime-20261105",
+      "build_session": 19662,
+      "host_sha256": "68ceddd88234a8b36142f92254bf726bfb36a119c4d2aa305af93fb023692df5",
+      "tests": {
+        "d32_graph": {
+          "exit": 0,
+          "counts": {
+            "OverallResultsAsserts": {
+              "successes": "47",
+              "failures": "0"
+            },
+            "OverallResultsTestCases": {
+              "successes": "1",
+              "failures": "0"
+            }
+          },
+          "stdout_bytes": 0,
+          "stderr_bytes": 0
+        },
+        "qualification": {
+          "exit": 0,
+          "counts": {
+            "OverallResultsAsserts": {
+              "successes": "45778",
+              "failures": "0"
+            },
+            "OverallResultsTestCases": {
+              "successes": "137",
+              "failures": "0"
+            }
+          },
+          "stdout_bytes": 0,
+          "stderr_bytes": 776
+        },
+        "closure": {
+          "exit": 0,
+          "counts": {
+            "OverallResultsAsserts": {
+              "successes": "2790",
+              "failures": "0"
+            },
+            "OverallResultsTestCases": {
+              "successes": "1",
+              "failures": "0"
+            }
+          },
+          "stdout_bytes": 0,
+          "stderr_bytes": 0
+        },
+        "request": {
+          "exit": 0,
+          "counts": {
+            "OverallResultsAsserts": {
+              "successes": "15134",
+              "failures": "0"
+            },
+            "OverallResultsTestCases": {
+              "successes": "22",
+              "failures": "0"
+            }
+          },
+          "stdout_bytes": 0,
+          "stderr_bytes": 0
+        },
+        "material": {
+          "exit": 0,
+          "counts": {
+            "OverallResultsAsserts": {
+              "successes": "983",
+              "failures": "0"
+            },
+            "OverallResultsTestCases": {
+              "successes": "3",
+              "failures": "0"
+            }
+          },
+          "stdout_bytes": 0,
+          "stderr_bytes": 0
+        },
+        "mesh": {
+          "exit": 0,
+          "counts": {
+            "OverallResultsAsserts": {
+              "successes": "371",
+              "failures": "0"
+            },
+            "OverallResultsTestCases": {
+              "successes": "2",
+              "failures": "0"
+            }
+          },
+          "stdout_bytes": 0,
+          "stderr_bytes": 0
+        },
+        "public": {
+          "exit": 0,
+          "counts": {
+            "OverallResultsAsserts": {
+              "successes": "875",
+              "failures": "0"
+            },
+            "OverallResultsTestCases": {
+              "successes": "2",
+              "failures": "0"
+            }
+          },
+          "stdout_bytes": 0,
+          "stderr_bytes": 0
+        },
+        "full": {
+          "exit": 0,
+          "counts": {
+            "OverallResultsAsserts": {
+              "successes": "520906",
+              "failures": "0"
+            },
+            "OverallResultsTestCases": {
+              "successes": "2077",
+              "failures": "0"
+            }
+          },
+          "stdout_bytes": 571,
+          "stderr_bytes": 4017
+        }
+      }
+    }
+  },
+  "mesh_directory": {
+    "freeze": "1cca030cf94844600f171a67e691189392562b010099c57d4974be2c3c64dcd1",
+    "review": "d8fde419cf3c623bfac89092ffa508d13ea414081b4fc069e8bca02716c08c07",
+    "patch": "6824d5c5dfa9cbf867585dc5a35ec73945360eadd9e08168d483f23997067992",
+    "red_patch": "d001aee7b10777a95fb1e6355826bbfadd2884a52915354286d9ebbd76d15c22",
+    "state": "committed and pushed4d3f4c1099; actualfinalRED runtime1/4failedasserts completeXML logs0; GREENfull2071/5206070fail,focusedall0; privatecomponent only no publicfactory/Parts/P4/GPU/Hostgrant",
+    "evidence": "work/b4-mesh-directory-runtime-20261105",
+    "receipt": "tests/servers/rendering/fixtures/mesh_directory_closure/DELIVERY.json",
+    "source_manifest": "work/b4-mesh-directory-runtime-20261105/FINAL_SOURCE.json"
+  },
+  "ci_pin_borrow": {
+    "run": 42027283091,
+    "commit": "3a013cc17abef284f3784a4983b75ad032462ed7",
+    "state": "completed success20/20",
+    "raw_logs": "work/b4-ci-pin-borrow-20261105/final",
+    "diagnostic_clean": false,
+    "double_scu_runtime_diagnostics": 105,
+    "receipt": "tests/servers/rendering/fixtures/production_output_pin_borrow/CI_RECEIPT.json"
+  },
+  "head": "a17e74e0d8",
+  "instance192_next": {
+    "K_candidate": "/tmp/b4-instance192-k-custody-v3-20261105",
+    "state": "8strict0 source independentreview431a6cb, exactRegistry2add; completefinitecandidate not yetapplied/runtime",
+    "recipe_owner": "Main owns originalC03 completeSprite math/source; D does not duplicate",
+    "issuer": "original A/B mapping/Host refs requested; no authority substitute"
+  },
+  "d32_gpu": {
+    "fixture": "/tmp/b4-d32-mainrd-fixture-20261105",
+    "native_generation": "actual mainMetal rc0; same host76601f23; both original numeric + newD32 shader containers",
+    "initial_dso_build": "rc1 missing44 oldobjects, noGPUrun",
+    "negative_successor": "1ab1931e5d91ff93efe60c4c768c1766d3c942c9895e3249d1791c0373f4fa0a applied",
+    "recovery": "/tmp/b4-d32-original-link-recovery-20261105 exactcurrentoriginalowner44TUs newsource/dependency/objectpins, preserve expectedunit/source/SPV/reflection checks",
+    "rootcause": "SceneReady selection0 and Ready entered; freshcurrentfactory identity782efde5 differs oldexpected; candidatehistory6a26262 rebuild exactexpected848e31c6 and source/profile recovered, originalexpected unmodified",
+    "history_reproduction": "/tmp/b4-d32-numeric-history-20261105/HISTORY_REPRODUCTION_RECEIPT.json; originalunit/source/profile exact; originalheadpin absent; currentSDK separatelyrecorded",
+    "actual_red": "actual_red_missing_begin runtime201; beginhandlevalid but reportbeginMAX; hiddennativefact reentrant enrollment appendedextra facts",
+    "fix": "d80083d69556147a9f36eadf25344aa3c97a4a829b4c8907c3153f8a961de1e2 applied; graphfactindex saved before frame enrollment",
+    "afterfix": "actualclear recorddepthstate1/revision1/begin2/clear4/end8; nativeComplete reached; fixture rejects genuine hiddennativefact semantic4 slotMAX, classspecific correction underway",
+    "acceptance": "actual originalmainRD native substrate passed; clear+scissors+10refusals+3rasterphysical+allclose; noRuntime/Host/SceneE18claim",
+    "raw": "work/b4-d32-combined-runtime-20261105/native"
+  },
+  "k_custody": {
+    "source": "work/b4-k-custody-runtime-20261105/SOURCE.json",
+    "state": "committed966e74c78c; actual build0 full2079/5212510fail; independent review; first archived-host-path failure retained",
+    "scope_open": "original creation/source/mapping/Host issuers and Core OBSERVE association missing; no full product closure claim",
+    "receipt": "tests/servers/rendering/fixtures/external_output_custody/DELIVERY.json",
+    "host_sha256": "479f8b4da4daef7ef61f19e63c20416b9202aa2f15d784387a8d4b04b5fb4f3e"
+  },
+  "d32_gcc_followup": {
+    "patch_sha256": "365528c350d9bb7feda4fa45b5090cd5d1589e310577b21f60d03f950e72565e",
+    "state": "committed10236f9580 actualstrictGCCred→green + realSCUgeneratorlimit1024red→green; noVulkanD3D12GPUclaim",
+    "evidence": "/tmp/b4-d32-crossplatform-audit-20261105",
+    "receipt": "tests/servers/rendering/fixtures/d32_native_cohort/GCC_RECEIPT.json"
+  },
+  "push_status": "pushed a17e74e0d8 includes formatting600fad0aa8",
+  "indexed144_observer": {
+    "commit": "23bbd7080d",
+    "state": "committed and pushed; build0; actual closure1/2864 request22/15256 mesh6/472 allpass logs0",
+    "host_sha256": "548fa2e9d823c2ca29cadc2ea00aed105a8ccea7df15f0582ca234fa0bcbdc36",
+    "receipt": "tests/servers/rendering/fixtures/indexed144_native_observer/DELIVERY.json",
+    "scope": "observer/existing frozen-Version invariant only; no latecreate/renderer/Hostgrant"
+  },
+  "native_service_caller_gap": {
+    "state": "no production _production_output_service caller; no admissible positive owner create yet; free/poll→RELEASED not connected",
+    "evidence": "/tmp/b4-k-liveness-caller-review-20261106/REVIEW.md",
+    "scope": "K component pass not productionliveness acceptance"
+  },
+  "sprite_current_interfaces": {
+    "evidence": "/tmp/b4-sprite-native-join-current-20261105/CURRENT_JOIN_AUDIT.json",
+    "A_head": "809293c2",
+    "status": "actualA integrates BFull plan/source+C decoder; oldCtree stale; productionretaincaller/mapping/params/Hostissuer stillmissing"
+  },
+  "active_thread": "01a1ac95-e0a4-7b70-8440-0a468dcb8529",
+  "previous_D_thread": "01a157d8-4e68-7d02-b560-af5b48f678c4",
+  "interrupted_lanes": {
+    "physics_callback": "prior agent execution automatically interrupted by platform review; evidence /tmp/b4-k03-physics-subtree-20261105 retained; no retry of interrupted action",
+    "service_positive_test": "prior agent automatically interrupted; no positive test package delivered, not declared complete"
+  },
+  "fixture_init_fix": {
+    "commit": "7975920ea3",
+    "state": "pushed;build0;finite2/223 Qualification137/45778 request22/15256 zero failures",
+    "receipt": "tests/servers/rendering/fixtures/native_fixture_initialization/DELIVERY.json",
+    "remote_successor_ci": "not yet checked"
+  },
+  "external_public_surface": {
+    "commit": "e8bd1a56d2",
+    "state": "pushed; actualClassDBREDsixmissing→GREENnone; RT/worker3cases116assert; doctoolbyteexact",
+    "receipt": "tests/servers/rendering/fixtures/external_output_surface/DELIVERY.json",
+    "scope": "sixpublicRTforward only; missingissuer/sourceHostremainstorage-refused"
+  },
+  "native_sdf_retry": {
+    "commit": "fdbe10678d",
+    "state": "pushed; actualmainMetalRED11SDFtargetfailures→GREEN362alltrue; original292+new70;6+2async;30alloc26resourcephysicalreturn;exit0",
+    "receipt": "tests/servers/rendering/fixtures/particle_sdf_history_retry/DELIVERY.json",
+    "combined_engine": "2082cases521421assertzero failures; stdout571stderr4017 retained",
+    "evidence": "work/b4-six-rs-sdf-green-20261106",
+    "scope": "normalnativeSDFtrailretry only; noSDFnumeric/ANGEwholeproducer/wholeOutputReleased"
+  },
+  "B_whole_sprite_handoff": {
+    "path": "/tmp/b4-b-whole-sprite-native-abi-20261105/HANDOFF.md",
+    "state": "sentB;43fixedsources exactexistingABIs/compiler audit nativeinterfaces; noNativeF32SqrtmodelABI oractualwholeSpriteaudit claimed",
+    "missing": "wholeSprite SPIRV/MSL actualcontraction/reassociation/RelaxedPrecision/nativeoptions/errorboundmeasurements"
+  },
+  "native_full_v2_join": {
+    "evidence": "/tmp/b4-native-full-v2-e20-join-20261106/CURRENT_JOIN.md",
+    "advance": "original Full recorder+nonce+native readback retention+completion view implemented in combined owner source",
+    "open": "original R01 requirement receipts/order/completion/ordinal remain NOT_READY; no runtime Full caller or E20 native material/version/custody grant"
+  },
+  "current_lanes": {
+    "physical_action_ordinal": "complete explicit typed V2 revision in progress; original logical canonical/receipt retained; Astra candidate+Sol inventory/tests",
+    "native_owner_join": "ambient/OBSERVE candidates unmerged; private RD thunk needed for static archive ordering risk",
+    "whole_sprite_policy": "precise property successor pushed; whole numeric qualification remains open"
+  },
+  "mobile_instance_recovery": {
+    "commit": "06d452e29d",
+    "state": "actual corrected RED386/3targetfailures→GREEN390alltrue;8async31alloc29resourcesphysicallyreturned;build0/full2082/5214210fail;independentfinalreviewpass",
+    "receipt": "tests/servers/rendering/fixtures/particle_mobile_instance_recovery/DELIVERY.json",
+    "evidence": "work/b4-mobile-instance-green2-20261106",
+    "scope": "fixed native Mobile descriptor recovery; no rendered pixel or whole production claim"
+  },
+  "sprite_v2_native_observation": {
+    "handoff": "/tmp/b4-sprite-v2-native-observation-handoff-20261106/HANDOFF.md",
+    "state": "actual3originalv2staticwrapperMetalcompile/load/pipelineallvalid;process0stderr0;12auditrowsruntimeSafeMathoptions;independent38pins/3SPVval/dis/noRelaxedPrecision/all51opsNoContraction/librarykeyrecompute pass",
+    "zip_sha256": "97e4cc4b912f38811c820f75bc393d7c93fba87731ab7dd8b687e330d31e852e",
+    "host_sha256": "17cc42bfe1ae89e53cbc4827a4c38b73c5798a53e6c501b0c929e59a2e6be8e1",
+    "scope": "compile/staticwrapperonly; no dispatch/mathbound/ticket/finalmappingunit/creation_seqcachehit/offlineargv/Applecompilerbinaryhash qualification"
+  },
+  "cpu3d_depth_sort": {
+    "commit": "a17e74e0d8",
+    "state": "actualpublicproducerRED3targetfails+rotationpass→GREEN4alltrue;full2082/5214210fail/native390390alltrue+physicalclose;independentfinalreviewpassed",
+    "receipt": "tests/servers/rendering/fixtures/cpu_particles_depth_sort/DELIVERY.json",
+    "scope": "returnedMultiMeshCPUordering;notraster/physicalclaimforthisfixture",
+    "ci_followup": {
+      "commit": "fdc68493be",
+      "receipt": "tests/servers/rendering/fixtures/cpu_particles_depth_sort/CI_RECEIPT.json",
+      "state": "pushed;mypy1.19.1RED3errors->GREEN;redgreenoracle29eachunchanged;independentreviewpass"
+    }
+  },
+  "metal_precise": {
+    "state": "committed,pushed;actualREDkeydim1fail+native3Safe0/functionsFast0 -> GREEN2full2082/5214240fail+native3Safe0/functionsPrecise1+native390passed;independentreviewpassed",
+    "receipt": "tests/servers/rendering/fixtures/metal_precise_compile_options/DELIVERY.json",
+    "host_sha256": "1af4e4a7b0a279f23e8c78484238baef3be4a5a17357b20bffa9ac38595110b7",
+    "limits": "noSpritewholemathqualification;oldfallbacknotqualified",
+    "commit": "308bb6e9fd"
+  },
+  "native_owner_join_candidates": {
+    "ambient": "/tmp/native-output-original-bridge/ambient-pin/implementation.patch",
+    "observe": "/tmp/b4-native-observe-leaf/native-observe.patch",
+    "state": "notapplied/unrun;independentsourcereviewpass;portability risk backward static archive refs, fixed private RD thunk recommended",
+    "sourceowner": "C actualOutputAdapter newheader pendingfreeze;Bprefreezeoperationreceiverassociationneeded;noCrownativerights",
+    "portable": "/tmp/b4-native-observe-portable/native-observe-portable.patch"
+  },
+  "c06_v2": {
+    "state": "JSON+13source+3ownerfixturetests applied root; fullbuildpending; V1observableerrorcompat audit fix in progress",
+    "wire": "/tmp/c06-v2-wire",
+    "inventory": "/tmp/c06-action-ordinal-inventory/INVENTORY.md",
+    "tests": "/tmp/c06-action-ordinal-tests/TEST_DESIGN.md"
+  },
+  "sprite_final6": {
+    "state": "actual6pipelines20audit4Safe0Precise1compiles+2cachehits;independent6keys+46pinsverified",
+    "evidence": "work/b4-sprite-final6-precise-20261106",
+    "manifest_sha256": "464b6231ba6f751bdc794a6c77a877b897e3ab8ef1bba32ffc5c7f72d57f704f",
+    "limits": "compileonly;nodispatch/mathqualification/ticket/Full"
+  },
+  "regenerable_cleanup": {
+    "manifest": "work/b4-regenerable-template-cleanup-20261106/MANIFEST.json",
+    "files": 2069,
+    "bytes": 306977216
+  },
+  "c06_v2_current": {
+    "status": "committed and pushed",
+    "source": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-c06-v2-20261106/runtime-fix/SOURCE.json",
+    "targeted": "50 cases / 33413 assertions / 0 failures",
+    "full": "2089 cases / 523669 assertions / 0 failures",
+    "actual_metal": "390 checks; 8 readbacks; 31 allocations; 29 native returns",
+    "host": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-c06-v2-20261106/final-host/editor.arm64",
+    "host_sha256": "0c882b933ea1ab94e8fee22447ff0c42f4bf470871a1ade6655fc44ffcb526f3",
+    "limits": "V2 native tests CPU backing emulator; no original source/publication/GPU qualification; queue active",
+    "commit": "112d26b6cb153317af7939fe8dfe178976228476"
+  },
+  "output_bridge_current": {
+    "status": "committed and pushed",
+    "source": "work/b4-output-bridge-20261106/SOURCE.json",
+    "patch_sha256": "f454ae8e63832c8f25d51279d5f6d2df1c2a733e8453f9c683dd5763e02061af",
+    "limits": "No positive original source admission caller or native bind/service qualification yet",
+    "commit": "36964570cd",
+    "targeted": "50 cases / 33453 assertions / 0 failures",
+    "full": "2089 cases / 523709 assertions / 0 failures",
+    "native390": "strict actual Metal pass; no positive external bind/service witness"
+  },
+  "typed_four_current": {
+    "status": "committed; push confirmed separately",
+    "patch": "/tmp/native-output-typed-interface-proposal/body-draft/implementation.patch",
+    "patch_sha256": "a7a24c510238dfda602054f6fdebb35eade23f9c5bb7646c1aa6f0b3dec5511d",
+    "limits": "No external exports/real Host forwarder; create/seal unavailable; acquire/poll projections and direct typed invocation pending",
+    "commit": "453edb900327e108f9ec29846e915b7acbc717fc",
+    "header": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/core/extension/gdextension_external_output_typed.h",
+    "header_sha256": "f1fe23eebc6b7b3806df5c7205f0eda09cbac803b76bd6365585d86e87f662ea",
+    "full": "2089 cases / 523709 assertions / 0 failures",
+    "host": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-typed-output-four-20261106/host/editor.arm64",
+    "host_sha256": "16594576de51447191f95adce9e77af4d50ee4056f97361d1f404439b31625bc"
+  },
+  "header_ci_followup": {
+    "commit": "0545e03db7e2aed66abcb239c29c178c6c2d923d",
+    "header_sha256": "b8803cf90953c97892be75a2265d90ef72c12e0577ac694d5a821a2f9a5e6912",
+    "source_run": 42102942108,
+    "source_result": "one style failure, six skipped; no remote build",
+    "fix": "copyright alignment and pragma once; original hooks idempotent, clang/codespell pass",
+    "preserve": "453 build/receipt pins old header; no relabel"
+  },
+  "active_workstreams": {
+    "registration_astra": "four proc JSON/compat/rooted wrappers candidate52fd frozen; new SDK snapshot; no old SDK overwrite; actual guarded callback tests Sol in progress",
+    "material_generation_sol": "independent leaf candidate with RED/GREEN stages; Astra review in progress; no D apply/build yet",
+    "live_geometry_sol_review": "final source/raw evidence independent review ongoing",
+    "full_material": "R1 transparent fog predicate static recheck passed; original created pipeline owner/charge/retire prefix still required; not applied",
+    "registration_cleanup": "cancel exact original root+Core row context candidate21cb; typedwithdraw missing generation anchor trueUnavailable; C/A genuine successor join pending",
+    "geometry_neighbor_sol": "actual no-neighbor owner-clear queuedreturn + live Indexed144 component test candidate; Pending/Unknown actualsource join audit, no synthetic seam",
+    "material_astra": "completed local7e9; full2105/529144 and Metal390 passed; public admission still absent",
+    "acquire_poll_astra": "frozen source inventory copied work/b4-acquire-poll-original-20261106; Main/A/C informed actualissuer/phase absent; no ABI mutation",
+    "pipeline_prefix_tests_review": "R1 source+R1 tests71e685 independent review accepted static; both originalP1 reports preserved; not Dapplied/run",
+    "ordinary_pipeline_sol": "productionc6f654 independentAstra review accepted; actualcapacity testb1d760 hasIDcompare compile P1, authorR1 fix+independentrecheck pending; root will actualRED/GREEN",
+    "generation_root_astra": "implemented, validated target/full/Metal390, independent final review accepted; public source/preparation/phase admission remains open",
+    "owned_storage_next_slice": "committed1a2ba155c6; full/target/native+independent final pass; local while d9 CI inprogress",
+    "storage_extent_tests": "independent next-slice capacity/failure/zero-capacity test matrix dispatched; /tmp only",
+    "storage_neighbors": "committed3f1b070800 target6/11584 full2118/542745 native390+8 evaluator passed independent source+target review",
+    "ci_lock_order": "independent diagnosis agent running, original owner service reacquire RD->Registry contrary actual factory Registry->RD; /tmp only",
+    "ci_tidy": "independent minimal includes/initializer fix agent running, all5 exact clangd diagnostics saved"
+  },
+  "linked_owner_current": {
+    "commit": "2cbe2271ecf0b733486adfa7944dece5fec5cb24",
+    "receipt": "tests/core/extension/native_output_bridge/LINKED_OWNER_RECEIPT.json",
+    "targeted": "51/33579 zero failures",
+    "full": "2090/523835 zero failures",
+    "actual_metal": "native390 passed",
+    "scope": "one metadata owner/two actual roots; no source admission"
+  },
+  "live_geometry_current": {
+    "state": "committed and pushed; independent final review accepted bounded component",
+    "receipt": "tests/core/extension/native_output_bridge/LIVE_GEOMETRY_RECEIPT.json",
+    "red": "3 failed cases; 279 successful/5 failed assertions",
+    "green": "3 cases/647 assertions zero failures",
+    "full": "2093 cases/524482 assertions zero failures",
+    "actual_metal": "native390 all checks passed",
+    "host_sha256": "fcacda63f2890080b7395805d1c89c3bbbc6ff36e564e47aead8ecce5a34e2ad",
+    "commit": "0739f328a8"
+  },
+  "material_generation_current": {
+    "state": "committed and pushed; independent final80/80",
+    "receipt": "tests/core/extension/native_output_bridge/MATERIAL_GENERATION_RECEIPT.json",
+    "red": "3 cases pass/1 target case fail;1118 successful6 failed assertions",
+    "green": "4 cases1122 assertions zero fail",
+    "full": "2094 cases524621 assertions zero fail",
+    "native390": "all checks passed",
+    "host_sha256": "02a71894580c2af3b4ea315f567dfb5b8e4f39ca1bb41b4767a7c7dd0ef61ed3",
+    "commit": "8b0f1efaa6"
+  },
+  "regenerable_probe_cleanup": {
+    "manifest": "work/b4-regenerable-probe-cleanup-20261106/MANIFEST.json",
+    "files": 3211,
+    "bytes": 788117840,
+    "scope": "own old restart_timing_probe .o/.a only; hosts/raw evidence preserved"
+  },
+  "four_registration_current": {
+    "state": "committed and pushed; final157/157, GREEN/full/native passed; SDK deliveredMain/B/C",
+    "source": "work/b4-four-registration-20261106/RED_BUILD_ALL_CHANGED_SOURCE.json",
+    "new_generated_header_sha256": "09e6d4fd87682515ec55355022840fdac18b06b83640d90171a60acda59ca29a",
+    "old_sdk_manifest_sha256": "ab1651d8c4a9d5bed42ff3a617b803d32f68ca5cb64f9cfc9585272211eb2ad2",
+    "cleanup_fix_candidate": "/tmp/native-output-owner-cleanup-context/implementation.patch",
+    "cleanup_fix_sha256": "21cb98dc8723f6c45e0fbef724865ff70480e2d67329f7d924f16d2c436d134d",
+    "scope": "cancel exact retained root/request; typedwithdraw missing generation root trueUnavailable; no successful create/seal/withdraw claim",
+    "actual_export": "actual-cpp-export C++ header dump exit0; generated header C11/Cpp17 layout output equal Python SDK; no runtime interface success claim",
+    "valid_red_host_sha256": "fcbe13ff74c08cd72d8ec25f4eaef9825e8677fc9e0fb7947088b09d46e80d45",
+    "valid_red_source": "work/b4-four-registration-20261106/RED_V3_SOURCE.json",
+    "host_sha256": "3454261cf610522c013dd42b400e26f5faefbdb192c228b978b1cc692b40053b",
+    "sdk_manifest": "work/b4-four-registration-20261106/sdk-registered-v1/MANIFEST.json",
+    "sdk_manifest_sha256": "72feb52ec765905da759c88db1d5da459ef803454c6251ebe60267e2d90be348",
+    "commit": "d1ffd3c5664fbd564dce0e3a8fdf822933de7b1a"
+  },
+  "queued_neighbor_defects": {
+    "ordinary_pipeline_rid_capacity": "fixed b53 real ordinary RID pre-reserve, actual RED/GREEN/full/native +independent74checks"
+  },
+  "live_geometry_neighbors_current": {
+    "state": "committed and pushed; independent source/raw checks and target6/2278 full2098/527406 passed",
+    "source": "work/b4-live-geometry-neighbors-20261106/FIXED_SOURCE.json",
+    "limits": "CPU component; actual maintenance source Pending three polls covered; Unknown remains uncovered",
+    "commit": "e291407d44",
+    "host_sha256": "d3bd507409d48ada4a3a8604843e4eea9908ce049953b953e958e0d2450e6cf5",
+    "receipt": "tests/core/extension/native_output_bridge/LIVE_GEOMETRY_NEIGHBORS_RECEIPT.json"
+  },
+  "ordinary_pipeline_capacity_current": {
+    "state": "committed and pushed; actual RED/GREEN/full/native and independent74/74 passed",
+    "source": "work/b4-render-pipeline-rid-capacity-20261106/GREEN_SOURCE.json",
+    "host_sha256": "1d5309e6d08123deed6ffd62daa03ec7bce6bc86e2b5c52627ca6ebe500d8667",
+    "receipt": "tests/core/extension/native_output_bridge/PIPELINE_RID_CAPACITY_RECEIPT.json",
+    "push_policy": "local commit when reviewed; let current e291 CI finish before next batch push, continuing implementation locally",
+    "commit": "b53af1983e959adba40344fb2dd1837beca44ac0"
+  },
+  "material_pipeline_prefix_current": {
+    "state": "committed and pushed; actual target/full/Metal390 and final independent raw review passed",
+    "receipt": "tests/core/extension/native_output_bridge/MATERIAL_PIPELINE_PREFIX_RECEIPT.json",
+    "host_sha256": "b874c63b4bedf14fcd235abf1ffcce7c734a2bd5ae2377edcaa2ad06cd9f6405",
+    "scope": "original Core pipeline custody; genuine source/preparation/GPU charge admission still absent",
+    "commit": "7e9d7864f1e16e83903b478f359d86b9481cfe7b"
+  },
+  "directory_custody_followup": {
+    "candidate": "/tmp/native-output-generation-root-directory-hold-r1/tests.patch",
+    "sha256": "4b0e8bbd75f9d184469d75263c71eb4795ccf90db6562b99bbef55d9c8ced515",
+    "scope": "actual Registryborrow into original viewcell; three private serial reads replaced with unique original row publicserial; not Dapplied"
+  },
+  "generation_root_current": {
+    "state": "committed and pushed; independent final accepted",
+    "evidence": "work/b4-generation-root-20261106",
+    "source": "SOURCE_DIRECTORY_CI_R5.json",
+    "build_session": 38694,
+    "review": "/tmp/current-generation-independent-review.md",
+    "limits": "internal component; public source/preparation/phase admission absent; full queue active",
+    "commit": "d9f3882f12596be6563017156356edb23b7ccab5",
+    "targeted": "8 cases / 4743 assertions / zero failures",
+    "full": "2113 cases / 534049 assertions / zero failures",
+    "metal": "390 checks all true; 8 evaluator checks pass",
+    "receipt": "tests/core/extension/native_output_bridge/GENERATION_ROOT_RECEIPT.json",
+    "remote_ci": {
+      "run": 42145192138,
+      "status": "in_progress",
+      "head": "d9f3882f12596be6563017156356edb23b7ccab5",
+      "observed_success": 14,
+      "observed_failure": 2,
+      "failed_jobs": {
+        "127655057364": "Mono clangd-tidy exit1",
+        "127655057527": "TSAN exit66; step/log pending"
+      }
+    }
+  },
+  "next_original_work": [
+    "Poll CI for ae0867ae15",
+    "Obtain U04 owner-issued typed source/operation association before production successor admission",
+    "Continue visible draw/no-next-draw and internal physical retirement coverage"
+  ],
+  "owned_storage_current": {
+    "state": "committed; held local until prior CI terminal",
+    "source": "work/b4-owned-storage-next-20261106/INTEGRATED_SOURCE_R4.json",
+    "receipt": "tests/core/extension/native_output_bridge/OWNED_STORAGE_RECEIPT.json",
+    "targeted": "4 cases9354assertions",
+    "full": "2116cases540515assertions",
+    "native": "390 alltrue",
+    "limits": "original successor/source/charge/Host/phase/public writable/Indexed144/neighbor matrix unfinished",
+    "commit": "1a2ba155c67979d0b16efcdfce9df669949a6979"
+  },
+  "owned_storage_neighbors_current": {
+    "state": "committed local; prior CI must finish before push",
+    "commit": "3f1b070800ded747d4a7f135251673508548f429",
+    "receipt": "tests/core/extension/native_output_bridge/OWNED_STORAGE_NEIGHBORS_RECEIPT.json",
+    "targeted": "6/11584 strictclean",
+    "full": "2118/542745",
+    "metal": "390alltrue",
+    "limits": "Unknown/surface extrema and original source/generation successor/public output incomplete"
+  },
+  "ci_log_download": {
+    "mono_old_session": 75807,
+    "mono_old_state": "terminal network read timeout, partial preserved",
+    "mono_retry_session": 66166,
+    "mono_retry_path": "work/b4-generation-root-20261106/CI_MONO_RETRY_WITH_HEADERS.log",
+    "tsan_log": "work/b4-generation-root-20261106/CI_TSAN_JOB.log",
+    "tsan_actual_failure": "lock-order-inversion Registry/RD return path, zero assertion failures; root independent diagnosis active",
+    "mono_retry_state": "complete200 length3593629 plus headers; exact diagnostics saved",
+    "tsan_state": "complete; lock-order-inversion exact stack saved",
+    "current": "CI42145192138 terminal18success2failure; changes pushed through8d56bcdd43; current CI42154714457 in_progress"
+  },
+  "held_local_commits": [],
+  "latest_local_validation": {
+    "tidy": "targeted 6/11584 and full 2118/542745 clean; stderr normalized equal",
+    "layout_extrema": "targeted 1/80 and full 2119/542825 clean",
+    "tsan_lifetime": "destructor-only candidate committed; Linux runtime pending",
+    "unknown": "target7/13273 full2120/544514 both0; strict targeted stdout/stderr0",
+    "duplicate_custody": "tests/servers/rendering/test_external_output_owner_state.cpp single-object incremental compile passed; full tests rebuild intentionally stopped after unrelated objects due 449MB disk; existing binary ExternalOutput filter 27/27,5277/5277 is pre-change"
+  },
+  "latest_reviews": {
+    "unknown_storage": "/tmp/unknown-storage-final-review.md; no blocking defect; production UNKNOWN remains fail-closed",
+    "successor_contract": "/tmp/successor-contract-review.md; same-attachment successor rejection contract-correct",
+    "native_gap_audit": "pending final mailbox; read-only"
+  }
+}
