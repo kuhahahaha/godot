@@ -55,6 +55,7 @@ class ExternalOutputStorage {
 #endif
 #ifdef TESTS_ENABLED
 	friend class ::TestExternalOutputPrefixAccess;
+	friend class ExternalLinkedOwnerTest;
 #endif
 
 	enum Role : uint32_t {
@@ -105,7 +106,16 @@ class ExternalOutputStorage {
 	// Mechanical allocation only. A future production caller still needs the
 	// original source/operation and real budget admission BEFORE calling this.
 	// They do not exist yet: no production acquire/seal path calls this method.
+	struct Instance192Layout {
+		uint32_t bytes[RESOURCE_COUNT] = {};
+		uint64_t total_bytes = 0;
+		uint32_t resource_count = 0;
+	};
+	static Error plan_instance192(uint32_t p_capacity, uint32_t p_surface_count, Instance192Layout &r_layout);
 	Error allocate_instance192(uint32_t p_capacity, uint32_t p_surface_count);
+	// Internal stable-slot path only. The caller installs storage and the exact
+	// original pin before entry; this is neither charge nor source admission.
+	Error allocate_instance192_owned(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t &, uint32_t, uint32_t);
 	Error request_retirement();
 	Error observe(Report &r_report);
 	// Explicit delegation only. Scheduling/fences remain the original RD's job.

@@ -176,6 +176,11 @@ struct Access {
 			++releases;
 			return OK;
 		}
+		bool output_storage_factory = false;
+		uint32_t output_storage_attempts = 0, output_storage_count = 0, output_storage_frees = 0, output_storage_fail_at = 0;
+		uint64_t output_storage_bytes[7] = {};
+		bool output_storage_live[7] = {};
+		bool output_storage_indirect[7] = {};
 		uint32_t allocations = 0, buffer_frees = 0, directory_pending_polls = 0;
 		bool buffer_live = false;
 		bool upload_mode = false, staging_live = false;
@@ -207,6 +212,20 @@ struct Access {
 
 		BufferID buffer_create(uint64_t bytes, BitField<BufferUsageBits> usage, MemoryAllocationType allocation, uint64_t) override {
 			CHECK(Thread::get_caller_id() == execution_thread);
+			if (output_storage_factory) {
+				CHECK(allocation == MEMORY_ALLOCATION_TYPE_GPU);
+				CHECK(usage.has_flag(BUFFER_USAGE_STORAGE_BIT));
+				++output_storage_attempts;
+				if (output_storage_fail_at == output_storage_attempts) {
+					return {};
+				}
+				REQUIRE(output_storage_count < 7);
+				const uint32_t index = output_storage_count++;
+				output_storage_bytes[index] = bytes;
+				output_storage_indirect[index] = usage.has_flag(BUFFER_USAGE_INDIRECT_BIT);
+				output_storage_live[index] = true;
+				return BufferID(300 + index);
+			}
 			if (mesh_directory_factory) {
 				CHECK((mesh_directory_indexed144 ? ((mesh_directory_buffer_count < 2 && bytes == 432 && usage.has_flag(BUFFER_USAGE_VERTEX_BIT)) || (mesh_directory_buffer_count == 2 && bytes == 12 && usage.has_flag(BUFFER_USAGE_INDEX_BIT))) : ((bytes == 36 && usage.has_flag(BUFFER_USAGE_VERTEX_BIT)) || (bytes == 12 && usage.has_flag(BUFFER_USAGE_INDEX_BIT)))));
 				CHECK((allocation == MEMORY_ALLOCATION_TYPE_GPU && mesh_directory_buffer_count < 4));
@@ -235,6 +254,13 @@ struct Access {
 		}
 		void buffer_free(BufferID id) override {
 			CHECK(Thread::get_caller_id() == execution_thread);
+			if (id.id >= 300 && id.id < 307) {
+				const uint32_t index = uint32_t(id.id - 300);
+				CHECK(output_storage_live[index]);
+				output_storage_live[index] = false;
+				++output_storage_frees;
+				return;
+			}
 			if (id.id >= 40 && id.id <= 43) {
 				const uint32_t index = uint32_t(id.id - 40);
 				CHECK(mesh_directory_buffers_live[index]);
@@ -1765,6 +1791,24 @@ struct Access {
 				auto &rd = fixture.rd;
 				test.check(__LINE__, registry.production_output_pin(context, ref, rd, test.output_pin) == OK);
 				test.check(__LINE__, rd._production_output_owned_reserve(context, test.output_pin, 2, test.owned_group) == OK);
+				const uint64_t rolled_back_serial = test.owned_group;
+				const auto next_group_serial = request.next_disposal_group_serial;
+				auto wrong_rollback_context = context;
+				++wrong_rollback_context.frame_serial;
+				test.check(__LINE__, rd._production_output_owned_rollback(wrong_rollback_context, test.output_pin, test.owned_group) == ERR_UNAUTHORIZED);
+				test.check(__LINE__, test.owned_group == rolled_back_serial && request.next_disposal_group_serial == next_group_serial);
+				// Cleanup keeps exact RECORD authority after new append admission closes.
+				const bool was_closing = request.attachment->closing;
+				request.attachment->closing = true;
+				uint64_t refused_group = 0;
+				test.check(__LINE__, rd._production_output_owned_reserve(context, test.output_pin, 2, refused_group) == ERR_BUSY && !refused_group);
+				test.check(__LINE__, rd._production_output_owned_rollback(context, test.output_pin, test.owned_group) == OK && !test.owned_group);
+				request.attachment->closing = was_closing;
+				test.check(__LINE__, request.next_disposal_group_serial == next_group_serial);
+				for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
+					test.check(__LINE__, request.uses[i].disposal_group_serial != rolled_back_serial);
+				}
+				test.check(__LINE__, rd._production_output_owned_reserve(context, test.output_pin, 2, test.owned_group) == OK && test.owned_group == next_group_serial);
 				const uint32_t used = request.binding_used;
 				const uint64_t revision = request.revision;
 				uint64_t oversized = 0;
@@ -1777,6 +1821,9 @@ struct Access {
 				test.auxiliary_pipeline = rd.compute_pipeline_create(test.auxiliary_shader);
 				test.check(__LINE__, test.auxiliary_shader.is_valid() && test.auxiliary_pipeline.is_valid());
 				test.check(__LINE__, rd._production_output_owned_storage_create(context, test.output_pin, test.owned_group, 0, 16, {}, test.auxiliary_buffer, test.auxiliary_buffer_witness) == OK);
+				const auto retained_group = test.owned_group;
+				test.check(__LINE__, rd._production_output_owned_rollback(context, test.output_pin, test.owned_group) == ERR_BUSY);
+				test.check(__LINE__, test.owned_group == retained_group && fixture.driver.auxiliary_buffer_live);
 				RenderingDevice::Uniform binding;
 				binding.uniform_type = RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER;
 				binding.binding = 0;
@@ -4734,6 +4781,188 @@ struct Access {
 		fixture.cleanup_owner();
 		CHECK(fixture.owner_cleaned);
 	}
+	struct OwnedStorageProbe {
+		SingletonEnrollment *fixture = nullptr;
+		RendererRD::ExternalLinkedOwnerTest *native = nullptr;
+		uint32_t capacity = 0, fail_at = 0, calls = 0;
+		bool insufficient = false;
+		static void receive(void *userdata, GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionOperationV1 *) {
+			using namespace GDExtensionDeviceExit;
+			auto &test = *static_cast<OwnedStorageProbe *>(userdata);
+			auto &fixture = *test.fixture;
+			auto &native = *test.native;
+			++test.calls;
+			native.install(0, fixture.registry, ref);
+			REQUIRE(fixture.registry.production_output_pin_current(fixture.rd, native.pin(0)) == OK);
+			REQUIRE(fixture.registry.production_output_owner_bind(native.pin(0), fixture.rd, native.particle_rid(), native.generation, 0, native.lease(0)) == OK);
+			const auto next = fixture.request->next_disposal_group_serial;
+			if (!test.insufficient && !test.fail_at) {
+				auto foreign_context = context;
+				++foreign_context.frame_serial;
+				CHECK(native.allocate_storage(foreign_context) == ERR_UNAUTHORIZED);
+				CHECK(native.storage_group() == 0);
+				CHECK(fixture.request->next_disposal_group_serial == next);
+				CHECK(fixture.driver.output_storage_attempts == 0);
+				// The group reservation succeeds, then the original native
+				// preflight refuses an open list before any driver allocation.
+				REQUIRE_FALSE(fixture.rd.compute_list.active);
+				fixture.rd.compute_list.active = true;
+				const Error busy = native.allocate_storage(context);
+				fixture.rd.compute_list.active = false;
+				CHECK(busy == ERR_BUSY);
+				CHECK(native.storage_group() == 0);
+				CHECK(native.storage_total_bytes() == 0);
+				CHECK(fixture.request->next_disposal_group_serial == next + 1);
+				CHECK(fixture.driver.output_storage_attempts == 0);
+				CHECK(native.slot_reserved(0));
+				CHECK(native.storage_tokens_empty());
+				for (uint32_t role = 0; role < 7; ++role) {
+					CHECK(native.storage_rid(role).is_null());
+					CHECK(native.storage_bytes(role) == 0);
+				}
+			}
+			const Error result = native.allocate_storage(context);
+			if (test.insufficient) {
+				CHECK(result == ERR_OUT_OF_MEMORY);
+				CHECK(native.storage_group() == 0);
+				CHECK(fixture.request->next_disposal_group_serial == next);
+				CHECK(fixture.driver.output_storage_attempts == 0);
+				for (uint32_t row = 0; row < fixture.request->capacity.resource_uses; ++row) {
+					const auto &cell = fixture.request->uses[row];
+					CHECK(cell.disposal_group_serial == 0);
+					CHECK(cell.output_role == (cell.output_consumer == &native.pin(0) ? ProductionUseCell::OutputRole::NATIVE_CONSUMER : ProductionUseCell::OutputRole::UNUSED));
+				}
+				native.discard_unattempted_storage();
+				return;
+			}
+			CHECK(result == (test.fail_at ? ERR_CANT_CREATE : OK));
+			const uint32_t expected_count = test.fail_at ? test.fail_at - 1 : (test.capacity ? 7 : 5);
+			CHECK(fixture.driver.output_storage_count == expected_count);
+			CHECK(fixture.driver.output_storage_attempts == (test.fail_at ? test.fail_at : expected_count));
+			CHECK(native.storage_total_bytes() == (test.capacity ? 1448u : 680u));
+			const uint32_t expected_bytes[7] = { test.capacity * 192, test.capacity * 192, 32, 64, 32, 40, 512 };
+			uint32_t ordinal = 0;
+			for (uint32_t role = 0; role < 7; ++role) {
+				CHECK(native.storage_bytes(role) == expected_bytes[role]);
+				if (!expected_bytes[role]) {
+					CHECK(native.storage_rid(role).is_null());
+					continue;
+				}
+				if (ordinal < expected_count) {
+					const RID rid = native.storage_rid(role);
+					REQUIRE(rid.is_valid());
+					CHECK(fixture.driver.output_storage_bytes[ordinal] == expected_bytes[role]);
+					CHECK(fixture.driver.output_storage_indirect[ordinal] == (role == 5));
+					CHECK(fixture.rd._production_output_owned_storage_contains(native.pin(0), native.storage_group(), rid));
+					CHECK_FALSE(fixture.rd._production_output_hold_contains(native.pin(0), native.storage_group(), rid));
+					const auto *buffer = fixture.rd.storage_buffer_owner.get_or_null(rid);
+					REQUIRE(buffer != nullptr);
+					CHECK(buffer->size == expected_bytes[role]);
+					CHECK(buffer->backing_serial != 0);
+					CHECK(buffer->driver_id == RDD::BufferID(300 + ordinal));
+					for (uint32_t earlier = 0; earlier < role; ++earlier) {
+						const RID other = native.storage_rid(earlier);
+						if (other.is_valid()) {
+							CHECK(other != rid);
+							const auto *previous = fixture.rd.storage_buffer_owner.get_or_null(other);
+							REQUIRE(previous != nullptr);
+							CHECK(previous->backing_serial != buffer->backing_serial);
+						}
+					}
+				} else {
+					CHECK(native.storage_rid(role).is_null());
+				}
+				++ordinal;
+			}
+			CHECK(native.storage_tokens_empty());
+			const auto attempts = fixture.driver.output_storage_attempts;
+			CHECK(native.allocate_storage(context) != OK);
+			CHECK(fixture.driver.output_storage_attempts == attempts);
+			CHECK(fixture.driver.output_storage_frees == 0);
+		}
+	};
+	static void owned_storage_observe(uint32_t capacity, uint32_t fail_at = 0, bool insufficient = false) {
+		using namespace GDExtensionDeviceExit;
+		auto *server = ordinal_server();
+		if (!server || !check_step(RendererRD::ParticlesStorage::get_singleton() == nullptr)) {
+			return;
+		}
+		const auto consume = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRecordConsumeV2>("device_session_production_record_consume_v2");
+		const auto release = ordinal_port<GDExtensionInterfaceDeviceSessionProductionReleaseV2>("device_session_production_release_v2");
+		REQUIRE(consume != nullptr);
+		REQUIRE(release != nullptr);
+		OrdinalPlan plan;
+		const uint32_t members = capacity ? 7 : 5;
+		plan.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, 0, members + 2 - uint32_t(insufficient), 0, 0, 0, 0, 0, 0 };
+		plan.action_count = plan.resource_count = plan.use_count = plan.readback_count = 0;
+		SingletonEnrollment fixture;
+		fixture.public_port = true;
+		OwnedStorageProbe probe;
+		probe.fixture = &fixture;
+		probe.capacity = capacity;
+		probe.fail_at = fail_at;
+		probe.insufficient = insufficient;
+		REQUIRE(ordinal_initialize(fixture, server, plan, &OwnedStorageProbe::receive, &probe) == OK);
+		fixture.driver.output_storage_factory = true;
+		fixture.driver.output_storage_fail_at = fail_at;
+		fixture.rd.draw_graph.initialize(&fixture.driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RDD::CommandQueueFamilyID(1), 0);
+		fixture.rd.draw_graph.begin();
+		fixture.rd.frames[0].fence = RDD::FenceID(93);
+		fixture.rd.frames[0].command_buffer = RDD::CommandBufferID(90);
+		fixture.rd.frames[0].command_pool = RDD::CommandPoolID(94);
+		fixture.rd.main_queue = RDD::CommandQueueID(1);
+		RendererRD::ExternalLinkedOwnerTest native(fixture.rd);
+		// Finite private component metadata; no source/charge or usable token.
+		native.prepare_storage(capacity, 2);
+		probe.native = &native;
+		auto &request = *fixture.request;
+		const GDExtensionProductionRequestRefV1 ref = { fixture.instance, request.serial };
+		uint64_t control = 0;
+		REQUIRE(fixture.port.record_schedule(ref, &control) == OK);
+		server->sync();
+		REQUIRE(probe.calls == 1);
+		GDExtensionProductionRecordReportV2 recorded{};
+		REQUIRE(consume(ref, control, &recorded).native_error == OK);
+		CHECK(request.native_count == 0);
+		CHECK(request.graph_count == 0);
+		native.withdraw();
+		for (uint32_t turn = 0; turn < 256 && !native.released(); ++turn) {
+			const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+			ProductionControlOutput output{};
+			uint64_t serial = 0;
+			const uint32_t frees = fixture.driver.output_storage_frees;
+			REQUIRE(fixture.registry.production_control_accept(ref, ProductionControlKind::OBSERVE, &serial, &budget) == OK);
+			REQUIRE(fixture.registry.production_control_schedule(ref, serial) == OK);
+			server->sync();
+			REQUIRE(fixture.registry.production_control_consume(ref, serial, &output) == OK);
+			CHECK((output.result.native_error == OK || output.result.native_error == ERR_BUSY));
+			CHECK(output.service_usage.passes <= 1);
+			CHECK(output.service_usage.receipts <= 1);
+			CHECK(fixture.driver.output_storage_frees - frees <= 1);
+			CHECK_FALSE(output.output_generation.native_released);
+		}
+		CHECK(native.released());
+		CHECK(native.storage_empty());
+		CHECK(native.storage_tokens_empty());
+		CHECK(fixture.driver.output_storage_frees == fixture.driver.output_storage_count);
+		for (uint32_t i = 0; i < 7; ++i) {
+			CHECK_FALSE(fixture.driver.output_storage_live[i]);
+		}
+		generation_root_drain_cursor(fixture, ref, server);
+		for (uint32_t turn = 0; turn < 16 && request.serial; ++turn) {
+			const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+			GDExtensionProductionServiceBudgetV1 remaining{};
+			GDExtensionProductionReportV2 report{};
+			const Error error = Error(release(ref, &budget, &remaining, &report).native_error);
+			CHECK((error == OK || error == ERR_BUSY));
+			if (request.serial) {
+				server->sync();
+			}
+		}
+		CHECK(request.serial == 0);
+		fixture.cleanup_owner();
+		CHECK(fixture.owner_cleaned);
+	}
 	struct PipelinePrefixProbe {
 		SingletonEnrollment *fixture = nullptr;
 		RendererRD::ExternalLinkedOwnerTest *native = nullptr;
@@ -6650,6 +6879,24 @@ TEST_CASE("[SceneTree][ProductionRequest][OutputRegisteredLeaves] guarded origin
 	for (uint32_t custody_case = 0; custody_case < 3; ++custody_case) {
 		Access::output_registered_leaves(custody_case);
 	}
+}
+TEST_CASE("[SceneTree][ProductionRequest][OwnedStorageComponent] exact Instance192 and zero-capacity resources retire through original OBSERVE") {
+	Access::owned_storage_observe(2);
+	Access::owned_storage_observe(0);
+}
+TEST_CASE("[SceneTree][ProductionRequest][OwnedStorageComponent] finite member shortage refuses before native allocation") {
+	Access::owned_storage_observe(2, 0, true);
+	Access::owned_storage_observe(0, 0, true);
+}
+TEST_CASE("[SceneTree][ProductionRequest][OwnedStorageComponent] every original native allocation failure retains and retires exact prefix") {
+	ERR_PRINT_OFF;
+	for (uint32_t fail = 1; fail <= 7; ++fail) {
+		Access::owned_storage_observe(2, fail);
+	}
+	for (uint32_t fail = 1; fail <= 5; ++fail) {
+		Access::owned_storage_observe(0, fail);
+	}
+	ERR_PRINT_ON;
 }
 TEST_CASE("[SceneTree][ProductionRequest][CoreProtected][GenerationRootComponent] Root retains actual pipeline and material prefix") {
 	Access::pipeline_prefix_observe(0, true);

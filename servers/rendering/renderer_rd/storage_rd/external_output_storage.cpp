@@ -34,6 +34,30 @@
 
 namespace RendererRD {
 
+Error ExternalOutputStorage::plan_instance192(uint32_t p_capacity, uint32_t p_surface_count, Instance192Layout &r_layout) {
+	if (p_capacity > (1u << 20) || p_surface_count == 0 || p_surface_count > ExternalOutputConfig::MAX_FLATTENED_SURFACES) {
+		return ERR_INVALID_PARAMETER;
+	}
+	// Compute every extent before any native creation. RD has no public maximum
+	// storage-buffer-byte limit; actual allocation failure stays a native error.
+	// Fixed control extents match ParticlesExternalGuard's Instance192 ABI.
+	Instance192Layout layout;
+	const uint64_t counts[RESOURCE_COUNT] = { p_capacity, p_capacity, 8, 16, 8, p_surface_count, 224 + uint64_t(p_surface_count) * 144 };
+	const uint64_t strides[RESOURCE_COUNT] = { 192, 192, 4, 4, 4, 20, 1 };
+
+	for (uint32_t i = 0; i < RESOURCE_COUNT; ++i) {
+		const Error size_error = ExternalOutputConfig::checked_buffer_bytes(counts[i], strides[i], UINT32_MAX, layout.bytes[i]);
+		if (size_error != OK) {
+			return size_error;
+		}
+		// Seven u32 extents sum safely in u64; no narrowing of total occurs.
+		layout.total_bytes += layout.bytes[i];
+		layout.resource_count += layout.bytes[i] != 0;
+	}
+	r_layout = layout;
+	return OK;
+}
+
 Error ExternalOutputStorage::allocate_instance192(uint32_t p_capacity, uint32_t p_surface_count) {
 	if (attempted || retirement_requested) {
 		return ERR_ALREADY_IN_USE;
@@ -45,25 +69,15 @@ Error ExternalOutputStorage::allocate_instance192(uint32_t p_capacity, uint32_t 
 	if (ready != OK) {
 		return ready;
 	}
-	// Compute every extent before any native creation. RD has no public maximum
-	// storage-buffer-byte limit; actual allocation failure stays a native error.
-	// Fixed control extents match ParticlesExternalGuard's Instance192 ABI.
-	uint32_t bytes[RESOURCE_COUNT] = {};
-	const uint64_t counts[RESOURCE_COUNT] = { p_capacity, p_capacity, 8, 16, 8, p_surface_count, 224 + uint64_t(p_surface_count) * 144 };
-	const uint64_t strides[RESOURCE_COUNT] = { 192, 192, 4, 4, 4, 20, 1 };
-	uint64_t planned_bytes = 0;
-	for (uint32_t i = 0; i < RESOURCE_COUNT; ++i) {
-		const Error size_error = ExternalOutputConfig::checked_buffer_bytes(counts[i], strides[i], UINT32_MAX, bytes[i]);
-		if (size_error != OK) {
-			return size_error;
-		}
-		// Seven u32 extents sum safely in u64; no narrowing of total occurs.
-		planned_bytes += bytes[i];
+	Instance192Layout layout;
+	const Error planned = plan_instance192(p_capacity, p_surface_count, layout);
+	if (planned != OK) {
+		return planned;
 	}
 	for (uint32_t i = 0; i < RESOURCE_COUNT; ++i) {
-		resources[i].bytes = bytes[i];
+		resources[i].bytes = layout.bytes[i];
 	}
-	total_bytes = planned_bytes;
+	total_bytes = layout.total_bytes;
 	attempted = true;
 	for (uint32_t i = 0; i < RESOURCE_COUNT; ++i) {
 		if (resources[i].bytes == 0) {
@@ -75,6 +89,59 @@ Error ExternalOutputStorage::allocate_instance192(uint32_t p_capacity, uint32_t 
 			// Preserve original creation error and every completed prefix entry.
 			// A busy/failed disposal is retryable; it cannot lose or reuse storage.
 			request_retirement();
+			return creation_error;
+		}
+	}
+	return OK;
+}
+
+Error ExternalOutputStorage::allocate_instance192_owned(GDExtensionProductionPhysicalContextRefV1 context,
+		GDExtensionDeviceExit::ProductionOutputPin &pin, uint64_t &group, uint32_t capacity, uint32_t surface_count) {
+	if (attempted || retirement_requested || group) {
+		return ERR_ALREADY_IN_USE;
+	}
+	Instance192Layout layout;
+	Error error = plan_instance192(capacity, surface_count, layout);
+	if (error != OK) {
+		return error;
+	}
+	// Entire original group capacity is reserved before the first native call.
+	// Failure here leaves this stable storage untouched and retryable.
+	error = device._production_output_owned_reserve(context, pin, layout.resource_count, group);
+	if (error != OK) {
+		return error;
+	}
+	for (uint32_t i = 0; i < RESOURCE_COUNT; ++i) {
+		resources[i].bytes = layout.bytes[i];
+	}
+	total_bytes = layout.total_bytes;
+	attempted = true;
+	uint32_t ordinal = 0;
+	for (uint32_t i = 0; i < RESOURCE_COUNT; ++i) {
+		if (!resources[i].bytes) {
+			continue;
+		}
+		const BitField<RenderingDevice::StorageBufferUsage> usage = i == PROTECTED_COMMANDS ? BitField<RenderingDevice::StorageBufferUsage>(RenderingDevice::STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT) : BitField<RenderingDevice::StorageBufferUsage>();
+		creation_error = device._production_output_owned_storage_create(context, pin, group, ordinal++, resources[i].bytes, usage, resources[i].rid, resources[i].witness);
+		if (creation_error != OK) {
+			if (creation_error == ERR_BUSY && ordinal == 1 && resources[i].rid.is_null()) {
+				// No original native factory succeeded. Restore only the exact
+				// metadata reservation; its consumed group serial stays consumed.
+				const Error rolled_back = device._production_output_owned_rollback(context, pin, group);
+				if (rolled_back == OK) {
+					for (uint32_t j = 0; j < RESOURCE_COUNT; ++j) {
+						resources[j].bytes = 0;
+					}
+					total_bytes = 0;
+					attempted = false;
+					creation_error = OK;
+					return ERR_BUSY;
+				}
+			}
+			// Successful factories bind under the same original Registry and
+			// recursive RD locks. Preserve that real prefix; only reservations
+			// for factories that never created resources become UNCREATED.
+			device._production_output_owned_cancel_unbound(pin, group);
 			return creation_error;
 		}
 	}

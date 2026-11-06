@@ -30,6 +30,7 @@
 
 #include "servers/rendering/renderer_rd/storage_rd/external_output_owner.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_packet.h"
+#include "servers/rendering/renderer_rd/storage_rd/external_output_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "tests/servers/rendering/test_external_output_custody_bridge.h"
 #include "tests/test_macros.h"
@@ -146,6 +147,49 @@ bool ExternalLinkedOwnerTest::geometry_group_returned() const {
 bool ExternalLinkedOwnerTest::geometry_active() const {
 	const auto &slot = owner->slots[0];
 	return slot.surfaces && slot.surfaces[0].geometry.is_active();
+}
+void ExternalLinkedOwnerTest::prepare_storage(uint32_t capacity, uint32_t surfaces) {
+	CRASH_COND(owner->has_live_slots() || owner->slots[0].storage || owner->slots[0].surfaces);
+	owner->config.profile = ExternalOutputConfig::INSTANCE_192;
+	owner->config.capacity = capacity;
+	auto &slot = owner->slots[0];
+	slot.surfaces = memnew_arr(ExternalOutputOwner::SurfaceBinding, surfaces);
+	slot.surface_count = surfaces;
+	slot.storage = new ExternalOutputStorage(*owner->device);
+}
+Error ExternalLinkedOwnerTest::allocate_storage(GDExtensionProductionPhysicalContextRefV1 context) {
+	return storage->_external_storage_prepare_owned_prefix(context, particles, 0);
+}
+uint64_t ExternalLinkedOwnerTest::storage_group() const {
+	return owner->slots[0].owned_group;
+}
+RID ExternalLinkedOwnerTest::storage_rid(uint32_t role) const {
+	CRASH_COND(role >= ExternalOutputStorage::RESOURCE_COUNT || !owner->slots[0].storage);
+	return owner->slots[0].storage->resources[role].rid;
+}
+uint32_t ExternalLinkedOwnerTest::storage_bytes(uint32_t role) const {
+	CRASH_COND(role >= ExternalOutputStorage::RESOURCE_COUNT || !owner->slots[0].storage);
+	return owner->slots[0].storage->resources[role].bytes;
+}
+uint64_t ExternalLinkedOwnerTest::storage_total_bytes() const {
+	CRASH_COND(!owner->slots[0].storage);
+	return owner->slots[0].storage->total_bytes;
+}
+bool ExternalLinkedOwnerTest::storage_tokens_empty() const {
+	const auto &slot = owner->slots[0];
+	return slot.lease_token.is_empty() && slot.record_token.is_empty() && slot.packet_token.is_empty();
+}
+bool ExternalLinkedOwnerTest::storage_empty() const {
+	return !owner->slots[0].storage;
+}
+void ExternalLinkedOwnerTest::discard_unattempted_storage() {
+	auto &slot = owner->slots[0];
+	CRASH_COND(!slot.storage || slot.storage->attempted || slot.owned_group);
+	delete slot.storage;
+	slot.storage = nullptr;
+	memdelete_arr(slot.surfaces);
+	slot.surfaces = nullptr;
+	slot.surface_count = 0;
 }
 void ExternalLinkedOwnerTest::install_pipeline(uint64_t group) {
 	CRASH_COND(!group || owner->slots[0].surfaces);

@@ -70,6 +70,15 @@ public:
 	void install_geometry(MeshStorage::NativeSurfaceHold &, uint64_t);
 	bool geometry_group_returned() const;
 	bool geometry_active() const;
+	void prepare_storage(uint32_t, uint32_t);
+	Error allocate_storage(GDExtensionProductionPhysicalContextRefV1);
+	uint64_t storage_group() const;
+	RID storage_rid(uint32_t) const;
+	uint32_t storage_bytes(uint32_t) const;
+	uint64_t storage_total_bytes() const;
+	bool storage_tokens_empty() const;
+	bool storage_empty() const;
+	void discard_unattempted_storage();
 	void install_pipeline(uint64_t);
 	RID &pipeline_root();
 	bool pipeline_returned() const;

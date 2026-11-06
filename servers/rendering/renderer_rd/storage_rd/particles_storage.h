@@ -519,6 +519,7 @@ public:
 	virtual void particles_initialize(RID p_rid) override;
 
 	// Synchronous typed bodies only. Registration/Host anchor is not supplied here.
+	Error _external_storage_prepare_owned_prefix(GDExtensionProductionPhysicalContextRefV1, RID, uint32_t);
 	Error _external_pipeline_prepare_owned_prefix(GDExtensionProductionPhysicalContextRefV1, RID, uint32_t, uint32_t, ExternalPipelinePreparation &);
 	void particles_external_create_typed(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionOutputCreateInputV1 &, GDExtensionOutputCreateResultV1 &);
 	void particles_external_seal_typed(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionOutputSealInputV1 &, GDExtensionOutputSealResultV1 &);

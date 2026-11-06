@@ -34,6 +34,35 @@
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 
 namespace RendererRD {
+Error ParticlesStorage::_external_storage_prepare_owned_prefix(GDExtensionProductionPhysicalContextRefV1 context, RID particle_rid, uint32_t slot_index) {
+	Particles *particles = particles_owner.get_or_null(particle_rid);
+	if (!particles || !particles->external) {
+		return ERR_INVALID_PARAMETER;
+	}
+	auto &owner = *particles->external;
+	if (!owner.device || owner.device != RenderingDevice::get_singleton() || slot_index >= owner.slot_count || owner.config.profile != ExternalOutputConfig::INSTANCE_192) {
+		return ERR_UNCONFIGURED;
+	}
+	auto &slot = owner.slots[slot_index];
+	if (slot.state != ExternalOutputOwner::LeaseState::RESERVED || !slot.original_registry || !slot.storage || &slot.storage->device != owner.device ||
+			slot.publication_closed || slot.pass_uses_closed || !slot.surface_count || !slot.surfaces ||
+			!_production_output_owner_matches(GDExtensionDeviceExit::ProductionOutputOwnerKind::SLOT, particle_rid, owner.generation, slot_index, slot.lease_serial, slot.original_pin, *owner.device, slot.original_request)) {
+		return ERR_UNAUTHORIZED;
+	}
+	// Idempotently link the already-installed original stable slot. The original
+	// source/charge receiver, generation successor join and lease commit are
+	// deliberately outside this internal component entry point.
+	Error error = slot.original_registry->production_output_owner_bind(slot.original_pin, *owner.device, particle_rid, owner.generation, slot_index, slot.lease_serial);
+	if (error != OK) {
+		return error;
+	}
+	error = slot.storage->allocate_instance192_owned(context, slot.original_pin, slot.owned_group, owner.config.capacity, slot.surface_count);
+	if (error != OK && slot.storage->attempted) {
+		owner.cancel_slot(slot_index);
+	}
+	return error;
+}
+
 Error ParticlesStorage::_external_pipeline_prepare_owned_prefix(GDExtensionProductionPhysicalContextRefV1 context, RID particle_rid, uint32_t slot_index, uint32_t surface_index, ExternalPipelinePreparation &preparation) {
 	Particles *particles = particles_owner.get_or_null(particle_rid);
 	if (!particles || !particles->external) {
@@ -362,7 +391,7 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 		if (slot.storage && !slot.output_membership_group) {
 			for (uint32_t i = 0; i < ExternalOutputStorage::RESOURCE_COUNT; ++i) {
 				const RID rid = slot.storage->resources[i].rid;
-				if (rid.is_valid() && !owner.device->_production_output_hold_contains(p_pin, slot.owned_group, rid)) {
+				if (rid.is_valid() && !owner.device->_production_output_owned_storage_contains(p_pin, slot.owned_group, rid)) {
 					return ERR_INVALID_DATA;
 				}
 			}
