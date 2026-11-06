@@ -47,6 +47,7 @@ class SkinnedMeshCaptureTestFixture : public Node3D {
 	bool closing = false;
 	bool scene_prepared = false;
 	StringName route;
+	StringName member;
 	ObjectID scene_nodes[4];
 	std::shared_ptr<SkinnedMeshCaptureTestNativeSession> session;
 	uint64_t session_epoch = 0, next_request = 1;

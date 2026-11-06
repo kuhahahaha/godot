@@ -83,7 +83,7 @@ Error SkinnedMeshCaptureTestFixture::build_fixed_scene(const StringName &p_membe
 	if (!is_inside_tree()) {
 		return ERR_INVALID_PARAMETER;
 	}
-	if (p_member != "S02") {
+	if (p_member != "S02" && p_member != "S03") {
 		return ERR_UNAVAILABLE;
 	}
 #if defined(DISABLE_DEPRECATED) || defined(PHYSICS_3D_DISABLED)
@@ -226,12 +226,13 @@ Error SkinnedMeshCaptureTestFixture::begin(StringName p_member, StringName p_rou
 	if (!RenderingServer::get_singleton()->get_rendering_device()) {
 		return reject(ERR_UNAVAILABLE, "P01_DEPENDENCY_RD");
 	}
-	// Only the implemented fixed episode may acquire. Other required members
+	// Only the implemented fixed episodes may acquire. Other required members
 	// stay explicit unavailable until their original action schedules are wired.
-	if (p_member != "S02" || (p_route != "N" && p_route != "C")) {
+	if ((p_member != "S02" && p_member != "S03") || (p_route != "N" && p_route != "C")) {
 		return reject(ERR_UNAVAILABLE, "P01_DEPENDENCY_ACQUISITION");
 	}
 	route = p_route;
+	member = p_member;
 	if (!is_inside_tree()) {
 		return reject(ERR_INVALID_PARAMETER, "P01_STATE");
 	}
@@ -316,8 +317,14 @@ void SkinnedMeshCaptureTestFixture::frame_pre_draw() {
 	late.after_views = true;
 	late.image = true;
 	late.viewport = view->get_viewport_rid();
+	if (member == "S03" && !initialization_pending) {
+		// Offscreen content has no actual draw to select. Observe the same
+		// initialized current buffer after views without inventing a draw.
+		late.viewport = RID();
+		late.image = false;
+	}
 	std::vector<SkinnedMeshCaptureTestSessionRequest> requests;
-	if (!initialization_pending && next_action != 3) {
+	if (!initialization_pending && (member == "S03" || next_action != 3)) {
 		requests.push_back(early);
 		late.request++;
 	}
@@ -346,14 +353,24 @@ Error SkinnedMeshCaptureTestFixture::advance_action(int32_t p_action_index) {
 	if (!initialization_ready(state) || !action_complete(state)) {
 		return reject(ERR_BUSY, "P01_PRECONDITION_NOT_ESTABLISHED");
 	}
-	if (p_action_index == 1) {
+	if (member == "S03") {
+		auto *source = Object::cast_to<Node3D>(ObjectDB::get_instance(scene_nodes[0]));
+		auto *player = Object::cast_to<AnimationPlayer>(ObjectDB::get_instance(scene_nodes[1]));
+		if (!source || !player) {
+			return reject(ERR_INVALID_DATA, "P01_SOURCE");
+		}
+		if (p_action_index == 0) {
+			source->set_position(Vector3(1000, 0, 0));
+		}
+		player->advance(1.0);
+	} else if (p_action_index == 1) {
 		auto *player = Object::cast_to<AnimationPlayer>(ObjectDB::get_instance(scene_nodes[1]));
 		if (!player) {
 			return reject(ERR_INVALID_DATA, "P01_SOURCE");
 		}
 		player->advance(1.0);
 	}
-	// a01: initialized t0; a07: actual animation advance; a13: no setter.
+	// S02: t0, advance, same pose. S03: offscreen advances t1/t2/t3.
 	++next_action;
 	sample_pending = true;
 	return OK;
