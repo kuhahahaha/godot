@@ -1689,7 +1689,7 @@ Error RenderingDevice::_buffer_get_data_async(RID p_buffer, const Callable &p_ca
 			if (p_capture) {
 				p_capture->segment(p_capture->count++) = { handle, uint32_t(region.src_offset - p_offset), uint32_t(region.src_offset + region.size - p_offset) };
 			} else {
-				request.result->copies.push_back({ handle, buffer->driver_id, destination, region });
+				request.result->copies.push_back({ handle, buffer->driver_id, destination, region, false, RDG::RecordMappingState::Pending, UINT32_MAX, RDD::CommandBufferID(), false, OK, {} });
 			}
 		}
 		request.final_segment = final;
