@@ -39,7 +39,17 @@ def main() -> int:
         ("draw_order", "ParticlesDrawOrder", "p_order"),
         ("draw_passes", "int", "p_passes"),
     ]
-    functions = "\n".join("void particles_set_" + name + "(int p_particles, " + ("RSE::" + typ if typ != "int" else typ) + " " + param + ") " + body(source, "void ParticlesStorage::particles_set_" + name + "(") for name, typ, param in methods)
+    functions = "\n".join(
+        "void particles_set_"
+        + name
+        + "(int p_particles, "
+        + ("RSE::" + typ if typ != "int" else typ)
+        + " "
+        + param
+        + ") "
+        + body(source, "void ParticlesStorage::particles_set_" + name + "(")
+        for name, typ, param in methods
+    )
     harness = r"""
 #include <cstdio>
 #include <vector>
