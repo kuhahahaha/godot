@@ -33,6 +33,8 @@
 #include "core/extension/gdextension_library_exit_guard.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_packet.h"
 
+#include <cstddef>
+
 namespace RendererRD {
 Error ExternalOutputOwner::validate_native_selection(const ExternalOutputConfig &config, uint32_t &surface_count) {
 	if (config.profile == ExternalOutputConfig::SCENE_ONLY) {
@@ -231,7 +233,96 @@ Error ExternalOutputOwner::select_slot(const ExternalOutputRequest &request, uin
 	return OK;
 }
 
+Error ExternalOutputOwner::plan_metadata_layout(uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces, MetadataLayout &r_layout) {
+	MetadataLayout layout;
+	layout.view_count = p_views;
+	layout.read_count = p_reads;
+	layout.surface_count = p_surfaces;
+	uint64_t cursor = sizeof(ExternalOutputOwner);
+	uint32_t alignment = alignof(ExternalOutputOwner);
+	auto append = [&](uint32_t count, size_t stride, size_t align, uint32_t &offset) {
+		alignment = MAX(alignment, uint32_t(align));
+		if (!count) {
+			return true;
+		}
+		const uint64_t aligned = (cursor + align - 1) & ~(uint64_t(align) - 1);
+		if (aligned > UINT32_MAX || count > (UINT32_MAX - aligned) / stride) {
+			return false;
+		}
+		const uint64_t bytes = uint64_t(count) * stride;
+		offset = uint32_t(aligned);
+		cursor = aligned + bytes;
+		return true;
+	};
+	if (cursor > UINT32_MAX ||
+			!append(p_views, sizeof(ViewCell), alignof(ViewCell), layout.view_offset) ||
+			!append(p_reads, sizeof(ReadCell), alignof(ReadCell), layout.read_offset) ||
+			!append(p_surfaces, sizeof(SurfaceCell), alignof(SurfaceCell), layout.surface_offset) ||
+			alignment > alignof(std::max_align_t)) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	layout.total_bytes = uint32_t(cursor);
+	layout.alignment = alignment;
+	r_layout = layout;
+	return OK;
+}
+
+Error ExternalOutputOwner::install_metadata_directory(GDExtensionDeviceExit::ProductionPhysicalContextRef context,
+		GDExtensionProductionRequestRefV1 request, GDExtensionDeviceExit::Registry &registry,
+		const GDExtensionDeviceExit::ProductionOutputMetadataLease &lease,
+		uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces) {
+	if (metadata_directory_installed || view_cells || read_cells || surface_cells || view_capacity || read_capacity || surface_capacity) {
+		return ERR_ALREADY_IN_USE;
+	}
+	if (state != GenerationState::CONFIGURED || has_live_slots()) {
+		return ERR_BUSY;
+	}
+	if (!device || lease.is_empty() || lease.get_data() != this ||
+			(!metadata_lease.is_empty() && (metadata_lease.get_data() != lease.get_data() || metadata_lease.get_size() != lease.get_size()))) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (generation_pin.is_empty()) {
+		if (generation_registry || generation_request.registry_instance || generation_request.handle_serial || generation_root_serial) {
+			return ERR_UNAUTHORIZED;
+		}
+	} else if (generation_registry != &registry || generation_request.registry_instance != request.registry_instance ||
+			generation_request.handle_serial != request.handle_serial || !generation_root_matches(generation_pin)) {
+		return ERR_UNAUTHORIZED;
+	}
+	MetadataLayout layout;
+	Error error = plan_metadata_layout(p_views, p_reads, p_surfaces, layout);
+	if (error != OK) {
+		return error;
+	}
+	error = registry.production_output_metadata_validate(context, request, lease, *device, layout.total_bytes, layout.alignment);
+	if (error != OK) {
+		return error;
+	}
+	auto *base = static_cast<uint8_t *>(lease.get_data());
+	for (uint32_t i = 0; i < p_views; ++i) {
+		new (base + layout.view_offset + size_t(i) * sizeof(ViewCell)) ViewCell;
+	}
+	for (uint32_t i = 0; i < p_reads; ++i) {
+		new (base + layout.read_offset + size_t(i) * sizeof(ReadCell)) ReadCell;
+	}
+	for (uint32_t i = 0; i < p_surfaces; ++i) {
+		new (base + layout.surface_offset + size_t(i) * sizeof(SurfaceCell)) SurfaceCell;
+	}
+	view_cells = p_views ? reinterpret_cast<ViewCell *>(base + layout.view_offset) : nullptr;
+	read_cells = p_reads ? reinterpret_cast<ReadCell *>(base + layout.read_offset) : nullptr;
+	surface_cells = p_surfaces ? reinterpret_cast<SurfaceCell *>(base + layout.surface_offset) : nullptr;
+	view_capacity = p_views;
+	read_capacity = p_reads;
+	surface_capacity = p_surfaces;
+	metadata_directory_installed = true;
+	metadata_directories_placement = true;
+	return OK;
+}
+
 Error ExternalOutputOwner::install_reserved_cells(uint32_t p_views, uint32_t p_reads) {
+	if (metadata_directory_installed || !metadata_lease.is_empty()) {
+		return ERR_ALREADY_IN_USE;
+	}
 	if (view_cells || read_cells || view_capacity || read_capacity || has_live_slots()) {
 		return ERR_ALREADY_IN_USE;
 	}
@@ -248,6 +339,9 @@ Error ExternalOutputOwner::install_reserved_cells(uint32_t p_views, uint32_t p_r
 }
 
 Error ExternalOutputOwner::install_reserved_surface_cells(uint32_t p_surfaces) {
+	if (metadata_directory_installed || !metadata_lease.is_empty()) {
+		return ERR_ALREADY_IN_USE;
+	}
 	if (surface_cells || surface_capacity || has_live_slots()) {
 		return ERR_ALREADY_IN_USE;
 	}
@@ -281,20 +375,31 @@ Error ExternalOutputOwner::return_reserved_cells() {
 			return ERR_BUSY;
 		}
 	}
-	if (surface_cells) {
+	if (metadata_directories_placement) {
+		for (uint32_t i = 0; i < surface_capacity; ++i) {
+			surface_cells[i].~SurfaceCell();
+		}
+		for (uint32_t i = 0; i < view_capacity; ++i) {
+			view_cells[i].~ViewCell();
+		}
+		for (uint32_t i = 0; i < read_capacity; ++i) {
+			read_cells[i].~ReadCell();
+		}
+	} else if (surface_cells) {
 		memdelete_arr(surface_cells);
 	}
 	surface_cells = nullptr;
 	surface_capacity = 0;
-	if (view_cells) {
+	if (!metadata_directories_placement && view_cells) {
 		memdelete_arr(view_cells);
 	}
-	if (read_cells) {
+	if (!metadata_directories_placement && read_cells) {
 		memdelete_arr(read_cells);
 	}
 	view_cells = nullptr;
 	read_cells = nullptr;
 	view_capacity = read_capacity = 0;
+	metadata_directories_placement = false;
 	return OK;
 }
 

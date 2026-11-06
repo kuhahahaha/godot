@@ -94,8 +94,8 @@ private:
 	static Error _production_output_service(GDExtensionDeviceExit::ProductionOutputOwnerKind p_kind, RID p_particles, uint64_t p_generation, uint32_t p_slot, uint64_t p_lease_serial, GDExtensionDeviceExit::ProductionOutputPin &p_pin, const GDExtensionProductionServiceBudgetV1 &p_budget, GDExtensionDeviceExit::ProductionServiceUsage &r_usage);
 	static Error _external_typed_context(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, bool);
 	uint64_t next_external_generation = 1;
-	void _external_create_typed(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionOutputCreateInputV1 &, uint32_t, GDExtensionOutputCreateResultV1 &);
-	void _external_create_received(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const ExternalOutputConfig &, GDExtensionDeviceExit::ProductionOutputMetadataLease &, GDExtensionOutputCreateResultV1 &);
+	void _external_create_typed(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionOutputCreateInputV1 &, uint32_t, uint32_t, uint32_t, uint32_t, GDExtensionOutputCreateResultV1 &);
+	void _external_create_received(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const ExternalOutputConfig &, GDExtensionDeviceExit::ProductionOutputMetadataLease &, uint32_t, uint32_t, uint32_t, GDExtensionOutputCreateResultV1 &);
 	GDExtensionOutputStatusV1 _external_seal_body(RID, const uint8_t *, const GDExtensionOutputCommonInputV1 &, const uint8_t *);
 	Error _external_cancel_body(RID, const uint8_t *);
 	Error _external_withdraw_body(RID, uint64_t);

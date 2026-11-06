@@ -29,6 +29,7 @@
 /**************************************************************************/
 
 #include "servers/rendering/renderer_rd/storage_rd/external_output_owner.h"
+#include "core/os/memory_allocation_test_hooks.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_packet.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
@@ -90,6 +91,35 @@ void ExternalLinkedOwnerTest::free_created() {
 	if (!storage->particles_owner.get_or_null(particles)) {
 		owner = nullptr;
 	}
+}
+void ExternalLinkedOwnerTest::create_with_metadata_counts(GDExtensionDeviceExit::ProductionPhysicalContextRef context,
+		GDExtensionProductionRequestRefV1 request, const GDExtensionOutputCreateInputV1 &input, uint32_t metadata_slot,
+		uint32_t views, uint32_t reads, uint32_t surfaces, GDExtensionOutputCreateResultV1 &result) {
+	storage->_external_create_typed(context, request, input, metadata_slot, views, reads, surfaces, result);
+}
+Error ExternalLinkedOwnerTest::metadata_directory_bytes(uint32_t views, uint32_t reads, uint32_t surfaces, uint64_t &bytes) {
+	ExternalOutputOwner::MetadataLayout layout;
+	const Error error = ExternalOutputOwner::plan_metadata_layout(views, reads, surfaces, layout);
+	if (error == OK) {
+		bytes = layout.total_bytes;
+	}
+	return error;
+}
+bool ExternalLinkedOwnerTest::metadata_directory_in_slab(uint32_t views, uint32_t reads, uint32_t surfaces) const {
+	if (!exists() || !owner->metadata_directory_installed || !owner->metadata_directories_placement ||
+			owner->metadata_lease.get_data() != owner) {
+		return false;
+	}
+	ExternalOutputOwner::MetadataLayout layout;
+	if (ExternalOutputOwner::plan_metadata_layout(views, reads, surfaces, layout) != OK ||
+			layout.total_bytes > owner->metadata_lease.get_size()) {
+		return false;
+	}
+	const auto *base = static_cast<const uint8_t *>(owner->metadata_lease.get_data());
+	return owner->view_capacity == views && owner->read_capacity == reads && owner->surface_capacity == surfaces &&
+			static_cast<const void *>(owner->view_cells) == (views ? base + layout.view_offset : nullptr) &&
+			static_cast<const void *>(owner->read_cells) == (reads ? base + layout.read_offset : nullptr) &&
+			static_cast<const void *>(owner->surface_cells) == (surfaces ? base + layout.surface_offset : nullptr);
 }
 GDExtensionDeviceExit::ProductionOutputPin &ExternalLinkedOwnerTest::pin(uint32_t slot) {
 	CRASH_COND(slot >= 2);
@@ -313,6 +343,54 @@ class TestExternalOutputOwnerStateAccess {
 	}
 
 public:
+	static void metadata_layout() {
+		using Layout = ExternalOutputOwner::MetadataLayout;
+		Layout zero;
+		REQUIRE(ExternalOutputOwner::plan_metadata_layout(0, 0, 0, zero) == OK);
+		CHECK(zero.total_bytes == sizeof(ExternalOutputOwner));
+		CHECK(zero.view_offset == 0);
+		CHECK(zero.read_offset == 0);
+		CHECK(zero.surface_offset == 0);
+		Layout layout;
+		// Only the planner is observed: assertions and the test framework are
+		// outside the allocator observation window.
+		const bool was_enabled = MemoryAllocationTest::enabled;
+		const uint64_t attempts = MemoryAllocationTest::attempts;
+		MemoryAllocationTest::enabled = true;
+		const Error planned = ExternalOutputOwner::plan_metadata_layout(2, 3, 4, layout);
+		MemoryAllocationTest::enabled = was_enabled;
+		CHECK(MemoryAllocationTest::attempts == attempts);
+		REQUIRE(planned == OK);
+		CHECK(layout.view_count == 2);
+		CHECK(layout.read_count == 3);
+		CHECK(layout.surface_count == 4);
+		CHECK(layout.view_offset >= sizeof(ExternalOutputOwner));
+		CHECK(layout.view_offset % alignof(ExternalOutputOwner::ViewCell) == 0);
+		CHECK(layout.read_offset % alignof(ExternalOutputOwner::ReadCell) == 0);
+		CHECK(layout.surface_offset % alignof(ExternalOutputOwner::SurfaceCell) == 0);
+		CHECK(layout.read_offset >= layout.view_offset + 2 * sizeof(ExternalOutputOwner::ViewCell));
+		CHECK(layout.surface_offset >= layout.read_offset + 3 * sizeof(ExternalOutputOwner::ReadCell));
+		CHECK(layout.total_bytes == layout.surface_offset + 4 * sizeof(ExternalOutputOwner::SurfaceCell));
+		CHECK(layout.alignment >= alignof(ExternalOutputOwner));
+		CHECK(layout.alignment >= alignof(ExternalOutputOwner::ViewCell));
+		CHECK(layout.alignment >= alignof(ExternalOutputOwner::ReadCell));
+		CHECK(layout.alignment >= alignof(ExternalOutputOwner::SurfaceCell));
+		const Layout before = layout;
+		CHECK(ExternalOutputOwner::plan_metadata_layout(UINT32_MAX, 0, 0, layout) == ERR_PARAMETER_RANGE_ERROR);
+		CHECK(memcmp(&layout, &before, sizeof(layout)) == 0);
+		CHECK(ExternalOutputOwner::plan_metadata_layout(0, UINT32_MAX, 0, layout) == ERR_PARAMETER_RANGE_ERROR);
+		CHECK(memcmp(&layout, &before, sizeof(layout)) == 0);
+		CHECK(ExternalOutputOwner::plan_metadata_layout(0, 0, UINT32_MAX, layout) == ERR_PARAMETER_RANGE_ERROR);
+		CHECK(memcmp(&layout, &before, sizeof(layout)) == 0);
+		const uint64_t start = (sizeof(ExternalOutputOwner) + alignof(ExternalOutputOwner::ViewCell) - 1) &
+				~uint64_t(alignof(ExternalOutputOwner::ViewCell) - 1);
+		const uint32_t largest = uint32_t((UINT32_MAX - start) / sizeof(ExternalOutputOwner::ViewCell));
+		REQUIRE(ExternalOutputOwner::plan_metadata_layout(largest, 0, 0, layout) == OK);
+		CHECK(layout.total_bytes == start + uint64_t(largest) * sizeof(ExternalOutputOwner::ViewCell));
+		const Layout boundary = layout;
+		CHECK(ExternalOutputOwner::plan_metadata_layout(largest + 1, 0, 0, layout) == ERR_PARAMETER_RANGE_ERROR);
+		CHECK(memcmp(&layout, &boundary, sizeof(layout)) == 0);
+	}
 	static void inline_generation_config() {
 		ExternalOutputConfig config;
 		config.max_views = config.max_inflight = 1;
@@ -696,6 +774,10 @@ void external_custody_issued_pin_test(GDExtensionDeviceExit::Registry &registry,
 
 TEST_CASE("[B4][GenerationCreate] retained configuration does not retain parser allocations") {
 	RendererRD::TestExternalOutputOwnerStateAccess::inline_generation_config();
+}
+
+TEST_CASE("[B4][GenerationMetadataLayout] finite placement slices are aligned disjoint and checked without allocation") {
+	RendererRD::TestExternalOutputOwnerStateAccess::metadata_layout();
 }
 
 TEST_CASE("[B4][ExternalOutput] finite slot preflight and withdrawal preserve occupied metadata") {

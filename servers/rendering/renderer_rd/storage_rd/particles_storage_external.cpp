@@ -248,15 +248,18 @@ Error ParticlesStorage::_external_typed_context(GDExtensionProductionPhysicalCon
 	return device == RenderingDevice::get_singleton() ? OK : ERR_INVALID_DATA;
 }
 void ParticlesStorage::particles_external_create_typed(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputCreateInputV1 &p_input, GDExtensionOutputCreateResultV1 &r_result) {
-	_external_create_typed(p_context, p_request, p_input, UINT32_MAX, r_result);
+	_external_create_typed(p_context, p_request, p_input, UINT32_MAX, 0, 0, 0, r_result);
 }
 uint64_t ParticlesStorage::particles_external_scene_metadata_bytes() {
-	return sizeof(ExternalOutputOwner);
+	ExternalOutputOwner::MetadataLayout layout;
+	const Error error = ExternalOutputOwner::plan_metadata_layout(0, 0, 0, layout);
+	CRASH_COND(error != OK);
+	return layout.total_bytes;
 }
 void ParticlesStorage::particles_external_create_typed_v2(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputCreateInputV1 &p_input, uint32_t p_metadata_slot, GDExtensionOutputCreateResultV1 &r_result) {
-	_external_create_typed(p_context, p_request, p_input, p_metadata_slot, r_result);
+	_external_create_typed(p_context, p_request, p_input, p_metadata_slot, 0, 0, 0, r_result);
 }
-void ParticlesStorage::_external_create_typed(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputCreateInputV1 &p_input, uint32_t p_metadata_slot, GDExtensionOutputCreateResultV1 &r_result) {
+void ParticlesStorage::_external_create_typed(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputCreateInputV1 &p_input, uint32_t p_metadata_slot, uint32_t p_view_capacity, uint32_t p_read_capacity, uint32_t p_surface_capacity, GDExtensionOutputCreateResultV1 &r_result) {
 	r_result = {};
 	r_result.abi = { 1, sizeof(r_result), 0 };
 	const Error context_error = _external_typed_context(p_context, p_request, true);
@@ -350,14 +353,20 @@ void ParticlesStorage::_external_create_typed(GDExtensionProductionPhysicalConte
 		r_result.status = output_status(ERR_PARAMETER_RANGE_ERROR, "generation_exhausted");
 		return;
 	}
+	ExternalOutputOwner::MetadataLayout layout;
+	const Error planned = ExternalOutputOwner::plan_metadata_layout(p_view_capacity, p_read_capacity, p_surface_capacity, layout);
+	if (planned != OK) {
+		r_result.status = output_status(planned, "native_metadata_layout");
+		return;
+	}
 	auto &registry = GDExtensionDeviceExit::Registry::get_singleton();
 	GDExtensionDeviceExit::ProductionOutputMetadataLease metadata;
-	const Error allocated = registry.production_output_metadata_create(p_context, p_request, p_metadata_slot, *RenderingDevice::get_singleton(), sizeof(ExternalOutputOwner), alignof(ExternalOutputOwner), metadata);
+	const Error allocated = registry.production_output_metadata_create(p_context, p_request, p_metadata_slot, *RenderingDevice::get_singleton(), layout.total_bytes, layout.alignment, metadata);
 	if (allocated != OK) {
 		r_result.status = output_status(allocated, "original_output_metadata_required");
 		return;
 	}
-	_external_create_received(p_context, p_request, config, metadata, r_result);
+	_external_create_received(p_context, p_request, config, metadata, p_view_capacity, p_read_capacity, p_surface_capacity, r_result);
 	if (!metadata.is_empty()) {
 		// Refusal before native ownership committed: the exact resource row is
 		// returned once. A committed owner moved this lease out of the caller.
@@ -367,14 +376,20 @@ void ParticlesStorage::_external_create_typed(GDExtensionProductionPhysicalConte
 }
 
 void ParticlesStorage::_external_create_received(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const ExternalOutputConfig &p_config,
-		GDExtensionDeviceExit::ProductionOutputMetadataLease &p_metadata, GDExtensionOutputCreateResultV1 &r_result) {
+		GDExtensionDeviceExit::ProductionOutputMetadataLease &p_metadata, uint32_t p_view_capacity, uint32_t p_read_capacity, uint32_t p_surface_capacity, GDExtensionOutputCreateResultV1 &r_result) {
 	auto &registry = GDExtensionDeviceExit::Registry::get_singleton();
 	auto *rd = RenderingDevice::get_singleton();
 	if (!rd || p_config.profile != ExternalOutputConfig::SCENE_ONLY || !next_external_generation) {
 		r_result.status = output_status(ERR_UNAVAILABLE, "native_generation_unavailable");
 		return;
 	}
-	const Error authenticated = registry.production_output_metadata_validate(p_context, p_request, p_metadata, *rd, sizeof(ExternalOutputOwner), alignof(ExternalOutputOwner));
+	ExternalOutputOwner::MetadataLayout layout;
+	const Error planned = ExternalOutputOwner::plan_metadata_layout(p_view_capacity, p_read_capacity, p_surface_capacity, layout);
+	if (planned != OK) {
+		r_result.status = output_status(planned, "native_metadata_layout");
+		return;
+	}
+	const Error authenticated = registry.production_output_metadata_validate(p_context, p_request, p_metadata, *rd, layout.total_bytes, layout.alignment);
 	if (authenticated != OK) {
 		r_result.status = output_status(authenticated, "original_output_metadata_required");
 		return;
@@ -383,8 +398,16 @@ void ParticlesStorage::_external_create_received(GDExtensionProductionPhysicalCo
 	next_external_generation = generation == UINT64_MAX ? 0 : generation + 1;
 	auto *owner = new (p_metadata.get_data()) ExternalOutputOwner(p_config, generation, true);
 	owner->device = rd;
+	const Error directory = owner->install_metadata_directory(p_context, p_request, registry, p_metadata, p_view_capacity, p_read_capacity, p_surface_capacity);
+	if (directory != OK) {
+		owner->state = ExternalOutputOwner::GenerationState::RELEASED;
+		owner->~ExternalOutputOwner();
+		r_result.status = output_status(directory, "native_metadata_directory");
+		return;
+	}
 	const RID rid = particles_owner.allocate_rid();
 	if (rid.is_null()) {
+		CRASH_COND(owner->return_reserved_cells() != OK);
 		owner->state = ExternalOutputOwner::GenerationState::RELEASED;
 		owner->~ExternalOutputOwner();
 		r_result.status = output_status(ERR_OUT_OF_MEMORY, "particles_rid_capacity");
@@ -398,6 +421,7 @@ void ParticlesStorage::_external_create_received(GDExtensionProductionPhysicalCo
 		// install_generation_root returns its own unlinked pin on failure.
 		// No source/native append occurred and no public RID escaped.
 		particles->external = nullptr;
+		CRASH_COND(owner->return_reserved_cells() != OK);
 		owner->state = ExternalOutputOwner::GenerationState::RELEASED;
 		owner->~ExternalOutputOwner();
 		particles_owner.free(rid);

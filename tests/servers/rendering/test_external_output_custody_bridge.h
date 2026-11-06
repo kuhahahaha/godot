@@ -54,6 +54,12 @@ public:
 	bool adopt_created(RID);
 	bool exists() const;
 	void free_created();
+	// Explicit finite-count internal receiver, not a public counts ABI or grant.
+	void create_with_metadata_counts(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1,
+			const GDExtensionOutputCreateInputV1 &, uint32_t p_metadata_slot,
+			uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces, GDExtensionOutputCreateResultV1 &);
+	static Error metadata_directory_bytes(uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces, uint64_t &r_bytes);
+	bool metadata_directory_in_slab(uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces) const;
 	GDExtensionDeviceExit::ProductionOutputPin &pin(uint32_t);
 	void install(uint32_t, GDExtensionDeviceExit::Registry &, GDExtensionProductionRequestRefV1);
 	// Independent generation substrate only; never a public Create/source issuer.

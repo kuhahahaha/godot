@@ -158,6 +158,19 @@ class ExternalOutputOwner {
 	ReadCell *read_cells = nullptr;
 	uint32_t view_capacity = 0, read_capacity = 0;
 	uint64_t next_view_serial = 1, next_read_serial = 1;
+	// Placement directories belong to the original metadata block. Their
+	// element destruction never returns that block or permits reinstallation.
+	bool metadata_directory_installed = false;
+	bool metadata_directories_placement = false;
+	struct MetadataLayout {
+		uint32_t view_count = 0, read_count = 0, surface_count = 0;
+		uint32_t view_offset = 0, read_offset = 0, surface_offset = 0;
+		uint32_t total_bytes = 0, alignment = 0;
+	};
+	static Error plan_metadata_layout(uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces, MetadataLayout &r_layout);
+	Error install_metadata_directory(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1,
+			GDExtensionDeviceExit::Registry &, const GDExtensionDeviceExit::ProductionOutputMetadataLease &,
+			uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces);
 
 	ExternalOutputConfig config;
 	// Production creation stores identity comparison bytes inline in its quoted

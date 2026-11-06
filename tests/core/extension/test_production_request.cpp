@@ -5189,10 +5189,192 @@ struct Access {
 		fixture.cleanup_owner();
 		CHECK(fixture.owner_cleaned);
 	}
+	struct SceneMetadataDirectoryProbe {
+		SingletonEnrollment *fixture = nullptr;
+		RendererRD::ExternalLinkedOwnerTest *native = nullptr;
+		GDExtensionInterfaceDeviceSessionOutputWithdrawV1 withdraw = nullptr;
+		GDExtensionOutputCreateResultV1 created{};
+		bool short_layout = false;
+		uint32_t calls = 0;
+		static constexpr uint32_t views = 2, reads = 3, surfaces = 4;
+		static void receive(void *opaque, GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionOperationV1 *) {
+			using namespace GDExtensionDeviceExit;
+			auto &probe = *static_cast<SceneMetadataDirectoryProbe *>(opaque);
+			auto &fixture = *probe.fixture;
+			auto &request = *fixture.request;
+			++probe.calls;
+			GDExtensionOutputCreateInputV1 config{};
+			config.abi = production_dto_abi<GDExtensionOutputCreateInputV1>();
+			config.profile = 3;
+			config.max_views = config.max_inflight = 1;
+			config.space = config.query_enabled = 1;
+			for (uint32_t axis = 0; axis < 3; ++axis) {
+				config.bounds.size[axis] = config.query_bounds.size[axis] = 1;
+			}
+			const uint64_t revision = request.revision;
+			const auto &resource = request.resources[0];
+			CHECK_FALSE(resource.metadata_created);
+			CHECK(resource.metadata_data == nullptr);
+			CHECK(resource.metadata_consumer == nullptr);
+			// Explicit internal counts enter the complete original typed preflight,
+			// factory and receiver. Public V2 retains its zero-count wire contract.
+			probe.native->create_with_metadata_counts(context, ref, config, 0, views, reads, surfaces, probe.created);
+			if (probe.short_layout) {
+				CHECK(probe.created.status.error == ERR_PARAMETER_RANGE_ERROR);
+				CHECK(probe.created.particles == 0);
+				CHECK(probe.created.generation == 0);
+				CHECK(probe.created.capabilities == 0);
+				CHECK(request.revision == revision);
+				CHECK_FALSE(resource.metadata_created);
+				CHECK_FALSE(resource.metadata_returned);
+				CHECK(resource.metadata_data == nullptr);
+				CHECK(resource.metadata_consumer == nullptr);
+				CHECK(resource.metadata_root_serial == 0);
+				CHECK(request.output_owner_head == UINT32_MAX);
+				return;
+			}
+			REQUIRE(probe.created.status.error == OK);
+			CHECK(probe.created.capabilities == 0);
+			REQUIRE(probe.created.particles != 0);
+			REQUIRE(probe.created.generation != 0);
+			REQUIRE(probe.native->adopt_created(RID::from_uint64(probe.created.particles)));
+			CHECK(probe.native->metadata_directory_in_slab(views, reads, surfaces));
+			CHECK_FALSE(probe.native->generation_directory_empty());
+			CHECK(resource.metadata_created);
+			CHECK_FALSE(resource.metadata_returned);
+			CHECK(resource.metadata_data != nullptr);
+			CHECK(resource.metadata_consumer != nullptr);
+			CHECK(resource.metadata_root_serial == probe.native->generation_serial());
+			GDExtensionOutputGenerationInputV1 generation{};
+			generation.abi = production_dto_abi<GDExtensionOutputGenerationInputV1>();
+			generation.particles = probe.created.particles;
+			generation.generation = probe.created.generation;
+			REQUIRE(probe.withdraw(context, ref, &generation).error == OK);
+			CHECK(probe.native->withdrawing());
+		}
+	};
+	static void output_scene_metadata_directory(bool short_layout) {
+		using namespace GDExtensionDeviceExit;
+		auto *server = ordinal_server();
+		if (!server || !check_step(RendererRD::ParticlesStorage::get_singleton() == nullptr)) {
+			return;
+		}
+		const auto consume = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRecordConsumeV2>("device_session_production_record_consume_v2");
+		const auto release = ordinal_port<GDExtensionInterfaceDeviceSessionProductionReleaseV2>("device_session_production_release_v2");
+		REQUIRE(consume != nullptr);
+		REQUIRE(release != nullptr);
+		uint64_t full_bytes = 0, owner_bytes = 0;
+		REQUIRE(RendererRD::ExternalLinkedOwnerTest::metadata_directory_bytes(SceneMetadataDirectoryProbe::views, SceneMetadataDirectoryProbe::reads, SceneMetadataDirectoryProbe::surfaces, full_bytes) == OK);
+		REQUIRE(RendererRD::ExternalLinkedOwnerTest::metadata_directory_bytes(0, 0, 0, owner_bytes) == OK);
+		REQUIRE(full_bytes > owner_bytes);
+		OrdinalPlan plan;
+		plan.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, 1, 1, 0, 0, 0, 1, 0, 0 };
+		plan.action_count = plan.use_count = plan.readback_count = 0;
+		plan.resource_count = 1;
+		plan.resources[0] = { GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1, 0, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, short_layout ? owner_bytes : full_bytes, 0 };
+		SingletonEnrollment fixture;
+		fixture.public_port = true;
+		SceneMetadataDirectoryProbe probe;
+		probe.fixture = &fixture;
+		probe.short_layout = short_layout;
+		probe.withdraw = reinterpret_cast<GDExtensionInterfaceDeviceSessionOutputWithdrawV1>(gdextension_get_guarded_proc_address("device_session_output_withdraw_v1"));
+		REQUIRE(probe.withdraw != nullptr);
+		REQUIRE(ordinal_initialize(fixture, server, plan, &SceneMetadataDirectoryProbe::receive, &probe) == OK);
+		RendererRD::ExternalLinkedOwnerTest native(fixture.rd, true);
+		probe.native = &native;
+		auto &request = *fixture.request;
+		const GDExtensionProductionRequestRefV1 ref = { fixture.instance, request.serial };
+		uint64_t record_control = 0;
+		REQUIRE(fixture.port.record_schedule(ref, &record_control) == OK);
+		server->sync();
+		GDExtensionProductionRecordReportV2 recorded{};
+		REQUIRE(consume(ref, record_control, &recorded).native_error == OK);
+		CHECK(probe.calls == 1);
+		CHECK(recorded.report.physical_returns_pending == (short_layout ? 0u : 1u));
+		CHECK(request.graph_count == 0);
+		CHECK(request.native_count == 0);
+		const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+		if (!short_layout) {
+			void *const slab = request.resources[0].metadata_data;
+			const auto *const lease = request.resources[0].metadata_consumer;
+			const uint64_t root_serial = native.generation_serial();
+			auto dispatch = [&]() {
+				uint64_t serial = 0;
+				REQUIRE(fixture.registry.production_control_accept(ref, ProductionControlKind::OBSERVE, &serial, &budget) == OK);
+				REQUIRE(fixture.registry.production_control_schedule(ref, serial) == OK);
+				server->sync();
+				REQUIRE(request.control.state == ProductionControlState::RETURNED);
+				ProductionControlOutput output{};
+				REQUIRE(fixture.registry.production_control_consume(ref, serial, &output) == OK);
+				return output;
+			};
+			const auto directory = dispatch();
+			CHECK(directory.result.native_error == OK);
+			CHECK(directory.service_usage.controls == 1);
+			CHECK(directory.service_usage.passes == 1);
+			CHECK(directory.service_usage.receipts == 0);
+			CHECK_FALSE(directory.output_generation.native_released);
+			CHECK(native.generation_directory_empty());
+			CHECK_FALSE(native.generation_pin().is_empty());
+			CHECK_FALSE(native.released());
+			CHECK(native.exists());
+			CHECK(request.resources[0].metadata_data == slab);
+			CHECK(request.resources[0].metadata_consumer == lease);
+			CHECK_FALSE(request.resources[0].metadata_returned);
+			GDExtensionProductionReportV2 current{};
+			REQUIRE(fixture.registry.production_report_contents_locked(request, current) == OK);
+			CHECK(current.physical_returns_pending == 1);
+			const auto terminal = dispatch();
+			REQUIRE(terminal.output_generation.native_released);
+			CHECK(terminal.result.native_error == OK);
+			CHECK(terminal.service_usage.passes == 1);
+			CHECK(terminal.service_usage.receipts == 0);
+			CHECK(terminal.output_generation.root_serial == root_serial);
+			CHECK(terminal.output_generation.particles == probe.created.particles);
+			CHECK(terminal.output_generation.generation == probe.created.generation);
+			CHECK(terminal.output_generation.root_source.physical_returns_pending == 1);
+			CHECK(native.released());
+			CHECK(native.exists());
+			CHECK(native.generation_pin().is_empty());
+			CHECK(request.resources[0].metadata_data == slab);
+			CHECK(request.resources[0].metadata_consumer == lease);
+			CHECK(fixture.registry.production_release(ref).native_error == ERR_BUSY);
+			CHECK(fixture.registry.production_close(fixture.attachment).native_error == ERR_BUSY);
+			const auto frozen = terminal.output_generation;
+			const uint64_t revision = request.revision;
+			native.free_created();
+			CHECK_FALSE(native.exists());
+			CHECK(request.revision == revision + 1);
+			REQUIRE(fixture.registry.production_report_contents_locked(request, current) == OK);
+			CHECK(current.physical_returns_pending == 0);
+			CHECK(request.resources[0].metadata_data == nullptr);
+			CHECK(request.resources[0].metadata_consumer == nullptr);
+			CHECK(request.resources[0].metadata_returned);
+			CHECK(std::memcmp(&frozen, &terminal.output_generation, sizeof(frozen)) == 0);
+			CHECK(std::memcmp(&frozen, &request.control.output.output_generation, sizeof(frozen)) == 0);
+		} else {
+			CHECK_FALSE(native.exists());
+		}
+		CHECK(fixture.driver.issues == 0);
+		for (uint32_t turn = 0; turn < 8 && request.serial; ++turn) {
+			GDExtensionProductionServiceBudgetV1 remaining{};
+			GDExtensionProductionReportV2 report{};
+			const Error error = Error(release(ref, &budget, &remaining, &report).native_error);
+			CHECK((error == OK || error == ERR_BUSY));
+			if (request.serial) {
+				server->sync();
+			}
+		}
+		CHECK(request.serial == 0);
+		fixture.cleanup_owner();
+		CHECK(fixture.owner_cleaned);
+	}
 	struct SceneMetadataRefundProbe {
 		SingletonEnrollment *fixture = nullptr;
+		RendererRD::ExternalLinkedOwnerTest *native = nullptr;
 		GDExtensionInterfaceDeviceSessionOutputCreateV2 create = nullptr;
 		GDExtensionDeviceExit::ProductionOutputPin occupied;
+		bool directories = false;
 		uint32_t calls = 0;
 		~SceneMetadataRefundProbe() {
 			if (!occupied.is_empty()) {
@@ -5224,7 +5406,11 @@ struct Access {
 			// Metadata allocation succeeds first. The original finite pin pool
 			// then refuses root installation, so the real Create rollback must
 			// destroy its placement owner/RID and explicitly return that block.
-			probe.create(context, ref, &input, &created);
+			if (probe.directories) {
+				probe.native->create_with_metadata_counts(context, ref, input.config, input.metadata_resource_slot, 2, 3, 4, created);
+			} else {
+				probe.create(context, ref, &input, &created);
+			}
 			CHECK(created.status.error == ERR_OUT_OF_MEMORY);
 			CHECK(created.particles == 0);
 			CHECK(created.generation == 0);
@@ -5248,7 +5434,7 @@ struct Access {
 			CHECK(request.native_count == 0);
 		}
 	};
-	static void output_scene_metadata_refund() {
+	static void output_scene_metadata_refund(bool directories = false) {
 		using namespace GDExtensionDeviceExit;
 		auto *server = ordinal_server();
 		if (!server || !check_step(RendererRD::ParticlesStorage::get_singleton() == nullptr)) {
@@ -5262,15 +5448,21 @@ struct Access {
 		plan.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, 1, 1, 0, 0, 0, 1, 0, 0 };
 		plan.action_count = plan.use_count = plan.readback_count = 0;
 		plan.resource_count = 1;
-		plan.resources[0] = { GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1, 0, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, RendererRD::ParticlesStorage::particles_external_scene_metadata_bytes(), 0 };
+		uint64_t metadata_bytes = RendererRD::ParticlesStorage::particles_external_scene_metadata_bytes();
+		if (directories) {
+			REQUIRE(RendererRD::ExternalLinkedOwnerTest::metadata_directory_bytes(2, 3, 4, metadata_bytes) == OK);
+		}
+		plan.resources[0] = { GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1, 0, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, metadata_bytes, 0 };
 		SingletonEnrollment fixture;
 		fixture.public_port = true;
 		SceneMetadataRefundProbe probe;
 		probe.fixture = &fixture;
+		probe.directories = directories;
 		probe.create = reinterpret_cast<GDExtensionInterfaceDeviceSessionOutputCreateV2>(gdextension_get_guarded_proc_address("device_session_output_create_v2"));
 		REQUIRE(probe.create != nullptr);
 		REQUIRE(ordinal_initialize(fixture, server, plan, &SceneMetadataRefundProbe::receive, &probe) == OK);
 		RendererRD::ExternalLinkedOwnerTest native(fixture.rd, true);
+		probe.native = &native;
 		auto &request = *fixture.request;
 		const GDExtensionProductionRequestRefV1 ref = { fixture.instance, request.serial };
 		uint64_t control = 0;
@@ -9195,6 +9387,15 @@ TEST_CASE("[SceneTree][ProductionRequest][OutputSceneMetadata] unrelated metadat
 }
 TEST_CASE("[SceneTree][ProductionRequest][OutputSceneMetadata] exhausted original pin capacity refunds real SceneOnly metadata allocation") {
 	Access::output_scene_metadata_refund();
+}
+TEST_CASE("[SceneTree][ProductionRequest][OutputSceneMetadata] exhausted original pin capacity destroys placement directories before refunding slab") {
+	Access::output_scene_metadata_refund(true);
+}
+TEST_CASE("[SceneTree][ProductionRequest][OutputSceneMetadata] actual owner slab directories return before terminal and slab returns only at particles free") {
+	Access::output_scene_metadata_directory(false);
+}
+TEST_CASE("[SceneTree][ProductionRequest][OutputSceneMetadata] short declared owner slab rejects finite directories before allocation") {
+	Access::output_scene_metadata_directory(true);
 }
 TEST_CASE("[SceneTree][ProductionRequest][OutputMetadataFactory] real owner-created storage cannot become a metadata allocation") {
 	Access::output_metadata_wrong_kind();
