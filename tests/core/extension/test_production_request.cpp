@@ -30,6 +30,7 @@
 
 #include "core/crypto/crypto_core.h"
 #include "core/extension/gdextension.h"
+#include "core/extension/gdextension_external_output_typed.h"
 #include "core/extension/gdextension_manager.h"
 #include "core/extension/gdextension_production_request.h"
 #include "core/object/class_db.h"

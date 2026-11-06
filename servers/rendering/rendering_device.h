@@ -34,7 +34,9 @@
 #include "core/extension/gdextension_record_source.h"
 #include "servers/rendering/native_disposal_witness.h"
 
-#include "modules/modules_enabled.gen.h"
+#ifdef TESTS_ENABLED
+#include "modules/modules_enabled.gen.h" // IWYU pragma: keep. For test module feature macros.
+#endif
 
 namespace GDExtensionDeviceExit {
 class ProductionAttachment;
@@ -404,7 +406,7 @@ private:
 			bool mapping_sealed = false;
 			RDG::RecordMappingState mapping = RDG::RecordMappingState::Pending;
 			uint32_t command_slot = UINT32_MAX;
-			RDD::CommandBufferID command_buffer = {};
+			RDD::CommandBufferID command_buffer;
 			bool issue_attempted = false;
 			Error queue_error = OK;
 			RDD::QueueCallReport issue_report = {};

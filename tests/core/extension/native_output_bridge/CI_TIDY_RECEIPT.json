@@ -1,0 +1,63 @@
+{
+  "base": "3f1b070800ded747d4a7f135251673508548f429",
+  "scope": "five exact Mono clangd-tidy diagnostics and direct test dependency",
+  "source_sha256": {
+    "servers/rendering/renderer_rd/storage_rd/external_output_owner.h": "a9270d1c652e8d29c6e7ae900eaaf99c0cbde38aa2e73d006c229fb0dd8d492c",
+    "servers/rendering/renderer_rd/storage_rd/particles_storage.h": "c78f8a12d92e5d30140358970c8d6f5d3deb316daf0a7694bdff0fea507baef8",
+    "servers/rendering/rendering_device.cpp": "5b5f9be51ea092721e62d886b6eb5959267b1caa72deea1b58709828337b08ee",
+    "servers/rendering/rendering_device.h": "e0858e3e1e4f9da1d98105faf220993cc5f87283486fec0ed3e8f92a34ae23c2",
+    "tests/core/extension/test_production_request.cpp": "d22154b7085a052376ab4f409464cdf7e63a3708d935747821a61af464ad3709"
+  },
+  "build": "work/b4-owned-storage-next-20261106/BUILD_CI_TIDY_R2.log",
+  "initial_failure": "R1 exposed four test aliases relying on transitive particles header; direct defining header added",
+  "targeted": {
+    "exit": 0,
+    "seconds": 1.93,
+    "host_before": "f2b1f6ff926544c1ce5acca493319a023f894f4dbb89795a336617a38efb2edf",
+    "host_after": "f2b1f6ff926544c1ce5acca493319a023f894f4dbb89795a336617a38efb2edf",
+    "stdout_bytes": 0,
+    "stderr_bytes": 0,
+    "test_cases": {
+      "successes": "6",
+      "failures": "0"
+    },
+    "asserts": {
+      "successes": "11584",
+      "failures": "0"
+    },
+    "validation_pass": true,
+    "raw_result": "work/b4-owned-storage-next-20261106/targeted-ci-tidy-r2/RESULT.json"
+  },
+  "full": {
+    "exit": 0,
+    "seconds": 17.79,
+    "host_before": "f2b1f6ff926544c1ce5acca493319a023f894f4dbb89795a336617a38efb2edf",
+    "host_after": "f2b1f6ff926544c1ce5acca493319a023f894f4dbb89795a336617a38efb2edf",
+    "stdout_bytes": 571,
+    "stderr_bytes": 4512,
+    "test_cases": {
+      "successes": "2118",
+      "failures": "0"
+    },
+    "asserts": {
+      "successes": "542745",
+      "failures": "0"
+    },
+    "validation_pass": true,
+    "raw_result": "work/b4-owned-storage-next-20261106/full-ci-tidy-r2/RESULT.json"
+  },
+  "stderr_comparison": {
+    "baseline": "full-neighbor-r2/stderr.log",
+    "current": "full-ci-tidy-r2/stderr.log",
+    "normalization": [
+      "8+digit dynamic IDs",
+      "rendering_device.cpp line numbers +3 from added conditional include"
+    ],
+    "equal": true
+  },
+  "limits": [
+    "Actual Linux clangd-tidy pending remote CI",
+    "TSAN lifecycle diagnosis is separate; no TSAN fix claimed",
+    "No additional GPU run for header dependency cleanup"
+  ]
+}

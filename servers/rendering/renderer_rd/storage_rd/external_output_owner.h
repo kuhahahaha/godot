@@ -31,7 +31,6 @@
 #pragma once
 
 #include "core/extension/gdextension_production_request.h"
-#include "core/templates/local_vector.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_packet.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_request.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"

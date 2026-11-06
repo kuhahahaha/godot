@@ -30,7 +30,7 @@
 
 #pragma once
 
-#include "core/extension/gdextension_external_output_typed.h"
+#include "core/extension/gdextension_interface.gen.h"
 #include "core/templates/local_vector.h"
 #include "core/templates/rid_owner.h"
 #include "core/templates/self_list.h"
