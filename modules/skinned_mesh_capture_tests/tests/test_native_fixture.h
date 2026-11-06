@@ -70,6 +70,12 @@ struct SkinnedMeshCaptureTestFixtureTestAccess {
 		CHECK_FALSE(p_fixture->action_complete(status));
 		p_fixture->sample_pending = false;
 		p_fixture->last_action_request = 0;
+		// A public action must wait for its deferred signal before there is
+		// a new request to inspect; completion of the prior one is insufficient.
+		p_fixture->sample_pending = true;
+		CHECK_FALSE(p_fixture->action_complete(status));
+		p_fixture->sample_pending = false;
+		CHECK(p_fixture->action_complete(status));
 	}
 
 	static Error prepare(SkinnedMeshCaptureTestFixture *p_fixture, const StringName &p_member) { return p_fixture->build_fixed_scene(p_member); }

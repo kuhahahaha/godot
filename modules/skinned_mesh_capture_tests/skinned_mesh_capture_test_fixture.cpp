@@ -234,7 +234,7 @@ Error SkinnedMeshCaptureTestFixture::begin(StringName p_member, StringName p_rou
 	}
 	// Only the implemented fixed episodes may acquire. Other required members
 	// stay explicit unavailable until their original action schedules are wired.
-	if ((p_member != "S02" && p_member != "S03" && p_member != "S04" && p_member != "S05") || (p_route != "N" && p_route != "C")) {
+	if ((p_member != "S02" && p_member != "S03" && p_member != "S04" && p_member != "S05") || (p_route != "N" && p_route != "C" && !(p_member == "S02" && p_route == "P"))) {
 		return reject(ERR_UNAVAILABLE, "P01_DEPENDENCY_ACQUISITION");
 	}
 	route = p_route;
@@ -258,8 +258,10 @@ Error SkinnedMeshCaptureTestFixture::begin(StringName p_member, StringName p_rou
 		session->close();
 		return reject(prepared, "P01_SOURCE");
 	}
-	initialization_pending = sample_pending = true;
-	RenderingServer::get_singleton()->connect("frame_pre_draw", callable_mp(this, &SkinnedMeshCaptureTestFixture::frame_pre_draw));
+	if (route != "P") {
+		initialization_pending = sample_pending = true;
+		RenderingServer::get_singleton()->connect("frame_pre_draw", callable_mp(this, &SkinnedMeshCaptureTestFixture::frame_pre_draw));
+	}
 	return OK;
 }
 
@@ -364,14 +366,24 @@ Error SkinnedMeshCaptureTestFixture::advance_action(int32_t p_action_index) {
 	if (!Thread::is_main_thread()) {
 		return ERR_UNAVAILABLE;
 	}
-	if (!session || closing || closed || p_action_index != next_action || p_action_index > ((member == "S04" || member == "S05") ? 0 : 2)) {
+	if (!session || closing || closed || p_action_index != next_action || p_action_index > ((member == "S04" || member == "S05") ? 0 : route == "P" ? 1 : 2)) {
 		return reject(ERR_INVALID_PARAMETER, "P01_STATE");
 	}
 	const auto state = session->status();
 	if (!initialization_ready(state) || !action_complete(state)) {
 		return reject(ERR_BUSY, "P01_PRECONDITION_NOT_ESTABLISHED");
 	}
-	if (member == "S04" || member == "S05") {
+	if (route == "P") {
+		auto *player = Object::cast_to<AnimationPlayer>(ObjectDB::get_instance(scene_nodes[1]));
+		if (!player) {
+			return reject(ERR_INVALID_DATA, "P01_SOURCE");
+		}
+		if (p_action_index == 0) {
+			player->advance(1.0);
+		} else {
+			player->seek(1.0, true);
+		}
+	} else if (member == "S04" || member == "S05") {
 		auto *player = Object::cast_to<AnimationPlayer>(ObjectDB::get_instance(scene_nodes[1]));
 		if (!player) {
 			return reject(ERR_INVALID_DATA, "P01_SOURCE");
@@ -542,6 +554,8 @@ Error SkinnedMeshCaptureTestFixture::submit_public_snapshot(const Dictionary &p_
 		return reject(error, error == ERR_BUSY ? "P01_BUDGET" : "P01_CREATE_OR_COPY");
 	}
 	++next_request;
+	last_action_request = request.request;
+	sample_pending = false;
 	return OK;
 }
 
@@ -556,7 +570,7 @@ Dictionary SkinnedMeshCaptureTestFixture::take_result() const {
 	if (session) {
 		const auto state = session->status();
 		result["initialization_ready"] = initialization_ready(state);
-		result["action_ready"] = initialization_ready(state) && action_complete(state) && next_action < ((member == "S04" || member == "S05") ? 1 : 3);
+		result["action_ready"] = initialization_ready(state) && action_complete(state) && next_action < ((member == "S04" || member == "S05") ? 1 : route == "P" ? 2 : 3);
 		result["next_action"] = next_action;
 		result["native_error"] = int(state.error);
 		result["cleanup_error"] = int(state.cleanup_error);
