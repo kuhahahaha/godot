@@ -16,8 +16,9 @@ SHADER = ROOT / "servers/rendering/renderer_rd/shaders/particles.glsl"
 source = SHADER.read_text()
 start = source.index("case COLLIDER_TYPE_HEIGHT_FIELD: {")
 end = source.index("} break;", start)
-branch = source[start:end + len("} break;")]
-compute = """#version 450
+branch = source[start : end + len("} break;")]
+compute = (
+    """#version 450
 layout(local_size_x = 4) in;
 #define COLLIDER_TYPE_HEIGHT_FIELD 3
 struct Collider { mat4 transform; vec3 extents; uint type; };
@@ -42,19 +43,34 @@ void main() {
     const float EPSILON = 0.001;
     for (uint i = 0u; i < 1u; i++) {
         switch (FRAME.colliders[i].type) {
-""" + branch + """
+"""
+    + branch
+    + """
         }
     }
     results.values[index] = col ? vec4(normal, depth) : vec4(99.0);
 }
 """
+)
 
 with tempfile.TemporaryDirectory(prefix="ange-heightfield-normal-") as tmp:
     shader_path = Path(tmp) / "compute.glsl"
     shader_path.write_text(compute)
     env = os.environ.copy()
     env["ANGE_HEIGHTFIELD_TEST_SHADER"] = str(shader_path)
-    command = [str(ROOT / "bin/godot.macos.editor.arm64"), "--display-driver", "macos", "--rendering-driver", "metal", "--rendering-method", "mobile", "--path", str(HERE), "--script", str(HERE / "probe.gd")]
+    command = [
+        str(ROOT / "bin/godot.macos.editor.arm64"),
+        "--display-driver",
+        "macos",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--path",
+        str(HERE),
+        "--script",
+        str(HERE / "probe.gd"),
+    ]
     result = subprocess.run(command, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=90)
     print(result.stdout)
     if "Metal 4.0 - Forward Mobile" not in result.stdout:
