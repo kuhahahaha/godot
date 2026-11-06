@@ -108,6 +108,9 @@ Error SkinnedMeshCaptureTestNativeSession::prepare_delivery(const std::vector<Sk
 	}
 	uint64_t previous = last_request;
 	for (const auto &request : p_requests) {
+		if (request.frozen_palette && (!request.explicit_update || request.after_views || request.public_source || !request.palette[0].is_finite() || !request.palette[1].is_finite())) {
+			return ERR_INVALID_PARAMETER;
+		}
 		if (!request.request || request.request <= previous || request.request > UINT64_MAX / 2 || request.scene.is_null() || request.mesh.is_null() || request.skeleton.is_null() || ((request.previous || request.image) && (!request.after_views || request.viewport.is_null())) ||
 				(request.public_source && (epoch > uint64_t(std::numeric_limits<int64_t>::max()) || request.public_snapshot.epoch != int64_t(epoch) || request.public_snapshot.request_id != int64_t(request.request)))) {
 			return ERR_INVALID_PARAMETER;

@@ -37,6 +37,7 @@
 #include "modules/skinned_mesh_capture_tests/skinned_mesh_capture_test_phase_observer.h"
 
 #include <thread>
+#include <limits>
 
 class SkinnedMeshCaptureTestNativeSessionTestAccess {
 public:
@@ -135,6 +136,38 @@ TEST_CASE("[P01] Public snapshots enter the original FIFO with exact epoch and r
 	CHECK(status.results[0].request == 1);
 	CHECK(status.results[0].received);
 	CHECK(status.error == ERR_UNAVAILABLE); // Dummy renderer has no RD; no GPU success claim.
+	session->close();
+	delivery = Callable();
+	SkinnedMeshCaptureTestNativeSessionTestAccess::maintain(*session);
+	SkinnedMeshCaptureTestNativeSessionTestAccess::remove_terminal();
+}
+TEST_CASE("[P01] Frozen palette admission rejects wrong phase and nonfinite inputs before publication") {
+	skinned_mesh_capture_test_hook_reset();
+	auto session = SkinnedMeshCaptureTestNativeSession::create(52, 9052, false);
+	REQUIRE(session != nullptr);
+	SkinnedMeshCaptureTestSessionRequest request;
+	request.request = 1;
+	request.scene = RID::from_uint64(1);
+	request.mesh = RID::from_uint64(2);
+	request.skeleton = RID::from_uint64(3);
+	request.frozen_palette = request.explicit_update = true;
+	SUBCASE("after views") { request.after_views = true; }
+	SUBCASE("public source") {
+		request.public_source = true;
+		request.public_snapshot.epoch = 9052;
+		request.public_snapshot.request_id = 1;
+	}
+	SUBCASE("missing explicit demand") { request.explicit_update = false; }
+	SUBCASE("nonfinite first palette") { request.palette[0].origin.x = std::numeric_limits<real_t>::infinity(); }
+	SUBCASE("nonfinite second palette") { request.palette[1].basis[1][1] = std::numeric_limits<real_t>::quiet_NaN(); }
+	Callable delivery;
+	CHECK(SkinnedMeshCaptureTestNativeSessionTestAccess::prepare(*session, { request }, delivery) == ERR_INVALID_PARAMETER);
+	CHECK(delivery.is_null());
+	// Rejected request1 did not consume publication/budget/request identity.
+	request.after_views = request.public_source = false;
+	request.explicit_update = true;
+	request.palette = {};
+	REQUIRE(SkinnedMeshCaptureTestNativeSessionTestAccess::prepare(*session, { request }, delivery) == OK);
 	session->close();
 	delivery = Callable();
 	SkinnedMeshCaptureTestNativeSessionTestAccess::maintain(*session);
