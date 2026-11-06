@@ -884,6 +884,38 @@ void TestNativeDisposalAccess::geometry_direct() {
 	CHECK(rd.draw_list.state.draw_count == 1);
 	CHECK(rd.draw_graph.record_mapping_state(indexed.draw_handle) == RDG::RecordMappingState::Pending);
 
+	// The checked profile must reject a stale cached index count before the
+	// shared draw tail can append a native instruction. Restore the original
+	// count immediately so the subsequent cases retain the original factory
+	// state.
+	const uint32_t cached_index_count = rd.draw_list.validation.index_array_count;
+	rd.draw_list.validation.index_array_count = cached_index_count - 3;
+	const uint32_t draws_before_stale_count = rd.draw_list.state.draw_count;
+	ERR_PRINT_OFF;
+	const auto stale_count = rd._draw_list_draw_geometry_direct_recorded((int64_t(RenderingDevice::ID_TYPE_DRAW_LIST) << RenderingDevice::ID_BASE_SHIFT), true);
+	ERR_PRINT_ON;
+	CHECK(stale_count.error == ERR_INVALID_DATA);
+	CHECK(stale_count.effect == RenderingDevice::NativeAppendEffect::NoNewEffect);
+	CHECK_FALSE(stale_count.capture_complete);
+	CHECK_FALSE(stale_count.draw_handle.is_valid());
+	CHECK(rd.draw_list.state.draw_count == draws_before_stale_count);
+	rd.draw_list.validation.index_array_count = cached_index_count;
+
+	// A RID from a different owner must be refused by the original index-array
+	// owner check, leaving the previously recorded graph prefix untouched.
+	const RID saved_index = rd.draw_list.state.index_array;
+	rd.draw_list.state.index_array = vertex_rid;
+	const uint32_t draws_before_foreign = rd.draw_list.state.draw_count;
+	ERR_PRINT_OFF;
+	const auto foreign = rd._draw_list_draw_geometry_direct_recorded((int64_t(RenderingDevice::ID_TYPE_DRAW_LIST) << RenderingDevice::ID_BASE_SHIFT), true);
+	ERR_PRINT_ON;
+	CHECK(foreign.error == ERR_INVALID_PARAMETER);
+	CHECK(foreign.effect == RenderingDevice::NativeAppendEffect::NoNewEffect);
+	CHECK_FALSE(foreign.capture_complete);
+	CHECK_FALSE(foreign.draw_handle.is_valid());
+	CHECK(rd.draw_list.state.draw_count == draws_before_foreign);
+	rd.draw_list.state.index_array = saved_index;
+
 	// A 4-vertex original VA cannot issue a non-indexed triangle-list draw.
 	rd.draw_list.state.index_array = RID();
 	const uint32_t before_refused = rd.draw_graph.qualification_command_count();
@@ -908,6 +940,21 @@ void TestNativeDisposalAccess::geometry_direct() {
 	CHECK(triangle_draw.capture_complete);
 	CHECK(triangle_draw.draw_handle.is_valid());
 	CHECK(rd.draw_graph.contains_record(triangle_draw.draw_handle));
+
+	// A stale vertex count that is itself triangle-list aligned must not reach
+	// the unchanged tail, which draws from this cached count in all builds.
+	const uint32_t cached_vertex_count = rd.draw_list.validation.vertex_array_size;
+	rd.draw_list.validation.vertex_array_size = cached_vertex_count + 3;
+	const uint32_t draws_before_stale_vertex = rd.draw_list.state.draw_count;
+	ERR_PRINT_OFF;
+	const auto stale_vertex = rd._draw_list_draw_geometry_direct_recorded((int64_t(RenderingDevice::ID_TYPE_DRAW_LIST) << RenderingDevice::ID_BASE_SHIFT), false);
+	ERR_PRINT_ON;
+	CHECK(stale_vertex.error == ERR_INVALID_DATA);
+	CHECK(stale_vertex.effect == RenderingDevice::NativeAppendEffect::NoNewEffect);
+	CHECK_FALSE(stale_vertex.capture_complete);
+	CHECK_FALSE(stale_vertex.draw_handle.is_valid());
+	CHECK(rd.draw_list.state.draw_count == draws_before_stale_vertex);
+	rd.draw_list.validation.vertex_array_size = cached_vertex_count;
 
 	// Required descriptor state is refused before any draw graph effect.
 	rd.draw_list.state.set_count = 1;
