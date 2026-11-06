@@ -2015,7 +2015,8 @@ RID RenderingDevice::_qualification_texture_create(const TextureFormat &p_format
 	return created;
 }
 
-RID RenderingDevice::_texture_create_internal(const TextureFormat &p_format, const TextureView &p_view, const Vector<Vector<uint8_t>> &p_data, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, RID p_reserved) {
+RID RenderingDevice::_texture_create_internal(const TextureFormat &p_format, const TextureView &p_view, const Vector<Vector<uint8_t>> &p_data, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, RID p_reserved, const NativeDisposalWitness *p_native_disposal) {
+	ERR_FAIL_COND_V(p_native_disposal && (p_cell || p_reserved.is_null() || !p_data.is_empty()), RID());
 	ERR_FAIL_COND_V_MSG(_recording_error() != OK, RID(), "Resource recording is suspended during frame fence recovery or readback callbacks.");
 	// Check the stored enum representation before copying or reading it.
 	static_assert(sizeof(p_format.format) == sizeof(uint32_t));
@@ -2224,7 +2225,16 @@ RID RenderingDevice::_texture_create_internal(const TextureFormat &p_format, con
 	RID id = p_reserved;
 	if (id.is_valid()) {
 		texture.qualification_return = p_cell;
-		p_cell->rid = id.get_id();
+		if (p_cell) {
+			p_cell->rid = id.get_id();
+		}
+		if (p_native_disposal) {
+			texture.native_disposal = *p_native_disposal;
+			texture.native_disposal_rid = id.get_id();
+			texture.native_disposal_serial = p_native_disposal->cell->serial;
+			p_native_disposal->cell->rid = id.get_id();
+			p_native_disposal->cell->backing = texture.driver_id.id;
+		}
 		texture_owner.initialize_rid(id, texture);
 	} else {
 		id = texture_owner.make_rid(texture);
@@ -2292,6 +2302,9 @@ RID RenderingDevice::texture_create_shared(const TextureView &p_view, RID p_with
 	// Create view.
 
 	Texture texture = *src_texture;
+	// A view is another native object; it cannot copy its parent's free receipt.
+	texture.native_disposal = NativeDisposalWitness();
+	texture.native_disposal_rid = texture.native_disposal_serial = 0;
 	texture.production_disposal_uses = nullptr;
 	texture.native_immutable_holds = 0;
 	texture.native_immutable_retire_requested = false;
@@ -2467,6 +2480,9 @@ RID RenderingDevice::texture_create_shared_from_slice(const TextureView &p_view,
 	}
 
 	Texture texture = *src_texture;
+	// A view is another native object; it cannot copy its parent's free receipt.
+	texture.native_disposal = NativeDisposalWitness();
+	texture.native_disposal_rid = texture.native_disposal_serial = 0;
 	texture.production_disposal_uses = nullptr;
 	texture.native_immutable_holds = 0;
 	texture.native_immutable_retire_requested = false;
@@ -4385,8 +4401,9 @@ RID RenderingDevice::_qualification_framebuffer_create(RID p_target, GDExtension
 	return _qualification_framebuffer_create_multipass(attachments, passes, INVALID_ID, 1, p_cell, p_target_cell, p_reserved);
 }
 
-RID RenderingDevice::_qualification_framebuffer_create_multipass(const Vector<RID> &p_texture_attachments, const Vector<FramebufferPass> &p_passes, FramebufferFormatID p_format_check, uint32_t p_view_count, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, GDExtensionDeviceExit::QualificationPhysicalReturn *p_target_cell, RID p_reserved) {
+RID RenderingDevice::_qualification_framebuffer_create_multipass(const Vector<RID> &p_texture_attachments, const Vector<FramebufferPass> &p_passes, FramebufferFormatID p_format_check, uint32_t p_view_count, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, GDExtensionDeviceExit::QualificationPhysicalReturn *p_target_cell, RID p_reserved, const NativeDisposalWitness *p_native_disposal) {
 	_THREAD_SAFE_METHOD_
+	ERR_FAIL_COND_V(p_native_disposal && (p_cell || p_target_cell || p_reserved.is_null()), RID());
 
 	// Authenticate the original target before worker waits or texture mutation.
 	if (p_cell) {
@@ -4475,10 +4492,20 @@ RID RenderingDevice::_qualification_framebuffer_create_multipass(const Vector<RI
 	framebuffer.framebuffer_cache = framebuffer_cache;
 
 	RID id;
-	if (p_cell) {
+	if (p_cell || p_native_disposal) {
 		id = p_reserved;
+		if (p_native_disposal) {
+			framebuffer.native_disposal = *p_native_disposal;
+			framebuffer.native_disposal_rid = id.get_id();
+			framebuffer.native_disposal_serial = p_native_disposal->cell->serial;
+			framebuffer.native_disposal_backing = uint64_t(uintptr_t(framebuffer_cache));
+			p_native_disposal->cell->rid = id.get_id();
+			p_native_disposal->cell->backing = framebuffer.native_disposal_backing;
+		}
 		framebuffer_owner.initialize_rid(id, framebuffer);
-		p_target_cell->dependent_children.fetch_add(1);
+		if (p_target_cell) {
+			p_target_cell->dependent_children.fetch_add(1);
+		}
 	} else {
 		id = framebuffer_owner.make_rid(framebuffer);
 	}
@@ -9405,6 +9432,100 @@ Error RenderingDevice::_native_disposal_preflight() const {
 	return _recording_error();
 }
 
+Error RenderingDevice::_native_disposal_depth_texture_create(uint32_t p_width, uint32_t p_height, RID &r_rid, NativeDisposalWitness &r_witness) {
+	const Error ready = _native_disposal_preflight();
+	if (ready != OK) {
+		return ready;
+	}
+	_THREAD_SAFE_METHOD_
+	if (!p_width || !p_height || r_rid.is_valid() || r_witness.cell.is_valid()) {
+		return ERR_INVALID_PARAMETER;
+	}
+	const uint64_t serial = _reserve_backing_serial();
+	if (!serial) {
+		return ERR_OUT_OF_MEMORY;
+	}
+	NativeDisposalWitness reserved;
+	reserved.cell.instantiate();
+	reserved.cell->device = uint64_t(get_instance_id());
+	reserved.cell->serial = serial;
+	const RID id = texture_owner.allocate_rid();
+	if (id.is_null()) {
+		return ERR_OUT_OF_MEMORY;
+	}
+	TextureFormat format;
+	format.texture_type = TEXTURE_TYPE_2D;
+	format.format = DATA_FORMAT_D32_SFLOAT;
+	format.width = p_width;
+	format.height = p_height;
+	format.usage_bits = TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+	// No upload/clear is issued here. A failed allocation has no native prefix.
+	const RID created = _texture_create_internal(format, TextureView(), {}, nullptr, id, &reserved);
+	if (created.is_null()) {
+		texture_owner.initialize_rid(id, Texture());
+		texture_owner.free(id);
+		return ERR_CANT_CREATE;
+	}
+	r_rid = created;
+	r_witness = reserved;
+	return OK;
+}
+
+Error RenderingDevice::_native_disposal_depth_framebuffer_create(const NativeDisposalWitness &p_texture, RID &r_rid, NativeDisposalWitness &r_witness) {
+	const Error ready = _native_disposal_preflight();
+	if (ready != OK) {
+		return ready;
+	}
+	_THREAD_SAFE_METHOD_
+	if (r_rid.is_valid() || r_witness.cell.is_valid()) {
+		return ERR_INVALID_PARAMETER;
+	}
+	NativeDisposalWitness::Report target_report;
+	const Error observed = _native_disposal_observe(p_texture, target_report);
+	if (observed != OK) {
+		return observed;
+	}
+	const RID target = RID::from_uint64(target_report.rid);
+	const Texture *texture = texture_owner.owns(target) ? texture_owner.get_or_null(target) : nullptr;
+	if (!texture || target_report.state != NativeDisposalWitness::State::LIVE || texture->native_disposal.cell != p_texture.cell ||
+			!p_texture.cell->matches(target.get_id(), texture->native_disposal_serial, texture->driver_id.id)) {
+		return ERR_INVALID_DATA;
+	}
+	if (texture->qualification_return || texture->native_immutable_retire_requested || texture->owner.is_valid() || texture->shared_fallback || texture->transfer_worker_index >= 0 || texture->format != DATA_FORMAT_D32_SFLOAT ||
+			texture->samples != TEXTURE_SAMPLES_1 || texture->usage_flags != (TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) {
+		return ERR_UNAVAILABLE;
+	}
+	const uint64_t serial = _reserve_backing_serial();
+	if (!serial) {
+		return ERR_OUT_OF_MEMORY;
+	}
+	NativeDisposalWitness reserved;
+	reserved.cell.instantiate();
+	reserved.cell->device = uint64_t(get_instance_id());
+	reserved.cell->serial = serial;
+	const RID id = framebuffer_owner.allocate_rid();
+	if (id.is_null()) {
+		return ERR_OUT_OF_MEMORY;
+	}
+	Vector<RID> attachments;
+	attachments.push_back(target);
+	FramebufferPass pass;
+	pass.depth_attachment = 0;
+	Vector<FramebufferPass> passes;
+	passes.push_back(pass);
+	const RID created = _qualification_framebuffer_create_multipass(attachments, passes, INVALID_ID, 1, nullptr, nullptr, id, &reserved);
+	if (created.is_null()) {
+		framebuffer_owner.initialize_rid(id, Framebuffer());
+		framebuffer_owner.free(id);
+		// The texture was already published by its own factory. Its original
+		// caller still owns its LIVE witness and performs any rollback.
+		return ERR_CANT_CREATE;
+	}
+	r_rid = created;
+	r_witness = reserved;
+	return OK;
+}
+
 Error RenderingDevice::_native_disposal_storage_create(uint32_t p_bytes, BitField<StorageBufferUsage> p_usage, RID &r_rid, NativeDisposalWitness &r_witness) {
 	const Error ready = _native_disposal_preflight();
 	if (ready != OK) {
@@ -9501,9 +9622,13 @@ Error RenderingDevice::_native_disposal_free(const NativeDisposalWitness &p_witn
 	const RID rid = RID::from_uint64(report.rid);
 	const Buffer *buffer = storage_buffer_owner.owns(rid) ? storage_buffer_owner.get_or_null(rid) : nullptr;
 	const UniformSet *set = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr;
+	const Texture *texture = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr;
+	const Framebuffer *framebuffer = framebuffer_owner.owns(rid) ? framebuffer_owner.get_or_null(rid) : nullptr;
 	const auto &cell = p_witness.cell;
 	if ((!buffer || buffer->native_disposal.cell != cell || !cell->matches(rid.get_id(), buffer->backing_serial, buffer->driver_id.id)) &&
-			(!set || set->native_disposal.cell != cell || !cell->matches(rid.get_id(), set->native_disposal_serial, set->driver_id.id))) {
+			(!set || set->native_disposal.cell != cell || !cell->matches(rid.get_id(), set->native_disposal_serial, set->driver_id.id)) &&
+			(!texture || texture->native_disposal.cell != cell || !cell->matches(rid.get_id(), texture->native_disposal_serial, texture->driver_id.id)) &&
+			(!framebuffer || framebuffer->native_disposal.cell != cell || !cell->matches(rid.get_id(), framebuffer->native_disposal_serial, uint64_t(uintptr_t(framebuffer->framebuffer_cache))))) {
 		cell->state = NativeDisposalWitness::State::UNKNOWN;
 		return ERR_INVALID_DATA;
 	}
@@ -10387,6 +10512,7 @@ void RenderingDevice::_free_internal(RID p_id, const MutexLock<Mutex> &p_lock) {
 	if (texture_owner.owns(p_id)) {
 		Texture *texture = texture_owner.get_or_null(p_id);
 		ERR_FAIL_COND(_qualification_enqueue(texture->qualification_return) != OK);
+		ERR_FAIL_COND(!_native_disposal_enqueue(texture->native_disposal, p_id.get_id(), texture->native_disposal_serial, texture->driver_id.id));
 		_check_transfer_worker_texture(texture);
 
 		RDG::ResourceTracker *draw_tracker = texture->draw_tracker;
@@ -10416,6 +10542,7 @@ void RenderingDevice::_free_internal(RID p_id, const MutexLock<Mutex> &p_lock) {
 	} else if (framebuffer_owner.owns(p_id)) {
 		Framebuffer *framebuffer = framebuffer_owner.get_or_null(p_id);
 		ERR_FAIL_COND(_qualification_enqueue(framebuffer->qualification_return) != OK);
+		ERR_FAIL_COND(!_native_disposal_enqueue(framebuffer->native_disposal, p_id.get_id(), framebuffer->native_disposal_serial, uint64_t(uintptr_t(framebuffer->framebuffer_cache))));
 		InvalidationCallback invalidated_callback = framebuffer->invalidated_callback;
 		void *invalidated_callback_userdata = framebuffer->invalidated_callback_userdata;
 		frames[frame].framebuffers_to_dispose_of.push_back(*framebuffer);
@@ -11045,6 +11172,7 @@ Error RenderingDevice::_free_pending_resources_step(int p_frame, const NativeDis
 					CRASH_COND(!framebuffer.qualification_dependency->dependent_children.load());
 					framebuffer.qualification_dependency->dependent_children.fetch_sub(1);
 				}
+				_native_disposal_returned(framebuffer.native_disposal, framebuffer.native_disposal_rid, framebuffer.native_disposal_serial, framebuffer.native_disposal_backing);
 				_qualification_freed(framebuffer.qualification_return);
 				f.framebuffers_to_dispose_of.pop_front();
 			} break;
@@ -11111,6 +11239,7 @@ Error RenderingDevice::_free_pending_resources_step(int p_frame, const NativeDis
 				}
 				driver->texture_free(texture->driver_id);
 				_production_disposal_returned(texture->production_disposal_uses);
+				_native_disposal_returned(texture->native_disposal, texture->native_disposal_rid, texture->native_disposal_serial, texture->driver_id.id);
 				texture_memory -= cursor.allocation_size;
 				_qualification_freed(texture->qualification_return);
 #if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
@@ -11290,6 +11419,7 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 			CRASH_COND(!framebuffer->qualification_dependency->dependent_children.load());
 			framebuffer->qualification_dependency->dependent_children.fetch_sub(1);
 		}
+		_native_disposal_returned(framebuffer->native_disposal, framebuffer->native_disposal_rid, framebuffer->native_disposal_serial, framebuffer->native_disposal_backing);
 		_qualification_freed(framebuffer->qualification_return);
 		frames[p_frame].framebuffers_to_dispose_of.pop_front();
 	}
@@ -11306,6 +11436,7 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 		texture_memory -= driver->texture_get_allocation_size(texture->driver_id);
 		driver->texture_free(texture->driver_id);
 		_production_disposal_returned(texture->production_disposal_uses);
+		_native_disposal_returned(texture->native_disposal, texture->native_disposal_rid, texture->native_disposal_serial, texture->driver_id.id);
 		_qualification_freed(texture->qualification_return);
 #if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
 		capture_test_resource_registry.observe_free(RenderCaptureTestResourceKind::Texture, texture->driver_id.id);

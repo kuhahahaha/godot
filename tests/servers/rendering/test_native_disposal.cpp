@@ -38,6 +38,9 @@ TEST_FORCE_LINK(test_native_disposal)
 
 class TestNativeDisposalAccess {
 public:
+	static void depth_disposal();
+	static void depth_factory_failures();
+	static void depth_identity();
 	static void pipeline_rid_capacity();
 	static void foreign_pending_owner_lookup();
 	static void foreign_pending_uniform_sets();
@@ -186,6 +189,99 @@ public:
 		++shader_frees;
 	}
 };
+
+// CPU driver-return fixture. It exercises real RD factories and disposal
+// queues; cache children model driver-created variants, never GPU completion.
+class DepthDisposalDriver : public TransferTestDriverBase {
+public:
+	NativeDisposalWitness *texture_witness = nullptr;
+	NativeDisposalWitness *framebuffer_witness = nullptr;
+	bool fail_texture = false, fail_pass = false;
+	uint32_t texture_creates = 0, texture_frees = 0, framebuffer_creates = 0, framebuffer_frees = 0, pass_creates = 0, pass_frees = 0;
+	HashSet<uint64_t> freed_framebuffers, freed_passes;
+	TextureID texture_create(const TextureFormat &format, const TextureView &view) override {
+		++texture_creates;
+		CHECK(format.format == DATA_FORMAT_D32_SFLOAT);
+		CHECK(view.format == DATA_FORMAT_D32_SFLOAT);
+		CHECK(format.texture_type == TEXTURE_TYPE_2D);
+		CHECK(format.width == 8);
+		CHECK(format.height == 4);
+		CHECK(format.samples == TEXTURE_SAMPLES_1);
+		CHECK(format.usage_bits == (TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT));
+		return fail_texture ? TextureID() : TextureID(51);
+	}
+	TextureID texture_create_shared(TextureID original, const TextureView &) override {
+		CHECK(original == TextureID(51));
+		return TextureID(52);
+	}
+	void texture_free(TextureID id) override {
+		CHECK((id == TextureID(51) || id == TextureID(52)));
+		if (texture_witness && id == TextureID(51)) {
+			CHECK(TestNativeDisposalAccess::state(*texture_witness) == NativeDisposalWitness::State::ENQUEUED);
+			CHECK(TestNativeDisposalAccess::refs(*texture_witness) >= 2);
+		}
+		if (framebuffer_witness && id == TextureID(51)) {
+			CHECK(TestNativeDisposalAccess::state(*framebuffer_witness) == NativeDisposalWitness::State::RETURNED);
+			CHECK(framebuffer_frees == framebuffer_creates);
+			// The device-wide format render pass is deliberately still alive.
+			CHECK(pass_frees + 1 == pass_creates);
+		}
+		++texture_frees;
+	}
+	uint64_t texture_get_allocation_size(TextureID id) override { return id == TextureID(51) ? 128 : 0; }
+	BitField<TextureUsageBits> texture_get_usages_supported_by_format(DataFormat format, bool readable) override {
+		CHECK(format == DATA_FORMAT_D32_SFLOAT);
+		CHECK_FALSE(readable);
+		return TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+	}
+	uint64_t limit_get(Limit) override { return 8192; }
+	uint64_t api_trait_get(ApiTrait trait) override { return trait == API_TRAIT_HONORS_PIPELINE_BARRIERS ? 1 : 0; }
+	void set_object_name(ObjectType type, ID id, const String &name) override {
+		CHECK(type == OBJECT_TYPE_TEXTURE);
+		CHECK((id.id == 51 || id.id == 52));
+		CHECK(name.begins_with("RID:"));
+	}
+	RenderPassID render_pass_create(VectorView<Attachment>, VectorView<Subpass>, VectorView<SubpassDependency>, uint32_t, AttachmentReference) override {
+		++pass_creates;
+		return fail_pass ? RenderPassID() : RenderPassID(100 + pass_creates);
+	}
+	FramebufferID framebuffer_create(RenderPassID pass, VectorView<TextureID> textures, uint32_t width, uint32_t height) override {
+		CHECK(pass.id > 101);
+		CHECK(textures.size() == 1);
+		CHECK(textures[0] == TextureID(51));
+		CHECK(width == 8);
+		CHECK(height == 4);
+		return FramebufferID(200 + ++framebuffer_creates);
+	}
+	void framebuffer_free(FramebufferID id) override {
+		CHECK(id.id > 200);
+		CHECK_FALSE(freed_framebuffers.has(id.id));
+		freed_framebuffers.insert(id.id);
+		if (framebuffer_witness) {
+			CHECK(TestNativeDisposalAccess::state(*framebuffer_witness) == NativeDisposalWitness::State::ENQUEUED);
+			CHECK(TestNativeDisposalAccess::refs(*framebuffer_witness) >= 2);
+		}
+		++framebuffer_frees;
+	}
+	void render_pass_free(RenderPassID id) override {
+		CHECK_FALSE(freed_passes.has(id.id));
+		freed_passes.insert(id.id);
+		if (framebuffer_witness && id.id != 101) {
+			CHECK(TestNativeDisposalAccess::state(*framebuffer_witness) == NativeDisposalWitness::State::ENQUEUED);
+		}
+		++pass_frees;
+	}
+};
+
+TEST_CASE("[RenderingDevice][NativeDisposal][D32] exact framebuffer cache children precede texture return") {
+	TestNativeDisposalAccess::depth_disposal();
+}
+TEST_CASE("[RenderingDevice][NativeDisposal][D32] failed factories preserve original rollback ownership") {
+	TestNativeDisposalAccess::depth_factory_failures();
+}
+TEST_CASE("[RenderingDevice][NativeDisposal][D32] foreign stale and copied view cannot borrow a disposal witness") {
+	TestNativeDisposalAccess::depth_identity();
+}
 
 // Real public shader/pipeline factories with deterministic CPU driver objects.
 // These objects carry no GPU execution or source-admission claim.
@@ -836,4 +932,186 @@ void TestNativeDisposalAccess::foreign_pending_export_and_callback() {
 
 TEST_CASE("[RenderingDevice][NativeDisposal] native buffer export and callbacks ignore foreign pending slots") {
 	TestNativeDisposalAccess::foreign_pending_export_and_callback();
+}
+
+void TestNativeDisposalAccess::depth_disposal() {
+	using namespace TestNativeDisposal;
+	RenderingDevice rd;
+	DepthDisposalDriver driver;
+	attach(rd, driver);
+	RID texture, framebuffer;
+	NativeDisposalWitness texture_witness, framebuffer_witness;
+	REQUIRE(rd._native_disposal_depth_texture_create(8, 4, texture, texture_witness) == OK);
+	REQUIRE(rd._native_disposal_depth_framebuffer_create(texture_witness, framebuffer, framebuffer_witness) == OK);
+	driver.texture_witness = &texture_witness;
+	driver.framebuffer_witness = &framebuffer_witness;
+	struct InvalidationState {
+		NativeDisposalWitness *witness;
+		bool returned = false;
+	} invalidation{ &framebuffer_witness };
+	rd.framebuffer_set_invalidation_callback(framebuffer, [](void *data) {
+		auto &event = *static_cast<InvalidationState *>(data);
+		CHECK(state(*event.witness) == NativeDisposalWitness::State::ENQUEUED);
+		event.returned = true; }, &invalidation);
+	// Two distinct native cache variants, each with its own driver-created
+	// framebuffer and render pass. Neither is the shared format render pass.
+	auto *cache = rd.framebuffer_owner.get_or_null(framebuffer)->framebuffer_cache;
+	for (uint64_t key = 1; key <= 2; ++key) {
+		const auto pass = driver.render_pass_create({}, {}, {}, 1, {});
+		const auto child = driver.framebuffer_create(pass, cache->textures, cache->width, cache->height);
+		cache->storage_map.insert(key, { child, pass });
+	}
+	RenderingDevice::NativeImmutableHold immutable;
+	CHECK(rd.native_immutable_hold_acquire(VectorView<RID>(&texture, 1), immutable) == ERR_UNAVAILABLE);
+	CHECK_FALSE(immutable.is_active());
+	CHECK(rd.native_immutable_hold_acquire(VectorView<RID>(&framebuffer, 1), immutable) == ERR_DOES_NOT_EXIST);
+	CHECK_FALSE(immutable.is_active());
+	CHECK(state(texture_witness) == NativeDisposalWitness::State::LIVE);
+	CHECK(state(framebuffer_witness) == NativeDisposalWitness::State::LIVE);
+	// Free the original texture. The original dependency cascade owns the fb.
+	REQUIRE(release(rd, texture_witness) == OK);
+	CHECK(invalidation.returned);
+	CHECK(state(framebuffer_witness) == NativeDisposalWitness::State::ENQUEUED);
+	CHECK(state(texture_witness) == NativeDisposalWitness::State::ENQUEUED);
+	CHECK(driver.framebuffer_frees == 0);
+	CHECK(driver.texture_frees == 0);
+	CHECK(release(rd, framebuffer_witness) == OK);
+	SUBCASE("ordinary original queue") {
+		dispose(rd);
+	}
+	SUBCASE("bounded original queue pauses inside cache child pair") {
+		uint32_t used = 0;
+		CHECK(step(rd, 1, 1, UINT64_MAX, used) == ERR_BUSY);
+		CHECK(used == 1);
+		CHECK(driver.framebuffer_frees == 1);
+		CHECK(driver.pass_frees == 0);
+		CHECK(state(framebuffer_witness) == NativeDisposalWitness::State::ENQUEUED);
+		CHECK(state(texture_witness) == NativeDisposalWitness::State::ENQUEUED);
+		// Existing cursor resumes after the already returned framebuffer free.
+		CHECK(step(rd, 1, 1, UINT64_MAX, used) == ERR_BUSY);
+		CHECK(driver.framebuffer_frees == 1);
+		CHECK(driver.pass_frees == 1);
+		CHECK(state(framebuffer_witness) == NativeDisposalWitness::State::ENQUEUED);
+		for (uint32_t turn = 0; turn < 8 && draining(rd); ++turn) {
+			const Error result = step(rd, 1, 1, UINT64_MAX, used);
+			CHECK((result == OK || result == ERR_BUSY));
+		}
+		CHECK_FALSE(draining(rd));
+	}
+	CHECK(driver.framebuffer_frees == 2);
+	CHECK(driver.pass_frees == 2);
+	CHECK(driver.texture_frees == 1);
+	CHECK(state(framebuffer_witness) == NativeDisposalWitness::State::RETURNED);
+	CHECK(state(texture_witness) == NativeDisposalWitness::State::RETURNED);
+	CHECK(refs(framebuffer_witness) == 1);
+	CHECK(refs(texture_witness) == 1);
+	CHECK(rd.texture_owner.get_rid_count() == 0);
+	CHECK(rd.framebuffer_owner.get_rid_count() == 0);
+	CHECK(rd.dependency_map.is_empty());
+	CHECK(rd.reverse_dependency_map.is_empty());
+	CHECK(rd.texture_memory == 0);
+	// Separate shared device-format owner teardown is not part of either receipt.
+	for (const auto &entry : rd.framebuffer_formats) {
+		driver.render_pass_free(entry.value.render_pass);
+	}
+	rd.framebuffer_formats.clear();
+	rd.framebuffer_format_cache.clear();
+	detach(rd);
+}
+
+void TestNativeDisposalAccess::depth_factory_failures() {
+	using namespace TestNativeDisposal;
+	RenderingDevice rd;
+	DepthDisposalDriver driver;
+	attach(rd, driver);
+	RID texture, framebuffer;
+	NativeDisposalWitness texture_witness, framebuffer_witness;
+	CHECK(rd._native_disposal_depth_texture_create(0, 4, texture, texture_witness) == ERR_INVALID_PARAMETER);
+	CHECK(driver.texture_creates == 0);
+	driver.fail_texture = true;
+	ERR_PRINT_OFF;
+	CHECK(rd._native_disposal_depth_texture_create(8, 4, texture, texture_witness) == ERR_CANT_CREATE);
+	ERR_PRINT_ON;
+	CHECK(texture.is_null());
+	CHECK(texture_witness.cell.is_null());
+	CHECK(rd.texture_owner.get_rid_count() == 0);
+	CHECK(rd.frames[0].textures_to_dispose_of.is_empty());
+	CHECK(driver.texture_frees == 0);
+	driver.fail_texture = false;
+	REQUIRE(rd._native_disposal_depth_texture_create(8, 4, texture, texture_witness) == OK);
+	const uint64_t texture_serial = texture_witness.cell->serial;
+	CHECK(rd._native_disposal_depth_texture_create(8, 4, texture, texture_witness) == ERR_INVALID_PARAMETER);
+	CHECK(texture_witness.cell->serial == texture_serial);
+	CHECK(driver.texture_creates == 2);
+	driver.fail_pass = true;
+	ERR_PRINT_OFF;
+	CHECK(rd._native_disposal_depth_framebuffer_create(texture_witness, framebuffer, framebuffer_witness) == ERR_CANT_CREATE);
+	ERR_PRINT_ON;
+	CHECK(framebuffer.is_null());
+	CHECK(framebuffer_witness.cell.is_null());
+	CHECK(rd.framebuffer_owner.get_rid_count() == 0);
+	CHECK(rd.frames[0].framebuffers_to_dispose_of.is_empty());
+	CHECK(state(texture_witness) == NativeDisposalWitness::State::LIVE);
+	CHECK(driver.texture_frees == 0);
+	CHECK(rd.framebuffer_formats.is_empty());
+	// Failure of the second factory must not hide or self-ack the first object.
+	driver.texture_witness = &texture_witness;
+	CHECK(release(rd, texture_witness) == OK);
+	CHECK(state(texture_witness) == NativeDisposalWitness::State::ENQUEUED);
+	dispose(rd);
+	CHECK(state(texture_witness) == NativeDisposalWitness::State::RETURNED);
+	CHECK(driver.texture_frees == 1);
+	CHECK(rd.texture_memory == 0);
+	// Serial exhaustion refuses without another driver allocation or RID.
+	rd.next_backing_serial = 0;
+	RID exhausted;
+	NativeDisposalWitness empty;
+	CHECK(rd._native_disposal_depth_texture_create(8, 4, exhausted, empty) == ERR_OUT_OF_MEMORY);
+	CHECK(exhausted.is_null());
+	CHECK(empty.cell.is_null());
+	CHECK(driver.texture_creates == 2);
+	detach(rd);
+}
+
+void TestNativeDisposalAccess::depth_identity() {
+	using namespace TestNativeDisposal;
+	RenderingDevice rd, foreign;
+	DepthDisposalDriver driver;
+	attach(rd, driver);
+	attach(foreign, driver);
+	RID texture, framebuffer;
+	NativeDisposalWitness texture_witness, framebuffer_witness;
+	REQUIRE(rd._native_disposal_depth_texture_create(8, 4, texture, texture_witness) == OK);
+	CHECK(foreign._native_disposal_depth_framebuffer_create(texture_witness, framebuffer, framebuffer_witness) == ERR_UNAUTHORIZED);
+	CHECK(release(foreign, texture_witness) == ERR_UNAUTHORIZED);
+	CHECK(framebuffer.is_null());
+	CHECK(framebuffer_witness.cell.is_null());
+	CHECK(state(texture_witness) == NativeDisposalWitness::State::LIVE);
+	// Original view factory must clear the copied parent's disposal cell.
+	const RID view = rd.texture_create_shared(RenderingDevice::TextureView(), texture);
+	REQUIRE(view.is_valid());
+	CHECK(rd.texture_owner.get_or_null(view)->native_disposal.cell.is_null());
+	rd.free_rid(view);
+	dispose(rd);
+	CHECK(state(texture_witness) == NativeDisposalWitness::State::LIVE);
+	CHECK(driver.texture_frees == 1);
+	// Corrupt the actual owner incarnation, not the caller's projected report.
+	auto *owner = rd.texture_owner.get_or_null(texture);
+	++owner->native_disposal_serial;
+	CHECK(release(rd, texture_witness) == ERR_INVALID_DATA);
+	CHECK(state(texture_witness) == NativeDisposalWitness::State::UNKNOWN);
+	CHECK(driver.texture_frees == 1);
+	CHECK(rd.texture_owner.get_or_null(texture) == owner);
+	// Fixture-only repair enables deterministic teardown; no public reset exists.
+	--owner->native_disposal_serial;
+	texture_witness.cell->state = NativeDisposalWitness::State::LIVE;
+	driver.texture_witness = &texture_witness;
+	CHECK(release(rd, texture_witness) == OK);
+	CHECK(rd._native_disposal_depth_framebuffer_create(texture_witness, framebuffer, framebuffer_witness) == ERR_INVALID_DATA);
+	dispose(rd);
+	CHECK(state(texture_witness) == NativeDisposalWitness::State::RETURNED);
+	CHECK(driver.texture_frees == 2);
+	CHECK(rd.texture_memory == 0);
+	detach(foreign);
+	detach(rd);
 }

@@ -1,0 +1,62 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_native_disposal.cpp:276:
+TEST CASE:  [RenderingDevice][NativeDisposal][D32] exact framebuffer cache children precede texture return
+  ordinary original queue
+
+tests/servers/rendering/test_native_disposal.cpp:224: ERROR: CHECK( TestNativeDisposalAccess::state(*framebuffer_witness) == NativeDisposalWitness::State::RETURNED ) is NOT correct!
+  values: CHECK( 2 == 3 )
+
+===============================================================================
+tests/servers/rendering/test_native_disposal.cpp:276:
+TEST CASE:  [RenderingDevice][NativeDisposal][D32] exact framebuffer cache children precede texture return
+
+DEEPEST SUBCASE STACK REACHED (DIFFERENT FROM THE CURRENT ONE):
+  ordinary original queue
+
+tests/servers/rendering/test_native_disposal.cpp:1004: ERROR: CHECK( state(framebuffer_witness) == NativeDisposalWitness::State::RETURNED ) is NOT correct!
+  values: CHECK( 2 == 3 )
+
+tests/servers/rendering/test_native_disposal.cpp:1005: ERROR: CHECK( state(texture_witness) == NativeDisposalWitness::State::RETURNED ) is NOT correct!
+  values: CHECK( 2 == 3 )
+
+===============================================================================
+tests/servers/rendering/test_native_disposal.cpp:276:
+TEST CASE:  [RenderingDevice][NativeDisposal][D32] exact framebuffer cache children precede texture return
+  bounded original queue pauses inside cache child pair
+
+tests/servers/rendering/test_native_disposal.cpp:224: ERROR: CHECK( TestNativeDisposalAccess::state(*framebuffer_witness) == NativeDisposalWitness::State::RETURNED ) is NOT correct!
+  values: CHECK( 2 == 3 )
+
+===============================================================================
+tests/servers/rendering/test_native_disposal.cpp:276:
+TEST CASE:  [RenderingDevice][NativeDisposal][D32] exact framebuffer cache children precede texture return
+
+DEEPEST SUBCASE STACK REACHED (DIFFERENT FROM THE CURRENT ONE):
+  bounded original queue pauses inside cache child pair
+
+tests/servers/rendering/test_native_disposal.cpp:1004: ERROR: CHECK( state(framebuffer_witness) == NativeDisposalWitness::State::RETURNED ) is NOT correct!
+  values: CHECK( 2 == 3 )
+
+tests/servers/rendering/test_native_disposal.cpp:1005: ERROR: CHECK( state(texture_witness) == NativeDisposalWitness::State::RETURNED ) is NOT correct!
+  values: CHECK( 2 == 3 )
+
+===============================================================================
+tests/servers/rendering/test_native_disposal.cpp:279:
+TEST CASE:  [RenderingDevice][NativeDisposal][D32] failed factories preserve original rollback ownership
+
+tests/servers/rendering/test_native_disposal.cpp:1062: ERROR: CHECK( state(texture_witness) == NativeDisposalWitness::State::RETURNED ) is NOT correct!
+  values: CHECK( 2 == 3 )
+
+===============================================================================
+tests/servers/rendering/test_native_disposal.cpp:282:
+TEST CASE:  [RenderingDevice][NativeDisposal][D32] foreign stale and copied view cannot borrow a disposal witness
+
+tests/servers/rendering/test_native_disposal.cpp:1112: ERROR: CHECK( state(texture_witness) == NativeDisposalWitness::State::RETURNED ) is NOT correct!
+  values: CHECK( 2 == 3 )
+
+===============================================================================
+[doctest] test cases:   3 |   0 passed | 3 failed | 2133 skipped
+[doctest] assertions: 242 | 234 passed | 8 failed |
+[doctest] Status: FAILURE!

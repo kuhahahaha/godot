@@ -1,0 +1,38 @@
+2026-11-06 D32 original-owner disposal increment — source ready for parent build/review
+Worktree: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104
+Authority/scope: parent explicitly authorized original NativeDisposalWitness extension for D32 texture and actual framebuffer cache child disposal, using canonical HEIGHT_RASTER_CONTRACT/K06. Shared source was not written until parent released build coordination. No builds/tests/commits by this agent.
+
+Own modified files:
+- servers/rendering/rendering_device.h
+- servers/rendering/rendering_device.cpp
+- tests/servers/rendering/test_native_disposal.cpp
+No immutable_hold.cpp, native_disposal_witness.h, core/metadata or height fixture changes.
+
+Implementation:
+1. Private _native_disposal_depth_texture_create(width,height,RID&,NativeDisposalWitness&) fixes the actual descriptor to D32_SFLOAT 2D, one mip/layer/sample, SAMPLING|DEPTH_STENCIL_ATTACHMENT. It reserves original nonwrapping backing serial, cell and RID before driver texture creation. No upload/clear/recording prefix occurs in this factory. Native failure cleans the reserved RID and returns no witness.
+2. Private _native_disposal_depth_framebuffer_create(const NativeDisposalWitness &texture,RID&,NativeDisposalWitness&) authenticates the exact existing local/live original texture cell + native ID + serial. Rejects qualified/view/fallback/worker/retiring/wrong-profile targets. It reserves another serial/cell/RID before original framebuffer format/cache path. No caller numeric metadata creates the relation. Factory failure leaves the already-published original texture LIVE for the original caller's explicit rollback; does not hide or self-release it.
+3. Texture and Framebuffer original owner structs retain existing NativeDisposalWitness. Texture identity uses device/RID/nonreused serial/native TextureID. Framebuffer identity uses device/RID/nonreused serial/exact original cache pointer (internal only; report still RID+serial). The copied pending-free object retains the cache identity after cache destruction.
+4. Original _free_internal authenticates and enqueues the witness before original RID invalidation/callback. Both ordinary _free_pending_resources and bounded _free_pending_resources_step publish RETURNED only after actual texture_free or ALL cached framebuffer_free + render_pass_free calls return. Existing bounded cursor preserves partial child progress, so no returned child repeats. The device-wide shared framebuffer-format render pass remains its original owner's obligation and is not claimed by this object's receipt.
+5. Both shared-texture and shared-slice creation clear copied parent witness fields; a distinct native view must not report its parent's physical free.
+6. _native_disposal_free supports the two exact new owner kinds in addition to its unchanged buffer/set cases. Unknown identity poisons the existing witness and does not free that mismatched owner. Foreign devices remain refused. Existing generic immutable holds are unchanged and still reject D32 attachment/FB roots.
+
+Tests added in existing force-linked TU:
+[RenderingDevice][NativeDisposal][D32] exact framebuffer cache children precede texture return
+  Subcases: ordinary original queue; bounded original queue pauses inside cache child pair.
+  Uses real private RD factories with deterministic CPU driver; two actual driver-created framebuffer/render-pass child pairs seeded into original cache. During each driver free witness must still be ENQUEUED. Bounded single-receipt turns pause between framebuffer and renderpass and do not repeat. Texture free requires framebuffer receipt already RETURNED. Invalidation callback sees ENQUEUED before any physical return. Generic immutable admissions still refuse. Asserts empty RID/dependency owners and balanced texture accounting. Shared format pass is separately cleaned after receipt assertions.
+[RenderingDevice][NativeDisposal][D32] failed factories preserve original rollback ownership
+  Covers zero shape, native texture failure with no witness/RID/hidden pending object, nonempty output unchanged, renderpass/framebuffer failure after texture success, retained LIVE texture until explicit queued rollback + actual free, and nonwrapping serial exhaustion before further driver effects.
+[RenderingDevice][NativeDisposal][D32] foreign stale and copied view cannot borrow a disposal witness
+  Covers foreign RD refusal; original public shared-view factory does not copy the parent witness; view free leaves parent LIVE; corrupt original owner serial yields UNKNOWN without free; fixture-only repair permits teardown; stale/enqueued texture cannot create new framebuffer.
+
+Source verification:
+- Read original texture/framebuffer factory, free dependency cascade, both physical drain paths, witness matching, generic immutable admission and test driver fixture.
+- clang-format applied only to the three owned files; git diff --check passed.
+- No compiler, unit test, native GPU or negative-control execution by this agent (parent owns all builds).
+
+Explicit boundaries / review attention:
+- This witnesses physical driver-return only. No GPU completion, retained Scene content, append permit, R02 physical context, native source membership, HeightFrame publication, no-next-draw control authorization or ABI adoption is introduced.
+- Existing main-RD original maintenance caller still owns native readiness before calling bounded drain. Unit direct-step fixtures test disposal mechanics, not real GPU completion or full no-draw integration.
+- Factory remains private and not yet called from ParticlesStorage. Original per-instance target custody, immutable content/reuse, capture producer+legacy/managed last-use and texture-descriptor set lifetimes remain required integration work.
+- All framebuffer CACHE-owned children are covered. Device-wide shared format cache is explicitly separate. Tests seed driver-created cache variants to target disposal; they do not pretend the fixture rendered those variants.
+- Out-of-memory behavior follows existing Godot native factory allocation model. New recoverable serial/native creation failures preserve source ownership; process-fatal allocator failure is not advertised as recoverable.

@@ -703,6 +703,9 @@ public:
 	// for a framebuffer to render into it.
 
 	struct Texture {
+		NativeDisposalWitness native_disposal;
+		uint64_t native_disposal_rid = 0;
+		uint64_t native_disposal_serial = 0;
 		GDExtensionDeviceExit::ProductionDisposalUse *production_disposal_uses = nullptr;
 		uint32_t native_immutable_holds = 0;
 		bool native_immutable_retire_requested = false;
@@ -837,7 +840,7 @@ public:
 	};
 
 private:
-	RID _texture_create_internal(const TextureFormat &p_format, const TextureView &p_view, const Vector<Vector<uint8_t>> &p_data, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, RID p_reserved);
+	RID _texture_create_internal(const TextureFormat &p_format, const TextureView &p_view, const Vector<Vector<uint8_t>> &p_data, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, RID p_reserved, const NativeDisposalWitness *p_native_disposal = nullptr);
 	RID _qualification_texture_create(const TextureFormat &p_format, const TextureView &p_view, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
 
 public:
@@ -1068,6 +1071,11 @@ private:
 	HashMap<FramebufferFormatID, FramebufferFormat> framebuffer_formats;
 
 	struct Framebuffer {
+		NativeDisposalWitness native_disposal;
+		uint64_t native_disposal_rid = 0;
+		uint64_t native_disposal_serial = 0;
+		// Exact cache identity, retained after its last child has returned.
+		uint64_t native_disposal_backing = 0;
 		uint32_t qualification_users = 0;
 		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
 		// This edge survives RID invalidation and returns after the actual driver free.
@@ -1083,7 +1091,7 @@ private:
 	};
 
 	RID_Owner<Framebuffer, true> framebuffer_owner;
-	RID _qualification_framebuffer_create_multipass(const Vector<RID> &, const Vector<FramebufferPass> &, FramebufferFormatID, uint32_t, GDExtensionDeviceExit::QualificationPhysicalReturn *, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID);
+	RID _qualification_framebuffer_create_multipass(const Vector<RID> &, const Vector<FramebufferPass> &, FramebufferFormatID, uint32_t, GDExtensionDeviceExit::QualificationPhysicalReturn *, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID, const NativeDisposalWitness *p_native_disposal = nullptr);
 	RID _qualification_framebuffer_create(RID, GDExtensionDeviceExit::QualificationPhysicalReturn *, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID);
 
 public:
@@ -1639,6 +1647,9 @@ private:
 	void _production_disposal_returned(GDExtensionDeviceExit::ProductionDisposalUse *&);
 	Error _native_disposal_preflight() const;
 	RID _storage_buffer_create_internal(uint32_t p_bytes, Span<uint8_t> p_data, BitField<StorageBufferUsage> p_usage, BitField<BufferCreationBits> p_creation_bits, const NativeDisposalWitness *p_native_disposal);
+	// Disposal observations only: neither content holds nor recording/completion authority.
+	Error _native_disposal_depth_texture_create(uint32_t p_width, uint32_t p_height, RID &r_rid, NativeDisposalWitness &r_witness);
+	Error _native_disposal_depth_framebuffer_create(const NativeDisposalWitness &p_texture, RID &r_rid, NativeDisposalWitness &r_witness);
 	Error _native_disposal_storage_create(uint32_t p_bytes, BitField<StorageBufferUsage> p_usage, RID &r_rid, NativeDisposalWitness &r_witness);
 	Error _native_disposal_uniform_set_create(const VectorView<Uniform> &p_uniforms, RID p_shader, uint32_t p_set, RID &r_rid, NativeDisposalWitness &r_witness);
 	Error _native_disposal_free(const NativeDisposalWitness &p_witness);
