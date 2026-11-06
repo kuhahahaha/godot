@@ -344,6 +344,11 @@ public:
 			CHECK(o.surface_return(moved) == OK);
 			CHECK(cell.pin.is_empty());
 			CHECK_FALSE(o.slot_has_custody(0));
+			// A released surface selection cannot return a second custody edge.
+			CHECK(o.surface_return(moved) == ERR_DOES_NOT_EXIST);
+			CHECK(moved.is_empty());
+			CHECK(cell.pin.is_empty());
+			CHECK_FALSE(o.slot_has_custody(0));
 			// Return the same real geometry hold to its original fixture owner.
 			*geometry = std::move(slot.surfaces[0].geometry);
 			memdelete_arr(slot.surfaces);
