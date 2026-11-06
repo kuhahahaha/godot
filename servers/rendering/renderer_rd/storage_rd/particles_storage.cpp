@@ -627,6 +627,7 @@ void ParticlesStorage::particles_set_draw_order(RID p_particles, RSE::ParticlesD
 	ERR_FAIL_INDEX(int(p_order), RSE::PARTICLES_DRAW_ORDER_VIEW_DEPTH + 1);
 
 	particles->draw_order = p_order;
+	particles->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_PARTICLES);
 }
 
 void ParticlesStorage::particles_set_draw_passes(RID p_particles, int p_passes) {

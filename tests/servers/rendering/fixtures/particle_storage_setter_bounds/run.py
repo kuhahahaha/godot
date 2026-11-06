@@ -52,7 +52,8 @@ namespace RSE {
 }
 struct Dependency {
     enum { DEPENDENCY_CHANGED_PARTICLES };
-    void changed_notify(int) {}
+    int changes = 0;
+    void changed_notify(int) { changes++; }
 };
 struct Particles {
     bool external = false;
@@ -85,6 +86,7 @@ int main() {
     exercise([](int value) { particles_set_transform_align_channel_filter(1, static_cast<RSE::ParticlesTransformAlignCustomSrc>(value)); }, p.transform_align_src, RSE::PARTICLES_ALIGN_CHANNEL_FILTER_MAX);
     exercise([](int value) { particles_set_transform_align_axis(1, static_cast<RSE::ParticlesTransformAlignAxis>(value)); }, p.transform_align_axis, RSE::PARTICLES_ALIGN_AXIS_MAX);
     exercise([](int value) { particles_set_draw_order(1, static_cast<RSE::ParticlesDrawOrder>(value)); }, p.draw_order, RSE::PARTICLES_DRAW_ORDER_VIEW_DEPTH + 1);
+    check(p.dependency.changes == RSE::PARTICLES_DRAW_ORDER_VIEW_DEPTH + 1);
     particles_set_draw_passes(1, 3);
     check(p.draw_passes.size() == 3);
     particles_set_draw_passes(1, 0);
