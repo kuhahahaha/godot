@@ -1,15 +1,16 @@
 {
   "schema": 1,
-  "commit": "ae0867ae15",
+  "commit": "03121ca8c6",
   "scope": "duplicate custody return lifecycle regression",
   "changes": [
-    "VIEW_RETURN wrapper second release returns ERR_DOES_NOT_EXIST and leaves cell custody/accounting unchanged",
+    "VIEW_RETURN wrapper second release returns ERR_DOES_NOT_EXIST and leaves cell custody unchanged",
     "READ_CANCEL wrapper second cancel returns ERR_DOES_NOT_EXIST and leaves returned cell unchanged"
   ],
   "verification": {
-    "single_object_compile": "passed",
-    "existing_binary_external_output": "27 cases, 5277 assertions, 0 failures (pre-change binary)",
-    "full_rebuild": "stopped intentionally due 449MB free disk after unrelated object compilation; not a test failure"
+    "single_object_compile": "passed for tests/servers/rendering/test_external_output_owner_state.cpp",
+    "existing_binary_external_output": "pre-change binary only; not used as evidence for new assertions",
+    "full_rebuild": "stopped intentionally due 449MB free disk after unrelated object compilation; not a test failure",
+    "new_assertions_runtime": "not yet run against a binary containing ae0867ae15; full rebuild stopped for disk preservation"
   },
   "limits": [
     "Does not prove U04/source/Host production successor admission",
