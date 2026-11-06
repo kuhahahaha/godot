@@ -5,7 +5,7 @@
   "changes": [
     "VIEW_RETURN wrapper second release returns ERR_DOES_NOT_EXIST and leaves cell custody unchanged",
     "READ_CANCEL wrapper second cancel returns ERR_DOES_NOT_EXIST and leaves returned cell unchanged",
-    "SURFACE_RETURN wrapper second surface_return returns ERR_DOES_NOT_EXIST and leaves surface cell custody unchanged"
+    "SURFACE_RETURN owner-private second surface_return returns ERR_INVALID_PARAMETER and leaves surface cell custody unchanged"
   ],
   "verification": {
     "single_object_compile": "passed for tests/servers/rendering/test_external_output_owner_state.cpp",

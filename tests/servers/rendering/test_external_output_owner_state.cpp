@@ -344,8 +344,8 @@ public:
 			CHECK(o.surface_return(moved) == OK);
 			CHECK(cell.pin.is_empty());
 			CHECK_FALSE(o.slot_has_custody(0));
-			// A released surface selection cannot return a second custody edge.
-			CHECK(o.surface_return(moved) == ERR_DOES_NOT_EXIST);
+			// A released surface selection is no longer valid at the owner-private entry.
+			CHECK(o.surface_return(moved) == ERR_INVALID_PARAMETER);
 			CHECK(moved.is_empty());
 			CHECK(cell.pin.is_empty());
 			CHECK_FALSE(o.slot_has_custody(0));
