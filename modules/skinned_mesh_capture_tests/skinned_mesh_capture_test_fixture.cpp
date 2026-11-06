@@ -84,7 +84,7 @@ Error SkinnedMeshCaptureTestFixture::build_fixed_scene(const StringName &p_membe
 	if (!is_inside_tree()) {
 		return ERR_INVALID_PARAMETER;
 	}
-	if (p_member != "S02" && p_member != "S03" && p_member != "S04") {
+	if (p_member != "S02" && p_member != "S03" && p_member != "S04" && p_member != "S05") {
 		return ERR_UNAVAILABLE;
 	}
 #if defined(DISABLE_DEPRECATED) || defined(PHYSICS_3D_DISABLED)
@@ -115,6 +115,10 @@ Error SkinnedMeshCaptureTestFixture::build_fixed_scene(const StringName &p_membe
 	arrays[Mesh::ARRAY_VERTEX] = PackedVector3Array{ Vector3(0, 0, 0), Vector3(1, 0, 0), Vector3(0, 1, 0) };
 	arrays[Mesh::ARRAY_BONES] = PackedInt32Array{ 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 	arrays[Mesh::ARRAY_WEIGHTS] = PackedFloat32Array{ 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0 };
+	if (p_member == "S05") {
+		arrays[Mesh::ARRAY_BONES] = PackedInt32Array{ 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0 };
+		arrays[Mesh::ARRAY_WEIGHTS] = PackedFloat32Array{ 1, 0, 0, 0, 1, 0, 0, 0, 0.5f + 1.0f / 65536.0f, 0.5f, 0, 0 };
+	}
 	Ref<ArrayMesh> mesh;
 	mesh.instantiate();
 	mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, arrays);
@@ -229,7 +233,7 @@ Error SkinnedMeshCaptureTestFixture::begin(StringName p_member, StringName p_rou
 	}
 	// Only the implemented fixed episodes may acquire. Other required members
 	// stay explicit unavailable until their original action schedules are wired.
-	if ((p_member != "S02" && p_member != "S03" && p_member != "S04") || (p_route != "N" && p_route != "C")) {
+	if ((p_member != "S02" && p_member != "S03" && p_member != "S04" && p_member != "S05") || (p_route != "N" && p_route != "C")) {
 		return reject(ERR_UNAVAILABLE, "P01_DEPENDENCY_ACQUISITION");
 	}
 	route = p_route;
@@ -358,19 +362,19 @@ Error SkinnedMeshCaptureTestFixture::advance_action(int32_t p_action_index) {
 	if (!Thread::is_main_thread()) {
 		return ERR_UNAVAILABLE;
 	}
-	if (!session || closing || closed || p_action_index != next_action || p_action_index > (member == "S04" ? 0 : 2)) {
+	if (!session || closing || closed || p_action_index != next_action || p_action_index > ((member == "S04" || member == "S05") ? 0 : 2)) {
 		return reject(ERR_INVALID_PARAMETER, "P01_STATE");
 	}
 	const auto state = session->status();
 	if (!initialization_ready(state) || !action_complete(state)) {
 		return reject(ERR_BUSY, "P01_PRECONDITION_NOT_ESTABLISHED");
 	}
-	if (member == "S04") {
+	if (member == "S04" || member == "S05") {
 		auto *player = Object::cast_to<AnimationPlayer>(ObjectDB::get_instance(scene_nodes[1]));
 		if (!player) {
 			return reject(ERR_INVALID_DATA, "P01_SOURCE");
 		}
-		for (int i = 0; i < 3; i++) {
+		for (int i = 0; i < (member == "S04" ? 3 : 2); i++) {
 			player->advance(1.0);
 		}
 	} else if (member == "S03") {
@@ -550,7 +554,7 @@ Dictionary SkinnedMeshCaptureTestFixture::take_result() const {
 	if (session) {
 		const auto state = session->status();
 		result["initialization_ready"] = initialization_ready(state);
-		result["action_ready"] = initialization_ready(state) && action_complete(state) && next_action < (member == "S04" ? 1 : 3);
+		result["action_ready"] = initialization_ready(state) && action_complete(state) && next_action < ((member == "S04" || member == "S05") ? 1 : 3);
 		result["next_action"] = next_action;
 		result["native_error"] = int(state.error);
 		result["cleanup_error"] = int(state.cleanup_error);
