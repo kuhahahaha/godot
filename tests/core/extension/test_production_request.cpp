@@ -6110,6 +6110,7 @@ struct Access {
 		}
 		uint64_t root_serial = 0;
 		uint32_t root_index = UINT32_MAX;
+		bool terminal_retry = false;
 
 		void check_root_unchanged(uint64_t next, uint32_t head, uint32_t cursor) const {
 			using namespace GDExtensionDeviceExit;
@@ -6137,6 +6138,33 @@ struct Access {
 			auto &request = *fixture.request;
 			++probe.calls;
 			REQUIRE(RegistrationContext::current != nullptr);
+			if (probe.terminal_retry) {
+				REQUIRE(ref.handle_serial == request.serial);
+				REQUIRE(native.released());
+				REQUIRE(native.generation_pin().is_empty());
+				const auto withdraw = reinterpret_cast<GDExtensionInterfaceDeviceSessionOutputWithdrawV1>(gdextension_get_guarded_proc_address("device_session_output_withdraw_v1"));
+				REQUIRE(withdraw != nullptr);
+				GDExtensionOutputGenerationInputV1 input{};
+				input.abi = production_dto_abi<GDExtensionOutputGenerationInputV1>();
+				input.particles = native.particle_rid().get_id();
+				input.generation = native.generation;
+				auto wrong = context;
+				++wrong.frame_serial;
+				OutputLeafProbe::status(withdraw(wrong, ref, &input), ERR_UNAUTHORIZED, "original_record_context_required");
+				OutputLeafProbe::status(withdraw(context, { ref.registry_instance, UINT64_MAX }, &input), ERR_UNAUTHORIZED, "original_record_context_required");
+				auto stale = input;
+				stale.particles = 0;
+				OutputLeafProbe::status(withdraw(context, ref, &stale), ERR_INVALID_PARAMETER, "stale_generation");
+				stale = input;
+				++stale.generation;
+				OutputLeafProbe::status(withdraw(context, ref, &stale), ERR_INVALID_PARAMETER, "stale_generation");
+				OutputLeafProbe::status(withdraw(context, ref, &input), OK, "");
+				OutputLeafProbe::status(withdraw(context, ref, &input), OK, "");
+				CHECK(native.released());
+				CHECK(native.generation_pin().is_empty());
+				CHECK(native.generation_serial() == probe.root_serial);
+				return;
+			}
 			if (ref.handle_serial != request.serial) {
 				// A second accepted request in the SAME attachment has its own
 				// genuine protected RECORD, but no successor-to-generation grant.
@@ -6144,8 +6172,15 @@ struct Access {
 				const auto head = request.output_owner_head, cursor = request.output_owner_cursor;
 				CHECK(fixture.registry.production_output_owner_bind(native.generation_pin(), fixture.rd, native.particle_rid(), native.generation, UINT32_MAX, 0, ProductionOutputOwnerKind::GENERATION) == ERR_UNAUTHORIZED);
 				CHECK_FALSE(fixture.rd._production_output_owner_matches(ProductionOutputOwnerKind::GENERATION, native.particle_rid(), native.generation, UINT32_MAX, 0, native.generation_pin(), ref));
+				const auto withdraw = reinterpret_cast<GDExtensionInterfaceDeviceSessionOutputWithdrawV1>(gdextension_get_guarded_proc_address("device_session_output_withdraw_v1"));
+				REQUIRE(withdraw != nullptr);
+				GDExtensionOutputGenerationInputV1 input{};
+				input.abi = production_dto_abi<GDExtensionOutputGenerationInputV1>();
+				input.particles = native.particle_rid().get_id();
+				input.generation = native.generation;
+				OutputLeafProbe::status(withdraw(context, ref, &input), ERR_UNAUTHORIZED, "original_output_generation_owner_required");
 				probe.check_root_unchanged(next, head, cursor);
-				CHECK_FALSE(native.withdrawing());
+				CHECK(native.withdrawing());
 				return;
 			}
 			REQUIRE(request.control.state == ProductionControlState::EXECUTING);
@@ -6209,19 +6244,24 @@ struct Access {
 			CHECK(copied_usage.receipts == 0);
 			CHECK_FALSE(request.control.output.output_generation.native_released);
 			probe.check_root_unchanged(next, head, cursor);
-			// The private generation root still grants no public Withdraw issuer.
+			// The original root authenticates cleanup once all fixture preparation
+			// is complete. Withdrawal then closes new work for this generation.
 			const auto withdraw = reinterpret_cast<GDExtensionInterfaceDeviceSessionOutputWithdrawV1>(gdextension_get_guarded_proc_address("device_session_output_withdraw_v1"));
 			REQUIRE(withdraw != nullptr);
 			GDExtensionOutputGenerationInputV1 input{};
 			input.abi = production_dto_abi<GDExtensionOutputGenerationInputV1>();
 			input.particles = native.particle_rid().get_id();
 			input.generation = native.generation;
-			OutputLeafProbe::status(withdraw(context, ref, &input), ERR_UNAVAILABLE, "original_output_generation_owner_required");
-			CHECK_FALSE(native.withdrawing());
+			CHECK(fixture.registry.production_output_generation_cleanup_context(context, ref, native.generation_pin(), fixture.rd, RID(), native.generation) == ERR_UNAUTHORIZED);
+			CHECK(fixture.registry.production_output_generation_cleanup_context(context, ref, native.generation_pin(), fixture.rd, native.particle_rid(), native.generation + 1) == ERR_UNAUTHORIZED);
+			CHECK(fixture.registry.production_output_generation_cleanup_context(context, { ref.registry_instance, UINT64_MAX }, native.generation_pin(), fixture.rd, native.particle_rid(), native.generation) == ERR_UNAUTHORIZED);
+			CHECK(fixture.registry.production_output_generation_cleanup_context(wrong, ref, native.generation_pin(), fixture.rd, native.particle_rid(), native.generation) == ERR_UNAUTHORIZED);
+			CHECK(fixture.registry.production_output_generation_cleanup_context(context, ref, native.generation_pin(), fixture.rd, native.particle_rid(), native.generation) == OK);
 			for (uint32_t i = 0; i < probe.slots; ++i) {
 				native.install(i, fixture.registry, ref);
 				REQUIRE(fixture.registry.production_output_pin_current(fixture.rd, native.pin(i)) == OK);
 				REQUIRE(fixture.registry.production_output_owner_bind(native.pin(i), fixture.rd, native.particle_rid(), native.generation, i, native.lease(i)) == OK);
+				CHECK(fixture.registry.production_output_generation_cleanup_context(context, ref, native.pin(i), fixture.rd, native.particle_rid(), native.generation) == ERR_UNAUTHORIZED);
 			}
 			if (probe.root_group) {
 				REQUIRE(fixture.rd._production_output_owned_reserve(context, native.generation_pin(), 1, probe.group) == OK);
@@ -6256,6 +6296,16 @@ struct Access {
 			CHECK(request.next_output_pin_serial == full);
 			CHECK(native.generation_serial() == probe.root_serial);
 			CHECK_FALSE(native.generation_pin().is_empty());
+			auto foreign_rid = input;
+			foreign_rid.particles = 0;
+			OutputLeafProbe::status(withdraw(context, ref, &foreign_rid), ERR_INVALID_PARAMETER, "stale_generation");
+			auto foreign_generation = input;
+			++foreign_generation.generation;
+			OutputLeafProbe::status(withdraw(context, ref, &foreign_generation), ERR_INVALID_PARAMETER, "stale_generation");
+			CHECK_FALSE(native.withdrawing());
+			OutputLeafProbe::status(withdraw(context, ref, &input), OK, "");
+			OutputLeafProbe::status(withdraw(context, ref, &input), OK, "");
+			CHECK(native.withdrawing());
 		}
 	};
 
@@ -6367,8 +6417,6 @@ struct Access {
 		CHECK(probe.calls == 2);
 		release_request(other_ref, other);
 
-		native.withdraw_generation();
-		native.withdraw_generation(); // Idempotent logical close; no fabricated history.
 		CHECK(native.withdrawing());
 		CHECK(native.history_cleared());
 		struct ComponentHookScope {
@@ -6603,6 +6651,17 @@ struct Access {
 		CHECK(fixture.driver.releases == 0);
 		if (root_group) {
 			generation_root_drain_cursor(fixture, ref, server);
+		}
+		if (!slots && !pressure && !directory && !root_group) {
+			probe.terminal_retry = true;
+			uint64_t retry_control = 0;
+			REQUIRE(fixture.port.record_schedule(ref, &retry_control) == OK);
+			server->sync();
+			CHECK(probe.calls == 3);
+			GDExtensionProductionRecordReportV2 retried{};
+			REQUIRE(consume_record(ref, retry_control, &retried).native_error == OK);
+			CHECK(native.released());
+			CHECK(native.generation_pin().is_empty());
 		}
 		release_request(ref, &request);
 		fixture.cleanup_owner();

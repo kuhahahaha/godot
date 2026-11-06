@@ -357,15 +357,39 @@ GDExtensionOutputStatusV1 ParticlesStorage::particles_external_withdraw_typed(GD
 	if (!valid_abi(p_input.abi, sizeof(p_input))) {
 		return output_status(ERR_INVALID_PARAMETER, "CONTRACT");
 	}
-	const Particles *particles = particles_owner.get_or_null(RID::from_uint64(p_input.particles));
+	const RID particles_rid = RID::from_uint64(p_input.particles);
+	const Particles *particles = particles_owner.get_or_null(particles_rid);
 	if (!particles || !particles->external || !p_input.generation || p_input.generation != particles->external->generation) {
 		return output_status(ERR_INVALID_PARAMETER, "stale_generation");
 	}
-	// A protected request and a matching scalar generation are not the
-	// original generation owner association. No such retained root exists
-	// yet; a packet slot or a shared attachment must not stand in for it.
-	// The existing public facade keeps its original cleanup behavior.
-	return output_status(ERR_UNAVAILABLE, "original_output_generation_owner_required");
+	const auto &owner = *particles->external;
+	auto &registry = GDExtensionDeviceExit::Registry::get_singleton();
+	if (owner.generation_pin.is_empty()) {
+		// A terminal root is returned by original OBSERVE, which retains only
+		// its correlation. RELEASED plus that original serial identifies the
+		// same closed generation for an idempotent cleanup retry.
+		if (owner.state == ExternalOutputOwner::GenerationState::RELEASED && owner.generation_root_serial &&
+				owner.generation_registry == &registry && owner.device == RenderingDevice::get_singleton() &&
+				owner.generation_request.registry_instance == p_request.registry_instance &&
+				owner.generation_request.handle_serial == p_request.handle_serial) {
+			return output_status(OK, "");
+		}
+		if (owner.generation_root_serial || owner.generation_registry || owner.generation_request.registry_instance || owner.generation_request.handle_serial) {
+			return output_status(ERR_UNAUTHORIZED, "original_output_generation_owner_required");
+		}
+		return output_status(ERR_UNAVAILABLE, "original_output_generation_owner_required");
+	}
+	if (owner.generation_registry != &registry || !owner.device || owner.device != RenderingDevice::get_singleton() ||
+			owner.generation_request.registry_instance != p_request.registry_instance || owner.generation_request.handle_serial != p_request.handle_serial ||
+			!owner.generation_root_matches(owner.generation_pin)) {
+		return output_status(ERR_UNAUTHORIZED, "original_output_generation_owner_required");
+	}
+	const Error owner_error = registry.production_output_generation_cleanup_context(p_context, p_request, owner.generation_pin, *owner.device, particles_rid, owner.generation);
+	if (owner_error != OK) {
+		return output_status(owner_error, "original_output_generation_owner_required");
+	}
+	const Error result = _external_withdraw_body(particles_rid, p_input.generation);
+	return result == OK ? output_status(OK, "") : output_status(result, "output_withdraw");
 }
 bool ParticlesStorage::particles_is_external(RID p_particles) const {
 	const Particles *particles = particles_owner.get_or_null(p_particles);
