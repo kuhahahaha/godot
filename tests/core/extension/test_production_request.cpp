@@ -48,6 +48,11 @@
 #include "tests/test_macros.h"
 
 #include <cstring>
+#ifdef THREADS_ENABLED
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
+#endif
 
 extern GDExtensionInterfaceFunctionPtr gdextension_get_proc_address(const char *);
 extern GDExtensionInterfaceFunctionPtr gdextension_get_guarded_proc_address(const char *);
@@ -865,6 +870,125 @@ struct Access {
 			return registry->production_reserve_metadata_locked(*attachment, operation, capacity, &action, 1, &resource, 1, &use, 1, nullptr, 0, out);
 		}
 	};
+
+#ifdef THREADS_ENABLED
+	static void quote_lock_contention(bool p_accept) {
+		REQUIRE(Thread::is_main_thread()); // Never change the engine's thread identity.
+		Enrollment fixture; // Reuse the existing original TLS/device/producer fixture.
+		auto &registry = *fixture.registry;
+		constexpr auto instance = Enrollment::INSTANCE;
+		const GDExtensionProductionCapacityV1 capacity = { GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionCapacityV1>(), 2, 2, 2, 2, 2, 32, 0, 2, 8, 0 };
+		GDExtensionProductionMetadataQuoteV1 baseline = {};
+		REQUIRE(registry.production_quote(&Enrollment::ABI, { instance, 5 }, { instance, 9 }, { instance, 6 }, { instance, 7 }, &capacity, &baseline).native_error == OK);
+		const uint32_t original_children = fixture.holder.production_children;
+		const auto original_private_refs = registry.records[0].private_refs;
+		struct Contention {
+			Enrollment &fixture;
+			std::mutex mutex;
+			std::condition_variable condition;
+			bool held = false, returned = false;
+			bool returned_while_held = false, window_expired = false, registry_acquired = false;
+			static void run(void *p_data) {
+				auto &self = *static_cast<Contention *>(p_data);
+				MutexLock rd_lock(self.fixture.rd._thread_safe_);
+				{
+					std::unique_lock<std::mutex> lock(self.mutex);
+					self.held = true;
+					self.condition.notify_one();
+					// Bounded scheduling window, not a claimed mutex-wait hook.
+					// Old source must be run with this test to witness ERR_BUSY while
+					// RD is held; a pre-call flag alone cannot prove that interleaving.
+					self.returned_while_held = self.condition.wait_for(lock, std::chrono::seconds(1), [&]() { return self.returned; });
+					self.window_expired = !self.returned_while_held;
+				}
+				// Still holding the actual RD lock, acquire Registry in its original
+				// order. The repaired main path must not hold Registry while waiting.
+				MutexLock registry_lock(self.fixture.registry->mutex);
+				self.registry_acquired = true;
+			}
+		} contention{ fixture };
+		Thread worker;
+		worker.start(&Contention::run, &contention);
+		if (!worker.is_started()) {
+			FAIL("Could not start the RD contention worker");
+			return;
+		}
+		{
+			std::unique_lock<std::mutex> lock(contention.mutex);
+			contention.condition.wait(lock, [&]() { return contention.held; });
+		}
+		GDExtensionProductionMetadataQuoteV1 observed = {};
+		GDExtensionProductionAttachmentRefV1 attachment = {};
+		GDExtensionProductionInstallationReportV1 report = {};
+		const auto result = p_accept ? registry.production_accept(&Enrollment::ABI, { instance, 5 }, { instance, 9 }, { instance, 6 }, { instance, 7 }, { instance, 3 }, &baseline, &attachment, &report) :
+				registry.production_quote(&Enrollment::ABI, { instance, 5 }, { instance, 9 }, { instance, 6 }, { instance, 7 }, &capacity, &observed);
+		{
+			std::lock_guard<std::mutex> lock(contention.mutex);
+			contention.returned = true;
+			contention.condition.notify_one(); // Old failure exits the hold immediately.
+		}
+		worker.wait_to_finish(); // No assertion/REQUIRE while a worker can be live.
+		INFO("quote/accept contention accept=", p_accept, " error=", result.native_error,
+				" returned_while_rd_held=", contention.returned_while_held, " window_expired=", contention.window_expired,
+				" worker_registry_acquired=", contention.registry_acquired);
+		CHECK(result.native_error == OK);
+		CHECK_FALSE(contention.returned_while_held);
+		CHECK(contention.window_expired);
+		CHECK(contention.registry_acquired);
+		if (p_accept && result.native_error == OK) {
+			CHECK(attachment.registry_instance == instance);
+			CHECK(attachment.handle_serial != 0);
+			CHECK(report.allocated_bytes == baseline.allocation_bytes);
+			CHECK(report.returned_bytes == 0);
+			CHECK(fixture.rd.production_entity_holds != nullptr);
+			CHECK(registry.production_close(attachment).native_error == OK);
+			CHECK(fixture.rd.production_entity_holds == nullptr);
+			CHECK(fixture.holder.production_children == original_children);
+			CHECK(registry.records[0].private_refs == original_private_refs);
+		} else if (!p_accept && result.native_error == OK) {
+			CHECK(std::memcmp(&observed, &baseline, sizeof(baseline)) == 0);
+		}
+		// Same original handles on a foreign thread do not transfer the TLS
+		// SceneReady authority. Both output DTOs must remain untouched.
+		struct Foreign {
+			Enrollment &fixture;
+			const GDExtensionProductionCapacityV1 &capacity;
+			const GDExtensionProductionMetadataQuoteV1 &input;
+			GDExtensionProductionMetadataQuoteV1 output = {};
+			GDExtensionProductionAttachmentRefV1 attachment = {};
+			GDExtensionProductionInstallationReportV1 report = {};
+			int32_t quote_error = OK, accept_error = OK;
+			static void run(void *p_data) {
+				auto &self = *static_cast<Foreign *>(p_data);
+				constexpr auto id = Enrollment::INSTANCE;
+				self.quote_error = self.fixture.registry->production_quote(&Enrollment::ABI, { id, 5 }, { id, 9 }, { id, 6 }, { id, 7 }, &self.capacity, &self.output).native_error;
+				self.accept_error = self.fixture.registry->production_accept(&Enrollment::ABI, { id, 5 }, { id, 9 }, { id, 6 }, { id, 7 }, { id, 3 }, &self.input, &self.attachment, &self.report).native_error;
+			}
+		} foreign{ fixture, capacity, baseline };
+		std::memset(&foreign.output, 0x5a, sizeof(foreign.output));
+		std::memset(&foreign.report, 0x5a, sizeof(foreign.report));
+		const auto before_output = foreign.output;
+		const auto before_report = foreign.report;
+		Thread foreign_thread;
+		foreign_thread.start(&Foreign::run, &foreign);
+		if (!foreign_thread.is_started()) {
+			FAIL("Could not start the foreign caller worker");
+			return;
+		}
+		foreign_thread.wait_to_finish();
+		CHECK(foreign.quote_error != OK);
+		CHECK(foreign.accept_error != OK);
+		CHECK(std::memcmp(&foreign.output, &before_output, sizeof(before_output)) == 0);
+		CHECK(std::memcmp(&foreign.report, &before_report, sizeof(before_report)) == 0);
+		CHECK(foreign.attachment.registry_instance == 0);
+		CHECK(foreign.attachment.handle_serial == 0);
+		CHECK(registry.production_quote(&Enrollment::ABI, { instance, 5 }, { instance, UINT64_MAX }, { instance, 6 }, { instance, 7 }, &capacity, &foreign.output).native_error != OK);
+		CHECK(std::memcmp(&foreign.output, &before_output, sizeof(before_output)) == 0);
+		CHECK(registry.production_accept(&Enrollment::ABI, { instance, 5 }, { instance, 9 }, { instance, 6 }, { instance, 7 }, { instance, UINT64_MAX }, &baseline, &foreign.attachment, &foreign.report).native_error != OK);
+		CHECK(std::memcmp(&foreign.report, &before_report, sizeof(before_report)) == 0);
+		CHECK(foreign.attachment.handle_serial == 0);
+	}
+#endif
 
 	// Same live singleton and original FIFO used by the engine. Only the newly
 	// reserved record, device and views belong to this controlled CPU fixture.
@@ -8560,5 +8684,14 @@ TEST_CASE("[SceneTree][ProductionRequest] exact native output closure returns th
 	SUBCASE("Unrecorded actual factory prefix returns after explicit owner cancellation") {
 		TestProductionRequest::Access::singleton_split_owner_set(true, false, false, false, false, false, true, false, true);
 	}
+}
+#endif
+
+#ifdef THREADS_ENABLED
+TEST_CASE("[ProductionRequest][QuoteLockOrder] main SceneReady quote survives bounded original RD contention") {
+	TestProductionRequest::Access::quote_lock_contention(false);
+}
+TEST_CASE("[ProductionRequest][QuoteLockOrder] main SceneReady accept survives bounded original RD contention") {
+	TestProductionRequest::Access::quote_lock_contention(true);
 }
 #endif

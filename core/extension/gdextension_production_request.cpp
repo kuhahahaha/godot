@@ -39,6 +39,7 @@
 #include <cstddef>
 #include <cstring>
 #include <new>
+#include <optional>
 #include <type_traits>
 
 namespace GDExtensionDeviceExit {
@@ -270,12 +271,32 @@ GDExtensionDeviceSessionResultV1 Registry::production_quote(const GDExtensionDev
 	if (!aligned(a) || !abi(*a) || !aligned(capacity) || !aligned(out)) {
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
+	// SceneReady's synchronous main-owner Engine stack keeps the original
+	// main RD Object alive. Take RD before Registry so a concurrent RD owner
+	// can finish its Registry work; never wait for RD while holding Registry.
+	// This TLS filter is only a lifetime/lock-order preflight. The original
+	// installation check below remains the authority for every input.
+	RenderingDevice *locked_main_rd = nullptr;
+	std::optional<MutexLock<Mutex>> main_rd_lock;
+	const auto *current = RegistrationContext::current;
+	if (Thread::is_main_thread() && current && current->reference &&
+			current->reference->registry == this && current->admitted && !current->ack &&
+			current->level_phase == LevelPhase::SCENE_READY) {
+		locked_main_rd = RenderingDevice::get_singleton();
+		if (locked_main_rd) {
+			main_rd_lock.emplace(locked_main_rd->_thread_safe_);
+		}
+	}
+	// Other original owner-thread paths retain their nonblocking contract.
 	MutexLock lock(mutex);
 	uint32_t library = 0, device = 0;
 	HolderRetirement *holder = nullptr;
 	Error e = production_installation_locked(frame, producer, context, session, library, device, holder);
 	if (e != OK) {
 		return result(e, 16);
+	}
+	if (locked_main_rd && device_records[device].object != locked_main_rd) {
+		return result(ERR_UNAVAILABLE, 16);
 	}
 	GDExtensionProductionMetadataQuoteV1 quote = {};
 	e = production_device_quote_locked(*Object::cast_to<RenderingDevice>(device_records[device].object), *capacity, quote);
@@ -289,12 +310,32 @@ GDExtensionDeviceSessionResultV1 Registry::production_accept(const GDExtensionDe
 	if (!aligned(a) || !abi(*a) || !aligned(input) || !production_dto_valid(*input) || !aligned(out) || !aligned(report) || !separate(out, sizeof(*out), report, sizeof(*report)) || out->registry_instance || out->handle_serial) {
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
+	// SceneReady's synchronous main-owner Engine stack keeps the original
+	// main RD Object alive. Take RD before Registry so a concurrent RD owner
+	// can finish its Registry work; never wait for RD while holding Registry.
+	// This TLS filter is only a lifetime/lock-order preflight. The original
+	// installation check below remains the authority for every input.
+	RenderingDevice *locked_main_rd = nullptr;
+	std::optional<MutexLock<Mutex>> main_rd_lock;
+	const auto *current = RegistrationContext::current;
+	if (Thread::is_main_thread() && current && current->reference &&
+			current->reference->registry == this && current->admitted && !current->ack &&
+			current->level_phase == LevelPhase::SCENE_READY) {
+		locked_main_rd = RenderingDevice::get_singleton();
+		if (locked_main_rd) {
+			main_rd_lock.emplace(locked_main_rd->_thread_safe_);
+		}
+	}
+	// Other original owner-thread paths retain their nonblocking contract.
 	MutexLock lock(mutex);
 	uint32_t library = 0, device = 0;
 	HolderRetirement *holder = nullptr;
 	Error e = production_installation_locked(frame, producer, context, session, library, device, holder);
 	if (e != OK) {
 		return result(e, 16);
+	}
+	if (locked_main_rd && device_records[device].object != locked_main_rd) {
+		return result(ERR_UNAVAILABLE, 16);
 	}
 	if (code.registry_instance != instance || code.handle_serial != holder->handle_serial) {
 		return result(ERR_UNAUTHORIZED, 16);
