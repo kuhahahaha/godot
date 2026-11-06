@@ -471,6 +471,10 @@ private:
 		bool destination_became_mutable = false;
 		CopyAppendResult(Error p_error = OK) : error(p_error) {}
 	};
+	enum class DrawCaptureProfile : uint8_t {
+		ProceduralTriangle,
+		GeometryDirect,
+	};
 	struct DrawAppendResult {
 		Error error = OK;
 		NativeAppendEffect effect = NativeAppendEffect::NoNewEffect;
@@ -533,7 +537,8 @@ private:
 	DrawListBeginResult _draw_list_begin_recorded(RID p_framebuffer, uint32_t p_draw_flags_bits, VectorView<Color> p_clear_color_values, float p_clear_depth_value, uint32_t p_clear_stencil_value, const Rect2 &p_region, uint32_t p_breadcrumb, bool p_capture = true);
 	DrawAppendResult _draw_list_bind_render_pipeline_recorded(DrawListID p_list, RID p_render_pipeline, bool p_capture = true);
 	DrawAppendResult _draw_list_set_push_constant_recorded(DrawListID p_list, const void *p_data, uint32_t p_data_size, bool p_capture = true);
-	DrawAppendResult _draw_list_draw_recorded(DrawListID p_list, bool p_use_indices, uint32_t p_instances, uint32_t p_procedural_vertices, bool p_capture = true);
+	DrawAppendResult _draw_list_draw_recorded(DrawListID p_list, bool p_use_indices, uint32_t p_instances, uint32_t p_procedural_vertices, bool p_capture = true, DrawCaptureProfile p_profile = DrawCaptureProfile::ProceduralTriangle);
+	DrawAppendResult _draw_list_draw_geometry_direct_recorded(DrawListID p_list, bool p_use_indices, uint32_t p_instances = 1);
 	DrawAppendResult _draw_list_enable_scissor_recorded(DrawListID p_list, const Rect2 &p_rect, bool p_capture = true);
 	DrawAppendResult _draw_list_end_recorded(bool p_capture = true);
 	CopyAppendResult _buffer_copy_recorded(RID p_src_buffer, RID p_dst_buffer, uint32_t p_src_offset, uint32_t p_dst_offset, uint32_t p_size);
@@ -1780,18 +1785,19 @@ private:
 		uint32_t native_immutable_holds = 0;
 		bool native_immutable_retire_requested = false;
 		bool native_external_access = false;
-		// Cached values for validation.
-#ifdef DEBUG_ENABLED
+		// Original creation facts needed by checked drawing in every build.
 		struct Validation {
-			FramebufferFormatID framebuffer_format;
+			FramebufferFormatID framebuffer_format = INVALID_ID;
 			uint32_t render_pass = 0;
+			VertexFormatID vertex_format = INVALID_ID;
+			RenderPrimitive primitive = RENDER_PRIMITIVE_MAX;
+#ifdef DEBUG_ENABLED
 			uint32_t dynamic_state = 0;
-			VertexFormatID vertex_format;
 			bool uses_restart_indices = false;
 			uint32_t primitive_minimum = 0;
 			uint32_t primitive_divisor = 0;
-		} validation;
 #endif
+		} validation;
 		// Actual pipeline.
 		RID shader;
 		RDD::ShaderID shader_driver_id;
@@ -2078,9 +2084,7 @@ private:
 
 	DrawList draw_list;
 	uint32_t draw_list_subpass_count = 0;
-#ifdef DEBUG_ENABLED
 	FramebufferFormatID draw_list_framebuffer_format = INVALID_ID;
-#endif
 	uint32_t draw_list_current_subpass = 0;
 
 	LocalVector<RID> draw_list_bound_textures;

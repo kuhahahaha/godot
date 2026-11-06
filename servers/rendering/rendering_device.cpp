@@ -6050,11 +6050,12 @@ RID RenderingDevice::_qualification_render_pipeline_create_internal(RID p_shader
 	pipeline.push_constant_size = shader->push_constant_size;
 	pipeline.stage_bits = shader->stage_bits;
 
-#ifdef DEBUG_ENABLED
-	pipeline.validation.dynamic_state = p_dynamic_state_flags;
 	pipeline.validation.framebuffer_format = p_framebuffer_format;
 	pipeline.validation.render_pass = p_for_render_pass;
 	pipeline.validation.vertex_format = p_vertex_format;
+	pipeline.validation.primitive = p_render_primitive;
+#ifdef DEBUG_ENABLED
+	pipeline.validation.dynamic_state = p_dynamic_state_flags;
 	pipeline.validation.uses_restart_indices = p_render_primitive == RENDER_PRIMITIVE_TRIANGLE_STRIPS_WITH_RESTART_INDEX;
 
 	static const uint32_t primitive_divisor[RENDER_PRIMITIVE_MAX] = {
@@ -6678,9 +6679,7 @@ RenderingDevice::DrawListID RenderingDevice::draw_list_begin_for_screen(DisplayS
 	Rect2i viewport = Rect2i(0, 0, context->surface_get_width(surface), context->surface_get_height(surface));
 
 	_draw_list_start(viewport);
-#ifdef DEBUG_ENABLED
 	draw_list_framebuffer_format = screen_get_framebuffer_format(p_screen);
-#endif
 	draw_list_subpass_count = 1;
 
 	RDD::RenderPassClearValue clear_value;
@@ -6840,9 +6839,7 @@ RenderingDevice::DrawListBeginResult RenderingDevice::_draw_list_begin_recorded(
 
 	_draw_list_start(Rect2i(viewport_offset, viewport_size));
 	draw_list.begin_handle = result.begin_handle;
-#ifdef DEBUG_ENABLED
 	draw_list_framebuffer_format = framebuffer->format_id;
-#endif
 	draw_list_current_subpass = 0;
 	draw_list_subpass_count = framebuffer_key->passes.size();
 
@@ -7311,20 +7308,66 @@ RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_set_push_constant_
 	return result;
 }
 
+RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_draw_geometry_direct_recorded(DrawListID p_list, bool p_use_indices, uint32_t p_instances) {
+	return _draw_list_draw_recorded(p_list, p_use_indices, p_instances, 0, true, DrawCaptureProfile::GeometryDirect);
+}
+
 void RenderingDevice::draw_list_draw(DrawListID p_list, bool p_use_indices, uint32_t p_instances, uint32_t p_procedural_vertices) {
 	_draw_list_draw_recorded(p_list, p_use_indices, p_instances, p_procedural_vertices, false);
 }
 
-RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_draw_recorded(DrawListID p_list, bool p_use_indices, uint32_t p_instances, uint32_t p_procedural_vertices, bool p_capture) {
+RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_draw_recorded(DrawListID p_list, bool p_use_indices, uint32_t p_instances, uint32_t p_procedural_vertices, bool p_capture, DrawCaptureProfile p_profile) {
 	DrawAppendResult result;
 	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
 	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
 
 	ERR_FAIL_COND_V(!draw_list.active, result.failure(ERR_INVALID_PARAMETER));
 
-	if (p_capture) {
+	if (p_capture && p_profile == DrawCaptureProfile::ProceduralTriangle) {
 		ERR_FAIL_COND_V(p_list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT), result.failure(ERR_INVALID_PARAMETER));
 		ERR_FAIL_COND_V(!draw_list.state.pipeline.is_valid() || p_use_indices || p_instances != 1 || p_procedural_vertices != 3 || draw_list.state.vertex_array.is_valid() || draw_list.state.index_array.is_valid() || draw_list.state.set_count || (draw_list.state.pipeline_push_constant_size && !draw_list.state.checked_push_constant_supplied), result.failure(ERR_UNAVAILABLE));
+	}
+
+	if (p_capture && p_profile == DrawCaptureProfile::GeometryDirect) {
+		ERR_FAIL_COND_V(p_list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT), result.failure(ERR_INVALID_PARAMETER));
+		ERR_FAIL_COND_V(!draw_graph.contains_record(draw_list.begin_handle), result.failure(ERR_INVALID_DATA));
+		ERR_FAIL_COND_V(!draw_list.state.pipeline.is_valid() || p_instances != 1 || p_procedural_vertices != 0, result.failure(ERR_UNAVAILABLE));
+		ERR_FAIL_COND_V(draw_list.state.set_count != 0, result.failure(ERR_UNAVAILABLE));
+		for (const DrawList::SetState &set : draw_list.state.sets) {
+			ERR_FAIL_COND_V(set.uniform_set.is_valid(), result.failure(ERR_UNAVAILABLE));
+		}
+		ERR_FAIL_COND_V(draw_list.state.pipeline_push_constant_size && !draw_list.state.checked_push_constant_supplied, result.failure(ERR_UNAVAILABLE));
+		ERR_FAIL_COND_V(!render_pipeline_owner.owns(draw_list.state.pipeline) || native_immutable_resource_is_retiring(draw_list.state.pipeline), result.failure(ERR_INVALID_PARAMETER));
+		const RenderPipeline *pipeline = render_pipeline_owner.get_or_null(draw_list.state.pipeline);
+		ERR_FAIL_NULL_V(pipeline, result.failure(ERR_INVALID_PARAMETER));
+		ERR_FAIL_COND_V(!pipeline->driver_id || pipeline->qualification_return, result.failure(ERR_UNAUTHORIZED));
+		ERR_FAIL_COND_V(pipeline->validation.framebuffer_format != draw_list_framebuffer_format || pipeline->validation.render_pass != draw_list_current_subpass, result.failure(ERR_INVALID_PARAMETER));
+		ERR_FAIL_COND_V(!shader_owner.owns(pipeline->shader) || native_immutable_resource_is_retiring(pipeline->shader), result.failure(ERR_INVALID_PARAMETER));
+		const Shader *shader = shader_owner.get_or_null(pipeline->shader);
+		ERR_FAIL_NULL_V(shader, result.failure(ERR_INVALID_PARAMETER));
+		ERR_FAIL_COND_V(shader->qualification_return, result.failure(ERR_UNAUTHORIZED));
+		ERR_FAIL_COND_V(!shader->driver_id || shader->driver_id != pipeline->shader_driver_id || draw_list.state.pipeline_shader != pipeline->shader || draw_list.state.pipeline_shader_driver_id != pipeline->shader_driver_id || draw_list.state.pipeline_shader_layout_hash != pipeline->shader_layout_hash || draw_list.state.pipeline_push_constant_size != pipeline->push_constant_size, result.failure(ERR_INVALID_DATA));
+		ERR_FAIL_COND_V(pipeline->validation.primitive != RENDER_PRIMITIVE_TRIANGLES || pipeline->validation.vertex_format == INVALID_ID, result.failure(ERR_UNAVAILABLE));
+		for (uint32_t i = 0; i < pipeline->set_formats.size(); ++i) {
+			ERR_FAIL_COND_V(pipeline->set_formats[i] != 0, result.failure(ERR_UNAVAILABLE));
+		}
+		ERR_FAIL_COND_V(!draw_list.state.vertex_array.is_valid() || !vertex_array_owner.owns(draw_list.state.vertex_array), result.failure(ERR_INVALID_PARAMETER));
+		const VertexArray *vertex_array = vertex_array_owner.get_or_null(draw_list.state.vertex_array);
+		ERR_FAIL_NULL_V(vertex_array, result.failure(ERR_INVALID_PARAMETER));
+		ERR_FAIL_COND_V(native_immutable_resource_is_retiring(draw_list.state.vertex_array) || vertex_array->description != pipeline->validation.vertex_format || vertex_array->vertex_count <= 0 || vertex_array->max_instances_allowed < 1, result.failure(ERR_INVALID_PARAMETER));
+		ERR_FAIL_COND_V(uint32_t(vertex_array->vertex_count) != draw_list.validation.vertex_array_size, result.failure(ERR_INVALID_DATA));
+		if (p_use_indices) {
+			ERR_FAIL_COND_V(!draw_list.state.index_array.is_valid() || !index_array_owner.owns(draw_list.state.index_array), result.failure(ERR_INVALID_PARAMETER));
+			const IndexArray *index_array = index_array_owner.get_or_null(draw_list.state.index_array);
+			ERR_FAIL_NULL_V(index_array, result.failure(ERR_INVALID_PARAMETER));
+			ERR_FAIL_COND_V(native_immutable_resource_is_retiring(draw_list.state.index_array) || index_array->indices < 3 || index_array->indices % 3 != 0 || index_array->supports_restart_indices || (index_array->format != INDEX_BUFFER_FORMAT_UINT16 && index_array->format != INDEX_BUFFER_FORMAT_UINT32), result.failure(ERR_INVALID_PARAMETER));
+			ERR_FAIL_COND_V(index_array->indices != draw_list.validation.index_array_count, result.failure(ERR_INVALID_DATA));
+			const uint64_t index_width = index_array->format == INDEX_BUFFER_FORMAT_UINT16 ? sizeof(uint16_t) : sizeof(uint32_t);
+			ERR_FAIL_COND_V(uint64_t(index_array->offset) * index_width > UINT32_MAX, result.failure(ERR_PARAMETER_RANGE_ERROR));
+		} else {
+			ERR_FAIL_COND_V(draw_list.state.index_array.is_valid(), result.failure(ERR_UNAVAILABLE));
+			ERR_FAIL_COND_V(vertex_array->vertex_count < 3 || vertex_array->vertex_count % 3 != 0, result.failure(ERR_INVALID_PARAMETER));
+		}
 	}
 
 #ifdef DEBUG_ENABLED
@@ -7519,6 +7562,12 @@ RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_draw_recorded(Draw
 
 	result.effect = NativeAppendEffect::Recorded;
 	result.capture_complete = p_capture;
+	if (p_capture && p_profile == DrawCaptureProfile::GeometryDirect && !draw_graph.contains_record(result.draw_handle)) {
+		// The native draw was already appended. Preserve that fact while
+		// reporting that its capture handle could not be retained.
+		result.error = ERR_INVALID_DATA;
+		result.capture_complete = false;
+	}
 	return result;
 }
 
