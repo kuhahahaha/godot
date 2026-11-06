@@ -1,0 +1,38 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/core/extension/test_production_request.cpp:8691:
+TEST CASE:  [ProductionRequest][QuoteLockOrder] main SceneReady quote survives bounded original RD contention
+
+tests/core/extension/test_production_request.cpp:934: ERROR: CHECK( result.native_error == OK ) is NOT correct!
+  values: CHECK( 44 == 0 )
+  logged: quote/accept contention accept=false error=44 returned_while_rd_held=true window_expired=false worker_registry_acquired=true
+
+tests/core/extension/test_production_request.cpp:935: ERROR: CHECK_FALSE( contention.returned_while_held ) is NOT correct!
+  values: CHECK_FALSE( true )
+  logged: quote/accept contention accept=false error=44 returned_while_rd_held=true window_expired=false worker_registry_acquired=true
+
+tests/core/extension/test_production_request.cpp:936: ERROR: CHECK( contention.window_expired ) is NOT correct!
+  values: CHECK( false )
+  logged: quote/accept contention accept=false error=44 returned_while_rd_held=true window_expired=false worker_registry_acquired=true
+
+===============================================================================
+tests/core/extension/test_production_request.cpp:8694:
+TEST CASE:  [ProductionRequest][QuoteLockOrder] main SceneReady accept survives bounded original RD contention
+
+tests/core/extension/test_production_request.cpp:934: ERROR: CHECK( result.native_error == OK ) is NOT correct!
+  values: CHECK( 44 == 0 )
+  logged: quote/accept contention accept=true error=44 returned_while_rd_held=true window_expired=false worker_registry_acquired=true
+
+tests/core/extension/test_production_request.cpp:935: ERROR: CHECK_FALSE( contention.returned_while_held ) is NOT correct!
+  values: CHECK_FALSE( true )
+  logged: quote/accept contention accept=true error=44 returned_while_rd_held=true window_expired=false worker_registry_acquired=true
+
+tests/core/extension/test_production_request.cpp:936: ERROR: CHECK( contention.window_expired ) is NOT correct!
+  values: CHECK( false )
+  logged: quote/accept contention accept=true error=44 returned_while_rd_held=true window_expired=false worker_registry_acquired=true
+
+===============================================================================
+[doctest] test cases:  2 |  0 passed | 2 failed | 2165 skipped
+[doctest] assertions: 34 | 28 passed | 6 failed |
+[doctest] Status: FAILURE!
