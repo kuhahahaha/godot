@@ -8,32 +8,9 @@
   },
   "build": "work/b4-owned-storage-next-20261106/BUILD_UNKNOWN.log",
   "targeted": {
-    "command": [
-      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
-      "--test",
-      "--reporters=xml",
-      "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/b4-owned-storage-next-20261106/targeted-unknown-r1/doctest.xml",
-      "--no-colors=true",
-      "--no-skipped-summary=true",
-      "--case-sensitive=true",
-      "--test-case=[SceneTree][ProductionRequest][OwnedStorageComponent] exact Instance192 and zero-capacity resources retire through original OBSERVE,[SceneTree][ProductionRequest][OwnedStorageComponent] actual backing mismatch retains original group storage and custody across OBSERVE,[SceneTree][ProductionRequest][OwnedStorageComponent] different accepted request cannot allocate original stable slot,[SceneTree][ProductionRequest][OwnedStorageComponent] finite member shortage refuses before native allocation,[SceneTree][ProductionRequest][OwnedStorageComponent] invalid Instance192 capacity preserves original slot before native effects,[SceneTree][ProductionRequest][OwnedStorageComponent] every original native allocation failure retains and retires exact prefix,[SceneTree][ProductionRequest] exact native output closure returns through bounded original FIFO"
-    ],
-    "environment": {
-      "GODOT_TEST_PHYSICS_3D_BACKEND": "GodotPhysics3D",
-      "GODOT_TEST_PHYSICS_3D_THREADED": "0"
-    },
-    "host_before": "129ca8f4da2c115cbad51100b9bfe3ae2ee255164007480eb381abab12ddc833",
-    "expected_names": [
-      "[SceneTree][ProductionRequest][OwnedStorageComponent] exact Instance192 and zero-capacity resources retire through original OBSERVE",
-      "[SceneTree][ProductionRequest][OwnedStorageComponent] actual backing mismatch retains original group storage and custody across OBSERVE",
-      "[SceneTree][ProductionRequest][OwnedStorageComponent] different accepted request cannot allocate original stable slot",
-      "[SceneTree][ProductionRequest][OwnedStorageComponent] finite member shortage refuses before native allocation",
-      "[SceneTree][ProductionRequest][OwnedStorageComponent] invalid Instance192 capacity preserves original slot before native effects",
-      "[SceneTree][ProductionRequest][OwnedStorageComponent] every original native allocation failure retains and retires exact prefix",
-      "[SceneTree][ProductionRequest] exact native output closure returns through bounded original FIFO"
-    ],
     "exit": 0,
     "seconds": 1.63,
+    "host_before": "129ca8f4da2c115cbad51100b9bfe3ae2ee255164007480eb381abab12ddc833",
     "host_after": "129ca8f4da2c115cbad51100b9bfe3ae2ee255164007480eb381abab12ddc833",
     "stdout_bytes": 0,
     "stderr_bytes": 0,
@@ -45,16 +22,8 @@
       "successes": "13273",
       "failures": "0"
     },
-    "executed_names": [
-      "[SceneTree][ProductionRequest][OwnedStorageComponent] exact Instance192 and zero-capacity resources retire through original OBSERVE",
-      "[SceneTree][ProductionRequest][OwnedStorageComponent] actual backing mismatch retains original group storage and custody across OBSERVE",
-      "[SceneTree][ProductionRequest][OwnedStorageComponent] different accepted request cannot allocate original stable slot",
-      "[SceneTree][ProductionRequest][OwnedStorageComponent] finite member shortage refuses before native allocation",
-      "[SceneTree][ProductionRequest][OwnedStorageComponent] invalid Instance192 capacity preserves original slot before native effects",
-      "[SceneTree][ProductionRequest][OwnedStorageComponent] every original native allocation failure retains and retires exact prefix",
-      "[SceneTree][ProductionRequest] exact native output closure returns through bounded original FIFO"
-    ],
-    "validation_pass": true
+    "validation_pass": true,
+    "raw_result": "work/b4-owned-storage-next-20261106/targeted-unknown-r1/RESULT.json"
   },
   "coverage": [
     "capacity 2 and zero",
@@ -64,7 +33,29 @@
   ],
   "limits": [
     "No GPU rendering assertion",
-    "full suite pending",
-    "style CI previously failed on unrelated file-format hook after frame initializer commit; exact hook diff not surfaced"
-  ]
+    "Linux TSAN and clangd-tidy await new CI42154714457"
+  ],
+  "full": {
+    "exit": 0,
+    "seconds": 17.79,
+    "host_before": "129ca8f4da2c115cbad51100b9bfe3ae2ee255164007480eb381abab12ddc833",
+    "host_after": "129ca8f4da2c115cbad51100b9bfe3ae2ee255164007480eb381abab12ddc833",
+    "stdout_bytes": 571,
+    "stderr_bytes": 4512,
+    "test_cases": {
+      "successes": "2120",
+      "failures": "0"
+    },
+    "asserts": {
+      "successes": "544514",
+      "failures": "0"
+    },
+    "validation_pass": true,
+    "raw_result": "work/b4-owned-storage-next-20261106/full-unknown-r1/RESULT.json"
+  },
+  "stderr_comparison": {
+    "baseline": "work/b4-owned-storage-next-20261106/full-layout-extrema/stderr.log",
+    "equal": true,
+    "normalization": "8+digit dynamic IDs"
+  }
 }
