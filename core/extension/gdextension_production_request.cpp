@@ -1937,11 +1937,12 @@ Error Registry::production_output_owners_service_locked(ProductionRequest &reque
 	rd._thread_safe_.unlock();
 	mutex.unlock();
 	const Error result = rd._production_output_owner_service(kind, particles, generation, slot, lease, *pin, budget, usage);
-	// Reacquire in the original Registry -> RD order. The callback ran with
-	// both locks released; reversing this order creates a TSAN lock cycle
-	// against owned factory paths that already hold Registry before RD.
-	mutex.lock();
+	// Blocking acquisition is RD -> Registry, as in native source capture and
+	// owned factory return. Registry-held entry points use RD.try_lock() and
+	// return ERR_BUSY on contention; they must never wait for RD. The capture
+	// pin retains this original request while both locks are released.
 	rd._thread_safe_.lock();
+	mutex.lock();
 	CRASH_COND(!request.capture_inflight);
 	--request.capture_inflight;
 	if (request.serial != serial || request.control.serial != control_serial || request.control.state != ProductionControlState::EXECUTING || request.attachment != attachment || attachment->held_device != &rd || attachment->epoch != epoch || device_records[attachment->device].epoch != epoch || device_records[attachment->device].object != &rd) {
@@ -2530,8 +2531,9 @@ void Registry::production_control_execute_locked(ProductionRequest &request, Ren
 					rd->_thread_safe_.unlock();
 					mutex.unlock();
 					const Error component = test_production_before_maintenance(request, *rd);
-					mutex.lock();
+					// Match the production callback's blocking RD -> Registry order.
 					rd->_thread_safe_.lock();
+					mutex.lock();
 					CRASH_COND(!request.capture_inflight);
 					--request.capture_inflight;
 					if (request.serial != request_serial || request.control.serial != control_serial || request.control.state != ProductionControlState::EXECUTING || request.attachment != attachment || attachment->held_device != rd || attachment->epoch != epoch || device_records[attachment->device].epoch != epoch || device_records[attachment->device].object != rd) {
