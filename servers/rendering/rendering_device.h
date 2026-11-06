@@ -59,6 +59,7 @@ struct Access;
 }
 namespace RendererRD {
 class TestParticlesProcessRetryAccess;
+class TestMultimeshRebuildAccess;
 }
 #endif
 
@@ -168,6 +169,7 @@ private:
 	friend struct TestProductionNativeObserve::Access;
 	friend class TestQualificationRtAccess;
 	friend class RendererRD::TestParticlesProcessRetryAccess;
+	friend class RendererRD::TestMultimeshRebuildAccess;
 	void test_arm_buffer_update_fault(RID p_buffer, uint32_t p_count) {
 		test_buffer_update_fault_buffer = p_buffer;
 		test_buffer_update_fault_count = p_count;
