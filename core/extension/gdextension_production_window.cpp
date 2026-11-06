@@ -113,10 +113,11 @@ GDExtensionDeviceSessionResultV1 Registry::production_reserve(GDExtensionProduct
 }
 
 GDExtensionDeviceSessionResultV1 Registry::production_raster_reserve(GDExtensionProductionAttachmentRefV1 ref, const GDExtensionProductionOperationV1 *operation, const GDExtensionProductionCapacityV1 *capacity, const GDExtensionProductionRasterActionV1 *action, GDExtensionProductionRequestRefV1 *out) {
-	if (out) {
-		*out = {};
+	if (!window_aligned(out)) {
+		return window_result(ERR_INVALID_PARAMETER);
 	}
-	if (!window_aligned(operation) || !window_aligned(capacity) || !window_aligned(action) || !window_aligned(out) || !operation || !capacity || !action || !out || out->registry_instance || out->handle_serial || !production_dto_valid(*operation) || !production_dto_valid(*capacity) || !production_dto_valid(*action) || action->reserved || action->action_ordinal == UINT64_MAX || action->canonical_suboperation < operation->canonical_begin || action->canonical_suboperation >= operation->canonical_end) {
+	*out = {};
+	if (!window_aligned(operation) || !window_aligned(capacity) || !window_aligned(action) || !window_aligned(out) || !operation || !capacity || !action || !out || out->registry_instance || out->handle_serial || !production_dto_valid(*operation) || !production_dto_valid(*capacity) || !production_dto_valid(*action) || action->reserved || action->target_content_revision || action->action_ordinal != 0 || action->framebuffer_resource_slot != 0 || action->depth_resource_slot != 1 || !action->shader_serial || !action->pipeline_serial || !action->framebuffer_serial || capacity->suboperations < 1 || capacity->resources < 4 || capacity->graph_memberships < 8 || action->canonical_suboperation < operation->canonical_begin || action->canonical_suboperation >= operation->canonical_end) {
 		return window_result(ERR_INVALID_PARAMETER);
 	}
 	MutexLock lock(mutex);
@@ -143,9 +144,160 @@ GDExtensionDeviceSessionResultV1 Registry::production_raster_reserve(GDExtension
 	}
 	request->raster_action = *action;
 	request->raster_reserved = true;
+	// A raster reservation is unfinished work, never an empty successful record.
+	// Independent request-owned raster preparation must fill these exact cells;
+	// no qualification resource import can prepare this action.
+	request->action_count = 1;
+	request->resource_count = 4;
+	auto &row = request->actions[0].declaration;
+	row.action_ordinal = 0;
+	row.canonical_suboperation = action->canonical_suboperation;
+	row.action_kind = GDEXTENSION_PRODUCTION_RASTER_FRAME_V1;
+	row.list_boundary = GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1;
+	for (uint32_t i = 0; i < 4; ++i) {
+		request->resources[i].request_serial = request->serial;
+		request->resources[i].declaration.resource_kind = GDEXTENSION_PRODUCTION_RASTER_PHYSICAL_V1;
+		request->resources[i].declaration.ownership = GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1;
+	}
 	*out = { instance, request->serial };
 	return window_result(OK);
 }
+GDExtensionDeviceSessionResultV1 Registry::production_raster_begin(ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, uint64_t revision) {
+	MutexLock lock(mutex);
+	ProductionRequest *request = nullptr;
+	RenderingDevice *rd = nullptr;
+	Error error = production_physical_request_locked(context, ref, request, rd, true);
+	if (error != OK) {
+		return window_result(error);
+	}
+	if (!request->raster_reserved || request->action_count != 1 || request->resource_count != 4 || !request->frozen || !request->actions[0].prepared || request->raster_started || request->next_action || revision != request->revision || request->capture_inflight || request->effects_pending || request->source_device_lost || request->revision > UINT64_MAX - 32 || request->graph_count > request->capacity.graph_memberships || request->capacity.graph_memberships - request->graph_count < 8) {
+		return window_result(ERR_INVALID_DATA);
+	}
+	if (!rd->_thread_safe_.try_lock()) {
+		return window_result(ERR_BUSY);
+	}
+	if (rd->production_recording_request || rd->draw_list.active || rd->compute_list.active || rd->raytracing_list.active || rd->_recording_error() != OK || rd->draw_graph.has_driver_callbacks()) {
+		rd->_thread_safe_.unlock();
+		return window_result(ERR_BUSY);
+	}
+	for (uint32_t i = 0; i < 4; ++i) {
+		const auto &slot = request->resources[i];
+		if (!slot.imported || slot.declaration.ownership != GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 || slot.uses[0].physical != &slot.owned_physical || !slot.owned_serial || slot.owned_physical.bridge != request->attachment->serial || slot.owned_physical.child != slot.owned_serial || slot.use_count != 1 || !slot.uses[0].same_physical() || !slot.uses[0].linked() || slot.uses[0].physical->use_closed.load()) {
+			rd->_thread_safe_.unlock();
+			return window_result(ERR_UNAVAILABLE);
+		}
+	}
+	const auto &fb_slot = request->resources[0];
+	const auto &depth_slot = request->resources[1];
+	const auto &shader_slot = request->resources[2];
+	const auto &pipeline_slot = request->resources[3];
+	const auto *framebuffer = rd->framebuffer_owner.get_or_null(fb_slot.primary);
+	const auto *texture = rd->texture_owner.get_or_null(depth_slot.primary);
+	const auto *shader = rd->shader_owner.get_or_null(shader_slot.primary);
+	const auto *pipeline = rd->render_pipeline_owner.get_or_null(pipeline_slot.primary);
+	if (fb_slot.backing_serial != request->raster_action.framebuffer_serial || shader_slot.backing_serial != request->raster_action.shader_serial || pipeline_slot.backing_serial != request->raster_action.pipeline_serial || !framebuffer || framebuffer->qualification_return != &fb_slot.owned_physical || framebuffer->qualification_dependency != &depth_slot.owned_physical || framebuffer->texture_ids.size() != 1 || framebuffer->texture_ids[0] != depth_slot.primary || !texture || texture->qualification_return != &depth_slot.owned_physical || texture->format != RenderingDevice::DATA_FORMAT_D32_SFLOAT || !shader || shader->qualification_return != &shader_slot.owned_physical || !pipeline || pipeline->qualification_return != &pipeline_slot.owned_physical || pipeline->qualification_dependency != &shader_slot.owned_physical) {
+		rd->_thread_safe_.unlock();
+		return window_result(ERR_INVALID_DATA);
+	}
+	// The captured begin has at most one preparation, two prefix, begin and
+	// clear handles; the current checked end adds one handle. Eight prequoted
+	// cells cover that entire frame before the first effect.
+	++production_physical_frame->append_calls;
+	++request->capture_inflight;
+	rd->production_recording_request = request;
+	const OriginalOperationIdentity identity{ request->operation.owner_request_nonce, request->attachment->library_generation, device_records[request->attachment->device].session, request->operation.record_generation, request->operation.canonical_begin, request->operation.canonical_end };
+	mutex.unlock();
+	const auto begun = rd->_draw_list_begin_recorded(request->resources[0].primary, RenderingDevice::DRAW_CLEAR_DEPTH, {}, 1.0f, 0, Rect2(), 0);
+	mutex.lock();
+	rd->production_recording_request = nullptr;
+	--request->capture_inflight;
+	request->draw_list_open = rd->draw_list.active;
+	request->raster_started = request->draw_list_open || begun.effect != RenderingDevice::NativeAppendEffect::NoNewEffect;
+	auto capture = [&](const RDG::RecordHandle &handle) {
+		if (!handle.is_valid()) {
+			return;
+		}
+		CheckedRecordAppend observed;
+		observed.state = CheckedRecordAppend::State::Appended;
+		observed.handle = handle;
+		if (bind_checked_record_append(observed, identity) != OK || production_capture_graph_locked(*request, *rd, 0, observed) != OK) {
+			request->effects_pending = true;
+		}
+	};
+	for (uint32_t i = 0; i < begun.preparation_count; ++i) {
+		capture(begun.preparation_handles[i]);
+	}
+	for (uint32_t i = 0; i < begun.prefix_count; ++i) {
+		capture(begun.prefix_handles[i]);
+	}
+	capture(begun.begin_handle);
+	capture(begun.clear_handle);
+	if (request->raster_started && (begun.error != OK || !begun.capture_complete || begun.effect == RenderingDevice::NativeAppendEffect::Unknown || !begun.begin_handle.is_valid() || !begun.clear_handle.is_valid())) {
+		request->effects_pending = true;
+	}
+	++request->revision;
+	rd->_thread_safe_.unlock();
+	return window_result(request->effects_pending ? ERR_BUSY : begun.error);
+}
+
+GDExtensionDeviceSessionResultV1 Registry::production_raster_end(ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref) {
+	MutexLock lock(mutex);
+	ProductionRequest *request = nullptr;
+	RenderingDevice *rd = nullptr;
+	Error error = production_physical_request_locked(context, ref, request, rd, false);
+	if (error != OK) {
+		return window_result(error);
+	}
+	if (!request->raster_reserved || !request->draw_list_open) {
+		return window_result(ERR_INVALID_DATA);
+	}
+	if (!rd->_thread_safe_.try_lock()) {
+		return window_result(ERR_BUSY);
+	}
+	error = production_raster_close_locked(*request, *rd);
+	rd->_thread_safe_.unlock();
+	return window_result(error);
+}
+
+Error Registry::production_raster_close_locked(ProductionRequest &request, RenderingDevice &rd) {
+	if (!request.raster_reserved || !request.draw_list_open || request.capture_inflight || rd.render_thread_id != Thread::get_caller_id() || !rd.draw_list.active || rd.compute_list.active || rd.raytracing_list.active || rd.production_recording_request || request.revision > UINT64_MAX - 4 || request.graph_count >= request.capacity.graph_memberships) {
+		request.effects_pending = true;
+		return ERR_BUSY;
+	}
+	const OriginalOperationIdentity identity{ request.operation.owner_request_nonce, request.attachment->library_generation, device_records[request.attachment->device].session, request.operation.record_generation, request.operation.canonical_begin, request.operation.canonical_end };
+	++request.capture_inflight;
+	rd.production_recording_request = &request;
+	mutex.unlock();
+	const auto ended = rd._draw_list_end_recorded();
+	mutex.lock();
+	rd.production_recording_request = nullptr;
+	--request.capture_inflight;
+	request.draw_list_open = rd.draw_list.active;
+	auto capture = [&](const RDG::RecordHandle &handle) {
+		if (!handle.is_valid()) {
+			return;
+		}
+		CheckedRecordAppend observed;
+		observed.state = CheckedRecordAppend::State::Appended;
+		observed.handle = handle;
+		if (bind_checked_record_append(observed, identity) != OK || production_capture_graph_locked(request, rd, 0, observed) != OK) {
+			request.effects_pending = true;
+		}
+	};
+	for (uint32_t i = 0; i < ended.prefix_count; ++i) {
+		capture(ended.prefix_handles[i]);
+	}
+	capture(ended.draw_handle);
+	if (ended.error != OK || ended.effect != RenderingDevice::NativeAppendEffect::Recorded || !ended.capture_complete || !ended.draw_handle.is_valid() || request.draw_list_open) {
+		request.effects_pending = true;
+	}
+	if (!request.effects_pending) {
+		request.next_action = 1;
+	}
+	++request.revision;
+	return request.effects_pending ? ERR_BUSY : OK;
+}
+
 GDExtensionDeviceSessionResultV1 Registry::production_reserve_v2(GDExtensionProductionAttachmentRefV1 ref, const GDExtensionProductionOperationV1 *operation, const GDExtensionProductionCapacityV1 *capacity, const GDExtensionProductionActionV2 *actions, uint32_t action_count, const GDExtensionProductionResourceV1 *resources, uint32_t resource_count, const GDExtensionProductionUseV1 *uses, uint32_t use_count, const GDExtensionProductionReadbackV2 *readbacks, uint32_t readback_count, GDExtensionProductionRequestRefV1 *out) {
 	if (!window_aligned(operation) || !window_aligned(capacity) || !window_aligned(out) || out->registry_instance || out->handle_serial) {
 		return window_result(ERR_INVALID_PARAMETER);
@@ -300,13 +452,20 @@ Error Registry::production_record_receive_locked(ProductionRequest &request, Ren
 			// Actual protected frame return is a physical cutoff, not a caller
 			// list split or cancellation. Keep entry/CodeHold live through closure.
 			mutex.lock();
-			error = production_close_lists_locked(request, device);
+			if (request.compute_list_open || request.draw_list_open) {
+				if (!device._thread_safe_.try_lock()) {
+					error = ERR_BUSY;
+				} else {
+					error = production_close_lists_locked(request, device);
+					device._thread_safe_.unlock();
+				}
+			}
 			if (error == OK && request.graph_count != request.segment_graph_begin && request.segment.segment == request.acknowledged_segment) {
 				error = production_close_segment_locked(request, request.control.output.segment, true);
 			} else {
 				request.control.output.segment = request.segment;
 			}
-			if (error != OK || request.compute_list_open || device.compute_list.active) {
+			if (error != OK || (request.compute_list_open || request.draw_list_open) || device.compute_list.active || device.draw_list.active) {
 				request.effects_pending = true;
 				if (error == OK) {
 					error = ERR_BUSY;
@@ -400,7 +559,7 @@ bool Registry::production_output_graph_command_locked(const ProductionRequest &r
 }
 
 bool Registry::production_output_recorded_ordered_locked(const ProductionRequest &request, const RenderingDevice &device) const {
-	if (request.cancelled || request.capture_inflight || request.next_action != request.action_count || !request.graph_count || request.compute_list_open || request.effects_pending) {
+	if (request.cancelled || request.capture_inflight || request.next_action != request.action_count || !request.graph_count || (request.compute_list_open || request.draw_list_open) || request.effects_pending) {
 		return false;
 	}
 	for (uint32_t i = 0; i < request.graph_count; ++i) {
@@ -480,7 +639,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_append_v2(ProductionPhysic
 	out->abi = production_dto_abi<GDExtensionProductionAppendV2>();
 	out->action_ordinal = ordinal;
 	out->revision = request->revision;
-	if (revision != request->revision || request->next_action >= request->action_count || ordinal != request->next_action) {
+	if (request->raster_reserved || revision != request->revision || request->next_action >= request->action_count || ordinal != request->next_action) {
 		return out->cause = window_result(ERR_INVALID_DATA);
 	}
 	out->canonical_suboperation = request->actions[ordinal].declaration.canonical_suboperation;

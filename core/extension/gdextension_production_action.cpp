@@ -564,7 +564,7 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 }
 
 Error Registry::production_close_segment_locked(ProductionRequest &request, GDExtensionProductionSegmentV2 &out, bool physical_scope_exit) {
-	if (request.capture_inflight || request.compute_list_open || request.effects_pending || request.source_device_lost || request.cancelled || request.segment.segment != request.acknowledged_segment) {
+	if (request.capture_inflight || (request.compute_list_open || request.draw_list_open) || request.effects_pending || request.source_device_lost || request.cancelled || request.segment.segment != request.acknowledged_segment) {
 		return ERR_BUSY;
 	}
 	if (request.graph_count == request.segment_graph_begin || request.segment.segment == UINT64_MAX || request.revision == UINT64_MAX) {
@@ -656,6 +656,9 @@ Error Registry::production_readback_delivery(BufferReadbackSourceCapture &captur
 }
 
 Error Registry::production_close_lists_locked(ProductionRequest &request, RenderingDevice &rd) {
+	if (request.draw_list_open) {
+		return production_raster_close_locked(request, rd);
+	}
 	if (!request.compute_list_open) {
 		return OK;
 	}
@@ -669,7 +672,7 @@ Error Registry::production_close_lists_locked(ProductionRequest &request, Render
 	CRASH_COND(!request.capture_inflight);
 	--request.capture_inflight;
 	request.compute_list_open = rd.compute_list.active;
-	if (!closed.is_valid() || request.compute_list_open) {
+	if (!closed.is_valid() || request.compute_list_open || request.draw_list_open) {
 		request.effects_pending = true;
 	}
 	++request.revision;

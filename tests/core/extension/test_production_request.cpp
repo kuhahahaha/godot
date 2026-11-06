@@ -885,7 +885,7 @@ struct Access {
 			const Error error = prepare_device(p_server);
 			return error == OK ? initialize_owner(loader_kind) : error;
 		}
-		Error initialize_owner(uint32_t loader_kind = 1, bool owned_storage = false, bool owned_set = false, GDExtensionDeviceExit::ProductionRecordReceiver receiver = nullptr, void *userdata = nullptr, bool keep_list = false, uint32_t record_actions = 1, bool upload_prefix = false, GDExtensionDeviceExit::ProductionMetadataReceiver metadata_receiver = nullptr, bool output_closure = false, bool output_borrow = false, bool mesh_directory = false, bool directory_external = false, const OrdinalPlan *ordinal_plan = nullptr, RenderingDevice *shared_device = nullptr) {
+		Error initialize_owner(uint32_t loader_kind = 1, bool owned_storage = false, bool owned_set = false, GDExtensionDeviceExit::ProductionRecordReceiver receiver = nullptr, void *userdata = nullptr, bool keep_list = false, uint32_t record_actions = 1, bool upload_prefix = false, GDExtensionDeviceExit::ProductionMetadataReceiver metadata_receiver = nullptr, bool output_closure = false, bool output_borrow = false, bool mesh_directory = false, bool directory_external = false, const OrdinalPlan *ordinal_plan = nullptr, RenderingDevice *shared_device = nullptr, bool defer_reserve = false) {
 			using namespace GDExtensionDeviceExit;
 			RenderingDevice &enrollment_rd = shared_device ? *shared_device : rd;
 			if (public_port && !port.load()) {
@@ -1015,6 +1015,9 @@ struct Access {
 				if (Error error = Error((public_port ? port.open(ready, attachment) : registry.production_open(ready, attachment)).native_error); error != OK) {
 					return error;
 				}
+			}
+			if (defer_reserve) {
+				return OK; // Accepted arena only; the caller exercises its typed reserve port.
 			}
 			if (ordinal_plan) {
 				const auto reserve_v2 = reinterpret_cast<GDExtensionInterfaceDeviceSessionProductionReserveV2>(GDExtension::get_interface_function("device_session_production_reserve_v2"));
@@ -4273,6 +4276,161 @@ struct Access {
 		const Error device = fixture.prepare_device(server);
 		return device == OK ? fixture.initialize_owner(1, false, false, receiver, userdata, false, 1, false, +[](void *, GDExtensionProductionAttachmentRefV1) {}, false, false, false, false, &plan) : device;
 	}
+	struct RasterReserveProbe {
+		SingletonEnrollment *fixture = nullptr;
+		Request *raster = nullptr;
+		GDExtensionProductionRequestRefV1 raster_ref{};
+		GDExtensionProductionPhysicalContextRefV1 expired{};
+		GDExtensionInterfaceDeviceSessionProductionRasterBeginV1 begin = nullptr;
+		GDExtensionInterfaceDeviceSessionProductionRasterEndV1 end = nullptr;
+		uint32_t calls = 0;
+		void rejected(GDExtensionProductionPhysicalContextRefV1 context) {
+			const uint64_t revision = raster->revision;
+			const uint32_t graphs = raster->graph_count, natives = raster->native_count;
+			CHECK(begin(context, raster_ref, revision).native_error == ERR_UNAUTHORIZED);
+			CHECK(end(context, raster_ref).native_error == ERR_UNAUTHORIZED);
+			CHECK(raster->revision == revision);
+			CHECK(raster->graph_count == graphs);
+			CHECK(raster->native_count == natives);
+			CHECK_FALSE(raster->raster_started);
+			CHECK_FALSE(raster->draw_list_open);
+			CHECK_FALSE(fixture->rd.draw_list.active);
+		}
+		static void receive(void *opaque, GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionOperationV1 *) {
+			auto &probe = *static_cast<RasterReserveProbe *>(opaque);
+			++probe.calls;
+			CHECK(ref.handle_serial == probe.fixture->request->serial);
+			CHECK(ref.handle_serial != probe.raster_ref.handle_serial);
+			probe.expired = context;
+			probe.rejected(context); // Genuine live RECORD context, but for another request.
+		}
+	};
+	static void singleton_raster_reserve() {
+		using namespace GDExtensionDeviceExit;
+		auto *server = ordinal_server();
+		if (!server) {
+			return;
+		}
+		const auto reserve = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRasterReserveV1>("device_session_production_raster_reserve_v1");
+		const auto reserve_empty = ordinal_port<GDExtensionInterfaceDeviceSessionProductionReserveV2>("device_session_production_reserve_v2");
+		const auto consume = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRecordConsumeV2>("device_session_production_record_consume_v2");
+		const auto release = ordinal_port<GDExtensionInterfaceDeviceSessionProductionReleaseV2>("device_session_production_release_v2");
+		RasterReserveProbe probe;
+		probe.begin = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRasterBeginV1>("device_session_production_raster_begin_v1");
+		probe.end = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRasterEndV1>("device_session_production_raster_end_v1");
+		REQUIRE(reserve != nullptr);
+		REQUIRE(reserve_empty != nullptr);
+		REQUIRE(consume != nullptr);
+		REQUIRE(release != nullptr);
+		REQUIRE(probe.begin != nullptr);
+		REQUIRE(probe.end != nullptr);
+		OrdinalPlan plan;
+		plan.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 2, 4, 4, 8, 2048, 0, 4, 0, 0 };
+		plan.attachment_requests = 2;
+		SingletonEnrollment fixture;
+		fixture.public_port = true;
+		probe.fixture = &fixture;
+		struct RasterCleanup {
+			RasterReserveProbe &probe;
+			~RasterCleanup() {
+				if (probe.raster && probe.raster->serial) {
+					CHECK(probe.fixture->registry.production_cancel(probe.raster_ref).native_error == OK);
+					CHECK(probe.fixture->registry.production_release(probe.raster_ref).native_error == OK);
+				}
+			}
+		} raster_cleanup{ probe };
+		REQUIRE(fixture.prepare_device(server) == OK);
+		REQUIRE(fixture.initialize_owner(1, false, false, &RasterReserveProbe::receive, &probe, false, 1, false, +[](void *, GDExtensionProductionAttachmentRefV1) {}, false, false, false, false, &plan, nullptr, true) == OK);
+		REQUIRE(fixture.request == nullptr);
+		REQUIRE(fixture.attachment.handle_serial != 0);
+		CHECK(fixture.qualification.handle_serial == 0);
+		// Nonzero serial declarations do not import any resource or grant ownership.
+		const GDExtensionProductionRasterActionV1 action = { production_dto_abi<GDExtensionProductionRasterActionV1>(), 0, plan.operation.canonical_begin, 0, 1, 0, 31, 32, 33, 0 };
+		for (uint32_t insufficient = 0; insufficient < 3; ++insufficient) {
+			auto capacity = plan.capacity;
+			if (insufficient == 0) {
+				capacity.resources = 3;
+			} else if (insufficient == 1) {
+				capacity.graph_memberships = 7;
+			} else {
+				capacity.graph_memberships = 9; // Schema-valid, exceeds the accepted arena.
+			}
+			GDExtensionProductionRequestRefV1 refused = { UINT64_MAX, UINT64_MAX };
+			CHECK(reserve(fixture.attachment, &plan.operation, &capacity, &action, &refused).native_error == (insufficient < 2 ? ERR_INVALID_PARAMETER : ERR_PARAMETER_RANGE_ERROR));
+			CHECK(refused.registry_instance == 0);
+			CHECK(refused.handle_serial == 0);
+			MutexLock lock(fixture.registry.mutex);
+			ProductionAttachment *accepted = nullptr;
+			RenderingDevice *device = nullptr;
+			REQUIRE(fixture.registry.production_attachment_locked(fixture.attachment, true, accepted, device) == OK);
+			for (uint32_t i = 0; i < accepted->quote.capacity.requests; ++i) {
+				CHECK(accepted->requests[i].serial == 0);
+			}
+		}
+		REQUIRE(reserve(fixture.attachment, &plan.operation, &plan.capacity, &action, &probe.raster_ref).native_error == OK);
+		{
+			MutexLock lock(fixture.registry.mutex);
+			RenderingDevice *device = nullptr;
+			REQUIRE(fixture.registry.production_request_locked(probe.raster_ref, false, probe.raster, device) == OK);
+			fixture.request = probe.raster; // Existing cleanup owns the actual issued cell on early return.
+			REQUIRE(device == &fixture.rd);
+			CHECK(probe.raster->attachment->serial == fixture.attachment.handle_serial);
+			CHECK(probe.raster->raster_reserved);
+			REQUIRE(probe.raster->action_count == 1);
+			CHECK(probe.raster->actions[0].declaration.action_kind == GDEXTENSION_PRODUCTION_RASTER_FRAME_V1);
+			CHECK_FALSE(probe.raster->actions[0].prepared);
+			REQUIRE(probe.raster->resource_count == 4);
+			for (uint32_t i = 0; i < probe.raster->resource_count; ++i) {
+				CHECK_FALSE(probe.raster->resources[i].imported);
+				CHECK(probe.raster->resources[i].use_count == 0);
+			}
+			CHECK(fixture.registry.production_freeze_locked(*probe.raster) == ERR_UNCONFIGURED);
+			CHECK_FALSE(probe.raster->frozen);
+		}
+		const uint64_t next_control = probe.raster->next_control_serial;
+		uint64_t refused_control = 0;
+		CHECK(fixture.port.record_schedule(probe.raster_ref, &refused_control) == ERR_UNCONFIGURED);
+		CHECK(refused_control == 0);
+		CHECK(probe.raster->next_control_serial == next_control);
+		CHECK(probe.raster->control.state == ProductionControlState::OWNER_CONSUMED);
+		CHECK_FALSE(probe.raster->frozen);
+		probe.rejected({});
+		GDExtensionProductionCapacityV1 empty_capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+		auto empty_operation = plan.operation;
+		++empty_operation.owner_request_nonce;
+		GDExtensionProductionRequestRefV1 empty_ref{};
+		REQUIRE(reserve_empty(fixture.attachment, &empty_operation, &empty_capacity, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0, &empty_ref).native_error == OK);
+		{
+			MutexLock lock(fixture.registry.mutex);
+			RenderingDevice *device = nullptr;
+			REQUIRE(fixture.registry.production_request_locked(empty_ref, false, fixture.request, device) == OK);
+			CHECK(fixture.request != probe.raster);
+		}
+		uint64_t control = 0;
+		REQUIRE(fixture.port.record_schedule(empty_ref, &control) == OK);
+		server->sync();
+		REQUIRE(probe.calls == 1);
+		GDExtensionProductionRecordReportV2 report{};
+		REQUIRE(consume(empty_ref, control, &report).native_error == OK);
+		probe.rejected(probe.expired); // Same actually-issued scalars after the original RECORD returned.
+		CHECK(probe.raster->graph_count == 0);
+		CHECK(probe.raster->native_count == 0);
+		CHECK(fixture.registry.production_cancel(probe.raster_ref).native_error == OK);
+		for (uint32_t turn = 0; turn < 8 && probe.raster->serial; ++turn) {
+			const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+			GDExtensionProductionServiceBudgetV1 remaining{};
+			GDExtensionProductionReportV2 released{};
+			const Error error = Error(release(probe.raster_ref, &budget, &remaining, &released).native_error);
+			CHECK((error == OK || error == ERR_BUSY));
+			if (probe.raster->serial) {
+				server->sync();
+			}
+		}
+		REQUIRE(probe.raster->serial == 0);
+		probe.raster = nullptr; // The attachment arena is released by cleanup_owner below.
+		fixture.cleanup_owner();
+		CHECK(fixture.owner_cleaned);
+	}
 	static void ordinal_rows_and_prepare() {
 		using namespace GDExtensionDeviceExit;
 		auto *server = ordinal_server();
@@ -7479,6 +7637,10 @@ TEST_CASE("[SceneTree][ProductionRequest] installed typed production port follow
 
 TEST_CASE("[ProductionRequest] installed typed production procedures reject foreign references without enrollment") {
 	TestProductionRequest::Access::installed_port_rejects_foreign_refs();
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][Raster] accepted raster reservation requires independent resources and rejects foreign expired frames") {
+	TestProductionRequest::Access::singleton_raster_reserve();
 }
 
 TEST_CASE("[ProductionRequest][Raster] typed reserve bridge validates its independent action contract") {

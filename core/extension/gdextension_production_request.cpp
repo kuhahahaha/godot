@@ -1678,7 +1678,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_v2(GDExtensionProd
 					own_tail = request->maintenance_serial && rd->native_disposal_active && request->maintenance_serial == rd->native_disposal_continuation.serial && rd->native_disposal_continuation.production_owner == request;
 					rd->_thread_safe_.unlock();
 				}
-				if (ready.native_error != ERR_BUSY || !own_tail || request->capture_inflight || request->compute_list_open || report->cause.native_error != OK || (!request->cancelled && request->next_action != request->action_count)) {
+				if (ready.native_error != ERR_BUSY || !own_tail || request->capture_inflight || (request->compute_list_open || request->draw_list_open) || report->cause.native_error != OK || (!request->cancelled && request->next_action != request->action_count)) {
 					return ready;
 				}
 			}
@@ -2016,7 +2016,7 @@ Error Registry::production_output_generation_return(ProductionOutputPin &pin, Re
 	if (projected != OK) {
 		return projected;
 	}
-	if (request.source_device_lost || request.compute_list_open || (!request.cancelled && request.next_action != request.action_count) ||
+	if (request.source_device_lost || (request.compute_list_open || request.draw_list_open) || (!request.cancelled && request.next_action != request.action_count) ||
 			terminal.root_source.possible_obligations || terminal.root_source.physical_returns_pending ||
 			terminal.root_source.known_obligations != terminal.root_source.complete_obligations) {
 		return ERR_BUSY;
@@ -2398,7 +2398,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_close(GDExtensionProductio
 	if (rd && rd->render_thread_id == Thread::get_caller_id() && rd->_thread_safe_.try_lock()) {
 		RdUnlock unlock{ rd->_thread_safe_ };
 		for (uint32_t i = 0; i < a->quote.capacity.requests; ++i) {
-			if (a->requests[i].serial && a->requests[i].compute_list_open) {
+			if (a->requests[i].serial && (a->requests[i].compute_list_open || a->requests[i].draw_list_open)) {
 				production_close_lists_locked(a->requests[i], *rd);
 			}
 		}
@@ -2630,7 +2630,7 @@ void Registry::production_control_execute_locked(ProductionRequest &request, Ren
 			break;
 		case ProductionControlKind::CANCEL:
 			cell.output.result = production_cancel_locked(request);
-			if (request.compute_list_open && rd && rd->_thread_safe_.try_lock()) {
+			if ((request.compute_list_open || request.draw_list_open) && rd && rd->_thread_safe_.try_lock()) {
 				RdUnlock unlock{ rd->_thread_safe_ };
 				const Error closed = production_close_lists_locked(request, *rd);
 				if (closed != OK) {

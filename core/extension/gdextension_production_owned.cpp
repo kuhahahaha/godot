@@ -491,7 +491,7 @@ Error Registry::production_sets_step_locked(ProductionRequest &request, Renderin
 	}
 	GDExtensionProductionReportV2 report;
 	production_report_locked(request, report);
-	if (report.possible_obligations || report.known_obligations != report.complete_obligations || request.compute_list_open) {
+	if (report.possible_obligations || report.known_obligations != report.complete_obligations || request.compute_list_open || request.draw_list_open) {
 		return ERR_BUSY;
 	}
 	const uint32_t visits = MIN(request.resource_count, 64u);
@@ -647,7 +647,7 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 			}
 			for (uint32_t r = 0; r < attachment->quote.capacity.requests && !captured; ++r) {
 				const auto &owner = attachment->requests[r];
-				if (!owner.serial || owner.compute_list_open || owner.capture_inflight) {
+				if (!owner.serial || (owner.compute_list_open || owner.draw_list_open) || owner.capture_inflight) {
 					continue;
 				}
 				for (uint32_t g = 0; g < owner.graph_count && !captured; ++g) {
