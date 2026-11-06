@@ -84,6 +84,11 @@ GDExtensionDeviceSessionResultV1 device_session_production_raster_end_v1(GDExten
 }
 static_assert(std::is_same_v<decltype(&device_session_production_raster_end_v1), GDExtensionInterfaceDeviceSessionProductionRasterEndV1>);
 
+GDExtensionDeviceSessionResultV1 device_session_production_record_history_v1(GDExtensionProductionRequestRefV1 request, uint64_t control_serial, GDExtensionProductionRecordHistoryV1 *out_history) {
+	return Registry::get_singleton().production_record_history(request, control_serial, out_history);
+}
+static_assert(std::is_same_v<decltype(&device_session_production_record_history_v1), GDExtensionInterfaceDeviceSessionProductionRecordHistoryV1>);
+
 int32_t device_session_production_record_schedule_v1(GDExtensionProductionRequestRefV1 request, uint64_t *out_control_serial) {
 	return int32_t(Registry::get_singleton().production_record_schedule(request, out_control_serial));
 }
@@ -260,6 +265,7 @@ void register_production_interfaces() {
 	GDExtension::register_interface_function("device_session_production_raster_begin_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_raster_begin_v1));
 	GDExtension::register_interface_function("device_session_production_raster_end_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_raster_end_v1));
 	GDExtension::register_interface_function("device_session_production_raster_reserve_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_raster_reserve_v1));
+	GDExtension::register_interface_function("device_session_production_record_history_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_record_history_v1));
 	GDExtension::register_interface_function("device_session_production_record_schedule_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_record_schedule_v1));
 	GDExtension::register_interface_function("device_session_production_record_consume_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_record_consume_v1));
 	GDExtension::register_interface_function("device_session_production_append_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_append_v1));

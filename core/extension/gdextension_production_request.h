@@ -372,7 +372,18 @@ struct ProductionControlOutput {
 	GDExtensionDeviceSessionResultV1 owner_return;
 	ProductionServiceUsage owner_usage;
 };
+// Kept in the original fixed control cell, including after owner consumption.
+struct ProductionRecordHistory {
+	GDExtensionDeviceSessionResultV1 last_schedule_result = {};
+	bool schedule_attempted = false;
+	bool queue_possible = false;
+	bool admitted = false;
+	bool schedule_result_valid = false;
+	bool control_effect_entered = false;
+	bool control_append_entered = false;
+};
 struct ProductionControlCell {
+	ProductionRecordHistory record_history;
 	ProductionControlInput input;
 	ProductionControlOutput output;
 	uint64_t serial;
@@ -423,6 +434,10 @@ class ProductionRequest {
 	bool compute_list_open = false;
 	bool draw_list_open = false;
 	bool raster_started = false;
+	// Monotonic across every control; empty later RECORDs cannot erase effects.
+	bool native_effect_entered = false;
+	// Resource allocation/retirement alone does not enter business append.
+	bool append_effect_entered = false;
 	// Independent typed raster declaration retained with the accepted request
 	// arena. It does not alias qualification or dispatch ownership.
 	GDExtensionProductionRasterActionV1 raster_action = {};

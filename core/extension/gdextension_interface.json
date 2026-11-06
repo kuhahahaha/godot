@@ -9471,6 +9471,127 @@
                     "value": 1
                 }
             ]
+        },
+        {
+            "name": "GDExtensionProductionRecordHistoryFlagsV1",
+            "kind": "enum",
+            "values": [
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_SCHEDULE_ATTEMPTED_V1",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_QUEUE_POSSIBLE_V1",
+                    "value": 2
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_ADMITTED_V1",
+                    "value": 4
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_SCHEDULE_RESULT_VALID_V1",
+                    "value": 8
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_CONTROL_EFFECT_ENTERED_V1",
+                    "value": 16
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_REQUEST_EFFECT_ENTERED_V1",
+                    "value": 32
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_RETURNED_V1",
+                    "value": 64
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_OWNER_CONSUMED_V1",
+                    "value": 128
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_TERMINAL_NO_EFFECT_V1",
+                    "value": 256
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_CONTROL_APPEND_ENTERED_V1",
+                    "value": 512
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_REQUEST_APPEND_ENTERED_V1",
+                    "value": 1024
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_TERMINAL_NO_APPEND_V1",
+                    "value": 2048
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionRecordHistoryStateV1",
+            "kind": "enum",
+            "values": [
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_PENDING_V1",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_QUEUED_V1",
+                    "value": 2
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_EXECUTING_V1",
+                    "value": 3
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_RETURNED_STATE_V1",
+                    "value": 4
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_OWNER_CONSUMED_STATE_V1",
+                    "value": 5
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionRecordHistoryV1",
+            "kind": "struct",
+            "description": [
+                "Original exact request/control history. Native effect flags include resource preparation and cleanup and do not prove append entry. Append flags separately track original append-capable attempts. TERMINAL_NO_APPEND may coexist with native effects that still require physical drain/release. Neither terminal flag authorizes resetting Runtime AppendStarted or replaying its once. Consuming keeps this history until the next accepted control."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "request_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "control_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "record_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "state",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "flags",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "last_schedule_result",
+                    "type": "GDExtensionDeviceSessionResultV1"
+                },
+                {
+                    "name": "record_result",
+                    "type": "GDExtensionDeviceSessionResultV1"
+                }
+            ]
         }
     ],
     "interface": [
@@ -20748,6 +20869,42 @@
                 "type": "GDExtensionDeviceSessionResultV1",
                 "description": [
                     "Checked Production result."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_record_history_v1",
+            "since": "4.7",
+            "description": [
+                "Read the retained history of the exact current RECORD control, including after owner consume. A failed query is never a no-effect certificate. This query performs no scheduling, polling or consumption."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Synchronous typed history input or output."
+                    ]
+                },
+                {
+                    "name": "control_serial",
+                    "type": "uint64_t",
+                    "description": [
+                        "Synchronous typed history input or output."
+                    ]
+                },
+                {
+                    "name": "out_history",
+                    "type": "GDExtensionProductionRecordHistoryV1*",
+                    "description": [
+                        "Synchronous typed history input or output."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Query result; output is valid only on success."
                 ]
             }
         }

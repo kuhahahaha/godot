@@ -121,6 +121,9 @@ Error Registry::production_capture_graph_locked(ProductionRequest &request, Rend
 	if (ordinal >= request.action_count || request.actions[ordinal].request != &request || request.actions[ordinal].declaration.action_ordinal != ordinal) {
 		return ERR_INVALID_DATA;
 	}
+	// A validated real action graph is append evidence. Failed preflight or
+	// merely creating a resource must not be reclassified as business append.
+	production_append_effect_enter_locked(request);
 	const auto &declaration = request.actions[ordinal].declaration;
 	for (uint32_t i = 0; i < request.graph_count; ++i) {
 		const auto &old = request.graphs[i];
@@ -479,6 +482,7 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 			return observed;
 		}
 	}
+	production_append_effect_enter_locked(request);
 	transfer_effect_entered = true;
 	bool list_open = request.compute_list_open;
 	mutex.unlock();
@@ -666,6 +670,7 @@ Error Registry::production_close_lists_locked(ProductionRequest &request, Render
 		return ERR_BUSY;
 	}
 	++request.capture_inflight;
+	production_append_effect_enter_locked(request);
 	mutex.unlock();
 	const auto closed = rd._compute_list_end_recorded();
 	mutex.lock();

@@ -1683,6 +1683,8 @@ struct Access {
 	}
 	struct SplitSet {
 		bool v1_compat_probe = false;
+		bool history_probe = false, history_empty_turn = false;
+		uint32_t history_empty_calls = 0;
 		bool record_window = false, keep_list = false, close_before_ack = false, budget_pause = false, upload_prefix = false;
 		bool public_port = false, output_closure = false, closure_retired = false, groups_settled = false, closure_rollback = false, output_borrow = false;
 		uint64_t borrowed_group = 0, owned_group = 0, qualified_group = 0;
@@ -1779,6 +1781,10 @@ struct Access {
 			auto &fixture = *test.setup.fixture;
 			auto &request = *fixture.request;
 			auto &registry = fixture.registry;
+			if (test.history_empty_turn) {
+				++test.history_empty_calls;
+				return; // A later actual RECORD has no append call of its own.
+			}
 			++test.receiver_calls;
 			test.receiver_thread = Thread::get_caller_id();
 			test.expired_context = context;
@@ -2458,6 +2464,31 @@ struct Access {
 				test.check(__LINE__, test.receiver_calls == 1 && request.control.state == ProductionControlState::RETURNED);
 				GDExtensionProductionRecordReportV1 returned = {};
 				test.check(__LINE__, test.consume(ref, control, &returned).native_error == OK && returned.result.native_error == OK);
+				if (test.history_probe) {
+					const auto query = Access::ordinal_port<GDExtensionInterfaceDeviceSessionProductionRecordHistoryV1>("device_session_production_record_history_v1");
+					test.check(__LINE__, query != nullptr);
+					if (query) {
+						GDExtensionProductionRecordHistoryV1 history{};
+						test.check(__LINE__, query(ref, control, &history).native_error == OK);
+						const uint32_t appended = GDEXTENSION_PRODUCTION_RECORD_HISTORY_CONTROL_APPEND_ENTERED_V1 | GDEXTENSION_PRODUCTION_RECORD_HISTORY_REQUEST_APPEND_ENTERED_V1;
+						test.check(__LINE__, (history.flags & appended) == appended);
+						test.check(__LINE__, (history.flags & GDEXTENSION_PRODUCTION_RECORD_HISTORY_TERMINAL_NO_APPEND_V1) == 0);
+						if (test.upload_prefix) {
+							test.check(__LINE__, returned.append.state == GDEXTENSION_PRODUCTION_KNOWN_PREFIX_V1 && returned.append.recorded_bytes == 64 && request.next_action == 0);
+						}
+						test.history_empty_turn = true;
+						uint64_t empty_control = 0;
+						test.check(__LINE__, test.schedule(ref, &empty_control) == OK && empty_control != control);
+						test.rendezvous(9);
+						GDExtensionProductionRecordReportV1 empty_return{};
+						test.check(__LINE__, test.consume(ref, empty_control, &empty_return).native_error == OK);
+						test.history_empty_turn = false;
+						test.check(__LINE__, test.history_empty_calls == 1);
+						test.check(__LINE__, query(ref, empty_control, &history).native_error == OK);
+						test.check(__LINE__, (history.flags & GDEXTENSION_PRODUCTION_RECORD_HISTORY_REQUEST_APPEND_ENTERED_V1) != 0);
+						test.check(__LINE__, (history.flags & (GDEXTENSION_PRODUCTION_RECORD_HISTORY_CONTROL_APPEND_ENTERED_V1 | GDEXTENSION_PRODUCTION_RECORD_HISTORY_TERMINAL_NO_APPEND_V1)) == 0);
+					}
+				}
 				if (test.v1_compat_probe) {
 					const auto append_v1 = Access::ordinal_port<GDExtensionInterfaceDeviceSessionProductionAppendV1>("device_session_production_append_v1");
 					const auto prepare_v1 = Access::ordinal_port<GDExtensionInterfaceDeviceSessionProductionPrepareUploadV1>("device_session_production_prepare_upload_v1");
@@ -3118,7 +3149,7 @@ struct Access {
 		}
 		return OK;
 	}
-	static void singleton_split_owner_set(bool record_window = false, bool keep_list = false, bool close_before_ack = false, bool budget_pause = false, bool upload_prefix = false, bool public_port = false, bool output_closure = false, bool closure_retired = false, bool closure_rollback = false, bool output_borrow = false, bool mesh_directory = false, bool directory_capacity_failure = false, bool directory_external = false, bool v1_compat_probe = false) {
+	static void singleton_split_owner_set(bool record_window = false, bool keep_list = false, bool close_before_ack = false, bool budget_pause = false, bool upload_prefix = false, bool public_port = false, bool output_closure = false, bool closure_retired = false, bool closure_rollback = false, bool output_borrow = false, bool mesh_directory = false, bool directory_capacity_failure = false, bool directory_external = false, bool v1_compat_probe = false, bool history_probe = false) {
 		auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
 		if (!check_step(server && !server->create_thread && server->server_thread == Thread::get_caller_id() && !RenderingDevice::get_singleton())) {
 			return;
@@ -3126,6 +3157,7 @@ struct Access {
 		server->sync();
 		SplitSet test;
 		test.v1_compat_probe = v1_compat_probe;
+		test.history_probe = history_probe;
 		test.record_window = record_window;
 		test.keep_list = keep_list;
 		test.close_before_ack = close_before_ack;
@@ -4276,6 +4308,147 @@ struct Access {
 		const Error device = fixture.prepare_device(server);
 		return device == OK ? fixture.initialize_owner(1, false, false, receiver, userdata, false, 1, false, +[](void *, GDExtensionProductionAttachmentRefV1) {}, false, false, false, false, &plan) : device;
 	}
+	static void record_history_zero(const GDExtensionProductionRecordHistoryV1 &value) {
+		CHECK(value.abi.abi_version == 0);
+		CHECK(value.abi.struct_size == 0);
+		CHECK(value.abi.reserved == 0);
+		CHECK(value.request_serial == 0);
+		CHECK(value.control_serial == 0);
+		CHECK(value.record_generation == 0);
+		CHECK(value.state == 0);
+		CHECK(value.flags == 0);
+		CHECK(v1_result(value.last_schedule_result, OK, 0));
+		CHECK(v1_result(value.record_result, OK, 0));
+	}
+	static void record_history_flags(const GDExtensionProductionRecordHistoryV1 &value, uint32_t present, uint32_t absent) {
+		CHECK(value.abi.abi_version == 1);
+		CHECK(value.abi.struct_size == sizeof(value));
+		CHECK(value.abi.reserved == 0);
+		CHECK((value.flags & present) == present);
+		CHECK((value.flags & absent) == 0);
+	}
+	struct RecordHistoryProbe {
+		SingletonEnrollment *fixture = nullptr;
+		GDExtensionInterfaceDeviceSessionProductionRecordHistoryV1 query = nullptr;
+		uint32_t calls = 0;
+		static void receive(void *opaque, GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionOperationV1 *) {
+			auto &probe = *static_cast<RecordHistoryProbe *>(opaque);
+			++probe.calls;
+			auto &request = *probe.fixture->request;
+			GDExtensionProductionRecordHistoryV1 history{};
+			REQUIRE(probe.query(ref, request.control.serial, &history).native_error == OK);
+			CHECK(history.state == GDEXTENSION_PRODUCTION_RECORD_HISTORY_EXECUTING_V1);
+			CHECK(history.request_serial == ref.handle_serial);
+			CHECK(history.control_serial == request.control.serial);
+			record_history_flags(history, GDEXTENSION_PRODUCTION_RECORD_HISTORY_ADMITTED_V1 | GDEXTENSION_PRODUCTION_RECORD_HISTORY_QUEUE_POSSIBLE_V1,
+					GDEXTENSION_PRODUCTION_RECORD_HISTORY_RETURNED_V1 | GDEXTENSION_PRODUCTION_RECORD_HISTORY_OWNER_CONSUMED_V1 | GDEXTENSION_PRODUCTION_RECORD_HISTORY_CONTROL_EFFECT_ENTERED_V1 | GDEXTENSION_PRODUCTION_RECORD_HISTORY_REQUEST_EFFECT_ENTERED_V1 | GDEXTENSION_PRODUCTION_RECORD_HISTORY_TERMINAL_NO_EFFECT_V1);
+		}
+	};
+	static void record_history_empty_lifecycle(bool refuse_first) {
+		using namespace GDExtensionDeviceExit;
+		auto *server = ordinal_server();
+		if (!server) {
+			return;
+		}
+		const auto query = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRecordHistoryV1>("device_session_production_record_history_v1");
+		const auto consume = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRecordConsumeV2>("device_session_production_record_consume_v2");
+		REQUIRE(query != nullptr);
+		REQUIRE(consume != nullptr);
+		OrdinalPlan plan;
+		plan.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+		plan.action_count = plan.resource_count = plan.use_count = plan.readback_count = 0;
+		SingletonEnrollment fixture;
+		fixture.public_port = true;
+		RecordHistoryProbe probe;
+		probe.fixture = &fixture;
+		probe.query = query;
+		REQUIRE(ordinal_initialize(fixture, server, plan, &RecordHistoryProbe::receive, &probe) == OK);
+		auto &request = *fixture.request;
+		const GDExtensionProductionRequestRefV1 ref = { fixture.instance, request.serial };
+		auto rejected = [&](GDExtensionProductionRequestRefV1 bad_ref, uint64_t bad_serial) {
+			GDExtensionProductionRecordHistoryV1 history;
+			std::memset(&history, 0x5a, sizeof(history));
+			const auto state = request.control.state;
+			const auto serial = request.control.serial;
+			const auto revision = request.revision;
+			CHECK(query(bad_ref, bad_serial, &history).native_error != OK);
+			record_history_zero(history);
+			CHECK(request.control.state == state);
+			CHECK(request.control.serial == serial);
+			CHECK(request.revision == revision);
+		};
+		rejected(ref, 0); // A reservation is not an accepted RECORD control.
+		if (refuse_first) {
+			uint32_t filled = 0;
+			while (filled < (1u << 20) && server->_try_production_control_dispatch(0, 0, 0, 0)) {
+				++filled;
+			}
+			REQUIRE(filled > 0);
+			REQUIRE(filled < (1u << 20));
+		}
+		uint64_t control = 0;
+		const auto scheduled = fixture.port.record_schedule(ref, &control);
+		REQUIRE(scheduled == (refuse_first ? ERR_BUSY : OK));
+		REQUIRE(control != 0);
+		const uint32_t scheduled_flags = GDEXTENSION_PRODUCTION_RECORD_HISTORY_SCHEDULE_ATTEMPTED_V1 | GDEXTENSION_PRODUCTION_RECORD_HISTORY_SCHEDULE_RESULT_VALID_V1;
+		const uint32_t effect_flags = GDEXTENSION_PRODUCTION_RECORD_HISTORY_CONTROL_EFFECT_ENTERED_V1 | GDEXTENSION_PRODUCTION_RECORD_HISTORY_REQUEST_EFFECT_ENTERED_V1 | GDEXTENSION_PRODUCTION_RECORD_HISTORY_CONTROL_APPEND_ENTERED_V1 | GDEXTENSION_PRODUCTION_RECORD_HISTORY_REQUEST_APPEND_ENTERED_V1;
+		const uint32_t terminal_flags = GDEXTENSION_PRODUCTION_RECORD_HISTORY_RETURNED_V1 | GDEXTENSION_PRODUCTION_RECORD_HISTORY_TERMINAL_NO_EFFECT_V1 | GDEXTENSION_PRODUCTION_RECORD_HISTORY_TERMINAL_NO_APPEND_V1;
+		GDExtensionProductionRecordHistoryV1 history{};
+		REQUIRE(query(ref, control, &history).native_error == OK);
+		CHECK(history.request_serial == ref.handle_serial);
+		CHECK(history.control_serial == control);
+		CHECK(history.record_generation == plan.operation.record_generation);
+		if (refuse_first) {
+			CHECK(history.state == GDEXTENSION_PRODUCTION_RECORD_HISTORY_PENDING_V1);
+			CHECK(history.last_schedule_result.native_error == ERR_BUSY);
+			record_history_flags(history, scheduled_flags, GDEXTENSION_PRODUCTION_RECORD_HISTORY_ADMITTED_V1 | GDEXTENSION_PRODUCTION_RECORD_HISTORY_QUEUE_POSSIBLE_V1 | terminal_flags | effect_flags);
+			server->sync(); // Drain actual rejected-admission pressure, not a substitute queue.
+			uint64_t retried = 0;
+			REQUIRE(fixture.port.record_schedule(ref, &retried) == OK);
+			CHECK(retried == control);
+			REQUIRE(query(ref, control, &history).native_error == OK);
+		}
+		CHECK(history.state == GDEXTENSION_PRODUCTION_RECORD_HISTORY_QUEUED_V1);
+		CHECK(history.last_schedule_result.native_error == OK);
+		record_history_flags(history, scheduled_flags | GDEXTENSION_PRODUCTION_RECORD_HISTORY_ADMITTED_V1 | GDEXTENSION_PRODUCTION_RECORD_HISTORY_QUEUE_POSSIBLE_V1,
+				terminal_flags | effect_flags | GDEXTENSION_PRODUCTION_RECORD_HISTORY_OWNER_CONSUMED_V1);
+		rejected({ ref.registry_instance, UINT64_MAX }, control);
+		rejected({ UINT64_MAX, ref.handle_serial }, control);
+		rejected(ref, control + 1);
+		server->sync();
+		REQUIRE(probe.calls == 1);
+		REQUIRE(query(ref, control, &history).native_error == OK);
+		CHECK(history.state == GDEXTENSION_PRODUCTION_RECORD_HISTORY_RETURNED_STATE_V1);
+		CHECK(history.record_result.native_error == OK);
+		record_history_flags(history, scheduled_flags | GDEXTENSION_PRODUCTION_RECORD_HISTORY_ADMITTED_V1 | terminal_flags,
+				GDEXTENSION_PRODUCTION_RECORD_HISTORY_QUEUE_POSSIBLE_V1 | GDEXTENSION_PRODUCTION_RECORD_HISTORY_OWNER_CONSUMED_V1 | effect_flags);
+		GDExtensionProductionRecordReportV2 returned{};
+		REQUIRE(consume(ref, control, &returned).native_error == OK);
+		REQUIRE(query(ref, control, &history).native_error == OK);
+		CHECK(history.state == GDEXTENSION_PRODUCTION_RECORD_HISTORY_OWNER_CONSUMED_STATE_V1);
+		record_history_flags(history, scheduled_flags | GDEXTENSION_PRODUCTION_RECORD_HISTORY_ADMITTED_V1 | terminal_flags | GDEXTENSION_PRODUCTION_RECORD_HISTORY_OWNER_CONSUMED_V1,
+				GDEXTENSION_PRODUCTION_RECORD_HISTORY_QUEUE_POSSIBLE_V1 | effect_flags);
+		CHECK(history.record_result.native_error == returned.result.native_error);
+		const auto consumed_history = history;
+		CHECK(fixture.port.record_schedule(ref, nullptr) == ERR_INVALID_PARAMETER);
+		REQUIRE(query(ref, control, &history).native_error == OK);
+		CHECK(history.flags == consumed_history.flags);
+		CHECK(history.control_serial == consumed_history.control_serial);
+		uint64_t successor = 0;
+		REQUIRE(fixture.port.record_schedule(ref, &successor) == OK);
+		REQUIRE(successor != control);
+		rejected(ref, control); // Accepting the next real control expires the old identity.
+		REQUIRE(query(ref, successor, &history).native_error == OK);
+		CHECK(history.control_serial == successor);
+		CHECK(history.state == GDEXTENSION_PRODUCTION_RECORD_HISTORY_QUEUED_V1);
+		record_history_flags(history, scheduled_flags | GDEXTENSION_PRODUCTION_RECORD_HISTORY_ADMITTED_V1 | GDEXTENSION_PRODUCTION_RECORD_HISTORY_QUEUE_POSSIBLE_V1,
+				terminal_flags | effect_flags | GDEXTENSION_PRODUCTION_RECORD_HISTORY_OWNER_CONSUMED_V1);
+		server->sync();
+		REQUIRE(probe.calls == 2);
+		REQUIRE(consume(ref, successor, &returned).native_error == OK);
+		fixture.cleanup_owner();
+		CHECK(fixture.owner_cleaned);
+	}
 	struct RasterReserveProbe {
 		SingletonEnrollment *fixture = nullptr;
 		Request *raster = nullptr;
@@ -4356,7 +4529,7 @@ struct Access {
 				capacity.graph_memberships = 9; // Schema-valid, exceeds the accepted arena.
 			}
 			GDExtensionProductionRequestRefV1 refused = { UINT64_MAX, UINT64_MAX };
-			CHECK(reserve(fixture.attachment, &plan.operation, &capacity, &action, &refused).native_error == (insufficient < 2 ? ERR_INVALID_PARAMETER : ERR_PARAMETER_RANGE_ERROR));
+			CHECK(reserve(fixture.attachment, &plan.operation, &capacity, &action, &refused).native_error == ERR_INVALID_PARAMETER);
 			CHECK(refused.registry_instance == 0);
 			CHECK(refused.handle_serial == 0);
 			MutexLock lock(fixture.registry.mutex);
@@ -5439,7 +5612,7 @@ struct Access {
 		RID shader, created;
 		uint64_t owned_group = 0, material_group = 0;
 		uint32_t mode = 0, calls = 0;
-		bool generation_root = false;
+		bool generation_root = false, history_empty_turn = false;
 		// 0: pipeline success, real material capacity failure; 1: material borrow;
 		// 2/3: driver failure (ordinary/quiet); 4: original Core capacity failure.
 		static void receive(void *userdata, GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionOperationV1 *) {
@@ -5449,6 +5622,9 @@ struct Access {
 			auto &rd = fixture.rd;
 			auto &native = *test.native;
 			++test.calls;
+			if (test.history_empty_turn) {
+				return; // A later real RECORD intentionally performs no factory attempt.
+			}
 			if (test.generation_root) {
 				REQUIRE(native.install_generation(context, ref, fixture.registry) == OK);
 			}
@@ -5556,7 +5732,7 @@ struct Access {
 			}
 		}
 	};
-	static void pipeline_prefix_observe(uint32_t mode, bool generation_root = false) {
+	static void pipeline_prefix_observe(uint32_t mode, bool generation_root = false, bool check_history = false) {
 		using namespace GDExtensionDeviceExit;
 		auto *server = ordinal_server();
 		if (!server || !check_step(RendererRD::ParticlesStorage::get_singleton() == nullptr)) {
@@ -5596,6 +5772,47 @@ struct Access {
 		CHECK(request.action_count == 0);
 		CHECK(request.graph_count == 0);
 		CHECK(request.native_count == 0);
+		if (check_history) {
+			const auto query = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRecordHistoryV1>("device_session_production_record_history_v1");
+			REQUIRE(query != nullptr);
+			GDExtensionProductionRecordHistoryV1 history{};
+			REQUIRE(query(ref, control, &history).native_error == OK);
+			const uint32_t entered = GDEXTENSION_PRODUCTION_RECORD_HISTORY_CONTROL_EFFECT_ENTERED_V1 | GDEXTENSION_PRODUCTION_RECORD_HISTORY_REQUEST_EFFECT_ENTERED_V1;
+			const uint32_t returned_flags = GDEXTENSION_PRODUCTION_RECORD_HISTORY_RETURNED_V1 | GDEXTENSION_PRODUCTION_RECORD_HISTORY_OWNER_CONSUMED_V1;
+			record_history_flags(history, returned_flags | (mode == 4 ? uint32_t(GDEXTENSION_PRODUCTION_RECORD_HISTORY_TERMINAL_NO_EFFECT_V1) : entered),
+					GDEXTENSION_PRODUCTION_RECORD_HISTORY_QUEUE_POSSIBLE_V1 | (mode == 4 ? entered : uint32_t(GDEXTENSION_PRODUCTION_RECORD_HISTORY_TERMINAL_NO_EFFECT_V1)));
+			record_history_flags(history, GDEXTENSION_PRODUCTION_RECORD_HISTORY_TERMINAL_NO_APPEND_V1,
+					GDEXTENSION_PRODUCTION_RECORD_HISTORY_CONTROL_APPEND_ENTERED_V1 | GDEXTENSION_PRODUCTION_RECORD_HISTORY_REQUEST_APPEND_ENTERED_V1);
+			// These factory attempts have no graph/native fact rows. Zero counts
+			// cannot erase attempted work, including a refused driver create.
+			CHECK(request.graph_count == 0);
+			CHECK(request.native_count == 0);
+			probe.history_empty_turn = true;
+			const auto attempts = fixture.driver.raster_attempts;
+			uint64_t empty_control = 0;
+			REQUIRE(fixture.port.record_schedule(ref, &empty_control) == OK);
+			REQUIRE(empty_control != control);
+			server->sync();
+			REQUIRE(probe.calls == 2);
+			GDExtensionProductionRecordReportV2 empty_return{};
+			REQUIRE(consume(ref, empty_control, &empty_return).native_error == OK);
+			REQUIRE(query(ref, empty_control, &history).native_error == OK);
+			record_history_flags(history, returned_flags | (mode == 4 ? uint32_t(GDEXTENSION_PRODUCTION_RECORD_HISTORY_TERMINAL_NO_EFFECT_V1) : uint32_t(GDEXTENSION_PRODUCTION_RECORD_HISTORY_REQUEST_EFFECT_ENTERED_V1)),
+					GDEXTENSION_PRODUCTION_RECORD_HISTORY_QUEUE_POSSIBLE_V1 | GDEXTENSION_PRODUCTION_RECORD_HISTORY_CONTROL_EFFECT_ENTERED_V1 | (mode == 4 ? uint32_t(GDEXTENSION_PRODUCTION_RECORD_HISTORY_REQUEST_EFFECT_ENTERED_V1) : uint32_t(GDEXTENSION_PRODUCTION_RECORD_HISTORY_TERMINAL_NO_EFFECT_V1)));
+			CHECK(fixture.driver.raster_attempts == attempts);
+			record_history_flags(history, GDEXTENSION_PRODUCTION_RECORD_HISTORY_TERMINAL_NO_APPEND_V1,
+					GDEXTENSION_PRODUCTION_RECORD_HISTORY_CONTROL_APPEND_ENTERED_V1 | GDEXTENSION_PRODUCTION_RECORD_HISTORY_REQUEST_APPEND_ENTERED_V1);
+			CHECK(fixture.registry.production_cancel(ref).native_error == OK);
+			REQUIRE(query(ref, empty_control, &history).native_error == OK);
+			record_history_flags(history, GDEXTENSION_PRODUCTION_RECORD_HISTORY_TERMINAL_NO_APPEND_V1 | (mode == 4 ? 0u : uint32_t(GDEXTENSION_PRODUCTION_RECORD_HISTORY_REQUEST_EFFECT_ENTERED_V1)),
+					GDEXTENSION_PRODUCTION_RECORD_HISTORY_CONTROL_APPEND_ENTERED_V1 | GDEXTENSION_PRODUCTION_RECORD_HISTORY_REQUEST_APPEND_ENTERED_V1);
+			CHECK(fixture.driver.raster_frees == 0); // No-append never returns native factory ownership.
+			if (mode == 0) {
+				CHECK(native.pipeline_root().is_valid());
+				CHECK(fixture.rd.render_pipeline_is_valid(native.pipeline_root()));
+				CHECK(fixture.driver.raster_live);
+			}
+		}
 		if (generation_root) {
 			native.withdraw_generation();
 		} else {
@@ -7641,6 +7858,39 @@ TEST_CASE("[ProductionRequest] installed typed production procedures reject fore
 
 TEST_CASE("[SceneTree][ProductionRequest][Raster] accepted raster reservation requires independent resources and rejects foreign expired frames") {
 	TestProductionRequest::Access::singleton_raster_reserve();
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][RecordHistory] exact empty RECORD history survives consume and expires on replacement") {
+	SUBCASE("Original FIFO accepts the exact control") {
+		TestProductionRequest::Access::record_history_empty_lifecycle(false);
+	}
+	SUBCASE("Original bounded FIFO refuses and retries the same control") {
+		TestProductionRequest::Access::record_history_empty_lifecycle(true);
+	}
+}
+
+#ifdef THREADS_ENABLED
+TEST_CASE("[SceneTree][ProductionRequest][RecordHistory] original compute append history survives a later empty RECORD") {
+	TestProductionRequest::Access::singleton_split_owner_set(true, false, false, false, false, false, false, false, false, false, false, false, false, false, true);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][RecordHistory] original partial upload history survives a later empty RECORD") {
+	TestProductionRequest::Access::singleton_split_owner_set(true, false, false, false, true, false, false, false, false, false, false, false, false, false, true);
+}
+#endif
+
+TEST_CASE("[SceneTree][ProductionRequest][RecordHistory] native factory history prevents zero-prefix no-effect certificates") {
+	ERR_PRINT_OFF;
+	SUBCASE("Successful original pipeline factory") {
+		TestProductionRequest::Access::pipeline_prefix_observe(0, false, true);
+	}
+	SUBCASE("Original driver refuses after effect entry") {
+		TestProductionRequest::Access::pipeline_prefix_observe(2, false, true);
+	}
+	SUBCASE("Pure Core capacity preflight never enters the factory") {
+		TestProductionRequest::Access::pipeline_prefix_observe(4, false, true);
+	}
+	ERR_PRINT_ON;
 }
 
 TEST_CASE("[ProductionRequest][Raster] typed reserve bridge validates its independent action contract") {

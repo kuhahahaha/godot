@@ -411,6 +411,7 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 	RID rid;
 	if (kind == ProductionControlKind::STORAGE_CREATE) {
 		const auto &origin = slot.create_origin;
+		production_native_effect_enter_locked(request);
 		++request.capture_inflight;
 		mutex.unlock();
 		rid = rd._qualification_storage_create(uint32_t(origin.bytes), &slot.owned_physical);
@@ -462,6 +463,7 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 		if (!rd._qualification_reserve_free_event(&slot.owned_physical)) {
 			return finish(ERR_PARAMETER_RANGE_ERROR);
 		}
+		production_native_effect_enter_locked(request);
 		++request.capture_inflight;
 		mutex.unlock();
 		rid = rd._uniform_set_create_qualification(uniforms, unit.secondary, slot.shader_set, false, &slot.owned_physical, &dependencies, nullptr, &request);
@@ -540,6 +542,7 @@ Error Registry::production_sets_step_locked(ProductionRequest &request, Renderin
 			++usage.passes;
 			++usage.receipts;
 			usage.controls = 1;
+			production_native_effect_enter_locked(request);
 			++request.capture_inflight;
 			mutex.unlock();
 			const bool previous = rd.qualification_retiring;
@@ -603,6 +606,7 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 		const uint64_t request_serial = request.serial, control_serial = request.control.serial;
 		auto *const attachment = request.attachment;
 		const uint64_t epoch = attachment->epoch;
+		production_native_effect_enter_locked(request);
 		++request.capture_inflight;
 		// Native owner callbacks must inherit neither Registry nor RD locks.
 		rd._thread_safe_.unlock();
@@ -756,6 +760,7 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 	service.deadline_usec = budget.deadline_micros;
 	RenderingDevice::NativeDisposalUsage actual;
 	usage.controls = 1;
+	production_native_effect_enter_locked(request);
 	++request.capture_inflight;
 	mutex.unlock();
 	const bool starting = !rd.native_disposal_active;

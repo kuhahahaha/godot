@@ -14,3 +14,5 @@ Verification on 2026-11-06:
 - Independent read-only review found no blocking issue within the explicitly incomplete scaffold; actual resource preparation and native authorization remain unimplemented.
 
 A current tests=yes, debug_symbols=no editor rebuild is tracked separately; runtime focused tests must be run on that newly linked binary before claiming the new behavior passes.
+
+Follow-up verification on 2026-11-06: the full editor build with tests=yes, debug_symbols=no and module_particles_runtime_tests_enabled=yes completed successfully. The newly linked binary passed raster 2/2 cases (146 assertions), all ProductionRequest 60/60 (38,304 assertions) and particle CPU tests 18/18 (90 assertions). The raster arena-capacity error expectation was corrected to ERR_INVALID_PARAMETER. See RECORD_HISTORY_RECEIPT.md and its JSON manifest for commands, identities, logs and limits. These results verify the scaffold guards; independent resource creation and positive native draw remain outstanding.

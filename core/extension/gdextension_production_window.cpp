@@ -204,6 +204,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_raster_begin(ProductionPhy
 	// cells cover that entire frame before the first effect.
 	++production_physical_frame->append_calls;
 	++request->capture_inflight;
+	production_append_effect_enter_locked(*request);
 	rd->production_recording_request = request;
 	const OriginalOperationIdentity identity{ request->operation.owner_request_nonce, request->attachment->library_generation, device_records[request->attachment->device].session, request->operation.record_generation, request->operation.canonical_begin, request->operation.canonical_end };
 	mutex.unlock();
@@ -266,6 +267,7 @@ Error Registry::production_raster_close_locked(ProductionRequest &request, Rende
 	}
 	const OriginalOperationIdentity identity{ request.operation.owner_request_nonce, request.attachment->library_generation, device_records[request.attachment->device].session, request.operation.record_generation, request.operation.canonical_begin, request.operation.canonical_end };
 	++request.capture_inflight;
+	production_append_effect_enter_locked(request);
 	rd.production_recording_request = &request;
 	mutex.unlock();
 	const auto ended = rd._draw_list_end_recorded();
@@ -318,6 +320,111 @@ GDExtensionDeviceSessionResultV1 Registry::production_reserve_v2(GDExtensionProd
 		*out = { instance, request->serial };
 	}
 	return window_result(error);
+}
+
+// Native attempts are monotonic request history. A later empty control cannot
+// turn earlier work into a no-effect certificate. Call with Registry locked,
+// immediately before the original effect-capable call, never at admission.
+void Registry::production_native_effect_enter_locked(ProductionRequest &request) {
+	request.native_effect_entered = true;
+	if (request.control.input.kind == ProductionControlKind::RECORD && request.control.state == ProductionControlState::EXECUTING) {
+		request.control.record_history.control_effect_entered = true;
+	}
+}
+
+// Only original append-capable recording paths call this. Allocation, native
+// preparation and disposal keep their separate native obligation history.
+void Registry::production_append_effect_enter_locked(ProductionRequest &request) {
+	production_native_effect_enter_locked(request);
+	request.append_effect_entered = true;
+	if (request.control.input.kind == ProductionControlKind::RECORD && request.control.state == ProductionControlState::EXECUTING) {
+		request.control.record_history.control_append_entered = true;
+	}
+}
+
+GDExtensionDeviceSessionResultV1 Registry::production_record_history(GDExtensionProductionRequestRefV1 ref, uint64_t serial, GDExtensionProductionRecordHistoryV1 *out) {
+	if (!window_aligned(out)) {
+		return window_result(ERR_INVALID_PARAMETER);
+	}
+	*out = {};
+	MutexLock lock(mutex);
+	ProductionRequest *request = nullptr;
+	RenderingDevice *device = nullptr;
+	const Error error = production_request_locked(ref, false, request, device);
+	if (error != OK) {
+		return window_result(error);
+	}
+	const auto &cell = request->control;
+	if (!serial || cell.serial != serial || cell.input.kind != ProductionControlKind::RECORD || cell.input.request_serial != request->serial || cell.input.record_generation != request->operation.record_generation) {
+		return window_result(ERR_DOES_NOT_EXIST);
+	}
+	out->abi = production_dto_abi<GDExtensionProductionRecordHistoryV1>();
+	out->request_serial = request->serial;
+	out->control_serial = serial;
+	out->record_generation = request->operation.record_generation;
+	switch (cell.state) {
+		case ProductionControlState::PENDING:
+			out->state = GDEXTENSION_PRODUCTION_RECORD_HISTORY_PENDING_V1;
+			break;
+		case ProductionControlState::QUEUED:
+			out->state = GDEXTENSION_PRODUCTION_RECORD_HISTORY_QUEUED_V1;
+			break;
+		case ProductionControlState::EXECUTING:
+			out->state = GDEXTENSION_PRODUCTION_RECORD_HISTORY_EXECUTING_V1;
+			break;
+		case ProductionControlState::RETURNED:
+			out->state = GDEXTENSION_PRODUCTION_RECORD_HISTORY_RETURNED_STATE_V1;
+			break;
+		case ProductionControlState::OWNER_CONSUMED:
+			out->state = GDEXTENSION_PRODUCTION_RECORD_HISTORY_OWNER_CONSUMED_STATE_V1;
+			break;
+	}
+	const auto &history = cell.record_history;
+	const bool returned = cell.state == ProductionControlState::RETURNED || cell.state == ProductionControlState::OWNER_CONSUMED;
+	if (history.schedule_attempted) {
+		out->flags |= GDEXTENSION_PRODUCTION_RECORD_HISTORY_SCHEDULE_ATTEMPTED_V1;
+	}
+	if (history.queue_possible && !returned) {
+		out->flags |= GDEXTENSION_PRODUCTION_RECORD_HISTORY_QUEUE_POSSIBLE_V1;
+	}
+	if (history.admitted) {
+		out->flags |= GDEXTENSION_PRODUCTION_RECORD_HISTORY_ADMITTED_V1;
+	}
+	if (history.schedule_result_valid) {
+		out->flags |= GDEXTENSION_PRODUCTION_RECORD_HISTORY_SCHEDULE_RESULT_VALID_V1;
+		out->last_schedule_result = history.last_schedule_result;
+	}
+	if (history.control_effect_entered) {
+		out->flags |= GDEXTENSION_PRODUCTION_RECORD_HISTORY_CONTROL_EFFECT_ENTERED_V1;
+	}
+	if (request->native_effect_entered) {
+		out->flags |= GDEXTENSION_PRODUCTION_RECORD_HISTORY_REQUEST_EFFECT_ENTERED_V1;
+	}
+	if (history.control_append_entered) {
+		out->flags |= GDEXTENSION_PRODUCTION_RECORD_HISTORY_CONTROL_APPEND_ENTERED_V1;
+	}
+	if (request->append_effect_entered) {
+		out->flags |= GDEXTENSION_PRODUCTION_RECORD_HISTORY_REQUEST_APPEND_ENTERED_V1;
+	}
+	if (returned) {
+		// Preparation-only effects may still require drain/release. Their native
+		// latch does not imply business append, and no-append does not reset the
+		// original Runtime's pre-activation AppendStarted/once transition.
+		if (!history.control_append_entered && !request->append_effect_entered && !request->capture_inflight && !request->compute_list_open && !request->draw_list_open && !request->graph_count && !request->native_count) {
+			out->flags |= GDEXTENSION_PRODUCTION_RECORD_HISTORY_TERMINAL_NO_APPEND_V1;
+		}
+		out->flags |= GDEXTENSION_PRODUCTION_RECORD_HISTORY_RETURNED_V1;
+		out->record_result = cell.output.result;
+		// Extra unresolved-state guards are conservative only. The affirmative
+		// fact comes from the original latches and exact terminal control.
+		if (!history.control_effect_entered && !request->native_effect_entered && !request->capture_inflight && !request->effects_pending && !request->source_device_lost && !request->compute_list_open && !request->draw_list_open && !request->graph_count && !request->native_count) {
+			out->flags |= GDEXTENSION_PRODUCTION_RECORD_HISTORY_TERMINAL_NO_EFFECT_V1;
+		}
+	}
+	if (cell.state == ProductionControlState::OWNER_CONSUMED) {
+		out->flags |= GDEXTENSION_PRODUCTION_RECORD_HISTORY_OWNER_CONSUMED_V1;
+	}
+	return window_result(OK);
 }
 
 Error Registry::production_record_schedule(GDExtensionProductionRequestRefV1 ref, uint64_t *out) {

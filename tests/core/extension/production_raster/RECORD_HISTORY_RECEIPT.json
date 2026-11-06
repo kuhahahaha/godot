@@ -1,0 +1,54 @@
+{
+  "date": "2026-11-06",
+  "base_commit": "ff768c1d56935c41bdc9b7d6f7812ac2525323af",
+  "binary": {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+    "sha256": "23864d6840801c3c6f2912c823aa6ace264c7a9096aff62f9e208ffafec3362f"
+  },
+  "source_sha256": {
+    "core/extension/gdextension_interface.json": "574d5607bac5c4c88a881052de49bb91bc3c9d23832e5ba46f3c92cfe0aa1e91",
+    "core/extension/gdextension_library_exit_guard.h": "502bd2bd01abc0bb08ef262c6f282282da3f927b9b533fc840455be1d6f3f861",
+    "core/extension/gdextension_production_action.cpp": "f2d42484bb5888e5386a807c52362283b911fc5e0ab3fc6cfd6f57253394d014",
+    "core/extension/gdextension_production_interface.cpp": "7418f3bf60f207e1e67b2c734131a26376abe3b86d67c3da9081da0a3f5db59e",
+    "core/extension/gdextension_production_owned.cpp": "10307b6562826c66de887aa69b72df9086a6ccc968063bf6d2d092ca211209ed",
+    "core/extension/gdextension_production_request.cpp": "24dcfe6380b4f1305d4e2b65e7fc6b75a345421c5439b232eac787193fad9683",
+    "core/extension/gdextension_production_request.h": "13ec8969a921f19b36cdf0b5b4061d9743507c3777152e65ce803776e48b7271",
+    "core/extension/gdextension_production_window.cpp": "525138e2adf487802d7313c1c27a1dff8b525dc984e2a473ee2d893d2a9198ed",
+    "servers/rendering/rendering_device_immutable_hold.cpp": "c898f0cfbc5f1dcec59fca0472ffb96cc1c3a75969ef361dc6249000b128242e",
+    "tests/core/extension/test_production_request.cpp": "ae9dfbd25ce892c0082009f3e4efef35dcf0290a1c3862983ebf06e6088d81cc",
+    "tests/core/extension/production_raster/RECORD_HISTORY_CONTRACT.md": "2afa792ccf0cf3ec2af614652311e88560a381b301fc997ebcad0bb7faa9031b",
+    "core/extension/gdextension_interface.gen.h": "22993cbdeaede15b2dadfcdd34556bfb901543e3262021824798fbb8efebdee8"
+  },
+  "logs_sha256": {
+    "/tmp/b4-record-history-build-v2.log": "604d66160c22274d587a4f4d2a924b589ab553b3106265474866db29fa747228",
+    "/tmp/b4-record-history-list.log": "605ef7ffd40ad9be3b4a62613c8e84f55e9d2d7d8d14de7d0223752c87bc6441",
+    "/tmp/b4-record-history-tests.log": "26e709748ff0bb28027bffcc9d6f1fe6458cf64bbcf12c1b82043a19a7b3e05e",
+    "/tmp/b4-history-raster-tests.log": "3b8c48a1bcc5e3d6e4557a7f8f80836e8f24200fd8ff91404bd03aecedb90c02",
+    "/tmp/b4-history-production-tests.log": "8c8bdd089e178c930d5b2cd814e8ee05b71e3dac04f9aaa6de863bef36911002",
+    "/tmp/b4-history-particles-tests.log": "1e77f6fe9c30d87648855824257fe4053ae9d524274719d05544bb9265cc342b",
+    "/tmp/b4-record-history-clean-check.log": "e1eab0c35d0fce475abadb9ce9253ad53879aeeb0666a617b59b4459a4824747"
+  },
+  "results": {
+    "record_history": {
+      "cases": 4,
+      "assertions": 1675,
+      "exit_code": 0
+    },
+    "raster": {
+      "cases": 2,
+      "assertions": 146,
+      "exit_code": 0
+    },
+    "production_request": {
+      "cases": 60,
+      "assertions": 38304,
+      "exit_code": 0
+    },
+    "gpu_particles_cpu_tests": {
+      "cases": 18,
+      "assertions": 90,
+      "exit_code": 0
+    }
+  },
+  "gpu_acceptance": false
+}

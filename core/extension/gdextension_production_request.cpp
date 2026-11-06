@@ -1961,6 +1961,7 @@ Error Registry::production_output_owners_service_locked(ProductionRequest &reque
 	usage.controls = 1; // Same original OBSERVE control, not a second pass.
 	// One O(1) locator dispatch per control. Actual component phases alone
 	// debit passes/receipts, so a positive one-pass slice can make progress.
+	production_native_effect_enter_locked(request);
 	++request.capture_inflight;
 	rd._thread_safe_.unlock();
 	mutex.unlock();
@@ -2510,15 +2511,25 @@ Error Registry::production_control_schedule(GDExtensionProductionRequestRefV1 re
 	}
 	auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
 	if (!server || this != &get_singleton()) {
+		cell.record_history.schedule_result_valid = true;
+		cell.record_history.last_schedule_result = result(ERR_UNAVAILABLE);
 		return ERR_UNAVAILABLE;
 	}
 	// Publication holds the original Registry lock; CQMT does not execute inline
 	// and releases its lock before dispatch. The scalar command owns no DSO code.
+	cell.record_history.schedule_attempted = true;
+	cell.record_history.queue_possible = true;
 	cell.state = ProductionControlState::QUEUED;
 	if (!server->_try_production_control_dispatch(instance, r->attachment->serial, r->serial, serial)) {
 		cell.state = ProductionControlState::PENDING;
+		cell.record_history.queue_possible = false; // FIFO false means no publication.
+		cell.record_history.schedule_result_valid = true;
+		cell.record_history.last_schedule_result = result(ERR_BUSY);
 		return ERR_BUSY;
 	}
+	cell.record_history.admitted = true;
+	cell.record_history.schedule_result_valid = true;
+	cell.record_history.last_schedule_result = result(OK);
 	return OK;
 }
 

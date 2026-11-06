@@ -1566,6 +1566,7 @@ Error RenderingDevice::_production_output_owned_storage_create(GDExtensionProduc
 	} unlock{ _thread_safe_ };
 	// The original factory owns native validation and rollback. Reservation alone
 	// is arena custody; the original output owner must supply its allocation charge.
+	registry.production_native_effect_enter_locked(*request);
 	const Error created = _native_disposal_storage_create(bytes, usage, rid, witness);
 	if (created != OK) {
 		return created;
@@ -1613,6 +1614,7 @@ Error RenderingDevice::_production_output_owned_uniform_set_create(GDExtensionPr
 			return ERR_UNAUTHORIZED;
 		}
 	}
+	registry.production_native_effect_enter_locked(*request);
 	const Error created = _native_disposal_uniform_set_create(uniforms, shader, index, rid, witness);
 	if (created != OK) {
 		return created;
@@ -1767,6 +1769,7 @@ Error RenderingDevice::_production_output_owned_render_pipeline_create(GDExtensi
 	}
 	// Factory publishes directly into this original cell; there is no fallible
 	// post-creation capture/bind and no stack-owned created-pipeline prefix.
+	registry.production_native_effect_enter_locked(*request);
 	r_pipeline = _qualification_render_pipeline_create_internal(p_shader, p_framebuffer_format, p_vertex_format, p_render_primitive, p_rasterization_state, p_multisample_state, p_depth_stencil_state, p_blend_state, p_dynamic_state_flags, p_for_render_pass, p_specialization_constants, nullptr, RID(), reserved);
 	return r_pipeline.is_valid() ? OK : ERR_CANT_CREATE;
 }
