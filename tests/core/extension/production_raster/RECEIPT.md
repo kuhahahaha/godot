@@ -4,7 +4,7 @@ Source implementation and focused tests: `b75484dcf1` (combined core/test commit
 
 The accepted arena now contains one independent raster action and four unprepared request-owned physical resource slots. Freeze and RECORD scheduling refuse an unprepared reservation, preventing an empty successful RECORD. Typed begin/end validate the original physical callback, request, control, thread, exact owned physical cells and remaining graph capacity. Draw closure participates in callback return and pending obligations. No qualification raster import exists.
 
-Follow-up independent framebuffer/depth/shader/pipeline creation and prefix-failure retirement are now implemented and CPU-verified; see RESOURCE_PREPARATION_CONTRACT.md and RESOURCE_PREPARATION_RECEIPT.md. Successful checked begin/end and graph execution through the original service path remain the next integration boundary. No visible draw or GPU completion is claimed. Sprite LE192 writer/receiver and visible draw acceptance remain outstanding.
+Follow-up independent framebuffer/depth/shader/pipeline creation and prefix-failure retirement are now implemented and CPU-verified; see RESOURCE_PREPARATION_CONTRACT.md and RESOURCE_PREPARATION_RECEIPT.md. Successful checked begin/end, original graph issue/completion and physical retirement now pass CPU/mock-driver integration; see CHECKED_JOIN_RECEIPT.md. Real GPU execution/readback and procedural geometry remain subsequent boundaries. No visible draw or GPU completion is claimed. Sprite LE192 writer/receiver and visible draw acceptance remain outstanding.
 
 Verification on 2026-11-06:
 
