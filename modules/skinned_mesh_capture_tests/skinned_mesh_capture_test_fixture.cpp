@@ -412,7 +412,7 @@ Error SkinnedMeshCaptureTestFixture::advance_action(int32_t p_action_index) {
 		if (!player) {
 			return reject(ERR_INVALID_DATA, "P01_SOURCE");
 		}
-		for (int i = 0; i < (member == "S04" ? 3 : condition == "root_rotation" ? 1 : 2); i++) {
+		for (int i = 0; i < (member == "S04" ? 3 : condition == "root_rotation" || condition == "nonuniform_source" ? 1 : 2); i++) {
 			player->advance(1.0);
 		}
 	} else if (member == "S03") {
