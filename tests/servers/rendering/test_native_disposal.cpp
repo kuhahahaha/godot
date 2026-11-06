@@ -40,6 +40,8 @@ class TestNativeDisposalAccess {
 public:
 	static void pipeline_rid_capacity();
 	static void foreign_pending_owner_lookup();
+	static void foreign_pending_uniform_sets();
+	static void foreign_pending_export_and_callback();
 	static void attach(RenderingDevice &p_rd, RenderingDeviceDriver &p_driver) {
 		p_rd.driver = &p_driver;
 		p_rd.is_main_instance = true;
@@ -84,14 +86,14 @@ public:
 		--buffer->backing_serial;
 		buffer->native_disposal.cell->state = NativeDisposalWitness::State::LIVE;
 	}
-	static RID shader(RenderingDevice &p_rd) {
+	static RID shader(RenderingDevice &p_rd, RenderingDevice::UniformType p_type = RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER) {
 		RenderingDevice::Shader shader;
 		shader.driver_id = RenderingDeviceDriver::ShaderID(31);
 		shader.uniform_sets.resize(1);
 		RenderingDevice::ShaderUniform uniform;
-		uniform.type = RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER;
+		uniform.type = p_type;
 		uniform.binding = 0;
-		uniform.length = 128;
+		uniform.length = p_type == RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER ? 128 : 1;
 		uniform.writable = true;
 		shader.uniform_sets.write[0].push_back(uniform);
 		shader.set_formats.push_back(1);
@@ -165,10 +167,19 @@ public:
 		return UniformSetID(23);
 	}
 	void uniform_set_free(UniformSetID) override {
-		CHECK(TestNativeDisposalAccess::state(*set_witness) == NativeDisposalWitness::State::ENQUEUED);
-		CHECK(TestNativeDisposalAccess::refs(*set_witness) >= 2);
+		if (set_witness) {
+			CHECK(TestNativeDisposalAccess::state(*set_witness) == NativeDisposalWitness::State::ENQUEUED);
+			CHECK(TestNativeDisposalAccess::refs(*set_witness) >= 2);
+		}
 		++set_frees;
 	}
+	void sampler_free(SamplerID p_id) override { CHECK(p_id.id == 17); }
+	uint64_t get_resource_native_handle(DriverResource p_type, ID p_id) override {
+		CHECK(p_type == DRIVER_RESOURCE_BUFFER);
+		CHECK(p_id.id == 19);
+		return 919;
+	}
+	uint64_t api_trait_get(ApiTrait p_trait) override { return p_trait == API_TRAIT_HONORS_PIPELINE_BARRIERS ? 1 : 0; }
 	bool shader_retire_ready_nonblocking(ShaderID) const override { return shader_ready; }
 	void shader_free(ShaderID p_id) override {
 		CHECK(p_id.id == 31);
@@ -646,7 +657,7 @@ void TestNativeDisposalAccess::foreign_pending_owner_lookup() {
 		CHECK(rd.native_immutable_resource_is_held(buffer));
 		CHECK(rd.native_immutable_resource_is_held(child));
 		const int before_frees = driver.frees;
-		rd.free_rid(buffer);
+		CHECK(release(rd, witness) == ERR_BUSY);
 		CHECK(rd.native_immutable_resource_is_retiring(buffer));
 		CHECK(rd.native_immutable_resource_is_retiring(child));
 		dispose(rd);
@@ -680,4 +691,149 @@ void TestNativeDisposalAccess::foreign_pending_owner_lookup() {
 
 TEST_CASE("[RenderingDevice][NativeDisposal] pending foreign RID slots do not poison native retirement") {
 	TestNativeDisposalAccess::foreign_pending_owner_lookup();
+}
+
+void TestNativeDisposalAccess::foreign_pending_uniform_sets() {
+	using namespace TestNativeDisposal;
+	for (bool sampler_binding : { false, true }) {
+		RenderingDevice rd;
+		Driver driver;
+		attach(rd, driver);
+		struct Errors {
+			uint32_t count = 0;
+			static void capture(void *data, const char *, const char *, int, const char *, const char *, bool, ErrorHandlerType type) {
+				if (type == ERR_HANDLER_ERROR) {
+					++static_cast<Errors *>(data)->count;
+				}
+			}
+		} errors;
+		ErrorHandlerList handler{ &Errors::capture, &errors };
+		add_error_handler(&handler);
+
+		const RID pending_texture = rd.texture_owner.allocate_rid();
+		RID pending_sampler, pending_storage;
+		RID resource;
+		NativeDisposalWitness buffer_witness;
+		if (sampler_binding) {
+			pending_storage = rd.storage_buffer_owner.allocate_rid();
+			RenderingDevice::Sampler sampler;
+			sampler.driver_id = RenderingDeviceDriver::SamplerID(17);
+			resource = rd.sampler_owner.make_rid(sampler);
+			CHECK(uint32_t(pending_storage.get_id()) == uint32_t(resource.get_id()));
+		} else {
+			pending_sampler = rd.sampler_owner.allocate_rid();
+			CHECK(create(rd, resource, buffer_witness) == OK);
+			CHECK(uint32_t(pending_sampler.get_id()) == uint32_t(resource.get_id()));
+		}
+		CHECK(uint32_t(pending_texture.get_id()) == uint32_t(resource.get_id()));
+		const auto type = sampler_binding ? RenderingDevice::UNIFORM_TYPE_SAMPLER : RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER;
+		const RID shader_rid = shader(rd, type);
+		RenderingDevice::Uniform uniform;
+		uniform.uniform_type = type;
+		uniform.binding = 0;
+		uniform.append_id(resource);
+		const RID set_rid = rd.uniform_set_create(VectorView<RenderingDevice::Uniform>(&uniform, 1), shader_rid, 0);
+		CHECK(set_rid.is_valid());
+		CHECK(driver.set_creates == 1);
+		CHECK(errors.count == 0);
+		rd.free_rid(set_rid);
+		dispose(rd);
+		CHECK(driver.set_frees == 1);
+		rd.free_rid(resource);
+		dispose(rd);
+		CHECK(errors.count == 0);
+
+		// A genuine witnessed set can also share its index with pending storage.
+		if (!sampler_binding) {
+			RID buffer;
+			NativeDisposalWitness buffer_receipt, set_receipt;
+			CHECK(create(rd, buffer, buffer_receipt) == OK);
+			const RID set_filler = rd.uniform_set_owner.allocate_rid();
+			pending_storage = rd.storage_buffer_owner.allocate_rid();
+			RID witnessed_set;
+			CHECK(set(rd, buffer, shader_rid, witnessed_set, set_receipt) == OK);
+			CHECK(uint32_t(pending_storage.get_id()) == uint32_t(witnessed_set.get_id()));
+			driver.set_witness = &set_receipt;
+			CHECK(release(rd, set_receipt) == OK);
+			dispose(rd);
+			CHECK(state(set_receipt) == NativeDisposalWitness::State::RETURNED);
+			CHECK(driver.set_frees == 2);
+			CHECK(errors.count == 0);
+			driver.set_witness = nullptr;
+			CHECK(release(rd, buffer_receipt) == OK);
+			dispose(rd);
+			rd.uniform_set_owner.initialize_rid(set_filler, RenderingDevice::UniformSet());
+			rd.uniform_set_owner.free(set_filler);
+		}
+		release_shader(rd, shader_rid);
+		rd.texture_owner.initialize_rid(pending_texture, RenderingDevice::Texture());
+		rd.texture_owner.free(pending_texture);
+		if (pending_sampler.is_valid()) {
+			rd.sampler_owner.initialize_rid(pending_sampler, RenderingDevice::Sampler());
+			rd.sampler_owner.free(pending_sampler);
+		}
+		rd.storage_buffer_owner.initialize_rid(pending_storage, RenderingDevice::Buffer());
+		rd.storage_buffer_owner.free(pending_storage);
+		CHECK(errors.count == 0);
+		remove_error_handler(&handler);
+		detach(rd);
+	}
+}
+
+TEST_CASE("[RenderingDevice][NativeDisposal] uniform creation and witnessed set release ignore foreign pending slots") {
+	TestNativeDisposalAccess::foreign_pending_uniform_sets();
+}
+
+void TestNativeDisposalAccess::foreign_pending_export_and_callback() {
+	using namespace TestNativeDisposal;
+	RenderingDevice rd;
+	Driver driver;
+	attach(rd, driver);
+	struct Errors {
+		uint32_t count = 0;
+		static void capture(void *data, const char *, const char *, int, const char *, const char *, bool, ErrorHandlerType type) {
+			if (type == ERR_HANDLER_ERROR) {
+				++static_cast<Errors *>(data)->count;
+			}
+		}
+	} errors;
+	ErrorHandlerList handler{ &Errors::capture, &errors };
+	add_error_handler(&handler);
+	const RID pending_texture = rd.texture_owner.allocate_rid();
+	const RID pending_storage = rd.storage_buffer_owner.allocate_rid();
+	RenderingDevice::Buffer buffer;
+	buffer.driver_id = RenderingDeviceDriver::BufferID(19);
+	buffer.size = 128;
+	buffer.usage = RenderingDeviceDriver::BUFFER_USAGE_VERTEX_BIT;
+	const RID vertex = rd.vertex_buffer_owner.make_rid(buffer);
+	CHECK(uint32_t(vertex.get_id()) == uint32_t(pending_texture.get_id()));
+	CHECK(uint32_t(vertex.get_id()) == uint32_t(pending_storage.get_id()));
+	CHECK(rd.get_driver_resource(RenderingDevice::DRIVER_RESOURCE_BUFFER, vertex) == 919);
+	CHECK(rd.vertex_buffer_owner.get_or_null(vertex)->native_external_access);
+	CHECK(errors.count == 0);
+
+	rd.draw_graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
+	rd.draw_graph.begin();
+	RenderingDevice::CallbackResource callback;
+	callback.type = RenderingDevice::CALLBACK_RESOURCE_TYPE_BUFFER;
+	callback.usage = RenderingDevice::CALLBACK_RESOURCE_USAGE_VERTEX_BUFFER_READ;
+	callback.rid = vertex;
+	CHECK(rd.driver_callback_add(nullptr, nullptr, VectorView<RenderingDevice::CallbackResource>(&callback, 1)) == OK);
+	CHECK(errors.count == 0);
+	rd.draw_graph.begin();
+	rd.draw_graph.finalize();
+	rd.free_rid(vertex);
+	dispose(rd);
+	CHECK(driver.frees == 1);
+	rd.texture_owner.initialize_rid(pending_texture, RenderingDevice::Texture());
+	rd.texture_owner.free(pending_texture);
+	rd.storage_buffer_owner.initialize_rid(pending_storage, RenderingDevice::Buffer());
+	rd.storage_buffer_owner.free(pending_storage);
+	CHECK(errors.count == 0);
+	remove_error_handler(&handler);
+	detach(rd);
+}
+
+TEST_CASE("[RenderingDevice][NativeDisposal] native buffer export and callbacks ignore foreign pending slots") {
+	TestNativeDisposalAccess::foreign_pending_export_and_callback();
 }

@@ -786,9 +786,9 @@ void Registry::qualification_resource_retire_step(QualificationBridge *b, Render
 		}
 		if (!reason) {
 			RID rid = RID::from_uint64(c->rid);
-			auto *texture = rd->texture_owner.get_or_null(rid);
-			auto *sampler = rd->sampler_owner.get_or_null(rid);
-			auto *set = rd->uniform_set_owner.get_or_null(rid);
+			auto *texture = rd->texture_owner.owns(rid) ? rd->texture_owner.get_or_null(rid) : nullptr;
+			auto *sampler = rd->sampler_owner.owns(rid) ? rd->sampler_owner.get_or_null(rid) : nullptr;
+			auto *set = rd->uniform_set_owner.owns(rid) ? rd->uniform_set_owner.get_or_null(rid) : nullptr;
 			auto *actual = texture ? texture->qualification_return : sampler ? sampler->qualification_return
 					: set													 ? set->qualification_return
 																			 : nullptr;

@@ -1394,7 +1394,7 @@ Error RenderingDevice::driver_callback_add(RDD::DriverCallback p_callback, void 
 		ERR_FAIL_COND_V(!read_only && (native_immutable_resource_is_held(p_resources[i].rid) || native_immutable_resource_is_retiring(p_resources[i].rid)), ERR_BUSY);
 
 		if (p_resources[i].type == CALLBACK_RESOURCE_TYPE_BUFFER) {
-			auto *buffer = storage_buffer_owner.get_or_null(p_resources[i].rid);
+			auto *buffer = storage_buffer_owner.owns(p_resources[i].rid) ? storage_buffer_owner.get_or_null(p_resources[i].rid) : nullptr;
 			ERR_FAIL_COND_V(buffer && buffer->qualification_return, ERR_UNAUTHORIZED);
 		} else if (p_resources[i].type == CALLBACK_RESOURCE_TYPE_TEXTURE) {
 			auto *texture = texture_owner.get_or_null(p_resources[i].rid);
@@ -5287,17 +5287,17 @@ RID RenderingDevice::_uniform_set_create_qualification(const VectorView<RD::Unif
 		for (uint32_t i = 0; i < p_uniforms[u].get_id_count(); ++i) {
 			ERR_FAIL_COND_V(native_immutable_resource_is_retiring(p_uniforms[u].get_id(i)), RID());
 			const auto &uniform = p_uniforms[u];
-			auto *texture = texture_owner.get_or_null(uniform.get_id(i));
+			auto *texture = texture_owner.owns(uniform.get_id(i)) ? texture_owner.get_or_null(uniform.get_id(i)) : nullptr;
 			ERR_FAIL_COND_V(texture && texture->qualification_return && (!p_children || !p_children->has(texture->qualification_return)), RID());
 			if (texture && texture->qualification_return && !qualification_dependencies.has(texture->qualification_return)) {
 				qualification_dependencies.push_back(texture->qualification_return);
 			}
-			auto *sampler = sampler_owner.get_or_null(uniform.get_id(i));
+			auto *sampler = sampler_owner.owns(uniform.get_id(i)) ? sampler_owner.get_or_null(uniform.get_id(i)) : nullptr;
 			ERR_FAIL_COND_V(sampler && sampler->qualification_return && (!p_children || !p_children->has(sampler->qualification_return)), RID());
 			if (sampler && sampler->qualification_return && !qualification_dependencies.has(sampler->qualification_return)) {
 				qualification_dependencies.push_back(sampler->qualification_return);
 			}
-			auto *buffer = storage_buffer_owner.get_or_null(uniform.get_id(i));
+			auto *buffer = storage_buffer_owner.owns(uniform.get_id(i)) ? storage_buffer_owner.get_or_null(uniform.get_id(i)) : nullptr;
 			if (buffer && buffer->qualification_return && !qualification_dependencies.has(buffer->qualification_return)) {
 				qualification_dependencies.push_back(buffer->qualification_return);
 			}
@@ -9499,8 +9499,8 @@ Error RenderingDevice::_native_disposal_free(const NativeDisposalWitness &p_witn
 		return OK; // Idempotent request; OK does not mean driver-free returned.
 	}
 	const RID rid = RID::from_uint64(report.rid);
-	const Buffer *buffer = storage_buffer_owner.get_or_null(rid);
-	const UniformSet *set = uniform_set_owner.get_or_null(rid);
+	const Buffer *buffer = storage_buffer_owner.owns(rid) ? storage_buffer_owner.get_or_null(rid) : nullptr;
+	const UniformSet *set = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr;
 	const auto &cell = p_witness.cell;
 	if ((!buffer || buffer->native_disposal.cell != cell || !cell->matches(rid.get_id(), buffer->backing_serial, buffer->driver_id.id)) &&
 			(!set || set->native_disposal.cell != cell || !cell->matches(rid.get_id(), set->native_disposal_serial, set->driver_id.id))) {
@@ -12637,7 +12637,7 @@ uint64_t RenderingDevice::get_driver_resource(DriverResource p_resource, RID p_r
 			// A texture view exports the same mutable physical image as its
 			// original parent. Lost coverage belongs to that backing, including
 			// sibling views reached later through their actual owner closure.
-			const auto *texture = texture_owner.get_or_null(escaped_rid);
+			const auto *texture = texture_owner.owns(escaped_rid) ? texture_owner.get_or_null(escaped_rid) : nullptr;
 			escaped_rid = texture ? texture->owner : RID();
 		}
 	}

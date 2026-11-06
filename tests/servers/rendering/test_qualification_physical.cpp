@@ -54,6 +54,85 @@ TEST_FORCE_LINK(test_qualification_physical)
 extern thread_local void (*test_uniform_set_after_rid_free)(RenderingDevice *);
 class TestQualificationPhysicalAccess {
 public:
+	struct LookupErrors {
+		uint32_t count = 0;
+		static void capture(void *data, const char *, const char *, int, const char *, const char *, bool, ErrorHandlerType type) {
+			if (type == ERR_HANDLER_ERROR) {
+				++static_cast<LookupErrors *>(data)->count;
+			}
+		}
+	};
+	static void foreign_pending_resource_retirement(uint32_t p_kind) {
+		using namespace GDExtensionDeviceExit;
+		struct Driver : TransferTestDriverBase {
+			uint32_t frees = 0;
+			uint64_t texture_get_allocation_size(TextureID) override { return 0; }
+			void texture_free(TextureID) override { ++frees; }
+			void sampler_free(SamplerID) override { ++frees; }
+			void uniform_set_free(UniformSetID) override { ++frees; }
+		} driver;
+		RenderingDevice device;
+		device.driver = &driver;
+		device.render_thread_id = Thread::get_caller_id();
+		device.frames.resize(1);
+		device.frames[0].qualification_epoch = 1;
+		auto *registry = memnew(Registry);
+		Registry::QualificationBridge bridge;
+		QualificationResource child;
+		child.creating = false;
+		child.retiring = true;
+		child.physical.use_closed = true;
+		RenderingDevice::Texture texture;
+		RenderingDevice::Sampler sampler;
+		RenderingDevice::UniformSet set;
+		texture.driver_id = RDD::TextureID(51);
+		sampler.driver_id = RDD::SamplerID(53);
+		set.driver_id = RDD::UniformSetID(59);
+		texture.qualification_return = sampler.qualification_return = set.qualification_return = &child.physical;
+		const RID texture_rid = p_kind == 0 ? device.texture_owner.make_rid(texture) : device.texture_owner.allocate_rid();
+		const RID sampler_rid = p_kind == 1 ? device.sampler_owner.make_rid(sampler) : device.sampler_owner.allocate_rid();
+		const RID set_rid = p_kind == 2 ? device.uniform_set_owner.make_rid(set) : device.uniform_set_owner.allocate_rid();
+		CHECK(uint32_t(texture_rid.get_id()) == uint32_t(sampler_rid.get_id()));
+		CHECK(uint32_t(texture_rid.get_id()) == uint32_t(set_rid.get_id()));
+		const RID rid = p_kind == 0 ? texture_rid : p_kind == 1 ? sampler_rid
+																: set_rid;
+		child.rid = child.physical.rid = rid.get_id();
+		LookupErrors errors;
+		ErrorHandlerList handler{ &LookupErrors::capture, &errors };
+		add_error_handler(&handler);
+		{
+			MutexLock lock(device._thread_safe_);
+			registry->qualification_resource_retire_step(&bridge, &device, &child);
+		}
+		CHECK(child.physical.enqueued);
+		CHECK(child.report.reason == 1);
+		CHECK_FALSE(child.physical.free_event);
+		device._free_pending_resources(0);
+		registry->qualification_resource_retire_step(&bridge, &device, &child);
+		remove_error_handler(&handler);
+		CHECK(errors.count == 0);
+		CHECK(driver.frees == 1);
+		CHECK(child.report.state == 1);
+		CHECK(child.report.return_status == 1);
+		CHECK(child.report.event_seq != 0);
+		// Pending slots cannot be freed until initialized; they never represent
+		// qualification children and must not acquire physical return events.
+		if (p_kind != 0) {
+			device.texture_owner.initialize_rid(texture_rid, RenderingDevice::Texture());
+			device.texture_owner.free(texture_rid);
+		}
+		if (p_kind != 1) {
+			device.sampler_owner.initialize_rid(sampler_rid, RenderingDevice::Sampler());
+			device.sampler_owner.free(sampler_rid);
+		}
+		if (p_kind != 2) {
+			device.uniform_set_owner.initialize_rid(set_rid, RenderingDevice::UniformSet());
+			device.uniform_set_owner.free(set_rid);
+		}
+		device.frames.clear();
+		device.driver = nullptr;
+		memdelete(registry);
+	}
 	static void storage_retirement_capacity(RenderingDevice &device, uint32_t mode = 0, const int *native_creates = nullptr) {
 		using namespace GDExtensionDeviceExit;
 		// Controlled enrollment, actual original factory/RID/retire/ACK entries.
@@ -1235,7 +1314,7 @@ public:
 
 	// Metadata-only original-child fixture: this exercises preappend admission,
 	// not texture production, native completion, or Method qualification.
-	static void typed_uniform_preflight(uint32_t p_mode, bool p_two_set = false) {
+	static void typed_uniform_preflight(uint32_t p_mode, bool p_two_set = false, int p_pending_owner = -1) {
 		using namespace GDExtensionDeviceExit;
 		struct Driver : TransferTestDriverBase {
 			bool native_call_observation_supported() const override { return true; }
@@ -1248,6 +1327,26 @@ public:
 		registry->records[0].snapshot.library_generation = 1;
 		Registry::QualificationBridge bridge;
 		bridge.serial = 11;
+		// Reserve a real pending slot before creating that owner's typed resource.
+		// Other admitted kinds still occupy index zero with different validators.
+		RID pending;
+		switch (p_pending_owner) {
+			case 0:
+				pending = device.texture_owner.allocate_rid();
+				break;
+			case 1:
+				pending = device.sampler_owner.allocate_rid();
+				break;
+			case 2:
+				pending = device.storage_buffer_owner.allocate_rid();
+				break;
+			case 3:
+				pending = device.compute_pipeline_owner.allocate_rid();
+				break;
+			case 4:
+				pending = device.shader_owner.allocate_rid();
+				break;
+		}
 		Registry::QualificationBridge::Texture texture_child;
 		Registry::QualificationBridge::Sampler sampler_child;
 		bridge.textures[0] = &texture_child;
@@ -1309,6 +1408,14 @@ public:
 		buffer.backing_serial = 67;
 		buffer.usage = RDD::BUFFER_USAGE_TRANSFER_FROM_BIT;
 		const RID buffer_rid = device.storage_buffer_owner.make_rid(buffer);
+		RID uniform_buffer_rid;
+		if (p_pending_owner >= 0) {
+			uniform_buffer_rid = device.uniform_buffer_owner.make_rid(buffer);
+			device.reverse_dependency_map[set_rid].insert(buffer_rid);
+			device.reverse_dependency_map[set_rid].insert(uniform_buffer_rid);
+			CHECK(pending.is_valid());
+			CHECK(uint32_t(pending.get_id()) == uint32_t(p_pending_owner == 0 ? sampler_rid.get_id() : texture_rid.get_id()));
+		}
 		GDExtensionQualificationRecordV1 request = {};
 		request.abi = { 1, sizeof(GDExtensionDeviceExitAbi), 0 };
 		request.record_generation = request.request_nonce = request.library_generation = request.qualification_session_serial = 1;
@@ -1438,11 +1545,16 @@ public:
 			}
 		}
 		LocalVector<RID> resources;
+		LookupErrors errors;
+		ErrorHandlerList handler{ &LookupErrors::capture, &errors };
+		add_error_handler(&handler);
 		CHECK(registry->qualification_record_preflight(&bridge, &device, request, resources, second_rid, second_rid) == expected);
+		remove_error_handler(&handler);
+		CHECK(errors.count == 0);
 		if (!p_mode) {
 			CHECK(resources.has(texture_rid));
 			CHECK(resources.has(sampler_rid));
-			CHECK(resources.size() == (p_two_set ? 7u : 6u));
+			CHECK(resources.size() == (p_two_set ? 7u : 6u) + (p_pending_owner >= 0 ? 1u : 0u));
 		}
 		CHECK(device.draw_graph.qualification_command_count() == 0);
 		CHECK(live_texture->qualification_users == 0);
@@ -1452,6 +1564,32 @@ public:
 		device.reverse_dependency_map.clear();
 		live_texture->shared_fallback = nullptr;
 		device.storage_buffer_owner.free(buffer_rid);
+		if (uniform_buffer_rid.is_valid()) {
+			CHECK(resources.has(uniform_buffer_rid));
+			device.uniform_buffer_owner.free(uniform_buffer_rid);
+		}
+		switch (p_pending_owner) {
+			case 0:
+				device.texture_owner.initialize_rid(pending, RenderingDevice::Texture());
+				device.texture_owner.free(pending);
+				break;
+			case 1:
+				device.sampler_owner.initialize_rid(pending, RenderingDevice::Sampler());
+				device.sampler_owner.free(pending);
+				break;
+			case 2:
+				device.storage_buffer_owner.initialize_rid(pending, RenderingDevice::Buffer());
+				device.storage_buffer_owner.free(pending);
+				break;
+			case 3:
+				device.compute_pipeline_owner.initialize_rid(pending, RenderingDevice::ComputePipeline());
+				device.compute_pipeline_owner.free(pending);
+				break;
+			case 4:
+				device.shader_owner.initialize_rid(pending, RenderingDevice::Shader());
+				device.shader_owner.free(pending);
+				break;
+		}
 		device.uniform_set_owner.free(set_rid);
 		if (second_set.is_valid()) {
 			device.uniform_set_owner.free(second_set);
@@ -5949,6 +6087,20 @@ TEST_CASE("[Qualification][T1] parent release refuses an unsettled texture desce
 	CHECK(driver.texture_frees == 1);
 	CHECK(driver.frees == 1);
 	TestQualificationPhysicalAccess::detach(device);
+}
+
+TEST_CASE("[Qualification][RID] typed retirement ignores foreign pending owner slots") {
+	for (uint32_t kind = 0; kind < 3; ++kind) {
+		CAPTURE(kind);
+		TestQualificationPhysicalAccess::foreign_pending_resource_retirement(kind);
+	}
+}
+
+TEST_CASE("[Qualification][RID] record preflight admits real dependencies despite foreign pending owner slots") {
+	for (int owner = 0; owner < 5; ++owner) {
+		CAPTURE(owner);
+		TestQualificationPhysicalAccess::typed_uniform_preflight(0, false, owner);
+	}
 }
 
 TEST_CASE("[Qualification][T1] record preflight accepts only ready original typed texture and sampler children") {
