@@ -19,6 +19,8 @@ sources:
 #  of necessity, as we're only evaluating a Linux runner.
 clangd:
   - "**/*.{h,hpp,hxx,hh,c,cpp,cxx,cc}"
+  # Standalone SDK probe uses its runner's explicit external SDK include paths.
+  - "!tests/core/object/fixtures/device_exit_sdk_load/probe.cc"
   - "!**/thirdparty/**"
   - "!**/*-so_wrap.{h,c}"
   - "!drivers/{apple*,core*,d3d12,metal,wasapi,windows,winmidi,xaudio2}/**"
