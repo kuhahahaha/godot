@@ -1,0 +1,97 @@
+diff --git a/servers/rendering/renderer_viewport.cpp b/servers/rendering/renderer_viewport.cpp
+index b4c466b71c..70aea44c72 100644
+--- a/servers/rendering/renderer_viewport.cpp
++++ b/servers/rendering/renderer_viewport.cpp
+@@ -1373,6 +1373,12 @@ RendererViewport::Viewport::CameraSourceToken RendererViewport::viewport_begin_c
+ 	viewport->current_camera_token = token;
+ 	viewport->captured_camera_data = RendererSceneRender::CameraData();
+ 	viewport->captured_camera_data_valid = false;
++	// A successful new invocation supersedes only the unadopted stage. Keep
++	// the previously adopted camera until this invocation actually adopts.
++	// Sequence exhaustion above must leave the existing stage untouched.
++	viewport->staged_camera_data = RendererSceneRender::CameraData();
++	viewport->staged_camera_token = Viewport::CameraSourceToken();
++	viewport->staged_camera_data_valid = false;
+ 	return token;
+ }
+ 
+diff --git a/tests/servers/rendering/test_viewport_camera_source.cpp b/tests/servers/rendering/test_viewport_camera_source.cpp
+index bcbbf14694..0b608d688d 100644
+--- a/tests/servers/rendering/test_viewport_camera_source.cpp
++++ b/tests/servers/rendering/test_viewport_camera_source.cpp
+@@ -686,3 +686,75 @@ TEST_CASE("[B4][E19] camera history advances only after color adoption") {
+ 	CHECK_FALSE(RSG::viewport->viewport_adopt_camera_data(viewport));
+ 	RSG::viewport->free(viewport);
+ }
++
++TEST_CASE("[B4][E19][CameraStage] successful capture supersedes only unadopted camera stage") {
++	REQUIRE(RSG::viewport != nullptr);
++	RID viewport = RSG::viewport->viewport_allocate();
++	RSG::viewport->viewport_initialize(viewport);
++	RendererViewport::Viewport::ViewPresentationKey key{ 811, 3, 1 };
++	CHECK(RSG::viewport->viewport_register_presentation_key(viewport, key));
++	RendererSceneRender::CameraData previous{};
++	previous.main_transform.origin = Vector3(1, 2, 3);
++	const auto previous_token = RSG::viewport->viewport_begin_camera_capture(viewport, previous);
++	CHECK(previous_token.is_valid());
++	CHECK(RSG::viewport->viewport_stage_camera_data(viewport, &previous, previous_token));
++	CHECK(RSG::viewport->viewport_adopt_camera_data(viewport));
++
++	RendererSceneRender::CameraData first{};
++	first.main_transform.origin = Vector3(4, 5, 6);
++	const auto first_token = RSG::viewport->viewport_begin_camera_capture(viewport, first);
++	CHECK(RSG::viewport->viewport_stage_camera_data(viewport, &first, first_token));
++	RendererSceneRender::CameraData second{};
++	second.main_transform.origin = Vector3(7, 8, 9);
++	const auto second_token = RSG::viewport->viewport_begin_camera_capture(viewport, second);
++	CHECK(second_token.capture_ordinal == first_token.capture_ordinal + 1);
++	// The newly captured invocation must not accidentally adopt the previous
++	// invocation's unconsumed stage, or block its own exact payload staging.
++	CHECK_FALSE(RSG::viewport->viewport_adopt_camera_data(viewport));
++	CHECK(RSG::viewport->viewport_get_previous_camera_token(viewport) == previous_token);
++	CHECK(RSG::viewport->viewport_get_prev_camera_data(viewport)->main_transform == previous.main_transform);
++	CHECK(RSG::viewport->viewport_stage_camera_data(viewport, &second, second_token));
++	CHECK(RSG::viewport->viewport_adopt_camera_data(viewport));
++	CHECK(RSG::viewport->viewport_get_previous_camera_token(viewport) == second_token);
++	CHECK(RSG::viewport->viewport_get_prev_camera_data(viewport)->main_transform == second.main_transform);
++	RSG::viewport->free(viewport);
++}
++
++TEST_CASE("[B4][E19][CameraStage] exhausted capture leaves the previous valid stage intact") {
++	REQUIRE(RSG::viewport != nullptr);
++	RID viewport = RSG::viewport->viewport_allocate();
++	RSG::viewport->viewport_initialize(viewport);
++	RendererViewport::Viewport::ViewPresentationKey key{ 812, 3, 1 };
++	CHECK(RSG::viewport->viewport_register_presentation_key(viewport, key));
++	RendererSceneRender::CameraData previous{};
++	previous.main_transform.origin = Vector3(1, 2, 3);
++	const auto previous_token = RSG::viewport->viewport_begin_camera_capture(viewport, previous);
++	CHECK(RSG::viewport->viewport_stage_camera_data(viewport, &previous, previous_token));
++	CHECK(RSG::viewport->viewport_adopt_camera_data(viewport));
++	RendererSceneRender::CameraData staged{};
++	staged.main_transform.origin = Vector3(4, 5, 6);
++	const auto staged_token = RSG::viewport->viewport_begin_camera_capture(viewport, staged);
++	CHECK(RSG::viewport->viewport_stage_camera_data(viewport, &staged, staged_token));
++	// Exercise the existing native ordinal boundary without changing token
++	// issuance, thread identity, or introducing a production test hook.
++	auto *native_viewport = RSG::viewport->viewport_owner.get_or_null(viewport);
++	native_viewport->camera_capture_ordinal = UINT64_MAX;
++	RendererSceneRender::CameraData refused{};
++	refused.main_transform.origin = Vector3(10, 11, 12);
++	ERR_PRINT_OFF;
++	const auto failed = RSG::viewport->viewport_begin_camera_capture(viewport, refused);
++	ERR_PRINT_ON;
++	CHECK_FALSE(failed.is_valid());
++	CHECK_FALSE(refused.has_source_token());
++	CHECK(native_viewport->camera_capture_ordinal == UINT64_MAX);
++	CHECK(RSG::viewport->viewport_get_current_camera_token(viewport) == staged_token);
++	CHECK(RSG::viewport->viewport_get_previous_camera_token(viewport) == previous_token);
++	CHECK(RSG::viewport->viewport_get_prev_camera_data(viewport)->main_transform == previous.main_transform);
++	RendererSceneRender::CameraData captured{};
++	CHECK(RSG::viewport->viewport_get_camera_capture(viewport, staged_token, captured));
++	CHECK(captured.main_transform == staged.main_transform);
++	CHECK(RSG::viewport->viewport_adopt_camera_data(viewport));
++	CHECK(RSG::viewport->viewport_get_previous_camera_token(viewport) == staged_token);
++	CHECK(RSG::viewport->viewport_get_prev_camera_data(viewport)->main_transform == staged.main_transform);
++	RSG::viewport->free(viewport);
++}
