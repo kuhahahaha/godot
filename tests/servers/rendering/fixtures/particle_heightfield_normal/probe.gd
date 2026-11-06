@@ -62,4 +62,5 @@ func _initialize() -> void:
 	rd.free_rid(height)
 	rd.free_rid(sampler)
 	rd.free_rid(shader)
+	rd.free()
 	quit(0 if passed else 1)
