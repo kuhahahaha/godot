@@ -1,0 +1,7 @@
+config_version=5
+
+[application]
+config/name="Heightfield native clear regression"
+
+[rendering]
+renderer/rendering_method="mobile"

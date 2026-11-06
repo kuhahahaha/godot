@@ -32,12 +32,14 @@
 
 #include "particles_external_guard_test_fixture.h"
 #include "particles_external_output_test_fixture.h"
+#include "particles_heightfield_clear_test_fixture.h"
 #include "particles_runtime_test_fixture.h"
 
 #include "core/object/class_db.h"
 void initialize_particles_runtime_tests_module(ModuleInitializationLevel p_level) {
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
 		GDREGISTER_CLASS(ParticlesRuntimeTestFixture);
+		GDREGISTER_CLASS(ParticlesHeightfieldClearTestFixture);
 		GDREGISTER_CLASS(ParticlesExternalGuardTestFixture);
 		GDREGISTER_CLASS(ParticlesExternalOutputTestFixture);
 	}

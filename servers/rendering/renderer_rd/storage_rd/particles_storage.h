@@ -51,6 +51,7 @@ class ProductionOutputPin;
 class RenderDataRD;
 
 class ParticlesRuntimeTestFixture;
+class ParticlesHeightfieldClearTestFixture;
 
 namespace RendererRD {
 
@@ -70,6 +71,7 @@ class ParticlesStorage : public RendererParticlesStorage {
 private:
 #if defined(TESTS_ENABLED) && defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
 	friend class ::ParticlesRuntimeTestFixture;
+	friend class ::ParticlesHeightfieldClearTestFixture;
 #endif
 #ifdef TESTS_ENABLED
 	friend class ExternalLinkedOwnerTest;
