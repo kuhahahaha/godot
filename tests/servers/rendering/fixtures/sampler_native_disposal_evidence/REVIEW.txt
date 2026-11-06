@@ -1,0 +1,32 @@
+Frozen single-sampler native disposal witness — independent final source review
+2026-11-06 UTC
+Workspace /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104
+
+VERDICT: No actionable correctness findings in the frozen three-file diff. Used /tmp/b4-sampler-witness-review-checklist.txt. This is read-only source review; I did not build/run tests and do not claim runtime passage. Parent owns unified verification.
+
+Production review:
+- Ordinary public sampler creation still calls the original shared factory; validation, driver payload, make_rid behavior and DEV naming remain in the same order. Qualification still reserves its original free_event and RID before native creation, publishes qualification cell RID only on success and releases free_event exactly once on allocation/native failure.
+- Shared factory explicitly rejects simultaneous qualification + native witness. State validation occurs BEFORE RID reservation, addressing all five early validation exits without an external reservation leak. Shared helper solely owns RID reservation/rollback. On null native id it initializes/frees reserved RID and only releases qualification event for an actual qualification cell.
+- New private factory checks original preflight/fresh outputs, reserves fresh nonzero backing serial and cell before calling original factory. Successful original owner initialization retains the same cell, exact RID/serial and native id; outputs publish only afterward. Failure does not queue or free a nonexistent native sampler.
+- Native release uses owner.owns before sampler owner lookup; exact cell identity plus incarnation/RID/native backing matching precedes original free_rid. It preserves original immutable hold retirement, dependent recursion and callback handling rather than directly freeing native storage.
+- Original sampler logical free enqueues exact witness before copying into original pending queue and releasing RID. Both bounded category 6 and ordinary sampler drain write RETURNED only AFTER driver->sampler_free returns; qualification and production enqueue/return hooks, their order relative to original free, and queue pop remain intact. Queued value owns the retained witness.
+- _production_disposal_head and its existing sampler RID-based production identity scheme remain unchanged. No new sampler callback or artificial dependency path is added. Existing dependent uniform-set callback recursion/re-resolution remains in original free_rid path.
+
+Actual added test source coverage (four cases, with subcases):
+1. Two real native sampler factories, exact compare-state payload, owner/cell identity, distinct serials even for repeated driver id 17, DEV naming, LIVE/ENQUEUED states, no eager free, idempotent requests, and strict ENQUEUED assertion inside driver sampler_free. Ordinary and one-free bounded drains verify individual returns, no duplicate free, final sole caller ref and empty original queue/owner/maps.
+2. Local-RD and active-list refusals; all five original invalid state fields before native create; driver create failure with no RID/queue/witness or free; occupied output variations; serial exhaustion; successful earlier object remains caller rollback ownership.
+3. Foreign RD, forged same-number/different-cell identity, owner serial mismatch, backing mismatch and terminal UNKNOWN; actual immutable hold retirement keeps witness LIVE until original hold release enqueues; repeated native id after original return cannot be freed by old receipt.
+4. Ordinary sampler creation/free and native create failure retain original no-witness path and exact selected state.
+
+Coverage limitations, not observed bugs:
+- New tests directly call both original pending-resource drain functions, rather than exercising frame fences or the full maintenance continuation.
+- New sampler cases do not inject RID allocator failure, wrong render thread, recording failure, dependent-set callback reentry, foreign pending sampler slots, or qualification/production attached sampler lifecycle. These unchanged paths were source-reviewed; no new runtime evidence for them is asserted here. Existing broader qualification tests are separate parent verification evidence.
+- No exact RID slot reuse is explicitly asserted; native id 17 reuse is deliberate and tested.
+
+Claims boundary:
+This diff implements ONE original sampler disposal witness only. It does not implement planned D32 sampled uniform-set admission, sample-set descriptor construction/dependencies, Scene read/bind/source authority, aggregate output release, GPU completion or E34 completion. _native_disposal_uniform_set_create remains the existing storage-buffer profile. No claim from the earlier sample-set feasibility audit is promoted to implementation by this change.
+
+Final SHA-256 reviewed:
+0ba58bc30508f6b6944e5667e378952d98ca275841da395bcf4b86a6c9aa14f3  servers/rendering/rendering_device.h
+62b5eec9a047f4751bb9d6d10f60cd599ec2dcf9cf3c221776a94c54dc98e06a  servers/rendering/rendering_device.cpp
+64939a8e9d5d37e09906731ae33a3b5bbd9139b3d56c578ccd164f68ec6c3075  tests/servers/rendering/test_native_disposal.cpp

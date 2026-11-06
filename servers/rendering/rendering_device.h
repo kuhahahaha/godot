@@ -1136,6 +1136,9 @@ public:
 	/*****************/
 private:
 	struct Sampler {
+		NativeDisposalWitness native_disposal;
+		uint64_t native_disposal_rid = 0;
+		uint64_t native_disposal_serial = 0;
 		GDExtensionDeviceExit::ProductionDisposalUse *production_disposal_uses = nullptr;
 		uint32_t native_immutable_holds = 0;
 		bool native_immutable_retire_requested = false;
@@ -1146,7 +1149,7 @@ private:
 	};
 	RID_Owner<Sampler, true> sampler_owner;
 	RID _qualification_sampler_create(const SamplerState &p_state, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
-	RID _sampler_create_internal(const SamplerState &p_state, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
+	RID _sampler_create_internal(const SamplerState &p_state, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, const NativeDisposalWitness *p_native_disposal = nullptr);
 
 public:
 	RID sampler_create(const SamplerState &p_state);
@@ -1669,6 +1672,7 @@ private:
 	Error _native_disposal_preflight() const;
 	RID _storage_buffer_create_internal(uint32_t p_bytes, Span<uint8_t> p_data, BitField<StorageBufferUsage> p_usage, BitField<BufferCreationBits> p_creation_bits, const NativeDisposalWitness *p_native_disposal);
 	// Disposal observations only: neither content holds nor recording/completion authority.
+	Error _native_disposal_sampler_create(const SamplerState &p_state, RID &r_rid, NativeDisposalWitness &r_witness);
 	Error _native_disposal_depth_texture_create(uint32_t p_width, uint32_t p_height, RID &r_rid, NativeDisposalWitness &r_witness);
 	Error _native_disposal_depth_framebuffer_create(const NativeDisposalWitness &p_texture, RID &r_rid, NativeDisposalWitness &r_witness);
 	Error _native_disposal_storage_create(uint32_t p_bytes, BitField<StorageBufferUsage> p_usage, RID &r_rid, NativeDisposalWitness &r_witness);

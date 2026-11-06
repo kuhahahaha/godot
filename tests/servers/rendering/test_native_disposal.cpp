@@ -38,6 +38,10 @@ TEST_FORCE_LINK(test_native_disposal)
 
 class TestNativeDisposalAccess {
 public:
+	static void sampler_disposal();
+	static void sampler_factory_failures();
+	static void sampler_identity();
+	static void sampler_ordinary();
 	static void depth_disposal();
 	static void depth_factory_failures();
 	static void depth_identity();
@@ -189,6 +193,51 @@ public:
 		++shader_frees;
 	}
 };
+
+// Observe the real sampler factory and both original pending-free drains.
+// Reusing native id 17 deliberately leaves incarnation identity to the owner.
+class SamplerDisposalDriver : public TransferTestDriverBase {
+public:
+	Vector<NativeDisposalWitness *> free_witnesses;
+	bool fail_create = false;
+	uint32_t creates = 0, frees = 0, names = 0;
+	String last_name;
+	SamplerState last_state;
+	SamplerID sampler_create(const SamplerState &p_state) override {
+		++creates;
+		last_state = p_state;
+		return fail_create ? SamplerID() : SamplerID(17);
+	}
+	void sampler_free(SamplerID p_id) override {
+		CHECK(p_id == SamplerID(17));
+		REQUIRE(frees < uint32_t(free_witnesses.size()));
+		if (auto *witness = free_witnesses[frees]) {
+			CHECK(TestNativeDisposalAccess::state(*witness) == NativeDisposalWitness::State::ENQUEUED);
+			CHECK(TestNativeDisposalAccess::refs(*witness) >= 2);
+		}
+		++frees;
+	}
+	void set_object_name(ObjectType p_type, ID p_id, const String &p_name) override {
+		CHECK(p_type == OBJECT_TYPE_SAMPLER);
+		CHECK(p_id.id == 17);
+		CHECK(p_name.begins_with("RID:"));
+		++names;
+		last_name = p_name;
+	}
+};
+
+TEST_CASE("[RenderingDevice][NativeDisposal][Sampler] actual driver return owns ordinary and bounded receipts") {
+	TestNativeDisposalAccess::sampler_disposal();
+}
+TEST_CASE("[RenderingDevice][NativeDisposal][Sampler] failed factories leave original rollback ownership intact") {
+	TestNativeDisposalAccess::sampler_factory_failures();
+}
+TEST_CASE("[RenderingDevice][NativeDisposal][Sampler] foreign stale and forged identities cannot sign returned") {
+	TestNativeDisposalAccess::sampler_identity();
+}
+TEST_CASE("[RenderingDevice][NativeDisposal][Sampler] ordinary creation and free retain their original path") {
+	TestNativeDisposalAccess::sampler_ordinary();
+}
 
 // CPU driver-return fixture. It exercises real RD factories and disposal
 // queues; cache children model driver-created variants, never GPU completion.
@@ -1113,5 +1162,273 @@ void TestNativeDisposalAccess::depth_identity() {
 	CHECK(driver.texture_frees == 2);
 	CHECK(rd.texture_memory == 0);
 	detach(foreign);
+	detach(rd);
+}
+
+void TestNativeDisposalAccess::sampler_disposal() {
+	using namespace TestNativeDisposal;
+	RenderingDevice rd;
+	SamplerDisposalDriver driver;
+	attach(rd, driver);
+	RID first, second;
+	NativeDisposalWitness first_witness, second_witness;
+	RenderingDevice::SamplerState sampler_state;
+	sampler_state.enable_compare = true;
+	sampler_state.compare_op = RenderingDevice::COMPARE_OP_LESS;
+	REQUIRE(rd._native_disposal_sampler_create(sampler_state, first, first_witness) == OK);
+	REQUIRE(rd._native_disposal_sampler_create(sampler_state, second, second_witness) == OK);
+	CHECK(driver.last_state.enable_compare);
+	CHECK(driver.last_state.compare_op == RenderingDevice::COMPARE_OP_LESS);
+	CHECK(first_witness.cell != second_witness.cell);
+	CHECK(first_witness.cell->serial != second_witness.cell->serial);
+	CHECK(rd.sampler_owner.get_or_null(first)->native_disposal.cell == first_witness.cell);
+	NativeDisposalWitness::Report report;
+	REQUIRE(observe(rd, first_witness, report) == OK);
+	CHECK(report.state == NativeDisposalWitness::State::LIVE);
+	CHECK(report.rid == first.get_id());
+	CHECK(report.serial != 0);
+#ifdef DEV_ENABLED
+	CHECK(driver.names == 2);
+	CHECK(driver.last_name == "RID:" + itos(second.get_id()));
+#else
+	CHECK(driver.names == 0);
+#endif
+	driver.free_witnesses.push_back(&first_witness);
+	driver.free_witnesses.push_back(&second_witness);
+	REQUIRE(release(rd, first_witness) == OK);
+	REQUIRE(release(rd, second_witness) == OK);
+	CHECK_FALSE(rd.sampler_owner.owns(first));
+	CHECK_FALSE(rd.sampler_owner.owns(second));
+	CHECK(state(first_witness) == NativeDisposalWitness::State::ENQUEUED);
+	CHECK(state(second_witness) == NativeDisposalWitness::State::ENQUEUED);
+	CHECK(driver.frees == 0);
+	CHECK(release(rd, first_witness) == OK);
+	SUBCASE("ordinary original queue") {
+		dispose(rd);
+	}
+	SUBCASE("bounded original queue returns one sampler at a time") {
+		uint32_t used = 0;
+		CHECK(step(rd, 1, 1, UINT64_MAX, used) == ERR_BUSY);
+		CHECK(used == 1);
+		CHECK(driver.frees == 1);
+		CHECK(state(first_witness) == NativeDisposalWitness::State::RETURNED);
+		CHECK(state(second_witness) == NativeDisposalWitness::State::ENQUEUED);
+		CHECK(step(rd, 1, 1, UINT64_MAX, used) == OK);
+		CHECK(used == 1);
+		CHECK_FALSE(draining(rd));
+	}
+	CHECK(driver.frees == 2);
+	CHECK(state(first_witness) == NativeDisposalWitness::State::RETURNED);
+	CHECK(state(second_witness) == NativeDisposalWitness::State::RETURNED);
+	CHECK(refs(first_witness) == 1);
+	CHECK(refs(second_witness) == 1);
+	CHECK(release(rd, first_witness) == OK);
+	CHECK(driver.frees == 2);
+	CHECK(rd.frames[0].samplers_to_dispose_of.is_empty());
+	CHECK(rd.sampler_owner.get_rid_count() == 0);
+	CHECK(rd.dependency_map.is_empty());
+	CHECK(rd.reverse_dependency_map.is_empty());
+	detach(rd);
+}
+
+void TestNativeDisposalAccess::sampler_factory_failures() {
+	using namespace TestNativeDisposal;
+	RenderingDevice rd;
+	SamplerDisposalDriver driver;
+	attach(rd, driver);
+	RID rid;
+	NativeDisposalWitness witness;
+	const RenderingDevice::SamplerState sampler_state;
+	local(rd, true);
+	CHECK(rd._native_disposal_sampler_create(sampler_state, rid, witness) == ERR_UNAUTHORIZED);
+	local(rd, false);
+	CHECK(driver.creates == 0);
+	rd.draw_list.active = true;
+	CHECK(rd._native_disposal_sampler_create(sampler_state, rid, witness) == ERR_BUSY);
+	rd.draw_list.active = false;
+	CHECK(driver.creates == 0);
+	// Original validation can fail before driver creation. A reserved witness
+	// and RID must roll back on every such return, not just native failure.
+	for (uint32_t invalid_field = 0; invalid_field < 5; ++invalid_field) {
+		RenderingDevice::SamplerState invalid = sampler_state;
+		switch (invalid_field) {
+			case 0:
+				invalid.repeat_u = RenderingDevice::SAMPLER_REPEAT_MODE_MAX;
+				break;
+			case 1:
+				invalid.repeat_v = RenderingDevice::SAMPLER_REPEAT_MODE_MAX;
+				break;
+			case 2:
+				invalid.repeat_w = RenderingDevice::SAMPLER_REPEAT_MODE_MAX;
+				break;
+			case 3:
+				invalid.compare_op = RenderingDevice::COMPARE_OP_MAX;
+				break;
+			case 4:
+				invalid.border_color = RenderingDevice::SAMPLER_BORDER_COLOR_MAX;
+				break;
+		}
+		ERR_PRINT_OFF;
+		CHECK(rd._native_disposal_sampler_create(invalid, rid, witness) == ERR_CANT_CREATE);
+		ERR_PRINT_ON;
+		CHECK(rid.is_null());
+		CHECK(witness.cell.is_null());
+		CHECK(driver.creates == 0);
+		CHECK(driver.frees == 0);
+		CHECK(rd.sampler_owner.get_rid_count() == 0);
+		CHECK(rd.frames[0].samplers_to_dispose_of.is_empty());
+	}
+	driver.fail_create = true;
+	ERR_PRINT_OFF;
+	CHECK(rd._native_disposal_sampler_create(sampler_state, rid, witness) == ERR_CANT_CREATE);
+	ERR_PRINT_ON;
+	CHECK(rid.is_null());
+	CHECK(witness.cell.is_null());
+	CHECK(driver.creates == 1);
+	CHECK(driver.frees == 0);
+	CHECK(driver.names == 0);
+	CHECK(rd.sampler_owner.get_rid_count() == 0);
+	CHECK(rd.frames[0].samplers_to_dispose_of.is_empty());
+	driver.fail_create = false;
+	REQUIRE(rd._native_disposal_sampler_create(sampler_state, rid, witness) == OK);
+	const uint64_t serial = witness.cell->serial;
+	CHECK(rd._native_disposal_sampler_create(sampler_state, rid, witness) == ERR_INVALID_PARAMETER);
+	CHECK(witness.cell->serial == serial);
+	CHECK(state(witness) == NativeDisposalWitness::State::LIVE);
+	CHECK(driver.creates == 2);
+	RID empty_rid;
+	NativeDisposalWitness empty_witness;
+	CHECK(rd._native_disposal_sampler_create(sampler_state, rid, empty_witness) == ERR_INVALID_PARAMETER);
+	CHECK(empty_witness.cell.is_null());
+	CHECK(rd._native_disposal_sampler_create(sampler_state, empty_rid, witness) == ERR_INVALID_PARAMETER);
+	CHECK(empty_rid.is_null());
+	rd.next_backing_serial = 0;
+	CHECK(rd._native_disposal_sampler_create(sampler_state, empty_rid, empty_witness) == ERR_OUT_OF_MEMORY);
+	CHECK(empty_rid.is_null());
+	CHECK(empty_witness.cell.is_null());
+	CHECK(driver.creates == 2);
+	CHECK(driver.frees == 0);
+	// The earlier successful factory remains the original caller's rollback.
+	driver.free_witnesses.push_back(&witness);
+	CHECK(release(rd, witness) == OK);
+	dispose(rd);
+	CHECK(driver.frees == 1);
+	CHECK(state(witness) == NativeDisposalWitness::State::RETURNED);
+	CHECK(rd.sampler_owner.get_rid_count() == 0);
+	detach(rd);
+}
+
+void TestNativeDisposalAccess::sampler_identity() {
+	using namespace TestNativeDisposal;
+	RenderingDevice rd, foreign;
+	SamplerDisposalDriver driver;
+	attach(rd, driver);
+	attach(foreign, driver);
+	const RenderingDevice::SamplerState sampler_state;
+	RID rid;
+	NativeDisposalWitness witness;
+	REQUIRE(rd._native_disposal_sampler_create(sampler_state, rid, witness) == OK);
+	NativeDisposalWitness::Report report;
+	CHECK(observe(foreign, witness, report) == ERR_UNAUTHORIZED);
+	CHECK(release(foreign, witness) == ERR_UNAUTHORIZED);
+	CHECK(state(witness) == NativeDisposalWitness::State::LIVE);
+	CHECK(driver.frees == 0);
+	// Matching numeric identity is insufficient: the original cell must match.
+	NativeDisposalWitness forged;
+	forged.cell.instantiate();
+	forged.cell->device = witness.cell->device;
+	forged.cell->rid = witness.cell->rid;
+	forged.cell->serial = witness.cell->serial;
+	forged.cell->backing = witness.cell->backing;
+	CHECK(release(rd, forged) == ERR_INVALID_DATA);
+	CHECK(state(forged) == NativeDisposalWitness::State::UNKNOWN);
+	CHECK(state(witness) == NativeDisposalWitness::State::LIVE);
+	CHECK(rd.sampler_owner.owns(rid));
+	CHECK(driver.frees == 0);
+	SUBCASE("original immutable hold defers sampler enqueue") {
+		RenderingDevice::NativeImmutableHold hold;
+		REQUIRE(rd.native_immutable_hold_acquire(VectorView<RID>(&rid, 1), hold) == OK);
+		CHECK(release(rd, witness) == ERR_BUSY);
+		CHECK(state(witness) == NativeDisposalWitness::State::LIVE);
+		CHECK(rd.native_immutable_resource_is_retiring(rid));
+		CHECK(rd.sampler_owner.owns(rid));
+		dispose(rd);
+		CHECK(driver.frees == 0);
+		CHECK(rd.native_immutable_hold_release(hold) == OK);
+		CHECK(state(witness) == NativeDisposalWitness::State::ENQUEUED);
+		CHECK(driver.frees == 0);
+	}
+	SUBCASE("owner serial mismatch") {
+		auto *owner = rd.sampler_owner.get_or_null(rid);
+		++owner->native_disposal_serial;
+		CHECK(release(rd, witness) == ERR_INVALID_DATA);
+		CHECK(state(witness) == NativeDisposalWitness::State::UNKNOWN);
+		CHECK(observe(rd, witness, report) == ERR_INVALID_DATA);
+		CHECK(driver.frees == 0);
+		CHECK(rd.frames[0].samplers_to_dispose_of.is_empty());
+		// Fixture-only repair permits teardown; no production reset is exposed.
+		--owner->native_disposal_serial;
+		witness.cell->state = NativeDisposalWitness::State::LIVE;
+	}
+	SUBCASE("exact driver backing mismatch") {
+		++witness.cell->backing;
+		CHECK(release(rd, witness) == ERR_INVALID_DATA);
+		CHECK(state(witness) == NativeDisposalWitness::State::UNKNOWN);
+		CHECK(driver.frees == 0);
+		CHECK(rd.frames[0].samplers_to_dispose_of.is_empty());
+		--witness.cell->backing;
+		witness.cell->state = NativeDisposalWitness::State::LIVE;
+	}
+	driver.free_witnesses.push_back(&witness);
+	REQUIRE(release(rd, witness) == OK);
+	dispose(rd);
+	CHECK(state(witness) == NativeDisposalWitness::State::RETURNED);
+	const uint64_t old_serial = witness.cell->serial;
+	// A fresh real factory may reuse native id 17; an old receipt cannot free it.
+	RID next;
+	NativeDisposalWitness next_witness;
+	REQUIRE(rd._native_disposal_sampler_create(sampler_state, next, next_witness) == OK);
+	CHECK(next_witness.cell->serial != old_serial);
+	CHECK(next_witness.cell != witness.cell);
+	CHECK(release(rd, witness) == OK);
+	CHECK(release(rd, forged) == ERR_INVALID_DATA);
+	CHECK(driver.frees == 1);
+	CHECK(rd.sampler_owner.owns(next));
+	CHECK(state(next_witness) == NativeDisposalWitness::State::LIVE);
+	driver.free_witnesses.push_back(&next_witness);
+	CHECK(release(rd, next_witness) == OK);
+	dispose(rd);
+	CHECK(driver.frees == 2);
+	CHECK(state(next_witness) == NativeDisposalWitness::State::RETURNED);
+	CHECK(rd.sampler_owner.get_rid_count() == 0);
+	detach(foreign);
+	detach(rd);
+}
+
+void TestNativeDisposalAccess::sampler_ordinary() {
+	using namespace TestNativeDisposal;
+	RenderingDevice rd;
+	SamplerDisposalDriver driver;
+	attach(rd, driver);
+	RenderingDevice::SamplerState sampler_state;
+	sampler_state.mag_filter = RenderingDevice::SAMPLER_FILTER_LINEAR;
+	const RID ordinary = rd.sampler_create(sampler_state);
+	REQUIRE(ordinary.is_valid());
+	CHECK(driver.creates == 1);
+	CHECK(driver.last_state.mag_filter == RenderingDevice::SAMPLER_FILTER_LINEAR);
+	CHECK(rd.sampler_owner.get_or_null(ordinary)->native_disposal.cell.is_null());
+	driver.free_witnesses.push_back(nullptr);
+	rd.free_rid(ordinary);
+	CHECK_FALSE(rd.sampler_owner.owns(ordinary));
+	CHECK(driver.frees == 0);
+	dispose(rd);
+	CHECK(driver.frees == 1);
+	driver.fail_create = true;
+	const RID failed = rd.sampler_create(sampler_state);
+	CHECK(failed.is_null());
+	CHECK(driver.creates == 2);
+	CHECK(driver.frees == 1);
+	CHECK(rd.sampler_owner.get_rid_count() == 0);
+	CHECK(rd.frames[0].samplers_to_dispose_of.is_empty());
 	detach(rd);
 }

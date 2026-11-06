@@ -1,0 +1,11 @@
+# Original sampler disposal witness — 2026-11-06
+
+Adds a private witnessed sampler factory through the original sampler owner. The original shared factory validates before reserving a RID and owns all RID rollback. Ordinary and qualification behavior remains in the original path. Exact cell/RID/incarnation/native identity precedes original free_rid, retaining immutable hold retirement and dependency behavior. Original pending queues acknowledge only after actual sampler_free returns in both drains. No public ABI or new registry.
+
+macOS arm64 tests-enabled editor build passed. Focused 4 cases / 287 assertions pass. Effective negative omitting only both sampler returned hooks leaves actual driver frees intact and fails 3 cases / 12 assertions. Reversed exact mutation, rebuilt successfully, then full configured suite passed 2,141 cases / 546,160 assertions with 3 skipped. Independent review final source hashes match. New tests exercise real original sampler factories and queues using a CPU driver.
+
+Build: `scons -Q tests=yes platform=macos target=editor module_particles_runtime_tests_enabled=yes -j3`. Focused: `bin/godot.macos.editor.arm64 --headless --test --test-case='*[NativeDisposal]*[Sampler]*'`. Full uses `--headless --test` with GODOT_TEST_PHYSICS_3D_BACKEND=GodotPhysics3D and GODOT_TEST_PHYSICS_3D_THREADED=0.
+
+Coverage includes exact selected sampler state, no eager free, one-free budget pauses, strict ENQUEUED at actual driver entry and RETURNED after return, no duplicate free, refcount cleanup, five invalid state enums, native failure rollback, fresh output/serial checks, foreign/forged/mismatched identities, native id reuse, immutable hold retirement and ordinary creation/free failure parity. See REVIEW.txt for limits: RID allocation exhaustion, thread/recording refusal, foreign pending sampler slots, dependent callback reentry, and attached qualification/production samplers are not newly runtime-tested.
+
+Single sampler mechanism only. D32 sampled-set construction, Scene read/bind/source authority, aggregate release and GPU completion remain separate unfinished work. Persistent goal remains active. Captured output whitespace normalized with repository file_format.py for CI.

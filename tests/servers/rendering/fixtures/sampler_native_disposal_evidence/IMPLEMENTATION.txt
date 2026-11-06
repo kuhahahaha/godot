@@ -1,0 +1,28 @@
+Original Sampler disposal witness — production handoff 2026-11-06
+
+FROZEN source: servers/rendering/rendering_device.h/.cpp only.
+58 insertions, 7 removals at handoff. No test edits, builds or commits here.
+Plan: /tmp/b4-sampled-disposal-implementation-plan.txt Task 1.
+Patch: /tmp/b4-sampler-disposal-implementation.patch.
+
+Implemented:
+- Existing Sampler holds NativeDisposalWitness and exact queued rid/serial.
+- Private _native_disposal_sampler_create(const SamplerState&, RID&, NativeDisposalWitness&) uses original main-RT preflight, fresh outputs and nonwrapping backing serial. Outputs publish only after successful original factory and owner initialization.
+- Shared _sampler_create_internal gains optional native witness. Ordinary/qualification signatures unchanged. Simultaneous qualification+witness rejected before effects. Original recording-error gate extended only for witness lane.
+- All original state validation (repeat u/v/w, compare_op, border_color) remains BEFORE shared RID reservation. Wrapper reserves only serial/cell. Shared helper is sole RID reservation/rollback owner, so every early validation return has no pending RID. Qualification event reservation and rollback are guarded by p_cell and never invoked with null native-witness lane.
+- On native failure, actual reserved RID is initialized/freed exactly once; no native free, queue or dependency created. Empty caller outputs unchanged. Inner null/invalid state maps ERR_CANT_CREATE; serial exhaustion ERR_OUT_OF_MEMORY; nonfresh outputs ERR_INVALID_PARAMETER. Failed attempts may consume monotonic serial but never reuse/wrap it.
+- Exact _native_disposal_free dispatch resolves sampler with owns() before get_or_null, checks original cell identity/RID/serial/native SamplerID and calls unchanged free_rid. Idempotent returned/enqueued paths remain; failed identity becomes UNKNOWN as existing policy.
+- Original _free_internal sampler branch enqueues witness after qualification enqueue and before production enqueue/pending queue copy/RID removal.
+- Ordinary and bounded category-6 sampler drains write RETURNED only after actual driver sampler_free returns, using queued original fields. Existing production/qualification notification and pop order preserved. No budget/cursor/frame/fence or dependency policy changed.
+
+Explicitly untouched:
+- Sampled uniform profile (Task 2 remains planned).
+- Ordinary sampler post-driver make_rid behavior.
+- Existing production sampler kind-6 identity scheme and use bookkeeping.
+- Immutable holds, retire/dependency callbacks and free_rid reentrancy rules.
+- NativeDisposalWitness ABI/file, public ABI, ClassDB and source authority.
+- pending_clear, descriptor preparation, graph commands, GPU completion.
+
+Static verification: clang-format and git diff --check passed.
+Runtime verification: NOT RUN by this agent. Sol owns strict sampler tests, root owns builds, behavioral negative controls, full suite and commit.
+Negative controls proposed for root: remove bounded hook only, remove ordinary hook only, or move hook before driver; strict driver-entry test must distinguish early return. Use exact hunks so unrelated state is preserved.

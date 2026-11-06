@@ -4573,9 +4573,10 @@ RID RenderingDevice::_qualification_sampler_create(const SamplerState &p_state, 
 	return _sampler_create_internal(p_state, p_cell);
 }
 
-RID RenderingDevice::_sampler_create_internal(const SamplerState &p_state, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell) {
+RID RenderingDevice::_sampler_create_internal(const SamplerState &p_state, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, const NativeDisposalWitness *p_native_disposal) {
 	_THREAD_SAFE_METHOD_
-	ERR_FAIL_COND_V(p_cell && _recording_error() != OK, RID());
+	ERR_FAIL_COND_V(p_cell && p_native_disposal, RID());
+	ERR_FAIL_COND_V((p_cell || p_native_disposal) && _recording_error() != OK, RID());
 
 	ERR_FAIL_INDEX_V(p_state.repeat_u, SAMPLER_REPEAT_MODE_MAX, RID());
 	ERR_FAIL_INDEX_V(p_state.repeat_v, SAMPLER_REPEAT_MODE_MAX, RID());
@@ -4583,12 +4584,16 @@ RID RenderingDevice::_sampler_create_internal(const SamplerState &p_state, GDExt
 	ERR_FAIL_INDEX_V(p_state.compare_op, COMPARE_OP_MAX, RID());
 	ERR_FAIL_INDEX_V(p_state.border_color, SAMPLER_BORDER_COLOR_MAX, RID());
 
+	// Validation above cannot leak a pending RID: this shared body owns the
+	// reservation and rollback for both retained creation paths.
 	RID reserved;
-	if (p_cell) {
-		ERR_FAIL_COND_V(!_qualification_reserve_free_event(p_cell), RID());
+	if (p_cell || p_native_disposal) {
+		ERR_FAIL_COND_V(p_cell && !_qualification_reserve_free_event(p_cell), RID());
 		reserved = sampler_owner.allocate_rid();
 		if (reserved.is_null()) {
-			_qualification_release_free_event(p_cell);
+			if (p_cell) {
+				_qualification_release_free_event(p_cell);
+			}
 			return RID();
 		}
 	}
@@ -4598,7 +4603,9 @@ RID RenderingDevice::_sampler_create_internal(const SamplerState &p_state, GDExt
 		if (reserved.is_valid()) {
 			sampler_owner.initialize_rid(reserved, Sampler());
 			sampler_owner.free(reserved);
-			_qualification_release_free_event(p_cell);
+			if (p_cell) {
+				_qualification_release_free_event(p_cell);
+			}
 		}
 		return RID();
 	}
@@ -4607,6 +4614,15 @@ RID RenderingDevice::_sampler_create_internal(const SamplerState &p_state, GDExt
 	if (p_cell) {
 		sampler.qualification_return = p_cell;
 		p_cell->rid = id.get_id();
+	}
+	if (p_native_disposal) {
+		sampler.native_disposal = *p_native_disposal;
+		sampler.native_disposal_rid = id.get_id();
+		sampler.native_disposal_serial = p_native_disposal->cell->serial;
+		p_native_disposal->cell->rid = id.get_id();
+		p_native_disposal->cell->backing = sampler.driver_id.id;
+	}
+	if (id.is_valid()) {
 		sampler_owner.initialize_rid(id, sampler);
 	} else {
 		id = sampler_owner.make_rid(sampler);
@@ -9528,6 +9544,32 @@ Error RenderingDevice::_native_disposal_preflight() const {
 	return _recording_error();
 }
 
+Error RenderingDevice::_native_disposal_sampler_create(const SamplerState &p_state, RID &r_rid, NativeDisposalWitness &r_witness) {
+	const Error ready = _native_disposal_preflight();
+	if (ready != OK) {
+		return ready;
+	}
+	_THREAD_SAFE_METHOD_
+	if (r_rid.is_valid() || r_witness.cell.is_valid()) {
+		return ERR_INVALID_PARAMETER;
+	}
+	const uint64_t serial = _reserve_backing_serial();
+	if (!serial) {
+		return ERR_OUT_OF_MEMORY;
+	}
+	NativeDisposalWitness reserved;
+	reserved.cell.instantiate();
+	reserved.cell->device = uint64_t(get_instance_id());
+	reserved.cell->serial = serial;
+	const RID created = _sampler_create_internal(p_state, nullptr, &reserved);
+	if (created.is_null()) {
+		return ERR_CANT_CREATE;
+	}
+	r_rid = created;
+	r_witness = reserved;
+	return OK;
+}
+
 Error RenderingDevice::_native_disposal_depth_texture_create(uint32_t p_width, uint32_t p_height, RID &r_rid, NativeDisposalWitness &r_witness) {
 	const Error ready = _native_disposal_preflight();
 	if (ready != OK) {
@@ -9720,10 +9762,12 @@ Error RenderingDevice::_native_disposal_free(const NativeDisposalWitness &p_witn
 	const UniformSet *set = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr;
 	const Texture *texture = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr;
 	const Framebuffer *framebuffer = framebuffer_owner.owns(rid) ? framebuffer_owner.get_or_null(rid) : nullptr;
+	const Sampler *sampler = sampler_owner.owns(rid) ? sampler_owner.get_or_null(rid) : nullptr;
 	const auto &cell = p_witness.cell;
 	if ((!buffer || buffer->native_disposal.cell != cell || !cell->matches(rid.get_id(), buffer->backing_serial, buffer->driver_id.id)) &&
 			(!set || set->native_disposal.cell != cell || !cell->matches(rid.get_id(), set->native_disposal_serial, set->driver_id.id)) &&
 			(!texture || texture->native_disposal.cell != cell || !cell->matches(rid.get_id(), texture->native_disposal_serial, texture->driver_id.id)) &&
+			(!sampler || sampler->native_disposal.cell != cell || !cell->matches(rid.get_id(), sampler->native_disposal_serial, sampler->driver_id.id)) &&
 			(!framebuffer || framebuffer->native_disposal.cell != cell || !cell->matches(rid.get_id(), framebuffer->native_disposal_serial, uint64_t(uintptr_t(framebuffer->framebuffer_cache))))) {
 		cell->state = NativeDisposalWitness::State::UNKNOWN;
 		return ERR_INVALID_DATA;
@@ -10652,6 +10696,7 @@ void RenderingDevice::_free_internal(RID p_id, const MutexLock<Mutex> &p_lock) {
 	} else if (sampler_owner.owns(p_id)) {
 		Sampler *sampler = sampler_owner.get_or_null(p_id);
 		ERR_FAIL_COND(_qualification_enqueue(sampler->qualification_return) != OK);
+		ERR_FAIL_COND(!_native_disposal_enqueue(sampler->native_disposal, p_id.get_id(), sampler->native_disposal_serial, sampler->driver_id.id));
 		_production_disposal_enqueued(sampler->production_disposal_uses);
 		frames[frame].samplers_to_dispose_of.push_back(*sampler);
 		sampler_owner.free(p_id);
@@ -11238,6 +11283,7 @@ Error RenderingDevice::_free_pending_resources_step(int p_frame, const NativeDis
 				}
 				auto &sampler = f.samplers_to_dispose_of.front()->get();
 				driver->sampler_free(sampler.driver_id);
+				_native_disposal_returned(sampler.native_disposal, sampler.native_disposal_rid, sampler.native_disposal_serial, sampler.driver_id.id);
 				_production_disposal_returned(sampler.production_disposal_uses);
 				_qualification_freed(sampler.qualification_return);
 				f.samplers_to_dispose_of.pop_front();
@@ -11501,6 +11547,7 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 		Sampler &sampler = frames[p_frame].samplers_to_dispose_of.front()->get();
 
 		driver->sampler_free(sampler.driver_id);
+		_native_disposal_returned(sampler.native_disposal, sampler.native_disposal_rid, sampler.native_disposal_serial, sampler.driver_id.id);
 		_production_disposal_returned(sampler.production_disposal_uses);
 		_qualification_freed(sampler.qualification_return);
 
