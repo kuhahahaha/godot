@@ -1610,17 +1610,17 @@ Error RenderingDevice::_production_output_owned_seal(GDExtensionProductionPhysic
 	return OK;
 }
 
-Error RenderingDevice::_production_output_owned_pipeline_preflight(GDExtensionProductionPhysicalContextRefV1 context, GDExtensionDeviceExit::ProductionOutputPin &pin, uint64_t group) {
+Error RenderingDevice::_production_output_owned_pipeline_preflight(GDExtensionProductionPhysicalContextRefV1 physical_context, GDExtensionDeviceExit::ProductionOutputPin &pin, uint64_t group) {
 	if (!pin.registry || !group) {
 		return ERR_INVALID_PARAMETER;
 	}
 	MutexLock lock(pin.registry->mutex);
 	GDExtensionDeviceExit::ProductionRequest *request = nullptr;
-	const Error ready = _production_output_owned_create_preflight_locked(context, pin, group, 0, request);
+	const Error ready = _production_output_owned_create_preflight_locked(physical_context, pin, group, 0, request);
 	return ready == OK ? _native_disposal_preflight() : ready;
 }
 
-Error RenderingDevice::_production_output_owned_render_pipeline_create(GDExtensionProductionPhysicalContextRefV1 context, GDExtensionDeviceExit::ProductionOutputPin &pin, uint64_t group, uint32_t ordinal, RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState &p_rasterization_state, const PipelineMultisampleState &p_multisample_state, const PipelineDepthStencilState &p_depth_stencil_state, const PipelineColorBlendState &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const Vector<PipelineSpecializationConstant> &p_specialization_constants, RID &r_pipeline) {
+Error RenderingDevice::_production_output_owned_render_pipeline_create(GDExtensionProductionPhysicalContextRefV1 physical_context, GDExtensionDeviceExit::ProductionOutputPin &pin, uint64_t group, uint32_t ordinal, RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState &p_rasterization_state, const PipelineMultisampleState &p_multisample_state, const PipelineDepthStencilState &p_depth_stencil_state, const PipelineColorBlendState &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const Vector<PipelineSpecializationConstant> &p_specialization_constants, RID &r_pipeline) {
 	using namespace GDExtensionDeviceExit;
 	if (!pin.registry || !group || r_pipeline.is_valid()) {
 		return ERR_INVALID_PARAMETER;
@@ -1628,7 +1628,7 @@ Error RenderingDevice::_production_output_owned_render_pipeline_create(GDExtensi
 	Registry &registry = *pin.registry;
 	MutexLock lock(registry.mutex);
 	ProductionRequest *request = nullptr;
-	const Error ready = _production_output_owned_create_preflight_locked(context, pin, group, ordinal, request);
+	const Error ready = _production_output_owned_create_preflight_locked(physical_context, pin, group, ordinal, request);
 	if (ready != OK) {
 		return ready;
 	}
