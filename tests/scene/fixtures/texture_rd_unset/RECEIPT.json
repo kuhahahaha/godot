@@ -1,0 +1,147 @@
+{
+  "scope": "Public TextureRD binding/unset regression on actual main RD; no particle draw or cross-thread timing claim",
+  "source_baseline": "4b7fc19314",
+  "platform": "macos arm64",
+  "renderer": "Forward Mobile",
+  "driver": "Metal 4.0",
+  "device": "Apple M3 Pro (Apple9)",
+  "build_command": "scons -Q platform=macos target=editor tests=yes debug_symbols=no module_particles_runtime_tests_enabled=yes -j3",
+  "build_exit": 0,
+  "run_command": "ANGE_MACOS_BACKGROUND_RENDER=1 bin/godot.macos.editor.arm64 --display-driver macos --rendering-method mobile --rendering-driver metal --audio-driver Dummy --path tests/scene/fixtures/texture_rd_unset --script run.gd",
+  "red_exit": 1,
+  "green_exit": 0,
+  "red": {
+    "cases": [
+      {
+        "checks": 19,
+        "clear_getters": [
+          "RID(3762391351332)",
+          "RID(3762391351332)"
+        ],
+        "failures": [
+          "Cycle 1: Clear native RD getter must be empty",
+          "Cycle 2: Clear native RD getter must be empty"
+        ],
+        "name": "Texture2DRD"
+      },
+      {
+        "checks": 19,
+        "clear_getters": [
+          "RID(3792456122404)",
+          "RID(3792456122404)"
+        ],
+        "failures": [
+          "Cycle 1: Clear native RD getter must be empty",
+          "Cycle 2: Clear native RD getter must be empty"
+        ],
+        "name": "Texture2DArrayRD"
+      },
+      {
+        "checks": 19,
+        "clear_getters": [
+          "RID(3822520893476)",
+          "RID(3822520893476)"
+        ],
+        "failures": [
+          "Cycle 1: Clear native RD getter must be empty",
+          "Cycle 2: Clear native RD getter must be empty"
+        ],
+        "name": "TextureCubemapRD"
+      },
+      {
+        "checks": 19,
+        "clear_getters": [
+          "RID(3852585664548)",
+          "RID(3852585664548)"
+        ],
+        "failures": [
+          "Cycle 1: Clear native RD getter must be empty",
+          "Cycle 2: Clear native RD getter must be empty"
+        ],
+        "name": "TextureCubemapArrayRD"
+      },
+      {
+        "checks": 19,
+        "clear_getters": [
+          "RID(3882650435620)",
+          "RID(3882650435620)"
+        ],
+        "failures": [
+          "Cycle 1: Clear native RD getter must be empty",
+          "Cycle 2: Clear native RD getter must be empty"
+        ],
+        "name": "Texture3DRD"
+      }
+    ],
+    "checks": 95,
+    "failures": [
+      "Texture2DRD: Cycle 1: Clear native RD getter must be empty",
+      "Texture2DRD: Cycle 2: Clear native RD getter must be empty",
+      "Texture2DArrayRD: Cycle 1: Clear native RD getter must be empty",
+      "Texture2DArrayRD: Cycle 2: Clear native RD getter must be empty",
+      "TextureCubemapRD: Cycle 1: Clear native RD getter must be empty",
+      "TextureCubemapRD: Cycle 2: Clear native RD getter must be empty",
+      "TextureCubemapArrayRD: Cycle 1: Clear native RD getter must be empty",
+      "TextureCubemapArrayRD: Cycle 2: Clear native RD getter must be empty",
+      "Texture3DRD: Cycle 1: Clear native RD getter must be empty",
+      "Texture3DRD: Cycle 2: Clear native RD getter must be empty"
+    ],
+    "main_rd": true
+  },
+  "green": {
+    "cases": [
+      {
+        "checks": 19,
+        "clear_getters": [
+          "RID(0)",
+          "RID(0)"
+        ],
+        "failures": [],
+        "name": "Texture2DRD"
+      },
+      {
+        "checks": 19,
+        "clear_getters": [
+          "RID(0)",
+          "RID(0)"
+        ],
+        "failures": [],
+        "name": "Texture2DArrayRD"
+      },
+      {
+        "checks": 19,
+        "clear_getters": [
+          "RID(0)",
+          "RID(0)"
+        ],
+        "failures": [],
+        "name": "TextureCubemapRD"
+      },
+      {
+        "checks": 19,
+        "clear_getters": [
+          "RID(0)",
+          "RID(0)"
+        ],
+        "failures": [],
+        "name": "TextureCubemapArrayRD"
+      },
+      {
+        "checks": 19,
+        "clear_getters": [
+          "RID(0)",
+          "RID(0)"
+        ],
+        "failures": [],
+        "name": "Texture3DRD"
+      }
+    ],
+    "checks": 95,
+    "failures": [],
+    "main_rd": true
+  },
+  "editor_sha256": "110416e08cc2c1fca29e33a49311672e429e8503392a10acc042d132aa4c3f42",
+  "script_sha256": "8c86425ed29074cf0eaea4b101c4034e094ddba007b0e9d34c90c3e28989092b",
+  "fixed_3ee_editor_sha256": "d9f3335d4e1b5693f17ad53560cec977e11abd9f80230273a625a173727216de",
+  "review": "Independent read-only review by /root/review_collision_fixture: no blocker; source ownership retained by caller; existing cross-thread enqueue timing outside scope."
+}

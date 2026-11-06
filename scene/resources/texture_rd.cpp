@@ -83,6 +83,7 @@ void Texture2DRD::set_texture_rd_rid(RID p_texture_rd_rid) {
 	} else if (texture_rid.is_valid()) {
 		RS::get_singleton()->free_rid(texture_rid);
 		texture_rid = RID();
+		texture_rd_rid = RID();
 		size = Size2i();
 
 		notify_property_list_changed();
@@ -186,6 +187,7 @@ void TextureLayeredRD::set_texture_rd_rid(RID p_texture_rd_rid) {
 	} else if (texture_rid.is_valid()) {
 		RS::get_singleton()->free_rid(texture_rid);
 		texture_rid = RID();
+		texture_rd_rid = RID();
 		image_format = Image::FORMAT_MAX;
 		size = Size2i();
 		layers = 0;
@@ -308,6 +310,7 @@ void Texture3DRD::set_texture_rd_rid(RID p_texture_rd_rid) {
 	} else if (texture_rid.is_valid()) {
 		RS::get_singleton()->free_rid(texture_rid);
 		texture_rid = RID();
+		texture_rd_rid = RID();
 		image_format = Image::FORMAT_MAX;
 		size = Vector3i();
 		mipmaps = 0;
