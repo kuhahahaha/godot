@@ -44,6 +44,37 @@
 
 #include <mutex>
 
+Error SkinnedMeshCaptureTestNativeSource::enqueue_packed_skin(RID p_scene, RID p_mesh, RID p_skeleton, const Callable &p_callback, SkinnedMeshCaptureTestNativeSourceObservation &r_observation) {
+	auto *server = RenderingServer::get_singleton();
+	auto *scene = RenderCaptureTestAccess::scene_singleton();
+	auto *storage = RendererRD::MeshStorage::get_singleton();
+	auto *rd = RenderingDevice::get_singleton();
+	uint64_t frame = 0;
+	bool after_views = false;
+	if (!server || !server->is_on_render_thread() || !scene || !storage || !rd || !skinned_mesh_capture_test_phase_capture_window(frame, after_views)) {
+		return ERR_UNAVAILABLE;
+	}
+	const auto *instance = RenderCaptureTestAccess::instance(scene, p_scene);
+	const auto *mesh = RenderCaptureTestAccess::mesh(storage, p_mesh);
+	if (!instance || instance->base != p_mesh || instance->skeleton != p_skeleton || !mesh || mesh->surface_count != 1 || !mesh->surfaces[0] || mesh->surfaces[0]->skin_buffer_size != 48) {
+		return ERR_INVALID_DATA;
+	}
+	if (RenderCaptureTestAccess::draw_list(rd).active || RenderCaptureTestAccess::compute_list(rd).active || RenderCaptureTestAccess::raytracing_list(rd).active) {
+		return ERR_BUSY;
+	}
+	const RID rid = mesh->surfaces[0]->skin_buffer;
+	const auto *buffer = RenderCaptureTestAccess::buffer(rd, rid);
+	if (!buffer || buffer->size != 48 || !buffer->capture_test_allocation_serial || RenderCaptureTestAccess::capture_test_allocation_registry(rd).resolve(buffer->driver_id.id, rid.get_id()) != buffer->capture_test_allocation_serial || RenderCaptureTestAccess::capture_test_allocation_registry(rd).access_escaped(buffer->driver_id.id, buffer->capture_test_allocation_serial)) {
+		return ERR_INVALID_DATA;
+	}
+	const Error error = rd->buffer_get_data_async(rid, p_callback, 0, 48);
+	if (error == OK) {
+		r_observation.skin_allocation = buffer->capture_test_allocation_serial;
+		r_observation.skin_buffer = rid.get_id();
+	}
+	return error;
+}
+
 Error SkinnedMeshCaptureTestNativeSource::set_frozen_palette(RID p_scene, RID p_mesh, RID p_skeleton, const std::array<Transform3D, 2> &p_palette) {
 	auto *server = RenderingServer::get_singleton();
 	auto *scene = RenderCaptureTestAccess::scene_singleton();

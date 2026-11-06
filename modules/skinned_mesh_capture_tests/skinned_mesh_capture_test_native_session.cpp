@@ -231,6 +231,19 @@ void SkinnedMeshCaptureTestNativeSession::consume(Job &p_job) {
 	if (error == OK) {
 		error = pool.enqueue_pair(slot, run, epoch, p_job.request.request, collector, p_job.identities, p_job.enqueued);
 	}
+	if (error == OK && p_job.request.packed_skin) {
+		Callable callback;
+		error = skins.reserve(slot, callback);
+		if (error == OK) {
+			error = SkinnedMeshCaptureTestNativeSource::enqueue_packed_skin(p_job.request.scene, p_job.request.mesh, p_job.request.skeleton, callback, p_job.result.source);
+			if (error != OK) {
+				const Error rejected = skins.reject(slot);
+				if (rejected != OK) {
+					error = rejected;
+				}
+			}
+		}
+	}
 	if (error == OK && p_job.request.image) {
 		auto *rd = RenderingDevice::get_singleton();
 		const RID texture = RenderingServer::get_singleton()->viewport_get_texture(p_job.request.viewport);
@@ -354,7 +367,7 @@ void SkinnedMeshCaptureTestNativeSession::maintain() {
 		}
 		closing |= close_requested;
 	}
-	if (collector.poisoned() || images.poisoned()) {
+	if (collector.poisoned() || images.poisoned() || skins.poisoned()) {
 		fail(ERR_INVALID_DATA);
 		closing = true;
 	}
@@ -402,6 +415,18 @@ void SkinnedMeshCaptureTestNativeSession::maintain() {
 					continue;
 				}
 			}
+			if (job.request.packed_skin) {
+				const Error skin = skins.copy(uint32_t(&job - jobs.data()), job.result.packed_skin);
+				if (skin == ERR_BUSY) {
+					continue;
+				}
+				if (skin != OK) {
+					job.result.error = skin;
+					fail(skin);
+					closing = true;
+					continue;
+				}
+			}
 			if (transport_required) {
 				if (job.publication_attempted) {
 					continue;
@@ -410,7 +435,8 @@ void SkinnedMeshCaptureTestNativeSession::maintain() {
 				const auto id = std::to_string(job.request.request);
 				const bool published_raw = skinned_mesh_capture_test_capture_blob("snapshot-" + id, job.result.snapshot.ptr(), job.result.snapshot.size()) && skinned_mesh_capture_test_capture_blob("consumer-" + id, job.result.consumer.ptr(), job.result.consumer.size());
 				const bool published_image = !job.request.image || (published_raw && skinned_mesh_capture_test_capture_blob("image-" + id, job.result.image.ptr(), job.result.image.size()));
-				if (!published_raw || !published_image) {
+				const bool published_skin = !job.request.packed_skin || (published_raw && skinned_mesh_capture_test_capture_blob("packed-skin-" + id, job.result.packed_skin.ptr(), job.result.packed_skin.size()));
+				if (!published_raw || !published_image || !published_skin) {
 					job.result.error = ERR_UNAVAILABLE;
 					fail(ERR_UNAVAILABLE);
 					closing = true;
@@ -442,11 +468,12 @@ void SkinnedMeshCaptureTestNativeSession::maintain() {
 		cancel_unrecorded();
 		collector.close();
 		images.close();
-		if (deliveries_drained && collector.drained() && images.drained()) {
+		skins.close();
+		if (deliveries_drained && collector.drained() && images.drained() && skins.drained()) {
 			// Last image holder release can follow a duplicate callback after the
 			// first poison sample. Image drain prevents further image callbacks;
 			// raw drain alone does not establish callable-holder release.
-			if (collector.poisoned() || images.poisoned()) {
+			if (collector.poisoned() || images.poisoned() || skins.poisoned()) {
 				fail(ERR_INVALID_DATA);
 			}
 			if (!pool.retirement_required()) {

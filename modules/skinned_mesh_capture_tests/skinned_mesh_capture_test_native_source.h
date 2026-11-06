@@ -31,8 +31,8 @@
 #pragma once
 #include "skinned_mesh_capture_test_rd_pool.h"
 
-#include <vector>
 #include <array>
+#include <vector>
 
 // Read-only original-owner metadata. No borrowed pointer or buffer RID leaves
 // capture_current; the actual source is copied in the same list-closed RT call.
@@ -43,6 +43,7 @@ struct SkinnedMeshCaptureTestNativeSourceObservation {
 	bool after_views = false;
 	uint64_t scene = 0, mesh = 0, mesh_instance = 0, skeleton = 0;
 	uint64_t device = 0, allocation = 0, buffer = 0;
+	uint64_t skin_allocation = 0, skin_buffer = 0;
 	uint64_t dispatch_call_count = 0;
 	uint64_t skeleton_version = 0, mesh_skeleton_version = 0, last_change = 0;
 	uint32_t current = 0, previous = 0;
@@ -63,6 +64,7 @@ class SkinnedMeshCaptureTestNativeSource {
 	static Error capture(RID p_scene, RID p_mesh, RID p_skeleton, SkinnedMeshCaptureTestRDPool &p_pool, uint32_t p_slot, SkinnedMeshCaptureTestNativeSourceObservation &r_observation, const SkinnedMeshCaptureTestDrawObservation *p_draw, bool p_previous);
 
 public:
+	static Error enqueue_packed_skin(RID p_scene, RID p_mesh, RID p_skeleton, const Callable &p_callback, SkinnedMeshCaptureTestNativeSourceObservation &r_observation);
 	static Error set_frozen_palette(RID p_scene, RID p_mesh, RID p_skeleton, const std::array<Transform3D, 2> &p_palette);
 	static uint64_t draw_record_count();
 	static Error select_draw(RID p_scene, RID p_mesh, RID p_skeleton, uint64_t p_epoch, uint64_t p_frame, RID p_viewport, uint64_t p_sequence, uint64_t &r_sequence);

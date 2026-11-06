@@ -87,3 +87,13 @@ TEST_CASE("[P01] Full RGBA8 image blob has exact size digest and line budget") {
 	CHECK(line.find("\"bytes\":\"32768\"") != std::string::npos);
 	CHECK(line.find("c35020473aed1b4642cd726cad727b63fff2824ad68cedd7ffb73c7cbd890479") != std::string::npos);
 }
+
+TEST_CASE("[P01] Packed skin codec accepts exact48 and refuses adjacent lengths") {
+	for (int size : { 47, 48, 49 }) {
+		SkinnedMeshCaptureTestCaptureCodec codec;
+		std::string line;
+		REQUIRE(codec.start({ "run", "S05.N", std::string(64, 'a'), "build" }, line));
+		std::vector<uint8_t> bytes(size, 0);
+		CHECK(codec.blob("packed-skin-1", bytes.data(), bytes.size(), line) == (size == 48));
+	}
+}

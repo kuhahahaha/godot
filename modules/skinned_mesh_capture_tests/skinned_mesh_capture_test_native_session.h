@@ -32,6 +32,7 @@
 #include "skinned_mesh_capture_test_image_collector.h"
 #include "skinned_mesh_capture_test_native_source.h"
 #include "skinned_mesh_capture_test_public_snapshot.h"
+#include "skinned_mesh_capture_test_skin_collector.h"
 
 #include <array>
 #include <memory>
@@ -51,6 +52,7 @@ struct SkinnedMeshCaptureTestSessionRequest {
 	bool after_views = false;
 	bool previous = false;
 	bool image = false;
+	bool packed_skin = false;
 };
 struct SkinnedMeshCaptureTestSessionResult {
 	uint64_t request = 0, frame = 0, publication = 0;
@@ -60,7 +62,7 @@ struct SkinnedMeshCaptureTestSessionResult {
 	bool completed = false;
 	bool canceled = false;
 	SkinnedMeshCaptureTestNativeSourceObservation source;
-	PackedByteArray snapshot, consumer, image;
+	PackedByteArray snapshot, consumer, image, packed_skin;
 	uint64_t image_texture = 0;
 	uint32_t image_format = 0;
 };
@@ -100,6 +102,7 @@ class SkinnedMeshCaptureTestNativeSession : public std::enable_shared_from_this<
 	SkinnedMeshCaptureTestRDPool pool;
 	SkinnedMeshCaptureTestReadbackCollector collector;
 	SkinnedMeshCaptureTestImageCollector images;
+	SkinnedMeshCaptureTestSkinCollector skins;
 	struct Job {
 		SkinnedMeshCaptureTestSessionRequest request;
 		SkinnedMeshCaptureTestSessionResult result;

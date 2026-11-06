@@ -35,8 +35,8 @@
 #include "skinned_mesh_capture_test_phase_observer.h"
 #include "skinned_mesh_capture_test_public_snapshot.h"
 
-#include "core/io/marshalls.h"
 #include "core/crypto/crypto_core.h"
+#include "core/io/marshalls.h"
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "core/os/thread.h"
@@ -46,12 +46,13 @@
 #include "scene/3d/skeleton_3d.h"
 #include "scene/animation/animation_player.h"
 #include "scene/main/viewport.h"
+#include "scene/resources/3d/skin.h"
 #include "scene/resources/animation_library.h"
 #include "scene/resources/environment.h"
 #include "scene/resources/material.h"
 #include "scene/resources/mesh.h"
-#include "scene/resources/3d/skin.h"
 #include "servers/rendering/rendering_server.h"
+
 #include <cmath>
 #if !defined(DISABLE_DEPRECATED) && !defined(PHYSICS_3D_DISABLED)
 #include "scene/3d/physics/physical_bone_simulator_3d.h"
@@ -317,6 +318,7 @@ void SkinnedMeshCaptureTestFixture::frame_pre_draw() {
 	early.mesh = mesh->get_mesh()->get_rid();
 	early.skeleton = mesh->get_skin_reference()->get_skeleton();
 	early.explicit_update = route == "C";
+	early.packed_skin = member == "S05";
 	auto late = early;
 	late.explicit_update = false;
 	late.after_views = true;
@@ -569,6 +571,9 @@ Dictionary SkinnedMeshCaptureTestFixture::take_result() const {
 			capture["completed"] = entry.completed;
 			capture["canceled"] = entry.canceled;
 			capture["image"] = entry.image;
+			capture["packed_skin"] = entry.packed_skin;
+			capture["skin_allocation"] = String::num_uint64(entry.source.skin_allocation);
+			capture["skin_buffer"] = String::num_uint64(entry.source.skin_buffer);
 			capture["image_format"] = entry.image_format;
 			capture["error"] = int(entry.error);
 			capture["snapshot"] = entry.snapshot;

@@ -109,7 +109,7 @@ bool SkinnedMeshCaptureTestCaptureCodec::event(const SkinnedMeshCaptureTestHookE
 	return true;
 }
 bool SkinnedMeshCaptureTestCaptureCodec::blob(const std::string &p_artifact, const uint8_t *p_bytes, size_t p_size, std::string &r_line) {
-	if (!started || sealed || poisoned || !identifier(p_artifact) || !p_bytes || (p_size != 64 && p_size != 32768) || blobs.count(p_artifact) || blobs.size() >= 54) {
+	if (!started || sealed || poisoned || !identifier(p_artifact) || !p_bytes || (p_size != 48 && p_size != 64 && p_size != 32768) || blobs.count(p_artifact) || blobs.size() >= 54) {
 		poisoned = true;
 		return false;
 	}
