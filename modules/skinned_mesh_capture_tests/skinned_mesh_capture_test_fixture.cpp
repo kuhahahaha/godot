@@ -116,7 +116,7 @@ Error SkinnedMeshCaptureTestFixture::build_fixed_scene(const StringName &p_membe
 	arrays[Mesh::ARRAY_VERTEX] = PackedVector3Array{ Vector3(0, 0, 0), Vector3(1, 0, 0), Vector3(0, 1, 0) };
 	arrays[Mesh::ARRAY_BONES] = PackedInt32Array{ 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 	arrays[Mesh::ARRAY_WEIGHTS] = PackedFloat32Array{ 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0 };
-	if (p_member == "S05" && condition != "root_rotation") {
+	if (p_member == "S05" && condition == "mixed_weights_Q") {
 		arrays[Mesh::ARRAY_BONES] = PackedInt32Array{ 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0 };
 		arrays[Mesh::ARRAY_WEIGHTS] = PackedFloat32Array{ 1, 0, 0, 0, 1, 0, 0, 0, 0.5f + 1.0f / 65536.0f, 0.5f, 0, 0 };
 	}
@@ -235,7 +235,7 @@ Error SkinnedMeshCaptureTestFixture::begin(StringName p_member, StringName p_rou
 	if (!known_member || (p_route != "P" && p_route != "N" && p_route != "C") || (p_member == "S07" && p_route == "P")) {
 		return reject(ERR_INVALID_PARAMETER, "P01_STATE");
 	}
-	if ((!p_condition.is_empty() && p_member != "S05") || (p_member == "S05" && !p_condition.is_empty() && p_condition != "mixed_weights_Q" && p_condition != "root_rotation")) {
+	if ((!p_condition.is_empty() && p_member != "S05") || (p_member == "S05" && !p_condition.is_empty() && p_condition != "mixed_weights_Q" && p_condition != "root_rotation" && p_condition != "nonuniform_source")) {
 		return reject(ERR_INVALID_PARAMETER, "P01_STATE");
 	}
 	if (!RenderingServer::get_singleton()->get_rendering_device()) {
@@ -389,6 +389,13 @@ Error SkinnedMeshCaptureTestFixture::advance_action(int32_t p_action_index) {
 			return reject(ERR_INVALID_DATA, "P01_SOURCE");
 		}
 		if (p_action_index == 0) {
+			if (member == "S05" && condition == "nonuniform_source") {
+				auto *source = Object::cast_to<Node3D>(ObjectDB::get_instance(scene_nodes[0]));
+				if (!source) {
+					return reject(ERR_INVALID_DATA, "P01_SOURCE");
+				}
+				source->set_transform(Transform3D(Basis().scaled(Vector3(2, 1, 1)), Vector3(2, -1, 0)));
+			}
 			player->advance(member == "S05" && condition == "mixed_weights_Q" ? 2.0 : 1.0);
 		} else {
 			player->seek(1.0, true);
