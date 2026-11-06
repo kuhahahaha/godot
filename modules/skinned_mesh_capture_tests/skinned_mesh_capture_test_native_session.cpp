@@ -199,6 +199,8 @@ void SkinnedMeshCaptureTestNativeSession::record(Job &p_job) {
 	Error error;
 	if (p_job.request.public_source) {
 		error = pool.record_public(slot, p_job.request.public_snapshot);
+	} else if (p_job.request.explicit_update) {
+		error = SkinnedMeshCaptureTestNativeSource::update_and_capture_current(p_job.request.scene, p_job.request.mesh, p_job.request.skeleton, pool, slot, p_job.result.source);
 	} else if (p_job.request.viewport.is_valid()) {
 		uint64_t sequence = 0;
 		error = SkinnedMeshCaptureTestNativeSource::select_draw(p_job.request.scene, p_job.request.mesh, p_job.request.skeleton, epoch, p_job.result.frame, p_job.request.viewport, 0, sequence);

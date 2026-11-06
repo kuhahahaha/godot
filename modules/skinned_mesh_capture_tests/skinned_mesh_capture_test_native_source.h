@@ -68,6 +68,7 @@ public:
 	static std::vector<SkinnedMeshCaptureTestDrawObservation> draw_observations();
 	static Error capture_selected(RID p_scene, RID p_mesh, RID p_skeleton, uint64_t p_draw_sequence, bool p_previous, SkinnedMeshCaptureTestRDPool &p_pool, uint32_t p_slot, SkinnedMeshCaptureTestNativeSourceObservation &r_observation);
 	static Error capture_current(RID p_scene, RID p_mesh, RID p_skeleton, SkinnedMeshCaptureTestRDPool &p_pool, uint32_t p_slot, SkinnedMeshCaptureTestNativeSourceObservation &r_observation);
+	static Error update_and_capture_current(RID p_scene, RID p_mesh, RID p_skeleton, SkinnedMeshCaptureTestRDPool &p_pool, uint32_t p_slot, SkinnedMeshCaptureTestNativeSourceObservation &r_observation);
 };
 
 // Stack scope at the original viewport draw entry, including early returns.

@@ -233,6 +233,29 @@ std::vector<SkinnedMeshCaptureTestDrawObservation> SkinnedMeshCaptureTestNativeS
 Error SkinnedMeshCaptureTestNativeSource::capture_current(RID p_scene, RID p_mesh, RID p_skeleton, SkinnedMeshCaptureTestRDPool &p_pool, uint32_t p_slot, SkinnedMeshCaptureTestNativeSourceObservation &r_observation) {
 	return capture(p_scene, p_mesh, p_skeleton, p_pool, p_slot, r_observation, nullptr, false);
 }
+Error SkinnedMeshCaptureTestNativeSource::update_and_capture_current(RID p_scene, RID p_mesh, RID p_skeleton, SkinnedMeshCaptureTestRDPool &p_pool, uint32_t p_slot, SkinnedMeshCaptureTestNativeSourceObservation &r_observation) {
+	auto *rd = RenderingDevice::get_singleton();
+	auto *server = RenderingServer::get_singleton();
+	auto *scene = RenderCaptureTestAccess::scene_singleton();
+	auto *storage = RendererRD::MeshStorage::get_singleton();
+	uint64_t frame = 0;
+	bool after_views = false;
+	if (!rd || !server || !server->is_on_render_thread() || !scene || !storage || !skinned_mesh_capture_test_phase_capture_window(frame, after_views) || after_views) {
+		return ERR_UNAVAILABLE;
+	}
+	if (RenderCaptureTestAccess::draw_list(rd).active || RenderCaptureTestAccess::compute_list(rd).active || RenderCaptureTestAccess::raytracing_list(rd).active) {
+		return ERR_BUSY;
+	}
+	const auto *instance = RenderCaptureTestAccess::instance(scene, p_scene);
+	if (!instance || instance->base_type != RSE::INSTANCE_MESH || instance->base != p_mesh || instance->skeleton != p_skeleton || instance->mesh_instance.is_null()) {
+		return ERR_INVALID_DATA;
+	}
+	// Use the original global dirty queue. Its observer retains every actual
+	// dispatch, including neighbors; C does not isolate or replace that queue.
+	storage->mesh_instance_check_for_update(instance->mesh_instance);
+	storage->update_mesh_instances();
+	return capture_current(p_scene, p_mesh, p_skeleton, p_pool, p_slot, r_observation);
+}
 Error SkinnedMeshCaptureTestNativeSource::capture_selected(RID p_scene, RID p_mesh, RID p_skeleton, uint64_t p_draw_sequence, bool p_previous, SkinnedMeshCaptureTestRDPool &p_pool, uint32_t p_slot, SkinnedMeshCaptureTestNativeSourceObservation &r_observation) {
 	SkinnedMeshCaptureTestDrawObservation selected;
 	bool found = false;

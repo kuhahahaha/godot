@@ -44,6 +44,7 @@ struct SkinnedMeshCaptureTestSessionRequest {
 	uint64_t request = 0;
 	RID scene, mesh, skeleton, viewport;
 	bool public_source = false;
+	bool explicit_update = false;
 	SkinnedMeshCaptureTestPublicSnapshot public_snapshot;
 	bool after_views = false;
 	bool previous = false;

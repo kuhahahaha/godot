@@ -228,7 +228,7 @@ Error SkinnedMeshCaptureTestFixture::begin(StringName p_member, StringName p_rou
 	}
 	// Only the implemented fixed episode may acquire. Other required members
 	// stay explicit unavailable until their original action schedules are wired.
-	if (p_member != "S02" || p_route != "N") {
+	if (p_member != "S02" || (p_route != "N" && p_route != "C")) {
 		return reject(ERR_UNAVAILABLE, "P01_DEPENDENCY_ACQUISITION");
 	}
 	route = p_route;
@@ -310,7 +310,9 @@ void SkinnedMeshCaptureTestFixture::frame_pre_draw() {
 	early.scene = mesh->get_instance();
 	early.mesh = mesh->get_mesh()->get_rid();
 	early.skeleton = mesh->get_skin_reference()->get_skeleton();
+	early.explicit_update = route == "C";
 	auto late = early;
+	late.explicit_update = false;
 	late.after_views = true;
 	late.image = true;
 	late.viewport = view->get_viewport_rid();
