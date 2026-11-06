@@ -315,6 +315,12 @@ public:
 			CHECK(moved.release_checked() == OK);
 			CHECK(cell.pin.is_empty());
 			CHECK_FALSE(o.slot_has_custody(0));
+			// A returned wrapper cannot consume another custody edge or mutate
+			// the original request accounting on a duplicate release.
+			CHECK(moved.release_checked() == ERR_DOES_NOT_EXIST);
+			CHECK(moved.is_empty());
+			CHECK(cell.pin.is_empty());
+			CHECK_FALSE(o.slot_has_custody(0));
 		} else if (mode == ExternalCustodyTestMode::SURFACE_RETURN) {
 			REQUIRE(geometry != nullptr);
 			slot.surfaces = memnew_arr(ExternalOutputOwner::SurfaceBinding, 1);
@@ -372,6 +378,13 @@ public:
 				cell.state = ExternalOutputOwner::ReadCell::State::UNUSED;
 			} else {
 				CHECK(moved.cancel_before_draw() == OK);
+				CHECK(cell.pin.is_empty());
+				CHECK(cell.state == ExternalOutputOwner::ReadCell::State::RETURNED);
+				CHECK_FALSE(o.slot_has_custody(0));
+				// Cancellation is terminal for this binding; retrying must be
+				// side-effect free and must not unpin a different read cell.
+				CHECK(moved.cancel_before_draw() == ERR_DOES_NOT_EXIST);
+				CHECK(moved.is_empty());
 				CHECK(cell.pin.is_empty());
 				CHECK(cell.state == ExternalOutputOwner::ReadCell::State::RETURNED);
 				CHECK_FALSE(o.slot_has_custody(0));
