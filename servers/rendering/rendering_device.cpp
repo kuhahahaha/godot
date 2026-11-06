@@ -10324,14 +10324,17 @@ void RenderingDevice::free_rid(RID p_rid) {
 		}
 	} free_scope{ *this, p_rid, immutable_lock };
 
-	auto *buffer = storage_buffer_owner.get_or_null(p_rid);
-	auto *shader = shader_owner.get_or_null(p_rid);
-	auto *pipeline = compute_pipeline_owner.get_or_null(p_rid);
-	auto *texture = texture_owner.get_or_null(p_rid);
-	auto *sampler = sampler_owner.get_or_null(p_rid);
-	auto *raster_pipeline = render_pipeline_owner.get_or_null(p_rid);
-	auto *framebuffer = framebuffer_owner.get_or_null(p_rid);
-	ERR_FAIL_COND_MSG(!qualification_retiring && ((raster_pipeline && raster_pipeline->qualification_return) || (framebuffer && framebuffer->qualification_return) || (buffer && buffer->qualification_return) || (shader && shader->qualification_return) || (pipeline && pipeline->qualification_return) || (texture && texture->qualification_return) || (sampler && sampler->qualification_return) || (uniform_set_owner.get_or_null(p_rid) && uniform_set_owner.get_or_null(p_rid)->qualification_return)), "Qualification resources require their original owner retirement acknowledgment.");
+	// Cross-owner probes must reject foreign validators before inspecting a
+	// possibly uninitialized slot reserved by asynchronous native creation.
+	auto *buffer = storage_buffer_owner.owns(p_rid) ? storage_buffer_owner.get_or_null(p_rid) : nullptr;
+	auto *shader = shader_owner.owns(p_rid) ? shader_owner.get_or_null(p_rid) : nullptr;
+	auto *pipeline = compute_pipeline_owner.owns(p_rid) ? compute_pipeline_owner.get_or_null(p_rid) : nullptr;
+	auto *texture = texture_owner.owns(p_rid) ? texture_owner.get_or_null(p_rid) : nullptr;
+	auto *sampler = sampler_owner.owns(p_rid) ? sampler_owner.get_or_null(p_rid) : nullptr;
+	auto *raster_pipeline = render_pipeline_owner.owns(p_rid) ? render_pipeline_owner.get_or_null(p_rid) : nullptr;
+	auto *framebuffer = framebuffer_owner.owns(p_rid) ? framebuffer_owner.get_or_null(p_rid) : nullptr;
+	auto *uniform_set = uniform_set_owner.owns(p_rid) ? uniform_set_owner.get_or_null(p_rid) : nullptr;
+	ERR_FAIL_COND_MSG(!qualification_retiring && ((raster_pipeline && raster_pipeline->qualification_return) || (framebuffer && framebuffer->qualification_return) || (buffer && buffer->qualification_return) || (shader && shader->qualification_return) || (pipeline && pipeline->qualification_return) || (texture && texture->qualification_return) || (sampler && sampler->qualification_return) || (uniform_set && uniform_set->qualification_return)), "Qualification resources require their original owner retirement acknowledgment.");
 	ERR_FAIL_COND_MSG(texture && texture->qualification_return && texture->transfer_worker_index >= 0, "Qualification texture has an unsettled transfer worker.");
 	ERR_FAIL_COND_MSG(_qualification_resource_busy(p_rid), "Qualification ticket still owns this resource or one of its dependents.");
 	bool *retiring = nullptr;
@@ -10370,7 +10373,7 @@ thread_local void (*test_uniform_set_after_rid_free)(RenderingDevice *) = nullpt
 
 void RenderingDevice::_free_internal(RID p_id, const MutexLock<Mutex> &p_lock) {
 	ERR_FAIL_COND(_qualification_resource_busy(p_id));
-	auto *qualified_texture = texture_owner.get_or_null(p_id);
+	auto *qualified_texture = texture_owner.owns(p_id) ? texture_owner.get_or_null(p_id) : nullptr;
 	ERR_FAIL_COND(qualified_texture && qualified_texture->qualification_return && qualified_texture->transfer_worker_index >= 0);
 #ifdef DEV_ENABLED
 	String resource_name;

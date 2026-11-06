@@ -39,6 +39,7 @@ TEST_FORCE_LINK(test_native_disposal)
 class TestNativeDisposalAccess {
 public:
 	static void pipeline_rid_capacity();
+	static void foreign_pending_owner_lookup();
 	static void attach(RenderingDevice &p_rd, RenderingDeviceDriver &p_driver) {
 		p_rd.driver = &p_driver;
 		p_rd.is_main_instance = true;
@@ -600,4 +601,83 @@ void TestNativeDisposalAccess::pipeline_rid_capacity() {
 	rd.framebuffer_formats.clear();
 	rd.framebuffer_format_cache.clear();
 	detach(rd);
+}
+
+void TestNativeDisposalAccess::foreign_pending_owner_lookup() {
+	using namespace TestNativeDisposal;
+	RenderingDevice rd;
+	Driver driver;
+	attach(rd, driver);
+	struct Errors {
+		uint32_t count = 0;
+		static void capture(void *data, const char *, const char *, int, const char *, const char *, bool, ErrorHandlerType type) {
+			if (type == ERR_HANDLER_ERROR) {
+				++static_cast<Errors *>(data)->count;
+			}
+		}
+	} errors;
+	ErrorHandlerList handler{ &Errors::capture, &errors };
+	add_error_handler(&handler);
+	auto exercise = [&](auto &pending_owner, const auto &empty_resource) {
+		// The pending foreign slot has the same table index as the live buffer.
+		// Its validator belongs to another RID: lookup must not inspect it as ours.
+		const RID pending = pending_owner.allocate_rid();
+		const RID pending_child = pending_owner.allocate_rid();
+		CHECK(pending.is_valid());
+		CHECK(pending_child.is_valid());
+		NativeDisposalWitness witness, child_witness;
+		RID buffer, child;
+		CHECK(create(rd, buffer, witness) == OK);
+		CHECK(create(rd, child, child_witness) == OK);
+		CHECK(uint32_t(pending_child.get_id()) == uint32_t(child.get_id()));
+		rd._add_dependency(child, buffer);
+		CHECK(uint32_t(pending.get_id()) == uint32_t(buffer.get_id()));
+		CHECK_FALSE(pending_owner.owns(buffer));
+		CHECK_FALSE(rd.native_immutable_resource_is_held(buffer));
+		CHECK_FALSE(rd.native_immutable_resource_is_retiring(buffer));
+		uint32_t kind;
+		uint64_t serial, driver_id;
+		CHECK(rd._production_disposal_head(buffer, kind, serial, driver_id) != nullptr);
+		CHECK_FALSE(rd._qualification_resource_busy(buffer));
+		// Acquire the child's real dependency closure, then retire the held parent.
+		// Both slots must remain live until this original hold releases them.
+		RenderingDevice::NativeImmutableHold hold;
+		CHECK(rd.native_immutable_hold_acquire(VectorView<RID>(&child, 1), hold, 4) == OK);
+		CHECK(rd.native_immutable_resource_is_held(buffer));
+		CHECK(rd.native_immutable_resource_is_held(child));
+		const int before_frees = driver.frees;
+		rd.free_rid(buffer);
+		CHECK(rd.native_immutable_resource_is_retiring(buffer));
+		CHECK(rd.native_immutable_resource_is_retiring(child));
+		dispose(rd);
+		CHECK(driver.frees == before_frees);
+		CHECK(rd.native_immutable_hold_release(hold) == OK);
+		dispose(rd);
+		CHECK(driver.frees == before_frees + 2);
+		CHECK(rd.dependency_map.is_empty());
+		CHECK(rd.reverse_dependency_map.is_empty());
+		CHECK(errors.count == 0);
+		// Matching pending RIDs still belong to their owner; the init guard stays.
+		ERR_PRINT_OFF;
+		CHECK(pending_owner.get_or_null(pending) == nullptr);
+		ERR_PRINT_ON;
+		CHECK(errors.count == 1);
+		errors.count = 0;
+		pending_owner.initialize_rid(pending, empty_resource);
+		pending_owner.free(pending);
+		pending_owner.initialize_rid(pending_child, empty_resource);
+		pending_owner.free(pending_child);
+	};
+	exercise(rd.shader_owner, RenderingDevice::Shader());
+	exercise(rd.texture_owner, RenderingDevice::Texture());
+	exercise(rd.vertex_buffer_owner, RenderingDevice::Buffer());
+	exercise(rd.uniform_set_owner, RenderingDevice::UniformSet());
+	remove_error_handler(&handler);
+	CHECK(driver.creates == 8);
+	CHECK(driver.frees == 8);
+	detach(rd);
+}
+
+TEST_CASE("[RenderingDevice][NativeDisposal] pending foreign RID slots do not poison native retirement") {
+	TestNativeDisposalAccess::foreign_pending_owner_lookup();
 }
