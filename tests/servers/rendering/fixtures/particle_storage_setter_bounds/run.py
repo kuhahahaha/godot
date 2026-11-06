@@ -46,10 +46,17 @@ def main() -> int:
 #define ERR_FAIL_NULL(p) if (!(p)) return
 #define ERR_FAIL_INDEX(i, max) if ((i) < 0 || (i) >= (max)) return
 #define ERR_FAIL_COND(cond) if (cond) return
+#define ERR_FAIL_COND_MSG(cond, msg) if (cond) return
 namespace RSE {
 """ + enum_defs + r"""
 }
+struct Dependency {
+    enum { DEPENDENCY_CHANGED_PARTICLES };
+    void changed_notify(int) {}
+};
 struct Particles {
+    bool external = false;
+    Dependency dependency;
     RSE::ParticlesTransformAlign transform_align = RSE::PARTICLES_TRANSFORM_ALIGN_DISABLED;
     RSE::ParticlesTransformAlignCustomSrc transform_align_src = RSE::PARTICLES_ALIGN_CHANNEL_FILTER_DISABLED;
     RSE::ParticlesTransformAlignAxis transform_align_axis = RSE::PARTICLES_ALIGN_AXIS_X;

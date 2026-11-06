@@ -636,6 +636,7 @@ void ParticlesStorage::particles_set_draw_passes(RID p_particles, int p_passes) 
 	ERR_FAIL_COND(p_passes < 1);
 
 	particles->draw_passes.resize(p_passes);
+	particles->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_PARTICLES);
 }
 
 void ParticlesStorage::particles_set_draw_pass_mesh(RID p_particles, int p_pass, RID p_mesh) {
@@ -644,6 +645,7 @@ void ParticlesStorage::particles_set_draw_pass_mesh(RID p_particles, int p_pass,
 	ERR_FAIL_COND_MSG(particles->external, "ExternalOutput particles require their immutable output owner.");
 	ERR_FAIL_INDEX(p_pass, particles->draw_passes.size());
 	particles->draw_passes.write[p_pass] = p_mesh;
+	particles->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_PARTICLES);
 }
 
 void ParticlesStorage::particles_restart(RID p_particles) {
