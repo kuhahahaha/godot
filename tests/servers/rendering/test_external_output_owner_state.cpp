@@ -369,6 +369,29 @@ public:
 			CHECK(cell.consumer == &moved);
 			o.withdraw();
 			if (mode == ExternalCustodyTestMode::READ_UNKNOWN) {
+				// Exercise only the original return guard's finite state input;
+				// these markers are not evidence that a native draw was recorded.
+				// The pin itself is the real borrowed pin supplied by Registry.
+				const uint64_t original_serial = cell.serial;
+				for (auto state : { ExternalOutputOwner::ReadCell::State::RECORDED, ExternalOutputOwner::ReadCell::State::UNKNOWN }) {
+					cell.state = state;
+					CHECK(moved.cancel_before_draw() == ERR_BUSY);
+					CHECK_FALSE(moved.is_empty());
+					CHECK(cell.consumer == &moved);
+					CHECK(cell.serial == original_serial);
+					CHECK(cell.state == state);
+					CHECK_FALSE(cell.pin.is_empty());
+					CHECK(o.slot_has_custody(0));
+					CHECK(o.return_slot_pin(0) == ERR_BUSY);
+					CHECK(o.return_reserved_cells() == ERR_BUSY);
+					// Repeated withdrawal closes only future work. It cannot
+					// settle the retained read or erase its consumer directory.
+					o.withdraw();
+					CHECK(cell.consumer == &moved);
+					CHECK(cell.serial == original_serial);
+					CHECK(cell.state == state);
+					CHECK_FALSE(cell.pin.is_empty());
+				}
 				CHECK(o.read_return(moved, true) == OK);
 				CHECK(moved.is_empty());
 				CHECK(cell.state == ExternalOutputOwner::ReadCell::State::UNKNOWN);
