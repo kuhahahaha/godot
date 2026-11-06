@@ -42,3 +42,18 @@ for height in (None, -0.5, 0.0, 0.5):
                 not math.isclose(samples[0].get("first_raw", float("nan")), 0.75, abs_tol=0.001) or \
                 not math.isclose(samples[0].get("second_raw", float("nan")), expected, abs_tol=0.001):
             sys.exit(f"Missing independent D32 samples on {renderer}, height={height}")
+
+# Verify production capture uses the live collider extents and transform, not fixed defaults.
+for method, renderer in (("mobile", "Forward Mobile"), ("forward_plus", "Forward+")):
+    command = [str(ROOT / "bin/godot.macos.editor.arm64"), "--display-driver", "macos", "--rendering-driver", "metal", "--rendering-method", method, "--path", str(HERE), "--script", "res://run.gd"]
+    env = os.environ.copy()
+    env.update({"ANGE_HEIGHTFIELD_GEOMETRY": "1", "ANGE_HEIGHTFIELD_GEOMETRY_HEIGHT": "0.25", "ANGE_HEIGHTFIELD_EXTENTS_Y": "2.0", "ANGE_HEIGHTFIELD_TRANSFORM_Y": "-0.5"})
+    result = subprocess.run(command, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=90)
+    print(f"HEIGHTFIELD_NATIVE_PARAMS renderer={method}")
+    print(result.stdout)
+    if result.returncode != 0 or "ERROR:" in result.stdout or "WARNING:" in result.stdout or f"Metal 4.0 - {renderer} - Using Device #0: Apple" not in result.stdout:
+        sys.exit(f"Parameterized capture failed on {renderer}")
+    samples = [json.loads(line.split("HEIGHTFIELD_CLEAR_NATIVE_PASS ", 1)[1]) for line in result.stdout.splitlines() if "HEIGHTFIELD_CLEAR_NATIVE_PASS " in line]
+    expected = (0.25 - (-0.5) + 2.0) / 4.0
+    if len(samples) != 1 or not samples[0].get("pass") or not math.isclose(samples[0].get("second_raw", float("nan")), expected, abs_tol=0.001):
+        sys.exit(f"Missing parameterized extents/transform sample on {renderer}")

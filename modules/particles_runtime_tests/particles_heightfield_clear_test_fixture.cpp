@@ -14,6 +14,7 @@
 void ParticlesHeightfieldClearTestFixture::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("run"), &ParticlesHeightfieldClearTestFixture::run);
 	ClassDB::bind_method(D_METHOD("run_geometry", "height"), &ParticlesHeightfieldClearTestFixture::run_geometry);
+	ClassDB::bind_method(D_METHOD("run_geometry_params", "height", "extents_y", "transform_y"), &ParticlesHeightfieldClearTestFixture::run_geometry_params);
 	ClassDB::bind_method(D_METHOD("result"), &ParticlesHeightfieldClearTestFixture::result);
 }
 
@@ -23,7 +24,13 @@ Dictionary ParticlesHeightfieldClearTestFixture::result() const {
 }
 
 Error ParticlesHeightfieldClearTestFixture::run_geometry(float p_height) {
+	return run_geometry_params(p_height, 1.0f, 0.0f);
+}
+
+Error ParticlesHeightfieldClearTestFixture::run_geometry_params(float p_height, float p_extents_y, float p_transform_y) {
 	geometry_height = p_height;
+	capture_extents_y = p_extents_y;
+	capture_transform_y = p_transform_y;
 	geometry_capture = true;
 	return run();
 }
@@ -46,7 +53,7 @@ Error ParticlesHeightfieldClearTestFixture::run() {
 	collision = storage->particles_collision_allocate();
 	storage->particles_collision_initialize(collision);
 	storage->particles_collision_set_collision_type(collision, RSE::PARTICLES_COLLISION_TYPE_HEIGHTFIELD_COLLIDE);
-	storage->particles_collision_set_box_extents(collision, Vector3(1, 1, 1));
+	storage->particles_collision_set_box_extents(collision, Vector3(1, capture_extents_y, 1));
 	storage->particles_collision_set_height_field_resolution(collision, RSE::PARTICLES_COLLISION_HEIGHTFIELD_RESOLUTION_256);
 	first_instance = storage->particles_collision_instance_create(collision);
 	second_instance = storage->particles_collision_instance_create(collision);
@@ -96,7 +103,9 @@ Error ParticlesHeightfieldClearTestFixture::run() {
 		geometry->set_transform(transform, surface.aabb, transform.xform(surface.aabb));
 		instances.push_back(geometry);
 	}
-	scene->render_particle_collider_heightfield(second_instance, Transform3D(), instances);
+	Transform3D capture_transform;
+	capture_transform.origin.y = capture_transform_y;
+	scene->render_particle_collider_heightfield(second_instance, capture_transform, instances);
 
 	const auto *first_data = storage->particles_collision_instance_owner.get_or_null(first_instance);
 	const auto *second_data = storage->particles_collision_instance_owner.get_or_null(second_instance);
@@ -181,6 +190,7 @@ void ParticlesHeightfieldClearTestFixture::sample_done(const PackedByteArray &p_
 		MutexLock lock(result_mutex);
 		result_data["first_raw"] = raw[0];
 		result_data["second_raw"] = raw[1];
-		result_data["pass"] = p_bytes.size() == 8 && raw[0] >= 0.749f && raw[0] <= 0.751f && Math::abs(raw[1] - (geometry_capture ? (geometry_height + 1.0f) * 0.5f : 0.0f)) <= 0.001f;
+		const float expected = geometry_capture ? (geometry_height - capture_transform_y + capture_extents_y) / (2.0f * capture_extents_y) : 0.0f;
+		result_data["pass"] = p_bytes.size() == 8 && raw[0] >= 0.749f && raw[0] <= 0.751f && Math::abs(raw[1] - expected) <= 0.001f;
 	}
 }

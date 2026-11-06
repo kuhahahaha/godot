@@ -14,6 +14,8 @@ func _initialize() -> void:
 func _start() -> void:
 	RenderingServer.set_render_loop_enabled(false)
 	var method := "run_geometry" if OS.get_environment("ANGE_HEIGHTFIELD_GEOMETRY") == "1" else "run"
+	if method == "run_geometry" and OS.get_environment("ANGE_HEIGHTFIELD_EXTENTS_Y") != "":
+		method = "run_geometry_params"
 	if not fixture.has_method(method):
 		print("HEIGHTFIELD_GEOMETRY_MISSING ", method)
 		quit(1)
@@ -21,6 +23,8 @@ func _start() -> void:
 	var callback := Callable(fixture, method)
 	if method == "run_geometry":
 		callback = callback.bind(float(OS.get_environment("ANGE_HEIGHTFIELD_GEOMETRY_HEIGHT")))
+	elif method == "run_geometry_params":
+		callback = callback.bind(float(OS.get_environment("ANGE_HEIGHTFIELD_GEOMETRY_HEIGHT")), float(OS.get_environment("ANGE_HEIGHTFIELD_EXTENTS_Y")), float(OS.get_environment("ANGE_HEIGHTFIELD_TRANSFORM_Y")))
 	RenderingServer.call_on_render_thread(callback)
 
 func _process(_delta: float) -> bool:
