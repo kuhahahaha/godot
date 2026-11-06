@@ -76,6 +76,7 @@ public:
 	RID storage_rid(uint32_t) const;
 	uint32_t storage_bytes(uint32_t) const;
 	uint64_t storage_total_bytes() const;
+	NativeDisposalWitness &storage_witness(uint32_t);
 	bool storage_tokens_empty() const;
 	bool storage_empty() const;
 	void discard_unattempted_storage();
@@ -89,6 +90,9 @@ public:
 	bool history_cleared() const;
 	bool released() const;
 };
+// Actual native mismatch injection and exact test-only undo, on the original RT.
+Error external_storage_poison_and_free(RenderingDevice &, NativeDisposalWitness &, NativeDisposalWitness::Report &);
+Error external_storage_restore_poison(RenderingDevice &, NativeDisposalWitness &, const NativeDisposalWitness::Report &);
 // Opaque original MaterialStorage/ShaderRD test profile; creates no admission.
 void *pipeline_material_profile_create(RID);
 Error pipeline_material_profile_acquire(void *, RID, uint32_t, MaterialStorage::NativeMaterialHold &);

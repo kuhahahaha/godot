@@ -4787,12 +4787,19 @@ struct Access {
 		RendererRD::ExternalLinkedOwnerTest *native = nullptr;
 		uint32_t capacity = 0, fail_at = 0, calls = 0;
 		bool insufficient = false, invalid_extent = false, foreign_before_allocate = false, foreign_turn = false;
+		bool integrated_unknown = false, restore_unknown = false;
+		NativeDisposalWitness::Report poisoned;
 		static void receive(void *userdata, GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionOperationV1 *) {
 			using namespace GDExtensionDeviceExit;
 			auto &test = *static_cast<OwnedStorageProbe *>(userdata);
 			auto &fixture = *test.fixture;
 			auto &native = *test.native;
 			++test.calls;
+			if (test.restore_unknown) {
+				REQUIRE(RendererRD::external_storage_restore_poison(fixture.rd, native.storage_witness(2), test.poisoned) == OK);
+				CHECK(fixture.rd._production_output_owned_storage_contains(native.pin(0), native.storage_group(), native.storage_rid(2)));
+				return;
+			}
 			if (test.foreign_turn) {
 				const GDExtensionProductionRequestRefV1 original = { fixture.instance, fixture.request->serial };
 				REQUIRE(ref.handle_serial != original.handle_serial);
@@ -4914,9 +4921,16 @@ struct Access {
 			CHECK(native.allocate_storage(context) != OK);
 			CHECK(fixture.driver.output_storage_attempts == attempts);
 			CHECK(fixture.driver.output_storage_frees == 0);
+			if (test.integrated_unknown) {
+				REQUIRE(RendererRD::external_storage_poison_and_free(fixture.rd, native.storage_witness(2), test.poisoned) == ERR_INVALID_DATA);
+				CHECK(test.poisoned.rid == native.storage_rid(2).get_id());
+				CHECK(test.poisoned.serial != 0);
+				CHECK_FALSE(fixture.rd._production_output_owned_storage_contains(native.pin(0), native.storage_group(), native.storage_rid(2)));
+				CHECK(fixture.driver.output_storage_frees == 0);
+			}
 		}
 	};
-	static void owned_storage_observe(uint32_t capacity, uint32_t fail_at = 0, bool insufficient = false, bool invalid_extent = false, bool foreign_before_allocate = false) {
+	static void owned_storage_observe(uint32_t capacity, uint32_t fail_at = 0, bool insufficient = false, bool invalid_extent = false, bool foreign_before_allocate = false, bool integrated_unknown = false) {
 		using namespace GDExtensionDeviceExit;
 		auto *server = ordinal_server();
 		if (!server || !check_step(RendererRD::ParticlesStorage::get_singleton() == nullptr)) {
@@ -4940,6 +4954,7 @@ struct Access {
 		probe.insufficient = insufficient;
 		probe.invalid_extent = invalid_extent;
 		probe.foreign_before_allocate = foreign_before_allocate;
+		probe.integrated_unknown = integrated_unknown;
 		REQUIRE(ordinal_initialize(fixture, server, plan, &OwnedStorageProbe::receive, &probe) == OK);
 		fixture.driver.output_storage_factory = true;
 		fixture.driver.output_storage_fail_at = fail_at;
@@ -5051,6 +5066,60 @@ struct Access {
 					CHECK(fixture.driver.output_storage_live[role] == live[role]);
 				}
 			}
+		}
+		if (integrated_unknown) {
+			const uint64_t group = native.storage_group();
+			const auto next_group = request.next_disposal_group_serial;
+			void *const arena = request.attachment->arena;
+			const auto children = fixture.holder.production_children;
+			const auto attempts = fixture.driver.output_storage_attempts;
+			RID resources[7];
+			bool live[7];
+			for (uint32_t role = 0; role < 7; ++role) {
+				resources[role] = native.storage_rid(role);
+				live[role] = fixture.driver.output_storage_live[role];
+			}
+			uint32_t mismatch_turns = 0;
+			for (uint32_t turn = 0; turn < 32 && mismatch_turns < 2; ++turn) {
+				const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+				ProductionControlOutput output{};
+				uint64_t serial = 0;
+				REQUIRE(fixture.registry.production_control_accept(ref, ProductionControlKind::OBSERVE, &serial, &budget) == OK);
+				REQUIRE(fixture.registry.production_control_schedule(ref, serial) == OK);
+				server->sync();
+				REQUIRE(fixture.registry.production_control_consume(ref, serial, &output) == OK);
+				CHECK((output.result.native_error == OK || output.result.native_error == ERR_BUSY || output.result.native_error == ERR_INVALID_DATA));
+				mismatch_turns += output.result.native_error == ERR_INVALID_DATA;
+				CHECK_FALSE(output.output_generation.native_released);
+				CHECK(output.service_usage.passes <= 1);
+				CHECK(output.service_usage.receipts <= 1);
+				CHECK(native.storage_group() == group);
+				CHECK_FALSE(native.storage_empty());
+				CHECK_FALSE(native.released());
+				CHECK(fixture.registry.production_output_pin_matches(native.pin(0), ref, fixture.rd));
+				CHECK(request.next_disposal_group_serial == next_group);
+				CHECK(request.attachment->arena == arena);
+				CHECK(fixture.holder.production_children == children);
+				CHECK(children != 0);
+				CHECK(fixture.driver.output_storage_attempts == attempts);
+				CHECK(fixture.driver.output_storage_frees == 0);
+				for (uint32_t role = 0; role < 7; ++role) {
+					CHECK(native.storage_rid(role) == resources[role]);
+					CHECK(fixture.driver.output_storage_live[role] == live[role]);
+				}
+			}
+			CHECK(mismatch_turns == 2);
+			// Re-enter the real original RT solely for exact test injection undo.
+			// No production recovery API, membership repair or custody reset.
+			probe.restore_unknown = true;
+			uint64_t restore_control = 0;
+			REQUIRE(fixture.port.record_schedule(ref, &restore_control) == OK);
+			server->sync();
+			GDExtensionProductionRecordReportV2 restore_report{};
+			REQUIRE(consume(ref, restore_control, &restore_report).native_error == OK);
+			CHECK(probe.calls == 2);
+			CHECK(native.storage_group() == group);
+			CHECK(fixture.driver.output_storage_frees == 0);
 		}
 		for (uint32_t turn = 0; turn < 256 && !native.released(); ++turn) {
 			const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
@@ -7009,6 +7078,10 @@ TEST_CASE("[SceneTree][ProductionRequest][OutputRegisteredLeaves] guarded origin
 TEST_CASE("[SceneTree][ProductionRequest][OwnedStorageComponent] exact Instance192 and zero-capacity resources retire through original OBSERVE") {
 	Access::owned_storage_observe(2);
 	Access::owned_storage_observe(0);
+}
+TEST_CASE("[SceneTree][ProductionRequest][OwnedStorageComponent] actual backing mismatch retains original group storage and custody across OBSERVE") {
+	Access::owned_storage_observe(2, 0, false, false, false, true);
+	Access::owned_storage_observe(0, 0, false, false, false, true);
 }
 TEST_CASE("[SceneTree][ProductionRequest][OwnedStorageComponent] different accepted request cannot allocate original stable slot") {
 	Access::owned_storage_observe(2, 0, false, false, true);

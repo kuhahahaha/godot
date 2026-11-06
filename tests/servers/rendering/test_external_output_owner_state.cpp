@@ -175,6 +175,10 @@ uint64_t ExternalLinkedOwnerTest::storage_total_bytes() const {
 	CRASH_COND(!owner->slots[0].storage);
 	return owner->slots[0].storage->total_bytes;
 }
+NativeDisposalWitness &ExternalLinkedOwnerTest::storage_witness(uint32_t role) {
+	CRASH_COND(role >= ExternalOutputStorage::RESOURCE_COUNT || !owner->slots[0].storage);
+	return owner->slots[0].storage->resources[role].witness;
+}
 bool ExternalLinkedOwnerTest::storage_tokens_empty() const {
 	const auto &slot = owner->slots[0];
 	return slot.lease_token.is_empty() && slot.record_token.is_empty() && slot.packet_token.is_empty();

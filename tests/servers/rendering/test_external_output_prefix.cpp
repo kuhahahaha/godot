@@ -30,6 +30,7 @@
 
 #include "servers/rendering/renderer_rd/storage_rd/external_output_config.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_storage.h"
+#include "tests/servers/rendering/test_external_output_custody_bridge.h"
 #include "tests/servers/rendering/transfer_test_driver_base.h"
 #include "tests/test_macros.h"
 
@@ -66,6 +67,33 @@ public:
 	static void local(RenderingDevice &p_rd, bool p_local) { p_rd.is_main_instance = !p_local; }
 	static void busy(RenderingDevice &p_rd, bool p_busy) { p_rd.compute_list.active = p_busy; }
 	static void poison(RenderingDevice &p_rd, RID p_rid) { ++p_rd.storage_buffer_owner.get_or_null(p_rid)->backing_serial; }
+	static Error poison_and_free(RenderingDevice &p_rd, NativeDisposalWitness &p_witness, NativeDisposalWitness::Report &r_report) {
+		NativeDisposalWitness::Report before;
+		CRASH_COND(p_rd._native_disposal_observe(p_witness, before) != OK || before.state != State::LIVE);
+		auto *buffer = p_rd.storage_buffer_owner.get_or_null(RID::from_uint64(before.rid));
+		CRASH_COND(!buffer || buffer->native_disposal.cell != p_witness.cell || buffer->backing_serial != before.serial || buffer->backing_serial == UINT64_MAX);
+		++buffer->backing_serial; // Only the real backing changes; not the witness.
+		const Error result = p_rd._native_disposal_free(p_witness);
+		CRASH_COND(p_rd._native_disposal_observe(p_witness, r_report) != ERR_INVALID_DATA);
+		CRASH_COND(r_report.state != State::UNKNOWN || r_report.rid != before.rid || r_report.serial != before.serial);
+		return result;
+	}
+	static Error restore_poison(RenderingDevice &p_rd, NativeDisposalWitness &p_witness, const NativeDisposalWitness::Report &p_report) {
+		NativeDisposalWitness::Report before;
+		CRASH_COND(p_rd._native_disposal_observe(p_witness, before) != ERR_INVALID_DATA);
+		CRASH_COND(before.state != State::UNKNOWN || before.rid != p_report.rid || before.serial != p_report.serial);
+		auto *buffer = p_rd.storage_buffer_owner.get_or_null(RID::from_uint64(before.rid));
+		CRASH_COND(!buffer || buffer->native_disposal.cell != p_witness.cell || buffer->backing_serial != before.serial + 1);
+		// Test-only undo of precisely the preceding backing injection. Original
+		// OBSERVE failed before storage.observe() or group release; production
+		// has no UNKNOWN reset, and this never repairs membership or custody.
+		--buffer->backing_serial;
+		p_witness.cell->state = State::LIVE;
+		NativeDisposalWitness::Report after;
+		const Error result = p_rd._native_disposal_observe(p_witness, after);
+		CRASH_COND(after.state != State::LIVE || after.rid != before.rid || after.serial != before.serial);
+		return result;
+	}
 	static void cleanup_unknown_for_test(RenderingDevice &p_rd, Storage *&p_storage) {
 		// Test-only undo of injected corruption. Production has no UNKNOWN reset.
 		for (auto &resource : p_storage->resources) {
@@ -81,6 +109,15 @@ public:
 		p_storage = nullptr;
 	}
 };
+
+namespace RendererRD {
+Error external_storage_poison_and_free(RenderingDevice &p_rd, NativeDisposalWitness &p_witness, NativeDisposalWitness::Report &r_report) {
+	return TestExternalOutputPrefixAccess::poison_and_free(p_rd, p_witness, r_report);
+}
+Error external_storage_restore_poison(RenderingDevice &p_rd, NativeDisposalWitness &p_witness, const NativeDisposalWitness::Report &p_report) {
+	return TestExternalOutputPrefixAccess::restore_poison(p_rd, p_witness, p_report);
+}
+} // namespace RendererRD
 
 namespace TestExternalOutputPrefix {
 using Access = TestExternalOutputPrefixAccess;
