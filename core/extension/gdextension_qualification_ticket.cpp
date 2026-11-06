@@ -29,7 +29,6 @@
 /**************************************************************************/
 
 #include "core/crypto/crypto_core.h"
-#include "core/extension/gdextension.h"
 #include "core/extension/gdextension_qualification_depth.h"
 #include "core/extension/gdextension_qualification_internal.h"
 #include "core/os/os.h"
