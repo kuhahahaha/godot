@@ -34,6 +34,7 @@
 #include "particles_external_output_test_fixture.h"
 #include "particles_heightfield_clear_test_fixture.h"
 #include "particles_runtime_test_fixture.h"
+#include "particles_scene_pairs_test_fixture.h"
 
 #include "core/object/class_db.h"
 void initialize_particles_runtime_tests_module(ModuleInitializationLevel p_level) {
@@ -42,6 +43,7 @@ void initialize_particles_runtime_tests_module(ModuleInitializationLevel p_level
 		GDREGISTER_CLASS(ParticlesExternalGuardTestFixture);
 		GDREGISTER_CLASS(ParticlesExternalOutputTestFixture);
 		GDREGISTER_CLASS(ParticlesHeightfieldClearTestFixture);
+		GDREGISTER_CLASS(ParticlesScenePairsTestFixture);
 	}
 }
 void uninitialize_particles_runtime_tests_module(ModuleInitializationLevel p_level) {}
