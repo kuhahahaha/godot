@@ -1,0 +1,39 @@
+{
+  "status": "PASS",
+  "platform": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+  "inputs": {
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64": "39420063d151cb03341c03ea694de3ffa0b137bdc9bee4b4f595118a3cbaa956",
+    "/Users/macbookair/.codex/worktrees/e25-e26-final-integration/ANGE/godot-cpp/gen/include/gdextension_interface.h": "d6b958e11b01fa0d7fe5a3bc1d1ccfaa103ea228838b339ae615b70173dc22c4",
+    "/Users/macbookair/.codex/worktrees/e25-e26-final-integration/ANGE/godot-cpp/include/godot_cpp/core/device_exit_api.hpp": "471e538f4bc671e3732907311158ae5bc55a2505023f7562c68091a90f2706e7",
+    "/Users/macbookair/.codex/worktrees/e25-e26-final-integration/ANGE/godot-cpp/gdextension/gdextension_interface.json": "d6a9fade372d644b153bd79aa133639226db45c1b64c59f47678355593a9b6cd",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/core/object/fixtures/device_exit_sdk_load/probe.cc": "5022165951322ef43b872ffbcfb6a1b1e32f6e1ca87374cef3c9a6e52a153898",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/core/object/fixtures/device_exit_sdk_load/run.py": "eb6681635adef505ef9fab04e8c3a37e2cc34879550912588863d66163e64c6e"
+  },
+  "host_version": "4.7.2.stable.custom_build.34ab56ce9",
+  "scope": "41 raw lookups + SDK load; eight distinct lifecycle APIs, no qualification/GPU calls",
+  "artifact_sha256": {
+    "version.json": "9e078fa0518965754c1ec6fa30f1727681d6c81c053aab59cefbd6c35f08ff8e",
+    "compile.stdout.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "version.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "compiler-version.json": "2bad9e641b4c426fc5c280e44b3d016962af916ce3b2a449375d74007ec5e930",
+    "compiler-version.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "libprobe.dylib": "4605dc33aa95b334360dab9b3cec04bc21f889dfc7966823e918238693a640a5",
+    "host": "39420063d151cb03341c03ea694de3ffa0b137bdc9bee4b4f595118a3cbaa956",
+    "legacy.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "guarded.stdout.log": "cad2380e24a8710eafff08b7fdc812d4c211cb83d474bd7b06bb03ecd12c7cb3",
+    "version.stdout.log": "8069fb95b9d7ee14348a3d0796daf9bf11712dfd3e013026224e6b92595b581a",
+    "compile.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "compiler-version.stdout.log": "b8a2569d699eec50baaf1719096d0801d16fb28fbcb2df7ffd0a07cd26d9fd47",
+    "legacy.json": "4627eef3b12116620fdb0813f41108cef3b617bf0f23a810073ede7e66221444",
+    "legacy.stdout.log": "4057850a279b2b69e4aa4b5939ebc07306abeeefb9086f87a6a35479131db0b4",
+    "guarded.json": "a9f45ab279b5c73e51333c88930ddedb0ce7d7c6e13572dae4af11baaab920a7",
+    "guarded.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "compile.json": "450a3b3480343ae6d2b8388b83c3f989db2aba13033829b74adaee3aca0bd869",
+    "guarded/probe.gd": "2a6b0d46d70dc627ad11d9d9e01b343db1c5792771039371803c5c5ef96beb13",
+    "guarded/probe.gdextension": "533f349309783270db2c3def43e440b8bf38b6fd68ca801c2fd630cff291f624",
+    "guarded/project.godot": "9126c351ee5f076a1ac41a8f0c03dc519d9bd9e4da38d2e95714a65d32277f44",
+    "legacy/probe.gd": "6f55271fb07e0a7f163fca3a93424111cf78195f077d0f108691b1522d7044b5",
+    "legacy/probe.gdextension": "6447c2310d339758cedb2ad9588175c64e35aafffd0cc0bbe5f15d8e70343de4",
+    "legacy/project.godot": "9126c351ee5f076a1ac41a8f0c03dc519d9bd9e4da38d2e95714a65d32277f44"
+  }
+}
