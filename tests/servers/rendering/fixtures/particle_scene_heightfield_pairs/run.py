@@ -43,10 +43,11 @@ struct InstancePair { Instance *a=nullptr,*b=nullptr; SelfList<InstancePair> lin
 template<class T> struct Owner { T *items[8]{}; T *get_or_null(RID rid) const { return rid.id>0 && rid.id<8 ? items[rid.id]:nullptr; } };
 namespace RendererRD { struct ParticlesStorage {
     static ParticlesStorage *single;
+    bool active[8]{}; uint64_t keys[8]{}, revs[8]{}; int origins[8]{}; Vector3 extents[8]{};
     static ParticlesStorage *get_singleton() { return single; }
     bool particles_collision_instance_get_scene_heightfield(RID id,uint64_t &key,uint64_t &rev,Transform3D &transform,Vector3 &extents,RSE::ParticlesCollisionHeightfieldResolution &resolution) const {
-        if (id.id!=1 && id.id!=2) return false;
-        key=id.id==1?11:22; rev=7; transform.origin=id.id==1?1:2; extents={1,2,3}; resolution=RSE::PARTICLES_COLLISION_HEIGHTFIELD_RESOLUTION_1024; return true;
+        if (id.id<=0 || id.id>=8 || !active[id.id]) return false;
+        key=keys[id.id]; rev=revs[id.id]; transform.origin=origins[id.id]; extents=this->extents[id.id]; resolution=RSE::PARTICLES_COLLISION_HEIGHTFIELD_RESOLUTION_1024; return true;
     }
 }; ParticlesStorage *ParticlesStorage::single=nullptr; }
 struct RendererSceneCull {
@@ -56,6 +57,8 @@ struct RendererSceneCull {
 bool RendererSceneCull::scene_heightfield_snapshot_pair(RID p_receiver,SceneHeightfieldSource &r_source,bool &r_present) const ''' + method + r'''
 int main() {
     RendererRD::ParticlesStorage storage; RendererRD::ParticlesStorage::single=&storage;
+    storage.active[1]=storage.active[2]=true; storage.keys[1]=11; storage.keys[2]=22; storage.revs[1]=storage.revs[2]=7;
+    storage.origins[1]=1; storage.origins[2]=2; storage.extents[1]=storage.extents[2]={1,2,3};
     RendererSceneCull scene; int scenario=1;
     Instance receiver; receiver.base_type=1; receiver.base={1}; receiver.scenario=&scenario;
     Instance other_receiver; other_receiver.base_type=1; other_receiver.base={1}; other_receiver.scenario=&scenario;
@@ -76,6 +79,16 @@ int main() {
     check(scene.scene_heightfield_snapshot_pair({1},out,present) && !present,"hidden receiver empty");
     receiver.visible=true; left.visible=false;
     check(scene.scene_heightfield_snapshot_pair({1},out,present) && !present,"hidden source empty");
+    left.visible=true; right.collision_data.cull_mask=0;
+    storage.origins[1]=9; storage.extents[1]={2,4,6}; storage.revs[1]=8;
+    check(scene.scene_heightfield_snapshot_pair({1},out,present) && present && out.source_key==11 && out.shape_revision==8 && out.transform.origin==9 && out.extents.x==2 && out.extents.y==4 && out.extents.z==6,"source transform extents revision update");
+    right.collision_data.cull_mask=1;
+    storage.active[1]=false;
+    check(scene.scene_heightfield_snapshot_pair({1},out,present) && present && out.source_key==22,"released source removed while other source remains");
+    storage.active[1]=true; storage.keys[1]=33; storage.revs[1]=12;
+    check(!scene.scene_heightfield_snapshot_pair({1},out,present) && !present,"recreated second field rejects ambiguous pair");
+    right.collision_data.cull_mask=0;
+    check(scene.scene_heightfield_snapshot_pair({1},out,present) && present && out.source_key==33 && out.shape_revision==12,"recreated source key and revision are fresh");
     check(!scene.scene_heightfield_snapshot_pair({7},out,present) && !present,"unknown receiver rejects");
     return good?0:1;
 }
