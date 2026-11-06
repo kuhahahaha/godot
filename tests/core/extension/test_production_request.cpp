@@ -4785,18 +4785,44 @@ struct Access {
 		SingletonEnrollment *fixture = nullptr;
 		RendererRD::ExternalLinkedOwnerTest *native = nullptr;
 		uint32_t capacity = 0, fail_at = 0, calls = 0;
-		bool insufficient = false;
+		bool insufficient = false, invalid_extent = false, foreign_before_allocate = false, foreign_turn = false;
 		static void receive(void *userdata, GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionOperationV1 *) {
 			using namespace GDExtensionDeviceExit;
 			auto &test = *static_cast<OwnedStorageProbe *>(userdata);
 			auto &fixture = *test.fixture;
 			auto &native = *test.native;
 			++test.calls;
-			native.install(0, fixture.registry, ref);
-			REQUIRE(fixture.registry.production_output_pin_current(fixture.rd, native.pin(0)) == OK);
-			REQUIRE(fixture.registry.production_output_owner_bind(native.pin(0), fixture.rd, native.particle_rid(), native.generation, 0, native.lease(0)) == OK);
+			if (test.foreign_turn) {
+				const GDExtensionProductionRequestRefV1 original = { fixture.instance, fixture.request->serial };
+				REQUIRE(ref.handle_serial != original.handle_serial);
+				CHECK(ref.registry_instance == original.registry_instance);
+				const auto next = fixture.request->next_disposal_group_serial;
+				const auto attempts = fixture.driver.output_storage_attempts;
+				CHECK(native.allocate_storage(context) == ERR_UNAUTHORIZED);
+				CHECK(fixture.request->next_disposal_group_serial == next);
+				CHECK(fixture.driver.output_storage_attempts == attempts);
+				CHECK(fixture.driver.output_storage_frees == 0);
+				CHECK(native.storage_group() == 0);
+				CHECK(native.storage_total_bytes() == 0);
+				CHECK(native.slot_reserved(0));
+				CHECK(native.storage_tokens_empty());
+				CHECK(fixture.registry.production_output_pin_matches(native.pin(0), original, fixture.rd));
+				for (uint32_t role = 0; role < 7; ++role) {
+					CHECK(native.storage_rid(role).is_null());
+					CHECK(native.storage_bytes(role) == 0);
+				}
+				return;
+			}
+			if (native.pin(0).is_empty()) {
+				native.install(0, fixture.registry, ref);
+				REQUIRE(fixture.registry.production_output_pin_current(fixture.rd, native.pin(0)) == OK);
+				REQUIRE(fixture.registry.production_output_owner_bind(native.pin(0), fixture.rd, native.particle_rid(), native.generation, 0, native.lease(0)) == OK);
+			}
+			if (test.foreign_before_allocate && test.calls == 1) {
+				return; // Keep the actual original slot before any factory attempt.
+			}
 			const auto next = fixture.request->next_disposal_group_serial;
-			if (!test.insufficient && !test.fail_at) {
+			if (!test.insufficient && !test.invalid_extent && !test.fail_at) {
 				auto foreign_context = context;
 				++foreign_context.frame_serial;
 				CHECK(native.allocate_storage(foreign_context) == ERR_UNAUTHORIZED);
@@ -4822,8 +4848,16 @@ struct Access {
 				}
 			}
 			const Error result = native.allocate_storage(context);
-			if (test.insufficient) {
-				CHECK(result == ERR_OUT_OF_MEMORY);
+			if (test.insufficient || test.invalid_extent) {
+				CHECK(result == (test.invalid_extent ? ERR_INVALID_PARAMETER : ERR_OUT_OF_MEMORY));
+				CHECK(native.storage_total_bytes() == 0);
+				CHECK(native.slot_reserved(0));
+				CHECK(native.storage_tokens_empty());
+				CHECK(fixture.registry.production_output_pin_matches(native.pin(0), ref, fixture.rd));
+				for (uint32_t role = 0; role < 7; ++role) {
+					CHECK(native.storage_rid(role).is_null());
+					CHECK(native.storage_bytes(role) == 0);
+				}
 				CHECK(native.storage_group() == 0);
 				CHECK(fixture.request->next_disposal_group_serial == next);
 				CHECK(fixture.driver.output_storage_attempts == 0);
@@ -4881,7 +4915,7 @@ struct Access {
 			CHECK(fixture.driver.output_storage_frees == 0);
 		}
 	};
-	static void owned_storage_observe(uint32_t capacity, uint32_t fail_at = 0, bool insufficient = false) {
+	static void owned_storage_observe(uint32_t capacity, uint32_t fail_at = 0, bool insufficient = false, bool invalid_extent = false, bool foreign_before_allocate = false) {
 		using namespace GDExtensionDeviceExit;
 		auto *server = ordinal_server();
 		if (!server || !check_step(RendererRD::ParticlesStorage::get_singleton() == nullptr)) {
@@ -4895,6 +4929,7 @@ struct Access {
 		const uint32_t members = capacity ? 7 : 5;
 		plan.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, 0, members + 2 - uint32_t(insufficient), 0, 0, 0, 0, 0, 0 };
 		plan.action_count = plan.resource_count = plan.use_count = plan.readback_count = 0;
+		plan.attachment_requests = foreign_before_allocate ? 2 : 1;
 		SingletonEnrollment fixture;
 		fixture.public_port = true;
 		OwnedStorageProbe probe;
@@ -4902,6 +4937,8 @@ struct Access {
 		probe.capacity = capacity;
 		probe.fail_at = fail_at;
 		probe.insufficient = insufficient;
+		probe.invalid_extent = invalid_extent;
+		probe.foreign_before_allocate = foreign_before_allocate;
 		REQUIRE(ordinal_initialize(fixture, server, plan, &OwnedStorageProbe::receive, &probe) == OK);
 		fixture.driver.output_storage_factory = true;
 		fixture.driver.output_storage_fail_at = fail_at;
@@ -4923,9 +4960,97 @@ struct Access {
 		REQUIRE(probe.calls == 1);
 		GDExtensionProductionRecordReportV2 recorded{};
 		REQUIRE(consume(ref, control, &recorded).native_error == OK);
+		if (foreign_before_allocate) {
+			const auto reserve = ordinal_port<GDExtensionInterfaceDeviceSessionProductionReserveV2>("device_session_production_reserve_v2");
+			REQUIRE(reserve != nullptr);
+			GDExtensionProductionCapacityV1 empty_capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+			auto other_operation = plan.operation;
+			++other_operation.owner_request_nonce;
+			GDExtensionProductionRequestRefV1 other_ref{};
+			REQUIRE(reserve(fixture.attachment, &other_operation, &empty_capacity, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0, &other_ref).native_error == OK);
+			Request *other = nullptr;
+			{
+				MutexLock lock(fixture.registry.mutex);
+				RenderingDevice *same_device = nullptr;
+				REQUIRE(fixture.registry.production_request_locked(other_ref, false, other, same_device) == OK);
+				REQUIRE(other->attachment == request.attachment);
+				CHECK(same_device == &fixture.rd);
+			}
+			probe.foreign_turn = true;
+			uint64_t other_control = 0;
+			REQUIRE(fixture.port.record_schedule(other_ref, &other_control) == OK);
+			server->sync();
+			GDExtensionProductionRecordReportV2 other_report{};
+			REQUIRE(consume(other_ref, other_control, &other_report).native_error == OK);
+			CHECK(probe.calls == 2);
+			probe.foreign_turn = false;
+			for (uint32_t turn = 0; turn < 8 && other->serial; ++turn) {
+				const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+				GDExtensionProductionServiceBudgetV1 remaining{};
+				GDExtensionProductionReportV2 report{};
+				const Error error = Error(release(other_ref, &budget, &remaining, &report).native_error);
+				CHECK((error == OK || error == ERR_BUSY));
+				if (other->serial) {
+					server->sync();
+				}
+			}
+			REQUIRE(other->serial == 0);
+			// Resume the true original RECORD; rejection did not consume its slot.
+			uint64_t original_control = 0;
+			REQUIRE(fixture.port.record_schedule(ref, &original_control) == OK);
+			server->sync();
+			GDExtensionProductionRecordReportV2 original_report{};
+			REQUIRE(consume(ref, original_control, &original_report).native_error == OK);
+			CHECK(probe.calls == 3);
+		}
 		CHECK(request.native_count == 0);
 		CHECK(request.graph_count == 0);
 		native.withdraw();
+		if (!insufficient && !invalid_extent) {
+			const uint64_t group = native.storage_group();
+			const auto attempts = fixture.driver.output_storage_attempts;
+			const auto frees = fixture.driver.output_storage_frees;
+			const auto next_group = request.next_disposal_group_serial;
+			void *const arena = request.attachment->arena;
+			const auto children = fixture.holder.production_children;
+			RID resources[7];
+			bool live[7];
+			for (uint32_t role = 0; role < 7; ++role) {
+				resources[role] = native.storage_rid(role);
+				live[role] = fixture.driver.output_storage_live[role];
+			}
+			for (uint32_t idle = 0; idle < 3; ++idle) {
+				GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 0, 0, 0, 0 };
+				if (idle == 2) {
+					budget.controls = budget.passes = budget.receipts = 1;
+					budget.deadline_micros = 1;
+				}
+				ProductionControlOutput output{};
+				uint64_t serial = 0;
+				REQUIRE(fixture.registry.production_control_accept(ref, ProductionControlKind::OBSERVE, &serial, &budget) == OK);
+				REQUIRE(fixture.registry.production_control_schedule(ref, serial) == OK);
+				server->sync();
+				REQUIRE(fixture.registry.production_control_consume(ref, serial, &output) == OK);
+				CHECK(output.service_usage.controls == 0);
+				CHECK(output.service_usage.passes == 0);
+				CHECK(output.service_usage.receipts == 0);
+				CHECK_FALSE(output.output_generation.native_released);
+				CHECK(native.storage_group() == group);
+				CHECK_FALSE(native.storage_empty());
+				CHECK_FALSE(native.released());
+				CHECK(fixture.registry.production_output_pin_matches(native.pin(0), ref, fixture.rd));
+				CHECK(request.next_disposal_group_serial == next_group);
+				CHECK(request.attachment->arena == arena);
+				CHECK(fixture.holder.production_children == children);
+				CHECK(children != 0);
+				CHECK(fixture.driver.output_storage_attempts == attempts);
+				CHECK(fixture.driver.output_storage_frees == frees);
+				for (uint32_t role = 0; role < 7; ++role) {
+					CHECK(native.storage_rid(role) == resources[role]);
+					CHECK(fixture.driver.output_storage_live[role] == live[role]);
+				}
+			}
+		}
 		for (uint32_t turn = 0; turn < 256 && !native.released(); ++turn) {
 			const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
 			ProductionControlOutput output{};
@@ -6884,9 +7009,15 @@ TEST_CASE("[SceneTree][ProductionRequest][OwnedStorageComponent] exact Instance1
 	Access::owned_storage_observe(2);
 	Access::owned_storage_observe(0);
 }
+TEST_CASE("[SceneTree][ProductionRequest][OwnedStorageComponent] different accepted request cannot allocate original stable slot") {
+	Access::owned_storage_observe(2, 0, false, false, true);
+}
 TEST_CASE("[SceneTree][ProductionRequest][OwnedStorageComponent] finite member shortage refuses before native allocation") {
 	Access::owned_storage_observe(2, 0, true);
 	Access::owned_storage_observe(0, 0, true);
+}
+TEST_CASE("[SceneTree][ProductionRequest][OwnedStorageComponent] invalid Instance192 capacity preserves original slot before native effects") {
+	Access::owned_storage_observe((1u << 20) + 1, 0, false, true);
 }
 TEST_CASE("[SceneTree][ProductionRequest][OwnedStorageComponent] every original native allocation failure retains and retires exact prefix") {
 	ERR_PRINT_OFF;

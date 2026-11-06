@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "component": "Owned storage idle-budget invalid extent and real foreign request neighbors",
+  "base_commit": "1a2ba155c67979d0b16efcdfce9df669949a6979",
+  "source_pins": {
+    "tests/core/extension/test_production_request.cpp": "6ef8f831219ee98242aab506ad795732cd575bea19dab8551dd1c3668b2167ca"
+  },
+  "host_sha256": "88ff7db22bae5dd671421e23aed6553c29db0143eb6b5f488a6c7b6adb86d4e0",
+  "metadata_sha256": "130d22de4193a573001f5f6d1583a416558c544974fce4a3acca4dea9551f59c",
+  "results": {
+    "targeted": {
+      "path": "work/b4-owned-storage-next-20261106/targeted-neighbor-r2/RESULT.json",
+      "sha256": "c1e6062106a360c00a00d3748d6de4665b1c8e22976c58394e2d3d9f0bd976f0",
+      "exit": 0,
+      "test_cases": {
+        "successes": "6",
+        "failures": "0"
+      },
+      "asserts": {
+        "successes": "11584",
+        "failures": "0"
+      },
+      "validation_pass": true
+    },
+    "full": {
+      "path": "work/b4-owned-storage-next-20261106/full-neighbor-r2/RESULT.json",
+      "sha256": "2ac7e3ea01d81d7e5ff8451d1ca44b22ca2af4d2a8b51681a70f21be27d737e7",
+      "exit": 0,
+      "test_cases": {
+        "successes": "2118",
+        "failures": "0"
+      },
+      "asserts": {
+        "successes": "542745",
+        "failures": "0"
+      },
+      "validation_pass": true
+    },
+    "metal": {
+      "path": "work/b4-owned-storage-next-20261106/native390-neighbor-r2/RESULT.json",
+      "sha256": "1ad1ea6c515889ecf174536ecc9f0ab9f0e9a7382dc0c60cbcbf39a58a5f0b3b",
+      "gpu_pass": true,
+      "checks": {
+        "one_result": true,
+        "not_timeout": true,
+        "no_fatal_or_exit_leaks": true,
+        "exact_expected_engine_errors": true,
+        "actual_metal_startup": true,
+        "native_and_outer_success": true,
+        "host_and_metadata_unchanged": true,
+        "source_unchanged": true
+      }
+    }
+  },
+  "independent_review_sha256": "877af7c3461d2cf6d9c69a9d81dbaad9012f0557cbf25633431442fea0191f78",
+  "verified": [
+    "Every allocated-prefix variant retains actual RID/native ledger/group/pin/arena/code through two zero-budget and one expired-deadline original OBSERVE turns.",
+    "Invalid capacity above2^20 refuses before reservation/native effects and preserves unattempted stable slot for exact cleanup.",
+    "A genuine second accepted same-attachment request executes original protected RECORD but cannot allocate first request stable slot; original request resumes successfully after foreign release."
+  ],
+  "limits": [
+    "Tests only; internal CPU-backed component plus existing Metal regression.",
+    "Unknown and surface-layout extrema matrix remain open.",
+    "No generation/source successor admission, public writable lease or complete visible output chain."
+  ]
+}
