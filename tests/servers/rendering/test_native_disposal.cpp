@@ -38,6 +38,9 @@ TEST_FORCE_LINK(test_native_disposal)
 
 class TestNativeDisposalAccess {
 public:
+	static void sampled_disposal();
+	static void sampled_failure();
+	static void sampled_identity();
 	static void sampler_disposal();
 	static void sampler_factory_failures();
 	static void sampler_identity();
@@ -284,7 +287,7 @@ public:
 		return TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 	}
 	uint64_t limit_get(Limit) override { return 8192; }
-	uint64_t api_trait_get(ApiTrait trait) override { return trait == API_TRAIT_HONORS_PIPELINE_BARRIERS ? 1 : 0; }
+	uint64_t api_trait_get(ApiTrait trait) override { return trait == API_TRAIT_HONORS_PIPELINE_BARRIERS || trait == API_TRAIT_TEXTURE_OUTPUTS_REQUIRE_CLEARS ? 1 : 0; }
 	void set_object_name(ObjectType type, ID id, const String &name) override {
 		CHECK(type == OBJECT_TYPE_TEXTURE);
 		CHECK((id.id == 51 || id.id == 52));
@@ -321,6 +324,158 @@ public:
 		++pass_frees;
 	}
 };
+
+// Real serialized reflection/native shader factory; CPU fixture, no compiler.
+class SampledDepthContainer : public RenderingShaderContainer {
+protected:
+	uint32_t _format() const override { return 0x4453504c; }
+	uint32_t _format_version() const override { return 1; }
+	bool _set_code_from_spirv(const ReflectShader &) override { return false; }
+
+public:
+	void initialize(uint32_t p_length = 1, bool p_writable = false) {
+		reflection_data.pipeline_type =
+				RenderingDeviceCommons::PIPELINE_TYPE_RASTERIZATION;
+		reflection_data.stage_count = 2;
+		reflection_data.set_count = 1;
+		reflection_binding_set_uniforms_count.push_back(1);
+		ReflectionBindingData binding;
+		binding.type = RenderingDeviceCommons::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE;
+		binding.binding = 3;
+		binding.length = p_length;
+		binding.writable = p_writable;
+		binding.stages = 1u << RenderingDeviceCommons::SHADER_STAGE_FRAGMENT;
+		reflection_binding_set_uniforms_data.push_back(binding);
+		for (auto stage : { RenderingDeviceCommons::SHADER_STAGE_VERTEX,
+					 RenderingDeviceCommons::SHADER_STAGE_FRAGMENT }) {
+			reflection_shader_stages.push_back(stage);
+			Shader shader;
+			shader.shader_stage = stage;
+			shader.code_compressed_bytes.push_back(42);
+			shader.code_decompressed_size = 1;
+			shaders.push_back(shader);
+		}
+	}
+};
+class SampledDepthFormat : public RenderingShaderContainerFormat {
+public:
+	Ref<RenderingShaderContainer> create_container() const override {
+		return memnew(SampledDepthContainer);
+	}
+	ShaderLanguageVersion get_shader_language_version() const override {
+		return SHADER_LANGUAGE_VULKAN_VERSION_1_1;
+	}
+	ShaderSpirvVersion get_shader_spirv_version() const override {
+		return SHADER_SPIRV_VERSION_1_3;
+	}
+};
+class SampledDepthDriver : public DepthDisposalDriver {
+public:
+	SampledDepthFormat format;
+	NativeDisposalWitness *sampler_witness = nullptr, *set_witness = nullptr;
+	bool fail_set = false;
+	uint32_t sampler_creates = 0, sampler_frees = 0, set_creates = 0,
+			 set_frees = 0, shader_frees = 0;
+	uint32_t clear_calls = 0, prepare_calls = 0;
+	const RenderingShaderContainerFormat &
+	get_shader_container_format() const override {
+		return format;
+	}
+	ShaderID shader_create_from_container(
+			const Ref<RenderingShaderContainer> &p_container,
+			const Vector<ImmutableSampler> &p_immutable) override {
+		CHECK(p_immutable.is_empty());
+		const auto &reflection = p_container->get_shader_reflection();
+		CHECK(reflection.pipeline_type == PIPELINE_TYPE_RASTERIZATION);
+		REQUIRE(reflection.uniform_sets.size() == 1);
+		REQUIRE(reflection.uniform_sets[0].size() == 1);
+		CHECK(reflection.uniform_sets[0][0].binding == 3);
+		return ShaderID(301);
+	}
+	uint32_t shader_get_layout_hash(ShaderID p_id) override {
+		CHECK(p_id == ShaderID(301));
+		return 123;
+	}
+	bool shader_retire_ready_nonblocking(ShaderID) const override { return true; }
+	void shader_free(ShaderID p_id) override {
+		CHECK(p_id == ShaderID(301));
+		++shader_frees;
+	}
+	SamplerID sampler_create(const SamplerState &) override {
+		++sampler_creates;
+		return SamplerID(17);
+	}
+	void sampler_free(SamplerID p_id) override {
+		CHECK(p_id == SamplerID(17));
+		REQUIRE(sampler_witness != nullptr);
+		CHECK(TestNativeDisposalAccess::state(*sampler_witness) ==
+				NativeDisposalWitness::State::ENQUEUED);
+		CHECK(TestNativeDisposalAccess::refs(*sampler_witness) >= 2);
+		++sampler_frees;
+	}
+	UniformSetID uniform_set_create(VectorView<BoundUniform> p_uniforms,
+			ShaderID p_shader, uint32_t p_set,
+			int p_pool) override {
+		++set_creates;
+		CHECK(p_shader == ShaderID(301));
+		CHECK(p_set == 0);
+		CHECK(p_pool == -1);
+		REQUIRE(p_uniforms.size() == 1);
+		CHECK(p_uniforms[0].type == UNIFORM_TYPE_SAMPLER_WITH_TEXTURE);
+		CHECK(p_uniforms[0].binding == 3);
+		CHECK_FALSE(p_uniforms[0].immutable_sampler);
+		REQUIRE(p_uniforms[0].ids.size() == 2);
+		CHECK(p_uniforms[0].ids[0].id == 17);
+		CHECK(p_uniforms[0].ids[1].id == 51);
+		return fail_set ? UniformSetID() : UniformSetID(61);
+	}
+	void uniform_set_free(UniformSetID p_id) override {
+		CHECK(p_id == UniformSetID(61));
+		REQUIRE(set_witness != nullptr);
+		CHECK(TestNativeDisposalAccess::state(*set_witness) ==
+				NativeDisposalWitness::State::ENQUEUED);
+		CHECK(TestNativeDisposalAccess::refs(*set_witness) >= 2);
+		++set_frees;
+	}
+	void command_clear_depth_stencil_texture(
+			CommandBufferID, TextureID, TextureLayout, float, uint8_t,
+			const TextureSubresourceRange &) override {
+		++clear_calls;
+	}
+	void command_uniform_set_prepare_for_use(CommandBufferID, UniformSetID,
+			ShaderID, uint32_t) override {
+		++prepare_calls;
+	}
+	void set_object_name(ObjectType p_type, ID p_id,
+			const String &p_name) override {
+		if (p_type == OBJECT_TYPE_TEXTURE) {
+			DepthDisposalDriver::set_object_name(p_type, p_id, p_name);
+			return;
+		}
+		CHECK(p_name.begins_with("RID:"));
+		if (p_type == OBJECT_TYPE_SAMPLER) {
+			CHECK(p_id.id == 17);
+		} else if (p_type == OBJECT_TYPE_SHADER) {
+			CHECK(p_id.id == 301);
+		} else {
+			CHECK(p_type == OBJECT_TYPE_UNIFORM_SET);
+			CHECK(p_id.id == 61);
+		}
+	}
+};
+
+TEST_CASE("[RenderingDevice][NativeDisposal][D32Sample] original descriptor "
+		  "payload and independent cascade receipts") {
+	TestNativeDisposalAccess::sampled_disposal();
+}
+TEST_CASE("[RenderingDevice][NativeDisposal][D32Sample] failed set preserves "
+		  "successful parents for original rollback") {
+	TestNativeDisposalAccess::sampled_failure();
+}
+TEST_CASE("[RenderingDevice][NativeDisposal][D32Sample] bounded reflection and "
+		  "foreign identity refuse before native create") {
+	TestNativeDisposalAccess::sampled_identity();
+}
 
 TEST_CASE("[RenderingDevice][NativeDisposal][D32] exact framebuffer cache children precede texture return") {
 	TestNativeDisposalAccess::depth_disposal();
@@ -1430,5 +1585,273 @@ void TestNativeDisposalAccess::sampler_ordinary() {
 	CHECK(driver.frees == 1);
 	CHECK(rd.sampler_owner.get_rid_count() == 0);
 	CHECK(rd.frames[0].samplers_to_dispose_of.is_empty());
+	detach(rd);
+}
+
+void TestNativeDisposalAccess::sampled_disposal() {
+	using namespace TestNativeDisposal;
+	RenderingDevice rd;
+	SampledDepthDriver driver;
+	attach(rd, driver);
+	RID sampler, texture, framebuffer, set;
+	NativeDisposalWitness sampler_witness, texture_witness, framebuffer_witness,
+			set_witness;
+	REQUIRE(rd._native_disposal_sampler_create(RenderingDevice::SamplerState(),
+					sampler, sampler_witness) == OK);
+	REQUIRE(rd._native_disposal_depth_texture_create(8, 4, texture,
+					texture_witness) == OK);
+	Ref<SampledDepthContainer> container;
+	container.instantiate();
+	container->initialize();
+	const RID shader = rd.shader_create_from_bytecode(container->to_bytes());
+	REQUIRE(shader.is_valid());
+	const uint32_t original_commands =
+			rd.draw_graph.qualification_command_count();
+	REQUIRE(rd.texture_owner.get_or_null(texture)->pending_clear);
+	REQUIRE(rd._native_disposal_depth_sample_set_create(
+					sampler_witness, texture_witness, shader, 0, 3, set,
+					set_witness) == OK);
+	CHECK(driver.set_creates == 1);
+	CHECK(rd.draw_graph.qualification_command_count() == original_commands);
+	CHECK(rd.texture_owner.get_or_null(texture)->pending_clear);
+	REQUIRE(rd._native_disposal_depth_framebuffer_create(
+					texture_witness, framebuffer, framebuffer_witness) == OK);
+	auto *original_set = rd.uniform_set_owner.get_or_null(set);
+	REQUIRE(original_set != nullptr);
+	REQUIRE(original_set->pending_clear_textures.size() == 1);
+	CHECK(original_set->pending_clear_textures[0] == texture);
+	CHECK(original_set->writable_resources.is_empty());
+	CHECK(original_set->shared_textures_to_update.is_empty());
+	CHECK(driver.clear_calls == 0);
+	CHECK(driver.prepare_calls == 0);
+	CHECK(rd.dependency_map[shader].has(set));
+	CHECK(rd.dependency_map[sampler].has(set));
+	CHECK(rd.dependency_map[texture].has(set));
+	CHECK(rd.dependency_map[texture].has(framebuffer));
+	CHECK(rd.reverse_dependency_map[set].size() == 3);
+	driver.sampler_witness = &sampler_witness;
+	driver.texture_witness = &texture_witness;
+	driver.framebuffer_witness = &framebuffer_witness;
+	driver.set_witness = &set_witness;
+	struct Callback {
+		NativeDisposalWitness *set;
+		bool called = false;
+	} callback{ &set_witness };
+	rd.uniform_set_set_invalidation_callback(
+			set,
+			[](void *p_data) {
+				auto &event = *static_cast<Callback *>(p_data);
+				CHECK(state(*event.set) == NativeDisposalWitness::State::ENQUEUED);
+				event.called = true;
+			},
+			&callback);
+	bool sampler_first = false, bounded = false;
+	SUBCASE("texture cascade with ordinary drain") {}
+	SUBCASE("sampler cascade with ordinary drain") {
+		sampler_first = true;
+	}
+	SUBCASE("texture cascade with bounded drain") {
+		bounded = true;
+	}
+	SUBCASE("sampler cascade with bounded drain") {
+		sampler_first = true;
+		bounded = true;
+	}
+	if (!sampler_first) {
+		REQUIRE(release(rd, texture_witness) == OK);
+		CHECK(state(set_witness) == NativeDisposalWitness::State::ENQUEUED);
+		CHECK(state(framebuffer_witness) == NativeDisposalWitness::State::ENQUEUED);
+		CHECK(state(sampler_witness) == NativeDisposalWitness::State::LIVE);
+		CHECK(rd.sampler_owner.owns(sampler));
+		REQUIRE(release(rd, sampler_witness) == OK);
+	} else {
+		REQUIRE(release(rd, sampler_witness) == OK);
+		CHECK(state(set_witness) == NativeDisposalWitness::State::ENQUEUED);
+		CHECK(state(texture_witness) == NativeDisposalWitness::State::LIVE);
+		CHECK(state(framebuffer_witness) == NativeDisposalWitness::State::LIVE);
+		CHECK(rd.texture_owner.owns(texture));
+		CHECK(rd.framebuffer_owner.owns(framebuffer));
+		REQUIRE(release(rd, texture_witness) == OK);
+	}
+	CHECK(callback.called);
+	CHECK(driver.set_frees == 0);
+	CHECK(driver.sampler_frees == 0);
+	CHECK(driver.texture_frees == 0);
+	if (!bounded) {
+		dispose(rd);
+	} else {
+		uint32_t used = 0;
+		CHECK(step(rd, 1, 1, UINT64_MAX, used) == ERR_BUSY);
+		CHECK(used == 1);
+		CHECK(driver.set_frees == 1);
+		CHECK(state(set_witness) == NativeDisposalWitness::State::RETURNED);
+		CHECK(state(sampler_witness) == NativeDisposalWitness::State::ENQUEUED);
+		CHECK(state(texture_witness) == NativeDisposalWitness::State::ENQUEUED);
+		for (uint32_t turn = 0; turn < 16 && draining(rd); ++turn) {
+			const Error result = step(rd, 1, 1, UINT64_MAX, used);
+			if (result != OK) {
+				CHECK(result == ERR_BUSY);
+			}
+		}
+		CHECK_FALSE(draining(rd));
+	}
+	CHECK(driver.set_frees == 1);
+	CHECK(driver.sampler_frees == 1);
+	CHECK(driver.texture_frees == 1);
+	CHECK(state(set_witness) == NativeDisposalWitness::State::RETURNED);
+	CHECK(state(sampler_witness) == NativeDisposalWitness::State::RETURNED);
+	CHECK(state(framebuffer_witness) == NativeDisposalWitness::State::RETURNED);
+	CHECK(state(texture_witness) == NativeDisposalWitness::State::RETURNED);
+	CHECK(refs(set_witness) == 1);
+	CHECK(refs(sampler_witness) == 1);
+	CHECK(refs(texture_witness) == 1);
+	rd.free_rid(shader);
+	dispose(rd);
+	CHECK(driver.shader_frees == 1);
+	CHECK(rd.dependency_map.is_empty());
+	CHECK(rd.reverse_dependency_map.is_empty());
+	for (const auto &entry : rd.framebuffer_formats) {
+		driver.render_pass_free(entry.value.render_pass);
+	}
+	rd.framebuffer_formats.clear();
+	rd.framebuffer_format_cache.clear();
+	detach(rd);
+}
+
+void TestNativeDisposalAccess::sampled_failure() {
+	using namespace TestNativeDisposal;
+	RenderingDevice rd;
+	SampledDepthDriver driver;
+	attach(rd, driver);
+	RID sampler, texture, framebuffer, set;
+	NativeDisposalWitness sampler_witness, texture_witness, framebuffer_witness,
+			set_witness;
+	REQUIRE(rd._native_disposal_sampler_create(RenderingDevice::SamplerState(),
+					sampler, sampler_witness) == OK);
+	REQUIRE(rd._native_disposal_depth_texture_create(8, 4, texture,
+					texture_witness) == OK);
+	REQUIRE(rd._native_disposal_depth_framebuffer_create(
+					texture_witness, framebuffer, framebuffer_witness) == OK);
+	Ref<SampledDepthContainer> container;
+	container.instantiate();
+	container->initialize();
+	const RID shader = rd.shader_create_from_bytecode(container->to_bytes());
+	REQUIRE(shader.is_valid());
+	driver.fail_set = true;
+	const uint32_t commands = rd.draw_graph.qualification_command_count();
+	ERR_PRINT_OFF;
+	CHECK(rd._native_disposal_depth_sample_set_create(
+				  sampler_witness, texture_witness, shader, 0, 3, set, set_witness) ==
+			ERR_CANT_CREATE);
+	ERR_PRINT_ON;
+	CHECK(set.is_null());
+	CHECK(set_witness.cell.is_null());
+	CHECK(driver.set_creates == 1);
+	CHECK(driver.set_frees == 0);
+	CHECK(rd.uniform_set_owner.get_rid_count() == 0);
+	CHECK(rd.frames[0].uniform_sets_to_dispose_of.is_empty());
+	CHECK(state(sampler_witness) == NativeDisposalWitness::State::LIVE);
+	CHECK(state(texture_witness) == NativeDisposalWitness::State::LIVE);
+	CHECK(state(framebuffer_witness) == NativeDisposalWitness::State::LIVE);
+	CHECK(rd.texture_owner.get_or_null(texture)->pending_clear);
+	CHECK(rd.draw_graph.qualification_command_count() == commands);
+	CHECK_FALSE(rd.dependency_map.has(sampler));
+	CHECK_FALSE(rd.dependency_map.has(shader));
+	CHECK(rd.dependency_map[texture].size() == 1); // Only original framebuffer.
+	CHECK(driver.clear_calls == 0);
+	CHECK(driver.prepare_calls == 0);
+	driver.sampler_witness = &sampler_witness;
+	driver.texture_witness = &texture_witness;
+	driver.framebuffer_witness = &framebuffer_witness;
+	CHECK(release(rd, texture_witness) == OK);
+	CHECK(state(sampler_witness) == NativeDisposalWitness::State::LIVE);
+	CHECK(release(rd, sampler_witness) == OK);
+	dispose(rd);
+	CHECK(driver.texture_frees == 1);
+	CHECK(driver.sampler_frees == 1);
+	CHECK(state(framebuffer_witness) == NativeDisposalWitness::State::RETURNED);
+	rd.free_rid(shader);
+	dispose(rd);
+	CHECK(driver.shader_frees == 1);
+	CHECK(rd.dependency_map.is_empty());
+	CHECK(rd.reverse_dependency_map.is_empty());
+	for (const auto &entry : rd.framebuffer_formats) {
+		driver.render_pass_free(entry.value.render_pass);
+	}
+	rd.framebuffer_formats.clear();
+	rd.framebuffer_format_cache.clear();
+	detach(rd);
+}
+
+void TestNativeDisposalAccess::sampled_identity() {
+	using namespace TestNativeDisposal;
+	RenderingDevice rd, foreign;
+	SampledDepthDriver driver;
+	attach(rd, driver);
+	attach(foreign, driver);
+	RID sampler, texture, set;
+	NativeDisposalWitness sampler_witness, texture_witness, set_witness;
+	REQUIRE(rd._native_disposal_sampler_create(RenderingDevice::SamplerState(),
+					sampler, sampler_witness) == OK);
+	REQUIRE(rd._native_disposal_depth_texture_create(8, 4, texture,
+					texture_witness) == OK);
+	Ref<SampledDepthContainer> container;
+	container.instantiate();
+	uint32_t reflected_length = 1;
+	bool writable = false;
+	SUBCASE("reflected sampler array unavailable") {
+		reflected_length = 2;
+	}
+	SUBCASE("reflected writable descriptor unavailable") {
+		writable = true;
+	}
+	container->initialize(reflected_length, writable);
+	const RID shader = rd.shader_create_from_bytecode(container->to_bytes());
+	REQUIRE(shader.is_valid());
+	const uint32_t commands = rd.draw_graph.qualification_command_count();
+	CHECK(foreign._native_disposal_depth_sample_set_create(
+				  sampler_witness, texture_witness, shader, 0, 3, set, set_witness) ==
+			ERR_UNAUTHORIZED);
+	NativeDisposalWitness forged;
+	forged.cell.instantiate();
+	forged.cell->device = sampler_witness.cell->device;
+	forged.cell->rid = sampler_witness.cell->rid;
+	forged.cell->serial = sampler_witness.cell->serial;
+	forged.cell->backing = sampler_witness.cell->backing;
+	CHECK(rd._native_disposal_depth_sample_set_create(
+				  forged, texture_witness, shader, 0, 3, set, set_witness) ==
+			ERR_INVALID_DATA);
+	CHECK(rd._native_disposal_depth_sample_set_create(
+				  sampler_witness, texture_witness, shader, 0, 4, set, set_witness) ==
+			ERR_UNAVAILABLE);
+	CHECK(rd._native_disposal_depth_sample_set_create(
+				  sampler_witness, texture_witness, shader, 0, 3, set, set_witness) ==
+			ERR_UNAVAILABLE);
+	CHECK(driver.set_creates == 0);
+	CHECK(set.is_null());
+	CHECK(set_witness.cell.is_null());
+	CHECK(rd.uniform_set_owner.get_rid_count() == 0);
+	CHECK(rd.texture_owner.get_or_null(texture)->pending_clear);
+	CHECK(rd.draw_graph.qualification_command_count() == commands);
+	CHECK(state(sampler_witness) == NativeDisposalWitness::State::LIVE);
+	CHECK(state(texture_witness) == NativeDisposalWitness::State::LIVE);
+	CHECK(driver.clear_calls == 0);
+	CHECK(driver.prepare_calls == 0);
+	driver.sampler_witness = &sampler_witness;
+	driver.texture_witness = &texture_witness;
+	CHECK(release(rd, sampler_witness) == OK);
+	CHECK(rd._native_disposal_depth_sample_set_create(
+				  sampler_witness, texture_witness, shader, 0, 3, set, set_witness) ==
+			ERR_INVALID_DATA);
+	CHECK(release(rd, texture_witness) == OK);
+	dispose(rd);
+	rd.free_rid(shader);
+	dispose(rd);
+	CHECK(driver.sampler_frees == 1);
+	CHECK(driver.texture_frees == 1);
+	CHECK(driver.set_frees == 0);
+	CHECK(rd.dependency_map.is_empty());
+	CHECK(rd.reverse_dependency_map.is_empty());
+	detach(foreign);
 	detach(rd);
 }

@@ -9664,6 +9664,88 @@ Error RenderingDevice::_native_disposal_depth_framebuffer_create(const NativeDis
 	return OK;
 }
 
+Error RenderingDevice::_native_disposal_depth_sample_set_create(const NativeDisposalWitness &p_sampler, const NativeDisposalWitness &p_texture, RID p_shader, uint32_t p_set, uint32_t p_binding, RID &r_rid, NativeDisposalWitness &r_witness) {
+	const Error ready = _native_disposal_preflight();
+	if (ready != OK) {
+		return ready;
+	}
+	_THREAD_SAFE_METHOD_
+	if (r_rid.is_valid() || r_witness.cell.is_valid()) {
+		return ERR_INVALID_PARAMETER;
+	}
+	NativeDisposalWitness::Report sampler_report, texture_report;
+	Error observed = _native_disposal_observe(p_sampler, sampler_report);
+	if (observed != OK) {
+		return observed;
+	}
+	observed = _native_disposal_observe(p_texture, texture_report);
+	if (observed != OK) {
+		return observed;
+	}
+	const RID sampler_rid = RID::from_uint64(sampler_report.rid);
+	const RID texture_rid = RID::from_uint64(texture_report.rid);
+	// Reject foreign validators before inspecting possibly uninitialized slots.
+	const Sampler *sampler = sampler_owner.owns(sampler_rid) ? sampler_owner.get_or_null(sampler_rid) : nullptr;
+	const Texture *texture = texture_owner.owns(texture_rid) ? texture_owner.get_or_null(texture_rid) : nullptr;
+	if (!sampler || !sampler->driver_id || sampler_report.state != NativeDisposalWitness::State::LIVE || sampler->native_disposal.cell != p_sampler.cell || sampler->native_disposal_rid != sampler_rid.get_id() ||
+			!p_sampler.cell->matches(sampler_rid.get_id(), sampler->native_disposal_serial, sampler->driver_id.id) ||
+			!texture || !texture->driver_id || texture_report.state != NativeDisposalWitness::State::LIVE || texture->native_disposal.cell != p_texture.cell || texture->native_disposal_rid != texture_rid.get_id() ||
+			!p_texture.cell->matches(texture_rid.get_id(), texture->native_disposal_serial, texture->driver_id.id)) {
+		return ERR_INVALID_DATA;
+	}
+	// Dependency invalidation callbacks run unlocked while the original root
+	// free is active. They cannot add a new descriptor child to that root.
+	if (resource_frees_in_progress.has(sampler_rid) || resource_frees_in_progress.has(texture_rid) || resource_frees_in_progress.has(p_shader)) {
+		return ERR_BUSY;
+	}
+	const Shader *shader = shader_owner.owns(p_shader) ? shader_owner.get_or_null(p_shader) : nullptr;
+	if (!shader || !shader->driver_id || shader->qualification_return || shader->native_immutable_retire_requested || !shader->native_immutable_samplers.is_empty() ||
+			sampler->qualification_return || sampler->native_immutable_retire_requested || texture->qualification_return || texture->native_immutable_retire_requested) {
+		return ERR_UNAVAILABLE;
+	}
+	if (texture->type != TEXTURE_TYPE_2D || texture->format != DATA_FORMAT_D32_SFLOAT || texture->samples != TEXTURE_SAMPLES_1 ||
+			!texture->width || !texture->height || texture->depth != 1 || texture->layers != 1 || texture->mipmaps != 1 || texture->base_layer || texture->base_mipmap ||
+			texture->usage_flags != (TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) || texture->owner.is_valid() || texture->shared_fallback ||
+			texture->transfer_worker_index >= 0 || !texture->draw_tracker) {
+		return ERR_UNAVAILABLE;
+	}
+	if (p_set >= uint32_t(shader->uniform_sets.size()) || p_set >= uint32_t(shader->set_formats.size()) || shader->uniform_sets[p_set].size() != 1) {
+		return ERR_UNAVAILABLE;
+	}
+	const ShaderUniform &binding = shader->uniform_sets[p_set][0];
+	if (binding.binding != p_binding || binding.type != UNIFORM_TYPE_SAMPLER_WITH_TEXTURE || binding.length != 1 || binding.writable) {
+		return ERR_UNAVAILABLE;
+	}
+	Vector<RID> ids;
+	const Error allocated = ids.resize(2);
+	if (allocated != OK) {
+		return allocated;
+	}
+	ids.write[0] = sampler_rid;
+	ids.write[1] = texture_rid;
+	Uniform uniform(UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, ids);
+	uniform.binding = p_binding;
+	uniform.immutable_sampler = false;
+	const uint64_t serial = _reserve_backing_serial();
+	if (!serial) {
+		return ERR_OUT_OF_MEMORY;
+	}
+	NativeDisposalWitness reserved;
+	reserved.cell.instantiate();
+	reserved.cell->device = uint64_t(get_instance_id());
+	reserved.cell->serial = serial;
+	// The original factory reserves its RID before native creation and owns
+	// all dependency edges. It records pending_clear metadata without consuming
+	// the clear. This disposal witness grants no read/source/bind authority.
+	const RID created = _uniform_set_create_qualification(VectorView<Uniform>(&uniform, 1), p_shader, p_set, false, nullptr, nullptr, &reserved);
+	if (created.is_null()) {
+		return ERR_CANT_CREATE; // Earlier published parents remain caller-owned.
+	}
+	r_rid = created;
+	r_witness = reserved;
+	return OK;
+}
+
 Error RenderingDevice::_native_disposal_storage_create(uint32_t p_bytes, BitField<StorageBufferUsage> p_usage, RID &r_rid, NativeDisposalWitness &r_witness) {
 	const Error ready = _native_disposal_preflight();
 	if (ready != OK) {

@@ -1675,6 +1675,7 @@ private:
 	Error _native_disposal_sampler_create(const SamplerState &p_state, RID &r_rid, NativeDisposalWitness &r_witness);
 	Error _native_disposal_depth_texture_create(uint32_t p_width, uint32_t p_height, RID &r_rid, NativeDisposalWitness &r_witness);
 	Error _native_disposal_depth_framebuffer_create(const NativeDisposalWitness &p_texture, RID &r_rid, NativeDisposalWitness &r_witness);
+	Error _native_disposal_depth_sample_set_create(const NativeDisposalWitness &p_sampler, const NativeDisposalWitness &p_texture, RID p_shader, uint32_t p_set, uint32_t p_binding, RID &r_rid, NativeDisposalWitness &r_witness);
 	Error _native_disposal_storage_create(uint32_t p_bytes, BitField<StorageBufferUsage> p_usage, RID &r_rid, NativeDisposalWitness &r_witness);
 	Error _native_disposal_uniform_set_create(const VectorView<Uniform> &p_uniforms, RID p_shader, uint32_t p_set, RID &r_rid, NativeDisposalWitness &r_witness);
 	Error _native_disposal_free(const NativeDisposalWitness &p_witness);
