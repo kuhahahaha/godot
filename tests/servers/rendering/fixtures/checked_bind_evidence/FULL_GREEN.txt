@@ -16,9 +16,9 @@ ERROR: Condition "callback_scope.get_error() != OK" is true. Returning: callback
    at: initialize_library (core/extension/gdextension.cpp:1230)
 ERROR: Condition "callback_scope.get_error() != OK" is true. Returning: callback_scope.get_error()
    at: initialize_library (core/extension/gdextension.cpp:1230)
-Failed call with 0 arguments. Message queue out of memory. 
-Failed set target ID: 4450945076403. Message queue out of memory. 
-Failed notification: 12345 target ID: 4450978630835. Message queue out of memory. 
+Failed call with 0 arguments. Message queue out of memory.
+Failed set target ID: 4450945076403. Message queue out of memory.
+Failed notification: 12345 target ID: 4450978630835. Message queue out of memory.
 ERROR: Object '<Object#4453428104371>' was freed or unreferenced while a signal is being emitted from it. Try connecting to the signal using 'CONNECT_DEFERRED' flag, or use queue_free() to free the object (if this object is a Node) to avoid this error and potential crashes.
    at: ~Object (core/object/object.cpp:3179)
 ERROR: Object '<Object#4453461658803>' was freed or unreferenced while a signal is being emitted from it. Try connecting to the signal using 'CONNECT_DEFERRED' flag, or use queue_free() to free the object (if this object is a Node) to avoid this error and potential crashes.
