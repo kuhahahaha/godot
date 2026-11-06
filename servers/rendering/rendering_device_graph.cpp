@@ -139,7 +139,8 @@ bool RenderingDeviceGraph::contains_record(const RecordHandle &p_handle) const {
 	return instruction->type == DrawListInstruction::TYPE_DRAW_INDIRECT || instruction->type == DrawListInstruction::TYPE_DRAW_INDEXED_INDIRECT ||
 			instruction->type == DrawListInstruction::TYPE_BIND_UNIFORM_SETS || instruction->type == DrawListInstruction::TYPE_UNIFORM_SET_PREPARE_FOR_USE ||
 			instruction->type == DrawListInstruction::TYPE_BIND_PIPELINE || instruction->type == DrawListInstruction::TYPE_DRAW || instruction->type == DrawListInstruction::TYPE_DRAW_INDEXED ||
-			instruction->type == DrawListInstruction::TYPE_SET_PUSH_CONSTANT || instruction->type == DrawListInstruction::TYPE_SET_SCISSOR || instruction->type == DrawListInstruction::TYPE_SET_VIEWPORT;
+			instruction->type == DrawListInstruction::TYPE_SET_PUSH_CONSTANT || instruction->type == DrawListInstruction::TYPE_SET_SCISSOR || instruction->type == DrawListInstruction::TYPE_SET_VIEWPORT ||
+			instruction->type == DrawListInstruction::TYPE_BIND_VERTEX_BUFFERS || instruction->type == DrawListInstruction::TYPE_BIND_INDEX_BUFFER;
 }
 
 bool RenderingDeviceGraph::_resolve_record_command_index(const RecordHandle &p_handle, uint32_t &r_index) const {
@@ -2475,7 +2476,9 @@ RenderingDeviceGraph::RecordHandle RenderingDeviceGraph::add_draw_list_begin(RDD
 	return _add_draw_list_begin(nullptr, p_render_pass, p_framebuffer, p_region, p_attachment_operations, p_attachment_clear_values, p_stages, p_breadcrumb, p_split_cmd_buffer);
 }
 
-void RenderingDeviceGraph::add_draw_list_bind_index_buffer(RDD::BufferID p_buffer, RDD::IndexBufferFormat p_format, uint32_t p_offset) {
+RenderingDeviceGraph::RecordHandle RenderingDeviceGraph::add_draw_list_bind_index_buffer(RDD::BufferID p_buffer, RDD::IndexBufferFormat p_format, uint32_t p_offset) {
+	const uint32_t instruction_offset = GRAPH_ALIGN(draw_instruction_list.data.size());
+	draw_record_offsets.insert((uint64_t(draw_instruction_list.index) << 32) | instruction_offset);
 	DrawListBindIndexBufferInstruction *instruction = reinterpret_cast<DrawListBindIndexBufferInstruction *>(_allocate_draw_list_instruction(sizeof(DrawListBindIndexBufferInstruction)));
 	instruction->type = DrawListInstruction::TYPE_BIND_INDEX_BUFFER;
 	instruction->buffer = p_buffer;
@@ -2485,6 +2488,7 @@ void RenderingDeviceGraph::add_draw_list_bind_index_buffer(RDD::BufferID p_buffe
 	if (instruction->buffer.id != 0) {
 		draw_instruction_list.stages.set_flag(RDD::PIPELINE_STAGE_VERTEX_INPUT_BIT);
 	}
+	return { graph_instance, uint64_t(tracking_frame), 3, uint32_t(draw_instruction_list.index), instruction_offset };
 }
 
 RenderingDeviceGraph::RecordHandle RenderingDeviceGraph::add_draw_list_bind_pipeline(RDD::PipelineID p_pipeline, BitField<RDD::PipelineStageBits> p_pipeline_stage_bits) {
@@ -2520,8 +2524,10 @@ RenderingDeviceGraph::RecordHandle RenderingDeviceGraph::add_draw_list_bind_unif
 	return { graph_instance, uint64_t(tracking_frame), 3, uint32_t(draw_instruction_list.index), instruction_offset };
 }
 
-void RenderingDeviceGraph::add_draw_list_bind_vertex_buffers(Span<RDD::BufferID> p_vertex_buffers, Span<uint64_t> p_vertex_buffer_offsets) {
+RenderingDeviceGraph::RecordHandle RenderingDeviceGraph::add_draw_list_bind_vertex_buffers(Span<RDD::BufferID> p_vertex_buffers, Span<uint64_t> p_vertex_buffer_offsets) {
 	DEV_ASSERT(p_vertex_buffers.size() == p_vertex_buffer_offsets.size());
+	const uint32_t instruction_offset = GRAPH_ALIGN(draw_instruction_list.data.size());
+	draw_record_offsets.insert((uint64_t(draw_instruction_list.index) << 32) | instruction_offset);
 
 	uint32_t instruction_size = sizeof(DrawListBindVertexBuffersInstruction) + sizeof(RDD::BufferID) * p_vertex_buffers.size() + sizeof(uint64_t) * p_vertex_buffer_offsets.size();
 	DrawListBindVertexBuffersInstruction *instruction = reinterpret_cast<DrawListBindVertexBuffersInstruction *>(_allocate_draw_list_instruction(instruction_size));
@@ -2539,6 +2545,7 @@ void RenderingDeviceGraph::add_draw_list_bind_vertex_buffers(Span<RDD::BufferID>
 	if (instruction->vertex_buffers_count > 0) {
 		draw_instruction_list.stages.set_flag(RDD::PIPELINE_STAGE_VERTEX_INPUT_BIT);
 	}
+	return { graph_instance, uint64_t(tracking_frame), 3, uint32_t(draw_instruction_list.index), instruction_offset };
 }
 
 void RenderingDeviceGraph::add_draw_list_clear_attachments(VectorView<RDD::AttachmentClear> p_attachments_clear, VectorView<Rect2i> p_attachments_clear_rect) {

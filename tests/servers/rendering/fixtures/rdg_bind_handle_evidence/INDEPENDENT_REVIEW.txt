@@ -1,0 +1,28 @@
+Independent read-only RDG VA/IA bind-handle review — 2026-11-06
+Worktree: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104
+Scope: rendering_device_graph.{h,cpp} and test_rendering_device_graph_handles.cpp current three-file diff. No source edits, build or test execution by reviewer. Parent owns unified build/test evidence.
+
+Conclusion: no actionable findings in this narrow RDG record-identity increment.
+
+Original payload/order preserved
+Only bind return types and identity bookkeeping change: existing index bind payload buffer/format/uint32 offset, vertex bind count/buffer array/uint64 offset array/dynamic offset mask and stage flags are unchanged. Original _allocate_draw_list_instruction byte sizing/layout and command execution switch remain untouched. Changing ignored void-style results into ignored RecordHandle results does not change callers' original recording behavior. No command is appended, replayed, reordered or executed to manufacture the handle.
+
+Exact identity and mapping
+Both helpers compute GRAPH_ALIGN(draw_instruction_list.data.size()) immediately before original allocator, which computes the same alignment. They register that exact (list index <<32)|byte offset in original draw_record_offsets and return original graph_instance/tracking_frame/kind3/list index/offset after writing instruction. Added contains_record accepted types are only the two actual bind instruction kinds. Existing membership set prevents interior/random offsets from passing solely because payload happens to resemble an opcode.
+
+contains_record follows the existing open instruction storage while list is open and the copied RecordedDrawListCommand instruction storage after end. _resolve_record_command_index maps either bind record to that original containing draw list. Pending before graph.end is correct; Recorded requires a real mapped command-buffer slot whose begin succeeded. graph.begin clears membership and advances frame identity, so earlier handles become Invalid. Foreign graph/frame, wrong index and unregistered/out-of-range offsets cannot obtain another mapping. These are internal record identities, not unforgeable authority capabilities; copying the exact identity of an existing record is not new recording authority.
+
+Regression inspected
+- Tests both returned-handle and discarded-return callers against the same complete driver-observed event vector, including begin, vertex bind, 32-bit IA bind,16-bit IA bind,end. Native command methods are not invoked during initial recording.
+- VA has three buffers (including zero ID), offsets4,8,2^35 and dynamic mask5, preserving array order and64-bit width. Caller mutates original buffer/offset array after recording; original expected values still must reach driver, confirming original copied payload.
+- IA32 offset0xabc and IA16 offset6 retain exact original format/value/order. IA offset API/storage remains32-bit; no silent signature widening is introduced.
+- Returned records require kind3, same graph/frame/list identity and monotonic distinct offsets; contains/Pending/unresolved slot tested while open and after list end. After graph.end, they must map Recorded to actual primary command buffer11/slot0.
+- Invalid graph identity, offset+1, UINT32_MAX offset, wrong list index, and stale frame after begin are rejected with unchanged output slot sentinel. Original end handle remains valid too.
+
+Limits / nonclaims
+Test uses deterministic driver recording methods, no actual device submission/fence completion. It does not establish resource validity, VA/IA checked bind admission, producer/reader native last-use, driver success/completion, HEIGHT ready, checked height resolver, immutable target custody or E34 acceptance. Existing raw RDG helpers retain their caller sequencing/precondition model; no public API or parallel receipt registry was introduced. Dedicated bind-handle failed-command-buffer-begin and multi-list tests are not added, but both use unchanged shared mapping validation already exercised by adjacent handle tests.
+
+Reviewed SHA256:
+ae8081a0aeffe0a4acc4b5646622eb6fbf298416353f63592c6a901bc6bcbbcd servers/rendering/rendering_device_graph.h
+08fa9b8b4029f9011fb310759ab2182e9c449e08e5a2e9aa5072106fa851c70d servers/rendering/rendering_device_graph.cpp
+aea0bb84145a692e7eea9329c40cabc445e0f39ae67e602382fc194909e3d9bf tests/servers/rendering/test_rendering_device_graph_handles.cpp

@@ -1,0 +1,130 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:180:
+TEST CASE:  [R02][Graph] vertex and index bind handles retain original payload and executed mapping
+
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:209: ERROR: CHECK( graph.contains_record(record) ) is NOT correct!
+  values: CHECK( false )
+  logged: discard_return := 0
+
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:210: ERROR: CHECK( graph.record_mapping_state(record) == Graph::RecordMappingState::Pending ) is NOT correct!
+  values: CHECK( 0 == 1 )
+  logged: discard_return := 0
+
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:209: ERROR: CHECK( graph.contains_record(record) ) is NOT correct!
+  values: CHECK( false )
+  logged: discard_return := 0
+
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:210: ERROR: CHECK( graph.record_mapping_state(record) == Graph::RecordMappingState::Pending ) is NOT correct!
+  values: CHECK( 0 == 1 )
+  logged: discard_return := 0
+
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:209: ERROR: CHECK( graph.contains_record(record) ) is NOT correct!
+  values: CHECK( false )
+  logged: discard_return := 0
+
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:210: ERROR: CHECK( graph.record_mapping_state(record) == Graph::RecordMappingState::Pending ) is NOT correct!
+  values: CHECK( 0 == 1 )
+  logged: discard_return := 0
+
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:231: ERROR: CHECK( graph.contains_record(record) ) is NOT correct!
+  values: CHECK( false )
+  logged: discard_return := 0
+
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:232: ERROR: CHECK( graph.record_mapping_state(record) == Graph::RecordMappingState::Pending ) is NOT correct!
+  values: CHECK( 0 == 1 )
+  logged: discard_return := 0
+
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:231: ERROR: CHECK( graph.contains_record(record) ) is NOT correct!
+  values: CHECK( false )
+  logged: discard_return := 0
+
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:232: ERROR: CHECK( graph.record_mapping_state(record) == Graph::RecordMappingState::Pending ) is NOT correct!
+  values: CHECK( 0 == 1 )
+  logged: discard_return := 0
+
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:231: ERROR: CHECK( graph.contains_record(record) ) is NOT correct!
+  values: CHECK( false )
+  logged: discard_return := 0
+
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:232: ERROR: CHECK( graph.record_mapping_state(record) == Graph::RecordMappingState::Pending ) is NOT correct!
+  values: CHECK( 0 == 1 )
+  logged: discard_return := 0
+
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:251: ERROR: CHECK( graph.contains_record(record) ) is NOT correct!
+  values: CHECK( false )
+  logged: discard_return := 0
+
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:252: ERROR: CHECK( graph.record_mapping_state(record) == Graph::RecordMappingState::Recorded ) is NOT correct!
+  values: CHECK( 0 == 2 )
+  logged: discard_return := 0
+
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:254: ERROR: CHECK( graph.resolve_record_command_buffer_slot(record, slot) ) is NOT correct!
+  values: CHECK( false )
+  logged: discard_return := 0
+
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:255: ERROR: CHECK( slot == 0 ) is NOT correct!
+  values: CHECK( 4294967295 == 0 )
+  logged: discard_return := 0
+
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:257: ERROR: CHECK( graph.resolve_record_command_buffer(record, actual) ) is NOT correct!
+  values: CHECK( false )
+  logged: discard_return := 0
+
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:258: ERROR: CHECK( actual == primary ) is NOT correct!
+  values: CHECK( {?} == {?} )
+  logged: discard_return := 0
+
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:251: ERROR: CHECK( graph.contains_record(record) ) is NOT correct!
+  values: CHECK( false )
+  logged: discard_return := 0
+
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:252: ERROR: CHECK( graph.record_mapping_state(record) == Graph::RecordMappingState::Recorded ) is NOT correct!
+  values: CHECK( 0 == 2 )
+  logged: discard_return := 0
+
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:254: ERROR: CHECK( graph.resolve_record_command_buffer_slot(record, slot) ) is NOT correct!
+  values: CHECK( false )
+  logged: discard_return := 0
+
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:255: ERROR: CHECK( slot == 0 ) is NOT correct!
+  values: CHECK( 4294967295 == 0 )
+  logged: discard_return := 0
+
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:257: ERROR: CHECK( graph.resolve_record_command_buffer(record, actual) ) is NOT correct!
+  values: CHECK( false )
+  logged: discard_return := 0
+
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:258: ERROR: CHECK( actual == primary ) is NOT correct!
+  values: CHECK( {?} == {?} )
+  logged: discard_return := 0
+
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:251: ERROR: CHECK( graph.contains_record(record) ) is NOT correct!
+  values: CHECK( false )
+  logged: discard_return := 0
+
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:252: ERROR: CHECK( graph.record_mapping_state(record) == Graph::RecordMappingState::Recorded ) is NOT correct!
+  values: CHECK( 0 == 2 )
+  logged: discard_return := 0
+
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:254: ERROR: CHECK( graph.resolve_record_command_buffer_slot(record, slot) ) is NOT correct!
+  values: CHECK( false )
+  logged: discard_return := 0
+
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:255: ERROR: CHECK( slot == 0 ) is NOT correct!
+  values: CHECK( 4294967295 == 0 )
+  logged: discard_return := 0
+
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:257: ERROR: CHECK( graph.resolve_record_command_buffer(record, actual) ) is NOT correct!
+  values: CHECK( false )
+  logged: discard_return := 0
+
+tests/servers/rendering/test_rendering_device_graph_handles.cpp:258: ERROR: CHECK( actual == primary ) is NOT correct!
+  values: CHECK( {?} == {?} )
+  logged: discard_return := 0
+
+===============================================================================
+[doctest] test cases:   1 |   0 passed |  1 failed | 2136 skipped
+[doctest] assertions: 173 | 143 passed | 30 failed |
+[doctest] Status: FAILURE!
