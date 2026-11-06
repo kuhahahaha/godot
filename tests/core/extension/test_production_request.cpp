@@ -7481,6 +7481,12 @@ TEST_CASE("[ProductionRequest] installed typed production procedures reject fore
 	TestProductionRequest::Access::installed_port_rejects_foreign_refs();
 }
 
+TEST_CASE("[ProductionRequest][Raster] exposes a versioned raster record bridge") {
+	using RasterReserve = GDExtensionDeviceSessionResultV1 (*)(const GDExtensionProductionAttachmentRefV1 *, const void *, const void *, const void *, uint32_t, const void *, uint32_t, const void *, uint32_t, GDExtensionProductionRequestRefV1 *);
+	const auto reserve = reinterpret_cast<RasterReserve>(GDExtension::get_interface_function("device_session_production_raster_reserve_v1"));
+	REQUIRE(reserve != nullptr);
+}
+
 #ifdef THREADS_ENABLED
 TEST_CASE("[SceneTree][ProductionRequest] exact native output closure returns through bounded original FIFO") {
 	SUBCASE("Retired shader pipeline and owned buffer set each progress with one pass") {
