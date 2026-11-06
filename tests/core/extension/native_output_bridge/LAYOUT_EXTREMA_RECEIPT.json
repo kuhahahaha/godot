@@ -1,0 +1,24 @@
+{
+  "scope": "pure Instance192 layout extrema; no native allocation",
+  "source_sha256": "aa6e7369f4f8e43bdcddba3a95c6ff4b7f00da606742459f859a84e6d8a115d1",
+  "target": {
+    "cases": 1,
+    "assertions": 80,
+    "result": "work/b4-owned-storage-next-20261106/targeted-layout-extrema/RESULT.json"
+  },
+  "full": {
+    "cases": 2119,
+    "assertions": 542825,
+    "result": "work/b4-owned-storage-next-20261106/full-layout-extrema/RESULT.json"
+  },
+  "build": "work/b4-owned-storage-next-20261106/BUILD_LAYOUT_EXTREMA.log",
+  "limits": [
+    "Integrated UNKNOWN fixture pending",
+    "No claim of maximum native allocation or GPU execution"
+  ],
+  "stderr_comparison": {
+    "baseline": "work/b4-owned-storage-next-20261106/full-ci-tidy-r2/stderr.log",
+    "normalization": "8+digit dynamic IDs",
+    "equal": true
+  }
+}

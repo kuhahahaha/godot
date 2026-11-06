@@ -42,6 +42,8 @@ public:
 	using Storage = RendererRD::ExternalOutputStorage;
 	using Report = Storage::Report;
 	using State = NativeDisposalWitness::State;
+	using Layout = Storage::Instance192Layout;
+	static Error plan(uint32_t p_capacity, uint32_t p_surfaces, Layout &r_layout) { return Storage::plan_instance192(p_capacity, p_surfaces, r_layout); }
 	static Storage *make(RenderingDevice &p_rd) { return new Storage(p_rd); }
 	static Error destroy(Storage *&p_storage) { return Storage::destroy_if_returned(p_storage); }
 	static Error allocate(Storage &p_storage, uint32_t p_capacity, uint32_t p_surfaces = 1) { return p_storage.allocate_instance192(p_capacity, p_surfaces); }
@@ -215,6 +217,46 @@ TEST_CASE("[RenderingDevice][ExternalOutputPrefix] all sizes preflight before na
 	CHECK(driver.creates == 0);
 	CHECK(Access::destroy(storage) == OK);
 	Access::detach(rd);
+}
+
+TEST_CASE("[RenderingDevice][ExternalOutputPrefix] pure layout rejects surface and capacity extrema without changing output") {
+	using Config = RendererRD::ExternalOutputConfig;
+	Access::Layout layout;
+	for (uint32_t i = 0; i < 7; ++i) {
+		layout.bytes[i] = 101 + i;
+	}
+	layout.total_bytes = 0x123456789abcdef0ULL;
+	layout.resource_count = 43;
+	const auto sentinel = layout;
+	const uint32_t invalid[][2] = {
+		{ 0, 0 },
+		{ 1, Config::MAX_FLATTENED_SURFACES + 1 },
+		{ 1, UINT32_MAX },
+		{ (1u << 20) + 1, 1 },
+		{ UINT32_MAX, Config::MAX_FLATTENED_SURFACES },
+	};
+	for (const auto &extent : invalid) {
+		CHECK(Access::plan(extent[0], extent[1], layout) == ERR_INVALID_PARAMETER);
+		for (uint32_t i = 0; i < 7; ++i) {
+			CHECK(layout.bytes[i] == sentinel.bytes[i]);
+		}
+		CHECK(layout.total_bytes == sentinel.total_bytes);
+		CHECK(layout.resource_count == sentinel.resource_count);
+	}
+	// This is arithmetic preflight only: no surface directory or driver call.
+	for (uint32_t capacity : { 0u, 1u, 1u << 20 }) {
+		REQUIRE(Access::plan(capacity, Config::MAX_FLATTENED_SURFACES, layout) == OK);
+		const uint64_t surfaces = Config::MAX_FLATTENED_SURFACES;
+		CHECK(layout.bytes[0] == uint64_t(capacity) * 192);
+		CHECK(layout.bytes[1] == uint64_t(capacity) * 192);
+		CHECK(layout.bytes[2] == 32);
+		CHECK(layout.bytes[3] == 64);
+		CHECK(layout.bytes[4] == 32);
+		CHECK(layout.bytes[5] == surfaces * 20);
+		CHECK(layout.bytes[6] == 224 + surfaces * 144);
+		CHECK(layout.total_bytes == uint64_t(capacity) * 384 + 352 + surfaces * 164);
+		CHECK(layout.resource_count == (capacity ? 7u : 5u));
+	}
 }
 
 TEST_CASE("[RenderingDevice][ExternalOutputPrefix] busy retirement retries without allocation or next draw") {
