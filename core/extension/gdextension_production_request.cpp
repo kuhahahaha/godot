@@ -2530,8 +2530,8 @@ void Registry::production_control_execute_locked(ProductionRequest &request, Ren
 					rd->_thread_safe_.unlock();
 					mutex.unlock();
 					const Error component = test_production_before_maintenance(request, *rd);
-					rd->_thread_safe_.lock();
 					mutex.lock();
+					rd->_thread_safe_.lock();
 					CRASH_COND(!request.capture_inflight);
 					--request.capture_inflight;
 					if (request.serial != request_serial || request.control.serial != control_serial || request.control.state != ProductionControlState::EXECUTING || request.attachment != attachment || attachment->held_device != rd || attachment->epoch != epoch || device_records[attachment->device].epoch != epoch || device_records[attachment->device].object != rd) {

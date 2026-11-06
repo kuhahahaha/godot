@@ -608,8 +608,9 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 		rd._thread_safe_.unlock();
 		mutex.unlock();
 		const Error dropped = rd._production_output_drop_step(request, slice, actual);
-		rd._thread_safe_.lock();
+		// Match the Registry -> RD order used by original owned factories.
 		mutex.lock();
+		rd._thread_safe_.lock();
 		CRASH_COND(!request.capture_inflight);
 		--request.capture_inflight;
 		usage.controls = 1;
