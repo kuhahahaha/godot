@@ -38,6 +38,8 @@
 #include "servers/rendering/rendering_server.h"
 #include "servers/rendering/rendering_server_globals.h"
 
+#include <limits>
+
 static std::mutex registry_mutex;
 static std::vector<std::shared_ptr<SkinnedMeshCaptureTestNativeSession>> sessions;
 
@@ -106,7 +108,8 @@ Error SkinnedMeshCaptureTestNativeSession::prepare_delivery(const std::vector<Sk
 	}
 	uint64_t previous = last_request;
 	for (const auto &request : p_requests) {
-		if (!request.request || request.request <= previous || request.request > UINT64_MAX / 2 || request.scene.is_null() || request.mesh.is_null() || request.skeleton.is_null() || ((request.previous || request.image) && (!request.after_views || request.viewport.is_null()))) {
+		if (!request.request || request.request <= previous || request.request > UINT64_MAX / 2 || request.scene.is_null() || request.mesh.is_null() || request.skeleton.is_null() || ((request.previous || request.image) && (!request.after_views || request.viewport.is_null())) ||
+				(request.public_source && (epoch > uint64_t(std::numeric_limits<int64_t>::max()) || request.public_snapshot.epoch != int64_t(epoch) || request.public_snapshot.request_id != int64_t(request.request)))) {
 			return ERR_INVALID_PARAMETER;
 		}
 		previous = request.request;
@@ -194,7 +197,9 @@ void SkinnedMeshCaptureTestNativeSession::record(Job &p_job) {
 	p_job.started = true;
 	const uint32_t slot = uint32_t(&p_job - jobs.data());
 	Error error;
-	if (p_job.request.viewport.is_valid()) {
+	if (p_job.request.public_source) {
+		error = pool.record_public(slot, p_job.request.public_snapshot);
+	} else if (p_job.request.viewport.is_valid()) {
 		uint64_t sequence = 0;
 		error = SkinnedMeshCaptureTestNativeSource::select_draw(p_job.request.scene, p_job.request.mesh, p_job.request.skeleton, epoch, p_job.result.frame, p_job.request.viewport, 0, sequence);
 		if (error == OK) {

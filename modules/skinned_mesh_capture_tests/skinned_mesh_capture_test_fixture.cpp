@@ -33,8 +33,10 @@
 #include "skinned_mesh_capture_test_capture_startup.h"
 #include "skinned_mesh_capture_test_observer.h"
 #include "skinned_mesh_capture_test_phase_observer.h"
+#include "skinned_mesh_capture_test_public_snapshot.h"
 
 #include "core/io/marshalls.h"
+#include "core/crypto/crypto_core.h"
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "core/os/thread.h"
@@ -48,7 +50,9 @@
 #include "scene/resources/environment.h"
 #include "scene/resources/material.h"
 #include "scene/resources/mesh.h"
+#include "scene/resources/3d/skin.h"
 #include "servers/rendering/rendering_server.h"
+#include <cmath>
 #if !defined(DISABLE_DEPRECATED) && !defined(PHYSICS_3D_DISABLED)
 #include "scene/3d/physics/physical_bone_simulator_3d.h"
 #endif
@@ -61,6 +65,12 @@ void SkinnedMeshCaptureTestFixture::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("submit_public_snapshot", "value"), &SkinnedMeshCaptureTestFixture::submit_public_snapshot);
 	ClassDB::bind_method(D_METHOD("take_result"), &SkinnedMeshCaptureTestFixture::take_result);
 	ClassDB::bind_method(D_METHOD("close", "no_future_draw"), &SkinnedMeshCaptureTestFixture::close, DEFVAL(false));
+}
+
+void SkinnedMeshCaptureTestFixture::public_skeleton_updated() {
+	if (Thread::is_main_thread() && session && route == "P" && !closing) {
+		++public_signal_ordinal;
+	}
 }
 
 Error SkinnedMeshCaptureTestFixture::build_fixed_scene(const StringName &p_member) {
@@ -186,6 +196,9 @@ Error SkinnedMeshCaptureTestFixture::build_fixed_scene(const StringName &p_membe
 	scene_nodes[0] = source->get_instance_id();
 	scene_nodes[1] = player->get_instance_id();
 	scene_nodes[2] = view->get_instance_id();
+	if (route == "P") {
+		skeleton->connect("skeleton_updated", callable_mp(this, &SkinnedMeshCaptureTestFixture::public_skeleton_updated));
+	}
 	scene_prepared = true;
 	return OK;
 #endif
@@ -218,6 +231,7 @@ Error SkinnedMeshCaptureTestFixture::begin(StringName p_member, StringName p_rou
 	if (p_member != "S02" || p_route != "N") {
 		return reject(ERR_UNAVAILABLE, "P01_DEPENDENCY_ACQUISITION");
 	}
+	route = p_route;
 	if (!is_inside_tree()) {
 		return reject(ERR_INVALID_PARAMETER, "P01_STATE");
 	}
@@ -347,9 +361,114 @@ Error SkinnedMeshCaptureTestFixture::submit_public_snapshot(const Dictionary &p_
 	if (!Thread::is_main_thread()) {
 		return ERR_UNAVAILABLE;
 	}
-	// No request has been admitted while acquisition is unavailable. In
-	// particular, validating a Dictionary alone cannot consume a request.
-	return reject(ERR_INVALID_PARAMETER, "P01_STATE");
+	if (!session || route != "P" || closing || closed || !scene_prepared) {
+		return reject(ERR_INVALID_PARAMETER, "P01_STATE");
+	}
+	SkinnedMeshCaptureTestPublicSnapshot snapshot;
+	if (skinned_mesh_capture_test_decode_public_snapshot(p_value, snapshot) != OK) {
+		return reject(ERR_INVALID_DATA, "P01_PROFILE");
+	}
+	if (snapshot.epoch != int64_t(session_epoch)) {
+		return reject(ERR_INVALID_DATA, "P01_STALE_EPOCH");
+	}
+	auto *source = Object::cast_to<Node3D>(ObjectDB::get_instance(scene_nodes[0]));
+	auto *mesh = Object::cast_to<MeshInstance3D>(get_node_or_null(NodePath("Source/Mesh")));
+	auto *skeleton = Object::cast_to<Skeleton3D>(get_node_or_null(NodePath("Source/Skeleton")));
+	if (!source || !mesh || !skeleton || mesh->get_parent() != source || skeleton->get_parent() != source || mesh->get_mesh().is_null() || mesh->get_skin_reference().is_null() || mesh->get_skin_reference()->get_skin().is_null()) {
+		return reject(ERR_INVALID_DATA, "P01_SOURCE");
+	}
+	const Ref<Skin> skin = mesh->get_skin_reference()->get_skin();
+	const uint64_t actual_ids[6] = {
+		uint64_t(source->get_instance_id()), uint64_t(mesh->get_instance_id()), uint64_t(skeleton->get_instance_id()),
+		uint64_t(mesh->get_mesh()->get_instance_id()), uint64_t(mesh->get_skin_reference()->get_instance_id()), uint64_t(skin->get_instance_id())
+	};
+	for (int i = 0; i < 6; ++i) {
+		if (snapshot.source_object_ids[i] != actual_ids[i]) {
+			return reject(ERR_INVALID_DATA, "P01_SOURCE");
+		}
+	}
+	if (snapshot.pose_signal_ordinal != public_signal_ordinal || snapshot.observed_signal_ordinal != public_signal_ordinal || public_signal_ordinal <= 0 || skin->get_bind_count() != 2 || skeleton->get_bone_count() != 2) {
+		return reject(ERR_INVALID_DATA, "P01_SOURCE");
+	}
+	if (mesh->get_mesh()->get_surface_count() != 1) {
+		return reject(ERR_INVALID_DATA, "P01_SOURCE");
+	}
+	const Array arrays = mesh->get_mesh()->surface_get_arrays(0);
+	if (arrays.size() != Mesh::ARRAY_MAX || arrays[Mesh::ARRAY_VERTEX].get_type() != Variant::PACKED_VECTOR3_ARRAY || arrays[Mesh::ARRAY_BONES].get_type() != Variant::PACKED_INT32_ARRAY || arrays[Mesh::ARRAY_WEIGHTS].get_type() != Variant::PACKED_FLOAT32_ARRAY) {
+		return reject(ERR_INVALID_DATA, "P01_SOURCE");
+	}
+	const PackedVector3Array positions = arrays[Mesh::ARRAY_VERTEX];
+	const PackedInt32Array indices = arrays[Mesh::ARRAY_BONES];
+	const PackedFloat32Array weights = arrays[Mesh::ARRAY_WEIGHTS];
+	if (positions.size() != 3 || indices.size() != 12 || weights.size() != 12) {
+		return reject(ERR_INVALID_DATA, "P01_SOURCE");
+	}
+	for (int i = 0; i < 3; ++i) {
+		if (snapshot.positions[i] != positions[i]) {
+			return reject(ERR_INVALID_DATA, "P01_SOURCE");
+		}
+	}
+	for (int i = 0; i < 12; ++i) {
+		if (!Math::is_finite(weights[i]) || weights[i] < 0 || weights[i] > 1) {
+			return reject(ERR_INVALID_DATA, "P01_SOURCE");
+		}
+		const int expected_weight = int(std::round(double(weights[i]) * 65535.0));
+		if (snapshot.bind_indices[i] != indices[i] || snapshot.weights_u16[i] != expected_weight) {
+			return reject(ERR_INVALID_DATA, "P01_SOURCE");
+		}
+	}
+	uint8_t bind_bytes[2 * (4 + 3 + 4 + 4 + 48)] = {};
+	size_t bind_size = 0;
+	for (int slot = 0; slot < 2; ++slot) {
+		const String name = skin->get_bind_name(slot);
+		const CharString utf8 = name.utf8();
+		const int mapped = name.is_empty() ? skin->get_bind_bone(slot) : skeleton->find_bone(name);
+		const Transform3D bind = skin->get_bind_pose(slot);
+		if (mapped < 0 || mapped >= 2 || !bind.is_finite()) {
+			return reject(ERR_INVALID_DATA, "P01_SOURCE");
+		}
+		encode_uint32(uint32_t(utf8.length()), bind_bytes + bind_size);
+		bind_size += 4;
+		for (int i = 0; i < utf8.length(); ++i) {
+			bind_bytes[bind_size++] = uint8_t(utf8[i]);
+		}
+		encode_uint32(uint32_t(skin->get_bind_bone(slot)), bind_bytes + bind_size);
+		bind_size += 4;
+		encode_uint32(uint32_t(mapped), bind_bytes + bind_size);
+		bind_size += 4;
+		const Transform3D palette = skeleton->get_bone_global_pose(mapped) * bind;
+		for (int row = 0; row < 3; ++row) {
+			for (int column = 0; column < 4; ++column) {
+				const float bind_value = column == 3 ? bind.origin[row] : bind.basis[column][row];
+				const float palette_value = column == 3 ? palette.origin[row] : palette.basis[column][row];
+				if (!Math::is_finite(bind_value) || !Math::is_finite(palette_value) || snapshot.pose_matrices[slot * 12 + row * 4 + column] != palette_value) {
+					return reject(ERR_INVALID_DATA, "P01_SOURCE");
+				}
+				encode_float(bind_value, bind_bytes + bind_size);
+				bind_size += 4;
+			}
+		}
+	}
+	uint8_t hash[32];
+	if (CryptoCore::sha256(bind_bytes, bind_size, hash) != OK || String::hex_encode_buffer(hash, sizeof(hash)) != snapshot.bind_digest || snapshot.source_to_world != source->get_global_transform()) {
+		return reject(ERR_INVALID_DATA, "P01_SOURCE");
+	}
+	if (snapshot.request_id != int64_t(next_request) || next_request > 3) {
+		return reject(ERR_INVALID_PARAMETER, "P01_STATE");
+	}
+	SkinnedMeshCaptureTestSessionRequest request;
+	request.request = next_request;
+	request.scene = mesh->get_instance();
+	request.mesh = mesh->get_mesh()->get_rid();
+	request.skeleton = mesh->get_skin_reference()->get_skeleton();
+	request.public_source = true;
+	request.public_snapshot = snapshot;
+	const Error error = session->enqueue(request);
+	if (error != OK) {
+		return reject(error, error == ERR_BUSY ? "P01_BUDGET" : "P01_CREATE_OR_COPY");
+	}
+	++next_request;
+	return OK;
 }
 
 Dictionary SkinnedMeshCaptureTestFixture::take_result() const {

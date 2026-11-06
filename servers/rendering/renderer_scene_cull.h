@@ -56,6 +56,22 @@ class RendererSceneCull : public RenderingMethod {
 	friend class RenderCaptureTestAccess;
 #endif
 public:
+	struct SceneSphereSource {
+		uint64_t source_key = 0;
+		uint64_t shape_revision = 0;
+		Transform3D transform;
+		float radius = 0;
+	};
+	bool scene_sphere_snapshot_pairs(RID p_receiver, uint32_t p_max_sources, Vector<SceneSphereSource> &r_sources) const;
+	struct SceneHeightfieldSource {
+		uint64_t source_key = 0;
+		uint64_t shape_revision = 0;
+		Transform3D transform;
+		Vector3 extents;
+		RSE::ParticlesCollisionHeightfieldResolution resolution = RSE::PARTICLES_COLLISION_HEIGHTFIELD_RESOLUTION_1024;
+	};
+	bool scene_heightfield_snapshot_pair(RID p_receiver, SceneHeightfieldSource &r_source, bool &r_present) const;
+
 	RendererSceneRender *scene_render = nullptr;
 
 	enum {

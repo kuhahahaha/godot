@@ -31,6 +31,7 @@
 #pragma once
 #include "skinned_mesh_capture_test_image_collector.h"
 #include "skinned_mesh_capture_test_native_source.h"
+#include "skinned_mesh_capture_test_public_snapshot.h"
 
 #include <array>
 #include <memory>
@@ -42,6 +43,8 @@
 struct SkinnedMeshCaptureTestSessionRequest {
 	uint64_t request = 0;
 	RID scene, mesh, skeleton, viewport;
+	bool public_source = false;
+	SkinnedMeshCaptureTestPublicSnapshot public_snapshot;
 	bool after_views = false;
 	bool previous = false;
 	bool image = false;

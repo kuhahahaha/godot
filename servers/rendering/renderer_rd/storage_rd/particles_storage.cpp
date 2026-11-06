@@ -1491,13 +1491,16 @@ bool ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 						if (collision_heightmap_texture != RID()) { //already taken
 							continue;
 						}
+						if (pci->heightfield_texture.is_null()) {
+							continue;
+						}
 
 						col.type = ParticlesFrameParams::COLLISION_TYPE_HEIGHT_FIELD;
 						Vector3 extents = pc->extents * scale;
 						col.extents[0] = extents.x;
 						col.extents[1] = extents.y;
 						col.extents[2] = extents.z;
-						collision_heightmap_texture = pc->heightfield_texture;
+						collision_heightmap_texture = pci->heightfield_texture;
 					} break;
 					default: {
 					}
@@ -2590,28 +2593,42 @@ void ParticlesStorage::particles_collision_initialize(RID p_rid) {
 	particles_collision_owner.initialize_rid(p_rid, ParticlesCollision());
 }
 
+void ParticlesStorage::_heightfield_free_instance_target(ParticlesCollisionInstance *p_instance) {
+	if (p_instance->heightfield_fb.is_valid()) {
+		RD::get_singleton()->free_rid(p_instance->heightfield_fb);
+		p_instance->heightfield_fb = RID();
+	}
+	if (p_instance->heightfield_texture.is_valid()) {
+		RD::get_singleton()->free_rid(p_instance->heightfield_texture);
+		p_instance->heightfield_texture = RID();
+	}
+}
+
+void ParticlesStorage::_heightfield_invalidate_base_instances(RID p_collision) {
+	ParticlesCollision *collision = particles_collision_owner.get_or_null(p_collision);
+	ERR_FAIL_NULL(collision);
+	for (const RID &rid : collision->instances) {
+		ParticlesCollisionInstance *instance = particles_collision_instance_owner.get_or_null(rid);
+		if (instance) _heightfield_free_instance_target(instance);
+	}
+}
+
 void ParticlesStorage::particles_collision_free(RID p_rid) {
 	ParticlesCollision *particles_collision = particles_collision_owner.get_or_null(p_rid);
 	ERR_FAIL_NULL(particles_collision);
-
-	if (particles_collision->heightfield_fb.is_valid()) {
-		RD::get_singleton()->free_rid(particles_collision->heightfield_fb);
-		particles_collision->heightfield_fb = RID();
-	}
-	if (particles_collision->heightfield_texture.is_valid()) {
-		RD::get_singleton()->free_rid(particles_collision->heightfield_texture);
-		particles_collision->heightfield_texture = RID();
-	}
+	_heightfield_invalidate_base_instances(p_rid);
 	particles_collision->dependency.deleted_notify(p_rid);
 	particles_collision_owner.free(p_rid);
 }
 
-RID ParticlesStorage::particles_collision_get_heightfield_framebuffer(RID p_particles_collision) const {
-	ParticlesCollision *particles_collision = particles_collision_owner.get_or_null(p_particles_collision);
+RID ParticlesStorage::particles_collision_get_heightfield_framebuffer(RID p_collision_instance) const {
+	ParticlesCollisionInstance *instance = particles_collision_instance_owner.get_or_null(p_collision_instance);
+	ERR_FAIL_NULL_V(instance, RID());
+	ParticlesCollision *particles_collision = particles_collision_owner.get_or_null(instance->collision);
 	ERR_FAIL_NULL_V(particles_collision, RID());
 	ERR_FAIL_COND_V(particles_collision->type != RSE::PARTICLES_COLLISION_TYPE_HEIGHTFIELD_COLLIDE, RID());
 
-	if (particles_collision->heightfield_texture == RID()) {
+	if (instance->heightfield_texture == RID()) {
 		//create
 		const int resolutions[RSE::PARTICLES_COLLISION_HEIGHTFIELD_RESOLUTION_MAX] = { 256, 512, 1024, 2048, 4096, 8192 };
 		Size2i size;
@@ -2633,23 +2650,23 @@ RID ParticlesStorage::particles_collision_get_heightfield_framebuffer(RID p_part
 		tf.texture_type = RD::TEXTURE_TYPE_2D;
 		tf.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
-		particles_collision->heightfield_texture = RD::get_singleton()->texture_create(tf, RD::TextureView());
-		if (particles_collision->heightfield_texture.is_null()) {
+		instance->heightfield_texture = RD::get_singleton()->texture_create(tf, RD::TextureView());
+		if (instance->heightfield_texture.is_null()) {
 			return RID();
 		}
 
 		Vector<RID> fb_tex;
-		fb_tex.push_back(particles_collision->heightfield_texture);
-		particles_collision->heightfield_fb = RD::get_singleton()->framebuffer_create(fb_tex);
-		if (particles_collision->heightfield_fb.is_null()) {
-			RD::get_singleton()->free_rid(particles_collision->heightfield_texture);
-			particles_collision->heightfield_texture = RID();
+		fb_tex.push_back(instance->heightfield_texture);
+		instance->heightfield_fb = RD::get_singleton()->framebuffer_create(fb_tex);
+		if (instance->heightfield_fb.is_null()) {
+			RD::get_singleton()->free_rid(instance->heightfield_texture);
+			instance->heightfield_texture = RID();
 			return RID();
 		}
-		particles_collision->heightfield_fb_size = size;
+		instance->heightfield_fb_size = size;
 	}
 
-	return particles_collision->heightfield_fb;
+	return instance->heightfield_fb;
 }
 
 void ParticlesStorage::particles_collision_set_collision_type(RID p_particles_collision, RSE::ParticlesCollisionType p_type) {
@@ -2660,16 +2677,11 @@ void ParticlesStorage::particles_collision_set_collision_type(RID p_particles_co
 	if (p_type == particles_collision->type) {
 		return;
 	}
+	ERR_FAIL_COND_MSG(particles_collision->scene_shape_revision == UINT64_MAX, "Particle collision scene shape revision exhausted.");
 
-	if (particles_collision->heightfield_fb.is_valid()) {
-		RD::get_singleton()->free_rid(particles_collision->heightfield_fb);
-		particles_collision->heightfield_fb = RID();
-	}
-	if (particles_collision->heightfield_texture.is_valid()) {
-		RD::get_singleton()->free_rid(particles_collision->heightfield_texture);
-		particles_collision->heightfield_texture = RID();
-	}
+	_heightfield_invalidate_base_instances(p_particles_collision);
 	particles_collision->type = p_type;
+	particles_collision->scene_shape_revision++;
 	particles_collision->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_AABB);
 }
 
@@ -2702,8 +2714,10 @@ void ParticlesStorage::particles_collision_set_sphere_radius(RID p_particles_col
 	ParticlesCollision *particles_collision = particles_collision_owner.get_or_null(p_particles_collision);
 	ERR_FAIL_NULL(particles_collision);
 	ERR_FAIL_COND_MSG(!Math::is_finite(p_radius) || p_radius < 0.0, "Particle collision sphere radius must be finite and non-negative.");
+	ERR_FAIL_COND_MSG(particles_collision->scene_shape_revision == UINT64_MAX, "Particle collision scene shape revision exhausted.");
 
 	particles_collision->radius = p_radius;
+	particles_collision->scene_shape_revision++;
 	particles_collision->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_AABB);
 }
 
@@ -2714,18 +2728,19 @@ void ParticlesStorage::particles_collision_set_box_extents(RID p_particles_colli
 
 	const Vector3 previous_extents = particles_collision->extents;
 	if (particles_collision->type == RSE::PARTICLES_COLLISION_TYPE_HEIGHTFIELD_COLLIDE &&
+			(previous_extents.x != p_extents.x || previous_extents.y != p_extents.y || previous_extents.z != p_extents.z)) {
+		ERR_FAIL_COND_MSG(particles_collision->scene_shape_revision == UINT64_MAX, "Particle collision scene shape revision exhausted.");
+	}
+	if (particles_collision->type == RSE::PARTICLES_COLLISION_TYPE_HEIGHTFIELD_COLLIDE &&
 			(previous_extents.x != p_extents.x || previous_extents.z != p_extents.z)) {
-		if (particles_collision->heightfield_fb.is_valid()) {
-			RD::get_singleton()->free_rid(particles_collision->heightfield_fb);
-			particles_collision->heightfield_fb = RID();
-		}
-		if (particles_collision->heightfield_texture.is_valid()) {
-			RD::get_singleton()->free_rid(particles_collision->heightfield_texture);
-			particles_collision->heightfield_texture = RID();
-		}
+		_heightfield_invalidate_base_instances(p_particles_collision);
 	}
 
 	particles_collision->extents = p_extents;
+	if (particles_collision->type == RSE::PARTICLES_COLLISION_TYPE_HEIGHTFIELD_COLLIDE &&
+			(previous_extents.x != p_extents.x || previous_extents.y != p_extents.y || previous_extents.z != p_extents.z)) {
+		particles_collision->scene_shape_revision++;
+	}
 	particles_collision->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_AABB);
 }
 
@@ -2774,17 +2789,12 @@ void ParticlesStorage::particles_collision_set_height_field_resolution(RID p_par
 	if (particles_collision->heightfield_resolution == p_resolution) {
 		return;
 	}
+	ERR_FAIL_COND_MSG(particles_collision->scene_shape_revision == UINT64_MAX, "Particle collision scene shape revision exhausted.");
 
 	particles_collision->heightfield_resolution = p_resolution;
+	particles_collision->scene_shape_revision++;
 
-	if (particles_collision->heightfield_fb.is_valid()) {
-		RD::get_singleton()->free_rid(particles_collision->heightfield_fb);
-		particles_collision->heightfield_fb = RID();
-	}
-	if (particles_collision->heightfield_texture.is_valid()) {
-		RD::get_singleton()->free_rid(particles_collision->heightfield_texture);
-		particles_collision->heightfield_texture = RID();
-	}
+	_heightfield_invalidate_base_instances(p_particles_collision);
 }
 
 AABB ParticlesStorage::particles_collision_get_aabb(RID p_particles_collision) const {
@@ -2830,13 +2840,29 @@ Dependency *ParticlesStorage::particles_collision_get_dependency(RID p_particles
 /* Particles collision instance */
 
 RID ParticlesStorage::particles_collision_instance_create(RID p_collision) {
+	ERR_FAIL_COND_V(next_scene_source_key == 0, RID());
+	ParticlesCollision *collision = particles_collision_owner.get_or_null(p_collision);
+	ERR_FAIL_NULL_V(collision, RID());
 	ParticlesCollisionInstance pci;
 	pci.collision = p_collision;
-	return particles_collision_instance_owner.make_rid(pci);
+	pci.scene_source_key = next_scene_source_key++;
+	RID instance = particles_collision_instance_owner.make_rid(pci);
+	collision->instances.insert(instance);
+	return instance;
 }
 
 void ParticlesStorage::particles_collision_instance_free(RID p_rid) {
+	ParticlesCollisionInstance *instance = particles_collision_instance_owner.get_or_null(p_rid);
+	ERR_FAIL_NULL(instance);
+	ParticlesCollision *collision = particles_collision_owner.get_or_null(instance->collision);
+	if (collision) collision->instances.erase(p_rid);
+	_heightfield_free_instance_target(instance);
 	particles_collision_instance_owner.free(p_rid);
+}
+
+RID ParticlesStorage::particles_collision_instance_get_collision(RID p_collision_instance) const {
+	const ParticlesCollisionInstance *instance = particles_collision_instance_owner.get_or_null(p_collision_instance);
+	return instance ? instance->collision : RID();
 }
 
 void ParticlesStorage::particles_collision_instance_set_transform(RID p_collision_instance, const Transform3D &p_transform) {
@@ -2850,4 +2876,37 @@ void ParticlesStorage::particles_collision_instance_set_active(RID p_collision_i
 	ParticlesCollisionInstance *pci = particles_collision_instance_owner.get_or_null(p_collision_instance);
 	ERR_FAIL_NULL(pci);
 	pci->active = p_active;
+}
+
+bool ParticlesStorage::particles_collision_instance_get_scene_sphere(RID p_instance, uint64_t &r_source_key, uint64_t &r_shape_revision, Transform3D &r_transform, float &r_radius) const {
+	const ParticlesCollisionInstance *pci = particles_collision_instance_owner.get_or_null(p_instance);
+	if (!pci || !pci->active || pci->scene_source_key == 0) {
+		return false;
+	}
+	const ParticlesCollision *pc = particles_collision_owner.get_or_null(pci->collision);
+	if (!pc || pc->type != RSE::PARTICLES_COLLISION_TYPE_SPHERE_COLLIDE) {
+		return false;
+	}
+	r_source_key = pci->scene_source_key;
+	r_shape_revision = pc->scene_shape_revision;
+	r_transform = pci->transform;
+	r_radius = pc->radius;
+	return true;
+}
+
+bool ParticlesStorage::particles_collision_instance_get_scene_heightfield(RID p_instance, uint64_t &r_source_key, uint64_t &r_shape_revision, Transform3D &r_transform, Vector3 &r_extents, RSE::ParticlesCollisionHeightfieldResolution &r_resolution) const {
+	const ParticlesCollisionInstance *pci = particles_collision_instance_owner.get_or_null(p_instance);
+	if (!pci || !pci->active || pci->scene_source_key == 0) {
+		return false;
+	}
+	const ParticlesCollision *pc = particles_collision_owner.get_or_null(pci->collision);
+	if (!pc || pc->type != RSE::PARTICLES_COLLISION_TYPE_HEIGHTFIELD_COLLIDE) {
+		return false;
+	}
+	r_source_key = pci->scene_source_key;
+	r_shape_revision = pc->scene_shape_revision;
+	r_transform = pci->transform;
+	r_extents = pc->extents;
+	r_resolution = pc->heightfield_resolution;
+	return true;
 }

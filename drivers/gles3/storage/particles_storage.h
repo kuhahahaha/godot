@@ -478,6 +478,7 @@ public:
 
 	virtual RID particles_collision_instance_create(RID p_collision) override;
 	virtual void particles_collision_instance_free(RID p_rid) override;
+	RID particles_collision_instance_get_collision(RID p_collision_instance) const;
 	virtual void particles_collision_instance_set_transform(RID p_collision_instance, const Transform3D &p_transform) override;
 	virtual void particles_collision_instance_set_active(RID p_collision_instance, bool p_active) override;
 };
