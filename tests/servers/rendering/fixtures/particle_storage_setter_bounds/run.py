@@ -36,6 +36,7 @@ def main() -> int:
 
     enums = (ROOT / "servers/rendering/rendering_server_enums.h").read_text()
     enum_names = [
+        "ParticlesMode",
         "ParticlesTransformAlign",
         "ParticlesTransformAlignCustomSrc",
         "ParticlesTransformAlignAxis",
@@ -43,6 +44,7 @@ def main() -> int:
     ]
     enum_defs = "\n".join("enum " + name + " " + body(enums, "enum " + name + " {") + ";" for name in enum_names)
     methods = [
+        ("mode", "ParticlesMode", "p_mode"),
         ("transform_align", "ParticlesTransformAlign", "p_transform_align"),
         ("transform_align_channel_filter", "ParticlesTransformAlignCustomSrc", "p_transform_align_channel_filter"),
         ("transform_align_axis", "ParticlesTransformAlignAxis", "p_rotation_axis"),
@@ -81,12 +83,14 @@ struct Dependency {
 struct Particles {
     bool external = false;
     Dependency dependency;
+    RSE::ParticlesMode mode = RSE::PARTICLES_MODE_2D;
     RSE::ParticlesTransformAlign transform_align = RSE::PARTICLES_TRANSFORM_ALIGN_DISABLED;
     RSE::ParticlesTransformAlignCustomSrc transform_align_src = RSE::PARTICLES_ALIGN_CHANNEL_FILTER_DISABLED;
     RSE::ParticlesTransformAlignAxis transform_align_axis = RSE::PARTICLES_ALIGN_AXIS_X;
     RSE::ParticlesDrawOrder draw_order = RSE::PARTICLES_DRAW_ORDER_INDEX;
     std::vector<int> draw_passes;
 };
+void _particles_free_data(Particles *) {}
 struct Owner { Particles value; Particles *get_or_null(int id) { return id == 1 ? &value : nullptr; } } particles_owner;
 """
         + functions
@@ -95,6 +99,9 @@ int main() {
     int checks = 0, failures = 0;
     auto check = [&](bool result) { checks++; if (!result) failures++; };
     auto &p = particles_owner.value;
+    particles_set_mode(1, RSE::PARTICLES_MODE_3D);
+    check(p.mode == RSE::PARTICLES_MODE_3D);
+    check(p.dependency.changes == 1);
     auto exercise = [&](auto setter, auto &field, int maximum) {
         using T = decltype(field + 0);
         (void)sizeof(T);
@@ -111,7 +118,7 @@ int main() {
     exercise([](int value) { particles_set_transform_align_channel_filter(1, static_cast<RSE::ParticlesTransformAlignCustomSrc>(value)); }, p.transform_align_src, RSE::PARTICLES_ALIGN_CHANNEL_FILTER_MAX);
     exercise([](int value) { particles_set_transform_align_axis(1, static_cast<RSE::ParticlesTransformAlignAxis>(value)); }, p.transform_align_axis, RSE::PARTICLES_ALIGN_AXIS_MAX);
     exercise([](int value) { particles_set_draw_order(1, static_cast<RSE::ParticlesDrawOrder>(value)); }, p.draw_order, RSE::PARTICLES_DRAW_ORDER_VIEW_DEPTH + 1);
-    check(p.dependency.changes == RSE::PARTICLES_DRAW_ORDER_VIEW_DEPTH + 1);
+    check(p.dependency.changes == RSE::PARTICLES_DRAW_ORDER_VIEW_DEPTH + 2);
     particles_set_draw_passes(1, 3);
     check(p.draw_passes.size() == 3);
     particles_set_draw_passes(1, 0);

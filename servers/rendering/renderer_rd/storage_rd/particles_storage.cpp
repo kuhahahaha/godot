@@ -290,6 +290,7 @@ void ParticlesStorage::particles_set_mode(RID p_particles, RSE::ParticlesMode p_
 	_particles_free_data(particles);
 
 	particles->mode = p_mode;
+	particles->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_PARTICLES);
 }
 
 void ParticlesStorage::particles_set_emitting(RID p_particles, bool p_emitting) {
