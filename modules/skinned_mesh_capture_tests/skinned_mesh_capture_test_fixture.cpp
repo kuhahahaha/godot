@@ -243,7 +243,7 @@ Error SkinnedMeshCaptureTestFixture::begin(StringName p_member, StringName p_rou
 	}
 	// Only the implemented fixed episodes may acquire. Other required members
 	// stay explicit unavailable until their original action schedules are wired.
-	if ((p_member != "S02" && p_member != "S03" && p_member != "S04" && p_member != "S05") || (p_route != "N" && p_route != "C" && !(p_member == "S02" && p_route == "P"))) {
+	if ((p_member != "S02" && p_member != "S03" && p_member != "S04" && p_member != "S05") || (p_route != "N" && p_route != "C" && !((p_member == "S02" || p_member == "S05") && p_route == "P"))) {
 		return reject(ERR_UNAVAILABLE, "P01_DEPENDENCY_ACQUISITION");
 	}
 	route = p_route;
@@ -389,7 +389,7 @@ Error SkinnedMeshCaptureTestFixture::advance_action(int32_t p_action_index) {
 			return reject(ERR_INVALID_DATA, "P01_SOURCE");
 		}
 		if (p_action_index == 0) {
-			player->advance(1.0);
+			player->advance(member == "S05" && condition == "mixed_weights_Q" ? 2.0 : 1.0);
 		} else {
 			player->seek(1.0, true);
 		}
@@ -535,8 +535,8 @@ Error SkinnedMeshCaptureTestFixture::submit_public_snapshot(const Dictionary &p_
 		const Transform3D palette = skeleton->get_bone_global_pose(mapped) * bind;
 		for (int row = 0; row < 3; ++row) {
 			for (int column = 0; column < 4; ++column) {
-				const float bind_value = column == 3 ? bind.origin[row] : bind.basis[column][row];
-				const float palette_value = column == 3 ? palette.origin[row] : palette.basis[column][row];
+				const float bind_value = column == 3 ? bind.origin[row] : bind.basis[row][column];
+				const float palette_value = column == 3 ? palette.origin[row] : palette.basis[row][column];
 				if (!Math::is_finite(bind_value) || !Math::is_finite(palette_value) || snapshot.pose_matrices[slot * 12 + row * 4 + column] != palette_value) {
 					return reject(ERR_INVALID_DATA, "P01_SOURCE");
 				}
