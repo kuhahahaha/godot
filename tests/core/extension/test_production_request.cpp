@@ -1397,7 +1397,16 @@ struct Access {
 		Error initialized = ERR_UNCONFIGURED;
 		uint64_t owner_thread = 0, first_serial = 0, second_serial = 0;
 		bool passed = true;
-		void check(bool condition) {
+		uint32_t first_failure_line = 0, last_failure_line = 0, failure_count = 0;
+		void check(uint32_t line, bool condition) {
+			if (!condition) {
+				FAIL_CHECK("SplitOwner failed original source check at line ", line);
+				if (!first_failure_line) {
+					first_failure_line = line;
+				}
+				last_failure_line = line;
+				++failure_count;
+			}
 			passed &= condition;
 		}
 		void rendezvous() {
@@ -1423,72 +1432,118 @@ struct Access {
 			auto zero = budget;
 			zero.receipts = 0;
 			const uint64_t initial_serial = request.next_control_serial;
-			test.check(registry.production_observe(ref, &zero, &report).native_error == OK);
-			test.check(request.next_control_serial == initial_serial);
-			test.check(request.control.state == ProductionControlState::OWNER_CONSUMED);
-			test.check(registry.production_observe(ref, &budget, &report).native_error == ERR_BUSY);
+			test.check(__LINE__, registry.production_observe(ref, &zero, &report).native_error == OK);
+			test.check(__LINE__, request.next_control_serial == initial_serial);
+			test.check(__LINE__, request.control.state == ProductionControlState::OWNER_CONSUMED);
+			// A saturated FIFO can retain an unpublished turn beyond its original
+			// deadline. Retrying that saved budget must settle its no-effect return.
+			auto expiring = budget;
+			uint64_t expired_serial = 0;
+			for (uint32_t admission = 0; admission < 8 && !expired_serial; ++admission) {
+				expiring.deadline_micros = OS::get_singleton()->get_ticks_usec() + 100000;
+				const auto accepted = registry.production_observe(ref, &expiring, &report);
+				if (request.control.state == ProductionControlState::PENDING) {
+					test.check(__LINE__, accepted.native_error == ERR_BUSY);
+					expired_serial = request.control.serial;
+				} else {
+					test.check(__LINE__, accepted.native_error == OK && request.next_control_serial == initial_serial);
+				}
+			}
+			test.check(__LINE__, expired_serial != 0);
+			if (expired_serial) {
+				while (OS::get_singleton()->get_ticks_usec() <= expiring.deadline_micros) {
+					OS::get_singleton()->delay_usec(1000);
+				}
+				test.check(__LINE__, registry.production_observe(ref, &zero, &report).native_error == OK);
+				test.check(__LINE__, request.control.state == ProductionControlState::PENDING);
+				test.check(__LINE__, registry.production_observe(ref, &expiring, &report).native_error == OK);
+				test.check(__LINE__, request.control.state == ProductionControlState::OWNER_CONSUMED);
+				test.check(__LINE__, request.control.serial == expired_serial && request.next_control_serial == expired_serial + 1);
+				test.check(__LINE__, fixture.driver.retains == 0 && fixture.driver.polls == 0);
+			}
+			test.check(__LINE__, registry.production_observe(ref, &budget, &report).native_error == ERR_BUSY);
 			test.first_serial = request.control.serial;
-			test.check(request.control.state == ProductionControlState::PENDING);
+			test.check(__LINE__, request.control.state == ProductionControlState::PENDING);
 			auto changed_pending = budget;
 			changed_pending.receipts = 2;
-			test.check(registry.production_observe(ref, &changed_pending, &report).native_error == ERR_BUSY);
-			test.check(request.control.serial == test.first_serial);
-			test.check(request.control.input.budget.receipts == 1);
-			test.check(fixture.driver.retains == 0 && fixture.driver.polls == 0);
-			test.check(registry.production_cancel(ref).native_error == ERR_BUSY);
-			test.check(!request.cancelled);
-			test.check(registry.production_close(fixture.attachment).native_error == ERR_BUSY);
+			test.check(__LINE__, registry.production_observe(ref, &changed_pending, &report).native_error == ERR_BUSY);
+			test.check(__LINE__, request.control.serial == test.first_serial);
+			test.check(__LINE__, request.control.input.budget.receipts == 1);
+			test.check(__LINE__, fixture.driver.retains == 0 && fixture.driver.polls == 0);
+			test.check(__LINE__, registry.production_cancel(ref).native_error == ERR_BUSY);
+			test.check(__LINE__, !request.cancelled);
+			test.check(__LINE__, registry.production_close(fixture.attachment).native_error == ERR_BUSY);
 			test.rendezvous(); // The actual server thread drains the saturated FIFO.
-			test.check(request.control.state == ProductionControlState::PENDING);
+			test.check(__LINE__, request.control.state == ProductionControlState::PENDING);
 			auto expired_pending = budget;
 			expired_pending.deadline_micros = 1;
-			test.check(registry.production_observe(ref, &expired_pending, &report).native_error == OK);
-			test.check(request.control.state == ProductionControlState::PENDING && request.control.serial == test.first_serial);
-			test.check(registry.production_observe(ref, &zero, &report).native_error == OK);
-			test.check(request.control.state == ProductionControlState::PENDING && fixture.driver.retains == 0 && fixture.driver.polls == 0);
-			test.check(registry.production_observe(ref, &changed_pending, &report).native_error == ERR_BUSY);
-			test.check(request.control.serial == test.first_serial);
-			test.check(request.control.input.budget.receipts == 1);
-			test.check(request.control.state == ProductionControlState::QUEUED);
+			test.check(__LINE__, registry.production_observe(ref, &expired_pending, &report).native_error == ERR_BUSY);
+			test.check(__LINE__, request.control.state == ProductionControlState::PENDING && request.control.serial == test.first_serial);
+			test.check(__LINE__, registry.production_observe(ref, &zero, &report).native_error == OK);
+			test.check(__LINE__, request.control.state == ProductionControlState::PENDING && fixture.driver.retains == 0 && fixture.driver.polls == 0);
+			test.check(__LINE__, registry.production_observe(ref, &changed_pending, &report).native_error == ERR_BUSY);
+			test.check(__LINE__, request.control.serial == test.first_serial);
+			test.check(__LINE__, request.control.input.budget.receipts == 1);
+			test.check(__LINE__, request.control.state == ProductionControlState::QUEUED);
+			test.check(__LINE__, registry.production_observe(ref, &expired_pending, &report).native_error == ERR_BUSY);
+			test.check(__LINE__, request.control.state == ProductionControlState::QUEUED && request.control.serial == test.first_serial);
 			test.rendezvous();
-			test.check(request.control.state == ProductionControlState::RETURNED);
-			test.check(fixture.driver.retains == 1 && fixture.driver.polls == 0);
-			test.check(registry.production_observe(ref, &zero, &report).native_error == OK);
-			test.check(request.control.state == ProductionControlState::RETURNED);
-			// An expired next reduction still consumes the retained immutable return,
-			// but cannot enqueue another native service turn.
-			auto expired = budget;
-			expired.deadline_micros = 1;
-			test.check(registry.production_observe(ref, &expired, &report).native_error == OK);
-			test.check(request.control.state == ProductionControlState::OWNER_CONSUMED);
-			test.check(request.next_control_serial == test.first_serial + 1);
+			test.check(__LINE__, request.control.state == ProductionControlState::RETURNED);
+			test.check(__LINE__, fixture.driver.retains == 1 && fixture.driver.polls == 0);
+			test.check(__LINE__, registry.production_observe(ref, &zero, &report).native_error == OK);
+			test.check(__LINE__, request.control.state == ProductionControlState::RETURNED);
+			// A caller may refresh both the deadline and the next reduction. This
+			// call consumes the original incomplete-source Busy without a new turn.
+			test.check(__LINE__, request.control.output.result.native_error == ERR_BUSY);
+			auto refreshed = changed_pending;
+			refreshed.deadline_micros = OS::get_singleton()->get_ticks_usec() + 20000000;
+			test.check(__LINE__, registry.production_observe(ref, &refreshed, &report).native_error == ERR_BUSY);
+			test.check(__LINE__, request.control.state == ProductionControlState::OWNER_CONSUMED);
+			test.check(__LINE__, request.next_control_serial == test.first_serial + 1);
 			// Publish the new reduction only after the original return was consumed.
 			auto reduced = budget;
 			reduced.receipts = 2;
-			test.check(registry.production_observe(ref, &reduced, &report).native_error == ERR_BUSY);
+			test.check(__LINE__, registry.production_observe(ref, &reduced, &report).native_error == ERR_BUSY);
 			test.second_serial = request.control.serial;
-			test.check(test.second_serial > test.first_serial);
-			test.check(request.control.input.budget.receipts == 2);
+			test.check(__LINE__, test.second_serial > test.first_serial);
+			test.check(__LINE__, request.control.input.budget.receipts == 2);
 			test.rendezvous();
-			test.check(registry.production_observe(ref, &reduced, &report).native_error == OK);
-			test.check(request.control.state == ProductionControlState::OWNER_CONSUMED);
-			test.check(fixture.driver.polls == 1 && report.known_obligations == 1 && report.complete_obligations == 1);
+			// An expired nonzero offer also consumes a returned original turn.
+			auto expired = budget;
+			expired.deadline_micros = 1;
+			test.check(__LINE__, registry.production_observe(ref, &expired, &report).native_error == OK);
+			test.check(__LINE__, request.control.state == ProductionControlState::OWNER_CONSUMED);
+			test.check(__LINE__, fixture.driver.polls == 1 && report.known_obligations == 1 && report.complete_obligations == 1);
+			// Hold the actual RD mutex across FIFO execution to produce a real
+			// returned Busy. A changed expired offer must preserve that result,
+			// and a second expired retry must not accept a replacement turn.
+			fixture.rd._thread_safe_.lock();
+			test.check(__LINE__, registry.production_observe(ref, &budget, &report).native_error == ERR_BUSY);
+			const uint64_t busy_serial = request.control.serial;
+			test.rendezvous();
+			fixture.rd._thread_safe_.unlock();
+			test.check(__LINE__, request.control.state == ProductionControlState::RETURNED && request.control.output.result.native_error == ERR_BUSY);
+			test.check(__LINE__, registry.production_observe(ref, &expired, &report).native_error == ERR_BUSY);
+			test.check(__LINE__, request.control.state == ProductionControlState::OWNER_CONSUMED);
+			test.check(__LINE__, registry.production_observe(ref, &expired, &report).native_error == OK);
+			test.check(__LINE__, request.control.state == ProductionControlState::OWNER_CONSUMED && request.next_control_serial == busy_serial + 1);
+			test.check(__LINE__, fixture.driver.retains == 1 && fixture.driver.polls == 1);
 			// Maintenance remains callable after the original owner's seal.
 			{
 				MutexLock lock(registry.mutex);
 				registry.records[fixture.reference.slot].quiescing = true;
 			}
-			test.check(registry.production_observe(ref, &budget, &report).native_error == ERR_BUSY);
+			test.check(__LINE__, registry.production_observe(ref, &budget, &report).native_error == ERR_BUSY);
 			test.rendezvous();
-			test.check(registry.production_observe(ref, &budget, &report).native_error == OK);
-			test.check(fixture.driver.retains == 1 && fixture.driver.polls == 1);
+			test.check(__LINE__, registry.production_observe(ref, &budget, &report).native_error == OK);
+			test.check(__LINE__, fixture.driver.retains == 1 && fixture.driver.polls == 1);
 			uint64_t release = 0;
-			test.check(registry.production_control_accept(ref, ProductionControlKind::RELEASE, &release, &budget) == OK);
-			test.check(registry.production_control_schedule(ref, release) == OK);
+			test.check(__LINE__, registry.production_control_accept(ref, ProductionControlKind::RELEASE, &release, &budget) == OK);
+			test.check(__LINE__, registry.production_control_schedule(ref, release) == OK);
 			test.rendezvous();
 			ProductionControlOutput returned = {};
-			test.check(registry.production_control_consume(ref, release, &returned) == OK);
-			test.check(returned.owner_return.native_error == OK && fixture.driver.releases == 1);
+			test.check(__LINE__, registry.production_control_consume(ref, release, &returned) == OK);
+			test.check(__LINE__, returned.owner_return.native_error == OK && fixture.driver.releases == 1);
 			fixture.cleanup_owner();
 			test.owner_ready.post();
 		}
@@ -3345,7 +3400,7 @@ struct Access {
 			GDExtensionProductionReportV1 report = {};
 			GDExtensionProductionServiceBudgetV1 zero = { GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionServiceBudgetV1>(), 0, 0, 0, 0, 0 };
 			CHECK(fixture.registry.production_observe(ref, &zero, &report).native_error == ERR_UNAUTHORIZED);
-			for (uint32_t phase = 0; phase < 5; ++phase) {
+			for (uint32_t phase = 0; phase < 6; ++phase) {
 				server->sync();
 				if (phase == 0) {
 					// Mechanical private capture of a real CPU driver's issue report.

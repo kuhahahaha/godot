@@ -1048,7 +1048,7 @@ Error Registry::production_observe_service(GDExtensionProductionRequestRefV1 ref
 		return OK;
 	}
 	uint64_t serial = 0;
-	bool returned = false, same_budget = false;
+	bool returned = false;
 	{
 		MutexLock lock(mutex);
 		ProductionRequest *request = nullptr;
@@ -1057,19 +1057,28 @@ Error Registry::production_observe_service(GDExtensionProductionRequestRefV1 ref
 		if (error != OK) {
 			return error;
 		}
-		const auto &cell = request->control;
+		auto &cell = request->control;
 		if (cell.state != ProductionControlState::OWNER_CONSUMED) {
 			if (cell.input.kind != ProductionControlKind::OBSERVE) {
 				return ERR_BUSY;
 			}
 			serial = cell.serial;
+			if (cell.state == ProductionControlState::PENDING && !service_budget_active(cell.input.budget)) {
+				// This exact turn never published. Return only its proven no-effect
+				// result; a retry cannot renew the original immutable authorization.
+				cell.output = {};
+				cell.output.request_serial = request->serial;
+				cell.output.control_serial = cell.serial;
+				cell.output.result = result(OK);
+				production_report_locked(*request, cell.output.report);
+				cell.state = ProductionControlState::RETURNED;
+			}
 			returned = cell.state == ProductionControlState::RETURNED;
 			if (returned && cell.output.output_generation.native_released) {
 				// Only an exact original consumer accepting the full internal result
 				// may consume it. The current public observe DTO has no such field.
 				return ERR_UNAVAILABLE;
 			}
-			same_budget = same_service_budget(cell.input.budget, budget);
 		}
 	}
 	if (returned) {
@@ -1078,17 +1087,14 @@ Error Registry::production_observe_service(GDExtensionProductionRequestRefV1 ref
 		if (error != OK) {
 			return error;
 		}
-		if (same_budget) {
-			return Error(output.result.native_error);
-		}
-		// The old immutable turn is consumed even when its deadline expired or
-		// the next reduction differs. A fresh turn uses the same fixed cell.
-		serial = 0;
+		// A nonzero retry consumes only the original turn, regardless of its
+		// offered deadline/reduction. A fresh turn requires a subsequent call.
+		return Error(output.result.native_error);
 	}
-	// The caller's current reduction gates publication even for an older
-	// retained PENDING turn. Query/expired calls preserve that immutable cell.
+	// Expiry cannot report a successful service return while an original turn
+	// remains outstanding. Zero queries above deliberately preserve custody.
 	if (!service_budget_active(budget)) {
-		return OK;
+		return serial ? ERR_BUSY : OK;
 	}
 	if (!serial) {
 		const Error error = production_control_accept(ref, ProductionControlKind::OBSERVE, &serial, &budget);

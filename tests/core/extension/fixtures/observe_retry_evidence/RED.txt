@@ -1,0 +1,29 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/core/extension/test_production_request.cpp:7331:
+TEST CASE:  [SceneTree][ProductionRequest] public Observe hands owner maintenance to original RS FIFO
+
+tests/core/extension/test_production_request.cpp:1403: ERROR: SplitOwner failed original source check at line 1460
+
+tests/core/extension/test_production_request.cpp:1403: ERROR: SplitOwner failed original source check at line 1480
+
+tests/core/extension/test_production_request.cpp:1403: ERROR: SplitOwner failed original source check at line 1488
+
+tests/core/extension/test_production_request.cpp:1403: ERROR: SplitOwner failed original source check at line 1492
+
+tests/core/extension/test_production_request.cpp:1403: ERROR: SplitOwner failed original source check at line 1497
+
+tests/core/extension/test_production_request.cpp:1403: ERROR: SplitOwner failed original source check at line 1501
+
+tests/core/extension/test_production_request.cpp:1403: ERROR: SplitOwner failed original source check at line 1502
+
+tests/core/extension/test_production_request.cpp:1403: ERROR: SplitOwner failed original source check at line 1526
+
+tests/core/extension/test_production_request.cpp:3428: ERROR: CHECK( test.passed ) is NOT correct!
+  values: CHECK( false )
+
+===============================================================================
+[doctest] test cases:  1 |  0 passed | 1 failed | 2135 skipped
+[doctest] assertions: 32 | 23 passed | 9 failed |
+[doctest] Status: FAILURE!
