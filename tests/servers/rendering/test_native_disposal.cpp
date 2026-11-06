@@ -779,8 +779,8 @@ TEST_CASE("[RenderingDevice][NativeDisposal] failed native creation leaves no wi
 } // namespace TestNativeDisposal
 
 // GeometryDirect is a narrow capture profile over original draw-list state.
-// This fixture checks graph append/refusal and original factory provenance; it does not
-// execute a native command buffer or provide source/execution authority.
+// This fixture checks original factory provenance and graph execution against a
+// strict driver. It does not provide source authority or GPU completion evidence.
 void TestNativeDisposalAccess::geometry_direct() {
 	using namespace TestNativeDisposal;
 	RenderingDevice rd;
@@ -788,6 +788,62 @@ void TestNativeDisposalAccess::geometry_direct() {
 		uint64_t next_buffer = 10;
 		uint32_t buffer_frees = 0;
 		uint32_t vertex_format_frees = 0;
+		Vector<uint64_t> payload;
+		CommandBufferID command_buffer_create(CommandPoolID) override { return CommandBufferID(12); }
+		bool command_buffer_begin(CommandBufferID) override { return true; }
+		void command_buffer_end(CommandBufferID) override {}
+		SemaphoreID semaphore_create() override { return SemaphoreID(13); }
+		void command_insert_breadcrumb(CommandBufferID, uint32_t) override {}
+		void command_pipeline_barrier(CommandBufferID, BitField<PipelineStageBits>, BitField<PipelineStageBits>, VectorView<MemoryAccessBarrier>, VectorView<BufferBarrier>, VectorView<TextureBarrier>, VectorView<AccelerationStructureBarrier>) override {}
+		void command_begin_render_pass(CommandBufferID p_buffer, RenderPassID p_pass, FramebufferID p_framebuffer, CommandBufferType, const Rect2i &, VectorView<RenderPassClearValue>) override {
+			CHECK(p_buffer == CommandBufferID(11));
+			CHECK(p_pass == RenderPassID(1));
+			CHECK(p_framebuffer == FramebufferID(2));
+			payload.push_back(10);
+		}
+		void command_end_render_pass(CommandBufferID p_buffer) override {
+			CHECK(p_buffer == CommandBufferID(11));
+			payload.push_back(20);
+		}
+		void command_bind_render_pipeline(CommandBufferID p_buffer, PipelineID p_pipeline) override {
+			CHECK(p_buffer == CommandBufferID(11));
+			payload.push_back(1);
+			payload.push_back(p_pipeline.id);
+		}
+		void command_render_bind_vertex_buffers(CommandBufferID p_buffer, uint32_t p_count, const BufferID *p_buffers, const uint64_t *p_offsets, uint64_t p_dynamic_offsets) override {
+			CHECK(p_buffer == CommandBufferID(11));
+			payload.push_back(2);
+			payload.push_back(p_count);
+			for (uint32_t i = 0; i < p_count; ++i) {
+				payload.push_back(p_buffers[i].id);
+				payload.push_back(p_offsets[i]);
+			}
+			payload.push_back(p_dynamic_offsets);
+		}
+		void command_render_bind_index_buffer(CommandBufferID p_buffer, BufferID p_index, IndexBufferFormat p_format, uint64_t p_offset) override {
+			CHECK(p_buffer == CommandBufferID(11));
+			payload.push_back(3);
+			payload.push_back(p_index.id);
+			payload.push_back(p_format);
+			payload.push_back(p_offset);
+		}
+		void command_render_draw_indexed(CommandBufferID p_buffer, uint32_t p_count, uint32_t p_instances, uint32_t p_first_index, int32_t p_vertex_offset, uint32_t p_first_instance) override {
+			CHECK(p_buffer == CommandBufferID(11));
+			payload.push_back(4);
+			payload.push_back(p_count);
+			payload.push_back(p_instances);
+			payload.push_back(p_first_index);
+			payload.push_back(p_vertex_offset);
+			payload.push_back(p_first_instance);
+		}
+		void command_render_draw(CommandBufferID p_buffer, uint32_t p_count, uint32_t p_instances, uint32_t p_base_vertex, uint32_t p_first_instance) override {
+			CHECK(p_buffer == CommandBufferID(11));
+			payload.push_back(5);
+			payload.push_back(p_count);
+			payload.push_back(p_instances);
+			payload.push_back(p_base_vertex);
+			payload.push_back(p_first_instance);
+		}
 		BufferID buffer_create(uint64_t, BitField<BufferUsageBits>, MemoryAllocationType, uint64_t) override { return BufferID(next_buffer++); }
 		void buffer_free(BufferID p_buffer) override {
 			CHECK((p_buffer == BufferID(10) || p_buffer == BufferID(11)));
@@ -819,7 +875,7 @@ void TestNativeDisposalAccess::geometry_direct() {
 	REQUIRE(shader_rid.is_valid());
 	const auto framebuffer_format = rd.framebuffer_format_create(Vector<RenderingDevice::AttachmentFormat>());
 	rd.draw_graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
-	rd.draw_graph.begin();
+	rd.draw_graph.begin(true);
 	const RDG::RecordHandle begin = rd.draw_graph.add_draw_list_begin(RDD::RenderPassID(1), RDD::FramebufferID(2), Rect2i(), {}, {}, {}, 0, false);
 	rd.draw_list.begin_handle = begin;
 	rd.draw_list.active = true;
@@ -968,7 +1024,37 @@ void TestNativeDisposalAccess::geometry_direct() {
 	CHECK_FALSE(set_refused.draw_handle.is_valid());
 	CHECK(rd.draw_graph.qualification_command_count() == before_set_refused);
 
-	rd.draw_list = RenderingDevice::DrawList();
+	// Finish the same original list and execute its stored instructions. The
+	// failed captures above must not add any native draw to this exact payload.
+	CHECK(driver.payload.is_empty());
+	const auto end = rd._draw_list_end_recorded(true);
+	CHECK(end.error == OK);
+	CHECK(end.capture_complete);
+	CHECK_FALSE(rd.draw_list.active);
+	RenderingDeviceGraph::CommandBufferPool pool;
+	RDD::CommandBufferID primary(11);
+	rd.draw_graph.end(false, false, primary, pool);
+	const uint64_t expected[] = {
+		10, 1, 400, 2, 1, 10, 0, 0,
+		3, 11, RDD::INDEX_BUFFER_FORMAT_UINT32, 8,
+		4, 6, 1, 0, 0, 0,
+		2, 1, 10, 0, 0,
+		5, 3, 1, 0, 0, 20
+	};
+	REQUIRE(driver.payload.size() == int(sizeof(expected) / sizeof(expected[0])));
+	for (int i = 0; i < driver.payload.size(); ++i) {
+		CHECK(driver.payload[i] == expected[i]);
+	}
+	for (const auto &record : { begin, pipeline_bind.draw_handle, vertex_bind.bind_handle, index_bind.bind_handle, indexed.draw_handle, triangle_bind.bind_handle, triangle_draw.draw_handle, end.draw_handle }) {
+		CHECK(rd.draw_graph.contains_record(record));
+		CHECK(rd.draw_graph.record_mapping_state(record) == RDG::RecordMappingState::Recorded);
+		uint32_t slot = UINT32_MAX;
+		CHECK(rd.draw_graph.resolve_record_command_buffer_slot(record, slot));
+		CHECK(slot == 0);
+		RDD::CommandBufferID actual;
+		CHECK(rd.draw_graph.resolve_record_command_buffer(record, actual));
+		CHECK(actual == primary);
+	}
 	rd.draw_graph.begin();
 	rd.free_rid(vertex_rid);
 	rd.free_rid(triangle_rid);
