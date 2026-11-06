@@ -37,6 +37,7 @@
 namespace GDExtensionDeviceExit {
 namespace {
 static_assert(std::is_standard_layout_v<GDExtensionProductionCapacityV1> && std::is_trivially_copyable_v<GDExtensionProductionCapacityV1>);
+static_assert(std::is_standard_layout_v<GDExtensionProductionRasterActionV1> && std::is_trivially_copyable_v<GDExtensionProductionRasterActionV1>);
 static_assert(std::is_standard_layout_v<GDExtensionProductionMetadataQuoteV1> && std::is_trivially_copyable_v<GDExtensionProductionMetadataQuoteV1>);
 static_assert(std::is_standard_layout_v<GDExtensionProductionInstallationReportV1> && std::is_trivially_copyable_v<GDExtensionProductionInstallationReportV1>);
 static_assert(std::is_standard_layout_v<GDExtensionProductionOperationV1> && std::is_trivially_copyable_v<GDExtensionProductionOperationV1>);
@@ -69,6 +70,10 @@ GDExtensionDeviceSessionResultV1 device_session_production_reserve_v1(GDExtensio
 	return Registry::get_singleton().production_reserve(attachment, operation, capacity, actions, action_count, resources, resource_count, uses, use_count, readbacks, readback_count, out_request);
 }
 static_assert(std::is_same_v<decltype(&device_session_production_reserve_v1), GDExtensionInterfaceDeviceSessionProductionReserveV1>);
+GDExtensionDeviceSessionResultV1 device_session_production_raster_reserve_v1(GDExtensionProductionAttachmentRefV1 attachment, const GDExtensionProductionOperationV1 *operation, const GDExtensionProductionCapacityV1 *capacity, const GDExtensionProductionRasterActionV1 *action, GDExtensionProductionRequestRefV1 *out_request) {
+	return Registry::get_singleton().production_raster_reserve(attachment, operation, capacity, action, out_request);
+}
+static_assert(std::is_same_v<decltype(&device_session_production_raster_reserve_v1), GDExtensionInterfaceDeviceSessionProductionRasterReserveV1>);
 int32_t device_session_production_record_schedule_v1(GDExtensionProductionRequestRefV1 request, uint64_t *out_control_serial) {
 	return int32_t(Registry::get_singleton().production_record_schedule(request, out_control_serial));
 }
@@ -242,6 +247,7 @@ void register_production_interfaces() {
 	GDExtension::register_interface_function("device_session_production_accept_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_accept_v1));
 	GDExtension::register_interface_function("device_session_production_install_record_receiver_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_install_record_receiver_v1));
 	GDExtension::register_interface_function("device_session_production_reserve_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_reserve_v1));
+	GDExtension::register_interface_function("device_session_production_raster_reserve_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_raster_reserve_v1));
 	GDExtension::register_interface_function("device_session_production_record_schedule_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_record_schedule_v1));
 	GDExtension::register_interface_function("device_session_production_record_consume_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_record_consume_v1));
 	GDExtension::register_interface_function("device_session_production_append_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_append_v1));

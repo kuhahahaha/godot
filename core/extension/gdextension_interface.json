@@ -6937,6 +6937,55 @@
             ]
         },
         {
+            "name": "GDExtensionProductionRasterActionV1",
+            "kind": "struct",
+            "description": [
+                "Checked Core production raster transport. This independent versioned DTO does not reuse dispatch ordinals or qualification ownership."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "action_ordinal",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "canonical_suboperation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "framebuffer_resource_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "depth_resource_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "target_content_revision",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "shader_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "pipeline_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "framebuffer_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
             "name": "GDExtensionProductionAccessV1",
             "kind": "enum",
             "description": [
@@ -18574,6 +18623,56 @@
                 "type": "GDExtensionDeviceSessionResultV1",
                 "description": [
                     "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_raster_reserve_v1",
+            "since": "4.7",
+            "description": [
+                "Checked Core production raster transport. This independent typed entry point reserves no logical Runtime authority and does not reuse dispatch or qualification ownership."
+            ],
+            "arguments": [
+                {
+                    "name": "attachment",
+                    "type": "GDExtensionProductionAttachmentRefV1",
+                    "description": [
+                        "Synchronous checked typed raster input."
+                    ]
+                },
+                {
+                    "name": "operation",
+                    "type": "const GDExtensionProductionOperationV1*",
+                    "description": [
+                        "Synchronous checked typed raster input."
+                    ]
+                },
+                {
+                    "name": "capacity",
+                    "type": "const GDExtensionProductionCapacityV1*",
+                    "description": [
+                        "Synchronous checked typed raster input."
+                    ]
+                },
+                {
+                    "name": "action",
+                    "type": "const GDExtensionProductionRasterActionV1*",
+                    "description": [
+                        "Synchronous checked typed raster input."
+                    ]
+                },
+                {
+                    "name": "out_request",
+                    "type": "GDExtensionProductionRequestRefV1*",
+                    "description": [
+                        "Synchronous checked typed raster input."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Checked typed raster result."
                 ]
             }
         },

@@ -111,6 +111,19 @@ GDExtensionDeviceSessionResultV1 Registry::production_reserve(GDExtensionProduct
 	}
 	return window_result(error);
 }
+
+GDExtensionDeviceSessionResultV1 Registry::production_raster_reserve(GDExtensionProductionAttachmentRefV1 ref, const GDExtensionProductionOperationV1 *operation, const GDExtensionProductionCapacityV1 *capacity, const GDExtensionProductionRasterActionV1 *action, GDExtensionProductionRequestRefV1 *out) {
+	if (out) {
+		*out = {};
+	}
+	if (!operation || !capacity || !action || !production_dto_valid(*operation) || !production_dto_valid(*capacity) || !production_dto_valid(*action) || action->reserved || !action->action_ordinal || !action->canonical_suboperation) {
+		return window_result(ERR_INVALID_PARAMETER);
+	}
+	// The public typed contract is established independently first; physical
+	// request/frame execution is intentionally gated until raster ownership is
+	// connected to the accepted production arena.
+	return window_result(ERR_UNAVAILABLE);
+}
 GDExtensionDeviceSessionResultV1 Registry::production_reserve_v2(GDExtensionProductionAttachmentRefV1 ref, const GDExtensionProductionOperationV1 *operation, const GDExtensionProductionCapacityV1 *capacity, const GDExtensionProductionActionV2 *actions, uint32_t action_count, const GDExtensionProductionResourceV1 *resources, uint32_t resource_count, const GDExtensionProductionUseV1 *uses, uint32_t use_count, const GDExtensionProductionReadbackV2 *readbacks, uint32_t readback_count, GDExtensionProductionRequestRefV1 *out) {
 	if (!window_aligned(operation) || !window_aligned(capacity) || !window_aligned(out) || out->registry_instance || out->handle_serial) {
 		return window_result(ERR_INVALID_PARAMETER);
