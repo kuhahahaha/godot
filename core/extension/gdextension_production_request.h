@@ -421,6 +421,10 @@ class ProductionRequest {
 	uint64_t next_disposal_group_serial = 1;
 	bool frozen = false, cancelled = false, effects_pending = false;
 	bool compute_list_open = false;
+	// Independent typed raster declaration retained with the accepted request
+	// arena. It does not alias qualification or dispatch ownership.
+	GDExtensionProductionRasterActionV1 raster_action = {};
+	bool raster_reserved = false;
 	uint32_t next_action = 0;
 	uint32_t native_workers_bound = 0;
 	GDExtensionProductionSegmentV2 segment = {};

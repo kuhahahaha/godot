@@ -116,13 +116,35 @@ GDExtensionDeviceSessionResultV1 Registry::production_raster_reserve(GDExtension
 	if (out) {
 		*out = {};
 	}
-	if (!operation || !capacity || !action || !production_dto_valid(*operation) || !production_dto_valid(*capacity) || !production_dto_valid(*action) || action->reserved || !action->action_ordinal || !action->canonical_suboperation) {
+	if (!window_aligned(operation) || !window_aligned(capacity) || !window_aligned(action) || !window_aligned(out) || !operation || !capacity || !action || !out || out->registry_instance || out->handle_serial || !production_dto_valid(*operation) || !production_dto_valid(*capacity) || !production_dto_valid(*action) || action->reserved || action->action_ordinal == UINT64_MAX || action->canonical_suboperation < operation->canonical_begin || action->canonical_suboperation >= operation->canonical_end) {
 		return window_result(ERR_INVALID_PARAMETER);
 	}
-	// The public typed contract is established independently first; physical
-	// request/frame execution is intentionally gated until raster ownership is
-	// connected to the accepted production arena.
-	return window_result(ERR_UNAVAILABLE);
+	MutexLock lock(mutex);
+	ProductionAttachment *attachment = nullptr;
+	RenderingDevice *device = nullptr;
+	Error error = production_attachment_locked(ref, true, attachment, device);
+	if (error != OK) {
+		return window_result(error);
+	}
+	if (!attachment->opened || !attachment->record_receiver) {
+		return window_result(ERR_UNAVAILABLE);
+	}
+	// Reserve one real accepted arena request through the same metadata
+	// allocator. Raster action ownership remains typed and independent; no
+	// dispatch row is synthesized and no qualification ticket is consulted.
+	GDExtensionProductionActionV1 no_actions[1] = {};
+	GDExtensionProductionResourceV1 no_resources[1] = {};
+	GDExtensionProductionUseV1 no_uses[1] = {};
+	GDExtensionProductionReadbackV1 no_readbacks[1] = {};
+	ProductionRequest *request = nullptr;
+	error = production_reserve_metadata_rows_locked(*attachment, *operation, *capacity, { no_actions, nullptr }, 0, no_resources, 0, no_uses, 0, { no_readbacks, nullptr, operation->canonical_begin }, 0, request, 2);
+	if (error != OK || !request) {
+		return window_result(error);
+	}
+	request->raster_action = *action;
+	request->raster_reserved = true;
+	*out = { instance, request->serial };
+	return window_result(OK);
 }
 GDExtensionDeviceSessionResultV1 Registry::production_reserve_v2(GDExtensionProductionAttachmentRefV1 ref, const GDExtensionProductionOperationV1 *operation, const GDExtensionProductionCapacityV1 *capacity, const GDExtensionProductionActionV2 *actions, uint32_t action_count, const GDExtensionProductionResourceV1 *resources, uint32_t resource_count, const GDExtensionProductionUseV1 *uses, uint32_t use_count, const GDExtensionProductionReadbackV2 *readbacks, uint32_t readback_count, GDExtensionProductionRequestRefV1 *out) {
 	if (!window_aligned(operation) || !window_aligned(capacity) || !window_aligned(out) || out->registry_instance || out->handle_serial) {
