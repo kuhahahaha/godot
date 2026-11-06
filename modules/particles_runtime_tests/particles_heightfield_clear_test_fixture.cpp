@@ -6,17 +6,26 @@
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server.h"
+#include "servers/rendering/rendering_server_globals.h"
+#include "servers/rendering/storage/mesh_storage.h"
 
 #include <cstring>
 
 void ParticlesHeightfieldClearTestFixture::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("run"), &ParticlesHeightfieldClearTestFixture::run);
+	ClassDB::bind_method(D_METHOD("run_geometry", "height"), &ParticlesHeightfieldClearTestFixture::run_geometry);
 	ClassDB::bind_method(D_METHOD("result"), &ParticlesHeightfieldClearTestFixture::result);
 }
 
 Dictionary ParticlesHeightfieldClearTestFixture::result() const {
 	MutexLock lock(result_mutex);
 	return result_data.duplicate(true);
+}
+
+Error ParticlesHeightfieldClearTestFixture::run_geometry(float p_height) {
+	geometry_height = p_height;
+	geometry_capture = true;
+	return run();
 }
 
 Error ParticlesHeightfieldClearTestFixture::run() {
@@ -52,9 +61,34 @@ Error ParticlesHeightfieldClearTestFixture::run() {
 	}
 	rd->draw_list_end();
 	PagedArrayPool<RenderGeometryInstance *> pool;
-	PagedArray<RenderGeometryInstance *> empty;
-	empty.set_page_pool(&pool);
-	scene->render_particle_collider_heightfield(second_instance, Transform3D(), empty);
+	PagedArray<RenderGeometryInstance *> instances;
+	instances.set_page_pool(&pool);
+	if (geometry_capture) {
+		// Fixed world y maps to reversed orthographic depth (y + 1) / 2.
+		Array arrays;
+		arrays.resize(RSE::ARRAY_MAX);
+		arrays[RSE::ARRAY_VERTEX] = PackedVector3Array{
+			Vector3(-1, 0, -1), Vector3(1, 0, -1), Vector3(1, 0, 1),
+			Vector3(-1, 0, -1), Vector3(1, 0, 1), Vector3(-1, 0, 1)
+		};
+		RenderingServerTypes::SurfaceData surface;
+		const Error prepared = RenderingServer::get_singleton()->mesh_create_surface_data_from_arrays(&surface, RSE::PRIMITIVE_TRIANGLES, arrays);
+		if (prepared != OK) {
+			return prepared;
+		}
+		mesh = RSG::mesh_storage->mesh_allocate();
+		RSG::mesh_storage->mesh_initialize(mesh);
+		RSG::mesh_storage->mesh_add_surface(mesh, surface);
+		geometry = scene->geometry_instance_create(mesh);
+		if (!geometry) {
+			return ERR_CANT_CREATE;
+		}
+		Transform3D transform;
+		transform.origin.y = geometry_height;
+		geometry->set_transform(transform, surface.aabb, transform.xform(surface.aabb));
+		instances.push_back(geometry);
+	}
+	scene->render_particle_collider_heightfield(second_instance, Transform3D(), instances);
 
 	const auto *first_data = storage->particles_collision_instance_owner.get_or_null(first_instance);
 	const auto *second_data = storage->particles_collision_instance_owner.get_or_null(second_instance);
@@ -120,19 +154,25 @@ void ParticlesHeightfieldClearTestFixture::sample_done(const PackedByteArray &p_
 	if (p_bytes.size() == 8) {
 		std::memcpy(raw, p_bytes.ptr(), 8);
 	}
-	{
-		MutexLock lock(result_mutex);
-		result_data["first_raw"] = raw[0];
-		result_data["second_raw"] = raw[1];
-		result_data["pass"] = p_bytes.size() == 8 && raw[0] >= 0.749f && raw[0] <= 0.751f && raw[1] >= -0.001f && raw[1] <= 0.001f;
-	}
+
 	rd->free_rid(uniform_set);
 	rd->free_rid(sampler);
 	rd->free_rid(buffer);
 	rd->free_rid(pipeline);
 	rd->free_rid(shader);
+	if (geometry) {
+		RendererSceneRenderRD::get_singleton()->geometry_instance_free(geometry);
+		geometry = nullptr;
+		RSG::mesh_storage->mesh_free(mesh);
+	}
 	auto *storage = RendererRD::ParticlesStorage::get_singleton();
 	storage->particles_collision_instance_free(first_instance);
 	storage->particles_collision_instance_free(second_instance);
 	storage->particles_collision_free(collision);
+	{
+		MutexLock lock(result_mutex);
+		result_data["first_raw"] = raw[0];
+		result_data["second_raw"] = raw[1];
+		result_data["pass"] = p_bytes.size() == 8 && raw[0] >= 0.749f && raw[0] <= 0.751f && Math::abs(raw[1] - (geometry_capture ? (geometry_height + 1.0f) * 0.5f : 0.0f)) <= 0.001f;
+	}
 }

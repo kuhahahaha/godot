@@ -13,7 +13,15 @@ func _initialize() -> void:
 
 func _start() -> void:
 	RenderingServer.set_render_loop_enabled(false)
-	RenderingServer.call_on_render_thread(Callable(fixture, "run"))
+	var method := "run_geometry" if OS.get_environment("ANGE_HEIGHTFIELD_GEOMETRY") == "1" else "run"
+	if not fixture.has_method(method):
+		print("HEIGHTFIELD_GEOMETRY_MISSING ", method)
+		quit(1)
+		return
+	var callback := Callable(fixture, method)
+	if method == "run_geometry":
+		callback = callback.bind(float(OS.get_environment("ANGE_HEIGHTFIELD_GEOMETRY_HEIGHT")))
+	RenderingServer.call_on_render_thread(callback)
 
 func _process(_delta: float) -> bool:
 	var result: Dictionary = fixture.call("result")

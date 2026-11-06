@@ -5,12 +5,17 @@
 #include "core/variant/dictionary.h"
 
 class RenderingDevice;
+class RenderGeometryInstance;
 
 class ParticlesHeightfieldClearTestFixture : public RefCounted {
 	GDCLASS(ParticlesHeightfieldClearTestFixture, RefCounted)
 	Dictionary result_data;
 	mutable Mutex result_mutex;
 	bool started = false;
+	bool geometry_capture = false;
+	float geometry_height = 0;
+	RID mesh;
+	RenderGeometryInstance *geometry = nullptr;
 	RID collision;
 	RID first_instance;
 	RID second_instance;
@@ -29,5 +34,6 @@ protected:
 
 public:
 	Error run();
+	Error run_geometry(float p_height);
 	Dictionary result() const;
 };
