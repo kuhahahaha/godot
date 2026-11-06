@@ -60,6 +60,14 @@ Error ParticlesHeightfieldClearTestFixture::run() {
 		return ERR_UNAVAILABLE;
 	}
 	rd->draw_list_end();
+	// Seed the actual capture target with a non-zero depth value as well. The
+	// production height pass must clear this reused target before drawing; a
+	// fresh second allocation would only test its initial contents.
+	const auto second_seed = rd->draw_list_begin(second_framebuffer, RD::DRAW_CLEAR_DEPTH, {}, 0.75f);
+	if (second_seed == RD::INVALID_ID) {
+		return ERR_UNAVAILABLE;
+	}
+	rd->draw_list_end();
 	PagedArrayPool<RenderGeometryInstance *> pool;
 	PagedArray<RenderGeometryInstance *> instances;
 	instances.set_page_pool(&pool);
