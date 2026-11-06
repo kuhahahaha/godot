@@ -1,0 +1,94 @@
+{
+  "schema": 1,
+  "component": "Independent generation root and retained exact terminal result",
+  "base_commit": "7e9d7864f1e16e83903b478f359d86b9481cfe7b",
+  "source_pins": {
+    "core/extension/gdextension_library_exit_guard.h": "771885565c647121dc6b90c639704960f7414a9c44518748f8b38e1a21069083",
+    "core/extension/gdextension_production_request.cpp": "7e17017eb33f30f683b221acb4b2cdee7c9db9f2ee14a44156a51c2de10a3b98",
+    "core/extension/gdextension_production_request.h": "d78758ccc116349704d5d59cb444132bbf75a582b242e92ad094e8dd1e4f6227",
+    "servers/rendering/renderer_rd/storage_rd/external_output_owner.cpp": "8e70e5cb7ed4acd41ba791c28a43f6bac4a74b2cb302098ef20937da9b52049e",
+    "servers/rendering/renderer_rd/storage_rd/external_output_owner.h": "b11b6d6778169a50c54d196d0590f1291cdd82d593f22dcff4d7316ac249d25c",
+    "servers/rendering/renderer_rd/storage_rd/particles_storage.h": "4fbd0340e49be5bfe5840e78563a10d7324fceefb2abf12936e4f32396accce5",
+    "servers/rendering/renderer_rd/storage_rd/particles_storage_retire.cpp": "3970e2e5c3703b503c2e9ff8428cf541d4b0e4f5ff2e31e06ebfaf468f92d8d4",
+    "servers/rendering/rendering_device.cpp": "eb3d4486b15b1e33c968528f007133421b907265759b2efe6521406a55f1a66a",
+    "servers/rendering/rendering_device.h": "6b791a6f0d1f8dd2af5d966be08721dc4deed5b74bcf3f9961ecb12f66af96a3",
+    "servers/rendering/rendering_device_immutable_hold.cpp": "8a245fee0cb7cbeb12e31de55221c1431df80a954e95d8d444dc95a8951ba8b7",
+    "tests/core/extension/test_production_request.cpp": "128aef64ef4cee00f67878b6cee9f74f95ae0e9eaf88d17c83de4728defc24db",
+    "tests/servers/rendering/test_external_output_custody_bridge.h": "14efb0dde76b3ff565da70b1c21574e860107d2ba00c2c8f1f40e33c76d1bb69",
+    "tests/servers/rendering/test_external_output_owner_state.cpp": "b7f6efe48edaf227c10dc5c1f442d3c255cedabd1637e2ee4d090b4fa3344e59",
+    "tests/servers/rendering/test_mesh_storage_external.cpp": "2faa2d1052fdadc978b27477d8927f377669716f465f76bbc8db038be8be0af8"
+  },
+  "host_sha256": "fbe2e0e81d43a06725e7d62c758bcfcabe011790be594e6095750ade5f7f0e00",
+  "controlled_metadata_sha256": "33f109162e8dd918a00696d2e47b95bf01d6d712d21fbad97178c288f724b16e",
+  "results": {
+    "targeted": {
+      "path": "work/b4-generation-root-20261106/targeted-directory-ci-r5/RESULT.json",
+      "sha256": "4662af2a60af0a4e8c818f3e7b1072ff54cea82cb5d8ad0cce62e29fe2233ba0",
+      "exit": 0,
+      "test_cases": {
+        "successes": "8",
+        "failures": "0"
+      },
+      "asserts": {
+        "successes": "4743",
+        "failures": "0"
+      },
+      "validation_pass": true
+    },
+    "full": {
+      "path": "work/b4-generation-root-20261106/full-r5/RESULT.json",
+      "sha256": "8a5d8db630a4a382811d11749c3aae63149c8cd34f11a1b099d045f831bbdce7",
+      "exit": 0,
+      "test_cases": {
+        "successes": "2113",
+        "failures": "0"
+      },
+      "asserts": {
+        "successes": "534049",
+        "failures": "0"
+      },
+      "validation_pass": true
+    },
+    "metal": {
+      "path": "work/b4-generation-root-20261106/native390/RESULT.json",
+      "sha256": "4604c7841716f3f46b0fb875534d0d50061c7b43d652c1a5d6162c8fa334b9a6",
+      "gpu_pass": true,
+      "checks": {
+        "one_result": true,
+        "not_timeout": true,
+        "no_fatal_or_exit_leaks": true,
+        "exact_expected_engine_errors": true,
+        "actual_metal_startup": true,
+        "native_and_outer_success": true,
+        "host_and_metadata_unchanged": true,
+        "source_unchanged": true
+      }
+    }
+  },
+  "verified_behavior": [
+    "Independent original generation pin survives zero Acquire and last slot return.",
+    "Original directory borrow blocks terminal with no native work; directory return and root return consume separate bounded passes.",
+    "Full immutable terminal snapshot saved before root unpin; failed unpin clears tentative result; exact original consume retains arena/code custody.",
+    "Real pipeline/material and geometry prefixes survive and retire under original bounded OBSERVE; all receipts reconcile with actual driver operations.",
+    "Private locked unpin avoids recursive BinaryMutex acquisition without weakening validation or opening snapshot race."
+  ],
+  "attempts": [
+    "Initial build succeeded but target hung; sample and LLDB captured nonrecursive Registry nested unpin; exact hung process terminated.",
+    "Lock-fix target completed with one test custody-state failure; fixed test distinguishes member counter drop from whole group drop.",
+    "Directory initial compile failed doctest logical decomposition; parenthesized expression.",
+    "R3 target exposed member-drop/group-marker intermediate state; R4 attempted private witness reads rejected at compile and removed; final tests use actual public pipeline hold count and original observations.",
+    "CI shadow errors fixed with scoped physical_context and MobileShader renames."
+  ],
+  "limits": [
+    "Private CPU-backed generation component; Metal390 is existing real particle regression, not a new generation GPU admission proof.",
+    "Public ABI unchanged; original source/preparation/phase/Host admission and successful Create/Acquire/Poll/Seal remain open.",
+    "Legacy public observe cannot represent full generation result and returns Unavailable while retaining it.",
+    "Remote CI for final changes not yet run; broader Godot queue remains active."
+  ],
+  "ci_fix_commit": "7a2463a989",
+  "independent_final_review": {
+    "path": "work/b4-generation-root-20261106/FINAL_INDEPENDENT_REVIEW.md",
+    "sha256": "fa9c5364e0b24c5c5be20edb89858ed8e33fa354040271d82b5b0591bb081222",
+    "result": "No blocking source or raw-evidence defect; target/full/Metal raw evidence checked"
+  }
+}

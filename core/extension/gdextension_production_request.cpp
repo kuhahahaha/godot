@@ -123,6 +123,7 @@ Error Registry::production_layout(const GDExtensionProductionCapacityV1 &c, GDEx
 	if (!add_layout(bytes, count, sizeof(type), alignof(type))) \
 	return ERR_PARAMETER_RANGE_ERROR
 	LAYOUT(ProductionAttachment, 1);
+	// Includes the fixed OBSERVE generation result; use the actual new sizeof.
 	LAYOUT(ProductionRequest, c.requests);
 	LAYOUT(ProductionActionCell, c.suboperations);
 	LAYOUT(ProductionResourceSlot, c.resources);
@@ -1063,6 +1064,11 @@ Error Registry::production_observe_service(GDExtensionProductionRequestRefV1 ref
 			}
 			serial = cell.serial;
 			returned = cell.state == ProductionControlState::RETURNED;
+			if (returned && cell.output.output_generation.native_released) {
+				// Only an exact original consumer accepting the full internal result
+				// may consume it. The current public observe DTO has no such field.
+				return ERR_UNAVAILABLE;
+			}
 			same_budget = same_service_budget(cell.input.budget, budget);
 		}
 	}
@@ -1829,7 +1835,7 @@ Error Registry::production_output_pin_borrow(const ProductionOutputPin &source, 
 	}
 	return ERR_OUT_OF_MEMORY; // Only original UNUSED quoted cells can retain metadata.
 }
-Error Registry::production_output_owner_bind(ProductionOutputPin &pin, RenderingDevice &rd, RID particles, uint64_t generation, uint32_t slot, uint64_t lease) {
+Error Registry::production_output_owner_bind(ProductionOutputPin &pin, RenderingDevice &rd, RID particles, uint64_t generation, uint32_t slot, uint64_t lease, ProductionOutputOwnerKind kind) {
 	MutexLock lock(mutex);
 	if (!production_output_pin_matches_locked(pin, { instance, pin.request_serial }, rd)) {
 		return ERR_UNAUTHORIZED;
@@ -1843,12 +1849,13 @@ Error Registry::production_output_owner_bind(ProductionOutputPin &pin, Rendering
 	if (request.capture_inflight || request.cancelled || request.release_started || request.control.state != ProductionControlState::EXECUTING || request.control.input.kind != ProductionControlKind::RECORD || request.next_action || request.graph_count || request.native_count) {
 		return ERR_BUSY;
 	}
-	if (!rd._production_output_owner_matches(particles, generation, slot, lease, pin, { instance, request.serial })) {
+	if (!rd._production_output_owner_matches(kind, particles, generation, slot, lease, pin, { instance, request.serial })) {
 		return ERR_UNAUTHORIZED;
 	}
 	if (row.output_generation) {
-		return row.output_particles == particles && row.output_generation == generation && row.output_slot == slot && row.output_lease == lease ? OK : ERR_ALREADY_IN_USE;
+		return row.output_owner_kind == kind && row.output_particles == particles && row.output_generation == generation && row.output_slot == slot && row.output_lease == lease ? OK : ERR_ALREADY_IN_USE;
 	}
+	row.output_owner_kind = kind;
 	row.output_particles = particles;
 	row.output_generation = generation;
 	row.output_slot = slot;
@@ -1880,8 +1887,8 @@ Error Registry::production_output_cleanup_context(ProductionPhysicalContextRef c
 		return ERR_UNAUTHORIZED;
 	}
 	const auto &row = request->uses[pin.cell_index];
-	if (!generation || !lease || row.output_particles != particles || row.output_generation != generation || row.output_slot != slot || row.output_lease != lease ||
-			!rd._production_output_owner_matches(particles, generation, slot, lease, pin, ref)) {
+	if (row.output_owner_kind != ProductionOutputOwnerKind::SLOT || !generation || !lease || row.output_particles != particles || row.output_generation != generation || row.output_slot != slot || row.output_lease != lease ||
+			!rd._production_output_owner_matches(ProductionOutputOwnerKind::SLOT, particles, generation, slot, lease, pin, ref)) {
 		return ERR_UNAUTHORIZED;
 	}
 	return OK;
@@ -1910,11 +1917,12 @@ Error Registry::production_output_owners_service_locked(ProductionRequest &reque
 	if (row.request != &request || row.output_role != ProductionUseCell::OutputRole::NATIVE_CONSUMER || !row.output_generation || !row.output_consumer || !production_output_pin_matches_locked(*row.output_consumer, { instance, request.serial }, rd)) {
 		return ERR_INVALID_DATA;
 	}
+	const ProductionOutputOwnerKind kind = row.output_owner_kind;
 	const RID particles = row.output_particles;
 	const uint64_t generation = row.output_generation, lease = row.output_lease, pin_serial = row.output_pin_serial;
 	const uint32_t slot = row.output_slot;
 	ProductionOutputPin *const pin = row.output_consumer; // Synchronous original custody, never persisted.
-	if (!rd._production_output_owner_matches(particles, generation, slot, lease, *pin, { instance, request.serial })) {
+	if (!rd._production_output_owner_matches(kind, particles, generation, slot, lease, *pin, { instance, request.serial })) {
 		return ERR_INVALID_DATA;
 	}
 	// Advance before owner may unlink this row. unpin repairs this cursor.
@@ -1928,7 +1936,7 @@ Error Registry::production_output_owners_service_locked(ProductionRequest &reque
 	++request.capture_inflight;
 	rd._thread_safe_.unlock();
 	mutex.unlock();
-	const Error result = rd._production_output_owner_service(particles, generation, slot, lease, *pin, budget, usage);
+	const Error result = rd._production_output_owner_service(kind, particles, generation, slot, lease, *pin, budget, usage);
 	rd._thread_safe_.lock();
 	mutex.lock();
 	CRASH_COND(!request.capture_inflight);
@@ -1939,17 +1947,78 @@ Error Registry::production_output_owners_service_locked(ProductionRequest &reque
 	// Re-resolve the original finite row. The callback may have unpinned it;
 	// neither the old pin pointer nor an owner pointer is touched after return.
 	const auto &returned = request.uses[index];
-	if (returned.request == &request && returned.output_role == ProductionUseCell::OutputRole::UNUSED && !returned.output_consumer && !returned.output_pin_serial && !returned.output_generation && returned.output_prev == UINT32_MAX && returned.output_next == UINT32_MAX) {
+	if (returned.request == &request && returned.output_role == ProductionUseCell::OutputRole::UNUSED && returned.output_owner_kind == ProductionOutputOwnerKind::NONE && !returned.output_consumer && !returned.output_pin_serial && !returned.output_generation && returned.output_prev == UINT32_MAX && returned.output_next == UINT32_MAX) {
 		return result;
 	}
-	if (returned.request != &request || returned.output_role != ProductionUseCell::OutputRole::NATIVE_CONSUMER || returned.output_pin_serial != pin_serial || returned.output_particles != particles || returned.output_generation != generation || returned.output_slot != slot || returned.output_lease != lease) {
+	if (returned.request != &request || returned.output_role != ProductionUseCell::OutputRole::NATIVE_CONSUMER || returned.output_pin_serial != pin_serial || returned.output_owner_kind != kind || returned.output_particles != particles || returned.output_generation != generation || returned.output_slot != slot || returned.output_lease != lease) {
 		return ERR_INVALID_DATA;
 	}
 	return result;
 }
 
+Error Registry::production_output_generation_return(ProductionOutputPin &pin, RenderingDevice &rd, RID particles,
+		uint64_t generation, const GDExtensionProductionServiceBudgetV1 &budget, ProductionServiceUsage &usage) {
+	MutexLock lock(mutex);
+	if (!production_output_pin_matches_locked(pin, { instance, pin.request_serial }, rd)) {
+		return ERR_UNAUTHORIZED;
+	}
+	auto &request = *pin.request;
+	auto &control = request.control;
+	const auto &row = request.uses[pin.cell_index];
+	if (row.output_owner_kind != ProductionOutputOwnerKind::GENERATION || row.output_particles != particles || row.output_generation != generation || row.output_slot != UINT32_MAX || row.output_lease ||
+			!rd._production_output_owner_matches(ProductionOutputOwnerKind::GENERATION, particles, generation, UINT32_MAX, 0, pin, { instance, request.serial }) ||
+			control.state != ProductionControlState::EXECUTING || control.input.kind != ProductionControlKind::OBSERVE || control.input.request_serial != request.serial ||
+			&budget != &control.input.budget || &usage != &control.output.service_usage || request.capture_inflight != 1) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (control.output.output_generation.native_released || !budget.controls || usage.passes >= MIN(budget.passes, 64u) ||
+			usage.receipts >= MIN(budget.receipts, 128u) || !budget.deadline_micros || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros) {
+		return ERR_BUSY;
+	}
+	ProductionOutputGenerationResult terminal = {};
+	const Error ready = rd._production_output_generation_ready(particles, generation, pin, { instance, request.serial }, terminal.unused_slots, terminal.returned_slots);
+	if (ready != OK) {
+		return ready;
+	}
+	const Error projected = production_report_contents_locked(request, terminal.root_source);
+	if (projected != OK) {
+		return projected;
+	}
+	if (request.source_device_lost || request.compute_list_open || (!request.cancelled && request.next_action != request.action_count) ||
+			terminal.root_source.possible_obligations || terminal.root_source.physical_returns_pending ||
+			terminal.root_source.known_obligations != terminal.root_source.complete_obligations) {
+		return ERR_BUSY;
+	}
+	if (OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros) {
+		return ERR_BUSY;
+	}
+	terminal.registry_instance = instance;
+	terminal.request_serial = request.serial;
+	terminal.control_serial = control.serial;
+	terminal.root_serial = pin.serial;
+	terminal.particles = particles.get_id();
+	terminal.generation = generation;
+	terminal.native_released = true;
+	// Save while the original root is still retained. No concurrent reader can
+	// consume EXECUTING; a failed unpin rolls back this tentative result.
+	control.output.output_generation = terminal;
+	const Error error = production_output_unpin_locked(pin);
+	if (error != OK) {
+		control.output.output_generation = {};
+		return error;
+	}
+	++usage.passes;
+	usage.controls = 1;
+	// The original control/request keeps arena and code alive through consume.
+	return OK;
+}
+
 Error Registry::production_output_unpin(ProductionOutputPin &pin) {
 	MutexLock lock(mutex);
+	return production_output_unpin_locked(pin);
+}
+
+Error Registry::production_output_unpin_locked(ProductionOutputPin &pin) {
 	if (!pin.registry) {
 		return ERR_DOES_NOT_EXIST;
 	}
@@ -1965,6 +2034,16 @@ Error Registry::production_output_unpin(ProductionOutputPin &pin) {
 	auto &cell = request.uses[pin.cell_index];
 	if (cell.request != &request || cell.output_role != ProductionUseCell::OutputRole::NATIVE_CONSUMER || cell.output_consumer != &pin || cell.output_pin_serial != pin.serial || pin.cell_index < request.use_count + request.binding_used) {
 		return ERR_INVALID_DATA;
+	}
+	if (cell.output_owner_kind == ProductionOutputOwnerKind::GENERATION) {
+		const auto &control = request.control;
+		const auto &terminal = control.output.output_generation;
+		if (control.state != ProductionControlState::EXECUTING || control.input.kind != ProductionControlKind::OBSERVE ||
+				!terminal.native_released || terminal.registry_instance != instance || terminal.request_serial != request.serial ||
+				terminal.control_serial != control.serial || terminal.root_serial != pin.serial ||
+				terminal.particles != cell.output_particles.get_id() || terminal.generation != cell.output_generation) {
+			return ERR_BUSY;
+		}
 	}
 	auto owns_group = [&](uint64_t serial) {
 		for (uint32_t index = request.use_count + request.binding_used; index < request.capacity.resource_uses; ++index) {
@@ -2007,6 +2086,7 @@ Error Registry::production_output_unpin(ProductionOutputPin &pin) {
 		if (request.output_owner_cursor == pin.cell_index) {
 			request.output_owner_cursor = cell.output_next != UINT32_MAX ? cell.output_next : request.output_owner_head;
 		}
+		cell.output_owner_kind = ProductionOutputOwnerKind::NONE;
 		cell.output_particles = RID();
 		cell.output_generation = cell.output_lease = 0;
 		cell.output_slot = cell.output_prev = cell.output_next = UINT32_MAX;
@@ -2336,6 +2416,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_close(GDExtensionProductio
 }
 
 static_assert(std::is_trivially_copyable_v<ProductionControlInput>);
+static_assert(std::is_trivially_copyable_v<ProductionOutputGenerationResult>);
 static_assert(std::is_trivially_copyable_v<ProductionControlOutput>);
 static_assert(std::is_trivially_copyable_v<ProductionControlCell>);
 

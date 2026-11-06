@@ -135,6 +135,7 @@ class ProductionRequest;
 // Core-only custody of one original accepted arena cell, never a record grant.
 // Explicit last-use return is mandatory; destruction cannot invent it.
 class ProductionOutputPin {
+	friend class ::RendererRD::ExternalOutputOwner;
 	friend class Registry;
 	friend class ::RenderingDevice;
 	Registry *registry = nullptr;
@@ -240,6 +241,7 @@ class ProductionUseCell {
 	uint64_t output_pin_serial = 0;
 	// Exact native owner locator on the ORIGINAL root pin row. Borrow rows
 	// remain unlinked. No wrapper/owner address is retained here.
+	ProductionOutputOwnerKind output_owner_kind = ProductionOutputOwnerKind::NONE;
 	RID output_particles;
 	uint64_t output_generation = 0, output_lease = 0;
 	uint32_t output_slot = UINT32_MAX;
@@ -346,6 +348,16 @@ enum class ProductionRecordPause : uint32_t { NONE,
 	SCOPE_RETURN,
 	APPEND_LIMIT,
 	UPLOAD_PREFIX };
+// One immutable native-generation closure per dispatched original owner turn.
+// This is charged with ProductionRequest, not a public Poll DTO or E05/U09 ACK.
+// Source counters describe only this exact root request, never other requests.
+struct ProductionOutputGenerationResult {
+	uint64_t registry_instance, request_serial, control_serial, root_serial;
+	uint64_t particles, generation;
+	GDExtensionProductionReportV2 root_source;
+	uint32_t unused_slots, returned_slots;
+	bool native_released;
+};
 struct ProductionControlOutput {
 	uint64_t request_serial;
 	uint64_t control_serial;
@@ -355,6 +367,7 @@ struct ProductionControlOutput {
 	GDExtensionProductionAppendV2 append;
 	ProductionRecordPause record_pause;
 	ProductionServiceUsage service_usage;
+	ProductionOutputGenerationResult output_generation;
 	// Owner reference return is distinct from the immutable RT result.
 	GDExtensionDeviceSessionResultV1 owner_return;
 	ProductionServiceUsage owner_usage;

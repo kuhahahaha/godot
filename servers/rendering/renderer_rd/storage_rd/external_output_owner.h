@@ -166,6 +166,12 @@ class ExternalOutputOwner {
 	RenderingDevice *device = nullptr;
 	uint32_t slot_count = 0;
 	uint64_t next_lease_serial = 1;
+	// Independent original Create-request custody, never borrowed from a slot.
+	// The serial/ref remain correlation after return; only the live pin grants custody.
+	GDExtensionDeviceExit::ProductionOutputPin generation_pin;
+	GDExtensionDeviceExit::Registry *generation_registry = nullptr;
+	GDExtensionProductionRequestRefV1 generation_request = {};
+	uint64_t generation_root_serial = 0;
 	View views[MAX_VIEWS];
 	Slot slots[MAX_SLOTS];
 	// Original parent capacity/accounting and identity association must be
@@ -179,7 +185,7 @@ class ExternalOutputOwner {
 
 public:
 	~ExternalOutputOwner() {
-		CRASH_COND(surface_cells || view_cells || read_cells);
+		CRASH_COND(surface_cells || view_cells || read_cells || !generation_pin.is_empty());
 		// No destructor fabricates native/source return or drops accepted uses.
 		CRASH_COND(state != GenerationState::RELEASED);
 		for (uint32_t i = 0; i < slot_count; ++i) {
@@ -191,6 +197,11 @@ private:
 	// Pure finite preflight only. Original Registry custody and original U08
 	// charge must both succeed before a caller commits a Reserved slot.
 	Error select_slot(const ExternalOutputRequest &p_request, uint32_t &r_view, uint32_t &r_slot) const;
+	// Component substrate for the original accepted Create receiver. The public
+	// Create leaf remains unavailable until its real admission/source join exists.
+	bool generation_root_matches(const GDExtensionDeviceExit::ProductionOutputPin &) const;
+	Error generation_returnable(uint32_t &, uint32_t &) const;
+	Error install_generation_root(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, GDExtensionDeviceExit::Registry &, RenderingDevice &, RID);
 	Error install_reserved_cells(uint32_t p_views, uint32_t p_reads);
 	Error install_reserved_surface_cells(uint32_t p_surfaces);
 	Error surface_return(ExternalSurfaceSelection &);

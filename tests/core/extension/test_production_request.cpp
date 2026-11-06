@@ -4222,7 +4222,7 @@ struct Access {
 		RD::VertexFormatID format = 0;
 		uint64_t group = 0;
 		bool cow = false, capacity_failure = false, transferred = false;
-		bool clear_early = false, indexed144 = false;
+		bool clear_early = false, indexed144 = false, generation_root = false;
 		Error capture_result = FAILED;
 		static void
 		receive(void *userdata,
@@ -4233,6 +4233,9 @@ struct Access {
 			auto &fixture = *test.fixture;
 			auto &rd = fixture.rd;
 			auto &native = *test.native;
+			if (test.generation_root) {
+				REQUIRE(native.install_generation(context, ref, fixture.registry) == OK);
+			}
 			native.install(0, fixture.registry, ref);
 			REQUIRE(fixture.registry.production_output_pin_current(
 							rd, native.pin(0)) == OK);
@@ -4421,7 +4424,7 @@ struct Access {
 		}
 	};
 	static void live_geometry_observe(bool cow = false,
-			bool capacity_failure = false, bool clear_early = false, bool indexed144 = false, uint32_t pending_polls = 0) {
+			bool capacity_failure = false, bool clear_early = false, bool indexed144 = false, uint32_t pending_polls = 0, bool generation_root = false) {
 		using namespace GDExtensionDeviceExit;
 		auto *server = ordinal_server();
 		if (!server ||
@@ -4444,7 +4447,7 @@ struct Access {
 			1,
 			0,
 			0,
-			capacity_failure ? 3u : 16u,
+			(capacity_failure ? 3u : 16u) + uint32_t(generation_root),
 			0,
 			0,
 			0,
@@ -4462,6 +4465,7 @@ struct Access {
 		probe.capacity_failure = capacity_failure;
 		probe.clear_early = clear_early;
 		probe.indexed144 = indexed144;
+		probe.generation_root = generation_root;
 		if (!check_step(ordinal_initialize(fixture, server, plan,
 								&LiveGeometryProbe::receive,
 								&probe) == OK)) {
@@ -4506,7 +4510,13 @@ struct Access {
 			CHECK_FALSE(held.settled);
 		}
 		fixture.driver.directory_pending_polls = pending_polls;
-		native.withdraw();
+		if (generation_root) {
+			native.withdraw_generation();
+		} else {
+			native.withdraw();
+		}
+		const uint64_t root_serial = native.generation_serial();
+		bool saw_slot_return_before_root = false, saw_terminal = false;
 		bool saw_settled = false, saw_finish_after_group = false;
 		bool saw_queued = false, saw_physical = false;
 		uint32_t pending_seen = 0;
@@ -4536,6 +4546,33 @@ struct Access {
 			CHECK((output.result.native_error == OK ||
 					output.result.native_error == ERR_BUSY));
 			CHECK(output.service_usage.passes <= 1);
+			if (generation_root) {
+				if (output.output_generation.native_released) {
+					CHECK_FALSE(saw_terminal);
+					CHECK(saw_slot_return_before_root);
+					CHECK(native.pin(0).is_empty());
+					CHECK(native.generation_pin().is_empty());
+					CHECK(native.released());
+					CHECK(output.output_generation.registry_instance == ref.registry_instance);
+					CHECK(output.output_generation.request_serial == ref.handle_serial);
+					CHECK(output.output_generation.control_serial == serial);
+					CHECK(output.output_generation.root_serial == root_serial);
+					CHECK(output.output_generation.particles == native.particle_rid().get_id());
+					CHECK(output.output_generation.generation == native.generation);
+					CHECK(output.output_generation.unused_slots == 1);
+					CHECK(output.output_generation.returned_slots == 1);
+					saw_terminal = true;
+				} else {
+					CHECK_FALSE(native.generation_pin().is_empty());
+					CHECK_FALSE(native.released());
+					if (native.pin(0).is_empty()) {
+						saw_slot_return_before_root = true;
+					}
+				}
+			} else {
+				CHECK_FALSE(output.output_generation.native_released);
+			}
+
 			CHECK(output.service_usage.receipts <= 1);
 			CHECK(output.service_usage.receipts == fixture.driver.observed_disposal_receipts() - before_receipts);
 			if (clear_early) {
@@ -4625,6 +4662,10 @@ struct Access {
 			}
 		}
 		CHECK(native.released());
+		CHECK(saw_terminal == generation_root);
+		if (generation_root) {
+			generation_root_drain_cursor(fixture, ref, server);
+		}
 		if (probe.transferred) {
 			CHECK(saw_settled);
 			CHECK(saw_finish_after_group);
@@ -4700,6 +4741,7 @@ struct Access {
 		RID shader, created;
 		uint64_t owned_group = 0, material_group = 0;
 		uint32_t mode = 0, calls = 0;
+		bool generation_root = false;
 		// 0: pipeline success, real material capacity failure; 1: material borrow;
 		// 2/3: driver failure (ordinary/quiet); 4: original Core capacity failure.
 		static void receive(void *userdata, GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionOperationV1 *) {
@@ -4709,6 +4751,9 @@ struct Access {
 			auto &rd = fixture.rd;
 			auto &native = *test.native;
 			++test.calls;
+			if (test.generation_root) {
+				REQUIRE(native.install_generation(context, ref, fixture.registry) == OK);
+			}
 			native.install(0, fixture.registry, ref);
 			REQUIRE(fixture.registry.production_output_pin_current(rd, native.pin(0)) == OK);
 			REQUIRE(fixture.registry.production_output_owner_bind(native.pin(0), rd, native.particle_rid(), native.generation, 0, native.lease(0)) == OK);
@@ -4813,7 +4858,7 @@ struct Access {
 			}
 		}
 	};
-	static void pipeline_prefix_observe(uint32_t mode) {
+	static void pipeline_prefix_observe(uint32_t mode, bool generation_root = false) {
 		using namespace GDExtensionDeviceExit;
 		auto *server = ordinal_server();
 		if (!server || !check_step(RendererRD::ParticlesStorage::get_singleton() == nullptr)) {
@@ -4824,13 +4869,14 @@ struct Access {
 		REQUIRE(consume != nullptr);
 		REQUIRE(release != nullptr);
 		OrdinalPlan plan;
-		plan.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, 0, mode == 4 ? 1u : 12u, 0, 0, 0, 0, 0, 0 };
+		plan.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, 0, (mode == 4 ? 1u : 12u) + uint32_t(generation_root), 0, 0, 0, 0, 0, 0 };
 		plan.action_count = plan.resource_count = plan.use_count = plan.readback_count = 0;
 		SingletonEnrollment fixture;
 		fixture.public_port = true;
 		PipelinePrefixProbe probe;
 		probe.fixture = &fixture;
 		probe.mode = mode;
+		probe.generation_root = generation_root;
 		REQUIRE(ordinal_initialize(fixture, server, plan, &PipelinePrefixProbe::receive, &probe) == OK);
 		fixture.driver.raster_device = &fixture.rd;
 		fixture.rd.draw_graph.initialize(&fixture.driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RDD::CommandQueueFamilyID(1), 0);
@@ -4852,7 +4898,13 @@ struct Access {
 		CHECK(request.action_count == 0);
 		CHECK(request.graph_count == 0);
 		CHECK(request.native_count == 0);
-		native.withdraw();
+		if (generation_root) {
+			native.withdraw_generation();
+		} else {
+			native.withdraw();
+		}
+		const uint64_t root_serial = native.generation_serial();
+		bool saw_slot_return_before_root = false, saw_terminal = false;
 		bool saw_owned = false, saw_borrowed = false, saw_owned_before_borrow = false, saw_material_return = false;
 		uint32_t turns = 0;
 		for (; turns < 128 && !native.released(); ++turns) {
@@ -4868,6 +4920,33 @@ struct Access {
 			REQUIRE(fixture.registry.production_control_consume(ref, serial, &output) == OK);
 			CHECK((output.result.native_error == OK || output.result.native_error == ERR_BUSY));
 			CHECK(output.service_usage.passes <= 1);
+			if (generation_root) {
+				if (output.output_generation.native_released) {
+					CHECK_FALSE(saw_terminal);
+					CHECK(saw_slot_return_before_root);
+					CHECK(native.pin(0).is_empty());
+					CHECK(native.generation_pin().is_empty());
+					CHECK(native.released());
+					CHECK(output.output_generation.registry_instance == ref.registry_instance);
+					CHECK(output.output_generation.request_serial == ref.handle_serial);
+					CHECK(output.output_generation.control_serial == serial);
+					CHECK(output.output_generation.root_serial == root_serial);
+					CHECK(output.output_generation.particles == native.particle_rid().get_id());
+					CHECK(output.output_generation.generation == native.generation);
+					CHECK(output.output_generation.unused_slots == 1);
+					CHECK(output.output_generation.returned_slots == 1);
+					saw_terminal = true;
+				} else {
+					CHECK_FALSE(native.generation_pin().is_empty());
+					CHECK_FALSE(native.released());
+					if (native.pin(0).is_empty()) {
+						saw_slot_return_before_root = true;
+					}
+				}
+			} else {
+				CHECK_FALSE(output.output_generation.native_released);
+			}
+
 			CHECK(output.service_usage.receipts <= 1);
 			CHECK(fixture.driver.raster_frees - frees_before <= 1);
 			CHECK(output.service_usage.receipts == fixture.driver.observed_disposal_receipts() + fixture.driver.raster_frees - receipts_before);
@@ -4901,7 +4980,16 @@ struct Access {
 					// A retiring RID need not survive a whole OBSERVE dispatch.
 					if (owned_release && !borrowed_release) {
 						CHECK(owned.held == 1);
-						CHECK_FALSE(owned.dropped);
+						// A generation-root OBSERVE may already drop the owned counter.
+						// Its original member remains HELD while the material borrow
+						// keeps the actual pipeline alive until its separate release.
+						const auto *pipeline = fixture.rd.render_pipeline_owner.get_or_null(probe.created);
+						REQUIRE(pipeline != nullptr);
+						CHECK(pipeline->native_immutable_holds >= 1);
+						CHECK(pipeline->native_immutable_holds <= 2);
+						if (owned.dropped) {
+							CHECK(pipeline->native_immutable_holds == 1);
+						}
 						CHECK_FALSE(owned.settled);
 						CHECK(borrowed.held == 2);
 						CHECK_FALSE(borrowed.dropped);
@@ -4925,6 +5013,7 @@ struct Access {
 			}
 		}
 		CHECK(native.released());
+		CHECK(saw_terminal == generation_root);
 		CHECK(turns > 1);
 		CHECK(saw_owned == (mode != 4));
 		if (mode == 1) {
@@ -5403,6 +5492,583 @@ struct Access {
 		CHECK(fixture.owner_cleaned);
 	}
 
+	static void generation_root_drain_cursor(SingletonEnrollment &fixture, GDExtensionProductionRequestRefV1 ref, RenderingServerDefault *server) {
+		using namespace GDExtensionDeviceExit;
+		auto &request = *fixture.request;
+		REQUIRE(request.control.state == ProductionControlState::OWNER_CONSUMED);
+		// Same original v2 dispatch/consume path as the runtime-corrected prefix.
+		// Every turn gets a fresh one-pass budget; no v1 mailbox projection.
+		for (uint32_t turn = 0; turn < 128 && request.maintenance_serial; ++turn) {
+			const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+			const uint32_t receipts_before = fixture.driver.observed_disposal_receipts() + fixture.driver.raster_frees;
+			ProductionControlOutput output{};
+			uint64_t serial = 0;
+			REQUIRE(fixture.registry.production_control_accept(ref, ProductionControlKind::OBSERVE, &serial, &budget) == OK);
+			REQUIRE(fixture.registry.production_control_schedule(ref, serial) == OK);
+			server->sync();
+			REQUIRE(fixture.registry.production_control_consume(ref, serial, &output) == OK);
+			CHECK((output.result.native_error == OK || output.result.native_error == ERR_BUSY));
+			CHECK(output.service_usage.passes <= 1);
+			CHECK(output.service_usage.receipts <= 1);
+			CHECK(output.service_usage.receipts == fixture.driver.observed_disposal_receipts() + fixture.driver.raster_frees - receipts_before);
+			CHECK_FALSE(output.output_generation.native_released);
+		}
+		CHECK(request.maintenance_serial == 0);
+	}
+	struct GenerationRootProbe {
+		SingletonEnrollment *fixture = nullptr;
+		RendererRD::ExternalLinkedOwnerTest *native = nullptr;
+		uint32_t slots = 0, calls = 0;
+		uint32_t directory_row = UINT32_MAX;
+		uint64_t directory_serial = 0;
+		bool pressure = false, root_group = false, service_group = false, group_settled = false, directory_hold = false;
+		uint64_t group = 0;
+		uint32_t group_turns = 0;
+		static GenerationRootProbe *&active() {
+			static thread_local GenerationRootProbe *probe = nullptr;
+			return probe;
+		}
+		static Error observe_component(GDExtensionDeviceExit::ProductionRequest &request, RenderingDevice &rd) {
+			using namespace GDExtensionDeviceExit;
+			auto *probe = active();
+			if (!probe || &request != probe->fixture->request || &rd != &probe->fixture->rd) {
+				return ERR_UNAUTHORIZED;
+			}
+			if (probe->native->generation_pin().is_empty()) {
+				return OK;
+			}
+			auto &control = request.control;
+			const auto before = control.output.service_usage;
+			auto copied_budget = control.input.budget;
+			ProductionServiceUsage copied_usage{};
+			ProductionDisposalObservation report;
+			CHECK(rd._production_output_retire_service(probe->native->generation_pin(), 0, copied_budget, control.output.service_usage, report) == ERR_UNAUTHORIZED);
+			CHECK(rd._production_output_retire_service(probe->native->generation_pin(), 0, control.input.budget, copied_usage, report) == ERR_UNAUTHORIZED);
+			CHECK(control.output.service_usage.controls == before.controls);
+			CHECK(control.output.service_usage.passes == before.passes);
+			CHECK(control.output.service_usage.receipts == before.receipts);
+			CHECK(copied_usage.controls == 0);
+			CHECK(copied_usage.passes == 0);
+			CHECK(copied_usage.receipts == 0);
+			if (!probe->service_group || probe->group_settled) {
+				return OK;
+			}
+			// Existing original OBSERVE test hook; call only the real group
+			// service with the exact original references, never write cell state.
+			++probe->group_turns;
+			const Error error = rd._production_output_retire_service(probe->native->generation_pin(), probe->group, control.input.budget, control.output.service_usage, report);
+			if (error == OK) {
+				CHECK(report.settled);
+				CHECK(report.uncreated == 1);
+				CHECK(report.held == 0);
+				CHECK(report.queued == 0);
+				CHECK(report.physical_returned == 0);
+				CHECK(report.unknown == 0);
+				probe->group_settled = true;
+			}
+			return error;
+		}
+		uint64_t root_serial = 0;
+		uint32_t root_index = UINT32_MAX;
+
+		void check_root_unchanged(uint64_t next, uint32_t head, uint32_t cursor) const {
+			using namespace GDExtensionDeviceExit;
+			const auto &request = *fixture->request;
+			CHECK_FALSE(native->generation_pin().is_empty());
+			CHECK(native->generation_serial() == root_serial);
+			CHECK(request.next_output_pin_serial == next);
+			CHECK(request.output_owner_head == head);
+			CHECK(request.output_owner_cursor == cursor);
+			const auto &row = request.uses[root_index];
+			CHECK(row.output_consumer == &native->generation_pin());
+			CHECK(row.output_pin_serial == root_serial);
+			CHECK(row.output_owner_kind == ProductionOutputOwnerKind::GENERATION);
+			CHECK(row.output_particles == native->particle_rid());
+			CHECK(row.output_generation == native->generation);
+			CHECK(row.output_slot == UINT32_MAX);
+			CHECK(row.output_lease == 0);
+		}
+		static void receive(void *userdata, GDExtensionDeviceExit::ProductionPhysicalContextRef context,
+				GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionOperationV1 *) {
+			using namespace GDExtensionDeviceExit;
+			auto &probe = *static_cast<GenerationRootProbe *>(userdata);
+			auto &fixture = *probe.fixture;
+			auto &native = *probe.native;
+			auto &request = *fixture.request;
+			++probe.calls;
+			REQUIRE(RegistrationContext::current != nullptr);
+			if (ref.handle_serial != request.serial) {
+				// A second accepted request in the SAME attachment has its own
+				// genuine protected RECORD, but no successor-to-generation grant.
+				const auto next = request.next_output_pin_serial;
+				const auto head = request.output_owner_head, cursor = request.output_owner_cursor;
+				CHECK(fixture.registry.production_output_owner_bind(native.generation_pin(), fixture.rd, native.particle_rid(), native.generation, UINT32_MAX, 0, ProductionOutputOwnerKind::GENERATION) == ERR_UNAUTHORIZED);
+				CHECK_FALSE(fixture.rd._production_output_owner_matches(ProductionOutputOwnerKind::GENERATION, native.particle_rid(), native.generation, UINT32_MAX, 0, native.generation_pin(), ref));
+				probe.check_root_unchanged(next, head, cursor);
+				CHECK_FALSE(native.withdrawing());
+				return;
+			}
+			REQUIRE(request.control.state == ProductionControlState::EXECUTING);
+			REQUIRE(request.control.input.kind == ProductionControlKind::RECORD);
+			const auto before = request.next_output_pin_serial;
+			auto wrong = context;
+			++wrong.frame_serial;
+			CHECK(native.install_generation(wrong, ref, fixture.registry) == ERR_UNAUTHORIZED);
+			CHECK(native.install_generation(context, { ref.registry_instance, UINT64_MAX }, fixture.registry) == ERR_UNAUTHORIZED);
+			CHECK(native.install_generation(context, { UINT64_MAX, ref.handle_serial }, fixture.registry) == ERR_UNAUTHORIZED);
+			CHECK(native.generation_uninstalled());
+			CHECK(request.next_output_pin_serial == before);
+			CHECK(request.output_owner_head == UINT32_MAX);
+			CHECK(request.output_owner_cursor == UINT32_MAX);
+			if (probe.pressure) {
+				REQUIRE(request.capacity.resource_uses == 1);
+				ProductionOutputPin occupied;
+				REQUIRE(fixture.registry.production_output_pin_current(fixture.rd, occupied) == OK);
+				const auto full = request.next_output_pin_serial;
+				CHECK(native.install_generation(context, ref, fixture.registry) == ERR_OUT_OF_MEMORY);
+				CHECK(native.generation_uninstalled());
+				CHECK(request.next_output_pin_serial == full);
+				CHECK(fixture.registry.production_output_pin_matches(occupied, ref, fixture.rd));
+				REQUIRE(fixture.registry.production_output_unpin(occupied) == OK);
+				CHECK(occupied.is_empty());
+				// An issued pin with a rejected locator returns its exact real row.
+				// The consumed pin serial is not rewound or reused.
+				CHECK(native.install_generation_at(context, ref, fixture.registry, RID()) == ERR_UNAUTHORIZED);
+				CHECK(native.generation_uninstalled());
+				CHECK(request.next_output_pin_serial == full + 1);
+				CHECK(request.output_owner_head == UINT32_MAX);
+				CHECK(request.uses[0].output_role == ProductionUseCell::OutputRole::UNUSED);
+				CHECK(request.uses[0].output_owner_kind == ProductionOutputOwnerKind::NONE);
+				CHECK(request.uses[0].output_consumer == nullptr);
+				CHECK(request.uses[0].output_pin_serial == 0);
+			}
+			REQUIRE(native.install_generation(context, ref, fixture.registry) == OK);
+			probe.root_serial = native.generation_serial();
+			REQUIRE(probe.root_serial != 0);
+			for (uint32_t i = 0; i < request.capacity.resource_uses; ++i) {
+				if (request.uses[i].output_consumer == &native.generation_pin()) {
+					probe.root_index = i;
+				}
+			}
+			REQUIRE(probe.root_index != UINT32_MAX);
+			const auto next = request.next_output_pin_serial;
+			const auto head = request.output_owner_head, cursor = request.output_owner_cursor;
+			CHECK(native.install_generation(context, ref, fixture.registry) == ERR_ALREADY_IN_USE);
+			CHECK(fixture.registry.production_output_owner_bind(native.generation_pin(), fixture.rd, RID(), native.generation, UINT32_MAX, 0, ProductionOutputOwnerKind::GENERATION) == ERR_UNAUTHORIZED);
+			CHECK(fixture.registry.production_output_owner_bind(native.generation_pin(), fixture.rd, native.particle_rid(), native.generation + 1, UINT32_MAX, 0, ProductionOutputOwnerKind::GENERATION) == ERR_UNAUTHORIZED);
+			CHECK(fixture.registry.production_output_owner_bind(native.generation_pin(), fixture.rd, native.particle_rid(), native.generation, 0, 0, ProductionOutputOwnerKind::GENERATION) == ERR_UNAUTHORIZED);
+			CHECK(fixture.registry.production_output_owner_bind(native.generation_pin(), fixture.rd, native.particle_rid(), native.generation, 0, native.lease(0), ProductionOutputOwnerKind::SLOT) == ERR_UNAUTHORIZED);
+			CHECK(fixture.registry.production_output_owner_bind(native.generation_pin(), fixture.rd, native.particle_rid(), native.generation, UINT32_MAX, 0, ProductionOutputOwnerKind::GENERATION) == OK);
+			CHECK_FALSE(fixture.rd._production_output_owner_matches(ProductionOutputOwnerKind::GENERATION, native.particle_rid(), native.generation, UINT32_MAX, 0, native.generation_pin(), { ref.registry_instance, UINT64_MAX }));
+			CHECK(fixture.registry.production_output_unpin(native.generation_pin()) == ERR_BUSY);
+			GDExtensionProductionServiceBudgetV1 copied_budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+			ProductionServiceUsage copied_usage{};
+			CHECK(fixture.registry.production_output_generation_return(native.generation_pin(), fixture.rd, native.particle_rid(), native.generation, copied_budget, copied_usage) == ERR_UNAUTHORIZED);
+			CHECK(copied_usage.controls == 0);
+			CHECK(copied_usage.passes == 0);
+			CHECK(copied_usage.receipts == 0);
+			CHECK_FALSE(request.control.output.output_generation.native_released);
+			probe.check_root_unchanged(next, head, cursor);
+			// The private generation root still grants no public Withdraw issuer.
+			const auto withdraw = reinterpret_cast<GDExtensionInterfaceDeviceSessionOutputWithdrawV1>(gdextension_get_guarded_proc_address("device_session_output_withdraw_v1"));
+			REQUIRE(withdraw != nullptr);
+			GDExtensionOutputGenerationInputV1 input{};
+			input.abi = production_dto_abi<GDExtensionOutputGenerationInputV1>();
+			input.particles = native.particle_rid().get_id();
+			input.generation = native.generation;
+			OutputLeafProbe::status(withdraw(context, ref, &input), ERR_UNAVAILABLE, "original_output_generation_owner_required");
+			CHECK_FALSE(native.withdrawing());
+			for (uint32_t i = 0; i < probe.slots; ++i) {
+				native.install(i, fixture.registry, ref);
+				REQUIRE(fixture.registry.production_output_pin_current(fixture.rd, native.pin(i)) == OK);
+				REQUIRE(fixture.registry.production_output_owner_bind(native.pin(i), fixture.rd, native.particle_rid(), native.generation, i, native.lease(i)) == OK);
+			}
+			if (probe.root_group) {
+				REQUIRE(fixture.rd._production_output_owned_reserve(context, native.generation_pin(), 1, probe.group) == OK);
+				REQUIRE(probe.group != 0);
+				ProductionDisposalObservation held;
+				REQUIRE(fixture.rd._production_output_hold_returned(native.generation_pin(), probe.group, held) == OK);
+				CHECK_FALSE(held.dropped);
+				CHECK_FALSE(held.settled);
+				CHECK(held.uncreated == 0); // The real reservation has not been returned.
+			}
+			if (probe.directory_hold) {
+				// This is a real Registry-issued borrow into the original finite
+				// directory, not an acquired view or a fabricated completion.
+				REQUIRE(fixture.registry.production_output_pin_borrow(native.generation_pin(), fixture.rd, native.generation_directory_pin()) == OK);
+				CHECK(fixture.registry.production_output_pin_matches(native.generation_directory_pin(), ref, fixture.rd));
+				for (uint32_t i = 0; i < request.capacity.resource_uses; ++i) {
+					const auto &row = request.uses[i];
+					if (row.output_role == ProductionUseCell::OutputRole::NATIVE_CONSUMER && row.output_consumer == &native.generation_directory_pin()) {
+						REQUIRE(probe.directory_row == UINT32_MAX);
+						probe.directory_row = i;
+						probe.directory_serial = row.output_pin_serial;
+					}
+				}
+				REQUIRE(probe.directory_row != UINT32_MAX);
+				CHECK(probe.directory_serial != 0);
+				CHECK(probe.directory_serial != probe.root_serial);
+			}
+			ProductionOutputPin excess;
+			const auto full = request.next_output_pin_serial;
+			CHECK(fixture.registry.production_output_pin_current(fixture.rd, excess) == ERR_OUT_OF_MEMORY);
+			CHECK(excess.is_empty());
+			CHECK(request.next_output_pin_serial == full);
+			CHECK(native.generation_serial() == probe.root_serial);
+			CHECK_FALSE(native.generation_pin().is_empty());
+		}
+	};
+
+	static void generation_root_observe(uint32_t slots, bool pressure = false, bool directory = false, bool root_group = false, bool directory_hold = false) {
+		using namespace GDExtensionDeviceExit;
+		auto *server = ordinal_server();
+		if (!server || !check_step(RendererRD::ParticlesStorage::get_singleton() == nullptr)) {
+			return;
+		}
+		REQUIRE((slots == 0 || slots == 2));
+		const auto consume_record = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRecordConsumeV2>("device_session_production_record_consume_v2");
+		const auto observe = ordinal_port<GDExtensionInterfaceDeviceSessionProductionObserveV2>("device_session_production_observe_v2");
+		const auto release = ordinal_port<GDExtensionInterfaceDeviceSessionProductionReleaseV2>("device_session_production_release_v2");
+		const auto reserve = ordinal_port<GDExtensionInterfaceDeviceSessionProductionReserveV2>("device_session_production_reserve_v2");
+		REQUIRE(consume_record != nullptr);
+		REQUIRE(observe != nullptr);
+		REQUIRE(release != nullptr);
+		REQUIRE(reserve != nullptr);
+		OrdinalPlan plan;
+		// Root + slots, and only the group row/member actually used by the group case.
+		REQUIRE((!directory_hold || (directory && !slots && !root_group && !pressure)));
+		const uint32_t cells = 1 + slots + (root_group ? 2 : 0) + uint32_t(directory_hold);
+		plan.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, 0, cells, 0, 0, 0, 0, 0, 0 };
+		plan.action_count = plan.resource_count = plan.use_count = plan.readback_count = 0;
+		plan.attachment_requests = 2; // One real same-attachment negative-control request.
+		SingletonEnrollment fixture;
+		fixture.public_port = true;
+		GenerationRootProbe probe;
+		probe.fixture = &fixture;
+		probe.slots = slots;
+		probe.pressure = pressure;
+		probe.root_group = root_group;
+		probe.directory_hold = directory_hold;
+		REQUIRE(ordinal_initialize(fixture, server, plan, &GenerationRootProbe::receive, &probe) == OK);
+		if (root_group) {
+			// Actual empty graph, so no unrelated timestamp command can masquerade
+			// as this original empty request's captured source.
+			fixture.rd.draw_graph.initialize(&fixture.driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RDD::CommandQueueFamilyID(1), 0);
+			fixture.rd.draw_graph.begin();
+			fixture.rd.frames[0].fence = RDD::FenceID(93);
+			fixture.rd.frames[0].command_buffer = RDD::CommandBufferID(90);
+			fixture.rd.frames[0].command_pool = RDD::CommandPoolID(94);
+			fixture.rd.main_queue = RDD::CommandQueueID(1);
+		}
+		RendererRD::ExternalLinkedOwnerTest native(fixture.rd);
+		probe.native = &native;
+		if (directory) {
+			REQUIRE(native.prepare_generation_directory() == OK);
+		}
+		auto &request = *fixture.request;
+		REQUIRE(request.capacity.resource_uses == cells);
+		CHECK(request.attachment->quote.capacity.resource_uses == cells);
+		auto total = plan.capacity;
+		total.requests = plan.attachment_requests;
+		GDExtensionProductionMetadataQuoteV1 actual_quote{};
+		REQUIRE(quote(total, actual_quote) == OK);
+		CHECK(actual_quote.allocation_bytes == request.attachment->quote.allocation_bytes);
+		CHECK(actual_quote.allocation_bytes >= sizeof(ProductionAttachment) + 2 * sizeof(ProductionRequest) + cells * sizeof(ProductionUseCell));
+		const GDExtensionProductionRequestRefV1 ref = { fixture.instance, request.serial };
+		uint64_t control = 0;
+		REQUIRE(fixture.port.record_schedule(ref, &control) == OK);
+		server->sync();
+		REQUIRE(probe.calls == 1);
+		GDExtensionProductionRecordReportV2 recorded{};
+		REQUIRE(consume_record(ref, control, &recorded).native_error == OK);
+		CHECK(request.action_count == 0);
+		CHECK(request.graph_count == 0);
+		CHECK(request.native_count == 0); // Genuine empty original source, no completion injection.
+		CHECK(native.generation_serial() == probe.root_serial);
+		CHECK_FALSE(native.generation_pin().is_empty());
+		CHECK(request.output_owner_cursor == probe.root_index);
+		if (!slots) {
+			CHECK(native.pin(0).is_empty());
+			CHECK(native.pin(1).is_empty());
+			CHECK_FALSE(native.slot_reserved(0));
+			CHECK_FALSE(native.slot_reserved(1));
+		}
+		const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+		auto release_request = [&](GDExtensionProductionRequestRefV1 target, Request *actual) {
+			for (uint32_t turn = 0; turn < (root_group ? 16u : 8u) && actual->serial; ++turn) {
+				GDExtensionProductionServiceBudgetV1 remaining{};
+				GDExtensionProductionReportV2 report{};
+				const Error error = Error(release(target, &budget, &remaining, &report).native_error);
+				CHECK((error == OK || error == ERR_BUSY));
+				if (actual->serial) {
+					server->sync();
+				}
+			}
+			CHECK(actual->serial == 0);
+		};
+		GDExtensionProductionCapacityV1 empty = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+		auto other_operation = plan.operation;
+		++other_operation.owner_request_nonce;
+		GDExtensionProductionRequestRefV1 other_ref{};
+		REQUIRE(reserve(fixture.attachment, &other_operation, &empty, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0, &other_ref).native_error == OK);
+		Request *other = nullptr;
+		{
+			MutexLock lock(fixture.registry.mutex);
+			RenderingDevice *same_device = nullptr;
+			REQUIRE(fixture.registry.production_request_locked(other_ref, false, other, same_device) == OK);
+			REQUIRE(other->attachment == request.attachment);
+			REQUIRE(same_device == &fixture.rd);
+		}
+		uint64_t other_control = 0;
+		REQUIRE(fixture.port.record_schedule(other_ref, &other_control) == OK);
+		server->sync();
+		GDExtensionProductionRecordReportV2 other_record{};
+		REQUIRE(consume_record(other_ref, other_control, &other_record).native_error == OK);
+		CHECK(probe.calls == 2);
+		release_request(other_ref, other);
+
+		native.withdraw_generation();
+		native.withdraw_generation(); // Idempotent logical close; no fabricated history.
+		CHECK(native.withdrawing());
+		CHECK(native.history_cleared());
+		struct ComponentHookScope {
+			decltype(test_production_before_maintenance) previous = test_production_before_maintenance;
+			GenerationRootProbe *prior = GenerationRootProbe::active();
+			~ComponentHookScope() {
+				test_production_before_maintenance = previous;
+				GenerationRootProbe::active() = prior;
+			}
+		} hook_scope;
+		GenerationRootProbe::active() = &probe;
+		test_production_before_maintenance = &GenerationRootProbe::observe_component;
+		auto dispatch = [&](const GDExtensionProductionServiceBudgetV1 &limit) {
+			uint64_t serial = 0;
+			REQUIRE(fixture.registry.production_control_accept(ref, ProductionControlKind::OBSERVE, &serial, &limit) == OK);
+			REQUIRE(fixture.registry.production_control_schedule(ref, serial) == OK);
+			server->sync();
+			REQUIRE(request.control.state == ProductionControlState::RETURNED);
+			CHECK(request.capture_inflight == 0);
+			return serial;
+		};
+		for (uint32_t idle = 0; idle < 2; ++idle) {
+			auto limit = budget;
+			if (!idle) {
+				limit.controls = limit.passes = limit.receipts = 0;
+			} else {
+				limit.deadline_micros = 1;
+			}
+			const auto cursor = request.output_owner_cursor;
+			const uint64_t serial = dispatch(limit);
+			ProductionControlOutput output{};
+			REQUIRE(fixture.registry.production_control_consume(ref, serial, &output) == OK);
+			CHECK(output.service_usage.controls == 0);
+			CHECK(output.service_usage.passes == 0);
+			CHECK(output.service_usage.receipts == 0);
+			CHECK_FALSE(output.output_generation.native_released);
+			CHECK(request.output_owner_cursor == cursor);
+			CHECK_FALSE(native.generation_pin().is_empty());
+			CHECK_FALSE(native.released());
+			CHECK(native.generation_directory_empty() == !directory);
+		}
+		if (directory_hold) {
+			const auto borrowed_serial = probe.directory_serial;
+			REQUIRE(probe.directory_row < request.capacity.resource_uses);
+			const auto next = request.next_output_pin_serial;
+			const auto head = request.output_owner_head, cursor = request.output_owner_cursor;
+			void *const arena = request.attachment->arena;
+			const auto children = fixture.holder.production_children;
+			for (uint32_t blocked = 0; blocked < 3; ++blocked) {
+				const uint64_t serial = dispatch(budget);
+				const auto &output = request.control.output;
+				CHECK(output.result.native_error == ERR_BUSY);
+				CHECK(output.service_usage.controls == 1);
+				CHECK(output.service_usage.passes == 0);
+				CHECK(output.service_usage.receipts == 0);
+				CHECK_FALSE(output.output_generation.native_released);
+				CHECK(output.output_generation.root_serial == 0);
+				probe.check_root_unchanged(next, head, cursor);
+				CHECK_FALSE(native.generation_directory_empty());
+				CHECK_FALSE(native.released());
+				CHECK(request.uses[probe.directory_row].output_pin_serial == borrowed_serial);
+				CHECK(request.uses[probe.directory_row].output_role == ProductionUseCell::OutputRole::NATIVE_CONSUMER);
+				CHECK(request.uses[probe.directory_row].output_consumer == &native.generation_directory_pin());
+				CHECK(fixture.registry.production_output_pin_matches(native.generation_directory_pin(), ref, fixture.rd));
+				CHECK(request.attachment->arena == arena);
+				CHECK(fixture.holder.production_children == children);
+				CHECK(children != 0);
+				CHECK(fixture.driver.issues == 0);
+				CHECK(fixture.driver.polls == 0);
+				CHECK(request.action_count == 0);
+				CHECK(request.graph_count == 0);
+				CHECK(request.native_count == 0);
+				ProductionControlOutput consumed{};
+				REQUIRE(fixture.registry.production_control_consume(ref, serial, &consumed) == OK);
+				CHECK_FALSE(consumed.output_generation.native_released);
+			}
+			// Return only the independently issued original borrow. The directory
+			// and terminal root still require their separate real OBSERVE passes.
+			REQUIRE(fixture.registry.production_output_unpin(native.generation_directory_pin()) == OK);
+			CHECK(native.generation_directory_pin().is_empty());
+			CHECK_FALSE(native.generation_pin().is_empty());
+			CHECK(native.generation_serial() == probe.root_serial);
+			CHECK_FALSE(native.generation_directory_empty());
+			CHECK_FALSE(native.released());
+		}
+		if (root_group) {
+			// Root readiness reaches original unpin with a real outstanding group.
+			// Its tentative terminal result must be erased without unlinking root.
+			const auto head = request.output_owner_head, cursor = request.output_owner_cursor;
+			const uint64_t blocked = dispatch(budget);
+			CHECK(request.control.output.result.native_error == ERR_BUSY);
+			CHECK_FALSE(request.control.output.output_generation.native_released);
+			CHECK(request.control.output.output_generation.root_serial == 0);
+			CHECK(request.control.output.service_usage.passes == 0);
+			CHECK(request.control.output.service_usage.receipts == 0);
+			CHECK_FALSE(native.generation_pin().is_empty());
+			CHECK(request.output_owner_head == head);
+			CHECK(request.output_owner_cursor == cursor);
+			ProductionDisposalObservation retained;
+			REQUIRE(fixture.rd._production_output_hold_returned(native.generation_pin(), probe.group, retained) == OK);
+			CHECK_FALSE(retained.dropped);
+			CHECK_FALSE(retained.settled);
+			ProductionControlOutput blocked_output{};
+			REQUIRE(fixture.registry.production_control_consume(ref, blocked, &blocked_output) == OK);
+			probe.service_group = true;
+		}
+		// Root first sees live slots (0 passes), then each slot returns (1 each),
+		// then root closes (1). A directory adds its own one-pass phase.
+		const uint32_t turns = root_group ? 16 : slots ? 4
+				: directory							   ? 2
+													   : 1; // Finite retry bound, never extra per-turn credit.
+		uint64_t terminal_control = 0;
+		for (uint32_t turn = 0; turn < turns; ++turn) {
+			const uint64_t serial = dispatch(budget);
+			const auto &output = request.control.output;
+			CHECK(output.service_usage.controls == 1);
+			if (root_group) {
+				CHECK(output.service_usage.passes <= 1);
+			} else {
+				CHECK(output.service_usage.passes == (slots && turn == 0 ? 0u : 1u));
+			}
+			CHECK(output.service_usage.receipts == 0);
+			if (root_group) {
+				CHECK((output.result.native_error == OK || output.result.native_error == ERR_BUSY));
+			} else {
+				CHECK(output.result.native_error == (slots && turn == 0 ? ERR_BUSY : OK));
+			}
+			if (root_group ? output.output_generation.native_released : turn + 1 == turns) {
+				terminal_control = serial;
+				break; // Retain the actual returned result, do not consume yet.
+			}
+			CHECK_FALSE(output.output_generation.native_released);
+			CHECK_FALSE(native.generation_pin().is_empty());
+			CHECK_FALSE(native.released());
+			if (slots && turn == 2) {
+				CHECK(native.pin(0).is_empty());
+				CHECK(native.pin(1).is_empty());
+				CHECK(request.output_owner_head == probe.root_index);
+				CHECK(request.output_owner_cursor == probe.root_index);
+			}
+			if (directory) {
+				CHECK(native.generation_directory_empty());
+			}
+			ProductionControlOutput consumed{};
+			REQUIRE(fixture.registry.production_control_consume(ref, serial, &consumed) == OK);
+		}
+		REQUIRE(terminal_control != 0);
+		if (root_group) {
+			CHECK(probe.group_settled);
+			CHECK(probe.group_turns >= 3);
+		}
+		REQUIRE(request.control.output.output_generation.native_released);
+		if (root_group) {
+			// Original drop started its real native continuation. The terminal
+			// pass leaves that continuation no credit, so later maintenance returns
+			// Busy without erasing the already-saved generation result.
+			CHECK(request.maintenance_serial != 0);
+			CHECK(fixture.rd.native_disposal_active.load());
+			CHECK(request.control.output.result.native_error == ERR_BUSY);
+		}
+		CHECK(native.released());
+		CHECK(native.generation_pin().is_empty());
+		CHECK(native.generation_serial() == probe.root_serial);
+		CHECK_FALSE(native.generation_uninstalled()); // Returned correlation is not a never-installed root.
+		CHECK(request.output_owner_head == UINT32_MAX);
+		CHECK(request.output_owner_cursor == UINT32_MAX);
+		CHECK(request.uses[probe.root_index].output_owner_kind == ProductionOutputOwnerKind::NONE);
+		CHECK(request.uses[probe.root_index].output_consumer == nullptr);
+		const auto &terminal = request.control.output.output_generation;
+		CHECK(terminal.registry_instance == fixture.instance);
+		CHECK(terminal.request_serial == ref.handle_serial);
+		CHECK(terminal.control_serial == terminal_control);
+		CHECK(terminal.root_serial == probe.root_serial);
+		CHECK(terminal.particles == native.particle_rid().get_id());
+		CHECK(terminal.generation == native.generation);
+		CHECK(terminal.unused_slots == 2 - slots);
+		CHECK(terminal.returned_slots == slots);
+		CHECK(terminal.root_source.abi.struct_size == sizeof(GDExtensionProductionReportV2));
+		CHECK(terminal.root_source.operation.owner_request_nonce == plan.operation.owner_request_nonce);
+		CHECK(terminal.root_source.known_obligations == 0);
+		CHECK(terminal.root_source.possible_obligations == 0);
+		CHECK(terminal.root_source.complete_obligations == 0);
+		CHECK(terminal.root_source.physical_returns_pending == 0);
+		CHECK(terminal.root_source.cause.native_error == OK);
+		uint8_t frozen[sizeof(ProductionControlOutput)];
+		std::memcpy(frozen, &request.control.output, sizeof(frozen));
+		void *const arena = request.attachment->arena;
+		const auto children = fixture.holder.production_children;
+		const auto next_control = request.next_control_serial;
+		GDExtensionProductionReportV2 public_report{};
+		auto query_budget = budget;
+		query_budget.controls = query_budget.receipts = query_budget.passes = 0;
+		CHECK(observe(ref, &query_budget, &public_report).native_error == OK);
+		CHECK(std::memcmp(frozen, &request.control.output, sizeof(frozen)) == 0);
+		CHECK(observe(ref, &budget, &public_report).native_error == ERR_UNAVAILABLE);
+		CHECK(request.control.state == ProductionControlState::RETURNED);
+		CHECK(std::memcmp(frozen, &request.control.output, sizeof(frozen)) == 0);
+		uint64_t rejected = 0;
+		CHECK(fixture.registry.production_control_accept(ref, ProductionControlKind::CANCEL, &rejected, &budget) == ERR_BUSY);
+		CHECK(fixture.registry.production_release(ref).native_error == ERR_BUSY);
+		CHECK(fixture.registry.production_close(fixture.attachment).native_error == ERR_BUSY);
+		CHECK(request.attachment->arena == arena);
+		CHECK(fixture.holder.production_children == children);
+		CHECK(children != 0);
+		CHECK(request.next_control_serial == next_control);
+		CHECK(std::memcmp(frozen, &request.control.output, sizeof(frozen)) == 0);
+		ProductionControlOutput consumed{};
+		CHECK(fixture.registry.production_control_consume(ref, terminal_control + 1, &consumed) == ERR_DOES_NOT_EXIST);
+		CHECK(fixture.registry.production_control_consume({ UINT64_MAX, ref.handle_serial }, terminal_control, &consumed) != OK);
+		CHECK(std::memcmp(frozen, &request.control.output, sizeof(frozen)) == 0);
+		REQUIRE(fixture.registry.production_control_consume(ref, terminal_control, &consumed) == OK);
+		CHECK(consumed.output_generation.native_released);
+		CHECK(consumed.output_generation.registry_instance == fixture.instance);
+		CHECK(consumed.output_generation.request_serial == ref.handle_serial);
+		CHECK(consumed.output_generation.control_serial == terminal_control);
+		CHECK(consumed.output_generation.root_serial == probe.root_serial);
+		CHECK(consumed.output_generation.particles == native.particle_rid().get_id());
+		CHECK(consumed.output_generation.generation == native.generation);
+		CHECK(consumed.output_generation.unused_slots == 2 - slots);
+		CHECK(consumed.output_generation.returned_slots == slots);
+		CHECK(request.control.state == ProductionControlState::OWNER_CONSUMED);
+		CHECK(fixture.registry.production_control_consume(ref, terminal_control, &consumed) == ERR_DOES_NOT_EXIST);
+		const uint64_t repeat = dispatch(budget);
+		REQUIRE(fixture.registry.production_control_consume(ref, repeat, &consumed) == OK);
+		CHECK_FALSE(consumed.output_generation.native_released);
+		CHECK(consumed.output_generation.root_serial == 0);
+		CHECK(consumed.service_usage.passes <= (root_group ? 1u : 0u));
+		CHECK(consumed.service_usage.receipts == 0);
+		CHECK(fixture.driver.issues == 0);
+		CHECK(fixture.driver.polls == 0);
+		CHECK(fixture.driver.retains == 0);
+		CHECK(fixture.driver.releases == 0);
+		if (root_group) {
+			generation_root_drain_cursor(fixture, ref, server);
+		}
+		release_request(ref, &request);
+		fixture.cleanup_owner();
+		CHECK(fixture.owner_cleaned);
+	}
+
 	struct LinkedOwnerProbe {
 		SingletonEnrollment *fixture = nullptr;
 		RendererRD::ExternalLinkedOwnerTest *native = nullptr;
@@ -5479,6 +6145,8 @@ struct Access {
 			server->sync();
 			REQUIRE(fixture.registry.production_control_consume(ref, serial, &output) == OK);
 			CHECK(output.result.native_error == OK);
+			CHECK_FALSE(output.output_generation.native_released);
+			CHECK(output.output_generation.root_serial == 0);
 			CHECK(request.serial == ref.handle_serial);
 			CHECK(request.capture_inflight == 0);
 			return output.service_usage;
@@ -5983,6 +6651,36 @@ TEST_CASE("[SceneTree][ProductionRequest][OutputRegisteredLeaves] guarded origin
 		Access::output_registered_leaves(custody_case);
 	}
 }
+TEST_CASE("[SceneTree][ProductionRequest][CoreProtected][GenerationRootComponent] Root retains actual pipeline and material prefix") {
+	Access::pipeline_prefix_observe(0, true);
+	Access::pipeline_prefix_observe(1, true);
+	Access::pipeline_prefix_observe(2, true);
+}
+TEST_CASE("[SceneTree][ProductionRequest][CoreProtected][GenerationRootComponent] Root retains actual geometry and pending native disposal") {
+	Access::live_geometry_observe(false, false, false, false, 0, true);
+	Access::live_geometry_observe(false, false, true, false, 3, true);
+}
+TEST_CASE("[SceneTree][ProductionRequest][CoreProtected][GenerationRootComponent] zero Acquire retains an independent root and immutable terminal result") {
+	Access::generation_root_observe(0);
+}
+TEST_CASE("[SceneTree][ProductionRequest][CoreProtected][GenerationRootComponent] last slot return preserves generation root until its own OBSERVE turn") {
+	Access::generation_root_observe(2);
+}
+TEST_CASE("[SceneTree][ProductionRequest][CoreProtected][GenerationRootComponent] real quoted cell exhaustion and rejected locator retain original custody") {
+	Access::generation_root_observe(0, true);
+}
+TEST_CASE("[SceneTree][ProductionRequest][CoreProtected][GenerationRootComponent] metadata directory and terminal root return spend separate one-pass turns") {
+	Access::generation_root_observe(0, false, true);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][CoreProtected][GenerationRootComponent] original borrowed directory pin blocks root terminal without native work") {
+	TestProductionRequest::Access::generation_root_observe(0, false, true, false, true);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][CoreProtected][GenerationRootComponent] unresolved original root group retains pin and rolls back tentative terminal result") {
+	Access::generation_root_observe(0, false, false, true);
+}
+
 TEST_CASE("[SceneTree][ProductionRequest][LinkedOwnerComponent] original OBSERVE traverses and unlinks two real roots within one-pass slices") {
 	Access::linked_owner_observe();
 }

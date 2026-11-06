@@ -49,6 +49,16 @@ public:
 	~ExternalLinkedOwnerTest();
 	GDExtensionDeviceExit::ProductionOutputPin &pin(uint32_t);
 	void install(uint32_t, GDExtensionDeviceExit::Registry &, GDExtensionProductionRequestRefV1);
+	// Independent generation substrate only; never a public Create/source issuer.
+	Error install_generation(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, GDExtensionDeviceExit::Registry &);
+	Error install_generation_at(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, GDExtensionDeviceExit::Registry &, RID);
+	GDExtensionDeviceExit::ProductionOutputPin &generation_pin();
+	uint64_t generation_serial() const;
+	bool generation_uninstalled() const;
+	Error prepare_generation_directory();
+	bool generation_directory_empty() const;
+	GDExtensionDeviceExit::ProductionOutputPin &generation_directory_pin();
+	void withdraw_generation();
 	RID particle_rid() const { return particles; }
 	static constexpr uint64_t generation = 33;
 	static uint64_t lease(uint32_t slot) { return 11 + slot; }

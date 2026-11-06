@@ -14380,19 +14380,24 @@ bool RenderingDevice::_production_resource_permitted(RID rid) const {
 // Keep the original Core-to-native service edge in this already rooted server
 // object, so static archive extraction does not depend on Core link order.
 bool RenderingDevice::_production_output_owner_matches(
-		RID p_particles, uint64_t p_generation, uint32_t p_slot, uint64_t p_lease,
+		GDExtensionDeviceExit::ProductionOutputOwnerKind p_kind, RID p_particles, uint64_t p_generation, uint32_t p_slot, uint64_t p_lease,
 		const GDExtensionDeviceExit::ProductionOutputPin &p_pin,
 		GDExtensionProductionRequestRefV1 p_request) {
 	return RendererRD::ParticlesStorage::_production_output_owner_matches(
-			p_particles, p_generation, p_slot, p_lease, p_pin, *this, p_request);
+			p_kind, p_particles, p_generation, p_slot, p_lease, p_pin, *this, p_request);
+}
+Error RenderingDevice::_production_output_generation_ready(RID p_particles, uint64_t p_generation,
+		const GDExtensionDeviceExit::ProductionOutputPin &p_pin, GDExtensionProductionRequestRefV1 p_request,
+		uint32_t &r_unused, uint32_t &r_returned) {
+	return RendererRD::ParticlesStorage::_production_output_generation_ready(p_particles, p_generation, p_pin, *this, p_request, r_unused, r_returned);
 }
 Error RenderingDevice::_production_output_owner_service(
-		RID p_particles, uint64_t p_generation, uint32_t p_slot, uint64_t p_lease,
+		GDExtensionDeviceExit::ProductionOutputOwnerKind p_kind, RID p_particles, uint64_t p_generation, uint32_t p_slot, uint64_t p_lease,
 		GDExtensionDeviceExit::ProductionOutputPin &p_pin,
 		const GDExtensionProductionServiceBudgetV1 &p_budget,
 		GDExtensionDeviceExit::ProductionServiceUsage &r_usage) {
 	return RendererRD::ParticlesStorage::_production_output_service(
-			p_particles, p_generation, p_slot, p_lease, p_pin, p_budget, r_usage);
+			p_kind, p_particles, p_generation, p_slot, p_lease, p_pin, p_budget, r_usage);
 }
 
 // The four original output leaves live in this already rooted server object,

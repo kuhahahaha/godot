@@ -100,6 +100,10 @@ class ProductionCleanupExtent {
 public:
 	static bool denies_new_work() { return current != nullptr; }
 };
+// Internal locator kind only; not an extension ABI or admission grant.
+enum class ProductionOutputOwnerKind : uint8_t { NONE,
+	GENERATION,
+	SLOT };
 class ProductionOutputPin;
 class ProductionAttachment;
 class ProductionRequest;
@@ -865,9 +869,11 @@ private:
 	// This never issues a physical context, source permission or native read use.
 	Error production_output_pin_borrow(const ProductionOutputPin &, RenderingDevice &, ProductionOutputPin &);
 	Error production_output_unpin(ProductionOutputPin &);
-	// Called only after the original accepted slot installs its root pin and
+	Error production_output_unpin_locked(ProductionOutputPin &);
+	// Called only after the original generation or slot installs its root pin and
 	// exact locator. Does not grant source/mapping/Host admission.
-	Error production_output_owner_bind(ProductionOutputPin &, RenderingDevice &, RID, uint64_t, uint32_t, uint64_t);
+	Error production_output_owner_bind(ProductionOutputPin &, RenderingDevice &, RID, uint64_t, uint32_t, uint64_t, ProductionOutputOwnerKind = ProductionOutputOwnerKind::SLOT);
+	Error production_output_generation_return(ProductionOutputPin &, RenderingDevice &, RID, uint64_t, const GDExtensionProductionServiceBudgetV1 &, ProductionServiceUsage &);
 	Error production_output_cleanup_context(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const ProductionOutputPin &, RenderingDevice &, RID, uint64_t, uint32_t, uint64_t);
 	Error production_output_owners_service_locked(ProductionRequest &, RenderingDevice &);
 	Error production_output_owner_context_locked(const ProductionOutputPin &, RenderingDevice &);

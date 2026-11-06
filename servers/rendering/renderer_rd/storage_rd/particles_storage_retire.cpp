@@ -47,7 +47,7 @@ Error ParticlesStorage::_external_pipeline_prepare_owned_prefix(GDExtensionProdu
 	}
 	auto &slot = owner.slots[slot_index];
 	if (!slot.original_registry || !slot.surfaces || surface_index >= slot.surface_count || slot.publication_closed ||
-			!_production_output_owner_matches(particle_rid, owner.generation, slot_index, slot.lease_serial, slot.original_pin, *owner.device, slot.original_request)) {
+			!_production_output_owner_matches(GDExtensionDeviceExit::ProductionOutputOwnerKind::SLOT, particle_rid, owner.generation, slot_index, slot.lease_serial, slot.original_pin, *owner.device, slot.original_request)) {
 		return ERR_UNAUTHORIZED;
 	}
 	auto &surface = slot.surfaces[surface_index];
@@ -72,9 +72,9 @@ Error ParticlesStorage::_external_pipeline_prepare_owned_prefix(GDExtensionProdu
 	return OK;
 }
 
-bool ParticlesStorage::_production_output_owner_matches(RID particle_rid, uint64_t generation, uint32_t slot, uint64_t lease_serial, const GDExtensionDeviceExit::ProductionOutputPin &pin, RenderingDevice &device, GDExtensionProductionRequestRefV1 request) {
+bool ParticlesStorage::_production_output_owner_matches(GDExtensionDeviceExit::ProductionOutputOwnerKind kind, RID particle_rid, uint64_t generation, uint32_t slot, uint64_t lease_serial, const GDExtensionDeviceExit::ProductionOutputPin &pin, RenderingDevice &device, GDExtensionProductionRequestRefV1 request) {
 	ParticlesStorage *storage = get_singleton();
-	if (!storage || !generation || !lease_serial || pin.is_empty()) {
+	if (!storage || !generation || pin.is_empty()) {
 		return false;
 	}
 	const Particles *particles = storage->particles_owner.get_or_null(particle_rid);
@@ -82,18 +82,38 @@ bool ParticlesStorage::_production_output_owner_matches(RID particle_rid, uint64
 		return false;
 	}
 	const ExternalOutputOwner &owner = *particles->external;
-	if (owner.generation != generation || owner.device != &device || slot >= owner.slot_count || owner.state == ExternalOutputOwner::GenerationState::RELEASED) {
+	if (owner.generation != generation || owner.device != &device || owner.state == ExternalOutputOwner::GenerationState::RELEASED) {
+		return false;
+	}
+	if (kind == GDExtensionDeviceExit::ProductionOutputOwnerKind::GENERATION) {
+		return slot == UINT32_MAX && !lease_serial && owner.generation_root_matches(pin) && request.registry_instance && request.handle_serial &&
+				owner.generation_request.registry_instance == request.registry_instance && owner.generation_request.handle_serial == request.handle_serial;
+	}
+	if (kind != GDExtensionDeviceExit::ProductionOutputOwnerKind::SLOT || !lease_serial || slot >= owner.slot_count) {
 		return false;
 	}
 	const auto &actual = owner.slots[slot];
 	return request.registry_instance && request.handle_serial && actual.original_request.registry_instance == request.registry_instance && actual.original_request.handle_serial == request.handle_serial && actual.lease_serial == lease_serial && &actual.original_pin == &pin && actual.state != ExternalOutputOwner::LeaseState::EMPTY && actual.state != ExternalOutputOwner::LeaseState::RELEASED;
 }
 
-Error ParticlesStorage::_production_output_service(RID p_particles, uint64_t p_generation, uint32_t p_slot,
+Error ParticlesStorage::_production_output_generation_ready(RID particles, uint64_t generation,
+		const GDExtensionDeviceExit::ProductionOutputPin &pin, RenderingDevice &device, GDExtensionProductionRequestRefV1 request,
+		uint32_t &unused, uint32_t &returned) {
+	if (!_production_output_owner_matches(GDExtensionDeviceExit::ProductionOutputOwnerKind::GENERATION, particles, generation, UINT32_MAX, 0, pin, device, request)) {
+		return ERR_UNAUTHORIZED;
+	}
+	const auto &owner = *get_singleton()->particles_owner.get_or_null(particles)->external;
+	if (owner.surface_cells || owner.view_cells || owner.read_cells || owner.surface_capacity || owner.view_capacity || owner.read_capacity) {
+		return ERR_BUSY;
+	}
+	return owner.generation_returnable(unused, returned);
+}
+
+Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::ProductionOutputOwnerKind p_kind, RID p_particles, uint64_t p_generation, uint32_t p_slot,
 		uint64_t p_lease_serial, GDExtensionDeviceExit::ProductionOutputPin &p_pin,
 		const GDExtensionProductionServiceBudgetV1 &p_budget, GDExtensionDeviceExit::ProductionServiceUsage &r_usage) {
 	ParticlesStorage *storage = get_singleton();
-	if (!storage || !p_generation || !p_lease_serial || p_pin.is_empty()) {
+	if (!storage || !p_generation || p_pin.is_empty()) {
 		return ERR_INVALID_PARAMETER;
 	}
 	Particles *particles = storage->particles_owner.get_or_null(p_particles);
@@ -101,7 +121,48 @@ Error ParticlesStorage::_production_output_service(RID p_particles, uint64_t p_g
 		return ERR_DOES_NOT_EXIST;
 	}
 	auto &owner = *particles->external;
-	if (owner.generation != p_generation || !owner.device || p_slot >= owner.slot_count) {
+	if (owner.generation != p_generation || !owner.device) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (p_kind == GDExtensionDeviceExit::ProductionOutputOwnerKind::GENERATION) {
+		if (p_slot != UINT32_MAX || p_lease_serial || !owner.generation_root_matches(p_pin) ||
+				!owner.generation_registry->production_output_pin_matches(p_pin, owner.generation_request, *owner.device)) {
+			return ERR_UNAUTHORIZED;
+		}
+		GDExtensionDeviceExit::ProductionDisposalObservation observation;
+		Error error = owner.device->_production_output_retire_service(p_pin, 0, p_budget, r_usage, observation);
+		if (error != OK) {
+			return error;
+		}
+		uint32_t unused = 0, returned = 0;
+		error = owner.generation_returnable(unused, returned);
+		if (error != OK) {
+			return error;
+		}
+		if (owner.surface_cells || owner.view_cells || owner.read_cells) {
+			// Directory destruction is its own charged phase. A one-pass turn
+			// retains the generation root and terminal result until a later turn.
+			if (r_usage.passes >= MIN(p_budget.passes, 64u) || r_usage.receipts >= MIN(p_budget.receipts, 128u) ||
+					OS::get_singleton()->get_ticks_usec() >= p_budget.deadline_micros) {
+				return ERR_BUSY;
+			}
+			error = owner.return_reserved_cells();
+			if (error != OK) {
+				return error;
+			}
+			++r_usage.passes;
+			r_usage.controls = 1;
+			return OK;
+		}
+		error = owner.generation_registry->production_output_generation_return(p_pin, *owner.device, p_particles, p_generation, p_budget, r_usage);
+		if (error != OK) {
+			return error;
+		}
+		owner.state = ExternalOutputOwner::GenerationState::RELEASED;
+		// Preserve original ref/serial for correlation; they cannot reissue a pin.
+		return OK;
+	}
+	if (p_kind != GDExtensionDeviceExit::ProductionOutputOwnerKind::SLOT || !p_lease_serial || p_slot >= owner.slot_count) {
 		return ERR_INVALID_PARAMETER;
 	}
 	auto &slot = owner.slots[p_slot];
@@ -374,9 +435,14 @@ Error ParticlesStorage::_production_output_service(RID p_particles, uint64_t p_g
 	if (error != OK) {
 		return error;
 	}
-	if ((owner.state == ExternalOutputOwner::GenerationState::WITHDRAWING ||
-				owner.state == ExternalOutputOwner::GenerationState::RETIRING ||
-				owner.state == ExternalOutputOwner::GenerationState::FAULTED_RETIRING) &&
+	// The older slot-only component path has no installed generation root and
+	// never emits a terminal generation result/public Poll grant. A real root
+	// keeps the owner alive for its own subsequent OBSERVE turn.
+	if (owner.generation_pin.is_empty() && !owner.generation_registry && !owner.generation_root_serial &&
+			!owner.generation_request.registry_instance && !owner.generation_request.handle_serial &&
+			(owner.state == ExternalOutputOwner::GenerationState::WITHDRAWING ||
+					owner.state == ExternalOutputOwner::GenerationState::RETIRING ||
+					owner.state == ExternalOutputOwner::GenerationState::FAULTED_RETIRING) &&
 			!owner.has_live_slots()) {
 		// This is original native owner closure only; G still retains its E05
 		// source obligations and cannot infer its own acknowledgment here.

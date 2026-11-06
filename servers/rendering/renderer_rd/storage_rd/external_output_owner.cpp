@@ -34,6 +34,63 @@
 #include "servers/rendering/renderer_rd/storage_rd/external_output_packet.h"
 
 namespace RendererRD {
+bool ExternalOutputOwner::generation_root_matches(const GDExtensionDeviceExit::ProductionOutputPin &pin) const {
+	return &pin == &generation_pin && !pin.is_empty() && generation_registry == pin.registry &&
+			generation_request.registry_instance && generation_request.handle_serial == pin.request_serial &&
+			generation_root_serial && generation_root_serial == pin.serial;
+}
+
+Error ExternalOutputOwner::generation_returnable(uint32_t &unused, uint32_t &returned) const {
+	unused = returned = 0;
+	if ((state != GenerationState::WITHDRAWING && state != GenerationState::RETIRING && state != GenerationState::FAULTED_RETIRING) || has_live_slots()) {
+		return ERR_BUSY;
+	}
+	for (uint32_t i = 0; i < slot_count; ++i) {
+		const auto &slot = slots[i];
+		if (!slot.publication_closed || !slot.pass_uses_closed || slot.storage || slot.surfaces || slot.surface_count || !slot.original_pin.is_empty() || slot.owned_group || slot.output_membership_group || slot_has_custody(i)) {
+			return ERR_BUSY;
+		}
+		unused += slot.state == LeaseState::EMPTY;
+		returned += slot.state == LeaseState::RELEASED;
+	}
+	for (uint32_t i = 0; i < config.max_views; ++i) {
+		if (!views[i].closed || views[i].history_slot != UINT32_MAX) {
+			return ERR_BUSY;
+		}
+	}
+	return OK;
+}
+
+Error ExternalOutputOwner::install_generation_root(GDExtensionDeviceExit::ProductionPhysicalContextRef context,
+		GDExtensionProductionRequestRefV1 request, GDExtensionDeviceExit::Registry &registry, RenderingDevice &rd, RID particles) {
+	if (!generation_pin.is_empty() || generation_registry || generation_request.registry_instance || generation_request.handle_serial || generation_root_serial) {
+		return ERR_ALREADY_IN_USE;
+	}
+	if (device != &rd || state != GenerationState::CONFIGURED || has_live_slots()) {
+		return ERR_INVALID_PARAMETER;
+	}
+	// Real current protected RECORD and original prequoted use capacity only.
+	// This does not install any source/Host/phase or U08 permission.
+	Error error = registry.production_output_pin(context, request, rd, generation_pin);
+	if (error != OK) {
+		return error;
+	}
+	generation_registry = &registry;
+	generation_request = request;
+	generation_root_serial = generation_pin.serial;
+	error = registry.production_output_owner_bind(generation_pin, rd, particles, generation, UINT32_MAX, 0, GDExtensionDeviceExit::ProductionOutputOwnerKind::GENERATION);
+	if (error != OK) {
+		// No native effect and no linked root was installed. Return only this
+		// unused custody row, keeping its consumed serial non-reusable in Core.
+		const Error returned = registry.production_output_unpin(generation_pin);
+		CRASH_COND(returned != OK);
+		generation_registry = nullptr;
+		generation_request = {};
+		generation_root_serial = 0;
+	}
+	return error;
+}
+
 Error ExternalOutputOwner::select_slot(const ExternalOutputRequest &request, uint32_t &out_view, uint32_t &out_slot) const {
 	if (!admits_work()) {
 		return ERR_UNAVAILABLE;

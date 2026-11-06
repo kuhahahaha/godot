@@ -44,8 +44,9 @@
 #include "servers/rendering/storage/utilities.h"
 
 namespace GDExtensionDeviceExit {
+enum class ProductionOutputOwnerKind : uint8_t;
 class ProductionOutputPin;
-}
+} //namespace GDExtensionDeviceExit
 
 class RenderDataRD;
 
@@ -83,8 +84,9 @@ private:
 	friend class ::RenderingDevice;
 	// Fixed original Core -> native owner service. Core re-resolves its finite
 	// row after return; no owner/wrapper pointer is persisted in the Core arena.
-	static bool _production_output_owner_matches(RID, uint64_t, uint32_t, uint64_t, const GDExtensionDeviceExit::ProductionOutputPin &, RenderingDevice &, GDExtensionProductionRequestRefV1);
-	static Error _production_output_service(RID p_particles, uint64_t p_generation, uint32_t p_slot, uint64_t p_lease_serial, GDExtensionDeviceExit::ProductionOutputPin &p_pin, const GDExtensionProductionServiceBudgetV1 &p_budget, GDExtensionDeviceExit::ProductionServiceUsage &r_usage);
+	static Error _production_output_generation_ready(RID, uint64_t, const GDExtensionDeviceExit::ProductionOutputPin &, RenderingDevice &, GDExtensionProductionRequestRefV1, uint32_t &, uint32_t &);
+	static bool _production_output_owner_matches(GDExtensionDeviceExit::ProductionOutputOwnerKind, RID, uint64_t, uint32_t, uint64_t, const GDExtensionDeviceExit::ProductionOutputPin &, RenderingDevice &, GDExtensionProductionRequestRefV1);
+	static Error _production_output_service(GDExtensionDeviceExit::ProductionOutputOwnerKind p_kind, RID p_particles, uint64_t p_generation, uint32_t p_slot, uint64_t p_lease_serial, GDExtensionDeviceExit::ProductionOutputPin &p_pin, const GDExtensionProductionServiceBudgetV1 &p_budget, GDExtensionDeviceExit::ProductionServiceUsage &r_usage);
 	static Error _external_typed_context(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, bool);
 	GDExtensionOutputStatusV1 _external_seal_body(RID, const uint8_t *, const GDExtensionOutputCommonInputV1 &, const uint8_t *);
 	Error _external_cancel_body(RID, const uint8_t *);

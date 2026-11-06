@@ -68,6 +68,44 @@ void ExternalLinkedOwnerTest::install(uint32_t index, GDExtensionDeviceExit::Reg
 	slot.lease_serial = lease(index);
 	slot.state = ExternalOutputOwner::LeaseState::RESERVED;
 }
+Error ExternalLinkedOwnerTest::install_generation(GDExtensionDeviceExit::ProductionPhysicalContextRef context,
+		GDExtensionProductionRequestRefV1 request, GDExtensionDeviceExit::Registry &registry) {
+	return install_generation_at(context, request, registry, particles);
+}
+Error ExternalLinkedOwnerTest::install_generation_at(GDExtensionDeviceExit::ProductionPhysicalContextRef context,
+		GDExtensionProductionRequestRefV1 request, GDExtensionDeviceExit::Registry &registry, RID locator) {
+	return owner->install_generation_root(context, request, registry, *owner->device, locator);
+}
+GDExtensionDeviceExit::ProductionOutputPin &ExternalLinkedOwnerTest::generation_pin() {
+	return owner->generation_pin;
+}
+uint64_t ExternalLinkedOwnerTest::generation_serial() const {
+	return owner->generation_root_serial;
+}
+bool ExternalLinkedOwnerTest::generation_uninstalled() const {
+	return owner->generation_pin.is_empty() && !owner->generation_registry && !owner->generation_root_serial &&
+			!owner->generation_request.registry_instance && !owner->generation_request.handle_serial;
+}
+Error ExternalLinkedOwnerTest::prepare_generation_directory() {
+	// Explicit finite component metadata, prepared before actual RECORD. This
+	// does not pretend that the missing public U08/Create admission was issued.
+	return owner->install_reserved_cells(1, 1);
+}
+bool ExternalLinkedOwnerTest::generation_directory_empty() const {
+	return !owner->view_cells && !owner->read_cells && !owner->surface_cells &&
+			!owner->view_capacity && !owner->read_capacity && !owner->surface_capacity;
+}
+GDExtensionDeviceExit::ProductionOutputPin &ExternalLinkedOwnerTest::generation_directory_pin() {
+	// An actual finite directory cell, without inventing a view consumer/phase.
+	CRASH_COND(!owner->view_cells || owner->view_capacity != 1);
+	return owner->view_cells[0].pin;
+}
+void ExternalLinkedOwnerTest::withdraw_generation() {
+	// Call the original admission-close transition; zero Acquire has no history
+	// slot to invent and no public phase/source/lease token to manufacture.
+	owner->withdraw();
+}
+
 void ExternalLinkedOwnerTest::prepare_lease_tokens() {
 	// Private test metadata, not an admitted lease issuer. Allocate before RECORD.
 	for (uint32_t i = 0; i < 2; ++i) {
@@ -145,7 +183,7 @@ bool ExternalLinkedOwnerTest::history_cleared() const {
 	return owner->views[0].history_slot == UINT32_MAX;
 }
 bool ExternalLinkedOwnerTest::released() const {
-	return owner->state == ExternalOutputOwner::GenerationState::RELEASED &&
+	return owner->state == ExternalOutputOwner::GenerationState::RELEASED && owner->generation_pin.is_empty() &&
 			owner->slots[0].original_pin.is_empty() && owner->slots[1].original_pin.is_empty();
 }
 
