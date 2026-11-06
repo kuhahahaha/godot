@@ -7,3 +7,5 @@ Build: `scons -Q tests=yes platform=macos target=editor module_particles_runtime
 Negative controls temporarily replacing the typed Withdraw implementation with unconditional `ERR_UNAVAILABLE` failed the focused test and triggered the expected uncleared-owner abort; restoring the exact implementation and rebuilding returned the focused suite to green.
 
 Limits: this proves original-root custody and terminal correlation only. It does not add a cancel entry point, typed lifecycle frame, Sprite/LE192 writer, native completion callback, physical GPU retirement proof, or no-next-draw close.
+
+Post-commit full regression for `f847ccd2dd` and `a5ed5d777e`: `GODOT_TEST_PHYSICS_3D_BACKEND=GodotPhysics3D GODOT_TEST_PHYSICS_3D_THREADED=0 bin/godot.macos.editor.arm64 --headless --test` exited 0 with 2,147 cases / 548,716 assertions / 0 failures / 3 skipped. Log: `/tmp/b4-prepared-withdraw-full.log`. Opt-in Vulkan particle upload/trail tests explicitly reported UNRUN; no real GPU acceptance is claimed.
