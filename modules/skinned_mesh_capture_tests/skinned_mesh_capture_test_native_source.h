@@ -32,6 +32,7 @@
 #include "skinned_mesh_capture_test_rd_pool.h"
 
 #include <vector>
+#include <array>
 
 // Read-only original-owner metadata. No borrowed pointer or buffer RID leaves
 // capture_current; the actual source is copied in the same list-closed RT call.
@@ -62,6 +63,7 @@ class SkinnedMeshCaptureTestNativeSource {
 	static Error capture(RID p_scene, RID p_mesh, RID p_skeleton, SkinnedMeshCaptureTestRDPool &p_pool, uint32_t p_slot, SkinnedMeshCaptureTestNativeSourceObservation &r_observation, const SkinnedMeshCaptureTestDrawObservation *p_draw, bool p_previous);
 
 public:
+	static Error set_frozen_palette(RID p_scene, RID p_mesh, RID p_skeleton, const std::array<Transform3D, 2> &p_palette);
 	static uint64_t draw_record_count();
 	static Error select_draw(RID p_scene, RID p_mesh, RID p_skeleton, uint64_t p_epoch, uint64_t p_frame, RID p_viewport, uint64_t p_sequence, uint64_t &r_sequence);
 	static bool observe_draw(RID p_mesh_instance, uint32_t p_surface, RID p_vertex_array, uint64_t p_before_count, uint32_t p_renderer, uint32_t p_pass);

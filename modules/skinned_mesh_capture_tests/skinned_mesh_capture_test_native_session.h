@@ -45,6 +45,8 @@ struct SkinnedMeshCaptureTestSessionRequest {
 	RID scene, mesh, skeleton, viewport;
 	bool public_source = false;
 	bool explicit_update = false;
+	bool frozen_palette = false;
+	std::array<Transform3D, 2> palette;
 	SkinnedMeshCaptureTestPublicSnapshot public_snapshot;
 	bool after_views = false;
 	bool previous = false;
@@ -126,6 +128,7 @@ class SkinnedMeshCaptureTestNativeSession : public std::enable_shared_from_this<
 	void phase(uint64_t p_frame, bool p_after_views);
 	void maintain();
 	void record(Job &p_job);
+	void consume(Job &p_job);
 	SkinnedMeshCaptureTestNativeSession(uint64_t p_run, uint64_t p_epoch, bool p_dual, bool p_transport_required);
 
 public:

@@ -53,6 +53,8 @@ class SkinnedMeshCaptureTestFixture : public Node3D {
 	uint64_t session_epoch = 0, next_request = 1;
 	int32_t next_action = 0;
 	bool sample_pending = false, initialization_pending = false;
+	bool explicit_three = false;
+	std::array<std::array<Transform3D, 2>, 3> frozen_palettes;
 	uint64_t last_action_request = 0;
 	int64_t public_signal_ordinal = 0;
 	void public_skeleton_updated();
@@ -67,6 +69,7 @@ class SkinnedMeshCaptureTestFixture : public Node3D {
 public:
 	Error begin(StringName p_member, StringName p_route);
 	Error advance_action(int32_t p_action_index);
+	Error advance_explicit_capture();
 	Error submit_public_snapshot(const Dictionary &p_value);
 	Dictionary take_result() const;
 	Error close(bool p_no_future_draw = false);

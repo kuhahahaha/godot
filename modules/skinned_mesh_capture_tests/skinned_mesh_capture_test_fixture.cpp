@@ -62,6 +62,7 @@ static LocalVector<ObjectID> live_fixtures;
 void SkinnedMeshCaptureTestFixture::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("begin", "member", "route"), &SkinnedMeshCaptureTestFixture::begin);
 	ClassDB::bind_method(D_METHOD("advance_action", "action_index"), &SkinnedMeshCaptureTestFixture::advance_action);
+	ClassDB::bind_method(D_METHOD("advance_explicit_capture"), &SkinnedMeshCaptureTestFixture::advance_explicit_capture);
 	ClassDB::bind_method(D_METHOD("submit_public_snapshot", "value"), &SkinnedMeshCaptureTestFixture::submit_public_snapshot);
 	ClassDB::bind_method(D_METHOD("take_result"), &SkinnedMeshCaptureTestFixture::take_result);
 	ClassDB::bind_method(D_METHOD("close", "no_future_draw"), &SkinnedMeshCaptureTestFixture::close, DEFVAL(false));
@@ -324,11 +325,22 @@ void SkinnedMeshCaptureTestFixture::frame_pre_draw() {
 		late.image = false;
 	}
 	std::vector<SkinnedMeshCaptureTestSessionRequest> requests;
-	if (!initialization_pending && (member == "S03" || next_action != 3)) {
-		requests.push_back(early);
-		late.request++;
+	if (explicit_three && !initialization_pending) {
+		for (int i = 0; i < 3; i++) {
+			auto request = early;
+			request.request = next_request + i;
+			request.frozen_palette = true;
+			request.palette = frozen_palettes[i];
+			requests.push_back(request);
+		}
+		late.request = next_request + 2;
+	} else {
+		if (!initialization_pending && (member == "S03" || next_action != 3)) {
+			requests.push_back(early);
+			late.request++;
+		}
+		requests.push_back(late);
 	}
-	requests.push_back(late);
 	const Error error = session->enqueue_batch(requests);
 	sample_pending = false;
 	if (error != OK) {
@@ -380,6 +392,35 @@ Error SkinnedMeshCaptureTestFixture::advance_action(int32_t p_action_index) {
 	}
 	// S02: t0, advance, same pose. S03: offscreen advances t1/t2/t3.
 	++next_action;
+	sample_pending = true;
+	return OK;
+}
+
+Error SkinnedMeshCaptureTestFixture::advance_explicit_capture() {
+	if (!Thread::is_main_thread() || !session || member != "S04" || route != "C" || next_action != 0 || closing || closed) {
+		return reject(ERR_INVALID_PARAMETER, "P01_STATE");
+	}
+	const auto state = session->status();
+	if (!initialization_ready(state) || !action_complete(state)) {
+		return reject(ERR_BUSY, "P01_PRECONDITION_NOT_ESTABLISHED");
+	}
+	auto *skeleton = Object::cast_to<Skeleton3D>(get_node_or_null(NodePath("Source/Skeleton")));
+	auto *mesh = Object::cast_to<MeshInstance3D>(get_node_or_null(NodePath("Source/Mesh")));
+	auto *player = Object::cast_to<AnimationPlayer>(ObjectDB::get_instance(scene_nodes[1]));
+	if (!skeleton || !mesh || !player || mesh->get_skin_reference().is_null()) {
+		return reject(ERR_INVALID_DATA, "P01_SOURCE");
+	}
+	const Ref<Skin> skin = mesh->get_skin_reference()->get_skin();
+	for (int i = 0; i < 3; i++) {
+		player->advance(1.0);
+		for (int slot = 0; slot < 2; slot++) {
+			const String name = skin->get_bind_name(slot);
+			const int bone = name.is_empty() ? skin->get_bind_bone(slot) : skeleton->find_bone(name);
+			frozen_palettes[i][slot] = skeleton->get_bone_global_pose(bone) * skin->get_bind_pose(slot);
+		}
+	}
+	explicit_three = true;
+	next_action = 1;
 	sample_pending = true;
 	return OK;
 }

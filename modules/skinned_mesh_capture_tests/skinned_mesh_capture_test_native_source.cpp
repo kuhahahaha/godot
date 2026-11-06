@@ -44,6 +44,31 @@
 
 #include <mutex>
 
+Error SkinnedMeshCaptureTestNativeSource::set_frozen_palette(RID p_scene, RID p_mesh, RID p_skeleton, const std::array<Transform3D, 2> &p_palette) {
+	auto *server = RenderingServer::get_singleton();
+	auto *scene = RenderCaptureTestAccess::scene_singleton();
+	auto *storage = RendererRD::MeshStorage::get_singleton();
+	uint64_t frame = 0;
+	bool after_views = false;
+	if (!server || !server->is_on_render_thread() || !scene || !storage || !skinned_mesh_capture_test_phase_capture_window(frame, after_views) || after_views) {
+		return ERR_UNAVAILABLE;
+	}
+	const auto *instance = RenderCaptureTestAccess::instance(scene, p_scene);
+	const auto *skeleton = RenderCaptureTestAccess::skeleton(storage, p_skeleton);
+	auto *rd = RenderingDevice::get_singleton();
+	if (!rd || RenderCaptureTestAccess::draw_list(rd).active || RenderCaptureTestAccess::compute_list(rd).active || RenderCaptureTestAccess::raytracing_list(rd).active) {
+		return ERR_BUSY;
+	}
+	if (!instance || instance->base != p_mesh || instance->skeleton != p_skeleton || !skeleton || skeleton->size != 2 || skeleton->use_2d) {
+		return ERR_INVALID_DATA;
+	}
+	for (int i = 0; i < 2; i++) {
+		storage->skeleton_bone_set_transform(p_skeleton, i, p_palette[i]);
+	}
+	storage->_update_dirty_skeletons();
+	return OK;
+}
+
 Error SkinnedMeshCaptureTestNativeSource::capture(RID p_scene, RID p_mesh, RID p_skeleton, SkinnedMeshCaptureTestRDPool &p_pool, uint32_t p_slot, SkinnedMeshCaptureTestNativeSourceObservation &r_observation, const SkinnedMeshCaptureTestDrawObservation *p_draw, bool p_previous) {
 	RenderingDevice *rd = RenderingDevice::get_singleton();
 	RenderingServer *server = RenderingServer::get_singleton();

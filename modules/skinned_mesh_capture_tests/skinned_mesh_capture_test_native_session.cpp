@@ -212,8 +212,19 @@ void SkinnedMeshCaptureTestNativeSession::record(Job &p_job) {
 	}
 	if (error == OK) {
 		p_job.result.recorded = true;
-		error = pool.record_transport(slot);
+		if (p_job.request.frozen_palette) {
+			return; // All immutable copies precede any transport consumer.
+		}
+		consume(p_job);
+		return;
 	}
+	p_job.result.error = error;
+	fail(error);
+	closing = true;
+}
+void SkinnedMeshCaptureTestNativeSession::consume(Job &p_job) {
+	const uint32_t slot = uint32_t(&p_job - jobs.data());
+	Error error = pool.record_transport(slot);
 	if (error == OK) {
 		error = pool.enqueue_pair(slot, run, epoch, p_job.request.request, collector, p_job.identities, p_job.enqueued);
 	}
@@ -312,7 +323,20 @@ void SkinnedMeshCaptureTestNativeSession::phase(uint64_t p_frame, bool p_after_v
 		if (job.started || job.result.frame != p_frame || job.request.after_views != p_after_views) {
 			continue;
 		}
+		if (job.request.frozen_palette) {
+			const Error error = SkinnedMeshCaptureTestNativeSource::set_frozen_palette(job.request.scene, job.request.mesh, job.request.skeleton, job.request.palette);
+			if (error != OK) {
+				fail(error);
+				closing = true;
+				break;
+			}
+		}
 		record(job);
+	}
+	for (auto &job : jobs) {
+		if (!closing && job.request.frozen_palette && job.result.frame == p_frame && job.result.recorded && job.enqueued == 0) {
+			consume(job);
+		}
 	}
 	publish();
 }
