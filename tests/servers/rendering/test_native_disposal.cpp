@@ -779,64 +779,99 @@ TEST_CASE("[RenderingDevice][NativeDisposal] failed native creation leaves no wi
 } // namespace TestNativeDisposal
 
 // GeometryDirect is a narrow capture profile over original draw-list state.
-// This fixture only checks graph append/refusal and payload shape; it does not
+// This fixture checks graph append/refusal and original factory provenance; it does not
 // execute a native command buffer or provide source/execution authority.
 void TestNativeDisposalAccess::geometry_direct() {
 	using namespace TestNativeDisposal;
 	RenderingDevice rd;
-	TransferTestDriverBase driver;
-	rd.driver = &driver;
-	rd.render_thread_id = Thread::get_caller_id();
-	rd.is_main_instance = true;
+	struct GeometryDriver : RasterCapacityDriver {
+		uint64_t next_buffer = 10;
+		uint32_t buffer_frees = 0;
+		uint32_t vertex_format_frees = 0;
+		BufferID buffer_create(uint64_t, BitField<BufferUsageBits>, MemoryAllocationType, uint64_t) override { return BufferID(next_buffer++); }
+		void buffer_free(BufferID p_buffer) override {
+			CHECK((p_buffer == BufferID(10) || p_buffer == BufferID(11)));
+			++buffer_frees;
+		}
+		VertexFormatID vertex_format_create(Span<VertexAttribute> p_attributes, const VertexAttributeBindingsMap &) override {
+			CHECK(p_attributes.size() == 1);
+			return VertexFormatID(7);
+		}
+		void vertex_format_free(VertexFormatID p_vertex_format) override {
+			CHECK(p_vertex_format == VertexFormatID(7));
+			++vertex_format_frees;
+		}
+		void set_object_name(ObjectType p_type, ID p_id, const String &p_name) override {
+			if (p_type == OBJECT_TYPE_BUFFER) {
+				CHECK((p_id.id == 10 || p_id.id == 11));
+				return;
+			}
+			RasterCapacityDriver::set_object_name(p_type, p_id, p_name);
+		}
+		uint64_t buffer_get_dynamic_offsets(Span<BufferID>) override { return 0; }
+		uint64_t api_trait_get(ApiTrait) override { return 0; }
+	} driver;
+	attach(rd, driver);
+	Ref<RasterContainer> container;
+	container.instantiate();
+	container->initialize();
+	const RID shader_rid = rd.shader_create_from_bytecode(container->to_bytes());
+	REQUIRE(shader_rid.is_valid());
+	const auto framebuffer_format = rd.framebuffer_format_create(Vector<RenderingDevice::AttachmentFormat>());
 	rd.draw_graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RenderingDeviceDriver::CommandQueueFamilyID(1), 0);
 	rd.draw_graph.begin();
 	const RDG::RecordHandle begin = rd.draw_graph.add_draw_list_begin(RDD::RenderPassID(1), RDD::FramebufferID(2), Rect2i(), {}, {}, {}, 0, false);
 	rd.draw_list.begin_handle = begin;
 	rd.draw_list.active = true;
-	rd.draw_list_framebuffer_format = 1;
+	rd.draw_list_framebuffer_format = framebuffer_format;
 	rd.draw_list_current_subpass = 0;
 
-	RenderingDevice::VertexDescriptionCache description;
-	description.driver_id = RDD::VertexFormatID(7);
-	rd.vertex_formats.insert(77, description);
-	RenderingDevice::VertexArray vertex_array;
-	vertex_array.description = 77;
-	vertex_array.vertex_count = 4; // Indexed quad: 4 vertices, 6 indices.
-	vertex_array.max_instances_allowed = 1;
-	vertex_array.buffers.push_back(RDD::BufferID(10));
-	vertex_array.offsets.push_back(0);
-	const RID vertex_rid = rd.vertex_array_owner.make_rid(vertex_array);
-
-	RenderingDevice::IndexArray index_array;
-	index_array.driver_id = RDD::BufferID(11);
-	index_array.offset = 0;
-	index_array.indices = 6;
-	index_array.format = RenderingDevice::INDEX_BUFFER_FORMAT_UINT32;
-	index_array.supports_restart_indices = false;
-	const RID index_rid = rd.index_array_owner.make_rid(index_array);
-
-	RenderingDevice::RenderPipeline pipeline;
-	pipeline.driver_id = RDD::PipelineID(12);
-	pipeline.validation.framebuffer_format = 1;
-	pipeline.validation.render_pass = 0;
-	pipeline.validation.vertex_format = 77;
-	pipeline.validation.primitive = RenderingDevice::RENDER_PRIMITIVE_TRIANGLES;
-	pipeline.set_formats.clear();
-	const RID pipeline_rid = rd.render_pipeline_owner.make_rid(pipeline);
-	rd.draw_list.state.pipeline = pipeline_rid;
-	rd.draw_list.state.vertex_array = vertex_rid;
-	rd.draw_list.state.index_array = index_rid;
+	RenderingDevice::VertexAttribute attribute;
+	attribute.location = 0;
+	attribute.format = RenderingDevice::DATA_FORMAT_R32G32B32_SFLOAT;
+	attribute.stride = 12;
+	attribute.frequency = RenderingDevice::VERTEX_FREQUENCY_VERTEX;
+	const auto vertex_format = rd.vertex_format_create(Vector<RenderingDevice::VertexAttribute>{ attribute });
+	REQUIRE(bool(vertex_format != RenderingDevice::INVALID_ID));
+	const RID vertex_buffer = rd.vertex_buffer_create(128);
+	REQUIRE(vertex_buffer.is_valid());
+	const RID vertex_rid = rd.vertex_array_create(4, vertex_format, Vector<RID>{ vertex_buffer });
+	REQUIRE(vertex_rid.is_valid());
+	const RID index_buffer = rd.index_buffer_create(8, RenderingDevice::INDEX_BUFFER_FORMAT_UINT32);
+	REQUIRE(index_buffer.is_valid());
+	// Two elements of prefix belong to the index bind, not draw first_index.
+	const RID index_rid = rd.index_array_create(index_buffer, 2, 6);
+	REQUIRE(index_rid.is_valid());
+	const RID pipeline_rid = rd.render_pipeline_create(shader_rid, framebuffer_format, vertex_format, RenderingDevice::RENDER_PRIMITIVE_TRIANGLES,
+			RenderingDevice::PipelineRasterizationState(), RenderingDevice::PipelineMultisampleState(), RenderingDevice::PipelineDepthStencilState(), RenderingDevice::PipelineColorBlendState());
+	REQUIRE(pipeline_rid.is_valid());
 	rd.draw_list.state.set_count = 0;
-	rd.draw_list.validation.vertex_array_size = 4;
-	rd.draw_list.validation.index_array_count = 6;
 #ifdef DEBUG_ENABLED
 	rd.draw_list.validation.pipeline_active = true;
-	rd.draw_list.validation.pipeline_vertex_format = 77;
-	rd.draw_list.validation.vertex_format = 77;
+	rd.draw_list.validation.pipeline_vertex_format = vertex_format;
+	rd.draw_list.validation.vertex_format = vertex_format;
 	rd.draw_list.validation.pipeline_primitive_minimum = 3;
 	rd.draw_list.validation.pipeline_primitive_divisor = 3;
 	rd.draw_list.validation.pipeline_push_constant_size = 0;
 #endif
+	const auto pipeline_bind = rd._draw_list_bind_render_pipeline_recorded((int64_t(RenderingDevice::ID_TYPE_DRAW_LIST) << RenderingDevice::ID_BASE_SHIFT), pipeline_rid);
+	CHECK(pipeline_bind.error == OK);
+	CHECK(pipeline_bind.effect == RenderingDevice::NativeAppendEffect::Recorded);
+	CHECK(pipeline_bind.capture_complete);
+	CHECK(pipeline_bind.draw_handle.is_valid());
+	CHECK(rd.draw_graph.contains_record(pipeline_bind.draw_handle));
+	const auto vertex_bind = rd._draw_list_bind_vertex_array_recorded((int64_t(RenderingDevice::ID_TYPE_DRAW_LIST) << RenderingDevice::ID_BASE_SHIFT), vertex_rid, nullptr, 0);
+	CHECK(vertex_bind.error == OK);
+	CHECK(vertex_bind.effect == RenderingDevice::NativeAppendEffect::Recorded);
+	CHECK(vertex_bind.capture_complete);
+	CHECK(vertex_bind.bind_handle.is_valid());
+	CHECK(rd.draw_graph.contains_record(vertex_bind.bind_handle));
+	const auto index_bind = rd._draw_list_bind_index_array_recorded((int64_t(RenderingDevice::ID_TYPE_DRAW_LIST) << RenderingDevice::ID_BASE_SHIFT), index_rid, nullptr, 0);
+	CHECK(index_bind.error == OK);
+	CHECK(index_bind.effect == RenderingDevice::NativeAppendEffect::Recorded);
+	CHECK(index_bind.capture_complete);
+	CHECK(index_bind.bind_handle.is_valid());
+	CHECK(rd.draw_graph.contains_record(index_bind.bind_handle));
 
 	const uint32_t before = rd.draw_graph.qualification_command_count();
 	const auto indexed = rd._draw_list_draw_geometry_direct_recorded((int64_t(RenderingDevice::ID_TYPE_DRAW_LIST) << RenderingDevice::ID_BASE_SHIFT), true);
@@ -845,12 +880,12 @@ void TestNativeDisposalAccess::geometry_direct() {
 	CHECK(indexed.capture_complete);
 	CHECK(indexed.draw_handle.is_valid());
 	CHECK(rd.draw_graph.contains_record(indexed.draw_handle));
-	CHECK(rd.draw_graph.qualification_command_count() == before + 1);
+	CHECK(rd.draw_graph.qualification_command_count() == before);
+	CHECK(rd.draw_list.state.draw_count == 1);
+	CHECK(rd.draw_graph.record_mapping_state(indexed.draw_handle) == RDG::RecordMappingState::Pending);
 
-	// The same original VA can issue a non-indexed triangle only when its
-	// vertex count is triangle-list aligned; a 4-vertex quad is refused.
+	// A 4-vertex original VA cannot issue a non-indexed triangle-list draw.
 	rd.draw_list.state.index_array = RID();
-	rd.draw_list.validation.vertex_array_size = 4;
 	const uint32_t before_refused = rd.draw_graph.qualification_command_count();
 	ERR_PRINT_OFF;
 	const auto refused = rd._draw_list_draw_geometry_direct_recorded((int64_t(RenderingDevice::ID_TYPE_DRAW_LIST) << RenderingDevice::ID_BASE_SHIFT), false);
@@ -861,14 +896,67 @@ void TestNativeDisposalAccess::geometry_direct() {
 	CHECK_FALSE(refused.draw_handle.is_valid());
 	CHECK(rd.draw_graph.qualification_command_count() == before_refused);
 
-	rd.index_array_owner.free(index_rid);
-	rd.vertex_array_owner.free(vertex_rid);
-	rd.render_pipeline_owner.free(pipeline_rid);
+	// A separate original VA with three vertices is accepted for the same
+	// no-descriptor GeometryDirect profile.
+	const RID triangle_rid = rd.vertex_array_create(3, vertex_format, Vector<RID>{ vertex_buffer });
+	REQUIRE(triangle_rid.is_valid());
+	const auto triangle_bind = rd._draw_list_bind_vertex_array_recorded((int64_t(RenderingDevice::ID_TYPE_DRAW_LIST) << RenderingDevice::ID_BASE_SHIFT), triangle_rid, nullptr, 0);
+	CHECK(triangle_bind.error == OK);
+	const auto triangle_draw = rd._draw_list_draw_geometry_direct_recorded((int64_t(RenderingDevice::ID_TYPE_DRAW_LIST) << RenderingDevice::ID_BASE_SHIFT), false);
+	CHECK(triangle_draw.error == OK);
+	CHECK(triangle_draw.effect == RenderingDevice::NativeAppendEffect::Recorded);
+	CHECK(triangle_draw.capture_complete);
+	CHECK(triangle_draw.draw_handle.is_valid());
+	CHECK(rd.draw_graph.contains_record(triangle_draw.draw_handle));
+
+	// Required descriptor state is refused before any draw graph effect.
+	rd.draw_list.state.set_count = 1;
+	rd.draw_list.state.sets[0].pipeline_expected_format = 1;
+	const uint32_t before_set_refused = rd.draw_graph.qualification_command_count();
+	ERR_PRINT_OFF;
+	const auto set_refused = rd._draw_list_draw_geometry_direct_recorded((int64_t(RenderingDevice::ID_TYPE_DRAW_LIST) << RenderingDevice::ID_BASE_SHIFT), false);
+	ERR_PRINT_ON;
+	CHECK(set_refused.error == ERR_UNAVAILABLE);
+	CHECK(set_refused.effect == RenderingDevice::NativeAppendEffect::NoNewEffect);
+	CHECK_FALSE(set_refused.draw_handle.is_valid());
+	CHECK(rd.draw_graph.qualification_command_count() == before_set_refused);
+
+	rd.draw_list = RenderingDevice::DrawList();
 	rd.draw_graph.begin();
-	rd.driver = nullptr;
+	rd.free_rid(vertex_rid);
+	rd.free_rid(triangle_rid);
+	rd.free_rid(index_rid);
+	rd.free_rid(pipeline_rid);
+	rd.free_rid(vertex_buffer);
+	rd.free_rid(index_buffer);
+	rd.free_rid(shader_rid);
+	dispose(rd);
+	CHECK_FALSE(rd.vertex_array_owner.owns(vertex_rid));
+	CHECK_FALSE(rd.vertex_array_owner.owns(triangle_rid));
+	CHECK_FALSE(rd.index_array_owner.owns(index_rid));
+	CHECK_FALSE(rd.render_pipeline_owner.owns(pipeline_rid));
+	CHECK(driver.pipeline_frees == 1);
+	CHECK(driver.shader_frees == 1);
+	CHECK(driver.buffer_frees == 2);
+	CHECK(rd.dependency_map.is_empty());
+	CHECK(rd.reverse_dependency_map.is_empty());
+	for (auto &entry : rd.framebuffer_formats) {
+		driver.render_pass_free(entry.value.render_pass);
+	}
+	rd.framebuffer_formats.clear();
+	rd.framebuffer_format_cache.clear();
+	// detach() removes the driver; release the original cached vertex format
+	// first so RenderingDevice's destructor has no native cache left to free.
+	for (auto &entry : rd.vertex_formats) {
+		driver.vertex_format_free(entry.value.driver_id);
+	}
+	rd.vertex_formats.clear();
+	rd.vertex_format_cache.clear();
+	CHECK(driver.vertex_format_frees == 1);
+	detach(rd);
 }
 
-TEST_CASE("[RenderingDevice][NativeDisposal][GeometryDirect] indexed quad and refusal preserve graph payload") {
+TEST_CASE("[RenderingDevice][NativeDisposal][GeometryDirect] original factories append quad and triangle and refuse unsupported state") {
 	TestNativeDisposalAccess::geometry_direct();
 }
 
