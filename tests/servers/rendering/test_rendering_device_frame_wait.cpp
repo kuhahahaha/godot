@@ -203,7 +203,7 @@ public:
 		frame.download_buffer_get_data_requests[0].size = size;
 		frame.download_buffer_copy_regions[0].size = size;
 		const auto handle = device.draw_graph.add_buffer_get_data(RenderingDeviceDriver::BufferID(71), nullptr, RenderingDeviceDriver::BufferID(51), { 0, 0, size });
-		result->copies.push_back({ handle, RenderingDeviceDriver::BufferID(71), RenderingDeviceDriver::BufferID(51), { 0, 0, size } });
+		result->copies.push_back({ handle, RenderingDeviceDriver::BufferID(71), RenderingDeviceDriver::BufferID(51), { 0, 0, size }, false, RenderingDeviceGraph::RecordMappingState::Pending, UINT32_MAX, RenderingDeviceDriver::CommandBufferID(), false, OK, {} });
 		return result;
 	}
 	static void add_idle_slot(RenderingDevice &device) { device.frames.resize(2); }
@@ -216,7 +216,7 @@ public:
 		auto &request = frame.download_buffer_get_data_requests[0];
 		const auto region = frame.download_buffer_copy_regions[0];
 		const auto handle = device.draw_graph.add_buffer_get_data(RenderingDeviceDriver::BufferID(71), nullptr, RenderingDeviceDriver::BufferID(51), region);
-		request.result->copies.push_back({ handle, RenderingDeviceDriver::BufferID(71), RenderingDeviceDriver::BufferID(51), region });
+		request.result->copies.push_back({ handle, RenderingDeviceDriver::BufferID(71), RenderingDeviceDriver::BufferID(51), region, false, RenderingDeviceGraph::RecordMappingState::Pending, UINT32_MAX, RenderingDeviceDriver::CommandBufferID(), false, OK, {} });
 	}
 	static void separate_present(RenderingDevice &device) {
 		device.main_queue = RenderingDeviceDriver::CommandQueueID(1);
@@ -237,7 +237,7 @@ public:
 			const RenderingDeviceDriver::BufferID destination(51 + i);
 			const RenderingDeviceDriver::BufferCopyRegion region{ i * 4, 0, 4 };
 			const auto handle = device.draw_graph.add_buffer_get_data(RenderingDeviceDriver::BufferID(71), nullptr, destination, region);
-			request.result->copies.push_back({ handle, RenderingDeviceDriver::BufferID(71), destination, region });
+			request.result->copies.push_back({ handle, RenderingDeviceDriver::BufferID(71), destination, region, false, RenderingDeviceGraph::RecordMappingState::Pending, UINT32_MAX, RenderingDeviceDriver::CommandBufferID(), false, OK, {} });
 			frame.download_buffer_staging_buffers.push_back(destination);
 			frame.download_buffer_copy_regions.push_back(region);
 		}
