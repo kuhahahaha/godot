@@ -1,0 +1,16 @@
+ERROR: Condition "texture && texture->qualification_return" is true. Returning: ERR_UNAUTHORIZED
+   at: driver_callback_add (servers/rendering/rendering_device.cpp:1401)
+ERROR: Condition "texture && texture->qualification_return" is true. Returning: ERR_UNAUTHORIZED
+   at: driver_callback_add (servers/rendering/rendering_device.cpp:1401)
+ERROR: Condition "!pipeline.driver_id" is true. Returning: RID()
+   at: _qualification_pipeline_create (servers/rendering/rendering_device.cpp:6140)
+ERROR: Condition "!pipeline.driver_id" is true. Returning: RID()
+   at: _qualification_pipeline_create (servers/rendering/rendering_device.cpp:6140)
+ERROR: Condition "!shader_id" is true. Returning: RID()
+   at: _qualification_shader_create (servers/rendering/rendering_device.cpp:5095)
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+[doctest] test cases:   175 |   175 passed | 0 failed | 1965 skipped
+[doctest] assertions: 50024 | 50024 passed | 0 failed |
+[doctest] Status: SUCCESS!

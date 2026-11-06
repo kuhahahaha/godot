@@ -157,6 +157,7 @@ private:
 	friend class TestQualificationFinalizeAccess;
 	friend class TestQualificationPhysicalAccess;
 	friend class TestNativeDisposalAccess;
+	friend class TestCheckedBindAccess;
 	friend class TestExternalOutputPrefixAccess;
 	friend class TestQualificationAckAccess;
 	friend class TestQualificationStagingAccess;
@@ -486,6 +487,26 @@ private:
 			return result;
 		}
 	};
+	// CPU binding acceptance is distinct from a native graph instruction.
+	// Uniform sets remain deferred state; VA/IA capture the actual bind append.
+	struct BindAppendResult {
+		Error error = OK;
+		NativeAppendEffect effect = NativeAppendEffect::NoNewEffect;
+		RDG::RecordHandle bind_handle;
+		uint32_t transfer_count = 0;
+		bool state_accepted = false;
+		bool state_changed = false;
+		bool capture_complete = false;
+		BindAppendResult failure(Error p_error) const {
+			BindAppendResult result = *this;
+			result.error = p_error;
+			return result;
+		}
+	};
+	BindAppendResult _draw_list_bind_uniform_set_recorded(DrawListID p_list, RID p_uniform_set, uint32_t p_index, bool p_capture = true);
+	BindAppendResult _draw_list_bind_vertex_array_recorded(DrawListID p_list, RID p_vertex_array, NativeTransferDependency *p_transfers, uint32_t p_transfer_capacity, bool p_capture = true);
+	BindAppendResult _draw_list_bind_index_array_recorded(DrawListID p_list, RID p_index_array, NativeTransferDependency *p_transfers, uint32_t p_transfer_capacity, bool p_capture = true);
+	bool _draw_list_usage_conflicts(const RDG::ResourceTracker *p_tracker, RDG::ResourceUsage p_usage) const;
 	// Mechanical original-owner join only; all native prefix and transfer facts
 	// stay attached for the packet owner even when the draw itself is refused.
 	struct SourceDrawAppendResult {
@@ -1991,6 +2012,8 @@ private:
 	// also run in release builds.
 
 	struct DrawList {
+		// Original graph begin identity, not source or execution authority.
+		RDG::RecordHandle begin_handle;
 		Rect2i viewport;
 		bool active = false;
 

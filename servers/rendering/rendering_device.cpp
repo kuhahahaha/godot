@@ -6671,7 +6671,7 @@ RenderingDevice::DrawListID RenderingDevice::draw_list_begin_for_screen(DisplayS
 	clear_value.color = p_clear_color;
 
 	RDD::RenderPassID render_pass = driver->swap_chain_get_render_pass(sc_it->value);
-	draw_graph.add_draw_list_begin(render_pass, fb_it->value, viewport, RDG::ATTACHMENT_OPERATION_CLEAR, clear_value, RDD::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, RDD::BreadcrumbMarker::BLIT_PASS, split_swapchain_into_its_own_cmd_buffer);
+	draw_list.begin_handle = draw_graph.add_draw_list_begin(render_pass, fb_it->value, viewport, RDG::ATTACHMENT_OPERATION_CLEAR, clear_value, RDD::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, RDD::BreadcrumbMarker::BLIT_PASS, split_swapchain_into_its_own_cmd_buffer);
 
 	draw_graph.add_draw_list_set_viewport(viewport);
 	draw_graph.add_draw_list_set_scissor(viewport);
@@ -6823,6 +6823,7 @@ RenderingDevice::DrawListBeginResult RenderingDevice::_draw_list_begin_recorded(
 	}
 
 	_draw_list_start(Rect2i(viewport_offset, viewport_size));
+	draw_list.begin_handle = result.begin_handle;
 #ifdef DEBUG_ENABLED
 	draw_list_framebuffer_format = framebuffer->format_id;
 #endif
@@ -6957,21 +6958,32 @@ RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_bind_render_pipeli
 }
 
 void RenderingDevice::draw_list_bind_uniform_set(DrawListID p_list, RID p_uniform_set, uint32_t p_index) {
-	ERR_RENDER_THREAD_GUARD();
-	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
+	_draw_list_bind_uniform_set_recorded(p_list, p_uniform_set, p_index, false);
+}
+
+RenderingDevice::BindAppendResult RenderingDevice::_draw_list_bind_uniform_set_recorded(DrawListID p_list, RID p_uniform_set, uint32_t p_index, bool p_capture) {
+	BindAppendResult result;
+	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
+	if (p_capture) {
+		ERR_FAIL_COND_V(p_list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT), result.failure(ERR_INVALID_PARAMETER));
+		ERR_FAIL_COND_V(p_index >= MAX_UNIFORM_SETS || p_index >= driver->limit_get(LIMIT_MAX_BOUND_UNIFORM_SETS), result.failure(ERR_INVALID_PARAMETER));
+	}
 
 #ifdef DEBUG_ENABLED
-	ERR_FAIL_COND_MSG(p_index >= driver->limit_get(LIMIT_MAX_BOUND_UNIFORM_SETS) || p_index >= MAX_UNIFORM_SETS,
+	ERR_FAIL_COND_V_MSG(p_index >= driver->limit_get(LIMIT_MAX_BOUND_UNIFORM_SETS) || p_index >= MAX_UNIFORM_SETS, result.failure(ERR_INVALID_PARAMETER),
 			"Attempting to bind a descriptor set (" + itos(p_index) + ") greater than what the hardware supports (" + itos(driver->limit_get(LIMIT_MAX_BOUND_UNIFORM_SETS)) + ").");
 #endif
 
-	ERR_FAIL_COND(!draw_list.active);
+	ERR_FAIL_COND_V(!draw_list.active, result.failure(ERR_INVALID_PARAMETER));
 
 	const UniformSet *uniform_set = uniform_set_owner.get_or_null(p_uniform_set);
-	ERR_FAIL_NULL(uniform_set);
-	ERR_FAIL_COND_MSG(_native_immutable_uniform_set_writes(*uniform_set), "An immutable native backing cannot be bound for shader writes.");
-	ERR_FAIL_COND((!uniform_set->qualification_dependencies.is_empty() || uniform_set->qualification_return) && !qualification_recording);
+	ERR_FAIL_NULL_V(uniform_set, result.failure(ERR_INVALID_PARAMETER));
+	ERR_FAIL_COND_V_MSG(_native_immutable_uniform_set_writes(*uniform_set), result.failure(ERR_UNAUTHORIZED), "An immutable native backing cannot be bound for shader writes.");
+	ERR_FAIL_COND_V((!uniform_set->qualification_dependencies.is_empty() || uniform_set->qualification_return) && !qualification_recording, result.failure(ERR_UNAUTHORIZED));
 
+	const auto &previous = draw_list.state.sets[p_index];
+	result.state_changed = p_index > draw_list.state.set_count || previous.uniform_set_driver_id != uniform_set->driver_id || previous.bound || previous.uniform_set_format != uniform_set->format || previous.uniform_set != p_uniform_set;
 	if (p_index > draw_list.state.set_count) {
 		draw_list.state.set_count = p_index;
 	}
@@ -6981,36 +6993,78 @@ void RenderingDevice::draw_list_bind_uniform_set(DrawListID p_list, RID p_unifor
 	draw_list.state.sets[p_index].uniform_set_format = uniform_set->format;
 	draw_list.state.sets[p_index].uniform_set = p_uniform_set;
 
+	bool validate_attachments = p_capture;
 #ifdef DEBUG_ENABLED
-	{ // Validate that textures bound are not attached as framebuffer bindings.
+	validate_attachments = true;
+#endif
+	if (validate_attachments) { // Preserve the original post-state-mutation validation.
 		uint32_t attachable_count = uniform_set->attachable_textures.size();
 		const UniformSet::AttachableTexture *attachable_ptr = uniform_set->attachable_textures.ptr();
 		uint32_t bound_count = draw_list_bound_textures.size();
 		const RID *bound_ptr = draw_list_bound_textures.ptr();
 		for (uint32_t i = 0; i < attachable_count; i++) {
 			for (uint32_t j = 0; j < bound_count; j++) {
-				ERR_FAIL_COND_MSG(attachable_ptr[i].texture == bound_ptr[j],
+				ERR_FAIL_COND_V_MSG(attachable_ptr[i].texture == bound_ptr[j], result.failure(ERR_INVALID_PARAMETER),
 						"Attempted to use the same texture in framebuffer attachment and a uniform (set: " + itos(p_index) + ", binding: " + itos(attachable_ptr[i].bind) + "), this is not allowed.");
 			}
 		}
 	}
-#endif
+	result.state_accepted = true;
+	result.capture_complete = p_capture;
+	return result;
 }
 
 void RenderingDevice::draw_list_bind_vertex_array(DrawListID p_list, RID p_vertex_array) {
-	ERR_RENDER_THREAD_GUARD();
-	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
+	_draw_list_bind_vertex_array_recorded(p_list, p_vertex_array, nullptr, 0, false);
+}
 
-	ERR_FAIL_COND(!draw_list.active);
+bool RenderingDevice::_draw_list_usage_conflicts(const RDG::ResourceTracker *p_tracker, RDG::ResourceUsage p_usage) const {
+	// Match add_draw_list_usage's reset-if-outdated and same-list usage rule.
+	// The retained original begin identifies this active graph list only.
+	return p_tracker->command_frame == int64_t(draw_list.begin_handle.graph_frame) && p_tracker->draw_list_index == int32_t(draw_list.begin_handle.index) && p_tracker->draw_list_usage != p_usage;
+}
 
-	VertexArray *vertex_array = vertex_array_owner.get_or_null(p_vertex_array);
-	ERR_FAIL_NULL(vertex_array);
-
-	if (draw_list.state.vertex_array == p_vertex_array) {
-		return; // Already set.
+RenderingDevice::BindAppendResult RenderingDevice::_draw_list_bind_vertex_array_recorded(DrawListID p_list, RID p_vertex_array, NativeTransferDependency *p_transfers, uint32_t p_transfer_capacity, bool p_capture) {
+	BindAppendResult result;
+	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
+	if (p_capture) {
+		ERR_FAIL_COND_V(p_list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT), result.failure(ERR_INVALID_PARAMETER));
 	}
 
+	ERR_FAIL_COND_V(!draw_list.active, result.failure(ERR_INVALID_PARAMETER));
+	if (p_capture) {
+		ERR_FAIL_COND_V(!draw_graph.contains_record(draw_list.begin_handle), result.failure(ERR_INVALID_DATA));
+	}
+
+	VertexArray *vertex_array = vertex_array_owner.get_or_null(p_vertex_array);
+	ERR_FAIL_NULL_V(vertex_array, result.failure(ERR_INVALID_PARAMETER));
+
+	if (draw_list.state.vertex_array == p_vertex_array) {
+		result.state_accepted = true;
+		result.capture_complete = p_capture;
+		return result; // Already set; no new transfer or instruction.
+	}
+
+	if (p_capture) {
+		const uint32_t count = vertex_array->transfer_worker_indices.size();
+		ERR_FAIL_COND_V(count != uint32_t(vertex_array->transfer_worker_operations.size()) || vertex_array->buffers.size() != vertex_array->offsets.size(), result.failure(ERR_INVALID_DATA));
+		ERR_FAIL_COND_V(count > p_transfer_capacity || (count && !p_transfers), result.failure(ERR_PARAMETER_RANGE_ERROR));
+		for (uint32_t i = 0; i < count; ++i) {
+			const int32_t index = vertex_array->transfer_worker_indices[i];
+			ERR_FAIL_COND_V(index < 0 || uint32_t(index) >= transfer_worker_pool.size() || !transfer_worker_pool[index] || transfer_worker_pool[index]->index != uint32_t(index) || transfer_worker_pool[index]->index >= transfer_worker_operation_used_by_draw.size(), result.failure(ERR_INVALID_DATA));
+		}
+		for (RDG::ResourceTracker *tracker : vertex_array->draw_trackers) {
+			ERR_FAIL_NULL_V(tracker, result.failure(ERR_INVALID_DATA));
+			ERR_FAIL_COND_V(_draw_list_usage_conflicts(tracker, RDG::RESOURCE_USAGE_VERTEX_BUFFER_READ), result.failure(ERR_INVALID_PARAMETER));
+		}
+		for (uint32_t i = 0; i < count; ++i) {
+			p_transfers[i] = { uint32_t(vertex_array->transfer_worker_indices[i]), vertex_array->transfer_worker_operations[i] };
+		}
+		result.transfer_count = count;
+	}
 	_check_transfer_worker_vertex_array(vertex_array);
+	result.state_changed = true;
 
 	draw_list.state.vertex_array = p_vertex_array;
 
@@ -7019,12 +7073,20 @@ void RenderingDevice::draw_list_bind_vertex_array(DrawListID p_list, RID p_verte
 	draw_list.validation.vertex_max_instances_allowed = vertex_array->max_instances_allowed;
 #endif
 	draw_list.validation.vertex_array_size = vertex_array->vertex_count;
+	result.state_accepted = true;
 
-	draw_graph.add_draw_list_bind_vertex_buffers(vertex_array->buffers, vertex_array->offsets);
+	result.bind_handle = draw_graph.add_draw_list_bind_vertex_buffers(vertex_array->buffers, vertex_array->offsets);
+	result.effect = NativeAppendEffect::Recorded;
 
 	for (int i = 0; i < vertex_array->draw_trackers.size(); i++) {
 		draw_graph.add_draw_list_usage(vertex_array->draw_trackers[i], RDG::RESOURCE_USAGE_VERTEX_BUFFER_READ);
 	}
+	if (p_capture) {
+		ERR_FAIL_COND_V(!draw_graph.contains_record(result.bind_handle), result.failure(ERR_INVALID_DATA));
+	}
+	result.state_accepted = true;
+	result.capture_complete = p_capture;
+	return result;
 }
 
 void RenderingDevice::draw_list_bind_vertex_buffers_format(DrawListID p_list, VertexFormatID p_vertex_format, uint32_t p_vertex_count, const Span<RID> &p_vertex_buffers, const Span<uint64_t> &p_offsets) {
@@ -7129,32 +7191,66 @@ void RenderingDevice::draw_list_bind_vertex_buffers_format(DrawListID p_list, Ve
 }
 
 void RenderingDevice::draw_list_bind_index_array(DrawListID p_list, RID p_index_array) {
-	ERR_RENDER_THREAD_GUARD();
-	ERR_FAIL_COND_MSG(_recording_error() != OK, "Recording is suspended after a frame fence wait failure.");
+	_draw_list_bind_index_array_recorded(p_list, p_index_array, nullptr, 0, false);
+}
 
-	ERR_FAIL_COND(!draw_list.active);
-
-	IndexArray *index_array = index_array_owner.get_or_null(p_index_array);
-	ERR_FAIL_NULL(index_array);
-
-	if (draw_list.state.index_array == p_index_array) {
-		return; // Already set.
+RenderingDevice::BindAppendResult RenderingDevice::_draw_list_bind_index_array_recorded(DrawListID p_list, RID p_index_array, NativeTransferDependency *p_transfers, uint32_t p_transfer_capacity, bool p_capture) {
+	BindAppendResult result;
+	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
+	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
+	if (p_capture) {
+		ERR_FAIL_COND_V(p_list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT), result.failure(ERR_INVALID_PARAMETER));
 	}
 
+	ERR_FAIL_COND_V(!draw_list.active, result.failure(ERR_INVALID_PARAMETER));
+	if (p_capture) {
+		ERR_FAIL_COND_V(!draw_graph.contains_record(draw_list.begin_handle), result.failure(ERR_INVALID_DATA));
+	}
+
+	IndexArray *index_array = index_array_owner.get_or_null(p_index_array);
+	ERR_FAIL_NULL_V(index_array, result.failure(ERR_INVALID_PARAMETER));
+
+	if (draw_list.state.index_array == p_index_array) {
+		result.state_accepted = true;
+		result.capture_complete = p_capture;
+		return result; // Already set; no new transfer or instruction.
+	}
+
+	if (p_capture) {
+		const uint64_t checked_offset = uint64_t(index_array->offset) * (index_array->format == INDEX_BUFFER_FORMAT_UINT16 ? sizeof(uint16_t) : sizeof(uint32_t));
+		ERR_FAIL_COND_V(checked_offset > UINT32_MAX, result.failure(ERR_PARAMETER_RANGE_ERROR));
+		ERR_FAIL_COND_V(index_array->draw_tracker && _draw_list_usage_conflicts(index_array->draw_tracker, RDG::RESOURCE_USAGE_INDEX_BUFFER_READ), result.failure(ERR_INVALID_PARAMETER));
+		if (index_array->transfer_worker_index >= 0) {
+			const uint32_t index = index_array->transfer_worker_index;
+			ERR_FAIL_COND_V(!p_transfer_capacity || !p_transfers, result.failure(ERR_PARAMETER_RANGE_ERROR));
+			ERR_FAIL_COND_V(index >= transfer_worker_pool.size() || !transfer_worker_pool[index] || transfer_worker_pool[index]->index != uint32_t(index) || transfer_worker_pool[index]->index >= transfer_worker_operation_used_by_draw.size(), result.failure(ERR_INVALID_DATA));
+			p_transfers[0] = { index, index_array->transfer_worker_operation };
+			result.transfer_count = 1;
+		}
+	}
 	_check_transfer_worker_index_array(index_array);
+	result.state_changed = true;
 
 	draw_list.state.index_array = p_index_array;
 #ifdef DEBUG_ENABLED
 	draw_list.validation.index_array_max_index = index_array->max_index;
 #endif
 	draw_list.validation.index_array_count = index_array->indices;
+	result.state_accepted = true;
 
 	const uint64_t offset_bytes = index_array->offset * (index_array->format == INDEX_BUFFER_FORMAT_UINT16 ? sizeof(uint16_t) : sizeof(uint32_t));
-	draw_graph.add_draw_list_bind_index_buffer(index_array->driver_id, index_array->format, offset_bytes);
+	result.bind_handle = draw_graph.add_draw_list_bind_index_buffer(index_array->driver_id, index_array->format, offset_bytes);
+	result.effect = NativeAppendEffect::Recorded;
 
 	if (index_array->draw_tracker != nullptr) {
 		draw_graph.add_draw_list_usage(index_array->draw_tracker, RDG::RESOURCE_USAGE_INDEX_BUFFER_READ);
 	}
+	if (p_capture) {
+		ERR_FAIL_COND_V(!draw_graph.contains_record(result.bind_handle), result.failure(ERR_INVALID_DATA));
+	}
+	result.state_accepted = true;
+	result.capture_complete = p_capture;
+	return result;
 }
 
 void RenderingDevice::draw_list_set_line_width(DrawListID p_list, float p_width) {

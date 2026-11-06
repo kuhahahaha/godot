@@ -1,0 +1,110 @@
+Checked bind implementation handoff — 2026-11-06
+Tree: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104
+Source frozen for parent build/review. NO builds or commits run here.
+
+Owned changes:
+servers/rendering/rendering_device.h
+servers/rendering/rendering_device.cpp
+tests/servers/rendering/test_checked_draw_bind.cpp (new dedicated TU)
+No graph, public ABI, Scene, Registry, original source authority, old fixture,
+resolver or checked draw profile changed. Sol's original graph kind3 VA/IA
+handles are used as supplied in current tree.
+
+Three private helpers implemented:
+_draw_list_bind_uniform_set_recorded
+_draw_list_bind_vertex_array_recorded
+_draw_list_bind_index_array_recorded
+Existing public void methods delegate to these same bodies with capture=false.
+Original ordinary guard/effect order remains; checked-only preflights occur
+only in capture=true. Same RID early returns still avoid transfer draining.
+
+BindAppendResult:
+- error and NativeAppendEffect describe refusal/native append separately.
+- state_accepted / state_changed explicitly describe CPU binding state.
+- bind_handle is absent for every uniform setter and redundant VA/IA call.
+- transfer_count describes exact pairs written into caller-supplied storage.
+- capture_complete certifies this local setter's bounded evidence only, NOT
+  source admission, a native range, later draw compatibility, execution or GPU
+  completion. A no-op makes no claim that an earlier binding was captured.
+- After VA/IA CPU acceptance, a later handle capture failure preserves accepted
+  state, changed=true, actual instruction handle and transfers; no rollback.
+
+Uniform:
+Checks thread, suspension, active list, original RID and immutable/qualification
+exclusions. Checked path validates exact draw-list value and set bounds in all
+builds. No pipeline/shader is required at this state setter. Keeps existing
+set_count assignment, state mutation and bound=false semantics. Attachment
+alias validation stays AFTER mutation for ordinary/debug and checked/all builds:
+error + state_changed may be true, state_accepted=false, no native append and
+capture_complete=false. Successful pending state has NoNewEffect and no handle;
+real descriptor evidence remains deferred to the actual draw body.
+
+VA/IA:
+Caller preallocates NativeTransferDependency[] and supplies capacity. Every VA
+worker/operation pair is retained in original order, including duplicate worker
+entries; original _check_transfer_worker_* still updates its own per-worker max
+and clears the original pending source fields. All capacity, metadata, worker
+index and usage checks precede transfer, CPU state and graph effects.
+IA byte offset is checked in 64-bit before narrowing into the original graph's
+uint32 offset; ordinary false path keeps its historical behavior.
+No missing tracker or resource edge is invented. IA null tracker is legal;
+VA absent tracker entries are legal, but an actual null vector entry refuses
+instead of entering the original dereference. Original actual bind instruction
+returns the kind3 handle; contains_record validates local capture after append.
+
+Usage conflict evidence:
+Retains the original add_draw_list_begin result in existing DrawList, both
+screen and framebuffer begin. Reset is original _draw_list_end/DrawList reset.
+This is recording identity ONLY. Checked VA/IA require it to remain contained.
+Preflight mirrors current graph add_draw_list_usage exactly: matching tracker
+command_frame AND matching draw_list_index with unequal draw_list_usage refuses.
+Other frame/list is accepted; original reset_if_outdated/insertion still runs.
+There is no read-union relaxation in this graph entry point: current DEV branch
+rejects every unequal same-list usage enum. Same usage is allowed. No graph API
+or graph private-state access was added.
+
+Dedicated regression (parent filter *[CheckedBind]*):
+1. uniform acceptance records CPU state without a native instruction
+   Compares two consecutive original scissor instruction offsets against a
+   scissor separated by setter, checks accepted/redundant state, bounds, list,
+   missing RID, suspension, inactive/wrong thread, post-mutation alias failure,
+   ordinary setter state equivalence.
+2. geometry binds preserve original payload transfers and mapping
+   checked and ordinary subcases; 2 original VBs, 3 transfer pairs (two workers,
+   duplicate worker 0 maxima), IA transfer, too-small arenas refuse untouched,
+   actual kind3 handles, redundant VA/IA no new effects, original per-worker
+   maxima and cleared fields, recorded tracker usage and counts. End original
+   graph and compare exact CPU driver's observed VA/IA payload with fixed
+   literals; map actual handles to original command buffer 11.
+3. original usage conflicts and offset overflow refuse before effects
+   Real add_draw_list_usage creates prior conflicting facts; checked refusal
+   preserves all transfer fields/state. New-list usage, same-list same usage,
+   and stale prior-frame usage accepted; wide IA offset refuses before effects.
+
+Test fixture builds original RD owner entries and original graph begin/list
+state through private friend plumbing, following test_record_source style.
+It does NOT claim native resource factory provenance or Scene authority.
+The two real RD begin assignments are source-reviewed; this new fixture uses
+actual graph begin handles directly and does not independently cover those
+screen/framebuffer entry points. Existing parent begin/draw regressions remain
+relevant neighbors. Deferred descriptor draws, pipeline invalidation across
+all shaders and full immutable/qualification rejection matrix are not newly
+covered here. No physical native/GPU/height runtime test run.
+
+Saved artifacts:
+/tmp/b4-checked-bind-draft/prepare.py : draft extraction script, do not rerun on
+  already-modified source (not idempotent).
+/tmp/b4-checked-bind-implementation.patch : production-only diff versus HEAD.
+/tmp/b4-checked-bind-negative.py : narrow mutation helper for parent RED; save
+  production source first, run script, rebuild/run CheckedBind, then restore
+  ONLY file contents from saved copy if no concurrent edits. Better use the
+  generated /tmp/b4-checked-bind-negative.patch and git apply --reverse to
+  restore exactly those mutation hunks without discarding other changes.
+
+Validation here: clang-format and git diff --check. Builds/tests NOT RUN here.
+Root explicitly owns builds and RED/GREEN.
+
+HEIGHT_RASTER remains unavailable: these helpers do not broaden the checked
+triangle draw profile, capture deferred descriptor/shared-copy/clear prefixes,
+join original Scene/K01/R03 ownership, implement quarantine/unwind policy,
+resolve geometry/materials or certify D32 readback/native completion.

@@ -1,0 +1,14 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_checked_draw_bind.cpp:358:
+TEST CASE:  [RenderingDevice][CheckedBind] geometry binds preserve original payload transfers and mapping
+  checked
+
+tests/servers/rendering/test_checked_draw_bind.cpp:249: ERROR: CHECK( vertex.transfer_count == 3 ) is NOT correct!
+  values: CHECK( 0 == 3 )
+
+===============================================================================
+[doctest] test cases:   3 |   2 passed | 1 failed | 2137 skipped
+[doctest] assertions: 209 | 208 passed | 1 failed |
+[doctest] Status: FAILURE!
