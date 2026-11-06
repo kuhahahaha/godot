@@ -1,0 +1,63 @@
+{
+  "base": "1bd86e1b619b804b25a44a86f780734c8a8c97cb",
+  "scope": "native_drain_trace",
+  "binary": {
+    "bytes": 156696952,
+    "sha256": "febcdcb166f54fdc465d2c5818085d2cb28e5e74940a4ca32d3e78fed4297f59",
+    "note": "Built from base1bd86e1b61 plus exact metadata and diagnostic source overlays below, before commits."
+  },
+  "source_sha256": {
+    "core/io/native_drain_diagnostic.h": "72384847932a44a7fb97d23e22bb79b3384828c0e54a481a26c497056689709a",
+    "core/extension/gdextension_production_request.cpp": "7cf9e55f46089501a879cc30369674d29b4f5fdb29e4cbf70895731fa4bff91d",
+    "core/extension/gdextension_production_owned.cpp": "908d98ae426e150ff4d2aed1a5f41947a4aa4008474438e9ad7c50a155d6cc83",
+    "servers/rendering/rendering_device.cpp": "c13577649c2b9594514bd4d99bcd31c399778d47f4c228496d306e24f572d850",
+    "drivers/metal/metal3_objects.cpp": "b1670c3a88f66b34a126e87a28009d5686e2ced86a221541370a6d5951b6a8f3",
+    "drivers/metal/rendering_context_driver_metal.cpp": "07b5274d739cf7d4e94875ff68b66a6620b4e3f48da91a7aa5e2a283e3fd0682",
+    "tests/core/extension/native_output_bridge/decode_native_drain_ring.py": "7f80941ab03c226ec99dae9c520f7b3e83d39e76e9a427fcea36155d684579ac"
+  },
+  "compiled_overlay_sha256": {
+    "servers/rendering/renderer_rd/storage_rd/external_output_owner.h": "7f65dabe891bfa5562b411940bf818da7d8657bca2a1c2aa66f2f7842133d963",
+    "servers/rendering/renderer_rd/storage_rd/external_output_owner.cpp": "a763a758f11c8c60f568737ceedfa08c3f49011948d38278cb706cfb76d0e196",
+    "servers/rendering/renderer_rd/storage_rd/particles_storage.h": "8c3bd10ed2bde5ddc76d81b7bed91653f4da6738c854a4c2ee0aa5336f6b3aa2",
+    "servers/rendering/renderer_rd/storage_rd/particles_storage_external.cpp": "8b3b47c986e88f83331876c3390396263558c02b9f5c8da82ad3e626d4f3b38e",
+    "tests/servers/rendering/test_external_output_custody_bridge.h": "0b5dc30218173dbbcb974c5d9ed9351de6f33a11e1b79d0cfc2eae75448ef995",
+    "tests/servers/rendering/test_external_output_owner_state.cpp": "4b6fbada1be2c56972cbd45494982df21420b6f83f1e9fafcd3966940c825a50",
+    "tests/core/extension/test_production_request.cpp": "041189aa211b27fbf5676d1cdab6f38e0b70a18368f7ecca32fa8589932c78a2"
+  },
+  "build": "scons -Q platform=macos target=editor tests=yes debug_symbols=no module_particles_runtime_tests_enabled=yes -j3",
+  "validation": {
+    "focused": {
+      "cases": 14,
+      "assertions": 1764,
+      "exit_code": 0
+    },
+    "combined": {
+      "cases": 140,
+      "assertions": 73562,
+      "exit_code": 0,
+      "expected_pipeline_diagnostics": 3,
+      "expected_camera_diagnostics": 3
+    },
+    "traced_core": {
+      "cases": 96,
+      "assertions": 69609,
+      "exit_code": 0
+    }
+  },
+  "limits": [
+    "Controlled CPU/native evidence only; Metal production root cause and actual GPU draw remain unverified.",
+    "Original R01/HostOutputCustody authority, selected view transport, full profile/packet/render consumption and physical completion remain separate live requirements.",
+    "Diagnostic opt-in synchronous IO consumes real wall time and can affect deadline outcomes without changing original gate expressions or budget bookkeeping."
+  ],
+  "raw_ring_sha256": "2102d7d2d635a4ebabafef306ac2f0269fefe732dfcba05c3878f0fb526306b7",
+  "raw_ring_bytes": 3145728,
+  "files_sha256": {
+    "SOURCE_CHANGE.patch": "f7a3e63ecbe271502e30b3d6a5d87a771a399b488889752c5af34b8fe4f26b2f",
+    "RECEIPT.md": "02818acc679b307d5b69f7491c9fb27bbd34ef6d1bfd97ff5de2157c55ce63f8",
+    "FIELDS.txt": "e178efec46abe67817fe912e25daea57adbeb74f7e2be725174e2213d7d40802",
+    "decoder-validation.json": "63e490e197387bb3317cc4602062b5b553e9a216ebd689406373705bbfed9581",
+    "controlled.ring.gz": "e1d2ae4b45bb6674698814992dab42ee695958af5f620c5386dc2d7d9a659c29",
+    "controlled.log": "ddc9412cd93a87d8f4210765ab4beb9e1c99142a7b926cf004bfa5a5c4a3ff27",
+    "build.log": "acc75821b740da7d7ae8d319fd81bc08dac2645fced599405c2c5aa0dd8f6aa8"
+  }
+}

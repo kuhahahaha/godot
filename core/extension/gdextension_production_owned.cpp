@@ -29,6 +29,7 @@
 /**************************************************************************/
 
 #include "core/extension/gdextension_production_request.h"
+#include "core/io/native_drain_diagnostic.h"
 #include "core/os/os.h"
 #include "core/os/thread.h"
 #include "servers/rendering/rendering_device.h"
@@ -875,8 +876,9 @@ Error Registry::production_sets_step_locked(ProductionRequest &request, Renderin
 }
 
 Error Registry::production_maintenance_locked(ProductionRequest &request, RenderingDevice &rd, const GDExtensionProductionServiceBudgetV1 &budget, ProductionServiceUsage &usage) {
+	NativeDrainDiagnostic::Span drain_trace("maintenance.preflight", request.serial, request.control.serial, request.maintenance_serial, rd.frame, uint64_t(rd.native_disposal_active.load()), rd.draw_graph.qualification_command_count());
 	if (!budget.controls || usage.passes >= MIN(budget.passes, 64u) || usage.receipts >= MIN(budget.receipts, 128u) || !budget.deadline_micros || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros || request.capture_inflight || request.source_device_lost || request.revision > UINT64_MAX - uint64_t(request.capacity.graph_memberships) * 2 - uint64_t(request.capacity.native_memberships) * 2 - request.capacity.readbacks - request.capacity.resources - 8) {
-		return ERR_BUSY;
+		return drain_trace.result(ERR_BUSY, "budget_or_inflight_or_loss");
 	}
 	bool closure_drop = false;
 	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
@@ -911,23 +913,23 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 		usage.passes += actual.passes;
 		usage.receipts += actual.polls + actual.frees + actual.issues + actual.retains + actual.releases + actual.recycles;
 		if (request.serial != request_serial || request.control.serial != control_serial || request.control.state != ProductionControlState::EXECUTING || request.attachment != attachment || attachment->held_device != &rd || attachment->epoch != epoch || device_records[attachment->device].epoch != epoch || device_records[attachment->device].object != &rd) {
-			return ERR_INVALID_DATA;
+			return drain_trace.result(ERR_INVALID_DATA, "drop_identity_changed");
 		}
 		if (dropped != OK) {
-			return dropped;
+			return drain_trace.result(dropped, "drop_step");
 		}
 		if (usage.passes >= MIN(budget.passes, 64u) || usage.receipts >= MIN(budget.receipts, 128u)) {
-			return ERR_BUSY;
+			return drain_trace.result(ERR_BUSY, "drop_budget_exhausted");
 		}
 	}
 	if (!rd.driver || rd.frames.is_empty() || rd.draw_list.active || rd.compute_list.active || rd.raytracing_list.active || rd.frame_wait_draining || rd.draw_graph.has_driver_callbacks()) {
-		return ERR_BUSY;
+		return drain_trace.result(ERR_BUSY, "active_list_or_driver_callback");
 	}
 	if (request.maintenance_serial && (!rd.native_disposal_active || request.maintenance_serial != rd.native_disposal_continuation.serial)) {
 		request.maintenance_serial = 0;
 	}
 	if (rd.native_disposal_active && !request.maintenance_serial) {
-		return ERR_BUSY; // Never adopt another request's or qualification lane's cursor.
+		return drain_trace.result(ERR_BUSY, "foreign_cursor"); // Never adopt another request's or qualification lane's cursor.
 	}
 	// Every graph command must be covered by an actual original production
 	// capture. Other renderer/qualification work waits for its original lane;
@@ -950,7 +952,8 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 			}
 		}
 		if (!captured) {
-			return ERR_BUSY;
+			drain_trace.state(request.serial, request.control.serial, rd.frame, command, rd.draw_graph.qualification_command_count(), 0);
+			return drain_trace.result(ERR_BUSY, "uncaptured_graph");
 		}
 	}
 	auto owned_physical = [&](const QualificationPhysicalReturn *physical) {
@@ -987,7 +990,8 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 	for (uint32_t frame_index = 0; frame_index < rd.frames.size(); ++frame_index) {
 		const auto &frame = rd.frames[frame_index];
 		if (!frame.qualification_tickets.is_empty() || !frame.download_texture_get_data_requests.is_empty() || !frame.swap_chains_to_present.is_empty() || (!resuming && (!frame.acceleration_structures_to_dispose_of.is_empty() || !frame.raytracing_pipelines_to_dispose_of.is_empty()))) {
-			return ERR_BUSY;
+			drain_trace.state(request.serial, request.control.serial, frame_index, frame.swap_chains_to_present.size(), frame.qualification_tickets.size(), frame.download_texture_get_data_requests.size());
+			return drain_trace.result(ERR_BUSY, "foreign_frame_work");
 		}
 		uint32_t buffers = frame.buffers_to_dispose_of.size();
 		uint32_t sets = frame.uniform_sets_to_dispose_of.size();
@@ -995,11 +999,11 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 			buffers = sets = 0;
 			if (frame_index == rd.native_disposal_continuation.target && rd.native_disposal_continuation.phase < 5) {
 				if (!frame.disposal.active) {
-					return ERR_INVALID_DATA;
+					return drain_trace.result(ERR_INVALID_DATA, "missing_disposal_cursor");
 				}
 				for (uint32_t kind = 0; kind < 10; ++kind) {
 					if ((kind == 2 || kind == 3) && frame.disposal.remaining[kind]) {
-						return ERR_INVALID_DATA;
+						return drain_trace.result(ERR_INVALID_DATA, "unsupported_disposal_kind");
 					}
 				}
 				buffers = frame.disposal.remaining[9];
@@ -1009,14 +1013,14 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 		const auto *buffer = frame.buffers_to_dispose_of.front();
 		for (uint32_t i = 0; i < buffers; ++i) {
 			if (!buffer || (!owned_physical(buffer->get().qualification_return) && !exact_closure(buffer->get().production_disposal_uses, 9, buffer->get().driver_id.id, buffer->get().backing_serial))) {
-				return ERR_BUSY;
+				return drain_trace.result(ERR_BUSY, "foreign_buffer");
 			}
 			buffer = buffer->next();
 		}
 		const auto *set = frame.uniform_sets_to_dispose_of.front();
 		for (uint32_t i = 0; i < sets; ++i) {
 			if (!set || (!owned_physical(set->get().qualification_return) && !exact_closure(set->get().production_disposal_uses, 4, set->get().driver_id.id))) {
-				return ERR_BUSY;
+				return drain_trace.result(ERR_BUSY, "foreign_uniform_set");
 			}
 			set = set->next();
 		}
@@ -1043,16 +1047,16 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 		auto *framebuffer = frame.framebuffers_to_dispose_of.front();
 		for (uint32_t i = 0; i < framebuffers; ++i) {
 			if (!framebuffer || !owned_physical(framebuffer->get().qualification_return)) {
-				return ERR_BUSY;
+				return drain_trace.result(ERR_BUSY, "foreign_framebuffer");
 			}
 			framebuffer = framebuffer->next();
 		}
 		if (!closure_prefix(frame.render_pipelines_to_dispose_of, 0) || !closure_prefix(frame.compute_pipelines_to_dispose_of, 1) || !closure_prefix(frame.shaders_to_dispose_of, 5) || !closure_prefix(frame.samplers_to_dispose_of, 6) || !closure_prefix(frame.textures_to_dispose_of, 8)) {
-			return ERR_BUSY;
+			return drain_trace.result(ERR_BUSY, "foreign_closure_prefix");
 		}
 		for (const auto &readback : frame.download_buffer_get_data_requests) {
 			if (!readback.capture || readback.capture->registry != this) {
-				return ERR_BUSY;
+				return drain_trace.result(ERR_BUSY, "foreign_readback");
 			}
 		}
 	}
@@ -1077,6 +1081,6 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 	--request.capture_inflight;
 	usage.receipts += actual.polls + actual.frees + actual.issues + actual.retains + actual.releases + actual.recycles;
 	usage.passes += actual.passes;
-	return error;
+	return drain_trace.result(error, "native_step_returned");
 }
 } // namespace GDExtensionDeviceExit

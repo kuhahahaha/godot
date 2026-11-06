@@ -39,6 +39,7 @@
 #include "core/extension/gdextension_record_source.h"
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
+#include "core/io/native_drain_diagnostic.h"
 #include "core/object/class_db.h"
 #include "core/os/os.h"
 #include "core/profiling/profiling.h"
@@ -10079,23 +10080,24 @@ Error RenderingDevice::_qualification_maintenance() {
 }
 
 Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage, const GDExtensionDeviceExit::ProductionRequest *p_production_owner) {
+	NativeDrainDiagnostic::Span drain_trace("rd.maintenance", uintptr_t(this), uintptr_t(p_production_owner));
 	if (!p_budget.receipts || !p_budget.passes || !p_budget.deadline_usec || OS::get_singleton()->get_ticks_usec() >= p_budget.deadline_usec) {
-		return ERR_BUSY;
+		return drain_trace.result(ERR_BUSY, "rd.return.1");
 	}
 	if (render_thread_id != Thread::get_caller_id() || !is_main_instance || !driver || native_finalization_returned) {
-		return ERR_UNAUTHORIZED;
+		return drain_trace.result(ERR_UNAUTHORIZED, "rd.return.2");
 	}
 	if (frames.is_empty() || uint32_t(frame) >= frames.size()) {
-		return ERR_UNCONFIGURED;
+		return drain_trace.result(ERR_UNCONFIGURED, "rd.return.3");
 	}
 	if (frame_issue_error != OK) {
-		return frame_issue_error;
+		return drain_trace.result(frame_issue_error.load(), "rd.return.4");
 	}
 	if (draw_list.active || compute_list.active || raytracing_list.active || frame_wait_draining || native_disposal_budget) {
-		return ERR_BUSY;
+		return drain_trace.result(ERR_BUSY, "rd.return.5");
 	}
 	if (!_thread_safe_.try_lock()) {
-		return ERR_BUSY;
+		return drain_trace.result(ERR_BUSY, "rd.return.6");
 	}
 	struct Unlock {
 		RenderingDevice &rd;
@@ -10105,25 +10107,26 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
 			rd._thread_safe_.unlock();
 		}
 	} unlock{ *this };
+	drain_trace.state(uintptr_t(this), uintptr_t(p_production_owner), frame, native_disposal_continuation.serial, native_disposal_continuation.phase, native_disposal_continuation.end_phase);
 	if (native_disposal_active && native_disposal_continuation.production_owner != p_production_owner) {
-		return ERR_BUSY; // A foreign lane cannot resume the original owner's cursor.
+		return drain_trace.result(ERR_BUSY, "rd.return.7"); // A foreign lane cannot resume the original owner's cursor.
 	}
 	native_disposal_budget = &p_budget;
 	native_disposal_usage = &r_usage;
 	if (!_native_disposal_available(NativeDisposalWork::WORK)) {
-		return ERR_BUSY;
+		return drain_trace.result(ERR_BUSY, "rd.return.8");
 	}
 	auto &cursor = native_disposal_continuation;
 	if (!native_disposal_active) {
 		if (draw_graph.has_driver_callbacks()) {
-			return ERR_BUSY;
+			return drain_trace.result(ERR_BUSY, "rd.return.9");
 		}
 		if (!next_native_disposal_serial) {
-			return ERR_PARAMETER_RANGE_ERROR;
+			return drain_trace.result(ERR_PARAMETER_RANGE_ERROR, "rd.return.10");
 		}
 		const uint32_t target = qualification_frame_advance_pending ? uint32_t(frame) : (frame + 1) % frames.size();
 		if (p_production_owner && frames[target].disposal.active) {
-			return ERR_BUSY; // A pre-existing ordinary drain keeps its original cutoff.
+			return drain_trace.result(ERR_BUSY, "rd.return.11"); // A pre-existing ordinary drain keeps its original cutoff.
 		}
 		cursor = {};
 		cursor.production_owner = p_production_owner;
@@ -10144,12 +10147,12 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
 		if (failed_wait_frame >= 0 && uint32_t(failed_wait_frame) != cursor.target) {
 			const Error previous = _native_disposal_stall_step(failed_wait_frame);
 			if (previous != OK) {
-				return previous;
+				return drain_trace.result(previous, "rd.return.12");
 			}
 		}
 		const Error error = _native_disposal_stall_step(cursor.target);
 		if (error != OK) {
-			return error;
+			return drain_trace.result(error, "rd.return.13");
 		}
 		cursor.phase = 1;
 		cursor.command_buffer = frames[frame].command_buffer;
@@ -10157,16 +10160,16 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
 	if (cursor.phase == 1) {
 		auto &f = frames[frame];
 		if (f.chain_prefix_poisoned) {
-			return _fail_frame_issue(FAILED);
+			return drain_trace.result(_fail_frame_issue(FAILED), "rd.return.14");
 		}
 		if (!f.fence_signaled && f.primary_command_buffer_begun) {
 			if (cursor.end_phase == 0) {
 				uint32_t bound = 0;
 				if (!driver->native_issue_bound(RDD::NativeIssueKind::PREPARE_SEGMENT, 0, bound)) {
-					return ERR_UNAVAILABLE;
+					return drain_trace.result(ERR_UNAVAILABLE, "rd.return.15");
 				}
 				if (!_native_disposal_admit(NativeDisposalWork::ISSUE, bound)) {
-					return ERR_BUSY;
+					return drain_trace.result(ERR_BUSY, "rd.return.16");
 				}
 				RDD::QueueCallReport hidden;
 				const Error error = driver->qualification_prepare_segment(hidden, true);
@@ -10177,39 +10180,42 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
 				if (hidden.native_issue_count > bound) {
 					r_usage.issues = uint32_t(MIN(uint64_t(UINT32_MAX), uint64_t(r_usage.issues) + hidden.native_issue_count - bound));
 					// An invalid backend bound cannot erase its actual source prefix.
-					return _fail_frame_issue(ERR_INVALID_DATA);
+					return drain_trace.result(_fail_frame_issue(ERR_INVALID_DATA), "rd.return.17");
 				}
 				r_usage.issues -= bound - hidden.native_issue_count;
 				if (error != OK) {
-					return error;
+					return drain_trace.result(error, "rd.return.18");
 				}
 				cursor.end_phase = 1;
 			}
 			if (cursor.end_phase == 1) {
 				const Error error = _submit_transfer_workers(cursor.command_buffer, true);
 				if (error != OK) {
-					return error == ERR_BUSY ? error : _fail_frame_issue(error);
+					return drain_trace.result(error == ERR_BUSY ? error : _fail_frame_issue(error), "rd.return.19");
 				}
 				cursor.end_phase = 2;
 			}
 			if (cursor.end_phase == 2) {
 				if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
-					return ERR_BUSY;
+					return drain_trace.result(ERR_BUSY, "rd.return.20");
 				}
 				// The caller validated every closed graph record against its
 				// accepted capture/quote. Recording this graph is one atomic pass;
 				// its native issues above/below are individually charged receipts.
 				cursor.end_phase = 3; // Never replay an uncertain graph prefix.
-				draw_graph.end(RENDER_GRAPH_REORDER == 1, RENDER_GRAPH_FULL_BARRIERS == 1, cursor.command_buffer, f.command_buffer_pool);
+				{
+					NativeDrainDiagnostic::Span graph_trace("graph.maintenance", uintptr_t(this), cursor.command_buffer.id, cursor.serial, frame, cursor.phase, cursor.end_phase);
+					draw_graph.end(RENDER_GRAPH_REORDER == 1, RENDER_GRAPH_FULL_BARRIERS == 1, cursor.command_buffer, f.command_buffer_pool);
+				}
 				_seal_buffer_readback_records();
 				_qualification_seal_tickets();
 				if (draw_graph.recording_failed()) {
-					return _fail_frame_issue(FAILED);
+					return drain_trace.result(_fail_frame_issue(FAILED), "rd.return.21");
 				}
 			}
 			if (cursor.end_phase == 3) {
 				if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
-					return ERR_BUSY;
+					return drain_trace.result(ERR_BUSY, "rd.return.22");
 				}
 				driver->command_buffer_end(cursor.command_buffer);
 				cursor.end_phase = 4;
@@ -10219,10 +10225,10 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
 				// enter the legacy end_segment wait from a bounded owner turn.
 				uint32_t bound = 0;
 				if (!driver->native_issue_bound(RDD::NativeIssueKind::PREPARE_SEGMENT, 0, bound)) {
-					return ERR_UNAVAILABLE;
+					return drain_trace.result(ERR_UNAVAILABLE, "rd.return.23");
 				}
 				if (!_native_disposal_admit(NativeDisposalWork::ISSUE, bound)) {
-					return ERR_BUSY;
+					return drain_trace.result(ERR_BUSY, "rd.return.24");
 				}
 				RDD::QueueCallReport hidden;
 				const Error error = driver->qualification_prepare_segment(hidden, true);
@@ -10233,11 +10239,11 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
 				if (hidden.native_issue_count > bound) {
 					r_usage.issues = uint32_t(MIN(uint64_t(UINT32_MAX), uint64_t(r_usage.issues) + hidden.native_issue_count - bound));
 					// An invalid backend bound cannot erase its actual source prefix.
-					return _fail_frame_issue(ERR_INVALID_DATA);
+					return drain_trace.result(_fail_frame_issue(ERR_INVALID_DATA), "rd.return.25");
 				}
 				r_usage.issues -= bound - hidden.native_issue_count;
 				if (error != OK) {
-					return error;
+					return drain_trace.result(error, "rd.return.26");
 				}
 				cursor.end_phase = 5;
 			}
@@ -10255,10 +10261,10 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
 		while (cursor.slot < cursor.slot_count) {
 			uint32_t bound = 0;
 			if (!driver->native_issue_bound(RDD::NativeIssueKind::MAIN_SLOT, 1, bound)) {
-				return ERR_UNAVAILABLE;
+				return drain_trace.result(ERR_UNAVAILABLE, "rd.return.27");
 			}
 			if (!_native_disposal_admit(NativeDisposalWork::ISSUE, bound)) {
-				return ERR_BUSY;
+				return drain_trace.result(ERR_BUSY, "rd.return.28");
 			}
 			const uint32_t slot = cursor.slot;
 			const auto command = slot ? pool.buffers[slot - 1] : f.command_buffer;
@@ -10274,11 +10280,11 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
 			_qualification_issue_tickets(slot, report, error);
 			if (report.native_issue_count > bound) {
 				r_usage.issues = uint32_t(MIN(uint64_t(UINT32_MAX), uint64_t(r_usage.issues) + report.native_issue_count - bound));
-				return _fail_frame_issue(ERR_INVALID_DATA);
+				return drain_trace.result(_fail_frame_issue(ERR_INVALID_DATA), "rd.return.29");
 			}
 			r_usage.issues -= bound - report.native_issue_count;
 			if (error != OK || !report.issued || report.error != OK) {
-				return _fail_frame_issue(error != OK ? error : (report.error != OK ? report.error : FAILED));
+				return drain_trace.result(_fail_frame_issue(error != OK ? error : (report.error != OK ? report.error : FAILED)), "rd.return.30");
 			}
 		}
 		if (cursor.slot_count) {
@@ -10295,29 +10301,29 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
 	if (cursor.phase == 3) {
 		const Error error = _native_disposal_stall_step(frame);
 		if (error != OK) {
-			return error;
+			return drain_trace.result(error, "rd.return.31");
 		}
 		cursor.phase = 4;
 	}
 	if (cursor.phase == 4) {
 		const Error error = _free_pending_resources_step(frame, p_budget, r_usage);
 		if (error != OK) {
-			return error;
+			return drain_trace.result(error, "rd.return.32");
 		}
 		cursor.phase = 5;
 	}
 	if (cursor.phase == 5) {
 		if (!next_qualification_frame_epoch) {
-			return ERR_PARAMETER_RANGE_ERROR;
+			return drain_trace.result(ERR_PARAMETER_RANGE_ERROR, "rd.return.33");
 		}
 		auto &f = frames[frame];
 		if (cursor.begin_phase == 0) {
 			if (command_pool_reset_enabled) {
 				if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
-					return ERR_BUSY;
+					return drain_trace.result(ERR_BUSY, "rd.return.34");
 				}
 				if (!driver->command_pool_reset(f.command_pool)) {
-					return _fail_frame_issue(FAILED);
+					return drain_trace.result(_fail_frame_issue(FAILED), "rd.return.35");
 				}
 			}
 			f.primary_command_buffer_begun = false;
@@ -10327,24 +10333,24 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
 		}
 		if (cursor.begin_phase == 1) {
 			if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
-				return ERR_BUSY;
+				return drain_trace.result(ERR_BUSY, "rd.return.36");
 			}
 			driver->begin_segment(frame, frames_drawn++);
 			cursor.begin_phase = 2;
 		}
 		if (cursor.begin_phase == 2) {
 			if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
-				return ERR_BUSY;
+				return drain_trace.result(ERR_BUSY, "rd.return.37");
 			}
 			f.primary_command_buffer_begun = driver->command_buffer_begin(f.command_buffer);
 			if (!f.primary_command_buffer_begun) {
-				return _fail_frame_issue(FAILED);
+				return drain_trace.result(_fail_frame_issue(FAILED), "rd.return.38");
 			}
 			cursor.begin_phase = 3;
 		}
 		if (cursor.begin_phase == 3) {
 			if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
-				return ERR_BUSY;
+				return drain_trace.result(ERR_BUSY, "rd.return.39");
 			}
 			draw_graph.begin(true);
 			f.qualification_epoch = next_qualification_frame_epoch++;
@@ -10361,7 +10367,7 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
 		if (cursor.begin_phase == 4) {
 			if (f.timestamp_count) {
 				if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
-					return ERR_BUSY;
+					return drain_trace.result(ERR_BUSY, "rd.return.40");
 				}
 				driver->timestamp_query_pool_get_results(f.timestamp_pool, f.timestamp_count, f.timestamp_result_values.ptr());
 			}
@@ -10370,7 +10376,7 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
 		if (cursor.begin_phase == 5) {
 			if (f.timestamp_count) {
 				if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
-					return ERR_BUSY;
+					return drain_trace.result(ERR_BUSY, "rd.return.41");
 				}
 				driver->command_timestamp_query_pool_reset(f.command_buffer, f.timestamp_pool, f.timestamp_count);
 				SWAP(f.timestamp_names, f.timestamp_result_names);
@@ -10387,7 +10393,7 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
 			cursor = {};
 		}
 	}
-	return OK;
+	return drain_trace.result(OK, "rd.return.42");
 }
 
 Error RenderingDevice::_native_disposal_stall_step(uint32_t p_frame) {
@@ -12148,7 +12154,10 @@ Error RenderingDevice::_end_frame(bool p_nonblocking) {
 	}
 
 	GodotProfileZoneGrouped(_profile_zone, "draw_graph.end");
-	draw_graph.end(RENDER_GRAPH_REORDER == 1, RENDER_GRAPH_FULL_BARRIERS == 1, command_buffer, frames[frame].command_buffer_pool);
+	{
+		NativeDrainDiagnostic::Span graph_trace("graph.ordinary", uintptr_t(this), command_buffer.id, frame, frames[frame].swap_chains_to_present.size(), frames[frame].fence_signaled, qualification_frame);
+		draw_graph.end(RENDER_GRAPH_REORDER == 1, RENDER_GRAPH_FULL_BARRIERS == 1, command_buffer, frames[frame].command_buffer_pool);
+	}
 	_seal_buffer_readback_records();
 	_qualification_seal_tickets();
 	if (draw_graph.recording_failed()) {

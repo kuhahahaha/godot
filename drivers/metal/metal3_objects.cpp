@@ -50,6 +50,7 @@
 
 #include "metal3_objects.h"
 
+#include "core/io/native_drain_diagnostic.h"
 #include "drivers/metal/metal_utils.h"
 #include "drivers/metal/pixel_formats.h"
 #include "drivers/metal/rendering_device_driver_metal3.h"
@@ -256,6 +257,7 @@ void MDCommandBuffer::_end() {
 }
 
 void MDCommandBuffer::_commit() {
+	NativeDrainDiagnostic::Span drain_trace("metal.commit", uintptr_t(this), uintptr_t(device_driver));
 	end();
 	// An empty recording still needs a native submission for its fence and
 	// completion handler. Native command buffers are otherwise created lazily.
@@ -272,7 +274,10 @@ void MDCommandBuffer::_commit() {
 	if (device_driver->active_native_issue_count) {
 		++*device_driver->active_native_issue_count;
 	}
-	cb->commit();
+	{
+		NativeDrainDiagnostic::Span submit_trace("metal.cb_commit", uintptr_t(this), uintptr_t(cb), uintptr_t(device_driver));
+		cb->commit();
+	}
 	commandBuffer.reset();
 	state_begin = false;
 }

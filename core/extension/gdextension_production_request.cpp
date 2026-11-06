@@ -31,6 +31,7 @@
 #include "core/extension/gdextension_production_request.h"
 
 #include "core/extension/gdextension_production_legacy_projection.h"
+#include "core/io/native_drain_diagnostic.h"
 #include "core/os/os.h"
 #include "core/os/thread.h"
 #include "servers/rendering/rendering_device.h"
@@ -2552,25 +2553,27 @@ Error Registry::production_control_accept(GDExtensionProductionRequestRefV1 ref,
 }
 
 Error Registry::production_control_schedule(GDExtensionProductionRequestRefV1 ref, uint64_t serial) {
+	NativeDrainDiagnostic::Span drain_trace("control.schedule", serial);
 	MutexLock lock(mutex);
 	ProductionRequest *r = nullptr;
 	RenderingDevice *rd = nullptr;
 	Error error = production_request_locked(ref, false, r, rd);
 	if (error != OK) {
-		return error;
+		return drain_trace.result(error, "request_lookup_failed");
 	}
 	auto &cell = r->control;
+	drain_trace.state(r->serial, serial, uint64_t(cell.state), uint64_t(cell.input.kind), r->maintenance_serial, 0);
 	if (!serial || cell.serial != serial || cell.state == ProductionControlState::OWNER_CONSUMED) {
-		return ERR_DOES_NOT_EXIST;
+		return drain_trace.result(ERR_DOES_NOT_EXIST, "serial_or_state_mismatch");
 	}
 	if (cell.state != ProductionControlState::PENDING) {
-		return OK;
+		return drain_trace.result(OK, "existing_control");
 	}
 	auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
 	if (!server || this != &get_singleton()) {
 		cell.record_history.schedule_result_valid = true;
 		cell.record_history.last_schedule_result = result(ERR_UNAVAILABLE);
-		return ERR_UNAVAILABLE;
+		return drain_trace.result(ERR_UNAVAILABLE, "server_unavailable");
 	}
 	// Publication holds the original Registry lock; CQMT does not execute inline
 	// and releases its lock before dispatch. The scalar command owns no DSO code.
@@ -2582,15 +2585,18 @@ Error Registry::production_control_schedule(GDExtensionProductionRequestRefV1 re
 		cell.record_history.queue_possible = false; // FIFO false means no publication.
 		cell.record_history.schedule_result_valid = true;
 		cell.record_history.last_schedule_result = result(ERR_BUSY);
-		return ERR_BUSY;
+		drain_trace.state(r->serial, serial, uint64_t(cell.state), uint64_t(cell.input.kind), r->maintenance_serial, 0);
+		return drain_trace.result(ERR_BUSY, "queue_refused");
 	}
 	cell.record_history.admitted = true;
 	cell.record_history.schedule_result_valid = true;
 	cell.record_history.last_schedule_result = result(OK);
-	return OK;
+	drain_trace.state(r->serial, serial, uint64_t(cell.state), uint64_t(cell.input.kind), r->maintenance_serial, 1);
+	return drain_trace.result(OK, "queue_accepted");
 }
 
 void Registry::production_control_execute_locked(ProductionRequest &request, RenderingDevice *rd) {
+	NativeDrainDiagnostic::Span drain_trace("control.execute", request.serial, request.control.serial, uint64_t(request.control.input.kind), request.maintenance_serial, uintptr_t(rd), 0);
 	auto &cell = request.control;
 	CRASH_COND(cell.state != ProductionControlState::QUEUED);
 	cell.state = ProductionControlState::EXECUTING;
@@ -2726,18 +2732,22 @@ void Registry::production_control_execute_locked(ProductionRequest &request, Ren
 		} break;
 	}
 	production_report_locked(request, cell.output.report);
+	drain_trace.result(cell.output.result.native_error, "control.returned");
 	cell.state = ProductionControlState::RETURNED;
 	request.attachment->metadata_pending = request.attachment->metadata_receiver != nullptr;
 	// No recursive schedule, driver wait, native completion, or source ACK here.
 }
 
 void Registry::production_control_dispatch(uint64_t registry, uint64_t attachment, uint64_t request, uint64_t serial) {
+	NativeDrainDiagnostic::Span drain_trace("control.dispatch", registry, attachment, request, serial);
 	auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
 	if (!server || Thread::get_caller_id() != server->server_thread) {
+		drain_trace.result(ERR_UNAUTHORIZED, "wrong_thread_or_no_server");
 		return;
 	}
 	MutexLock lock(mutex);
 	if (registry != instance || !serial) {
+		drain_trace.result(ERR_INVALID_PARAMETER, "foreign_registry_or_zero_serial");
 		return;
 	}
 	for (auto *a : production_attachments) {
@@ -2773,15 +2783,19 @@ void Registry::production_control_dispatch(uint64_t registry, uint64_t attachmen
 				}
 				cell.output.result = result(ERR_INVALID_DATA, 16);
 				cell.state = ProductionControlState::RETURNED;
+				drain_trace.result(ERR_INVALID_DATA, "original_identity_rejected");
 				return;
 			}
 			// A loss/sealed preflight does not erase already accepted cleanup. Pending
 			// native effects are still checked by the real release helper and retained.
+			drain_trace.result(OK, "entered_execute");
 			production_control_execute_locked(r, a->held_device);
 			return;
 		}
+		drain_trace.result(ERR_DOES_NOT_EXIST, "no_matching_request");
 		return;
 	}
+	drain_trace.result(ERR_DOES_NOT_EXIST, "no_matching_attachment");
 }
 
 Error Registry::production_control_consume(GDExtensionProductionRequestRefV1 ref, uint64_t serial, ProductionControlOutput *out) {
