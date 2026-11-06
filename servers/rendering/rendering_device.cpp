@@ -7312,12 +7312,19 @@ RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_draw_geometry_dire
 	return _draw_list_draw_recorded(p_list, p_use_indices, p_instances, 0, true, DrawCaptureProfile::GeometryDirect);
 }
 
+RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_draw_geometry_prepared_recorded(DrawListID p_list, bool p_use_indices, uint32_t p_instances) {
+	return _draw_list_draw_recorded(p_list, p_use_indices, p_instances, 0, true, DrawCaptureProfile::GeometryPrepared);
+}
+
 void RenderingDevice::draw_list_draw(DrawListID p_list, bool p_use_indices, uint32_t p_instances, uint32_t p_procedural_vertices) {
 	_draw_list_draw_recorded(p_list, p_use_indices, p_instances, p_procedural_vertices, false);
 }
 
 RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_draw_recorded(DrawListID p_list, bool p_use_indices, uint32_t p_instances, uint32_t p_procedural_vertices, bool p_capture, DrawCaptureProfile p_profile) {
 	DrawAppendResult result;
+	const bool geometry_capture = p_capture && (p_profile == DrawCaptureProfile::GeometryDirect || p_profile == DrawCaptureProfile::GeometryPrepared);
+	const bool prepared_capture = p_capture && p_profile == DrawCaptureProfile::GeometryPrepared;
+	uint32_t expected_prefix_count = 0;
 	ERR_RENDER_THREAD_GUARD_V(result.failure(ERR_UNAVAILABLE));
 	ERR_FAIL_COND_V_MSG(_recording_error() != OK, result.failure(_recording_error()), "Recording is suspended after a frame fence wait failure.");
 
@@ -7328,13 +7335,15 @@ RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_draw_recorded(Draw
 		ERR_FAIL_COND_V(!draw_list.state.pipeline.is_valid() || p_use_indices || p_instances != 1 || p_procedural_vertices != 3 || draw_list.state.vertex_array.is_valid() || draw_list.state.index_array.is_valid() || draw_list.state.set_count || (draw_list.state.pipeline_push_constant_size && !draw_list.state.checked_push_constant_supplied), result.failure(ERR_UNAVAILABLE));
 	}
 
-	if (p_capture && p_profile == DrawCaptureProfile::GeometryDirect) {
+	if (geometry_capture) {
 		ERR_FAIL_COND_V(p_list != (int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT), result.failure(ERR_INVALID_PARAMETER));
 		ERR_FAIL_COND_V(!draw_graph.contains_record(draw_list.begin_handle), result.failure(ERR_INVALID_DATA));
 		ERR_FAIL_COND_V(!draw_list.state.pipeline.is_valid() || p_instances != 1 || p_procedural_vertices != 0, result.failure(ERR_UNAVAILABLE));
-		ERR_FAIL_COND_V(draw_list.state.set_count != 0, result.failure(ERR_UNAVAILABLE));
-		for (const DrawList::SetState &set : draw_list.state.sets) {
-			ERR_FAIL_COND_V(set.uniform_set.is_valid(), result.failure(ERR_UNAVAILABLE));
+		if (!prepared_capture) {
+			ERR_FAIL_COND_V(draw_list.state.set_count != 0, result.failure(ERR_UNAVAILABLE));
+			for (const DrawList::SetState &set : draw_list.state.sets) {
+				ERR_FAIL_COND_V(set.uniform_set.is_valid(), result.failure(ERR_UNAVAILABLE));
+			}
 		}
 		ERR_FAIL_COND_V(draw_list.state.pipeline_push_constant_size && !draw_list.state.checked_push_constant_supplied, result.failure(ERR_UNAVAILABLE));
 		ERR_FAIL_COND_V(!render_pipeline_owner.owns(draw_list.state.pipeline) || native_immutable_resource_is_retiring(draw_list.state.pipeline), result.failure(ERR_INVALID_PARAMETER));
@@ -7348,8 +7357,10 @@ RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_draw_recorded(Draw
 		ERR_FAIL_COND_V(shader->qualification_return, result.failure(ERR_UNAUTHORIZED));
 		ERR_FAIL_COND_V(!shader->driver_id || shader->driver_id != pipeline->shader_driver_id || draw_list.state.pipeline_shader != pipeline->shader || draw_list.state.pipeline_shader_driver_id != pipeline->shader_driver_id || draw_list.state.pipeline_shader_layout_hash != pipeline->shader_layout_hash || draw_list.state.pipeline_push_constant_size != pipeline->push_constant_size, result.failure(ERR_INVALID_DATA));
 		ERR_FAIL_COND_V(pipeline->validation.primitive != RENDER_PRIMITIVE_TRIANGLES || pipeline->validation.vertex_format == INVALID_ID, result.failure(ERR_UNAVAILABLE));
-		for (uint32_t i = 0; i < pipeline->set_formats.size(); ++i) {
-			ERR_FAIL_COND_V(pipeline->set_formats[i] != 0, result.failure(ERR_UNAVAILABLE));
+		if (!prepared_capture) {
+			for (uint32_t i = 0; i < pipeline->set_formats.size(); ++i) {
+				ERR_FAIL_COND_V(pipeline->set_formats[i] != 0, result.failure(ERR_UNAVAILABLE));
+			}
 		}
 		ERR_FAIL_COND_V(!draw_list.state.vertex_array.is_valid() || !vertex_array_owner.owns(draw_list.state.vertex_array), result.failure(ERR_INVALID_PARAMETER));
 		const VertexArray *vertex_array = vertex_array_owner.get_or_null(draw_list.state.vertex_array);
@@ -7368,6 +7379,115 @@ RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_draw_recorded(Draw
 			ERR_FAIL_COND_V(draw_list.state.index_array.is_valid(), result.failure(ERR_UNAVAILABLE));
 			ERR_FAIL_COND_V(vertex_array->vertex_count < 3 || vertex_array->vertex_count % 3 != 0, result.failure(ERR_INVALID_PARAMETER));
 		}
+	}
+
+	if (prepared_capture) {
+		static_assert(MAX_UNIFORM_SETS * 2 <= DrawAppendResult::PREFIX_CAPACITY);
+		ERR_FAIL_COND_V(draw_list.state.set_count > MAX_UNIFORM_SETS || draw_list.state.set_count > driver->limit_get(LIMIT_MAX_BOUND_UNIFORM_SETS), result.failure(ERR_INVALID_PARAMETER));
+		const RenderPipeline *pipeline = render_pipeline_owner.get_or_null(draw_list.state.pipeline);
+		const Shader *shader = shader_owner.get_or_null(pipeline->shader);
+		ERR_FAIL_COND_V(uint32_t(pipeline->set_formats.size()) != draw_list.state.set_count || shader->set_formats != pipeline->set_formats, result.failure(ERR_INVALID_DATA));
+		// This profile captures read-only sets requiring no hidden copy, clear,
+		// transfer or revision mutation. Original public drawing is unchanged.
+		HashMap<RDG::ResourceTracker *, RDG::ResourceUsage> pending_usages;
+		uint32_t batch_count = 0;
+		uint32_t last_index = 0;
+		for (uint32_t i = 0; i < draw_list.state.set_count; ++i) {
+			const DrawList::SetState &binding = draw_list.state.sets[i];
+			ERR_FAIL_COND_V(binding.pipeline_expected_format != pipeline->set_formats[i], result.failure(ERR_INVALID_DATA));
+			if (!binding.pipeline_expected_format) {
+				continue;
+			}
+			ERR_FAIL_COND_V(!uniform_set_owner.owns(binding.uniform_set) || native_immutable_resource_is_retiring(binding.uniform_set), result.failure(ERR_INVALID_PARAMETER));
+			const UniformSet *set = uniform_set_owner.get_or_null(binding.uniform_set);
+			ERR_FAIL_NULL_V(set, result.failure(ERR_INVALID_PARAMETER));
+			ERR_FAIL_COND_V(!set->driver_id || set->driver_id != binding.uniform_set_driver_id || set->format != binding.uniform_set_format || set->format != binding.pipeline_expected_format, result.failure(ERR_INVALID_DATA));
+			ERR_FAIL_COND_V(set->qualification_return || !set->qualification_dependencies.is_empty() || _native_immutable_uniform_set_writes(*set), result.failure(ERR_UNAUTHORIZED));
+			ERR_FAIL_COND_V(!set->writable_resources.is_empty() || !set->pending_clear_textures.is_empty(), result.failure(ERR_UNAVAILABLE));
+			ERR_FAIL_COND_V(!shader_owner.owns(set->shader_id) || native_immutable_resource_is_retiring(set->shader_id), result.failure(ERR_INVALID_PARAMETER));
+			const Shader *origin = shader_owner.get_or_null(set->shader_id);
+			ERR_FAIL_COND_V(!origin || !origin->driver_id || origin->qualification_return || set->shader_set >= uint32_t(origin->set_formats.size()) || origin->set_formats[set->shader_set] != set->format, result.failure(ERR_INVALID_DATA));
+			for (const UniformSet::AttachableTexture &attachment : set->attachable_textures) {
+				ERR_FAIL_COND_V(draw_list_bound_textures.has(attachment.texture), result.failure(ERR_INVALID_PARAMETER));
+			}
+			for (const UniformSet::SharedTexture &shared : set->shared_textures_to_update) {
+				ERR_FAIL_COND_V(!texture_owner.owns(shared.texture) || native_immutable_resource_is_retiring(shared.texture), result.failure(ERR_INVALID_PARAMETER));
+				const Texture *texture = texture_owner.get_or_null(shared.texture);
+				ERR_FAIL_NULL_V(texture, result.failure(ERR_INVALID_PARAMETER));
+				if (!texture->shared_fallback) {
+					continue;
+				}
+				ERR_FAIL_COND_V(shared.writing, result.failure(ERR_UNAVAILABLE));
+				if (texture->owner.is_valid()) {
+					ERR_FAIL_COND_V(!texture_owner.owns(texture->owner) || native_immutable_resource_is_retiring(texture->owner), result.failure(ERR_INVALID_PARAMETER));
+					const Texture *owner = texture_owner.get_or_null(texture->owner);
+					ERR_FAIL_COND_V(!owner || !owner->shared_fallback, result.failure(ERR_INVALID_PARAMETER));
+					ERR_FAIL_COND_V(texture->shared_fallback->revision != owner->shared_fallback->revision, result.failure(ERR_UNAVAILABLE));
+				}
+			}
+			ERR_FAIL_COND_V(set->draw_trackers.size() != set->draw_trackers_usage.size(), result.failure(ERR_INVALID_DATA));
+			for (int j = 0; j < set->draw_trackers.size(); ++j) {
+				RDG::ResourceTracker *tracker = set->draw_trackers[j];
+				const RDG::ResourceUsage usage = set->draw_trackers_usage[j];
+				ERR_FAIL_COND_V(!tracker || usage <= RDG::RESOURCE_USAGE_NONE || usage >= RDG::RESOURCE_USAGE_MAX, result.failure(ERR_INVALID_DATA));
+				if (descriptor_set_batching && !binding.bound) {
+					ERR_FAIL_COND_V(_draw_list_usage_conflicts(tracker, usage), result.failure(ERR_INVALID_PARAMETER));
+					const RDG::ResourceUsage *previous = pending_usages.getptr(tracker);
+					ERR_FAIL_COND_V(previous && *previous != usage, result.failure(ERR_INVALID_PARAMETER));
+					pending_usages.insert(tracker, usage);
+				}
+			}
+			// Immutable resources legitimately have no tracker. Check the
+			// original owner and transfer premise without creating one here.
+			for (const auto &entry : set->untracked_usage) {
+				ERR_FAIL_COND_V(native_immutable_resource_is_retiring(entry.key), result.failure(ERR_INVALID_PARAMETER));
+				const Buffer *buffer = nullptr;
+				switch (entry.value) {
+					case RDG::RESOURCE_USAGE_UNIFORM_BUFFER_READ:
+						ERR_FAIL_COND_V(!uniform_buffer_owner.owns(entry.key), result.failure(ERR_INVALID_PARAMETER));
+						buffer = uniform_buffer_owner.get_or_null(entry.key);
+						break;
+					case RDG::RESOURCE_USAGE_TEXTURE_BUFFER_READ:
+						ERR_FAIL_COND_V(!texture_buffer_owner.owns(entry.key), result.failure(ERR_INVALID_PARAMETER));
+						buffer = texture_buffer_owner.get_or_null(entry.key);
+						break;
+					case RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ:
+						if (storage_buffer_owner.owns(entry.key)) {
+							buffer = storage_buffer_owner.get_or_null(entry.key);
+						} else if (vertex_buffer_owner.owns(entry.key)) {
+							buffer = vertex_buffer_owner.get_or_null(entry.key);
+						}
+						ERR_FAIL_NULL_V(buffer, result.failure(ERR_INVALID_PARAMETER));
+						break;
+					case RDG::RESOURCE_USAGE_TEXTURE_SAMPLE: {
+						ERR_FAIL_COND_V(!texture_owner.owns(entry.key), result.failure(ERR_INVALID_PARAMETER));
+						const Texture *texture = texture_owner.get_or_null(entry.key);
+						ERR_FAIL_COND_V(!texture || !texture->driver_id || texture->qualification_return || texture->transfer_worker_index >= 0, result.failure(ERR_INVALID_DATA));
+					} break;
+					default:
+						return result.failure(ERR_UNAVAILABLE);
+				}
+				ERR_FAIL_COND_V(buffer && (!buffer->driver_id || buffer->qualification_return || buffer->transfer_worker_index >= 0), result.failure(ERR_UNAVAILABLE));
+			}
+			expected_prefix_count += !driver->api_trait_get(RDD::API_TRAIT_HONORS_PIPELINE_BARRIERS);
+			if (!binding.bound) {
+				if (descriptor_set_batching) {
+					// Mirror the original loop, including its empty first batch
+					// when the first expected set has index greater than one.
+					if (i - last_index > 1) {
+						++expected_prefix_count;
+						batch_count = 1;
+					} else {
+						++batch_count;
+					}
+					last_index = i;
+				} else {
+					++expected_prefix_count;
+				}
+			}
+		}
+		expected_prefix_count += descriptor_set_batching && batch_count != 0;
+		ERR_FAIL_COND_V(expected_prefix_count > DrawAppendResult::PREFIX_CAPACITY, result.failure(ERR_PARAMETER_RANGE_ERROR));
 	}
 
 #ifdef DEBUG_ENABLED
@@ -7434,6 +7554,7 @@ RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_draw_recorded(Draw
 		if (!driver->api_trait_get(RDD::API_TRAIT_HONORS_PIPELINE_BARRIERS)) {
 			{
 				result.effect = NativeAppendEffect::NativePrefixOnly;
+				ERR_FAIL_COND_V(p_capture && result.prefix_count >= DrawAppendResult::PREFIX_CAPACITY, result.failure(ERR_PARAMETER_RANGE_ERROR));
 				const auto prefix = draw_graph.add_draw_list_uniform_set_prepare_for_use(draw_list.state.pipeline_shader_driver_id, draw_list.state.sets[i].uniform_set_driver_id, i);
 				if (p_capture) {
 					result.prefix_handles[result.prefix_count++] = prefix;
@@ -7456,6 +7577,7 @@ RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_draw_recorded(Draw
 					// If the descriptor sets are not contiguous, bind the previous ones and start a new batch.
 					{
 						result.effect = NativeAppendEffect::NativePrefixOnly;
+						ERR_FAIL_COND_V(p_capture && result.prefix_count >= DrawAppendResult::PREFIX_CAPACITY, result.failure(ERR_PARAMETER_RANGE_ERROR));
 						const auto prefix = draw_graph.add_draw_list_bind_uniform_sets(draw_list.state.pipeline_shader_driver_id, valid_descriptor_ids, first_set_index, valid_set_count);
 						if (p_capture) {
 							result.prefix_handles[result.prefix_count++] = prefix;
@@ -7483,6 +7605,7 @@ RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_draw_recorded(Draw
 			} else {
 				{
 					result.effect = NativeAppendEffect::NativePrefixOnly;
+					ERR_FAIL_COND_V(p_capture && result.prefix_count >= DrawAppendResult::PREFIX_CAPACITY, result.failure(ERR_PARAMETER_RANGE_ERROR));
 					const auto prefix = draw_graph.add_draw_list_bind_uniform_set(draw_list.state.pipeline_shader_driver_id, draw_list.state.sets[i].uniform_set_driver_id, i);
 					if (p_capture) {
 						result.prefix_handles[result.prefix_count++] = prefix;
@@ -7496,6 +7619,7 @@ RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_draw_recorded(Draw
 	if (descriptor_set_batching && valid_set_count > 0) {
 		{
 			result.effect = NativeAppendEffect::NativePrefixOnly;
+			ERR_FAIL_COND_V(p_capture && result.prefix_count >= DrawAppendResult::PREFIX_CAPACITY, result.failure(ERR_PARAMETER_RANGE_ERROR));
 			const auto prefix = draw_graph.add_draw_list_bind_uniform_sets(draw_list.state.pipeline_shader_driver_id, valid_descriptor_ids, first_set_index, valid_set_count);
 			if (p_capture) {
 				result.prefix_handles[result.prefix_count++] = prefix;
@@ -7562,11 +7686,31 @@ RenderingDevice::DrawAppendResult RenderingDevice::_draw_list_draw_recorded(Draw
 
 	result.effect = NativeAppendEffect::Recorded;
 	result.capture_complete = p_capture;
-	if (p_capture && p_profile == DrawCaptureProfile::GeometryDirect && !draw_graph.contains_record(result.draw_handle)) {
+	if (geometry_capture && !draw_graph.contains_record(result.draw_handle)) {
 		// The native draw was already appended. Preserve that fact while
 		// reporting that its capture handle could not be retained.
 		result.error = ERR_INVALID_DATA;
 		result.capture_complete = false;
+	}
+	if (prepared_capture) {
+		const auto &begin = draw_list.begin_handle;
+		uint32_t previous_offset = 0;
+		bool have_previous = false;
+		auto exact_instruction = [&](const RDG::RecordHandle &handle) {
+			return handle.kind == 3 && handle.graph_instance == begin.graph_instance && handle.graph_frame == begin.graph_frame && handle.index == begin.index && draw_graph.contains_record(handle);
+		};
+		bool complete = result.prefix_count == expected_prefix_count;
+		for (uint32_t i = 0; i < result.prefix_count; ++i) {
+			const auto &handle = result.prefix_handles[i];
+			complete = complete && exact_instruction(handle) && (!have_previous || handle.offset > previous_offset);
+			previous_offset = handle.offset;
+			have_previous = true;
+		}
+		complete = complete && exact_instruction(result.draw_handle) && (!have_previous || result.draw_handle.offset > previous_offset);
+		result.capture_complete = complete;
+		if (!complete) {
+			result.error = ERR_INVALID_DATA; // Preserve the already recorded draw.
+		}
 	}
 	return result;
 }

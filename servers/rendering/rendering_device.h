@@ -474,13 +474,15 @@ private:
 	enum class DrawCaptureProfile : uint8_t {
 		ProceduralTriangle,
 		GeometryDirect,
+		GeometryPrepared,
 	};
 	struct DrawAppendResult {
 		Error error = OK;
 		NativeAppendEffect effect = NativeAppendEffect::NoNewEffect;
 		RDG::RecordHandle draw_handle;
 		// At most one preparation and one bind per original uniform set.
-		RDG::RecordHandle prefix_handles[32];
+		static constexpr uint32_t PREFIX_CAPACITY = 32;
+		RDG::RecordHandle prefix_handles[PREFIX_CAPACITY];
 		uint32_t prefix_count = 0;
 		bool capture_complete = false;
 		NativeTransferDependency transfer;
@@ -539,6 +541,7 @@ private:
 	DrawAppendResult _draw_list_set_push_constant_recorded(DrawListID p_list, const void *p_data, uint32_t p_data_size, bool p_capture = true);
 	DrawAppendResult _draw_list_draw_recorded(DrawListID p_list, bool p_use_indices, uint32_t p_instances, uint32_t p_procedural_vertices, bool p_capture = true, DrawCaptureProfile p_profile = DrawCaptureProfile::ProceduralTriangle);
 	DrawAppendResult _draw_list_draw_geometry_direct_recorded(DrawListID p_list, bool p_use_indices, uint32_t p_instances = 1);
+	DrawAppendResult _draw_list_draw_geometry_prepared_recorded(DrawListID p_list, bool p_use_indices, uint32_t p_instances = 1);
 	DrawAppendResult _draw_list_enable_scissor_recorded(DrawListID p_list, const Rect2 &p_rect, bool p_capture = true);
 	DrawAppendResult _draw_list_end_recorded(bool p_capture = true);
 	CopyAppendResult _buffer_copy_recorded(RID p_src_buffer, RID p_dst_buffer, uint32_t p_src_offset, uint32_t p_dst_offset, uint32_t p_size);

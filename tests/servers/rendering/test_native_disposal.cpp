@@ -46,6 +46,8 @@ public:
 	static void sampler_identity();
 	static void sampler_ordinary();
 	static void geometry_direct();
+	static void geometry_prepared();
+	static void geometry_prepared_multiple();
 	static void depth_disposal();
 	static void depth_factory_failures();
 	static void depth_identity();
@@ -498,7 +500,7 @@ protected:
 	bool _set_code_from_spirv(const ReflectShader &) override { return false; }
 
 public:
-	void initialize() {
+	void initialize(bool p_with_uniform_set = false, uint32_t p_set_count = 1, bool p_sparse = false) {
 		reflection_data.pipeline_type = RenderingDeviceCommons::PIPELINE_TYPE_RASTERIZATION;
 		reflection_data.stage_count = 2;
 		for (auto stage : { RenderingDeviceCommons::SHADER_STAGE_VERTEX, RenderingDeviceCommons::SHADER_STAGE_FRAGMENT }) {
@@ -508,6 +510,22 @@ public:
 			shader.code_compressed_bytes.push_back(42);
 			shader.code_decompressed_size = 1;
 			shaders.push_back(shader);
+		}
+		if (p_with_uniform_set) {
+			reflection_data.set_count = p_set_count;
+			for (uint32_t i = 0; i < p_set_count; ++i) {
+				const bool populated = !p_sparse || i == 2 || i == 4;
+				reflection_binding_set_uniforms_count.push_back(populated ? 1 : 0);
+				if (populated) {
+					ReflectionBindingData uniform;
+					uniform.type = RenderingDeviceCommons::UNIFORM_TYPE_UNIFORM_BUFFER;
+					uniform.binding = 0;
+					uniform.stages = uint32_t(RenderingDeviceCommons::SHADER_STAGE_VERTEX_BIT | RenderingDeviceCommons::SHADER_STAGE_FRAGMENT_BIT);
+					uniform.length = 16;
+					uniform.writable = 0;
+					reflection_binding_set_uniforms_data.push_back(uniform);
+				}
+			}
 		}
 	}
 };
@@ -1091,6 +1109,509 @@ void TestNativeDisposalAccess::geometry_direct() {
 
 TEST_CASE("[RenderingDevice][NativeDisposal][GeometryDirect] original factories append quad and triangle and refuse unsupported state") {
 	TestNativeDisposalAccess::geometry_direct();
+}
+
+struct GeometryPreparedDriver : TestNativeDisposal::RasterCapacityDriver {
+	bool honors_barriers = false;
+	bool multiple_sets = false;
+	bool sparse_sets = false;
+	uint64_t next_buffer = 10;
+	uint32_t buffer_frees = 0;
+	uint32_t set_creates = 0;
+	uint32_t set_frees = 0;
+	uint32_t vertex_format_frees = 0;
+	mutable uint32_t dynamic_queries = 0;
+	Vector<uint64_t> native_calls;
+	CommandBufferID command_buffer_create(CommandPoolID) override { return CommandBufferID(12); }
+	bool command_buffer_begin(CommandBufferID) override { return true; }
+	void command_buffer_end(CommandBufferID) override {}
+	SemaphoreID semaphore_create() override { return SemaphoreID(13); }
+	void command_insert_breadcrumb(CommandBufferID, uint32_t) override {}
+	void command_pipeline_barrier(CommandBufferID, BitField<PipelineStageBits>, BitField<PipelineStageBits>, VectorView<MemoryAccessBarrier>, VectorView<BufferBarrier>, VectorView<TextureBarrier>, VectorView<AccelerationStructureBarrier>) override {}
+	void command_begin_render_pass(CommandBufferID command_buffer, RenderPassID pass, FramebufferID framebuffer, CommandBufferType, const Rect2i &, VectorView<RenderPassClearValue>) override {
+		CHECK(command_buffer == CommandBufferID(11));
+		CHECK(pass == RenderPassID(1));
+		CHECK(framebuffer == FramebufferID(2));
+	}
+	void command_end_render_pass(CommandBufferID command_buffer) override { CHECK(command_buffer == CommandBufferID(11)); }
+	void command_bind_render_pipeline(CommandBufferID command_buffer, PipelineID pipeline) override {
+		CHECK(command_buffer == CommandBufferID(11));
+		CHECK(pipeline == PipelineID(400));
+	}
+	void command_render_bind_vertex_buffers(CommandBufferID command_buffer, uint32_t count, const BufferID *buffers, const uint64_t *offsets, uint64_t dynamic_offsets) override {
+		CHECK(command_buffer == CommandBufferID(11));
+		CHECK(count == 1);
+		CHECK(buffers[0] == BufferID(10));
+		CHECK(offsets[0] == 0);
+		CHECK(dynamic_offsets == 0);
+	}
+	void command_render_draw(CommandBufferID command_buffer, uint32_t count, uint32_t instances, uint32_t base_vertex, uint32_t first_instance) override {
+		CHECK(command_buffer == CommandBufferID(11));
+		CHECK(count == 3);
+		CHECK(instances == 1);
+		CHECK(base_vertex == 0);
+		CHECK(first_instance == 0);
+		native_calls.push_back(multiple_sets ? 300 : 3);
+	}
+	BufferID buffer_create(uint64_t size, BitField<BufferUsageBits> usage, MemoryAllocationType, uint64_t) override {
+		CHECK(((next_buffer == 10 && size == 128) || (next_buffer == 11 && size == 16)));
+		if (next_buffer == 11) { CHECK(usage.has_flag(BUFFER_USAGE_UNIFORM_BIT)); }
+		return BufferID(next_buffer++);
+	}
+	void buffer_free(BufferID buffer) override {
+		CHECK((buffer == BufferID(10) || buffer == BufferID(11)));
+		++buffer_frees;
+	}
+	UniformSetID uniform_set_create(VectorView<BoundUniform> uniforms, ShaderID shader, uint32_t set, int pool) override {
+		CHECK(shader == ShaderID(301));
+		CHECK(((!multiple_sets && set == 0) || (multiple_sets && (sparse_sets ? ((set == 2) || (set == 4)) : (set < 2)))));
+		CHECK(pool == -1);
+		REQUIRE(uniforms.size() == 1);
+		CHECK(uniforms[0].type == UNIFORM_TYPE_UNIFORM_BUFFER);
+		CHECK(uniforms[0].binding == 0);
+		REQUIRE(uniforms[0].ids.size() == 1);
+		CHECK(uniforms[0].ids[0].id == 11);
+		++set_creates;
+		return UniformSetID(multiple_sets ? 60 + set : 61);
+	}
+	void uniform_set_free(UniformSetID set) override { CHECK(((!multiple_sets && set == UniformSetID(61)) || (multiple_sets && set.id >= 60 && set.id <= 64))); ++set_frees; }
+	uint32_t uniform_sets_get_dynamic_offsets(VectorView<UniformSetID> sets, ShaderID shader, uint32_t first, uint32_t count) const override {
+		CHECK(shader == ShaderID(301));
+		if (!multiple_sets) { CHECK(first == 0); CHECK(count == 1); }
+		REQUIRE(sets.size() >= count);
+		for (uint32_t i = 0; i < count; ++i) { CHECK(sets[i] == UniformSetID(multiple_sets ? 60 + first + i : 61)); }
+		++dynamic_queries;
+		return 0x55;
+	}
+	void command_uniform_set_prepare_for_use(CommandBufferID command_buffer, UniformSetID set, ShaderID shader, uint32_t index) override {
+		CHECK(command_buffer == CommandBufferID(11));
+		CHECK(set == UniformSetID(multiple_sets ? 60 + index : 61));
+		CHECK(shader == ShaderID(301));
+		if (!multiple_sets) { CHECK(index == 0); }
+		native_calls.push_back(multiple_sets ? 100 + index : 1);
+	}
+	void command_bind_render_uniform_sets(CommandBufferID command_buffer, VectorView<UniformSetID> sets, ShaderID shader, uint32_t first, uint32_t count, uint32_t dynamic_mask) override {
+		CHECK(command_buffer == CommandBufferID(11));
+		CHECK(shader == ShaderID(301));
+		if (!multiple_sets) { CHECK(first == 0); CHECK(count == 1); }
+		REQUIRE(sets.size() >= count);
+		for (uint32_t i = 0; i < count; ++i) { CHECK(sets[i] == UniformSetID(multiple_sets ? 60 + first + i : 61)); }
+		CHECK(dynamic_mask == 0x55);
+		native_calls.push_back(multiple_sets ? 200 + first * 10 + count : 2);
+	}
+	VertexFormatID vertex_format_create(Span<VertexAttribute> attributes, const VertexAttributeBindingsMap &) override {
+		CHECK(attributes.size() == 1);
+		return VertexFormatID(7);
+	}
+	void vertex_format_free(VertexFormatID format) override { CHECK(format == VertexFormatID(7)); ++vertex_format_frees; }
+	uint64_t buffer_get_dynamic_offsets(Span<BufferID>) override { return 0; }
+	uint64_t api_trait_get(ApiTrait trait) override { return trait == API_TRAIT_HONORS_PIPELINE_BARRIERS && honors_barriers; }
+	uint64_t limit_get(Limit limit) override { CHECK(limit == LIMIT_MAX_BOUND_UNIFORM_SETS); return 8; }
+	void set_object_name(ObjectType type, ID id, const String &name) override {
+		CHECK(name.begins_with("RID:"));
+		if (type == OBJECT_TYPE_BUFFER) { CHECK((id.id == 10 || id.id == 11)); return; }
+		if (type == OBJECT_TYPE_UNIFORM_SET) { CHECK(((!multiple_sets && id.id == 61) || (multiple_sets && id.id >= 60 && id.id <= 64))); return; }
+		RasterCapacityDriver::set_object_name(type, id, name);
+	}
+};
+
+// The prepared profile observes the actual descriptor instructions emitted by
+// the original draw loop. A bound set still receives prepare on non-barrier
+// APIs; the nonbatching path deliberately rebinds it on every draw.
+void TestNativeDisposalAccess::geometry_prepared() {
+	using namespace TestNativeDisposal;
+	for (bool batching : { false, true }) {
+		for (bool honors_barriers : { false, true }) {
+			RenderingDevice rd;
+			GeometryPreparedDriver driver;
+			driver.honors_barriers = honors_barriers;
+			attach(rd, driver);
+			rd.descriptor_set_batching = batching;
+			Ref<RasterContainer> container;
+			container.instantiate();
+			container->initialize(true);
+			const RID shader = rd.shader_create_from_bytecode(container->to_bytes());
+			REQUIRE(shader.is_valid());
+			// The ordinary compatibility rule is format based. In one path a
+			// distinct original shader owns the set while the pipeline uses shader.
+			const bool compatible_origin = batching && honors_barriers;
+			const RID origin_shader = compatible_origin ? rd.shader_create_from_bytecode(container->to_bytes()) : shader;
+			REQUIRE(origin_shader.is_valid());
+			if (compatible_origin) { CHECK(origin_shader != shader); }
+			const auto framebuffer_format = rd.framebuffer_format_create(Vector<RenderingDevice::AttachmentFormat>());
+			rd.draw_graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RDD::CommandQueueFamilyID(1), 0);
+			rd.draw_graph.begin(true);
+			const RDG::RecordHandle begin = rd.draw_graph.add_draw_list_begin(RDD::RenderPassID(1), RDD::FramebufferID(2), Rect2i(), {}, {}, {}, 0, false);
+			rd.draw_list.begin_handle = begin;
+			rd.draw_list.active = true;
+			rd.draw_list_framebuffer_format = framebuffer_format;
+			rd.draw_list_current_subpass = 0;
+			RenderingDevice::VertexAttribute attribute;
+			attribute.location = 0;
+			attribute.format = RenderingDevice::DATA_FORMAT_R32G32B32_SFLOAT;
+			attribute.stride = 12;
+			attribute.frequency = RenderingDevice::VERTEX_FREQUENCY_VERTEX;
+			const auto vertex_format = rd.vertex_format_create(Vector<RenderingDevice::VertexAttribute>{ attribute });
+			REQUIRE(vertex_format != int64_t(RenderingDevice::INVALID_ID));
+			const RID vertex_buffer = rd.vertex_buffer_create(128);
+			REQUIRE(vertex_buffer.is_valid());
+			const RID vertex_array = rd.vertex_array_create(3, vertex_format, Vector<RID>{ vertex_buffer });
+			REQUIRE(vertex_array.is_valid());
+			const RID uniform_buffer = rd.uniform_buffer_create(16);
+			REQUIRE(uniform_buffer.is_valid());
+			RenderingDevice::Uniform uniform;
+			uniform.uniform_type = RenderingDevice::UNIFORM_TYPE_UNIFORM_BUFFER;
+			uniform.binding = 0;
+			uniform.append_id(uniform_buffer);
+			const RID set = rd.uniform_set_create(VectorView<RenderingDevice::Uniform>(&uniform, 1), origin_shader, 0);
+			REQUIRE(set.is_valid());
+			CHECK(rd.uniform_set_owner.get_or_null(set)->shader_id == origin_shader);
+			const RID pipeline = rd.render_pipeline_create(shader, framebuffer_format, vertex_format, RenderingDevice::RENDER_PRIMITIVE_TRIANGLES,
+					RenderingDevice::PipelineRasterizationState(), RenderingDevice::PipelineMultisampleState(), RenderingDevice::PipelineDepthStencilState(), RenderingDevice::PipelineColorBlendState());
+			REQUIRE(pipeline.is_valid());
+			const RenderingDevice::DrawListID list = (int64_t(RenderingDevice::ID_TYPE_DRAW_LIST) << RenderingDevice::ID_BASE_SHIFT);
+			const auto pipeline_bind = rd._draw_list_bind_render_pipeline_recorded(list, pipeline);
+			REQUIRE(pipeline_bind.error == OK);
+			const auto vertex_bind = rd._draw_list_bind_vertex_array_recorded(list, vertex_array, nullptr, 0);
+			REQUIRE(vertex_bind.error == OK);
+			const auto set_bind = rd._draw_list_bind_uniform_set_recorded(list, set, 0);
+			CHECK(set_bind.error == OK);
+			CHECK(set_bind.state_accepted);
+			CHECK(set_bind.effect == RenderingDevice::NativeAppendEffect::NoNewEffect);
+			CHECK_FALSE(set_bind.bind_handle.is_valid());
+			CHECK(driver.native_calls.is_empty());
+			auto check_draw = [&](uint32_t expected_prefixes, uint32_t expected_draw_count) {
+				const auto result = rd._draw_list_draw_geometry_prepared_recorded(list, false);
+				CHECK(result.error == OK);
+				CHECK(result.effect == RenderingDevice::NativeAppendEffect::Recorded);
+				CHECK(result.capture_complete);
+				CHECK(result.prefix_count == expected_prefixes);
+				CHECK(rd.draw_list.state.draw_count == expected_draw_count);
+				CHECK(rd.draw_graph.contains_record(result.draw_handle));
+				CHECK(rd.draw_graph.record_mapping_state(result.draw_handle) == RDG::RecordMappingState::Pending);
+				uint32_t previous_offset = 0;
+				for (uint32_t i = 0; i < result.prefix_count; ++i) {
+					const auto &prefix = result.prefix_handles[i];
+					CHECK(prefix.is_valid());
+					CHECK(prefix.kind == 3);
+					CHECK(prefix.graph_instance == begin.graph_instance);
+					CHECK(prefix.graph_frame == begin.graph_frame);
+					CHECK(prefix.index == begin.index);
+					CHECK(prefix.offset > previous_offset);
+					CHECK(rd.draw_graph.contains_record(prefix));
+					CHECK(rd.draw_graph.record_mapping_state(prefix) == RDG::RecordMappingState::Pending);
+					previous_offset = prefix.offset;
+				}
+				CHECK(result.draw_handle.kind == 3);
+				CHECK(result.draw_handle.graph_instance == begin.graph_instance);
+				CHECK(result.draw_handle.graph_frame == begin.graph_frame);
+				CHECK(result.draw_handle.index == begin.index);
+				CHECK(result.draw_handle.offset > previous_offset);
+				return result;
+			};
+			const auto first = check_draw((honors_barriers ? 0 : 1) + 1, 1);
+			CHECK(rd.draw_list.state.sets[0].bound == batching);
+			const auto second = check_draw((honors_barriers ? 0 : 1) + (batching ? 0 : 1), 2);
+			CHECK(rd.draw_list.state.sets[0].bound == batching);
+			const auto rebind = rd._draw_list_bind_uniform_set_recorded(list, set, 0);
+			CHECK(rebind.error == OK);
+			CHECK(rebind.state_accepted);
+			CHECK(rebind.effect == RenderingDevice::NativeAppendEffect::NoNewEffect);
+			CHECK_FALSE(rd.draw_list.state.sets[0].bound);
+			const auto third = check_draw((honors_barriers ? 0 : 1) + 1, 3);
+			CHECK(rd.draw_list.state.sets[0].bound == batching);
+			const auto native_id = rd.draw_list.state.sets[0].uniform_set_driver_id;
+			rd.draw_list.state.sets[0].uniform_set_driver_id = RDD::UniformSetID(99);
+			const uint32_t queries_before_refusal = driver.dynamic_queries;
+			ERR_PRINT_OFF;
+			const auto stale_set = rd._draw_list_draw_geometry_prepared_recorded(list, false);
+			ERR_PRINT_ON;
+			CHECK(stale_set.error == ERR_INVALID_DATA);
+			CHECK(stale_set.effect == RenderingDevice::NativeAppendEffect::NoNewEffect);
+			CHECK_FALSE(stale_set.capture_complete);
+			CHECK_FALSE(stale_set.draw_handle.is_valid());
+			CHECK(stale_set.prefix_count == 0);
+			CHECK(rd.draw_list.state.draw_count == 3);
+			CHECK(driver.dynamic_queries == queries_before_refusal);
+			rd.draw_list.state.sets[0].uniform_set_driver_id = native_id;
+			auto refuse_without_effect = [&](Error expected) {
+				const uint32_t queries = driver.dynamic_queries;
+				const bool bound = rd.draw_list.state.sets[0].bound;
+				ERR_PRINT_OFF;
+				const auto refused = rd._draw_list_draw_geometry_prepared_recorded(list, false);
+				ERR_PRINT_ON;
+				CHECK(refused.error == expected);
+				CHECK(refused.effect == RenderingDevice::NativeAppendEffect::NoNewEffect);
+				CHECK_FALSE(refused.capture_complete);
+				CHECK_FALSE(refused.draw_handle.is_valid());
+				CHECK(refused.prefix_count == 0);
+				CHECK(rd.draw_list.state.draw_count == 3);
+				CHECK(rd.draw_list.state.sets[0].bound == bound);
+				CHECK(driver.dynamic_queries == queries);
+				CHECK(rd.draw_graph.record_mapping_state(third.draw_handle) == RDG::RecordMappingState::Pending);
+			};
+			const uint32_t correct_set_count = rd.draw_list.state.set_count;
+			rd.draw_list.state.set_count = correct_set_count + 1;
+			refuse_without_effect(ERR_INVALID_DATA);
+			rd.draw_list.state.set_count = correct_set_count;
+			const uint32_t correct_format = rd.draw_list.state.sets[0].uniform_set_format;
+			rd.draw_list.state.sets[0].uniform_set_format = correct_format + 1;
+			refuse_without_effect(ERR_INVALID_DATA);
+			rd.draw_list.state.sets[0].uniform_set_format = correct_format;
+			auto *set_resource = rd.uniform_set_owner.get_or_null(set);
+			REQUIRE(set_resource != nullptr);
+			set_resource->pending_clear_textures.push_back(uniform_buffer);
+			refuse_without_effect(ERR_UNAVAILABLE);
+			set_resource->pending_clear_textures.clear();
+			set_resource->qualification_dependencies.push_back(nullptr);
+			refuse_without_effect(ERR_UNAUTHORIZED);
+			set_resource->qualification_dependencies.clear();
+			set_resource->draw_trackers_usage.push_back(RDG::RESOURCE_USAGE_UNIFORM_BUFFER_READ);
+			refuse_without_effect(ERR_INVALID_DATA);
+			set_resource->draw_trackers_usage.resize(set_resource->draw_trackers.size());
+			if (batching) {
+				RDG::ResourceTracker *conflict_tracker = RDG::resource_tracker_create();
+				set_resource->draw_trackers.push_back(conflict_tracker);
+				set_resource->draw_trackers_usage.push_back(RDG::RESOURCE_USAGE_UNIFORM_BUFFER_READ);
+				set_resource->draw_trackers.push_back(conflict_tracker);
+				set_resource->draw_trackers_usage.push_back(RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ);
+				const bool original_bound = rd.draw_list.state.sets[0].bound;
+				rd.draw_list.state.sets[0].bound = false;
+				refuse_without_effect(ERR_INVALID_PARAMETER);
+				rd.draw_list.state.sets[0].bound = original_bound;
+				set_resource->draw_trackers.resize(set_resource->draw_trackers.size() - 2);
+				set_resource->draw_trackers_usage.resize(set_resource->draw_trackers_usage.size() - 2);
+				RDG::resource_tracker_free(conflict_tracker);
+			}
+			CHECK(driver.native_calls.is_empty());
+			const auto end = rd._draw_list_end_recorded(true);
+			REQUIRE(end.error == OK);
+			RenderingDeviceGraph::CommandBufferPool pool;
+			RDD::CommandBufferID primary(11);
+			rd.draw_graph.end(false, false, primary, pool);
+			Vector<uint64_t> expected_calls;
+			for (uint32_t draw = 0; draw < 3; ++draw) {
+				if (!honors_barriers) { expected_calls.push_back(1); }
+				if (draw != 1 || !batching) { expected_calls.push_back(2); }
+				expected_calls.push_back(3);
+			}
+			REQUIRE(driver.native_calls.size() == expected_calls.size());
+			for (int i = 0; i < expected_calls.size(); ++i) { CHECK(driver.native_calls[i] == expected_calls[i]); }
+			CHECK(driver.dynamic_queries == (batching ? 2 : 3));
+			for (const auto &record : { first.draw_handle, second.draw_handle, third.draw_handle, end.draw_handle }) {
+				CHECK(rd.draw_graph.record_mapping_state(record) == RDG::RecordMappingState::Recorded);
+				uint32_t slot = UINT32_MAX;
+				CHECK(rd.draw_graph.resolve_record_command_buffer_slot(record, slot));
+				CHECK(slot == 0);
+			}
+			for (const auto &draw : { first, second, third }) {
+				for (uint32_t i = 0; i < draw.prefix_count; ++i) {
+					const auto &prefix = draw.prefix_handles[i];
+					CHECK(rd.draw_graph.record_mapping_state(prefix) == RDG::RecordMappingState::Recorded);
+					uint32_t slot = UINT32_MAX;
+					CHECK(rd.draw_graph.resolve_record_command_buffer_slot(prefix, slot));
+					CHECK(slot == 0);
+					RDD::CommandBufferID actual;
+					CHECK(rd.draw_graph.resolve_record_command_buffer(prefix, actual));
+					CHECK(actual == primary);
+				}
+			}
+			rd.draw_graph.begin();
+			rd.free_rid(vertex_array);
+			rd.free_rid(pipeline);
+			rd.free_rid(set);
+			rd.free_rid(uniform_buffer);
+			rd.free_rid(vertex_buffer);
+			if (compatible_origin) { rd.free_rid(origin_shader); }
+			rd.free_rid(shader);
+			dispose(rd);
+			CHECK(driver.set_creates == 1);
+			CHECK(driver.set_frees == 1);
+			CHECK(driver.buffer_frees == 2);
+			CHECK(driver.pipeline_frees == 1);
+			CHECK(driver.shader_frees == (compatible_origin ? 2 : 1));
+			CHECK(rd.dependency_map.is_empty());
+			CHECK(rd.reverse_dependency_map.is_empty());
+			for (auto &entry : rd.framebuffer_formats) { driver.render_pass_free(entry.value.render_pass); }
+			rd.framebuffer_formats.clear();
+			rd.framebuffer_format_cache.clear();
+			for (auto &entry : rd.vertex_formats) { driver.vertex_format_free(entry.value.driver_id); }
+			rd.vertex_formats.clear();
+			rd.vertex_format_cache.clear();
+			CHECK(driver.vertex_format_frees == 1);
+			detach(rd);
+		}
+	}
+}
+
+TEST_CASE("[RenderingDevice][NativeDisposal][GeometryPrepared] original read-only descriptors capture four native paths") {
+	TestNativeDisposalAccess::geometry_prepared();
+}
+
+void TestNativeDisposalAccess::geometry_prepared_multiple() {
+	using namespace TestNativeDisposal;
+	for (bool sparse : { false, true }) {
+		RenderingDevice rd;
+		GeometryPreparedDriver driver;
+		driver.multiple_sets = true;
+		driver.sparse_sets = sparse;
+		attach(rd, driver);
+		rd.descriptor_set_batching = true;
+		Ref<RasterContainer> container;
+		container.instantiate();
+		container->initialize(true, sparse ? 5 : 2, sparse);
+		const RID shader = rd.shader_create_from_bytecode(container->to_bytes());
+		REQUIRE(shader.is_valid());
+		const auto framebuffer_format = rd.framebuffer_format_create(Vector<RenderingDevice::AttachmentFormat>());
+		rd.draw_graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RDD::CommandQueueFamilyID(1), 0);
+		rd.draw_graph.begin(true);
+		const RDG::RecordHandle begin = rd.draw_graph.add_draw_list_begin(RDD::RenderPassID(1), RDD::FramebufferID(2), Rect2i(), {}, {}, {}, 0, false);
+		rd.draw_list.begin_handle = begin;
+		rd.draw_list.active = true;
+		rd.draw_list_framebuffer_format = framebuffer_format;
+		rd.draw_list_current_subpass = 0;
+		RenderingDevice::VertexAttribute attribute;
+		attribute.location = 0;
+		attribute.format = RenderingDevice::DATA_FORMAT_R32G32B32_SFLOAT;
+		attribute.stride = 12;
+		attribute.frequency = RenderingDevice::VERTEX_FREQUENCY_VERTEX;
+		const auto vertex_format = rd.vertex_format_create(Vector<RenderingDevice::VertexAttribute>{ attribute });
+		REQUIRE(vertex_format != int64_t(RenderingDevice::INVALID_ID));
+		const RID vertex_buffer = rd.vertex_buffer_create(128);
+		REQUIRE(vertex_buffer.is_valid());
+		const RID vertex_array = rd.vertex_array_create(3, vertex_format, Vector<RID>{ vertex_buffer });
+		REQUIRE(vertex_array.is_valid());
+		const RID uniform_buffer = rd.uniform_buffer_create(16);
+		REQUIRE(uniform_buffer.is_valid());
+		RenderingDevice::Uniform uniform;
+		uniform.uniform_type = RenderingDevice::UNIFORM_TYPE_UNIFORM_BUFFER;
+		uniform.binding = 0;
+		uniform.append_id(uniform_buffer);
+		const uint32_t first_index = sparse ? 2 : 0;
+		const uint32_t second_index = sparse ? 4 : 1;
+		const RID first_set = rd.uniform_set_create(VectorView<RenderingDevice::Uniform>(&uniform, 1), shader, first_index);
+		const RID second_set = rd.uniform_set_create(VectorView<RenderingDevice::Uniform>(&uniform, 1), shader, second_index);
+		REQUIRE(first_set.is_valid());
+		REQUIRE(second_set.is_valid());
+		const RID pipeline = rd.render_pipeline_create(shader, framebuffer_format, vertex_format, RenderingDevice::RENDER_PRIMITIVE_TRIANGLES,
+				RenderingDevice::PipelineRasterizationState(), RenderingDevice::PipelineMultisampleState(), RenderingDevice::PipelineDepthStencilState(), RenderingDevice::PipelineColorBlendState());
+		REQUIRE(pipeline.is_valid());
+		const RenderingDevice::DrawListID list = (int64_t(RenderingDevice::ID_TYPE_DRAW_LIST) << RenderingDevice::ID_BASE_SHIFT);
+		REQUIRE(rd._draw_list_bind_render_pipeline_recorded(list, pipeline).error == OK);
+		REQUIRE(rd._draw_list_bind_vertex_array_recorded(list, vertex_array, nullptr, 0).error == OK);
+		const auto first_bind = rd._draw_list_bind_uniform_set_recorded(list, first_set, first_index);
+		const auto second_bind = rd._draw_list_bind_uniform_set_recorded(list, second_set, second_index);
+		CHECK(first_bind.error == OK);
+		CHECK(second_bind.error == OK);
+		CHECK(first_bind.effect == RenderingDevice::NativeAppendEffect::NoNewEffect);
+		CHECK(second_bind.effect == RenderingDevice::NativeAppendEffect::NoNewEffect);
+		CHECK_FALSE(first_bind.bind_handle.is_valid());
+		CHECK_FALSE(second_bind.bind_handle.is_valid());
+		CHECK(rd.draw_list.state.set_count == (sparse ? 5 : 2));
+		CHECK_FALSE(rd.draw_list.state.sets[first_index].bound);
+		CHECK_FALSE(rd.draw_list.state.sets[second_index].bound);
+		// Both sets came from original factories and point to the same tracked
+		// UBO. Inject a second valid usage on the later set to prove the dry
+		// run detects conflict across unbound setters before any instruction.
+		auto *first_resource = rd.uniform_set_owner.get_or_null(first_set);
+		auto *second_resource = rd.uniform_set_owner.get_or_null(second_set);
+		REQUIRE(first_resource != nullptr);
+		REQUIRE(second_resource != nullptr);
+		REQUIRE(first_resource->draw_trackers.size() == 1);
+		REQUIRE(second_resource->draw_trackers.size() == 1);
+		CHECK(first_resource->draw_trackers[0] == second_resource->draw_trackers[0]);
+		const RDG::ResourceUsage original_usage = second_resource->draw_trackers_usage[0];
+		second_resource->draw_trackers_usage.write[0] = RDG::RESOURCE_USAGE_STORAGE_BUFFER_READ;
+		ERR_PRINT_OFF;
+		const auto conflict = rd._draw_list_draw_geometry_prepared_recorded(list, false);
+		ERR_PRINT_ON;
+		CHECK(conflict.error == ERR_INVALID_PARAMETER);
+		CHECK(conflict.effect == RenderingDevice::NativeAppendEffect::NoNewEffect);
+		CHECK_FALSE(conflict.capture_complete);
+		CHECK_FALSE(conflict.draw_handle.is_valid());
+		CHECK(conflict.prefix_count == 0);
+		CHECK(rd.draw_list.state.draw_count == 0);
+		CHECK_FALSE(rd.draw_list.state.sets[first_index].bound);
+		CHECK_FALSE(rd.draw_list.state.sets[second_index].bound);
+		CHECK(driver.dynamic_queries == 0);
+		CHECK(driver.native_calls.is_empty());
+		second_resource->draw_trackers_usage.write[0] = original_usage;
+		const auto draw = rd._draw_list_draw_geometry_prepared_recorded(list, false);
+		CHECK(draw.error == OK);
+		CHECK(draw.effect == RenderingDevice::NativeAppendEffect::Recorded);
+		CHECK(draw.capture_complete);
+		CHECK(draw.prefix_count == (sparse ? 5 : 3));
+		CHECK(rd.draw_list.state.draw_count == 1);
+		CHECK(rd.draw_list.state.sets[first_index].bound);
+		CHECK(rd.draw_list.state.sets[second_index].bound);
+		CHECK(draw.draw_handle.kind == 3);
+		CHECK(draw.draw_handle.index == begin.index);
+		CHECK(rd.draw_graph.record_mapping_state(draw.draw_handle) == RDG::RecordMappingState::Pending);
+		uint32_t previous_offset = 0;
+		for (uint32_t i = 0; i < draw.prefix_count; ++i) {
+			const auto &prefix = draw.prefix_handles[i];
+			CHECK(prefix.kind == 3);
+			CHECK(prefix.graph_instance == begin.graph_instance);
+			CHECK(prefix.graph_frame == begin.graph_frame);
+			CHECK(prefix.index == begin.index);
+			CHECK(prefix.offset > previous_offset);
+			CHECK(rd.draw_graph.contains_record(prefix));
+			CHECK(rd.draw_graph.record_mapping_state(prefix) == RDG::RecordMappingState::Pending);
+			previous_offset = prefix.offset;
+		}
+		CHECK(draw.draw_handle.offset > previous_offset);
+		const auto end = rd._draw_list_end_recorded(true);
+		REQUIRE(end.error == OK);
+		RenderingDeviceGraph::CommandBufferPool pool;
+		RDD::CommandBufferID primary(11);
+		rd.draw_graph.end(false, false, primary, pool);
+		const uint64_t contiguous_calls[] = { 100, 101, 202, 300 };
+		const uint64_t sparse_calls[] = { 102, 104, 220, 221, 241, 300 };
+		const uint64_t *expected = sparse ? sparse_calls : contiguous_calls;
+		const uint32_t expected_count = sparse ? 6 : 4;
+		REQUIRE(driver.native_calls.size() == int(expected_count));
+		for (uint32_t i = 0; i < expected_count; ++i) { CHECK(driver.native_calls[i] == expected[i]); }
+		CHECK(driver.dynamic_queries == (sparse ? 3 : 1));
+		for (uint32_t i = 0; i < draw.prefix_count; ++i) {
+			const auto &prefix = draw.prefix_handles[i];
+			CHECK(rd.draw_graph.record_mapping_state(prefix) == RDG::RecordMappingState::Recorded);
+			uint32_t slot = UINT32_MAX;
+			CHECK(rd.draw_graph.resolve_record_command_buffer_slot(prefix, slot));
+			CHECK(slot == 0);
+		}
+		CHECK(rd.draw_graph.record_mapping_state(draw.draw_handle) == RDG::RecordMappingState::Recorded);
+		uint32_t slot = UINT32_MAX;
+		CHECK(rd.draw_graph.resolve_record_command_buffer_slot(draw.draw_handle, slot));
+		CHECK(slot == 0);
+		rd.draw_graph.begin();
+		rd.free_rid(vertex_array);
+		rd.free_rid(pipeline);
+		rd.free_rid(first_set);
+		rd.free_rid(second_set);
+		rd.free_rid(uniform_buffer);
+		rd.free_rid(vertex_buffer);
+		rd.free_rid(shader);
+		dispose(rd);
+		CHECK(driver.set_creates == 2);
+		CHECK(driver.set_frees == 2);
+		CHECK(driver.buffer_frees == 2);
+		CHECK(driver.pipeline_frees == 1);
+		CHECK(driver.shader_frees == 1);
+		CHECK(rd.dependency_map.is_empty());
+		CHECK(rd.reverse_dependency_map.is_empty());
+		for (auto &entry : rd.framebuffer_formats) { driver.render_pass_free(entry.value.render_pass); }
+		rd.framebuffer_formats.clear();
+		rd.framebuffer_format_cache.clear();
+		for (auto &entry : rd.vertex_formats) { driver.vertex_format_free(entry.value.driver_id); }
+		rd.vertex_formats.clear();
+		rd.vertex_format_cache.clear();
+		CHECK(driver.vertex_format_frees == 1);
+		detach(rd);
+	}
+}
+
+TEST_CASE("[RenderingDevice][NativeDisposal][GeometryPrepared] original sparse and contiguous sets preserve batching and refuse cross-set usage") {
+	TestNativeDisposalAccess::geometry_prepared_multiple();
 }
 
 void TestNativeDisposalAccess::pipeline_rid_capacity() {

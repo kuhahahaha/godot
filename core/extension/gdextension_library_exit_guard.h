@@ -908,6 +908,7 @@ private:
 	Error production_output_owner_bind(ProductionOutputPin &, RenderingDevice &, RID, uint64_t, uint32_t, uint64_t, ProductionOutputOwnerKind = ProductionOutputOwnerKind::SLOT);
 	Error production_output_generation_return(ProductionOutputPin &, RenderingDevice &, RID, uint64_t, const GDExtensionProductionServiceBudgetV1 &, ProductionServiceUsage &);
 	Error production_output_cleanup_context(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const ProductionOutputPin &, RenderingDevice &, RID, uint64_t, uint32_t, uint64_t);
+	Error production_output_generation_cleanup_context(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const ProductionOutputPin &, RenderingDevice &, RID, uint64_t);
 	Error production_output_owners_service_locked(ProductionRequest &, RenderingDevice &);
 	Error production_output_owner_context_locked(const ProductionOutputPin &, RenderingDevice &);
 	bool production_output_pin_matches(const ProductionOutputPin &, GDExtensionProductionRequestRefV1, RenderingDevice &);

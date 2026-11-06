@@ -1900,6 +1900,28 @@ Error Registry::production_output_cleanup_context(ProductionPhysicalContextRef c
 	return OK;
 }
 
+// Withdraw is cleanup of the independently installed original generation
+// root. A slot pin or matching scalar tuple cannot authenticate that root.
+Error Registry::production_output_generation_cleanup_context(ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, const ProductionOutputPin &pin, RenderingDevice &rd, RID particles, uint64_t generation) {
+	MutexLock lock(mutex);
+	ProductionRequest *request = nullptr;
+	RenderingDevice *device = nullptr;
+	const Error error = production_physical_request_locked(context, ref, request, device, false);
+	if (error != OK) {
+		return error;
+	}
+	if (device != &rd || !production_output_pin_matches_locked(pin, ref, rd) || pin.request != request) {
+		return ERR_UNAUTHORIZED;
+	}
+	const auto &row = request->uses[pin.cell_index];
+	if (row.output_owner_kind != ProductionOutputOwnerKind::GENERATION || !generation || !particles.is_valid() ||
+			row.output_particles != particles || row.output_generation != generation || row.output_slot != UINT32_MAX || row.output_lease ||
+			!rd._production_output_owner_matches(ProductionOutputOwnerKind::GENERATION, particles, generation, UINT32_MAX, 0, pin, ref)) {
+		return ERR_UNAUTHORIZED;
+	}
+	return OK;
+}
+
 // Enter and return holding Registry and RD locks, within original OBSERVE.
 // One exact linked root row per dispatch; no arena scan or callback registry.
 Error Registry::production_output_owners_service_locked(ProductionRequest &request, RenderingDevice &rd) {
