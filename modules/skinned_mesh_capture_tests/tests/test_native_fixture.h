@@ -78,7 +78,10 @@ struct SkinnedMeshCaptureTestFixtureTestAccess {
 		CHECK(p_fixture->action_complete(status));
 	}
 
-	static Error prepare(SkinnedMeshCaptureTestFixture *p_fixture, const StringName &p_member) { return p_fixture->build_fixed_scene(p_member); }
+	static Error prepare(SkinnedMeshCaptureTestFixture *p_fixture, const StringName &p_member, const StringName &p_condition = StringName()) {
+		p_fixture->condition = p_condition;
+		return p_fixture->build_fixed_scene(p_member);
+	}
 	static void acquired_public(SkinnedMeshCaptureTestFixture *p_fixture, uint64_t p_epoch, bool p_prepare_scene = false) {
 		p_fixture->session_epoch = p_epoch;
 		p_fixture->route = "P";
@@ -174,6 +177,24 @@ TEST_CASE("[P01][SceneTree] Fixed scene uses real skin and manual animation") {
 	memdelete(fixture);
 }
 
+TEST_CASE("[P01][SceneTree] S05 root rotation uses the fixed animation and baseline weights") {
+	auto *fixture = memnew(SkinnedMeshCaptureTestFixture);
+	SceneTree::get_singleton()->get_root()->add_child(fixture);
+	REQUIRE(SkinnedMeshCaptureTestFixtureTestAccess::prepare(fixture, "S05", "root_rotation") == OK);
+	auto *skeleton = Object::cast_to<Skeleton3D>(fixture->get_node_or_null(NodePath("Source/Skeleton")));
+	auto *player = Object::cast_to<AnimationPlayer>(fixture->get_node_or_null(NodePath("AnimationPlayer")));
+	auto *mesh = Object::cast_to<MeshInstance3D>(fixture->get_node_or_null(NodePath("Source/Mesh")));
+	const PackedFloat32Array weights = mesh->get_mesh()->surface_get_arrays(0)[Mesh::ARRAY_WEIGHTS];
+	CHECK(weights[8] == 1.0f);
+	CHECK(weights[9] == 0.0f);
+	player->advance(1.0);
+	MessageQueue::get_singleton()->flush();
+	CHECK(skeleton->get_bone_pose_position(1) == Vector3(1, 2, 0));
+	CHECK(skeleton->get_bone_pose_rotation(0).xform(Vector3(1, 0, 0)).is_equal_approx(Vector3(0, 1, 0)));
+	CHECK(fixture->close() == OK);
+	memdelete(fixture);
+}
+
 TEST_CASE("[P01] Native registry closes all live fixtures") {
 	auto *first = memnew(SkinnedMeshCaptureTestFixture);
 	auto *second = memnew(SkinnedMeshCaptureTestFixture);
@@ -201,6 +222,8 @@ TEST_CASE("[P01] Native fixture fails closed before acquisition") {
 	CHECK(fixture->begin("wrong", "P") == ERR_INVALID_PARAMETER);
 	CHECK(fixture->begin("S07", "P") == ERR_INVALID_PARAMETER);
 	CHECK(fixture->begin("S02", "wrong") == ERR_INVALID_PARAMETER);
+	CHECK(fixture->begin("S02", "N", "root_rotation") == ERR_INVALID_PARAMETER);
+	CHECK(fixture->begin("S05", "N", "unknown") == ERR_INVALID_PARAMETER);
 	CHECK(fixture->begin("S02", "N") == ERR_UNAVAILABLE);
 	CHECK(fixture->get_child_count() == 0);
 	CHECK(fixture->advance_action(1) == ERR_INVALID_PARAMETER);

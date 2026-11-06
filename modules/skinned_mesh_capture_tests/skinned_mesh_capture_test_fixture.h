@@ -48,6 +48,7 @@ class SkinnedMeshCaptureTestFixture : public Node3D {
 	bool scene_prepared = false;
 	StringName route;
 	StringName member;
+	StringName condition;
 	ObjectID scene_nodes[4];
 	std::shared_ptr<SkinnedMeshCaptureTestNativeSession> session;
 	uint64_t session_epoch = 0, next_request = 1;
@@ -67,7 +68,7 @@ class SkinnedMeshCaptureTestFixture : public Node3D {
 	Error reject(Error p_error, const char *p_diagnostic);
 
 public:
-	Error begin(StringName p_member, StringName p_route);
+	Error begin(StringName p_member, StringName p_route, StringName p_condition = StringName());
 	Error advance_action(int32_t p_action_index);
 	Error advance_explicit_capture();
 	Error submit_public_snapshot(const Dictionary &p_value);

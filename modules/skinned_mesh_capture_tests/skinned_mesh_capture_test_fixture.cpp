@@ -61,7 +61,7 @@
 static LocalVector<ObjectID> live_fixtures;
 
 void SkinnedMeshCaptureTestFixture::_bind_methods() {
-	ClassDB::bind_method(D_METHOD("begin", "member", "route"), &SkinnedMeshCaptureTestFixture::begin);
+	ClassDB::bind_method(D_METHOD("begin", "member", "route", "condition"), &SkinnedMeshCaptureTestFixture::begin, DEFVAL(StringName()));
 	ClassDB::bind_method(D_METHOD("advance_action", "action_index"), &SkinnedMeshCaptureTestFixture::advance_action);
 	ClassDB::bind_method(D_METHOD("advance_explicit_capture"), &SkinnedMeshCaptureTestFixture::advance_explicit_capture);
 	ClassDB::bind_method(D_METHOD("submit_public_snapshot", "value"), &SkinnedMeshCaptureTestFixture::submit_public_snapshot);
@@ -116,7 +116,7 @@ Error SkinnedMeshCaptureTestFixture::build_fixed_scene(const StringName &p_membe
 	arrays[Mesh::ARRAY_VERTEX] = PackedVector3Array{ Vector3(0, 0, 0), Vector3(1, 0, 0), Vector3(0, 1, 0) };
 	arrays[Mesh::ARRAY_BONES] = PackedInt32Array{ 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 	arrays[Mesh::ARRAY_WEIGHTS] = PackedFloat32Array{ 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0 };
-	if (p_member == "S05") {
+	if (p_member == "S05" && condition != "root_rotation") {
 		arrays[Mesh::ARRAY_BONES] = PackedInt32Array{ 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0 };
 		arrays[Mesh::ARRAY_WEIGHTS] = PackedFloat32Array{ 1, 0, 0, 0, 1, 0, 0, 0, 0.5f + 1.0f / 65536.0f, 0.5f, 0, 0 };
 	}
@@ -170,6 +170,12 @@ Error SkinnedMeshCaptureTestFixture::build_fixed_scene(const StringName &p_membe
 	for (int i = 0; i < 4; i++) {
 		animation->position_track_insert_key(track, i, Vector3(i, 2, 0));
 	}
+	if (p_member == "S05" && condition == "root_rotation") {
+		const int rotation = animation->add_track(Animation::TYPE_ROTATION_3D);
+		animation->track_set_path(rotation, NodePath("Source/Skeleton:root"));
+		animation->rotation_track_insert_key(rotation, 0, Quaternion());
+		animation->rotation_track_insert_key(rotation, 1, Quaternion(Vector3(0, 0, 1), Math::PI / 2.0));
+	}
 	Ref<AnimationLibrary> library;
 	library.instantiate();
 	library->add_animation("p01", animation);
@@ -215,7 +221,7 @@ Error SkinnedMeshCaptureTestFixture::reject(Error p_error, const char *p_diagnos
 	return p_error;
 }
 
-Error SkinnedMeshCaptureTestFixture::begin(StringName p_member, StringName p_route) {
+Error SkinnedMeshCaptureTestFixture::begin(StringName p_member, StringName p_route, StringName p_condition) {
 	if (!Thread::is_main_thread()) {
 		return ERR_UNAVAILABLE;
 	}
@@ -229,6 +235,9 @@ Error SkinnedMeshCaptureTestFixture::begin(StringName p_member, StringName p_rou
 	if (!known_member || (p_route != "P" && p_route != "N" && p_route != "C") || (p_member == "S07" && p_route == "P")) {
 		return reject(ERR_INVALID_PARAMETER, "P01_STATE");
 	}
+	if ((!p_condition.is_empty() && p_member != "S05") || (p_member == "S05" && !p_condition.is_empty() && p_condition != "mixed_weights_Q" && p_condition != "root_rotation")) {
+		return reject(ERR_INVALID_PARAMETER, "P01_STATE");
+	}
 	if (!RenderingServer::get_singleton()->get_rendering_device()) {
 		return reject(ERR_UNAVAILABLE, "P01_DEPENDENCY_RD");
 	}
@@ -239,6 +248,7 @@ Error SkinnedMeshCaptureTestFixture::begin(StringName p_member, StringName p_rou
 	}
 	route = p_route;
 	member = p_member;
+	condition = p_condition.is_empty() && p_member == "S05" ? StringName("mixed_weights_Q") : p_condition;
 	if (!is_inside_tree()) {
 		return reject(ERR_INVALID_PARAMETER, "P01_STATE");
 	}
@@ -320,7 +330,7 @@ void SkinnedMeshCaptureTestFixture::frame_pre_draw() {
 	early.mesh = mesh->get_mesh()->get_rid();
 	early.skeleton = mesh->get_skin_reference()->get_skeleton();
 	early.explicit_update = route == "C";
-	early.packed_skin = member == "S05";
+	early.packed_skin = member == "S05" && condition == "mixed_weights_Q";
 	auto late = early;
 	late.explicit_update = false;
 	late.after_views = true;
@@ -388,7 +398,7 @@ Error SkinnedMeshCaptureTestFixture::advance_action(int32_t p_action_index) {
 		if (!player) {
 			return reject(ERR_INVALID_DATA, "P01_SOURCE");
 		}
-		for (int i = 0; i < (member == "S04" ? 3 : 2); i++) {
+		for (int i = 0; i < (member == "S04" ? 3 : condition == "root_rotation" ? 1 : 2); i++) {
 			player->advance(1.0);
 		}
 	} else if (member == "S03") {
