@@ -401,6 +401,13 @@ Error SkinnedMeshCaptureTestFixture::advance_action(int32_t p_action_index) {
 			player->seek(1.0, true);
 		}
 	} else if (member == "S04" || member == "S05") {
+		if (member == "S05" && condition == "nonuniform_source") {
+			auto *source = Object::cast_to<Node3D>(ObjectDB::get_instance(scene_nodes[0]));
+			if (!source) {
+				return reject(ERR_INVALID_DATA, "P01_SOURCE");
+			}
+			source->set_transform(Transform3D(Basis().scaled(Vector3(2, 1, 1)), Vector3(2, -1, 0)));
+		}
 		auto *player = Object::cast_to<AnimationPlayer>(ObjectDB::get_instance(scene_nodes[1]));
 		if (!player) {
 			return reject(ERR_INVALID_DATA, "P01_SOURCE");
