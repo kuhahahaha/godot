@@ -31,6 +31,7 @@
 #include "particle_process_material.h"
 
 #include "core/config/engine.h"
+#include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "core/version.h"
 #include "servers/rendering/rendering_server.h"
@@ -1812,23 +1813,62 @@ void ParticleProcessMaterial::set_emission_box_extents(Vector3 p_extents) {
 #endif
 }
 
-void ParticleProcessMaterial::set_emission_point_texture(const Ref<Texture2D> &p_points) {
-	emission_point_texture = p_points;
-	Variant tex_rid = p_points.is_valid() ? Variant(p_points->get_rid()) : Variant();
+void ParticleProcessMaterial::_emission_point_texture_changed() {
+	const Variant tex_rid = emission_point_texture.is_valid() ? Variant(emission_point_texture->get_rid()) : Variant();
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->emission_texture_points, tex_rid);
-	RenderingServer::get_singleton()->material_set_param(_get_material(), "emission_texture_points_valid", p_points.is_valid());
+	RenderingServer::get_singleton()->material_set_param(_get_material(), "emission_texture_points_valid", emission_point_texture.is_valid());
 }
 
-void ParticleProcessMaterial::set_emission_normal_texture(const Ref<Texture2D> &p_normals) {
-	emission_normal_texture = p_normals;
-	Variant tex_rid = p_normals.is_valid() ? Variant(p_normals->get_rid()) : Variant();
+void ParticleProcessMaterial::set_emission_point_texture(const Ref<Texture2D> &p_points) {
+	if (emission_point_texture != p_points) {
+		if (emission_point_texture.is_valid()) {
+			emission_point_texture->disconnect_changed(callable_mp(this, &ParticleProcessMaterial::_emission_point_texture_changed));
+		}
+		emission_point_texture = p_points;
+		if (emission_point_texture.is_valid()) {
+			// TextureRD resources can emit changed from the render thread.
+			emission_point_texture->connect_changed(callable_mp(this, &ParticleProcessMaterial::_emission_point_texture_changed), CONNECT_DEFERRED);
+		}
+	}
+	_emission_point_texture_changed();
+}
+
+void ParticleProcessMaterial::_emission_normal_texture_changed() {
+	const Variant tex_rid = emission_normal_texture.is_valid() ? Variant(emission_normal_texture->get_rid()) : Variant();
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->emission_texture_normal, tex_rid);
 }
 
-void ParticleProcessMaterial::set_emission_color_texture(const Ref<Texture2D> &p_colors) {
-	emission_color_texture = p_colors;
-	Variant tex_rid = p_colors.is_valid() ? Variant(p_colors->get_rid()) : Variant();
+void ParticleProcessMaterial::set_emission_normal_texture(const Ref<Texture2D> &p_normals) {
+	if (emission_normal_texture != p_normals) {
+		if (emission_normal_texture.is_valid()) {
+			emission_normal_texture->disconnect_changed(callable_mp(this, &ParticleProcessMaterial::_emission_normal_texture_changed));
+		}
+		emission_normal_texture = p_normals;
+		if (emission_normal_texture.is_valid()) {
+			// TextureRD resources can emit changed from the render thread.
+			emission_normal_texture->connect_changed(callable_mp(this, &ParticleProcessMaterial::_emission_normal_texture_changed), CONNECT_DEFERRED);
+		}
+	}
+	_emission_normal_texture_changed();
+}
+
+void ParticleProcessMaterial::_emission_color_texture_changed() {
+	const Variant tex_rid = emission_color_texture.is_valid() ? Variant(emission_color_texture->get_rid()) : Variant();
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->emission_texture_color, tex_rid);
+}
+
+void ParticleProcessMaterial::set_emission_color_texture(const Ref<Texture2D> &p_colors) {
+	if (emission_color_texture != p_colors) {
+		if (emission_color_texture.is_valid()) {
+			emission_color_texture->disconnect_changed(callable_mp(this, &ParticleProcessMaterial::_emission_color_texture_changed));
+		}
+		emission_color_texture = p_colors;
+		if (emission_color_texture.is_valid()) {
+			// TextureRD resources can emit changed from the render thread.
+			emission_color_texture->connect_changed(callable_mp(this, &ParticleProcessMaterial::_emission_color_texture_changed), CONNECT_DEFERRED);
+		}
+	}
+	_emission_color_texture_changed();
 	_queue_shader_change();
 }
 
