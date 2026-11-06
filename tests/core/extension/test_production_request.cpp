@@ -7481,10 +7481,15 @@ TEST_CASE("[ProductionRequest] installed typed production procedures reject fore
 	TestProductionRequest::Access::installed_port_rejects_foreign_refs();
 }
 
-TEST_CASE("[ProductionRequest][Raster] exposes a versioned raster record bridge") {
-	using RasterReserve = GDExtensionDeviceSessionResultV1 (*)(const GDExtensionProductionAttachmentRefV1 *, const void *, const void *, const void *, uint32_t, const void *, uint32_t, const void *, uint32_t, GDExtensionProductionRequestRefV1 *);
+TEST_CASE("[ProductionRequest][Raster] typed reserve bridge validates its independent action contract") {
+	using RasterReserve = GDExtensionInterfaceDeviceSessionProductionRasterReserveV1;
 	const auto reserve = reinterpret_cast<RasterReserve>(GDExtension::get_interface_function("device_session_production_raster_reserve_v1"));
 	REQUIRE(reserve != nullptr);
+	GDExtensionProductionRequestRefV1 out = { UINT64_MAX, UINT64_MAX };
+	const auto result = reserve({}, nullptr, nullptr, nullptr, &out);
+	CHECK(result.native_error == ERR_INVALID_PARAMETER);
+	CHECK(out.registry_instance == 0);
+	CHECK(out.handle_serial == 0);
 }
 
 #ifdef THREADS_ENABLED
