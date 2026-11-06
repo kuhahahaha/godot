@@ -322,7 +322,7 @@ void SkinnedMeshCaptureTestFixture::frame_pre_draw() {
 	auto late = early;
 	late.explicit_update = false;
 	late.after_views = true;
-	late.image = true;
+	late.image = member != "S05";
 	late.viewport = view->get_viewport_rid();
 	if (member == "S03" && !initialization_pending) {
 		// Offscreen content has no actual draw to select. Observe the same
