@@ -312,6 +312,21 @@ public:
 			CHECK_FALSE(cell.pin.is_empty());
 			o.withdraw();
 			CHECK(o.slot_has_custody(0));
+			// A stale wrapper must not discharge the actual current pin. Restore
+			// only the injected wrapper field, never the Registry or cell state.
+			++moved.serial;
+			CHECK(moved.release_checked() == ERR_INVALID_DATA);
+			CHECK(cell.consumer == &moved);
+			CHECK(cell.serial == 1);
+			CHECK_FALSE(cell.pin.is_empty());
+			CHECK(o.slot_has_custody(0));
+			--moved.serial;
+			moved.slot = 1;
+			CHECK(moved.release_checked() == ERR_INVALID_DATA);
+			CHECK(cell.consumer == &moved);
+			CHECK(cell.slot == 0);
+			CHECK_FALSE(cell.pin.is_empty());
+			moved.slot = 0;
 			CHECK(moved.release_checked() == OK);
 			CHECK(cell.pin.is_empty());
 			CHECK_FALSE(o.slot_has_custody(0));
@@ -341,6 +356,19 @@ public:
 			CHECK(moved.geometry_source == &slot.surfaces[0].geometry);
 			o.withdraw();
 			CHECK(o.slot_has_custody(0));
+			++moved.serial;
+			CHECK(o.surface_return(moved) == ERR_INVALID_DATA);
+			CHECK(cell.consumer == &moved);
+			CHECK(cell.serial == 1);
+			CHECK_FALSE(cell.pin.is_empty());
+			--moved.serial;
+			++moved.generation;
+			CHECK(o.surface_return(moved) == ERR_INVALID_DATA);
+			CHECK(cell.consumer == &moved);
+			CHECK(moved.geometry_source == &slot.surfaces[0].geometry);
+			CHECK_FALSE(cell.pin.is_empty());
+			CHECK(o.slot_has_custody(0));
+			--moved.generation;
 			CHECK(o.surface_return(moved) == OK);
 			CHECK(cell.pin.is_empty());
 			CHECK_FALSE(o.slot_has_custody(0));
@@ -368,6 +396,27 @@ public:
 			CHECK(read.is_empty());
 			CHECK(cell.consumer == &moved);
 			o.withdraw();
+			// Late record is still refused and cannot convert this existing
+			// borrow into a native use or allow a stale cancellation to unpin it.
+			CHECK(moved.record_checked(0) == ERR_UNAVAILABLE);
+			CHECK(cell.state == ExternalOutputOwner::ReadCell::State::RESERVED);
+			++moved.serial;
+			CHECK(moved.cancel_before_draw() == ERR_INVALID_DATA);
+			CHECK(o.read_return(moved, true) == ERR_INVALID_DATA);
+			CHECK(cell.consumer == &moved);
+			CHECK(cell.serial == 1);
+			CHECK(cell.state == ExternalOutputOwner::ReadCell::State::RESERVED);
+			CHECK_FALSE(cell.pin.is_empty());
+			--moved.serial;
+			moved.slot = 1;
+			CHECK(moved.cancel_before_draw() == ERR_INVALID_DATA);
+			CHECK(o.read_return(moved, true) == ERR_INVALID_DATA);
+			CHECK(cell.consumer == &moved);
+			CHECK(cell.slot == 0);
+			CHECK(cell.state == ExternalOutputOwner::ReadCell::State::RESERVED);
+			CHECK_FALSE(cell.pin.is_empty());
+			CHECK(o.slot_has_custody(0));
+			moved.slot = 0;
 			if (mode == ExternalCustodyTestMode::READ_UNKNOWN) {
 				// Exercise only the original return guard's finite state input;
 				// these markers are not evidence that a native draw was recorded.
