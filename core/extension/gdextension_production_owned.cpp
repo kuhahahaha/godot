@@ -372,6 +372,275 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 	return result(production_create_service(ref, ProductionControlKind::SET_CREATE, index));
 }
 
+void Registry::production_raster_prepare_report_locked(const ProductionRequest &request, GDExtensionProductionRasterPrepareReportV1 &out) const {
+	out = {};
+	out.abi = production_dto_abi<GDExtensionProductionRasterPrepareReportV1>();
+	out.request_serial = request.serial;
+	out.control_serial = request.raster_prepare_control;
+	out.create_attempt = request.raster_prepare_origin.create_attempt;
+	out.revision = request.revision;
+	out.phase = request.raster_prepare_phase;
+	out.result = result(request.resources[0].creating ? ERR_BUSY : request.resources[0].handoff_error);
+	uint64_t *serials[4] = { &out.framebuffer_serial, &out.depth_serial, &out.shader_serial, &out.pipeline_serial };
+	for (uint32_t i = 0; i < 4; ++i) {
+		const auto &slot = request.resources[i];
+		*serials[i] = slot.backing_serial;
+		if (slot.primary.is_valid()) {
+			out.known_mask |= 1u << i;
+		}
+		if (slot.returned && slot.primary.is_valid()) {
+			out.returned_mask |= 1u << i;
+		}
+	}
+}
+
+GDExtensionDeviceSessionResultV1 Registry::production_raster_prepare_report(GDExtensionProductionRequestRefV1 ref, GDExtensionProductionRasterPrepareReportV1 *out) {
+	if (!valid(out)) {
+		return result(ERR_INVALID_PARAMETER);
+	}
+	*out = {};
+	MutexLock lock(mutex);
+	ProductionRequest *request = nullptr;
+	RenderingDevice *rd = nullptr;
+	Error error = production_request_locked(ref, false, request, rd);
+	if (error != OK) {
+		return result(error);
+	}
+	if (!request->raster_reserved || request->resource_count != 4 || !request->raster_prepare_origin.create_attempt) {
+		return result(ERR_DOES_NOT_EXIST);
+	}
+	production_raster_prepare_report_locked(*request, *out);
+	return result(OK);
+}
+
+GDExtensionDeviceSessionResultV1 Registry::production_raster_prepare(GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionRasterPrepareV1 *input, const void *binary, uint64_t bytes, GDExtensionProductionRasterPrepareReportV1 *out) {
+	if (!valid(out)) {
+		return result(ERR_INVALID_PARAMETER);
+	}
+	*out = {};
+	if (!valid(input) || !production_dto_valid(*input) || input->reserved || !input->create_attempt || !input->width || !input->height || !binary || !bytes || bytes > INT32_MAX || input->shader_bytes != bytes) {
+		return result(ERR_INVALID_PARAMETER);
+	}
+	{
+		MutexLock lock(mutex);
+		ProductionRequest *request = nullptr;
+		RenderingDevice *rd = nullptr;
+		Error error = production_request_locked(ref, false, request, rd);
+		if (error != OK) {
+			return result(error);
+		}
+		if (!request->raster_reserved || request->resource_count != 4 || request->capacity.return_cells < 4) {
+			return result(ERR_INVALID_DATA);
+		}
+		auto &action = request->actions[0];
+		if (request->raster_prepare_origin.create_attempt) {
+			const auto &origin = request->raster_prepare_origin;
+			if (origin.create_attempt != input->create_attempt || origin.width != input->width || origin.height != input->height || origin.shader_bytes != bytes || action.payload_bytes != bytes || std::memcmp(request->attachment->payload + action.payload_offset, binary, size_t(bytes))) {
+				return result(ERR_INVALID_DATA);
+			}
+			if (!request->resources[0].creating && request->control.state == ProductionControlState::OWNER_CONSUMED) {
+				production_raster_prepare_report_locked(*request, *out);
+				return out->result;
+			}
+		} else {
+			error = production_request_locked(ref, true, request, rd);
+			if (error != OK) {
+				return result(error);
+			}
+			if (request->frozen || request->capture_inflight || !request->next_control_serial || request->payload_used > request->capacity.retained_payload_bytes || bytes > request->capacity.retained_payload_bytes - request->payload_used || production_serials.exhausted || production_serials.next > UINT64_MAX - 8 || request->revision > UINT64_MAX - 32) {
+				return result(ERR_PARAMETER_RANGE_ERROR);
+			}
+			uint64_t owner = 0;
+			production_serials.take(owner);
+			for (uint32_t i = 0; i < 4; ++i) {
+				auto &slot = request->resources[i];
+				slot.owned_serial = owner; // One raster owner, four distinct physical identities.
+				production_serials.take(slot.retire_serial);
+				production_serials.take(slot.owned_physical.serial);
+				slot.owned_physical.bridge = request->attachment->serial;
+				slot.owned_physical.child = owner;
+				slot.handoff_error = ERR_BUSY;
+				request->returns[i].serial = slot.retire_serial;
+				request->returns[i].pending = true;
+			}
+			request->resources[0].creating = true;
+			request->raster_prepare_origin = *input;
+			action.payload_offset = request->payload_offset + request->payload_used;
+			action.payload_bytes = bytes;
+			std::memcpy(request->attachment->payload + action.payload_offset, binary, size_t(bytes));
+			request->payload_used += bytes;
+			error = production_create_accept_locked(*request, ProductionControlKind::RASTER_CREATE, 0);
+			CRASH_COND(error != OK);
+			request->raster_prepare_control = request->control.serial;
+		}
+	}
+	const Error service = production_create_service(ref, ProductionControlKind::RASTER_CREATE, 0);
+	const auto observed = production_raster_prepare_report(ref, out);
+	return observed.native_error == OK ? result(service) : observed;
+}
+
+Error Registry::production_raster_prepare_finish_locked(ProductionRequest &request, Error error) {
+	if (!request.raster_reserved || request.resource_count != 4 || request.capacity.return_cells < 4 || request.raster_prepare_control != request.control.serial) {
+		return ERR_INVALID_DATA;
+	}
+	request.resources[0].creating = false;
+	request.resources[0].handoff_error = error;
+	for (uint32_t i = 0; i < 4; ++i) {
+		if (!request.resources[i].primary.is_valid()) {
+			request.returns[i].pending = false;
+		}
+	}
+	if (error != OK) {
+		request.actions[0].prepared = false;
+	}
+	if (request.revision != UINT64_MAX) {
+		++request.revision;
+	}
+	return error;
+}
+
+Error Registry::production_raster_prepare_execute_locked(ProductionRequest &request, RenderingDevice &rd) {
+	if (!request.raster_reserved || request.resource_count != 4 || request.capacity.return_cells < 4 || !request.resources[0].creating || request.raster_prepare_control != request.control.serial) {
+		return ERR_INVALID_DATA;
+	}
+	auto finish = [&](Error error) { return production_raster_prepare_finish_locked(request, error); };
+	const auto &attachment = *request.attachment;
+	const auto &owner = records[attachment.library];
+	auto admission_closed = [&]() {
+		return attachment.closing || !owner.attached || owner.quiescing || owner.close_started || owner.close_error != OK || owner.guard_enrollment != GuardEnrollment::QUALIFIED || request.cancelled || request.release_started || request.frozen || !device_records[attachment.device].live || rd.production_finalization_started.load(std::memory_order_acquire) || !rd.driver;
+	};
+	if (admission_closed()) {
+		return finish(ERR_UNAVAILABLE);
+	}
+	if (rd.render_thread_id != Thread::get_caller_id() || !rd._thread_safe_.try_lock()) {
+		return finish(ERR_BUSY); // A returned attempt is never replayed under a new control.
+	}
+	RdUnlock unlock{ rd._thread_safe_ };
+	if (rd._recording_error() != OK || rd.draw_list.active || rd.compute_list.active || rd.raytracing_list.active) {
+		return finish(ERR_BUSY);
+	}
+	Vector<uint8_t> binary;
+	if (binary.resize(int(request.raster_prepare_origin.shader_bytes)) != OK) {
+		return finish(ERR_OUT_OF_MEMORY);
+	}
+	std::memcpy(binary.ptrw(), request.attachment->payload + request.actions[0].payload_offset, size_t(binary.size()));
+	// All native return credits and RID cells exist before the first allocation.
+	RID reserved[4];
+	auto discard = [&](uint32_t i) {
+		if (reserved[i].is_valid()) {
+			switch (i) {
+				case 0:
+					rd.framebuffer_owner.initialize_rid(reserved[i], RenderingDevice::Framebuffer());
+					rd.framebuffer_owner.free(reserved[i]);
+					break;
+				case 1:
+					rd.texture_owner.initialize_rid(reserved[i], RenderingDevice::Texture());
+					rd.texture_owner.free(reserved[i]);
+					break;
+				case 2:
+					rd.shader_owner.initialize_rid(reserved[i], RenderingDevice::Shader());
+					rd.shader_owner.free(reserved[i]);
+					break;
+				case 3:
+					rd.render_pipeline_owner.initialize_rid(reserved[i], RenderingDevice::RenderPipeline());
+					rd.render_pipeline_owner.free(reserved[i]);
+					break;
+			}
+			reserved[i] = RID();
+		}
+		if (request.resources[i].owned_physical.event_capacity_reserved) {
+			rd._qualification_release_free_event(&request.resources[i].owned_physical);
+		}
+	};
+	for (uint32_t i = 0; i < 4; ++i) {
+		if (!rd._qualification_reserve_free_event(&request.resources[i].owned_physical)) {
+			for (uint32_t j = 0; j < i; ++j) {
+				discard(j);
+			}
+			return finish(ERR_PARAMETER_RANGE_ERROR);
+		}
+	}
+	reserved[0] = rd.framebuffer_owner.allocate_rid();
+	reserved[1] = rd.texture_owner.allocate_rid();
+	reserved[2] = rd.shader_owner.allocate_rid();
+	reserved[3] = rd.render_pipeline_owner.allocate_rid();
+	for (uint32_t i = 0; i < 4; ++i) {
+		if (reserved[i].is_null()) {
+			for (uint32_t j = 0; j < 4; ++j) {
+				discard(j);
+			}
+			return finish(ERR_OUT_OF_MEMORY);
+		}
+	}
+	RenderingDevice::TextureFormat format;
+	format.texture_type = RenderingDevice::TEXTURE_TYPE_2D;
+	format.format = RenderingDevice::DATA_FORMAT_D32_SFLOAT;
+	format.width = request.raster_prepare_origin.width;
+	format.height = request.raster_prepare_origin.height;
+	format.usage_bits = RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT | RenderingDevice::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+	const uint32_t order[4] = { 1, 2, 0, 3 };
+	Error error = OK;
+	++request.capture_inflight;
+	for (uint32_t step = 0; step < 4; ++step) {
+		if (admission_closed()) {
+			error = ERR_UNAVAILABLE;
+			break;
+		}
+		const uint32_t i = order[step];
+		auto &slot = request.resources[i];
+		request.raster_prepare_phase = step + 1;
+		production_native_effect_enter_locked(request); // Allocation is not append.
+		mutex.unlock();
+		RID created;
+		switch (i) {
+			case 1:
+				created = rd._texture_create_internal(format, RenderingDevice::TextureView(), {}, &slot.owned_physical, reserved[i]);
+				break;
+			case 2:
+				created = rd._qualification_shader_create(binary, RID(), {}, &slot.owned_physical, reserved[i]);
+				break;
+			case 0:
+				created = rd._qualification_framebuffer_create(request.resources[1].primary, &slot.owned_physical, &request.resources[1].owned_physical, reserved[i]);
+				break;
+			case 3:
+				created = rd._qualification_render_pipeline_create(request.resources[2].primary, rd.framebuffer_get_format(request.resources[0].primary), &slot.owned_physical, reserved[i]);
+				break;
+		}
+		mutex.lock();
+		if (created.is_null()) {
+			error = ERR_CANT_CREATE;
+			break;
+		}
+		reserved[i] = RID(); // The factory published this original reservation.
+		slot.primary = created;
+		slot.backing_serial = slot.owned_physical.serial;
+		slot.owned_physical.rid = created.get_id();
+		error = slot.uses[0].attach(slot.owned_physical, request, request.serial);
+		if (error == OK) {
+			slot.use_count = 1;
+			slot.imported = true;
+		}
+		if (error != OK || request.source_device_lost || admission_closed()) {
+			error = error != OK ? error : ERR_UNAVAILABLE;
+			break;
+		}
+	}
+	--request.capture_inflight;
+	for (uint32_t i = 0; i < 4; ++i) {
+		if (!request.resources[i].primary.is_valid()) {
+			discard(i);
+		}
+	}
+	if (error == OK) {
+		request.raster_action.framebuffer_serial = request.resources[0].backing_serial;
+		request.raster_action.shader_serial = request.resources[2].backing_serial;
+		request.raster_action.pipeline_serial = request.resources[3].backing_serial;
+		request.actions[0].prepared = true;
+		request.raster_prepare_phase = 5;
+	}
+	return finish(error);
+}
+
 Error Registry::production_create_execute_locked(ProductionRequest &request, RenderingDevice &rd, ProductionControlKind kind, uint32_t index) {
 	if (index >= request.resource_count || index >= request.capacity.return_cells) {
 		return ERR_INVALID_DATA;
@@ -503,8 +772,10 @@ Error Registry::production_sets_step_locked(ProductionRequest &request, Renderin
 		auto &slot = request.resources[i];
 		const bool set = slot.declaration.resource_kind == GDEXTENSION_PRODUCTION_SET_V1;
 		const bool storage = slot.declaration.resource_kind == GDEXTENSION_PRODUCTION_STORAGE_V1;
+		const bool raster = request.raster_reserved && slot.declaration.resource_kind == GDEXTENSION_PRODUCTION_RASTER_PHYSICAL_V1;
+		const bool raster_retire = raster && request.raster_prepare_origin.create_attempt && !request.resources[0].creating && (request.cancelled || request.next_action == request.action_count || request.resources[0].handoff_error != OK);
 		if (slot.declaration.ownership != GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 || !slot.primary.is_valid() || slot.returned ||
-				(!set && !storage) || (storage && !slot.retiring) || (set && !request.cancelled && request.next_action != request.action_count)) {
+				(!set && !storage && !raster) || (raster && !raster_retire) || (storage && !slot.retiring) || (set && !request.cancelled && request.next_action != request.action_count)) {
 			continue;
 		}
 		{
@@ -528,6 +799,24 @@ Error Registry::production_sets_step_locked(ProductionRequest &request, Renderin
 		}
 		if (slot.owned_physical.dependent_children.load()) {
 			continue;
+		}
+		if (raster && i == 2 && !slot.owned_physical.enqueued && !request.raster_shader_retire_ready) {
+			const auto *shader = rd.shader_owner.get_or_null(slot.primary);
+			if (!shader || shader->qualification_return != &slot.owned_physical) {
+				return ERR_INVALID_DATA;
+			}
+			++usage.passes;
+			++usage.receipts;
+			usage.controls = 1;
+			if (!rd.driver->shader_retire_ready_nonblocking(shader->driver_id)) {
+				continue;
+			}
+			request.raster_shader_retire_ready = true;
+			// Readiness is monotonic after original preparation/recording closes;
+			// a one-receipt budget may enqueue the free on its next owner turn.
+			if (usage.passes >= MIN(budget.passes, 64u) || usage.receipts >= MIN(budget.receipts, 128u)) {
+				return ERR_BUSY;
+			}
 		}
 		if (slot.use_count) {
 			const Error error = slot.uses[0].detach(request, request.serial);
@@ -697,7 +986,7 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 	const bool resuming = rd.native_disposal_active && request.maintenance_serial == rd.native_disposal_continuation.serial;
 	for (uint32_t frame_index = 0; frame_index < rd.frames.size(); ++frame_index) {
 		const auto &frame = rd.frames[frame_index];
-		if (!frame.qualification_tickets.is_empty() || !frame.download_texture_get_data_requests.is_empty() || !frame.swap_chains_to_present.is_empty() || (!resuming && (!frame.framebuffers_to_dispose_of.is_empty() || !frame.acceleration_structures_to_dispose_of.is_empty() || !frame.raytracing_pipelines_to_dispose_of.is_empty()))) {
+		if (!frame.qualification_tickets.is_empty() || !frame.download_texture_get_data_requests.is_empty() || !frame.swap_chains_to_present.is_empty() || (!resuming && (!frame.acceleration_structures_to_dispose_of.is_empty() || !frame.raytracing_pipelines_to_dispose_of.is_empty()))) {
 			return ERR_BUSY;
 		}
 		uint32_t buffers = frame.buffers_to_dispose_of.size();
@@ -709,7 +998,7 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 					return ERR_INVALID_DATA;
 				}
 				for (uint32_t kind = 0; kind < 10; ++kind) {
-					if ((kind == 2 || kind == 3 || kind == 7) && frame.disposal.remaining[kind]) {
+					if ((kind == 2 || kind == 3) && frame.disposal.remaining[kind]) {
 						return ERR_INVALID_DATA;
 					}
 				}
@@ -738,13 +1027,26 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
 			}
 			auto *item = list.front();
 			for (uint32_t n = 0; n < count; ++n) {
-				if (!item || !exact_closure(item->get().production_disposal_uses, kind, item->get().driver_id.id)) {
+				if (!item || (!owned_physical(item->get().qualification_return) && !exact_closure(item->get().production_disposal_uses, kind, item->get().driver_id.id))) {
 					return false;
 				}
 				item = item->next();
 			}
 			return true;
 		};
+		// Framebuffers have no ProductionDisposalUse list. Admit only the exact
+		// preallocated physical cell of a live accepted request on this RD.
+		uint32_t framebuffers = frame.framebuffers_to_dispose_of.size();
+		if (resuming) {
+			framebuffers = frame_index == rd.native_disposal_continuation.target && rd.native_disposal_continuation.phase < 5 ? frame.disposal.remaining[7] : 0;
+		}
+		auto *framebuffer = frame.framebuffers_to_dispose_of.front();
+		for (uint32_t i = 0; i < framebuffers; ++i) {
+			if (!framebuffer || !owned_physical(framebuffer->get().qualification_return)) {
+				return ERR_BUSY;
+			}
+			framebuffer = framebuffer->next();
+		}
 		if (!closure_prefix(frame.render_pipelines_to_dispose_of, 0) || !closure_prefix(frame.compute_pipelines_to_dispose_of, 1) || !closure_prefix(frame.shaders_to_dispose_of, 5) || !closure_prefix(frame.samplers_to_dispose_of, 6) || !closure_prefix(frame.textures_to_dispose_of, 8)) {
 			return ERR_BUSY;
 		}

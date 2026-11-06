@@ -940,6 +940,9 @@ private:
 	Error production_readback_delivery(BufferReadbackSourceCapture &, bool);
 	void production_native_effect_enter_locked(ProductionRequest &);
 	void production_append_effect_enter_locked(ProductionRequest &);
+	Error production_raster_prepare_execute_locked(ProductionRequest &, RenderingDevice &);
+	Error production_raster_prepare_finish_locked(ProductionRequest &, Error);
+	void production_raster_prepare_report_locked(const ProductionRequest &, GDExtensionProductionRasterPrepareReportV1 &) const;
 	Error production_close_lists_locked(ProductionRequest &, RenderingDevice &);
 	Error production_close_segment_locked(ProductionRequest &, GDExtensionProductionSegmentV2 &, bool = false);
 	Error production_close_segment_locked(ProductionRequest &, GDExtensionProductionSegmentV1 &, bool = false);
@@ -1039,6 +1042,8 @@ public:
 	GDExtensionDeviceSessionResultV1 production_reserve_v2(GDExtensionProductionAttachmentRefV1 ref, const GDExtensionProductionOperationV1 *operation, const GDExtensionProductionCapacityV1 *capacity, const GDExtensionProductionActionV2 *actions, uint32_t action_count, const GDExtensionProductionResourceV1 *resources, uint32_t resource_count, const GDExtensionProductionUseV1 *uses, uint32_t use_count, const GDExtensionProductionReadbackV2 *readbacks, uint32_t readback_count, GDExtensionProductionRequestRefV1 *out);
 	GDExtensionDeviceSessionResultV1 production_reserve(GDExtensionProductionAttachmentRefV1, const GDExtensionProductionOperationV1 *, const GDExtensionProductionCapacityV1 *, const GDExtensionProductionActionV1 *, uint32_t, const GDExtensionProductionResourceV1 *, uint32_t, const GDExtensionProductionUseV1 *, uint32_t, const GDExtensionProductionReadbackV1 *, uint32_t, GDExtensionProductionRequestRefV1 *);
 	GDExtensionDeviceSessionResultV1 production_record_history(GDExtensionProductionRequestRefV1, uint64_t, GDExtensionProductionRecordHistoryV1 *);
+	GDExtensionDeviceSessionResultV1 production_raster_prepare(GDExtensionProductionRequestRefV1, const GDExtensionProductionRasterPrepareV1 *, const void *, uint64_t, GDExtensionProductionRasterPrepareReportV1 *);
+	GDExtensionDeviceSessionResultV1 production_raster_prepare_report(GDExtensionProductionRequestRefV1, GDExtensionProductionRasterPrepareReportV1 *);
 	GDExtensionDeviceSessionResultV1 production_raster_begin(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, uint64_t);
 	GDExtensionDeviceSessionResultV1 production_raster_end(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1);
 	Error production_raster_close_locked(ProductionRequest &, RenderingDevice &);

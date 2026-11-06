@@ -6712,7 +6712,7 @@ RenderingDevice::DrawListBeginResult RenderingDevice::_draw_list_begin_recorded(
 
 	Framebuffer *framebuffer = framebuffer_owner.get_or_null(p_framebuffer);
 	ERR_FAIL_NULL_V(framebuffer, result.failure(ERR_INVALID_PARAMETER));
-	ERR_FAIL_COND_V(framebuffer->qualification_return && (!qualification_recording || framebuffer->qualification_return->use_closed.load()), result.failure(ERR_UNAUTHORIZED));
+	ERR_FAIL_COND_V(framebuffer->qualification_return && ((!qualification_recording && !_production_resource_permitted(p_framebuffer)) || framebuffer->qualification_return->use_closed.load()), result.failure(ERR_UNAUTHORIZED));
 
 	if (p_capture) {
 		ERR_FAIL_COND_V(framebuffer->texture_ids.size() != 1 || !p_draw_flags.has_flag(DRAW_CLEAR_DEPTH), result.failure(ERR_UNAVAILABLE));

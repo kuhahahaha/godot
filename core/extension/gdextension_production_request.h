@@ -328,6 +328,7 @@ enum class ProductionControlKind : uint32_t { OBSERVE,
 	RELEASE,
 	STORAGE_CREATE,
 	SET_CREATE,
+	RASTER_CREATE,
 	RECORD };
 enum class ProductionControlState : uint32_t { OWNER_CONSUMED,
 	PENDING,
@@ -441,6 +442,10 @@ class ProductionRequest {
 	// Independent typed raster declaration retained with the accepted request
 	// arena. It does not alias qualification or dispatch ownership.
 	GDExtensionProductionRasterActionV1 raster_action = {};
+	GDExtensionProductionRasterPrepareV1 raster_prepare_origin = {};
+	uint64_t raster_prepare_control = 0;
+	uint32_t raster_prepare_phase = 0;
+	bool raster_shader_retire_ready = false;
 	bool raster_reserved = false;
 	uint32_t next_action = 0;
 	uint32_t native_workers_bound = 0;

@@ -2635,6 +2635,9 @@ void Registry::production_control_execute_locked(ProductionRequest &request, Ren
 			}
 			cell.output.result = result(error);
 		} break;
+		case ProductionControlKind::RASTER_CREATE:
+			cell.output.result = result(rd ? production_raster_prepare_execute_locked(request, *rd) : production_raster_prepare_finish_locked(request, ERR_UNAVAILABLE));
+			break;
 		case ProductionControlKind::STORAGE_CREATE:
 		case ProductionControlKind::SET_CREATE:
 			cell.output.result = result(rd ? production_create_execute_locked(request, *rd, cell.input.kind, cell.input.resource_slot) : ERR_UNAVAILABLE);
@@ -2708,6 +2711,9 @@ void Registry::production_control_dispatch(uint64_t registry, uint64_t attachmen
 				cell.output = {};
 				cell.output.request_serial = r.serial;
 				cell.output.control_serial = cell.serial;
+				if (cell.input.kind == ProductionControlKind::RASTER_CREATE) {
+					production_raster_prepare_finish_locked(r, ERR_INVALID_DATA);
+				}
 				cell.output.result = result(ERR_INVALID_DATA, 16);
 				cell.state = ProductionControlState::RETURNED;
 				return;

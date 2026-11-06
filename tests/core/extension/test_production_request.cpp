@@ -314,10 +314,16 @@ struct Access {
 			if (trait == API_TRAIT_SHADER_CHANGE_INVALIDATION) {
 				return SHADER_CHANGE_INVALIDATION_ALL_BOUND_UNIFORM_SETS;
 			}
+			if (production_raster_factory) {
+				return 0;
+			}
 			FAIL_CHECK("Unexpected source-service CPU driver trait");
 			return 0;
 		}
 		uint64_t limit_get(Limit p_limit) override {
+			if (production_raster_factory) {
+				return 8192;
+			}
 			// Immutable limits are queried by owner-side prepare before RT append.
 			if (p_limit == LIMIT_MAX_PUSH_CONSTANT_SIZE) {
 				return 128;
@@ -331,6 +337,53 @@ struct Access {
 		UnitFormat format;
 		uint32_t shader_creates = 0, pipeline_creates = 0, set_creates = 0, set_frees = 0, shader_frees = 0, pipeline_frees = 0;
 		bool set_live = false;
+		bool production_raster_factory = false, production_depth_live = false;
+		uint32_t production_fail_stage = 0, production_quiesce_stage = 0;
+		void (*production_factory_probe)(void *) = nullptr;
+		void *production_factory_probe_data = nullptr;
+		uint32_t production_stage_attempts[4] = {};
+		uint32_t production_depth_frees = 0;
+		Request *production_raster_request = nullptr;
+		Vector<uint32_t> production_free_order;
+		TextureID texture_create(const TextureFormat &value, const TextureView &view) override {
+			CHECK(production_raster_factory);
+			CHECK(Thread::get_caller_id() == execution_thread);
+			CHECK(value.format == DATA_FORMAT_D32_SFLOAT);
+			CHECK(view.format == DATA_FORMAT_D32_SFLOAT);
+			CHECK(value.width == 8);
+			CHECK(value.height == 4);
+			CHECK(value.usage_bits == (TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT));
+			++production_stage_attempts[0];
+			if (production_fail_stage == 1) {
+				return {};
+			}
+			CHECK_FALSE(production_depth_live);
+			production_depth_live = true;
+			if (production_quiesce_stage == 1 && production_factory_probe) {
+				production_factory_probe(production_factory_probe_data);
+			}
+			return TextureID(380);
+		}
+		void texture_free(TextureID id) override {
+			CHECK(production_raster_factory);
+			CHECK(id == TextureID(380));
+			CHECK(production_depth_live);
+			REQUIRE(production_raster_request != nullptr);
+			const auto &framebuffer = production_raster_request->resources[0];
+			CHECK((framebuffer.primary.is_null() || framebuffer.owned_physical.free_event));
+			production_depth_live = false;
+			++production_depth_frees;
+			production_free_order.push_back(1);
+		}
+		uint64_t texture_get_allocation_size(TextureID id) override {
+			CHECK(id == TextureID(380));
+			return 128;
+		}
+		BitField<TextureUsageBits> texture_get_usages_supported_by_format(DataFormat value, bool readable) override {
+			CHECK(value == DATA_FORMAT_D32_SFLOAT);
+			CHECK_FALSE(readable);
+			return TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+		}
 		bool raster_fail = false, raster_quiet = false, raster_live = false;
 		RenderingDevice *raster_device = nullptr;
 		uint32_t raster_budgeted_frees = 0;
@@ -340,13 +393,27 @@ struct Access {
 			value.dont_print_on_render_pipeline_creation_failure = raster_quiet;
 			return value;
 		}
-		RenderPassID render_pass_create(VectorView<Attachment>, VectorView<Subpass>, VectorView<SubpassDependency>, uint32_t, AttachmentReference) override { return RenderPassID(280); }
+		RenderPassID render_pass_create(VectorView<Attachment>, VectorView<Subpass>, VectorView<SubpassDependency>, uint32_t, AttachmentReference) override {
+			if (production_raster_factory) {
+				++production_stage_attempts[2];
+				if (production_fail_stage == 3) {
+					return {};
+				}
+			}
+			return RenderPassID(280);
+		}
 		void render_pass_free(RenderPassID id) override { CHECK(id == RenderPassID(280)); }
 		PipelineID render_pipeline_create(ShaderID shader, VertexFormatID, RenderPrimitive, PipelineRasterizationState, PipelineMultisampleState, PipelineDepthStencilState, PipelineColorBlendState, VectorView<int32_t>, BitField<PipelineDynamicStateFlags>, RenderPassID pass, uint32_t, VectorView<PipelineSpecializationConstant>) override {
 			CHECK(Thread::get_caller_id() == execution_thread);
 			CHECK(shader == ShaderID(280));
 			CHECK(pass == RenderPassID(280));
 			++raster_attempts;
+			if (production_raster_factory) {
+				++production_stage_attempts[3];
+				if (production_fail_stage == 4) {
+					return {};
+				}
+			}
 			if (raster_fail) {
 				return {};
 			}
@@ -360,6 +427,15 @@ struct Access {
 			const auto reflection = container->get_shader_reflection();
 			if (reflection.pipeline_type == PIPELINE_TYPE_RASTERIZATION) {
 				CHECK(reflection.uniform_sets.is_empty());
+				if (production_raster_factory) {
+					++production_stage_attempts[1];
+					if (production_fail_stage == 2) {
+						return {};
+					}
+				}
+				if (production_quiesce_stage == 2 && production_factory_probe) {
+					production_factory_probe(production_factory_probe_data);
+				}
 				return ShaderID(280);
 			}
 			CHECK(reflection.pipeline_type == PIPELINE_TYPE_COMPUTE);
@@ -392,6 +468,12 @@ struct Access {
 		}
 		void shader_free(ShaderID id) override {
 			if (id == ShaderID(280)) {
+				if (production_raster_factory) {
+					REQUIRE(production_raster_request != nullptr);
+					const auto &pipeline = production_raster_request->resources[3];
+					CHECK((pipeline.primary.is_null() || pipeline.owned_physical.free_event));
+					production_free_order.push_back(2);
+				}
 				++raster_shader_frees;
 				return;
 			}
@@ -413,6 +495,9 @@ struct Access {
 				CHECK(raster_live);
 				raster_live = false;
 				++raster_frees;
+				if (production_raster_factory) {
+					production_free_order.push_back(3);
+				}
 				return;
 			}
 			if (id == PipelineID(181)) {
@@ -422,9 +507,18 @@ struct Access {
 			CHECK(id == PipelineID(81));
 			++pipeline_frees;
 		}
+		mutable uint32_t production_shader_not_ready = 0, production_shader_ready_polls = 0;
 		void (*disposal_probe)(void *) = nullptr;
 		void *disposal_probe_data = nullptr;
 		bool shader_retire_ready_nonblocking(ShaderID) const override {
+			if (production_raster_factory) {
+				++production_shader_ready_polls;
+				if (production_shader_not_ready) {
+					--production_shader_not_ready;
+					CHECK(raster_shader_frees == 0);
+					return false;
+				}
+			}
 			if (disposal_probe) {
 				disposal_probe(disposal_probe_data);
 			}
@@ -4517,19 +4611,28 @@ struct Access {
 		REQUIRE(fixture.request == nullptr);
 		REQUIRE(fixture.attachment.handle_serial != 0);
 		CHECK(fixture.qualification.handle_serial == 0);
-		// Nonzero serial declarations do not import any resource or grant ownership.
-		const GDExtensionProductionRasterActionV1 action = { production_dto_abi<GDExtensionProductionRasterActionV1>(), 0, plan.operation.canonical_begin, 0, 1, 0, 31, 32, 33, 0 };
-		for (uint32_t insufficient = 0; insufficient < 3; ++insufficient) {
+		// Native identities are supplied only by independent preparation.
+		const GDExtensionProductionRasterActionV1 action = { production_dto_abi<GDExtensionProductionRasterActionV1>(), 0, plan.operation.canonical_begin, 0, 1, 0, 0, 0, 0, 0 };
+		for (uint32_t insufficient = 0; insufficient < 7; ++insufficient) {
 			auto capacity = plan.capacity;
+			auto refused_action = action;
 			if (insufficient == 0) {
 				capacity.resources = 3;
 			} else if (insufficient == 1) {
 				capacity.graph_memberships = 7;
-			} else {
+			} else if (insufficient == 2) {
 				capacity.graph_memberships = 9; // Schema-valid, exceeds the accepted arena.
+			} else if (insufficient == 3) {
+				capacity.return_cells = 3;
+			} else if (insufficient == 4) {
+				refused_action.framebuffer_serial = 31;
+			} else if (insufficient == 5) {
+				refused_action.shader_serial = 32;
+			} else {
+				refused_action.pipeline_serial = 33;
 			}
 			GDExtensionProductionRequestRefV1 refused = { UINT64_MAX, UINT64_MAX };
-			CHECK(reserve(fixture.attachment, &plan.operation, &capacity, &action, &refused).native_error == ERR_INVALID_PARAMETER);
+			CHECK(reserve(fixture.attachment, &plan.operation, &capacity, &refused_action, &refused).native_error == ERR_INVALID_PARAMETER);
 			CHECK(refused.registry_instance == 0);
 			CHECK(refused.handle_serial == 0);
 			MutexLock lock(fixture.registry.mutex);
@@ -4601,6 +4704,266 @@ struct Access {
 		}
 		REQUIRE(probe.raster->serial == 0);
 		probe.raster = nullptr; // The attachment arena is released by cleanup_owner below.
+		fixture.cleanup_owner();
+		CHECK(fixture.owner_cleaned);
+	}
+	static void singleton_raster_prepare(uint32_t fail_stage, uint32_t quiesce_stage = 0) {
+		using namespace GDExtensionDeviceExit;
+		auto *server = ordinal_server();
+		if (!server) {
+			return;
+		}
+		const auto reserve = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRasterReserveV1>("device_session_production_raster_reserve_v1");
+		const auto prepare = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRasterPrepareV1>("device_session_production_raster_prepare_v1");
+		const auto query = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRasterPrepareReportV1>("device_session_production_raster_prepare_report_v1");
+		const auto history_query = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRecordHistoryV1>("device_session_production_record_history_v1");
+		const auto consume = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRecordConsumeV2>("device_session_production_record_consume_v2");
+		const auto release = ordinal_port<GDExtensionInterfaceDeviceSessionProductionReleaseV2>("device_session_production_release_v2");
+		REQUIRE(reserve != nullptr);
+		REQUIRE(prepare != nullptr);
+		REQUIRE(query != nullptr);
+		REQUIRE(history_query != nullptr);
+		REQUIRE(consume != nullptr);
+		REQUIRE(release != nullptr);
+		Ref<UnitContainer> container;
+		container.instantiate();
+		container->initialize_raster();
+		const Vector<uint8_t> binary = container->to_bytes();
+		REQUIRE(!binary.is_empty());
+		OrdinalPlan plan;
+		plan.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 1, 4, 4, 8, 2048, 0, 4, uint64_t(binary.size()), 0 };
+		SingletonEnrollment fixture;
+		fixture.public_port = true;
+		REQUIRE(fixture.prepare_device(server) == OK);
+		REQUIRE(fixture.initialize_owner(1, false, false, +[](void *, ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const GDExtensionProductionOperationV1 *) {}, nullptr, false, 1, false, +[](void *, GDExtensionProductionAttachmentRefV1) {}, false, false, false, false, &plan, nullptr, true) == OK);
+		CHECK(fixture.qualification.handle_serial == 0);
+		fixture.driver.production_raster_factory = true;
+		fixture.driver.production_fail_stage = fail_stage;
+		fixture.driver.production_quiesce_stage = quiesce_stage;
+		fixture.driver.production_factory_probe_data = &fixture;
+		fixture.driver.production_factory_probe = +[](void *opaque) {
+			auto &owner = *static_cast<SingletonEnrollment *>(opaque);
+			REQUIRE(owner.port.cancel != nullptr);
+			CHECK(owner.port.cancel({ owner.instance, owner.request->serial }).native_error == ERR_BUSY);
+			CHECK_FALSE(owner.request->cancelled);
+			// This Core factory has no active DSO callback or binding holder.
+			// Quiesce succeeds and seals admission; the separate physical close
+			// gate still retains every original resource until native retirement.
+			CHECK(owner.registry.begin_quiesce(owner.reference) == OK);
+		};
+		fixture.driver.raster_quiet = true;
+		fixture.driver.raster_device = &fixture.rd;
+		// Real RD factories and owner cells, with a CPU driver: no GPU draw claim.
+		fixture.rd.draw_graph.initialize(&fixture.driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RDD::CommandQueueFamilyID(1), 0);
+		fixture.rd.draw_graph.begin();
+		// Match the existing empty CPU frame fixtures: an original frame has
+		// a nonzero epoch before its native factories may enqueue retirement.
+		// This establishes frame provenance, never a completion/free receipt.
+		fixture.rd.frames[0].qualification_epoch = 1;
+		fixture.rd.frames[0].fence = RDD::FenceID(93);
+		fixture.rd.frames[0].command_buffer = RDD::CommandBufferID(90);
+		fixture.rd.frames[0].command_pool = RDD::CommandPoolID(94);
+		fixture.rd.main_queue = RDD::CommandQueueID(1);
+		const GDExtensionProductionRasterActionV1 action = { production_dto_abi<GDExtensionProductionRasterActionV1>(), 0, plan.operation.canonical_begin, 0, 1, 0, 0, 0, 0, 0 };
+		GDExtensionProductionRequestRefV1 ref{};
+		REQUIRE(reserve(fixture.attachment, &plan.operation, &plan.capacity, &action, &ref).native_error == OK);
+		{
+			MutexLock lock(fixture.registry.mutex);
+			RenderingDevice *device = nullptr;
+			REQUIRE(fixture.registry.production_request_locked(ref, false, fixture.request, device) == OK);
+			REQUIRE(device == &fixture.rd);
+		}
+		auto &request = *fixture.request;
+		fixture.driver.production_raster_request = &request;
+		GDExtensionProductionRasterPrepareReportV1 report{};
+		CHECK(query(ref, &report).native_error == ERR_DOES_NOT_EXIST);
+		const GDExtensionProductionRasterPrepareV1 input = { production_dto_abi<GDExtensionProductionRasterPrepareV1>(), 17, 8, 4, uint64_t(binary.size()), 0 };
+		Vector<uint8_t> oversized = binary;
+		oversized.push_back(0);
+		auto oversized_input = input;
+		oversized_input.shader_bytes = oversized.size();
+		const uint64_t before_admission = request.next_control_serial;
+		CHECK(prepare(ref, &oversized_input, oversized.ptr(), oversized.size(), &report).native_error == ERR_PARAMETER_RANGE_ERROR);
+		CHECK(request.next_control_serial == before_admission);
+		CHECK(request.raster_prepare_control == 0);
+		CHECK(request.raster_prepare_origin.create_attempt == 0);
+		CHECK(request.payload_used == 0);
+		CHECK_FALSE(request.native_effect_entered);
+		CHECK_FALSE(request.append_effect_entered);
+		CHECK(query(ref, &report).native_error == ERR_DOES_NOT_EXIST);
+		REQUIRE(prepare(ref, &input, binary.ptr(), binary.size(), &report).native_error == ERR_BUSY);
+		const uint64_t create_control = report.control_serial;
+		REQUIRE(create_control != 0);
+		CHECK(report.create_attempt == input.create_attempt);
+		CHECK(report.request_serial == request.serial);
+		// Read-only queries retain the original FIFO control without consuming it.
+		const auto state_before_query = request.control.state;
+		REQUIRE(query(ref, &report).native_error == OK);
+		CHECK(request.control.state == state_before_query);
+		CHECK(report.control_serial == create_control);
+		CHECK(prepare(ref, &input, binary.ptr(), binary.size(), &report).native_error == ERR_BUSY);
+		CHECK(report.control_serial == create_control);
+		for (uint32_t mutation = 0; mutation < 3; ++mutation) {
+			auto mismatched = input;
+			Vector<uint8_t> changed = binary;
+			if (mutation == 0) {
+				++mismatched.create_attempt;
+			} else if (mutation == 1) {
+				++mismatched.width;
+			} else {
+				changed.write[changed.size() - 1] ^= 1;
+			}
+			CHECK(prepare(ref, &mismatched, changed.ptr(), changed.size(), &report).native_error == ERR_INVALID_DATA);
+			CHECK(request.raster_prepare_control == create_control);
+		}
+		server->sync();
+		REQUIRE(query(ref, &report).native_error == OK);
+		CHECK(request.control.state == ProductionControlState::RETURNED);
+		const Error expected = quiesce_stage ? ERR_UNAVAILABLE : fail_stage ? ERR_CANT_CREATE
+																			: OK;
+		CHECK(report.result.native_error == expected);
+		const uint32_t prefixes[5] = { 15, 0, 2, 6, 7 };
+		const uint32_t known = quiesce_stage ? (quiesce_stage == 1 ? 2u : 6u) : prefixes[fail_stage];
+		CHECK(report.phase == (quiesce_stage ? quiesce_stage : fail_stage ? fail_stage
+																		  : 5u));
+		CHECK(report.known_mask == known);
+		CHECK(report.returned_mask == 0);
+		REQUIRE(prepare(ref, &input, binary.ptr(), binary.size(), &report).native_error == expected);
+		CHECK(request.control.state == ProductionControlState::OWNER_CONSUMED);
+		const uint64_t revision = report.revision;
+		CHECK(prepare(ref, &input, binary.ptr(), binary.size(), &report).native_error == expected);
+		CHECK(report.revision == revision);
+		CHECK(report.control_serial == create_control);
+		CHECK(request.actions[0].prepared == (expected == OK));
+		CHECK(request.native_effect_entered);
+		CHECK_FALSE(request.append_effect_entered);
+		CHECK(request.graph_count == 0);
+		CHECK(request.native_count == 0);
+		for (uint32_t stage = 0; stage < 4; ++stage) {
+			CHECK(fixture.driver.production_stage_attempts[stage] == ((quiesce_stage ? stage < quiesce_stage : !fail_stage || stage < fail_stage) ? 1u : 0u));
+		}
+		const uint64_t serials[4] = { report.framebuffer_serial, report.depth_serial, report.shader_serial, report.pipeline_serial };
+		for (uint32_t i = 0; i < 4; ++i) {
+			const auto &slot = request.resources[i];
+			CHECK(slot.owned_serial == request.resources[0].owned_serial);
+			CHECK(slot.owned_physical.bridge == fixture.attachment.handle_serial);
+			CHECK(slot.owned_physical.child == slot.owned_serial);
+			CHECK(slot.imported == bool(known & (1u << i)));
+			CHECK(slot.use_count == ((known & (1u << i)) ? 1u : 0u));
+			CHECK(serials[i] == ((known & (1u << i)) ? slot.owned_physical.serial : 0));
+			for (uint32_t j = 0; j < i; ++j) {
+				CHECK(slot.owned_physical.serial != request.resources[j].owned_physical.serial);
+				CHECK(slot.retire_serial != request.resources[j].retire_serial);
+			}
+		}
+		if (known & 2u) {
+			const auto *depth = fixture.rd.texture_owner.get_or_null(request.resources[1].primary);
+			REQUIRE(depth != nullptr);
+			CHECK(depth->qualification_return == &request.resources[1].owned_physical);
+		}
+		if (known & 4u) {
+			const auto *shader = fixture.rd.shader_owner.get_or_null(request.resources[2].primary);
+			REQUIRE(shader != nullptr);
+			CHECK(shader->qualification_return == &request.resources[2].owned_physical);
+		}
+		if (known & 1u) {
+			const auto *framebuffer = fixture.rd.framebuffer_owner.get_or_null(request.resources[0].primary);
+			REQUIRE(framebuffer != nullptr);
+			CHECK(framebuffer->qualification_return == &request.resources[0].owned_physical);
+			CHECK(framebuffer->qualification_dependency == &request.resources[1].owned_physical);
+			CHECK(request.resources[1].owned_physical.dependent_children.load() == 1);
+		}
+		if (known & 8u) {
+			const auto *pipeline = fixture.rd.render_pipeline_owner.get_or_null(request.resources[3].primary);
+			REQUIRE(pipeline != nullptr);
+			CHECK(pipeline->qualification_return == &request.resources[3].owned_physical);
+			CHECK(pipeline->qualification_dependency == &request.resources[2].owned_physical);
+			CHECK(request.resources[2].owned_physical.dependent_children.load() == 1);
+		}
+		if (expected == OK) {
+			// A genuine empty RECORD sees prior native preparation, with no append.
+			uint64_t control = 0;
+			REQUIRE(fixture.port.record_schedule(ref, &control) == OK);
+			server->sync();
+			GDExtensionProductionRecordReportV2 recorded{};
+			REQUIRE(consume(ref, control, &recorded).native_error == OK);
+			GDExtensionProductionRecordHistoryV1 history{};
+			REQUIRE(history_query(ref, control, &history).native_error == OK);
+			record_history_flags(history, GDEXTENSION_PRODUCTION_RECORD_HISTORY_REQUEST_EFFECT_ENTERED_V1 | GDEXTENSION_PRODUCTION_RECORD_HISTORY_TERMINAL_NO_APPEND_V1,
+					GDEXTENSION_PRODUCTION_RECORD_HISTORY_CONTROL_EFFECT_ENTERED_V1 | GDEXTENSION_PRODUCTION_RECORD_HISTORY_TERMINAL_NO_EFFECT_V1 | GDEXTENSION_PRODUCTION_RECORD_HISTORY_CONTROL_APPEND_ENTERED_V1 | GDEXTENSION_PRODUCTION_RECORD_HISTORY_REQUEST_APPEND_ENTERED_V1);
+		}
+		CHECK(fixture.registry.production_cancel(ref).native_error == OK);
+		CHECK(fixture.driver.production_depth_frees == 0);
+		CHECK(fixture.driver.raster_shader_frees == 0);
+		CHECK(fixture.driver.raster_frees == 0);
+		fixture.driver.production_shader_not_ready = (known & 4u) ? 2u : 0u;
+		uint32_t returned = 0;
+		for (uint32_t turn = 0; turn < 192 && (returned != known || request.maintenance_serial); ++turn) {
+			const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+			const uint32_t frees_before = fixture.driver.production_free_order.size();
+			ProductionControlOutput output{};
+			uint64_t serial = 0;
+			REQUIRE(fixture.registry.production_control_accept(ref, ProductionControlKind::OBSERVE, &serial, &budget) == OK);
+			REQUIRE(fixture.registry.production_control_schedule(ref, serial) == OK);
+			server->sync();
+			REQUIRE(fixture.registry.production_control_consume(ref, serial, &output) == OK);
+			CHECK((output.result.native_error == OK || output.result.native_error == ERR_BUSY));
+			CHECK(output.service_usage.passes <= 1);
+			CHECK(output.service_usage.receipts <= 1);
+			CHECK(fixture.driver.production_free_order.size() - frees_before <= 1);
+			REQUIRE(query(ref, &report).native_error == OK);
+			CHECK(report.control_serial == create_control);
+			CHECK(report.known_mask == known);
+			CHECK((report.returned_mask & returned) == returned);
+			CHECK((report.returned_mask & ~known) == 0);
+			returned = report.returned_mask;
+			if (fixture.driver.production_shader_ready_polls && fixture.driver.production_shader_ready_polls <= 2) {
+				CHECK_FALSE(request.raster_shader_retire_ready);
+				CHECK((returned & 4u) == 0);
+				CHECK(fixture.driver.raster_shader_frees == 0);
+				CHECK_FALSE(request.resources[2].owned_physical.enqueued);
+			}
+			for (uint32_t i = 0; i < 4; ++i) {
+				if (returned & (1u << i)) {
+					CHECK(request.resources[i].owned_physical.free_event != 0);
+					CHECK(request.resources[i].use_count == 0);
+				}
+			}
+		}
+		CHECK(returned == known);
+		CHECK(fixture.driver.production_shader_not_ready == 0);
+		if (known & 4u) {
+			CHECK(fixture.driver.production_shader_ready_polls >= 3);
+		} else {
+			CHECK(fixture.driver.production_shader_ready_polls == 0);
+		}
+		CHECK(request.maintenance_serial == 0);
+		CHECK(fixture.driver.production_depth_frees == ((known & 2u) ? 1u : 0u));
+		CHECK(fixture.driver.raster_shader_frees == ((known & 4u) ? 1u : 0u));
+		CHECK(fixture.driver.raster_frees == ((known & 8u) ? 1u : 0u));
+		CHECK_FALSE(fixture.driver.production_depth_live);
+		CHECK_FALSE(fixture.driver.raster_live);
+		CHECK(request.native_effect_entered);
+		CHECK_FALSE(request.append_effect_entered);
+		CHECK(fixture.qualification.handle_serial == 0);
+		// Framebuffer format passes belong to the RD cache, not the four roots.
+		for (auto &entry : fixture.rd.framebuffer_formats) {
+			fixture.driver.render_pass_free(entry.value.render_pass);
+		}
+		fixture.rd.framebuffer_formats.clear();
+		fixture.rd.framebuffer_format_cache.clear();
+		for (uint32_t turn = 0; turn < 32 && request.serial; ++turn) {
+			const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+			GDExtensionProductionServiceBudgetV1 remaining{};
+			GDExtensionProductionReportV2 released{};
+			const Error error = Error(release(ref, &budget, &remaining, &released).native_error);
+			CHECK((error == OK || error == ERR_BUSY));
+			if (request.serial) {
+				server->sync();
+			}
+		}
+		CHECK(request.serial == 0);
+		fixture.driver.production_raster_request = nullptr;
 		fixture.cleanup_owner();
 		CHECK(fixture.owner_cleaned);
 	}
@@ -7858,6 +8221,32 @@ TEST_CASE("[ProductionRequest] installed typed production procedures reject fore
 
 TEST_CASE("[SceneTree][ProductionRequest][Raster] accepted raster reservation requires independent resources and rejects foreign expired frames") {
 	TestProductionRequest::Access::singleton_raster_reserve();
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][RasterPrepare] independent four-resource factories retain exact failure prefixes and retire through bounded original FIFO") {
+	ERR_PRINT_OFF;
+	SUBCASE("All four production roots are ready without qualification imports") {
+		TestProductionRequest::Access::singleton_raster_prepare(0);
+	}
+	SUBCASE("Depth factory fails before any root exists") {
+		TestProductionRequest::Access::singleton_raster_prepare(1);
+	}
+	SUBCASE("Shader factory preserves the original depth prefix") {
+		TestProductionRequest::Access::singleton_raster_prepare(2);
+	}
+	SUBCASE("Framebuffer factory preserves depth and shader") {
+		TestProductionRequest::Access::singleton_raster_prepare(3);
+	}
+	SUBCASE("Pipeline factory preserves the original framebuffer dependency") {
+		TestProductionRequest::Access::singleton_raster_prepare(4);
+	}
+	SUBCASE("Actual quiesce seals admission inside the original depth factory") {
+		TestProductionRequest::Access::singleton_raster_prepare(0, 1);
+	}
+	SUBCASE("Actual quiesce preserves depth and shader without creating later roots") {
+		TestProductionRequest::Access::singleton_raster_prepare(0, 2);
+	}
+	ERR_PRINT_ON;
 }
 
 TEST_CASE("[SceneTree][ProductionRequest][RecordHistory] exact empty RECORD history survives consume and expires on replacement") {

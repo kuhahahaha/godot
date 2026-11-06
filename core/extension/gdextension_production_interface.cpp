@@ -74,6 +74,14 @@ GDExtensionDeviceSessionResultV1 device_session_production_raster_reserve_v1(GDE
 	return Registry::get_singleton().production_raster_reserve(attachment, operation, capacity, action, out_request);
 }
 static_assert(std::is_same_v<decltype(&device_session_production_raster_reserve_v1), GDExtensionInterfaceDeviceSessionProductionRasterReserveV1>);
+GDExtensionDeviceSessionResultV1 device_session_production_raster_prepare_v1(GDExtensionProductionRequestRefV1 request, const GDExtensionProductionRasterPrepareV1 *prepare, const void *shader_binary, uint64_t bytes, GDExtensionProductionRasterPrepareReportV1 *out_report) {
+	return Registry::get_singleton().production_raster_prepare(request, prepare, shader_binary, bytes, out_report);
+}
+static_assert(std::is_same_v<decltype(&device_session_production_raster_prepare_v1), GDExtensionInterfaceDeviceSessionProductionRasterPrepareV1>);
+GDExtensionDeviceSessionResultV1 device_session_production_raster_prepare_report_v1(GDExtensionProductionRequestRefV1 request, GDExtensionProductionRasterPrepareReportV1 *out_report) {
+	return Registry::get_singleton().production_raster_prepare_report(request, out_report);
+}
+static_assert(std::is_same_v<decltype(&device_session_production_raster_prepare_report_v1), GDExtensionInterfaceDeviceSessionProductionRasterPrepareReportV1>);
 GDExtensionDeviceSessionResultV1 device_session_production_raster_begin_v1(GDExtensionProductionPhysicalContextRefV1 context, GDExtensionProductionRequestRefV1 request, uint64_t revision) {
 	return Registry::get_singleton().production_raster_begin(context, request, revision);
 }
@@ -262,6 +270,8 @@ void register_production_interfaces() {
 	GDExtension::register_interface_function("device_session_production_accept_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_accept_v1));
 	GDExtension::register_interface_function("device_session_production_install_record_receiver_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_install_record_receiver_v1));
 	GDExtension::register_interface_function("device_session_production_reserve_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_reserve_v1));
+	GDExtension::register_interface_function("device_session_production_raster_prepare_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_raster_prepare_v1));
+	GDExtension::register_interface_function("device_session_production_raster_prepare_report_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_raster_prepare_report_v1));
 	GDExtension::register_interface_function("device_session_production_raster_begin_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_raster_begin_v1));
 	GDExtension::register_interface_function("device_session_production_raster_end_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_raster_end_v1));
 	GDExtension::register_interface_function("device_session_production_raster_reserve_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_raster_reserve_v1));

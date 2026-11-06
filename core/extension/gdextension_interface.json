@@ -9592,6 +9592,104 @@
                     "type": "GDExtensionDeviceSessionResultV1"
                 }
             ]
+        },
+        {
+            "name": "GDExtensionProductionRasterPrepareV1",
+            "kind": "struct",
+            "description": [
+                "Independent request-owned raster preparation. No qualification ownership or caller RID grants authority. Mask bits are framebuffer, depth, shader, pipeline; phases 1 depth, 2 shader, 3 framebuffer, 4 pipeline, 5 created. Native physical return remains independent."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "create_attempt",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "width",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "height",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "shader_bytes",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionRasterPrepareReportV1",
+            "kind": "struct",
+            "description": [
+                "Independent request-owned raster preparation. No qualification ownership or caller RID grants authority. Mask bits are framebuffer, depth, shader, pipeline; phases 1 depth, 2 shader, 3 framebuffer, 4 pipeline, 5 created. Native physical return remains independent."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "request_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "control_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "create_attempt",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "revision",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "known_mask",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "returned_mask",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "phase",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "result",
+                    "type": "GDExtensionDeviceSessionResultV1"
+                },
+                {
+                    "name": "framebuffer_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "depth_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "shader_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "pipeline_serial",
+                    "type": "uint64_t"
+                }
+            ]
         }
     ],
     "interface": [
@@ -20905,6 +21003,85 @@
                 "type": "GDExtensionDeviceSessionResultV1",
                 "description": [
                     "Query result; output is valid only on success."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_raster_prepare_v1",
+            "since": "4.7",
+            "description": [
+                "Prepare original request-owned raster resources through the original fixed FIFO, or read their retained preparation report. Exact retry is idempotent. Only phase 5 and successful returned creation establish preparation; read-only report does not consume or schedule."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Typed preparation input or output."
+                    ]
+                },
+                {
+                    "name": "prepare",
+                    "type": "const GDExtensionProductionRasterPrepareV1*",
+                    "description": [
+                        "Typed preparation input or output."
+                    ]
+                },
+                {
+                    "name": "shader_binary",
+                    "type": "const void*",
+                    "description": [
+                        "Typed preparation input or output."
+                    ]
+                },
+                {
+                    "name": "bytes",
+                    "type": "uint64_t",
+                    "description": [
+                        "Typed preparation input or output."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionProductionRasterPrepareReportV1*",
+                    "description": [
+                        "Typed preparation input or output."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Operation result; retained physical prefixes remain owned on failure."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_raster_prepare_report_v1",
+            "since": "4.7",
+            "description": [
+                "Prepare original request-owned raster resources through the original fixed FIFO, or read their retained preparation report. Exact retry is idempotent. Only phase 5 and successful returned creation establish preparation; read-only report does not consume or schedule."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Typed preparation input or output."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionProductionRasterPrepareReportV1*",
+                    "description": [
+                        "Typed preparation input or output."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Operation result; retained physical prefixes remain owned on failure."
                 ]
             }
         }
