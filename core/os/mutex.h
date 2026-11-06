@@ -32,6 +32,10 @@
 
 #include "core/typedefs.h"
 
+#ifdef TSAN_ENABLED
+#include <sanitizer/tsan_interface.h>
+#endif
+
 #ifdef MINGW_ENABLED
 #define MINGW_STDTHREAD_REDUNDANCY_WARNING
 #include <thirdparty/mingw-std-threads/mingw.mutex.h>
@@ -55,6 +59,14 @@ class MutexImpl {
 	mutable StdMutexT mutex;
 
 public:
+#ifdef TSAN_ENABLED
+	~MutexImpl() {
+		// A static native initializer can leave the standard mutex destructor
+		// trivial. Retire this lifetime before its storage can be reused.
+		__tsan_mutex_destroy(mutex.native_handle(), 0);
+	}
+#endif
+
 	_ALWAYS_INLINE_ void lock() const {
 		mutex.lock();
 	}

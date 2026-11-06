@@ -1,0 +1,24 @@
+{
+  "scope": "TSAN-only actual MutexImpl destructor retirement; implicit construction unchanged",
+  "source_sha256": "6c3600c4c9a94f924cc011bc7586e158f0a905279dc3fa5c932d84985a27229c",
+  "failed_ci": 42145192138,
+  "diagnosis": "different automatic mutex lifetimes reuse one stack address; GCC12 recursive_mutex static initializer branch omits native destruction",
+  "reviews": [
+    "work/b4-ci-mutex-lifetime-20261106/ci-lock-order-diagnosis.md",
+    "work/b4-ci-mutex-lifetime-20261106/tsan-lifetime-independent.md",
+    "work/b4-ci-mutex-lifetime-20261106/tsan-destructor-scope-review.md"
+  ],
+  "local_checks": {
+    "clang_format": 0,
+    "diff_check": 0,
+    "TSAN_header_syntax": 0,
+    "static_initialization_IR": "independent review preserves native bytes"
+  },
+  "runtime_status": "pending Linux TSAN reproduction and actual CI; no sanitizer pass claimed",
+  "constraints": [
+    "No lock ordering change",
+    "No pre/post lock annotations",
+    "No deadlock detector suppression",
+    "No CI option change"
+  ]
+}
