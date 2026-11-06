@@ -49,9 +49,10 @@ template<class T> struct Owner { T *items[8]{}; T *get_or_null(RID rid) const { 
 namespace RendererRD { struct ParticlesStorage {
     static ParticlesStorage *single;
     static ParticlesStorage *get_singleton() { return single; }
+    struct Entry { bool active; uint64_t key, rev; int origin; float radius; } entries[8]{};
     bool particles_collision_instance_get_scene_sphere(RID id,uint64_t &key,uint64_t &rev,Transform3D &transform,float &radius) const {
-        if (id.id!=1 && id.id!=2) return false;
-        key=id.id==1?9:3; rev=7; transform.origin=id.id==1?11:22; radius=2; return true;
+        if (id.id <= 0 || id.id >= 8 || !entries[id.id].active) return false;
+        const Entry &e = entries[id.id]; key=e.key; rev=e.rev; transform.origin=e.origin; radius=e.radius; return true;
     }
 }; ParticlesStorage *ParticlesStorage::single=nullptr; }
 struct RendererSceneCull {
@@ -61,6 +62,7 @@ struct RendererSceneCull {
 bool RendererSceneCull::scene_sphere_snapshot_pairs(RID p_receiver,uint32_t p_max_sources,Vector<SceneSphereSource> &r_sources) const ''' + method + r'''
 int main() {
     RendererRD::ParticlesStorage storage; RendererRD::ParticlesStorage::single=&storage;
+    storage.entries[1] = {true,9,7,11,2}; storage.entries[2] = {true,3,7,22,2};
     RendererSceneCull scene;
     int scenario=1;
     Instance receiver; receiver.base_type=1; receiver.base={1}; receiver.scenario=&scenario;
@@ -83,6 +85,13 @@ int main() {
     check(scene.scene_sphere_snapshot_pairs({1},2,out) && out.empty(),"hidden receiver is empty");
     receiver.visible=true; right.collision_data.cull_mask=0;
     check(scene.scene_sphere_snapshot_pairs({1},2,out) && out.size()==1 && out[0].source_key==9,"mask excludes source");
+    right.collision_data.cull_mask=1;
+    storage.entries[2].key=12; storage.entries[2].rev=8; storage.entries[2].origin=42; storage.entries[2].radius=4;
+    check(scene.scene_sphere_snapshot_pairs({1},2,out) && out.size()==2 && out[0].source_key==9 && out[1].source_key==12 && out[1].shape_revision==8 && out[1].transform.origin==42 && out[1].radius==4,"source transform revision update is observed");
+    storage.entries[2].active=false;
+    check(scene.scene_sphere_snapshot_pairs({1},2,out) && out.size()==1 && out[0].source_key==9,"released source is removed");
+    storage.entries[2]={true,3,10,55,5};
+    check(scene.scene_sphere_snapshot_pairs({1},2,out) && out.size()==2 && out[0].source_key==3 && out[0].shape_revision==10 && out[0].transform.origin==55 && out[0].radius==5,"recreated source carries new revision");
     check(!scene.scene_sphere_snapshot_pairs({7},2,out),"invalid receiver rejects");
     return ok?0:1;
 }
