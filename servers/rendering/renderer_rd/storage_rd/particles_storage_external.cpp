@@ -248,6 +248,15 @@ Error ParticlesStorage::_external_typed_context(GDExtensionProductionPhysicalCon
 	return device == RenderingDevice::get_singleton() ? OK : ERR_INVALID_DATA;
 }
 void ParticlesStorage::particles_external_create_typed(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputCreateInputV1 &p_input, GDExtensionOutputCreateResultV1 &r_result) {
+	_external_create_typed(p_context, p_request, p_input, UINT32_MAX, r_result);
+}
+uint64_t ParticlesStorage::particles_external_scene_metadata_bytes() {
+	return sizeof(ExternalOutputOwner);
+}
+void ParticlesStorage::particles_external_create_typed_v2(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputCreateInputV1 &p_input, uint32_t p_metadata_slot, GDExtensionOutputCreateResultV1 &r_result) {
+	_external_create_typed(p_context, p_request, p_input, p_metadata_slot, r_result);
+}
+void ParticlesStorage::_external_create_typed(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputCreateInputV1 &p_input, uint32_t p_metadata_slot, GDExtensionOutputCreateResultV1 &r_result) {
 	r_result = {};
 	r_result.abi = { 1, sizeof(r_result), 0 };
 	const Error context_error = _external_typed_context(p_context, p_request, true);
@@ -264,9 +273,19 @@ void ParticlesStorage::particles_external_create_typed(GDExtensionProductionPhys
 		r_result.status = output_status(ERR_INVALID_PARAMETER, "LIMIT");
 		return;
 	}
+	if (p_input.surface_materials.count > ExternalOutputConfig::MAX_FLATTENED_SURFACES) {
+		r_result.status = output_status(ERR_INVALID_PARAMETER, "LIMIT");
+		return;
+	}
 	AABB bounds, geometry_bounds, query_bounds;
 	if (!decode_bounds(p_input.bounds, bounds, true) || !decode_bounds(p_input.query_bounds, query_bounds, p_input.query_enabled != 0)) {
 		return;
+	}
+	if (p_input.query_enabled) {
+		const AABB cull_bounds = bounds.merge(query_bounds);
+		if (!cull_bounds.is_finite() || !cull_bounds.get_end().is_finite()) {
+			return;
+		}
 	}
 	if (p_input.profile == 1 && (!p_input.surfaces.count || p_input.surfaces.count > ExternalOutputConfig::MAX_MESH_RIDS || !p_input.surface_materials.count)) {
 		return;
@@ -283,7 +302,113 @@ void ParticlesStorage::particles_external_create_typed(GDExtensionProductionPhys
 	if (p_input.profile == 3 && (p_input.capacity || p_input.surfaces.count || p_input.surface_materials.count || p_input.pass_mask || p_input.motion || !p_input.query_enabled)) {
 		return;
 	}
-	r_result.status = create_body();
+	ExternalOutputConfig config;
+	config.profile = ExternalOutputConfig::Profile(p_input.profile);
+	config.capacity = p_input.capacity;
+	config.max_views = p_input.max_views;
+	config.max_inflight = p_input.max_inflight;
+	config.space = ExternalOutputConfig::Space(p_input.space);
+	config.pass_mask = p_input.pass_mask;
+	config.motion = ExternalOutputConfig::Motion(p_input.motion);
+	config.query_enabled = p_input.query_enabled;
+	config.bounds = bounds;
+	config.geometry_bounds = geometry_bounds;
+	config.query_bounds = query_bounds;
+	for (uint32_t i = 0; i < p_input.surfaces.count; ++i) {
+		config.surfaces.push_back(RID::from_uint64(p_input.surfaces.data[i]));
+	}
+	for (uint32_t i = 0; i < p_input.surface_materials.count; ++i) {
+		config.surface_materials.push_back(RID::from_uint64(p_input.surface_materials.data[i]));
+	}
+	const auto copy_tag = [](const GDExtensionOutputTokenV1 &input, PackedByteArray &output) {
+		output.resize(32);
+		memcpy(output.ptrw(), input.bytes, 32);
+	};
+	copy_tag(p_input.producer_tag, config.producer_tag);
+	copy_tag(p_input.device_tag, config.device_tag);
+	copy_tag(p_input.layout_digest, config.layout_digest);
+	copy_tag(p_input.mapping_digest, config.mapping_digest);
+	copy_tag(p_input.numeric_profile_digest, config.numeric_profile_digest);
+	uint32_t surface_count = 0;
+	const Error selection_error = ExternalOutputOwner::validate_native_selection(config, surface_count);
+	if (selection_error != OK) {
+		r_result.status = output_status(selection_error, "native_output_selection");
+		return;
+	}
+	if (p_metadata_slot == UINT32_MAX) {
+		r_result.status = create_body();
+		return;
+	}
+	// Render profiles still require their actual fixed-profile shader readiness
+	// and retained selection directories. A SceneOnly generation issues neither
+	// a raster capability nor a published final particle source.
+	if (config.profile != ExternalOutputConfig::SCENE_ONLY) {
+		r_result.status = output_status(ERR_UNAVAILABLE, "native_profile_preparation_required");
+		return;
+	}
+	if (!next_external_generation) {
+		r_result.status = output_status(ERR_PARAMETER_RANGE_ERROR, "generation_exhausted");
+		return;
+	}
+	auto &registry = GDExtensionDeviceExit::Registry::get_singleton();
+	GDExtensionDeviceExit::ProductionOutputMetadataLease metadata;
+	const Error allocated = registry.production_output_metadata_create(p_context, p_request, p_metadata_slot, *RenderingDevice::get_singleton(), sizeof(ExternalOutputOwner), alignof(ExternalOutputOwner), metadata);
+	if (allocated != OK) {
+		r_result.status = output_status(allocated, "original_output_metadata_required");
+		return;
+	}
+	_external_create_received(p_context, p_request, config, metadata, r_result);
+	if (!metadata.is_empty()) {
+		// Refusal before native ownership committed: the exact resource row is
+		// returned once. A committed owner moved this lease out of the caller.
+		const Error returned = registry.production_output_metadata_return(metadata);
+		CRASH_COND(returned != OK);
+	}
+}
+
+void ParticlesStorage::_external_create_received(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const ExternalOutputConfig &p_config,
+		GDExtensionDeviceExit::ProductionOutputMetadataLease &p_metadata, GDExtensionOutputCreateResultV1 &r_result) {
+	auto &registry = GDExtensionDeviceExit::Registry::get_singleton();
+	auto *rd = RenderingDevice::get_singleton();
+	if (!rd || p_config.profile != ExternalOutputConfig::SCENE_ONLY || !next_external_generation) {
+		r_result.status = output_status(ERR_UNAVAILABLE, "native_generation_unavailable");
+		return;
+	}
+	const Error authenticated = registry.production_output_metadata_validate(p_context, p_request, p_metadata, *rd, sizeof(ExternalOutputOwner), alignof(ExternalOutputOwner));
+	if (authenticated != OK) {
+		r_result.status = output_status(authenticated, "original_output_metadata_required");
+		return;
+	}
+	const uint64_t generation = next_external_generation;
+	next_external_generation = generation == UINT64_MAX ? 0 : generation + 1;
+	auto *owner = new (p_metadata.get_data()) ExternalOutputOwner(p_config, generation, true);
+	owner->device = rd;
+	const RID rid = particles_owner.allocate_rid();
+	if (rid.is_null()) {
+		owner->state = ExternalOutputOwner::GenerationState::RELEASED;
+		owner->~ExternalOutputOwner();
+		r_result.status = output_status(ERR_OUT_OF_MEMORY, "particles_rid_capacity");
+		return;
+	}
+	particles_owner.initialize_rid(rid);
+	auto *particles = particles_owner.get_or_null(rid);
+	particles->external = owner;
+	const Error installed = owner->install_generation_root(p_context, p_request, registry, *rd, rid, &p_metadata);
+	if (installed != OK) {
+		// install_generation_root returns its own unlinked pin on failure.
+		// No source/native append occurred and no public RID escaped.
+		particles->external = nullptr;
+		owner->state = ExternalOutputOwner::GenerationState::RELEASED;
+		owner->~ExternalOutputOwner();
+		particles_owner.free(rid);
+		r_result.status = output_status(installed, "original_generation_root_required");
+		return;
+	}
+	owner->metadata_lease = static_cast<GDExtensionDeviceExit::ProductionOutputMetadataLease &&>(p_metadata);
+	r_result.particles = rid.get_id();
+	r_result.generation = generation;
+	r_result.capabilities = 0; // SceneOnly does not advertise a raster profile.
+	r_result.status = output_status(OK, "");
 }
 void ParticlesStorage::particles_external_seal_typed(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputSealInputV1 &p_input, GDExtensionOutputSealResultV1 &r_result) {
 	r_result = {};

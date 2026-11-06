@@ -153,6 +153,30 @@ public:
 	bool is_empty() const { return registry == nullptr; }
 };
 
+// One actual byte-bounded CPU metadata resource in an original accepted row.
+// This lease proves physical allocation/custody only, never logical U08/source
+// admission. Explicit return after all readers and the linked root are gone.
+class ProductionOutputMetadataLease {
+	friend class Registry;
+	Registry *registry = nullptr;
+	ProductionRequest *request = nullptr;
+	uint64_t request_serial = 0;
+	uint32_t resource_slot = UINT32_MAX;
+	void *data = nullptr;
+	uint64_t bytes = 0;
+
+public:
+	ProductionOutputMetadataLease() = default;
+	ProductionOutputMetadataLease(const ProductionOutputMetadataLease &) = delete;
+	ProductionOutputMetadataLease &operator=(const ProductionOutputMetadataLease &) = delete;
+	ProductionOutputMetadataLease(ProductionOutputMetadataLease &&) noexcept;
+	ProductionOutputMetadataLease &operator=(ProductionOutputMetadataLease &&) noexcept;
+	~ProductionOutputMetadataLease();
+	bool is_empty() const { return registry == nullptr; }
+	void *get_data() const { return data; }
+	uint64_t get_size() const { return bytes; }
+};
+
 #ifdef TESTS_ENABLED
 // Component fixture only, on the genuine original OBSERVE dispatch. The
 // original arena capture pin remains held across this callback boundary.
@@ -195,6 +219,11 @@ class ProductionResourceSlot {
 	GDExtensionStorageRetireReportV1 retire_report = {};
 	uint64_t owned_serial = 0, retire_serial = 0;
 	bool creating = false, retiring = false, returned = false;
+	// Independent CPU allocation, not a GPU storage backing or return fact.
+	ProductionOutputMetadataLease *metadata_consumer = nullptr;
+	void *metadata_data = nullptr;
+	uint64_t metadata_root_serial = 0;
+	bool metadata_created = false, metadata_returned = false;
 	Error handoff_error = OK;
 };
 class ProductionActionCell {

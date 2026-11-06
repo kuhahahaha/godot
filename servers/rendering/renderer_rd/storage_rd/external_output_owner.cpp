@@ -34,6 +34,60 @@
 #include "servers/rendering/renderer_rd/storage_rd/external_output_packet.h"
 
 namespace RendererRD {
+Error ExternalOutputOwner::validate_native_selection(const ExternalOutputConfig &config, uint32_t &surface_count) {
+	if (config.profile == ExternalOutputConfig::SCENE_ONLY) {
+		if (!config.surfaces.is_empty() || !config.surface_materials.is_empty()) {
+			return ERR_INVALID_PARAMETER;
+		}
+		surface_count = 0;
+		return OK;
+	}
+	if (config.surfaces.size() > ExternalOutputConfig::MAX_MESH_RIDS ||
+			config.surface_materials.is_empty() || config.surface_materials.size() > ExternalOutputConfig::MAX_FLATTENED_SURFACES) {
+		return ERR_INVALID_PARAMETER;
+	}
+	auto *meshes = MeshStorage::get_singleton();
+	auto *materials = MaterialStorage::get_singleton();
+	if (!meshes || !materials) {
+		return ERR_UNAVAILABLE;
+	}
+	uint32_t flattened = 0;
+	if (config.profile == ExternalOutputConfig::INSTANCE_192) {
+		if (config.surfaces.is_empty()) {
+			return ERR_INVALID_PARAMETER;
+		}
+		for (RID mesh : config.surfaces) {
+			if (!meshes->owns_mesh(mesh)) {
+				return ERR_INVALID_PARAMETER;
+			}
+			const int count = meshes->mesh_get_surface_count(mesh);
+			if (count <= 0 || uint32_t(count) > ExternalOutputConfig::MAX_FLATTENED_SURFACES - flattened) {
+				return ERR_INVALID_PARAMETER;
+			}
+			flattened += uint32_t(count);
+		}
+		if (flattened != uint32_t(config.surface_materials.size())) {
+			return ERR_INVALID_PARAMETER;
+		}
+	} else if (config.profile == ExternalOutputConfig::INDEXED_144 && config.surfaces.is_empty()) {
+		flattened = config.surface_materials.size();
+	} else {
+		return ERR_INVALID_PARAMETER;
+	}
+	for (RID material : config.surface_materials) {
+		if (!materials->owns_material(material)) {
+			return ERR_INVALID_PARAMETER;
+		}
+		MaterialStorage::MaterialData *data = nullptr;
+		const Error error = materials->material_get_native_preparation_data(material, materials->material_get_generation(material), data);
+		if (error != OK) {
+			return error;
+		}
+	}
+	surface_count = flattened;
+	return OK;
+}
+
 bool ExternalOutputOwner::generation_root_matches(const GDExtensionDeviceExit::ProductionOutputPin &pin) const {
 	return &pin == &generation_pin && !pin.is_empty() && generation_registry == pin.registry &&
 			generation_request.registry_instance && generation_request.handle_serial == pin.request_serial &&
@@ -62,7 +116,8 @@ Error ExternalOutputOwner::generation_returnable(uint32_t &unused, uint32_t &ret
 }
 
 Error ExternalOutputOwner::install_generation_root(GDExtensionDeviceExit::ProductionPhysicalContextRef context,
-		GDExtensionProductionRequestRefV1 request, GDExtensionDeviceExit::Registry &registry, RenderingDevice &rd, RID particles) {
+		GDExtensionProductionRequestRefV1 request, GDExtensionDeviceExit::Registry &registry, RenderingDevice &rd, RID particles,
+		GDExtensionDeviceExit::ProductionOutputMetadataLease *metadata) {
 	if (!generation_pin.is_empty() || generation_registry || generation_request.registry_instance || generation_request.handle_serial || generation_root_serial) {
 		return ERR_ALREADY_IN_USE;
 	}
@@ -78,7 +133,12 @@ Error ExternalOutputOwner::install_generation_root(GDExtensionDeviceExit::Produc
 	generation_registry = &registry;
 	generation_request = request;
 	generation_root_serial = generation_pin.serial;
-	error = registry.production_output_owner_bind(generation_pin, rd, particles, generation, UINT32_MAX, 0, GDExtensionDeviceExit::ProductionOutputOwnerKind::GENERATION);
+	if (metadata) {
+		error = registry.production_output_metadata_bind(*metadata, generation_pin);
+	}
+	if (error == OK) {
+		error = registry.production_output_owner_bind(generation_pin, rd, particles, generation, UINT32_MAX, 0, GDExtensionDeviceExit::ProductionOutputOwnerKind::GENERATION);
+	}
 	if (error != OK) {
 		// No native effect and no linked root was installed. Return only this
 		// unused custody row, keeping its consumed serial non-reusable in Core.
@@ -98,7 +158,11 @@ Error ExternalOutputOwner::select_slot(const ExternalOutputRequest &request, uin
 	if (request.common.generation != generation) {
 		return ERR_INVALID_PARAMETER;
 	}
-	if (request.layout_digest != config.layout_digest || request.mapping_digest != config.mapping_digest || (request.pass_mask & ~config.pass_mask)) {
+	const bool digests_match = config_tags_inline ?
+			(request.layout_digest.size() == 32 && request.mapping_digest.size() == 32 &&
+					memcmp(request.layout_digest.ptr(), frozen_config_tags[2], 32) == 0 && memcmp(request.mapping_digest.ptr(), frozen_config_tags[3], 32) == 0) :
+			(request.layout_digest == config.layout_digest && request.mapping_digest == config.mapping_digest);
+	if (!digests_match || (request.pass_mask & ~config.pass_mask)) {
 		return ERR_INVALID_DATA;
 	}
 	if (!next_lease_serial) {

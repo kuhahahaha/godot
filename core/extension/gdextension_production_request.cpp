@@ -551,13 +551,17 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 	}
 	for (uint32_t i = 0; i < resource_count; ++i) {
 		const auto &r = resources[i];
-		if (r.resource_kind < GDEXTENSION_PRODUCTION_STORAGE_V1 || r.resource_kind > GDEXTENSION_PRODUCTION_SET_V1 || r.ownership < GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 || r.ownership > GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1 || !r.original_generation || (r.resource_kind == GDEXTENSION_PRODUCTION_UNIT_V1 && r.ownership != GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1) || (r.resource_kind == GDEXTENSION_PRODUCTION_STORAGE_V1 && !r.physical_bytes)) {
+		if (r.resource_kind == GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1 &&
+				(r.ownership != GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 || r.required_usage || !r.physical_bytes || r.physical_bytes > UINT32_MAX)) {
+			return ERR_INVALID_DATA;
+		}
+		if (((r.resource_kind < GDEXTENSION_PRODUCTION_STORAGE_V1 || r.resource_kind > GDEXTENSION_PRODUCTION_SET_V1) && r.resource_kind != GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1) || r.ownership < GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 || r.ownership > GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1 || !r.original_generation || (r.resource_kind == GDEXTENSION_PRODUCTION_UNIT_V1 && r.ownership != GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1) || (r.resource_kind == GDEXTENSION_PRODUCTION_STORAGE_V1 && !r.physical_bytes)) {
 			return ERR_INVALID_DATA;
 		}
 	}
 	for (uint32_t i = 0; i < use_count; ++i) {
 		const auto &u = uses[i];
-		if (u.resource_slot >= resource_count || u.access < GDEXTENSION_PRODUCTION_READ_V1 || u.access > GDEXTENSION_PRODUCTION_ATOMIC_V1 || (u.required_usage & ~resources[u.resource_slot].required_usage) || !range(u.byte_offset, u.byte_size, resources[u.resource_slot].physical_bytes)) {
+		if (u.resource_slot >= resource_count || resources[u.resource_slot].resource_kind == GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1 || u.access < GDEXTENSION_PRODUCTION_READ_V1 || u.access > GDEXTENSION_PRODUCTION_ATOMIC_V1 || (u.required_usage & ~resources[u.resource_slot].required_usage) || !range(u.byte_offset, u.byte_size, resources[u.resource_slot].physical_bytes)) {
 			return ERR_INVALID_DATA;
 		}
 	}
@@ -571,6 +575,9 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 	}
 	for (uint32_t i = 0; i < action_count; ++i) {
 		const auto &v = actions[i];
+		if (v.physical_unit < resource_count && resources[v.physical_unit].resource_kind == GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1) {
+			return ERR_INVALID_DATA;
+		}
 		if (v.action_ordinal != i || v.source_recipe_reserved || v.canonical_suboperation < op.canonical_begin || v.canonical_suboperation >= op.canonical_end || (i && v.canonical_suboperation < actions[i - 1].canonical_suboperation) || (contract_version == 1 && v.canonical_suboperation != op.canonical_begin + i) || v.action_kind < GDEXTENSION_PRODUCTION_DISPATCH_V1 || v.action_kind > GDEXTENSION_PRODUCTION_READBACK_V1 || v.list_boundary > GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1 || v.first_use > use_count || v.use_count > use_count - v.first_use) {
 			return ERR_INVALID_DATA;
 		}
@@ -853,7 +860,7 @@ Error Registry::production_freeze_locked(ProductionRequest &r) {
 		}
 	}
 	for (uint32_t i = 0; i < r.resource_count; ++i) {
-		if (!r.resources[i].imported) {
+		if (!r.resources[i].imported && r.resources[i].declaration.resource_kind != GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1) {
 			return ERR_UNCONFIGURED;
 		}
 	}
@@ -1209,6 +1216,7 @@ Error Registry::production_report_contents_locked(const ProductionRequest &r, GD
 	report.fact_count = r.graph_count + r.native_count;
 	for (uint32_t i = 0; i < r.resource_count; ++i) {
 		report.possible_obligations += r.resources[i].transfer_pending;
+		report.physical_returns_pending += r.resources[i].metadata_data != nullptr;
 	}
 	Error cause = OK;
 	for (uint32_t i = 0; i < r.graph_count; ++i) {
@@ -2058,8 +2066,16 @@ Error Registry::production_output_generation_return(ProductionOutputPin &pin, Re
 	if (projected != OK) {
 		return projected;
 	}
+	// The placement owner remains alive until the released particles RID is
+	// actually freed. Only this root's own CPU allocation may outlive its pin;
+	// the complete request report and reclaim gate still include that resource.
+	uint32_t owner_metadata_pending = 0;
+	for (uint32_t i = 0; i < request.resource_count; ++i) {
+		const auto &resource = request.resources[i];
+		owner_metadata_pending += resource.metadata_data && resource.metadata_root_serial == pin.serial;
+	}
 	if (request.source_device_lost || (request.compute_list_open || request.draw_list_open) || (!request.cancelled && request.next_action != request.action_count) ||
-			terminal.root_source.possible_obligations || terminal.root_source.physical_returns_pending ||
+			terminal.root_source.possible_obligations || terminal.root_source.physical_returns_pending != owner_metadata_pending ||
 			terminal.root_source.known_obligations != terminal.root_source.complete_obligations) {
 		return ERR_BUSY;
 	}
@@ -2225,7 +2241,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 		}
 	}
 	for (uint32_t i = 0; i < r->resource_count; ++i) {
-		if (r->resources[i].transfer_pending) {
+		if (r->resources[i].transfer_pending || r->resources[i].metadata_data || r->resources[i].metadata_consumer) {
 			return result(ERR_BUSY, 16);
 		}
 	}

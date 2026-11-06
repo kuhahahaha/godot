@@ -6941,6 +6941,10 @@
                 {
                     "name": "GDEXTENSION_PRODUCTION_RASTER_PHYSICAL_V1",
                     "value": 4
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1",
+                    "value": 5
                 }
             ]
         },
@@ -9142,6 +9146,28 @@
                 {
                     "name": "numeric_profile_digest",
                     "type": "GDExtensionOutputTokenV1"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputCreateInputV2",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "config",
+                    "type": "GDExtensionOutputCreateInputV1"
+                },
+                {
+                    "name": "metadata_resource_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
                 }
             ]
         },
@@ -20786,6 +20812,46 @@
                     "type": "GDExtensionOutputCreateResultV1*",
                     "description": [
                         "Aligned writable result, disjoint from input and all input spans. If either DTO pointer or a RID span is null (when nonempty), misaligned, overflowing or overlaps the output, the result is left untouched. Other checked contract failures write a static CONTRACT status."
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "device_session_output_create_v2",
+            "since": "4.7",
+            "description": [
+                "Synchronous native ExternalOutput creation using an exact original accepted OUTPUT_METADATA resource row. The outer ABI version is 2 and struct_size is sizeof(GDExtensionOutputCreateInputV2); reserved fields are zero. The nested config retains its unchanged V1 ABI and layout.",
+                "The metadata resource slot belongs to the same original request, has CREATED_BY_OWNER ownership and sufficient declared physical_bytes, and is consumed once. Native allocation and generation custody do not attest Runtime logical source/account admission or a U08 payment.",
+                "All pointer extents must be live and accessible for this call. Nonempty nested RID spans must be aligned and pairwise disjoint from the entire V2 input and output. No input pointer is retained. Detail strings have static engine lifetime.",
+                "Currently only SceneOnly creation is supported; render profiles retain their native preparation refusal. A successful generation retains its metadata resource until actual particles_free after Released; generation terminal alone does not return that resource. V1 creation retains its original admission refusal."
+            ],
+            "arguments": [
+                {
+                    "name": "physical_context",
+                    "type": "GDExtensionProductionPhysicalContextRefV1",
+                    "description": [
+                        "Actual synchronous protected RECORD callback context; expires when that callback returns."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "The original accepted request owning the metadata resource row and generation custody."
+                    ]
+                },
+                {
+                    "name": "input",
+                    "type": "const GDExtensionOutputCreateInputV2*",
+                    "description": [
+                        "Borrowed nested configuration and original metadata resource slot. UINT32_MAX is not a valid slot."
+                    ]
+                },
+                {
+                    "name": "out_result",
+                    "type": "GDExtensionOutputCreateResultV1*",
+                    "description": [
+                        "Unchanged V1 result. If either DTO extent or a nonempty RID span is null, misaligned, overflowing or overlaps the output, the result is untouched. Other checked contract failures write CONTRACT with no new RID or generation."
                     ]
                 }
             ]

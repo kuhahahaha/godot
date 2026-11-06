@@ -248,6 +248,8 @@ static_assert(std::is_same_v<decltype(&device_session_production_release_v2), GD
 void register_production_interfaces() {
 	static_assert(std::is_same_v<decltype(&device_session_output_create_v1), GDExtensionInterfaceDeviceSessionOutputCreateV1>);
 	GDExtension::register_interface_function("device_session_output_create_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_output_create_v1));
+	static_assert(std::is_same_v<decltype(&device_session_output_create_v2), GDExtensionInterfaceDeviceSessionOutputCreateV2>);
+	GDExtension::register_interface_function("device_session_output_create_v2", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_output_create_v2));
 	static_assert(std::is_same_v<decltype(&device_session_output_seal_v1), GDExtensionInterfaceDeviceSessionOutputSealV1>);
 	GDExtension::register_interface_function("device_session_output_seal_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_output_seal_v1));
 	static_assert(std::is_same_v<decltype(&device_session_output_cancel_v1), GDExtensionInterfaceDeviceSessionOutputCancelV1>);

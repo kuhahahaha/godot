@@ -1,0 +1,11 @@
+# Native output metadata and SceneOnly generation receipt
+
+The original accepted ProductionResourceSlot now supports a distinct OUTPUT_METADATA CPU allocation. The move-only lease preserves that request and its attachment until the actual block is freed. GPU import, use, action, binding and readback paths retain exact resource-kind checks.
+
+CreateV2 preserves the V1 config/result ABI and adds an original metadata resource selector. The SceneOnly receiver places its owner in that real block, allocates a native particles RID and installs its original generation pin. It advertises no raster capability. On failure after allocation, it destroys its unpublished owner/RID and actually returns the block; pin-capacity exhaustion verifies this path.
+
+Generation terminal checks allow only metadata bound to that exact root to remain alive until actual particles_free. The complete request report still counts that pending allocation. A second unbound allocation blocks terminal; request/attachment reclamation remains blocked after root return until actual particles_free moves the lease out, destroys its placement owner, and returns the allocation. Allocation/return advance report revision; failures do not. A bound live unlinked pin also blocks return.
+
+Root built the editor and ran **10 focused cases / 1443 assertions, exit 0**, and the full relevant combination **136 cases / 73241 assertions, exit 0**, without exclusions. Combination output has exactly three pre-existing pipeline-failure diagnostics and three pre-existing foreign-camera-token diagnostics. Raw output, commands, source and binary identities are in RECEIPT.json and the adjacent files. Independent Sol review checked Core isolation/reclaim/move, wire and receiver rollback; Astra handled native receiver, V2 wire and the repeated V2 fixture-tail issue. Final build and tests were run by root.
+
+This is controlled CPU/native custody evidence, not actual GPU draw or logical source/account admission. R01 account/HostOutputCustody join, RID pool accounting, draw-profile preparation, actual acquire/camera transport and renderer consumption remain open in the long goal. Existing fixed-core-24c editor is preserved separately. Earlier invalid fixture capacities, wrong Thread::start interpretation and V1-vs-V2 drain calls were corrected; their failures are not target RED evidence.

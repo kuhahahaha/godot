@@ -47,7 +47,10 @@
 #include "tests/servers/rendering/transfer_test_driver_base.h"
 #include "tests/test_macros.h"
 
+#include <cstddef>
 #include <cstring>
+#include <type_traits>
+#include <utility>
 #ifdef THREADS_ENABLED
 #include <chrono>
 #include <condition_variable>
@@ -4654,6 +4657,841 @@ struct Access {
 		CHECK((value.flags & present) == present);
 		CHECK((value.flags & absent) == 0);
 	}
+	struct OutputMetadataProbe {
+		SingletonEnrollment *fixture = nullptr;
+		GDExtensionDeviceExit::ProductionOutputMetadataLease first, second;
+		GDExtensionDeviceExit::ProductionPhysicalContextRef expired{};
+		uint32_t calls = 0, foreign_calls = 0;
+		bool retry_returned = false;
+		~OutputMetadataProbe() {
+			// Failure cleanup returns only actual factory leases on this original
+			// execution thread. It never manufactures a returned row or context.
+			if (!second.is_empty()) {
+				CHECK(fixture->registry.production_output_metadata_return(second) == OK);
+			}
+			if (!first.is_empty()) {
+				CHECK(fixture->registry.production_output_metadata_return(first) == OK);
+			}
+		}
+		static void receive(void *opaque, GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionOperationV1 *) {
+			using namespace GDExtensionDeviceExit;
+			auto &probe = *static_cast<OutputMetadataProbe *>(opaque);
+			auto &fixture = *probe.fixture;
+			auto &registry = fixture.registry;
+			auto &request = *fixture.request;
+			const GDExtensionProductionRequestRefV1 original = { fixture.instance, request.serial };
+			ProductionOutputMetadataLease rejected;
+			if (ref.handle_serial != original.handle_serial) {
+				++probe.foreign_calls;
+				CHECK(registry.production_output_metadata_create(context, original, 0, fixture.rd, 64, 8, rejected) == ERR_UNAUTHORIZED);
+				CHECK(rejected.is_empty());
+				CHECK(registry.production_output_metadata_validate(context, ref, probe.first, fixture.rd, 64, 8) == ERR_INVALID_DATA);
+				CHECK_FALSE(probe.first.is_empty());
+				return;
+			}
+			++probe.calls;
+			probe.expired = context;
+			CHECK(request.frozen);
+			CHECK(request.control.state == ProductionControlState::EXECUTING);
+			CHECK(request.control.input.kind == ProductionControlKind::RECORD);
+			CHECK(request.action_count == 0);
+			CHECK(request.graph_count == 0);
+			CHECK(request.native_count == 0);
+			if (probe.retry_returned) {
+				CHECK(registry.production_output_metadata_create(context, ref, 1, fixture.rd, 1, 8, rejected) == ERR_ALREADY_IN_USE);
+				CHECK(rejected.is_empty());
+				CHECK_FALSE(probe.first.is_empty());
+				return;
+			}
+			auto refuse = [&](ProductionPhysicalContextRef target_context, GDExtensionProductionRequestRefV1 target_request, uint32_t slot, uint64_t bytes, uint32_t alignment, Error expected) {
+				const uint64_t revision = request.revision;
+				CHECK(registry.production_output_metadata_create(target_context, target_request, slot, fixture.rd, bytes, alignment, rejected) == expected);
+				CHECK(request.revision == revision);
+				CHECK(rejected.is_empty());
+				CHECK(rejected.get_data() == nullptr);
+				CHECK(rejected.get_size() == 0);
+			};
+			refuse(context, ref, 0, 0, 8, ERR_INVALID_PARAMETER);
+			refuse(context, ref, 0, 64, 0, ERR_INVALID_PARAMETER);
+			refuse(context, ref, 0, 64, 3, ERR_INVALID_PARAMETER);
+			refuse(context, ref, 0, 64, 2 * alignof(std::max_align_t), ERR_INVALID_PARAMETER);
+			auto wrong_context = context;
+			++wrong_context.frame_serial;
+			refuse(wrong_context, ref, 0, 64, 8, ERR_UNAUTHORIZED);
+			refuse(context, { ref.registry_instance, UINT64_MAX }, 0, 64, 8, ERR_UNAUTHORIZED);
+			refuse(context, { UINT64_MAX, ref.handle_serial }, 0, 64, 8, ERR_UNAUTHORIZED);
+			refuse(context, ref, 2, 64, 8, ERR_INVALID_PARAMETER);
+			refuse(context, ref, 0, 129, 8, ERR_PARAMETER_RANGE_ERROR);
+			{
+				RenderingDevice other_device;
+				CHECK(registry.production_output_metadata_create(context, ref, 0, other_device, 64, 8, rejected) == ERR_UNAUTHORIZED);
+				CHECK(rejected.is_empty());
+			}
+			const uint64_t first_revision = request.revision;
+			REQUIRE(registry.production_output_metadata_create(context, ref, 0, fixture.rd, 64, 8, probe.first) == OK);
+			CHECK(request.revision == first_revision + 1);
+			CHECK_FALSE(probe.first.is_empty());
+			CHECK(probe.first.get_size() == 128); // Full declared extent, not the minimum.
+			REQUIRE(probe.first.get_data() != nullptr);
+			CHECK(reinterpret_cast<uintptr_t>(probe.first.get_data()) % 8 == 0);
+			CHECK(registry.production_output_metadata_validate(context, ref, probe.first, fixture.rd, 128, 8) == OK);
+			CHECK(registry.production_output_metadata_validate(context, ref, probe.first, fixture.rd, 129, 8) == ERR_PARAMETER_RANGE_ERROR);
+			CHECK(registry.production_output_metadata_validate(context, ref, rejected, fixture.rd, 64, 8) == ERR_INVALID_DATA);
+			auto *bytes = static_cast<uint8_t *>(probe.first.get_data());
+			for (uint32_t i = 0; i < 128; ++i) {
+				bytes[i] = uint8_t(i ^ 0x5a);
+			}
+			void *const original_data = probe.first.get_data();
+			CHECK(registry.production_output_metadata_create({}, {}, UINT32_MAX, fixture.rd, 0, 0, probe.first) == ERR_ALREADY_IN_USE);
+			CHECK(probe.first.get_data() == original_data);
+			CHECK(probe.first.get_size() == 128);
+			refuse(context, ref, 0, 64, 8, ERR_ALREADY_IN_USE);
+			ProductionOutputMetadataLease moved(std::move(probe.first));
+			CHECK(probe.first.is_empty());
+			CHECK(probe.first.get_data() == nullptr);
+			CHECK(probe.first.get_size() == 0);
+			CHECK(moved.get_data() == original_data);
+			CHECK(registry.production_output_metadata_validate(context, ref, moved, fixture.rd, 128, 8) == OK);
+			CHECK(registry.production_output_metadata_validate(context, ref, probe.first, fixture.rd, 64, 8) == ERR_INVALID_DATA);
+			probe.first = std::move(moved);
+			CHECK(moved.is_empty());
+			CHECK(probe.first.get_data() == original_data);
+			for (uint32_t i = 0; i < 128; ++i) {
+				CHECK(static_cast<const uint8_t *>(probe.first.get_data())[i] == uint8_t(i ^ 0x5a));
+			}
+			const uint64_t second_revision = request.revision;
+			REQUIRE(registry.production_output_metadata_create(context, ref, 1, fixture.rd, 48, 8, probe.second) == OK);
+			CHECK(request.revision == second_revision + 1);
+			CHECK(probe.second.get_size() == 48);
+			REQUIRE(probe.second.get_data() != nullptr);
+			CHECK(probe.second.get_data() != probe.first.get_data());
+			std::memset(probe.second.get_data(), 0xa5, size_t(probe.second.get_size()));
+			GDExtensionProductionReportV2 report{};
+			REQUIRE(registry.production_report_contents_locked(request, report) == OK);
+			CHECK(report.physical_returns_pending == 2);
+			CHECK(report.known_obligations == 0);
+			CHECK(report.possible_obligations == 0);
+			CHECK(report.complete_obligations == 0);
+			CHECK(request.graph_count == 0);
+			CHECK(request.native_count == 0);
+		}
+	};
+	static void output_metadata_factory() {
+		using namespace GDExtensionDeviceExit;
+		static_assert(!std::is_copy_constructible_v<ProductionOutputMetadataLease>);
+		static_assert(!std::is_copy_assignable_v<ProductionOutputMetadataLease>);
+		static_assert(std::is_move_constructible_v<ProductionOutputMetadataLease>);
+		static_assert(std::is_move_assignable_v<ProductionOutputMetadataLease>);
+		auto *server = ordinal_server();
+		if (!server) {
+			return;
+		}
+		const auto consume = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRecordConsumeV2>("device_session_production_record_consume_v2");
+		const auto reserve = ordinal_port<GDExtensionInterfaceDeviceSessionProductionReserveV2>("device_session_production_reserve_v2");
+		const auto release = ordinal_port<GDExtensionInterfaceDeviceSessionProductionReleaseV2>("device_session_production_release_v2");
+		REQUIRE(consume != nullptr);
+		REQUIRE(reserve != nullptr);
+		REQUIRE(release != nullptr);
+		OrdinalPlan plan;
+		plan.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, 2, 2, 0, 0, 0, 2, 0, 0 };
+		plan.resources[0] = { GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1, 0, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 128, 0 };
+		plan.resources[1] = { GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1, 0, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 48, 0 };
+		plan.action_count = plan.use_count = plan.readback_count = 0;
+		plan.resource_count = 2;
+		plan.attachment_requests = 2;
+		SingletonEnrollment fixture;
+		fixture.public_port = true;
+		OutputMetadataProbe probe;
+		probe.fixture = &fixture;
+		REQUIRE(ordinal_initialize(fixture, server, plan, &OutputMetadataProbe::receive, &probe) == OK);
+		auto &request = *fixture.request;
+		const GDExtensionProductionRequestRefV1 ref = { fixture.instance, request.serial };
+		ProductionOutputMetadataLease expired;
+		CHECK(fixture.registry.production_output_metadata_create({}, ref, 0, fixture.rd, 64, 8, expired) == ERR_UNAUTHORIZED);
+		CHECK(expired.is_empty());
+		auto record = [&]() {
+			uint64_t control = 0;
+			REQUIRE(fixture.port.record_schedule(ref, &control) == OK);
+			server->sync();
+			GDExtensionProductionRecordReportV2 result{};
+			REQUIRE(consume(ref, control, &result).native_error == OK);
+			CHECK(result.report.action_count == 0);
+			CHECK(result.report.physical_returns_pending == (probe.retry_returned ? 1 : 2));
+		};
+		record();
+		REQUIRE(probe.calls == 1);
+#ifdef THREADS_ENABLED
+		struct ForeignMetadataReturn {
+			Registry *registry = nullptr;
+			ProductionOutputMetadataLease *lease = nullptr;
+			Error error = OK;
+			static void run(void *opaque) {
+				auto &test = *static_cast<ForeignMetadataReturn *>(opaque);
+				test.error = test.registry->production_output_metadata_return(*test.lease);
+			}
+		} foreign_return;
+		foreign_return.registry = &fixture.registry;
+		foreign_return.lease = &probe.first;
+		Thread foreign_thread;
+		foreign_thread.start(&ForeignMetadataReturn::run, &foreign_return);
+		REQUIRE(foreign_thread.is_started());
+		foreign_thread.wait_to_finish();
+		CHECK(foreign_return.error == ERR_UNAUTHORIZED);
+		CHECK_FALSE(probe.first.is_empty());
+#endif
+		CHECK(fixture.registry.production_output_metadata_create(probe.expired, ref, 0, fixture.rd, 64, 8, expired) == ERR_UNAUTHORIZED);
+		CHECK(expired.is_empty());
+		// A second accepted request has a genuine context in this same attachment,
+		// but cannot create against the original request's metadata declaration.
+		GDExtensionProductionCapacityV1 empty = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+		auto other_operation = plan.operation;
+		++other_operation.owner_request_nonce;
+		GDExtensionProductionRequestRefV1 other_ref{};
+		REQUIRE(reserve(fixture.attachment, &other_operation, &empty, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0, &other_ref).native_error == OK);
+		Request *other = nullptr;
+		{
+			MutexLock lock(fixture.registry.mutex);
+			RenderingDevice *same_device = nullptr;
+			REQUIRE(fixture.registry.production_request_locked(other_ref, false, other, same_device) == OK);
+			REQUIRE(other != &request);
+			REQUIRE(other->attachment == request.attachment);
+			REQUIRE(same_device == &fixture.rd);
+		}
+		uint64_t other_control = 0;
+		REQUIRE(fixture.port.record_schedule(other_ref, &other_control) == OK);
+		server->sync();
+		GDExtensionProductionRecordReportV2 other_record{};
+		REQUIRE(consume(other_ref, other_control, &other_record).native_error == OK);
+		CHECK(probe.foreign_calls == 1);
+		const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+		GDExtensionProductionServiceBudgetV1 remaining{};
+		GDExtensionProductionReportV2 released{};
+		for (uint32_t turn = 0; turn < 8 && other->serial; ++turn) {
+			const Error error = Error(release(other_ref, &budget, &remaining, &released).native_error);
+			CHECK((error == OK || error == ERR_BUSY));
+			if (other->serial) {
+				server->sync();
+			}
+		}
+		REQUIRE(other->serial == 0);
+		CHECK(other->control.state == ProductionControlState::OWNER_CONSUMED);
+		CHECK(request.attachment->children == 1);
+		CHECK_FALSE(probe.first.is_empty());
+		for (uint32_t i = 0; i < 48; ++i) {
+			CHECK(static_cast<const uint8_t *>(probe.second.get_data())[i] == 0xa5);
+		}
+		const uint64_t second_return_revision = request.revision;
+		REQUIRE(fixture.registry.production_output_metadata_return(probe.second) == OK);
+		CHECK(request.revision == second_return_revision + 1);
+		CHECK(probe.second.is_empty());
+		CHECK(probe.second.get_data() == nullptr);
+		CHECK(probe.second.get_size() == 0);
+		CHECK(fixture.registry.production_output_metadata_return(probe.second) == ERR_DOES_NOT_EXIST);
+		CHECK(request.revision == second_return_revision + 1);
+		probe.retry_returned = true;
+		record();
+		CHECK(probe.calls == 2);
+		CHECK_FALSE(probe.first.is_empty());
+		// Original release/close cannot drop the remaining real allocation.
+		CHECK(release(ref, &budget, &remaining, &released).native_error == ERR_BUSY);
+		server->sync();
+		CHECK(request.serial == ref.handle_serial);
+		CHECK_FALSE(probe.first.is_empty());
+		CHECK(fixture.registry.production_close(fixture.attachment).native_error == ERR_BUSY);
+		CHECK(request.serial == ref.handle_serial);
+		CHECK_FALSE(probe.first.is_empty());
+		const uint64_t first_return_revision = request.revision;
+		REQUIRE(fixture.registry.production_output_metadata_return(probe.first) == OK);
+		CHECK(request.revision == first_return_revision + 1);
+		CHECK(probe.first.is_empty());
+		CHECK(fixture.registry.production_output_metadata_return(probe.first) == ERR_DOES_NOT_EXIST);
+		CHECK(request.revision == first_return_revision + 1);
+		for (uint32_t turn = 0; turn < 8 && request.serial; ++turn) {
+			const Error error = Error(release(ref, &budget, &remaining, &released).native_error);
+			CHECK((error == OK || error == ERR_BUSY));
+			if (request.serial) {
+				server->sync();
+			}
+		}
+		CHECK(request.serial == 0);
+		fixture.cleanup_owner();
+		CHECK(fixture.owner_cleaned);
+	}
+	struct MetadataBoundPinProbe {
+		SingletonEnrollment *fixture = nullptr;
+		GDExtensionDeviceExit::ProductionOutputMetadataLease metadata;
+		GDExtensionDeviceExit::ProductionOutputPin pin;
+		uint32_t calls = 0;
+		~MetadataBoundPinProbe() {
+			if (!pin.is_empty()) {
+				CHECK(fixture->registry.production_output_unpin(pin) == OK);
+			}
+			if (!metadata.is_empty()) {
+				CHECK(fixture->registry.production_output_metadata_return(metadata) == OK);
+			}
+		}
+		static void receive(void *opaque, GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionOperationV1 *) {
+			using namespace GDExtensionDeviceExit;
+			auto &probe = *static_cast<MetadataBoundPinProbe *>(opaque);
+			auto &fixture = *probe.fixture;
+			auto &request = *fixture.request;
+			++probe.calls;
+			const uint64_t before_create = request.revision;
+			REQUIRE(fixture.registry.production_output_metadata_create(context, ref, 0, fixture.rd, 32, 8, probe.metadata) == OK);
+			CHECK(request.revision == before_create + 1);
+			REQUIRE(fixture.registry.production_output_pin(context, ref, fixture.rd, probe.pin) == OK);
+			REQUIRE(fixture.registry.production_output_metadata_bind(probe.metadata, probe.pin) == OK);
+			// A real live pin protects its bound allocation even before native
+			// owner installation links any generation locator into this request.
+			CHECK(request.output_owner_head == UINT32_MAX);
+			CHECK(request.output_owner_cursor == UINT32_MAX);
+			CHECK(fixture.registry.production_output_pin_matches(probe.pin, ref, fixture.rd));
+			void *const data = probe.metadata.get_data();
+			const uint64_t before_return = request.revision;
+			CHECK(fixture.registry.production_output_metadata_return(probe.metadata) == ERR_BUSY);
+			CHECK(request.revision == before_return);
+			CHECK(probe.metadata.get_data() == data);
+			CHECK(probe.metadata.get_size() == 32);
+			GDExtensionProductionReportV2 report{};
+			REQUIRE(fixture.registry.production_report_contents_locked(request, report) == OK);
+			CHECK(report.physical_returns_pending == 1);
+			REQUIRE(fixture.registry.production_output_unpin(probe.pin) == OK);
+			CHECK(probe.pin.is_empty());
+			const uint64_t before_actual_return = request.revision;
+			REQUIRE(fixture.registry.production_output_metadata_return(probe.metadata) == OK);
+			CHECK(request.revision == before_actual_return + 1);
+			CHECK(probe.metadata.is_empty());
+			CHECK(fixture.registry.production_output_metadata_return(probe.metadata) == ERR_DOES_NOT_EXIST);
+			CHECK(request.revision == before_actual_return + 1);
+			ProductionOutputMetadataLease rejected;
+			CHECK(fixture.registry.production_output_metadata_create(context, ref, 0, fixture.rd, 32, 8, rejected) == ERR_ALREADY_IN_USE);
+			CHECK(rejected.is_empty());
+			CHECK(request.revision == before_actual_return + 1);
+			REQUIRE(fixture.registry.production_report_contents_locked(request, report) == OK);
+			CHECK(report.physical_returns_pending == 0);
+		}
+	};
+	static void output_metadata_bound_pin() {
+		using namespace GDExtensionDeviceExit;
+		auto *server = ordinal_server();
+		if (!server) {
+			return;
+		}
+		const auto consume = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRecordConsumeV2>("device_session_production_record_consume_v2");
+		const auto release = ordinal_port<GDExtensionInterfaceDeviceSessionProductionReleaseV2>("device_session_production_release_v2");
+		REQUIRE(consume != nullptr);
+		REQUIRE(release != nullptr);
+		OrdinalPlan plan;
+		plan.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, 1, 1, 0, 0, 0, 1, 0, 0 };
+		plan.resources[0] = { GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1, 0, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 32, 0 };
+		plan.action_count = plan.use_count = plan.readback_count = 0;
+		plan.resource_count = 1;
+		SingletonEnrollment fixture;
+		fixture.public_port = true;
+		MetadataBoundPinProbe probe;
+		probe.fixture = &fixture;
+		REQUIRE(ordinal_initialize(fixture, server, plan, &MetadataBoundPinProbe::receive, &probe) == OK);
+		auto &request = *fixture.request;
+		const GDExtensionProductionRequestRefV1 ref = { fixture.instance, request.serial };
+		uint64_t control = 0;
+		REQUIRE(fixture.port.record_schedule(ref, &control) == OK);
+		server->sync();
+		GDExtensionProductionRecordReportV2 recorded{};
+		REQUIRE(consume(ref, control, &recorded).native_error == OK);
+		CHECK(probe.calls == 1);
+		CHECK(recorded.report.physical_returns_pending == 0);
+		const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+		for (uint32_t turn = 0; turn < 8 && request.serial; ++turn) {
+			GDExtensionProductionServiceBudgetV1 remaining{};
+			GDExtensionProductionReportV2 report{};
+			const Error error = Error(release(ref, &budget, &remaining, &report).native_error);
+			CHECK((error == OK || error == ERR_BUSY));
+			if (request.serial) {
+				server->sync();
+			}
+		}
+		CHECK(request.serial == 0);
+		fixture.cleanup_owner();
+		CHECK(fixture.owner_cleaned);
+	}
+	struct SceneMetadataProbe {
+		SingletonEnrollment *fixture = nullptr;
+		RendererRD::ExternalLinkedOwnerTest *native = nullptr;
+		GDExtensionInterfaceDeviceSessionOutputCreateV2 create = nullptr;
+		GDExtensionInterfaceDeviceSessionOutputWithdrawV1 withdraw = nullptr;
+		GDExtensionOutputCreateResultV1 created{};
+		GDExtensionDeviceExit::ProductionOutputMetadataLease unrelated;
+		bool extra_metadata = false;
+		uint32_t calls = 0;
+		~SceneMetadataProbe() {
+			if (!unrelated.is_empty()) {
+				CHECK(fixture->registry.production_output_metadata_return(unrelated) == OK);
+			}
+		}
+		static void receive(void *opaque, GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionOperationV1 *) {
+			using namespace GDExtensionDeviceExit;
+			auto &probe = *static_cast<SceneMetadataProbe *>(opaque);
+			auto &fixture = *probe.fixture;
+			++probe.calls;
+			GDExtensionOutputCreateInputV2 input{};
+			input.abi = production_dto_abi<GDExtensionOutputCreateInputV2>();
+			input.abi.abi_version = 2;
+			input.config.abi = production_dto_abi<GDExtensionOutputCreateInputV1>();
+			input.config.profile = 3;
+			input.config.max_views = input.config.max_inflight = 1;
+			input.config.space = input.config.query_enabled = 1;
+			for (uint32_t axis = 0; axis < 3; ++axis) {
+				input.config.bounds.size[axis] = input.config.query_bounds.size[axis] = 1;
+			}
+			input.metadata_resource_slot = 0;
+			probe.create(context, ref, &input, &probe.created);
+			REQUIRE(probe.created.status.error == OK);
+			CHECK(probe.created.abi.abi_version == 1);
+			CHECK(probe.created.abi.struct_size == sizeof(probe.created));
+			REQUIRE(probe.created.particles != 0);
+			REQUIRE(probe.created.generation != 0);
+			CHECK(probe.created.capabilities == 0);
+			REQUIRE(probe.native->adopt_created(RID::from_uint64(probe.created.particles)));
+			CHECK(probe.native->exists());
+			CHECK_FALSE(probe.native->released());
+			CHECK_FALSE(probe.native->generation_pin().is_empty());
+			CHECK(fixture.registry.production_output_pin_matches(probe.native->generation_pin(), ref, fixture.rd));
+			CHECK(fixture.request->output_owner_head != UINT32_MAX);
+			if (probe.extra_metadata) {
+				const uint64_t revision = fixture.request->revision;
+				REQUIRE(fixture.registry.production_output_metadata_create(context, ref, 1, fixture.rd, 32, 8, probe.unrelated) == OK);
+				CHECK(fixture.request->revision == revision + 1);
+			}
+			GDExtensionOutputGenerationInputV1 generation{};
+			generation.abi = production_dto_abi<GDExtensionOutputGenerationInputV1>();
+			generation.particles = probe.created.particles;
+			generation.generation = probe.created.generation;
+			REQUIRE(probe.withdraw(context, ref, &generation).error == OK);
+			CHECK(probe.withdraw(context, ref, &generation).error == OK);
+			CHECK(probe.native->withdrawing());
+		}
+	};
+	static void output_scene_metadata(bool extra_metadata) {
+		using namespace GDExtensionDeviceExit;
+		auto *server = ordinal_server();
+		if (!server || !check_step(RendererRD::ParticlesStorage::get_singleton() == nullptr)) {
+			return;
+		}
+		const auto consume = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRecordConsumeV2>("device_session_production_record_consume_v2");
+		const auto release = ordinal_port<GDExtensionInterfaceDeviceSessionProductionReleaseV2>("device_session_production_release_v2");
+		REQUIRE(consume != nullptr);
+		REQUIRE(release != nullptr);
+		OrdinalPlan plan;
+		const uint32_t metadata_rows = extra_metadata ? 2u : 1u;
+		plan.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, metadata_rows, metadata_rows, 0, 0, 0, metadata_rows, 0, 0 };
+		plan.action_count = plan.use_count = plan.readback_count = 0;
+		plan.resource_count = extra_metadata ? 2 : 1;
+		plan.resources[0] = { GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1, 0, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, RendererRD::ParticlesStorage::particles_external_scene_metadata_bytes(), 0 };
+		plan.resources[1] = { GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1, 0, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 32, 0 };
+		SingletonEnrollment fixture;
+		fixture.public_port = true;
+		SceneMetadataProbe probe;
+		probe.fixture = &fixture;
+		probe.extra_metadata = extra_metadata;
+		probe.create = reinterpret_cast<GDExtensionInterfaceDeviceSessionOutputCreateV2>(gdextension_get_guarded_proc_address("device_session_output_create_v2"));
+		probe.withdraw = reinterpret_cast<GDExtensionInterfaceDeviceSessionOutputWithdrawV1>(gdextension_get_guarded_proc_address("device_session_output_withdraw_v1"));
+		REQUIRE(probe.create != nullptr);
+		REQUIRE(probe.withdraw != nullptr);
+		REQUIRE(ordinal_initialize(fixture, server, plan, &SceneMetadataProbe::receive, &probe) == OK);
+		RendererRD::ExternalLinkedOwnerTest native(fixture.rd, true);
+		probe.native = &native;
+		auto &request = *fixture.request;
+		const GDExtensionProductionRequestRefV1 ref = { fixture.instance, request.serial };
+		uint64_t record_control = 0;
+		REQUIRE(fixture.port.record_schedule(ref, &record_control) == OK);
+		server->sync();
+		GDExtensionProductionRecordReportV2 recorded{};
+		REQUIRE(consume(ref, record_control, &recorded).native_error == OK);
+		REQUIRE(probe.calls == 1);
+		CHECK(recorded.report.physical_returns_pending == (extra_metadata ? 2u : 1u));
+		CHECK(request.action_count == 0);
+		CHECK(request.graph_count == 0);
+		CHECK(request.native_count == 0);
+		const uint64_t root_serial = native.generation_serial();
+		REQUIRE(root_serial != 0);
+		const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+		auto dispatch = [&]() {
+			uint64_t serial = 0;
+			REQUIRE(fixture.registry.production_control_accept(ref, ProductionControlKind::OBSERVE, &serial, &budget) == OK);
+			REQUIRE(fixture.registry.production_control_schedule(ref, serial) == OK);
+			server->sync();
+			REQUIRE(request.control.state == ProductionControlState::RETURNED);
+			CHECK(request.capture_inflight == 0);
+			return serial;
+		};
+		if (extra_metadata) {
+			const uint32_t head = request.output_owner_head;
+			for (uint32_t turn = 0; turn < 2; ++turn) {
+				const uint64_t serial = dispatch();
+				CHECK(request.control.output.result.native_error == ERR_BUSY);
+				CHECK_FALSE(request.control.output.output_generation.native_released);
+				CHECK_FALSE(native.generation_pin().is_empty());
+				CHECK_FALSE(native.released());
+				CHECK(request.output_owner_head == head);
+				ProductionControlOutput blocked{};
+				REQUIRE(fixture.registry.production_control_consume(ref, serial, &blocked) == OK);
+			}
+			const uint64_t revision = request.revision;
+			REQUIRE(fixture.registry.production_output_metadata_return(probe.unrelated) == OK);
+			CHECK(request.revision == revision + 1);
+		}
+		const uint64_t terminal_control = dispatch();
+		REQUIRE(request.control.output.output_generation.native_released);
+		CHECK(request.control.output.result.native_error == OK);
+		CHECK(request.control.output.service_usage.controls == 1);
+		CHECK(request.control.output.service_usage.passes == 1);
+		CHECK(request.control.output.service_usage.receipts == 0);
+		CHECK(native.released());
+		CHECK(native.exists());
+		CHECK(native.generation_pin().is_empty());
+		CHECK(request.output_owner_head == UINT32_MAX);
+		CHECK(request.output_owner_cursor == UINT32_MAX);
+		const auto terminal = request.control.output.output_generation;
+		CHECK(terminal.root_serial == root_serial);
+		CHECK(terminal.particles == probe.created.particles);
+		CHECK(terminal.generation == probe.created.generation);
+		CHECK(terminal.root_source.physical_returns_pending == 1);
+		CHECK(terminal.root_source.known_obligations == 0);
+		CHECK(terminal.root_source.possible_obligations == 0);
+		CHECK(terminal.root_source.complete_obligations == 0);
+		ProductionControlOutput consumed{};
+		REQUIRE(fixture.registry.production_control_consume(ref, terminal_control, &consumed) == OK);
+		CHECK(std::memcmp(&terminal, &consumed.output_generation, sizeof(terminal)) == 0);
+		CHECK(fixture.registry.production_release(ref).native_error == ERR_BUSY);
+		CHECK(fixture.registry.production_close(fixture.attachment).native_error == ERR_BUSY);
+		GDExtensionProductionReportV2 live{};
+		REQUIRE(fixture.registry.production_report_contents_locked(request, live) == OK);
+		CHECK(live.physical_returns_pending == 1);
+		const uint64_t before_free = request.revision;
+		native.free_created(); // Actual particles_free destroys placement owner, then returns its allocation.
+		CHECK_FALSE(native.exists());
+		CHECK(request.revision == before_free + 1);
+		REQUIRE(fixture.registry.production_report_contents_locked(request, live) == OK);
+		CHECK(live.physical_returns_pending == 0);
+		CHECK(std::memcmp(&terminal, &consumed.output_generation, sizeof(terminal)) == 0);
+		CHECK(consumed.output_generation.root_source.physical_returns_pending == 1);
+		CHECK(fixture.driver.issues == 0);
+		for (uint32_t turn = 0; turn < 8 && request.serial; ++turn) {
+			GDExtensionProductionServiceBudgetV1 remaining{};
+			GDExtensionProductionReportV2 report{};
+			const Error error = Error(release(ref, &budget, &remaining, &report).native_error);
+			CHECK((error == OK || error == ERR_BUSY));
+			if (request.serial) {
+				server->sync();
+			}
+		}
+		CHECK(request.serial == 0);
+		fixture.cleanup_owner();
+		CHECK(fixture.owner_cleaned);
+	}
+	struct SceneMetadataRefundProbe {
+		SingletonEnrollment *fixture = nullptr;
+		GDExtensionInterfaceDeviceSessionOutputCreateV2 create = nullptr;
+		GDExtensionDeviceExit::ProductionOutputPin occupied;
+		uint32_t calls = 0;
+		~SceneMetadataRefundProbe() {
+			if (!occupied.is_empty()) {
+				CHECK(fixture->registry.production_output_unpin(occupied) == OK);
+			}
+		}
+		static void receive(void *opaque, GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionOperationV1 *) {
+			using namespace GDExtensionDeviceExit;
+			auto &probe = *static_cast<SceneMetadataRefundProbe *>(opaque);
+			auto &fixture = *probe.fixture;
+			auto &request = *fixture.request;
+			++probe.calls;
+			REQUIRE(request.capacity.resource_uses == 1);
+			REQUIRE(fixture.registry.production_output_pin(context, ref, fixture.rd, probe.occupied) == OK);
+			CHECK(request.output_owner_head == UINT32_MAX);
+			GDExtensionOutputCreateInputV2 input{};
+			input.abi = production_dto_abi<GDExtensionOutputCreateInputV2>();
+			input.abi.abi_version = 2;
+			input.config.abi = production_dto_abi<GDExtensionOutputCreateInputV1>();
+			input.config.profile = 3;
+			input.config.max_views = input.config.max_inflight = 1;
+			input.config.space = input.config.query_enabled = 1;
+			for (uint32_t axis = 0; axis < 3; ++axis) {
+				input.config.bounds.size[axis] = input.config.query_bounds.size[axis] = 1;
+			}
+			input.metadata_resource_slot = 0;
+			GDExtensionOutputCreateResultV1 created{};
+			const uint64_t revision = request.revision;
+			// Metadata allocation succeeds first. The original finite pin pool
+			// then refuses root installation, so the real Create rollback must
+			// destroy its placement owner/RID and explicitly return that block.
+			probe.create(context, ref, &input, &created);
+			CHECK(created.status.error == ERR_OUT_OF_MEMORY);
+			CHECK(created.particles == 0);
+			CHECK(created.generation == 0);
+			CHECK(created.capabilities == 0);
+			CHECK(request.revision == revision + 2); // Actual create plus actual return.
+			CHECK(request.resources[0].metadata_created);
+			CHECK(request.resources[0].metadata_returned);
+			CHECK(request.resources[0].metadata_data == nullptr);
+			CHECK(request.resources[0].metadata_consumer == nullptr);
+			CHECK(request.resources[0].metadata_root_serial == 0);
+			CHECK_FALSE(probe.occupied.is_empty());
+			CHECK(fixture.registry.production_output_pin_matches(probe.occupied, ref, fixture.rd));
+			CHECK(request.output_owner_head == UINT32_MAX);
+			CHECK(request.output_owner_cursor == UINT32_MAX);
+			GDExtensionProductionReportV2 report{};
+			REQUIRE(fixture.registry.production_report_contents_locked(request, report) == OK);
+			CHECK(report.physical_returns_pending == 0);
+			CHECK(report.known_obligations == 0);
+			CHECK(report.possible_obligations == 0);
+			CHECK(request.graph_count == 0);
+			CHECK(request.native_count == 0);
+		}
+	};
+	static void output_scene_metadata_refund() {
+		using namespace GDExtensionDeviceExit;
+		auto *server = ordinal_server();
+		if (!server || !check_step(RendererRD::ParticlesStorage::get_singleton() == nullptr)) {
+			return;
+		}
+		const auto consume = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRecordConsumeV2>("device_session_production_record_consume_v2");
+		const auto release = ordinal_port<GDExtensionInterfaceDeviceSessionProductionReleaseV2>("device_session_production_release_v2");
+		REQUIRE(consume != nullptr);
+		REQUIRE(release != nullptr);
+		OrdinalPlan plan;
+		plan.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, 1, 1, 0, 0, 0, 1, 0, 0 };
+		plan.action_count = plan.use_count = plan.readback_count = 0;
+		plan.resource_count = 1;
+		plan.resources[0] = { GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1, 0, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, RendererRD::ParticlesStorage::particles_external_scene_metadata_bytes(), 0 };
+		SingletonEnrollment fixture;
+		fixture.public_port = true;
+		SceneMetadataRefundProbe probe;
+		probe.fixture = &fixture;
+		probe.create = reinterpret_cast<GDExtensionInterfaceDeviceSessionOutputCreateV2>(gdextension_get_guarded_proc_address("device_session_output_create_v2"));
+		REQUIRE(probe.create != nullptr);
+		REQUIRE(ordinal_initialize(fixture, server, plan, &SceneMetadataRefundProbe::receive, &probe) == OK);
+		RendererRD::ExternalLinkedOwnerTest native(fixture.rd, true);
+		auto &request = *fixture.request;
+		const GDExtensionProductionRequestRefV1 ref = { fixture.instance, request.serial };
+		uint64_t control = 0;
+		REQUIRE(fixture.port.record_schedule(ref, &control) == OK);
+		server->sync();
+		GDExtensionProductionRecordReportV2 recorded{};
+		REQUIRE(consume(ref, control, &recorded).native_error == OK);
+		CHECK(probe.calls == 1);
+		CHECK(recorded.report.physical_returns_pending == 0);
+		CHECK_FALSE(native.exists());
+		CHECK_FALSE(probe.occupied.is_empty());
+		CHECK(fixture.registry.production_release(ref).native_error == ERR_BUSY);
+		REQUIRE(fixture.registry.production_output_unpin(probe.occupied) == OK);
+		CHECK(probe.occupied.is_empty());
+		const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+		for (uint32_t turn = 0; turn < 8 && request.serial; ++turn) {
+			GDExtensionProductionServiceBudgetV1 remaining{};
+			GDExtensionProductionReportV2 report{};
+			const Error error = Error(release(ref, &budget, &remaining, &report).native_error);
+			CHECK((error == OK || error == ERR_BUSY));
+			if (request.serial) {
+				server->sync();
+			}
+		}
+		CHECK(request.serial == 0);
+		fixture.cleanup_owner();
+		CHECK(fixture.owner_cleaned);
+		// The empty-storage bridge destructor independently rejects any actual
+		// RID left behind by failed Create; it never fabricates owner cleanup.
+	}
+	static void output_metadata_wrong_kind() {
+		using namespace GDExtensionDeviceExit;
+		auto *server = ordinal_server();
+		if (!server) {
+			return;
+		}
+		OrdinalPlan plan;
+		plan.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, 1, 1, 0, 16, 0, 1, 0, 0 };
+		plan.resources[0] = { GDEXTENSION_PRODUCTION_STORAGE_V1, 0, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 16, 0 };
+		plan.action_count = plan.use_count = plan.readback_count = 0;
+		plan.resource_count = 1;
+		SingletonEnrollment fixture;
+		fixture.public_port = true;
+		struct Probe {
+			SingletonEnrollment *fixture = nullptr;
+			uint32_t calls = 0;
+			static void receive(void *opaque, ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionOperationV1 *) {
+				auto &test = *static_cast<Probe *>(opaque);
+				++test.calls;
+				ProductionOutputMetadataLease rejected;
+				CHECK(test.fixture->request->frozen);
+				CHECK(test.fixture->request->resources[0].imported);
+				CHECK(test.fixture->registry.production_output_metadata_create(context, ref, 0, test.fixture->rd, 16, 8, rejected) == ERR_INVALID_DATA);
+				CHECK(rejected.is_empty());
+			}
+		} probe;
+		probe.fixture = &fixture;
+		fixture.rd.draw_graph.initialize(&fixture.driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RDD::CommandQueueFamilyID(1), 0);
+		fixture.rd.draw_graph.begin();
+		const Error initialized = ordinal_initialize(fixture, server, plan, &Probe::receive, &probe);
+		CHECK(initialized == OK);
+		if (initialized != OK) {
+			fixture.cleanup_owner();
+			return;
+		}
+		// Replace prepare_device's quoted timestamp prefix with the actual empty
+		// controlled frame, matching SplitStorage before its original create FIFO.
+		fixture.rd.draw_graph.initialize(&fixture.driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RDD::CommandQueueFamilyID(1), 0);
+		fixture.rd.draw_graph.begin();
+		// The ordinary storage row reaches frozen only through its real owner
+		// factory. No resource kind/imported bit or protected frame is edited.
+		fixture.rd.frames[0].qualification_epoch = 1;
+		fixture.rd.frames[0].fence = RDD::FenceID(93);
+		fixture.rd.frames[0].command_buffer = RDD::CommandBufferID(90);
+		fixture.rd.frames[0].command_pool = RDD::CommandPoolID(94);
+		fixture.rd.main_queue = RDD::CommandQueueID(1);
+		fixture.rd.frames_drawn = 3;
+		auto &request = *fixture.request;
+		const GDExtensionProductionRequestRefV1 ref = { fixture.instance, request.serial };
+		const GDExtensionStorageCreateRequestV1 origin = { Enrollment::ABI, 16, 0, 0, 1, 1, 0 };
+		GDExtensionStorageBackingV1 backing{};
+		CHECK(fixture.registry.production_storage_create(ref, 0, &origin, &backing).native_error == ERR_BUSY);
+		server->sync();
+		REQUIRE(fixture.registry.production_storage_create(ref, 0, &origin, &backing).native_error == OK);
+		CHECK(backing.rid != 0);
+		CHECK(backing.backing_serial != 0);
+		CHECK(backing.byte_size == 16);
+		CHECK(fixture.driver.allocations == 1);
+		uint64_t control = 0;
+		REQUIRE(fixture.port.record_schedule(ref, &control) == OK);
+		server->sync();
+		GDExtensionProductionRecordReportV2 recorded{};
+		REQUIRE(fixture.registry.production_record_consume_v2(ref, control, &recorded).native_error == OK);
+		CHECK(probe.calls == 1);
+		CHECK(fixture.driver.allocations == 1); // Metadata rejection created nothing.
+		const GDExtensionStorageRetireRequestV1 retire_origin = { Enrollment::ABI, backing.backing, backing.rid, backing.backing_serial, 0, 0, 1, 1, 0 };
+		GDExtensionStorageRetireRefV1 retire{};
+		GDExtensionStorageRetireReportV1 report{};
+		REQUIRE(fixture.registry.production_storage_retire(ref, 0, &retire_origin, &retire, &report).native_error == OK);
+		const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+		for (uint32_t turn = 0; turn < 32 && !report.state; ++turn) {
+			const Error scheduled = Error(fixture.registry.production_storage_observe(ref, retire, &budget, &report).native_error);
+			CHECK((scheduled == OK || scheduled == ERR_BUSY));
+			server->sync();
+			const Error observed = Error(fixture.registry.production_storage_observe(ref, retire, &budget, &report).native_error);
+			CHECK((observed == OK || observed == ERR_BUSY));
+		}
+		CHECK(report.state == 1);
+		CHECK(report.return_status == 1);
+		CHECK(report.event_seq != 0);
+		CHECK(fixture.driver.buffer_frees == 1);
+		CHECK_FALSE(fixture.driver.buffer_live);
+		REQUIRE(fixture.registry.production_storage_release(ref, retire).native_error == OK);
+		// This is an ordinal V2 request. The SplitStorage drain helper uses
+		// V1 observe, which correctly rejects this request before accepting a
+		// maintenance control and therefore cannot finish its original tail.
+		CHECK(request.contract_version == 2);
+		CHECK(request.control.state == ProductionControlState::OWNER_CONSUMED);
+		const auto observe = ordinal_port<GDExtensionInterfaceDeviceSessionProductionObserveV2>("device_session_production_observe_v2");
+		REQUIRE(observe);
+		auto tail_budget = budget;
+		GDExtensionProductionReportV2 tail_report{};
+		for (uint32_t turn = 0; turn < 64 && request.maintenance_serial; ++turn) {
+			{
+				MutexLock lock(fixture.rd._thread_safe_);
+				CHECK(fixture.rd.native_disposal_active);
+				CHECK(fixture.rd.native_disposal_continuation.production_owner == &request);
+				CHECK(fixture.rd.native_disposal_continuation.serial == request.maintenance_serial);
+			}
+			if (request.control.state == ProductionControlState::OWNER_CONSUMED) {
+				tail_budget.deadline_micros = OS::get_singleton()->get_ticks_usec() + 10000000;
+			}
+			const Error scheduled = Error(observe(ref, &tail_budget, &tail_report).native_error);
+			CHECK((scheduled == OK || scheduled == ERR_BUSY));
+			if (request.control.state != ProductionControlState::OWNER_CONSUMED) {
+				server->sync();
+				if (request.control.state == ProductionControlState::RETURNED) {
+					CHECK(request.control.output.service_usage.receipts <= 1);
+					CHECK(request.control.output.service_usage.passes <= 1);
+				}
+				const Error consumed = Error(observe(ref, &tail_budget, &tail_report).native_error);
+				CHECK((consumed == OK || consumed == ERR_BUSY));
+			}
+			CHECK(request.serial == ref.handle_serial);
+		}
+		{
+			MutexLock lock(fixture.rd._thread_safe_);
+			CHECK_FALSE((fixture.rd.native_disposal_active && fixture.rd.native_disposal_continuation.production_owner == &request));
+			CHECK(request.maintenance_serial == 0);
+		}
+		CHECK(request.control.state == ProductionControlState::OWNER_CONSUMED);
+		fixture.cleanup_owner();
+		CHECK(fixture.owner_cleaned);
+	}
+	static void output_metadata_declarations() {
+		using namespace GDExtensionDeviceExit;
+		for (uint32_t mutation = 0; mutation < 9; ++mutation) {
+			auto *server = ordinal_server();
+			if (!server) {
+				return;
+			}
+			OrdinalPlan plan;
+			plan.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 2, 1, 1, 2, 2048, 1, 1, 0, 4 };
+			plan.action_count = plan.use_count = plan.readback_count = 0;
+			plan.resource_count = 1;
+			plan.resources[0] = { GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1, 0, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 128, 0 };
+			switch (mutation) {
+				case 0:
+					plan.resources[0].ownership = GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1;
+					break;
+				case 1:
+					plan.resources[0].required_usage = 1;
+					break;
+				case 2:
+					plan.resources[0].physical_bytes = 0;
+					break;
+				case 3:
+					plan.resources[0].physical_bytes = uint64_t(UINT32_MAX) + 1;
+					break;
+				case 4:
+					plan.use_count = 1;
+					plan.uses[0] = { 0, GDEXTENSION_PRODUCTION_READ_V1, 0, 4, 0 };
+					break;
+				case 5:
+					plan.action_count = 1;
+					plan.actions[0] = { 0, 11, 0, 0, GDEXTENSION_PRODUCTION_DISPATCH_V1, 0, 0, 0, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX };
+					break;
+				case 6:
+					plan.action_count = plan.use_count = 1;
+					plan.uses[0] = { 0, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 4, 0 };
+					plan.actions[0] = { 0, 11, 0, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, 0, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX };
+					break;
+				case 7:
+					plan.action_count = 2;
+					plan.actions[0] = { 0, 11, 0, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 0, 0, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX };
+					plan.actions[1] = { 1, 12, 0, 0, GDEXTENSION_PRODUCTION_READBACK_V1, UINT32_MAX, 0, 0, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, 0 };
+					plan.readback_count = 1;
+					plan.readback = { 0, 0, 0, 1, 0, 4 };
+					break;
+				case 8:
+					break; // Same valid capacity and lawful metadata declaration.
+			}
+			SingletonEnrollment fixture;
+			fixture.public_port = true;
+			GDExtensionProductionMetadataQuoteV1 layout{};
+			REQUIRE(fixture.registry.production_layout(plan.capacity, layout) == OK);
+			const Error error = ordinal_initialize(fixture, server, plan);
+			if (mutation == 8) {
+				REQUIRE(error == OK);
+				REQUIRE(fixture.request != nullptr);
+				const GDExtensionProductionRequestRefV1 ref = { fixture.instance, fixture.request->serial };
+				CHECK(drain_request_cursor(fixture, ref, [&]() { server->sync(); }));
+			} else {
+				CHECK_MESSAGE(error == ERR_INVALID_DATA, "metadata declaration mutation=", mutation);
+				CHECK(fixture.request == nullptr);
+			}
+			CHECK(fixture.driver.issues == 0);
+			fixture.cleanup_owner();
+			CHECK(fixture.owner_cleaned);
+		}
+	}
 	struct RecordHistoryProbe {
 		SingletonEnrollment *fixture = nullptr;
 		GDExtensionInterfaceDeviceSessionProductionRecordHistoryV1 query = nullptr;
@@ -8342,6 +9180,27 @@ TEST_CASE("[SceneTree][ProductionRequest][LiveGeometryComponent] live Indexed144
 }
 TEST_CASE("[SceneTree][ProductionRequest][LiveGeometryComponent] failed Core capture retains live metadata and physical source") {
 	Access::live_geometry_observe(false, true);
+}
+TEST_CASE("[SceneTree][ProductionRequest][OutputMetadataFactory] protected original RECORD owns bounded actual CPU metadata and returns once") {
+	Access::output_metadata_factory();
+}
+TEST_CASE("[SceneTree][ProductionRequest][OutputMetadataFactory] bound live unlinked pin blocks actual metadata return") {
+	Access::output_metadata_bound_pin();
+}
+TEST_CASE("[SceneTree][ProductionRequest][OutputSceneMetadata] real SceneOnly root terminal retains metadata until actual particles free") {
+	Access::output_scene_metadata(false);
+}
+TEST_CASE("[SceneTree][ProductionRequest][OutputSceneMetadata] unrelated metadata blocks SceneOnly terminal until actual return") {
+	Access::output_scene_metadata(true);
+}
+TEST_CASE("[SceneTree][ProductionRequest][OutputSceneMetadata] exhausted original pin capacity refunds real SceneOnly metadata allocation") {
+	Access::output_scene_metadata_refund();
+}
+TEST_CASE("[SceneTree][ProductionRequest][OutputMetadataFactory] real owner-created storage cannot become a metadata allocation") {
+	Access::output_metadata_wrong_kind();
+}
+TEST_CASE("[SceneTree][ProductionRequest][OutputMetadataFactory] metadata declarations reject ordinary resource use before native effects") {
+	Access::output_metadata_declarations();
 }
 TEST_CASE("[SceneTree][ProductionRequest][OutputRegisteredLeaves] guarded original output leaves reject foreign custody and preserve original RECORD cleanup") {
 	// Independent original fixtures let all custody probes execute even if an

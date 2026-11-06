@@ -43,10 +43,17 @@ class ExternalLinkedOwnerTest {
 	ParticlesStorage *storage = nullptr;
 	ExternalOutputOwner *owner = nullptr;
 	RID particles;
+	RenderingDevice *expected_device = nullptr;
+	bool empty_storage_mode = false;
 
 public:
-	explicit ExternalLinkedOwnerTest(RenderingDevice &);
+	explicit ExternalLinkedOwnerTest(RenderingDevice &, bool p_empty_storage = false);
 	~ExternalLinkedOwnerTest();
+	// This mode only locates a real Create result. It installs no owner/pin and
+	// destroys no placement object itself; free goes through ParticlesStorage.
+	bool adopt_created(RID);
+	bool exists() const;
+	void free_created();
 	GDExtensionDeviceExit::ProductionOutputPin &pin(uint32_t);
 	void install(uint32_t, GDExtensionDeviceExit::Registry &, GDExtensionProductionRequestRefV1);
 	// Independent generation substrate only; never a public Create/source issuer.

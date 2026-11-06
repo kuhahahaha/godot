@@ -38,8 +38,12 @@
 TEST_FORCE_LINK(test_external_output_owner_state)
 
 namespace RendererRD {
-ExternalLinkedOwnerTest::ExternalLinkedOwnerTest(RenderingDevice &rd) {
+ExternalLinkedOwnerTest::ExternalLinkedOwnerTest(RenderingDevice &rd, bool p_empty_storage) :
+		expected_device(&rd), empty_storage_mode(p_empty_storage) {
 	storage = memnew(ParticlesStorage(this));
+	if (empty_storage_mode) {
+		return;
+	}
 	ExternalOutputConfig config;
 	config.max_views = 1;
 	config.max_inflight = 2;
@@ -50,12 +54,42 @@ ExternalLinkedOwnerTest::ExternalLinkedOwnerTest(RenderingDevice &rd) {
 	storage->particles_owner.get_or_null(particles)->external = owner;
 }
 ExternalLinkedOwnerTest::~ExternalLinkedOwnerTest() {
+	if (empty_storage_mode) {
+		// A failed test cannot disguise a leaked real Create result as cleanup.
+		CRASH_COND(owner || storage->particles_owner.get_rid_count());
+		memdelete(storage);
+		return;
+	}
 	// Fail closed on leaked custody; never manufacture RELEASED during cleanup.
 	CRASH_COND(!released());
 	storage->particles_owner.get_or_null(particles)->external = nullptr;
 	memdelete(owner);
 	storage->particles_owner.free(particles);
 	memdelete(storage);
+}
+bool ExternalLinkedOwnerTest::adopt_created(RID p_particles) {
+	if (!empty_storage_mode || owner) {
+		return false;
+	}
+	auto *created = storage->particles_owner.get_or_null(p_particles);
+	if (!created || !created->external || created->external->device != expected_device ||
+			created->external->metadata_lease.is_empty() || created->external->generation_pin.is_empty()) {
+		return false;
+	}
+	particles = p_particles;
+	owner = created->external;
+	return true;
+}
+bool ExternalLinkedOwnerTest::exists() const {
+	const auto *created = storage->particles_owner.get_or_null(particles);
+	return created && owner && created->external == owner;
+}
+void ExternalLinkedOwnerTest::free_created() {
+	CRASH_COND(!empty_storage_mode || !exists());
+	storage->particles_free(particles);
+	if (!storage->particles_owner.get_or_null(particles)) {
+		owner = nullptr;
+	}
 }
 GDExtensionDeviceExit::ProductionOutputPin &ExternalLinkedOwnerTest::pin(uint32_t slot) {
 	CRASH_COND(slot >= 2);
@@ -78,10 +112,11 @@ Error ExternalLinkedOwnerTest::install_generation_at(GDExtensionDeviceExit::Prod
 	return owner->install_generation_root(context, request, registry, *owner->device, locator);
 }
 GDExtensionDeviceExit::ProductionOutputPin &ExternalLinkedOwnerTest::generation_pin() {
+	CRASH_COND(!exists());
 	return owner->generation_pin;
 }
 uint64_t ExternalLinkedOwnerTest::generation_serial() const {
-	return owner->generation_root_serial;
+	return exists() ? owner->generation_root_serial : 0;
 }
 bool ExternalLinkedOwnerTest::generation_uninstalled() const {
 	return owner->generation_pin.is_empty() && !owner->generation_registry && !owner->generation_root_serial &&
@@ -231,8 +266,15 @@ bool ExternalLinkedOwnerTest::history_cleared() const {
 	return owner->views[0].history_slot == UINT32_MAX;
 }
 bool ExternalLinkedOwnerTest::released() const {
-	return owner->state == ExternalOutputOwner::GenerationState::RELEASED && owner->generation_pin.is_empty() &&
-			owner->slots[0].original_pin.is_empty() && owner->slots[1].original_pin.is_empty();
+	if (!exists() || owner->state != ExternalOutputOwner::GenerationState::RELEASED || !owner->generation_pin.is_empty()) {
+		return false;
+	}
+	for (uint32_t i = 0; i < owner->slot_count; ++i) {
+		if (!owner->slots[i].original_pin.is_empty()) {
+			return false;
+		}
+	}
+	return true;
 }
 
 // CPU finite-table policy only. No native owner was admitted, no Core pin was
@@ -271,6 +313,35 @@ class TestExternalOutputOwnerStateAccess {
 	}
 
 public:
+	static void inline_generation_config() {
+		ExternalOutputConfig config;
+		config.max_views = config.max_inflight = 1;
+		config.producer_tag = tag(1);
+		config.device_tag = tag(2);
+		config.layout_digest = tag(3);
+		config.mapping_digest = tag(4);
+		config.numeric_profile_digest = tag(5);
+		ExternalOutputOwner owner(config, 1, true);
+		CHECK(owner.config.producer_tag.is_empty());
+		CHECK(owner.config.device_tag.is_empty());
+		CHECK(owner.config.layout_digest.is_empty());
+		CHECK(owner.config.mapping_digest.is_empty());
+		CHECK(owner.config.numeric_profile_digest.is_empty());
+		// Parser allocations and subsequent parser writes cannot become the
+		// lifetime or value source for the persistent native generation.
+		config.layout_digest.set(0, 9);
+		config.mapping_digest = PackedByteArray();
+		auto selected = request(0, 1);
+		selected.layout_digest = tag(3);
+		selected.mapping_digest = tag(4);
+		uint32_t view = UINT32_MAX, slot = UINT32_MAX;
+		CHECK(owner.select_slot(selected, view, slot) == OK);
+		selected.layout_digest = config.layout_digest;
+		CHECK(owner.select_slot(selected, view, slot) == ERR_INVALID_DATA);
+		selected.layout_digest = PackedByteArray();
+		CHECK(owner.select_slot(selected, view, slot) == ERR_INVALID_DATA);
+		owner.state = ExternalOutputOwner::GenerationState::RELEASED;
+	}
 	static void issued_pin(GDExtensionDeviceExit::Registry &registry, GDExtensionProductionRequestRefV1 ref,
 			GDExtensionDeviceExit::ProductionOutputPin &issued, ExternalCustodyTestMode mode,
 			MeshStorage::NativeSurfaceHold *geometry) {
@@ -622,6 +693,10 @@ void external_custody_issued_pin_test(GDExtensionDeviceExit::Registry &registry,
 	TestExternalOutputOwnerStateAccess::issued_pin(registry, ref, pin, mode, geometry);
 }
 } // namespace RendererRD
+
+TEST_CASE("[B4][GenerationCreate] retained configuration does not retain parser allocations") {
+	RendererRD::TestExternalOutputOwnerStateAccess::inline_generation_config();
+}
 
 TEST_CASE("[B4][ExternalOutput] finite slot preflight and withdrawal preserve occupied metadata") {
 	RendererRD::TestExternalOutputOwnerStateAccess::finite_policy();

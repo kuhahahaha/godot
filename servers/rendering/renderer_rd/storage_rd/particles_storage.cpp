@@ -267,7 +267,18 @@ void ParticlesStorage::particles_free(RID p_rid) {
 		particles->dependency.deleted_notify(p_rid);
 		particles->update_list.remove_from_list();
 		particles->external = nullptr;
-		memdelete(external);
+		if (!external->metadata_lease.is_empty()) {
+			// Generation terminal permits logical RID destruction. Its original
+			// metadata resource remains live until this last CPU owner is gone.
+			// Move custody out before destroying an owner inside that allocation.
+			auto *registry = external->generation_registry;
+			GDExtensionDeviceExit::ProductionOutputMetadataLease metadata = static_cast<GDExtensionDeviceExit::ProductionOutputMetadataLease &&>(external->metadata_lease);
+			external->~ExternalOutputOwner();
+			const Error returned = registry->production_output_metadata_return(metadata);
+			CRASH_COND(returned != OK);
+		} else {
+			memdelete(external);
+		}
 		particles_owner.free(p_rid);
 		return;
 	}
@@ -947,7 +958,8 @@ AABB ParticlesStorage::particles_get_aabb(RID p_particles) const {
 	const Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL_V(particles, AABB());
 	if (particles->external) {
-		return particles->external->config.bounds;
+		const auto &config = particles->external->config;
+		return config.query_enabled ? config.bounds.merge(config.query_bounds) : config.bounds;
 	}
 
 	return particles->custom_aabb;

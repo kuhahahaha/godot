@@ -106,6 +106,7 @@ enum class ProductionOutputOwnerKind : uint8_t { NONE,
 	GENERATION,
 	SLOT };
 class ProductionOutputPin;
+class ProductionOutputMetadataLease;
 class ProductionAttachment;
 class ProductionRequest;
 struct ProductionActionRows;
@@ -864,6 +865,7 @@ private:
 	friend class ::RendererRD::ParticlesStorage;
 	friend class ::RendererRD::ExternalOutputOwner;
 	friend class ProductionOutputPin;
+	friend class ProductionOutputMetadataLease;
 	struct DeviceRecord {
 		Object *object = nullptr;
 		uint64_t epoch = 0, session = 0, thread = 0, execution_thread = 0;
@@ -898,6 +900,11 @@ private:
 	// never interprets Dictionary tokens or grants source/Host/mapping admission.
 	Error production_output_pin_current(RenderingDevice &, ProductionOutputPin &);
 	Error production_output_pin(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, RenderingDevice &, ProductionOutputPin &);
+	Error production_output_metadata_create(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, uint32_t, RenderingDevice &, uint64_t, uint32_t, ProductionOutputMetadataLease &);
+	Error production_output_metadata_validate(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const ProductionOutputMetadataLease &, RenderingDevice &, uint64_t, uint32_t);
+	Error production_output_metadata_bind(ProductionOutputMetadataLease &, const ProductionOutputPin &);
+	Error production_output_metadata_return(ProductionOutputMetadataLease &);
+	void production_output_metadata_move(ProductionOutputMetadataLease &, ProductionOutputMetadataLease &);
 	// Metadata custody only, from an existing original pin into a spare quoted cell.
 	// This never issues a physical context, source permission or native read use.
 	Error production_output_pin_borrow(const ProductionOutputPin &, RenderingDevice &, ProductionOutputPin &);
