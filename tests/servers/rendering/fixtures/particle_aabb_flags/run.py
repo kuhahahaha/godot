@@ -77,7 +77,9 @@ struct AABB {
     float get_longest_axis_size() const { return std::max({size.x,size.y,size.z}); }
 };
 ''' + shader_flags + "\n" + particle_data + r'''
+struct ExternalState { struct { AABB bounds; } config; };
 struct Particles {
+    ExternalState *external = nullptr;
     int amount = 1;
     unsigned userdata_count = 0;
     bool trails_enabled = false, use_local_coords = true;
@@ -89,8 +91,9 @@ struct Particles {
 struct Owner { Particles value; const Particles *get_or_null(RID) const { return &value; } } particles_owner;
 struct RD {
     Vector<uint8_t> snapshot;
+    int readbacks = 0;
     static RD *get_singleton() { static RD value; return &value; }
-    Vector<uint8_t> buffer_get_data(RID) { return snapshot; }
+    Vector<uint8_t> buffer_get_data(RID) { readbacks++; return snapshot; }
 };
 struct MeshStorage {
     static MeshStorage *get_singleton() { static MeshStorage value; return &value; }
@@ -144,6 +147,24 @@ int main() {
     check(capture({{uint((7 << 16) | PARTICLE_FLAG_TRAILED),{1,2,3}}, {uint((7 << 16) | PARTICLE_FLAG_ACTIVE | PARTICLE_FLAG_STARTED),{5,7,9}}}, 3, true), {1,2,3}, {4,5,6}, "userdata stride and cycle flags preserve active and trail positions");
     check(capture({{uint(7 << 16),{-100,-200,-300}}, {PARTICLE_FLAG_ACTIVE,{12,23,34}}}, 0, false, true), {2,3,4}, {}, "global snapshot excludes stale position before local transform");
     check(capture({{uint(7 << 16),{-100,-200,-300}}, {PARTICLE_FLAG_ACTIVE,{2,3,4}}}, 0, false, false, true), {0,1,2}, {4,4,4}, "mesh padding grows only visible particle bounds");
+    ExternalState external{{{{11,22,33}, {4,5,6}}}};
+    particles_owner.value.external = &external;
+    // External bounds remain authoritative even with an invalid native amount.
+    particles_owner.value.amount = 0;
+    const int readbacks = RD::get_singleton()->readbacks;
+    check(particles_get_current_aabb({1}), {11,22,33}, {4,5,6}, "external owner supplies immutable bounds");
+    checks++;
+    if (RD::get_singleton()->readbacks != readbacks) {
+        failures++;
+        std::fprintf(stderr, "FAIL: external bounds must bypass native buffer readback\n");
+    }
+    particles_owner.value.amount = 1;
+    uint64_t data_size = 123;
+    checks++;
+    if (_particles_get_data_size(&particles_owner.value, data_size) || data_size != 0) {
+        failures++;
+        std::fprintf(stderr, "FAIL: external particles must reject native data sizing and clear output\n");
+    }
     std::printf("particle AABB flags (%s): %d/%d checks passed\n", sizeof(real_t) == sizeof(double) ? "double" : "float", checks-failures, checks);
     return failures ? 1 : 0;
 }
