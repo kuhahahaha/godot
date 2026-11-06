@@ -31,6 +31,7 @@
 #include "gpu_particles_collision_3d.h"
 
 #include "core/math/geometry_3d.h"
+#include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "core/object/worker_thread_pool.h"
 #include "core/os/os.h"
@@ -645,10 +646,23 @@ bool GPUParticlesCollisionSDF3D::get_bake_mask_value(int p_layer_number) const {
 	return bake_mask & (1 << (p_layer_number - 1));
 }
 
-void GPUParticlesCollisionSDF3D::set_texture(const Ref<Texture3D> &p_texture) {
-	texture = p_texture;
-	RID tex = texture.is_valid() ? texture->get_rid() : RID();
+void GPUParticlesCollisionSDF3D::_texture_changed() {
+	const RID tex = texture.is_valid() ? texture->get_rid() : RID();
 	RS::get_singleton()->particles_collision_set_field_texture(_get_collision(), tex);
+}
+
+void GPUParticlesCollisionSDF3D::set_texture(const Ref<Texture3D> &p_texture) {
+	if (texture != p_texture) {
+		if (texture.is_valid()) {
+			texture->disconnect_changed(callable_mp(this, &GPUParticlesCollisionSDF3D::_texture_changed));
+		}
+		texture = p_texture;
+		if (texture.is_valid()) {
+			// TextureRD resources can emit changed from the render thread.
+			texture->connect_changed(callable_mp(this, &GPUParticlesCollisionSDF3D::_texture_changed), CONNECT_DEFERRED);
+		}
+	}
+	_texture_changed();
 }
 
 Ref<Texture3D> GPUParticlesCollisionSDF3D::get_texture() const {
@@ -1050,10 +1064,23 @@ Vector3 GPUParticlesAttractorVectorField3D::get_size() const {
 	return size;
 }
 
-void GPUParticlesAttractorVectorField3D::set_texture(const Ref<Texture3D> &p_texture) {
-	texture = p_texture;
-	RID tex = texture.is_valid() ? texture->get_rid() : RID();
+void GPUParticlesAttractorVectorField3D::_texture_changed() {
+	const RID tex = texture.is_valid() ? texture->get_rid() : RID();
 	RS::get_singleton()->particles_collision_set_field_texture(_get_collision(), tex);
+}
+
+void GPUParticlesAttractorVectorField3D::set_texture(const Ref<Texture3D> &p_texture) {
+	if (texture != p_texture) {
+		if (texture.is_valid()) {
+			texture->disconnect_changed(callable_mp(this, &GPUParticlesAttractorVectorField3D::_texture_changed));
+		}
+		texture = p_texture;
+		if (texture.is_valid()) {
+			// TextureRD resources can emit changed from the render thread.
+			texture->connect_changed(callable_mp(this, &GPUParticlesAttractorVectorField3D::_texture_changed), CONNECT_DEFERRED);
+		}
+	}
+	_texture_changed();
 }
 
 Ref<Texture3D> GPUParticlesAttractorVectorField3D::get_texture() const {

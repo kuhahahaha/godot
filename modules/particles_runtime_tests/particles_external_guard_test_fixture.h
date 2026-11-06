@@ -59,4 +59,5 @@ public:
 	Error run();
 	Dictionary result() const;
 	Dictionary observe_viewport_vrs_texture(RID p_viewport) const;
+	Dictionary observe_particle_collision_texture(RID p_collision) const;
 };

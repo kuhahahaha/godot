@@ -33,6 +33,7 @@
 #include "core/object/class_db.h"
 #include "core/os/os.h"
 #include "servers/rendering/renderer_rd/effects/particles_external_guard.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server.h"
@@ -43,6 +44,7 @@ void ParticlesExternalGuardTestFixture::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("run"), &ParticlesExternalGuardTestFixture::run);
 	ClassDB::bind_method(D_METHOD("result"), &ParticlesExternalGuardTestFixture::result);
 	ClassDB::bind_method(D_METHOD("observe_viewport_vrs_texture", "viewport"), &ParticlesExternalGuardTestFixture::observe_viewport_vrs_texture);
+	ClassDB::bind_method(D_METHOD("observe_particle_collision_texture", "collision"), &ParticlesExternalGuardTestFixture::observe_particle_collision_texture);
 }
 
 void ParticlesExternalGuardTestFixture::check(bool p_ok, const String &p_label) {
@@ -204,6 +206,27 @@ Dictionary ParticlesExternalGuardTestFixture::observe_viewport_vrs_texture(RID p
 	if (target_valid) {
 		observation["render_target"] = target;
 		observation["vrs_texture"] = storage->render_target_get_vrs_texture(target);
+	}
+	return observation;
+}
+
+Dictionary ParticlesExternalGuardTestFixture::observe_particle_collision_texture(RID p_collision) const {
+	Dictionary observation;
+	RenderingServer *rs = RenderingServer::get_singleton();
+	RenderingDevice *rd = RenderingDevice::get_singleton();
+	RendererRD::ParticlesStorage *particles = RendererRD::ParticlesStorage::get_singleton();
+	RendererRD::TextureStorage *textures = RendererRD::TextureStorage::get_singleton();
+	const bool owner = rs && rd && particles && textures && rs->is_on_render_thread() && rs->get_rendering_device() == rd && rd->is_main_instance;
+	observation["main_rd_render_thread"] = owner;
+	if (!owner) {
+		return observation;
+	}
+	const auto *collision = particles->particles_collision_owner.get_or_null(p_collision);
+	observation["collision_valid"] = collision != nullptr;
+	if (collision) {
+		observation["field_texture"] = collision->field_texture;
+		const bool is_3d = textures->texture_get_type(collision->field_texture) == RendererRD::TextureStorage::TYPE_3D;
+		observation["resolved_3d_texture"] = is_3d ? textures->texture_get_rd_texture(collision->field_texture) : RID();
 	}
 	return observation;
 }
