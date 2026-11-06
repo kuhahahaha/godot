@@ -35,10 +35,10 @@
 #include "core/math/geometry_3d.h"
 #include "core/object/callable_mp.h"
 #include "core/object/worker_thread_pool.h"
+#include "servers/rendering/renderer_viewport.h"
 #include "servers/rendering/rendering_light_culler.h"
 #include "servers/rendering/rendering_server.h"
 #include "servers/rendering/rendering_server_default.h"
-#include "servers/rendering/renderer_viewport.h"
 
 #ifndef XR_DISABLED
 #include "servers/xr/xr_interface.h"
@@ -2776,10 +2776,7 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 	// Freeze the token only after CameraData is fully constructed. This keeps
 	// failed/unsupported camera setup from consuming a source ordinal.
 	if (p_viewport.is_valid() && RSG::viewport) {
-		const RendererViewport::Viewport::CameraSourceToken source_token = RSG::viewport->viewport_begin_camera_capture(p_viewport);
-		camera_data.source_view_id = source_token.view_id;
-		camera_data.source_view_epoch = source_token.view_epoch;
-		camera_data.source_capture_ordinal = source_token.capture_ordinal;
+		RSG::viewport->viewport_begin_camera_capture(p_viewport, camera_data);
 	}
 
 	RID environment = _render_get_environment(p_camera, p_scenario);

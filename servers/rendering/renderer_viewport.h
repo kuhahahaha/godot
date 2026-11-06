@@ -97,6 +97,10 @@ public:
 		RendererSceneRender::CameraData staged_camera_data;
 		CameraSourceToken staged_camera_token;
 		bool staged_camera_data_valid = false;
+		// Frozen at the actual pre-cull camera invocation, independently of
+		// post-render staging and previous-camera adoption.
+		RendererSceneRender::CameraData captured_camera_data;
+		bool captured_camera_data_valid = false;
 
 		// E15/E16 identity is owned by the registered viewport. These fields
 		// are updated only at the real camera invocation and color adoption
@@ -286,6 +290,11 @@ public:
 	Viewport::CameraSourceToken viewport_get_previous_camera_token(RID p_viewport) const;
 	Viewport::CameraSourceToken viewport_get_current_camera_token(RID p_viewport) const;
 	Viewport::CameraSourceToken viewport_begin_camera_capture(RID p_viewport);
+	// Internal registered-viewport association only. Freeze the completed actual
+	// camera before culling; lookup copies it without granting a view/permit.
+	Viewport::CameraSourceToken viewport_begin_camera_capture(RID p_viewport, RendererSceneRender::CameraData &r_camera_data);
+	// Only the current invocation is available. Failure leaves the output intact.
+	bool viewport_get_camera_capture(RID p_viewport, const Viewport::CameraSourceToken &p_token, RendererSceneRender::CameraData &r_camera_data) const;
 	Viewport::ViewPresentationKey viewport_get_presentation_key(RID p_viewport) const;
 	bool viewport_register_presentation_key(RID p_viewport, const Viewport::ViewPresentationKey &p_key);
 	void viewport_invalidate_presentation_key(RID p_viewport);

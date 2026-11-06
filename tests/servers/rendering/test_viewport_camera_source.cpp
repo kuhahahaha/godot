@@ -2,13 +2,107 @@
 /*  test_viewport_camera_source.cpp                                      */
 /**************************************************************************/
 
-#include "servers/rendering/renderer_viewport.h"
 #include "servers/rendering/renderer_rd/storage_rd/render_data_rd.h"
+#include "servers/rendering/renderer_viewport.h"
+#include "servers/rendering/rendering_server_globals.h"
 #include "tests/test_macros.h"
 
-#include "servers/rendering/rendering_server_globals.h"
-
 TEST_FORCE_LINK(test_viewport_camera_source)
+
+TEST_CASE("[B4][E14][E16] pre-cull camera capture freezes the registered exact payload") {
+	REQUIRE(RSG::viewport != nullptr);
+	RID viewport = RSG::viewport->viewport_allocate();
+	RSG::viewport->viewport_initialize(viewport);
+	RID other_viewport = RSG::viewport->viewport_allocate();
+	RSG::viewport->viewport_initialize(other_viewport);
+	RendererSceneRender::CameraData camera{};
+	Projection projection;
+	projection.set_perspective(67, 1.5, 0.2, 700);
+	camera.set_camera(Transform3D(Basis(), Vector3(2, 3, 4)), projection, false, true, Vector2(0.25, -0.5), 8, 0x17);
+	RendererSceneRender::CameraData copy{};
+	copy.main_transform.origin = Vector3(90, 91, 92);
+	const auto sentinel = copy.main_transform;
+	CHECK_FALSE(RSG::viewport->viewport_begin_camera_capture(viewport, camera).is_valid());
+	CHECK_FALSE(camera.has_source_token());
+	RendererViewport::Viewport::ViewPresentationKey key;
+	key.view_id = 81;
+	key.view_epoch = 6;
+	key.present_seq = 1;
+	REQUIRE(RSG::viewport->viewport_register_presentation_key(viewport, key));
+	// Even equal numeric associations cannot transfer a payload to another RID.
+	REQUIRE(RSG::viewport->viewport_register_presentation_key(other_viewport, key));
+	const auto token = RSG::viewport->viewport_begin_camera_capture(viewport, camera);
+	REQUIRE(token.is_valid());
+	CHECK(camera.source_view_id == key.view_id);
+	CHECK(camera.source_view_epoch == key.view_epoch);
+	CHECK(camera.source_capture_ordinal == token.capture_ordinal);
+	CHECK_FALSE(RSG::viewport->viewport_get_previous_camera_token(viewport).is_valid());
+	CHECK_FALSE(RSG::viewport->viewport_adopt_camera_data(viewport));
+	CHECK_FALSE(RSG::viewport->viewport_get_camera_capture(other_viewport, token, copy));
+	CHECK(copy.main_transform == sentinel);
+	for (int component = 0; component < 3; component++) {
+		auto foreign = token;
+		if (component == 0) {
+			foreign.view_id++;
+		} else if (component == 1) {
+			foreign.view_epoch++;
+		} else {
+			foreign.capture_ordinal++;
+		}
+		CHECK_FALSE(RSG::viewport->viewport_get_camera_capture(viewport, foreign, copy));
+		CHECK(copy.main_transform == sentinel);
+	}
+	const auto frozen = camera;
+	// The source stack object and a returned copy cannot mutate the native record.
+	camera.main_transform.origin = Vector3(8, 9, 10);
+	camera.taa_jitter = Vector2(1, 1);
+	for (int repeat = 0; repeat < 2; repeat++) {
+		REQUIRE(RSG::viewport->viewport_get_camera_capture(viewport, token, copy));
+		CHECK(copy.main_transform == frozen.main_transform);
+		CHECK(copy.main_projection == frozen.main_projection);
+		CHECK(copy.taa_jitter == frozen.taa_jitter);
+		CHECK(copy.taa_frame_count == frozen.taa_frame_count);
+		CHECK(copy.visible_layers == frozen.visible_layers);
+		CHECK(copy.vaspect == frozen.vaspect);
+		CHECK(copy.is_orthogonal == frozen.is_orthogonal);
+		CHECK(copy.view_count == frozen.view_count);
+		for (uint32_t view = 0; view < frozen.view_count; view++) {
+			CHECK(copy.view_offset[view] == frozen.view_offset[view]);
+			CHECK(copy.view_projection[view] == frozen.view_projection[view]);
+		}
+		copy.main_transform.origin = Vector3(40, 41, 42);
+	}
+	REQUIRE(RSG::viewport->viewport_stage_camera_data(viewport, &frozen, token));
+	CHECK_FALSE(RSG::viewport->viewport_get_previous_camera_token(viewport).is_valid());
+	REQUIRE(RSG::viewport->viewport_adopt_camera_data(viewport));
+	CHECK(RSG::viewport->viewport_get_previous_camera_token(viewport) == token);
+	CHECK(RSG::viewport->viewport_get_camera_capture(viewport, token, copy));
+	const auto next = RSG::viewport->viewport_begin_camera_capture(viewport, camera);
+	CHECK(next.capture_ordinal == token.capture_ordinal + 1);
+	CHECK_FALSE(RSG::viewport->viewport_get_camera_capture(viewport, token, copy));
+	CHECK(RSG::viewport->viewport_get_camera_capture(viewport, next, copy));
+	CHECK(RSG::viewport->viewport_get_previous_camera_token(viewport) == token);
+	key.view_epoch++;
+	REQUIRE(RSG::viewport->viewport_register_presentation_key(viewport, key));
+	CHECK_FALSE(RSG::viewport->viewport_get_camera_capture(viewport, next, copy));
+	CHECK_FALSE(RSG::viewport->viewport_get_previous_camera_token(viewport).is_valid());
+	const auto epoch_token = RSG::viewport->viewport_begin_camera_capture(viewport, camera);
+	CHECK(RSG::viewport->viewport_get_camera_capture(viewport, epoch_token, copy));
+	RSG::viewport->viewport_invalidate_presentation_key(viewport);
+	CHECK_FALSE(RSG::viewport->viewport_get_camera_capture(viewport, epoch_token, copy));
+	REQUIRE(RSG::viewport->viewport_register_presentation_key(viewport, key));
+	CHECK_FALSE(RSG::viewport->viewport_get_camera_capture(viewport, epoch_token, copy));
+	const auto registered_again = RSG::viewport->viewport_begin_camera_capture(viewport, camera);
+	CHECK(registered_again.capture_ordinal > epoch_token.capture_ordinal);
+	CHECK(RSG::viewport->viewport_get_camera_capture(viewport, registered_again, copy));
+	// A token-only invocation never exposes an earlier invocation's payload.
+	const auto no_payload = RSG::viewport->viewport_begin_camera_capture(viewport);
+	CHECK_FALSE(RSG::viewport->viewport_get_camera_capture(viewport, registered_again, copy));
+	CHECK_FALSE(RSG::viewport->viewport_get_camera_capture(viewport, no_payload, copy));
+	RSG::viewport->free(viewport);
+	CHECK_FALSE(RSG::viewport->viewport_get_camera_capture(viewport, no_payload, copy));
+	RSG::viewport->free(other_viewport);
+}
 
 TEST_CASE("[B4][E15] viewport camera source requires explicit C01 registration") {
 	CHECK(RSG::viewport != nullptr);
@@ -93,7 +187,6 @@ TEST_CASE("[B4][E15] viewport camera source requires explicit C01 registration")
 	CHECK(invalidated_previous->source_capture_ordinal == 0);
 	RSG::viewport->free(viewport);
 }
-
 
 TEST_CASE("[B4][E17] external packet identity requires camera tuple and material capability") {
 	RendererSceneRender::CameraData camera;
