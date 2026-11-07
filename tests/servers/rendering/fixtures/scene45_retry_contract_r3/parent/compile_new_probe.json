@@ -1,0 +1,32 @@
+{
+  "label": "compile_new_probe",
+  "returncode": 0,
+  "seconds": 1.8735990524291992,
+  "command": [
+    "clang++",
+    "-std=c++17",
+    "-O0",
+    "-g0",
+    "-fPIC",
+    "-DSCENE_NUMERIC_SOURCE_CONTROL",
+    "-DMACOS_ENABLED",
+    "-DUNIX_ENABLED",
+    "-DTHREADS_ENABLED",
+    "-DDEBUG_ENABLED",
+    "-DNDEBUG",
+    "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene-numeric-frozen-source-20261107/godot-cpp/gen/include",
+    "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene-numeric-frozen-source-20261107/godot-cpp/include",
+    "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene-numeric-frozen-source-20261107",
+    "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene-numeric-frozen-source-20261107/src",
+    "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene-numeric-frozen-source-20261107/thirdparty",
+    "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene-numeric-frozen-source-20261107/thirdparty/spirv-reflect",
+    "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene-numeric-frozen-source-20261107/thirdparty/flecs/distr",
+    "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene-numeric-frozen-source-20261107/thirdparty/rapidyaml/ryml",
+    "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene-numeric-frozen-source-20261107/thirdparty/rapidyaml/c4core",
+    "-I/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104",
+    "-c",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r3-retry-contract/runner/probe.cpp",
+    "-o",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r3-retry-contract/probe.o"
+  ]
+}

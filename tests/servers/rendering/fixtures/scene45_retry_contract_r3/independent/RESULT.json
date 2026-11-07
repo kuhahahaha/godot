@@ -1,0 +1,53 @@
+{
+  "base": "1e0a609539",
+  "independent_execution": "offline validation only; no GPU/build/source changes",
+  "positive_occurrences": 117,
+  "cancel_occurrences": 1,
+  "terminal_facts_positive": 1521,
+  "terminal_facts_cancel": 3,
+  "positive_actual_retry_count": 0,
+  "positive_actual_accept_count": 117,
+  "all118_revalidated": true,
+  "inputs_unchanged": true,
+  "negative_sensitivity": {
+    "extra_successful_kind9_with_complete_snapshot": {
+      "case": "positive",
+      "rejected": true
+    },
+    "delete_actual_accept": {
+      "case": "positive",
+      "rejected": true
+    },
+    "change_actual_accept_ticket": {
+      "case": "positive",
+      "rejected": true
+    },
+    "pollute_actual_snapshot_with_capture": {
+      "case": "positive",
+      "rejected": true
+    },
+    "mismatch_actual_snapshot_fact_count": {
+      "case": "positive",
+      "rejected": true
+    },
+    "claim_noappend_bool_does_not_replace_snapshot": {
+      "case": "positive",
+      "rejected": true
+    },
+    "busy19_without_typed_retry_evidence": {
+      "case": "positive",
+      "rejected": true
+    },
+    "cancel_reason19_is_not_original16": {
+      "case": "cancel_prefix",
+      "rejected": true
+    }
+  },
+  "hashes": {
+    "work/scene45-native-qualification-successor-r3-retry-contract/runner/probe.cpp": "4eb6abe17f9ac83efcb1686507e739243296820a98fecc4ca62e5367e6f1bf59",
+    "work/scene45-native-qualification-successor-r3-retry-contract/runner/run_control.py": "a7da6cd40534c7a6b630f96ae9d0a138bd86c70b2347fb35fdde8a61410ce4f8",
+    "work/scene45-native-qualification-successor-r3-retry-contract/native-artifacts/RESULTS.json": "c3d3cb7341612e56b157f791a455bb94c70dd1c38895a02c62cdf92c780d369b",
+    "work/scene45-native-qualification-successor-r3-retry-contract/native-artifacts/POSITIVE.log": "94bd263d1f544e7f3a224ce97de5f934cf09b2d41be3af08a877b1cce431c9c6",
+    "work/scene45-native-qualification-successor-r3-retry-contract/native-artifacts/CANCEL_PREFIX.log": "62aef0ad2820a15fbb70d56aac846ed255332731d280938092a56efefc28250e"
+  }
+}

@@ -1,0 +1,38 @@
+[
+  {
+    "original": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r3-retry-contract/native-artifacts/POSITIVE.log",
+    "archived": false,
+    "bytes": 2062051,
+    "sha256": "94bd263d1f544e7f3a224ce97de5f934cf09b2d41be3af08a877b1cce431c9c6"
+  },
+  {
+    "original": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r3-retry-contract/native-artifacts/RUN_INPUTS_BEFORE.json",
+    "archived": false,
+    "bytes": 906463,
+    "sha256": "56956c6077117d61cef17b9dbfcdbee03eb521044bf3c185a85b48c3146ee759"
+  },
+  {
+    "original": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r3-retry-contract/native-artifacts/RUN_INPUTS_AFTER.json",
+    "archived": false,
+    "bytes": 906463,
+    "sha256": "56956c6077117d61cef17b9dbfcdbee03eb521044bf3c185a85b48c3146ee759"
+  },
+  {
+    "original": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r3-retry-contract/runner/probe.cpp",
+    "archived": false,
+    "bytes": 51256,
+    "sha256": "4eb6abe17f9ac83efcb1686507e739243296820a98fecc4ca62e5367e6f1bf59"
+  },
+  {
+    "original": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r3-retry-contract/runner/run_control.py",
+    "archived": false,
+    "bytes": 17556,
+    "sha256": "a7da6cd40534c7a6b630f96ae9d0a138bd86c70b2347fb35fdde8a61410ce4f8"
+  },
+  {
+    "original": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r3-retry-contract/RUN_CONFIG.json",
+    "archived": false,
+    "bytes": 277744,
+    "sha256": "c552f19ec1fd6fae70d2b85a3f5b3a8520f6b06625a021b089d35fa46bef7761"
+  }
+]

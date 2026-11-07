@@ -1,0 +1,11 @@
+{
+  "label": "original_full_positive_then_cancel",
+  "returncode": 0,
+  "seconds": 15.889693975448608,
+  "command": [
+    "python3",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r3-retry-contract/runner/run_control.py",
+    "--scene-config",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r3-retry-contract/RUN_CONFIG.json"
+  ]
+}

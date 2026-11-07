@@ -1,0 +1,44 @@
+import ast, hashlib, json, re
+from pathlib import Path
+base=Path('/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104')
+r3=base/'work/scene45-native-qualification-successor-r3-retry-contract'
+p=r3/'native-artifacts'
+source=(r3/'runner/run_control.py').read_text()
+nodes=[n for n in ast.parse(source).body if isinstance(n,ast.FunctionDef) and n.name in ('sha','record_return_contract','validate_occurrence')]
+ns={'hashlib':hashlib,'json':json,'re':re,'Path':Path}
+exec(compile(ast.Module(body=nodes,type_ignores=[]),str(r3/'runner/run_control.py'),'exec'),ns)
+result=json.loads((p/'RESULTS.json').read_text())
+observed=[];blocks={}
+for run in result['runs']:
+ case=run['case'];raw=(p/(case.upper()+'.log')).read_text()
+ matches=list(re.finditer(r'ORIGINAL_SCENE_OCCURRENCE_BEGIN ordinal=(\d+)\n(.*?)ORIGINAL_SCENE_OCCURRENCE_END ordinal=\1 physical_returns=1\n',raw,re.S))
+ assert [int(m[1]) for m in matches]==list(range(117 if case=='positive' else 1))
+ for m,expected in zip(matches,run['occurrences']):
+  ordinal=int(m[1]);block=m[2];metadata=json.loads((p/f'occurrence-{ordinal}/input/unit.json').read_text())
+  actual=ns['validate_occurrence'](block,raw,metadata,p/f'occurrence-{ordinal}'/('result_'+case),case,run['rc'],run['timeout'])
+  assert all(actual['checks'].values()) and actual['checks']==expected['checks']
+  assert [list(x) for x in actual['facts']]==expected['facts']
+  observed.append({'case':case,'ordinal':ordinal,'facts':len(actual['facts']),'checks':len(actual['checks'])})
+  blocks.setdefault(case,(block,raw,metadata,p/f'occurrence-{ordinal}'/('result_'+case)))
+
+def verdict(text,case):
+ block,raw,metadata,output=blocks[case]
+ return ns['validate_occurrence'](text,raw,metadata,output,case,0,False)['checks']['qrt_original_returns']
+b=blocks['positive'][0];c=blocks['cancel_prefix'][0]
+extra_lines = [line for line in b.splitlines() if line.startswith('QRT_NATIVE_RETURN kind=9 ') or line.startswith('QRT_CALL_IDENTITY kind=9 ') or line.startswith('ORIGINAL_RECORD_SNAPSHOT ') or line.startswith('ORIGINAL_RECORD_SNAPSHOT_FACT ')]
+extra_call = b + '\n'.join(re.sub(r'operation=\d+', 'operation=999999', line) for line in extra_lines) + '\n'
+mutations={
+ 'extra_successful_kind9_with_complete_snapshot':('positive',extra_call),
+ 'delete_actual_accept':('positive',re.sub(r'^ORIGINAL_RECORD_ACCEPT .*\n','',b,flags=re.M)),
+ 'change_actual_accept_ticket':('positive',re.sub(r'(ORIGINAL_RECORD_ACCEPT [^\n]*ticket=)\d+:\d+',r'\g<1>1:999999',b)),
+ 'pollute_actual_snapshot_with_capture':('positive',re.sub(r'(ORIGINAL_RECORD_SNAPSHOT_FACT [^\n]*semantic=)[456]',r'\g<1>1',b,count=1)),
+ 'mismatch_actual_snapshot_fact_count':('positive',re.sub(r'(ORIGINAL_RECORD_SNAPSHOT [^\n]*facts=)\d+',r'\g<1>999999',b,count=1)),
+ 'claim_noappend_bool_does_not_replace_snapshot':('positive',re.sub(r'^ORIGINAL_RECORD_SNAPSHOT(?:_FACT)? .*\n','',b,flags=re.M)+'noRecordAppend=1\n'),
+ 'busy19_without_typed_retry_evidence':('positive',re.sub(r'(QRT_NATIVE_RETURN kind=9[^\n]*error=)0',r'\g<1>44',re.sub(r'(QRT_CALL_IDENTITY kind=9[^\n]*error=)0 reason=0',r'\g<1>44 reason=19',b))),
+ 'cancel_reason19_is_not_original16':('cancel_prefix',c.replace('error=44 reason=16','error=44 reason=19')),
+}
+sensitivity={name:{'case':case,'rejected':not verdict(text,case)} for name,(case,text) in mutations.items()}
+assert all(v['rejected'] for v in sensitivity.values())
+before=json.loads((p/'RUN_INPUTS_BEFORE.json').read_text());after=json.loads((p/'RUN_INPUTS_AFTER.json').read_text());assert before==after
+out={'base': '1e0a609539','independent_execution':'offline validation only; no GPU/build/source changes','positive_occurrences':117,'cancel_occurrences':1,'terminal_facts_positive':sum(x['facts'] for x in observed if x['case']=='positive'),'terminal_facts_cancel':sum(x['facts'] for x in observed if x['case']=='cancel_prefix'),'positive_actual_retry_count':(p/'POSITIVE.log').read_text().count('ORIGINAL_RECORD_RETRY '),'positive_actual_accept_count':(p/'POSITIVE.log').read_text().count('ORIGINAL_RECORD_ACCEPT '),'all118_revalidated':True,'inputs_unchanged':True,'negative_sensitivity':sensitivity,'hashes':{str(f.relative_to(base)):hashlib.sha256(f.read_bytes()).hexdigest() for f in [r3/'runner/probe.cpp',r3/'runner/run_control.py',p/'RESULTS.json',p/'POSITIVE.log',p/'CANCEL_PREFIX.log']}}
+Path(__file__).with_name('RESULT.json').write_text(json.dumps(out,indent=2)+'\n');print(json.dumps({k:v for k,v in out.items() if k!='hashes'},indent=2))
