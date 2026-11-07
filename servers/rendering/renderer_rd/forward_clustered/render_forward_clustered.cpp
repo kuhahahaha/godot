@@ -4407,6 +4407,10 @@ void RenderForwardClustered::_geometry_instance_update(RenderGeometryInstance *p
 		ginstance->data->dependency_tracker.update_begin();
 	}
 
+	// Only the original SceneOnly profile is metadata without particle geometry.
+	// Render profiles keep their own native consumer/admission requirements.
+	const bool scene_only_particles = ginstance->data->base_type == RSE::INSTANCE_PARTICLES && particles_storage->particles_is_external_scene_only(ginstance->data->base);
+
 	//add geometry for drawing
 	switch (ginstance->data->base_type) {
 		case RSE::INSTANCE_MESH: {
@@ -4461,6 +4465,10 @@ void RenderForwardClustered::_geometry_instance_update(RenderGeometryInstance *p
 		} break;
 #endif
 		case RSE::INSTANCE_PARTICLES: {
+			if (scene_only_particles) {
+				ginstance->instance_count = 0;
+				break;
+			}
 			int draw_passes = particles_storage->particles_get_draw_passes(ginstance->data->base);
 
 			for (int j = 0; j < draw_passes; j++) {
@@ -4493,7 +4501,12 @@ void RenderForwardClustered::_geometry_instance_update(RenderGeometryInstance *p
 	ginstance->base_flags = 0;
 
 	bool store_transform = true;
-	if (ginstance->data->base_type == RSE::INSTANCE_MULTIMESH) {
+	if (scene_only_particles) {
+		ginstance->transforms_uniform_set = RID();
+		if (ginstance->data->dirty_dependencies) {
+			particles_storage->particles_update_dependency(ginstance->data->base, &ginstance->data->dependency_tracker);
+		}
+	} else if (ginstance->data->base_type == RSE::INSTANCE_MULTIMESH) {
 		ginstance->base_flags |= INSTANCE_DATA_FLAG_MULTIMESH;
 
 		if (mesh_storage->multimesh_get_transform_format(ginstance->data->base) == RSE::MULTIMESH_TRANSFORM_2D) {
@@ -4548,7 +4561,7 @@ void RenderForwardClustered::_geometry_instance_update(RenderGeometryInstance *p
 	ginstance->store_transform_cache = store_transform;
 	ginstance->can_sdfgi = false;
 
-	if (!RendererRD::LightStorage::get_singleton()->lightmap_instance_is_valid(ginstance->lightmap_instance)) {
+	if (!scene_only_particles && !RendererRD::LightStorage::get_singleton()->lightmap_instance_is_valid(ginstance->lightmap_instance)) {
 		if (ginstance->voxel_gi_instances[0].is_null() && (ginstance->data->use_baked_light || ginstance->data->use_dynamic_gi)) {
 			ginstance->can_sdfgi = true;
 		}

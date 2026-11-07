@@ -36,6 +36,10 @@ REQUIRED_CHECKS = {
     "viewport_receiver_snapshot",
     "viewport_original_root_live",
     "viewport_receiver_retained_until_observation",
+    "viewport_post_draw_snapshot",
+    "viewport_post_draw_source_unchanged",
+    "viewport_post_draw_query_unchanged",
+    "viewport_post_draw_revisions_unchanged",
 }
 
 

@@ -16,7 +16,10 @@ uses the existing adopted Callable, original protected RECORD and actual draw's
 typed phase callback to install an original generation root. A SCENE_ONLY native
 receiver is attached to that SAME viewport's world and its original committed
 query is checked against a real sphere source. Receiver and root remain alive
-through both after-view draws and their actual image readbacks. Each comparison
+through both after-view draws and their actual image readbacks. The harness then
+resamples the same receiver's native snapshot before cleanup, requiring its
+source identity, shape, transform, radius, receiver transform, query bounds and
+pose/bounds/pair revisions to remain unchanged. Each pixel comparison
 requires two visible draws, nonuniform pixels in both actual images and
 identical RGBA8 bytes; four PNGs and raw-RGBA SHA256
 values are emitted per renderer. stage4 is readiness only, never GPU completion.
@@ -37,7 +40,7 @@ ANGE_SCENE_VIEWPORT_CAPTURE_DIR=/absolute/baseline-mobile-evidence \
 Repeat with `--rendering-method forward_plus` and a separate capture directory
 for Forward+. This emits `mode: baseline-only` with the same exact RGBA/draw-count
 comparisons but no managed root checks; it is a setup stability control, not a
-formal managed acceptance run. The normal runner still requires all 18 lifecycle
+formal managed acceptance run. The normal runner still requires all 22 lifecycle
 checks and emits `mode: managed`.
 
 After observation, the original receiver/source are freed, future drawing stops,
@@ -46,12 +49,14 @@ generation OBSERVE/RELEASE and enrollment cleanup checks run. The existing manag
 55-check default route is unchanged. The borrowed viewport world is freed only
 after all original owner cleanup has returned.
 
-Current expected RED: ordinary renderer/dependency/cull code still sends a live
-external SCENE_ONLY receiver to legacy particle getters/process requests. The
-fixture leaves it visible, leaves shadows enabled, and retains it across actual
-camera draws so those errors are exposed, not suppressed. Only the original
-production owners may add the missing routing; this fixture modifies no owner or
-dispatch API and never invokes scene_phase_dispatch directly.
+The original fixed c4c21 regression is RED: ordinary renderer/dependency/cull
+code sent the live external SCENE_ONLY receiver to legacy getters and process
+requests. The adopted original-owner profile query, Mobile/Clustered consumers
+and Scene cull routing address that exact path. This fixture leaves the receiver
+visible and shadows enabled so the combined routing must preserve the ordinary
+draws without suppressing diagnostics. Keep historical RED logs unchanged and
+join successor results to their actual source and binary identities. The test
+never invokes scene_phase_dispatch directly.
 
 The native test substrate is not a public Scene connection issuer. Output reports
 `external_scene_connection: not-present` and `pair_membership: not-observed`.

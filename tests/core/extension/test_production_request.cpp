@@ -11663,6 +11663,7 @@ struct Access {
 		bool phase_mode = false;
 		bool viewport_mode = false;
 		RID viewport_scenario, viewport_receiver, viewport_source, viewport_collision;
+		RendererSceneCull::SceneSphereSnapshot viewport_snapshot;
 		Callable phase_callable;
 		GDExtensionScenePhaseRegistrationRefV1 phase_registration{};
 		GDExtensionProductionRequestRefV1 waiting_request{};
@@ -11843,14 +11844,28 @@ struct Access {
 			const AABB query(Vector3(-1, -1, -1), Vector3(2, 2, 2));
 			check("viewport_receiver_query_committed", scene->scene_receiver_commit_query(viewport_receiver, native->generation, device, Transform3D(), query, query, 1) == OK);
 			scene->update_dirty_instances();
-			RendererSceneCull::SceneSphereSnapshot snapshot;
-			check("viewport_receiver_snapshot", scene->scene_sphere_snapshot(viewport_receiver, native->generation, device, 4, snapshot) == OK && snapshot.sources.size() == 1);
+			check("viewport_receiver_snapshot", scene->scene_sphere_snapshot(viewport_receiver, native->generation, device, 4, viewport_snapshot) == OK && viewport_snapshot.sources.size() == 1);
 			check("viewport_original_root_live", !native->generation_pin().is_empty());
 		}
 		void finish_viewport_observation() {
 			CRASH_COND(!viewport_mode || stage != 4);
 			auto *scene = RendererSceneCull::singleton;
 			check("viewport_receiver_retained_until_observation", viewport_receiver.is_valid() && !native->generation_pin().is_empty());
+			RendererSceneCull::SceneSphereSnapshot observed;
+			const bool snapshot_valid = scene->scene_sphere_snapshot(viewport_receiver, native->generation, device, 4, observed) == OK && observed.sources.size() == 1 && viewport_snapshot.sources.size() == 1;
+			check("viewport_post_draw_snapshot", snapshot_valid);
+			check("viewport_post_draw_source_unchanged", snapshot_valid &&
+					observed.sources[0].source_key == viewport_snapshot.sources[0].source_key &&
+					observed.sources[0].shape_revision == viewport_snapshot.sources[0].shape_revision &&
+					observed.sources[0].transform == viewport_snapshot.sources[0].transform &&
+					observed.sources[0].radius == viewport_snapshot.sources[0].radius);
+			check("viewport_post_draw_query_unchanged", snapshot_valid &&
+					observed.receiver_transform == viewport_snapshot.receiver_transform &&
+					observed.query_bounds == viewport_snapshot.query_bounds);
+			check("viewport_post_draw_revisions_unchanged", snapshot_valid &&
+					observed.pose_revision == viewport_snapshot.pose_revision &&
+					observed.bounds_revision == viewport_snapshot.bounds_revision &&
+					observed.pair_revision == viewport_snapshot.pair_revision);
 			scene->free(viewport_source);viewport_source = RID();
 			scene->free(viewport_receiver);viewport_receiver = RID();
 			RendererRD::ParticlesStorage::get_singleton()->particles_collision_free(viewport_collision);viewport_collision = RID();
