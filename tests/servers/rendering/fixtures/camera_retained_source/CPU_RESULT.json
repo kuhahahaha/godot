@@ -1,0 +1,159 @@
+[
+  {
+    "label": "FOCUSED",
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=*[CameraCapture]*,*[CameraStage]*,*[E14][E16]*",
+      "--reporters=xml",
+      "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/sprite-camera-retained-source-20261107/FOCUSED.xml"
+    ],
+    "exit_code": 0,
+    "seconds": 1.46,
+    "assertions": [
+      {
+        "successes": "66",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "successes": "92",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "successes": "14",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "successes": "19",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "successes": "191",
+        "failures": "0"
+      }
+    ],
+    "cases": [
+      {
+        "successes": "4",
+        "failures": "0",
+        "skipped": "2256"
+      }
+    ]
+  },
+  {
+    "label": "CAMERA_NEIGHBORS",
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=*[B4]*camera*,*[B4]*Camera*,*[B4]*packet*,*[B4]*RenderDataRD*",
+      "--reporters=xml",
+      "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/sprite-camera-retained-source-20261107/CAMERA_NEIGHBORS.xml"
+    ],
+    "exit_code": 0,
+    "seconds": 0.08,
+    "assertions": [
+      {
+        "successes": "142",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "successes": "66",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "successes": "92",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "successes": "38",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "successes": "31",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "successes": "9",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "successes": "9",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "successes": "8",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "successes": "11",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "successes": "11",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "successes": "8",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "successes": "7",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "successes": "14",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "successes": "24",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "successes": "16",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "successes": "14",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "successes": "19",
+        "failures": "0",
+        "test_case_success": "true"
+      },
+      {
+        "successes": "519",
+        "failures": "0"
+      }
+    ],
+    "cases": [
+      {
+        "successes": "17",
+        "failures": "0",
+        "skipped": "2243"
+      }
+    ]
+  }
+]

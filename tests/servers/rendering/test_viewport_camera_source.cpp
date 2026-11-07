@@ -35,6 +35,117 @@
 
 TEST_FORCE_LINK(test_viewport_camera_source)
 
+TEST_CASE("[B4][CameraCapture] retained native camera payload survives source retirement") {
+	REQUIRE(RSG::viewport != nullptr);
+	const RID viewport = RSG::viewport->viewport_allocate();
+	RSG::viewport->viewport_initialize(viewport);
+	const RID other_viewport = RSG::viewport->viewport_allocate();
+	RSG::viewport->viewport_initialize(other_viewport);
+	RendererViewport::Viewport::ViewPresentationKey key{ 821, 7, 11 };
+	REQUIRE(RSG::viewport->viewport_register_presentation_key(viewport, key));
+	REQUIRE(RSG::viewport->viewport_register_presentation_key(other_viewport, key));
+	RendererSceneRender::CameraData camera{};
+	Projection projection;
+	projection.set_perspective(67, 1.5, 0.2, 700);
+	camera.set_camera(Transform3D(Basis(), Vector3(2, 3, 4)), projection, false, true, Vector2(0.25, -0.5), 8, 0x17);
+	const auto token = RSG::viewport->viewport_begin_camera_capture(viewport, camera);
+	REQUIRE(token.is_valid());
+	const auto original = camera;
+	auto *native_viewport = RSG::viewport->viewport_owner.get_or_null(viewport);
+	// Ordinary capture and the existing copy getter allocate no retained object.
+	CHECK(native_viewport->captured_camera.is_null());
+	RendererSceneRender::CameraData copied{};
+	REQUIRE(RSG::viewport->viewport_get_camera_capture(viewport, token, copied));
+	CHECK(native_viewport->captured_camera.is_null());
+	Ref<RendererViewport::Viewport::CameraCapture> retained;
+	CHECK_FALSE(RSG::viewport->viewport_get_camera_capture_ref(other_viewport, token, retained));
+	CHECK(retained.is_null());
+	const uint64_t captured_present_seq = key.present_seq;
+	key.present_seq++;
+	REQUIRE(RSG::viewport->viewport_register_presentation_key(viewport, key));
+	REQUIRE(RSG::viewport->viewport_get_camera_capture_ref(viewport, token, retained));
+	CHECK(retained->get_viewport() == viewport);
+	CHECK(retained->get_token() == token);
+	CHECK(retained->get_presentation_key().view_id == key.view_id);
+	CHECK(retained->get_presentation_key().view_epoch == key.view_epoch);
+	CHECK(retained->get_presentation_key().present_seq == captured_present_seq);
+	Ref<RendererViewport::Viewport::CameraCapture> repeated;
+	REQUIRE(RSG::viewport->viewport_get_camera_capture_ref(viewport, token, repeated));
+	CHECK(repeated.ptr() == retained.ptr());
+	for (int field = 0; field < 3; field++) {
+		auto foreign = token;
+		if (field == 0) {
+			foreign.view_id++;
+		} else if (field == 1) {
+			foreign.view_epoch++;
+		} else {
+			foreign.capture_ordinal++;
+		}
+		CHECK_FALSE(RSG::viewport->viewport_get_camera_capture_ref(viewport, foreign, repeated));
+		CHECK(repeated.ptr() == retained.ptr());
+	}
+	CHECK(retained->get_reference_count() == 3); // current cache and two callers.
+	camera.main_transform.origin = Vector3(50, 60, 70);
+	copied.view_projection[0].columns[0][0] += 1;
+	CHECK(retained->get_camera_data().main_transform == original.main_transform);
+	CHECK(retained->get_camera_data().view_projection[0] == original.view_projection[0]);
+	// A changed presentation sequence must not relabel an already captured source.
+	key.present_seq++;
+	REQUIRE(RSG::viewport->viewport_register_presentation_key(viewport, key));
+	REQUIRE(RSG::viewport->viewport_get_camera_capture_ref(viewport, token, repeated));
+	CHECK(repeated->get_presentation_key().present_seq == captured_present_seq);
+	const auto next = RSG::viewport->viewport_begin_camera_capture(viewport, camera);
+	REQUIRE(next.is_valid());
+	CHECK(native_viewport->captured_camera.is_null());
+	CHECK(retained->get_reference_count() == 2);
+	CHECK_FALSE(RSG::viewport->viewport_get_camera_capture_ref(viewport, token, repeated));
+	CHECK(repeated.ptr() == retained.ptr()); // failure preserves the output.
+	Ref<RendererViewport::Viewport::CameraCapture> next_retained;
+	REQUIRE(RSG::viewport->viewport_get_camera_capture_ref(viewport, next, next_retained));
+	CHECK(next_retained.ptr() != retained.ptr());
+	CHECK(next_retained->get_camera_data().main_transform == camera.main_transform);
+	CHECK(next_retained->get_presentation_key().present_seq == key.present_seq);
+	key.view_epoch++;
+	REQUIRE(RSG::viewport->viewport_register_presentation_key(viewport, key));
+	CHECK(native_viewport->captured_camera.is_null());
+	CHECK(next_retained->get_reference_count() == 1);
+	CHECK_FALSE(RSG::viewport->viewport_get_camera_capture_ref(viewport, next, repeated));
+	const auto epoch_token = RSG::viewport->viewport_begin_camera_capture(viewport, camera);
+	Ref<RendererViewport::Viewport::CameraCapture> epoch_retained;
+	REQUIRE(RSG::viewport->viewport_get_camera_capture_ref(viewport, epoch_token, epoch_retained));
+	RSG::viewport->viewport_invalidate_presentation_key(viewport);
+	CHECK(epoch_retained->get_reference_count() == 1);
+	CHECK_FALSE(RSG::viewport->viewport_get_camera_capture_ref(viewport, epoch_token, repeated));
+	REQUIRE(RSG::viewport->viewport_register_presentation_key(viewport, key));
+	const auto empty_token = RSG::viewport->viewport_begin_camera_capture(viewport);
+	CHECK_FALSE(RSG::viewport->viewport_get_camera_capture_ref(viewport, empty_token, repeated));
+	CHECK(repeated.ptr() == retained.ptr());
+	const auto last_token = RSG::viewport->viewport_begin_camera_capture(viewport, camera);
+	Ref<RendererViewport::Viewport::CameraCapture> last_retained;
+	REQUIRE(RSG::viewport->viewport_get_camera_capture_ref(viewport, last_token, last_retained));
+	RSG::viewport->free(viewport);
+	CHECK(last_retained->get_reference_count() == 1);
+	CHECK_FALSE(RSG::viewport->viewport_get_camera_capture_ref(viewport, last_token, repeated));
+	CHECK(repeated.ptr() == retained.ptr());
+	const auto &frozen = retained->get_camera_data();
+	CHECK(frozen.main_transform == original.main_transform);
+	CHECK(frozen.main_projection == original.main_projection);
+	CHECK(frozen.view_count == original.view_count);
+	CHECK(frozen.taa_jitter == original.taa_jitter);
+	CHECK(frozen.taa_frame_count == original.taa_frame_count);
+	CHECK(frozen.visible_layers == original.visible_layers);
+	CHECK(frozen.is_orthogonal == original.is_orthogonal);
+	CHECK(frozen.vaspect == original.vaspect);
+	for (uint32_t eye = 0; eye < frozen.view_count; eye++) {
+		CHECK(frozen.view_offset[eye] == original.view_offset[eye]);
+		CHECK(frozen.view_projection[eye] == original.view_projection[eye]);
+	}
+	CHECK(frozen.source_capture_ordinal == token.capture_ordinal);
+	CHECK(epoch_retained->get_token() == epoch_token);
+	CHECK(last_retained->get_token() == last_token);
+	RSG::viewport->free(other_viewport);
+}
+
 TEST_CASE("[B4][E14][E16] pre-cull camera capture freezes the registered exact payload") {
 	REQUIRE(RSG::viewport != nullptr);
 	RID viewport = RSG::viewport->viewport_allocate();
@@ -735,6 +846,8 @@ TEST_CASE("[B4][E19][CameraStage] exhausted capture leaves the previous valid st
 	staged.main_transform.origin = Vector3(4, 5, 6);
 	const auto staged_token = RSG::viewport->viewport_begin_camera_capture(viewport, staged);
 	CHECK(RSG::viewport->viewport_stage_camera_data(viewport, &staged, staged_token));
+	Ref<RendererViewport::Viewport::CameraCapture> retained;
+	REQUIRE(RSG::viewport->viewport_get_camera_capture_ref(viewport, staged_token, retained));
 	// Exercise the existing native ordinal boundary without changing token
 	// issuance, thread identity, or introducing a production test hook.
 	auto *native_viewport = RSG::viewport->viewport_owner.get_or_null(viewport);
@@ -747,6 +860,8 @@ TEST_CASE("[B4][E19][CameraStage] exhausted capture leaves the previous valid st
 	CHECK_FALSE(failed.is_valid());
 	CHECK_FALSE(refused.has_source_token());
 	CHECK(native_viewport->camera_capture_ordinal == UINT64_MAX);
+	CHECK(native_viewport->captured_camera.ptr() == retained.ptr());
+	CHECK(retained->get_camera_data().main_transform == staged.main_transform);
 	CHECK(RSG::viewport->viewport_get_current_camera_token(viewport) == staged_token);
 	CHECK(RSG::viewport->viewport_get_previous_camera_token(viewport) == previous_token);
 	CHECK(RSG::viewport->viewport_get_prev_camera_data(viewport)->main_transform == previous.main_transform);

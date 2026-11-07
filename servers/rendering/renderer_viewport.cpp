@@ -1373,6 +1373,8 @@ RendererViewport::Viewport::CameraSourceToken RendererViewport::viewport_begin_c
 	viewport->current_camera_token = token;
 	viewport->captured_camera_data = RendererSceneRender::CameraData();
 	viewport->captured_camera_data_valid = false;
+	viewport->captured_presentation_key = Viewport::ViewPresentationKey();
+	viewport->captured_camera.unref();
 	// A successful new invocation supersedes only the unadopted stage. Keep
 	// the previously adopted camera until this invocation actually adopts.
 	// Sequence exhaustion above must leave the existing stage untouched.
@@ -1393,6 +1395,7 @@ RendererViewport::Viewport::CameraSourceToken RendererViewport::viewport_begin_c
 	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
 	viewport->captured_camera_data = r_camera_data;
 	viewport->captured_camera_data_valid = true;
+	viewport->captured_presentation_key = viewport->presentation_key;
 	return token;
 }
 
@@ -1404,6 +1407,20 @@ bool RendererViewport::viewport_get_camera_capture(RID p_viewport, const Viewpor
 		return false;
 	}
 	r_camera_data = viewport->captured_camera_data;
+	return true;
+}
+
+bool RendererViewport::viewport_get_camera_capture_ref(RID p_viewport, const Viewport::CameraSourceToken &p_token, Ref<Viewport::CameraCapture> &r_capture) const {
+	const Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	if (!viewport || !viewport->presentation_registered || !viewport->captured_camera_data_valid ||
+			!p_token.is_valid() || p_token.view_epoch == 0 || p_token != viewport->current_camera_token ||
+			p_token.view_id != viewport->presentation_key.view_id || p_token.view_epoch != viewport->presentation_key.view_epoch) {
+		return false;
+	}
+	if (viewport->captured_camera.is_null()) {
+		viewport->captured_camera = Ref<Viewport::CameraCapture>(memnew(Viewport::CameraCapture(p_viewport, viewport->captured_presentation_key, p_token, viewport->captured_camera_data)));
+	}
+	r_capture = viewport->captured_camera;
 	return true;
 }
 
@@ -1425,6 +1442,8 @@ bool RendererViewport::viewport_register_presentation_key(RID p_viewport, const 
 	if (viewport->presentation_registered && viewport->presentation_key.view_epoch != p_key.view_epoch) {
 		viewport->captured_camera_data = RendererSceneRender::CameraData();
 		viewport->captured_camera_data_valid = false;
+		viewport->captured_presentation_key = Viewport::ViewPresentationKey();
+		viewport->captured_camera.unref();
 		viewport->previous_camera_token = Viewport::CameraSourceToken();
 		viewport->current_camera_token = Viewport::CameraSourceToken();
 		viewport->prev_camera_data = RendererSceneRender::CameraData();
@@ -1445,6 +1464,8 @@ void RendererViewport::viewport_invalidate_presentation_key(RID p_viewport) {
 	viewport->presentation_key = Viewport::ViewPresentationKey();
 	viewport->captured_camera_data = RendererSceneRender::CameraData();
 	viewport->captured_camera_data_valid = false;
+	viewport->captured_presentation_key = Viewport::ViewPresentationKey();
+	viewport->captured_camera.unref();
 	viewport->previous_camera_token = Viewport::CameraSourceToken();
 	viewport->current_camera_token = Viewport::CameraSourceToken();
 	// Keep the nonwrapping native ordinal for this viewport RID lifetime.
