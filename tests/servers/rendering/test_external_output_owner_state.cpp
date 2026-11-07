@@ -251,7 +251,17 @@ bool ExternalLinkedOwnerTest::selection_inline_matches(const ExternalOutputConfi
 			return false;
 		}
 	}
-	return memcmp(owner->frozen_config_tags[0], config.producer_tag.ptr(), 32) == 0;
+	const PackedByteArray *tags[] = { &config.producer_tag, &config.device_tag, &config.layout_digest, &config.mapping_digest, &config.numeric_profile_digest };
+	for (uint32_t i = 0; i < 5; ++i) {
+		if (tags[i]->size() != 32 || memcmp(owner->frozen_config_tags[i], tags[i]->ptr(), 32) != 0) {
+			return false;
+		}
+	}
+	return true;
+}
+uint64_t ExternalLinkedOwnerTest::selection_material_generation(uint32_t index) const {
+	CRASH_COND(!exists() || index >= owner->generation_material_count);
+	return owner->generation_materials[index].generation;
 }
 void ExternalLinkedOwnerTest::forget_auto_returned() {
 	CRASH_COND(!empty_storage_mode || storage->particles_owner.get_or_null(particles));

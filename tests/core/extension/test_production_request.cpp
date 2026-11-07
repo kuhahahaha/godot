@@ -5537,7 +5537,8 @@ struct Access {
 	struct GenerationSelectionProbe {
 		SingletonEnrollment *fixture = nullptr;
 		RendererRD::ExternalLinkedOwnerTest *native = nullptr;
-		RendererRD::ExternalOutputConfig config;
+		RendererRD::ExternalOutputConfig config, expected_identity;
+		uint64_t expected_material_generations[2] = {};
 		int failure = 0;
 		uint32_t calls = 0;
 		static void receive(void *opaque, GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionOperationV1 *) {
@@ -5603,7 +5604,20 @@ struct Access {
 			CHECK(result == (p.failure == 0 ? OK : p.failure == 1 ? ERR_INVALID_DATA
 																  : ERR_UNAUTHORIZED));
 			REQUIRE(p.native->exists());
-			CHECK(p.native->selection_inline_matches(p.config));
+			CHECK(p.native->selection_inline_matches(p.expected_identity));
+			for (uint32_t i = 0; i < 2; ++i) {
+				CHECK(p.native->selection_material_generation(i) == p.expected_material_generations[i]);
+			}
+			// Independent expected bytes have their own allocations. Each changed
+			// input tag must disagree without changing the held original identity.
+			PackedByteArray *expected_tags[] = { &p.expected_identity.producer_tag, &p.expected_identity.device_tag, &p.expected_identity.layout_digest, &p.expected_identity.mapping_digest, &p.expected_identity.numeric_profile_digest };
+			for (auto *tag : expected_tags) {
+				const uint8_t original = (*tag)[17];
+				tag->set(17, original ^ 0xff);
+				CHECK_FALSE(p.native->selection_inline_matches(p.expected_identity));
+				tag->set(17, original);
+				CHECK(p.native->selection_inline_matches(p.expected_identity));
+			}
 			CHECK(p.native->selection_meshes() == (p.failure == 2 ? 0u : 1u));
 			CHECK(p.native->selection_materials() == (p.failure == 0 ? 2u : p.failure == 1 ? 1u
 																						   : 0u));
@@ -5665,6 +5679,24 @@ struct Access {
 			tags[i]->resize(32);
 			tags[i]->fill(i + 1);
 		}
+		// Give the second original material a distinct genuine generation before
+		// snapshotting; an index swap or constant generation cannot pass.
+		RendererRD::MaterialStorage::get_singleton()->material_set_render_priority(probe.config.surface_materials[1], 4);
+		for (const RID &rid : probe.config.surfaces) {
+			probe.expected_identity.surfaces.push_back(rid);
+		}
+		for (uint32_t i = 0; i < 2; ++i) {
+			const RID rid = probe.config.surface_materials[i];
+			probe.expected_identity.surface_materials.push_back(rid);
+			probe.expected_material_generations[i] = RendererRD::MaterialStorage::get_singleton()->material_get_generation(rid);
+			REQUIRE(probe.expected_material_generations[i] != 0);
+		}
+		REQUIRE(probe.expected_material_generations[0] != probe.expected_material_generations[1]);
+		PackedByteArray *expected_tags[] = { &probe.expected_identity.producer_tag, &probe.expected_identity.device_tag, &probe.expected_identity.layout_digest, &probe.expected_identity.mapping_digest, &probe.expected_identity.numeric_profile_digest };
+		for (uint32_t i = 0; i < 5; ++i) {
+			expected_tags[i]->resize(32);
+			memcpy(expected_tags[i]->ptrw(), tags[i]->ptr(), 32);
+		}
 		uint64_t bytes = 0;
 		REQUIRE(RendererRD::ExternalLinkedOwnerTest::selection_metadata_bytes(probe.config, bytes) == OK);
 		OrdinalPlan plan;
@@ -5697,11 +5729,24 @@ struct Access {
 			CHECK(RendererRD::selection_material_holds(materials, 1) == (failure == 0 ? 1u : 0u));
 			const uint32_t initial_leases = failure == 0 ? 3 : failure == 1 ? 2
 																			: 0;
-			// Drop parser references: quoted row identity survives their lifetime.
+			// Destroy parser bytes before dropping all references. Expected identity
+			// was independently allocated and cannot keep parser storage alive.
+			for (auto *tag : tags) {
+				tag->fill(0xa5);
+			}
 			probe.config.surfaces.clear();
 			probe.config.surface_materials.clear();
 			for (auto *tag : tags) {
 				*tag = PackedByteArray();
+			}
+			if (failure != 3) {
+				CHECK(native.selection_inline_matches(probe.expected_identity));
+				for (uint32_t i = 0; i < 2; ++i) {
+					CHECK(native.selection_material_generation(i) == probe.expected_material_generations[i]);
+				}
+				CHECK(mesh_owner->selection_holds == (failure == 2 ? 0u : 1u));
+				CHECK(RendererRD::selection_material_holds(materials, 0) == (failure == 2 ? 0u : 1u));
+				CHECK(RendererRD::selection_material_holds(materials, 1) == (failure == 0 ? 1u : 0u));
 			}
 			const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
 			for (uint32_t turn = 0; turn < (failure == 3 ? 0u : initial_leases + 2); ++turn) {
