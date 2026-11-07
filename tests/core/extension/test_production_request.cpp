@@ -11893,7 +11893,7 @@ struct Access {
 			const RID left = instance(native->particle_rid(), Vector3());
 			const RID right = instance(native->particle_rid(), Vector3());
 			const RID source_a = instance(sphere, Vector3(-0.5f, 0, 0));
-			const RID source_b = instance(sphere, Vector3(0.5f, 0, 0));
+			RID source_b = instance(sphere, Vector3(0.5f, 0, 0));
 			check("managed_commit_left", scene->scene_receiver_commit_query(left, native->generation, device, Transform3D(), envelope, query_a, 1) == OK);
 			check("managed_commit_right", scene->scene_receiver_commit_query(right, native->generation, device, Transform3D(), envelope, query_b, 1) == OK);
 			RendererSceneCull::SceneSphereSnapshot a,b,rejected;
@@ -11916,6 +11916,36 @@ struct Access {
 			RendererSceneCull::SceneSphereSnapshot changed,unchanged;
 			check("managed_left_revision", scene->scene_sphere_snapshot(left, native->generation, device, 4, changed) == OK && changed.bounds_revision == 2 && changed.pose_revision > a.pose_revision && changed.sources.size() == 1 && b.sources.size() == 1 && changed.sources[0].source_key == b.sources[0].source_key);
 			check("managed_right_unchanged", scene->scene_sphere_snapshot(right, native->generation, device, 4, unchanged) == OK && unchanged.bounds_revision == b.bounds_revision && unchanged.pose_revision == b.pose_revision && unchanged.pair_revision == b.pair_revision && unchanged.query_bounds == b.query_bounds);
+			// Retain only the value snapshot. It carries no Scene sample/borrow
+			// authorization and must not follow later source-owner mutations or ABA.
+			const RendererSceneCull::SceneSphereSnapshot retained = b;
+			const RendererSceneCull::SceneSphereSource retained_source = b.sources.size() == 1 ? b.sources[0] : RendererSceneCull::SceneSphereSource();
+			const uint64_t retained_pose = b.pose_revision, retained_bounds = b.bounds_revision, retained_pairs = b.pair_revision;
+			auto retained_unchanged = [&]() {
+				return retained.sources.size() == 1 && retained.sources[0].source_key == retained_source.source_key &&
+						retained.sources[0].shape_revision == retained_source.shape_revision && retained.sources[0].transform == retained_source.transform &&
+						retained.sources[0].radius == retained_source.radius && retained.receiver_transform == Transform3D() && retained.query_bounds == query_b &&
+						retained.pose_revision == retained_pose && retained.bounds_revision == retained_bounds && retained.pair_revision == retained_pairs;
+			};
+			scene->instance_set_transform(source_b, Transform3D(Basis(), Vector3(0.75f, 0, 0)));
+			storage->particles_collision_set_sphere_radius(sphere, 0.125f);
+			scene->update_dirty_instances();
+			RendererSceneCull::SceneSphereSnapshot moved, removed, replacement;
+			check("managed_source_mutation_snapshot", scene->scene_sphere_snapshot(right, native->generation, device, 4, moved) == OK &&
+					moved.sources.size() == 1 && moved.sources[0].source_key == retained_source.source_key && moved.sources[0].shape_revision > retained_source.shape_revision &&
+					moved.sources[0].transform.origin == Vector3(0.75f, 0, 0) && moved.sources[0].radius == 0.125f);
+			check("managed_value_snapshot_frozen_after_source_mutation", retained_unchanged());
+			scene->free(source_b);source_b = RID();
+			scene->update_dirty_instances();
+			check("managed_source_free_snapshot", scene->scene_sphere_snapshot(right, native->generation, device, 4, removed) == OK &&
+					removed.sources.is_empty() && removed.pair_revision > moved.pair_revision);
+			check("managed_value_snapshot_frozen_after_source_free", retained_unchanged());
+			source_b = instance(sphere, Vector3(0.75f, 0, 0));
+			scene->update_dirty_instances();
+			check("managed_recreated_source_distinct_identity", scene->scene_sphere_snapshot(right, native->generation, device, 4, replacement) == OK &&
+					replacement.sources.size() == 1 && replacement.sources[0].source_key != 0 && replacement.sources[0].source_key != retained_source.source_key &&
+					replacement.sources[0].transform.origin == Vector3(0.75f, 0, 0) && replacement.sources[0].radius == 0.125f && replacement.pair_revision > removed.pair_revision);
+			check("managed_value_snapshot_frozen_after_source_recreate", retained_unchanged());
 			// Same broad envelope, different committed queries: source selection
 			// belongs to the scene receiver instance, for height as for sphere.
 			RID height = storage->particles_collision_allocate();storage->particles_collision_initialize(height);
@@ -11946,6 +11976,7 @@ struct Access {
 			storage->particles_collision_free(height);
 			scene->free(source_a);scene->free(source_b);scene->free(left);scene->free(right);scene->free(scenario);
 			storage->particles_collision_free(sphere);
+			check("managed_value_snapshot_readable_after_receiver_free", retained_unchanged());
 		}
 		// Empty dictionary means the original queued control has not returned yet.
 		Dictionary advance() {
