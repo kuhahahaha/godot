@@ -428,8 +428,9 @@ public:
 			f.driver.completion.completed = true;
 			f.driver.completion.completed_serial = 901;
 			NativeHeightRange::Snapshot settled;
-			CHECK(observe(f, range, settled) == OK);
-			CHECK(settled.native_complete);
+			CHECK(observe(f, range, settled) == ERR_BUSY);
+			CHECK(settled.completed_sources == 1);
+			CHECK_FALSE(settled.native_complete); // The checked recording is still open.
 			Sink sink(f.rd, 2, 0);
 			sink.native_range = range;
 			range->capture_sink = &sink;
@@ -440,13 +441,13 @@ public:
 			sink.restoration_unknown = true;
 			sink.cleanup.draw.effect = Effect::Unknown;
 			sink.cleanup.draw.error = FAILED;
-			CHECK(f.rd._native_height_range_enroll_original_record(range, sink, 0, true) == OK);
-			CHECK(f.rd._native_height_range_close_checked_capture(range, sink) == ERR_INVALID_DATA);
+			CHECK(f.rd._native_height_range_enroll_original_record(range, sink, 0, true) == FAILED);
+			CHECK(f.rd._native_height_range_close_checked_capture(range, sink) == FAILED);
 			CHECK(range->uncaptured_prefix);
 			range->native_complete = false;
 			range->prefix_settled = false;
 			NativeHeightRange::Snapshot out;
-			CHECK(observe(f, range, out) == ERR_INVALID_DATA);
+			CHECK(observe(f, range, out) == FAILED); // Preserve the first cleanup error.
 			CHECK_FALSE(out.native_complete);
 			CHECK(give_back(f, range) == ERR_BUSY);
 			CHECK_FALSE(range->observers_returned);
