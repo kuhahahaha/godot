@@ -112,22 +112,40 @@ struct ProductionActionRows {
 		return r;
 	}
 };
+// Core normalization only, never a wire layout. Keep the legacy reserved
+// field until validation so adapting an old row cannot erase a bad input.
+struct ProductionReadbackDeclaration {
+	uint32_t resource_slot = 0, reserved = 0;
+	uint64_t producer_action_ordinal = 0, copy_action_ordinal = 0;
+	uint64_t byte_offset = 0, byte_size = 0;
+	uint32_t source_kind = GDEXTENSION_PRODUCTION_READBACK_REQUEST_WRITER_V1;
+	GDExtensionProductionReadbackIncomingSourceV1 incoming = {};
+};
 struct ProductionReadbackRows {
 	const GDExtensionProductionReadbackV1 *legacy = nullptr;
 	const GDExtensionProductionReadbackV2 *ordinal = nullptr;
 	uint64_t canonical_begin = 0;
+	const GDExtensionProductionReadbackSourceV1 *sources = nullptr;
 	bool aligned() const {
+		if (sources) {
+			return uintptr_t(sources) % alignof(GDExtensionProductionReadbackSourceV1) == 0;
+		}
 		if (legacy) {
 			return uintptr_t(legacy) % alignof(GDExtensionProductionReadbackV1) == 0;
 		}
 		return ordinal && uintptr_t(ordinal) % alignof(GDExtensionProductionReadbackV2) == 0;
 	}
-	GDExtensionProductionReadbackV2 operator[](uint32_t index) const {
+	ProductionReadbackDeclaration operator[](uint32_t index) const {
+		if (sources) {
+			const auto &v = sources[index];
+			return { v.resource_slot, 0, v.writer.producer_action_ordinal, v.copy_action_ordinal, v.byte_offset, v.byte_size, v.source_kind, v.incoming };
+		}
 		if (ordinal) {
-			return ordinal[index];
+			const auto &v = ordinal[index];
+			return { v.resource_slot, v.reserved, v.producer_action_ordinal, v.copy_action_ordinal, v.byte_offset, v.byte_size, GDEXTENSION_PRODUCTION_READBACK_REQUEST_WRITER_V1, {} };
 		}
 		const auto &v = legacy[index];
-		return { v.resource_slot, v.reserved, v.canonical_producer >= canonical_begin ? v.canonical_producer - canonical_begin : UINT64_MAX, v.canonical_copy >= canonical_begin ? v.canonical_copy - canonical_begin : UINT64_MAX, v.byte_offset, v.byte_size };
+		return { v.resource_slot, v.reserved, v.canonical_producer >= canonical_begin ? v.canonical_producer - canonical_begin : UINT64_MAX, v.canonical_copy >= canonical_begin ? v.canonical_copy - canonical_begin : UINT64_MAX, v.byte_offset, v.byte_size, GDEXTENSION_PRODUCTION_READBACK_REQUEST_WRITER_V1, {} };
 	}
 };
 
@@ -329,7 +347,7 @@ class ProductionReadbackCell {
 #endif
 	ProductionReadbackCell() = default;
 	ProductionRequest *request = nullptr;
-	GDExtensionProductionReadbackV2 declaration = {};
+	ProductionReadbackDeclaration declaration = {};
 	ReadbackSourceState source;
 	BufferReadbackSourceCapture capture;
 	uint64_t bytes_offset = 0;

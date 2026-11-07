@@ -952,6 +952,9 @@ private:
 	Error production_dispatch_closure_locked(const ProductionRequest &, RenderingDevice &, const ProductionActionCell &, const GDExtensionProductionDispatchV2 &) const;
 	bool production_use_matches_locked(const ProductionRequest &, const ProductionActionCell &, uint32_t, uint64_t, uint64_t, uint32_t) const;
 	Error production_freeze_locked(ProductionRequest &);
+	Error production_freeze_rd_locked(ProductionRequest &, RenderingDevice *);
+	bool production_has_incoming_readbacks_locked(const ProductionRequest &) const;
+	Error production_incoming_readbacks_validate_locked(const ProductionRequest &, RenderingDevice &, uint64_t) const;
 	Error production_maintenance_locked(ProductionRequest &, RenderingDevice &, const GDExtensionProductionServiceBudgetV1 &, ProductionServiceUsage &);
 	Error production_create_service(GDExtensionProductionRequestRefV1, ProductionControlKind, uint32_t);
 	Error production_create_accept_locked(ProductionRequest &, ProductionControlKind, uint32_t);
@@ -1064,6 +1067,7 @@ public:
 	GDExtensionDeviceSessionResultV1 production_facts_v2(GDExtensionProductionRequestRefV1 ref, uint64_t revision, uint32_t first, GDExtensionProductionFactV2 *out, uint32_t capacity, uint32_t *written, uint32_t expected_contract = 2);
 	GDExtensionDeviceSessionResultV1 production_release_v2(GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionServiceBudgetV1 *input, GDExtensionProductionServiceBudgetV1 *remaining, GDExtensionProductionReportV2 *report, uint32_t expected_contract = 2);
 	GDExtensionDeviceSessionResultV1 production_reserve_v2(GDExtensionProductionAttachmentRefV1 ref, const GDExtensionProductionOperationV1 *operation, const GDExtensionProductionCapacityV1 *capacity, const GDExtensionProductionActionV2 *actions, uint32_t action_count, const GDExtensionProductionResourceV1 *resources, uint32_t resource_count, const GDExtensionProductionUseV1 *uses, uint32_t use_count, const GDExtensionProductionReadbackV2 *readbacks, uint32_t readback_count, GDExtensionProductionRequestRefV1 *out);
+	GDExtensionDeviceSessionResultV1 production_reserve_readback_sources_v1(GDExtensionProductionAttachmentRefV1 ref, const GDExtensionProductionOperationV1 *operation, const GDExtensionProductionCapacityV1 *capacity, const GDExtensionProductionActionV2 *actions, uint32_t action_count, const GDExtensionProductionResourceV1 *resources, uint32_t resource_count, const GDExtensionProductionUseV1 *uses, uint32_t use_count, const GDExtensionProductionReadbackSourceV1 *readbacks, uint32_t readback_count, GDExtensionProductionRequestRefV1 *out);
 	GDExtensionDeviceSessionResultV1 production_reserve(GDExtensionProductionAttachmentRefV1, const GDExtensionProductionOperationV1 *, const GDExtensionProductionCapacityV1 *, const GDExtensionProductionActionV1 *, uint32_t, const GDExtensionProductionResourceV1 *, uint32_t, const GDExtensionProductionUseV1 *, uint32_t, const GDExtensionProductionReadbackV1 *, uint32_t, GDExtensionProductionRequestRefV1 *);
 	GDExtensionDeviceSessionResultV1 production_record_history(GDExtensionProductionRequestRefV1, uint64_t, GDExtensionProductionRecordHistoryV1 *);
 	GDExtensionDeviceSessionResultV1 production_raster_prepare(GDExtensionProductionRequestRefV1, const GDExtensionProductionRasterPrepareV1 *, const void *, uint64_t, GDExtensionProductionRasterPrepareReportV1 *);

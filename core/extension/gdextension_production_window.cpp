@@ -326,6 +326,28 @@ GDExtensionDeviceSessionResultV1 Registry::production_reserve_v2(GDExtensionProd
 	return window_result(error);
 }
 
+GDExtensionDeviceSessionResultV1 Registry::production_reserve_readback_sources_v1(GDExtensionProductionAttachmentRefV1 ref, const GDExtensionProductionOperationV1 *operation, const GDExtensionProductionCapacityV1 *capacity, const GDExtensionProductionActionV2 *actions, uint32_t action_count, const GDExtensionProductionResourceV1 *resources, uint32_t resource_count, const GDExtensionProductionUseV1 *uses, uint32_t use_count, const GDExtensionProductionReadbackSourceV1 *readbacks, uint32_t readback_count, GDExtensionProductionRequestRefV1 *out) {
+	if (!window_aligned(operation) || !window_aligned(capacity) || !window_aligned(out) || out->registry_instance || out->handle_serial) {
+		return window_result(ERR_INVALID_PARAMETER);
+	}
+	MutexLock lock(mutex);
+	ProductionAttachment *attachment = nullptr;
+	RenderingDevice *device = nullptr;
+	Error error = production_attachment_locked(ref, true, attachment, device);
+	if (error != OK) {
+		return window_result(error);
+	}
+	if (!attachment->opened || !attachment->record_receiver) {
+		return window_result(ERR_UNAVAILABLE);
+	}
+	ProductionRequest *request = nullptr;
+	error = production_reserve_metadata_rows_locked(*attachment, *operation, *capacity, { nullptr, actions }, action_count, resources, resource_count, uses, use_count, { nullptr, nullptr, operation->canonical_begin, readbacks }, readback_count, request, 2);
+	if (error == OK) {
+		*out = { instance, request->serial };
+	}
+	return window_result(error);
+}
+
 // Native attempts are monotonic request history. A later empty control cannot
 // turn earlier work into a no-effect certificate. Call with Registry locked,
 // immediately before the original effect-capable call, never at admission.

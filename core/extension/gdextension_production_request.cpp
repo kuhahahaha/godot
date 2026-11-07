@@ -572,7 +572,20 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 	uint64_t readback_bytes = 0;
 	for (uint32_t i = 0; i < readback_count; ++i) {
 		const auto &r = readbacks[i];
-		if (r.reserved || r.resource_slot >= resource_count || resources[r.resource_slot].resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1 || !r.byte_size || !range(r.byte_offset, r.byte_size, resources[r.resource_slot].physical_bytes) || r.producer_action_ordinal >= r.copy_action_ordinal || r.copy_action_ordinal >= action_count || r.byte_size > c.readback_bytes - readback_bytes) {
+		if (r.reserved || r.resource_slot >= resource_count || resources[r.resource_slot].resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1 || !r.byte_size || !range(r.byte_offset, r.byte_size, resources[r.resource_slot].physical_bytes) || r.copy_action_ordinal >= action_count || r.byte_size > c.readback_bytes - readback_bytes) {
+			return ERR_INVALID_DATA;
+		}
+		if (r.source_kind == GDEXTENSION_PRODUCTION_READBACK_REQUEST_WRITER_V1) {
+			if (r.incoming.original_generation || r.incoming.backing_serial || r.producer_action_ordinal >= r.copy_action_ordinal) {
+				return ERR_INVALID_DATA;
+			}
+		} else if (r.source_kind == GDEXTENSION_PRODUCTION_READBACK_RETAINED_INCOMING_V1) {
+			if (contract_version != 2 || r.producer_action_ordinal || !r.incoming.original_generation || !r.incoming.backing_serial ||
+					resources[r.resource_slot].ownership != GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1 ||
+					resources[r.resource_slot].original_generation != r.incoming.original_generation) {
+				return ERR_INVALID_DATA;
+			}
+		} else {
 			return ERR_INVALID_DATA;
 		}
 		readback_bytes += r.byte_size;
@@ -596,13 +609,31 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 		}
 	}
 	for (uint32_t i = 0; i < readback_count; ++i) {
+		const bool incoming = readbacks[i].source_kind == GDEXTENSION_PRODUCTION_READBACK_RETAINED_INCOMING_V1;
 		bool producer = false, copy = false;
 		for (uint32_t j = 0; j < action_count; ++j) {
-			producer |= actions[j].action_ordinal == readbacks[i].producer_action_ordinal;
+			if (!incoming) {
+				producer |= actions[j].action_ordinal == readbacks[i].producer_action_ordinal;
+			}
 			copy |= actions[j].action_ordinal == readbacks[i].copy_action_ordinal && actions[j].action_kind == GDEXTENSION_PRODUCTION_READBACK_V1 && actions[j].readback_slot == i;
 		}
-		if (!producer || !copy) {
+		if ((!incoming && !producer) || !copy) {
 			return ERR_INVALID_DATA;
+		}
+		if (incoming) {
+			const auto &readback = readbacks[i];
+			const auto &action = actions[uint32_t(readback.copy_action_ordinal)];
+			bool covered = false;
+			for (uint32_t u = 0; u < action.use_count; ++u) {
+				const auto &use = uses[action.first_use + u];
+				covered |= use.resource_slot == readback.resource_slot &&
+						(use.access == GDEXTENSION_PRODUCTION_READ_V1 || use.access == GDEXTENSION_PRODUCTION_READ_WRITE_V1) &&
+						readback.byte_offset >= use.byte_offset && range(readback.byte_offset - use.byte_offset, readback.byte_size, use.byte_size);
+			}
+			if (!covered) {
+				return ERR_INVALID_DATA;
+			}
+			continue;
 		}
 		if (contract_version == 2) {
 			const auto &readback = readbacks[i];
@@ -856,7 +887,32 @@ bool Registry::production_use_matches_locked(const ProductionRequest &r, const P
 	}
 	return false;
 }
+bool Registry::production_has_incoming_readbacks_locked(const ProductionRequest &r) const {
+	for (uint32_t i = 0; i < r.readback_count; ++i) {
+		if (r.readbacks[i].declaration.source_kind == GDEXTENSION_PRODUCTION_READBACK_RETAINED_INCOMING_V1) {
+			return true;
+		}
+	}
+	return false;
+}
+
 Error Registry::production_freeze_locked(ProductionRequest &r) {
+	// The original schedule path holds Registry only. Incoming reflection and
+	// physical identity inspection additionally require this exact RD lock.
+	if (!production_has_incoming_readbacks_locked(r) || r.frozen || r.cancelled) {
+		return production_freeze_rd_locked(r, nullptr);
+	}
+	RenderingDevice *rd = r.attachment ? r.attachment->held_device : nullptr;
+	if (!rd || !rd->_thread_safe_.try_lock()) {
+		return ERR_BUSY;
+	}
+	RdUnlock unlock{ rd->_thread_safe_ };
+	return production_freeze_rd_locked(r, rd);
+}
+
+// Registry is held; rd, when supplied, is already locked by the original
+// schedule or append caller. This helper never takes a recursive RD lock.
+Error Registry::production_freeze_rd_locked(ProductionRequest &r, RenderingDevice *rd) {
 	if (r.cancelled) {
 		return ERR_BUSY;
 	}
@@ -907,6 +963,9 @@ Error Registry::production_freeze_locked(ProductionRequest &r) {
 	if (r.contract_version == 2) {
 		for (uint32_t i = 0; i < r.readback_count; ++i) {
 			const auto &readback = r.readbacks[i].declaration;
+			if (readback.source_kind == GDEXTENSION_PRODUCTION_READBACK_RETAINED_INCOMING_V1) {
+				continue; // Real incoming validation below, before frozen publishes.
+			}
 			if (readback.producer_action_ordinal >= readback.copy_action_ordinal || readback.copy_action_ordinal >= r.action_count || readback.resource_slot >= r.resource_count) {
 				return ERR_INVALID_DATA;
 			}
@@ -970,6 +1029,15 @@ Error Registry::production_freeze_locked(ProductionRequest &r) {
 			if (!covered) {
 				return ERR_INVALID_DATA;
 			}
+		}
+	}
+	if (production_has_incoming_readbacks_locked(r)) {
+		if (!rd) {
+			return ERR_UNAVAILABLE;
+		}
+		const Error incoming = production_incoming_readbacks_validate_locked(r, *rd, 0);
+		if (incoming != OK) {
+			return incoming;
 		}
 	}
 	r.frozen = true;

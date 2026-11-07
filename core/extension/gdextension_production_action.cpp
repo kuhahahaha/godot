@@ -33,6 +33,144 @@
 #include "servers/rendering/rendering_device.h"
 
 namespace GDExtensionDeviceExit {
+Error Registry::production_incoming_readbacks_validate_locked(const ProductionRequest &request, RenderingDevice &rd, uint64_t next_action) const {
+	if (!production_has_incoming_readbacks_locked(request)) {
+		return OK;
+	}
+	if (!request.attachment || request.attachment->held_device != &rd || request.contract_version != 2) {
+		return ERR_INVALID_DATA;
+	}
+	auto in_range = [](uint64_t offset, uint64_t size, uint64_t total) {
+		return offset <= total && size <= total - offset;
+	};
+	// Both ranges have already been checked against the actual buffer extent.
+	auto overlaps = [](uint64_t a, uint64_t a_size, uint64_t b, uint64_t b_size) {
+		return a_size && b_size && (a <= b ? b - a < a_size : a - b < b_size);
+	};
+	auto resolve = [&](uint32_t index, const RenderingDevice::Buffer *&buffer) -> Error {
+		if (index >= request.resource_count) {
+			return ERR_INVALID_DATA;
+		}
+		const auto &resource = request.resources[index];
+		if (resource.output_alias_prepared || resource.output_set_deferred) {
+			return ERR_UNAVAILABLE;
+		}
+		if (resource.request != &request || resource.request_serial != request.serial || !resource.imported ||
+				resource.creating || resource.retiring || resource.returned || resource.declaration.resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1 ||
+				!resource.primary.is_valid() || !resource.backing_serial || resource.use_count != 1) {
+			return ERR_INVALID_DATA;
+		}
+		const auto &use = resource.uses[0];
+		if (use.request != &request || use.request_serial != request.serial || !use.linked() || !use.same_physical() ||
+				use.physical->use_closed.load() || use.physical->enqueued || use.physical->reserved_event || use.physical->free_event) {
+			return ERR_INVALID_DATA;
+		}
+		buffer = rd.storage_buffer_owner.get_or_null(resource.primary);
+		if (!buffer || !buffer->driver_id || buffer->backing_serial != resource.backing_serial || buffer->size != resource.declaration.physical_bytes ||
+				buffer->qualification_return != use.physical || use.physical->rid != resource.primary.get_id() || use.physical->serial != resource.backing_serial ||
+				(resource.declaration.required_usage & ~uint64_t(buffer->usage))) {
+			return ERR_INVALID_DATA;
+		}
+		return OK;
+	};
+	for (uint32_t i = 0; i < request.readback_count; ++i) {
+		const auto &cell = request.readbacks[i];
+		const auto &readback = cell.declaration;
+		if (readback.source_kind != GDEXTENSION_PRODUCTION_READBACK_RETAINED_INCOMING_V1 || readback.copy_action_ordinal < next_action) {
+			continue;
+		}
+		if (cell.request != &request || readback.reserved || readback.producer_action_ordinal || !readback.incoming.original_generation || !readback.incoming.backing_serial ||
+				readback.resource_slot >= request.resource_count || readback.copy_action_ordinal >= request.action_count || !readback.byte_size) {
+			return ERR_INVALID_DATA;
+		}
+		const auto &source = request.resources[readback.resource_slot];
+		const auto &copy = request.actions[readback.copy_action_ordinal];
+		if (source.declaration.ownership != GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1 || source.declaration.original_generation != readback.incoming.original_generation ||
+				source.backing_serial != readback.incoming.backing_serial || copy.request != &request || !copy.prepared ||
+				copy.declaration.action_ordinal != readback.copy_action_ordinal || copy.declaration.action_kind != GDEXTENSION_PRODUCTION_READBACK_V1 ||
+				copy.readback_slot != i || copy.declaration.readback_slot != i ||
+				!production_use_matches_locked(request, copy, readback.resource_slot, readback.byte_offset, readback.byte_size, GDEXTENSION_PRODUCTION_READ_V1)) {
+			return ERR_INVALID_DATA;
+		}
+		const RenderingDevice::Buffer *source_buffer = nullptr;
+		Error error = resolve(readback.resource_slot, source_buffer);
+		if (error != OK) {
+			return error;
+		}
+		if (!in_range(readback.byte_offset, readback.byte_size, source_buffer->size)) {
+			return ERR_INVALID_DATA;
+		}
+		auto check_write = [&](uint32_t slot, uint64_t offset, uint64_t size) -> Error {
+			const RenderingDevice::Buffer *target = nullptr;
+			const Error resolved = resolve(slot, target);
+			if (resolved != OK) {
+				return resolved;
+			}
+			if (!in_range(offset, size, target->size)) {
+				return ERR_INVALID_DATA;
+			}
+			// Import slots are not physical identities. Check both the original
+			// object and actual driver backing so another slot cannot hide a write.
+			const bool same = target == source_buffer || target->driver_id == source_buffer->driver_id || target->qualification_return == source_buffer->qualification_return;
+			return same && overlaps(offset, size, readback.byte_offset, readback.byte_size) ? ERR_INVALID_DATA : OK;
+		};
+		for (uint64_t ordinal = 0; ordinal < readback.copy_action_ordinal; ++ordinal) {
+			const auto &action = request.actions[ordinal];
+			if (action.request != &request || !action.prepared || action.declaration.action_ordinal != ordinal) {
+				return ERR_INVALID_DATA;
+			}
+			switch (action.declaration.action_kind) {
+				case GDEXTENSION_PRODUCTION_UPLOAD_V1:
+					error = check_write(action.upload.destination_slot, action.upload.destination_offset, action.upload.bytes);
+					break;
+				case GDEXTENSION_PRODUCTION_COPY_V1:
+					error = check_write(action.copy.destination_slot, action.copy.destination_offset, action.copy.bytes);
+					break;
+				case GDEXTENSION_PRODUCTION_DISPATCH_V1: {
+					const auto &dispatch = action.dispatch;
+					error = production_dispatch_closure_locked(request, rd, action, dispatch);
+					if (error != OK) {
+						return error;
+					}
+					const auto *shader = rd.shader_owner.get_or_null(request.resources[dispatch.unit_slot].secondary);
+					for (uint32_t set_index = 0; set_index < dispatch.set_count; ++set_index) {
+						const auto &set = request.resources[dispatch.first_set_slot + set_index];
+						for (uint32_t b = 0; b < set.binding_count; ++b) {
+							const auto &binding = request.uses[set.first_binding + b].binding;
+							for (const auto &uniform : shader->uniform_sets[set_index]) {
+								if (uniform.binding != binding.binding || uniform.type != RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER || !uniform.writable) {
+									continue;
+								}
+								if (set.output_set_deferred || binding.offset || binding.resource_slot >= request.resource_count || binding.bytes != request.resources[binding.resource_slot].declaration.physical_bytes) {
+									return ERR_UNAVAILABLE;
+								}
+								// The declared READ use can still bind writable shader
+								// storage. Protect its whole physical binding window.
+								error = check_write(binding.resource_slot, binding.offset, binding.bytes);
+								if (error != OK) {
+									return error;
+								}
+							}
+						}
+					}
+				} break;
+				case GDEXTENSION_PRODUCTION_READBACK_V1:
+					error = OK;
+					break;
+				case GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1:
+				default:
+					// The independent output factory does not enter this append
+					// tail. Refuse the entire prefix before schedule can freeze it.
+					return ERR_UNAVAILABLE;
+			}
+			if (error != OK) {
+				return error;
+			}
+		}
+	}
+	return OK;
+}
+
 Error Registry::production_dispatch_closure_locked(const ProductionRequest &request, RenderingDevice &rd, const ProductionActionCell &action, const GDExtensionProductionDispatchV2 &dispatch) const {
 	if (dispatch.unit_slot >= request.resource_count || dispatch.first_set_slot > request.resource_count || dispatch.set_count > request.resource_count - dispatch.first_set_slot || dispatch.set_count > RenderingDevice::MAX_UNIFORM_SETS) {
 		return ERR_INVALID_DATA;
@@ -366,7 +504,13 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 		observed.error = ERR_UNAUTHORIZED;
 		return observed;
 	}
-	observed.error = production_freeze_locked(request);
+	observed.error = production_freeze_rd_locked(request, &rd);
+	if (observed.error != OK) {
+		return observed;
+	}
+	// Frozen declarations do not replace the current RD identity check. This
+	// must precede transfer staging, capture writes and every ordinary effect.
+	observed.error = production_incoming_readbacks_validate_locked(request, rd, index);
 	if (observed.error != OK) {
 		return observed;
 	}

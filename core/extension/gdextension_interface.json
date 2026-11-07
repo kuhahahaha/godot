@@ -8656,6 +8656,96 @@
             ]
         },
         {
+            "name": "GDExtensionProductionReadbackSourceKindV1",
+            "kind": "enum",
+            "description": [
+                "Explicit physical readback source kind. The row tag is uint32_t; enum ABI size is not used for wire layout."
+            ],
+            "values": [
+                {
+                    "name": "GDEXTENSION_PRODUCTION_READBACK_REQUEST_WRITER_V1",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_READBACK_RETAINED_INCOMING_V1",
+                    "value": 2
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionReadbackWriterSourceV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "producer_action_ordinal",
+                    "type": "uint64_t",
+                    "description": [
+                        "Real same-request writer ordinal; zero is a valid writer ordinal, never a no-producer sentinel."
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionReadbackIncomingSourceV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "original_generation",
+                    "type": "uint64_t",
+                    "description": [
+                        "Nonzero original retained storage generation, cross-checked against the imported resource."
+                    ]
+                },
+                {
+                    "name": "backing_serial",
+                    "type": "uint64_t",
+                    "description": [
+                        "Nonzero original physical backing serial, cross-checked against the authenticated import and live RD object."
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionReadbackSourceV1",
+            "kind": "struct",
+            "description": [
+                "Explicit 56-byte physical readback source row, selected only by device_session_production_reserve_readback_sources_v1. Inactive payload fields must be zero; source_kind selects interpretation, never an ordinal sentinel.",
+                "REQUEST_WRITER preserves the actual V2 same-request writer and full write-coverage requirements. RETAINED_INCOMING has no producer action and permits copy ordinal zero; only an original RETAINED_PREPARED STORAGE import is eligible.",
+                "Incoming protects the exact physical range from earlier writes in this request, including aliases and full reflected writable binding windows. An earlier NATIVE_OUTPUT or unresolved write target is unsupported. Original E05/R01 lease, stable content version, complete source and ordered dependency authority remain with their owners.",
+                "Opaque physical copying does not certify initialized padding/inactive bytes or grant semantic decoding/raw export authority. No content initialization pass is implied."
+            ],
+            "members": [
+                {
+                    "name": "resource_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "source_kind",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "copy_action_ordinal",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "byte_offset",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "byte_size",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "writer",
+                    "type": "GDExtensionProductionReadbackWriterSourceV1"
+                },
+                {
+                    "name": "incoming",
+                    "type": "GDExtensionProductionReadbackIncomingSourceV1"
+                }
+            ]
+        },
+        {
             "name": "GDExtensionProductionAppendV2",
             "kind": "struct",
             "description": [
@@ -20971,6 +21061,107 @@
                 {
                     "name": "readbacks",
                     "type": "const GDExtensionProductionReadbackV2*",
+                    "description": [
+                        "Synchronous checked readbacks."
+                    ]
+                },
+                {
+                    "name": "readback_count",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous checked readback count."
+                    ]
+                },
+                {
+                    "name": "out_request",
+                    "type": "GDExtensionProductionRequestRefV1*",
+                    "description": [
+                        "Synchronous checked out request."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original checked native result. Returned API calls and Core physical contexts do not issue original Runtime logical permissions."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_reserve_readback_sources_v1",
+            "since": "4.7",
+            "description": [
+                "Reserves the original production request with explicit writer/incoming source rows. Actions and all prepare/append/observe/facts/release controls retain the V2 dialect; this source-family V1 does not select a V1 request.",
+                "Inputs are synchronous aligned nonaliasing POD spans. Caller supplies at least readback_count readable source rows of the exact generated type; allocation extent is not inferred. Inactive payloads, unknown tags, identities, ranges and capacity are checked before publishing a request.",
+                "The output must initially be zero and remains unchanged on failure. Existing V1/V2 reserve entries and their real-writer contracts are unchanged. Incoming is only opaque physical copy under the original retained version/lease and ordered-source prerequisites, not logical publication or completion authority."
+            ],
+            "arguments": [
+                {
+                    "name": "attachment",
+                    "type": "GDExtensionProductionAttachmentRefV1",
+                    "description": [
+                        "Synchronous checked attachment."
+                    ]
+                },
+                {
+                    "name": "operation",
+                    "type": "const GDExtensionProductionOperationV1*",
+                    "description": [
+                        "Synchronous checked operation."
+                    ]
+                },
+                {
+                    "name": "capacity",
+                    "type": "const GDExtensionProductionCapacityV1*",
+                    "description": [
+                        "Synchronous checked capacity."
+                    ]
+                },
+                {
+                    "name": "actions",
+                    "type": "const GDExtensionProductionActionV2*",
+                    "description": [
+                        "Synchronous checked actions."
+                    ]
+                },
+                {
+                    "name": "action_count",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous checked action count."
+                    ]
+                },
+                {
+                    "name": "resources",
+                    "type": "const GDExtensionProductionResourceV1*",
+                    "description": [
+                        "Synchronous checked resources."
+                    ]
+                },
+                {
+                    "name": "resource_count",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous checked resource count."
+                    ]
+                },
+                {
+                    "name": "uses",
+                    "type": "const GDExtensionProductionUseV1*",
+                    "description": [
+                        "Synchronous checked uses."
+                    ]
+                },
+                {
+                    "name": "use_count",
+                    "type": "uint32_t",
+                    "description": [
+                        "Synchronous checked use count."
+                    ]
+                },
+                {
+                    "name": "readbacks",
+                    "type": "const GDExtensionProductionReadbackSourceV1*",
                     "description": [
                         "Synchronous checked readbacks."
                     ]
