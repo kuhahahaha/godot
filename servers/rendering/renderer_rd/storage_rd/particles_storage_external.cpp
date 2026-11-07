@@ -639,6 +639,10 @@ bool ParticlesStorage::particles_is_external(RID p_particles) const {
 	const Particles *particles = particles_owner.get_or_null(p_particles);
 	return particles && particles->external;
 }
+bool ParticlesStorage::particles_is_external_scene_only(RID p_particles) const {
+	const Particles *particles = particles_owner.get_or_null(p_particles);
+	return particles && particles->external && particles->external->config.profile == ExternalOutputConfig::SCENE_ONLY;
+}
 uint32_t ParticlesStorage::particles_external_surface_count(RID p_particles) const {
 	const Particles *particles = particles_owner.get_or_null(p_particles);
 	if (!particles || !particles->external) {

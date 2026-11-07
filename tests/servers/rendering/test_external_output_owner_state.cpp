@@ -39,6 +39,47 @@
 TEST_FORCE_LINK(test_external_output_owner_state)
 
 namespace RendererRD {
+void ExternalLinkedOwnerTest::scene_only_profile_query() {
+	RenderingDevice device;
+	ParticlesStorage storage(static_cast<ExternalLinkedOwnerTest *>(nullptr));
+	const RendererParticlesStorage &interface = storage;
+	CHECK_FALSE(interface.particles_is_external_scene_only(RID()));
+	const RID ordinary = storage.particles_allocate();
+	storage.particles_initialize(ordinary);
+	CHECK_FALSE(interface.particles_is_external(ordinary));
+	CHECK_FALSE(interface.particles_is_external_scene_only(ordinary));
+	struct ProfileCase {
+		ExternalOutputConfig::Profile profile;
+		bool scene_only;
+	};
+	// All cases deliberately have zero capacity, passes and installed surfaces:
+	// those values cannot stand in for the original owner's explicit profile.
+	const ProfileCase cases[] = {
+		{ ExternalOutputConfig::SCENE_ONLY, true },
+		{ ExternalOutputConfig::INSTANCE_192, false },
+		{ ExternalOutputConfig::INDEXED_144, false },
+	};
+	for (const ProfileCase &test : cases) {
+		ExternalOutputConfig config;
+		config.profile = test.profile;
+		config.max_views = 1;
+		config.max_inflight = 1;
+		ExternalOutputOwner owner(config, 1);
+		const RID rid = storage.particles_allocate();
+		storage.particles_initialize(rid);
+		storage.particles_owner.get_or_null(rid)->external = &owner;
+		CHECK(interface.particles_is_external(rid));
+		CHECK(interface.particles_is_external_scene_only(rid) == test.scene_only);
+		CHECK(storage.particles_external_surface_count(rid) == 0);
+		// No native resource/lease was admitted by this private component setup.
+		storage.particles_owner.get_or_null(rid)->external = nullptr;
+		storage.particles_owner.free(rid);
+		owner.state = ExternalOutputOwner::GenerationState::RELEASED;
+		CHECK_FALSE(interface.particles_is_external_scene_only(rid));
+	}
+	storage.particles_owner.free(ordinary);
+}
+
 ExternalLinkedOwnerTest::ExternalLinkedOwnerTest(RenderingDevice &rd, bool p_empty_storage, bool p_query_enabled) :
 		expected_device(&rd), empty_storage_mode(p_empty_storage) {
 	storage = memnew(ParticlesStorage(this));
@@ -1053,4 +1094,8 @@ TEST_CASE("[B4][EngineGuardLifecycle] CPU component storage keeps engine prepara
 
 TEST_CASE("[B4][GenerationSelectionLayout] original mesh and material lease rows are separate checked native slices") {
 	RendererRD::TestExternalOutputOwnerStateAccess::generation_selection_layout();
+}
+
+TEST_CASE("[B4][SceneOnlyRouting] original metadata profile is distinct from zero-surface render profiles") {
+	RendererRD::ExternalLinkedOwnerTest::scene_only_profile_query();
 }

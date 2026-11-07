@@ -48,6 +48,8 @@ class ExternalLinkedOwnerTest {
 	bool empty_storage_mode = false;
 
 public:
+	// CPU profile projection only; does not create/admit a render generation.
+	static void scene_only_profile_query();
 	explicit ExternalLinkedOwnerTest(RenderingDevice &, bool p_empty_storage = false, bool p_query_enabled = false);
 	~ExternalLinkedOwnerTest();
 	// This mode only locates a real Create result. It installs no owner/pin and

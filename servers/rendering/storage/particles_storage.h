@@ -121,6 +121,8 @@ public:
 
 	virtual bool particles_is_inactive(RID p_particles) const = 0;
 	virtual bool particles_is_external(RID p_particles) const { return false; }
+	// Metadata-only routing from the original output profile, not a render grant.
+	virtual bool particles_is_external_scene_only(RID p_particles) const { return false; }
 
 	virtual void particles_set_draw_order(RID p_particles, RSE::ParticlesDrawOrder p_order) = 0;
 
