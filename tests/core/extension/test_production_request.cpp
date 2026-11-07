@@ -11961,6 +11961,18 @@ struct Access {
 			height_present = false;
 			check("managed_height_query_right", scene->scene_heightfield_snapshot_pair(right, height_right, height_present) && height_present && height_right.transform.origin.x == 0.5f);
 			check("managed_height_distinct_source", height_left.source_key != 0 && height_right.source_key != 0 && height_left.source_key != height_right.source_key);
+			auto height_instance_matches = [&](const RendererSceneCull::SceneHeightfieldSource &source) {
+				uint64_t key = 0, revision = 0;
+				Transform3D transform;
+				Vector3 extents;
+				RSE::ParticlesCollisionHeightfieldResolution resolution;
+				return source.collision_instance.is_valid() && storage->particles_collision_instance_get_collision(source.collision_instance) == height &&
+						storage->particles_collision_instance_get_scene_heightfield(source.collision_instance, key, revision, transform, extents, resolution) &&
+						key == source.source_key && revision == source.shape_revision && transform == source.transform && extents == source.extents && resolution == source.resolution;
+			};
+			check("managed_height_instance_owner_identity", height_instance_matches(height_left) && height_instance_matches(height_right));
+			check("managed_height_distinct_storage_instances", height_left.collision_instance != height_right.collision_instance &&
+					height_left.collision_instance != height_a && height_right.collision_instance != height_b);
 			const RID height_extra = instance(height, Vector3(0.75f, 0, 0));
 			scene->update_dirty_instances();
 			height_present = false;

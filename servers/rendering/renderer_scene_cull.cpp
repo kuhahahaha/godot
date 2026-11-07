@@ -307,6 +307,7 @@ bool RendererSceneCull::scene_heightfield_snapshot_pair(RID p_receiver, SceneHei
 		if (!storage->particles_collision_instance_get_scene_heightfield(collision->instance, value.source_key, value.shape_revision, value.transform, value.extents, value.resolution)) {
 			continue;
 		}
+		value.collision_instance = collision->instance;
 		if (r_present) {
 			r_present = false;
 			return false;
