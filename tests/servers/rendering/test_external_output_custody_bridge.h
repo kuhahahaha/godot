@@ -45,7 +45,7 @@ class ExternalLinkedOwnerTest {
 	RID particles;
 
 public:
-	explicit ExternalLinkedOwnerTest(RenderingDevice &);
+	explicit ExternalLinkedOwnerTest(RenderingDevice &, bool p_query_enabled = false);
 	~ExternalLinkedOwnerTest();
 	GDExtensionDeviceExit::ProductionOutputPin &pin(uint32_t);
 	void install(uint32_t, GDExtensionDeviceExit::Registry &, GDExtensionProductionRequestRefV1);

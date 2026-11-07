@@ -38,11 +38,15 @@
 TEST_FORCE_LINK(test_external_output_owner_state)
 
 namespace RendererRD {
-ExternalLinkedOwnerTest::ExternalLinkedOwnerTest(RenderingDevice &rd) {
+ExternalLinkedOwnerTest::ExternalLinkedOwnerTest(RenderingDevice &rd, bool p_query_enabled) {
 	storage = memnew(ParticlesStorage(this));
 	ExternalOutputConfig config;
 	config.max_views = 1;
 	config.max_inflight = 2;
+	config.query_enabled = p_query_enabled;
+	if (p_query_enabled) {
+		config.query_bounds = AABB(Vector3(-1, -1, -1), Vector3(2, 2, 2));
+	}
 	owner = memnew(ExternalOutputOwner(config, generation));
 	owner->device = &rd;
 	particles = storage->particles_owner.allocate_rid();

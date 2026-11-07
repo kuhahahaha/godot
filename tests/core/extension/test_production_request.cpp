@@ -5946,6 +5946,7 @@ struct Access {
 		uint32_t directory_row = UINT32_MAX;
 		uint64_t directory_serial = 0;
 		bool pressure = false, root_group = false, service_group = false, group_settled = false, directory_hold = false;
+		bool scene_query = false;
 		uint64_t group = 0;
 		uint32_t group_turns = 0;
 		static GenerationRootProbe *&active() {
@@ -6066,7 +6067,24 @@ struct Access {
 				CHECK(request.uses[0].output_consumer == nullptr);
 				CHECK(request.uses[0].output_pin_serial == 0);
 			}
+			if (probe.scene_query) {
+				CHECK(RendererRD::ParticlesStorage::get_singleton()->particles_scene_validate_receiver(
+						native.particle_rid(), native.generation, &fixture.rd) == ERR_UNAVAILABLE);
+			}
 			REQUIRE(native.install_generation(context, ref, fixture.registry) == OK);
+			// Original Registry-issued root, original device and configuration.
+			// This tests receiver owner data admission, not Scene phase permission.
+			auto *storage = RendererRD::ParticlesStorage::get_singleton();
+			REQUIRE(storage != nullptr);
+			CHECK(storage->particles_scene_validate_receiver(native.particle_rid(), native.generation, &fixture.rd) ==
+					(probe.scene_query ? OK : ERR_INVALID_DATA));
+			CHECK(storage->particles_scene_validate_receiver(native.particle_rid(), native.generation + 1, &fixture.rd) == ERR_INVALID_DATA);
+			CHECK(storage->particles_scene_validate_receiver(native.particle_rid(), native.generation, nullptr) == ERR_INVALID_PARAMETER);
+			{
+				RenderingDevice foreign;
+				CHECK(storage->particles_scene_validate_receiver(native.particle_rid(), native.generation, &foreign) == ERR_INVALID_DATA);
+			}
+			CHECK(storage->particles_scene_validate_receiver(RID(), native.generation, &fixture.rd) == ERR_INVALID_PARAMETER);
 			probe.root_serial = native.generation_serial();
 			REQUIRE(probe.root_serial != 0);
 			for (uint32_t i = 0; i < request.capacity.resource_uses; ++i) {
@@ -6143,7 +6161,7 @@ struct Access {
 		}
 	};
 
-	static void generation_root_observe(uint32_t slots, bool pressure = false, bool directory = false, bool root_group = false, bool directory_hold = false) {
+	static void generation_root_observe(uint32_t slots, bool pressure = false, bool directory = false, bool root_group = false, bool directory_hold = false, bool scene_query = false) {
 		using namespace GDExtensionDeviceExit;
 		auto *server = ordinal_server();
 		if (!server || !check_step(RendererRD::ParticlesStorage::get_singleton() == nullptr)) {
@@ -6173,6 +6191,7 @@ struct Access {
 		probe.pressure = pressure;
 		probe.root_group = root_group;
 		probe.directory_hold = directory_hold;
+		probe.scene_query = scene_query;
 		REQUIRE(ordinal_initialize(fixture, server, plan, &GenerationRootProbe::receive, &probe) == OK);
 		if (root_group) {
 			// Actual empty graph, so no unrelated timestamp command can masquerade
@@ -6184,7 +6203,7 @@ struct Access {
 			fixture.rd.frames[0].command_pool = RDD::CommandPoolID(94);
 			fixture.rd.main_queue = RDD::CommandQueueID(1);
 		}
-		RendererRD::ExternalLinkedOwnerTest native(fixture.rd);
+		RendererRD::ExternalLinkedOwnerTest native(fixture.rd, scene_query);
 		probe.native = &native;
 		if (directory) {
 			REQUIRE(native.prepare_generation_directory() == OK);
@@ -6252,6 +6271,8 @@ struct Access {
 		release_request(other_ref, other);
 
 		native.withdraw_generation();
+		CHECK(RendererRD::ParticlesStorage::get_singleton()->particles_scene_validate_receiver(
+				native.particle_rid(), native.generation, &fixture.rd) == ERR_UNAVAILABLE);
 		native.withdraw_generation(); // Idempotent logical close; no fabricated history.
 		CHECK(native.withdrawing());
 		CHECK(native.history_cleared());
@@ -7114,6 +7135,9 @@ TEST_CASE("[SceneTree][ProductionRequest][CoreProtected][GenerationRootComponent
 }
 TEST_CASE("[SceneTree][ProductionRequest][CoreProtected][GenerationRootComponent] zero Acquire retains an independent root and immutable terminal result") {
 	Access::generation_root_observe(0);
+}
+TEST_CASE("[SceneTree][ProductionRequest][CoreProtected][SceneReceiverOwner] original generation root admits query enabled receiver data") {
+	Access::generation_root_observe(0, false, false, false, false, true);
 }
 TEST_CASE("[SceneTree][ProductionRequest][CoreProtected][GenerationRootComponent] last slot return preserves generation root until its own OBSERVE turn") {
 	Access::generation_root_observe(2);
