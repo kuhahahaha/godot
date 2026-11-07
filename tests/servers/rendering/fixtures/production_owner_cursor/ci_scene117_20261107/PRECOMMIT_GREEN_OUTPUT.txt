@@ -1,0 +1,22 @@
+check that executables have shebangs.....................................Passed
+check that scripts with shebangs are executable..........................Passed
+clang-format.............................................................Passed
+clang-format-glsl....................................(no files to check)Skipped
+ruff check...............................................................Passed
+ruff format..............................................................Passed
+mypy.....................................................................Passed
+codespell................................................................Passed
+Validate files with jsonschema.......................(no files to check)Skipped
+make-rst.............................................(no files to check)Skipped
+doc-status...........................................(no files to check)Skipped
+validate-builders....................................(no files to check)Skipped
+validate-xml.........................................(no files to check)Skipped
+validate-codeowners......................................................Passed
+validate-includes........................................................Passed
+eslint...............................................(no files to check)Skipped
+jsdoc................................................(no files to check)Skipped
+svgo.................................................(no files to check)Skipped
+copyright-headers........................................................Passed
+header-guards............................................................Passed
+file-format..............................................................Passed
+dotnet-format........................................(no files to check)Skipped

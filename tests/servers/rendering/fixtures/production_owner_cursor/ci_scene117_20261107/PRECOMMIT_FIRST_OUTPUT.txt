@@ -1,0 +1,94 @@
+[INFO] Initializing environment for https://github.com/pre-commit/pre-commit-hooks.
+[INFO] Initializing environment for https://github.com/pre-commit/mirrors-clang-format.
+[INFO] Initializing environment for https://github.com/pocc/pre-commit-hooks.
+[INFO] Initializing environment for https://github.com/pocc/pre-commit-hooks:clang-tidy==21.1.6.
+[INFO] Initializing environment for https://github.com/astral-sh/ruff-pre-commit.
+[INFO] Initializing environment for https://github.com/pre-commit/mirrors-mypy.
+[INFO] Initializing environment for https://github.com/codespell-project/codespell.
+[INFO] Initializing environment for https://github.com/codespell-project/codespell:tomli.
+[INFO] Initializing environment for https://github.com/python-jsonschema/check-jsonschema.
+[INFO] Initializing environment for local.
+[INFO] Initializing environment for local:xmlschema.
+[INFO] Initializing environment for local:@eslint/js@^9.3.0,@html-eslint/eslint-plugin@^0.24.1,@html-eslint/parser@^0.24.1,@stylistic/eslint-plugin@^2.1.0,eslint@^9.3.0,eslint-plugin-html@^8.1.1,globals@^15.3.0,espree@^10.0.1.
+[INFO] Initializing environment for local:jsdoc@^4.0.3.
+[INFO] Initializing environment for local:svgo@3.3.2.
+[INFO] Installing environment for https://github.com/pre-commit/pre-commit-hooks.
+[INFO] Once installed this environment will be reused.
+[INFO] This may take a few minutes...
+[INFO] Installing environment for https://github.com/pre-commit/mirrors-clang-format.
+[INFO] Once installed this environment will be reused.
+[INFO] This may take a few minutes...
+[INFO] Installing environment for https://github.com/astral-sh/ruff-pre-commit.
+[INFO] Once installed this environment will be reused.
+[INFO] This may take a few minutes...
+[INFO] Installing environment for https://github.com/pre-commit/mirrors-mypy.
+[INFO] Once installed this environment will be reused.
+[INFO] This may take a few minutes...
+[INFO] Installing environment for https://github.com/codespell-project/codespell.
+[INFO] Once installed this environment will be reused.
+[INFO] This may take a few minutes...
+[INFO] Installing environment for https://github.com/python-jsonschema/check-jsonschema.
+[INFO] Once installed this environment will be reused.
+[INFO] This may take a few minutes...
+[INFO] Installing environment for local.
+[INFO] Once installed this environment will be reused.
+[INFO] This may take a few minutes...
+[INFO] Installing environment for local.
+[INFO] Once installed this environment will be reused.
+[INFO] This may take a few minutes...
+[INFO] Installing environment for local.
+[INFO] Once installed this environment will be reused.
+[INFO] This may take a few minutes...
+[INFO] Installing environment for local.
+[INFO] Once installed this environment will be reused.
+[INFO] This may take a few minutes...
+[INFO] Installing environment for local.
+[INFO] Once installed this environment will be reused.
+[INFO] This may take a few minutes...
+check that executables have shebangs.....................................Passed
+check that scripts with shebangs are executable..........................Failed
+- hook id: check-shebang-scripts-are-executable
+- exit code: 1
+
+tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_legacy_neighbors.py: has a shebang but is not marked executable!
+  If it is supposed to be executable, try: `chmod +x tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_legacy_neighbors.py`
+  If on Windows, you may also need to: `git add --chmod=+x tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_legacy_neighbors.py`
+  If it is not supposed to be executable, double-check its shebang is wanted.
+
+tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_legacy_native.py: has a shebang but is not marked executable!
+  If it is supposed to be executable, try: `chmod +x tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_legacy_native.py`
+  If on Windows, you may also need to: `git add --chmod=+x tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_legacy_native.py`
+  If it is not supposed to be executable, double-check its shebang is wanted.
+
+tests/servers/rendering/fixtures/particle_scene_viewport_invariance_native/run_native.py: has a shebang but is not marked executable!
+  If it is supposed to be executable, try: `chmod +x tests/servers/rendering/fixtures/particle_scene_viewport_invariance_native/run_native.py`
+  If on Windows, you may also need to: `git add --chmod=+x tests/servers/rendering/fixtures/particle_scene_viewport_invariance_native/run_native.py`
+  If it is not supposed to be executable, double-check its shebang is wanted.
+
+clang-format.............................................................Passed
+clang-format-glsl....................................(no files to check)Skipped
+ruff check...............................................................Passed
+ruff format..............................................................Passed
+mypy.....................................................................Passed
+codespell................................................................Failed
+- hook id: codespell
+- files were modified by this hook
+
+[32mFIXED:[0m tests/servers/rendering/fixtures/particle_scene_phase_managed_native/README.md
+
+Validate files with jsonschema.......................(no files to check)Skipped
+make-rst.............................................(no files to check)Skipped
+doc-status...........................................(no files to check)Skipped
+validate-builders....................................(no files to check)Skipped
+validate-xml.........................................(no files to check)Skipped
+validate-codeowners......................................................Passed
+validate-includes........................................................Passed
+eslint...............................................(no files to check)Skipped
+jsdoc................................................(no files to check)Skipped
+svgo.................................................(no files to check)Skipped
+copyright-headers........................................................Failed
+- hook id: copyright-headers
+- files were modified by this hook
+header-guards............................................................Passed
+file-format..............................................................Passed
+dotnet-format........................................(no files to check)Skipped

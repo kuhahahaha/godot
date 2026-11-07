@@ -11,9 +11,9 @@ import argparse
 import json
 import math
 import os
-from pathlib import Path
 import re
 import subprocess
+from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 PREFIX = "HEIGHTFIELD_CLEAR_NATIVE_PASS "
@@ -79,11 +79,16 @@ def main():
             label = f"{renderer}/{transform_case}"
             command = [
                 str(args.binary.resolve()),
-                "--display-driver", args.display_driver,
-                "--rendering-driver", "metal",
-                "--rendering-method", method,
-                "--path", str(HERE),
-                "--script", "res://run.gd",
+                "--display-driver",
+                args.display_driver,
+                "--rendering-driver",
+                "metal",
+                "--rendering-method",
+                method,
+                "--path",
+                str(HERE),
+                "--script",
+                "res://run.gd",
             ]
             env = os.environ.copy()
             env.pop("ANGE_HEIGHTFIELD_LEGACY_NEIGHBOR_CASE", None)
@@ -96,11 +101,18 @@ def main():
             ):
                 env.pop(name, None)
             env["ANGE_HEIGHTFIELD_TRANSFORM_CASE"] = transform_case
-            print(f"HEIGHTFIELD_LEGACY_NATIVE_CASE renderer={method} transform_case={transform_case} world_radius=0.25", flush=True)
+            print(
+                f"HEIGHTFIELD_LEGACY_NATIVE_CASE renderer={method} transform_case={transform_case} world_radius=0.25",
+                flush=True,
+            )
             print("COMMAND " + json.dumps(command), flush=True)
             result = subprocess.run(
-                command, env=env, text=True, stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT, timeout=90,
+                command,
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=90,
             )
             print(result.stdout, flush=True)
             if result.returncode != 0:
@@ -109,14 +121,13 @@ def main():
                 raise SystemExit(f"Legacy native case emitted an error or warning on {label}")
             startup = re.findall(
                 rf"^Metal [0-9.]+ - {re.escape(renderer)} - Using Device #[0-9]+: .+$",
-                result.stdout, re.MULTILINE,
+                result.stdout,
+                re.MULTILINE,
             )
             if len(startup) != 1:
                 raise SystemExit(f"Missing real Metal/{renderer} renderer evidence")
             samples = [
-                json.loads(line[len(PREFIX):])
-                for line in result.stdout.splitlines()
-                if line.startswith(PREFIX)
+                json.loads(line[len(PREFIX) :]) for line in result.stdout.splitlines() if line.startswith(PREFIX)
             ]
             if len(samples) != 1 or not valid_sample(samples[0], normal, depth, position):
                 raise SystemExit(f"Legacy particle plane oracle failed on {label}")

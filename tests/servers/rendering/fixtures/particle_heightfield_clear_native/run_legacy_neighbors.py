@@ -11,9 +11,9 @@ import argparse
 import json
 import math
 import os
-from pathlib import Path
 import re
 import subprocess
+from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 PREFIX = "HEIGHTFIELD_CLEAR_NATIVE_PASS "
@@ -21,9 +21,24 @@ CASES = {
     "sphere": {"normal": (0.0, 1.0, 0.0), "depth": 0.25, "position": (0.0, 1.25, 0.0), "textures_used": 0},
     "box": {"normal": (1.0, 0.0, 0.0), "depth": 0.125, "position": (1.25, 0.0, 0.0), "textures_used": 0},
     "sdf": {"normal": (1.0, 0.0, 0.0), "depth": 0.125, "position": (0.25, 0.0, 0.0), "textures_used": 1},
-    "sphere_attractor": {"force": (-1.0, 0.0, 0.0), "velocity": (-1.0 / 60.0, 0.0, 0.0), "position": (1.0, 0.0, 0.0), "textures_used": 0},
-    "box_attractor": {"force": (-1.0, 0.0, 0.0), "velocity": (-1.0 / 60.0, 0.0, 0.0), "position": (1.0, 0.0, 0.0), "textures_used": 0},
-    "vector_attractor": {"force": (-2.0, 0.0, 0.0), "velocity": (-2.0 / 60.0, 0.0, 0.0), "position": (0.0, 0.0, 0.0), "textures_used": 1},
+    "sphere_attractor": {
+        "force": (-1.0, 0.0, 0.0),
+        "velocity": (-1.0 / 60.0, 0.0, 0.0),
+        "position": (1.0, 0.0, 0.0),
+        "textures_used": 0,
+    },
+    "box_attractor": {
+        "force": (-1.0, 0.0, 0.0),
+        "velocity": (-1.0 / 60.0, 0.0, 0.0),
+        "position": (1.0, 0.0, 0.0),
+        "textures_used": 0,
+    },
+    "vector_attractor": {
+        "force": (-2.0, 0.0, 0.0),
+        "velocity": (-2.0 / 60.0, 0.0, 0.0),
+        "position": (0.0, 0.0, 0.0),
+        "textures_used": 1,
+    },
 }
 
 
@@ -92,11 +107,16 @@ def main():
             label = f"{renderer}/{case}"
             command = [
                 str(args.binary.resolve()),
-                "--display-driver", args.display_driver,
-                "--rendering-driver", "metal",
-                "--rendering-method", method,
-                "--path", str(HERE),
-                "--script", "res://run.gd",
+                "--display-driver",
+                args.display_driver,
+                "--rendering-driver",
+                "metal",
+                "--rendering-method",
+                method,
+                "--path",
+                str(HERE),
+                "--script",
+                "res://run.gd",
             ]
             env = os.environ.copy()
             for name in (
@@ -112,8 +132,12 @@ def main():
             print(f"HEIGHTFIELD_LEGACY_NEIGHBOR_CASE renderer={method} source={case}", flush=True)
             print("COMMAND " + json.dumps(command), flush=True)
             result = subprocess.run(
-                command, env=env, text=True, stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT, timeout=90,
+                command,
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=90,
             )
             print(result.stdout, flush=True)
             if result.returncode != 0:
@@ -122,14 +146,13 @@ def main():
                 raise SystemExit(f"Legacy neighbor emitted an error or warning on {label}")
             startup = re.findall(
                 rf"^Metal [0-9.]+ - {re.escape(renderer)} - Using Device #[0-9]+: .+$",
-                result.stdout, re.MULTILINE,
+                result.stdout,
+                re.MULTILINE,
             )
             if len(startup) != 1:
                 raise SystemExit(f"Missing real Metal/{renderer} renderer evidence")
             samples = [
-                json.loads(line[len(PREFIX):])
-                for line in result.stdout.splitlines()
-                if line.startswith(PREFIX)
+                json.loads(line[len(PREFIX) :]) for line in result.stdout.splitlines() if line.startswith(PREFIX)
             ]
             if len(samples) != 1 or not valid_sample(samples[0], case):
                 raise SystemExit(f"Legacy neighbor oracle failed on {label}")

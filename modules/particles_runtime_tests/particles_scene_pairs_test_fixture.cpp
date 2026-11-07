@@ -1,7 +1,38 @@
+/**************************************************************************/
+/*  particles_scene_pairs_test_fixture.cpp                                */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
 #include "particles_scene_pairs_test_fixture.h"
+
 #include "core/object/class_db.h"
-#include "servers/rendering/renderer_scene_cull.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
+#include "servers/rendering/renderer_scene_cull.h"
 #include "servers/rendering/rendering_server.h"
 
 namespace TestProductionRequest {
@@ -74,8 +105,8 @@ void ParticlesScenePairsTestFixture::run() {
 	RendererSceneCull::SceneSphereSnapshot rejected_snapshot;
 	rejected_snapshot.pose_revision = 99;
 	checks["ordinary_receiver_not_promoted"] = scene->scene_receiver_commit_query(left, 1, RenderingDevice::get_singleton(),
-			Transform3D(Basis(), Vector3(50, 0, 0)), AABB(Vector3(-1, -1, -1), Vector3(2, 2, 2)),
-			AABB(Vector3(49, -1, -1), Vector3(2, 2, 2)), 1) != OK;
+													   Transform3D(Basis(), Vector3(50, 0, 0)), AABB(Vector3(-1, -1, -1), Vector3(2, 2, 2)),
+													   AABB(Vector3(49, -1, -1), Vector3(2, 2, 2)), 1) != OK;
 	checks["ordinary_snapshot_rejected_and_empty"] = scene->scene_sphere_snapshot(left, 1, RenderingDevice::get_singleton(), 4, rejected_snapshot) != OK &&
 			rejected_snapshot.pose_revision == 0 && rejected_snapshot.sources.is_empty();
 	scene->update_dirty_instances();
@@ -102,7 +133,6 @@ void ParticlesScenePairsTestFixture::run() {
 	scene->update_dirty_instances();
 	checks["kept_pair_shape_revision"] = scene->scene_sphere_snapshot_pairs(left, 4, a) && a.size() == 1 && left_instance->scene_pair_revision > membership_revision;
 	membership_revision = left_instance->scene_pair_revision;
-
 
 	scene->instance_set_visible(source, false);
 	scene->update_dirty_instances();

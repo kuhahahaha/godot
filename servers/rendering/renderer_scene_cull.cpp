@@ -35,11 +35,11 @@
 #include "core/math/geometry_3d.h"
 #include "core/object/callable_mp.h"
 #include "core/object/worker_thread_pool.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/renderer_viewport.h"
 #include "servers/rendering/rendering_light_culler.h"
 #include "servers/rendering/rendering_server.h"
 #include "servers/rendering/rendering_server_default.h"
-#include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 
 #ifndef XR_DISABLED
 #include "servers/xr/xr_interface.h"
@@ -177,13 +177,21 @@ void RendererSceneCull::occluder_set_mesh(RID p_occluder, const PackedVector3Arr
 
 Error RendererSceneCull::scene_receiver_commit_query(RID p_receiver, uint64_t p_generation, const RenderingDevice *p_device,
 		const Transform3D &p_transform, const AABB &p_local_envelope, const AABB &p_world_query, uint64_t p_bounds_revision) {
-	if (!RenderingServer::get_singleton()->is_on_render_thread()) return ERR_UNAVAILABLE;
+	if (!RenderingServer::get_singleton()->is_on_render_thread()) {
+		return ERR_UNAVAILABLE;
+	}
 	Instance *receiver = instance_owner.get_or_null(p_receiver);
-	if (!receiver || receiver->base_type != RSE::INSTANCE_PARTICLES || !receiver->scenario) return ERR_INVALID_PARAMETER;
+	if (!receiver || receiver->base_type != RSE::INSTANCE_PARTICLES || !receiver->scenario) {
+		return ERR_INVALID_PARAMETER;
+	}
 	auto *storage = RendererRD::ParticlesStorage::get_singleton();
-	if (!storage) return ERR_UNAVAILABLE;
+	if (!storage) {
+		return ERR_UNAVAILABLE;
+	}
 	const Error validated = storage->particles_scene_validate_receiver(receiver->base, p_generation, p_device);
-	if (validated != OK) return validated;
+	if (validated != OK) {
+		return validated;
+	}
 	const bool same_generation = receiver->scene_query_base == receiver->base && receiver->scene_query_generation == p_generation;
 	const AABB transformed_envelope = p_transform.xform(p_local_envelope);
 	const real_t determinant = p_transform.basis.determinant();
@@ -191,17 +199,25 @@ Error RendererSceneCull::scene_receiver_commit_query(RID p_receiver, uint64_t p_
 			!Math::is_finite(determinant) || determinant == 0 || !transformed_envelope.is_finite() || !transformed_envelope.get_end().is_finite() ||
 			!p_local_envelope.is_finite() || !p_local_envelope.get_end().is_finite() || !p_local_envelope.has_volume() ||
 			!p_world_query.is_finite() || !p_world_query.get_end().is_finite() || !p_world_query.has_volume() ||
-			!transformed_envelope.encloses(p_world_query)) return ERR_INVALID_PARAMETER;
+			!transformed_envelope.encloses(p_world_query)) {
+		return ERR_INVALID_PARAMETER;
+	}
 	if (receiver->scene_pose_revision == UINT64_MAX || receiver->scene_pair_exhausted ||
-			(receiver->scene_query_world != p_world_query && receiver->scene_pair_revision == UINT64_MAX)) return ERR_PARAMETER_RANGE_ERROR;
+			(receiver->scene_query_world != p_world_query && receiver->scene_pair_revision == UINT64_MAX)) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
 	// All validation precedes mutation. Only this actual scene instance changes;
 	// the original base's render/query configuration remains immutable.
-	if (!receiver->custom_aabb) receiver->custom_aabb = memnew(AABB);
+	if (!receiver->custom_aabb) {
+		receiver->custom_aabb = memnew(AABB);
+	}
 	*receiver->custom_aabb = p_local_envelope;
 	receiver->transform = p_transform;
 	receiver->scene_query_base = receiver->base;
 	receiver->scene_query_generation = p_generation;
-	if (receiver->scene_query_world != p_world_query) ++receiver->scene_pair_revision;
+	if (receiver->scene_query_world != p_world_query) {
+		++receiver->scene_pair_revision;
+	}
 	receiver->scene_query_world = p_world_query;
 	receiver->scene_bounds_revision = p_bounds_revision;
 	++receiver->scene_pose_revision;
@@ -213,18 +229,32 @@ Error RendererSceneCull::scene_receiver_commit_query(RID p_receiver, uint64_t p_
 Error RendererSceneCull::scene_sphere_snapshot(RID p_receiver, uint64_t p_generation, const RenderingDevice *p_device,
 		uint32_t p_max_sources, SceneSphereSnapshot &r_snapshot) const {
 	r_snapshot = SceneSphereSnapshot();
-	if (!RenderingServer::get_singleton()->is_on_render_thread()) return ERR_UNAVAILABLE;
+	if (!RenderingServer::get_singleton()->is_on_render_thread()) {
+		return ERR_UNAVAILABLE;
+	}
 	const Instance *receiver = instance_owner.get_or_null(p_receiver);
-	if (!receiver || receiver->base_type != RSE::INSTANCE_PARTICLES || !receiver->scenario) return ERR_INVALID_PARAMETER;
+	if (!receiver || receiver->base_type != RSE::INSTANCE_PARTICLES || !receiver->scenario) {
+		return ERR_INVALID_PARAMETER;
+	}
 	auto *storage = RendererRD::ParticlesStorage::get_singleton();
-	if (!storage) return ERR_UNAVAILABLE;
+	if (!storage) {
+		return ERR_UNAVAILABLE;
+	}
 	const Error validated = storage->particles_scene_validate_receiver(receiver->base, p_generation, p_device);
-	if (validated != OK) return validated;
+	if (validated != OK) {
+		return validated;
+	}
 	if (_instance_update_list.first() != nullptr || !receiver->scene_query_committed || receiver->scene_query_base != receiver->base ||
-			receiver->scene_query_generation != p_generation || receiver->update_item.in_list()) return ERR_UNAVAILABLE;
-	if (!p_max_sources || p_max_sources > 1024 || receiver->scene_pair_exhausted) return ERR_PARAMETER_RANGE_ERROR;
+			receiver->scene_query_generation != p_generation || receiver->update_item.in_list()) {
+		return ERR_UNAVAILABLE;
+	}
+	if (!p_max_sources || p_max_sources > 1024 || receiver->scene_pair_exhausted) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
 	SceneSphereSnapshot value;
-	if (!scene_sphere_snapshot_pairs(p_receiver, p_max_sources, value.sources)) return ERR_PARAMETER_RANGE_ERROR;
+	if (!scene_sphere_snapshot_pairs(p_receiver, p_max_sources, value.sources)) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
 	value.receiver_transform = receiver->transform;
 	value.query_bounds = receiver->scene_query_world;
 	value.pose_revision = receiver->scene_pose_revision;
@@ -435,8 +465,11 @@ void RendererSceneCull::_instance_pair(Instance *p_A, Instance *p_B) {
 		voxel_gi->lights.insert(A);
 	} else if (B->base_type == RSE::INSTANCE_PARTICLES_COLLISION && A->base_type == RSE::INSTANCE_PARTICLES) {
 		InstanceParticlesCollisionData *collision = static_cast<InstanceParticlesCollisionData *>(B->base_data);
-		if (A->scene_pair_revision == UINT64_MAX) A->scene_pair_exhausted = true;
-		else ++A->scene_pair_revision;
+		if (A->scene_pair_revision == UINT64_MAX) {
+			A->scene_pair_exhausted = true;
+		} else {
+			++A->scene_pair_revision;
+		}
 
 		if ((collision->cull_mask & A->layer_mask) && !RSG::particles_storage->particles_is_external(A->base)) {
 			RSG::particles_storage->particles_add_collision(A->base, collision->instance);
@@ -566,8 +599,11 @@ void RendererSceneCull::_instance_unpair(Instance *p_A, Instance *p_B) {
 		voxel_gi->lights.erase(A);
 	} else if (B->base_type == RSE::INSTANCE_PARTICLES_COLLISION && A->base_type == RSE::INSTANCE_PARTICLES) {
 		InstanceParticlesCollisionData *collision = static_cast<InstanceParticlesCollisionData *>(B->base_data);
-		if (A->scene_pair_revision == UINT64_MAX) A->scene_pair_exhausted = true;
-		else ++A->scene_pair_revision;
+		if (A->scene_pair_revision == UINT64_MAX) {
+			A->scene_pair_exhausted = true;
+		} else {
+			++A->scene_pair_revision;
+		}
 
 		if ((collision->cull_mask & A->layer_mask) && !RSG::particles_storage->particles_is_external(A->base)) {
 			RSG::particles_storage->particles_remove_collision(A->base, collision->instance);
