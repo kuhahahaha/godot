@@ -9640,6 +9640,16 @@ void RenderingDevice::_flush_barriers_for_transfer_worker(TransferWorker *p_tran
 
 Error RenderingDevice::_check_transfer_worker_operation(uint32_t index, uint64_t operation) {
 	auto *worker = transfer_worker_pool[index];
+	// A checked height capture currently has no authenticated worker-source
+	// join. Refuse before touching the worker locks or issuing a quote so a raw
+	// transfer dependency can never be mistaken for a settled height prefix.
+	if (!native_height_ranges.is_empty() && !frames.is_empty() && uint32_t(frame) < frames.size()) {
+		for (const Ref<NativeHeightRange> &range : native_height_ranges) {
+			if (range->capture_sink && !range->recording_closed && range->capture_frame == uint32_t(frame) && range->capture_epoch == frames[frame].qualification_epoch) {
+				return ERR_UNAVAILABLE;
+			}
+		}
+	}
 	// Never hold operations while waiting for thread: aggregate submit uses the
 	// original thread -> operations order. A retry publishes no new dependency.
 	if (!worker->thread_mutex.try_lock()) {
