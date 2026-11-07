@@ -1,0 +1,28 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/core/extension/test_production_request.cpp:11970:
+TEST CASE:  [SceneTree][ProductionRequest][NativeScenePhase] actual early hook owns bounded typed delivery expiry and original relay close
+
+tests/core/extension/test_production_request.cpp:4967: ERROR: CHECK( final_relay.holder_closed ) is NOT correct!
+  values: CHECK( false )
+
+tests/core/extension/test_production_request.cpp:4969: FATAL ERROR: REQUIRE( fixture.registry.scene_phase_unregister(probe.registration, close) == OK ) is NOT correct!
+  values: REQUIRE( 44 == 0 )
+
+tests/core/extension/test_production_request.cpp:4970: ERROR: CHECK( close.relay_holder_closed == 1 ) is NOT correct!
+  values: CHECK( 0 == 1 )
+
+tests/core/extension/test_production_request.cpp:4972: ERROR: CHECK( fixture.registry.observe_normal_relay(probe.relay, final_relay) == ERR_INVALID_DATA ) is NOT correct!
+  values: CHECK( 0 == 30 )
+
+tests/core/extension/test_production_request.cpp:4974: FATAL ERROR: REQUIRE( fixture.registry.scene_phase_unregister(probe.registration, close) == OK ) is NOT correct!
+  values: REQUIRE( 44 == 0 )
+
+tests/core/extension/test_production_request.cpp:4990: ERROR: CHECK( fixture.registry.forget_normal_relay(probe.relay) == ERR_INVALID_DATA ) is NOT correct!
+  values: CHECK( 44 == 30 )
+
+===============================================================================
+[doctest] test cases:   3 |   2 passed | 1 failed | 2214 skipped
+[doctest] assertions: 209 | 203 passed | 6 failed |
+[doctest] Status: FAILURE!

@@ -31,6 +31,7 @@
 #include "core/extension/gdextension_production_request.h"
 
 #include "core/extension/gdextension_production_legacy_projection.h"
+#include "core/io/native_drain_diagnostic.h"
 #include "core/os/os.h"
 #include "core/os/thread.h"
 #include "servers/rendering/rendering_device.h"
@@ -39,6 +40,7 @@
 #include <cstddef>
 #include <cstring>
 #include <new>
+#include <optional>
 #include <type_traits>
 
 namespace GDExtensionDeviceExit {
@@ -270,12 +272,32 @@ GDExtensionDeviceSessionResultV1 Registry::production_quote(const GDExtensionDev
 	if (!aligned(a) || !abi(*a) || !aligned(capacity) || !aligned(out)) {
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
+	// SceneReady's synchronous main-owner Engine stack keeps the original
+	// main RD Object alive. Take RD before Registry so a concurrent RD owner
+	// can finish its Registry work; never wait for RD while holding Registry.
+	// This TLS filter is only a lifetime/lock-order preflight. The original
+	// installation check below remains the authority for every input.
+	RenderingDevice *locked_main_rd = nullptr;
+	std::optional<MutexLock<Mutex>> main_rd_lock;
+	const auto *current = RegistrationContext::current;
+	if (Thread::is_main_thread() && current && current->reference &&
+			current->reference->registry == this && current->admitted && !current->ack &&
+			current->level_phase == LevelPhase::SCENE_READY) {
+		locked_main_rd = RenderingDevice::get_singleton();
+		if (locked_main_rd) {
+			main_rd_lock.emplace(locked_main_rd->_thread_safe_);
+		}
+	}
+	// Other original owner-thread paths retain their nonblocking contract.
 	MutexLock lock(mutex);
 	uint32_t library = 0, device = 0;
 	HolderRetirement *holder = nullptr;
 	Error e = production_installation_locked(frame, producer, context, session, library, device, holder);
 	if (e != OK) {
 		return result(e, 16);
+	}
+	if (locked_main_rd && device_records[device].object != locked_main_rd) {
+		return result(ERR_UNAVAILABLE, 16);
 	}
 	GDExtensionProductionMetadataQuoteV1 quote = {};
 	e = production_device_quote_locked(*Object::cast_to<RenderingDevice>(device_records[device].object), *capacity, quote);
@@ -289,12 +311,32 @@ GDExtensionDeviceSessionResultV1 Registry::production_accept(const GDExtensionDe
 	if (!aligned(a) || !abi(*a) || !aligned(input) || !production_dto_valid(*input) || !aligned(out) || !aligned(report) || !separate(out, sizeof(*out), report, sizeof(*report)) || out->registry_instance || out->handle_serial) {
 		return result(ERR_INVALID_PARAMETER, 2);
 	}
+	// SceneReady's synchronous main-owner Engine stack keeps the original
+	// main RD Object alive. Take RD before Registry so a concurrent RD owner
+	// can finish its Registry work; never wait for RD while holding Registry.
+	// This TLS filter is only a lifetime/lock-order preflight. The original
+	// installation check below remains the authority for every input.
+	RenderingDevice *locked_main_rd = nullptr;
+	std::optional<MutexLock<Mutex>> main_rd_lock;
+	const auto *current = RegistrationContext::current;
+	if (Thread::is_main_thread() && current && current->reference &&
+			current->reference->registry == this && current->admitted && !current->ack &&
+			current->level_phase == LevelPhase::SCENE_READY) {
+		locked_main_rd = RenderingDevice::get_singleton();
+		if (locked_main_rd) {
+			main_rd_lock.emplace(locked_main_rd->_thread_safe_);
+		}
+	}
+	// Other original owner-thread paths retain their nonblocking contract.
 	MutexLock lock(mutex);
 	uint32_t library = 0, device = 0;
 	HolderRetirement *holder = nullptr;
 	Error e = production_installation_locked(frame, producer, context, session, library, device, holder);
 	if (e != OK) {
 		return result(e, 16);
+	}
+	if (locked_main_rd && device_records[device].object != locked_main_rd) {
+		return result(ERR_UNAVAILABLE, 16);
 	}
 	if (code.registry_instance != instance || code.handle_serial != holder->handle_serial) {
 		return result(ERR_UNAUTHORIZED, 16);
@@ -510,13 +552,20 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 	}
 	for (uint32_t i = 0; i < resource_count; ++i) {
 		const auto &r = resources[i];
-		if (r.resource_kind < GDEXTENSION_PRODUCTION_STORAGE_V1 || r.resource_kind > GDEXTENSION_PRODUCTION_SET_V1 || r.ownership < GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 || r.ownership > GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1 || !r.original_generation || (r.resource_kind == GDEXTENSION_PRODUCTION_UNIT_V1 && r.ownership != GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1) || (r.resource_kind == GDEXTENSION_PRODUCTION_STORAGE_V1 && !r.physical_bytes)) {
+		if (r.ownership == GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1 && (contract_version != 2 || r.resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1)) {
+			return ERR_INVALID_DATA;
+		}
+		if (r.resource_kind == GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1 &&
+				(r.ownership != GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 || r.required_usage || !r.physical_bytes || r.physical_bytes > UINT32_MAX)) {
+			return ERR_INVALID_DATA;
+		}
+		if (((r.resource_kind < GDEXTENSION_PRODUCTION_STORAGE_V1 || r.resource_kind > GDEXTENSION_PRODUCTION_SET_V1) && r.resource_kind != GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1) || r.ownership < GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 || r.ownership > GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1 || !r.original_generation || (r.resource_kind == GDEXTENSION_PRODUCTION_UNIT_V1 && r.ownership != GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1) || (r.resource_kind == GDEXTENSION_PRODUCTION_STORAGE_V1 && !r.physical_bytes)) {
 			return ERR_INVALID_DATA;
 		}
 	}
 	for (uint32_t i = 0; i < use_count; ++i) {
 		const auto &u = uses[i];
-		if (u.resource_slot >= resource_count || u.access < GDEXTENSION_PRODUCTION_READ_V1 || u.access > GDEXTENSION_PRODUCTION_ATOMIC_V1 || (u.required_usage & ~resources[u.resource_slot].required_usage) || !range(u.byte_offset, u.byte_size, resources[u.resource_slot].physical_bytes)) {
+		if (u.resource_slot >= resource_count || resources[u.resource_slot].resource_kind == GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1 || u.access < GDEXTENSION_PRODUCTION_READ_V1 || u.access > GDEXTENSION_PRODUCTION_ATOMIC_V1 || (u.required_usage & ~resources[u.resource_slot].required_usage) || !range(u.byte_offset, u.byte_size, resources[u.resource_slot].physical_bytes)) {
 			return ERR_INVALID_DATA;
 		}
 	}
@@ -530,7 +579,13 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 	}
 	for (uint32_t i = 0; i < action_count; ++i) {
 		const auto &v = actions[i];
-		if (v.action_ordinal != i || v.source_recipe_reserved || v.canonical_suboperation < op.canonical_begin || v.canonical_suboperation >= op.canonical_end || (i && v.canonical_suboperation < actions[i - 1].canonical_suboperation) || (contract_version == 1 && v.canonical_suboperation != op.canonical_begin + i) || v.action_kind < GDEXTENSION_PRODUCTION_DISPATCH_V1 || v.action_kind > GDEXTENSION_PRODUCTION_READBACK_V1 || v.list_boundary > GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1 || v.first_use > use_count || v.use_count > use_count - v.first_use) {
+		if (v.physical_unit < resource_count && resources[v.physical_unit].resource_kind == GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1) {
+			return ERR_INVALID_DATA;
+		}
+		if (v.action_ordinal != i || v.source_recipe_reserved || v.canonical_suboperation < op.canonical_begin || v.canonical_suboperation >= op.canonical_end || (i && v.canonical_suboperation < actions[i - 1].canonical_suboperation) || (contract_version == 1 && v.canonical_suboperation != op.canonical_begin + i) || v.action_kind < GDEXTENSION_PRODUCTION_DISPATCH_V1 || (v.action_kind > GDEXTENSION_PRODUCTION_READBACK_V1 && (contract_version != 2 || v.action_kind != GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1)) || v.list_boundary > GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1 || v.first_use > use_count || v.use_count > use_count - v.first_use) {
+			return ERR_INVALID_DATA;
+		}
+		if (v.action_kind == GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1 && (v.physical_unit != UINT32_MAX || v.readback_slot != UINT32_MAX || v.list_boundary != GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1)) {
 			return ERR_INVALID_DATA;
 		}
 		if (v.action_kind == GDEXTENSION_PRODUCTION_DISPATCH_V1 && (v.physical_unit >= resource_count || resources[v.physical_unit].resource_kind != GDEXTENSION_PRODUCTION_UNIT_V1)) {
@@ -559,7 +614,9 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 						(use.access == GDEXTENSION_PRODUCTION_WRITE_V1 || use.access == GDEXTENSION_PRODUCTION_READ_WRITE_V1 || use.access == GDEXTENSION_PRODUCTION_ATOMIC_V1) &&
 						readback.byte_offset >= use.byte_offset && range(readback.byte_offset - use.byte_offset, readback.byte_size, use.byte_size);
 			}
-			if (!covered || writer.action_kind == GDEXTENSION_PRODUCTION_READBACK_V1) {
+			if (!covered || writer.action_kind == GDEXTENSION_PRODUCTION_READBACK_V1 ||
+					(resources[readback.resource_slot].ownership == GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1 && writer.action_kind != GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1) ||
+					(resources[readback.resource_slot].ownership != GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1 && writer.action_kind == GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1)) {
 				return ERR_INVALID_DATA;
 			}
 		}
@@ -812,7 +869,38 @@ Error Registry::production_freeze_locked(ProductionRequest &r) {
 		}
 	}
 	for (uint32_t i = 0; i < r.resource_count; ++i) {
-		if (!r.resources[i].imported) {
+		const auto &resource = r.resources[i];
+		if (resource.output_alias_prepared) {
+			if (resource.declaration.ownership != GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1 || resource.output_action_ordinal >= r.action_count || !r.actions[resource.output_action_ordinal].prepared || resource.imported || resource.owned_serial || resource.use_count) {
+				return ERR_INVALID_DATA;
+			}
+			bool exact_role = false;
+			for (const auto &role : r.actions[resource.output_action_ordinal].output_roles) {
+				exact_role |= role.bytes && role.resource_slot == i && role.bytes == resource.declaration.physical_bytes && role.generation == resource.declaration.original_generation;
+			}
+			if (!exact_role) {
+				return ERR_INVALID_DATA;
+			}
+			continue;
+		}
+		if (resource.output_set_deferred) {
+			if (resource.declaration.resource_kind != GDEXTENSION_PRODUCTION_SET_V1 || resource.declaration.ownership != GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 || !resource.owned_serial || resource.imported || resource.creating || resource.use_count || resource.first_binding > r.capacity.resource_uses || resource.binding_count > r.capacity.resource_uses - resource.first_binding) {
+				return ERR_INVALID_DATA;
+			}
+			bool has_alias = false;
+			for (uint32_t b = 0; b < resource.binding_count; ++b) {
+				const auto slot = r.uses[resource.first_binding + b].binding.resource_slot;
+				if (slot >= r.resource_count || (!r.resources[slot].imported && !r.resources[slot].output_alias_prepared)) {
+					return ERR_INVALID_DATA;
+				}
+				has_alias |= r.resources[slot].output_alias_prepared;
+			}
+			if (!has_alias) {
+				return ERR_INVALID_DATA;
+			}
+			continue;
+		}
+		if (!resource.imported && resource.declaration.resource_kind != GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1) {
 			return ERR_UNCONFIGURED;
 		}
 	}
@@ -824,6 +912,40 @@ Error Registry::production_freeze_locked(ProductionRequest &r) {
 			}
 			const auto &writer = r.actions[readback.producer_action_ordinal];
 			const auto &resource = r.resources[readback.resource_slot];
+			if (resource.output_alias_prepared) {
+				// Freeze validates only the original unbound alias plan. READBACK
+				// recording stays gated pending real factory/witness integration.
+				const auto &copy = r.actions[readback.copy_action_ordinal];
+				if (resource.request != &r || resource.request_serial != r.serial ||
+						resource.declaration.resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1 ||
+						resource.declaration.ownership != GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1 ||
+						resource.output_action_ordinal != readback.producer_action_ordinal ||
+						writer.request != &r || writer.declaration.action_ordinal != readback.producer_action_ordinal ||
+						writer.declaration.action_kind != GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1 || !writer.output_source_prepared ||
+						copy.request != &r || copy.declaration.action_ordinal != readback.copy_action_ordinal ||
+						copy.declaration.action_kind != GDEXTENSION_PRODUCTION_READBACK_V1 || copy.readback_slot != i ||
+						copy.declaration.readback_slot != i || !readback.byte_size ||
+						!range(readback.byte_offset, readback.byte_size, resource.declaration.physical_bytes) ||
+						!production_use_matches_locked(r, copy, readback.resource_slot, readback.byte_offset, readback.byte_size, GDEXTENSION_PRODUCTION_READ_V1)) {
+					return ERR_INVALID_DATA;
+				}
+				bool covered = false;
+				for (const auto &role : writer.output_roles) {
+					if (!role.bytes || role.resource_slot != readback.resource_slot || role.use_index >= r.use_count ||
+							role.use_index < writer.declaration.first_use || role.use_index - writer.declaration.first_use >= writer.declaration.use_count) {
+						continue;
+					}
+					const auto &use = r.uses[role.use_index];
+					covered |= role.bytes == resource.declaration.physical_bytes && role.generation == resource.declaration.original_generation &&
+							use.request == &r && use.declaration.resource_slot == readback.resource_slot &&
+							use.declaration.access == GDEXTENSION_PRODUCTION_WRITE_V1 && !use.declaration.byte_offset &&
+							use.declaration.byte_size == role.bytes && range(readback.byte_offset, readback.byte_size, role.bytes);
+				}
+				if (!covered) {
+					return ERR_INVALID_DATA;
+				}
+				continue;
+			}
 			// Original import/create already authenticated storage generation,
 			// RID and backing serial and retained the exact physical dependency.
 			// Native record rechecks that same RID/backing before any effect.
@@ -1048,7 +1170,7 @@ Error Registry::production_observe_service(GDExtensionProductionRequestRefV1 ref
 		return OK;
 	}
 	uint64_t serial = 0;
-	bool returned = false, same_budget = false;
+	bool returned = false;
 	{
 		MutexLock lock(mutex);
 		ProductionRequest *request = nullptr;
@@ -1057,19 +1179,28 @@ Error Registry::production_observe_service(GDExtensionProductionRequestRefV1 ref
 		if (error != OK) {
 			return error;
 		}
-		const auto &cell = request->control;
+		auto &cell = request->control;
 		if (cell.state != ProductionControlState::OWNER_CONSUMED) {
 			if (cell.input.kind != ProductionControlKind::OBSERVE) {
 				return ERR_BUSY;
 			}
 			serial = cell.serial;
+			if (cell.state == ProductionControlState::PENDING && !service_budget_active(cell.input.budget)) {
+				// This exact turn never published. Return only its proven no-effect
+				// result; a retry cannot renew the original immutable authorization.
+				cell.output = {};
+				cell.output.request_serial = request->serial;
+				cell.output.control_serial = cell.serial;
+				cell.output.result = result(OK);
+				production_report_locked(*request, cell.output.report);
+				cell.state = ProductionControlState::RETURNED;
+			}
 			returned = cell.state == ProductionControlState::RETURNED;
 			if (returned && cell.output.output_generation.native_released) {
 				// Only an exact original consumer accepting the full internal result
 				// may consume it. The current public observe DTO has no such field.
 				return ERR_UNAVAILABLE;
 			}
-			same_budget = same_service_budget(cell.input.budget, budget);
 		}
 	}
 	if (returned) {
@@ -1078,17 +1209,14 @@ Error Registry::production_observe_service(GDExtensionProductionRequestRefV1 ref
 		if (error != OK) {
 			return error;
 		}
-		if (same_budget) {
-			return Error(output.result.native_error);
-		}
-		// The old immutable turn is consumed even when its deadline expired or
-		// the next reduction differs. A fresh turn uses the same fixed cell.
-		serial = 0;
+		// A nonzero retry consumes only the original turn, regardless of its
+		// offered deadline/reduction. A fresh turn requires a subsequent call.
+		return Error(output.result.native_error);
 	}
-	// The caller's current reduction gates publication even for an older
-	// retained PENDING turn. Query/expired calls preserve that immutable cell.
+	// Expiry cannot report a successful service return while an original turn
+	// remains outstanding. Zero queries above deliberately preserve custody.
 	if (!service_budget_active(budget)) {
-		return OK;
+		return serial ? ERR_BUSY : OK;
 	}
 	if (!serial) {
 		const Error error = production_control_accept(ref, ProductionControlKind::OBSERVE, &serial, &budget);
@@ -1162,6 +1290,7 @@ Error Registry::production_report_contents_locked(const ProductionRequest &r, GD
 	report.fact_count = r.graph_count + r.native_count;
 	for (uint32_t i = 0; i < r.resource_count; ++i) {
 		report.possible_obligations += r.resources[i].transfer_pending;
+		report.physical_returns_pending += r.resources[i].metadata_data != nullptr;
 	}
 	Error cause = OK;
 	for (uint32_t i = 0; i < r.graph_count; ++i) {
@@ -1672,7 +1801,42 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_v2(GDExtensionProd
 					own_tail = request->maintenance_serial && rd->native_disposal_active && request->maintenance_serial == rd->native_disposal_continuation.serial && rd->native_disposal_continuation.production_owner == request;
 					rd->_thread_safe_.unlock();
 				}
-				if (ready.native_error != ERR_BUSY || !own_tail || request->capture_inflight || request->compute_list_open || report->cause.native_error != OK || (!request->cancelled && request->next_action != request->action_count)) {
+				// A returned CPU map failure is a result error, not an outstanding
+				// native obligation. Admit only the original maintenance tail after
+				// all issued work is positively complete; preserve the error report.
+				const bool returned_map_failure = [&]() {
+					if (report->cause.native_error != ERR_CANT_ACQUIRE_RESOURCE || request->effects_pending || request->source_device_lost || report->possible_obligations || report->physical_returns_pending || report->known_obligations != report->complete_obligations) {
+						return false;
+					}
+					for (uint32_t i = 0; i < request->graph_count; ++i) {
+						const auto &graph = request->graphs[i];
+						if (graph.request != request || graph.pending || graph.fact.issue_error != OK) {
+							return false;
+						}
+					}
+					for (uint32_t i = 0; i < request->native_count; ++i) {
+						const ProductionNativeCell *owner = nullptr;
+						if (production_native_owner_locked(*request, i, owner) != OK || owner->member.source.issue != RDD::IssueFact::KnownAccepted || owner->member.source.error != OK || owner->observation.state != NativeSourceObservation::State::Complete || owner->observation.error != OK || owner->observation.completion_error != OK || owner->observation.retention_error != OK || owner->member.retention_error != OK || owner->release_error != OK || !owner->member.retained) {
+							return false;
+						}
+					}
+					bool found_map_failure = false;
+					for (uint32_t i = 0; i < request->readback_count; ++i) {
+						const auto &readback = request->readbacks[i];
+						if (readback.request != request || readback.source.returned != readback.source.issued || readback.source.completed > readback.source.issued) {
+							return false;
+						}
+						if (readback.source.error == OK) {
+							continue;
+						}
+						if (readback.source.error != ERR_CANT_ACQUIRE_RESOURCE || !readback.source.issued || readback.source.delivered) {
+							return false;
+						}
+						found_map_failure = true;
+					}
+					return found_map_failure;
+				}();
+				if (ready.native_error != ERR_BUSY || !own_tail || request->capture_inflight || (request->compute_list_open || request->draw_list_open) || (report->cause.native_error != OK && !returned_map_failure) || (!request->cancelled && request->next_action != request->action_count)) {
 					return ready;
 				}
 			}
@@ -1869,6 +2033,18 @@ Error Registry::production_output_owner_bind(ProductionOutputPin &pin, Rendering
 	if (request.output_owner_cursor == UINT32_MAX) {
 		request.output_owner_cursor = pin.cell_index;
 	}
+	if (kind == ProductionOutputOwnerKind::GENERATION) {
+		for (uint32_t i = 0; i < request.resource_count; ++i) {
+			auto &resource = request.resources[i];
+			if (resource.request == &request && resource.request_serial == request.serial &&
+					resource.declaration.resource_kind == GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1 &&
+					resource.declaration.ownership == GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 &&
+					resource.metadata_created && !resource.metadata_returned && resource.metadata_data && resource.metadata_consumer &&
+					resource.metadata_root_serial == pin.serial) {
+				resource.metadata_generation_bound = true;
+			}
+		}
+	}
 	return OK;
 }
 
@@ -1889,6 +2065,28 @@ Error Registry::production_output_cleanup_context(ProductionPhysicalContextRef c
 	const auto &row = request->uses[pin.cell_index];
 	if (row.output_owner_kind != ProductionOutputOwnerKind::SLOT || !generation || !lease || row.output_particles != particles || row.output_generation != generation || row.output_slot != slot || row.output_lease != lease ||
 			!rd._production_output_owner_matches(ProductionOutputOwnerKind::SLOT, particles, generation, slot, lease, pin, ref)) {
+		return ERR_UNAUTHORIZED;
+	}
+	return OK;
+}
+
+// Withdraw is cleanup of the independently installed original generation
+// root. A slot pin or matching scalar tuple cannot authenticate that root.
+Error Registry::production_output_generation_cleanup_context(ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, const ProductionOutputPin &pin, RenderingDevice &rd, RID particles, uint64_t generation) {
+	MutexLock lock(mutex);
+	ProductionRequest *request = nullptr;
+	RenderingDevice *device = nullptr;
+	const Error error = production_physical_request_locked(context, ref, request, device, false);
+	if (error != OK) {
+		return error;
+	}
+	if (device != &rd || !production_output_pin_matches_locked(pin, ref, rd) || pin.request != request) {
+		return ERR_UNAUTHORIZED;
+	}
+	const auto &row = request->uses[pin.cell_index];
+	if (row.output_owner_kind != ProductionOutputOwnerKind::GENERATION || !generation || !particles.is_valid() ||
+			row.output_particles != particles || row.output_generation != generation || row.output_slot != UINT32_MAX || row.output_lease ||
+			!rd._production_output_owner_matches(ProductionOutputOwnerKind::GENERATION, particles, generation, UINT32_MAX, 0, pin, ref)) {
 		return ERR_UNAUTHORIZED;
 	}
 	return OK;
@@ -1933,15 +2131,17 @@ Error Registry::production_output_owners_service_locked(ProductionRequest &reque
 	usage.controls = 1; // Same original OBSERVE control, not a second pass.
 	// One O(1) locator dispatch per control. Actual component phases alone
 	// debit passes/receipts, so a positive one-pass slice can make progress.
+	production_native_effect_enter_locked(request);
 	++request.capture_inflight;
 	rd._thread_safe_.unlock();
 	mutex.unlock();
 	const Error result = rd._production_output_owner_service(kind, particles, generation, slot, lease, *pin, budget, usage);
-	// Reacquire in the original Registry -> RD order. The callback ran with
-	// both locks released; reversing this order creates a TSAN lock cycle
-	// against owned factory paths that already hold Registry before RD.
-	mutex.lock();
+	// Blocking acquisition is RD -> Registry, as in native source capture and
+	// owned factory return. Registry-held entry points use RD.try_lock() and
+	// return ERR_BUSY on contention; they must never wait for RD. The capture
+	// pin retains this original request while both locks are released.
 	rd._thread_safe_.lock();
+	mutex.lock();
 	CRASH_COND(!request.capture_inflight);
 	--request.capture_inflight;
 	if (request.serial != serial || request.control.serial != control_serial || request.control.state != ProductionControlState::EXECUTING || request.attachment != attachment || attachment->held_device != &rd || attachment->epoch != epoch || device_records[attachment->device].epoch != epoch || device_records[attachment->device].object != &rd) {
@@ -1987,8 +2187,22 @@ Error Registry::production_output_generation_return(ProductionOutputPin &pin, Re
 	if (projected != OK) {
 		return projected;
 	}
-	if (request.source_device_lost || request.compute_list_open || (!request.cancelled && request.next_action != request.action_count) ||
-			terminal.root_source.possible_obligations || terminal.root_source.physical_returns_pending ||
+	// Each installed generation's placement owner remains alive until its RID
+	// is actually freed. Sibling generations must be able to return their roots
+	// independently, including after a sibling root was unpinned but before its
+	// particles_free. A metadata bind to an uninstalled pin is not this proof.
+	// The complete request report and reclaim gate still count every allocation.
+	uint32_t owner_metadata_pending = 0;
+	for (uint32_t i = 0; i < request.resource_count; ++i) {
+		const auto &resource = request.resources[i];
+		owner_metadata_pending += resource.request == &request && resource.request_serial == request.serial &&
+				resource.declaration.resource_kind == GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1 &&
+				resource.declaration.ownership == GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 &&
+				resource.metadata_created && !resource.metadata_returned && resource.metadata_data && resource.metadata_consumer &&
+				resource.metadata_root_serial && resource.metadata_generation_bound;
+	}
+	if (request.source_device_lost || (request.compute_list_open || request.draw_list_open) || (!request.cancelled && request.next_action != request.action_count) ||
+			terminal.root_source.possible_obligations || terminal.root_source.physical_returns_pending != owner_metadata_pending ||
 			terminal.root_source.known_obligations != terminal.root_source.complete_obligations) {
 		return ERR_BUSY;
 	}
@@ -2075,6 +2289,14 @@ Error Registry::production_output_unpin_locked(ProductionOutputPin &pin) {
 			}
 		}
 	}
+	if (cell.output_owner_kind == ProductionOutputOwnerKind::SLOT) {
+		for (uint32_t i = 0; i < request.action_count; ++i) {
+			auto &action = request.actions[i];
+			if (action.output_root == pin.serial && action.output_particles == cell.output_particles && action.output_generation == cell.output_generation && action.output_slot == cell.output_slot && action.output_lease == cell.output_lease) {
+				action.output_state = ProductionActionCell::OutputState::RETURNED;
+			}
+		}
+	}
 	// Return only this custody edge. No request/native completion, driver call,
 	// unpin of backing resources, new admission or metadata refund is implied.
 	if (cell.output_generation) {
@@ -2154,7 +2376,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 		}
 	}
 	for (uint32_t i = 0; i < r->resource_count; ++i) {
-		if (r->resources[i].transfer_pending) {
+		if (r->resources[i].transfer_pending || r->resources[i].metadata_data || r->resources[i].metadata_consumer) {
 			return result(ERR_BUSY, 16);
 		}
 	}
@@ -2192,6 +2414,36 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 		if (r->readbacks[i].source.issued && r->readbacks[i].source.returned != r->readbacks[i].source.issued) {
 			return result(ERR_BUSY, 16);
 		}
+	}
+	for (uint32_t i = 0; i < r->action_count; ++i) {
+		auto &content = r->actions[i].scene_attempt.content;
+		if (!content.is_valid()) {
+			continue;
+		}
+		if (reclaim) {
+			return result(ERR_BUSY, 16);
+		}
+		if (!budget && !usage) {
+			return result(OK);
+		} // Readiness only, no owner call.
+		if (!budget || !usage || !service_budget_active(*budget) || usage->passes >= MIN(budget->passes, 64u) || usage->receipts >= MIN(budget->receipts, 128u)) {
+			return result(ERR_BUSY, 16);
+		}
+		++r->capture_inflight;
+		++usage->passes;
+		++usage->receipts;
+		Ref<SceneReadContent> returning = content;
+		mutex.unlock();
+		const Error returned = returning->return_after_reads();
+		mutex.lock();
+		if (returned == OK) {
+			content.unref();
+		} // returning still pins destructor.
+		mutex.unlock();
+		returning.unref(); // Native owner destruction never runs under Registry.
+		mutex.lock();
+		--r->capture_inflight;
+		return result(returned == OK ? ERR_BUSY : returned, 16); // One charged owner return per turn.
 	}
 	// Native observer references may only be dropped in the original owner's
 	// final-release phase. RT readiness neither releases them nor signs R01 ACK.
@@ -2369,7 +2621,7 @@ GDExtensionDeviceSessionResultV1 Registry::production_close(GDExtensionProductio
 	if (rd && rd->render_thread_id == Thread::get_caller_id() && rd->_thread_safe_.try_lock()) {
 		RdUnlock unlock{ rd->_thread_safe_ };
 		for (uint32_t i = 0; i < a->quote.capacity.requests; ++i) {
-			if (a->requests[i].serial && a->requests[i].compute_list_open) {
+			if (a->requests[i].serial && (a->requests[i].compute_list_open || a->requests[i].draw_list_open)) {
 				production_close_lists_locked(a->requests[i], *rd);
 			}
 		}
@@ -2465,35 +2717,50 @@ Error Registry::production_control_accept(GDExtensionProductionRequestRefV1 ref,
 }
 
 Error Registry::production_control_schedule(GDExtensionProductionRequestRefV1 ref, uint64_t serial) {
+	NativeDrainDiagnostic::Span drain_trace("control.schedule", serial);
 	MutexLock lock(mutex);
 	ProductionRequest *r = nullptr;
 	RenderingDevice *rd = nullptr;
 	Error error = production_request_locked(ref, false, r, rd);
 	if (error != OK) {
-		return error;
+		return drain_trace.result(error, "request_lookup_failed");
 	}
 	auto &cell = r->control;
+	drain_trace.state(r->serial, serial, uint64_t(cell.state), uint64_t(cell.input.kind), r->maintenance_serial, 0);
 	if (!serial || cell.serial != serial || cell.state == ProductionControlState::OWNER_CONSUMED) {
-		return ERR_DOES_NOT_EXIST;
+		return drain_trace.result(ERR_DOES_NOT_EXIST, "serial_or_state_mismatch");
 	}
 	if (cell.state != ProductionControlState::PENDING) {
-		return OK;
+		return drain_trace.result(OK, "existing_control");
 	}
 	auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
 	if (!server || this != &get_singleton()) {
-		return ERR_UNAVAILABLE;
+		cell.record_history.schedule_result_valid = true;
+		cell.record_history.last_schedule_result = result(ERR_UNAVAILABLE);
+		return drain_trace.result(ERR_UNAVAILABLE, "server_unavailable");
 	}
 	// Publication holds the original Registry lock; CQMT does not execute inline
 	// and releases its lock before dispatch. The scalar command owns no DSO code.
+	cell.record_history.schedule_attempted = true;
+	cell.record_history.queue_possible = true;
 	cell.state = ProductionControlState::QUEUED;
 	if (!server->_try_production_control_dispatch(instance, r->attachment->serial, r->serial, serial)) {
 		cell.state = ProductionControlState::PENDING;
-		return ERR_BUSY;
+		cell.record_history.queue_possible = false; // FIFO false means no publication.
+		cell.record_history.schedule_result_valid = true;
+		cell.record_history.last_schedule_result = result(ERR_BUSY);
+		drain_trace.state(r->serial, serial, uint64_t(cell.state), uint64_t(cell.input.kind), r->maintenance_serial, 0);
+		return drain_trace.result(ERR_BUSY, "queue_refused");
 	}
-	return OK;
+	cell.record_history.admitted = true;
+	cell.record_history.schedule_result_valid = true;
+	cell.record_history.last_schedule_result = result(OK);
+	drain_trace.state(r->serial, serial, uint64_t(cell.state), uint64_t(cell.input.kind), r->maintenance_serial, 1);
+	return drain_trace.result(OK, "queue_accepted");
 }
 
 void Registry::production_control_execute_locked(ProductionRequest &request, RenderingDevice *rd) {
+	NativeDrainDiagnostic::Span drain_trace("control.execute", request.serial, request.control.serial, uint64_t(request.control.input.kind), request.maintenance_serial, uintptr_t(rd), 0);
 	auto &cell = request.control;
 	CRASH_COND(cell.state != ProductionControlState::QUEUED);
 	cell.state = ProductionControlState::EXECUTING;
@@ -2530,8 +2797,9 @@ void Registry::production_control_execute_locked(ProductionRequest &request, Ren
 					rd->_thread_safe_.unlock();
 					mutex.unlock();
 					const Error component = test_production_before_maintenance(request, *rd);
-					mutex.lock();
+					// Match the production callback's blocking RD -> Registry order.
 					rd->_thread_safe_.lock();
+					mutex.lock();
 					CRASH_COND(!request.capture_inflight);
 					--request.capture_inflight;
 					if (request.serial != request_serial || request.control.serial != control_serial || request.control.state != ProductionControlState::EXECUTING || request.attachment != attachment || attachment->held_device != rd || attachment->epoch != epoch || device_records[attachment->device].epoch != epoch || device_records[attachment->device].object != rd) {
@@ -2594,13 +2862,16 @@ void Registry::production_control_execute_locked(ProductionRequest &request, Ren
 			}
 			cell.output.result = result(error);
 		} break;
+		case ProductionControlKind::RASTER_CREATE:
+			cell.output.result = result(rd ? production_raster_prepare_execute_locked(request, *rd) : production_raster_prepare_finish_locked(request, ERR_UNAVAILABLE));
+			break;
 		case ProductionControlKind::STORAGE_CREATE:
 		case ProductionControlKind::SET_CREATE:
 			cell.output.result = result(rd ? production_create_execute_locked(request, *rd, cell.input.kind, cell.input.resource_slot) : ERR_UNAVAILABLE);
 			break;
 		case ProductionControlKind::CANCEL:
 			cell.output.result = production_cancel_locked(request);
-			if (request.compute_list_open && rd && rd->_thread_safe_.try_lock()) {
+			if ((request.compute_list_open || request.draw_list_open) && rd && rd->_thread_safe_.try_lock()) {
 				RdUnlock unlock{ rd->_thread_safe_ };
 				const Error closed = production_close_lists_locked(request, *rd);
 				if (closed != OK) {
@@ -2621,22 +2892,48 @@ void Registry::production_control_execute_locked(ProductionRequest &request, Ren
 					}
 				}
 			}
-			cell.output.result = maintenance == OK ? production_release_locked(request, rd, false) : result(maintenance, 16);
+			if (maintenance != OK) {
+				cell.output.result = result(maintenance, 16);
+				break;
+			}
+			// The original immutable authorization already paid for this dispatch
+			// and any maintenance above. The release leaf resets its usage output,
+			// so offer only the residual slice and merge a separate usage result.
+			auto release_budget = cell.input.budget;
+			auto &used = cell.output.service_usage;
+			if (used.controls > 1 || used.controls > release_budget.controls || used.passes > MIN(release_budget.passes, 64u) || used.receipts > MIN(release_budget.receipts, 128u)) {
+				cell.output.result = result(ERR_INVALID_DATA, 19);
+				break;
+			}
+			release_budget.passes = MIN(release_budget.passes, 64u) - used.passes;
+			release_budget.receipts = MIN(release_budget.receipts, 128u) - used.receipts;
+			ProductionServiceUsage release_usage = {};
+			cell.output.result = production_release_locked(request, rd, false, &release_budget, &release_usage);
+			if (release_usage.controls || release_usage.passes > release_budget.passes || release_usage.receipts > release_budget.receipts) {
+				cell.output.result = result(ERR_INVALID_DATA, 19);
+				break;
+			}
+			used.passes += release_usage.passes;
+			used.receipts += release_usage.receipts;
 		} break;
 	}
 	production_report_locked(request, cell.output.report);
+	drain_trace.result(cell.output.result.native_error, "control.returned");
 	cell.state = ProductionControlState::RETURNED;
 	request.attachment->metadata_pending = request.attachment->metadata_receiver != nullptr;
 	// No recursive schedule, driver wait, native completion, or source ACK here.
 }
 
 void Registry::production_control_dispatch(uint64_t registry, uint64_t attachment, uint64_t request, uint64_t serial) {
+	NativeDrainDiagnostic::Span drain_trace("control.dispatch", registry, attachment, request, serial);
 	auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
 	if (!server || Thread::get_caller_id() != server->server_thread) {
+		drain_trace.result(ERR_UNAUTHORIZED, "wrong_thread_or_no_server");
 		return;
 	}
 	MutexLock lock(mutex);
 	if (registry != instance || !serial) {
+		drain_trace.result(ERR_INVALID_PARAMETER, "foreign_registry_or_zero_serial");
 		return;
 	}
 	for (auto *a : production_attachments) {
@@ -2667,17 +2964,29 @@ void Registry::production_control_dispatch(uint64_t registry, uint64_t attachmen
 				cell.output = {};
 				cell.output.request_serial = r.serial;
 				cell.output.control_serial = cell.serial;
+				if (cell.input.kind == ProductionControlKind::RASTER_CREATE) {
+					production_raster_prepare_finish_locked(r, ERR_INVALID_DATA);
+				}
 				cell.output.result = result(ERR_INVALID_DATA, 16);
 				cell.state = ProductionControlState::RETURNED;
+				drain_trace.result(ERR_INVALID_DATA, "original_identity_rejected");
 				return;
 			}
 			// A loss/sealed preflight does not erase already accepted cleanup. Pending
 			// native effects are still checked by the real release helper and retained.
+			drain_trace.result(OK, "entered_execute");
+			if (a->scene_registration && cell.input.kind == ProductionControlKind::RECORD && !a->scene_occurrence && !a->scene_closed) {
+				cell.scene_waiting = true;
+				return; // Original queued mailbox waits for actual SceneBeforeParticles.
+			}
+			cell.scene_waiting = false;
 			production_control_execute_locked(r, a->held_device);
 			return;
 		}
+		drain_trace.result(ERR_DOES_NOT_EXIST, "no_matching_request");
 		return;
 	}
+	drain_trace.result(ERR_DOES_NOT_EXIST, "no_matching_attachment");
 }
 
 Error Registry::production_control_consume(GDExtensionProductionRequestRefV1 ref, uint64_t serial, ProductionControlOutput *out) {

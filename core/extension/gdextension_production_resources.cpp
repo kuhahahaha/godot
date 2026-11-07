@@ -198,6 +198,9 @@ Error Registry::production_unpin_resources_locked(ProductionRequest &p_request) 
 		if (slot.use_count > 2) {
 			return ERR_INVALID_DATA;
 		}
+		if (slot.output_alias_prepared && slot.output_witness.cell.is_valid() && slot.output_witness.cell->state != NativeDisposalWitness::State::RETURNED) {
+			return ERR_BUSY;
+		}
 		for (uint32_t j = 0; j < slot.use_count; j++) {
 			const auto &use = slot.uses[j];
 			if (use.request != &p_request || use.request_serial != p_request.serial || !use.same_physical() || !use.linked()) {
@@ -213,6 +216,11 @@ Error Registry::production_unpin_resources_locked(ProductionRequest &p_request) 
 				return error;
 			}
 			slot.use_count--;
+		}
+		if (slot.output_alias_prepared) {
+			// All original root pins have returned above. Release this observer
+			// only after its sole disposal owner observed actual driver return.
+			slot.output_witness = NativeDisposalWitness();
 		}
 		slot.imported = false;
 		slot.first_binding = UINT32_MAX;

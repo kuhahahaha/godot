@@ -144,6 +144,147 @@ public:
 	void command_insert_breadcrumb(CommandBufferID, uint32_t) override {}
 };
 
+class GraphBindHandleTestDriver : public RecordSlotTestDriver {
+public:
+	Vector<uint64_t> payload;
+	uint64_t buffer_get_dynamic_offsets(Span<BufferID> p_buffers) override {
+		CHECK(p_buffers.size() == 3);
+		return 5;
+	}
+	void command_begin_render_pass(CommandBufferID p_command_buffer, RenderPassID p_render_pass, FramebufferID p_framebuffer, CommandBufferType, const Rect2i &, VectorView<RenderPassClearValue>) override {
+		CHECK(p_command_buffer == CommandBufferID(11));
+		CHECK(p_render_pass == RenderPassID(21));
+		CHECK(p_framebuffer == FramebufferID(22));
+		payload.push_back(10);
+	}
+	void command_end_render_pass(CommandBufferID) override { payload.push_back(20); }
+	void command_render_bind_vertex_buffers(CommandBufferID p_command_buffer, uint32_t p_count, const BufferID *p_buffers, const uint64_t *p_offsets, uint64_t p_dynamic_offsets) override {
+		payload.push_back(1);
+		payload.push_back(p_command_buffer.id);
+		payload.push_back(p_count);
+		for (uint32_t i = 0; i < p_count; i++) {
+			payload.push_back(p_buffers[i].id);
+			payload.push_back(p_offsets[i]);
+		}
+		payload.push_back(p_dynamic_offsets);
+	}
+	void command_render_bind_index_buffer(CommandBufferID p_command_buffer, BufferID p_buffer, IndexBufferFormat p_format, uint64_t p_offset) override {
+		payload.push_back(2);
+		payload.push_back(p_command_buffer.id);
+		payload.push_back(p_buffer.id);
+		payload.push_back(p_format);
+		payload.push_back(p_offset);
+	}
+};
+
+TEST_CASE("[R02][Graph] vertex and index bind handles retain original payload and executed mapping") {
+	using Driver = RenderingDeviceDriver;
+	using Graph = RenderingDeviceGraph;
+	for (int discard_return = 0; discard_return < 2; discard_return++) {
+		CAPTURE(discard_return);
+		Graph graph;
+		GraphBindHandleTestDriver driver;
+		graph.initialize(&driver, [](Driver *, VectorView<Driver::AttachmentLoadOp>, VectorView<Driver::AttachmentStoreOp>, void *) { return Driver::RenderPassID(); }, 1, Driver::CommandQueueFamilyID(1), 0);
+		graph.begin();
+		graph.add_draw_list_begin(Driver::RenderPassID(21), Driver::FramebufferID(22), Rect2i(), {}, {}, {});
+		Driver::BufferID buffers[] = { Driver::BufferID(31), Driver::BufferID(), Driver::BufferID(33) };
+		uint64_t offsets[] = { 4, 8, uint64_t(1) << 35 };
+		Graph::RecordHandle records[3];
+		if (discard_return) {
+			// Existing void-style callers still record exactly the same instructions.
+			graph.add_draw_list_bind_vertex_buffers(buffers, offsets);
+			graph.add_draw_list_bind_index_buffer(Driver::BufferID(71), Driver::INDEX_BUFFER_FORMAT_UINT32, 0xabc);
+			graph.add_draw_list_bind_index_buffer(Driver::BufferID(72), Driver::INDEX_BUFFER_FORMAT_UINT16, 6);
+		} else {
+			records[0] = graph.add_draw_list_bind_vertex_buffers(buffers, offsets);
+			records[1] = graph.add_draw_list_bind_index_buffer(Driver::BufferID(71), Driver::INDEX_BUFFER_FORMAT_UINT32, 0xabc);
+			records[2] = graph.add_draw_list_bind_index_buffer(Driver::BufferID(72), Driver::INDEX_BUFFER_FORMAT_UINT16, 6);
+			CHECK(records[0].offset < records[1].offset);
+			CHECK(records[1].offset < records[2].offset);
+			for (const auto &record : records) {
+				CHECK(record.kind == 3);
+				CHECK(record.index == records[0].index);
+				CHECK(record.graph_instance == records[0].graph_instance);
+				CHECK(record.graph_frame == records[0].graph_frame);
+				CHECK(graph.contains_record(record));
+				CHECK(graph.record_mapping_state(record) == Graph::RecordMappingState::Pending);
+				uint32_t slot = UINT32_MAX;
+				CHECK_FALSE(graph.resolve_record_command_buffer_slot(record, slot));
+				CHECK(slot == UINT32_MAX);
+				auto invalid = record;
+				invalid.graph_instance++;
+				CHECK_FALSE(graph.contains_record(invalid));
+				CHECK_FALSE(graph.resolve_record_command_buffer_slot(invalid, slot));
+				invalid = record;
+				invalid.offset++;
+				CHECK_FALSE(graph.contains_record(invalid));
+				invalid.offset = UINT32_MAX;
+				CHECK_FALSE(graph.contains_record(invalid));
+			}
+		}
+		// Caller-owned arrays are copied into the original instruction storage.
+		buffers[0] = Driver::BufferID(99);
+		offsets[0] = 999;
+		const auto end = graph.add_draw_list_end();
+		if (!discard_return) {
+			for (const auto &record : records) {
+				CHECK(graph.contains_record(record));
+				CHECK(graph.record_mapping_state(record) == Graph::RecordMappingState::Pending);
+				uint32_t slot = UINT32_MAX;
+				CHECK_FALSE(graph.resolve_record_command_buffer_slot(record, slot));
+				CHECK(slot == UINT32_MAX);
+			}
+		}
+		CHECK(driver.payload.is_empty()); // Recording is not native command execution.
+		Graph::CommandBufferPool pool;
+		Driver::CommandBufferID primary(11);
+		graph.end(false, false, primary, pool);
+		const uint64_t expected[] = { 10, 1, 11, 3, 31, 4, 0, 8, 33, uint64_t(1) << 35, 5,
+			2, 11, 71, Driver::INDEX_BUFFER_FORMAT_UINT32, 0xabc,
+			2, 11, 72, Driver::INDEX_BUFFER_FORMAT_UINT16, 6, 20 };
+		REQUIRE(driver.payload.size() == int(sizeof(expected) / sizeof(expected[0])));
+		for (int i = 0; i < driver.payload.size(); i++) {
+			CHECK(driver.payload[i] == expected[i]);
+		}
+		if (!discard_return) {
+			for (const auto &record : records) {
+				CHECK(graph.contains_record(record));
+				CHECK(graph.record_mapping_state(record) == Graph::RecordMappingState::Recorded);
+				uint32_t slot = UINT32_MAX;
+				CHECK(graph.resolve_record_command_buffer_slot(record, slot));
+				CHECK(slot == 0);
+				Driver::CommandBufferID actual;
+				CHECK(graph.resolve_record_command_buffer(record, actual));
+				CHECK(actual == primary);
+				for (int invalid_part = 0; invalid_part < 3; invalid_part++) {
+					auto invalid = record;
+					if (invalid_part == 0) {
+						invalid.graph_instance++;
+					} else if (invalid_part == 1) {
+						invalid.offset++;
+					} else {
+						invalid.index++;
+					}
+					CHECK_FALSE(graph.contains_record(invalid));
+					CHECK(graph.record_mapping_state(invalid) == Graph::RecordMappingState::Invalid);
+					slot = UINT32_MAX;
+					CHECK_FALSE(graph.resolve_record_command_buffer_slot(invalid, slot));
+					CHECK(slot == UINT32_MAX);
+				}
+			}
+			CHECK(graph.contains_record(end));
+			graph.begin();
+			for (const auto &record : records) {
+				CHECK_FALSE(graph.contains_record(record));
+				CHECK(graph.record_mapping_state(record) == Graph::RecordMappingState::Invalid);
+				uint32_t slot = UINT32_MAX;
+				CHECK_FALSE(graph.resolve_record_command_buffer_slot(record, slot));
+				CHECK(slot == UINT32_MAX);
+			}
+		}
+	}
+}
+
 TEST_CASE("[R02][Graph] rejected primary begin cannot execute or resolve an upload") {
 	RenderingDeviceGraph graph;
 	RecordSlotTestDriver driver;

@@ -6912,6 +6912,14 @@
                 {
                     "name": "GDEXTENSION_PRODUCTION_READBACK_V1",
                     "value": 4
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RASTER_FRAME_V1",
+                    "value": 5
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1",
+                    "value": 6
                 }
             ]
         },
@@ -6933,6 +6941,63 @@
                 {
                     "name": "GDEXTENSION_PRODUCTION_SET_V1",
                     "value": 3
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RASTER_PHYSICAL_V1",
+                    "value": 4
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1",
+                    "value": 5
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionRasterActionV1",
+            "kind": "struct",
+            "description": [
+                "Checked Core production raster transport. This independent versioned DTO does not reuse dispatch ordinals or qualification ownership."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "action_ordinal",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "canonical_suboperation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "framebuffer_resource_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "depth_resource_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "target_content_revision",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "shader_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "pipeline_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "framebuffer_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
                 }
             ]
         },
@@ -6975,6 +7040,10 @@
                 {
                     "name": "GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1",
                     "value": 2
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1",
+                    "value": 3
                 }
             ]
         },
@@ -9089,6 +9158,28 @@
             ]
         },
         {
+            "name": "GDExtensionOutputCreateInputV2",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "config",
+                    "type": "GDExtensionOutputCreateInputV1"
+                },
+                {
+                    "name": "metadata_resource_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
             "name": "GDExtensionOutputCommonInputV1",
             "kind": "struct",
             "members": [
@@ -9303,6 +9394,136 @@
             ]
         },
         {
+            "name": "GDExtensionOutputMetadataLimitsV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "view_lease_capacity",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "read_lease_capacity",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "surface_lease_capacity",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputMetadataRequirementsV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "required_metadata_bytes",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "layout_version",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "required_alignment",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "slot_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "flattened_surface_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "binding_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "limits",
+                    "type": "GDExtensionOutputMetadataLimitsV1"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputMetadataQueryInputV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "config",
+                    "type": "GDExtensionOutputCreateInputV1"
+                },
+                {
+                    "name": "limits",
+                    "type": "GDExtensionOutputMetadataLimitsV1"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputMetadataQueryResultV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "status",
+                    "type": "GDExtensionOutputStatusV1"
+                },
+                {
+                    "name": "requirements",
+                    "type": "GDExtensionOutputMetadataRequirementsV1"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputCreateInputV3",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "config",
+                    "type": "GDExtensionOutputCreateInputV1"
+                },
+                {
+                    "name": "requirements",
+                    "type": "GDExtensionOutputMetadataRequirementsV1"
+                },
+                {
+                    "name": "metadata_resource_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
             "name": "GDExtensionOutputWritableV1",
             "kind": "struct",
             "members": [
@@ -9412,6 +9633,746 @@
                 {
                     "name": "GDEXTENSION_OUTPUT_SEAL_RECORDED_ORDERED_V1",
                     "value": 1
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionRecordHistoryFlagsV1",
+            "kind": "enum",
+            "values": [
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_SCHEDULE_ATTEMPTED_V1",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_QUEUE_POSSIBLE_V1",
+                    "value": 2
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_ADMITTED_V1",
+                    "value": 4
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_SCHEDULE_RESULT_VALID_V1",
+                    "value": 8
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_CONTROL_EFFECT_ENTERED_V1",
+                    "value": 16
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_REQUEST_EFFECT_ENTERED_V1",
+                    "value": 32
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_RETURNED_V1",
+                    "value": 64
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_OWNER_CONSUMED_V1",
+                    "value": 128
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_TERMINAL_NO_EFFECT_V1",
+                    "value": 256
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_CONTROL_APPEND_ENTERED_V1",
+                    "value": 512
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_REQUEST_APPEND_ENTERED_V1",
+                    "value": 1024
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_TERMINAL_NO_APPEND_V1",
+                    "value": 2048
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionRecordHistoryStateV1",
+            "kind": "enum",
+            "values": [
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_PENDING_V1",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_QUEUED_V1",
+                    "value": 2
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_EXECUTING_V1",
+                    "value": 3
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_RETURNED_STATE_V1",
+                    "value": 4
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_RECORD_HISTORY_OWNER_CONSUMED_STATE_V1",
+                    "value": 5
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionRecordHistoryV1",
+            "kind": "struct",
+            "description": [
+                "Original exact request/control history. Native effect flags include resource preparation and cleanup and do not prove append entry. Append flags separately track original append-capable attempts. TERMINAL_NO_APPEND may coexist with native effects that still require physical drain/release. Neither terminal flag authorizes resetting Runtime AppendStarted or replaying its once. Consuming keeps this history until the next accepted control."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "request_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "control_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "record_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "state",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "flags",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "last_schedule_result",
+                    "type": "GDExtensionDeviceSessionResultV1"
+                },
+                {
+                    "name": "record_result",
+                    "type": "GDExtensionDeviceSessionResultV1"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionRasterPrepareV1",
+            "kind": "struct",
+            "description": [
+                "Independent request-owned raster preparation. No qualification ownership or caller RID grants authority. Mask bits are framebuffer, depth, shader, pipeline; phases 1 depth, 2 shader, 3 framebuffer, 4 pipeline, 5 created. Native physical return remains independent."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "create_attempt",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "width",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "height",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "shader_bytes",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionRasterPrepareReportV1",
+            "kind": "struct",
+            "description": [
+                "Independent request-owned raster preparation. No qualification ownership or caller RID grants authority. Mask bits are framebuffer, depth, shader, pipeline; phases 1 depth, 2 shader, 3 framebuffer, 4 pipeline, 5 created. Native physical return remains independent."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "request_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "control_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "create_attempt",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "revision",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "known_mask",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "returned_mask",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "phase",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "result",
+                    "type": "GDExtensionDeviceSessionResultV1"
+                },
+                {
+                    "name": "framebuffer_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "depth_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "shader_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "pipeline_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionOutputRoleV1",
+            "kind": "struct",
+            "description": [
+                "One immutable original native-output role association. Role uses the existing OutputConstantsV1 values; protected native commands and status are never producer writable. Absent role has zero bytes and UINT32_MAX locators."
+            ],
+            "members": [
+                {
+                    "name": "role",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "resource_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "use_index",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "allocation_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "bytes",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionOutputPrepareV1",
+            "kind": "struct",
+            "description": [
+                "Frozen native action preparation, retaining original accepted resource/use locators and exact acquire input. The ordinal is the native request action ordinal, never the compiler Output SOURCE ordinal.",
+                "The three role entries are current records, aligned previous records and output metadata, in that order. Physical source association does not establish original Runtime selected-root or account authority; the original caller retains and checks those owners.",
+                "first_source_use/source_use_count select the complete contiguous source READ-use span inside this original accepted action. Every source backing, count, attribute, identity, validity and instance gate uses its own original use row with exact resource slot, byte offset, byte size and original resource generation. All action READ storage uses must belong to this span; the single source_resource_slot/source_use_index/source_generation is only a checked anchor within it and never grants authority over other sources. Original typed mapping retains each semantic role and maps it to these accepted rows."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "action_ordinal",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "canonical_suboperation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "source_recipe_substep",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "source_resource_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "source_use_index",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "source_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "first_source_use",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "source_use_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "read_capacity",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "read_graph_capacity",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "roles[3]",
+                    "type": "GDExtensionProductionOutputRoleV1"
+                },
+                {
+                    "name": "input",
+                    "type": "GDExtensionOutputAcquireInputV1"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputCustodyV1",
+            "kind": "enum",
+            "values": [
+                {
+                    "name": "GDEXTENSION_OUTPUT_NO_CUSTODY_V1",
+                    "value": 0
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_CUSTODY_ACCEPTED_V1",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_CUSTODY_RETAINED_PREFIX_V1",
+                    "value": 2
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_CUSTODY_UNKNOWN_V1",
+                    "value": 3
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputAcquireResultV1",
+            "kind": "struct",
+            "description": [
+                "Actual native acquisition observation. A failure with retained-prefix or unknown custody must keep its original source and physical retirement obligations; status alone is not a no-effect receipt.",
+                "Writable descriptors retain exact original resource/use locators; a returned RID cannot import authority into another request. The copied token correlates the actual retained lease; token bytes alone grant no new authority.",
+                "state uses OutputLeaseStateV1; INVALID conveys no validated lease observation.",
+                "With no validated writable descriptors, resource_slots and use_indices are UINT32_MAX. action_ordinal is UINT64_MAX until an original action association is validated; writable_count alone bounds the active descriptors."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "status",
+                    "type": "GDExtensionOutputStatusV1"
+                },
+                {
+                    "name": "custody",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "state",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "lease_token",
+                    "type": "GDExtensionOutputTokenV1"
+                },
+                {
+                    "name": "writable_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "writables[3]",
+                    "type": "GDExtensionOutputWritableV1"
+                },
+                {
+                    "name": "resource_slots[3]",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "use_indices[3]",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "request_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "action_ordinal",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputPollResultV1",
+            "kind": "struct",
+            "description": [
+                "Read-only observation of the exact native output owner and original request. Does not schedule, append, advance an action or infer completion from time. known/possible/complete describe the original request obligations; physical_returned counts actual output physical returns across the whole validated generation.",
+                "state uses OutputGenerationStateV1; INVALID conveys no validated generation observation.",
+                "The request must match the original generation request or an actual slot request. action_ordinal identifies the unique matching slot action, or UINT64_MAX when no unique action association exists. Released remains observable until the actual metadata owner is freed; an empty returned generation pin does not imply that the owner is absent."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "status",
+                    "type": "GDExtensionOutputStatusV1"
+                },
+                {
+                    "name": "generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "state",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "custody",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "known",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "possible",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "complete",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "physical_returned",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "request_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "action_ordinal",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputGenerationStateV1",
+            "kind": "enum",
+            "description": [
+                "Observable native owner state. INVALID is zero and denotes no validated owner observation, not a completion state."
+            ],
+            "values": [
+                {
+                    "name": "GDEXTENSION_OUTPUT_GENERATION_INVALID_V1",
+                    "value": 0
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_GENERATION_CONFIGURED_V1",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_GENERATION_ACTIVE_V1",
+                    "value": 2
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_GENERATION_WITHDRAWING_V1",
+                    "value": 3
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_GENERATION_RETIRING_V1",
+                    "value": 4
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_GENERATION_FAULTED_RETIRING_V1",
+                    "value": 5
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_GENERATION_RELEASED_V1",
+                    "value": 6
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputLeaseStateV1",
+            "kind": "enum",
+            "description": [
+                "Observable native owner state. INVALID is zero and denotes no validated owner observation, not a completion state."
+            ],
+            "values": [
+                {
+                    "name": "GDEXTENSION_OUTPUT_LEASE_INVALID_V1",
+                    "value": 0
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_LEASE_EMPTY_V1",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_LEASE_RESERVED_V1",
+                    "value": 2
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_LEASE_WRITING_V1",
+                    "value": 3
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_LEASE_SEALED_RECORDED_V1",
+                    "value": 4
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_LEASE_ADOPTED_V1",
+                    "value": 5
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_LEASE_EMPTY_OR_FAULT_PACKET_V1",
+                    "value": 6
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_LEASE_RETIRING_V1",
+                    "value": 7
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_LEASE_RELEASED_V1",
+                    "value": 8
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionSceneOpaque32V1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "bytes[32]",
+                    "type": "uint8_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionNormalRelayRefV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "token",
+                    "type": "GDExtensionSceneOpaque32V1"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionScenePhaseRegistrationRefV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "token",
+                    "type": "GDExtensionSceneOpaque32V1"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionScenePhaseSinkConfigV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "device_capability",
+                    "type": "GDExtensionSceneOpaque32V1"
+                },
+                {
+                    "name": "phase",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "max_operations",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionNativeScenePhaseV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "device_capability",
+                    "type": "GDExtensionSceneOpaque32V1"
+                },
+                {
+                    "name": "phase_token",
+                    "type": "GDExtensionSceneOpaque32V1"
+                },
+                {
+                    "name": "physical_context",
+                    "type": "GDExtensionSceneOpaque32V1"
+                },
+                {
+                    "name": "occurrence",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "expiry_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionScenePhaseCloseV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "registration_closed",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "active_deliveries",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "relay_cell_released",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "relay_holder_closed",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionScenePhaseReceiverV1",
+            "kind": "function",
+            "arguments": [
+                {
+                    "name": "userdata",
+                    "type": "void*"
+                },
+                {
+                    "name": "phase",
+                    "type": "const GDExtensionNativeScenePhaseV1*"
+                },
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1"
+                },
+                {
+                    "name": "operation",
+                    "type": "const GDExtensionProductionOperationV1*"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionSceneOperationKeyV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "owner_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "transport_operation",
+                    "type": "GDExtensionProductionOperationV1"
+                },
+                {
+                    "name": "record_request",
+                    "type": "GDExtensionSceneOpaque32V1"
+                },
+                {
+                    "name": "operation_ref",
+                    "type": "GDExtensionSceneOpaque32V1"
+                },
+                {
+                    "name": "cursor_ref",
+                    "type": "GDExtensionSceneOpaque32V1"
+                },
+                {
+                    "name": "schedule_digest",
+                    "type": "GDExtensionSceneOpaque32V1"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionSceneReadOutcomeV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "native_error",
+                    "type": "int32_t"
+                },
+                {
+                    "name": "outcome",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "detail",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "phase_borrow",
+                    "type": "GDExtensionSceneOpaque32V1"
+                },
+                {
+                    "name": "record_permit",
+                    "type": "GDExtensionSceneOpaque32V1"
+                },
+                {
+                    "name": "record_fact",
+                    "type": "GDExtensionSceneOpaque32V1"
                 }
             ]
         }
@@ -18578,6 +19539,56 @@
             }
         },
         {
+            "name": "device_session_production_raster_reserve_v1",
+            "since": "4.7",
+            "description": [
+                "Checked Core production raster transport. This independent typed entry point reserves no logical Runtime authority and does not reuse dispatch or qualification ownership."
+            ],
+            "arguments": [
+                {
+                    "name": "attachment",
+                    "type": "GDExtensionProductionAttachmentRefV1",
+                    "description": [
+                        "Synchronous checked typed raster input."
+                    ]
+                },
+                {
+                    "name": "operation",
+                    "type": "const GDExtensionProductionOperationV1*",
+                    "description": [
+                        "Synchronous checked typed raster input."
+                    ]
+                },
+                {
+                    "name": "capacity",
+                    "type": "const GDExtensionProductionCapacityV1*",
+                    "description": [
+                        "Synchronous checked typed raster input."
+                    ]
+                },
+                {
+                    "name": "action",
+                    "type": "const GDExtensionProductionRasterActionV1*",
+                    "description": [
+                        "Synchronous checked typed raster input."
+                    ]
+                },
+                {
+                    "name": "out_request",
+                    "type": "GDExtensionProductionRequestRefV1*",
+                    "description": [
+                        "Synchronous checked typed raster input."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Checked typed raster result."
+                ]
+            }
+        },
+        {
             "name": "device_session_production_record_schedule_v1",
             "since": "4.7",
             "description": [
@@ -20431,7 +21442,7 @@
             "description": [
                 "Synchronous original native ExternalOutput create body. Symbol availability grants no source, Host, charge, phase or completion authority.",
                 "All pointer extents must be live and accessible for this call. Nonempty RID spans must be aligned and pairwise disjoint from the input and output. No input pointer is retained. Detail strings have static engine lifetime.",
-                "Create and seal preserve the current original admission/record-bridge refusal. Cancel and withdraw use the existing native state transitions. Acquire and poll are not exported by this subset."
+                "Create and seal retain their original source/profile and record-bridge admission checks. Cancel and withdraw use the existing native state transitions. Separately exported acquire and poll preserve exact original request/action custody and do not imply profile availability."
             ],
             "arguments": [
                 {
@@ -20465,12 +21476,52 @@
             ]
         },
         {
+            "name": "device_session_output_create_v2",
+            "since": "4.7",
+            "description": [
+                "Synchronous native ExternalOutput creation using an exact original accepted OUTPUT_METADATA resource row. The outer ABI version is 2 and struct_size is sizeof(GDExtensionOutputCreateInputV2); reserved fields are zero. The nested config retains its unchanged V1 ABI and layout.",
+                "The metadata resource slot belongs to the same original request, has CREATED_BY_OWNER ownership and sufficient declared physical_bytes, and is consumed once. Native allocation and generation custody do not attest Runtime logical source/account admission or a U08 payment.",
+                "All pointer extents must be live and accessible for this call. Nonempty nested RID spans must be aligned and pairwise disjoint from the entire V2 input and output. No input pointer is retained. Detail strings have static engine lifetime.",
+                "Currently only SceneOnly creation is supported; render profiles retain their native preparation refusal. A successful generation retains its metadata resource until actual particles_free after Released; generation terminal alone does not return that resource. V1 creation retains its original admission refusal."
+            ],
+            "arguments": [
+                {
+                    "name": "physical_context",
+                    "type": "GDExtensionProductionPhysicalContextRefV1",
+                    "description": [
+                        "Actual synchronous protected RECORD callback context; expires when that callback returns."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "The original accepted request owning the metadata resource row and generation custody."
+                    ]
+                },
+                {
+                    "name": "input",
+                    "type": "const GDExtensionOutputCreateInputV2*",
+                    "description": [
+                        "Borrowed nested configuration and original metadata resource slot. UINT32_MAX is not a valid slot."
+                    ]
+                },
+                {
+                    "name": "out_result",
+                    "type": "GDExtensionOutputCreateResultV1*",
+                    "description": [
+                        "Unchanged V1 result. If either DTO extent or a nonempty RID span is null, misaligned, overflowing or overlaps the output, the result is untouched. Other checked contract failures write CONTRACT with no new RID or generation."
+                    ]
+                }
+            ]
+        },
+        {
             "name": "device_session_output_seal_v1",
             "since": "4.7",
             "description": [
                 "Synchronous original native ExternalOutput seal body. Symbol availability grants no source, Host, charge, phase or completion authority.",
                 "All pointer extents must be live and accessible for this call. Nonempty RID spans must be aligned and pairwise disjoint from the input and output. No input pointer is retained. Detail strings have static engine lifetime.",
-                "Create and seal preserve the current original admission/record-bridge refusal. Cancel and withdraw use the existing native state transitions. Acquire and poll are not exported by this subset."
+                "Create and seal retain their original source/profile and record-bridge admission checks. Cancel and withdraw use the existing native state transitions. Separately exported acquire and poll preserve exact original request/action custody and do not imply profile availability."
             ],
             "arguments": [
                 {
@@ -20509,7 +21560,7 @@
             "description": [
                 "Synchronous original native ExternalOutput cancel body. Symbol availability grants no source, Host, charge, phase or completion authority.",
                 "All pointer extents must be live and accessible for this call. Nonempty RID spans must be aligned and pairwise disjoint from the input and output. No input pointer is retained. Detail strings have static engine lifetime.",
-                "Create and seal preserve the current original admission/record-bridge refusal. Cancel and withdraw use the existing native state transitions. Acquire and poll are not exported by this subset."
+                "Create and seal retain their original source/profile and record-bridge admission checks. Cancel and withdraw use the existing native state transitions. Separately exported acquire and poll preserve exact original request/action custody and do not imply profile availability."
             ],
             "arguments": [
                 {
@@ -20547,7 +21598,7 @@
             "description": [
                 "Synchronous original native ExternalOutput withdraw body. Symbol availability grants no source, Host, charge, phase or completion authority.",
                 "All pointer extents must be live and accessible for this call. Nonempty RID spans must be aligned and pairwise disjoint from the input and output. No input pointer is retained. Detail strings have static engine lifetime.",
-                "Create and seal preserve the current original admission/record-bridge refusal. Cancel and withdraw use the existing native state transitions. Acquire and poll are not exported by this subset."
+                "Create and seal retain their original source/profile and record-bridge admission checks. Cancel and withdraw use the existing native state transitions. Separately exported acquire and poll preserve exact original request/action custody and do not imply profile availability."
             ],
             "arguments": [
                 {
@@ -20576,6 +21627,574 @@
                 "type": "GDExtensionOutputStatusV1",
                 "description": [
                     "Original static-detail status, or CONTRACT for an invalid input pointer."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_raster_begin_v1",
+            "since": "4.7",
+            "description": [
+                "Begin the reserved depth-clear raster frame in its original Production physical callback. Captures checked begin and clear facts under the same request/action; target content publication and drawing are not part of this version."
+            ],
+            "arguments": [
+                {
+                    "name": "context",
+                    "type": "GDExtensionProductionPhysicalContextRefV1",
+                    "description": [
+                        "Synchronous typed input."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Synchronous typed input."
+                    ]
+                },
+                {
+                    "name": "revision",
+                    "type": "uint64_t",
+                    "description": [
+                        "Synchronous typed input."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Checked Production result."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_raster_end_v1",
+            "since": "4.7",
+            "description": [
+                "Close the reserved raster frame and capture its checked end. The original callback return also closes an open frame. Failed closure retains possible effects and all physical custody."
+            ],
+            "arguments": [
+                {
+                    "name": "context",
+                    "type": "GDExtensionProductionPhysicalContextRefV1",
+                    "description": [
+                        "Synchronous typed input."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Synchronous typed input."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Checked Production result."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_record_history_v1",
+            "since": "4.7",
+            "description": [
+                "Read the retained history of the exact current RECORD control, including after owner consume. A failed query is never a no-effect certificate. This query performs no scheduling, polling or consumption."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Synchronous typed history input or output."
+                    ]
+                },
+                {
+                    "name": "control_serial",
+                    "type": "uint64_t",
+                    "description": [
+                        "Synchronous typed history input or output."
+                    ]
+                },
+                {
+                    "name": "out_history",
+                    "type": "GDExtensionProductionRecordHistoryV1*",
+                    "description": [
+                        "Synchronous typed history input or output."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Query result; output is valid only on success."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_raster_prepare_v1",
+            "since": "4.7",
+            "description": [
+                "Prepare original request-owned raster resources through the original fixed FIFO, or read their retained preparation report. Exact retry is idempotent. Only phase 5 and successful returned creation establish preparation; read-only report does not consume or schedule."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Typed preparation input or output."
+                    ]
+                },
+                {
+                    "name": "prepare",
+                    "type": "const GDExtensionProductionRasterPrepareV1*",
+                    "description": [
+                        "Typed preparation input or output."
+                    ]
+                },
+                {
+                    "name": "shader_binary",
+                    "type": "const void*",
+                    "description": [
+                        "Typed preparation input or output."
+                    ]
+                },
+                {
+                    "name": "bytes",
+                    "type": "uint64_t",
+                    "description": [
+                        "Typed preparation input or output."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionProductionRasterPrepareReportV1*",
+                    "description": [
+                        "Typed preparation input or output."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Operation result; retained physical prefixes remain owned on failure."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_raster_prepare_report_v1",
+            "since": "4.7",
+            "description": [
+                "Prepare original request-owned raster resources through the original fixed FIFO, or read their retained preparation report. Exact retry is idempotent. Only phase 5 and successful returned creation establish preparation; read-only report does not consume or schedule."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Typed preparation input or output."
+                    ]
+                },
+                {
+                    "name": "out_report",
+                    "type": "GDExtensionProductionRasterPrepareReportV1*",
+                    "description": [
+                        "Typed preparation input or output."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Operation result; retained physical prefixes remain owned on failure."
+                ]
+            }
+        },
+        {
+            "name": "device_session_production_prepare_output_v1",
+            "since": "4.7",
+            "description": [
+                "Prepare the exact original native-output action before freeze. Copies only validated immutable data into prequoted original arena storage; availability is not source or account admission."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Original accepted request owning the frozen action and its finite resource/use arena."
+                    ]
+                },
+                {
+                    "name": "prepare",
+                    "type": "const GDExtensionProductionOutputPrepareV1*",
+                    "description": [
+                        "Aligned readable preparation DTO, borrowed synchronously and copied only after original admission checks."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original preparation status; success does not grant native acquisition or GPU completion."
+                ]
+            }
+        },
+        {
+            "name": "device_session_output_acquire_v1",
+            "since": "4.7",
+            "description": [
+                "Acquire only the exact original accepted/prepared native output action in its protected RECORD callback. Rechecks original action/frontier/source, finite role capacities and actual owner before native allocation.",
+                "All pointers designate live accessible aligned DTOs for this synchronous call. Invalid, overflowing or overlapping input/output extents leave the output untouched. Detail strings have static engine lifetime."
+            ],
+            "arguments": [
+                {
+                    "name": "physical_context",
+                    "type": "GDExtensionProductionPhysicalContextRefV1",
+                    "description": [
+                        "Actual protected RECORD callback context for this same original request."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Original accepted request owning the frozen action and its finite resource/use arena."
+                    ]
+                },
+                {
+                    "name": "action_ordinal",
+                    "type": "uint64_t",
+                    "description": [
+                        "Exact native accepted action ordinal; never a compiler Output SOURCE ordinal."
+                    ]
+                },
+                {
+                    "name": "input",
+                    "type": "const GDExtensionOutputAcquireInputV1*",
+                    "description": [
+                        "Aligned readable input DTO whose complete extent is disjoint from the output."
+                    ]
+                },
+                {
+                    "name": "out_result",
+                    "type": "GDExtensionOutputAcquireResultV1*",
+                    "description": [
+                        "Aligned writable result, left untouched when either DTO extent is invalid or overlaps the other."
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "device_session_output_poll_v1",
+            "since": "4.7",
+            "description": [
+                "Observe the same original output generation and request association without scheduling or appending. Original metadata owner must remain alive through this call.",
+                "All pointers designate live accessible aligned DTOs. Invalid, overflowing or overlapping extents leave the output untouched. Detail strings have static engine lifetime."
+            ],
+            "arguments": [
+                {
+                    "name": "physical_context",
+                    "type": "GDExtensionProductionPhysicalContextRefV1",
+                    "description": [
+                        "Actual protected RECORD callback context for this same original request."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Original accepted request owning the frozen action and its finite resource/use arena."
+                    ]
+                },
+                {
+                    "name": "input",
+                    "type": "const GDExtensionOutputGenerationInputV1*",
+                    "description": [
+                        "Aligned readable input DTO whose complete extent is disjoint from the output."
+                    ]
+                },
+                {
+                    "name": "out_result",
+                    "type": "GDExtensionOutputPollResultV1*",
+                    "description": [
+                        "Aligned writable result, left untouched when either DTO extent is invalid or overlaps the other."
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "device_session_output_create_v3",
+            "since": "4.7",
+            "description": [
+                "Exact version-3 Create transport. Recomputes versioned native metadata requirements and requires exact accepted metadata bytes before allocation. V2 is unchanged. Query grants no account, source, selection, or physical custody. Currently SceneOnly with all consumer limits zero; render profiles remain unavailable."
+            ],
+            "arguments": [
+                {
+                    "name": "physical_context",
+                    "type": "GDExtensionProductionPhysicalContextRefV1",
+                    "description": [
+                        "Actual synchronous protected RECORD callback context; expires when that callback returns."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "The original accepted request owning the metadata resource row and generation custody."
+                    ]
+                },
+                {
+                    "name": "input",
+                    "type": "const GDExtensionOutputCreateInputV3*",
+                    "description": [
+                        "Exact ABI3 configuration, complete native requirements projection including explicit finite limits, and original metadata resource slot. Create recomputes requirements before allocation."
+                    ]
+                },
+                {
+                    "name": "out_result",
+                    "type": "GDExtensionOutputCreateResultV1*",
+                    "description": [
+                        "Unchanged V1 result. If either DTO extent or a nonempty RID span is null, misaligned, overflowing or overlaps the output, the result is untouched. Other checked contract failures write CONTRACT with no new RID or generation."
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "device_session_output_metadata_query_v1",
+            "since": "4.7",
+            "description": [
+                "Read-only native requirements on the actual main render thread. No production context is needed and none is issued. No native factory, selection lease, account credit or stable quote handle is created. Caller must provide disjoint readable input spans and writable output. Create recomputes all requirements. Currently SceneOnly with explicit zero consumer limits only."
+            ],
+            "arguments": [
+                {
+                    "name": "input",
+                    "type": "const GDExtensionOutputMetadataQueryInputV1*",
+                    "description": [
+                        "Borrowed exact V1 configuration and explicit finite consumer limits. Query performs no allocation, pin, or selection retention."
+                    ]
+                },
+                {
+                    "name": "out_result",
+                    "type": "GDExtensionOutputMetadataQueryResultV1*",
+                    "description": [
+                        "Versioned native requirements and status only, with no RID, generation, resource slot or authorization. Invalid or overlapping pointer extents leave output untouched; checked contract errors return status."
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "device_session_scene_operation_query_v1",
+            "since": "4.7",
+            "description": [
+                "Query an original accepted Scene action fact without issuing a phase permit."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Original live production request owned by this device attachment."
+                    ]
+                },
+                {
+                    "name": "action_ordinal",
+                    "type": "uint64_t",
+                    "description": [
+                        "Original action index within the retained request."
+                    ]
+                },
+                {
+                    "name": "key",
+                    "type": "const GDExtensionSceneOperationKeyV1*",
+                    "description": [
+                        "Immutable original operation, cursor and schedule association; caller bytes alone grant no authority."
+                    ]
+                },
+                {
+                    "name": "outcome",
+                    "type": "GDExtensionSceneReadOutcomeV1*",
+                    "description": [
+                        "Output carrying the original append fact or a refusal; no new record permission is issued by a query."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Structured native result. Busy preserves original in-flight custody for a later bounded service turn."
+                ]
+            }
+        },
+        {
+            "name": "device_session_scene_operation_bind_v1",
+            "since": "4.7",
+            "description": [
+                "Validate the original Scene operation transport. This entry returns unavailable until the original E09 operation/cursor exporter is joined."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Original live production request owned by this device attachment."
+                    ]
+                },
+                {
+                    "name": "action_ordinal",
+                    "type": "uint64_t",
+                    "description": [
+                        "Original action index within the retained request."
+                    ]
+                },
+                {
+                    "name": "key",
+                    "type": "const GDExtensionSceneOperationKeyV1*",
+                    "description": [
+                        "Immutable original operation, cursor and schedule association; caller bytes alone grant no authority."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Structured native result. Busy preserves original in-flight custody for a later bounded service turn."
+                ]
+            }
+        },
+        {
+            "name": "device_session_scene_phase_capability_v1",
+            "since": "4.7",
+            "description": [
+                "Obtain a locator for the original attachment device owner."
+            ],
+            "arguments": [
+                {
+                    "name": "attachment",
+                    "type": "GDExtensionProductionAttachmentRefV1",
+                    "description": [
+                        "Original accepted production attachment for the live device and library generation."
+                    ]
+                },
+                {
+                    "name": "out_capability",
+                    "type": "GDExtensionSceneOpaque32V1*",
+                    "description": [
+                        "Output locator for that original device owner; it must be validated when used."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Structured native result. Busy preserves original in-flight custody for a later bounded service turn."
+                ]
+            }
+        },
+        {
+            "name": "device_session_scene_phase_relay_v1",
+            "since": "4.7",
+            "description": [
+                "Install a typed phase receiver on an existing adopted extension Callable and retain its original normal-entry holder."
+            ],
+            "arguments": [
+                {
+                    "name": "callable",
+                    "type": "GDExtensionConstTypePtr",
+                    "description": [
+                        "Original adopted extension Callable retaining its existing holder and userdata."
+                    ]
+                },
+                {
+                    "name": "receiver",
+                    "type": "GDExtensionScenePhaseReceiverV1",
+                    "description": [
+                        "Typed receiver leaf installed once on that original Callable."
+                    ]
+                },
+                {
+                    "name": "out_relay",
+                    "type": "GDExtensionNormalRelayRefV1*",
+                    "description": [
+                        "Output opaque locator for the original normal-entry relay."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Structured native result. Busy preserves original in-flight custody for a later bounded service turn."
+                ]
+            }
+        },
+        {
+            "name": "device_session_scene_phase_register_v1",
+            "since": "4.7",
+            "description": [
+                "Register the original typed relay for the actual SceneBeforeParticles boundary with a bounded operation limit."
+            ],
+            "arguments": [
+                {
+                    "name": "relay",
+                    "type": "GDExtensionNormalRelayRefV1",
+                    "description": [
+                        "Opaque locator resolved against the original live normal-entry relay."
+                    ]
+                },
+                {
+                    "name": "attachment",
+                    "type": "GDExtensionProductionAttachmentRefV1",
+                    "description": [
+                        "Original accepted production attachment for the live device and library generation."
+                    ]
+                },
+                {
+                    "name": "config",
+                    "type": "const GDExtensionScenePhaseSinkConfigV1*",
+                    "description": [
+                        "Exact ABI, original device capability, phase and bounded operation limit."
+                    ]
+                },
+                {
+                    "name": "out_registration",
+                    "type": "GDExtensionScenePhaseRegistrationRefV1*",
+                    "description": [
+                        "Zero-initialized output for the original attachment registration."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Structured native result. Busy preserves original in-flight custody for a later bounded service turn."
+                ]
+            }
+        },
+        {
+            "name": "device_session_scene_phase_unregister_v1",
+            "since": "4.7",
+            "description": [
+                "Close future phase delivery and service original waiting controls and relay holder closure without requiring another draw."
+            ],
+            "arguments": [
+                {
+                    "name": "registration",
+                    "type": "GDExtensionScenePhaseRegistrationRefV1",
+                    "description": [
+                        "Opaque locator for the original phase registration to close."
+                    ]
+                },
+                {
+                    "name": "out_close",
+                    "type": "GDExtensionScenePhaseCloseV1*",
+                    "description": [
+                        "Output of actual registration, delivery and original holder closure observations."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Structured native result. Busy preserves original in-flight custody for a later bounded service turn."
                 ]
             }
         }

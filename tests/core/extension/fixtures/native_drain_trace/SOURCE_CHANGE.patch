@@ -1,0 +1,905 @@
+diff --git a/core/io/native_drain_diagnostic.h b/core/io/native_drain_diagnostic.h
+new file mode 100644
+index 0000000000..96d2b11f46
+--- /dev/null
++++ b/core/io/native_drain_diagnostic.h
+@@ -0,0 +1,181 @@
++/**************************************************************************/
++/*  native_drain_diagnostic.h                                            */
++/**************************************************************************/
++/*                         This file is part of:                          */
++/*                             GODOT ENGINE                               */
++/*                        https://godotengine.org                         */
++/**************************************************************************/
++/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
++/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
++/*                                                                        */
++/* Permission is hereby granted, free of charge, to any person obtaining  */
++/* a copy of this software and associated documentation files (the        */
++/* "Software"), to deal in the Software without restriction, including    */
++/* without limitation the rights to use, copy, modify, merge, publish,    */
++/* distribute, sublicense, and/or sell copies of the Software, and to     */
++/* permit persons to whom the Software is furnished to do so, subject to  */
++/* the following conditions:                                              */
++/*                                                                        */
++/* The above copyright notice and this permission notice shall be         */
++/* included in all copies or substantial portions of the Software.        */
++/*                                                                        */
++/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
++/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
++/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
++/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
++/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
++/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
++/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
++/**************************************************************************/
++
++#ifndef NATIVE_DRAIN_DIAGNOSTIC_H
++#define NATIVE_DRAIN_DIAGNOSTIC_H
++
++#include "core/os/os.h"
++#include "core/os/thread.h"
++
++#include <atomic>
++#include <cerrno>
++#include <cstdio>
++#include <cstdlib>
++#include <cstring>
++#include <mutex>
++
++// Temporary, opt-in observation only. Never participates in ownership or budgets.
++namespace NativeDrainDiagnostic {
++inline std::atomic<uint32_t> lines_reserved{ 0 };
++inline std::atomic<uint64_t> next_pair{ 1 };
++inline bool enabled() {
++	static const bool value = []() {
++		const char *setting = std::getenv("ANGE_NATIVE_DRAIN_DIAGNOSTIC");
++		const char *ring = std::getenv("ANGE_NATIVE_DRAIN_DIAGNOSTIC_RING");
++		return (setting && std::strcmp(setting, "1") == 0) || (ring && *ring);
++	}();
++	return value;
++}
++struct Sink {
++	static constexpr uint32_t SLOT_BYTES = 768;
++	static constexpr uint32_t SLOT_COUNT = 4096;
++	std::mutex mutex;
++	FILE *ring = nullptr;
++	uint64_t next_sequence = 1;
++	bool quota_reported = false;
++	bool ring_failed = false;
++	Sink() {
++		const char *path = std::getenv("ANGE_NATIVE_DRAIN_DIAGNOSTIC_RING");
++		if (!path || !*path) {
++			std::fprintf(stderr, "[NATIVE-DRAIN-CORE] diagnostic=ring_disabled stderr_limit=4096 no_cleanup_arm_required=1\n");
++			std::fflush(stderr);
++			return;
++		}
++		if (path[0] != '/') {
++			failure("ring_path_not_absolute", EINVAL);
++			return;
++		}
++		ring = std::fopen(path, "w+b");
++		if (!ring) {
++			failure("ring_open_failed", errno);
++			return;
++		}
++		// Fixed-size sparse initialization; no growing log and no background work.
++		if (std::fseek(ring, long(SLOT_BYTES * SLOT_COUNT - 1), SEEK_SET) || std::fputc(0, ring) == EOF || std::fflush(ring)) {
++			failure("ring_initialize_failed", errno);
++			return;
++		}
++		std::fprintf(stderr, "[NATIVE-DRAIN-CORE] diagnostic=ring_ready slots=4096 slot_bytes=768 stderr_limit=4096 no_cleanup_arm_required=1\n");
++		std::fflush(stderr);
++	}
++	void failure(const char *reason, int error) {
++		if (!ring_failed) {
++			std::fprintf(stderr, "[NATIVE-DRAIN-CORE] diagnostic=%s errno=%d ring_disabled=1\n", reason, error);
++			std::fflush(stderr);
++			ring_failed = true;
++		}
++	}
++};
++inline Sink &sink() {
++	static Sink instance;
++	return instance;
++}
++class Span {
++	const char *event;
++	uint64_t token = 0;
++	bool stderr_admitted = false;
++	uint64_t fields[6];
++	int64_t code = 0;
++	const char *reason = "returned";
++	void emit(const char *phase) const {
++		auto &output = sink();
++		std::lock_guard<std::mutex> lock(output.mutex);
++		const uint64_t sequence = output.next_sequence++;
++		char record[Sink::SLOT_BYTES] = {};
++		const int length = std::snprintf(record, sizeof(record), "[NATIVE-DRAIN-CORE] seq=%llu t=%llu thread=%llu pair=%llu event=%s phase=%s code=%lld reason=%s a=%llu b=%llu c=%llu d=%llu e=%llu f=%llu",
++				(unsigned long long)sequence, (unsigned long long)OS::get_singleton()->get_ticks_usec(), (unsigned long long)Thread::get_caller_id(), (unsigned long long)token, event, phase,
++				(long long)code, reason, (unsigned long long)fields[0], (unsigned long long)fields[1], (unsigned long long)fields[2],
++				(unsigned long long)fields[3], (unsigned long long)fields[4], (unsigned long long)fields[5]);
++		if (length < 0 || size_t(length) + 28 >= sizeof(record)) {
++			output.failure("ring_record_too_long", EOVERFLOW);
++			return;
++		}
++		// The checksum rejects torn slots if the process is killed during overwrite.
++		uint64_t checksum = 14695981039346656037ull;
++		for (int i = 0; i < length; ++i) {
++			checksum = (checksum ^ uint8_t(record[i])) * 1099511628211ull;
++		}
++		std::snprintf(record + length, sizeof(record) - length, " checksum=%016llx\n", (unsigned long long)checksum);
++		if (stderr_admitted) {
++			std::fputs(record, stderr);
++			std::fflush(stderr);
++		} else if (!output.quota_reported) {
++			std::fprintf(stderr, "[NATIVE-DRAIN-CORE] diagnostic=stderr_quota_exhausted reserved_lines=4096 ring_active=%d seq=%llu existing_span_exits_reserved=1\n", int(output.ring && !output.ring_failed), (unsigned long long)sequence);
++			std::fflush(stderr);
++			output.quota_reported = true;
++		}
++		if (output.ring && !output.ring_failed) {
++			const long offset = long((sequence - 1) % Sink::SLOT_COUNT) * Sink::SLOT_BYTES;
++			if (std::fseek(output.ring, offset, SEEK_SET) || std::fwrite(record, 1, sizeof(record), output.ring) != sizeof(record) || std::fflush(output.ring)) {
++				output.failure("ring_write_failed", errno);
++			}
++		}
++	}
++
++public:
++	Span(const char *p_event, uint64_t a = 0, uint64_t b = 0, uint64_t c = 0, uint64_t d = 0, uint64_t e = 0, uint64_t f = 0) :
++			event(p_event), fields{ a, b, c, d, e, f } {
++		if (!enabled()) {
++			return;
++		}
++		token = next_pair.fetch_add(1, std::memory_order_relaxed);
++		uint32_t current = lines_reserved.load(std::memory_order_relaxed);
++		while (current < 4096) {
++			if (lines_reserved.compare_exchange_weak(current, current + 2, std::memory_order_relaxed)) {
++				stderr_admitted = true;
++				break;
++			}
++		}
++		emit("enter");
++	}
++	~Span() {
++		if (token) {
++			emit("exit");
++		}
++	}
++	Span(const Span &) = delete;
++	Span &operator=(const Span &) = delete;
++	template <class T>
++	T result(T value, const char *p_reason) {
++		code = int64_t(value);
++		reason = p_reason;
++		return value;
++	}
++	void state(uint64_t a, uint64_t b, uint64_t c, uint64_t d, uint64_t e, uint64_t f) {
++		fields[0] = a;
++		fields[1] = b;
++		fields[2] = c;
++		fields[3] = d;
++		fields[4] = e;
++		fields[5] = f;
++	}
++};
++} // namespace NativeDrainDiagnostic
++#endif
+diff --git a/core/extension/gdextension_production_request.cpp b/core/extension/gdextension_production_request.cpp
+index 684f6752a3..ac46ef7fff 100644
+--- a/core/extension/gdextension_production_request.cpp
++++ b/core/extension/gdextension_production_request.cpp
+@@ -31,6 +31,7 @@
+ #include "core/extension/gdextension_production_request.h"
+ 
+ #include "core/extension/gdextension_production_legacy_projection.h"
++#include "core/io/native_drain_diagnostic.h"
+ #include "core/os/os.h"
+ #include "core/os/thread.h"
+ #include "servers/rendering/rendering_device.h"
+@@ -2552,25 +2553,27 @@ Error Registry::production_control_accept(GDExtensionProductionRequestRefV1 ref,
+ }
+ 
+ Error Registry::production_control_schedule(GDExtensionProductionRequestRefV1 ref, uint64_t serial) {
++	NativeDrainDiagnostic::Span drain_trace("control.schedule", serial);
+ 	MutexLock lock(mutex);
+ 	ProductionRequest *r = nullptr;
+ 	RenderingDevice *rd = nullptr;
+ 	Error error = production_request_locked(ref, false, r, rd);
+ 	if (error != OK) {
+-		return error;
++		return drain_trace.result(error, "request_lookup_failed");
+ 	}
+ 	auto &cell = r->control;
++	drain_trace.state(r->serial, serial, uint64_t(cell.state), uint64_t(cell.input.kind), r->maintenance_serial, 0);
+ 	if (!serial || cell.serial != serial || cell.state == ProductionControlState::OWNER_CONSUMED) {
+-		return ERR_DOES_NOT_EXIST;
++		return drain_trace.result(ERR_DOES_NOT_EXIST, "serial_or_state_mismatch");
+ 	}
+ 	if (cell.state != ProductionControlState::PENDING) {
+-		return OK;
++		return drain_trace.result(OK, "existing_control");
+ 	}
+ 	auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
+ 	if (!server || this != &get_singleton()) {
+ 		cell.record_history.schedule_result_valid = true;
+ 		cell.record_history.last_schedule_result = result(ERR_UNAVAILABLE);
+-		return ERR_UNAVAILABLE;
++		return drain_trace.result(ERR_UNAVAILABLE, "server_unavailable");
+ 	}
+ 	// Publication holds the original Registry lock; CQMT does not execute inline
+ 	// and releases its lock before dispatch. The scalar command owns no DSO code.
+@@ -2582,15 +2585,18 @@ Error Registry::production_control_schedule(GDExtensionProductionRequestRefV1 re
+ 		cell.record_history.queue_possible = false; // FIFO false means no publication.
+ 		cell.record_history.schedule_result_valid = true;
+ 		cell.record_history.last_schedule_result = result(ERR_BUSY);
+-		return ERR_BUSY;
++		drain_trace.state(r->serial, serial, uint64_t(cell.state), uint64_t(cell.input.kind), r->maintenance_serial, 0);
++		return drain_trace.result(ERR_BUSY, "queue_refused");
+ 	}
+ 	cell.record_history.admitted = true;
+ 	cell.record_history.schedule_result_valid = true;
+ 	cell.record_history.last_schedule_result = result(OK);
+-	return OK;
++	drain_trace.state(r->serial, serial, uint64_t(cell.state), uint64_t(cell.input.kind), r->maintenance_serial, 1);
++	return drain_trace.result(OK, "queue_accepted");
+ }
+ 
+ void Registry::production_control_execute_locked(ProductionRequest &request, RenderingDevice *rd) {
++	NativeDrainDiagnostic::Span drain_trace("control.execute", request.serial, request.control.serial, uint64_t(request.control.input.kind), request.maintenance_serial, uintptr_t(rd), 0);
+ 	auto &cell = request.control;
+ 	CRASH_COND(cell.state != ProductionControlState::QUEUED);
+ 	cell.state = ProductionControlState::EXECUTING;
+@@ -2726,18 +2732,22 @@ void Registry::production_control_execute_locked(ProductionRequest &request, Ren
+ 		} break;
+ 	}
+ 	production_report_locked(request, cell.output.report);
++	drain_trace.result(cell.output.result.native_error, "control.returned");
+ 	cell.state = ProductionControlState::RETURNED;
+ 	request.attachment->metadata_pending = request.attachment->metadata_receiver != nullptr;
+ 	// No recursive schedule, driver wait, native completion, or source ACK here.
+ }
+ 
+ void Registry::production_control_dispatch(uint64_t registry, uint64_t attachment, uint64_t request, uint64_t serial) {
++	NativeDrainDiagnostic::Span drain_trace("control.dispatch", registry, attachment, request, serial);
+ 	auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
+ 	if (!server || Thread::get_caller_id() != server->server_thread) {
++		drain_trace.result(ERR_UNAUTHORIZED, "wrong_thread_or_no_server");
+ 		return;
+ 	}
+ 	MutexLock lock(mutex);
+ 	if (registry != instance || !serial) {
++		drain_trace.result(ERR_INVALID_PARAMETER, "foreign_registry_or_zero_serial");
+ 		return;
+ 	}
+ 	for (auto *a : production_attachments) {
+@@ -2773,15 +2783,19 @@ void Registry::production_control_dispatch(uint64_t registry, uint64_t attachmen
+ 				}
+ 				cell.output.result = result(ERR_INVALID_DATA, 16);
+ 				cell.state = ProductionControlState::RETURNED;
++				drain_trace.result(ERR_INVALID_DATA, "original_identity_rejected");
+ 				return;
+ 			}
+ 			// A loss/sealed preflight does not erase already accepted cleanup. Pending
+ 			// native effects are still checked by the real release helper and retained.
++			drain_trace.result(OK, "entered_execute");
+ 			production_control_execute_locked(r, a->held_device);
+ 			return;
+ 		}
++		drain_trace.result(ERR_DOES_NOT_EXIST, "no_matching_request");
+ 		return;
+ 	}
++	drain_trace.result(ERR_DOES_NOT_EXIST, "no_matching_attachment");
+ }
+ 
+ Error Registry::production_control_consume(GDExtensionProductionRequestRefV1 ref, uint64_t serial, ProductionControlOutput *out) {
+diff --git a/core/extension/gdextension_production_owned.cpp b/core/extension/gdextension_production_owned.cpp
+index 1ccafb45ae..d29bde564b 100644
+--- a/core/extension/gdextension_production_owned.cpp
++++ b/core/extension/gdextension_production_owned.cpp
+@@ -29,6 +29,7 @@
+ /**************************************************************************/
+ 
+ #include "core/extension/gdextension_production_request.h"
++#include "core/io/native_drain_diagnostic.h"
+ #include "core/os/os.h"
+ #include "core/os/thread.h"
+ #include "servers/rendering/rendering_device.h"
+@@ -875,8 +876,9 @@ Error Registry::production_sets_step_locked(ProductionRequest &request, Renderin
+ }
+ 
+ Error Registry::production_maintenance_locked(ProductionRequest &request, RenderingDevice &rd, const GDExtensionProductionServiceBudgetV1 &budget, ProductionServiceUsage &usage) {
++	NativeDrainDiagnostic::Span drain_trace("maintenance.preflight", request.serial, request.control.serial, request.maintenance_serial, rd.frame, uint64_t(rd.native_disposal_active.load()), rd.draw_graph.qualification_command_count());
+ 	if (!budget.controls || usage.passes >= MIN(budget.passes, 64u) || usage.receipts >= MIN(budget.receipts, 128u) || !budget.deadline_micros || OS::get_singleton()->get_ticks_usec() >= budget.deadline_micros || request.capture_inflight || request.source_device_lost || request.revision > UINT64_MAX - uint64_t(request.capacity.graph_memberships) * 2 - uint64_t(request.capacity.native_memberships) * 2 - request.capacity.readbacks - request.capacity.resources - 8) {
+-		return ERR_BUSY;
++		return drain_trace.result(ERR_BUSY, "budget_or_inflight_or_loss");
+ 	}
+ 	bool closure_drop = false;
+ 	for (uint32_t i = request.use_count + request.binding_used; i < request.capacity.resource_uses; ++i) {
+@@ -911,23 +913,23 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
+ 		usage.passes += actual.passes;
+ 		usage.receipts += actual.polls + actual.frees + actual.issues + actual.retains + actual.releases + actual.recycles;
+ 		if (request.serial != request_serial || request.control.serial != control_serial || request.control.state != ProductionControlState::EXECUTING || request.attachment != attachment || attachment->held_device != &rd || attachment->epoch != epoch || device_records[attachment->device].epoch != epoch || device_records[attachment->device].object != &rd) {
+-			return ERR_INVALID_DATA;
++			return drain_trace.result(ERR_INVALID_DATA, "drop_identity_changed");
+ 		}
+ 		if (dropped != OK) {
+-			return dropped;
++			return drain_trace.result(dropped, "drop_step");
+ 		}
+ 		if (usage.passes >= MIN(budget.passes, 64u) || usage.receipts >= MIN(budget.receipts, 128u)) {
+-			return ERR_BUSY;
++			return drain_trace.result(ERR_BUSY, "drop_budget_exhausted");
+ 		}
+ 	}
+ 	if (!rd.driver || rd.frames.is_empty() || rd.draw_list.active || rd.compute_list.active || rd.raytracing_list.active || rd.frame_wait_draining || rd.draw_graph.has_driver_callbacks()) {
+-		return ERR_BUSY;
++		return drain_trace.result(ERR_BUSY, "active_list_or_driver_callback");
+ 	}
+ 	if (request.maintenance_serial && (!rd.native_disposal_active || request.maintenance_serial != rd.native_disposal_continuation.serial)) {
+ 		request.maintenance_serial = 0;
+ 	}
+ 	if (rd.native_disposal_active && !request.maintenance_serial) {
+-		return ERR_BUSY; // Never adopt another request's or qualification lane's cursor.
++		return drain_trace.result(ERR_BUSY, "foreign_cursor"); // Never adopt another request's or qualification lane's cursor.
+ 	}
+ 	// Every graph command must be covered by an actual original production
+ 	// capture. Other renderer/qualification work waits for its original lane;
+@@ -950,7 +952,8 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
+ 			}
+ 		}
+ 		if (!captured) {
+-			return ERR_BUSY;
++			drain_trace.state(request.serial, request.control.serial, rd.frame, command, rd.draw_graph.qualification_command_count(), 0);
++			return drain_trace.result(ERR_BUSY, "uncaptured_graph");
+ 		}
+ 	}
+ 	auto owned_physical = [&](const QualificationPhysicalReturn *physical) {
+@@ -987,7 +990,8 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
+ 	for (uint32_t frame_index = 0; frame_index < rd.frames.size(); ++frame_index) {
+ 		const auto &frame = rd.frames[frame_index];
+ 		if (!frame.qualification_tickets.is_empty() || !frame.download_texture_get_data_requests.is_empty() || !frame.swap_chains_to_present.is_empty() || (!resuming && (!frame.acceleration_structures_to_dispose_of.is_empty() || !frame.raytracing_pipelines_to_dispose_of.is_empty()))) {
+-			return ERR_BUSY;
++			drain_trace.state(request.serial, request.control.serial, frame_index, frame.swap_chains_to_present.size(), frame.qualification_tickets.size(), frame.download_texture_get_data_requests.size());
++			return drain_trace.result(ERR_BUSY, "foreign_frame_work");
+ 		}
+ 		uint32_t buffers = frame.buffers_to_dispose_of.size();
+ 		uint32_t sets = frame.uniform_sets_to_dispose_of.size();
+@@ -995,11 +999,11 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
+ 			buffers = sets = 0;
+ 			if (frame_index == rd.native_disposal_continuation.target && rd.native_disposal_continuation.phase < 5) {
+ 				if (!frame.disposal.active) {
+-					return ERR_INVALID_DATA;
++					return drain_trace.result(ERR_INVALID_DATA, "missing_disposal_cursor");
+ 				}
+ 				for (uint32_t kind = 0; kind < 10; ++kind) {
+ 					if ((kind == 2 || kind == 3) && frame.disposal.remaining[kind]) {
+-						return ERR_INVALID_DATA;
++						return drain_trace.result(ERR_INVALID_DATA, "unsupported_disposal_kind");
+ 					}
+ 				}
+ 				buffers = frame.disposal.remaining[9];
+@@ -1009,14 +1013,14 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
+ 		const auto *buffer = frame.buffers_to_dispose_of.front();
+ 		for (uint32_t i = 0; i < buffers; ++i) {
+ 			if (!buffer || (!owned_physical(buffer->get().qualification_return) && !exact_closure(buffer->get().production_disposal_uses, 9, buffer->get().driver_id.id, buffer->get().backing_serial))) {
+-				return ERR_BUSY;
++				return drain_trace.result(ERR_BUSY, "foreign_buffer");
+ 			}
+ 			buffer = buffer->next();
+ 		}
+ 		const auto *set = frame.uniform_sets_to_dispose_of.front();
+ 		for (uint32_t i = 0; i < sets; ++i) {
+ 			if (!set || (!owned_physical(set->get().qualification_return) && !exact_closure(set->get().production_disposal_uses, 4, set->get().driver_id.id))) {
+-				return ERR_BUSY;
++				return drain_trace.result(ERR_BUSY, "foreign_uniform_set");
+ 			}
+ 			set = set->next();
+ 		}
+@@ -1043,16 +1047,16 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
+ 		auto *framebuffer = frame.framebuffers_to_dispose_of.front();
+ 		for (uint32_t i = 0; i < framebuffers; ++i) {
+ 			if (!framebuffer || !owned_physical(framebuffer->get().qualification_return)) {
+-				return ERR_BUSY;
++				return drain_trace.result(ERR_BUSY, "foreign_framebuffer");
+ 			}
+ 			framebuffer = framebuffer->next();
+ 		}
+ 		if (!closure_prefix(frame.render_pipelines_to_dispose_of, 0) || !closure_prefix(frame.compute_pipelines_to_dispose_of, 1) || !closure_prefix(frame.shaders_to_dispose_of, 5) || !closure_prefix(frame.samplers_to_dispose_of, 6) || !closure_prefix(frame.textures_to_dispose_of, 8)) {
+-			return ERR_BUSY;
++			return drain_trace.result(ERR_BUSY, "foreign_closure_prefix");
+ 		}
+ 		for (const auto &readback : frame.download_buffer_get_data_requests) {
+ 			if (!readback.capture || readback.capture->registry != this) {
+-				return ERR_BUSY;
++				return drain_trace.result(ERR_BUSY, "foreign_readback");
+ 			}
+ 		}
+ 	}
+@@ -1077,6 +1081,6 @@ Error Registry::production_maintenance_locked(ProductionRequest &request, Render
+ 	--request.capture_inflight;
+ 	usage.receipts += actual.polls + actual.frees + actual.issues + actual.retains + actual.releases + actual.recycles;
+ 	usage.passes += actual.passes;
+-	return error;
++	return drain_trace.result(error, "native_step_returned");
+ }
+ } // namespace GDExtensionDeviceExit
+diff --git a/servers/rendering/rendering_device.cpp b/servers/rendering/rendering_device.cpp
+index b50776a47d..ddc1e80e04 100644
+--- a/servers/rendering/rendering_device.cpp
++++ b/servers/rendering/rendering_device.cpp
+@@ -39,6 +39,7 @@
+ #include "core/extension/gdextension_record_source.h"
+ #include "core/io/dir_access.h"
+ #include "core/io/file_access.h"
++#include "core/io/native_drain_diagnostic.h"
+ #include "core/object/class_db.h"
+ #include "core/os/os.h"
+ #include "core/profiling/profiling.h"
+@@ -10079,23 +10080,24 @@ Error RenderingDevice::_qualification_maintenance() {
+ }
+ 
+ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage, const GDExtensionDeviceExit::ProductionRequest *p_production_owner) {
++	NativeDrainDiagnostic::Span drain_trace("rd.maintenance", uintptr_t(this), uintptr_t(p_production_owner));
+ 	if (!p_budget.receipts || !p_budget.passes || !p_budget.deadline_usec || OS::get_singleton()->get_ticks_usec() >= p_budget.deadline_usec) {
+-		return ERR_BUSY;
++		return drain_trace.result(ERR_BUSY, "rd.return.1");
+ 	}
+ 	if (render_thread_id != Thread::get_caller_id() || !is_main_instance || !driver || native_finalization_returned) {
+-		return ERR_UNAUTHORIZED;
++		return drain_trace.result(ERR_UNAUTHORIZED, "rd.return.2");
+ 	}
+ 	if (frames.is_empty() || uint32_t(frame) >= frames.size()) {
+-		return ERR_UNCONFIGURED;
++		return drain_trace.result(ERR_UNCONFIGURED, "rd.return.3");
+ 	}
+ 	if (frame_issue_error != OK) {
+-		return frame_issue_error;
++		return drain_trace.result(frame_issue_error.load(), "rd.return.4");
+ 	}
+ 	if (draw_list.active || compute_list.active || raytracing_list.active || frame_wait_draining || native_disposal_budget) {
+-		return ERR_BUSY;
++		return drain_trace.result(ERR_BUSY, "rd.return.5");
+ 	}
+ 	if (!_thread_safe_.try_lock()) {
+-		return ERR_BUSY;
++		return drain_trace.result(ERR_BUSY, "rd.return.6");
+ 	}
+ 	struct Unlock {
+ 		RenderingDevice &rd;
+@@ -10105,25 +10107,26 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
+ 			rd._thread_safe_.unlock();
+ 		}
+ 	} unlock{ *this };
++	drain_trace.state(uintptr_t(this), uintptr_t(p_production_owner), frame, native_disposal_continuation.serial, native_disposal_continuation.phase, native_disposal_continuation.end_phase);
+ 	if (native_disposal_active && native_disposal_continuation.production_owner != p_production_owner) {
+-		return ERR_BUSY; // A foreign lane cannot resume the original owner's cursor.
++		return drain_trace.result(ERR_BUSY, "rd.return.7"); // A foreign lane cannot resume the original owner's cursor.
+ 	}
+ 	native_disposal_budget = &p_budget;
+ 	native_disposal_usage = &r_usage;
+ 	if (!_native_disposal_available(NativeDisposalWork::WORK)) {
+-		return ERR_BUSY;
++		return drain_trace.result(ERR_BUSY, "rd.return.8");
+ 	}
+ 	auto &cursor = native_disposal_continuation;
+ 	if (!native_disposal_active) {
+ 		if (draw_graph.has_driver_callbacks()) {
+-			return ERR_BUSY;
++			return drain_trace.result(ERR_BUSY, "rd.return.9");
+ 		}
+ 		if (!next_native_disposal_serial) {
+-			return ERR_PARAMETER_RANGE_ERROR;
++			return drain_trace.result(ERR_PARAMETER_RANGE_ERROR, "rd.return.10");
+ 		}
+ 		const uint32_t target = qualification_frame_advance_pending ? uint32_t(frame) : (frame + 1) % frames.size();
+ 		if (p_production_owner && frames[target].disposal.active) {
+-			return ERR_BUSY; // A pre-existing ordinary drain keeps its original cutoff.
++			return drain_trace.result(ERR_BUSY, "rd.return.11"); // A pre-existing ordinary drain keeps its original cutoff.
+ 		}
+ 		cursor = {};
+ 		cursor.production_owner = p_production_owner;
+@@ -10144,12 +10147,12 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
+ 		if (failed_wait_frame >= 0 && uint32_t(failed_wait_frame) != cursor.target) {
+ 			const Error previous = _native_disposal_stall_step(failed_wait_frame);
+ 			if (previous != OK) {
+-				return previous;
++				return drain_trace.result(previous, "rd.return.12");
+ 			}
+ 		}
+ 		const Error error = _native_disposal_stall_step(cursor.target);
+ 		if (error != OK) {
+-			return error;
++			return drain_trace.result(error, "rd.return.13");
+ 		}
+ 		cursor.phase = 1;
+ 		cursor.command_buffer = frames[frame].command_buffer;
+@@ -10157,16 +10160,16 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
+ 	if (cursor.phase == 1) {
+ 		auto &f = frames[frame];
+ 		if (f.chain_prefix_poisoned) {
+-			return _fail_frame_issue(FAILED);
++			return drain_trace.result(_fail_frame_issue(FAILED), "rd.return.14");
+ 		}
+ 		if (!f.fence_signaled && f.primary_command_buffer_begun) {
+ 			if (cursor.end_phase == 0) {
+ 				uint32_t bound = 0;
+ 				if (!driver->native_issue_bound(RDD::NativeIssueKind::PREPARE_SEGMENT, 0, bound)) {
+-					return ERR_UNAVAILABLE;
++					return drain_trace.result(ERR_UNAVAILABLE, "rd.return.15");
+ 				}
+ 				if (!_native_disposal_admit(NativeDisposalWork::ISSUE, bound)) {
+-					return ERR_BUSY;
++					return drain_trace.result(ERR_BUSY, "rd.return.16");
+ 				}
+ 				RDD::QueueCallReport hidden;
+ 				const Error error = driver->qualification_prepare_segment(hidden, true);
+@@ -10177,39 +10180,42 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
+ 				if (hidden.native_issue_count > bound) {
+ 					r_usage.issues = uint32_t(MIN(uint64_t(UINT32_MAX), uint64_t(r_usage.issues) + hidden.native_issue_count - bound));
+ 					// An invalid backend bound cannot erase its actual source prefix.
+-					return _fail_frame_issue(ERR_INVALID_DATA);
++					return drain_trace.result(_fail_frame_issue(ERR_INVALID_DATA), "rd.return.17");
+ 				}
+ 				r_usage.issues -= bound - hidden.native_issue_count;
+ 				if (error != OK) {
+-					return error;
++					return drain_trace.result(error, "rd.return.18");
+ 				}
+ 				cursor.end_phase = 1;
+ 			}
+ 			if (cursor.end_phase == 1) {
+ 				const Error error = _submit_transfer_workers(cursor.command_buffer, true);
+ 				if (error != OK) {
+-					return error == ERR_BUSY ? error : _fail_frame_issue(error);
++					return drain_trace.result(error == ERR_BUSY ? error : _fail_frame_issue(error), "rd.return.19");
+ 				}
+ 				cursor.end_phase = 2;
+ 			}
+ 			if (cursor.end_phase == 2) {
+ 				if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
+-					return ERR_BUSY;
++					return drain_trace.result(ERR_BUSY, "rd.return.20");
+ 				}
+ 				// The caller validated every closed graph record against its
+ 				// accepted capture/quote. Recording this graph is one atomic pass;
+ 				// its native issues above/below are individually charged receipts.
+ 				cursor.end_phase = 3; // Never replay an uncertain graph prefix.
+-				draw_graph.end(RENDER_GRAPH_REORDER == 1, RENDER_GRAPH_FULL_BARRIERS == 1, cursor.command_buffer, f.command_buffer_pool);
++				{
++					NativeDrainDiagnostic::Span graph_trace("graph.maintenance", uintptr_t(this), cursor.command_buffer.id, cursor.serial, frame, cursor.phase, cursor.end_phase);
++					draw_graph.end(RENDER_GRAPH_REORDER == 1, RENDER_GRAPH_FULL_BARRIERS == 1, cursor.command_buffer, f.command_buffer_pool);
++				}
+ 				_seal_buffer_readback_records();
+ 				_qualification_seal_tickets();
+ 				if (draw_graph.recording_failed()) {
+-					return _fail_frame_issue(FAILED);
++					return drain_trace.result(_fail_frame_issue(FAILED), "rd.return.21");
+ 				}
+ 			}
+ 			if (cursor.end_phase == 3) {
+ 				if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
+-					return ERR_BUSY;
++					return drain_trace.result(ERR_BUSY, "rd.return.22");
+ 				}
+ 				driver->command_buffer_end(cursor.command_buffer);
+ 				cursor.end_phase = 4;
+@@ -10219,10 +10225,10 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
+ 				// enter the legacy end_segment wait from a bounded owner turn.
+ 				uint32_t bound = 0;
+ 				if (!driver->native_issue_bound(RDD::NativeIssueKind::PREPARE_SEGMENT, 0, bound)) {
+-					return ERR_UNAVAILABLE;
++					return drain_trace.result(ERR_UNAVAILABLE, "rd.return.23");
+ 				}
+ 				if (!_native_disposal_admit(NativeDisposalWork::ISSUE, bound)) {
+-					return ERR_BUSY;
++					return drain_trace.result(ERR_BUSY, "rd.return.24");
+ 				}
+ 				RDD::QueueCallReport hidden;
+ 				const Error error = driver->qualification_prepare_segment(hidden, true);
+@@ -10233,11 +10239,11 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
+ 				if (hidden.native_issue_count > bound) {
+ 					r_usage.issues = uint32_t(MIN(uint64_t(UINT32_MAX), uint64_t(r_usage.issues) + hidden.native_issue_count - bound));
+ 					// An invalid backend bound cannot erase its actual source prefix.
+-					return _fail_frame_issue(ERR_INVALID_DATA);
++					return drain_trace.result(_fail_frame_issue(ERR_INVALID_DATA), "rd.return.25");
+ 				}
+ 				r_usage.issues -= bound - hidden.native_issue_count;
+ 				if (error != OK) {
+-					return error;
++					return drain_trace.result(error, "rd.return.26");
+ 				}
+ 				cursor.end_phase = 5;
+ 			}
+@@ -10255,10 +10261,10 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
+ 		while (cursor.slot < cursor.slot_count) {
+ 			uint32_t bound = 0;
+ 			if (!driver->native_issue_bound(RDD::NativeIssueKind::MAIN_SLOT, 1, bound)) {
+-				return ERR_UNAVAILABLE;
++				return drain_trace.result(ERR_UNAVAILABLE, "rd.return.27");
+ 			}
+ 			if (!_native_disposal_admit(NativeDisposalWork::ISSUE, bound)) {
+-				return ERR_BUSY;
++				return drain_trace.result(ERR_BUSY, "rd.return.28");
+ 			}
+ 			const uint32_t slot = cursor.slot;
+ 			const auto command = slot ? pool.buffers[slot - 1] : f.command_buffer;
+@@ -10274,11 +10280,11 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
+ 			_qualification_issue_tickets(slot, report, error);
+ 			if (report.native_issue_count > bound) {
+ 				r_usage.issues = uint32_t(MIN(uint64_t(UINT32_MAX), uint64_t(r_usage.issues) + report.native_issue_count - bound));
+-				return _fail_frame_issue(ERR_INVALID_DATA);
++				return drain_trace.result(_fail_frame_issue(ERR_INVALID_DATA), "rd.return.29");
+ 			}
+ 			r_usage.issues -= bound - report.native_issue_count;
+ 			if (error != OK || !report.issued || report.error != OK) {
+-				return _fail_frame_issue(error != OK ? error : (report.error != OK ? report.error : FAILED));
++				return drain_trace.result(_fail_frame_issue(error != OK ? error : (report.error != OK ? report.error : FAILED)), "rd.return.30");
+ 			}
+ 		}
+ 		if (cursor.slot_count) {
+@@ -10295,29 +10301,29 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
+ 	if (cursor.phase == 3) {
+ 		const Error error = _native_disposal_stall_step(frame);
+ 		if (error != OK) {
+-			return error;
++			return drain_trace.result(error, "rd.return.31");
+ 		}
+ 		cursor.phase = 4;
+ 	}
+ 	if (cursor.phase == 4) {
+ 		const Error error = _free_pending_resources_step(frame, p_budget, r_usage);
+ 		if (error != OK) {
+-			return error;
++			return drain_trace.result(error, "rd.return.32");
+ 		}
+ 		cursor.phase = 5;
+ 	}
+ 	if (cursor.phase == 5) {
+ 		if (!next_qualification_frame_epoch) {
+-			return ERR_PARAMETER_RANGE_ERROR;
++			return drain_trace.result(ERR_PARAMETER_RANGE_ERROR, "rd.return.33");
+ 		}
+ 		auto &f = frames[frame];
+ 		if (cursor.begin_phase == 0) {
+ 			if (command_pool_reset_enabled) {
+ 				if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
+-					return ERR_BUSY;
++					return drain_trace.result(ERR_BUSY, "rd.return.34");
+ 				}
+ 				if (!driver->command_pool_reset(f.command_pool)) {
+-					return _fail_frame_issue(FAILED);
++					return drain_trace.result(_fail_frame_issue(FAILED), "rd.return.35");
+ 				}
+ 			}
+ 			f.primary_command_buffer_begun = false;
+@@ -10327,24 +10333,24 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
+ 		}
+ 		if (cursor.begin_phase == 1) {
+ 			if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
+-				return ERR_BUSY;
++				return drain_trace.result(ERR_BUSY, "rd.return.36");
+ 			}
+ 			driver->begin_segment(frame, frames_drawn++);
+ 			cursor.begin_phase = 2;
+ 		}
+ 		if (cursor.begin_phase == 2) {
+ 			if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
+-				return ERR_BUSY;
++				return drain_trace.result(ERR_BUSY, "rd.return.37");
+ 			}
+ 			f.primary_command_buffer_begun = driver->command_buffer_begin(f.command_buffer);
+ 			if (!f.primary_command_buffer_begun) {
+-				return _fail_frame_issue(FAILED);
++				return drain_trace.result(_fail_frame_issue(FAILED), "rd.return.38");
+ 			}
+ 			cursor.begin_phase = 3;
+ 		}
+ 		if (cursor.begin_phase == 3) {
+ 			if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
+-				return ERR_BUSY;
++				return drain_trace.result(ERR_BUSY, "rd.return.39");
+ 			}
+ 			draw_graph.begin(true);
+ 			f.qualification_epoch = next_qualification_frame_epoch++;
+@@ -10361,7 +10367,7 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
+ 		if (cursor.begin_phase == 4) {
+ 			if (f.timestamp_count) {
+ 				if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
+-					return ERR_BUSY;
++					return drain_trace.result(ERR_BUSY, "rd.return.40");
+ 				}
+ 				driver->timestamp_query_pool_get_results(f.timestamp_pool, f.timestamp_count, f.timestamp_result_values.ptr());
+ 			}
+@@ -10370,7 +10376,7 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
+ 		if (cursor.begin_phase == 5) {
+ 			if (f.timestamp_count) {
+ 				if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
+-					return ERR_BUSY;
++					return drain_trace.result(ERR_BUSY, "rd.return.41");
+ 				}
+ 				driver->command_timestamp_query_pool_reset(f.command_buffer, f.timestamp_pool, f.timestamp_count);
+ 				SWAP(f.timestamp_names, f.timestamp_result_names);
+@@ -10387,7 +10393,7 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
+ 			cursor = {};
+ 		}
+ 	}
+-	return OK;
++	return drain_trace.result(OK, "rd.return.42");
+ }
+ 
+ Error RenderingDevice::_native_disposal_stall_step(uint32_t p_frame) {
+@@ -12148,7 +12154,10 @@ Error RenderingDevice::_end_frame(bool p_nonblocking) {
+ 	}
+ 
+ 	GodotProfileZoneGrouped(_profile_zone, "draw_graph.end");
+-	draw_graph.end(RENDER_GRAPH_REORDER == 1, RENDER_GRAPH_FULL_BARRIERS == 1, command_buffer, frames[frame].command_buffer_pool);
++	{
++		NativeDrainDiagnostic::Span graph_trace("graph.ordinary", uintptr_t(this), command_buffer.id, frame, frames[frame].swap_chains_to_present.size(), frames[frame].fence_signaled, qualification_frame);
++		draw_graph.end(RENDER_GRAPH_REORDER == 1, RENDER_GRAPH_FULL_BARRIERS == 1, command_buffer, frames[frame].command_buffer_pool);
++	}
+ 	_seal_buffer_readback_records();
+ 	_qualification_seal_tickets();
+ 	if (draw_graph.recording_failed()) {
+diff --git a/drivers/metal/metal3_objects.cpp b/drivers/metal/metal3_objects.cpp
+index 3db3cd44e4..5759135fc9 100644
+--- a/drivers/metal/metal3_objects.cpp
++++ b/drivers/metal/metal3_objects.cpp
+@@ -50,6 +50,7 @@
+ 
+ #include "metal3_objects.h"
+ 
++#include "core/io/native_drain_diagnostic.h"
+ #include "drivers/metal/metal_utils.h"
+ #include "drivers/metal/pixel_formats.h"
+ #include "drivers/metal/rendering_device_driver_metal3.h"
+@@ -256,6 +257,7 @@ void MDCommandBuffer::_end() {
+ }
+ 
+ void MDCommandBuffer::_commit() {
++	NativeDrainDiagnostic::Span drain_trace("metal.commit", uintptr_t(this), uintptr_t(device_driver));
+ 	end();
+ 	// An empty recording still needs a native submission for its fence and
+ 	// completion handler. Native command buffers are otherwise created lazily.
+@@ -272,7 +274,10 @@ void MDCommandBuffer::_commit() {
+ 	if (device_driver->active_native_issue_count) {
+ 		++*device_driver->active_native_issue_count;
+ 	}
+-	cb->commit();
++	{
++		NativeDrainDiagnostic::Span submit_trace("metal.cb_commit", uintptr_t(this), uintptr_t(cb), uintptr_t(device_driver));
++		cb->commit();
++	}
+ 	commandBuffer.reset();
+ 	state_begin = false;
+ }
+diff --git a/drivers/metal/rendering_context_driver_metal.cpp b/drivers/metal/rendering_context_driver_metal.cpp
+index f4b649aea0..1e59d6abae 100644
+--- a/drivers/metal/rendering_context_driver_metal.cpp
++++ b/drivers/metal/rendering_context_driver_metal.cpp
+@@ -30,6 +30,7 @@
+ 
+ #include "rendering_context_driver_metal.h"
+ 
++#include "core/io/native_drain_diagnostic.h"
+ #include "core/os/os.h"
+ #include "core/templates/sort_array.h"
+ #include "drivers/metal/metal3_objects.h"
+@@ -136,7 +137,9 @@ public:
+ 
+ 	CA::MetalDrawable *get_drawable() const {
+ 		if (drawable == nullptr) {
++			NativeDrainDiagnostic::Span drawable_trace("metal.next_drawable", uintptr_t(layer), uintptr_t(this), 0);
+ 			drawable = layer->nextDrawable();
++			drawable_trace.state(uintptr_t(layer), uintptr_t(this), uintptr_t(drawable), 0, 0, 0);
+ 		}
+ 		return drawable;
+ 	}
+@@ -227,6 +230,7 @@ public:
+ 	}
+ 
+ 	RDD::FramebufferID acquire_next_frame_buffer() override {
++		NativeDrainDiagnostic::Span drain_trace("metal.acquire", uintptr_t(this), uintptr_t(layer), count, front, rear, frame_buffers.size());
+ 		if (count == frame_buffers.size()) {
+ 			return RDD::FramebufferID();
+ 		}
+@@ -238,10 +242,12 @@ public:
+ 		frame_buffer.size = Size2i(width, height);
+ 		frame_buffer.reset();
+ 
++		drain_trace.state(uintptr_t(this), uintptr_t(layer), count, front, rear, uintptr_t(&frame_buffer));
+ 		return RDD::FramebufferID(&frame_buffer);
+ 	}
+ 
+ 	void present(MTL3::MDCommandBuffer *p_cmd_buffer) override {
++		NativeDrainDiagnostic::Span drain_trace("metal.present", uintptr_t(this), uintptr_t(layer), count, front, rear, uintptr_t(p_cmd_buffer));
+ 		if (count == 0) {
+ 			return;
+ 		}
+@@ -252,6 +258,7 @@ public:
+ 
+ 		count--;
+ 		front = (front + 1) % frame_buffers.size();
++		drain_trace.state(uintptr_t(this), uintptr_t(layer), count, front, rear, uintptr_t(drawable));
+ 
+ 		if (drawable != nullptr) {
+ 			if (vsync_mode != DisplayServerEnums::VSYNC_DISABLED) {
+@@ -388,7 +395,9 @@ public:
+ 		uint64_t now = OS::get_singleton()->get_ticks_usec();
+ 		if (now >= target_time) {
+ 			target_time = now + 1'000'000; // 1 second into the future.
++			NativeDrainDiagnostic::Span drawable_trace("metal.offscreen_next_drawable", uintptr_t(this), uintptr_t(layer), rear, count.load(std::memory_order_relaxed));
+ 			CA::MetalDrawable *drawable = layer->nextDrawable();
++			drawable_trace.state(uintptr_t(this), uintptr_t(layer), rear, count.load(std::memory_order_relaxed), uintptr_t(drawable), 0);
+ 			ERR_FAIL_NULL_V_MSG(drawable, RDD::FramebufferID(), "no drawable available");
+ 			drawables[rear] = drawable;
+ 			frame_buffer.set_texture(0, drawable->texture());
+diff --git a/tests/core/extension/native_output_bridge/decode_native_drain_ring.py b/tests/core/extension/native_output_bridge/decode_native_drain_ring.py
+new file mode 100644
+index 0000000000..0ce98e0e47
+--- /dev/null
++++ b/tests/core/extension/native_output_bridge/decode_native_drain_ring.py
+@@ -0,0 +1,63 @@
++#!/usr/bin/env python3
++"""Decode the fixed 4096 x 768-byte native drain diagnostic ring after a run."""
++import argparse
++from pathlib import Path
++import re
++import sys
++
++SLOT_BYTES = 768
++SLOT_COUNT = 4096
++
++
++def decode(data):
++    if len(data) != SLOT_BYTES * SLOT_COUNT:
++        raise ValueError(f"expected {SLOT_BYTES * SLOT_COUNT} bytes, got {len(data)}")
++    records = []
++    invalid = []
++    for index in range(SLOT_COUNT):
++        slot = data[index * SLOT_BYTES : (index + 1) * SLOT_BYTES]
++        if not any(slot):
++            continue
++        line = slot.split(b"\0", 1)[0]
++        match = re.fullmatch(rb"(.+) checksum=([0-9a-f]{16})\n", line)
++        if not match:
++            invalid.append(index)
++            continue
++        payload, expected = match.groups()
++        checksum = 14695981039346656037
++        for value in payload:
++            checksum = ((checksum ^ value) * 1099511628211) & ((1 << 64) - 1)
++        seq = re.search(rb"\bseq=(\d+)\b", payload)
++        if checksum != int(expected, 16) or not seq:
++            invalid.append(index)
++            continue
++        sequence = int(seq.group(1))
++        if sequence < 1 or (sequence - 1) % SLOT_COUNT != index:
++            invalid.append(index)
++            continue
++        records.append((sequence, line.decode("ascii").rstrip("\n")))
++    records.sort()
++    return records, invalid
++
++
++def main():
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("ring", type=Path)
++    parser.add_argument("--output", type=Path, help="Write sorted records to this file instead of stdout")
++    args = parser.parse_args()
++    try:
++        records, invalid = decode(args.ring.read_bytes())
++    except (OSError, ValueError) as exc:
++        parser.exit(2, f"diagnostic ring error: {exc}\n")
++    text = "".join(line + "\n" for _, line in records)
++    if args.output:
++        args.output.write_text(text, encoding="ascii")
++    else:
++        sys.stdout.write(text)
++    span = f"{records[0][0]}..{records[-1][0]}" if records else "empty"
++    print(f"valid={len(records)} seq={span} invalid_or_torn_slots={invalid}", file=sys.stderr)
++    print("The ring retains only the latest window. Missing earlier span entries may have been overwritten; correlate same-thread graph nesting and pair IDs.", file=sys.stderr)
++
++
++if __name__ == "__main__":
++    main()

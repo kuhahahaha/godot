@@ -29,6 +29,8 @@ class ParticlesHeightfieldClearTestFixture : public RefCounted {
 	RID first_texture;
 	RID second_texture;
 	RenderingDevice *rd = nullptr;
+	Error run_capture();
+	void cleanup();
 	void sample_done(const PackedByteArray &p_bytes);
 
 protected:

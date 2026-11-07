@@ -943,11 +943,14 @@ bool ShaderRD::version_free(RID p_version) {
 			shader_versions_embedded_set.erase({ this, p_version });
 		}
 
-		version->mutex->lock();
+		// free() destroys Version and makes its slot reusable. Keep the original
+		// mutex independently so cleanup never reads the released slot.
+		Mutex *const version_mutex = version->mutex;
+		version_mutex->lock();
 		_clear_version(version);
 		version_owner.free(p_version);
-		version->mutex->unlock();
-		memdelete(version->mutex);
+		version_mutex->unlock();
+		memdelete(version_mutex);
 	} else {
 		return false;
 	}

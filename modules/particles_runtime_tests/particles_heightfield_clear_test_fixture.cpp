@@ -28,6 +28,9 @@ Error ParticlesHeightfieldClearTestFixture::run_geometry(float p_height) {
 }
 
 Error ParticlesHeightfieldClearTestFixture::run_geometry_params(float p_height, float p_extents_y, float p_transform_y) {
+	if (started) {
+		return ERR_ALREADY_IN_USE;
+	}
 	geometry_height = p_height;
 	capture_extents_y = p_extents_y;
 	capture_transform_y = p_transform_y;
@@ -40,6 +43,17 @@ Error ParticlesHeightfieldClearTestFixture::run() {
 		return ERR_ALREADY_IN_USE;
 	}
 	started = true;
+	const Error error = run_capture();
+	if (error != OK) {
+		cleanup();
+		MutexLock lock(result_mutex);
+		result_data["error_code"] = error;
+		result_data["pass"] = false;
+	}
+	return error;
+}
+
+Error ParticlesHeightfieldClearTestFixture::run_capture() {
 	rd = RenderingDevice::get_singleton();
 	auto *storage = RendererRD::ParticlesStorage::get_singleton();
 	auto *scene = RendererSceneRenderRD::get_singleton();
@@ -50,6 +64,7 @@ Error ParticlesHeightfieldClearTestFixture::run() {
 		MutexLock lock(result_mutex);
 		result_data["driver"] = rd->get_device_name();
 	}
+	// One collision base owns two independent instance capture targets.
 	collision = storage->particles_collision_allocate();
 	storage->particles_collision_initialize(collision);
 	storage->particles_collision_set_collision_type(collision, RSE::PARTICLES_COLLISION_TYPE_HEIGHTFIELD_COLLIDE);
@@ -62,24 +77,20 @@ Error ParticlesHeightfieldClearTestFixture::run() {
 	if (first_framebuffer.is_null() || second_framebuffer.is_null() || first_framebuffer == second_framebuffer) {
 		return ERR_UNAVAILABLE;
 	}
-	const auto list = rd->draw_list_begin(first_framebuffer, RD::DRAW_CLEAR_DEPTH, {}, 0.75f);
-	if (list == RD::INVALID_ID) {
-		return ERR_UNAVAILABLE;
+	// Seed BOTH targets: an empty renderer pass that omits its clear must fail.
+	// The untouched first target also detects accidental target aliasing.
+	for (const RID framebuffer : { first_framebuffer, second_framebuffer }) {
+		const auto list = rd->draw_list_begin(framebuffer, RD::DRAW_CLEAR_DEPTH, {}, 0.75f);
+		if (list == RD::INVALID_ID) {
+			return ERR_UNAVAILABLE;
+		}
+		rd->draw_list_end();
 	}
-	rd->draw_list_end();
-	// Seed the actual capture target with a non-zero depth value as well. The
-	// production height pass must clear this reused target before drawing; a
-	// fresh second allocation would only test its initial contents.
-	const auto second_seed = rd->draw_list_begin(second_framebuffer, RD::DRAW_CLEAR_DEPTH, {}, 0.75f);
-	if (second_seed == RD::INVALID_ID) {
-		return ERR_UNAVAILABLE;
-	}
-	rd->draw_list_end();
 	PagedArrayPool<RenderGeometryInstance *> pool;
 	PagedArray<RenderGeometryInstance *> instances;
 	instances.set_page_pool(&pool);
 	if (geometry_capture) {
-		// Fixed world y maps to reversed orthographic depth (y + 1) / 2.
+		// Live field transform/extents determine the reversed orthographic depth.
 		Array arrays;
 		arrays.resize(RSE::ARRAY_MAX);
 		arrays[RSE::ARRAY_VERTEX] = PackedVector3Array{
@@ -127,9 +138,15 @@ Error ParticlesHeightfieldClearTestFixture::run() {
 	Vector<RenderingDevice::ShaderStageSPIRVData> stages;
 	stages.push_back(stage);
 	shader = rd->shader_create_from_spirv(stages, "HeightfieldClearSample");
+	if (shader.is_null()) {
+		return ERR_CANT_CREATE;
+	}
 	pipeline = rd->compute_pipeline_create(shader);
 	buffer = rd->storage_buffer_create(8);
 	sampler = rd->sampler_create(RenderingDevice::SamplerState());
+	if (pipeline.is_null() || buffer.is_null() || sampler.is_null()) {
+		return ERR_CANT_CREATE;
+	}
 	RenderingDevice::Uniform u;
 	Vector<RenderingDevice::Uniform> uniforms;
 	u.binding = 0;
@@ -172,25 +189,44 @@ void ParticlesHeightfieldClearTestFixture::sample_done(const PackedByteArray &p_
 		std::memcpy(raw, p_bytes.ptr(), 8);
 	}
 
-	rd->free_rid(uniform_set);
-	rd->free_rid(sampler);
-	rd->free_rid(buffer);
-	rd->free_rid(pipeline);
-	rd->free_rid(shader);
-	if (geometry) {
-		RendererSceneRenderRD::get_singleton()->geometry_instance_free(geometry);
-		geometry = nullptr;
-		RSG::mesh_storage->mesh_free(mesh);
-	}
-	auto *storage = RendererRD::ParticlesStorage::get_singleton();
-	storage->particles_collision_instance_free(first_instance);
-	storage->particles_collision_instance_free(second_instance);
-	storage->particles_collision_free(collision);
+	cleanup();
 	{
 		MutexLock lock(result_mutex);
 		result_data["first_raw"] = raw[0];
 		result_data["second_raw"] = raw[1];
 		const float expected = geometry_capture ? (geometry_height - capture_transform_y + capture_extents_y) / (2.0f * capture_extents_y) : 0.0f;
 		result_data["pass"] = p_bytes.size() == 8 && raw[0] >= 0.749f && raw[0] <= 0.751f && Math::abs(raw[1] - expected) <= 0.001f;
+	}
+}
+
+void ParticlesHeightfieldClearTestFixture::cleanup() {
+	if (rd) {
+		for (RID *resource : { &uniform_set, &sampler, &buffer, &pipeline, &shader }) {
+			if (resource->is_valid()) {
+				rd->free_rid(*resource);
+				*resource = RID();
+			}
+		}
+	}
+	if (geometry) {
+		RendererSceneRenderRD::get_singleton()->geometry_instance_free(geometry);
+		geometry = nullptr;
+	}
+	if (mesh.is_valid()) {
+		RSG::mesh_storage->mesh_free(mesh);
+		mesh = RID();
+	}
+	auto *storage = RendererRD::ParticlesStorage::get_singleton();
+	if (storage) {
+		for (RID *instance : { &first_instance, &second_instance }) {
+			if (instance->is_valid()) {
+				storage->particles_collision_instance_free(*instance);
+				*instance = RID();
+			}
+		}
+		if (collision.is_valid()) {
+			storage->particles_collision_free(collision);
+			collision = RID();
+		}
 	}
 }

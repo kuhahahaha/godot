@@ -1,0 +1,13 @@
+{
+  "argv": [
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+    "--headless",
+    "--test",
+    "--test-case=*[OutputNativeSceneAcquire]*"
+  ],
+  "binary_bytes": 156845816,
+  "binary_sha256": "c8600263fe6e30bb001cf94bbd4c0738a49c8f1cd0f7af9f4715c65ba77b0306",
+  "exit": 0,
+  "elapsed": 1.4824839170323685,
+  "scope": "CPU/dummy only; acceptance requires diagnostic and assertion inspection"
+}

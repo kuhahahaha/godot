@@ -35,19 +35,21 @@
 #include "servers/rendering/rendering_device.h"
 
 RenderingDevice::Buffer *RenderingDevice::_native_immutable_buffer(RID rid) {
-	if (auto *buffer = vertex_buffer_owner.get_or_null(rid)) {
+	// A foreign owner may have a pending allocation at the same slot index.
+	// Check the full RID before lookup so only its actual owner checks readiness.
+	if (auto *buffer = vertex_buffer_owner.owns(rid) ? vertex_buffer_owner.get_or_null(rid) : nullptr) {
 		return buffer;
 	}
-	if (auto *buffer = index_buffer_owner.get_or_null(rid)) {
+	if (auto *buffer = index_buffer_owner.owns(rid) ? index_buffer_owner.get_or_null(rid) : nullptr) {
 		return buffer;
 	}
-	if (auto *buffer = uniform_buffer_owner.get_or_null(rid)) {
+	if (auto *buffer = uniform_buffer_owner.owns(rid) ? uniform_buffer_owner.get_or_null(rid) : nullptr) {
 		return buffer;
 	}
-	if (auto *buffer = storage_buffer_owner.get_or_null(rid)) {
+	if (auto *buffer = storage_buffer_owner.owns(rid) ? storage_buffer_owner.get_or_null(rid) : nullptr) {
 		return buffer;
 	}
-	return texture_buffer_owner.get_or_null(rid);
+	return texture_buffer_owner.owns(rid) ? texture_buffer_owner.get_or_null(rid) : nullptr;
 }
 
 GDExtensionDeviceExit::ProductionDisposalUse **RenderingDevice::_production_disposal_head(RID rid, uint32_t &kind, uint64_t &serial, uint64_t &driver_id) {
@@ -60,42 +62,42 @@ GDExtensionDeviceExit::ProductionDisposalUse **RenderingDevice::_production_disp
 		driver_id = p->driver_id.id;
 		return &p->production_disposal_uses;
 	}
-	if (auto *p = texture_owner.get_or_null(rid)) {
+	if (auto *p = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr) {
 		kind = 8;
 		driver_id = p->driver_id.id;
 		return &p->production_disposal_uses;
 	}
-	if (auto *p = sampler_owner.get_or_null(rid)) {
+	if (auto *p = sampler_owner.owns(rid) ? sampler_owner.get_or_null(rid) : nullptr) {
 		kind = 6;
 		driver_id = p->driver_id.id;
 		return &p->production_disposal_uses;
 	}
-	if (auto *p = shader_owner.get_or_null(rid)) {
+	if (auto *p = shader_owner.owns(rid) ? shader_owner.get_or_null(rid) : nullptr) {
 		kind = 5;
 		driver_id = p->driver_id.id;
 		return &p->production_disposal_uses;
 	}
-	if (auto *p = uniform_set_owner.get_or_null(rid)) {
+	if (auto *p = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr) {
 		kind = 4;
 		serial = p->native_disposal_serial ? p->native_disposal_serial : rid.get_id();
 		driver_id = p->driver_id.id;
 		return &p->production_disposal_uses;
 	}
-	if (auto *p = render_pipeline_owner.get_or_null(rid)) {
+	if (auto *p = render_pipeline_owner.owns(rid) ? render_pipeline_owner.get_or_null(rid) : nullptr) {
 		kind = 0;
 		driver_id = p->driver_id.id;
 		return &p->production_disposal_uses;
 	}
-	if (auto *p = compute_pipeline_owner.get_or_null(rid)) {
+	if (auto *p = compute_pipeline_owner.owns(rid) ? compute_pipeline_owner.get_or_null(rid) : nullptr) {
 		kind = 1;
 		driver_id = p->driver_id.id;
 		return &p->production_disposal_uses;
 	}
-	if (auto *p = vertex_array_owner.get_or_null(rid)) {
+	if (auto *p = vertex_array_owner.owns(rid) ? vertex_array_owner.get_or_null(rid) : nullptr) {
 		kind = 10;
 		return &p->production_disposal_uses;
 	}
-	if (auto *p = index_array_owner.get_or_null(rid)) {
+	if (auto *p = index_array_owner.owns(rid) ? index_array_owner.get_or_null(rid) : nullptr) {
 		kind = 11;
 		driver_id = p->driver_id.id;
 		return &p->production_disposal_uses;
@@ -151,11 +153,11 @@ void RenderingDevice::_native_immutable_retire_dependents(RID rid) {
 		}
 
 		const auto *buffer = _native_immutable_buffer(current);
-		const auto *texture = texture_owner.get_or_null(current);
-		const auto *shader = shader_owner.get_or_null(current);
-		const auto *pipeline = compute_pipeline_owner.get_or_null(current);
-		const auto *sampler = sampler_owner.get_or_null(current);
-		auto *set = uniform_set_owner.get_or_null(current);
+		const auto *texture = texture_owner.owns(current) ? texture_owner.get_or_null(current) : nullptr;
+		const auto *shader = shader_owner.owns(current) ? shader_owner.get_or_null(current) : nullptr;
+		const auto *pipeline = compute_pipeline_owner.owns(current) ? compute_pipeline_owner.get_or_null(current) : nullptr;
+		const auto *sampler = sampler_owner.owns(current) ? sampler_owner.get_or_null(current) : nullptr;
+		auto *set = uniform_set_owner.owns(current) ? uniform_set_owner.get_or_null(current) : nullptr;
 		if (!qualification_retiring && ((buffer && buffer->qualification_return) || (texture && texture->qualification_return) || (shader && shader->qualification_return) || (pipeline && pipeline->qualification_return) || (sampler && sampler->qualification_return) || (set && set->qualification_return))) {
 			continue;
 		}
@@ -197,28 +199,28 @@ uint32_t *RenderingDevice::_native_immutable_counter(RID rid, bool **retiring, b
 	if (auto *resource = _native_immutable_buffer(rid)) {
 		return counter(resource);
 	}
-	if (auto *resource = texture_owner.get_or_null(rid)) {
+	if (auto *resource = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr) {
 		return counter(resource);
 	}
-	if (auto *resource = sampler_owner.get_or_null(rid)) {
+	if (auto *resource = sampler_owner.owns(rid) ? sampler_owner.get_or_null(rid) : nullptr) {
 		return counter(resource);
 	}
-	if (auto *resource = shader_owner.get_or_null(rid)) {
+	if (auto *resource = shader_owner.owns(rid) ? shader_owner.get_or_null(rid) : nullptr) {
 		return counter(resource);
 	}
-	if (auto *resource = uniform_set_owner.get_or_null(rid)) {
+	if (auto *resource = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr) {
 		return counter(resource);
 	}
-	if (auto *resource = render_pipeline_owner.get_or_null(rid)) {
+	if (auto *resource = render_pipeline_owner.owns(rid) ? render_pipeline_owner.get_or_null(rid) : nullptr) {
 		return counter(resource);
 	}
-	if (auto *resource = compute_pipeline_owner.get_or_null(rid)) {
+	if (auto *resource = compute_pipeline_owner.owns(rid) ? compute_pipeline_owner.get_or_null(rid) : nullptr) {
 		return counter(resource);
 	}
-	if (auto *resource = vertex_array_owner.get_or_null(rid)) {
+	if (auto *resource = vertex_array_owner.owns(rid) ? vertex_array_owner.get_or_null(rid) : nullptr) {
 		return counter(resource);
 	}
-	if (auto *resource = index_array_owner.get_or_null(rid)) {
+	if (auto *resource = index_array_owner.owns(rid) ? index_array_owner.get_or_null(rid) : nullptr) {
 		return counter(resource);
 	}
 	return nullptr;
@@ -234,7 +236,7 @@ bool RenderingDevice::native_immutable_resource_is_held(RID rid) const {
 	if (holds && *holds) {
 		return true;
 	}
-	const auto *texture = const_cast<RenderingDevice *>(this)->texture_owner.get_or_null(rid);
+	const auto *texture = const_cast<RenderingDevice *>(this)->texture_owner.owns(rid) ? const_cast<RenderingDevice *>(this)->texture_owner.get_or_null(rid) : nullptr;
 	return texture && texture->owner.is_valid() && native_immutable_resource_is_held(texture->owner);
 }
 
@@ -245,7 +247,7 @@ bool RenderingDevice::native_immutable_resource_is_retiring(RID rid) const {
 	if (holds && *retiring) {
 		return true;
 	}
-	const auto *texture = const_cast<RenderingDevice *>(this)->texture_owner.get_or_null(rid);
+	const auto *texture = const_cast<RenderingDevice *>(this)->texture_owner.owns(rid) ? const_cast<RenderingDevice *>(this)->texture_owner.get_or_null(rid) : nullptr;
 	return texture && texture->owner.is_valid() && native_immutable_resource_is_retiring(texture->owner);
 }
 
@@ -255,10 +257,10 @@ bool RenderingDevice::native_immutable_pipeline_matches_shader(RID pipeline, RID
 	if (!original || !original->driver_id) {
 		return false;
 	}
-	if (const auto *physical = const_cast<RenderingDevice *>(this)->render_pipeline_owner.get_or_null(pipeline)) {
+	if (const auto *physical = const_cast<RenderingDevice *>(this)->render_pipeline_owner.owns(pipeline) ? const_cast<RenderingDevice *>(this)->render_pipeline_owner.get_or_null(pipeline) : nullptr) {
 		return physical->shader == shader && physical->shader_driver_id == original->driver_id;
 	}
-	if (const auto *physical = const_cast<RenderingDevice *>(this)->compute_pipeline_owner.get_or_null(pipeline)) {
+	if (const auto *physical = const_cast<RenderingDevice *>(this)->compute_pipeline_owner.owns(pipeline) ? const_cast<RenderingDevice *>(this)->compute_pipeline_owner.get_or_null(pipeline) : nullptr) {
 		return physical->shader == shader && physical->shader_driver_id == original->driver_id;
 	}
 	return false;
@@ -268,10 +270,10 @@ bool RenderingDevice::native_immutable_uniform_set_matches_pipeline(RID set_rid,
 	MutexLock lock(_thread_safe_);
 	auto *self = const_cast<RenderingDevice *>(this);
 	const Vector<uint32_t> *formats = nullptr;
-	if (const auto *pipeline = self->render_pipeline_owner.get_or_null(pipeline_rid); pipeline && pipeline->driver_id) {
+	if (const auto *pipeline = self->render_pipeline_owner.owns(pipeline_rid) ? self->render_pipeline_owner.get_or_null(pipeline_rid) : nullptr; pipeline && pipeline->driver_id) {
 		formats = &pipeline->set_formats;
 	}
-	if (const auto *pipeline = self->compute_pipeline_owner.get_or_null(pipeline_rid); pipeline && pipeline->driver_id) {
+	if (const auto *pipeline = self->compute_pipeline_owner.owns(pipeline_rid) ? self->compute_pipeline_owner.get_or_null(pipeline_rid) : nullptr; pipeline && pipeline->driver_id) {
 		formats = &pipeline->set_formats;
 	}
 	if (!formats) {
@@ -342,28 +344,28 @@ Error RenderingDevice::native_immutable_hold_acquire(const VectorView<RID> &root
 		if (const auto *resource = _native_immutable_buffer(rid); resource && !resource->driver_id) {
 			return ERR_UNAVAILABLE;
 		}
-		if (const auto *resource = texture_owner.get_or_null(rid); resource && !resource->driver_id) {
+		if (const auto *resource = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
 			return ERR_UNAVAILABLE;
 		}
-		if (const auto *resource = shader_owner.get_or_null(rid); resource && !resource->driver_id) {
+		if (const auto *resource = shader_owner.owns(rid) ? shader_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
 			return ERR_UNAVAILABLE;
 		}
-		if (const auto *resource = sampler_owner.get_or_null(rid); resource && !resource->driver_id) {
+		if (const auto *resource = sampler_owner.owns(rid) ? sampler_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
 			return ERR_UNAVAILABLE;
 		}
-		if (const auto *resource = uniform_set_owner.get_or_null(rid); resource && !resource->driver_id) {
+		if (const auto *resource = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
 			return ERR_UNAVAILABLE;
 		}
-		if (const auto *resource = uniform_set_owner.get_or_null(rid); resource && !resource->writable_resources.is_empty()) {
+		if (const auto *resource = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr; resource && !resource->writable_resources.is_empty()) {
 			return ERR_UNAVAILABLE;
 		}
-		if (const auto *resource = render_pipeline_owner.get_or_null(rid); resource && !resource->driver_id) {
+		if (const auto *resource = render_pipeline_owner.owns(rid) ? render_pipeline_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
 			return ERR_UNAVAILABLE;
 		}
-		if (const auto *resource = compute_pipeline_owner.get_or_null(rid); resource && !resource->driver_id) {
+		if (const auto *resource = compute_pipeline_owner.owns(rid) ? compute_pipeline_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
 			return ERR_UNAVAILABLE;
 		}
-		if (const auto *resource = index_array_owner.get_or_null(rid); resource && !resource->driver_id) {
+		if (const auto *resource = index_array_owner.owns(rid) ? index_array_owner.get_or_null(rid) : nullptr; resource && !resource->driver_id) {
 			return ERR_UNAVAILABLE;
 		}
 
@@ -373,7 +375,7 @@ Error RenderingDevice::native_immutable_hold_acquire(const VectorView<RID> &root
 		if (const auto *buffer = _native_immutable_buffer(rid); buffer && (buffer->transfer_worker_index >= 0 || buffer->usage.has_flag(RDD::BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT) || buffer->usage.has_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT))) {
 			return ERR_UNAVAILABLE;
 		}
-		if (const auto *texture = texture_owner.get_or_null(rid)) {
+		if (const auto *texture = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr) {
 			// Render-target ownership and dynamic framebuffer writes need their
 			// original snapshot producer; this retention leaf cannot freeze them.
 			if (texture->transfer_worker_index >= 0 || texture->pending_clear || (texture->usage_flags & TEXTURE_USAGE_COLOR_ATTACHMENT_BIT) || (texture->usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) || (texture->usage_flags & TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT)) {
@@ -407,7 +409,7 @@ Error RenderingDevice::native_immutable_hold_acquire(const VectorView<RID> &root
 		// Shader factories preserve the actual embedded sampler RIDs. These
 		// physical owners share this hold's bounded atomic closure, without
 		// imposing a new legacy shader/sampler dependency relationship.
-		if (const auto *shader = shader_owner.get_or_null(resources[i])) {
+		if (const auto *shader = shader_owner.owns(resources[i]) ? shader_owner.get_or_null(resources[i]) : nullptr) {
 			for (RID sampler : shader->native_immutable_samplers) {
 				const Error error = append(sampler);
 				if (error != OK) {
@@ -417,7 +419,7 @@ Error RenderingDevice::native_immutable_hold_acquire(const VectorView<RID> &root
 		}
 		// Native texture views must retain the actual original parent even when
 		// an older owner did not add a graph dependency for the view.
-		if (const auto *texture = texture_owner.get_or_null(resources[i]); texture && texture->owner.is_valid()) {
+		if (const auto *texture = texture_owner.owns(resources[i]) ? texture_owner.get_or_null(resources[i]) : nullptr; texture && texture->owner.is_valid()) {
 			const Error error = append(texture->owner);
 			if (error != OK) {
 				return error;
@@ -758,15 +760,15 @@ Error RenderingDevice::_production_output_hold_capture_locked(GDExtensionProduct
 		QualificationPhysicalReturn *qualified = nullptr;
 		if (auto *qualified_buffer = _native_immutable_buffer(rid)) {
 			qualified = qualified_buffer->qualification_return;
-		} else if (auto *qualified_texture = texture_owner.get_or_null(rid)) {
+		} else if (auto *qualified_texture = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr) {
 			qualified = qualified_texture->qualification_return;
-		} else if (auto *qualified_shader = shader_owner.get_or_null(rid)) {
+		} else if (auto *qualified_shader = shader_owner.owns(rid) ? shader_owner.get_or_null(rid) : nullptr) {
 			qualified = qualified_shader->qualification_return;
-		} else if (auto *qualified_pipeline = compute_pipeline_owner.get_or_null(rid)) {
+		} else if (auto *qualified_pipeline = compute_pipeline_owner.owns(rid) ? compute_pipeline_owner.get_or_null(rid) : nullptr) {
 			qualified = qualified_pipeline->qualification_return;
-		} else if (auto *qualified_sampler = sampler_owner.get_or_null(rid)) {
+		} else if (auto *qualified_sampler = sampler_owner.owns(rid) ? sampler_owner.get_or_null(rid) : nullptr) {
 			qualified = qualified_sampler->qualification_return;
-		} else if (auto *qualified_uniform_set = uniform_set_owner.get_or_null(rid)) {
+		} else if (auto *qualified_uniform_set = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr) {
 			qualified = qualified_uniform_set->qualification_return;
 		}
 		if (qualified) {
@@ -786,7 +788,7 @@ Error RenderingDevice::_production_output_hold_capture_locked(GDExtensionProduct
 				return ERR_UNAUTHORIZED;
 			}
 		}
-		if (auto *set = uniform_set_owner.get_or_null(rid); set && set->invalidated_callback) {
+		if (auto *set = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr; set && set->invalidated_callback) {
 			if (hold.material_origin.is_null() || !hold.material_origin_generation || !RendererRD::MaterialStorage::_native_hold_callback_is_owned(set->production_material_origin, set->production_material_origin_generation, set->invalidated_callback, set->invalidated_callback_userdata, rid)) {
 				return ERR_UNAVAILABLE;
 			}
@@ -794,7 +796,7 @@ Error RenderingDevice::_production_output_hold_capture_locked(GDExtensionProduct
 		if (auto *buffer = _native_immutable_buffer(rid); buffer && buffer->transfer_worker_index >= 0) {
 			return ERR_BUSY;
 		}
-		if (auto *texture = texture_owner.get_or_null(rid); texture && (texture->transfer_worker_index >= 0)) {
+		if (auto *texture = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr; texture && (texture->transfer_worker_index >= 0)) {
 			return ERR_UNAVAILABLE;
 		}
 		for (uint32_t i = begin; i < request.capacity.resource_uses; ++i) {
@@ -1141,14 +1143,22 @@ Error RenderingDevice::_production_output_drop_step(GDExtensionDeviceExit::Produ
 		if (dependents && !dependents->is_empty()) {
 			continue;
 		}
+		// Enqueue removes the ordinary RID dependency edge, but an output
+		// descriptor still pins its buffers until actual descriptor free.
+		// Skip this known blocked parent BEFORE spending a one-pass budget;
+		// otherwise it starves the very pending free that removes the pin.
+		const auto *output_buffer = storage_buffer_owner.owns(rid) ? storage_buffer_owner.get_or_null(rid) : nullptr;
+		if (output_buffer && output_buffer->native_disposal.cell.is_valid() && output_buffer->native_disposal.cell->production_dependent_sets) {
+			continue;
+		}
 		if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
 			return ERR_BUSY;
 		}
 		if (node.owned && node.kind != 0) {
 			NativeDisposalWitness witness;
-			if (auto *buffer = storage_buffer_owner.get_or_null(rid)) {
+			if (auto *buffer = storage_buffer_owner.owns(rid) ? storage_buffer_owner.get_or_null(rid) : nullptr) {
 				witness = buffer->native_disposal;
-			} else if (auto *set = uniform_set_owner.get_or_null(rid)) {
+			} else if (auto *set = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr) {
 				witness = set->native_disposal;
 			}
 			lock.temp_unlock();
@@ -1182,7 +1192,7 @@ Error RenderingDevice::_production_output_owned_reserve(GDExtensionProductionPhy
 	if (admitted != OK) {
 		return admitted;
 	}
-	if (actual_device != this || request != pin.request || request->next_action || request->graph_count || request->native_count || !request->next_disposal_group_serial) {
+	if (actual_device != this || request != pin.request || ((request->next_action || request->graph_count || request->native_count) && !registry.production_output_action_pin_matches_locked(*request, pin, *this)) || !request->next_disposal_group_serial) {
 		return ERR_BUSY;
 	}
 	uint64_t available = 0;
@@ -1236,7 +1246,7 @@ Error RenderingDevice::_production_output_owned_rollback(GDExtensionProductionPh
 	if (admitted != OK) {
 		return admitted;
 	}
-	if (actual_device != this || request != pin.request || request->next_action || request->graph_count || request->native_count || request->capture_inflight) {
+	if (actual_device != this || request != pin.request || ((request->next_action || request->graph_count || request->native_count) && !registry.production_output_action_pin_matches_locked(*request, pin, *this)) || request->capture_inflight) {
 		return ERR_BUSY;
 	}
 	const uint32_t begin = request->use_count + request->binding_used;
@@ -1335,8 +1345,8 @@ Error RenderingDevice::_production_output_owned_bind_locked(GDExtensionDeviceExi
 	uint32_t kind;
 	uint64_t generation, driver_id;
 	auto **head = _production_disposal_head(rid, kind, generation, driver_id);
-	const auto *buffer = storage_buffer_owner.get_or_null(rid);
-	const auto *set = uniform_set_owner.get_or_null(rid);
+	const auto *buffer = storage_buffer_owner.owns(rid) ? storage_buffer_owner.get_or_null(rid) : nullptr;
+	const auto *set = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr;
 	if (!head || (kind != 9 && kind != 4) || driver_id != physical->backing || (buffer ? buffer->native_disposal.cell != witness.cell || buffer->backing_serial != physical->serial : set ? set->native_disposal.cell != witness.cell || set->native_disposal_serial != physical->serial
 																																														  : true)) {
 		return ERR_INVALID_DATA;
@@ -1399,7 +1409,7 @@ Error RenderingDevice::_production_output_owned_cancel_unbound(GDExtensionDevice
 }
 
 bool RenderingDevice::_production_output_callback_supported(RID rid) {
-	const auto *set = uniform_set_owner.get_or_null(rid);
+	const auto *set = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr;
 	return !set || !set->invalidated_callback || (set->production_material_origin.is_valid() && set->production_material_origin_generation && RendererRD::MaterialStorage::_native_hold_callback_is_owned(set->production_material_origin, set->production_material_origin_generation, set->invalidated_callback, set->invalidated_callback_userdata, rid));
 }
 
@@ -1490,7 +1500,7 @@ bool RenderingDevice::_production_output_owned_storage_contains(GDExtensionDevic
 		Mutex &mutex;
 		~Unlock() { mutex.unlock(); }
 	} unlock{ _thread_safe_ };
-	const auto *buffer = storage_buffer_owner.get_or_null(rid);
+	const auto *buffer = storage_buffer_owner.owns(rid) ? storage_buffer_owner.get_or_null(rid) : nullptr;
 	if (!buffer || buffer->native_disposal.cell.is_null()) {
 		return false;
 	}
@@ -1521,7 +1531,7 @@ Error RenderingDevice::_production_output_owned_create_preflight_locked(GDExtens
 	if (admitted != OK) {
 		return admitted;
 	}
-	if (actual_device != this || request != pin.request || request->next_action || request->graph_count || request->native_count || request->capture_inflight) {
+	if (actual_device != this || request != pin.request || ((request->next_action || request->graph_count || request->native_count) && !registry.production_output_action_pin_matches_locked(*request, pin, *this)) || request->capture_inflight) {
 		return ERR_BUSY;
 	}
 	bool found = false;
@@ -1564,6 +1574,7 @@ Error RenderingDevice::_production_output_owned_storage_create(GDExtensionProduc
 	} unlock{ _thread_safe_ };
 	// The original factory owns native validation and rollback. Reservation alone
 	// is arena custody; the original output owner must supply its allocation charge.
+	registry.production_native_effect_enter_locked(*request);
 	const Error created = _native_disposal_storage_create(bytes, usage, rid, witness);
 	if (created != OK) {
 		return created;
@@ -1611,7 +1622,8 @@ Error RenderingDevice::_production_output_owned_uniform_set_create(GDExtensionPr
 			return ERR_UNAUTHORIZED;
 		}
 	}
-	const Error created = _native_disposal_uniform_set_create(uniforms, shader, index, rid, witness);
+	registry.production_native_effect_enter_locked(*request);
+	const Error created = _native_disposal_uniform_set_create(uniforms, shader, index, rid, witness, request, group, pin.serial, ordinal);
 	if (created != OK) {
 		return created;
 	}
@@ -1765,6 +1777,7 @@ Error RenderingDevice::_production_output_owned_render_pipeline_create(GDExtensi
 	}
 	// Factory publishes directly into this original cell; there is no fallible
 	// post-creation capture/bind and no stack-owned created-pipeline prefix.
+	registry.production_native_effect_enter_locked(*request);
 	r_pipeline = _qualification_render_pipeline_create_internal(p_shader, p_framebuffer_format, p_vertex_format, p_render_primitive, p_rasterization_state, p_multisample_state, p_depth_stencil_state, p_blend_state, p_dynamic_state_flags, p_for_render_pass, p_specialization_constants, nullptr, RID(), reserved);
 	return r_pipeline.is_valid() ? OK : ERR_CANT_CREATE;
 }

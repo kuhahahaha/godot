@@ -132,7 +132,7 @@ Error ParticlesStorage::_production_output_generation_ready(RID particles, uint6
 		return ERR_UNAUTHORIZED;
 	}
 	const auto &owner = *get_singleton()->particles_owner.get_or_null(particles)->external;
-	if (owner.surface_cells || owner.view_cells || owner.read_cells || owner.surface_capacity || owner.view_capacity || owner.read_capacity) {
+	if (owner.surface_cells || owner.view_cells || owner.read_cells || owner.generation_meshes || owner.generation_materials || owner.has_generation_selection_custody() || owner.surface_capacity || owner.view_capacity || owner.read_capacity) {
 		return ERR_BUSY;
 	}
 	return owner.generation_returnable(unused, returned);
@@ -168,7 +168,38 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 		if (error != OK) {
 			return error;
 		}
-		if (owner.surface_cells || owner.view_cells || owner.read_cells) {
+		if (owner.has_generation_selection_custody()) {
+			// One original CPU lease per admitted OBSERVE slice; no physical-return claim.
+			if (!p_budget.controls || r_usage.passes >= MIN(p_budget.passes, 64u) ||
+					r_usage.receipts >= MIN(p_budget.receipts, 128u) || !p_budget.deadline_micros || OS::get_singleton()->get_ticks_usec() >= p_budget.deadline_micros) {
+				return ERR_BUSY;
+			}
+			if (owner.retained_material_count) {
+				auto *materials = MaterialStorage::get_singleton();
+				if (!materials) {
+					return ERR_UNAVAILABLE;
+				}
+				error = materials->material_selection_release(owner.generation_materials[owner.retained_material_count - 1].lease);
+				if (error != OK) {
+					return error;
+				}
+				--owner.retained_material_count;
+			} else {
+				auto *meshes = MeshStorage::get_singleton();
+				if (!meshes) {
+					return ERR_UNAVAILABLE;
+				}
+				error = meshes->mesh_selection_release(owner.generation_meshes[owner.retained_mesh_count - 1].lease);
+				if (error != OK) {
+					return error;
+				}
+				--owner.retained_mesh_count;
+			}
+			++r_usage.passes;
+			r_usage.controls = 1;
+			return OK;
+		}
+		if (owner.surface_cells || owner.view_cells || owner.read_cells || owner.generation_meshes || owner.generation_materials) {
 			// Directory destruction is its own charged phase. A one-pass turn
 			// retains the generation root and terminal result until a later turn.
 			if (r_usage.passes >= MIN(p_budget.passes, 64u) || r_usage.receipts >= MIN(p_budget.receipts, 128u) ||
@@ -183,11 +214,21 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 			r_usage.controls = 1;
 			return OK;
 		}
+		// Root return and unpublished CPU-owner destruction are one admitted
+		// terminal phase. Preflight before unlink; no later cursor can find it.
+		const bool free_unpublished = owner.generation_selection_unpublished;
+		if (free_unpublished && (!p_budget.controls || r_usage.passes >= MIN(p_budget.passes, 64u) || r_usage.receipts >= MIN(p_budget.receipts, 128u) || !p_budget.deadline_micros || OS::get_singleton()->get_ticks_usec() >= p_budget.deadline_micros)) {
+			return ERR_BUSY;
+		}
 		error = owner.generation_registry->production_output_generation_return(p_pin, *owner.device, p_particles, p_generation, p_budget, r_usage);
 		if (error != OK) {
 			return error;
 		}
 		owner.state = ExternalOutputOwner::GenerationState::RELEASED;
+		if (free_unpublished) {
+			storage->particles_free(p_particles);
+			return OK;
+		}
 		// Preserve original ref/serial for correlation; they cannot reissue a pin.
 		return OK;
 	}
@@ -377,7 +418,13 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 		if (!spend()) {
 			return ERR_BUSY;
 		}
-		memdelete_arr(slot.surfaces);
+		if (slot.surfaces_placement) {
+			for (uint32_t i = 0; i < slot.surface_count; ++i) {
+				slot.surfaces[i].~SurfaceBinding();
+			}
+		} else {
+			memdelete_arr(slot.surfaces);
+		}
 		slot.surfaces = nullptr;
 		slot.surface_count = slot.retire_surface = 0;
 		return OK;
@@ -442,6 +489,7 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 			}
 			if (resource.rid.is_valid()) {
 				++r_usage.receipts;
+				++slot.physical_returned;
 			}
 			++slot.retire_resource;
 			return OK;
@@ -451,7 +499,11 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 		}
 		// Each exact original witness was observed physically returned above.
 		// No ordinary disposal cursor or speculative free is used here.
-		delete slot.storage;
+		if (slot.storage_placement) {
+			slot.storage->~ExternalOutputStorage();
+		} else {
+			delete slot.storage;
+		}
 		slot.storage = nullptr;
 		return OK;
 	}

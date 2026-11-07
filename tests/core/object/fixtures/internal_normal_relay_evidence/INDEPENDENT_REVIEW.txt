@@ -1,0 +1,53 @@
+Independent read-only final relay + metadata review
+Date: 2026-11-06 UTC
+Repository: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104
+Base HEAD: 5d56fc5de36df5c1c5a7becf6fcfae6ed6d50557
+Scope: HEAD diff for the five files below. No source changes, builds or tests performed by this reviewer.
+Applied Karpathy review guidance: check concrete invariants and test discrimination; avoid speculative redesign.
+
+Verdict: NO ACTIONABLE BLOCKING FINDINGS in the reviewed final restored relay + metadata diff.
+The initial read caught call_normal_relay with the intentionally removed RED guard. A later source read confirms the restored guard exists at gdextension_library_exit_guard.cpp:504-506 and runs BEFORE Variant/CallError output initialization. Verdict applies to that restored form. Temporary Mobile negative control is outside this review.
+
+1. ORIGINAL OWNER / GENERATION / TOKEN
+- Registration accepts only direct CallableCustomExtension (dynamic_cast), adopted original holder, valid original owner and actual call_func. Core field inspection avoids invoking DSO is_valid/hash/compare/string functions as admission. Bound/unbound wrappers are correctly excluded from this internal direct-holder domain.
+- Private registration helper checks owner Registry identity, QUALIFIED enrollment, attached/open generation and exact CleanupAction storage owner slot/generation, excluding pending or already-disposed holder. It copies only the original Callable reference, so owner RecordRef and cleanup stay rooted in the existing callable lifetime; it does not fabricate a code hold or cleanup permit.
+- Relay token includes Registry instance and unique serial. Delivery rechecks attached/quiescing/close/generation/enrollment. Holder observation matches record slot + generation + exact holder serial, so another Callable in the same generation cannot acknowledge this one. Holder close state remains inspectable without pinning a reclaimed library record.
+- begin_cycle refuses nonempty/live relay cells before changing instance; only empty/closed observations are reset. Old tokens become invalid in a new instance.
+
+2. THREAD / REENTRANCY / CONCURRENCY
+- All cell lookup/state transitions and active-delivery reservation use Registry mutex. normal_relays is a fixed array: a reserved relay pointer remains stable.
+- Delivery increments active_deliveries before unlocking and calls the original Callable without copying it onto the delivery thread. release refuses while deliveries active; forget requires no active/releasing/callback and actual holder_closed. Thus neither release nor cell reuse can race an admitted delivery's access to callback.
+- Actual DSO entry still goes through CallableCustomExtension::call -> enter -> CallbackScope. If generation closes between relay reservation and actual DSO admission, CallbackScope refuses it; the relay's original Callable holder continues to pin lifetime. The relay reservation itself is not treated as admitted DSO work.
+- Cancellation linearizes against subsequent reservations, while already-reserved calls may complete; release_requested cancels first and returns ERR_BUSY for active/reentrant calls. Caller must retry release later (the test does so). This is explicit fallible release, not an automatic deferred release claim.
+- release checks the original CleanupAction::Storage thread_id before changing flags, so a foreign-thread release leaves state unchanged. It copies to a local destruction-thread Callable, clears the registry ref while the local still pins it, unlocks, then drops local. Therefore final DSO destruction executes outside Registry mutex and on the original registered destruction thread. Reentrant release/forget during free sees releasing=true and cannot reuse the cell.
+- After decrementing active_deliveries, call_normal_relay does not dereference relay again. A concurrent legal forget at that point therefore cannot invalidate any later relay access in that call.
+
+3. TRUE HOLDER RETIREMENT
+- cell_released means the Registry's Callable ref has been dropped and no release is in progress; it intentionally does not imply actual holder retirement.
+- holder_closed is set only by unlink_holder_locked on exact original holder. Existing destructor enters CleanupScope, runs free_func, and only after its return retires the CleanupAction. Existing retire_binding_holder / finish_retiring_holders also defer unlink to the proper outer admitted frame when required. This preserves actual-return semantics rather than treating cancel, ref drop, or entry into free_func as acknowledgment.
+- forget requires holder_closed plus empty callback and zero active/releasing state. Assigning an empty NormalRelay under mutex cannot invoke DSO code. A forgotten relay leaves only the harmless boolean normal_relay_observed on an already retired holder.
+
+4. METADATA REFUSAL AND TEST DISCRIMINATION
+- Final call_normal_relay checks dynamic is_production_metadata_entry before touching ANY output or reserving delivery. The check scans enclosing registration frames, so nested ordinary callback frames cannot erase metadata restriction. Register-normal-relay also has its own metadata refusal. Observation/cancel/release remain distinct existing cleanup/control operations; this diff does not grant new callback entry from metadata.
+- The production-request test builds a real direct enrolled custom Callable with actual owner token and registers a valid relay BEFORE leaving its setup frame. It then explicitly leaves the setup SceneReady/normal frame and enters production owner via GDExtensionManager::frame twice. The callback asserts metadata flag, original render-thread identity and active_callbacks==1; both invocation counts are checked. This is an actual production-metadata route, not a fabricated scoped flag or unused token test.
+- Inside each invocation, it checks ERR_UNAUTHORIZED, unchanged real callback count, Variant output sentinel, all CallError fields, and every exposed relay snapshot field. The sentinel comparison specifically detects a too-late metadata check after output initialization.
+- Afterwards outside metadata, the SAME still-live relay succeeds, produces 42, and increments relay_calls from0 to1. This rules out false passes caused by null/invalid/cancelled relay, unsupported callback, closed owner, missing setup, or a never-runnable test callback.
+- With the early guard removed, original owner is valid and CallableCustomExtension::call admits a nested ordinary CallbackScope; callback body increments relay_calls and itself asserts metadata is false. It would see metadata still true. The rejection result, callback count, returned sentinel and CallError assertions would fail. This makes the planned removal RED a discriminating negative control. I did not independently execute or verify the parent-run RED receipt.
+- Cleanup checks registry ref release while external relay_callable remains, holder_closed false/free count0/forget busy; dropping that last external Callable then yields free count1/holder_closed true/forget success. These are concrete external-ref and exact-retirement observations.
+
+5. TYPED-ABI TEST COVERAGE
+The new original-normal-relay test covers null/wrapped rejection, unchanged validation/hash counts, occupied output token rejection, foreign instance, initial snapshot, forget busy, foreign-thread release refusal without cancellation, successful original call, cancellation idempotence, queued external retention, busy close, release from within active callback, another same-generation Callable not acknowledging the original holder, and generation-close refusal. It checks actual free count and that holder_closed is still false from inside free_func, then validates cell/holder closure and stale token rejection. Existing generated lifecycle bootstrap/termination performs final cleanup.
+
+6. LIMITS / NONBLOCKING FOLLOW-UP
+- This is source review, not independent execution, sanitizer or all-target verification. Parent should use actual GREEN/RED receipts, restoring the early metadata guard before final build. Current source read confirms the restoration, but shared files may change afterwards.
+- The tests do not stage a barrier-controlled foreign-thread delivery concurrent with release/cancel/close, or recursive nested delivery. Those branches are protected by the mutex/reservation logic described above, but runtime stress/TSAN coverage is not established by these tests. This is a coverage boundary, not a found defect or required redesign.
+- Internal helper API only: no planned public relay ABI, public queue adapters, or SDK exports are implemented by these changes. That matches the header comment and avoids overstating scope.
+
+Reviewed file SHA256 snapshot (working tree; line numbers may shift with concurrent edits):
+{
+  "core/extension/gdextension_interface.cpp": "25ad3bf44045e6cf11818e98f799c6c3a3fc4294e0d801f125265e156c10e7ae",
+  "core/extension/gdextension_library_exit_guard.h": "618b2ad69ae4b257669b5d9176ad67cece309cf77d8db3d66e1f7be6bd9cbc84",
+  "core/extension/gdextension_library_exit_guard.cpp": "ddd527a8f470f5cd4ae4beac132b500e17e1ab3ec987db04a1c27f8603381b09",
+  "tests/core/object/test_device_exit_typed_abi.cpp": "554404672832bf7833288e2de4fed2b67aa69c9385a0431b3f3c4ec535f18e50",
+  "tests/core/extension/test_production_request.cpp": "354539f646185093ab92f5906aa0dfd02997637cddbd869def8746616e671307"
+}

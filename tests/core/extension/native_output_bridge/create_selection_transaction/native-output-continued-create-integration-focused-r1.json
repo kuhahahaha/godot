@@ -1,0 +1,13 @@
+{
+  "argv": [
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+    "--headless",
+    "--test",
+    "--test-case=*[GenerationGuardRefusal]*,*[MetadataV3]*,*[OutputMetadataWire]*"
+  ],
+  "binary_bytes": 156978168,
+  "binary_sha256": "e8ff190cde7c0b44dcf1347adc4c1ecf87a8878039d9359346c4e6e715e2e0f2",
+  "exit": 0,
+  "elapsed": 1.7490423750132322,
+  "scope": "CPU/dummy only; acceptance requires diagnostic and assertion inspection"
+}

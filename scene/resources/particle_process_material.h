@@ -345,6 +345,10 @@ private:
 	Ref<Texture2D> emission_point_texture;
 	Ref<Texture2D> emission_normal_texture;
 	Ref<Texture2D> emission_color_texture;
+
+	void _emission_point_texture_changed();
+	void _emission_normal_texture_changed();
+	void _emission_color_texture_changed();
 	Vector3 emission_ring_axis;
 	real_t emission_ring_height = 0.0f;
 	real_t emission_ring_radius = 0.0f;

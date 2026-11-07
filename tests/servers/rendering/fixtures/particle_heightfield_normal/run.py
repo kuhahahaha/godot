@@ -16,8 +16,9 @@ SHADER = ROOT / "servers/rendering/renderer_rd/shaders/particles.glsl"
 source = SHADER.read_text()
 start = source.index("case COLLIDER_TYPE_HEIGHT_FIELD: {")
 end = source.index("} break;", start)
-branch = source[start:end + len("} break;")]
-compute = """#version 450
+branch = source[start : end + len("} break;")]
+compute = (
+    """#version 450
 layout(local_size_x = 4) in;
 #define COLLIDER_TYPE_HEIGHT_FIELD 3
 struct Collider { mat4 transform; vec3 extents; uint type; };
@@ -42,12 +43,15 @@ void main() {
     const float EPSILON = 0.001;
     for (uint i = 0u; i < 1u; i++) {
         switch (FRAME.colliders[i].type) {
-""" + branch + """
+"""
+    + branch
+    + """
         }
     }
     results.values[index] = col ? vec4(normal, depth) : vec4(99.0);
 }
 """
+)
 
 with tempfile.TemporaryDirectory(prefix="ange-heightfield-normal-") as tmp:
     shader_path = Path(tmp) / "compute.glsl"
@@ -57,14 +61,23 @@ with tempfile.TemporaryDirectory(prefix="ange-heightfield-normal-") as tmp:
     rendering_method = env.get("ANGE_HEIGHTFIELD_RENDERING_METHOD", "mobile")
     if rendering_method not in ("mobile", "forward_plus"):
         sys.exit(f"Unsupported rendering method: {rendering_method}")
-    command = [str(ROOT / "bin/godot.macos.editor.arm64"), "--display-driver", "macos", "--rendering-driver", "metal", "--rendering-method", rendering_method, "--path", str(HERE), "--script", str(HERE / "probe.gd")]
+    command = [
+        str(ROOT / "bin/godot.macos.editor.arm64"),
+        "--display-driver",
+        "macos",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        rendering_method,
+        "--path",
+        str(HERE),
+        "--script",
+        str(HERE / "probe.gd"),
+    ]
     result = subprocess.run(command, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=90)
     print(result.stdout)
-    expected_renderer = {
-        "mobile": "Forward Mobile",
-        "forward_plus": "Forward+",
-    }[rendering_method]
-    if "Metal 4.0" not in result.stdout or expected_renderer not in result.stdout or "Apple M5" not in result.stdout:
+    expected_renderer = {"mobile": "Forward Mobile", "forward_plus": "Forward+"}[rendering_method]
+    if f"Metal 4.0 - {expected_renderer}" not in result.stdout:
         sys.exit(f"Expected local Metal/{expected_renderer} GPU evidence")
     if "HEIGHTFIELD_NORMAL_GPU 3" not in result.stdout:
         sys.exit("Missing slope sample")

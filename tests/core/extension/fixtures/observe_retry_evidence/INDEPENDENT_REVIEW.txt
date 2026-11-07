@@ -1,0 +1,50 @@
+Independent read-only OBSERVE retry review — 2026-11-06
+Worktree: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104
+Scope: frozen diff core/extension/gdextension_production_request.cpp and tests/core/extension/test_production_request.cpp; original control accept/schedule/consume and RELEASE precedent; B OBSERVE_RESOLUTION.md; Astra handoff. No source edits/builds/tests by reviewer.
+
+Conclusion: no actionable correctness findings in this minimal semantics correction. It repairs the stated old OBSERVE retry/consumption problem within existing API and fixed request control cell, without adopting the proposed new continuation ABI. Parent owns actual RED/GREEN/build execution; final saved test logs have now also been inspected as noted below.
+
+Precise resulting semantics (after public contract/DTO/owner validation)
+- Any zero control/receipt/pass/deadline field: query returns OK and does not consume, publish, expire or replace an existing control. Public wrapper still performs request authorization/report projection.
+- OWNER_CONSUMED + expired nonzero current offer: OK with no new turn/native effect. Active current offer may accept one new OBSERVE into original fixed cell and schedule it; result Busy while outstanding.
+- Existing other-kind nonconsumed cell: Busy, no kind/serial replacement or consumption.
+- Existing OBSERVE PENDING whose ORIGINAL saved budget expired: under original Registry lock, prove still unpublished, convert that exact serial to no-effect RETURNED, then consume once and return OK. Neither offered current deadline nor reduction renews saved authorization; next_control_serial does not increase. This OK means control custody settled without service effects, not native/physical success.
+- Existing OBSERVE PENDING whose original budget remains active: active offered budget may retry publishing the SAME saved serial/budget; FIFO refusal leaves same PENDING. Expired nonzero offered budget now returns Busy, preserving control instead of misleading OK. Zero offer preserves it as above.
+- QUEUED/EXECUTING OBSERVE: never fabricate a no-effect return on expiry. Nonzero retry returns Busy until real RETURNED. A live retry's schedule sees non-PENDING and does not dispatch twice; expired retry returns Busy directly.
+- RETURNED OBSERVE + ANY nonzero offer (expired/refreshed/different quotas): consume exact old serial and immediately return its original native_error. Do not accept/publish a replacement turn in that call. A subsequent call alone may accept another turn. Busy and errors are not replaced by OK from the new offered budget.
+- Existing internal output_generation.native_released refusal remains: public observe DTO cannot acknowledge that internal result, so ERR_UNAVAILABLE preserves it for an authorized complete internal consumer.
+
+Concurrency/custody reasoning
+PENDING->no-effect RETURNED happens only while Registry mutex proves original state and expired original budget. FIFO schedule uses the same mutex, sets QUEUED before publication, and restores PENDING on refusal; therefore a published turn cannot be misclassified as unpublished. The subsequent exact-serial consume revalidates state/identity. A PENDING state may become RETURNED between initial lookup and schedule, but original schedule does not republish non-PENDING; conservatively Busy then later consume is safe. Original owner-thread/request/holder authorization and fixed-cell lifetime remain unchanged. No new queue, receipt issuer, state registry or ABI/header surface changed.
+
+Caller protocol and limitation
+For a strict drain-only owner, use a NONZERO expired offer until OK. An outstanding PENDING-live/QUEUED/EXECUTING turn returns Busy. An original returned Busy/error is consumed and returned once; preserve its diagnostic and retry the same expired drain, which then returns OK without accepting new work. Original PENDING-expired becomes a proven no-effect consumed result. Zero query is never a drain. A fresh active offer after drain may request new service. Public report remains ordinary current physical facts, not an exported control receipt or a replay of old report snapshot; no new service_control_serial/service_pending encoding is installed. Control settlement itself cannot certify logical completion, GPU completion or Runtime receipt.
+
+Tests inspected
+- Existing real split owner/server FIFO is saturated, then a retained unpublished original deadline expires. Zero query preserves PENDING; saved nonzero expired budget consumes it with no retain/poll and no replacement serial.
+- Live original PENDING with changed offered quota retains original saved quota/serial. Expired current offer returns Busy without mutation. Existing cancel/close refuse outstanding control.
+- QUEUED with expired offer stays same QUEUED serial. Actual FIFO return is required.
+- RETURNED with zero offer remains unconsumed. Refreshed live deadline plus changed reduction consumes the original incomplete-source ERR_BUSY and leaves next_control_serial unchanged; later separate call publishes new reduction. The first receipts=1 turn only retains the native source, so no poll/completion has happened; root correctly added an explicit saved output.result.native_error == ERR_BUSY precondition and changed the retry expectation to ERR_BUSY.
+- Expired nonzero offer consumes later real returned OK and observes the original native poll result.
+- Owner holds actual RD mutex across server FIFO execution to obtain original returned Busy; different expired offer returns that Busy while consuming it, subsequent expired drain returns OK and accepts nothing. Native retain/poll counts stay unchanged.
+- Existing sealed-owner maintenance and final release/holder cleanup remain covered. Server phase loop increased from5 to6 for the added actual FIFO turn, matching new owner rendezvous count.
+
+Coverage limits (not source defects found)
+No explicit EXECUTING unlock/interleaving test or non-Busy old failure test was added. Code path handles RETURNED native_error without budget comparison for all errors, and only exact PENDING enters expiry synthesis, but those cases are source-inspection arguments pending broader runtime coverage. Expiry test waits roughly100ms on monotonic OS clock and retains an overall10s service budget, so extreme scheduler stalls can fail timing expectations; no fake RegistrationContext/control result or inline execution is introduced. B's source document originally recommended a new ABI; this narrower correction changes existing semantics and needs B integration reevaluation, not an assertion its original Full route already passed.
+
+Reviewed SHA256:
+12a9b0c4f6547c591cb5c2505c276b93aca20507754e377884016cb557d68871 core/extension/gdextension_production_request.cpp
+9bf6a6a1fb94389eef96b216b1c2413120f830d84bcd081ab61e98338fe06ae2 tests/core/extension/test_production_request.cpp
+
+
+Final re-review after parent runtime correction
+Re-read final production and test diffs. Production fix unchanged. Root corrected the first real RETURNED retry expectation from OK to ERR_BUSY and asserts the saved original Busy before consuming it. This matches production_poll_native_locked: the only receipt is spent on retain, its poll condition requires used.receipts < receipts, so source remains incomplete and the original control returns Busy. Preserving that Busy is exactly what this fix is meant to enforce. My earlier test-description phrase “original OK” was incorrect and is replaced above.
+
+SplitOwner::check now accepts __LINE__, emits FAIL_CHECK and retains first/last failure lines/count for diagnosing actual negative cuts. Each previous check in this helper is updated to pass __LINE__; it remains nonfatal, allowing FIFO rendezvous and original cleanup to complete on RED. No new semantic or lifecycle issue found in these corrections.
+
+Saved execution evidence inspected (not rerun):
+- /tmp/b4-observe-retry-negative-tests.log: production-only fix reverted, existing/new regression retained; one case failed with32 assertions,23 passed/9 failed. Original source-line diagnostics expose affected checks rather than only aggregate passed=false.
+- /tmp/b4-d32-observe-final-full-tests.log: restored final full suite2133 passed,0 failed,3 skipped;545491 assertions passed,0 failed. GPU-specific doctest skips remain explicitly labeled in the log and must not be counted as GPU run evidence.
+- Root additionally reports the separate height GPU8-case matrix passed; this OBSERVE re-review does not independently rerun that matrix or infer it from doctest totals.
+
+Final no-actionable-findings conclusion applies to the hashes immediately above. No source changes/builds/tests performed by this reviewer.

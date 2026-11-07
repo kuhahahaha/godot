@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+    "--headless",
+    "--test",
+    "--test-case=*[OutputNativeSceneAcquire]*"
+  ],
+  "binary_bytes": 156829304,
+  "binary_sha256": "1dc60d01adedb85ef89a8db47b4d32042e0fac519b05d16c665cfde196dc84b8",
+  "exit": 0,
+  "elapsed": 1.4710750579833984,
+  "accepted": false,
+  "reason": "Unexpected self-dependency diagnostic despite assertion success; separate same-buffer COPY issue retained in queue"
+}

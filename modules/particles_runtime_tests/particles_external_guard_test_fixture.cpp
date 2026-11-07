@@ -33,6 +33,8 @@
 #include "core/object/class_db.h"
 #include "core/os/os.h"
 #include "servers/rendering/renderer_rd/effects/particles_external_guard.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server.h"
 
@@ -41,6 +43,8 @@
 void ParticlesExternalGuardTestFixture::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("run"), &ParticlesExternalGuardTestFixture::run);
 	ClassDB::bind_method(D_METHOD("result"), &ParticlesExternalGuardTestFixture::result);
+	ClassDB::bind_method(D_METHOD("observe_viewport_vrs_texture", "viewport"), &ParticlesExternalGuardTestFixture::observe_viewport_vrs_texture);
+	ClassDB::bind_method(D_METHOD("observe_particle_collision_texture", "collision"), &ParticlesExternalGuardTestFixture::observe_particle_collision_texture);
 }
 
 void ParticlesExternalGuardTestFixture::check(bool p_ok, const String &p_label) {
@@ -92,6 +96,27 @@ Error ParticlesExternalGuardTestFixture::run() {
 	using Guard = RendererRD::ParticlesExternalGuard;
 	static_assert(Guard::MODE_COUNT == 5);
 	const char *names[Guard::MODE_COUNT] = { "INIT", "VALIDATE", "FINALIZE", "INIT_EMPTY", "FINALIZE_EMPTY" };
+	const auto *storage = RendererRD::ParticlesStorage::get_singleton();
+	const auto *engine_guard = storage ? storage->get_external_guard() : nullptr;
+	check(storage && engine_guard && storage->get_external_guard_preparation_error() == OK && storage->is_external_guard_prepared(), "engine.actual_prepared_owner");
+	if (!storage || !engine_guard || storage->get_external_guard_preparation_error() != OK || !storage->is_external_guard_prepared()) {
+		return finish(ERR_UNAVAILABLE);
+	}
+	std::array<RID, Guard::MODE_COUNT> engine_pipelines;
+	std::array<RID, Guard::MODE_COUNT> engine_shaders;
+	for (int i = 0; i < Guard::MODE_COUNT; ++i) {
+		engine_pipelines[i] = engine_guard->get_pipeline(Guard::Mode(i));
+		const auto *pipeline = rd->compute_pipeline_owner.get_or_null(engine_pipelines[i]);
+		engine_shaders[i] = pipeline ? pipeline->shader : RID();
+		const auto *shader = rd->shader_owner.get_or_null(engine_shaders[i]);
+		const String label = String("engine.") + names[i];
+		check(pipeline && bool(pipeline->driver_id) && rd->compute_pipeline_is_valid(engine_pipelines[i]), label + ".actual_pipeline");
+		check(shader && bool(shader->driver_id) && pipeline && pipeline->shader_driver_id == shader->driver_id, label + ".original_shader_association");
+		check(pipeline && pipeline->push_constant_size == sizeof(Guard::PushConstant) && pipeline->local_group_size[0] == 64 && pipeline->local_group_size[1] == 1 && pipeline->local_group_size[2] == 1, label + ".reflected_compute_layout");
+		for (int j = 0; j < i; ++j) {
+			check(engine_pipelines[i] != engine_pipelines[j] && engine_shaders[i] != engine_shaders[j], label + ".distinct_engine_variant");
+		}
+	}
 	Error first_error = OK;
 	// All wrapper ownership, including destruction, stays on this callback.
 	// Publish completion only after this scope has released its original owner.
@@ -166,6 +191,10 @@ Error ParticlesExternalGuardTestFixture::run() {
 		}
 		release("final_release");
 	}
+	// Local wrapper release must preserve the independently engine-owned bundle.
+	for (int i = 0; i < Guard::MODE_COUNT; ++i) {
+		check(engine_guard->get_pipeline(Guard::Mode(i)) == engine_pipelines[i] && rd->compute_pipeline_is_valid(engine_pipelines[i]), String("engine.") + names[i] + ".survives_local_release");
+	}
 	return finish(first_error);
 }
 
@@ -184,4 +213,45 @@ Dictionary ParticlesExternalGuardTestFixture::result() const {
 	report["source_authority_supplied"] = false;
 	report["physical_return_claimed"] = false;
 	return report;
+}
+
+Dictionary ParticlesExternalGuardTestFixture::observe_viewport_vrs_texture(RID p_viewport) const {
+	Dictionary observation;
+	RenderingServer *rs = RenderingServer::get_singleton();
+	RenderingDevice *rd = RenderingDevice::get_singleton();
+	RendererRD::TextureStorage *storage = RendererRD::TextureStorage::get_singleton();
+	const bool owner = rs && rd && storage && rs->is_on_render_thread() && rs->get_rendering_device() == rd && rd->is_main_instance;
+	observation["main_rd_render_thread"] = owner;
+	if (!owner) {
+		return observation;
+	}
+	const RID target = rs->viewport_get_render_target(p_viewport);
+	const bool target_valid = target.is_valid() && storage->owns_render_target(target);
+	observation["target_valid"] = target_valid;
+	if (target_valid) {
+		observation["render_target"] = target;
+		observation["vrs_texture"] = storage->render_target_get_vrs_texture(target);
+	}
+	return observation;
+}
+
+Dictionary ParticlesExternalGuardTestFixture::observe_particle_collision_texture(RID p_collision) const {
+	Dictionary observation;
+	RenderingServer *rs = RenderingServer::get_singleton();
+	RenderingDevice *rd = RenderingDevice::get_singleton();
+	RendererRD::ParticlesStorage *particles = RendererRD::ParticlesStorage::get_singleton();
+	RendererRD::TextureStorage *textures = RendererRD::TextureStorage::get_singleton();
+	const bool owner = rs && rd && particles && textures && rs->is_on_render_thread() && rs->get_rendering_device() == rd && rd->is_main_instance;
+	observation["main_rd_render_thread"] = owner;
+	if (!owner) {
+		return observation;
+	}
+	const auto *collision = particles->particles_collision_owner.get_or_null(p_collision);
+	observation["collision_valid"] = collision != nullptr;
+	if (collision) {
+		observation["field_texture"] = collision->field_texture;
+		const bool is_3d = textures->texture_get_type(collision->field_texture) == RendererRD::TextureStorage::TYPE_3D;
+		observation["resolved_3d_texture"] = is_3d ? textures->texture_get_rd_texture(collision->field_texture) : RID();
+	}
+	return observation;
 }

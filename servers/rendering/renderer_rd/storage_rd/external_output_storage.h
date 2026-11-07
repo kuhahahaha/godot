@@ -49,6 +49,7 @@ class ParticlesStorage;
 // This reference is not that lease. Never observe/maintain after device destruction.
 // No destructor submits/free guesses.
 class ExternalOutputStorage {
+	friend class GDExtensionDeviceExit::Registry;
 	friend class ParticlesStorage;
 #if defined(TESTS_ENABLED) && defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
 	friend class ::ParticlesExternalOutputTestFixture;

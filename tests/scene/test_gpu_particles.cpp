@@ -104,6 +104,22 @@ TEST_CASE("[CPUParticles] 2D ratio setters reject non-finite values") {
 	memdelete(particles);
 }
 
+TEST_CASE("[CPUParticles] 2D ratio setters reject values outside normalized range") {
+	CPUParticles2D *particles = memnew(CPUParticles2D);
+	particles->set_explosiveness_ratio(0.25f);
+	particles->set_randomness_ratio(0.75f);
+	particles->set_lifetime_randomness(0.5);
+	ERR_PRINT_OFF;
+	particles->set_explosiveness_ratio(-0.1f);
+	particles->set_randomness_ratio(1.1f);
+	particles->set_lifetime_randomness(2.0);
+	ERR_PRINT_ON;
+	CHECK(particles->get_explosiveness_ratio() == 0.25f);
+	CHECK(particles->get_randomness_ratio() == 0.75f);
+	CHECK(particles->get_lifetime_randomness() == 0.5);
+	memdelete(particles);
+}
+
 #ifndef _3D_DISABLED
 TEST_CASE("[GPUParticles] 3D scene ratio setters reject non-finite values") {
 	check_ratios<GPUParticles3D>();
@@ -160,6 +176,22 @@ TEST_CASE("[CPUParticles] 3D ratio setters reject non-finite values") {
 	ERR_PRINT_ON;
 	CHECK(particles->get_explosiveness_ratio() == 0.25f);
 	CHECK(particles->get_randomness_ratio() == 0.75f);
+	memdelete(particles);
+}
+
+TEST_CASE("[CPUParticles] 3D ratio setters reject values outside normalized range") {
+	CPUParticles3D *particles = memnew(CPUParticles3D);
+	particles->set_explosiveness_ratio(0.25f);
+	particles->set_randomness_ratio(0.75f);
+	particles->set_lifetime_randomness(0.5);
+	ERR_PRINT_OFF;
+	particles->set_explosiveness_ratio(-0.1f);
+	particles->set_randomness_ratio(1.1f);
+	particles->set_lifetime_randomness(2.0);
+	ERR_PRINT_ON;
+	CHECK(particles->get_explosiveness_ratio() == 0.25f);
+	CHECK(particles->get_randomness_ratio() == 0.75f);
+	CHECK(particles->get_lifetime_randomness() == 0.5);
 	memdelete(particles);
 }
 

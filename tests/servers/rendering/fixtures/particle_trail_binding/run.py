@@ -30,15 +30,17 @@ def main():
 #include <map>
 #include <vector>
 #define ERR_PRINT(message) ((void)0)
+#define ERR_FAIL_COND_V(condition, value) do { if (condition) return value; } while (0)
+#define ERR_FAIL_COND_MSG(condition, message) do { if (condition) return; } while (0)
 #define ERR_FAIL_NULL(value) do { if (!(value)) return; } while (0)
 struct RID { int id = 0; bool is_valid() const { return id != 0; } bool is_null() const { return id == 0; } };
 template<class T> using Vector = std::vector<T>;
 struct Transform3D {};
-struct Dependency { enum { DEPENDENCY_CHANGED_PARTICLES }; void changed_notify(int) {} };
+struct Dependency { enum { DEPENDENCY_CHANGED_PARTICLES }; int changes = 0; void changed_notify(int) { changes++; } };
 struct Particles {
     Vector<Transform3D> trail_bind_poses;
     RID trail_bind_pose_buffer, trail_bind_pose_uniform_set, unused_trail_storage_buffer;
-    bool trail_bind_poses_dirty = false, clear = false;
+    bool external = false, trail_bind_poses_dirty = false, clear = false;
     int prev_ticks = 7, phase = 1, prev_phase = 1, frees = 0;
     Dependency dependency;
 };
@@ -99,6 +101,27 @@ int main() {
     check(p.trail_bind_pose_uniform_set.is_null() && rd->uniform_attempts == previous_attempts, "failed real trail allocation does not publish fallback uniform");
     check(prepare(&p), "next attempt retries real allocation");
     check(rd->bound_buffers[p.trail_bind_pose_uniform_set.id] == p.trail_bind_pose_buffer.id, "recovered uniform binds real trail buffer");
+    Particles external;
+    external.external = true;
+    external.trail_bind_poses.resize(2);
+    external.trail_bind_pose_buffer = {101};
+    external.trail_bind_pose_uniform_set = {102};
+    external.unused_trail_storage_buffer = {103};
+    set_poses(&external, Vector<Transform3D>(3));
+    check(external.trail_bind_poses.size() == 2 && !external.trail_bind_poses_dirty &&
+            external.frees == 0 && external.dependency.changes == 0 && !external.clear &&
+            external.prev_ticks == 7 && external.phase == 1 && external.prev_phase == 1,
+            "external pose setter preserves layout, simulation and dependency state");
+    const int external_uniform_attempts = rd->uniform_attempts;
+    const int external_next = rd->next;
+    check(!_particles_ensure_trail_uniform(&external, {100}), "external particles reject native trail uniform setup");
+    check(external.trail_bind_pose_buffer.id == 101 && external.trail_bind_pose_uniform_set.id == 102 &&
+            external.unused_trail_storage_buffer.id == 103 && rd->uniform_attempts == external_uniform_attempts &&
+            rd->next == external_next, "external guard preserves resources without allocations");
+    external.trail_bind_pose_uniform_set = {};
+    check(!_particles_ensure_trail_uniform(&external, {100}) && external.trail_bind_pose_uniform_set.is_null() &&
+            rd->uniform_attempts == external_uniform_attempts && rd->next == external_next,
+            "external guard blocks first-time uniform creation");
     std::printf("particle trail binding: %d/%d checks passed\n", checks - failures, checks);
     return failures ? 1 : 0;
 }

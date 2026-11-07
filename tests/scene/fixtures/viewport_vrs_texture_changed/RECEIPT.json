@@ -1,0 +1,317 @@
+{
+  "scope": "Actual main-RD render-target VRS texture RID propagation; no hardware shading or resampling claim",
+  "source_baseline": "e756b9ef9d",
+  "build_command": "scons -Q platform=macos target=editor tests=yes debug_symbols=no module_particles_runtime_tests_enabled=yes -j3",
+  "build_exit": 0,
+  "command": "ANGE_MACOS_BACKGROUND_RENDER=1 bin/godot.macos.editor.arm64 --display-driver macos --rendering-method mobile --rendering-driver metal --audio-driver Dummy --path tests/scene/fixtures/viewport_vrs_texture_changed --script run.gd",
+  "renderer": "Metal4 / Forward Mobile / Apple M3 Pro (Apple9)",
+  "red_exit": 1,
+  "green_exit": 0,
+  "red": {
+    "checks": 60,
+    "failures": [
+      "v1 same resource changed A to B: actual target VRS RID",
+      "v2 shared resource changed A to B: actual target VRS RID",
+      "Repeated same-ref setter has one changed subscription",
+      "v1 same-ref changed to null RID: actual target VRS RID",
+      "v2 shared changed to null RID: actual target VRS RID",
+      "Replacement resource subscribed",
+      "v2 old shared resource remains live: actual target VRS RID",
+      "v1 replacement changed A to B: actual target VRS RID",
+      "v1 replacement same-ref changed to null: actual target VRS RID",
+      "Render-thread changed refreshes on main thread: actual target VRS RID"
+    ],
+    "observations": [
+      {
+        "expected": "RID(3762391351300)",
+        "label": "v1 initial",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3809635991553)",
+        "target_valid": true,
+        "vrs_texture": "RID(3762391351300)"
+      },
+      {
+        "expected": "RID(3762391351300)",
+        "label": "v2 initial",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3874060500994)",
+        "target_valid": true,
+        "vrs_texture": "RID(3762391351300)"
+      },
+      {
+        "expected": "RID(3775276253189)",
+        "label": "v1 same resource changed A to B",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3809635991553)",
+        "target_valid": true,
+        "vrs_texture": "RID(3762391351300)"
+      },
+      {
+        "expected": "RID(3775276253189)",
+        "label": "v2 shared resource changed A to B",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3874060500994)",
+        "target_valid": true,
+        "vrs_texture": "RID(3762391351300)"
+      },
+      {
+        "expected": "RID(3775276253189)",
+        "label": "v1 repeated same-ref setter repairs/keeps current B",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3809635991553)",
+        "target_valid": true,
+        "vrs_texture": "RID(3775276253189)"
+      },
+      {
+        "expected": "RID(0)",
+        "label": "v1 same-ref changed to null RID",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3809635991553)",
+        "target_valid": true,
+        "vrs_texture": "RID(3775276253189)"
+      },
+      {
+        "expected": "RID(0)",
+        "label": "v2 shared changed to null RID",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3874060500994)",
+        "target_valid": true,
+        "vrs_texture": "RID(3762391351300)"
+      },
+      {
+        "expected": "RID(3762391351300)",
+        "label": "v1 replacement initial A",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3809635991553)",
+        "target_valid": true,
+        "vrs_texture": "RID(3762391351300)"
+      },
+      {
+        "expected": "RID(3762391351300)",
+        "label": "v1 old resource change leaves replacement A",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3809635991553)",
+        "target_valid": true,
+        "vrs_texture": "RID(3762391351300)"
+      },
+      {
+        "expected": "RID(3775276253189)",
+        "label": "v2 old shared resource remains live",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3874060500994)",
+        "target_valid": true,
+        "vrs_texture": "RID(3762391351300)"
+      },
+      {
+        "expected": "RID(3775276253189)",
+        "label": "v1 replacement changed A to B",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3809635991553)",
+        "target_valid": true,
+        "vrs_texture": "RID(3762391351300)"
+      },
+      {
+        "expected": "RID(0)",
+        "label": "v2 explicit null setter",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3874060500994)",
+        "target_valid": true,
+        "vrs_texture": "RID(0)"
+      },
+      {
+        "expected": "RID(0)",
+        "label": "v2 detached resource change leaves null",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3874060500994)",
+        "target_valid": true,
+        "vrs_texture": "RID(0)"
+      },
+      {
+        "expected": "RID(0)",
+        "label": "v1 replacement same-ref changed to null",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3809635991553)",
+        "target_valid": true,
+        "vrs_texture": "RID(3775276253189)"
+      },
+      {
+        "expected": "RID(3775276253189)",
+        "label": "Render-thread changed refreshes on main thread",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3809635991553)",
+        "target_valid": true,
+        "vrs_texture": "RID(0)"
+      },
+      {
+        "expected": "RID(3775276253189)",
+        "label": "Queued old notification reads current replacement B",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3809635991553)",
+        "target_valid": true,
+        "vrs_texture": "RID(3775276253189)"
+      },
+      {
+        "expected": "RID(0)",
+        "label": "Queued old notification reads current null member",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3809635991553)",
+        "target_valid": true,
+        "vrs_texture": "RID(0)"
+      }
+    ]
+  },
+  "green": {
+    "checks": 60,
+    "failures": [],
+    "observations": [
+      {
+        "expected": "RID(3762391351300)",
+        "label": "v1 initial",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3809635991553)",
+        "target_valid": true,
+        "vrs_texture": "RID(3762391351300)"
+      },
+      {
+        "expected": "RID(3762391351300)",
+        "label": "v2 initial",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3874060500994)",
+        "target_valid": true,
+        "vrs_texture": "RID(3762391351300)"
+      },
+      {
+        "expected": "RID(3775276253189)",
+        "label": "v1 same resource changed A to B",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3809635991553)",
+        "target_valid": true,
+        "vrs_texture": "RID(3775276253189)"
+      },
+      {
+        "expected": "RID(3775276253189)",
+        "label": "v2 shared resource changed A to B",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3874060500994)",
+        "target_valid": true,
+        "vrs_texture": "RID(3775276253189)"
+      },
+      {
+        "expected": "RID(3775276253189)",
+        "label": "v1 repeated same-ref setter repairs/keeps current B",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3809635991553)",
+        "target_valid": true,
+        "vrs_texture": "RID(3775276253189)"
+      },
+      {
+        "expected": "RID(0)",
+        "label": "v1 same-ref changed to null RID",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3809635991553)",
+        "target_valid": true,
+        "vrs_texture": "RID(0)"
+      },
+      {
+        "expected": "RID(0)",
+        "label": "v2 shared changed to null RID",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3874060500994)",
+        "target_valid": true,
+        "vrs_texture": "RID(0)"
+      },
+      {
+        "expected": "RID(3762391351300)",
+        "label": "v1 replacement initial A",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3809635991553)",
+        "target_valid": true,
+        "vrs_texture": "RID(3762391351300)"
+      },
+      {
+        "expected": "RID(3762391351300)",
+        "label": "v1 old resource change leaves replacement A",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3809635991553)",
+        "target_valid": true,
+        "vrs_texture": "RID(3762391351300)"
+      },
+      {
+        "expected": "RID(3775276253189)",
+        "label": "v2 old shared resource remains live",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3874060500994)",
+        "target_valid": true,
+        "vrs_texture": "RID(3775276253189)"
+      },
+      {
+        "expected": "RID(3775276253189)",
+        "label": "v1 replacement changed A to B",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3809635991553)",
+        "target_valid": true,
+        "vrs_texture": "RID(3775276253189)"
+      },
+      {
+        "expected": "RID(0)",
+        "label": "v2 explicit null setter",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3874060500994)",
+        "target_valid": true,
+        "vrs_texture": "RID(0)"
+      },
+      {
+        "expected": "RID(0)",
+        "label": "v2 detached resource change leaves null",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3874060500994)",
+        "target_valid": true,
+        "vrs_texture": "RID(0)"
+      },
+      {
+        "expected": "RID(0)",
+        "label": "v1 replacement same-ref changed to null",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3809635991553)",
+        "target_valid": true,
+        "vrs_texture": "RID(0)"
+      },
+      {
+        "expected": "RID(3775276253189)",
+        "label": "Render-thread changed refreshes on main thread",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3809635991553)",
+        "target_valid": true,
+        "vrs_texture": "RID(3775276253189)"
+      },
+      {
+        "expected": "RID(3775276253189)",
+        "label": "Queued old notification reads current replacement B",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3809635991553)",
+        "target_valid": true,
+        "vrs_texture": "RID(3775276253189)"
+      },
+      {
+        "expected": "RID(0)",
+        "label": "Queued old notification reads current null member",
+        "main_rd_render_thread": true,
+        "render_target": "RID(3809635991553)",
+        "target_valid": true,
+        "vrs_texture": "RID(0)"
+      }
+    ]
+  },
+  "editor_sha256": "8886a04e633238a4f0d1d458c65d0bae44efc5f350a30c0454a1e184a21c18af",
+  "script_sha256": "a27418f99c4c52fd75cacd3d5ec29bcb0a09994564ef8442efd288888bb0c279",
+  "fixed_3ee_editor_sha256": "d9f3335d4e1b5693f17ad53560cec977e11abd9f80230273a625a173727216de",
+  "review": "Independent read-only /root/review_collision_fixture: no blocker; queued calls resolve live ObjectID and read current member; test observer uses existing public target ownership and getter.",
+  "viewport_unit_tests": {
+    "command": "bin/godot.macos.editor.arm64 --headless --test --test-case='*Viewport*'",
+    "exit": 0,
+    "test_cases": 12,
+    "assertions": 938,
+    "failed": 0,
+    "scope": "CPU unit tests; separate from actual Metal target observer"
+  }
+}

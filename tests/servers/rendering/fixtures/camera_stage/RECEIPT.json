@@ -1,0 +1,62 @@
+{
+  "scope": "CPU/native-owner substrate regression only; no real output registration/capture custody/transport or GPU qualification claim",
+  "source_files": {
+    "servers/rendering/renderer_viewport.cpp": {
+      "bytes": 79893,
+      "sha256": "8975b9cfbad19cd0c64dff20135443082b4521fd4a9eeb523372346a99ba22b7"
+    },
+    "tests/servers/rendering/test_viewport_camera_source.cpp": {
+      "bytes": 37877,
+      "sha256": "81cccef06e976c0f17171798605a2e1c91e55a20d64afe2be103b5f745987858"
+    }
+  },
+  "source_diff": {
+    "bytes": 5878,
+    "sha256": "bcd01f2463f669fdf2fc02d6c1a2f0342aa5deb17a3f602682c005865ed3949d"
+  },
+  "logs": {
+    "b4-camera-stage-red-build.log": {
+      "bytes": 1915,
+      "sha256": "158129853562d357b3bed5962f3d6a98fb5eb8e28b6e1940e990a9346116b2c0"
+    },
+    "b4-camera-stage-red-run.log": {
+      "bytes": 1350,
+      "sha256": "96fad73d3f66b3ba96d4a0f4c09c468991a775ee2f9b63bb27ff03ea3ab139f3"
+    },
+    "b4-camera-focused-green-run.log": {
+      "bytes": 298,
+      "sha256": "b01293edf31aaa3f23fba521db40d258f9f72191b518eed49a3662a95dc9e33e"
+    },
+    "b4-viewport-green-run.log": {
+      "bytes": 726,
+      "sha256": "e9afc0b235ad7103a9fe0d65f111ce8d0484028b3e27cae31d0255b7aa9fb513"
+    },
+    "b4-camera-particle-green-build.log": {
+      "bytes": 2041,
+      "sha256": "17ddb0550bdab206db17a7ff6d3f7508a506c362f0cb81be4765608f7906eaa7"
+    }
+  },
+  "validation": {
+    "red": {
+      "exit": 1,
+      "cases": 2,
+      "passed": 1,
+      "failed": 1,
+      "assertions": 30,
+      "target_failures": 3
+    },
+    "focused_green": {
+      "exit": 0,
+      "cases": 2,
+      "assertions": 30
+    },
+    "extended_green": {
+      "exit": 0,
+      "filter": "[B4] + [ViewportHistory]",
+      "cases": 39,
+      "assertions": 3842,
+      "expected_diagnostics": "3 existing foreign-camera-token negative diagnostics"
+    }
+  },
+  "change": "Successful begin clears only unadopted stage after ordinal exhaustion check; adopted previous camera and failed-begin stage preserved."
+}

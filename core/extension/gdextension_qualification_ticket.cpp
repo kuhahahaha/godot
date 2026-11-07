@@ -29,7 +29,6 @@
 /**************************************************************************/
 
 #include "core/crypto/crypto_core.h"
-#include "core/extension/gdextension.h"
 #include "core/extension/gdextension_qualification_depth.h"
 #include "core/extension/gdextension_qualification_internal.h"
 #include "core/os/os.h"
@@ -232,8 +231,8 @@ Error Registry::qualification_record_preflight(QualificationBridge *bridge, Rend
 					}
 					continue;
 				}
-				auto *texture = rd->texture_owner.get_or_null(dependency);
-				auto *sampler = rd->sampler_owner.get_or_null(dependency);
+				auto *texture = rd->texture_owner.owns(dependency) ? rd->texture_owner.get_or_null(dependency) : nullptr;
+				auto *sampler = rd->sampler_owner.owns(dependency) ? rd->sampler_owner.get_or_null(dependency) : nullptr;
 				if (texture || sampler) {
 					// A numeric RID or a same-numbered return cell is not the original
 					// method resource owner. Authenticate the typed child before admitting
@@ -269,9 +268,9 @@ Error Registry::qualification_record_preflight(QualificationBridge *bridge, Rend
 						return ERR_UNAVAILABLE;
 					}
 				} else {
-					auto *buffer = rd->storage_buffer_owner.get_or_null(dependency);
+					auto *buffer = rd->storage_buffer_owner.owns(dependency) ? rd->storage_buffer_owner.get_or_null(dependency) : nullptr;
 					if (!buffer) {
-						buffer = rd->uniform_buffer_owner.get_or_null(dependency);
+						buffer = rd->uniform_buffer_owner.owns(dependency) ? rd->uniform_buffer_owner.get_or_null(dependency) : nullptr;
 					}
 					if (!buffer || !buffer->driver_id || buffer->usage.has_flag(RDD::BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT) || buffer->transfer_worker_index >= 0) {
 						return ERR_UNAVAILABLE;
@@ -291,11 +290,11 @@ Error Registry::qualification_record_preflight(QualificationBridge *bridge, Rend
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
 	for (RID rid : resources) {
-		auto *stored = rd->storage_buffer_owner.get_or_null(rid);
-		auto *pipeline = rd->compute_pipeline_owner.get_or_null(rid);
-		auto *shader = rd->shader_owner.get_or_null(rid);
-		auto *texture = rd->texture_owner.get_or_null(rid);
-		auto *sampler = rd->sampler_owner.get_or_null(rid);
+		auto *stored = rd->storage_buffer_owner.owns(rid) ? rd->storage_buffer_owner.get_or_null(rid) : nullptr;
+		auto *pipeline = rd->compute_pipeline_owner.owns(rid) ? rd->compute_pipeline_owner.get_or_null(rid) : nullptr;
+		auto *shader = rd->shader_owner.owns(rid) ? rd->shader_owner.get_or_null(rid) : nullptr;
+		auto *texture = rd->texture_owner.owns(rid) ? rd->texture_owner.get_or_null(rid) : nullptr;
+		auto *sampler = rd->sampler_owner.owns(rid) ? rd->sampler_owner.get_or_null(rid) : nullptr;
 		auto *cell = stored ? stored->qualification_return : pipeline ? pipeline->qualification_return
 				: shader											  ? shader->qualification_return
 				: texture											  ? texture->qualification_return

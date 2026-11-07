@@ -1,0 +1,92 @@
+Native drain diagnostic package, ring revision, 2026-11-07
+Use both process-launch variables for the combined native run:
+ ANGE_NATIVE_DRAIN_DIAGNOSTIC=1
+ ANGE_NATIVE_DRAIN_DIAGNOSTIC_RING=/absolute/output/path/native-drain.ring
+The ring variable alone also opts in. With both unset, there is no file or stderr IO.
+No cleanup-arm gate is needed: all traced events enter the ring from process start.
+The ring is exactly 4096 x 768 = 3,145,728 bytes (3 MiB), overwriting oldest slots.
+Each write uses fseek/fwrite/fflush under one diagnostic mutex. No timer, worker,
+scheduler, fsync, native receipt or cleanup issuer is added. Power-loss persistence
+is not claimed. Opening/initialization/write errors emit an explicit one-time
+ring_disabled marker without changing the original native return code.
+Markers ring_ready/ring_disabled establish whether the sink was active.
+
+stderr admits at most 2048 spans (4096 event lines), reserving both enter and exit.
+A one-time stderr_quota_exhausted marker states ring_active; subsequent ring events
+continue independently. Marker lines are additional to the 4096 event-line quota.
+seq is the monotonic event sequence allocated under the diagnostic sink mutex;
+pair is the independent span ID. t is OS monotonic usec; thread is caller ID.
+Every slot has an FNV-1a 64-bit checksum of the complete payload before checksum=.
+A kill during overwrite may tear a slot: decoder rejects it and reports its slot.
+Older enters can be overwritten while exits survive: missing entries in the rolling
+window are not proof the call was never entered. Use same-thread outer graph nesting
+and pair IDs to distinguish ordinary graph from maintenance; a Metal event name alone
+is insufficient. A stalled last nextDrawable enter is flushed before the actual call.
+
+Decode after copying the ring artifact:
+ python3 tests/core/extension/native_output_bridge/decode_native_drain_ring.py \
+   /absolute/output/path/native-drain.ring --output /absolute/output/path/native-drain-sorted.log
+The decoder validates file size, checksum, sequence-to-slot mapping, and sorts by seq.
+Synthetic checks passed: 5000-event wrap retains 905..5000; torn slot is rejected;
+zero-filled and invalid-length cases handled. C++ build remains root's responsibility.
+
+Instrumentation does not alter original guards/budgets or returned expressions,
+but opt-in synchronous IO consumes wall time and can change deadline-sensitive
+outcomes. Do not claim observed return codes must equal a run with tracing disabled.
+No production root-cause fix is claimed yet. A remains the sole native runner.
+
+Field maps (a,b,c,d,e,f):
+control.schedule entry: control_serial; exit after validated request:
+ request_serial, control_serial, state, kind, maintenance_serial, publish_accepted (1 only for queue_accepted).
+control.dispatch: registry, attachment, request_serial, control_serial, 0, 0.
+control.execute: request_serial, control_serial, kind, maintenance_serial, RD_pointer, 0.
+maintenance.preflight: request_serial, control_serial, maintenance_serial, RD_frame,
+ native_disposal_active, graph_command_count.
+ preflight uncaptured_graph exit overrides c,d,e with frame, command_index, command_count.
+ preflight foreign_frame_work exit overrides c,d,e,f with frame_index,pending_swaps,
+ qualification_tickets,download_texture_requests. Code is exact original return value.
+rd.maintenance enter: RD_pointer, original_request_pointer,0,0,0,0.
+ After original thread/config/list guards and successful RD try-lock, exit fields become
+ RD_pointer,original_request_pointer,frame,cursor_serial,phase,end_phase. Early refusals
+ leave c-f zero, avoiding any new non-atomic RD read on the wrong-thread path. rd.return.N maps directly to original return N in source.
+graph.maintenance: RD_pointer, native_command_wrapper, cursor_serial, frame, phase, end_phase.
+graph.ordinary: RD_pointer, native_command_wrapper, frame, pending_swaps, fence_signaled,
+ qualification_frame.
+metal.acquire entry: SurfaceLayer_pointer, layer_pointer, count, front, rear, pool_size;
+ exit: same a-e, f=framebuffer_wrapper_pointer (unless pool was full).
+metal.next_drawable: layer_pointer, framebuffer_wrapper_pointer, drawable_pointer (exit),0,0,0.
+metal.present entry: SurfaceLayer_pointer, layer_pointer, count, front, rear, command_wrapper;
+ exit: same a-e with updated count/front, f=drawable_pointer (unless count was zero).
+metal.commit: command_wrapper, device_driver_pointer,0,0,0,0.
+metal.cb_commit: command_wrapper, native_MTL_command_buffer, device_driver_pointer,0,0,0.
+metal.offscreen_next_drawable: surface_pointer,layer_pointer,rear,count,drawable(exit),0.
+
+Interpretation:
+Absence-based readings below require a complete, unoverwritten interval and matching
+request/control/native pointers. Missing records alone do not prove non-execution.
+- Host before-service missing: Host callback/early-return path, no evidence of Core entry.
+- schedule reason=queue_accepted for the same request/control, dispatch absent in a
+  complete interval: consistent with FIFO not yet reaching dispatch; correlate the last
+  graph.ordinary / metal.next_drawable or other native span. An OK result with
+  reason=existing_control does not establish a new enqueue or missing dispatch.
+- dispatch entered, execute absent: original Registry locking/validation path.
+- maintenance foreign_frame_work pending_swaps>0: existing admission correctly refuses
+  borrowing presentation work; ordinary frame must issue/present it.
+- graph.ordinary enter + metal.next_drawable enter without exits: ordinary frame blocked
+  at CAMetalLayer acquisition before commit. It does NOT establish a maintenance stall.
+- graph.maintenance enter + metal.next_drawable enter without exits: maintenance graph
+  entered unexpected layer-backed framebuffer; correlate exact wrapper/pin/native graph.
+- next_drawable exits but no cb_commit: inspect graph/present/commit scopes, not timeout.
+
+Source findings: production_maintenance_locked already rejects every frame with pending
+swap_chains_to_present and all uncaptured graph commands. Preserve these guards.
+A normal Metal3 queue submission calls surface.present before command.commit. Maintenance
+submits with empty swaps only after its graph.end. Neither source ordering alone identifies
+which path the previous sampled nextDrawable belonged to.
+
+control.schedule reason distinguishes queue_accepted/queue_refused/existing_control/
+request_lookup_failed/serial_or_state_mismatch/server_unavailable.
+control.dispatch void returns carry diagnostic reasons wrong_thread_or_no_server,
+foreign_registry_or_zero_serial,original_identity_rejected,no_matching_request,
+no_matching_attachment,entered_execute. Their codes are diagnostic classifications
+for a void API, not additional original return values.

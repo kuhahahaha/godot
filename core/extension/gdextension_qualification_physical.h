@@ -41,6 +41,9 @@ class TestQualificationPhysicalAccess;
 class TestQualificationAckAccess;
 class TestProductionResourceUseAccess;
 #ifdef TESTS_ENABLED
+namespace TestProductionRequest {
+struct Access;
+}
 namespace TestProductionNativeObserve {
 struct Access;
 }
@@ -64,6 +67,7 @@ class QualificationPhysicalReturn {
 	friend class ::TestQualificationAckAccess;
 	friend class ::TestProductionResourceUseAccess;
 	friend struct ::TestProductionNativeObserve::Access;
+	friend struct ::TestProductionRequest::Access;
 #endif
 	BinaryMutex mutex;
 	uint64_t bridge = 0;

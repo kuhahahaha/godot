@@ -1,0 +1,19 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_viewport_camera_source.cpp:690:
+TEST CASE:  [B4][E19][CameraStage] successful capture supersedes only unadopted camera stage
+
+tests/servers/rendering/test_viewport_camera_source.cpp:713: ERROR: CHECK_FALSE( RenderingServerGlobals::viewport->viewport_adopt_camera_data(viewport) ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_viewport_camera_source.cpp:714: ERROR: CHECK( RenderingServerGlobals::viewport->viewport_get_previous_camera_token(viewport) == previous_token ) is NOT correct!
+  values: CHECK( {?} == {?} )
+
+tests/servers/rendering/test_viewport_camera_source.cpp:715: ERROR: CHECK( RenderingServerGlobals::viewport->viewport_get_prev_camera_data(viewport)->main_transform == previous.main_transform ) is NOT correct!
+  values: CHECK( [X: (1.0, 0.0, 0.0), Y: (0.0, 1.0, 0.0), Z: (0.0, 0.0, 1.0), O: (4.0, 5.0, 6.0)] == [X: (1.0, 0.0, 0.0), Y: (0.0, 1.0, 0.0), Z: (0.0, 0.0, 1.0), O: (1.0, 2.0, 3.0)] )
+
+===============================================================================
+[doctest] test cases:  2 |  1 passed | 1 failed | 2167 skipped
+[doctest] assertions: 30 | 27 passed | 3 failed |
+[doctest] Status: FAILURE!

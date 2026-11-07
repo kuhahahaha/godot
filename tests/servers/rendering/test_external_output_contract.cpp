@@ -128,7 +128,7 @@ public:
 		return p_device._buffer_copy_recorded(p_source, p_destination, p_source_offset, p_destination_offset, p_size);
 	}
 	static auto draw(RenderingDevice &p_device, RID p_buffer, uint32_t p_offset, bool p_indices = false) {
-		return p_device._draw_list_draw_indirect_recorded(0, p_indices, p_buffer, p_offset, 1, 20);
+		return p_device._draw_list_draw_indirect_recorded(int64_t(RenderingDevice::ID_TYPE_DRAW_LIST) << RenderingDevice::ID_BASE_SHIFT, p_indices, p_buffer, p_offset, 1, 20);
 	}
 	static bool contains(RenderingDevice &p_device, const RenderingDeviceGraph::RecordHandle &p_handle) { return p_device.draw_graph.contains_record(p_handle); }
 	static void suspended(RenderingDevice &p_device, Error p_error) { p_device.frame_wait_error = p_error; }

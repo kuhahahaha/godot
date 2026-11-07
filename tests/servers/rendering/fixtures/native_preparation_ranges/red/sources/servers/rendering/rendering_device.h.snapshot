@@ -1,0 +1,2740 @@
+/**************************************************************************/
+/*  rendering_device.h                                                    */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
+#pragma once
+
+#include "core/extension/gdextension_qualification_physical.h"
+#include "core/extension/gdextension_record_source.h"
+#include "servers/rendering/native_disposal_witness.h"
+
+#ifdef TESTS_ENABLED
+#include "modules/modules_enabled.gen.h" // IWYU pragma: keep. For test module feature macros.
+#endif
+
+namespace GDExtensionDeviceExit {
+class ProductionAttachment;
+}
+
+namespace RendererRD {
+class ExternalOutputStorage;
+class ExternalPipelinePreparation;
+class ParticlesStorage;
+class MaterialStorage;
+class MeshStorage;
+} //namespace RendererRD
+
+#ifdef TESTS_ENABLED
+namespace TestProductionRequest {
+struct Access;
+}
+namespace TestProductionNativeObserve {
+struct Access;
+}
+namespace RendererRD {
+class TestParticlesProcessRetryAccess;
+class TestMultimeshRebuildAccess;
+}
+#endif
+
+#include <atomic>
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
+#include "servers/rendering/render_capture_test_tracking.h"
+#endif
+
+#include "core/object/ref_counted.h"
+#include "core/object/worker_thread_pool.h"
+#include "core/os/condition_variable.h"
+#include "core/os/thread_safe.h"
+#include "core/templates/local_vector.h"
+#include "core/templates/rb_map.h"
+#include "core/templates/rb_set.h"
+#include "core/templates/rid_owner.h"
+#include "core/variant/type_info.h"
+#include "core/variant/typed_array.h"
+#include "servers/display/display_server_enums.h"
+#include "servers/rendering/rendering_device_commons.h"
+#include "servers/rendering/rendering_device_driver.h"
+#include "servers/rendering/rendering_device_enums.h"
+#include "servers/rendering/rendering_device_graph.h"
+
+namespace GDExtensionDeviceExit {
+struct CheckedRecordAppend;
+struct OriginalOperationIdentity;
+} //namespace GDExtensionDeviceExit
+class RDTextureFormat;
+class RDTextureView;
+class RDAttachmentFormat;
+class RDSamplerState;
+class RDVertexAttribute;
+class RDShaderSource;
+class RDShaderSPIRV;
+class RDUniform;
+class RDPipelineRasterizationState;
+class RDPipelineMultisampleState;
+class RDPipelineDepthStencilState;
+class RDPipelineColorBlendState;
+class RDFramebufferPass;
+class RDPipelineSpecializationConstant;
+class RDAccelerationStructureGeometry;
+class RDAccelerationStructureInstance;
+class RDPipelineShader;
+class RDHitGroup;
+
+namespace GDExtensionDeviceExit {
+enum class ProductionOutputOwnerKind : uint8_t;
+class ProductionOutputPin;
+class ProductionUseCell;
+} //namespace GDExtensionDeviceExit
+class RenderingDevice : public RenderingDeviceCommons {
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	friend class RenderCaptureTestAccess;
+#endif
+#if defined(TESTS_ENABLED) && defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
+	friend class ParticlesRuntimeTestFixture;
+	friend class ParticlesExternalGuardTestFixture;
+	friend class ParticlesExternalOutputTestFixture;
+#endif
+
+	friend class RendererRD::MeshStorage;
+	GDCLASS(RenderingDevice, Object)
+
+	_THREAD_SAFE_CLASS_
+
+private:
+	Thread::ID render_thread_id;
+
+public:
+	typedef int64_t DrawListID;
+	typedef int64_t ComputeListID;
+	typedef int64_t RaytracingListID;
+
+	typedef void (*InvalidationCallback)(void *);
+
+private:
+	friend class GDExtensionDeviceExit::Registry;
+	friend struct GDExtensionDeviceExit::QualificationTicket;
+	friend struct GDExtensionDeviceExit::QualificationResource;
+	friend class RenderingServerDefault;
+	friend class RendererRD::ExternalOutputStorage;
+	friend class RendererRD::ExternalPipelinePreparation;
+	friend class RendererRD::ParticlesStorage;
+	friend class RendererRD::MaterialStorage;
+#ifdef TESTS_ENABLED
+	friend class TestExternalOutputAccess;
+	friend class TestIndexed144DeviceAccess;
+	friend class TestMaterialStorageNativeHoldDeviceAccess;
+	friend class TestShaderCompilePolicyAccess;
+	friend class TestTransferWorkerAccess;
+	friend class TestFrameWaitAccess;
+	friend class TestQualificationFrameAccess;
+	friend class TestQualificationSerialAccess;
+	friend class TestQualificationFinalizeAccess;
+	friend class TestQualificationPhysicalAccess;
+	friend class TestNativeDisposalAccess;
+	friend class TestCheckedBindAccess;
+	friend class TestVertexArrayRangeAccess;
+	friend class TestExternalOutputPrefixAccess;
+	friend class TestQualificationAckAccess;
+	friend class TestQualificationStagingAccess;
+	friend class TestQualificationTicketAccess;
+	friend class TestRecordSourceAccess;
+	friend class TestProductionResourceUseAccess;
+	friend struct TestProductionRequest::Access;
+	friend struct TestProductionNativeObserve::Access;
+	friend class TestQualificationRtAccess;
+	friend class RendererRD::TestParticlesProcessRetryAccess;
+	friend class RendererRD::TestMultimeshRebuildAccess;
+	void test_arm_buffer_update_fault(RID p_buffer, uint32_t p_count) {
+		test_buffer_update_fault_buffer = p_buffer;
+		test_buffer_update_fault_count = p_count;
+#if defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
+		test_buffer_update_fault_skip = 0;
+#endif
+		test_buffer_update_fault_hits = 0;
+	}
+#if defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
+	void test_arm_buffer_update_fault_after(RID p_buffer, uint32_t p_count, uint32_t p_skip) {
+		test_arm_buffer_update_fault(p_buffer, p_count);
+		test_buffer_update_fault_skip = p_skip;
+	}
+#endif
+	uint32_t test_get_buffer_update_fault_hits() const { return test_buffer_update_fault_hits; }
+	void test_reset_compute_dispatch_count() { test_compute_dispatch_count = 0; }
+	uint32_t test_get_compute_dispatch_count() const { return test_compute_dispatch_count; }
+#endif
+	static RenderingDevice *singleton;
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
+	RenderCaptureTestAllocationRegistry capture_test_allocation_registry;
+	RenderCaptureTestResourceRegistry capture_test_resource_registry;
+	std::atomic<bool> capture_test_coverage_failed = false;
+#endif
+
+	RenderingContextDriver *context = nullptr;
+	RenderingDeviceDriver *driver = nullptr;
+	RenderingContextDriver::Device device;
+
+	bool local_device_processing = false;
+	bool is_main_instance = false;
+#ifdef TESTS_ENABLED
+	bool test_main_screen_prepared = false;
+	uint64_t test_main_screen_epoch = 0;
+#endif
+	bool native_finalization_returned = false;
+	// Entity-edge publication/removal is protected by its original Registry.
+	// The atomic owner selects that Registry before acquiring its lock.
+	std::atomic<GDExtensionDeviceExit::Registry *> production_entity_registry{ nullptr };
+	GDExtensionDeviceExit::ProductionAttachment *production_entity_holds = nullptr;
+	std::atomic<bool> production_finalization_started{ false };
+	Error _begin_production_finalization();
+
+#ifdef TESTS_ENABLED
+	// Test-only synchronous upload fault injection. The hook is armed only for
+	// an exact buffer RID and is consumed at the public buffer_update boundary,
+	// before staging or command recording can mutate device state.
+	RID test_buffer_update_fault_buffer;
+	uint32_t test_buffer_update_fault_count = 0;
+#if defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
+	uint32_t test_buffer_update_fault_skip = 0;
+#endif
+	uint32_t test_buffer_update_fault_hits = 0;
+	uint32_t test_compute_dispatch_count = 0;
+#endif
+	void _finalize_on_rendering_server_thread();
+
+protected:
+	static void _bind_methods();
+
+#ifndef DISABLE_DEPRECATED
+	RID _shader_create_from_bytecode_bind_compat_79606(const Vector<uint8_t> &p_shader_binary);
+	RID _texture_create_from_extension_compat_105570(TextureType p_type, DataFormat p_format, TextureSamples p_samples, BitField<RenderingDevice::TextureUsageBits> p_usage, uint64_t p_image, uint64_t p_width, uint64_t p_height, uint64_t p_depth, uint64_t p_layers);
+	static void _bind_compatibility_methods();
+#endif
+
+	/***************************/
+	/**** ID INFRASTRUCTURE ****/
+	/***************************/
+public:
+	//base numeric ID for all types
+	enum {
+		INVALID_FORMAT_ID = -1
+	};
+
+	enum IDType {
+		ID_TYPE_FRAMEBUFFER_FORMAT,
+		ID_TYPE_VERTEX_FORMAT,
+		ID_TYPE_DRAW_LIST,
+		ID_TYPE_COMPUTE_LIST = 4,
+		ID_TYPE_RAYTRACING_LIST = 5,
+		ID_TYPE_MAX,
+		ID_BASE_SHIFT = 58, // 5 bits for ID types.
+		ID_MASK = (ID_BASE_SHIFT - 1),
+	};
+
+private:
+	HashMap<RID, HashSet<RID>> dependency_map; // IDs to IDs that depend on it.
+	HashMap<RID, HashSet<RID>> reverse_dependency_map; // Same as above, but in reverse.
+	HashSet<RID> resource_frees_in_progress; // Accessed only on the render thread.
+
+	void _add_dependency(RID p_id, RID p_depends_on);
+	void _remove_dependency(RID p_id, RID p_depends_on);
+	bool _free_dependencies(RID p_id, const MutexLock<Mutex> &p_outer_lock);
+
+private:
+	/***************************/
+	/**** BUFFER MANAGEMENT ****/
+	/***************************/
+
+	// These are temporary buffers on CPU memory that hold
+	// the information until the CPU fetches it and places it
+	// either on GPU buffers, or images (textures). It ensures
+	// updates are properly synchronized with whatever the
+	// GPU is doing.
+	//
+	// The logic here is as follows, only 3 of these
+	// blocks are created at the beginning (one per frame)
+	// they can each belong to a frame (assigned to current when
+	// used) and they can only be reused after the same frame is
+	// recycled.
+	//
+	// When CPU requires to allocate more than what is available,
+	// more of these buffers are created. If a limit is reached,
+	// then a fence will ensure will wait for blocks allocated
+	// in previous frames are processed. If that fails, then
+	// another fence will ensure everything pending for the current
+	// frame is processed (effectively stalling).
+	//
+	// See the comments in the code to understand better how it works.
+
+	enum StagingRequiredAction {
+		STAGING_REQUIRED_ACTION_NONE,
+		STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL,
+		STAGING_REQUIRED_ACTION_STALL_PREVIOUS,
+	};
+
+	struct StagingBufferBlock {
+		RDD::BufferID driver_id;
+		uint64_t frame_used = 0;
+		uint32_t fill_amount = 0;
+		uint8_t *data_ptr = nullptr;
+	};
+
+	struct StagingBuffers {
+		Vector<StagingBufferBlock> blocks;
+		int current = 0;
+		uint32_t block_size = 0;
+		uint64_t max_size = 0;
+		BitField<RDD::BufferUsageBits> usage_bits = {};
+		bool used = false;
+	};
+
+	Error _staging_buffer_allocate(StagingBuffers &p_staging_buffers, uint32_t p_amount, uint32_t p_required_align, uint32_t &r_alloc_offset, uint32_t &r_alloc_size, StagingRequiredAction &r_required_action, bool p_can_segment = true);
+	Error _staging_buffer_execute_required_action(StagingBuffers &p_staging_buffers, StagingRequiredAction p_required_action);
+	Error _insert_staging_block(StagingBuffers &p_staging_buffers);
+
+	StagingBuffers upload_staging_buffers;
+	StagingBuffers download_staging_buffers;
+
+	std::atomic<uint64_t> next_backing_serial = 1;
+	uint64_t _reserve_backing_serial();
+	uint64_t next_qualification_object_serial = 1;
+	uint64_t next_qualification_free_event = 1;
+	uint64_t qualification_free_event_reservations = 0;
+	uint64_t next_qualification_frame_epoch = 1;
+	bool qualification_retiring = false;
+	bool qualification_recording = false;
+	GDExtensionDeviceExit::ProductionRequest *production_recording_request = nullptr;
+	bool _production_resource_permitted(RID) const;
+	GDExtensionDeviceExit::CheckedRecordAppend _record_source_dispatch(const GDExtensionDeviceExit::OriginalOperationIdentity &, ComputeListID, uint32_t, uint32_t, uint32_t, const void * = nullptr, uint32_t = 0);
+	GDExtensionDeviceExit::CheckedRecordAppend _record_source_buffer_copy(const GDExtensionDeviceExit::OriginalOperationIdentity &, RID, RID, uint32_t, uint32_t, uint32_t);
+	GDExtensionDeviceExit::CheckedRecordAppend _record_source_buffer_upload(const GDExtensionDeviceExit::OriginalOperationIdentity &, RID, uint32_t, uint32_t, const void *, GDExtensionDeviceExit::BufferUploadSourceCapture &);
+	struct SourceDrawAppendResult;
+	SourceDrawAppendResult _record_source_draw_indirect(const GDExtensionDeviceExit::OriginalOperationIdentity &, DrawListID, bool, RID, uint32_t, uint32_t, uint32_t);
+	RDG::RecordHandle _compute_list_end_recorded();
+	RDG::RecordHandle _compute_list_dispatch_recorded(ComputeListID p_list, uint32_t p_x, uint32_t p_y, uint32_t p_z);
+	Error _qualification_maintenance();
+	bool _qualification_resource_busy(RID p_rid);
+	Error _qualification_pin_resources(GDExtensionDeviceExit::QualificationTicket *p_ticket, const LocalVector<RID> &p_resources);
+	void _qualification_unpin_resources(GDExtensionDeviceExit::QualificationTicket *p_ticket);
+	void _qualification_add_frame_ticket(GDExtensionDeviceExit::QualificationTicket *p_ticket);
+	void _qualification_seal_tickets();
+	void _qualification_issue_tickets(uint32_t p_slot, const RDD::QueueCallReport &p_report, Error p_error);
+	void _qualification_issue_tickets_locked(uint32_t p_slot, const RDD::QueueCallReport &p_report, Error p_error);
+	Error _qualification_retain_tickets(uint32_t p_frame);
+	Error _qualification_poll_tickets(uint32_t p_frame);
+	void _qualification_return_frame_tickets(uint32_t p_frame);
+	std::atomic<bool> qualification_frame_advance_pending{ false };
+	Error _qualification_enqueue(GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
+	bool _qualification_free_event_available(bool p_reserved) const;
+	bool _qualification_reserve_free_event(GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
+	void _qualification_release_free_event(GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
+	void _qualification_freed(GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
+	RID _qualification_storage_create(uint32_t p_bytes, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
+
+	struct Buffer {
+		GDExtensionDeviceExit::ProductionDisposalUse *production_disposal_uses = nullptr;
+		uint32_t native_immutable_holds = 0;
+		bool native_immutable_retire_requested = false;
+		bool native_external_access = false;
+		NativeDisposalWitness native_disposal;
+		uint64_t native_disposal_rid = 0;
+		uint32_t qualification_users = 0;
+		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
+		uint64_t backing_serial = 0;
+		RDD::BufferID driver_id;
+#if defined(TESTS_ENABLED) && (defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED) || defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED))
+		uint64_t capture_test_allocation_serial = 0;
+#endif
+		uint32_t size = 0;
+		BitField<RDD::BufferUsageBits> usage = {};
+		RDG::ResourceTracker *draw_tracker = nullptr;
+		int32_t transfer_worker_index = -1;
+		uint64_t transfer_worker_operation = 0;
+	};
+
+	Buffer *_get_buffer_from_owner(RID p_buffer);
+	Error _buffer_initialize(Buffer *p_buffer, Span<uint8_t> p_data, uint32_t p_required_align = 32);
+
+	void update_perf_report();
+	// Flag for batching descriptor sets.
+	bool descriptor_set_batching = true;
+	// When true, the final draw call that copies our offscreen result into the Swapchain is put into its
+	// own cmd buffer, so that the whole rendering can start early instead of having to wait for the
+	// swapchain semaphore to be signaled (which causes bubbles).
+	bool split_swapchain_into_its_own_cmd_buffer = true;
+	uint32_t gpu_copy_count = 0;
+	uint32_t direct_copy_count = 0;
+	uint32_t copy_bytes_count = 0;
+	uint32_t prev_gpu_copy_count = 0;
+	uint32_t prev_copy_bytes_count = 0;
+
+	RID_Owner<Buffer, true> uniform_buffer_owner;
+	RID_Owner<Buffer, true> storage_buffer_owner;
+	RID_Owner<Buffer, true> texture_buffer_owner;
+
+	class BufferGetDataResult : public RefCounted {
+	public:
+		// Owned storage for one raw async request across internal staging flushes.
+		// Copy identities are observations, not authenticated completion proof.
+		struct CopyRecord {
+			RDG::RecordHandle handle;
+			RDD::BufferID source;
+			RDD::BufferID destination;
+			RDD::BufferCopyRegion region;
+			bool mapping_sealed = false;
+			RDG::RecordMappingState mapping = RDG::RecordMappingState::Pending;
+			uint32_t command_slot = UINT32_MAX;
+			RDD::CommandBufferID command_buffer;
+			bool issue_attempted = false;
+			Error queue_error = OK;
+			RDD::QueueCallReport issue_report = {};
+		};
+		PackedByteArray bytes;
+		LocalVector<CopyRecord> copies;
+		uint32_t completed_size = 0;
+		uint32_t issued_size = 0;
+		uint64_t request_serial = 0;
+		// Captured from the original buffer at the first actual copy append.
+		// Continuations must retain this same request/backing/range association.
+		uint64_t source_backing_serial = 0;
+		uint32_t source_offset = 0;
+		uint32_t source_size = 0;
+		Error error = OK;
+		int64_t native_code = 0;
+		bool delivered = false;
+		bool qualification_owned = false;
+	};
+
+	Error _buffer_get_data_async(RID, const Callable &, uint32_t, uint32_t, const Ref<BufferGetDataResult> &p_owned = {}, GDExtensionDeviceExit::BufferReadbackSourceCapture *p_capture = nullptr);
+
+	struct BufferGetDataRequest {
+		RID buffer;
+		uint32_t frame_local_index = 0;
+		uint32_t frame_local_count = 0;
+		Callable callback;
+		uint32_t size = 0;
+		uint32_t result_offset = 0;
+		bool final_segment = true;
+		Ref<BufferGetDataResult> result;
+		GDExtensionDeviceExit::BufferReadbackSourceCapture *capture = nullptr;
+	};
+
+	struct QualificationUploadProgress {
+		struct Segment {
+			RDG::RecordHandle handle;
+			uint32_t begin = 0, end = 0;
+		};
+		LocalVector<Segment> segments;
+		uint32_t consumed = 0, max_segments = 0;
+	};
+	Error _buffer_update(Buffer *p_buffer, RID p_buffer_id, uint32_t p_offset, uint32_t p_size, const void *p_data, QualificationUploadProgress *p_progress = nullptr, GDExtensionDeviceExit::BufferUploadSourceCapture *p_source = nullptr);
+
+	enum class NativeAppendEffect : uint8_t {
+		NoNewEffect,
+		NativePrefixOnly,
+		Recorded,
+		Unknown,
+	};
+	struct NativeTransferDependency {
+		uint32_t worker = 0;
+		uint64_t operation = 0;
+	};
+	struct CopyAppendResult {
+		Error error = OK;
+		NativeAppendEffect effect = NativeAppendEffect::NoNewEffect;
+		RDG::RecordHandle copy_handle;
+		NativeTransferDependency transfers[2];
+		uint32_t transfer_count = 0;
+		bool destination_became_mutable = false;
+		CopyAppendResult(Error p_error = OK) : error(p_error) {}
+	};
+	enum class DrawCaptureProfile : uint8_t {
+		ProceduralTriangle,
+		GeometryDirect,
+		GeometryPrepared,
+	};
+	struct DrawAppendResult {
+		Error error = OK;
+		NativeAppendEffect effect = NativeAppendEffect::NoNewEffect;
+		RDG::RecordHandle draw_handle;
+		// At most one preparation and one bind per original uniform set.
+		static constexpr uint32_t PREFIX_CAPACITY = 32;
+		RDG::RecordHandle prefix_handles[PREFIX_CAPACITY];
+		uint32_t prefix_count = 0;
+		bool capture_complete = false;
+		NativeTransferDependency transfer;
+		bool has_transfer = false;
+		DrawAppendResult failure(Error p_error) const {
+			DrawAppendResult result = *this;
+			result.error = p_error;
+			return result;
+		}
+	};
+	// CPU binding acceptance is distinct from a native graph instruction.
+	// Uniform sets remain deferred state; VA/IA capture the actual bind append.
+	struct BindAppendResult {
+		Error error = OK;
+		NativeAppendEffect effect = NativeAppendEffect::NoNewEffect;
+		RDG::RecordHandle bind_handle;
+		uint32_t transfer_count = 0;
+		bool state_accepted = false;
+		bool state_changed = false;
+		bool capture_complete = false;
+		BindAppendResult failure(Error p_error) const {
+			BindAppendResult result = *this;
+			result.error = p_error;
+			return result;
+		}
+	};
+	BindAppendResult _draw_list_bind_uniform_set_recorded(DrawListID p_list, RID p_uniform_set, uint32_t p_index, bool p_capture = true);
+	BindAppendResult _draw_list_bind_vertex_array_recorded(DrawListID p_list, RID p_vertex_array, NativeTransferDependency *p_transfers, uint32_t p_transfer_capacity, bool p_capture = true);
+	BindAppendResult _draw_list_bind_index_array_recorded(DrawListID p_list, RID p_index_array, NativeTransferDependency *p_transfers, uint32_t p_transfer_capacity, bool p_capture = true);
+	bool _draw_list_usage_conflicts(const RDG::ResourceTracker *p_tracker, RDG::ResourceUsage p_usage) const;
+	// Mechanical original-owner join only; all native prefix and transfer facts
+	// stay attached for the packet owner even when the draw itself is refused.
+	struct SourceDrawAppendResult {
+		GDExtensionDeviceExit::CheckedRecordAppend observed;
+		DrawAppendResult native;
+	};
+	struct DrawListBeginResult {
+		Error error = OK;
+		NativeAppendEffect effect = NativeAppendEffect::NoNewEffect;
+		DrawListID list = INVALID_ID;
+		RDG::RecordHandle begin_handle;
+		RDG::RecordHandle clear_handle;
+		RDG::RecordHandle preparation_handles[1];
+		uint32_t preparation_count = 0;
+		RDG::RecordHandle prefix_handles[2];
+		uint32_t prefix_count = 0;
+		bool capture_complete = false;
+		DrawListBeginResult failure(Error p_error) const {
+			DrawListBeginResult result = *this;
+			result.error = p_error;
+			return result;
+		}
+	};
+	DrawListBeginResult _draw_list_begin_recorded(RID p_framebuffer, uint32_t p_draw_flags_bits, VectorView<Color> p_clear_color_values, float p_clear_depth_value, uint32_t p_clear_stencil_value, const Rect2 &p_region, uint32_t p_breadcrumb, bool p_capture = true);
+	DrawAppendResult _draw_list_bind_render_pipeline_recorded(DrawListID p_list, RID p_render_pipeline, bool p_capture = true);
+	DrawAppendResult _draw_list_set_push_constant_recorded(DrawListID p_list, const void *p_data, uint32_t p_data_size, bool p_capture = true);
+	DrawAppendResult _draw_list_draw_recorded(DrawListID p_list, bool p_use_indices, uint32_t p_instances, uint32_t p_procedural_vertices, bool p_capture = true, DrawCaptureProfile p_profile = DrawCaptureProfile::ProceduralTriangle);
+	DrawAppendResult _draw_list_draw_geometry_direct_recorded(DrawListID p_list, bool p_use_indices, uint32_t p_instances = 1);
+	DrawAppendResult _draw_list_draw_geometry_prepared_recorded(DrawListID p_list, bool p_use_indices, uint32_t p_instances = 1);
+	DrawAppendResult _draw_list_enable_scissor_recorded(DrawListID p_list, const Rect2 &p_rect, bool p_capture = true);
+	DrawAppendResult _draw_list_end_recorded(bool p_capture = true);
+	CopyAppendResult _buffer_copy_recorded(RID p_src_buffer, RID p_dst_buffer, uint32_t p_src_offset, uint32_t p_dst_offset, uint32_t p_size);
+	DrawAppendResult _draw_list_draw_indirect_recorded(DrawListID p_list, bool p_use_indices, RID p_buffer, uint32_t p_offset, uint32_t p_draw_count, uint32_t p_stride, bool p_capture = true);
+
+public:
+	// Core physical retention only: no source, packet, window or Runtime grant.
+	class NativeImmutableHold {
+		friend class RenderingDevice;
+		friend class GDExtensionDeviceExit::Registry;
+		friend class RendererRD::MaterialStorage;
+		RID material_origin;
+		uint64_t material_origin_generation = 0;
+		RenderingDevice *device = nullptr;
+		Vector<RID> resources;
+		bool pins_returned = false;
+
+	public:
+		NativeImmutableHold() = default;
+		NativeImmutableHold(const NativeImmutableHold &) = delete;
+		NativeImmutableHold &operator=(const NativeImmutableHold &) = delete;
+		NativeImmutableHold(NativeImmutableHold &&other) { *this = static_cast<NativeImmutableHold &&>(other); }
+		NativeImmutableHold &operator=(NativeImmutableHold &&other) {
+			if (this == &other) {
+				return *this;
+			}
+			CRASH_COND(device);
+			device = other.device;
+			resources = static_cast<Vector<RID> &&>(other.resources);
+			pins_returned = other.pins_returned;
+			material_origin = other.material_origin;
+			material_origin_generation = other.material_origin_generation;
+			other.material_origin = RID();
+			other.material_origin_generation = 0;
+			other.device = nullptr;
+			other.pins_returned = false;
+			return *this;
+		}
+		~NativeImmutableHold() { CRASH_COND(device); } // Original owner must explicitly return it.
+		bool is_valid() const { return device && !pins_returned; }
+		bool is_active() const { return device != nullptr; }
+	};
+	// Bound only by the original private Mesh directory capture transaction.
+	// The numeric projections cannot create custody; the actual accepted group
+	// retains the physical shares and the same original output pin retains it.
+	class NativeOutputGroupBinding {
+		friend class RenderingDevice;
+		friend class RendererRD::MeshStorage;
+		uint64_t registry_instance = 0, request_serial = 0, pin_serial = 0, group_serial = 0;
+
+	public:
+		NativeOutputGroupBinding() = default;
+		NativeOutputGroupBinding(const NativeOutputGroupBinding &) = delete;
+		NativeOutputGroupBinding &operator=(const NativeOutputGroupBinding &) = delete;
+		NativeOutputGroupBinding(NativeOutputGroupBinding &&other) { *this = static_cast<NativeOutputGroupBinding &&>(other); }
+		NativeOutputGroupBinding &operator=(NativeOutputGroupBinding &&other) {
+			if (this != &other) {
+				CRASH_COND(group_serial);
+				registry_instance = other.registry_instance;
+				request_serial = other.request_serial;
+				pin_serial = other.pin_serial;
+				group_serial = other.group_serial;
+				other.registry_instance = other.request_serial = other.pin_serial = other.group_serial = 0;
+			}
+			return *this;
+		}
+		~NativeOutputGroupBinding() { CRASH_COND(group_serial); }
+		bool is_empty() const { return group_serial == 0; }
+	};
+	Error native_immutable_hold_acquire(const VectorView<RID> &p_roots, NativeImmutableHold &r_hold, uint32_t p_max_resources = 256);
+	Error native_immutable_hold_release(NativeImmutableHold &r_hold);
+	bool native_immutable_is_render_thread() const;
+	bool native_immutable_resource_is_held(RID p_rid) const;
+	bool native_immutable_resource_is_retiring(RID p_rid) const;
+	bool native_immutable_pipeline_matches_shader(RID p_pipeline, RID p_shader) const;
+	bool native_immutable_uniform_set_matches_pipeline(RID p_set, RID p_pipeline, uint32_t p_set_index) const;
+	Error buffer_copy(RID p_src_buffer, RID p_dst_buffer, uint32_t p_src_offset, uint32_t p_dst_offset, uint32_t p_size);
+	/**
+	 * @brief Updates the given GPU buffer at offset and size with the given CPU data.
+	 * @remarks
+	 *	Buffer update is queued into the render graph. The render graph will reorder this operation so
+	 *	that it happens together with other buffer_update() in bulk and before rendering operations
+	 *	(or compute dispatches) that need it.
+	 *
+	 *	This means that the following will not work as intended:
+	 *	@code
+	 *		buffer_update(buffer_a, ..., data_source_x, ...);
+	 *		draw_list_draw(buffer_a);							// render data_render_x.
+	 *		buffer_update(buffer_a, ..., data_source_y, ...);
+	 *		draw_list_draw(buffer_a);							// render data_source_y.
+	 *	@endcode
+	 *
+	 *	Because it will be *reordered* to become the following:
+	 *	@code
+	 *		buffer_update(buffer_a, ..., data_source_x, ...);
+	 *		buffer_update(buffer_a, ..., data_source_y, ...);
+	 *		draw_list_draw(buffer_a); // render data_source_y. <-- Oops! should be data_source_x
+	 *		draw_list_draw(buffer_a); // render data_source_y.
+	 *	@endcode
+	 *
+	 *	When p_skip_check = true, we will perform checks to prevent this situation from happening
+	 *	(buffer_update must not be called while creating a draw or compute list).
+	 *	Do NOT set it to false for user-facing public API because users had trouble understanding
+	 *  this problem when manually creating draw lists.
+	 *
+	 *  Godot internally can set p_skip_check = true when it believes it will only update
+	 *  the buffer once and it needs to be done while a draw/compute list is being created.
+	 *
+	 *  Important: The Vulkan & Metal APIs do not allow issuing copies while inside a RenderPass.
+	 *  We can do it because Godot's render graph will reorder them.
+	 *
+	 * @param p_buffer		GPU buffer to update.
+	 * @param p_offset		Offset in bytes (relative to p_buffer).
+	 * @param p_size		Size in bytes of the data.
+	 * @param p_data		CPU data to transfer to GPU.
+	 *						Pointer can be deleted after buffer_update returns.
+	 * @param p_skip_check	Must always be false for user-facing public API. See remarks.
+	 * @return				Status result of the operation.
+	 */
+	Error buffer_update(RID p_buffer, uint32_t p_offset, uint32_t p_size, const void *p_data, bool p_skip_check = false);
+	Error buffer_clear(RID p_buffer, uint32_t p_offset, uint32_t p_size);
+	Vector<uint8_t> buffer_get_data(RID p_buffer, uint32_t p_offset = 0, uint32_t p_size = 0); // This causes stall, only use to retrieve large buffers for saving.
+	Error buffer_get_data_async(RID p_buffer, const Callable &p_callback, uint32_t p_offset = 0, uint32_t p_size = 0);
+	uint64_t buffer_get_device_address(RID p_buffer);
+	uint8_t *buffer_persistent_map_advance(RID p_buffer);
+	void buffer_flush(RID p_buffer);
+
+private:
+	/******************/
+	/**** CALLBACK ****/
+	/******************/
+
+public:
+	enum CallbackResourceType {
+		CALLBACK_RESOURCE_TYPE_TEXTURE,
+		CALLBACK_RESOURCE_TYPE_BUFFER,
+	};
+
+	enum CallbackResourceUsage {
+		CALLBACK_RESOURCE_USAGE_NONE,
+		CALLBACK_RESOURCE_USAGE_COPY_FROM,
+		CALLBACK_RESOURCE_USAGE_COPY_TO,
+		CALLBACK_RESOURCE_USAGE_RESOLVE_FROM,
+		CALLBACK_RESOURCE_USAGE_RESOLVE_TO,
+		CALLBACK_RESOURCE_USAGE_UNIFORM_BUFFER_READ,
+		CALLBACK_RESOURCE_USAGE_INDIRECT_BUFFER_READ,
+		CALLBACK_RESOURCE_USAGE_TEXTURE_BUFFER_READ,
+		CALLBACK_RESOURCE_USAGE_TEXTURE_BUFFER_READ_WRITE,
+		CALLBACK_RESOURCE_USAGE_STORAGE_BUFFER_READ,
+		CALLBACK_RESOURCE_USAGE_STORAGE_BUFFER_READ_WRITE,
+		CALLBACK_RESOURCE_USAGE_VERTEX_BUFFER_READ,
+		CALLBACK_RESOURCE_USAGE_INDEX_BUFFER_READ,
+		CALLBACK_RESOURCE_USAGE_TEXTURE_SAMPLE,
+		CALLBACK_RESOURCE_USAGE_STORAGE_IMAGE_READ,
+		CALLBACK_RESOURCE_USAGE_STORAGE_IMAGE_READ_WRITE,
+		CALLBACK_RESOURCE_USAGE_ATTACHMENT_COLOR_READ_WRITE,
+		CALLBACK_RESOURCE_USAGE_ATTACHMENT_DEPTH_STENCIL_READ_WRITE,
+		CALLBACK_RESOURCE_USAGE_ATTACHMENT_FRAGMENT_SHADING_RATE_READ,
+		CALLBACK_RESOURCE_USAGE_ATTACHMENT_FRAGMENT_DENSITY_MAP_READ,
+		CALLBACK_RESOURCE_USAGE_GENERAL,
+		CALLBACK_RESOURCE_USAGE_ACCELERATION_STRUCTURE_READ,
+		CALLBACK_RESOURCE_USAGE_ACCELERATION_STRUCTURE_READ_WRITE,
+		CALLBACK_RESOURCE_USAGE_MAX
+	};
+
+	struct CallbackResource {
+		RID rid;
+		CallbackResourceType type = CALLBACK_RESOURCE_TYPE_TEXTURE;
+		CallbackResourceUsage usage = CALLBACK_RESOURCE_USAGE_NONE;
+	};
+
+	Error driver_callback_add(RDD::DriverCallback p_callback, void *p_userdata, VectorView<CallbackResource> p_resources);
+
+	/*****************/
+	/**** TEXTURE ****/
+	/*****************/
+
+	// In modern APIs, the concept of textures may not exist;
+	// instead there is the image (the memory pretty much,
+	// the view (how the memory is interpreted) and the
+	// sampler (how it's sampled from the shader).
+	//
+	// Texture here includes the first two stages, but
+	// It's possible to create textures sharing the image
+	// but with different views. The main use case for this
+	// is textures that can be read as both SRGB/Linear,
+	// or slices of a texture (a mipmap, a layer, a 3D slice)
+	// for a framebuffer to render into it.
+
+	struct Texture {
+		NativeDisposalWitness native_disposal;
+		uint64_t native_disposal_rid = 0;
+		uint64_t native_disposal_serial = 0;
+		GDExtensionDeviceExit::ProductionDisposalUse *production_disposal_uses = nullptr;
+		uint32_t native_immutable_holds = 0;
+		bool native_immutable_retire_requested = false;
+		bool native_external_access = false;
+		struct SharedFallback {
+			uint32_t revision = 1;
+			RDD::TextureID texture;
+			RDG::ResourceTracker *texture_tracker = nullptr;
+			RDD::BufferID buffer;
+			RDG::ResourceTracker *buffer_tracker = nullptr;
+			bool raw_reinterpretation = false;
+		};
+
+		RDD::TextureID driver_id;
+		uint32_t qualification_users = 0;
+		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
+
+		TextureType type = TEXTURE_TYPE_MAX;
+		DataFormat format = DATA_FORMAT_MAX;
+		TextureSamples samples = TEXTURE_SAMPLES_MAX;
+		TextureSliceType slice_type = TEXTURE_SLICE_MAX;
+		Rect2i slice_rect;
+		uint32_t width = 0;
+		uint32_t height = 0;
+		uint32_t depth = 0;
+		uint32_t layers = 0;
+		uint32_t mipmaps = 0;
+		uint32_t usage_flags = 0;
+		uint32_t base_mipmap = 0;
+		uint32_t base_layer = 0;
+
+		Vector<DataFormat> allowed_shared_formats;
+
+		bool is_resolve_buffer = false;
+		bool is_discardable = false;
+		bool is_subsampled = false;
+		bool has_initial_data = false;
+		bool pending_clear = false;
+
+		BitField<RDD::TextureAspectBits> read_aspect_flags = {};
+		BitField<RDD::TextureAspectBits> barrier_aspect_flags = {};
+		bool bound = false; // Bound to framebuffer.
+		RID owner;
+
+		RDG::ResourceTracker *draw_tracker = nullptr;
+		HashMap<Rect2i, RDG::ResourceTracker *> *slice_trackers = nullptr;
+		SharedFallback *shared_fallback = nullptr;
+		int32_t transfer_worker_index = -1;
+		uint64_t transfer_worker_operation = 0;
+
+		RDD::TextureSubresourceRange barrier_range() const {
+			RDD::TextureSubresourceRange r;
+			r.aspect = barrier_aspect_flags;
+			r.base_mipmap = base_mipmap;
+			r.mipmap_count = mipmaps;
+			r.base_layer = base_layer;
+			r.layer_count = layers;
+			return r;
+		}
+
+		TextureFormat texture_format() const {
+			TextureFormat tf;
+			tf.format = format;
+			tf.width = width;
+			tf.height = height;
+			tf.depth = depth;
+			tf.array_layers = layers;
+			tf.mipmaps = mipmaps;
+			tf.texture_type = type;
+			tf.samples = samples;
+			tf.usage_bits = usage_flags;
+			tf.shareable_formats = allowed_shared_formats;
+			tf.is_resolve_buffer = is_resolve_buffer;
+			tf.is_discardable = is_discardable;
+			return tf;
+		}
+	};
+
+	RID_Owner<Texture, true> texture_owner;
+	uint32_t texture_upload_region_size_px = 0;
+	uint32_t texture_download_region_size_px = 0;
+
+	uint32_t _texture_layer_count(Texture *p_texture) const;
+	uint32_t _texture_alignment(Texture *p_texture) const;
+	static uint32_t _normalize_staging_region_size(int64_t p_size);
+	Error _texture_initialize(RID p_texture, uint32_t p_layer, const Vector<uint8_t> &p_data, RDD::TextureLayout p_dst_layout, bool p_immediate_flush);
+	void _texture_check_shared_fallback(Texture *p_texture);
+	void _texture_update_shared_fallback(RID p_texture_rid, Texture *p_texture, bool p_for_writing);
+	void _texture_free_shared_fallback(Texture *p_texture);
+	void _texture_copy_shared(RID p_src_texture_rid, Texture *p_src_texture, RID p_dst_texture_rid, Texture *p_dst_texture);
+	bool _texture_create_reinterpret_buffer(Texture *p_texture);
+	void _texture_check_pending_clear(RID p_texture_rid, Texture *p_texture);
+	void _texture_clear_color(RID p_texture_rid, Texture *p_texture, const Color &p_color, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers);
+	void _texture_clear_depth_stencil(RID p_texture_rid, Texture *p_texture, float p_depth, uint8_t p_stencil, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers);
+	uint32_t _texture_vrs_method_to_usage_bits() const;
+	void _texture_ensure_shareable_format(RID p_texture, const DataFormat &p_shareable_format);
+
+	struct TextureGetDataRequest {
+		uint32_t frame_local_index = 0;
+		uint32_t frame_local_count = 0;
+		Callable callback;
+		uint32_t width = 0;
+		uint32_t height = 0;
+		uint32_t depth = 0;
+		uint32_t mipmaps = 0;
+		RDD::DataFormat format = RDD::DATA_FORMAT_MAX;
+	};
+
+public:
+	struct TextureView {
+		DataFormat format_override = DATA_FORMAT_MAX; // // Means, use same as format.
+		TextureSwizzle swizzle_r = TEXTURE_SWIZZLE_R;
+		TextureSwizzle swizzle_g = TEXTURE_SWIZZLE_G;
+		TextureSwizzle swizzle_b = TEXTURE_SWIZZLE_B;
+		TextureSwizzle swizzle_a = TEXTURE_SWIZZLE_A;
+
+		bool operator==(const TextureView &p_other) const {
+			if (format_override != p_other.format_override) {
+				return false;
+			} else if (swizzle_r != p_other.swizzle_r) {
+				return false;
+			} else if (swizzle_g != p_other.swizzle_g) {
+				return false;
+			} else if (swizzle_b != p_other.swizzle_b) {
+				return false;
+			} else if (swizzle_a != p_other.swizzle_a) {
+				return false;
+			} else {
+				return true;
+			}
+		}
+	};
+
+private:
+	RID _texture_create_internal(const TextureFormat &p_format, const TextureView &p_view, const Vector<Vector<uint8_t>> &p_data, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, RID p_reserved, const NativeDisposalWitness *p_native_disposal = nullptr);
+	RID _qualification_texture_create(const TextureFormat &p_format, const TextureView &p_view, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
+
+public:
+	RID texture_create(const TextureFormat &p_format, const TextureView &p_view, const Vector<Vector<uint8_t>> &p_data = Vector<Vector<uint8_t>>());
+	RID texture_create_shared(const TextureView &p_view, RID p_with_texture);
+	RID texture_create_from_extension(TextureType p_type, DataFormat p_format, TextureSamples p_samples, BitField<RenderingDevice::TextureUsageBits> p_usage, uint64_t p_image, uint64_t p_width, uint64_t p_height, uint64_t p_depth, uint64_t p_layers, uint64_t p_mipmaps = 1);
+	RID texture_create_shared_from_slice(const TextureView &p_view, RID p_with_texture, uint32_t p_layer, uint32_t p_mipmap, uint32_t p_mipmaps = 1, TextureSliceType p_slice_type = TEXTURE_SLICE_2D, uint32_t p_layers = 0);
+	Error texture_update(RID p_texture, uint32_t p_layer, const Vector<uint8_t> &p_data);
+	Vector<uint8_t> texture_get_data(RID p_texture, uint32_t p_layer); // CPU textures will return immediately, while GPU textures will most likely force a flush
+	Error texture_get_data_async(RID p_texture, uint32_t p_layer, const Callable &p_callback);
+
+	bool texture_is_format_supported_for_usage(DataFormat p_format, BitField<TextureUsageBits> p_usage) const;
+	bool texture_is_shared(RID p_texture);
+	bool texture_is_valid(RID p_texture);
+	TextureFormat texture_get_format(RID p_texture);
+	Size2i texture_size(RID p_texture);
+#ifndef DISABLE_DEPRECATED
+	uint64_t texture_get_native_handle(RID p_texture);
+#endif
+
+	Error texture_copy(RID p_from_texture, RID p_to_texture, const Vector3 &p_from, const Vector3 &p_to, const Vector3 &p_size, uint32_t p_src_mipmap, uint32_t p_dst_mipmap, uint32_t p_src_layer, uint32_t p_dst_layer);
+	Error texture_clear(RID p_texture, const Color &p_color, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers);
+	Error texture_resolve_multisample(RID p_from_texture, RID p_to_texture);
+
+	void texture_set_discardable(RID p_texture, bool p_discardable);
+	bool texture_is_discardable(RID p_texture);
+
+public:
+	/*************/
+	/**** VRS ****/
+	/*************/
+
+	enum VRSMethod {
+		VRS_METHOD_NONE,
+		VRS_METHOD_FRAGMENT_SHADING_RATE,
+		VRS_METHOD_FRAGMENT_DENSITY_MAP,
+	};
+
+private:
+	VRSMethod vrs_method = VRS_METHOD_NONE;
+	DataFormat vrs_format = DATA_FORMAT_MAX;
+	Size2i vrs_texel_size;
+
+	static RDG::ResourceUsage _vrs_usage_from_method(VRSMethod p_method);
+	static RDD::PipelineStageBits _vrs_stages_from_method(VRSMethod p_method);
+	static RDD::TextureLayout _vrs_layout_from_method(VRSMethod p_method);
+	void _vrs_detect_method();
+
+public:
+	VRSMethod vrs_get_method() const;
+	DataFormat vrs_get_format() const;
+	Size2i vrs_get_texel_size() const;
+
+	/*********************/
+	/**** FRAMEBUFFER ****/
+	/*********************/
+
+	// In modern APIs, generally, framebuffers work similar to how they
+	// do in OpenGL, with the exception that
+	// the "format" (RDD::RenderPassID) is not dynamic
+	// and must be more or less the same as the one
+	// used for the render pipelines.
+
+	struct AttachmentFormat {
+		enum : uint32_t {
+			UNUSED_ATTACHMENT = 0xFFFFFFFF
+		};
+		DataFormat format;
+		TextureSamples samples;
+		uint32_t usage_flags;
+		AttachmentFormat() {
+			format = DATA_FORMAT_R8G8B8A8_UNORM;
+			samples = TEXTURE_SAMPLES_1;
+			usage_flags = 0;
+		}
+	};
+
+	struct FramebufferPass {
+		Vector<int32_t> color_attachments;
+		Vector<int32_t> input_attachments;
+		Vector<int32_t> resolve_attachments;
+		Vector<int32_t> preserve_attachments;
+		int32_t depth_attachment = ATTACHMENT_UNUSED;
+		int32_t depth_resolve_attachment = ATTACHMENT_UNUSED;
+	};
+
+	typedef int64_t FramebufferFormatID;
+
+private:
+	struct FramebufferFormatKey {
+		Vector<AttachmentFormat> attachments;
+		Vector<FramebufferPass> passes;
+		uint32_t view_count = 1;
+		VRSMethod vrs_method = VRS_METHOD_NONE;
+		int32_t vrs_attachment = ATTACHMENT_UNUSED;
+		Size2i vrs_texel_size;
+
+		bool operator<(const FramebufferFormatKey &p_key) const {
+			if (vrs_texel_size != p_key.vrs_texel_size) {
+				return vrs_texel_size < p_key.vrs_texel_size;
+			}
+
+			if (vrs_attachment != p_key.vrs_attachment) {
+				return vrs_attachment < p_key.vrs_attachment;
+			}
+
+			if (vrs_method != p_key.vrs_method) {
+				return vrs_method < p_key.vrs_method;
+			}
+
+			if (view_count != p_key.view_count) {
+				return view_count < p_key.view_count;
+			}
+
+			uint32_t pass_size = passes.size();
+			uint32_t key_pass_size = p_key.passes.size();
+			if (pass_size != key_pass_size) {
+				return pass_size < key_pass_size;
+			}
+			const FramebufferPass *pass_ptr = passes.ptr();
+			const FramebufferPass *key_pass_ptr = p_key.passes.ptr();
+
+			for (uint32_t i = 0; i < pass_size; i++) {
+				{ // Compare color attachments.
+					uint32_t attachment_size = pass_ptr[i].color_attachments.size();
+					uint32_t key_attachment_size = key_pass_ptr[i].color_attachments.size();
+					if (attachment_size != key_attachment_size) {
+						return attachment_size < key_attachment_size;
+					}
+					const int32_t *pass_attachment_ptr = pass_ptr[i].color_attachments.ptr();
+					const int32_t *key_pass_attachment_ptr = key_pass_ptr[i].color_attachments.ptr();
+
+					for (uint32_t j = 0; j < attachment_size; j++) {
+						if (pass_attachment_ptr[j] != key_pass_attachment_ptr[j]) {
+							return pass_attachment_ptr[j] < key_pass_attachment_ptr[j];
+						}
+					}
+				}
+				{ // Compare input attachments.
+					uint32_t attachment_size = pass_ptr[i].input_attachments.size();
+					uint32_t key_attachment_size = key_pass_ptr[i].input_attachments.size();
+					if (attachment_size != key_attachment_size) {
+						return attachment_size < key_attachment_size;
+					}
+					const int32_t *pass_attachment_ptr = pass_ptr[i].input_attachments.ptr();
+					const int32_t *key_pass_attachment_ptr = key_pass_ptr[i].input_attachments.ptr();
+
+					for (uint32_t j = 0; j < attachment_size; j++) {
+						if (pass_attachment_ptr[j] != key_pass_attachment_ptr[j]) {
+							return pass_attachment_ptr[j] < key_pass_attachment_ptr[j];
+						}
+					}
+				}
+				{ // Compare resolve attachments.
+					uint32_t attachment_size = pass_ptr[i].resolve_attachments.size();
+					uint32_t key_attachment_size = key_pass_ptr[i].resolve_attachments.size();
+					if (attachment_size != key_attachment_size) {
+						return attachment_size < key_attachment_size;
+					}
+					const int32_t *pass_attachment_ptr = pass_ptr[i].resolve_attachments.ptr();
+					const int32_t *key_pass_attachment_ptr = key_pass_ptr[i].resolve_attachments.ptr();
+
+					for (uint32_t j = 0; j < attachment_size; j++) {
+						if (pass_attachment_ptr[j] != key_pass_attachment_ptr[j]) {
+							return pass_attachment_ptr[j] < key_pass_attachment_ptr[j];
+						}
+					}
+				}
+				{ // Compare preserve attachments.
+					uint32_t attachment_size = pass_ptr[i].preserve_attachments.size();
+					uint32_t key_attachment_size = key_pass_ptr[i].preserve_attachments.size();
+					if (attachment_size != key_attachment_size) {
+						return attachment_size < key_attachment_size;
+					}
+					const int32_t *pass_attachment_ptr = pass_ptr[i].preserve_attachments.ptr();
+					const int32_t *key_pass_attachment_ptr = key_pass_ptr[i].preserve_attachments.ptr();
+
+					for (uint32_t j = 0; j < attachment_size; j++) {
+						if (pass_attachment_ptr[j] != key_pass_attachment_ptr[j]) {
+							return pass_attachment_ptr[j] < key_pass_attachment_ptr[j];
+						}
+					}
+				}
+				if (pass_ptr[i].depth_attachment != key_pass_ptr[i].depth_attachment) {
+					return pass_ptr[i].depth_attachment < key_pass_ptr[i].depth_attachment;
+				}
+			}
+
+			int as = attachments.size();
+			int bs = p_key.attachments.size();
+			if (as != bs) {
+				return as < bs;
+			}
+
+			const AttachmentFormat *af_a = attachments.ptr();
+			const AttachmentFormat *af_b = p_key.attachments.ptr();
+			for (int i = 0; i < as; i++) {
+				const AttachmentFormat &a = af_a[i];
+				const AttachmentFormat &b = af_b[i];
+				if (a.format != b.format) {
+					return a.format < b.format;
+				}
+				if (a.samples != b.samples) {
+					return a.samples < b.samples;
+				}
+				if (a.usage_flags != b.usage_flags) {
+					return a.usage_flags < b.usage_flags;
+				}
+			}
+
+			return false; // Equal.
+		}
+	};
+
+	static RDD::RenderPassID _render_pass_create(RenderingDeviceDriver *p_driver, const Vector<AttachmentFormat> &p_attachments, const Vector<FramebufferPass> &p_passes, VectorView<RDD::AttachmentLoadOp> p_load_ops, VectorView<RDD::AttachmentStoreOp> p_store_ops, uint32_t p_view_count = 1, VRSMethod p_vrs_method = VRS_METHOD_NONE, int32_t p_vrs_attachment = -1, Size2i p_vrs_texel_size = Size2i(), Vector<TextureSamples> *r_samples = nullptr);
+	static RDD::RenderPassID _render_pass_create_from_graph(RenderingDeviceDriver *p_driver, VectorView<RDD::AttachmentLoadOp> p_load_ops, VectorView<RDD::AttachmentStoreOp> p_store_ops, void *p_user_data);
+
+	// This is a cache and it's never freed, it ensures
+	// IDs for a given format are always unique.
+	RBMap<FramebufferFormatKey, FramebufferFormatID> framebuffer_format_cache;
+	struct FramebufferFormat {
+		const RBMap<FramebufferFormatKey, FramebufferFormatID>::Element *E;
+		RDD::RenderPassID render_pass; // Here for constructing shaders, never used, see section (7.2. Render Pass Compatibility from Vulkan spec).
+		Vector<TextureSamples> pass_samples;
+		uint32_t view_count = 1; // Number of views.
+	};
+
+	HashMap<FramebufferFormatID, FramebufferFormat> framebuffer_formats;
+
+	struct Framebuffer {
+		NativeDisposalWitness native_disposal;
+		uint64_t native_disposal_rid = 0;
+		uint64_t native_disposal_serial = 0;
+		// Exact cache identity, retained after its last child has returned.
+		uint64_t native_disposal_backing = 0;
+		uint32_t qualification_users = 0;
+		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
+		// This edge survives RID invalidation and returns after the actual driver free.
+		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_dependency = nullptr;
+		FramebufferFormatID format_id;
+		uint32_t storage_mask = 0;
+		Vector<RID> texture_ids;
+		InvalidationCallback invalidated_callback = nullptr;
+		void *invalidated_callback_userdata = nullptr;
+		RDG::FramebufferCache *framebuffer_cache = nullptr;
+		Size2 size;
+		uint32_t view_count;
+	};
+
+	RID_Owner<Framebuffer, true> framebuffer_owner;
+	RID _qualification_framebuffer_create_multipass(const Vector<RID> &, const Vector<FramebufferPass> &, FramebufferFormatID, uint32_t, GDExtensionDeviceExit::QualificationPhysicalReturn *, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID, const NativeDisposalWitness *p_native_disposal = nullptr);
+	RID _qualification_framebuffer_create(RID, GDExtensionDeviceExit::QualificationPhysicalReturn *, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID);
+
+public:
+	// This ID is warranted to be unique for the same formats, does not need to be freed
+	FramebufferFormatID framebuffer_format_create(const Vector<AttachmentFormat> &p_format, uint32_t p_view_count = 1, int32_t p_vrs_attachment = -1);
+	FramebufferFormatID framebuffer_format_create_multipass(const Vector<AttachmentFormat> &p_attachments, const Vector<FramebufferPass> &p_passes, uint32_t p_view_count = 1, int32_t p_vrs_attachment = -1);
+	FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = TEXTURE_SAMPLES_1);
+	TextureSamples framebuffer_format_get_texture_samples(FramebufferFormatID p_format, uint32_t p_pass = 0);
+
+	RID framebuffer_create(const Vector<RID> &p_texture_attachments, FramebufferFormatID p_format_check = INVALID_ID, uint32_t p_view_count = 1);
+	RID framebuffer_create_multipass(const Vector<RID> &p_texture_attachments, const Vector<FramebufferPass> &p_passes, FramebufferFormatID p_format_check = INVALID_ID, uint32_t p_view_count = 1);
+	RID framebuffer_create_empty(const Size2i &p_size, TextureSamples p_samples = TEXTURE_SAMPLES_1, FramebufferFormatID p_format_check = INVALID_ID);
+	bool framebuffer_is_valid(RID p_framebuffer) const;
+	void framebuffer_set_invalidation_callback(RID p_framebuffer, InvalidationCallback p_callback, void *p_userdata);
+
+	FramebufferFormatID framebuffer_get_format(RID p_framebuffer);
+	Size2 framebuffer_get_size(RID p_framebuffer);
+
+	/*****************/
+	/**** SAMPLER ****/
+	/*****************/
+private:
+	struct Sampler {
+		NativeDisposalWitness native_disposal;
+		uint64_t native_disposal_rid = 0;
+		uint64_t native_disposal_serial = 0;
+		GDExtensionDeviceExit::ProductionDisposalUse *production_disposal_uses = nullptr;
+		uint32_t native_immutable_holds = 0;
+		bool native_immutable_retire_requested = false;
+		bool native_external_access = false;
+		RDD::SamplerID driver_id;
+		uint32_t qualification_users = 0;
+		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
+	};
+	RID_Owner<Sampler, true> sampler_owner;
+	RID _qualification_sampler_create(const SamplerState &p_state, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell);
+	RID _sampler_create_internal(const SamplerState &p_state, GDExtensionDeviceExit::QualificationPhysicalReturn *p_cell, const NativeDisposalWitness *p_native_disposal = nullptr);
+
+public:
+	RID sampler_create(const SamplerState &p_state);
+	bool sampler_is_format_supported_for_filter(DataFormat p_format, SamplerFilter p_sampler_filter) const;
+
+	/**********************/
+	/**** VERTEX ARRAY ****/
+	/**********************/
+
+	typedef int64_t VertexFormatID;
+
+private:
+	// Vertex buffers in Vulkan are similar to how
+	// they work in OpenGL, except that instead of
+	// an attribute index, there is a buffer binding
+	// index (for binding the buffers in real-time)
+	// and a location index (what is used in the shader).
+	//
+	// This mapping is done here internally, and it's not
+	// exposed.
+
+	RID_Owner<Buffer, true> vertex_buffer_owner;
+
+	struct VertexDescriptionKey {
+		Vector<VertexAttribute> vertex_formats;
+
+		bool operator==(const VertexDescriptionKey &p_key) const {
+			int vdc = vertex_formats.size();
+			int vdck = p_key.vertex_formats.size();
+
+			if (vdc != vdck) {
+				return false;
+			} else {
+				const VertexAttribute *a_ptr = vertex_formats.ptr();
+				const VertexAttribute *b_ptr = p_key.vertex_formats.ptr();
+				for (int i = 0; i < vdc; i++) {
+					const VertexAttribute &a = a_ptr[i];
+					const VertexAttribute &b = b_ptr[i];
+
+					if (a.location != b.location) {
+						return false;
+					}
+					if (a.offset != b.offset) {
+						return false;
+					}
+					if (a.format != b.format) {
+						return false;
+					}
+					if (a.stride != b.stride) {
+						return false;
+					}
+					if (a.frequency != b.frequency) {
+						return false;
+					}
+				}
+				return true; // They are equal.
+			}
+		}
+
+		uint32_t hash() const {
+			int vdc = vertex_formats.size();
+			uint32_t h = hash_murmur3_one_32(vdc);
+			const VertexAttribute *ptr = vertex_formats.ptr();
+			for (int i = 0; i < vdc; i++) {
+				const VertexAttribute &vd = ptr[i];
+				h = hash_murmur3_one_32(vd.location, h);
+				h = hash_murmur3_one_32(vd.offset, h);
+				h = hash_murmur3_one_32(vd.format, h);
+				h = hash_murmur3_one_32(vd.stride, h);
+				h = hash_murmur3_one_32(vd.frequency, h);
+			}
+			return hash_fmix32(h);
+		}
+	};
+
+	struct VertexDescriptionHash {
+		static _FORCE_INLINE_ uint32_t hash(const VertexDescriptionKey &p_key) {
+			return p_key.hash();
+		}
+	};
+
+	// This is a cache and it's never freed, it ensures that
+	// ID used for a specific format always remain the same.
+	HashMap<VertexDescriptionKey, VertexFormatID, VertexDescriptionHash> vertex_format_cache;
+
+	struct VertexDescriptionCache {
+		Vector<VertexAttribute> vertex_formats;
+		VertexAttributeBindingsMap bindings;
+		RDD::VertexFormatID driver_id;
+	};
+
+	HashMap<VertexFormatID, VertexDescriptionCache> vertex_formats;
+
+	struct VertexArray {
+		GDExtensionDeviceExit::ProductionDisposalUse *production_disposal_uses = nullptr;
+		uint32_t native_immutable_holds = 0;
+		bool native_immutable_retire_requested = false;
+		bool native_external_access = false;
+		RID buffer;
+		VertexFormatID description;
+		int vertex_count = 0;
+		uint32_t max_instances_allowed = 0;
+
+		Vector<RDD::BufferID> buffers; // Not owned, just referenced.
+		Vector<RDG::ResourceTracker *> draw_trackers; // Not owned, just referenced.
+		Vector<uint64_t> offsets;
+		Vector<int32_t> transfer_worker_indices;
+		Vector<uint64_t> transfer_worker_operations;
+		HashSet<RID> untracked_buffers;
+	};
+
+	RID_Owner<VertexArray, true> vertex_array_owner;
+
+	struct IndexBuffer : public Buffer {
+		uint32_t max_index = 0; // Used for validation.
+		uint32_t index_count = 0;
+		IndexBufferFormat format = INDEX_BUFFER_FORMAT_UINT16;
+		bool supports_restart_indices = false;
+	};
+
+	RID_Owner<IndexBuffer, true> index_buffer_owner;
+
+	struct IndexArray {
+		GDExtensionDeviceExit::ProductionDisposalUse *production_disposal_uses = nullptr;
+		uint32_t native_immutable_holds = 0;
+		bool native_immutable_retire_requested = false;
+		bool native_external_access = false;
+		uint32_t max_index = 0; // Remember the maximum index here too, for validation.
+		RDD::BufferID driver_id; // Not owned, inherited from index buffer.
+		RDG::ResourceTracker *draw_tracker = nullptr; // Not owned, inherited from index buffer.
+		uint32_t offset = 0;
+		uint32_t indices = 0;
+		IndexBufferFormat format = INDEX_BUFFER_FORMAT_UINT16;
+		bool supports_restart_indices = false;
+		int32_t transfer_worker_index = -1;
+		uint64_t transfer_worker_operation = 0;
+	};
+
+	RID_Owner<IndexArray, true> index_array_owner;
+
+public:
+	enum BufferCreationBits {
+		BUFFER_CREATION_DEVICE_ADDRESS_BIT = (1 << 0),
+		BUFFER_CREATION_AS_STORAGE_BIT = (1 << 1),
+		BUFFER_CREATION_DYNAMIC_PERSISTENT_BIT = (1 << 2),
+		BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT = (1 << 3),
+	};
+
+	enum StorageBufferUsage {
+		STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT = (1 << 0),
+	};
+
+	RID vertex_buffer_create(uint32_t p_size_bytes, Span<uint8_t> p_data = {}, BitField<BufferCreationBits> p_creation_bits = 0);
+	RID _vertex_buffer_create(uint32_t p_size_bytes, const Vector<uint8_t> &p_data, BitField<BufferCreationBits> p_creation_bits = 0) {
+		return vertex_buffer_create(p_size_bytes, p_data, p_creation_bits);
+	}
+
+	// This ID is warranted to be unique for the same formats, does not need to be freed
+	VertexFormatID vertex_format_create(const Vector<VertexAttribute> &p_vertex_descriptions);
+	RID vertex_array_create(uint32_t p_vertex_count, VertexFormatID p_vertex_format, const Vector<RID> &p_src_buffers, const Vector<uint64_t> &p_offsets = Vector<uint64_t>());
+
+	// Internal Indexed144 admission check. This does not expose arbitrary buffers to the public API.
+	bool validate_external_indexed_surface_buffers(RID p_current_vertex_buffer, RID p_previous_vertex_buffer, RID p_index_buffer, RID p_index_array, uint32_t p_vertex_capacity, uint32_t p_index_capacity);
+
+	RID index_buffer_create(uint32_t p_index_count, IndexBufferFormat p_format, Span<uint8_t> p_data = {}, bool p_use_restart_indices = false, BitField<BufferCreationBits> p_creation_bits = 0);
+	RID _index_buffer_create(uint32_t p_index_count, IndexBufferFormat p_format, const Vector<uint8_t> &p_data, bool p_use_restart_indices = false, BitField<BufferCreationBits> p_creation_bits = 0) {
+		return index_buffer_create(p_index_count, p_format, p_data, p_use_restart_indices, p_creation_bits);
+	}
+
+	RID index_array_create(RID p_index_buffer, uint32_t p_index_offset, uint32_t p_index_count);
+
+private:
+	BitField<RDD::BufferUsageBits> _creation_to_usage_bits(BitField<BufferCreationBits> p_creation_bits);
+
+	/****************/
+	/**** SHADER ****/
+	/****************/
+
+	// Some APIs (e.g., Vulkan) specifies a really complex behavior for the application
+	// in order to tell when descriptor sets need to be re-bound (or not).
+	// "When binding a descriptor set (see Descriptor Set Binding) to set
+	//  number N, if the previously bound descriptor sets for sets zero
+	//  through N-1 were all bound using compatible pipeline layouts,
+	//  then performing this binding does not disturb any of the lower numbered sets.
+	//  If, additionally, the previous bound descriptor set for set N was
+	//  bound using a pipeline layout compatible for set N, then the bindings
+	//  in sets numbered greater than N are also not disturbed."
+	// As a result, we need to figure out quickly when something is no longer "compatible".
+	// in order to avoid costly rebinds.
+
+private:
+	struct UniformSetFormat {
+		Vector<ShaderUniform> uniforms;
+
+		_FORCE_INLINE_ bool operator<(const UniformSetFormat &p_other) const {
+			if (uniforms.size() != p_other.uniforms.size()) {
+				return uniforms.size() < p_other.uniforms.size();
+			}
+			for (int i = 0; i < uniforms.size(); i++) {
+				if (uniforms[i] < p_other.uniforms[i]) {
+					return true;
+				} else if (p_other.uniforms[i] < uniforms[i]) {
+					return false;
+				}
+			}
+			return false;
+		}
+	};
+
+	// Always grows, never shrinks, ensuring unique IDs, but we assume
+	// the amount of formats will never be a problem, as the amount of shaders
+	// in a game is limited.
+	RBMap<UniformSetFormat, uint32_t> uniform_set_format_cache;
+
+	// Shaders in Vulkan are just pretty much
+	// precompiled blocks of SPIR-V bytecode. They
+	// are most likely not really compiled to host
+	// assembly until a pipeline is created.
+	//
+	// When supplying the shaders, this implementation
+	// will use the reflection abilities of glslang to
+	// understand and cache everything required to
+	// create and use the descriptor sets (Vulkan's
+	// biggest pain).
+	//
+	// Additionally, hashes are created for every set
+	// to do quick validation and ensuring the user
+	// does not submit something invalid.
+
+	struct Shader : public ShaderReflection {
+		GDExtensionDeviceExit::ProductionDisposalUse *production_disposal_uses = nullptr;
+		Vector<RID> native_immutable_samplers;
+		uint32_t native_immutable_holds = 0;
+		bool native_immutable_retire_requested = false;
+		bool native_external_access = false;
+		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
+		BitField<ShaderCompileFlags> compile_flags = {};
+		String name; // Used for debug.
+		RDD::ShaderID driver_id;
+		uint32_t layout_hash = 0;
+		BitField<RDD::PipelineStageBits> stage_bits = {};
+		Vector<uint32_t> set_formats;
+	};
+
+	String _shader_uniform_debug(RID p_shader, int p_set = -1);
+
+	RID_Owner<Shader, true> shader_owner;
+
+#ifndef DISABLE_DEPRECATED
+public:
+	enum BarrierMask {
+		BARRIER_MASK_VERTEX = 1,
+		BARRIER_MASK_FRAGMENT = 8,
+		BARRIER_MASK_COMPUTE = 2,
+		BARRIER_MASK_TRANSFER = 4,
+
+		BARRIER_MASK_RASTER = BARRIER_MASK_VERTEX | BARRIER_MASK_FRAGMENT, // 9,
+		BARRIER_MASK_ALL_BARRIERS = 0x7FFF, // all flags set
+		BARRIER_MASK_NO_BARRIER = 0x8000,
+	};
+
+	enum InitialAction {
+		INITIAL_ACTION_LOAD,
+		INITIAL_ACTION_CLEAR,
+		INITIAL_ACTION_DISCARD,
+		INITIAL_ACTION_MAX,
+		INITIAL_ACTION_CLEAR_REGION = INITIAL_ACTION_CLEAR,
+		INITIAL_ACTION_CLEAR_REGION_CONTINUE = INITIAL_ACTION_CLEAR,
+		INITIAL_ACTION_KEEP = INITIAL_ACTION_LOAD,
+		INITIAL_ACTION_DROP = INITIAL_ACTION_DISCARD,
+		INITIAL_ACTION_CONTINUE = INITIAL_ACTION_LOAD,
+	};
+
+	enum FinalAction {
+		FINAL_ACTION_STORE,
+		FINAL_ACTION_DISCARD,
+		FINAL_ACTION_MAX,
+		FINAL_ACTION_READ = FINAL_ACTION_STORE,
+		FINAL_ACTION_CONTINUE = FINAL_ACTION_STORE,
+	};
+
+	void barrier(BitField<BarrierMask> p_from = BARRIER_MASK_ALL_BARRIERS, BitField<BarrierMask> p_to = BARRIER_MASK_ALL_BARRIERS);
+	void full_barrier();
+	void draw_command_insert_label(String p_label_name, const Color &p_color = Color(1, 1, 1, 1));
+	Error draw_list_begin_split(RID p_framebuffer, uint32_t p_splits, DrawListID *r_split_ids, InitialAction p_initial_color_action, FinalAction p_final_color_action, InitialAction p_initial_depth_action, FinalAction p_final_depth_action, const Vector<Color> &p_clear_color_values = Vector<Color>(), float p_clear_depth = 1.0, uint32_t p_clear_stencil = 0, const Rect2 &p_region = Rect2(), const Vector<RID> &p_storage_textures = Vector<RID>());
+	Error draw_list_switch_to_next_pass_split(uint32_t p_splits, DrawListID *r_split_ids);
+	Vector<int64_t> _draw_list_begin_split(RID p_framebuffer, uint32_t p_splits, InitialAction p_initial_color_action, FinalAction p_final_color_action, InitialAction p_initial_depth_action, FinalAction p_final_depth_action, const Vector<Color> &p_clear_color_values = Vector<Color>(), float p_clear_depth = 1.0, uint32_t p_clear_stencil = 0, const Rect2 &p_region = Rect2(), const TypedArray<RID> &p_storage_textures = TypedArray<RID>());
+	Vector<int64_t> _draw_list_switch_to_next_pass_split(uint32_t p_splits);
+
+private:
+	void _draw_list_end_bind_compat_81356(BitField<BarrierMask> p_post_barrier);
+	void _compute_list_end_bind_compat_81356(BitField<BarrierMask> p_post_barrier);
+	void _barrier_bind_compat_81356(BitField<BarrierMask> p_from, BitField<BarrierMask> p_to);
+
+	void _draw_list_end_bind_compat_84976(BitField<BarrierMask> p_post_barrier);
+	void _compute_list_end_bind_compat_84976(BitField<BarrierMask> p_post_barrier);
+	InitialAction _convert_initial_action_84976(InitialAction p_old_initial_action);
+	FinalAction _convert_final_action_84976(FinalAction p_old_final_action);
+	DrawListID _draw_list_begin_bind_compat_84976(RID p_framebuffer, InitialAction p_initial_color_action, FinalAction p_final_color_action, InitialAction p_initial_depth_action, FinalAction p_final_depth_action, const Vector<Color> &p_clear_color_values, float p_clear_depth, uint32_t p_clear_stencil, const Rect2 &p_region, const TypedArray<RID> &p_storage_textures);
+	ComputeListID _compute_list_begin_bind_compat_84976(bool p_allow_draw_overlap);
+	Error _buffer_update_bind_compat_84976(RID p_buffer, uint32_t p_offset, uint32_t p_size, const Vector<uint8_t> &p_data, BitField<BarrierMask> p_post_barrier);
+	Error _buffer_clear_bind_compat_84976(RID p_buffer, uint32_t p_offset, uint32_t p_size, BitField<BarrierMask> p_post_barrier);
+	Error _texture_update_bind_compat_84976(RID p_texture, uint32_t p_layer, const Vector<uint8_t> &p_data, BitField<BarrierMask> p_post_barrier);
+	Error _texture_copy_bind_compat_84976(RID p_from_texture, RID p_to_texture, const Vector3 &p_from, const Vector3 &p_to, const Vector3 &p_size, uint32_t p_src_mipmap, uint32_t p_dst_mipmap, uint32_t p_src_layer, uint32_t p_dst_layer, BitField<BarrierMask> p_post_barrier);
+	Error _texture_clear_bind_compat_84976(RID p_texture, const Color &p_color, uint32_t p_base_mipmap, uint32_t p_mipmaps, uint32_t p_base_layer, uint32_t p_layers, BitField<BarrierMask> p_post_barrier);
+	Error _texture_resolve_multisample_bind_compat_84976(RID p_from_texture, RID p_to_texture, BitField<BarrierMask> p_post_barrier);
+
+	FramebufferFormatID _screen_get_framebuffer_format_bind_compat_87340() const;
+
+	DrawListID _draw_list_begin_bind_compat_90993(RID p_framebuffer, InitialAction p_initial_color_action, FinalAction p_final_color_action, InitialAction p_initial_depth_action, FinalAction p_final_depth_action, const Vector<Color> &p_clear_color_values, float p_clear_depth, uint32_t p_clear_stencil, const Rect2 &p_region);
+
+	DrawListID _draw_list_begin_bind_compat_98670(RID p_framebuffer, InitialAction p_initial_color_action, FinalAction p_final_color_action, InitialAction p_initial_depth_action, FinalAction p_final_depth_action, const Vector<Color> &p_clear_color_values, float p_clear_depth, uint32_t p_clear_stencil, const Rect2 &p_region, uint32_t p_breadcrumb);
+
+	RID _uniform_buffer_create_bind_compat_101561(uint32_t p_size_bytes, const Vector<uint8_t> &p_data);
+	RID _vertex_buffer_create_bind_compat_101561(uint32_t p_size_bytes, const Vector<uint8_t> &p_data, bool p_use_as_storage);
+	RID _index_buffer_create_bind_compat_101561(uint32_t p_size_indices, IndexBufferFormat p_format, const Vector<uint8_t> &p_data, bool p_use_restart_indices);
+	RID _storage_buffer_create_bind_compat_101561(uint32_t p_size, const Vector<uint8_t> &p_data, BitField<StorageBufferUsage> p_usage);
+#endif
+
+public:
+	RenderingDeviceDriver *get_device_driver() const { return driver; }
+	RenderingContextDriver *get_context_driver() const { return context; }
+
+	const RDD::Capabilities &get_device_capabilities() const { return driver->get_capabilities(); }
+
+	bool has_feature(const Features p_feature) const;
+
+	Vector<uint8_t> shader_compile_spirv_from_source(ShaderStage p_stage, const String &p_source_code, ShaderLanguage p_language = SHADER_LANGUAGE_GLSL, String *r_error = nullptr, bool p_allow_cache = true);
+	Vector<uint8_t> shader_compile_binary_from_spirv_with_options(const Vector<ShaderStageSPIRVData> &p_spirv, const String &p_shader_name, BitField<ShaderCompileFlags> p_flags);
+	RID shader_create_from_spirv_with_options(const Vector<ShaderStageSPIRVData> &p_spirv, const String &p_shader_name, BitField<ShaderCompileFlags> p_flags);
+	BitField<ShaderCompileFlags> shader_get_compile_flags(RID p_shader) const;
+	Vector<uint8_t> shader_compile_binary_from_spirv(const Vector<ShaderStageSPIRVData> &p_spirv, const String &p_shader_name = "");
+
+	RID shader_create_from_spirv(const Vector<ShaderStageSPIRVData> &p_spirv, const String &p_shader_name = "");
+	RID shader_create_from_bytecode(const Vector<uint8_t> &p_shader_binary, RID p_placeholder = RID());
+	RID shader_create_placeholder();
+	void shader_destroy_modules(RID p_shader);
+
+	uint64_t shader_get_vertex_input_attribute_mask(RID p_shader);
+
+	/******************/
+	/**** UNIFORMS ****/
+	/******************/
+	String get_perf_report() const;
+
+	/*****************/
+	/**** BUFFERS ****/
+	/*****************/
+
+	RID uniform_buffer_create(uint32_t p_size_bytes, Span<uint8_t> p_data = {}, BitField<BufferCreationBits> p_creation_bits = 0);
+	RID _uniform_buffer_create(uint32_t p_size_bytes, const Vector<uint8_t> &p_data, BitField<BufferCreationBits> p_creation_bits = 0) {
+		return uniform_buffer_create(p_size_bytes, p_data, p_creation_bits);
+	}
+
+	RID storage_buffer_create(uint32_t p_size_bytes, Span<uint8_t> p_data = {}, BitField<StorageBufferUsage> p_usage = 0, BitField<BufferCreationBits> p_creation_bits = 0);
+	RID _storage_buffer_create(uint32_t p_size_bytes, const Vector<uint8_t> &p_data, BitField<StorageBufferUsage> p_usage = 0, BitField<BufferCreationBits> p_creation_bits = 0) {
+		return storage_buffer_create(p_size_bytes, p_data, p_usage, p_creation_bits);
+	}
+
+	RID texture_buffer_create(uint32_t p_size_elements, DataFormat p_format, Span<uint8_t> p_data = {});
+	RID _texture_buffer_create(uint32_t p_size_elements, DataFormat p_format, const Vector<uint8_t> &p_data) {
+		return texture_buffer_create(p_size_elements, p_format, p_data);
+	}
+
+	struct Uniform {
+		UniformType uniform_type = UNIFORM_TYPE_IMAGE;
+		uint32_t binding = 0; // Binding index as specified in shader.
+		// This flag specifies that this is an immutable sampler to be set when creating pipeline layout.
+		bool immutable_sampler = false;
+
+	private:
+		// In most cases only one ID is provided per binding, so avoid allocating memory unnecessarily for performance.
+		RID id; // If only one is provided, this is used.
+		Vector<RID> ids; // If multiple ones are provided, this is used instead.
+
+	public:
+		_FORCE_INLINE_ uint32_t get_id_count() const {
+			return (id.is_valid() ? 1 : ids.size());
+		}
+
+		_FORCE_INLINE_ RID get_id(uint32_t p_idx) const {
+			if (id.is_valid()) {
+				ERR_FAIL_COND_V(p_idx != 0, RID());
+				return id;
+			} else {
+				return ids[p_idx];
+			}
+		}
+		_FORCE_INLINE_ void set_id(uint32_t p_idx, RID p_id) {
+			if (id.is_valid()) {
+				ERR_FAIL_COND(p_idx != 0);
+				id = p_id;
+			} else {
+				ids.write[p_idx] = p_id;
+			}
+		}
+
+		_FORCE_INLINE_ void append_id(RID p_id) {
+			if (ids.is_empty()) {
+				if (id == RID()) {
+					id = p_id;
+				} else {
+					ids.push_back(id);
+					ids.push_back(p_id);
+					id = RID();
+				}
+			} else {
+				ids.push_back(p_id);
+			}
+		}
+
+		_FORCE_INLINE_ void clear_ids() {
+			id = RID();
+			ids.clear();
+		}
+
+		_FORCE_INLINE_ Uniform(UniformType p_type, int p_binding, RID p_id) {
+			uniform_type = p_type;
+			binding = p_binding;
+			id = p_id;
+		}
+		_FORCE_INLINE_ Uniform(UniformType p_type, int p_binding, const Vector<RID> &p_ids) {
+			uniform_type = p_type;
+			binding = p_binding;
+			ids = p_ids;
+		}
+		_FORCE_INLINE_ Uniform() = default;
+	};
+
+	typedef Uniform PipelineImmutableSampler;
+	RID shader_create_from_bytecode_with_samplers(const Vector<uint8_t> &p_shader_binary, RID p_placeholder = RID(), const Vector<PipelineImmutableSampler> &p_immutable_samplers = Vector<PipelineImmutableSampler>());
+
+private:
+	RID _qualification_shader_create(const Vector<uint8_t> &, RID, const Vector<PipelineImmutableSampler> &, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID);
+	RID _qualification_pipeline_create(RID, const Vector<PipelineSpecializationConstant> &, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID, GDExtensionDeviceExit::ProductionUseCell *p_output_cell = nullptr);
+	static const uint32_t MAX_UNIFORM_SETS = 16;
+	static const uint32_t MAX_PUSH_CONSTANT_SIZE = 128;
+
+	// This structure contains the descriptor set. They _need_ to be allocated
+	// for a shader (and will be erased when this shader is erased), but should
+	// work for other shaders as long as the hash matches. This covers using
+	// them in shader variants.
+	//
+	// Keep also in mind that you can share buffers between descriptor sets, so
+	// the above restriction is not too serious.
+
+	struct UniformSet {
+		GDExtensionDeviceExit::ProductionDisposalUse *production_disposal_uses = nullptr;
+		uint32_t native_immutable_holds = 0;
+		bool native_immutable_retire_requested = false;
+		bool native_external_access = false;
+		NativeDisposalWitness native_disposal;
+		uint64_t native_disposal_rid = 0;
+		uint64_t native_disposal_serial = 0;
+		RID production_material_origin;
+		uint64_t production_material_origin_generation = 0;
+		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
+		uint32_t qualification_users = 0;
+		LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> qualification_dependencies;
+		uint32_t format = 0;
+		RID shader_id;
+		uint32_t shader_set = 0;
+		RDD::UniformSetID driver_id;
+		struct AttachableTexture {
+			uint32_t bind = 0;
+			RID texture;
+		};
+
+		struct SharedTexture {
+			uint32_t writing = 0;
+			RID texture;
+		};
+
+		LocalVector<RID> writable_resources; // Actual reflected writable bindings, never caller permission.
+		LocalVector<AttachableTexture> attachable_textures; // Used for validation.
+		Vector<RDG::ResourceTracker *> draw_trackers;
+		Vector<RDG::ResourceUsage> draw_trackers_usage;
+		HashMap<RID, RDG::ResourceUsage> untracked_usage;
+		LocalVector<SharedTexture> shared_textures_to_update;
+		LocalVector<RID> pending_clear_textures;
+		Vector<RID> acceleration_structures; // Used for validation.
+		InvalidationCallback invalidated_callback = nullptr;
+		void *invalidated_callback_userdata = nullptr;
+	};
+
+	// Mechanical ports for an original Core owner; deliberately private. No
+	// arbitrary-RID enrollment or qualification ticket authorizes these calls.
+	Error _production_output_generation_ready(RID, uint64_t, const GDExtensionDeviceExit::ProductionOutputPin &, GDExtensionProductionRequestRefV1, uint32_t &, uint32_t &);
+	bool _production_output_owner_matches(GDExtensionDeviceExit::ProductionOutputOwnerKind, RID, uint64_t, uint32_t, uint64_t, const GDExtensionDeviceExit::ProductionOutputPin &, GDExtensionProductionRequestRefV1);
+	Error _production_output_owner_service(GDExtensionDeviceExit::ProductionOutputOwnerKind, RID, uint64_t, uint32_t, uint64_t, GDExtensionDeviceExit::ProductionOutputPin &, const GDExtensionProductionServiceBudgetV1 &, GDExtensionDeviceExit::ProductionServiceUsage &);
+	Error _production_output_owned_pipeline_preflight(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t);
+	Error _production_output_owned_render_pipeline_create(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState &p_rasterization_state, const PipelineMultisampleState &p_multisample_state, const PipelineDepthStencilState &p_depth_stencil_state, const PipelineColorBlendState &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const Vector<PipelineSpecializationConstant> &p_specialization_constants, RID &);
+	Error _production_output_owned_reserve(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint32_t, uint64_t &);
+	Error _production_output_owned_rollback(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t &);
+	Error _production_output_owned_storage_create(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, uint32_t, BitField<StorageBufferUsage>, RID &, NativeDisposalWitness &);
+	Error _production_output_owned_uniform_set_create(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, const VectorView<Uniform> &, RID, uint32_t, RID &, NativeDisposalWitness &);
+	Error _production_output_owned_seal(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t);
+	Error _production_output_owned_create_preflight_locked(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, GDExtensionDeviceExit::ProductionRequest *&);
+	Error _production_output_owned_bind_locked(GDExtensionDeviceExit::ProductionRequest &, uint64_t, uint64_t, uint32_t, const NativeDisposalWitness &);
+	Error _production_output_owned_bind(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, uint32_t, const NativeDisposalWitness &);
+	Error _production_output_owned_cancel_unbound(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t);
+	bool _production_output_callback_supported(RID);
+	void _production_output_set_material_origin(RID, RID, uint64_t);
+	Error _production_output_directory_capture(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, const VectorView<RID> &, uint32_t, NativeOutputGroupBinding &);
+	Error _production_output_directory_return(GDExtensionDeviceExit::ProductionOutputPin &, NativeOutputGroupBinding &, const GDExtensionProductionServiceBudgetV1 &, GDExtensionDeviceExit::ProductionServiceUsage &);
+	Error _production_output_directory_mark_root(GDExtensionDeviceExit::ProductionOutputPin &, const NativeOutputGroupBinding &, RID, bool, const GDExtensionProductionServiceBudgetV1 &, GDExtensionDeviceExit::ProductionServiceUsage &);
+	Error _production_output_hold_capture_locked(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, NativeImmutableHold &, uint64_t &);
+	Error _production_output_hold_returned_locked(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, GDExtensionDeviceExit::ProductionDisposalObservation &);
+	Error _production_output_hold_capture(GDExtensionProductionPhysicalContextRefV1, GDExtensionDeviceExit::ProductionOutputPin &, NativeImmutableHold &, uint64_t &);
+	bool _production_output_hold_contains(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, RID);
+	bool _production_output_owned_storage_contains(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, RID);
+	Error _production_output_hold_begin_return(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t);
+	Error _production_output_retire_service(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, const GDExtensionProductionServiceBudgetV1 &, GDExtensionDeviceExit::ProductionServiceUsage &, GDExtensionDeviceExit::ProductionDisposalObservation &);
+	Error _production_output_hold_returned(GDExtensionDeviceExit::ProductionOutputPin &, uint64_t, GDExtensionDeviceExit::ProductionDisposalObservation &);
+	GDExtensionDeviceExit::ProductionDisposalUse **_production_disposal_head(RID, uint32_t &, uint64_t &, uint64_t &);
+	bool _production_disposal_belongs(RID, const GDExtensionDeviceExit::ProductionRequest *);
+	const GDExtensionDeviceExit::ProductionRequest *production_disposal_drop_owner = nullptr;
+	void _production_disposal_enqueued(GDExtensionDeviceExit::ProductionDisposalUse *&);
+	void _production_disposal_returned(GDExtensionDeviceExit::ProductionDisposalUse *&);
+	Error _native_disposal_preflight() const;
+	RID _storage_buffer_create_internal(uint32_t p_bytes, Span<uint8_t> p_data, BitField<StorageBufferUsage> p_usage, BitField<BufferCreationBits> p_creation_bits, const NativeDisposalWitness *p_native_disposal);
+	// Disposal observations only: neither content holds nor recording/completion authority.
+	Error _native_disposal_sampler_create(const SamplerState &p_state, RID &r_rid, NativeDisposalWitness &r_witness);
+	Error _native_disposal_depth_texture_create(uint32_t p_width, uint32_t p_height, RID &r_rid, NativeDisposalWitness &r_witness);
+	Error _native_disposal_depth_framebuffer_create(const NativeDisposalWitness &p_texture, RID &r_rid, NativeDisposalWitness &r_witness);
+	Error _native_disposal_depth_sample_set_create(const NativeDisposalWitness &p_sampler, const NativeDisposalWitness &p_texture, RID p_shader, uint32_t p_set, uint32_t p_binding, RID &r_rid, NativeDisposalWitness &r_witness);
+	Error _native_disposal_storage_create(uint32_t p_bytes, BitField<StorageBufferUsage> p_usage, RID &r_rid, NativeDisposalWitness &r_witness);
+	Error _native_disposal_uniform_set_create(const VectorView<Uniform> &p_uniforms, RID p_shader, uint32_t p_set, RID &r_rid, NativeDisposalWitness &r_witness);
+	Error _native_disposal_free(const NativeDisposalWitness &p_witness);
+	Error _native_disposal_observe(const NativeDisposalWitness &p_witness, NativeDisposalWitness::Report &r_report) const;
+	Error _native_disposal_maintenance();
+	struct NativeDisposalBudget {
+		uint32_t receipts = 0;
+		uint32_t passes = 0;
+		uint64_t deadline_usec = 0;
+	};
+	struct NativeDisposalUsage {
+		uint32_t polls = 0;
+		uint32_t frees = 0;
+		uint32_t issues = 0;
+		uint32_t retains = 0;
+		uint32_t releases = 0;
+		uint32_t recycles = 0;
+		uint32_t passes = 0;
+	};
+	// WORK accounts command recording/CPU phases only. Receipts count actual
+	// native observation, ownership return, issue and physical free calls.
+	enum class NativeDisposalWork : uint8_t { POLL,
+		FREE,
+		ISSUE,
+		RETAIN,
+		RELEASE,
+		RECYCLE,
+		WORK };
+	std::atomic<bool> native_disposal_active = false;
+	uint64_t next_native_disposal_serial = 1;
+	struct NativeDisposalContinuation {
+		uint64_t serial = 0;
+		const GDExtensionDeviceExit::ProductionRequest *production_owner = nullptr;
+		uint32_t phase = 0;
+		uint32_t target = 0;
+		uint32_t end_phase = 0;
+		uint32_t begin_phase = 0;
+		uint32_t slot = 0;
+		uint32_t slot_count = 0;
+		RDD::CommandBufferID command_buffer;
+	} native_disposal_continuation;
+	const NativeDisposalBudget *native_disposal_budget = nullptr;
+	NativeDisposalUsage *native_disposal_usage = nullptr;
+	bool _native_disposal_available(NativeDisposalWork p_work, uint32_t p_count = 1) const;
+	bool _native_disposal_admit(NativeDisposalWork p_work, uint32_t p_count = 1);
+	Error _production_output_drop_step(GDExtensionDeviceExit::ProductionRequest &, const NativeDisposalBudget &, NativeDisposalUsage &);
+	Error _native_disposal_stall_step(uint32_t p_frame);
+	bool _native_disposal_charge(const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage, NativeDisposalWork p_work);
+	Error _native_disposal_maintenance_step(const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage, const GDExtensionDeviceExit::ProductionRequest *p_production_owner = nullptr);
+	void _capture_disposal_cutoff(uint32_t p_frame);
+	Error _free_pending_resources_step(int p_frame, const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage);
+
+	bool _native_disposal_enqueue(NativeDisposalWitness &p_witness, uint64_t p_rid, uint64_t p_serial, uint64_t p_backing);
+	void _native_disposal_returned(NativeDisposalWitness &p_witness, uint64_t p_rid, uint64_t p_serial, uint64_t p_backing);
+
+	RID _qualification_uniform_set_create(const VectorView<Uniform> &, RID, uint32_t, GDExtensionDeviceExit::QualificationPhysicalReturn *, const LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> &);
+	RID _uniform_set_create_qualification(const VectorView<Uniform> &, RID, uint32_t, bool, GDExtensionDeviceExit::QualificationPhysicalReturn *, const LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> *, const NativeDisposalWitness *p_native_disposal = nullptr, const GDExtensionDeviceExit::ProductionRequest *p_production = nullptr);
+	Error _qualification_texture_upload(RID, const uint8_t *, uint32_t, QualificationUploadProgress &);
+	RID_Owner<UniformSet, true> uniform_set_owner;
+
+	void _uniform_set_update_shared(UniformSet *p_uniform_set);
+	void _uniform_set_update_clears(UniformSet *p_uniform_set);
+
+public:
+	/** Bake a set of uniforms that can be bound at runtime with the given shader.
+	 * @remark				Setting p_linear_pool = true while keeping the RID around for longer than the current frame will result in undefined behavior.
+	 * @param p_uniforms	The uniforms to bake into a set.
+	 * @param p_shader		The shader you intend to bind these uniforms with.
+	 * @param p_set_index	The set. Should be in range [0; 4)
+	 *						The value 4 comes from physical_device_properties.limits.maxBoundDescriptorSets. Vulkan only guarantees maxBoundDescriptorSets >= 4 (== 4 is very common on Mobile).
+	 * @param p_linear_pool	If you call this function every frame (and free the returned RID within the same frame!), set it to true for better performance.
+	 *						If you plan on keeping the return value around for more than one frame (e.g. Sets that are created once and reused forever) you MUST set it to false.
+	 * @return				Baked descriptor set.
+	 */
+	RID uniform_set_create(const VectorView<Uniform> &p_uniforms, RID p_shader, uint32_t p_shader_set, bool p_linear_pool = false);
+	bool uniform_set_is_valid(RID p_uniform_set);
+	void uniform_set_set_invalidation_callback(RID p_uniform_set, InvalidationCallback p_callback, void *p_userdata);
+
+	bool uniform_sets_have_linear_pools() const;
+
+	/*******************/
+	/**** PIPELINES ****/
+	/*******************/
+
+	// Render pipeline contains ALL the
+	// information required for drawing.
+	// This includes all the rasterizer state
+	// as well as shader used, framebuffer format,
+	// etc.
+	// While the pipeline is just a single object
+	// (VkPipeline) a lot of values are also saved
+	// here to do validation (vulkan does none by
+	// default) and warn the user if something
+	// was not supplied as intended.
+private:
+	struct RenderPipeline {
+		uint32_t qualification_users = 0;
+		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
+		// This edge survives RID invalidation and returns after the actual driver free.
+		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_dependency = nullptr;
+		GDExtensionDeviceExit::ProductionDisposalUse *production_disposal_uses = nullptr;
+		uint32_t native_immutable_holds = 0;
+		bool native_immutable_retire_requested = false;
+		bool native_external_access = false;
+		// Original creation facts needed by checked drawing in every build.
+		struct Validation {
+			FramebufferFormatID framebuffer_format = INVALID_ID;
+			uint32_t render_pass = 0;
+			VertexFormatID vertex_format = INVALID_ID;
+			RenderPrimitive primitive = RENDER_PRIMITIVE_MAX;
+#ifdef DEBUG_ENABLED
+			uint32_t dynamic_state = 0;
+			bool uses_restart_indices = false;
+			uint32_t primitive_minimum = 0;
+			uint32_t primitive_divisor = 0;
+#endif
+		} validation;
+		// Actual pipeline.
+		RID shader;
+		RDD::ShaderID shader_driver_id;
+		uint32_t shader_layout_hash = 0;
+		Vector<uint32_t> set_formats;
+		RDD::PipelineID driver_id;
+		BitField<RDD::PipelineStageBits> stage_bits = {};
+		uint32_t push_constant_size = 0;
+	};
+
+	RID_Owner<RenderPipeline, true> render_pipeline_owner;
+	RID _qualification_render_pipeline_create_internal(RID, FramebufferFormatID, VertexFormatID, RenderPrimitive, const PipelineRasterizationState &, const PipelineMultisampleState &, const PipelineDepthStencilState &, const PipelineColorBlendState &, BitField<PipelineDynamicStateFlags>, uint32_t, const Vector<PipelineSpecializationConstant> &, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID, GDExtensionDeviceExit::ProductionUseCell *p_output_cell = nullptr);
+	RID _qualification_render_pipeline_create(RID, FramebufferFormatID, GDExtensionDeviceExit::QualificationPhysicalReturn *, RID);
+
+	bool pipeline_cache_enabled = false;
+	size_t pipeline_cache_size = 0;
+	String pipeline_cache_file_path;
+	WorkerThreadPool::TaskID pipeline_cache_save_task = WorkerThreadPool::INVALID_TASK_ID;
+
+	Vector<uint8_t> _load_pipeline_cache();
+	static void _save_pipeline_cache(void *p_data);
+
+	struct ComputePipeline {
+		GDExtensionDeviceExit::ProductionDisposalUse *production_disposal_uses = nullptr;
+		uint32_t native_immutable_holds = 0;
+		bool native_immutable_retire_requested = false;
+		bool native_external_access = false;
+		uint32_t qualification_users = 0;
+		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
+		RID shader;
+		RDD::ShaderID shader_driver_id;
+		uint32_t shader_layout_hash = 0;
+		Vector<uint32_t> set_formats;
+		RDD::PipelineID driver_id;
+		uint32_t push_constant_size = 0;
+		uint32_t local_group_size[3] = { 0, 0, 0 };
+	};
+
+	RID_Owner<ComputePipeline, true> compute_pipeline_owner;
+
+	struct RaytracingPipeline {
+		RID layout_defining_shader;
+		RDD::ShaderID layout_defining_shader_driver_id;
+		uint32_t layout_defining_shader_layout_hash = 0;
+		Vector<uint32_t> set_formats;
+		RDD::RaytracingPipelineID driver_id;
+		uint32_t push_constant_size = 0;
+		Buffer sbt_buffer;
+		uint32_t raygen_shader_count = 0;
+		uint32_t miss_shader_count = 0;
+		uint32_t hit_group_count = 0;
+	};
+
+	Error _raytracing_pipeline_create_sbt_buffer(RDD::RaytracingPipelineID p_raytracing_pipeline, uint32_t p_raygen_shader_count, uint32_t p_miss_shader_count, Buffer &r_sbt_buffer);
+
+	RID_Owner<RaytracingPipeline, true> raytracing_pipeline_owner;
+
+public:
+	RID render_pipeline_create(RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState &p_rasterization_state, const PipelineMultisampleState &p_multisample_state, const PipelineDepthStencilState &p_depth_stencil_state, const PipelineColorBlendState &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags = 0, uint32_t p_for_render_pass = 0, const Vector<PipelineSpecializationConstant> &p_specialization_constants = Vector<PipelineSpecializationConstant>());
+	bool render_pipeline_is_valid(RID p_pipeline);
+
+	RID compute_pipeline_create(RID p_shader, const Vector<PipelineSpecializationConstant> &p_specialization_constants = Vector<PipelineSpecializationConstant>());
+	bool compute_pipeline_is_valid(RID p_pipeline);
+
+	struct PipelineShader {
+		RID shader;
+		Vector<PipelineSpecializationConstant> specialization_constants;
+
+		bool is_valid() const {
+			return shader.is_valid();
+		}
+	};
+
+	struct HitGroup {
+		PipelineShader closest_hit_shader;
+		PipelineShader any_hit_shader;
+		PipelineShader intersection_shader;
+	};
+
+	RID raytracing_pipeline_create(Span<PipelineShader> p_raygen_shaders, Span<PipelineShader> p_miss_shaders, Span<HitGroup> p_hit_groups, uint32_t p_max_trace_recursion_depth);
+	bool raytracing_pipeline_is_valid(RID p_pipeline);
+
+	void update_pipeline_cache(bool p_closing = false);
+
+private:
+	/****************/
+	/**** SCREEN ****/
+	/****************/
+	HashMap<DisplayServerEnums::WindowID, RDD::SwapChainID> screen_swap_chains;
+	HashMap<DisplayServerEnums::WindowID, RDD::FramebufferID> screen_framebuffers;
+
+	uint32_t _get_swap_chain_desired_count() const;
+
+public:
+	Error screen_create(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID);
+	Error screen_prepare_for_drawing(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID);
+	int screen_get_width(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID) const;
+	int screen_get_height(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID) const;
+	int screen_get_pre_rotation_degrees(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID) const;
+	FramebufferFormatID screen_get_framebuffer_format(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID) const;
+	ColorSpace screen_get_color_space(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID) const;
+	bool screen_get_hdr_output_supported(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID) const;
+	Error screen_free(DisplayServerEnums::WindowID p_screen = DisplayServerEnums::MAIN_WINDOW_ID);
+
+private:
+	/********************************/
+	/**** ACCELERATION STRUCTURE ****/
+	/********************************/
+
+	struct AccelerationStructure {
+		// --- Shared ---
+		RDD::AccelerationStructureID driver_id;
+		RDD::AccelerationStructureType type = {};
+		RDG::ResourceTracker *draw_tracker = nullptr;
+
+		// BLAS/TLAS are weakly linked, as opposed to RD dependencies.
+		HashSet<RID> acceleration_structure_dependencies;
+		bool invalidated = true;
+
+		// Scratch buffer used during build, owned by the AS.
+		RDD::BufferID scratch_buffer;
+
+		// --- Bottom Level ---
+		Vector<RDG::ResourceTracker *> draw_trackers;
+		HashSet<RID> untracked_buffers;
+
+		// --- Top Level ---
+		uint32_t max_instance_count = 0;
+
+		struct InstanceBuffer {
+			RDD::BufferID driver_id;
+			uint64_t frame_used = 0;
+			uint32_t used_size = 0;
+			uint8_t *data_ptr = nullptr;
+		};
+
+		LocalVector<InstanceBuffer> instance_buffers;
+	};
+
+	Error _acceleration_structure_scratch_buffer_create(AccelerationStructure *p_acceleration_structure);
+	void _blas_remove_tlas_dependencies(AccelerationStructure *p_blas, RID p_blas_id);
+	void _tlas_remove_blas_dependencies(AccelerationStructure *p_tlas, RID p_tlas_id);
+
+	RID_Owner<AccelerationStructure, true> acceleration_structure_owner;
+
+public:
+	struct AccelerationStructureGeometry {
+		BitField<AccelerationStructureGeometryFlagBits> flags = {};
+		RID vertex_buffer;
+		uint32_t vertex_offset = 0;
+		uint32_t vertex_stride = 0;
+		uint32_t vertex_count = 0;
+		DataFormat vertex_format = DATA_FORMAT_MAX;
+		RID index_buffer;
+		uint32_t index_offset = 0;
+		uint32_t index_count = 0;
+	};
+
+	RID blas_create(Span<AccelerationStructureGeometry> p_geometries, BitField<AccelerationStructureFlagBits> p_flags);
+	RID tlas_create(uint32_t p_max_instance_count, BitField<AccelerationStructureFlagBits> p_flags);
+
+	typedef int64_t HitShaderBindingTableRange;
+
+	struct AccelerationStructureInstance {
+		Transform3D transform;
+		uint32_t id = 0;
+		uint8_t mask = 0xFF;
+		HitShaderBindingTableRange hit_sbt_range = 0;
+		BitField<AccelerationStructureInstanceFlagBits> flags = {};
+		RID blas;
+	};
+
+	Error blas_build(RID p_blas);
+	Error tlas_build(RID p_tlas, Span<AccelerationStructureInstance> p_instances);
+
+private:
+	/**********************************/
+	/**** HIT SHADER BINDING TABLE ****/
+	/**********************************/
+
+	struct HitShaderBindingTable : Buffer {
+		RID raytracing_pipeline_id;
+		RDD::RaytracingPipelineID raytracing_pipeline;
+		uint32_t index_offset = 0;
+		uint32_t raytracing_pipeline_hit_group_count = 0; // Used for validation.
+
+		Vector<uint32_t> hit_group_indices;
+		uint32_t used_hit_group_count = 0;
+
+		uint32_t first_dirty_index = UINT32_MAX;
+		uint32_t last_dirty_index = 0;
+
+		typedef RBMap<uint32_t, RBSet<uint32_t>> FreeList;
+		typedef RBMap<uint32_t, uint32_t> ReverseFreeList;
+
+		FreeList free_list;
+		ReverseFreeList reverse_free_list;
+	};
+
+	RID_Owner<HitShaderBindingTable, true> hit_sbt_owner;
+
+	RDD::BufferID _hit_sbt_buffer_create(uint32_t p_buffer_size);
+	Error _hit_sbt_buffer_update(HitShaderBindingTable *p_hit_sbt, RID p_hit_sbt_id, RDD::ShaderBindingTable &r_sbt);
+	void _hit_sbt_add_dirty_range(HitShaderBindingTable *p_hit_sbt, uint32_t p_offset, uint32_t p_count);
+
+public:
+	RID hit_sbt_create(RID p_raytracing_pipeline, uint32_t p_initial_hit_group_capacity);
+	Error hit_sbt_set_pipeline(RID p_hit_sbt, RID p_raytracing_pipeline);
+
+	HitShaderBindingTableRange hit_sbt_range_alloc(RID p_hit_sbt, uint32_t p_hit_group_count);
+	Error hit_sbt_range_free(RID p_hit_sbt, HitShaderBindingTableRange p_range);
+	Error hit_sbt_range_update(RID p_hit_sbt, HitShaderBindingTableRange p_range, uint32_t p_hit_group_offset, Span<uint32_t> p_hit_group_indices);
+
+	/*************************/
+	/**** DRAW LISTS (II) ****/
+	/*************************/
+
+private:
+	// Draw list contains both the command buffer
+	// used for drawing as well as a LOT of
+	// information used for validation. This
+	// validation is cheap so most of it can
+	// also run in release builds.
+
+	struct DrawList {
+		// Original graph begin identity, not source or execution authority.
+		RDG::RecordHandle begin_handle;
+		Rect2i viewport;
+		bool active = false;
+
+		struct SetState {
+			uint32_t pipeline_expected_format = 0;
+			uint32_t uniform_set_format = 0;
+			RDD::UniformSetID uniform_set_driver_id;
+			RID uniform_set;
+			bool bound = false;
+		};
+
+		struct State {
+			SetState sets[MAX_UNIFORM_SETS];
+			uint32_t set_count = 0;
+			RID pipeline;
+			RID pipeline_shader;
+			RDD::ShaderID pipeline_shader_driver_id;
+			uint32_t pipeline_shader_layout_hash = 0;
+			uint32_t pipeline_push_constant_size = 0;
+			bool checked_push_constant_supplied = false;
+			RID vertex_array;
+			RID index_array;
+			uint32_t draw_count = 0;
+		} state;
+
+#ifdef DEBUG_ENABLED
+		struct Validation {
+			// Actual render pass values.
+			uint32_t dynamic_state = 0;
+			VertexFormatID vertex_format = INVALID_ID;
+			uint32_t vertex_array_size = 0;
+			uint32_t vertex_max_instances_allowed = 0xFFFFFFFF;
+			bool index_buffer_uses_restart_indices = false;
+			uint32_t index_array_count = 0;
+			uint32_t index_array_max_index = 0;
+			Vector<uint32_t> set_formats;
+			Vector<bool> set_bound;
+			Vector<RID> set_rids;
+			// Last pipeline set values.
+			bool pipeline_active = false;
+			uint32_t pipeline_dynamic_state = 0;
+			VertexFormatID pipeline_vertex_format = INVALID_ID;
+			RID pipeline_shader;
+			bool pipeline_uses_restart_indices = false;
+			uint32_t pipeline_primitive_divisor = 0;
+			uint32_t pipeline_primitive_minimum = 0;
+			uint32_t pipeline_push_constant_size = 0;
+			bool pipeline_push_constant_supplied = false;
+		} validation;
+#else
+		struct Validation {
+			uint32_t vertex_array_size = 0;
+			uint32_t index_array_count = 0;
+		} validation;
+#endif
+	};
+
+	DrawList draw_list;
+	uint32_t draw_list_subpass_count = 0;
+	FramebufferFormatID draw_list_framebuffer_format = INVALID_ID;
+	uint32_t draw_list_current_subpass = 0;
+
+	LocalVector<RID> draw_list_bound_textures;
+
+	void _draw_list_start(const Rect2i &p_viewport);
+	void _draw_list_end(Rect2i *r_last_viewport = nullptr);
+
+public:
+	enum DrawFlags {
+		DRAW_DEFAULT_ALL = 0,
+		DRAW_CLEAR_COLOR_0 = (1 << 0),
+		DRAW_CLEAR_COLOR_1 = (1 << 1),
+		DRAW_CLEAR_COLOR_2 = (1 << 2),
+		DRAW_CLEAR_COLOR_3 = (1 << 3),
+		DRAW_CLEAR_COLOR_4 = (1 << 4),
+		DRAW_CLEAR_COLOR_5 = (1 << 5),
+		DRAW_CLEAR_COLOR_6 = (1 << 6),
+		DRAW_CLEAR_COLOR_7 = (1 << 7),
+		DRAW_CLEAR_COLOR_MASK = 0xFF,
+		DRAW_CLEAR_COLOR_ALL = DRAW_CLEAR_COLOR_MASK,
+		DRAW_IGNORE_COLOR_0 = (1 << 8),
+		DRAW_IGNORE_COLOR_1 = (1 << 9),
+		DRAW_IGNORE_COLOR_2 = (1 << 10),
+		DRAW_IGNORE_COLOR_3 = (1 << 11),
+		DRAW_IGNORE_COLOR_4 = (1 << 12),
+		DRAW_IGNORE_COLOR_5 = (1 << 13),
+		DRAW_IGNORE_COLOR_6 = (1 << 14),
+		DRAW_IGNORE_COLOR_7 = (1 << 15),
+		DRAW_IGNORE_COLOR_MASK = 0xFF00,
+		DRAW_IGNORE_COLOR_ALL = DRAW_IGNORE_COLOR_MASK,
+		DRAW_CLEAR_DEPTH = (1 << 16),
+		DRAW_IGNORE_DEPTH = (1 << 17),
+		DRAW_CLEAR_STENCIL = (1 << 18),
+		DRAW_IGNORE_STENCIL = (1 << 19),
+		DRAW_CLEAR_ALL = DRAW_CLEAR_COLOR_ALL | DRAW_CLEAR_DEPTH | DRAW_CLEAR_STENCIL,
+		DRAW_IGNORE_ALL = DRAW_IGNORE_COLOR_ALL | DRAW_IGNORE_DEPTH | DRAW_IGNORE_STENCIL
+	};
+
+	/**
+	 * @param p_clear_color Must use linear encoding when HDR 2D is active.
+	 */
+	DrawListID draw_list_begin_for_screen(DisplayServerEnums::WindowID p_screen = 0, const Color &p_clear_color = Color());
+	/**
+	 * @param p_clear_color_values Color values must use linear encoding when HDR 2D is active.
+	 */
+	DrawListID draw_list_begin(RID p_framebuffer, BitField<DrawFlags> p_draw_flags = DRAW_DEFAULT_ALL, VectorView<Color> p_clear_color_values = VectorView<Color>(), float p_clear_depth_value = 1.0f, uint32_t p_clear_stencil_value = 0, const Rect2 &p_region = Rect2(), uint32_t p_breadcrumb = 0);
+	DrawListID _draw_list_begin_bind(RID p_framebuffer, BitField<DrawFlags> p_draw_flags = DRAW_DEFAULT_ALL, const Vector<Color> &p_clear_color_values = Vector<Color>(), float p_clear_depth_value = 1.0f, uint32_t p_clear_stencil_value = 0, const Rect2 &p_region = Rect2(), uint32_t p_breadcrumb = 0);
+
+	void draw_list_set_blend_constants(DrawListID p_list, const Color &p_color);
+	void draw_list_bind_render_pipeline(DrawListID p_list, RID p_render_pipeline);
+	void draw_list_bind_uniform_set(DrawListID p_list, RID p_uniform_set, uint32_t p_index);
+	void draw_list_bind_vertex_array(DrawListID p_list, RID p_vertex_array);
+	void draw_list_bind_vertex_buffers_format(DrawListID p_list, VertexFormatID p_vertex_format, uint32_t p_vertex_count, const Span<RID> &p_vertex_buffers, const Span<uint64_t> &p_offsets = Vector<uint64_t>());
+	void draw_list_bind_index_array(DrawListID p_list, RID p_index_array);
+	void draw_list_set_line_width(DrawListID p_list, float p_width);
+	void draw_list_set_push_constant(DrawListID p_list, const void *p_data, uint32_t p_data_size);
+
+	void draw_list_draw(DrawListID p_list, bool p_use_indices, uint32_t p_instances = 1, uint32_t p_procedural_vertices = 0);
+	void draw_list_draw_indirect(DrawListID p_list, bool p_use_indices, RID p_buffer, uint32_t p_offset = 0, uint32_t p_draw_count = 1, uint32_t p_stride = 0);
+
+	void draw_list_set_viewport(DrawListID p_list, const Rect2 &p_rect);
+	void draw_list_enable_scissor(DrawListID p_list, const Rect2 &p_rect);
+	void draw_list_disable_scissor(DrawListID p_list);
+
+	uint32_t draw_list_get_current_pass();
+	DrawListID draw_list_switch_to_next_pass();
+
+	void draw_list_end();
+
+private:
+	/**************************/
+	/**** RAYTRACING LISTS ****/
+	/**************************/
+
+	struct RaytracingList {
+		bool active = false;
+		struct SetState {
+			uint32_t pipeline_expected_format = 0;
+			uint32_t uniform_set_format = 0;
+			RDD::UniformSetID uniform_set_driver_id;
+			RID uniform_set;
+			bool bound = false;
+		};
+
+		struct State {
+			SetState sets[MAX_UNIFORM_SETS];
+			uint32_t set_count = 0;
+			RID pipeline;
+			RDD::RaytracingPipelineID pipeline_driver_id;
+			RID layout_defining_shader;
+			RDD::ShaderID layout_defining_shader_driver_id;
+			uint32_t layout_defining_shader_layout_hash = 0;
+			uint8_t push_constant_data[MAX_PUSH_CONSTANT_SIZE] = {};
+			uint32_t push_constant_size = 0;
+			RDD::BufferID sbt_buffer;
+			uint32_t raygen_shader_count = 0;
+			uint32_t miss_shader_count = 0;
+			uint32_t trace_count = 0;
+		} state;
+
+#ifdef DEBUG_ENABLED
+		struct Validation {
+			bool active = true; // Means command buffer was not closed, so you can keep adding things.
+			Vector<uint32_t> set_formats;
+			Vector<bool> set_bound;
+			Vector<RID> set_rids;
+			// Last pipeline set values.
+			bool pipeline_active = false;
+			RID pipeline_shader;
+			uint32_t invalid_set_from = 0;
+			uint32_t pipeline_push_constant_size = 0;
+			bool pipeline_push_constant_supplied = false;
+		} validation;
+#endif
+	};
+
+	RaytracingList raytracing_list;
+	RaytracingList::State raytracing_list_barrier_state;
+
+public:
+	RaytracingListID raytracing_list_begin();
+	void raytracing_list_bind_raytracing_pipeline(RaytracingListID p_list, RID p_raytracing_pipeline);
+	void raytracing_list_bind_uniform_set(RaytracingListID p_list, RID p_uniform_set, uint32_t p_index);
+	void raytracing_list_set_push_constant(RaytracingListID p_list, const void *p_data, uint32_t p_data_size);
+	void raytracing_list_trace_rays(RaytracingListID p_list, uint32_t p_raygen_shader_index, RID p_hit_sbt, uint32_t p_width, uint32_t p_height, uint32_t p_depth);
+	void raytracing_list_end();
+
+private:
+	/***********************/
+	/**** COMPUTE LISTS ****/
+	/***********************/
+
+	struct ComputeList {
+		bool active = false;
+		struct SetState {
+			uint32_t pipeline_expected_format = 0;
+			uint32_t uniform_set_format = 0;
+			RDD::UniformSetID uniform_set_driver_id;
+			RID uniform_set;
+			bool bound = false;
+		};
+
+		struct State {
+			SetState sets[MAX_UNIFORM_SETS];
+			uint32_t set_count = 0;
+			RID pipeline;
+			RID pipeline_shader;
+			RDD::ShaderID pipeline_shader_driver_id;
+			uint32_t pipeline_shader_layout_hash = 0;
+			uint32_t local_group_size[3] = { 0, 0, 0 };
+			uint8_t push_constant_data[MAX_PUSH_CONSTANT_SIZE] = {};
+			uint32_t push_constant_size = 0;
+			uint32_t dispatch_count = 0;
+		} state;
+
+#ifdef DEBUG_ENABLED
+		struct Validation {
+			Vector<uint32_t> set_formats;
+			Vector<bool> set_bound;
+			Vector<RID> set_rids;
+			// Last pipeline set values.
+			bool pipeline_active = false;
+			RID pipeline_shader;
+			uint32_t invalid_set_from = 0;
+			uint32_t pipeline_push_constant_size = 0;
+			bool pipeline_push_constant_supplied = false;
+		} validation;
+#endif
+	};
+
+	ComputeList compute_list;
+	ComputeList::State compute_list_barrier_state;
+
+public:
+	ComputeListID compute_list_begin();
+	void compute_list_bind_compute_pipeline(ComputeListID p_list, RID p_compute_pipeline);
+	void compute_list_bind_uniform_set(ComputeListID p_list, RID p_uniform_set, uint32_t p_index);
+	void compute_list_set_push_constant(ComputeListID p_list, const void *p_data, uint32_t p_data_size);
+	void compute_list_dispatch(ComputeListID p_list, uint32_t p_x_groups, uint32_t p_y_groups, uint32_t p_z_groups);
+	void compute_list_dispatch_threads(ComputeListID p_list, uint32_t p_x_threads, uint32_t p_y_threads, uint32_t p_z_threads);
+	void compute_list_dispatch_indirect(ComputeListID p_list, RID p_buffer, uint32_t p_offset);
+	void compute_list_add_barrier(ComputeListID p_list);
+
+	void compute_list_end();
+
+private:
+	/*************************/
+	/**** TRANSFER WORKER ****/
+	/*************************/
+
+	struct TransferWorker;
+	Error _production_join_transfer_worker(TransferWorker *, bool);
+	Error _production_retain_frame_sources(uint32_t);
+	struct TransferWorker {
+		uint32_t index = 0;
+		RDD::BufferID staging_buffer;
+		uint32_t max_transfer_size = 0;
+		uint32_t staging_buffer_size_in_use = 0;
+		uint32_t staging_buffer_size_allocated = 0;
+		RDD::CommandBufferID command_buffer;
+		RDD::CommandPoolID command_pool;
+		RDD::FenceID command_fence;
+		LocalVector<RDD::TextureBarrier> texture_barriers;
+		bool recording = false;
+		bool submitted = false;
+		bool qualification_observer_pending = false;
+		bool production_observer_pending = false;
+		bool submission_pending = false;
+		bool poisoned = false;
+		RDD::QueueCallReport last_submission;
+		RDD::FencePollResult last_completion;
+		Error completion_error = OK;
+		uint64_t submission_serial = 0;
+		BinaryMutex thread_mutex;
+		uint64_t operations_processed = 0;
+		uint64_t operations_submitted = 0;
+		uint64_t operations_counter = 0;
+		BinaryMutex operations_mutex;
+	};
+
+	TightLocalVector<TransferWorker *> transfer_worker_pool;
+	uint32_t transfer_worker_pool_size = 0;
+	uint32_t transfer_worker_pool_max_size = 1;
+	TightLocalVector<uint64_t> transfer_worker_operation_used_by_draw;
+	LocalVector<uint32_t> transfer_worker_pool_available_list;
+	LocalVector<RDD::TextureBarrier> transfer_worker_pool_texture_barriers;
+	BinaryMutex transfer_worker_pool_mutex;
+	BinaryMutex transfer_worker_pool_texture_barriers_mutex;
+	ConditionVariable transfer_worker_pool_condition;
+
+	TransferWorker *_acquire_transfer_worker(uint32_t p_transfer_size, uint32_t p_required_align, uint32_t &r_staging_offset);
+	void _release_transfer_worker(TransferWorker *p_transfer_worker);
+	void _end_transfer_worker(TransferWorker *p_transfer_worker);
+	void _submit_transfer_worker(TransferWorker *p_transfer_worker, VectorView<RDD::SemaphoreID> p_signal_semaphores = VectorView<RDD::SemaphoreID>(), bool p_operations_locked = false);
+	bool _wait_for_transfer_worker(TransferWorker *p_transfer_worker, bool p_blocking = false);
+	void _flush_barriers_for_transfer_worker(TransferWorker *p_transfer_worker, bool p_barriers_locked = false);
+	void _check_transfer_worker_operation(uint32_t p_transfer_worker_index, uint64_t p_transfer_worker_operation);
+	void _check_transfer_worker_buffer(Buffer *p_buffer);
+	void _check_transfer_worker_texture(Texture *p_texture);
+	void _check_transfer_worker_vertex_array(VertexArray *p_vertex_array);
+	void _check_transfer_worker_index_array(IndexArray *p_index_array);
+	Error _submit_transfer_workers(RDD::CommandBufferID p_draw_command_buffer = RDD::CommandBufferID(), bool p_nonblocking = false);
+	void _submit_transfer_barriers(RDD::CommandBufferID p_draw_command_buffer);
+	bool _wait_for_transfer_workers();
+	void _free_transfer_workers();
+
+	/***********************/
+	/**** COMMAND GRAPH ****/
+	/***********************/
+
+	bool _texture_make_mutable(Texture *p_texture, RID p_texture_id);
+	struct NativeImmutableFreeFrame {
+		NativeImmutableFreeFrame *previous = nullptr;
+		LocalVector<RID> returned;
+	};
+	NativeImmutableFreeFrame *native_immutable_free_frame = nullptr;
+	uint32_t native_immutable_hold_count = 0;
+	bool native_immutable_device_escaped = false;
+	Buffer *_native_immutable_buffer(RID p_rid);
+	void _native_immutable_retire_dependents(RID p_rid);
+	uint32_t *_native_immutable_counter(RID p_rid, bool **r_retiring = nullptr, bool **r_escaped = nullptr);
+	bool _native_immutable_uniform_set_writes(const UniformSet &p_set) const;
+	bool _buffer_make_mutable(Buffer *p_buffer, RID p_buffer_id);
+#if defined(TESTS_ENABLED) && defined(MODULE_SKINNED_MESH_CAPTURE_TESTS_ENABLED)
+	void _capture_test_record_writable_uses(const Vector<RDG::ResourceTracker *> &p_trackers, const Vector<RDG::ResourceUsage> &p_usages, uint32_t p_operation);
+	void _capture_test_record_writable_set(RID p_set, uint32_t p_operation);
+	void _capture_test_record_buffer_usage(uint64_t p_driver, RDG::ResourceUsage p_usage, uint32_t p_operation);
+#endif
+	bool _vertex_array_make_mutable(VertexArray *p_vertex_array, RID p_resource_id, RDG::ResourceTracker *p_resource_tracker);
+	bool _index_array_make_mutable(IndexArray *p_index_array, RDG::ResourceTracker *p_resource_tracker);
+	bool _uniform_set_make_mutable(UniformSet *p_uniform_set, RID p_resource_id, RDG::ResourceTracker *p_resource_tracker);
+	bool _acceleration_structure_make_mutable(AccelerationStructure *p_acceleration_structure, RID p_resource_id, RDG::ResourceTracker *p_resource_tracker);
+	bool _dependency_make_mutable(RID p_id, RID p_resource_id, RDG::ResourceTracker *p_resource_tracker);
+	bool _dependencies_make_mutable_recursive(RID p_id, RDG::ResourceTracker *p_resource_tracker);
+	bool _dependencies_make_mutable(RID p_id, RDG::ResourceTracker *p_resource_tracker);
+
+	RenderingDeviceGraph draw_graph;
+
+	/**************************/
+	/**** QUEUE MANAGEMENT ****/
+	/**************************/
+
+	RDD::CommandQueueFamilyID main_queue_family;
+	RDD::CommandQueueFamilyID transfer_queue_family;
+	RDD::CommandQueueFamilyID present_queue_family;
+	RDD::CommandQueueID main_queue;
+	RDD::CommandQueueID transfer_queue;
+	RDD::CommandQueueID present_queue;
+
+	/**************************/
+	/**** FRAME MANAGEMENT ****/
+	/**************************/
+
+	// This is the frame structure. There are normally
+	// 3 of these (used for triple buffering), or 2
+	// (double buffering). They are cycled constantly.
+	//
+	// It contains two command buffers, one that is
+	// used internally for setting up (creating stuff)
+	// and another used mostly for drawing.
+	//
+	// They also contains a list of things that need
+	// to be disposed of when deleted, which can't
+	// happen immediately due to the asynchronous
+	// nature of the GPU. They will get deleted
+	// when the frame is cycled.
+
+	struct Frame {
+		uint64_t qualification_epoch = 0;
+		// Cursor over the original owner queues. Counts seal this drain's cutoff;
+		// callback/reentrant additions remain in the queues for the next safe epoch.
+		struct DisposalCursor {
+			bool active = false;
+			uint32_t remaining[10] = {};
+			uint32_t kind = 0;
+			uint32_t phase = 0;
+			uint32_t item = 0;
+			uint64_t allocation_size = 0;
+		} disposal;
+		struct MaintenanceWait {
+			uint32_t phase = 0;
+			uint32_t report = 0;
+			uint32_t call = 0;
+			bool ready = false;
+			bool fence_returned = false;
+			uint32_t request = 0;
+			uint32_t region = 0;
+			uint64_t offset = 0;
+			bool request_started = false;
+			uint8_t *mapped = nullptr;
+		} maintenance_wait;
+
+		// List in usage order, from last to free to first to free.
+		List<Buffer> buffers_to_dispose_of;
+		List<Texture> textures_to_dispose_of;
+		List<Framebuffer> framebuffers_to_dispose_of;
+		List<Sampler> samplers_to_dispose_of;
+		List<Shader> shaders_to_dispose_of;
+		List<UniformSet> uniform_sets_to_dispose_of;
+		List<RenderPipeline> render_pipelines_to_dispose_of;
+		List<ComputePipeline> compute_pipelines_to_dispose_of;
+		List<AccelerationStructure> acceleration_structures_to_dispose_of;
+		List<RaytracingPipeline> raytracing_pipelines_to_dispose_of;
+
+		// Pending asynchronous data transfer for buffers.
+		LocalVector<RDD::BufferID> download_buffer_staging_buffers;
+		LocalVector<RDD::BufferCopyRegion> download_buffer_copy_regions;
+		LocalVector<BufferGetDataRequest> download_buffer_get_data_requests;
+
+		// Pending asynchronous data transfer for textures.
+		LocalVector<RDD::BufferID> download_texture_staging_buffers;
+		LocalVector<RDD::BufferTextureCopyRegion> download_buffer_texture_copy_regions;
+		LocalVector<uint32_t> download_texture_mipmap_offsets;
+		LocalVector<TextureGetDataRequest> download_texture_get_data_requests;
+
+		// The command pool used by the command buffer.
+		RDD::CommandPoolID command_pool;
+
+		// The command buffer used by the main thread when recording the frame.
+		RDD::CommandBufferID command_buffer;
+
+		// Signaled by the command buffer submission. Present must wait on this semaphore.
+		RDD::SemaphoreID semaphore;
+
+		// Signaled by the command buffer submission. Must wait on this fence before beginning command recording for the frame.
+		RDD::FenceID fence;
+		bool fence_signaled = false;
+		bool primary_command_buffer_begun = true;
+		LocalVector<RenderingDeviceDriver::QueueCallReport> chain_reports;
+		// Owns source observer references transferred by the original hidden queue.
+		LocalVector<RDD::QueueCallReport> qualification_hidden_reports;
+		LocalVector<GDExtensionDeviceExit::QualificationTicket *> qualification_tickets;
+		RDD::QueueCallReport present_report;
+		bool present_attempted = false;
+		bool chain_prefix_poisoned = false;
+
+		// Semaphores the frame must wait on before executing the command buffer.
+		LocalVector<RDD::SemaphoreID> semaphores_to_wait_on;
+
+		// Swap chains prepared for drawing during the frame that must be presented.
+		LocalVector<RDD::SwapChainID> swap_chains_to_present;
+
+		// Semaphores the transfer workers can use to wait before rendering the frame.
+		// This must have the same size of the transfer worker pool.
+		TightLocalVector<RDD::SemaphoreID> transfer_worker_semaphores;
+
+		// Extra command buffer pool used for driver workarounds or to reduce GPU bubbles by
+		// splitting the final render pass to the swapchain into its own cmd buffer.
+		RDG::CommandBufferPool command_buffer_pool;
+
+		struct Timestamp {
+			String description;
+			uint64_t value = 0;
+		};
+
+		RDD::QueryPoolID timestamp_pool;
+
+		TightLocalVector<String> timestamp_names;
+		TightLocalVector<uint64_t> timestamp_cpu_values;
+		uint32_t timestamp_count = 0;
+		TightLocalVector<String> timestamp_result_names;
+		TightLocalVector<uint64_t> timestamp_cpu_result_values;
+		TightLocalVector<uint64_t> timestamp_result_values;
+		uint32_t timestamp_result_count = 0;
+		uint64_t index = 0;
+	};
+
+	uint32_t max_timestamp_query_elements = 0;
+
+	int frame = 0;
+	TightLocalVector<Frame> frames;
+	uint64_t frames_drawn = 0;
+	std::atomic<Error> frame_wait_error = OK;
+	std::atomic<int64_t> frame_wait_native_code = 0;
+	std::atomic<bool> frame_wait_native_code_valid = false;
+	std::atomic<Error> frame_issue_error = OK;
+	int failed_wait_frame = -1;
+	std::atomic<bool> frame_wait_draining = false;
+	Error _recording_error() const {
+		const Error issue_error = frame_issue_error.load();
+		if (issue_error != OK) {
+			return issue_error;
+		}
+		const Error wait_error = frame_wait_error.load();
+		return wait_error != OK ? wait_error : ((frame_wait_draining.load() || qualification_frame_advance_pending.load() || native_disposal_active.load()) ? ERR_BUSY : OK);
+	}
+
+	// Whenever logic/physics request a graphics operation (not just deleting a resource) that requires
+	// us to flush all graphics commands, we must set frames_pending_resources_for_processing = frames.size().
+	// This is important for when the user requested for the logic loop to still be updated while
+	// graphics should not (e.g. headless Multiplayer servers, minimized windows that need to still
+	// process something on the background).
+	uint32_t frames_pending_resources_for_processing = 0u;
+
+public:
+	bool has_pending_resources_for_processing() const { return frames_pending_resources_for_processing != 0u; }
+
+private:
+	void _free_pending_resources(int p_frame);
+	Error _fail_frame_issue(Error p_error);
+	void _seal_buffer_readback_records();
+	void _observe_buffer_readback_issue(uint32_t p_slot, RDD::CommandBufferID p_command_buffer, Error p_error, const RDD::QueueCallReport &p_report);
+
+	uint64_t texture_memory = 0;
+	uint64_t buffer_memory = 0;
+
+protected:
+	bool execute_chained_cmds(bool p_present_swap_chain,
+			RenderingDeviceDriver::FenceID p_draw_fence,
+			RenderingDeviceDriver::SemaphoreID p_dst_draw_semaphore_to_signal);
+
+public:
+	void _free_internal(RID p_id, const MutexLock<Mutex> &p_lock);
+	Error _begin_frame(bool p_presented = false, bool p_nonblocking = false);
+	Error _end_frame(bool p_nonblocking = false);
+	Error _execute_frame(bool p_present);
+	Error _stall_for_frame(uint32_t p_frame, bool p_nonblocking = false);
+	Error _stall_for_previous_frames();
+	Error _flush_and_stall_for_all_frames(bool p_begin_frame = true);
+
+	template <typename T>
+	void _free_rids(T &p_owner, const char *p_type);
+
+#ifdef DEV_ENABLED
+	HashMap<RID, String> resource_names;
+#endif
+
+public:
+	Error initialize(RenderingContextDriver *p_context, DisplayServerEnums::WindowID p_main_window = DisplayServerEnums::INVALID_WINDOW_ID);
+	void finalize();
+
+	void _set_max_fps(int p_max_fps);
+
+	void free_rid(RID p_rid);
+#ifndef DISABLE_DEPRECATED
+	[[deprecated("Use `free_rid()` instead.")]] void free(RID p_rid) {
+		free_rid(p_rid);
+	}
+#endif // DISABLE_DEPRECATED
+
+	/****************/
+	/**** Timing ****/
+	/****************/
+
+	void capture_timestamp(const String &p_name);
+	uint32_t get_captured_timestamps_count() const;
+	uint64_t get_captured_timestamps_frame() const;
+	uint64_t get_captured_timestamp_gpu_time(uint32_t p_index) const;
+	uint64_t get_captured_timestamp_cpu_time(uint32_t p_index) const;
+	String get_captured_timestamp_name(uint32_t p_index) const;
+
+	/****************/
+	/**** LIMITS ****/
+	/****************/
+
+	uint64_t limit_get(Limit p_limit) const;
+
+	void swap_buffers(bool p_present);
+
+	uint32_t get_frame_delay() const;
+
+	void submit();
+	void sync();
+
+	enum MemoryType {
+		MEMORY_TEXTURES,
+		MEMORY_BUFFERS,
+		MEMORY_TOTAL
+	};
+
+	uint64_t get_memory_usage(MemoryType p_type) const;
+
+	RenderingDevice *create_local_device();
+
+	void set_resource_name(RID p_id, const String &p_name);
+
+	void _draw_command_begin_label(String p_label_name, const Color &p_color = Color(1, 1, 1, 1));
+	void draw_command_begin_label(const Span<char> p_label_name, const Color &p_color = Color(1, 1, 1, 1));
+	void draw_command_end_label();
+
+	String get_device_vendor_name() const;
+	String get_device_name() const;
+	RenderingDeviceEnums::DeviceType get_device_type() const;
+	String get_device_api_name() const;
+	String get_device_api_version() const;
+	String get_device_pipeline_cache_uuid() const;
+
+	DriverWorkarounds get_driver_workarounds() const;
+
+	uint64_t get_frames_drawn() const { return frames_drawn; }
+
+	bool is_composite_alpha_supported() const;
+
+	uint64_t get_driver_resource(DriverResource p_resource, RID p_rid = RID(), uint64_t p_index = 0);
+
+	String get_driver_and_device_memory_report() const;
+
+	String get_tracked_object_name(uint32_t p_type_index) const;
+	uint64_t get_tracked_object_type_count() const;
+
+	uint64_t get_driver_total_memory() const;
+	uint64_t get_driver_allocation_count() const;
+	uint64_t get_driver_memory_by_object_type(uint32_t p_type) const;
+	uint64_t get_driver_allocs_by_object_type(uint32_t p_type) const;
+
+	uint64_t get_device_total_memory() const;
+	uint64_t get_device_allocation_count() const;
+	uint64_t get_device_memory_by_object_type(uint32_t p_type) const;
+	uint64_t get_device_allocs_by_object_type(uint32_t p_type) const;
+
+	static RenderingDevice *get_singleton();
+
+	void make_current();
+
+	RenderingDevice();
+	~RenderingDevice();
+
+private:
+	/*****************/
+	/**** BINDERS ****/
+	/*****************/
+
+	RID _texture_create(const Ref<RDTextureFormat> &p_format, const Ref<RDTextureView> &p_view, const TypedArray<PackedByteArray> &p_data = Array());
+	RID _texture_create_shared(const Ref<RDTextureView> &p_view, RID p_with_texture);
+	RID _texture_create_shared_from_slice(const Ref<RDTextureView> &p_view, RID p_with_texture, uint32_t p_layer, uint32_t p_mipmap, uint32_t p_mipmaps = 1, TextureSliceType p_slice_type = TEXTURE_SLICE_2D);
+	Ref<RDTextureFormat> _texture_get_format(RID p_rd_texture);
+
+	FramebufferFormatID _framebuffer_format_create(const TypedArray<RDAttachmentFormat> &p_attachments, uint32_t p_view_count);
+	FramebufferFormatID _framebuffer_format_create_multipass(const TypedArray<RDAttachmentFormat> &p_attachments, const TypedArray<RDFramebufferPass> &p_passes, uint32_t p_view_count);
+	RID _framebuffer_create(const TypedArray<RID> &p_textures, FramebufferFormatID p_format_check = INVALID_ID, uint32_t p_view_count = 1);
+	RID _framebuffer_create_multipass(const TypedArray<RID> &p_textures, const TypedArray<RDFramebufferPass> &p_passes, FramebufferFormatID p_format_check = INVALID_ID, uint32_t p_view_count = 1);
+
+	RID _sampler_create(const Ref<RDSamplerState> &p_state);
+
+	VertexFormatID _vertex_format_create(const TypedArray<RDVertexAttribute> &p_vertex_formats);
+	RID _vertex_array_create(uint32_t p_vertex_count, VertexFormatID p_vertex_format, const TypedArray<RID> &p_src_buffers, const Vector<int64_t> &p_offsets = Vector<int64_t>());
+	void _draw_list_bind_vertex_buffers_format(DrawListID p_list, VertexFormatID p_vertex_format, uint32_t p_vertex_count, const TypedArray<RID> &p_vertex_buffers, const Vector<int64_t> &p_offsets = Vector<int64_t>());
+
+	Ref<RDShaderSPIRV> _shader_compile_spirv_from_source(const Ref<RDShaderSource> &p_source, bool p_allow_cache = true);
+	Vector<uint8_t> _shader_compile_binary_from_spirv_with_options(const Ref<RDShaderSPIRV> &p_spirv, const String &p_shader_name, BitField<ShaderCompileFlags> p_flags);
+	RID _shader_create_from_spirv_with_options(const Ref<RDShaderSPIRV> &p_spirv, const String &p_shader_name, BitField<ShaderCompileFlags> p_flags);
+	Vector<uint8_t> _shader_compile_binary_from_spirv(const Ref<RDShaderSPIRV> &p_bytecode, const String &p_shader_name = "");
+	RID _shader_create_from_spirv(const Ref<RDShaderSPIRV> &p_spirv, const String &p_shader_name = "");
+
+	RID _uniform_set_create(const TypedArray<RDUniform> &p_uniforms, RID p_shader, uint32_t p_shader_set);
+
+	Error _buffer_update_bind(RID p_buffer, uint32_t p_offset, uint32_t p_size, const Vector<uint8_t> &p_data);
+
+	RID _blas_create(const TypedArray<RDAccelerationStructureGeometry> &p_geometries, BitField<AccelerationStructureFlagBits> p_flags);
+	Error _tlas_build(RID p_tlas, const TypedArray<RDAccelerationStructureInstance> &p_instances);
+
+	Error _hit_sbt_range_update(RID p_hit_sbt, HitShaderBindingTableRange p_range, uint32_t p_offset, const Vector<int32_t> &p_hit_group_indices);
+
+	RID _render_pipeline_create(RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const Ref<RDPipelineRasterizationState> &p_rasterization_state, const Ref<RDPipelineMultisampleState> &p_multisample_state, const Ref<RDPipelineDepthStencilState> &p_depth_stencil_state, const Ref<RDPipelineColorBlendState> &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const TypedArray<RDPipelineSpecializationConstant> &p_specialization_constants);
+	RID _compute_pipeline_create(RID p_shader, const TypedArray<RDPipelineSpecializationConstant> &p_specialization_constants);
+	RID _raytracing_pipeline_create(const TypedArray<RDPipelineShader> &p_raygen_shaders, const TypedArray<RDPipelineShader> &p_miss_shaders, const TypedArray<RDHitGroup> &p_hit_groups, uint32_t p_max_trace_recursion_depth);
+
+	void _draw_list_set_push_constant(DrawListID p_list, const Vector<uint8_t> &p_data, uint32_t p_data_size);
+	void _compute_list_set_push_constant(ComputeListID p_list, const Vector<uint8_t> &p_data, uint32_t p_data_size);
+	void _raytracing_list_set_push_constant(RaytracingListID p_list, const Vector<uint8_t> &p_data, uint32_t p_data_size);
+};
+
+VARIANT_ENUM_CAST_EXT(RenderingDeviceEnums::DeviceType, RenderingDevice::DeviceType)
+VARIANT_ENUM_CAST(RenderingDevice::DriverResource)
+VARIANT_BITFIELD_CAST(RenderingDevice::ShaderCompileFlags)
+VARIANT_ENUM_CAST(RenderingDevice::ShaderStage)
+VARIANT_ENUM_CAST(RenderingDevice::ShaderLanguage)
+VARIANT_ENUM_CAST(RenderingDevice::CompareOperator)
+VARIANT_ENUM_CAST(RenderingDevice::DataFormat)
+VARIANT_ENUM_CAST(RenderingDevice::TextureType)
+VARIANT_ENUM_CAST(RenderingDevice::TextureSamples)
+VARIANT_BITFIELD_CAST(RenderingDevice::TextureUsageBits)
+VARIANT_ENUM_CAST(RenderingDevice::TextureSwizzle)
+VARIANT_ENUM_CAST(RenderingDevice::TextureSliceType)
+VARIANT_ENUM_CAST(RenderingDevice::SamplerFilter)
+VARIANT_ENUM_CAST(RenderingDevice::SamplerRepeatMode)
+VARIANT_ENUM_CAST(RenderingDevice::SamplerBorderColor)
+VARIANT_ENUM_CAST(RenderingDevice::VertexFrequency)
+VARIANT_ENUM_CAST(RenderingDevice::IndexBufferFormat)
+VARIANT_BITFIELD_CAST(RenderingDevice::StorageBufferUsage)
+VARIANT_BITFIELD_CAST(RenderingDevice::BufferCreationBits)
+VARIANT_BITFIELD_CAST(RenderingDevice::AccelerationStructureFlagBits)
+VARIANT_BITFIELD_CAST(RenderingDevice::AccelerationStructureGeometryFlagBits)
+VARIANT_BITFIELD_CAST(RenderingDevice::AccelerationStructureInstanceFlagBits)
+VARIANT_ENUM_CAST(RenderingDevice::UniformType)
+VARIANT_ENUM_CAST(RenderingDevice::RenderPrimitive)
+VARIANT_ENUM_CAST(RenderingDevice::PolygonCullMode)
+VARIANT_ENUM_CAST(RenderingDevice::PolygonFrontFace)
+VARIANT_ENUM_CAST(RenderingDevice::StencilOperation)
+VARIANT_ENUM_CAST(RenderingDevice::LogicOperation)
+VARIANT_ENUM_CAST(RenderingDevice::BlendFactor)
+VARIANT_ENUM_CAST(RenderingDevice::BlendOperation)
+VARIANT_BITFIELD_CAST(RenderingDevice::PipelineDynamicStateFlags)
+VARIANT_ENUM_CAST(RenderingDevice::PipelineSpecializationConstantType)
+VARIANT_ENUM_CAST(RenderingDevice::Limit)
+VARIANT_ENUM_CAST(RenderingDevice::MemoryType)
+VARIANT_ENUM_CAST(RenderingDevice::Features)
+VARIANT_ENUM_CAST(RenderingDevice::BreadcrumbMarker)
+VARIANT_BITFIELD_CAST(RenderingDevice::DrawFlags);
+
+#ifndef DISABLE_DEPRECATED
+VARIANT_BITFIELD_CAST(RenderingDevice::BarrierMask);
+VARIANT_ENUM_CAST(RenderingDevice::InitialAction)
+VARIANT_ENUM_CAST(RenderingDevice::FinalAction)
+#endif
+
+typedef RenderingDevice RD;

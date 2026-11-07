@@ -1,0 +1,13 @@
+{
+  "argv": [
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+    "--headless",
+    "--test",
+    "--test-case=*[NativeScenePhase]*,*[NativeScenePhaseCloseWaiting]*,*[ScenePhase]*"
+  ],
+  "binary_bytes": 157160008,
+  "binary_sha256": "73ae46c9b9a48a84d622db5ded5c8573fece37657adb591a76c4e433799bc0a4",
+  "exit": 1,
+  "elapsed": 1.7426448749611154,
+  "scope": "CPU/dummy only; acceptance requires diagnostic and assertion inspection"
+}

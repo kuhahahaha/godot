@@ -119,6 +119,8 @@ private:
 	Ref<Texture3D> texture;
 	float thickness = 1.0;
 
+	void _texture_changed();
+
 	struct PlotMesh {
 		Ref<Mesh> mesh;
 		Transform3D local_xform;
@@ -345,6 +347,8 @@ class GPUParticlesAttractorVectorField3D : public GPUParticlesAttractor3D {
 
 	Vector3 size = Vector3(2, 2, 2);
 	Ref<Texture3D> texture;
+
+	void _texture_changed();
 
 protected:
 	static void _bind_methods();

@@ -1,0 +1,44 @@
+{
+  "pipeline": {
+    "command": [
+      "bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=*[CheckedPipelineCompatibility]*"
+    ],
+    "exit_code": 1,
+    "log": "work/native-preparation-pipeline-red.log",
+    "binary": {
+      "bytes": 156746600,
+      "sha256": "c0f6ac8b49730ace0fa8925483cec50894fee2bc7131cb6a8754697175c21481"
+    }
+  },
+  "vertex": {
+    "command": [
+      "bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=*[VertexArrayRange]*"
+    ],
+    "exit_code": 1,
+    "log": "work/native-preparation-vertex-red.log",
+    "binary": {
+      "bytes": 156746600,
+      "sha256": "c0f6ac8b49730ace0fa8925483cec50894fee2bc7131cb6a8754697175c21481"
+    }
+  },
+  "constant": {
+    "command": [
+      "bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=*[VertexArrayRangeConstant]*"
+    ],
+    "exit_code": 1,
+    "log": "work/native-preparation-constant-red.log",
+    "binary": {
+      "bytes": 156746600,
+      "sha256": "c0f6ac8b49730ace0fa8925483cec50894fee2bc7131cb6a8754697175c21481"
+    }
+  }
+}

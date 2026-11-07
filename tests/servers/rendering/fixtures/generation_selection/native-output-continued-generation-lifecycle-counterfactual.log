@@ -1,0 +1,28 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/core/extension/test_production_request.cpp:10773:
+TEST CASE:  [SceneTree][ProductionRequest][GenerationSelection] stale second material retains prefix until unpublished auto drain
+
+tests/servers/rendering/test_external_output_owner_state.cpp:171: ERROR: CHECK( owner->state == ExternalOutputOwner::GenerationState::FAULTED_RETIRING ) is NOT correct!
+  values: CHECK( 0 == 4 )
+
+tests/servers/rendering/test_external_output_owner_state.cpp:172: ERROR: CHECK( owner->generation_selection_unpublished ) is NOT correct!
+  values: CHECK( false )
+
+tests/servers/rendering/test_external_output_owner_state.cpp:173: ERROR: CHECK_FALSE( owner->admits_work() ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_external_output_owner_state.cpp:175: ERROR: CHECK( owner->views[i].closed ) is NOT correct!
+  values: CHECK( false )
+
+tests/servers/rendering/test_external_output_owner_state.cpp:178: ERROR: CHECK( owner->slots[i].publication_closed ) is NOT correct!
+  values: CHECK( false )
+
+tests/servers/rendering/test_external_output_owner_state.cpp:179: ERROR: CHECK( owner->slots[i].pass_uses_closed ) is NOT correct!
+  values: CHECK( false )
+
+===============================================================================
+[doctest] test cases:   3 |   2 passed | 1 failed | 2207 skipped
+[doctest] assertions: 381 | 375 passed | 6 failed |
+[doctest] Status: FAILURE!

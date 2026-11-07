@@ -45,6 +45,7 @@ class ExternalOutputStorage;
 // Source tags are frozen equality projections, never source or budget grants.
 // This object has no world, operation issuer, scheduler, or automatic submission.
 class ExternalOutputOwner {
+	friend class GDExtensionDeviceExit::Registry;
 	friend class ParticlesStorage;
 	friend class ExternalPacketViewLease;
 	friend class ExternalSurfaceSelection;
@@ -97,6 +98,8 @@ class ExternalOutputOwner {
 		PackedByteArray record_token;
 		PackedByteArray packet_token;
 		ExternalOutputStorage *storage = nullptr;
+		bool storage_placement = false, surfaces_placement = false;
+		uint32_t physical_returned = 0;
 		SurfaceBinding *surfaces = nullptr;
 		uint32_t surface_count = 0;
 		// Correlation only; the original finite accepted-arena reverse custody
@@ -106,6 +109,7 @@ class ExternalOutputOwner {
 		GDExtensionDeviceExit::Registry *original_registry = nullptr;
 		GDExtensionDeviceExit::ProductionOutputPin original_pin;
 		uint64_t original_revision = 0;
+		uint64_t original_action_ordinal = UINT64_MAX;
 		uint64_t lease_serial = 0;
 		uint64_t owned_group = 0, output_membership_group = 0;
 		uint32_t retire_surface = 0, retire_resource = 0;
@@ -158,8 +162,50 @@ class ExternalOutputOwner {
 	ReadCell *read_cells = nullptr;
 	uint32_t view_capacity = 0, read_capacity = 0;
 	uint64_t next_view_serial = 1, next_read_serial = 1;
+	// Placement directories belong to the original metadata block. Their
+	// element destruction never returns that block or permits reinstallation.
+	bool metadata_directory_installed = false;
+	bool metadata_directories_placement = false;
+	struct GenerationMeshSelection {
+		RID mesh;
+		MeshStorage::NativeSelectionLease lease;
+	};
+	struct GenerationMaterialSelection {
+		RID material;
+		uint64_t generation = 0;
+		MaterialStorage::NativeSelectionLease lease;
+	};
+	GenerationMeshSelection *generation_meshes = nullptr;
+	GenerationMaterialSelection *generation_materials = nullptr;
+	uint32_t generation_mesh_count = 0, generation_material_count = 0;
+	uint32_t retained_mesh_count = 0, retained_material_count = 0;
+	bool generation_selection_unpublished = false;
+	bool generation_config_inline = false;
+	uint32_t binding_capacity = 0, storage_capacity = 0;
+	bool generation_selection_attempted = false;
+	bool generation_selection_complete = false;
+	bool has_generation_selection_custody() const { return retained_mesh_count || retained_material_count; }
+	Error acquire_generation_selection(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1);
+	struct MetadataLayout {
+		uint32_t view_count = 0, read_count = 0, surface_count = 0;
+		uint32_t view_offset = 0, read_offset = 0, surface_offset = 0;
+		uint32_t storage_offset = 0, surface_binding_offset = 0;
+		uint32_t total_bytes = 0, alignment = 0;
+		uint32_t mesh_selection_count = 0, material_selection_count = 0;
+		uint32_t mesh_selection_offset = 0, material_selection_offset = 0;
+		uint32_t binding_count = 0, storage_count = 0;
+	};
+	static Error plan_metadata_layout(uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces, MetadataLayout &r_layout, uint32_t p_mesh_selections = 0, uint32_t p_material_selections = 0, uint32_t p_bindings = UINT32_MAX, uint32_t p_storage = UINT32_MAX);
+	static Error plan_generation_selection_layout(const ExternalOutputConfig &, uint32_t, uint32_t, uint32_t, MetadataLayout &);
+	Error install_metadata_directory(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1,
+			GDExtensionDeviceExit::Registry &, const GDExtensionDeviceExit::ProductionOutputMetadataLease &,
+			uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces, bool p_generation_selection = false);
 
 	ExternalOutputConfig config;
+	// Production creation stores identity comparison bytes inline in its quoted
+	// metadata block; parser-owned PackedByteArray allocations are not retained.
+	uint8_t frozen_config_tags[5][32] = {};
+	bool config_tags_inline = false;
 	GenerationState state = GenerationState::CONFIGURED;
 	uint64_t generation = 0;
 	RenderingDevice *device = nullptr;
@@ -168,6 +214,7 @@ class ExternalOutputOwner {
 	// Independent original Create-request custody, never borrowed from a slot.
 	// The serial/ref remain correlation after return; only the live pin grants custody.
 	GDExtensionDeviceExit::ProductionOutputPin generation_pin;
+	GDExtensionDeviceExit::ProductionOutputMetadataLease metadata_lease;
 	GDExtensionDeviceExit::Registry *generation_registry = nullptr;
 	GDExtensionProductionRequestRefV1 generation_request = {};
 	uint64_t generation_root_serial = 0;
@@ -175,16 +222,29 @@ class ExternalOutputOwner {
 	Slot slots[MAX_SLOTS];
 	// Original parent capacity/accounting and identity association must be
 	// installed before constructing this owner. No Dictionary value is a charge.
-	ExternalOutputOwner(const ExternalOutputConfig &p_config, uint64_t p_generation) :
+	ExternalOutputOwner(const ExternalOutputConfig &p_config, uint64_t p_generation, bool p_inline_config = false, bool p_inline_selection = false) :
 			config(p_config), generation(p_generation), slot_count(p_config.max_views * p_config.max_inflight) {
 		CRASH_COND(!generation || !p_config.max_views || p_config.max_views > MAX_VIEWS || !p_config.max_inflight || p_config.max_inflight > MAX_INFLIGHT);
+		CRASH_COND(p_inline_selection && !p_inline_config);
+		if (p_inline_config) {
+			// Render profiles additionally need the original retained native
+			// selection table. Only SceneOnly has no such persistent allocation.
+			CRASH_COND(p_inline_selection ? p_config.profile != ExternalOutputConfig::INSTANCE_192 : (p_config.profile != ExternalOutputConfig::SCENE_ONLY || !p_config.surfaces.is_empty() || !p_config.surface_materials.is_empty()));
+			PackedByteArray *tags[] = { &config.producer_tag, &config.device_tag, &config.layout_digest, &config.mapping_digest, &config.numeric_profile_digest };
+			for (uint32_t i = 0; i < 5; ++i) {
+				CRASH_COND(tags[i]->size() != 32);
+				memcpy(frozen_config_tags[i], tags[i]->ptr(), 32);
+				*tags[i] = PackedByteArray();
+			}
+			config_tags_inline = true;
+		}
 	}
 	ExternalOutputOwner(const ExternalOutputOwner &) = delete;
 	ExternalOutputOwner &operator=(const ExternalOutputOwner &) = delete;
 
 public:
 	~ExternalOutputOwner() {
-		CRASH_COND(surface_cells || view_cells || read_cells || !generation_pin.is_empty());
+		CRASH_COND(surface_cells || view_cells || read_cells || generation_meshes || generation_materials || has_generation_selection_custody() || !generation_pin.is_empty());
 		// No destructor fabricates native/source return or drops accepted uses.
 		CRASH_COND(state != GenerationState::RELEASED);
 		for (uint32_t i = 0; i < slot_count; ++i) {
@@ -193,6 +253,9 @@ public:
 	}
 
 private:
+	// Read-only native selection preflight. This neither retains the selection
+	// nor grants publication; Create must retain the same owners before commit.
+	static Error validate_native_selection(const ExternalOutputConfig &, uint32_t &);
 	// Pure finite preflight only. Original Registry custody and original U08
 	// charge must both succeed before a caller commits a Reserved slot.
 	Error select_slot(const ExternalOutputRequest &p_request, uint32_t &r_view, uint32_t &r_slot) const;
@@ -200,7 +263,7 @@ private:
 	// Create leaf remains unavailable until its real admission/source join exists.
 	bool generation_root_matches(const GDExtensionDeviceExit::ProductionOutputPin &) const;
 	Error generation_returnable(uint32_t &, uint32_t &) const;
-	Error install_generation_root(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, GDExtensionDeviceExit::Registry &, RenderingDevice &, RID);
+	Error install_generation_root(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, GDExtensionDeviceExit::Registry &, RenderingDevice &, RID, GDExtensionDeviceExit::ProductionOutputMetadataLease * = nullptr);
 	Error install_reserved_cells(uint32_t p_views, uint32_t p_reads);
 	Error install_reserved_surface_cells(uint32_t p_surfaces);
 	Error surface_return(ExternalSurfaceSelection &);

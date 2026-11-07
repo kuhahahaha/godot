@@ -433,11 +433,13 @@ class TestMaterialStorageNativeHoldAccess {
 	class MaterialData : public MaterialStorage::MaterialData {
 	public:
 		RID shader, set;
+		uint32_t parameter_updates = 0;
 		Vector<ShaderCompiler::GeneratedCode::Texture> reflected_textures;
 		HashMap<StringName, ShaderLanguage::ShaderNode::Uniform> reflected_uniforms;
 		void set_render_priority(int) override {}
 		void set_next_pass(RID) override {}
 		bool update_parameters(const HashMap<StringName, Variant> &parameters, bool, bool) override {
+			++parameter_updates;
 			return update_parameters_uniform_set(parameters, false, false, reflected_uniforms, nullptr, reflected_textures, {}, 16, set, shader, 0, false, false);
 		}
 		~MaterialData() { free_parameters_uniform_set(set); }
@@ -797,6 +799,61 @@ private:
 	}
 
 public:
+	struct SelectionMaterials {
+		MaterialStorage *storage = nullptr, *previous = nullptr;
+		RID shader, materials[2];
+	};
+	class SelectionShaderData : public MaterialStorage::ShaderData {
+	public:
+		void set_code(const String &) override {}
+		bool is_animated() const override { return false; }
+		bool casts_shadows() const override { return false; }
+		RenderingServerTypes::ShaderNativeSourceCode get_native_source_code() const override { return {}; }
+		Pair<ShaderRD *, RID> get_native_shader_and_version() const override { return {}; }
+	};
+	class SelectionMaterialData : public MaterialStorage::MaterialData {
+	public:
+		void set_render_priority(int) override {}
+		void set_next_pass(RID) override {}
+		bool update_parameters(const HashMap<StringName, Variant> &, bool, bool) override { return false; }
+	};
+	static void *selection_create() {
+		auto *p = memnew(SelectionMaterials);
+		p->previous = MaterialStorage::get_singleton();
+		p->storage = memnew(MaterialStorage(MaterialStorage::NativeHoldTestTag{}));
+		auto &storage = *p->storage;
+		storage.shader_data_request_func[MaterialStorage::SHADER_TYPE_3D] = []() -> MaterialStorage::ShaderData * { return memnew(SelectionShaderData); };
+		storage.material_data_request_func[MaterialStorage::SHADER_TYPE_3D] = [](MaterialStorage::ShaderData *) -> MaterialStorage::MaterialData * { return memnew(SelectionMaterialData); };
+		p->shader = storage.shader_allocate();
+		storage.shader_initialize(p->shader, false);
+		storage.shader_set_code(p->shader, "shader_type spatial;");
+		for (RID &material : p->materials) {
+			material = storage.material_allocate();
+			storage.material_initialize(material);
+			storage.material_set_shader(material, p->shader);
+		}
+		storage._update_queued_materials();
+		return p;
+	}
+	static RID selection_rid(void *opaque, uint32_t index) { return static_cast<SelectionMaterials *>(opaque)->materials[index]; }
+	static uint32_t selection_holds(void *opaque, uint32_t index) {
+		auto &p = *static_cast<SelectionMaterials *>(opaque);
+		return p.storage->get_material(p.materials[index])->selection_holds;
+	}
+	static uint32_t selection_shader_count(void *opaque) {
+		auto &p = *static_cast<SelectionMaterials *>(opaque);
+		return p.storage->get_shader(p.shader)->selection_holds;
+	}
+	static void selection_destroy(void *opaque) {
+		auto *p = static_cast<SelectionMaterials *>(opaque);
+		for (RID material : p->materials) {
+			p->storage->material_free(material);
+		}
+		p->storage->shader_free(p->shader);
+		memdelete(p->storage);
+		MaterialStorage::singleton = p->previous;
+		memdelete(p);
+	}
 	static void run_preparation_data_boundary() {
 		class PreparationShaderData : public MaterialStorage::ShaderData {
 		public:
@@ -1039,6 +1096,121 @@ public:
 		}
 		storage->_update_queued_materials(); // Actual original uniform-set creator/capture.
 		CHECK(data->set.is_valid());
+		// CPU selection retains original owners, not an additional native pipeline.
+		MaterialStorage::NativeSelectionLease selection, sibling;
+		const uint64_t selected_generation = material_cell->generation;
+		const uint32_t physical_before = material_cell->native_immutable_holds;
+		CHECK(storage->material_selection_acquire(material, selection, selected_generation + 1) == ERR_INVALID_DATA);
+		CHECK_FALSE(selection.is_active());
+		// Explicit CPU counter-boundary model, not billions of admitted leases.
+		// Each rejected acquisition must leave the other original owner untouched.
+		const uint32_t material_selections = material_cell->selection_holds;
+		const uint32_t shader_selections = shader_cell->selection_holds;
+		material_cell->selection_holds = UINT32_MAX;
+		CHECK(storage->material_selection_acquire(material, selection, selected_generation) == ERR_PARAMETER_RANGE_ERROR);
+		CHECK_FALSE(selection.is_active());
+		CHECK(material_cell->selection_holds == UINT32_MAX);
+		CHECK(shader_cell->selection_holds == shader_selections);
+		CHECK(material_cell->generation == selected_generation);
+		CHECK(material_cell->native_immutable_holds == physical_before);
+		material_cell->selection_holds = material_selections;
+		shader_cell->selection_holds = UINT32_MAX;
+		CHECK(storage->material_selection_acquire(material, selection, selected_generation) == ERR_PARAMETER_RANGE_ERROR);
+		CHECK_FALSE(selection.is_active());
+		CHECK(material_cell->selection_holds == material_selections);
+		CHECK(shader_cell->selection_holds == UINT32_MAX);
+		CHECK(material_cell->generation == selected_generation);
+		CHECK(material_cell->native_immutable_holds == physical_before);
+		shader_cell->selection_holds = shader_selections;
+		CHECK(storage->material_selection_acquire(material, selection, selected_generation) == OK);
+		CHECK(storage->material_selection_acquire(material, selection, selected_generation) == ERR_ALREADY_IN_USE);
+		CHECK(storage->material_selection_acquire(material, sibling, selected_generation) == OK);
+		CHECK(material_cell->selection_holds == 2);
+		CHECK(shader_cell->selection_holds == 2);
+		CHECK(material_cell->native_immutable_holds == physical_before);
+		ERR_PRINT_OFF;
+		storage->material_free(material);
+		storage->shader_free(shader);
+		storage->material_set_shader(material, RID());
+		storage->material_set_param(material, "selection_probe", 1);
+		storage->material_set_next_pass(material, material);
+		storage->material_set_render_priority(material, 2);
+		storage->shader_set_code(shader, "shader_type spatial;");
+		storage->shader_set_default_texture_parameter(shader, "selection_probe", RID(), 0);
+		ERR_PRINT_ON;
+		CHECK(storage->material_owner.get_or_null(material) == material_cell);
+		CHECK(storage->shader_owner.get_or_null(shader) == shader_cell);
+		CHECK(material_cell->generation == selected_generation);
+		CHECK(material_cell->shader == shader_cell);
+		CHECK(storage->material_selection_release(selection) == OK);
+		CHECK(material_cell->selection_holds == 1);
+		CHECK(storage->material_selection_release(selection) == ERR_UNAUTHORIZED);
+		CHECK(storage->material_selection_release(sibling) == OK);
+		CHECK(material_cell->selection_holds == 0);
+		CHECK(shader_cell->selection_holds == 0);
+		class SelectionOnlyMaterialData : public MaterialStorage::MaterialData {
+		public:
+			void set_render_priority(int) override {}
+			void set_next_pass(RID) override {}
+			bool update_parameters(const HashMap<StringName, Variant> &, bool, bool) override { return false; }
+		};
+		storage->material_data_request_func[MaterialStorage::SHADER_TYPE_3D] = [](MaterialStorage::ShaderData *) -> MaterialStorage::MaterialData * { return memnew(SelectionOnlyMaterialData); };
+		const RID second_material = storage->material_allocate();
+		storage->material_initialize(second_material);
+		storage->material_set_shader(second_material, shader);
+		storage->material_data_request_func[MaterialStorage::SHADER_TYPE_3D] = &make_material;
+		storage->_update_queued_materials();
+		auto *second_cell = storage->material_owner.get_or_null(second_material);
+		CHECK(storage->material_selection_acquire(material, selection, selected_generation) == OK);
+		CHECK(storage->material_selection_acquire(second_material, sibling, second_cell->generation) == OK);
+		CHECK(shader_cell->selection_holds == 2);
+		CHECK(storage->material_selection_release(selection) == OK);
+		CHECK(shader_cell->selection_holds == 1);
+		ERR_PRINT_OFF;
+		storage->shader_free(shader);
+		ERR_PRINT_ON;
+		CHECK(storage->shader_owner.get_or_null(shader) == shader_cell);
+		CHECK(second_cell->shader == shader_cell);
+		CHECK(storage->material_selection_release(sibling) == OK);
+		CHECK(shader_cell->selection_holds == 0);
+		storage->material_free(second_material);
+		// Original dirty queue service is deferred while the material selection
+		// lives, and resumes after its actual return. The probe counts calls into
+		// the real existing parameter/uniform-set update, not a mirrored scheduler.
+		CHECK(storage->material_selection_acquire(material, selection, selected_generation) == OK);
+		const uint32_t updates_before_selection = data->parameter_updates;
+		const uint32_t sets_before_selection = driver.set_creates;
+		const RID set_before_selection = data->set;
+		storage->_material_queue_update(material_cell, true, false);
+		CHECK(material_cell->uniform_dirty);
+		CHECK(storage->material_selection_acquire(material, sibling, selected_generation) == ERR_BUSY);
+		CHECK_FALSE(sibling.is_active());
+		CHECK(material_cell->selection_holds == 1);
+		CHECK(shader_cell->selection_holds == 1);
+		for (uint32_t turn = 0; turn < 3; ++turn) {
+			storage->_update_queued_materials();
+			CHECK(data->parameter_updates == updates_before_selection);
+			CHECK(material_cell->uniform_dirty);
+			CHECK(material_cell->update_element.in_list());
+			CHECK(storage->material_update_list.first() == &material_cell->update_element);
+			CHECK(material_cell->update_element.next() == nullptr);
+			CHECK(material_cell->generation == selected_generation);
+			CHECK(data->set == set_before_selection);
+			CHECK(driver.set_creates == sets_before_selection);
+		}
+		CHECK(storage->material_selection_release(selection) == OK);
+		storage->_update_queued_materials();
+		CHECK(data->parameter_updates == updates_before_selection + 1);
+		CHECK_FALSE(material_cell->uniform_dirty);
+		CHECK_FALSE(material_cell->texture_dirty);
+		CHECK_FALSE(material_cell->update_element.in_list());
+		CHECK(storage->material_update_list.first() == nullptr);
+		CHECK(data->set == set_before_selection);
+		CHECK(driver.set_creates == sets_before_selection);
+		CHECK(material_cell->selection_holds == 0);
+		CHECK(shader_cell->selection_holds == 0);
+		storage->_update_queued_materials();
+		CHECK(data->parameter_updates == updates_before_selection + 1);
 		// Actual original factory metadata, never a test-supplied callback grant.
 		const uint64_t set_generation = data->native_uniform_sets[0].owner_generation;
 		CHECK(set_generation != 0);
@@ -1305,6 +1477,21 @@ public:
 		TestMaterialStorageNativeHoldDeviceAccess::restore(previous);
 	}
 };
+void *selection_materials_create() {
+	return TestMaterialStorageNativeHoldAccess::selection_create();
+}
+RID selection_material_rid(void *p, uint32_t i) {
+	return TestMaterialStorageNativeHoldAccess::selection_rid(p, i);
+}
+uint32_t selection_material_holds(void *p, uint32_t i) {
+	return TestMaterialStorageNativeHoldAccess::selection_holds(p, i);
+}
+uint32_t selection_shader_holds(void *p) {
+	return TestMaterialStorageNativeHoldAccess::selection_shader_count(p);
+}
+void selection_materials_destroy(void *p) {
+	TestMaterialStorageNativeHoldAccess::selection_destroy(p);
+}
 void *pipeline_material_profile_create(RID shader) {
 	return TestMaterialStorageNativeHoldAccess::create_pipeline_profile(shader);
 }

@@ -33,6 +33,7 @@
 #include "core/extension/gdextension_library_exit_guard.h"
 #include "core/extension/gdextension_production_resource_use.h"
 #include "core/extension/gdextension_record_source.h"
+#include "core/extension/gdextension_scene_phase.h"
 #include "servers/rendering/native_disposal_witness.h"
 
 class TestProductionResourceUseAccess;
@@ -153,6 +154,30 @@ public:
 	bool is_empty() const { return registry == nullptr; }
 };
 
+// One actual byte-bounded CPU metadata resource in an original accepted row.
+// This lease proves physical allocation/custody only, never logical U08/source
+// admission. Explicit return after all readers and the linked root are gone.
+class ProductionOutputMetadataLease {
+	friend class Registry;
+	Registry *registry = nullptr;
+	ProductionRequest *request = nullptr;
+	uint64_t request_serial = 0;
+	uint32_t resource_slot = UINT32_MAX;
+	void *data = nullptr;
+	uint64_t bytes = 0;
+
+public:
+	ProductionOutputMetadataLease() = default;
+	ProductionOutputMetadataLease(const ProductionOutputMetadataLease &) = delete;
+	ProductionOutputMetadataLease &operator=(const ProductionOutputMetadataLease &) = delete;
+	ProductionOutputMetadataLease(ProductionOutputMetadataLease &&) noexcept;
+	ProductionOutputMetadataLease &operator=(ProductionOutputMetadataLease &&) noexcept;
+	~ProductionOutputMetadataLease();
+	bool is_empty() const { return registry == nullptr; }
+	void *get_data() const { return data; }
+	uint64_t get_size() const { return bytes; }
+};
+
 #ifdef TESTS_ENABLED
 // Component fixture only, on the genuine original OBSERVE dispatch. The
 // original arena capture pin remains held across this callback boundary.
@@ -185,6 +210,14 @@ class ProductionResourceSlot {
 	uint32_t shader_set = UINT32_MAX;
 	uint32_t first_binding = UINT32_MAX, binding_count = 0;
 	bool imported = false;
+	// Nonowning alias of an actual output DISPOSAL_MEMBER. The native group
+	// remains the sole free owner; owned_physical is never populated for this.
+	NativeDisposalWitness output_witness;
+	uint64_t output_action_ordinal = UINT64_MAX;
+	uint64_t output_group_serial = 0, output_root_serial = 0;
+	uint32_t output_member_ordinal = UINT32_MAX;
+	bool output_alias_prepared = false;
+	bool output_set_deferred = false;
 	uint32_t transfer_worker = UINT32_MAX;
 	uint64_t transfer_operation = 0, transfer_action_ordinal = 0;
 	bool transfer_pending = false, transfer_staged = false;
@@ -195,6 +228,14 @@ class ProductionResourceSlot {
 	GDExtensionStorageRetireReportV1 retire_report = {};
 	uint64_t owned_serial = 0, retire_serial = 0;
 	bool creating = false, retiring = false, returned = false;
+	// Independent CPU allocation, not a GPU storage backing or return fact.
+	ProductionOutputMetadataLease *metadata_consumer = nullptr;
+	void *metadata_data = nullptr;
+	uint64_t metadata_root_serial = 0;
+	bool metadata_created = false, metadata_returned = false;
+	// Set only by successful real GENERATION owner installation. Survives root
+	// unpin until the actual placement allocation returns at particles_free.
+	bool metadata_generation_bound = false;
 	Error handoff_error = OK;
 };
 class ProductionActionCell {
@@ -213,7 +254,35 @@ class ProductionActionCell {
 	uint64_t payload_offset = 0, payload_bytes = 0;
 	uint32_t recorded_bytes = 0;
 	uint32_t readback_slot = UINT32_MAX;
+	// Original checked append fact, stored in its original action row. No once table.
+	CheckedRecordAppend original_append;
+	ScenePhaseAttempt scene_attempt;
+	GDExtensionSceneOperationKeyV1 scene_key = {};
+	bool scene_key_bound = false;
+	uint64_t original_append_fact_serial = 0;
 	bool prepared = false;
+	enum class OutputState : uint8_t { UNBOUND,
+		RESERVING,
+		BOUND,
+		RETIRING,
+		RETURNED,
+		UNKNOWN };
+	struct OutputRole {
+		uint32_t role = 0, resource_slot = UINT32_MAX, use_index = UINT32_MAX;
+		uint64_t generation = 0, bytes = 0;
+	};
+	OutputState output_state = OutputState::UNBOUND;
+	GDExtensionOutputAcquireInputV1 output_input = {};
+	OutputRole output_roles[3];
+	ProductionResourceSlot *output_source = nullptr;
+	uint32_t output_source_use = UINT32_MAX;
+	uint32_t output_first_source_use = UINT32_MAX, output_source_use_count = 0;
+	uint64_t output_source_generation = 0;
+	RID output_particles;
+	uint64_t output_generation = 0, output_lease = 0, output_root = 0;
+	uint32_t output_slot = UINT32_MAX;
+	uint32_t output_read_capacity = 0, output_read_graph_capacity = 0, output_read_cursor = 0;
+	bool output_source_prepared = false;
 };
 class ProductionUseCell {
 	friend class Registry;
@@ -328,6 +397,7 @@ enum class ProductionControlKind : uint32_t { OBSERVE,
 	RELEASE,
 	STORAGE_CREATE,
 	SET_CREATE,
+	RASTER_CREATE,
 	RECORD };
 enum class ProductionControlState : uint32_t { OWNER_CONSUMED,
 	PENDING,
@@ -372,11 +442,23 @@ struct ProductionControlOutput {
 	GDExtensionDeviceSessionResultV1 owner_return;
 	ProductionServiceUsage owner_usage;
 };
+// Kept in the original fixed control cell, including after owner consumption.
+struct ProductionRecordHistory {
+	GDExtensionDeviceSessionResultV1 last_schedule_result = {};
+	bool schedule_attempted = false;
+	bool queue_possible = false;
+	bool admitted = false;
+	bool schedule_result_valid = false;
+	bool control_effect_entered = false;
+	bool control_append_entered = false;
+};
 struct ProductionControlCell {
+	ProductionRecordHistory record_history;
 	ProductionControlInput input;
 	ProductionControlOutput output;
 	uint64_t serial;
 	ProductionControlState state;
+	bool scene_waiting = false;
 };
 class ProductionRequest {
 	friend class Registry;
@@ -421,6 +503,20 @@ class ProductionRequest {
 	uint64_t next_disposal_group_serial = 1;
 	bool frozen = false, cancelled = false, effects_pending = false;
 	bool compute_list_open = false;
+	bool draw_list_open = false;
+	bool raster_started = false;
+	// Monotonic across every control; empty later RECORDs cannot erase effects.
+	bool native_effect_entered = false;
+	// Resource allocation/retirement alone does not enter business append.
+	bool append_effect_entered = false;
+	// Independent typed raster declaration retained with the accepted request
+	// arena. It does not alias qualification or dispatch ownership.
+	GDExtensionProductionRasterActionV1 raster_action = {};
+	GDExtensionProductionRasterPrepareV1 raster_prepare_origin = {};
+	uint64_t raster_prepare_control = 0;
+	uint32_t raster_prepare_phase = 0;
+	bool raster_shader_retire_ready = false;
+	bool raster_reserved = false;
 	uint32_t next_action = 0;
 	uint32_t native_workers_bound = 0;
 	GDExtensionProductionSegmentV2 segment = {};
@@ -464,6 +560,11 @@ class ProductionAttachment {
 	uint64_t metadata_frame = 0;
 	bool metadata_active = false, metadata_pending = false;
 	void *record_receiver_userdata = nullptr;
+	NormalRelayToken scene_relay;
+	GDExtensionScenePhaseSinkConfigV1 scene_config = {};
+	uint64_t scene_registration = 0, scene_occurrence = 0;
+	uint32_t scene_active = 0;
+	bool scene_closed = false, scene_relay_closed = false;
 	bool opened = false;
 	bool closing = false;
 	// Open must acquire the original device holder and operation-window receiver.

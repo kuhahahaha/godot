@@ -1,0 +1,327 @@
+{
+  "recorded_at_utc": "2026-11-06T17:56:42.731932+00:00",
+  "verification_kind": "source-extracted production C++ and sequential CPU resource/control mocks; external_guard additionally validates SPIR-V offline",
+  "gpu_execution": false,
+  "native_host_execution": false,
+  "engine_build": false,
+  "head_before_commit": "3bf2bc119c8fd79af4d7365a7e0bead4ee21a253",
+  "host": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+  "source_sha256": "1981ac286fbc610c85879117f932c89d37de287f49af1f1e436c85ae05438f9f",
+  "excluded": [
+    "particle_collision_base_size (parent-owned)",
+    "all native/GPU host fixtures",
+    "particle_heightfield_normal (native host runner)",
+    "cpu_particles_depth_sort (native host runner)"
+  ],
+  "before_failures": [
+    {
+      "fixture": "particle_aabb_flags",
+      "exit_code": 1,
+      "stdout": "",
+      "stderr": "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/particle-aabb-flags-ntg5k639/test.cpp:72:45: error: no member named 'external' in 'Particles'\n   72 |         if (p_particles == nullptr || p_particles->external || p_particles->amount <= 0) {\n      |                                       ~~~~~~~~~~~  ^\n/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/particle-aabb-flags-ntg5k639/test.cpp:97:17: error: no member named 'external' in 'Particles'\n   97 |         if (particles->external) {\n      |             ~~~~~~~~~  ^\n/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/particle-aabb-flags-ntg5k639/test.cpp:98:21: error: no member named 'external' in 'Particles'\n   98 |                 return particles->external->config.bounds;\n      |                        ~~~~~~~~~  ^\n3 errors generated.\nTraceback (most recent call last):\n  File \"/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_aabb_flags/run.py\", line 166, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_aabb_flags/run.py\", line 160, in main\n    subprocess.run(command + [str(cpp), \"-o\", str(binary)], check=True)\n    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py\", line 578, in run\n    raise CalledProcessError(retcode, process.args,\n                             output=stdout, stderr=stderr)\nsubprocess.CalledProcessError: Command '['c++', '-std=c++17', '-Wall', '-Wextra', '-Wno-sign-compare', '/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/particle-aabb-flags-ntg5k639/test.cpp', '-o', '/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/particle-aabb-flags-ntg5k639/float']' returned non-zero exit status 1.\n"
+    },
+    {
+      "fixture": "particle_deferred_retry",
+      "exit_code": 1,
+      "stdout": "",
+      "stderr": "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/particle-deferred-retry-l6sm9jbt/test.cpp:57:18: error: no member named 'external' in 'Particles'\n   57 |                 if (particles->external) {\n      |                     ~~~~~~~~~  ^\n1 error generated.\nTraceback (most recent call last):\n  File \"/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_deferred_retry/run.py\", line 101, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_deferred_retry/run.py\", line 96, in main\n    subprocess.run([\"c++\", \"-std=c++17\", \"-Wall\", \"-Wextra\", str(cpp), \"-o\", str(binary)], check=True)\n    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py\", line 578, in run\n    raise CalledProcessError(retcode, process.args,\n                             output=stdout, stderr=stderr)\nsubprocess.CalledProcessError: Command '['c++', '-std=c++17', '-Wall', '-Wextra', '/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/particle-deferred-retry-l6sm9jbt/test.cpp', '-o', '/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/particle-deferred-retry-l6sm9jbt/test']' returned non-zero exit status 1.\n"
+    },
+    {
+      "fixture": "particle_trail_binding",
+      "exit_code": 1,
+      "stdout": "",
+      "stderr": "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/particle-trail-binding-db20evo0/test.cpp:37:29: error: no member named 'external' in 'Particles'\n   37 |         ERR_FAIL_COND_V(particles->external, false);\n      |                         ~~~~~~~~~  ^\n/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/particle-trail-binding-db20evo0/test.cpp:73:31: error: no member named 'external' in 'Particles'\n   73 |         ERR_FAIL_COND_MSG(particles->external, \"ExternalOutput particles require their immutable output owner.\");\n      |                           ~~~~~~~~~  ^\n2 errors generated.\nTraceback (most recent call last):\n  File \"/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_trail_binding/run.py\", line 114, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/particle_trail_binding/run.py\", line 109, in main\n    subprocess.run([\"c++\", \"-std=c++17\", \"-Wall\", \"-Wextra\", str(cpp), \"-o\", str(binary)], check=True)\n    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py\", line 578, in run\n    raise CalledProcessError(retcode, process.args,\n                             output=stdout, stderr=stderr)\nsubprocess.CalledProcessError: Command '['c++', '-std=c++17', '-Wall', '-Wextra', '/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/particle-trail-binding-db20evo0/test.cpp', '-o', '/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/particle-trail-binding-db20evo0/test']' returned non-zero exit status 1.\n"
+    }
+  ],
+  "after": [
+    {
+      "fixture": "particle_aabb_flags",
+      "command": [
+        "python3",
+        "tests/servers/rendering/fixtures/particle_aabb_flags/run.py"
+      ],
+      "exit_code": 0,
+      "stdout": "particle AABB flags (float): 20/20 checks passed\nparticle AABB flags (double): 20/20 checks passed\n",
+      "stderr": "",
+      "fixture_sha256": "25814cb3d220fc31d9d33b1a3f845712f322f8962444c0741a6c992c08569763"
+    },
+    {
+      "fixture": "particle_buffer_retry",
+      "command": [
+        "python3",
+        "tests/servers/rendering/fixtures/particle_buffer_retry/run.py"
+      ],
+      "exit_code": 0,
+      "stdout": "particle buffer retry: 26/26 checks passed\n",
+      "stderr": "",
+      "fixture_sha256": "8c19c50718414e7f52d6def623e89da727d745b84aff966b1e4c206ecf6a2492"
+    },
+    {
+      "fixture": "particle_collision_scene_bounds",
+      "command": [
+        "python3",
+        "tests/servers/rendering/fixtures/particle_collision_scene_bounds/run.py"
+      ],
+      "exit_code": 0,
+      "stdout": "particle collision scene bounds: 9/9 checks passed\n",
+      "stderr": "",
+      "fixture_sha256": "07582d5933bd25436ee9ca88cbb7529b5e9290fb20d4c9547887763d9b4c3fa6"
+    },
+    {
+      "fixture": "particle_collision_setter_bounds",
+      "command": [
+        "python3",
+        "tests/servers/rendering/fixtures/particle_collision_setter_bounds/run.py"
+      ],
+      "exit_code": 0,
+      "stdout": "particle collision setter bounds: 14/14 checks passed\n",
+      "stderr": "",
+      "fixture_sha256": "3261f963438d446be48f4fcee0d95726c2b8b12c51fa71e6aab50b62bcd34a93"
+    },
+    {
+      "fixture": "particle_collision_uniform_retry",
+      "command": [
+        "python3",
+        "tests/servers/rendering/fixtures/particle_collision_uniform_retry/run.py"
+      ],
+      "exit_code": 0,
+      "stdout": "particle collision uniform retry: 7/7 checks passed\n",
+      "stderr": "",
+      "fixture_sha256": "f604138ffb0be411c0dcf5b7b6e53987720ddb121c9bcfabca2a127626a1ecfa"
+    },
+    {
+      "fixture": "particle_deferred_retry",
+      "command": [
+        "python3",
+        "tests/servers/rendering/fixtures/particle_deferred_retry/run.py"
+      ],
+      "exit_code": 0,
+      "stdout": "particle deferred retry: 3/3 checks passed\n",
+      "stderr": "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/particle-deferred-retry-vy4zem3f/test.cpp:78:8: warning: unused variable 'retrying' [-Wunused-variable]\n   78 |                 bool retrying = retry_candidate && particles->frame_delta_committed && particles->frame_delta_committed_frame == frame;\n      |                      ^~~~~~~~\n1 warning generated.\n",
+      "fixture_sha256": "8a7c0de298be9c5f3ab490c51a46bca3f15f04759b5a81a1ff191a1e0ef44a09"
+    },
+    {
+      "fixture": "particle_emit_input_bounds",
+      "command": [
+        "python3",
+        "tests/servers/rendering/fixtures/particle_emit_input_bounds/run.py"
+      ],
+      "exit_code": 0,
+      "stdout": "particle emit input bounds: 4/4 checks passed\n",
+      "stderr": "",
+      "fixture_sha256": "d4889afb2783e5ef2f82b4793e4b12c48d16a566e73c63fb6942149b5cdc1168"
+    },
+    {
+      "fixture": "particle_epoch_reset",
+      "command": [
+        "python3",
+        "tests/servers/rendering/fixtures/particle_epoch_reset/run.py"
+      ],
+      "exit_code": 0,
+      "stdout": "particle epoch reset: 8/8 checks passed\n",
+      "stderr": "",
+      "fixture_sha256": "95a41000808399c9eaed9c01a57f865dad5a7c390a7d118611e719b2fa0ed7ea"
+    },
+    {
+      "fixture": "particle_external_guard",
+      "command": [
+        "python3",
+        "tests/servers/rendering/fixtures/particle_external_guard/run.py"
+      ],
+      "exit_code": 0,
+      "stdout": "INIT: SPIR-V compile/validate/layout PASS\nVALIDATE: SPIR-V compile/validate/layout PASS\nFINALIZE: SPIR-V compile/validate/layout PASS\nINIT_EMPTY: SPIR-V compile/validate/layout PASS\nFINALIZE_EMPTY: SPIR-V compile/validate/layout PASS\n58 CPU production-control/interval cases PASS (sequential, no GPU claim)\n{\"gpu_execution\": false, \"provenance_bridge\": false, \"component_only\": true}\n",
+      "stderr": "",
+      "fixture_sha256": "84cb79e700f68ceebd2ddf018fe333df785c972ada7f37f818ff08fbd3f5f3a6"
+    },
+    {
+      "fixture": "particle_gles3_aabb_readback_guard",
+      "command": [
+        "python3",
+        "tests/servers/rendering/fixtures/particle_gles3_aabb_readback_guard/run.py"
+      ],
+      "exit_code": 0,
+      "stdout": "particle GLES3 AABB readback guard: 7/7 checks passed\n",
+      "stderr": "",
+      "fixture_sha256": "5362263bd60a4e5c0d8d3a620998fbe6cce0cd94902cbbafbcbd3587f3468765"
+    },
+    {
+      "fixture": "particle_gles3_draw_pass_count",
+      "command": [
+        "python3",
+        "tests/servers/rendering/fixtures/particle_gles3_draw_pass_count/run.py"
+      ],
+      "exit_code": 0,
+      "stdout": "GLES3 draw-pass count: 4/4 checks passed\n",
+      "stderr": "",
+      "fixture_sha256": "66f2fcef11567f72edb35b7ea28e32a6bda5b2819e52cd9c45c665c35a74d149"
+    },
+    {
+      "fixture": "particle_gles3_heightfield_size",
+      "command": [
+        "python3",
+        "tests/servers/rendering/fixtures/particle_gles3_heightfield_size/run.py"
+      ],
+      "exit_code": 0,
+      "stdout": "particle GLES3 heightfield size: 8/8 checks passed\n",
+      "stderr": "",
+      "fixture_sha256": "43a8d278dafa78b44144ba25b263923ce4dea332e695e04bc2a047576d5cc39e"
+    },
+    {
+      "fixture": "particle_gles3_lifetime_split",
+      "command": [
+        "python3",
+        "tests/servers/rendering/fixtures/particle_gles3_lifetime_split/run.py"
+      ],
+      "exit_code": 0,
+      "stdout": "particle GLES3 lifetime split: 5/5 checks passed\n",
+      "stderr": "",
+      "fixture_sha256": "78d3b45df4eeecff7210f31f7cf263b8b03ab3ff75be2026f6661eeccce13f79"
+    },
+    {
+      "fixture": "particle_heightfield_size",
+      "command": [
+        "python3",
+        "tests/servers/rendering/fixtures/particle_heightfield_size/run.py"
+      ],
+      "exit_code": 0,
+      "stdout": "particle heightfield size (float): 18/18 checks passed\nparticle heightfield size (double): 18/18 checks passed\n",
+      "stderr": "",
+      "fixture_sha256": "4cb3acfdcf937be00bba72ec728196f37e719beae12522ed31ec6f144327a31a"
+    },
+    {
+      "fixture": "particle_process_failure",
+      "command": [
+        "python3",
+        "tests/servers/rendering/fixtures/particle_process_failure/run.py"
+      ],
+      "exit_code": 0,
+      "stdout": "particle process dispatch harness: 9/9 cases passed\nparticle inactivity retry harness: 2/2 cases passed\n",
+      "stderr": "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/particle-process-dispatch-r1slg80s/test.cpp:36:16: warning: unused variable 'sub_emitter' [-Wunused-variable]\n   36 |     Particles *sub_emitter = nullptr;\n      |                ^~~~~~~~~~~\n/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/particle-process-dispatch-r1slg80s/test.cpp:37:10: warning: unused variable 'sub_emitter_was_emitting' [-Wunused-variable]\n   37 |     bool sub_emitter_was_emitting = false;\n      |          ^~~~~~~~~~~~~~~~~~~~~~~~\n2 warnings generated.\n/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/particle-process-dispatch-r1slg80s/test.cpp:36:16: warning: unused variable 'sub_emitter' [-Wunused-variable]\n   36 |     Particles *sub_emitter = nullptr;\n      |                ^~~~~~~~~~~\n/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/particle-process-dispatch-r1slg80s/test.cpp:37:10: warning: unused variable 'sub_emitter_was_emitting' [-Wunused-variable]\n   37 |     bool sub_emitter_was_emitting = false;\n      |          ^~~~~~~~~~~~~~~~~~~~~~~~\n/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/particle-process-dispatch-r1slg80s/test.cpp:115:10: warning: variable 'retrying' set but not used [-Wunused-but-set-variable]\n  115 |     bool retrying = false;\n      |          ^\n3 warnings generated.\n",
+      "fixture_sha256": "c92de85ab75cb90cbcbcc7d6f3ffcb2e4991eeec7fbe41b27a49de57c14d340b"
+    },
+    {
+      "fixture": "particle_process_material_range_bounds",
+      "command": [
+        "python3",
+        "tests/servers/rendering/fixtures/particle_process_material_range_bounds/run.py"
+      ],
+      "exit_code": 0,
+      "stdout": "particle process material range bounds: 10/10 checks passed\n",
+      "stderr": "",
+      "fixture_sha256": "d656869ed5e994e603e990a469e4e6796a80dece2c07a72a0ac5f781a01fa649"
+    },
+    {
+      "fixture": "particle_process_progress",
+      "command": [
+        "python3",
+        "tests/servers/rendering/fixtures/particle_process_progress/run.py"
+      ],
+      "exit_code": 0,
+      "stdout": "particle process progress harness: 51/51 checks passed\nparticle process progress harness: 51/51 checks passed\n",
+      "stderr": "",
+      "fixture_sha256": "94c94e37c7e654b9392a2e46efcda27ead6c10d0fab64993aac9dd64ff707868"
+    },
+    {
+      "fixture": "particle_rd_cleanup",
+      "command": [
+        "python3",
+        "tests/servers/rendering/fixtures/particle_rd_cleanup/run.py"
+      ],
+      "exit_code": 0,
+      "stdout": "particle RD cleanup guards: 2/2 checks passed\n",
+      "stderr": "",
+      "fixture_sha256": "d6e4b42692aa936548c38ddbab3822a0183d3eb87cb47e90513f140c5ee445b8"
+    },
+    {
+      "fixture": "particle_rd_heightfield_extents",
+      "command": [
+        "python3",
+        "tests/servers/rendering/fixtures/particle_rd_heightfield_extents/run.py"
+      ],
+      "exit_code": 0,
+      "stdout": "RD heightfield extent cache: 11/11 checks passed\n",
+      "stderr": "",
+      "fixture_sha256": "8b29881a0eedb86095ecc01674623329b24ca7ccf4f9cef08acfe38f3b29500c"
+    },
+    {
+      "fixture": "particle_storage_setter_bounds",
+      "command": [
+        "python3",
+        "tests/servers/rendering/fixtures/particle_storage_setter_bounds/run.py"
+      ],
+      "exit_code": 0,
+      "stdout": "particle storage setter bounds: 34/34 checks passed\n",
+      "stderr": "",
+      "fixture_sha256": "25c7e4e254ebd624477c79e160ca20d2e47de6d400d5601d5490cffa48afe421"
+    },
+    {
+      "fixture": "particle_trail_binding",
+      "command": [
+        "python3",
+        "tests/servers/rendering/fixtures/particle_trail_binding/run.py"
+      ],
+      "exit_code": 0,
+      "stdout": "particle trail binding: 20/20 checks passed\n",
+      "stderr": "",
+      "fixture_sha256": "ac9ca9adf6a549ca0ca7bbbf06e60807d6b0121593e6bafc2518d15c21d450d7"
+    },
+    {
+      "fixture": "particle_update_queue",
+      "command": [
+        "python3",
+        "tests/servers/rendering/fixtures/particle_update_queue/run.py"
+      ],
+      "exit_code": 0,
+      "stdout": "particle update queue guard: 3/3 checks passed\n",
+      "stderr": "",
+      "fixture_sha256": "b564f3b256744d6fd82d7d6e04a2189370996cd314f7dfd91891eb24a6277e89"
+    }
+  ],
+  "negative_guard_mutations": [
+    {
+      "mutation": "aabb_readback_guard",
+      "function": "AABB ParticlesStorage::particles_get_current_aabb",
+      "removed": "\tif (particles->external) {\n\t\treturn particles->external->config.bounds;\n\t}",
+      "expected": "nonzero assertion result after deleting production guard in temporary source only",
+      "exit_code": 1,
+      "stdout": "particle AABB flags (float): 19/20 checks passed\nparticle AABB flags (double): 19/20 checks passed\n",
+      "stderr": "FAIL: external owner supplies immutable bounds: position=(0,0,0), size=(0,0,0)\nFAIL: external owner supplies immutable bounds: position=(0,0,0), size=(0,0,0)\n"
+    },
+    {
+      "mutation": "aabb_native_size_guard",
+      "function": "bool ParticlesStorage::_particles_get_data_size",
+      "removed": "p_particles->external || ",
+      "expected": "nonzero assertion result after deleting production guard in temporary source only",
+      "exit_code": 1,
+      "stdout": "particle AABB flags (float): 19/20 checks passed\nparticle AABB flags (double): 19/20 checks passed\n",
+      "stderr": "FAIL: external particles must reject native data sizing and clear output\nFAIL: external particles must reject native data sizing and clear output\n"
+    },
+    {
+      "mutation": "update_queue_guard",
+      "function": "void ParticlesStorage::update_particles()",
+      "removed": "\t\tif (particles->external) {\n\t\t\tcontinue;\n\t\t}",
+      "expected": "nonzero assertion result after deleting production guard in temporary source only",
+      "exit_code": 1,
+      "stdout": "particle deferred retry: 2/3 checks passed\n",
+      "stderr": "/var/folders/5r/gg85vym57vz_1j9fzz11_12r0000gn/T/particle-deferred-retry-ui98cfkr/test.cpp:76:8: warning: unused variable 'retrying' [-Wunused-variable]\n   76 |                 bool retrying = retry_candidate && particles->frame_delta_committed && particles->frame_delta_committed_frame == frame;\n      |                      ^~~~~~~~\n1 warning generated.\n"
+    },
+    {
+      "mutation": "trail_uniform_guard",
+      "function": "bool ParticlesStorage::_particles_ensure_trail_uniform",
+      "removed": "\tERR_FAIL_COND_V(particles->external, false);",
+      "expected": "nonzero assertion result after deleting production guard in temporary source only",
+      "exit_code": 1,
+      "stdout": "particle trail binding: 18/20 checks passed\n",
+      "stderr": "FAIL: external particles reject native trail uniform setup\nFAIL: external guard blocks first-time uniform creation\n"
+    },
+    {
+      "mutation": "trail_setter_guard",
+      "function": "void ParticlesStorage::particles_set_trail_bind_poses",
+      "removed": "\tERR_FAIL_COND_MSG(particles->external, \"ExternalOutput particles require their immutable output owner.\");",
+      "expected": "nonzero assertion result after deleting production guard in temporary source only",
+      "exit_code": 1,
+      "stdout": "particle trail binding: 18/20 checks passed\n",
+      "stderr": "FAIL: external pose setter preserves layout, simulation and dependency state\nFAIL: external guard preserves resources without allocations\n"
+    }
+  ]
+}

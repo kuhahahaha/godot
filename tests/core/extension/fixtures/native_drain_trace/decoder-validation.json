@@ -1,0 +1,17 @@
+{
+  "actual_cpp_events": 102864,
+  "ring_bytes": 3145728,
+  "retained_records": 4096,
+  "retained_first": 98769,
+  "retained_last": 102864,
+  "invalid_slots": [],
+  "corrupted_slot_rejected": [
+    0
+  ],
+  "empty_ring": "accepted empty",
+  "short_ring": "ValueError",
+  "stderr_event_lines": 4096,
+  "stderr_quota_markers": 1,
+  "disabled_regression_trace_events": 0,
+  "scope": "Controlled CPU/native tests only; no Metal drawable runtime diagnosis."
+}

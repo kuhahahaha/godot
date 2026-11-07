@@ -1,0 +1,25 @@
+{
+  "base_commit": "8c623ea4d099101450fb115889ecfa5c573847c7",
+  "sources": [
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/particles_storage.h",
+      "sha256": "cb87d8f4f12df888c11d8cf203e3b5a14effccd1a74ab036d08caed10b69b48b"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/particles_storage_external.cpp",
+      "sha256": "ffe511878a5d1783037848f6801d58c770659da6437f00f5a48dc948c1520efb"
+    },
+    {
+      "path": "tests/core/extension/test_production_request.cpp",
+      "sha256": "cfdbbb7d82949b26b63cc3d2fc58caf613c75b07962f8375382f2558f9af9c53"
+    },
+    {
+      "path": "tests/servers/rendering/test_external_output_custody_bridge.h",
+      "sha256": "ef9159508c49338f1c377a77930175391397090be644e85038761395cdd1bb1c"
+    },
+    {
+      "path": "tests/servers/rendering/test_external_output_owner_state.cpp",
+      "sha256": "15bfa6d6b90db197aa08bfc90a18f350b8cc0d9565da1e313523fdc088dc349b"
+    }
+  ]
+}

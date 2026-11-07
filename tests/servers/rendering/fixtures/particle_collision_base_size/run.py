@@ -53,7 +53,8 @@ struct RID { int id = 0; };
 #define ERR_FAIL_NULL(p) if (!(p)) return
 #define ERR_FAIL_COND_MSG(cond, message) if (cond) return
 namespace Math { inline bool is_finite(double value) { return std::isfinite(value); } }
-struct Particles { real_t collision_base_size = 0.01f; };
+struct ExternalOutputOwner {};
+struct Particles { real_t collision_base_size = 0.01f; ExternalOutputOwner *external = nullptr; };
 struct Owner { Particles value; Particles *get_or_null(RID rid) { return rid.id == 1 ? &value : nullptr; } } particles_owner;
 bool _particles_collision_base_size_is_valid(real_t p_size) ''' + rd_helper + r'''
 void rd_set(RID p_particles, real_t p_size) ''' + rd_body + r'''
@@ -71,6 +72,11 @@ int main() {
     check(particles_owner.value.collision_base_size == 0.5f, "RD rejects negative size");
     rd_set(rid, std::nanf(""));
     check(particles_owner.value.collision_base_size == 0.5f, "RD rejects non-finite size");
+    ExternalOutputOwner external;
+    particles_owner.value.external = &external;
+    rd_set(rid, 0.75f);
+    check(particles_owner.value.collision_base_size == 0.5f, "RD rejects mutable updates to external output");
+    particles_owner.value.external = nullptr;
     gles_set(rid, 0.25f);
     check(particles_owner.value.collision_base_size == 0.25f, "GLES3 accepts non-negative size");
     gles_set(rid, -1.0f);

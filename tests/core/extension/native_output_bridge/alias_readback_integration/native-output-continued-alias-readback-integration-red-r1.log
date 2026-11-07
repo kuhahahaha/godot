@@ -1,0 +1,97 @@
+ERROR: Original selection must return before owner replacement or free.
+   at: material_free (servers/rendering/renderer_rd/storage_rd/material_storage.cpp:2796)
+ERROR: Original selection must return before owner replacement or free.
+   at: material_free (servers/rendering/renderer_rd/storage_rd/material_storage.cpp:2796)
+ERROR: Original selection must return before owner replacement or free.
+   at: shader_free (servers/rendering/renderer_rd/storage_rd/material_storage.cpp:2492)
+ERROR: 2 RID allocations of type 'N10RendererRD15MaterialStorage8MaterialE' were leaked at exit.
+ERROR: 1 RID allocations of type 'N10RendererRD15MaterialStorage6ShaderE' were leaked at exit.
+ERROR: Mesh selection must return before free.
+   at: mesh_free (servers/rendering/renderer_rd/storage_rd/mesh_storage.cpp:297)
+ERROR: 1 RID allocations of type 'N10RendererRD11MeshStorage4MeshE' were leaked at exit.
+ERROR: FATAL: Condition "owner || storage->particles_owner.get_rid_count()" is true.
+   at: ~ExternalLinkedOwnerTest (tests/servers/rendering/test_external_output_owner_state.cpp:60)
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/core/extension/test_production_request.cpp:11427:
+TEST CASE:  [SceneTree][ProductionRequest][AliasReadbackIntegration] actual internal acquire upload and single download preserve byte custody
+
+tests/core/extension/test_production_request.cpp:6728: FATAL ERROR: REQUIRE( append(context, ref, ordinal, f.request->revision, &output).native_error == OK ) is NOT correct!
+  values: REQUIRE( 2 == 0 )
+
+tests/core/extension/test_production_request.cpp:6730: ERROR: CHECK( f.request->next_action == 3 ) is NOT correct!
+  values: CHECK( 2 == 3 )
+
+tests/core/extension/test_production_request.cpp:6731: ERROR: CHECK( f.request->readbacks[0].source.issued == 4 ) is NOT correct!
+  values: CHECK( 0 == 4 )
+
+tests/core/extension/test_production_request.cpp:6892: ERROR: CHECK( request.next_action == 3 ) is NOT correct!
+  values: CHECK( 2 == 3 )
+
+tests/core/extension/test_production_request.cpp:6912: FATAL ERROR: REQUIRE( request.readbacks[0].source.delivered ) is NOT correct!
+  values: REQUIRE( false )
+
+tests/core/extension/test_production_request.cpp:6913: ERROR: CHECK( request.readbacks[0].source.completed == 4 ) is NOT correct!
+  values: CHECK( 0 == 4 )
+
+tests/core/extension/test_production_request.cpp:6914: ERROR: CHECK( request.readbacks[0].source.returned == 4 ) is NOT correct!
+  values: CHECK( 0 == 4 )
+
+tests/core/extension/test_production_request.cpp:6915: FATAL ERROR: REQUIRE( copy_bytes(ref, request.revision, 0, returned_bytes, 4, &written).native_error == OK ) is NOT correct!
+  values: REQUIRE( 44 == 0 )
+
+tests/core/extension/test_production_request.cpp:6916: ERROR: CHECK( written == 4 ) is NOT correct!
+  values: CHECK( 0 == 4 )
+
+tests/core/extension/test_production_request.cpp:6917: ERROR: CHECK( memcmp(returned_bytes, pattern, 4) == 0 ) is NOT correct!
+  values: CHECK( -1 == 0 )
+
+tests/core/extension/test_production_request.cpp:6919: ERROR: CHECK( fixture.driver.alias_download_copies == 1 ) is NOT correct!
+  values: CHECK( 0 == 1 )
+
+tests/core/extension/test_production_request.cpp:6937: ERROR: CHECK( request.output_owner_head == 4294967295U ) is NOT correct!
+  values: CHECK( 6 == 4294967295 )
+
+tests/core/extension/test_production_request.cpp:6956: FATAL ERROR: REQUIRE( native.released() ) is NOT correct!
+  values: REQUIRE( false )
+
+tests/core/extension/test_production_request.cpp:6984: ERROR: CHECK( original->serial == 0 ) is NOT correct!
+  values: CHECK( 3 == 0 )
+
+tests/core/extension/test_production_request.cpp:6984: ERROR: CHECK( original->serial == 0 ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/core/extension/test_production_request.cpp:6987: ERROR: CHECK( fixture.driver.alias_frees == 8 ) is NOT correct!
+  values: CHECK( 1 == 8 )
+
+tests/core/extension/test_production_request.cpp:1709: ERROR: CHECK( success ) is NOT correct!
+  values: CHECK( false )
+
+tests/core/extension/test_production_request.cpp:7005: ERROR: CHECK( fixture.owner_cleaned ) is NOT correct!
+  values: CHECK( false )
+
+
+================================================================
+handle_crash: Program crashed with signal 5
+Engine version: Godot Engine v4.7.2.stable.custom_build (e9f596d726a546f72bbc0031b172244e287b4a66)
+Dumping the backtrace. Please include this when reporting the bug on: https://github.com/godotengine/godot/issues
+Load address: 100e20000
+
+[1] 193064144 (libsystem_platform.dylib+4144) - _sigtramp + 56
+[2] 10604a36c (main+522a36c) - TT_RunIns + 1477936
+[3] 101b5def8 (main+d3def8) - main + 10841592
+[4] 1012f49a4 (main+4d49a4) - main + 2021540
+[5] 1011fb62c (main+3db62c) - main + 1000748
+[6] 1011b8b00 (main+398b00) - main + 727552
+[7] 10110b498 (main+2eb498) - main + 17304
+[8] 101107490 (main+2e7490) - main (in godot.macos.editor.arm64) + 912
+[9] 192c83e80 (dyld+31e80) - start + 6688
+-- END OF C++ BACKTRACE --
+================================================================
+tests/core/extension/test_production_request.cpp:11427: FATAL ERROR: test case CRASHED: SIGABRT - Abort (abnormal termination) signal
+
+===============================================================================
+[doctest] test cases:    1 |    0 passed |  1 failed | 2212 skipped
+[doctest] assertions: 1064 | 1046 passed | 18 failed |
+[doctest] Status: FAILURE!

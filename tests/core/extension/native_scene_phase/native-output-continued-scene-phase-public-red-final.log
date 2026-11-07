@@ -1,0 +1,50 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/core/extension/test_production_request.cpp:12123:
+TEST CASE:  [SceneTree][ProductionRequest][NativeScenePhase] actual early hook owns bounded typed delivery expiry and original relay close
+
+tests/core/extension/test_production_request.cpp:4923: ERROR: CHECK( fixture.registry.scene_phase_encode_relay(plain.relay, plain_wire) == ERR_UNAUTHORIZED ) is NOT correct!
+  values: CHECK( 0 == 4 )
+
+tests/core/extension/test_production_request.cpp:4924: ERROR: CHECK( memcmp(&plain_wire, &unchanged_wire, sizeof(plain_wire)) == 0 ) is NOT correct!
+  values: CHECK( -1 == 0 )
+
+tests/core/extension/test_production_request.cpp:4944: ERROR: CHECK( query(probe.requests[0], 0, reinterpret_cast<const GDExtensionSceneOperationKeyV1 *>(overlap), reinterpret_cast<GDExtensionSceneReadOutcomeV1 *>(overlap)).native_error == ERR_INVALID_PARAMETER ) is NOT correct!
+  values: CHECK( 30 == 31 )
+
+tests/core/extension/test_production_request.cpp:4945: ERROR: CHECK( memcmp(overlap, untouched, sizeof(overlap)) == 0 ) is NOT correct!
+  values: CHECK( -164 == 0 )
+
+tests/core/extension/test_production_request.cpp:4947: ERROR: CHECK( query({}, 0, reinterpret_cast<const GDExtensionSceneOperationKeyV1 *>(overlap), reinterpret_cast<GDExtensionSceneReadOutcomeV1 *>(overlap)).native_error == ERR_INVALID_PARAMETER ) is NOT correct!
+  values: CHECK( 30 == 31 )
+
+tests/core/extension/test_production_request.cpp:4948: ERROR: CHECK( memcmp(overlap, untouched, sizeof(overlap)) == 0 ) is NOT correct!
+  values: CHECK( -164 == 0 )
+
+===============================================================================
+tests/core/extension/test_production_request.cpp:12127:
+TEST CASE:  [SceneTree][ProductionRequest][NativeScenePhaseCloseWaiting] actual unregister returns two original waiting controls without a draw
+
+tests/core/extension/test_production_request.cpp:4923: ERROR: CHECK( fixture.registry.scene_phase_encode_relay(plain.relay, plain_wire) == ERR_UNAUTHORIZED ) is NOT correct!
+  values: CHECK( 0 == 4 )
+
+tests/core/extension/test_production_request.cpp:4924: ERROR: CHECK( memcmp(&plain_wire, &unchanged_wire, sizeof(plain_wire)) == 0 ) is NOT correct!
+  values: CHECK( -1 == 0 )
+
+tests/core/extension/test_production_request.cpp:4944: ERROR: CHECK( query(probe.requests[0], 0, reinterpret_cast<const GDExtensionSceneOperationKeyV1 *>(overlap), reinterpret_cast<GDExtensionSceneReadOutcomeV1 *>(overlap)).native_error == ERR_INVALID_PARAMETER ) is NOT correct!
+  values: CHECK( 30 == 31 )
+
+tests/core/extension/test_production_request.cpp:4945: ERROR: CHECK( memcmp(overlap, untouched, sizeof(overlap)) == 0 ) is NOT correct!
+  values: CHECK( -164 == 0 )
+
+tests/core/extension/test_production_request.cpp:4947: ERROR: CHECK( query({}, 0, reinterpret_cast<const GDExtensionSceneOperationKeyV1 *>(overlap), reinterpret_cast<GDExtensionSceneReadOutcomeV1 *>(overlap)).native_error == ERR_INVALID_PARAMETER ) is NOT correct!
+  values: CHECK( 30 == 31 )
+
+tests/core/extension/test_production_request.cpp:4948: ERROR: CHECK( memcmp(overlap, untouched, sizeof(overlap)) == 0 ) is NOT correct!
+  values: CHECK( -164 == 0 )
+
+===============================================================================
+[doctest] test cases:   4 |   2 passed |  2 failed | 2214 skipped
+[doctest] assertions: 420 | 408 passed | 12 failed |
+[doctest] Status: FAILURE!

@@ -1373,6 +1373,12 @@ RendererViewport::Viewport::CameraSourceToken RendererViewport::viewport_begin_c
 	viewport->current_camera_token = token;
 	viewport->captured_camera_data = RendererSceneRender::CameraData();
 	viewport->captured_camera_data_valid = false;
+	// A successful new invocation supersedes only the unadopted stage. Keep
+	// the previously adopted camera until this invocation actually adopts.
+	// Sequence exhaustion above must leave the existing stage untouched.
+	viewport->staged_camera_data = RendererSceneRender::CameraData();
+	viewport->staged_camera_token = Viewport::CameraSourceToken();
+	viewport->staged_camera_data_valid = false;
 	return token;
 }
 

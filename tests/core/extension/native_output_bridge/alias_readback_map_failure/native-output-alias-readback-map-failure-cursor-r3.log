@@ -1,0 +1,27 @@
+[0;36m[doctest] [0mdoctest version is "2.4.12"
+[0;36m[doctest] [0mrun with "--help" for options
+MAP_CURSOR active=true serial=3 same_owner=true cause=28
+MAP_RELEASE_STUCK serial=3 ctrl=0 maintenance=3 capture=0 pending=false lost=false graphs=2 native=4
+MAP_GRAPH 0 pending=false
+MAP_GRAPH 1 pending=false
+MAP_NATIVE 0 owner=0 state=1 retained=true released=false issue=1
+MAP_NATIVE 1 owner=0 state=0 retained=false released=false issue=1
+MAP_NATIVE 2 owner=2 state=1 retained=true released=false issue=1
+MAP_NATIVE 3 owner=2 state=0 retained=false released=false issue=1
+[0;33m===============================================================================
+[0;37mtests/core/extension/test_production_request.cpp:11654:
+[0;33mTEST CASE:  [0m[SceneTree][ProductionRequest][AliasReadbackMapFailure] actual download map failure returns custody and retires original owners
+
+[0;37mtests/core/extension/test_production_request.cpp:7207: [0;31mERROR: [0;36mCHECK( original->serial == 0 ) [0mis NOT correct!
+  values: CHECK( 3 == 0 )
+
+[0;37mtests/core/extension/test_production_request.cpp:1724: [0;31mERROR: [0;36mCHECK( success ) [0mis NOT correct!
+  values: CHECK( false )
+
+[0;37mtests/core/extension/test_production_request.cpp:7228: [0;31mERROR: [0;36mCHECK( fixture.owner_cleaned ) [0mis NOT correct!
+  values: CHECK( false )
+
+[0;37mtests/core/extension/test_production_request.cpp:1724: [0;31mERROR: [0;36mCHECK( success ) [0mis NOT correct!
+  values: CHECK( false )
+
+GDEXTENSION_CLOSE_FAILED error=044 route=3

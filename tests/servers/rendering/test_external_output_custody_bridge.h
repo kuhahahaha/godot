@@ -31,6 +31,7 @@
 #pragma once
 
 #include "core/extension/gdextension_production_request.h"
+#include "servers/rendering/renderer_rd/storage_rd/external_output_config.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/mesh_storage.h"
 
@@ -44,13 +45,35 @@ class ExternalLinkedOwnerTest {
 	ExternalOutputOwner *owner = nullptr;
 	RID particles;
 	bool owns_storage = true;
+	RenderingDevice *expected_device = nullptr;
+	bool empty_storage_mode = false;
 	void initialize_owner(RenderingDevice &, bool);
 
 public:
-	explicit ExternalLinkedOwnerTest(RenderingDevice &, bool p_query_enabled = false);
+	explicit ExternalLinkedOwnerTest(RenderingDevice &, bool p_empty_storage = false, bool p_query_enabled = false);
 	// Borrow the existing RD owner; retain only this fixture particle and root.
 	ExternalLinkedOwnerTest(RenderingDevice &, ParticlesStorage &, bool p_query_enabled);
 	~ExternalLinkedOwnerTest();
+	// This mode only locates a real Create result. It installs no owner/pin and
+	// destroys no placement object itself; free goes through ParticlesStorage.
+	bool adopt_created(RID);
+	bool exists() const;
+	void free_created();
+	// Explicit finite-count internal receiver, not a public counts ABI or grant.
+	void create_with_metadata_counts(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1,
+			const GDExtensionOutputCreateInputV1 &, uint32_t p_metadata_slot,
+			uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces, GDExtensionOutputCreateResultV1 &);
+	static Error metadata_directory_bytes(uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces, uint64_t &r_bytes);
+	bool metadata_directory_in_slab(uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces) const;
+	static Error selection_metadata_bytes(const ExternalOutputConfig &, uint64_t &, uint32_t *p_alignment = nullptr);
+	Error create_selection_component(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const ExternalOutputConfig &, GDExtensionDeviceExit::ProductionOutputMetadataLease &, int p_failure);
+	void unprepared_guard_refusal(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const ExternalOutputConfig &, GDExtensionDeviceExit::ProductionOutputMetadataLease &);
+	uint32_t selection_meshes() const;
+	uint32_t selection_materials() const;
+	bool selection_inline_matches(const ExternalOutputConfig &) const;
+	uint64_t selection_material_generation(uint32_t) const;
+	bool selection_faulted() const;
+	void forget_auto_returned();
 	GDExtensionDeviceExit::ProductionOutputPin &pin(uint32_t);
 	void install(uint32_t, GDExtensionDeviceExit::Registry &, GDExtensionProductionRequestRefV1);
 	// Independent generation substrate only; never a public Create/source issuer.
@@ -81,6 +104,13 @@ public:
 	uint32_t storage_bytes(uint32_t) const;
 	uint64_t storage_total_bytes() const;
 	NativeDisposalWitness &storage_witness(uint32_t);
+	// CPU Poll arithmetic model only. These helpers construct no admitted slot
+	// or completion. Caller creates/frees through original RD factories and must
+	// observe actual RETURNED witnesses before advancing the modeled receipts.
+	void poll_model_begin_storage();
+	RID &poll_model_resource_rid(uint32_t);
+	void poll_model_consume_receipt(uint32_t);
+	void poll_model_end_storage(uint32_t);
 	bool storage_tokens_empty() const;
 	bool storage_empty() const;
 	void discard_unattempted_storage();
@@ -97,6 +127,12 @@ public:
 // Actual native mismatch injection and exact test-only undo, on the original RT.
 Error external_storage_poison_and_free(RenderingDevice &, NativeDisposalWitness &, NativeDisposalWitness::Report &);
 Error external_storage_restore_poison(RenderingDevice &, NativeDisposalWitness &, const NativeDisposalWitness::Report &);
+// Original CPU material/shader owners only; no ShaderRD version/pipeline readiness.
+void *selection_materials_create();
+RID selection_material_rid(void *, uint32_t);
+uint32_t selection_material_holds(void *, uint32_t);
+uint32_t selection_shader_holds(void *);
+void selection_materials_destroy(void *);
 // Opaque original MaterialStorage/ShaderRD test profile; creates no admission.
 void *pipeline_material_profile_create(RID);
 Error pipeline_material_profile_acquire(void *, RID, uint32_t, MaterialStorage::NativeMaterialHold &);

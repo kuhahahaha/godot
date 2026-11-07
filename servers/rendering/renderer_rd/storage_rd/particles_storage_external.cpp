@@ -31,6 +31,7 @@
 #include "core/extension/gdextension_library_exit_guard.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_owner.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
+#include "servers/rendering/rendering_server.h"
 
 #include <limits>
 
@@ -260,6 +261,91 @@ Error ParticlesStorage::_external_typed_context(GDExtensionProductionPhysicalCon
 	return device == RenderingDevice::get_singleton() ? OK : ERR_INVALID_DATA;
 }
 void ParticlesStorage::particles_external_create_typed(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputCreateInputV1 &p_input, GDExtensionOutputCreateResultV1 &r_result) {
+	_external_create_typed(p_context, p_request, p_input, UINT32_MAX, 0, 0, 0, r_result);
+}
+uint64_t ParticlesStorage::particles_external_scene_metadata_bytes() {
+	ExternalOutputOwner::MetadataLayout layout;
+	const Error error = ExternalOutputOwner::plan_metadata_layout(0, 0, 0, layout);
+	CRASH_COND(error != OK);
+	return layout.total_bytes;
+}
+void ParticlesStorage::particles_external_create_typed_v2(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputCreateInputV1 &p_input, uint32_t p_metadata_slot, GDExtensionOutputCreateResultV1 &r_result) {
+	_external_create_typed(p_context, p_request, p_input, p_metadata_slot, 0, 0, 0, r_result);
+}
+bool ParticlesStorage::_external_decode_create(const GDExtensionOutputCreateInputV1 &p_input, ExternalOutputConfig &config, uint32_t &surface_count, GDExtensionOutputCreateResultV1 &r_result) {
+	r_result.status = output_status(ERR_INVALID_PARAMETER, "CONTRACT");
+	if (!valid_abi(p_input.abi, sizeof(p_input)) || p_input.profile < 1 || p_input.profile > 3 || p_input.space < 1 || p_input.space > 2 || p_input.motion > 1 || p_input.query_enabled > 1 || (p_input.pass_mask & ~uint32_t(0x1f)) || p_input.surfaces.reserved || p_input.surface_materials.reserved ||
+			(p_input.surfaces.count && !p_input.surfaces.data) || (p_input.surface_materials.count && !p_input.surface_materials.data)) {
+		return false;
+	}
+	if (p_input.capacity > (1u << 20) || !p_input.max_views || p_input.max_views > 8 || !p_input.max_inflight || p_input.max_inflight > 4) {
+		r_result.status = output_status(ERR_INVALID_PARAMETER, "LIMIT");
+		return false;
+	}
+	if (p_input.surface_materials.count > ExternalOutputConfig::MAX_FLATTENED_SURFACES) {
+		r_result.status = output_status(ERR_INVALID_PARAMETER, "LIMIT");
+		return false;
+	}
+	AABB bounds, geometry_bounds, query_bounds;
+	if (!decode_bounds(p_input.bounds, bounds, true) || !decode_bounds(p_input.query_bounds, query_bounds, p_input.query_enabled != 0)) {
+		return false;
+	}
+	if (p_input.query_enabled) {
+		const AABB cull_bounds = bounds.merge(query_bounds);
+		if (!cull_bounds.is_finite() || !cull_bounds.get_end().is_finite()) {
+			return false;
+		}
+	}
+	if (p_input.profile == 1 && (!p_input.surfaces.count || p_input.surfaces.count > ExternalOutputConfig::MAX_MESH_RIDS || !p_input.surface_materials.count)) {
+		return false;
+	}
+	if (p_input.profile == 2 && (p_input.surfaces.count || !p_input.surface_materials.count || !decode_bounds(p_input.geometry_bounds, geometry_bounds, true))) {
+		return false;
+	}
+	if (p_input.profile != 2) {
+		const GDExtensionOutputBoundsV1 absent{};
+		if (memcmp(&p_input.geometry_bounds, &absent, sizeof(absent)) != 0) {
+			return false;
+		}
+	}
+	if (p_input.profile == 3 && (p_input.capacity || p_input.surfaces.count || p_input.surface_materials.count || p_input.pass_mask || p_input.motion || !p_input.query_enabled)) {
+		return false;
+	}
+	config.profile = ExternalOutputConfig::Profile(p_input.profile);
+	config.capacity = p_input.capacity;
+	config.max_views = p_input.max_views;
+	config.max_inflight = p_input.max_inflight;
+	config.space = ExternalOutputConfig::Space(p_input.space);
+	config.pass_mask = p_input.pass_mask;
+	config.motion = ExternalOutputConfig::Motion(p_input.motion);
+	config.query_enabled = p_input.query_enabled;
+	config.bounds = bounds;
+	config.geometry_bounds = geometry_bounds;
+	config.query_bounds = query_bounds;
+	for (uint32_t i = 0; i < p_input.surfaces.count; ++i) {
+		config.surfaces.push_back(RID::from_uint64(p_input.surfaces.data[i]));
+	}
+	for (uint32_t i = 0; i < p_input.surface_materials.count; ++i) {
+		config.surface_materials.push_back(RID::from_uint64(p_input.surface_materials.data[i]));
+	}
+	const auto copy_tag = [](const GDExtensionOutputTokenV1 &input, PackedByteArray &output) {
+		output.resize(32);
+		memcpy(output.ptrw(), input.bytes, 32);
+	};
+	copy_tag(p_input.producer_tag, config.producer_tag);
+	copy_tag(p_input.device_tag, config.device_tag);
+	copy_tag(p_input.layout_digest, config.layout_digest);
+	copy_tag(p_input.mapping_digest, config.mapping_digest);
+	copy_tag(p_input.numeric_profile_digest, config.numeric_profile_digest);
+	const Error selection_error = ExternalOutputOwner::validate_native_selection(config, surface_count);
+	if (selection_error != OK) {
+		r_result.status = output_status(selection_error, "native_output_selection");
+		return false;
+	}
+	return true;
+}
+
+void ParticlesStorage::_external_create_typed(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputCreateInputV1 &p_input, uint32_t p_metadata_slot, uint32_t p_view_capacity, uint32_t p_read_capacity, uint32_t p_surface_capacity, GDExtensionOutputCreateResultV1 &r_result) {
 	r_result = {};
 	r_result.abi = { 1, sizeof(r_result), 0 };
 	const Error context_error = _external_typed_context(p_context, p_request, true);
@@ -267,35 +353,181 @@ void ParticlesStorage::particles_external_create_typed(GDExtensionProductionPhys
 		r_result.status = output_status(context_error, "original_record_context_required");
 		return;
 	}
-	r_result.status = output_status(ERR_INVALID_PARAMETER, "CONTRACT");
-	if (!valid_abi(p_input.abi, sizeof(p_input)) || p_input.profile < 1 || p_input.profile > 3 || p_input.space < 1 || p_input.space > 2 || p_input.motion > 1 || p_input.query_enabled > 1 || (p_input.pass_mask & ~uint32_t(0x1f)) || p_input.surfaces.reserved || p_input.surface_materials.reserved ||
-			(p_input.surfaces.count && !p_input.surfaces.data) || (p_input.surface_materials.count && !p_input.surface_materials.data)) {
+	ExternalOutputConfig config;
+	uint32_t surface_count = 0;
+	if (!_external_decode_create(p_input, config, surface_count, r_result)) {
 		return;
 	}
-	if (p_input.capacity > (1u << 20) || !p_input.max_views || p_input.max_views > 8 || !p_input.max_inflight || p_input.max_inflight > 4) {
-		r_result.status = output_status(ERR_INVALID_PARAMETER, "LIMIT");
+	if (p_metadata_slot == UINT32_MAX) {
+		r_result.status = create_body();
 		return;
 	}
-	AABB bounds, geometry_bounds, query_bounds;
-	if (!decode_bounds(p_input.bounds, bounds, true) || !decode_bounds(p_input.query_bounds, query_bounds, p_input.query_enabled != 0)) {
+	// Render profiles still require their actual fixed-profile shader readiness
+	// and retained selection directories. A SceneOnly generation issues neither
+	// a raster capability nor a published final particle source.
+	if (config.profile != ExternalOutputConfig::SCENE_ONLY) {
+		r_result.status = output_status(ERR_UNAVAILABLE, "native_profile_preparation_required");
 		return;
 	}
-	if (p_input.profile == 1 && (!p_input.surfaces.count || p_input.surfaces.count > ExternalOutputConfig::MAX_MESH_RIDS || !p_input.surface_materials.count)) {
+	if (!next_external_generation) {
+		r_result.status = output_status(ERR_PARAMETER_RANGE_ERROR, "generation_exhausted");
 		return;
 	}
-	if (p_input.profile == 2 && (p_input.surfaces.count || !p_input.surface_materials.count || !decode_bounds(p_input.geometry_bounds, geometry_bounds, true))) {
+	ExternalOutputOwner::MetadataLayout layout;
+	const Error planned = ExternalOutputOwner::plan_metadata_layout(p_view_capacity, p_read_capacity, p_surface_capacity, layout);
+	if (planned != OK) {
+		r_result.status = output_status(planned, "native_metadata_layout");
 		return;
 	}
-	if (p_input.profile != 2) {
-		const GDExtensionOutputBoundsV1 absent{};
-		if (memcmp(&p_input.geometry_bounds, &absent, sizeof(absent)) != 0) {
+	auto &registry = GDExtensionDeviceExit::Registry::get_singleton();
+	GDExtensionDeviceExit::ProductionOutputMetadataLease metadata;
+	const Error allocated = registry.production_output_metadata_create(p_context, p_request, p_metadata_slot, *RenderingDevice::get_singleton(), layout.total_bytes, layout.alignment, metadata);
+	if (allocated != OK) {
+		r_result.status = output_status(allocated, "original_output_metadata_required");
+		return;
+	}
+	_external_create_received(p_context, p_request, config, metadata, p_view_capacity, p_read_capacity, p_surface_capacity, r_result);
+	if (!metadata.is_empty()) {
+		// Refusal before native ownership committed: the exact resource row is
+		// returned once. A committed owner moved this lease out of the caller.
+		const Error returned = registry.production_output_metadata_return(metadata);
+		CRASH_COND(returned != OK);
+	}
+}
+
+Error ParticlesStorage::_external_instance_preparation_error() const {
+	// Engine-owned state only: a component/test guard cannot grant readiness.
+	const Error prepared = get_external_guard_preparation_error();
+	if (prepared != OK) {
+		return prepared;
+	}
+	return is_external_guard_prepared() ? OK : ERR_UNAVAILABLE;
+}
+
+Error ParticlesStorage::_external_metadata_requirements(const ExternalOutputConfig &config, const GDExtensionOutputMetadataLimitsV1 &limits, GDExtensionOutputMetadataRequirementsV1 &out) const {
+	if (!valid_abi(limits.abi, sizeof(limits)) || limits.reserved) {
+		return ERR_INVALID_PARAMETER;
+	}
+	auto *rd = RenderingDevice::get_singleton();
+	auto *server = RenderingServer::get_singleton();
+	if (!rd || !server || !server->is_on_render_thread() || server->get_rendering_device() != rd) {
+		return ERR_UNAUTHORIZED;
+	}
+	ExternalOutputOwner::MetadataLayout layout;
+	Error planned;
+	if (config.profile == ExternalOutputConfig::INSTANCE_192) {
+		const Error prepared = _external_instance_preparation_error();
+		if (prepared != OK) {
+			return prepared;
+		}
+		planned = ExternalOutputOwner::plan_generation_selection_layout(config, limits.view_lease_capacity, limits.read_lease_capacity, limits.surface_lease_capacity, layout);
+	} else if (config.profile == ExternalOutputConfig::SCENE_ONLY) {
+		if (limits.view_lease_capacity || limits.read_lease_capacity || limits.surface_lease_capacity) {
+			return ERR_INVALID_PARAMETER;
+		}
+		planned = ExternalOutputOwner::plan_metadata_layout(0, 0, 0, layout);
+	} else {
+		return ERR_UNAVAILABLE;
+	}
+	if (planned != OK) {
+		return planned;
+	}
+	GDExtensionOutputMetadataRequirementsV1 result{};
+	result.abi = { 1, sizeof(result), 0 };
+	result.layout_version = 1;
+	result.required_metadata_bytes = layout.total_bytes;
+	result.required_alignment = layout.alignment;
+	result.slot_count = config.max_views * config.max_inflight;
+	result.flattened_surface_count = layout.material_selection_count;
+	result.binding_count = layout.binding_count;
+	result.limits = limits;
+	out = result;
+	return OK;
+}
+
+void ParticlesStorage::_external_create_received(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const ExternalOutputConfig &p_config,
+		GDExtensionDeviceExit::ProductionOutputMetadataLease &p_metadata, uint32_t p_view_capacity, uint32_t p_read_capacity, uint32_t p_surface_capacity, GDExtensionOutputCreateResultV1 &r_result, bool p_generation_selection) {
+	auto &registry = GDExtensionDeviceExit::Registry::get_singleton();
+	auto *rd = RenderingDevice::get_singleton();
+	// Internal opt-in only. Public V2/V3 keep their SceneOnly profile gates.
+	const bool instance_selection = p_generation_selection && p_config.profile == ExternalOutputConfig::INSTANCE_192;
+	if (!rd || (!instance_selection && p_config.profile != ExternalOutputConfig::SCENE_ONLY) || !next_external_generation) {
+		r_result.status = output_status(ERR_UNAVAILABLE, "native_generation_unavailable");
+		return;
+	}
+	if (instance_selection) {
+		const Error prepared = _external_instance_preparation_error();
+		if (prepared != OK) {
+			r_result.status = output_status(prepared, "native_profile_preparation_required");
 			return;
 		}
 	}
-	if (p_input.profile == 3 && (p_input.capacity || p_input.surfaces.count || p_input.surface_materials.count || p_input.pass_mask || p_input.motion || !p_input.query_enabled)) {
+	ExternalOutputOwner::MetadataLayout layout;
+	const Error planned = instance_selection ? ExternalOutputOwner::plan_generation_selection_layout(p_config, p_view_capacity, p_read_capacity, p_surface_capacity, layout) : ExternalOutputOwner::plan_metadata_layout(p_view_capacity, p_read_capacity, p_surface_capacity, layout);
+	if (planned != OK) {
+		r_result.status = output_status(planned, "native_metadata_layout");
 		return;
 	}
-	r_result.status = create_body();
+	const Error authenticated = registry.production_output_metadata_validate(p_context, p_request, p_metadata, *rd, layout.total_bytes, layout.alignment);
+	if (authenticated != OK) {
+		r_result.status = output_status(authenticated, "original_output_metadata_required");
+		return;
+	}
+	const uint64_t generation = next_external_generation;
+	next_external_generation = generation == UINT64_MAX ? 0 : generation + 1;
+	auto *owner = new (p_metadata.get_data()) ExternalOutputOwner(p_config, generation, true, instance_selection);
+	owner->device = rd;
+	const Error directory = owner->install_metadata_directory(p_context, p_request, registry, p_metadata, p_view_capacity, p_read_capacity, p_surface_capacity, instance_selection);
+	if (directory != OK) {
+		owner->state = ExternalOutputOwner::GenerationState::RELEASED;
+		owner->~ExternalOutputOwner();
+		r_result.status = output_status(directory, "native_metadata_directory");
+		return;
+	}
+	const RID rid = particles_owner.allocate_rid();
+	if (rid.is_null()) {
+		CRASH_COND(owner->return_reserved_cells() != OK);
+		owner->state = ExternalOutputOwner::GenerationState::RELEASED;
+		owner->~ExternalOutputOwner();
+		r_result.status = output_status(ERR_OUT_OF_MEMORY, "particles_rid_capacity");
+		return;
+	}
+	particles_owner.initialize_rid(rid);
+	auto *particles = particles_owner.get_or_null(rid);
+	particles->external = owner;
+	const Error installed = owner->install_generation_root(p_context, p_request, registry, *rd, rid, &p_metadata);
+	if (installed != OK) {
+		// install_generation_root returns its own unlinked pin on failure.
+		// No source/native append occurred and no public RID escaped.
+		particles->external = nullptr;
+		CRASH_COND(owner->return_reserved_cells() != OK);
+		owner->state = ExternalOutputOwner::GenerationState::RELEASED;
+		owner->~ExternalOutputOwner();
+		particles_owner.free(rid);
+		r_result.status = output_status(installed, "original_generation_root_required");
+		return;
+	}
+	owner->metadata_lease = static_cast<GDExtensionDeviceExit::ProductionOutputMetadataLease &&>(p_metadata);
+	if (instance_selection) {
+		const Error selected = owner->acquire_generation_selection(p_context, p_request);
+		if (selected != OK) {
+			// All post-root refusals, including a pre-lease refusal, retain the
+			// linked owner/metadata and any acquired original selection prefix.
+			// Original OBSERVE returns leases/rows/root and frees unpublished RID.
+			owner->withdraw();
+			owner->generation_selection_unpublished = true;
+			owner->state = ExternalOutputOwner::GenerationState::FAULTED_RETIRING;
+			r_result.status = output_status(selected, "native_generation_selection_required");
+			return;
+		}
+	}
+	r_result.particles = rid.get_id();
+	r_result.generation = generation;
+	// No canonical named Create capability bits exist. Root must pin public
+	// capability semantics before enabling Instance192; no raster/seal/consumer
+	// completeness is advertised by this internal transaction candidate.
+	r_result.capabilities = 0;
+	r_result.status = output_status(OK, "");
 }
 void ParticlesStorage::particles_external_seal_typed(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputSealInputV1 &p_input, GDExtensionOutputSealResultV1 &r_result) {
 	r_result = {};
@@ -369,15 +601,39 @@ GDExtensionOutputStatusV1 ParticlesStorage::particles_external_withdraw_typed(GD
 	if (!valid_abi(p_input.abi, sizeof(p_input))) {
 		return output_status(ERR_INVALID_PARAMETER, "CONTRACT");
 	}
-	const Particles *particles = particles_owner.get_or_null(RID::from_uint64(p_input.particles));
+	const RID particles_rid = RID::from_uint64(p_input.particles);
+	const Particles *particles = particles_owner.get_or_null(particles_rid);
 	if (!particles || !particles->external || !p_input.generation || p_input.generation != particles->external->generation) {
 		return output_status(ERR_INVALID_PARAMETER, "stale_generation");
 	}
-	// A protected request and a matching scalar generation are not the
-	// original generation owner association. No such retained root exists
-	// yet; a packet slot or a shared attachment must not stand in for it.
-	// The existing public facade keeps its original cleanup behavior.
-	return output_status(ERR_UNAVAILABLE, "original_output_generation_owner_required");
+	const auto &owner = *particles->external;
+	auto &registry = GDExtensionDeviceExit::Registry::get_singleton();
+	if (owner.generation_pin.is_empty()) {
+		// A terminal root is returned by original OBSERVE, which retains only
+		// its correlation. RELEASED plus that original serial identifies the
+		// same closed generation for an idempotent cleanup retry.
+		if (owner.state == ExternalOutputOwner::GenerationState::RELEASED && owner.generation_root_serial &&
+				owner.generation_registry == &registry && owner.device == RenderingDevice::get_singleton() &&
+				owner.generation_request.registry_instance == p_request.registry_instance &&
+				owner.generation_request.handle_serial == p_request.handle_serial) {
+			return output_status(OK, "");
+		}
+		if (owner.generation_root_serial || owner.generation_registry || owner.generation_request.registry_instance || owner.generation_request.handle_serial) {
+			return output_status(ERR_UNAUTHORIZED, "original_output_generation_owner_required");
+		}
+		return output_status(ERR_UNAVAILABLE, "original_output_generation_owner_required");
+	}
+	if (owner.generation_registry != &registry || !owner.device || owner.device != RenderingDevice::get_singleton() ||
+			owner.generation_request.registry_instance != p_request.registry_instance || owner.generation_request.handle_serial != p_request.handle_serial ||
+			!owner.generation_root_matches(owner.generation_pin)) {
+		return output_status(ERR_UNAUTHORIZED, "original_output_generation_owner_required");
+	}
+	const Error owner_error = registry.production_output_generation_cleanup_context(p_context, p_request, owner.generation_pin, *owner.device, particles_rid, owner.generation);
+	if (owner_error != OK) {
+		return output_status(owner_error, "original_output_generation_owner_required");
+	}
+	const Error result = _external_withdraw_body(particles_rid, p_input.generation);
+	return result == OK ? output_status(OK, "") : output_status(result, "output_withdraw");
 }
 bool ParticlesStorage::particles_is_external(RID p_particles) const {
 	const Particles *particles = particles_owner.get_or_null(p_particles);
@@ -408,4 +664,94 @@ Error ParticlesStorage::particles_external_end_draw_list() {
 	// Cannot attest native list closure without original recorded read cells.
 	return ERR_UNAVAILABLE;
 }
+} // namespace RendererRD
+
+namespace RendererRD {
+void ParticlesStorage::particles_external_metadata_query(const GDExtensionOutputMetadataQueryInputV1 &input, GDExtensionOutputMetadataQueryResultV1 &out) {
+	out = {};
+	out.abi = { 1, sizeof(out), 0 };
+	out.status = output_status(ERR_INVALID_PARAMETER, "CONTRACT");
+	if (!valid_abi(input.abi, sizeof(input)) || !valid_abi(input.limits.abi, sizeof(input.limits)) || input.limits.reserved) {
+		return;
+	}
+	auto *rd = RenderingDevice::get_singleton();
+	auto *server = RenderingServer::get_singleton();
+	if (!rd || !server || !server->is_on_render_thread() || server->get_rendering_device() != rd) {
+		out.status = output_status(ERR_UNAUTHORIZED, "main_render_thread_required");
+		return;
+	}
+	ExternalOutputConfig config;
+	uint32_t surfaces = 0;
+	GDExtensionOutputCreateResultV1 decoded{};
+	if (!_external_decode_create(input.config, config, surfaces, decoded)) {
+		out.status = decoded.status;
+		return;
+	}
+	// Transport is installed before render-profile placement/selection support.
+	if (config.profile != ExternalOutputConfig::SCENE_ONLY) {
+		out.status = output_status(ERR_UNAVAILABLE, "native_profile_preparation_required");
+		return;
+	}
+	if (input.limits.view_lease_capacity || input.limits.read_lease_capacity || input.limits.surface_lease_capacity) {
+		return;
+	}
+	// Public Instance192 remains unavailable until seal/consumer/read admission
+	// is complete. The internal planner is independently testable on real RD.
+	const Error planned = _external_metadata_requirements(config, input.limits, out.requirements);
+	if (planned != OK) {
+		out.status = output_status(planned, "native_metadata_layout");
+		return;
+	}
+	out.status = output_status(OK, "");
+}
+
+void ParticlesStorage::particles_external_create_typed_v3(GDExtensionProductionPhysicalContextRefV1 context, GDExtensionProductionRequestRefV1 request, const GDExtensionOutputCreateInputV3 &input, GDExtensionOutputCreateResultV1 &out) {
+	out = {};
+	out.abi = { 1, sizeof(out), 0 };
+	out.status = output_status(ERR_INVALID_PARAMETER, "CONTRACT");
+	if (input.abi.abi_version != 3 || input.abi.struct_size != sizeof(input) || input.abi.reserved || input.reserved || input.metadata_resource_slot == UINT32_MAX || !valid_abi(input.requirements.abi, sizeof(input.requirements)) || input.requirements.reserved) {
+		return;
+	}
+	const Error authenticated = _external_typed_context(context, request, true);
+	if (authenticated != OK) {
+		out.status = output_status(authenticated, "original_record_context_required");
+		return;
+	}
+	GDExtensionOutputMetadataQueryInputV1 query{};
+	query.abi = { 1, sizeof(query), 0 };
+	query.config = input.config;
+	query.limits = input.requirements.limits;
+	GDExtensionOutputMetadataQueryResultV1 quote{};
+	particles_external_metadata_query(query, quote);
+	if (quote.status.error != OK) {
+		out.status = quote.status;
+		return;
+	}
+	const auto &a = input.requirements;
+	const auto &b = quote.requirements;
+	if (a.layout_version != b.layout_version || a.required_metadata_bytes != b.required_metadata_bytes || a.required_alignment != b.required_alignment || a.slot_count != b.slot_count || a.flattened_surface_count != b.flattened_surface_count || a.binding_count != b.binding_count) {
+		return;
+	}
+	ExternalOutputConfig config;
+	uint32_t surfaces = 0;
+	if (!_external_decode_create(input.config, config, surfaces, out)) {
+		return;
+	}
+	if (!next_external_generation) {
+		out.status = output_status(ERR_PARAMETER_RANGE_ERROR, "generation_exhausted");
+		return;
+	}
+	auto &registry = GDExtensionDeviceExit::Registry::get_singleton();
+	GDExtensionDeviceExit::ProductionOutputMetadataLease metadata;
+	const Error allocated = registry.production_output_metadata_create(context, request, input.metadata_resource_slot, *RenderingDevice::get_singleton(), b.required_metadata_bytes, b.required_alignment, metadata, true);
+	if (allocated != OK) {
+		out.status = output_status(allocated, "original_output_metadata_required");
+		return;
+	}
+	_external_create_received(context, request, config, metadata, 0, 0, 0, out);
+	if (!metadata.is_empty()) {
+		CRASH_COND(registry.production_output_metadata_return(metadata) != OK);
+	}
+}
+
 } // namespace RendererRD

@@ -1,0 +1,121 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/core/extension/test_production_request.cpp:9524:
+TEST CASE:  [SceneTree][ProductionRequest][OutputSceneMetadata] two actual SceneOnly generations terminal before either metadata allocation returns
+
+tests/core/extension/test_production_request.cpp:5280: ERROR: CHECK( output.result.native_error == OK ) is NOT correct!
+  values: CHECK( 44 == 0 )
+
+tests/core/extension/test_production_request.cpp:5284: FATAL ERROR: REQUIRE( output.output_generation.native_released ) is NOT correct!
+  values: REQUIRE( false )
+  logged: Two genuine SceneOnly roots must terminal independently before either particles_free
+
+tests/core/extension/test_production_request.cpp:5287: ERROR: CHECK( terminal.particles == probe.created[index].particles ) is NOT correct!
+  values: CHECK( 0 == 103079215105 )
+
+tests/core/extension/test_production_request.cpp:5288: ERROR: CHECK( terminal.generation == probe.created[index].generation ) is NOT correct!
+  values: CHECK( 0 == 2 )
+
+tests/core/extension/test_production_request.cpp:5289: ERROR: CHECK( terminal.root_serial == request.resources[index].metadata_root_serial ) is NOT correct!
+  values: CHECK( 0 == 2 )
+
+tests/core/extension/test_production_request.cpp:5292: ERROR: CHECK( terminal.root_source.physical_returns_pending == 2 ) is NOT correct!
+  values: CHECK( 0 == 2 )
+
+tests/core/extension/test_production_request.cpp:5294: ERROR: CHECK( output.service_usage.passes == 1 ) is NOT correct!
+  values: CHECK( 0 == 1 )
+
+tests/core/extension/test_production_request.cpp:5280: ERROR: CHECK( output.result.native_error == OK ) is NOT correct!
+  values: CHECK( 44 == 0 )
+
+tests/core/extension/test_production_request.cpp:5284: FATAL ERROR: REQUIRE( output.output_generation.native_released ) is NOT correct!
+  values: REQUIRE( false )
+  logged: Two genuine SceneOnly roots must terminal independently before either particles_free
+
+tests/core/extension/test_production_request.cpp:5287: ERROR: CHECK( terminal.particles == probe.created[index].particles ) is NOT correct!
+  values: CHECK( 0 == 103079215105 )
+
+tests/core/extension/test_production_request.cpp:5288: ERROR: CHECK( terminal.generation == probe.created[index].generation ) is NOT correct!
+  values: CHECK( 0 == 2 )
+
+tests/core/extension/test_production_request.cpp:5289: ERROR: CHECK( terminal.root_serial == request.resources[index].metadata_root_serial ) is NOT correct!
+  values: CHECK( 0 == 2 )
+
+tests/core/extension/test_production_request.cpp:5290: ERROR: CHECK_FALSE( returned[index] ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/core/extension/test_production_request.cpp:5292: ERROR: CHECK( terminal.root_source.physical_returns_pending == 2 ) is NOT correct!
+  values: CHECK( 0 == 2 )
+
+tests/core/extension/test_production_request.cpp:5294: ERROR: CHECK( output.service_usage.passes == 1 ) is NOT correct!
+  values: CHECK( 0 == 1 )
+
+tests/core/extension/test_production_request.cpp:5300: ERROR: CHECK( returned[0] ) is NOT correct!
+  values: CHECK( false )
+
+tests/core/extension/test_production_request.cpp:5302: ERROR: CHECK( request.output_owner_head == 4294967295U ) is NOT correct!
+  values: CHECK( 1 == 4294967295 )
+
+tests/core/extension/test_production_request.cpp:5303: ERROR: CHECK( request.output_owner_cursor == 4294967295U ) is NOT correct!
+  values: CHECK( 0 == 4294967295 )
+
+tests/core/extension/test_production_request.cpp:5307: ERROR: CHECK_FALSE( storage->owns_particles(rid) ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/core/extension/test_production_request.cpp:5308: ERROR: CHECK( request.resources[i].metadata_returned ) is NOT correct!
+  values: CHECK( false )
+
+tests/core/extension/test_production_request.cpp:5309: ERROR: CHECK( request.resources[i].metadata_data == nullptr ) is NOT correct!
+  values: CHECK( 0x79160a0010 == nullptr )
+
+tests/core/extension/test_production_request.cpp:5312: ERROR: CHECK( live.physical_returns_pending == 1 - i ) is NOT correct!
+  values: CHECK( 2 == 1 )
+
+testERROR: FATAL: Condition "owner || storage->particles_owner.get_rid_count()" is true.
+   at: ~ExternalLinkedOwnerTest (tests/servers/rendering/test_external_output_owner_state.cpp:60)
+s/core/extension/test_production_request.cpp:5307: ERROR: CHECK_FALSE( storage->owns_particles(rid) ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/core/extension/test_production_request.cpp:5308: ERROR: CHECK( request.resources[i].metadata_returned ) is NOT correct!
+  values: CHECK( false )
+
+tests/core/extension/test_production_request.cpp:5309: ERROR: CHECK( request.resources[i].metadata_data == nullptr ) is NOT correct!
+  values: CHECK( 0x79160a5010 == nullptr )
+
+tests/core/extension/test_production_request.cpp:5312: ERROR: CHECK( live.physical_returns_pending == 1 - i ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/core/extension/test_production_request.cpp:5327: ERROR: CHECK( request.serial == 0 ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/core/extension/test_production_request.cpp:1611: ERROR: CHECK( success ) is NOT correct!
+  values: CHECK( false )
+
+tests/core/extension/test_production_request.cpp:5329: ERROR: CHECK( fixture.owner_cleaned ) is NOT correct!
+  values: CHECK( false )
+
+
+================================================================
+handle_crash: Program crashed with signal 5
+Engine version: Godot Engine v4.7.2.stable.custom_build (9558cdc89578886e081b59b472fc476f3202467d)
+Dumping the backtrace. Please include this when reporting the bug on: https://github.com/godotengine/godot/issues
+Load address: 102df0000
+
+[1] 193064144 (libsystem_platform.dylib+4144) - _sigtramp + 56
+[2] 107fde1ac (main+51ee1ac) - TT_RunIns + 1477672
+[3] 103b10194 (main+d20194) - main + 10719380
+[4] 103228a48 (main+438a48) - main + 1382728
+[5] 1031cb624 (main+3db624) - main + 1000740
+[6] 103188af8 (main+398af8) - main + 727544
+[7] 1030db498 (main+2eb498) - main + 17304
+[8] 1030d7490 (main+2e7490) - main (in godot.macos.editor.arm64) + 912
+[9] 192c83e80 (dyld+31e80) - start + 6688
+-- END OF C++ BACKTRACE --
+================================================================
+tests/core/extension/test_production_request.cpp:9524: FATAL ERROR: test case CRASHED: SIGABRT - Abort (abnormal termination) signal
+
+===============================================================================
+[doctest] test cases:   1 |  0 passed |  1 failed | 2185 skipped
+[doctest] assertions: 124 | 95 passed | 29 failed |
+[doctest] Status: FAILURE!

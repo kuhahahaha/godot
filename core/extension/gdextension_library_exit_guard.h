@@ -34,13 +34,17 @@
 #include "core/os/mutex.h"
 #include "core/templates/local_vector.h"
 #include "core/templates/rid.h"
+#include "core/variant/callable.h"
 
 namespace RendererRD {
 class ParticlesStorage;
 class ExternalOutputOwner;
 } //namespace RendererRD
+template <class T>
+class Ref;
 class StringName;
 class RenderingDevice;
+class NativeDisposalWitness;
 class RenderingServerDefault;
 class TestProductionResourceUseAccess;
 class TestQualificationPhysicalAccess;
@@ -79,6 +83,7 @@ namespace TestProductionRequest {
 struct Access;
 }
 namespace GDExtensionDeviceExit {
+class SceneReadContent;
 struct CheckedRecordAppend;
 struct OriginalOperationIdentity;
 struct BufferReadbackSourceCapture;
@@ -105,6 +110,7 @@ enum class ProductionOutputOwnerKind : uint8_t { NONE,
 	GENERATION,
 	SLOT };
 class ProductionOutputPin;
+class ProductionOutputMetadataLease;
 class ProductionAttachment;
 class ProductionRequest;
 struct ProductionActionRows;
@@ -151,6 +157,21 @@ enum class LifetimeFailure { ASSOCIATION_BUSY,
 void record_binding_entry_result(Error p_error);
 const char *get_binding_entry_diagnostic();
 
+// Internal core relay domain. This is not the planned extension relay ABI.
+// Only an enrolled original Callable can issue a normal relay.
+struct NormalRelayToken {
+	uint64_t registry_instance = 0;
+	uint64_t serial = 0;
+};
+struct NormalRelaySnapshot {
+	uint64_t library_generation = 0;
+	uint64_t destruction_thread = 0;
+	uint32_t active_deliveries = 0;
+	bool cancelled = false;
+	bool release_requested = false;
+	bool cell_released = false;
+	bool holder_closed = false;
+};
 class Registry;
 class ProducerRegistrationRef;
 struct ProducerRegistrationIdentity;
@@ -221,6 +242,7 @@ struct HolderRetirement {
 	bool pending = false;
 	bool cleanup = false;
 	bool typed_code_hold = false;
+	bool normal_relay_observed = false;
 	uint32_t qualification_children = 0;
 	uint32_t production_children = 0;
 	bool core_owned = false;
@@ -760,6 +782,22 @@ private:
 	Record records[RECORD_CAPACITY];
 	View views[VIEW_CAPACITY];
 	BindingOwner binding_owners[RECORD_CAPACITY];
+	struct NormalRelay {
+		uint64_t serial = 0;
+		uint32_t record = INVALID_SLOT;
+		uint64_t generation = 0;
+		uint64_t holder = 0;
+		uint64_t destruction_thread = 0;
+		uint32_t active_deliveries = 0;
+		bool cancelled = false;
+		bool release_requested = false;
+		bool releasing = false;
+		bool holder_closed = false;
+		Callable callback;
+	};
+	NormalRelay normal_relays[PRIVATE_CAPACITY];
+	NormalRelay *find_normal_relay_locked(NormalRelayToken p_token);
+	Error register_normal_relay_holder(const Callable &p_callback, const RecordRef &p_owner, const CleanupAction &p_cleanup, NormalRelayToken &r_token);
 	uint32_t record_limit = RECORD_CAPACITY;
 	uint32_t view_limit = VIEW_CAPACITY;
 	uint32_t private_limit = PRIVATE_CAPACITY;
@@ -831,6 +869,7 @@ private:
 	friend class ::RendererRD::ParticlesStorage;
 	friend class ::RendererRD::ExternalOutputOwner;
 	friend class ProductionOutputPin;
+	friend class ProductionOutputMetadataLease;
 	struct DeviceRecord {
 		Object *object = nullptr;
 		uint64_t epoch = 0, session = 0, thread = 0, execution_thread = 0;
@@ -859,12 +898,27 @@ private:
 	Error qualification_rt_ticket_locked(QualificationBridge *, const GDExtensionQualificationRtRequestV1 &, const uint8_t *, const uint8_t *, QualificationTicket *&);
 
 	void production_metadata_pump();
+	void scene_phase_dispatch(RenderingDevice &);
+	bool scene_phase_holder_matches_locked(const CleanupAction &, const RecordRef &, NormalRelayToken, bool);
+	uint64_t scene_phase_occurrence = 0;
+	Error scene_phase_call_relay(NormalRelayToken, const GDExtensionNativeScenePhaseV1 &, GDExtensionProductionRequestRefV1, const GDExtensionProductionOperationV1 &);
 	struct ProductionPhysicalFrame;
 	static thread_local ProductionPhysicalFrame *production_physical_frame;
 	// Core-only ambient bridge. Uses the original executing RECORD frame;
 	// never interprets Dictionary tokens or grants source/Host/mapping admission.
 	Error production_output_pin_current(RenderingDevice &, ProductionOutputPin &);
+	bool production_output_source_matches_locked(const ProductionRequest &, const ProductionActionCell &, RenderingDevice &) const;
+	bool production_output_alias_matches_locked(const ProductionRequest &, const ProductionResourceSlot &, RenderingDevice &) const;
+	Error production_output_alias_bind_locked(ProductionRequest &, ProductionActionCell &, uint32_t, const ProductionOutputPin &, uint64_t, uint32_t, const NativeDisposalWitness &, RenderingDevice &);
+	bool production_output_action_pin_matches_locked(const ProductionRequest &, const ProductionOutputPin &, RenderingDevice &) const;
+	Error production_output_action_pin_locked(ProductionRequest &, ProductionActionCell &, RenderingDevice &, ProductionOutputPin &);
+	Error production_output_action_owner_bind_locked(ProductionRequest &, ProductionActionCell &, ProductionOutputPin &, RenderingDevice &, RID, uint64_t, uint32_t, uint64_t);
 	Error production_output_pin(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, RenderingDevice &, ProductionOutputPin &);
+	Error production_output_metadata_create(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, uint32_t, RenderingDevice &, uint64_t, uint32_t, ProductionOutputMetadataLease &, bool p_exact_bytes = false);
+	Error production_output_metadata_validate(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const ProductionOutputMetadataLease &, RenderingDevice &, uint64_t, uint32_t);
+	Error production_output_metadata_bind(ProductionOutputMetadataLease &, const ProductionOutputPin &);
+	Error production_output_metadata_return(ProductionOutputMetadataLease &);
+	void production_output_metadata_move(ProductionOutputMetadataLease &, ProductionOutputMetadataLease &);
 	// Metadata custody only, from an existing original pin into a spare quoted cell.
 	// This never issues a physical context, source permission or native read use.
 	Error production_output_pin_borrow(const ProductionOutputPin &, RenderingDevice &, ProductionOutputPin &);
@@ -875,6 +929,7 @@ private:
 	Error production_output_owner_bind(ProductionOutputPin &, RenderingDevice &, RID, uint64_t, uint32_t, uint64_t, ProductionOutputOwnerKind = ProductionOutputOwnerKind::SLOT);
 	Error production_output_generation_return(ProductionOutputPin &, RenderingDevice &, RID, uint64_t, const GDExtensionProductionServiceBudgetV1 &, ProductionServiceUsage &);
 	Error production_output_cleanup_context(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const ProductionOutputPin &, RenderingDevice &, RID, uint64_t, uint32_t, uint64_t);
+	Error production_output_generation_cleanup_context(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const ProductionOutputPin &, RenderingDevice &, RID, uint64_t);
 	Error production_output_owners_service_locked(ProductionRequest &, RenderingDevice &);
 	Error production_output_owner_context_locked(const ProductionOutputPin &, RenderingDevice &);
 	bool production_output_pin_matches(const ProductionOutputPin &, GDExtensionProductionRequestRefV1, RenderingDevice &);
@@ -904,6 +959,11 @@ private:
 	Error production_observe_service(GDExtensionProductionRequestRefV1, const GDExtensionProductionServiceBudgetV1 &);
 	Error production_sets_step_locked(ProductionRequest &, RenderingDevice &, const GDExtensionProductionServiceBudgetV1 &, ProductionServiceUsage &);
 	Error production_readback_delivery(BufferReadbackSourceCapture &, bool);
+	void production_native_effect_enter_locked(ProductionRequest &);
+	void production_append_effect_enter_locked(ProductionRequest &);
+	Error production_raster_prepare_execute_locked(ProductionRequest &, RenderingDevice &);
+	Error production_raster_prepare_finish_locked(ProductionRequest &, Error);
+	void production_raster_prepare_report_locked(const ProductionRequest &, GDExtensionProductionRasterPrepareReportV1 &) const;
 	Error production_close_lists_locked(ProductionRequest &, RenderingDevice &);
 	Error production_close_segment_locked(ProductionRequest &, GDExtensionProductionSegmentV2 &, bool = false);
 	Error production_close_segment_locked(ProductionRequest &, GDExtensionProductionSegmentV1 &, bool = false);
@@ -990,6 +1050,9 @@ public:
 	GDExtensionDeviceSessionResultV1 production_quote(const GDExtensionDeviceExitAbi *, GDExtensionDeviceExitSceneReadyContextRef, GDExtensionProducerRegistrationRefV1, GDExtensionDeviceRegistryContextRef, GDExtensionOriginalDeviceSessionRef, const GDExtensionProductionCapacityV1 *, GDExtensionProductionMetadataQuoteV1 *);
 	GDExtensionDeviceSessionResultV1 production_accept(const GDExtensionDeviceExitAbi *, GDExtensionDeviceExitSceneReadyContextRef, GDExtensionProducerRegistrationRefV1, GDExtensionDeviceRegistryContextRef, GDExtensionOriginalDeviceSessionRef, GDExtensionDeviceExitLibraryCodeHoldRef, const GDExtensionProductionMetadataQuoteV1 *, GDExtensionProductionAttachmentRefV1 *, GDExtensionProductionInstallationReportV1 *);
 	Error production_install_record_receiver(GDExtensionDeviceExitSceneReadyContextRef, GDExtensionProductionAttachmentRefV1, ProductionRecordReceiver, void *, ProductionMetadataReceiver = nullptr);
+	GDExtensionDeviceSessionResultV1 production_prepare_output(GDExtensionProductionRequestRefV1, const GDExtensionProductionOutputPrepareV1 *);
+	void production_output_acquire(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, uint64_t, const GDExtensionOutputAcquireInputV1 *, GDExtensionOutputAcquireResultV1 *);
+	void production_output_poll(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const GDExtensionOutputGenerationInputV1 *, GDExtensionOutputPollResultV1 *);
 	GDExtensionDeviceSessionResultV1 production_prepare_dispatch_v2(GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionDispatchV2 *input, const void *push, uint32_t bytes, uint32_t expected_contract = 2);
 	GDExtensionDeviceSessionResultV1 production_prepare_copy_v2(GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionCopyV2 *input, uint32_t expected_contract = 2);
 	GDExtensionDeviceSessionResultV1 production_prepare_upload_v2(GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionUploadV2 *input, const void *data, uint64_t bytes, uint32_t expected_contract = 2);
@@ -1002,6 +1065,13 @@ public:
 	GDExtensionDeviceSessionResultV1 production_release_v2(GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionServiceBudgetV1 *input, GDExtensionProductionServiceBudgetV1 *remaining, GDExtensionProductionReportV2 *report, uint32_t expected_contract = 2);
 	GDExtensionDeviceSessionResultV1 production_reserve_v2(GDExtensionProductionAttachmentRefV1 ref, const GDExtensionProductionOperationV1 *operation, const GDExtensionProductionCapacityV1 *capacity, const GDExtensionProductionActionV2 *actions, uint32_t action_count, const GDExtensionProductionResourceV1 *resources, uint32_t resource_count, const GDExtensionProductionUseV1 *uses, uint32_t use_count, const GDExtensionProductionReadbackV2 *readbacks, uint32_t readback_count, GDExtensionProductionRequestRefV1 *out);
 	GDExtensionDeviceSessionResultV1 production_reserve(GDExtensionProductionAttachmentRefV1, const GDExtensionProductionOperationV1 *, const GDExtensionProductionCapacityV1 *, const GDExtensionProductionActionV1 *, uint32_t, const GDExtensionProductionResourceV1 *, uint32_t, const GDExtensionProductionUseV1 *, uint32_t, const GDExtensionProductionReadbackV1 *, uint32_t, GDExtensionProductionRequestRefV1 *);
+	GDExtensionDeviceSessionResultV1 production_record_history(GDExtensionProductionRequestRefV1, uint64_t, GDExtensionProductionRecordHistoryV1 *);
+	GDExtensionDeviceSessionResultV1 production_raster_prepare(GDExtensionProductionRequestRefV1, const GDExtensionProductionRasterPrepareV1 *, const void *, uint64_t, GDExtensionProductionRasterPrepareReportV1 *);
+	GDExtensionDeviceSessionResultV1 production_raster_prepare_report(GDExtensionProductionRequestRefV1, GDExtensionProductionRasterPrepareReportV1 *);
+	GDExtensionDeviceSessionResultV1 production_raster_begin(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, uint64_t);
+	GDExtensionDeviceSessionResultV1 production_raster_end(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1);
+	Error production_raster_close_locked(ProductionRequest &, RenderingDevice &);
+	GDExtensionDeviceSessionResultV1 production_raster_reserve(GDExtensionProductionAttachmentRefV1, const GDExtensionProductionOperationV1 *, const GDExtensionProductionCapacityV1 *, const GDExtensionProductionRasterActionV1 *, GDExtensionProductionRequestRefV1 *);
 	Error production_record_schedule(GDExtensionProductionRequestRefV1, uint64_t *);
 	GDExtensionDeviceSessionResultV1 production_record_consume(GDExtensionProductionRequestRefV1, uint64_t, GDExtensionProductionRecordReportV1 *);
 	GDExtensionDeviceSessionResultV1 production_append(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, uint64_t, uint64_t, GDExtensionProductionAppendV1 *);
@@ -1110,6 +1180,22 @@ public:
 	Error retain_binding_owner(void *p_token, RecordRef &r_ref);
 	Error retain_callable_owner(void *p_token, RecordRef &r_ref);
 	Error register_callable_cleanup(const RecordRef &p_ref, uint64_t p_identity, CleanupAction &r_action, uint64_t &r_serial);
+	// Internal queue adapters may retain the token; the original Callable stays here.
+	// Release is fallible and must run on the original Callable destruction thread.
+	Error scene_phase_install_relay(const Callable &, GDExtensionScenePhaseReceiverV1, NormalRelayToken &);
+	Error scene_phase_encode_relay(NormalRelayToken, GDExtensionNormalRelayRefV1 &);
+	Error scene_phase_register(GDExtensionNormalRelayRefV1, GDExtensionProductionAttachmentRefV1, const GDExtensionScenePhaseSinkConfigV1 &, GDExtensionScenePhaseRegistrationRefV1 &);
+	Error scene_phase_unregister(GDExtensionScenePhaseRegistrationRefV1, GDExtensionScenePhaseCloseV1 &);
+	Error scene_phase_capability(GDExtensionProductionAttachmentRefV1, GDExtensionSceneOpaque32V1 &);
+	Error scene_phase_query_operation(GDExtensionProductionRequestRefV1, uint64_t, const GDExtensionSceneOperationKeyV1 &, GDExtensionSceneReadOutcomeV1 &);
+	Error scene_phase_bind_operation(GDExtensionProductionRequestRefV1, uint64_t, const GDExtensionSceneOperationKeyV1 &);
+	Error scene_phase_borrow(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, uint64_t, const GDExtensionSceneOperationKeyV1 &, const GDExtensionSceneOpaque32V1 &, const Ref<SceneReadContent> &, GDExtensionSceneReadOutcomeV1 &);
+	Error register_normal_relay(const Callable &p_callback, NormalRelayToken &r_token);
+	Error call_normal_relay(NormalRelayToken p_token, const Variant **p_arguments, int p_argcount, Variant &r_return_value, Callable::CallError &r_error);
+	Error cancel_normal_relay(NormalRelayToken p_token);
+	Error release_normal_relay_holder(NormalRelayToken p_token);
+	Error observe_normal_relay(NormalRelayToken p_token, NormalRelaySnapshot &r_snapshot);
+	Error forget_normal_relay(NormalRelayToken p_token);
 	void forget_binding_owner(GDExtension *p_owner);
 	void observe_initialize(const RecordRef &p_ref, Error p_error);
 	void detach(const RecordRef &p_ref);

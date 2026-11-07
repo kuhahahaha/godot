@@ -108,12 +108,12 @@ void CPUParticles3D::set_pre_process_time(double p_time) {
 }
 
 void CPUParticles3D::set_explosiveness_ratio(real_t p_ratio) {
-	ERR_FAIL_COND_MSG(!Math::is_finite(p_ratio), "Particles explosiveness ratio must be finite.");
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_ratio) || p_ratio < 0.0 || p_ratio > 1.0, "Particles explosiveness ratio must be finite and between 0 and 1.");
 	explosiveness_ratio = p_ratio;
 }
 
 void CPUParticles3D::set_randomness_ratio(real_t p_ratio) {
-	ERR_FAIL_COND_MSG(!Math::is_finite(p_ratio), "Particles randomness ratio must be finite.");
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_ratio) || p_ratio < 0.0 || p_ratio > 1.0, "Particles randomness ratio must be finite and between 0 and 1.");
 	randomness_ratio = p_ratio;
 }
 
@@ -124,7 +124,7 @@ void CPUParticles3D::set_visibility_aabb(const AABB &p_aabb) {
 }
 
 void CPUParticles3D::set_lifetime_randomness(double p_random) {
-	ERR_FAIL_COND_MSG(!Math::is_finite(p_random), "Particles lifetime randomness must be finite.");
+	ERR_FAIL_COND_MSG(!Math::is_finite(p_random) || p_random < 0.0 || p_random > 1.0, "Particles lifetime randomness must be finite and between 0 and 1.");
 	lifetime_randomness = p_random;
 }
 

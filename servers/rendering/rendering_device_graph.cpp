@@ -139,7 +139,8 @@ bool RenderingDeviceGraph::contains_record(const RecordHandle &p_handle) const {
 	return instruction->type == DrawListInstruction::TYPE_DRAW_INDIRECT || instruction->type == DrawListInstruction::TYPE_DRAW_INDEXED_INDIRECT ||
 			instruction->type == DrawListInstruction::TYPE_BIND_UNIFORM_SETS || instruction->type == DrawListInstruction::TYPE_UNIFORM_SET_PREPARE_FOR_USE ||
 			instruction->type == DrawListInstruction::TYPE_BIND_PIPELINE || instruction->type == DrawListInstruction::TYPE_DRAW || instruction->type == DrawListInstruction::TYPE_DRAW_INDEXED ||
-			instruction->type == DrawListInstruction::TYPE_SET_PUSH_CONSTANT || instruction->type == DrawListInstruction::TYPE_SET_SCISSOR || instruction->type == DrawListInstruction::TYPE_SET_VIEWPORT;
+			instruction->type == DrawListInstruction::TYPE_SET_PUSH_CONSTANT || instruction->type == DrawListInstruction::TYPE_SET_SCISSOR || instruction->type == DrawListInstruction::TYPE_SET_VIEWPORT ||
+			instruction->type == DrawListInstruction::TYPE_BIND_VERTEX_BUFFERS || instruction->type == DrawListInstruction::TYPE_BIND_INDEX_BUFFER;
 }
 
 bool RenderingDeviceGraph::_resolve_record_command_index(const RecordHandle &p_handle, uint32_t &r_index) const {
@@ -638,6 +639,16 @@ RenderingDeviceGraph::RaytracingListInstruction *RenderingDeviceGraph::_allocate
 }
 
 void RenderingDeviceGraph::_add_command_to_graph(ResourceTracker **p_resource_trackers, ResourceUsage *p_resource_usages, uint32_t p_resource_count, int32_t p_command_index, RecordedCommand *r_command) {
+	bool same_buffer_copy = false;
+	if (r_command->type == RecordedCommand::TYPE_BUFFER_COPY && p_resource_count == 2 && p_resource_trackers[0] && p_resource_trackers[0] == p_resource_trackers[1] && p_resource_usages[0] == RESOURCE_USAGE_COPY_TO && p_resource_usages[1] == RESOURCE_USAGE_COPY_FROM) {
+		const auto *copy = static_cast<const RecordedBufferCopyCommand *>(r_command);
+		if (copy->source.id && copy->source.id == copy->destination.id && copy->source.id == p_resource_trackers[0]->buffer_driver_id.id) {
+			// One buffer is both read and written. Track it once as a writer,
+			// retaining both transfer accesses before deriving any barriers.
+			same_buffer_copy = true;
+			p_resource_count = 1;
+		}
+	}
 	// Assign the next stages derived from the stages the command requires first.
 	r_command->next_stages = r_command->self_stages;
 
@@ -695,6 +706,9 @@ void RenderingDeviceGraph::_add_command_to_graph(ResourceTracker **p_resource_tr
 		ResourceUsage new_resource_usage = p_resource_usages[i];
 		bool write_usage = _is_write_usage(new_resource_usage);
 		BitField<RDD::BarrierAccessBits> new_usage_access = _usage_to_access_bits(new_resource_usage);
+		if (same_buffer_copy) {
+			new_usage_access.set_flag(_usage_to_access_bits(RESOURCE_USAGE_COPY_FROM));
+		}
 		bool is_resource_a_slice = resource_tracker->parent != nullptr;
 		if (is_resource_a_slice) {
 			// This resource depends on a parent resource.
@@ -2475,7 +2489,9 @@ RenderingDeviceGraph::RecordHandle RenderingDeviceGraph::add_draw_list_begin(RDD
 	return _add_draw_list_begin(nullptr, p_render_pass, p_framebuffer, p_region, p_attachment_operations, p_attachment_clear_values, p_stages, p_breadcrumb, p_split_cmd_buffer);
 }
 
-void RenderingDeviceGraph::add_draw_list_bind_index_buffer(RDD::BufferID p_buffer, RDD::IndexBufferFormat p_format, uint32_t p_offset) {
+RenderingDeviceGraph::RecordHandle RenderingDeviceGraph::add_draw_list_bind_index_buffer(RDD::BufferID p_buffer, RDD::IndexBufferFormat p_format, uint32_t p_offset) {
+	const uint32_t instruction_offset = GRAPH_ALIGN(draw_instruction_list.data.size());
+	draw_record_offsets.insert((uint64_t(draw_instruction_list.index) << 32) | instruction_offset);
 	DrawListBindIndexBufferInstruction *instruction = reinterpret_cast<DrawListBindIndexBufferInstruction *>(_allocate_draw_list_instruction(sizeof(DrawListBindIndexBufferInstruction)));
 	instruction->type = DrawListInstruction::TYPE_BIND_INDEX_BUFFER;
 	instruction->buffer = p_buffer;
@@ -2485,6 +2501,7 @@ void RenderingDeviceGraph::add_draw_list_bind_index_buffer(RDD::BufferID p_buffe
 	if (instruction->buffer.id != 0) {
 		draw_instruction_list.stages.set_flag(RDD::PIPELINE_STAGE_VERTEX_INPUT_BIT);
 	}
+	return { graph_instance, uint64_t(tracking_frame), 3, uint32_t(draw_instruction_list.index), instruction_offset };
 }
 
 RenderingDeviceGraph::RecordHandle RenderingDeviceGraph::add_draw_list_bind_pipeline(RDD::PipelineID p_pipeline, BitField<RDD::PipelineStageBits> p_pipeline_stage_bits) {
@@ -2520,8 +2537,10 @@ RenderingDeviceGraph::RecordHandle RenderingDeviceGraph::add_draw_list_bind_unif
 	return { graph_instance, uint64_t(tracking_frame), 3, uint32_t(draw_instruction_list.index), instruction_offset };
 }
 
-void RenderingDeviceGraph::add_draw_list_bind_vertex_buffers(Span<RDD::BufferID> p_vertex_buffers, Span<uint64_t> p_vertex_buffer_offsets) {
+RenderingDeviceGraph::RecordHandle RenderingDeviceGraph::add_draw_list_bind_vertex_buffers(Span<RDD::BufferID> p_vertex_buffers, Span<uint64_t> p_vertex_buffer_offsets) {
 	DEV_ASSERT(p_vertex_buffers.size() == p_vertex_buffer_offsets.size());
+	const uint32_t instruction_offset = GRAPH_ALIGN(draw_instruction_list.data.size());
+	draw_record_offsets.insert((uint64_t(draw_instruction_list.index) << 32) | instruction_offset);
 
 	uint32_t instruction_size = sizeof(DrawListBindVertexBuffersInstruction) + sizeof(RDD::BufferID) * p_vertex_buffers.size() + sizeof(uint64_t) * p_vertex_buffer_offsets.size();
 	DrawListBindVertexBuffersInstruction *instruction = reinterpret_cast<DrawListBindVertexBuffersInstruction *>(_allocate_draw_list_instruction(instruction_size));
@@ -2539,6 +2558,7 @@ void RenderingDeviceGraph::add_draw_list_bind_vertex_buffers(Span<RDD::BufferID>
 	if (instruction->vertex_buffers_count > 0) {
 		draw_instruction_list.stages.set_flag(RDD::PIPELINE_STAGE_VERTEX_INPUT_BIT);
 	}
+	return { graph_instance, uint64_t(tracking_frame), 3, uint32_t(draw_instruction_list.index), instruction_offset };
 }
 
 void RenderingDeviceGraph::add_draw_list_clear_attachments(VectorView<RDD::AttachmentClear> p_attachments_clear, VectorView<Rect2i> p_attachments_clear_rect) {

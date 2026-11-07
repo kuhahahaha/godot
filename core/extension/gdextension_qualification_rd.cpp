@@ -34,18 +34,18 @@ using GDExtensionDeviceExit::QualificationTicket;
 using GDExtensionDeviceExit::Registry;
 
 bool RenderingDevice::_qualification_resource_busy(RID rid) {
-	const Buffer *buffer = storage_buffer_owner.get_or_null(rid);
+	const Buffer *buffer = storage_buffer_owner.owns(rid) ? storage_buffer_owner.get_or_null(rid) : nullptr;
 	if (!buffer) {
-		buffer = uniform_buffer_owner.get_or_null(rid);
+		buffer = uniform_buffer_owner.owns(rid) ? uniform_buffer_owner.get_or_null(rid) : nullptr;
 	}
 	if (buffer && buffer->qualification_users) {
 		return true;
 	}
-	const auto *texture = texture_owner.get_or_null(rid);
+	const auto *texture = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr;
 	if (texture && texture->qualification_users) {
 		return true;
 	}
-	const auto *sampler = sampler_owner.get_or_null(rid);
+	const auto *sampler = sampler_owner.owns(rid) ? sampler_owner.get_or_null(rid) : nullptr;
 	if (sampler && sampler->qualification_users) {
 		return true;
 	}
@@ -69,7 +69,7 @@ bool RenderingDevice::_qualification_resource_busy(RID rid) {
 			return true;
 		}
 	}
-	const auto *set = uniform_set_owner.get_or_null(rid);
+	const auto *set = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr;
 	if (set && set->qualification_users) {
 		return true;
 	}
@@ -83,9 +83,9 @@ bool RenderingDevice::_qualification_resource_busy(RID rid) {
 			return true;
 		}
 	}
-	const auto *pipeline = compute_pipeline_owner.get_or_null(rid);
-	const auto *raster_pipeline = render_pipeline_owner.get_or_null(rid);
-	const auto *framebuffer = framebuffer_owner.get_or_null(rid);
+	const auto *pipeline = compute_pipeline_owner.owns(rid) ? compute_pipeline_owner.get_or_null(rid) : nullptr;
+	const auto *raster_pipeline = render_pipeline_owner.owns(rid) ? render_pipeline_owner.get_or_null(rid) : nullptr;
+	const auto *framebuffer = framebuffer_owner.owns(rid) ? framebuffer_owner.get_or_null(rid) : nullptr;
 	if ((raster_pipeline && raster_pipeline->qualification_users) || (framebuffer && framebuffer->qualification_users)) {
 		return true;
 	}
@@ -103,7 +103,7 @@ bool RenderingDevice::_qualification_resource_busy(RID rid) {
 			}
 		}
 	}
-	const auto *shader = shader_owner.get_or_null(rid);
+	const auto *shader = shader_owner.owns(rid) ? shader_owner.get_or_null(rid) : nullptr;
 	const auto *physical = buffer ? buffer->qualification_return : texture ? texture->qualification_return
 			: sampler													   ? sampler->qualification_return
 			: set														   ? set->qualification_return
@@ -120,16 +120,16 @@ bool RenderingDevice::_qualification_resource_busy(RID rid) {
 		for (RID child : *dependencies) {
 			// A qualified texture is returned by its original owner. Do not let a
 			// parent recursively consume it or exhaust an unreserved event sequence.
-			const auto *child_pipeline = render_pipeline_owner.get_or_null(child);
-			const auto *child_framebuffer = framebuffer_owner.get_or_null(child);
+			const auto *child_pipeline = render_pipeline_owner.owns(child) ? render_pipeline_owner.get_or_null(child) : nullptr;
+			const auto *child_framebuffer = framebuffer_owner.owns(child) ? framebuffer_owner.get_or_null(child) : nullptr;
 			if ((child_pipeline && child_pipeline->qualification_return) || (child_framebuffer && child_framebuffer->qualification_return)) {
 				return true;
 			}
-			const auto *child_texture = texture_owner.get_or_null(child);
+			const auto *child_texture = texture_owner.owns(child) ? texture_owner.get_or_null(child) : nullptr;
 			if (child_texture && child_texture->qualification_return) {
 				return true;
 			}
-			const auto *child_sampler = sampler_owner.get_or_null(child);
+			const auto *child_sampler = sampler_owner.owns(child) ? sampler_owner.get_or_null(child) : nullptr;
 			if (child_sampler && child_sampler->qualification_return) {
 				return true;
 			}
@@ -153,11 +153,11 @@ Error RenderingDevice::_qualification_pin_resources(QualificationTicket *ticket,
 				break;
 			}
 		}
-		auto *texture = texture_owner.get_or_null(rid);
-		auto *sampler = sampler_owner.get_or_null(rid);
-		auto *set = uniform_set_owner.get_or_null(rid);
-		auto *raster_pipeline = render_pipeline_owner.get_or_null(rid);
-		auto *framebuffer = framebuffer_owner.get_or_null(rid);
+		auto *texture = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr;
+		auto *sampler = sampler_owner.owns(rid) ? sampler_owner.get_or_null(rid) : nullptr;
+		auto *set = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr;
+		auto *raster_pipeline = render_pipeline_owner.owns(rid) ? render_pipeline_owner.get_or_null(rid) : nullptr;
+		auto *framebuffer = framebuffer_owner.owns(rid) ? framebuffer_owner.get_or_null(rid) : nullptr;
 		// New admissions revalidate existing texture/sampler pins and count each
 		// new child only once within the incoming batch.
 		const bool typed_child = texture || sampler || raster_pipeline || framebuffer || (set && set->qualification_return);
@@ -176,12 +176,12 @@ Error RenderingDevice::_qualification_pin_resources(QualificationTicket *ticket,
 		if (!already && !duplicate && ticket->resource_pins.size() + (++added) > 128) {
 			return ERR_PARAMETER_RANGE_ERROR;
 		}
-		Buffer *buffer = storage_buffer_owner.get_or_null(rid);
+		Buffer *buffer = storage_buffer_owner.owns(rid) ? storage_buffer_owner.get_or_null(rid) : nullptr;
 		if (!buffer) {
-			buffer = uniform_buffer_owner.get_or_null(rid);
+			buffer = uniform_buffer_owner.owns(rid) ? uniform_buffer_owner.get_or_null(rid) : nullptr;
 		}
-		auto *pipeline = compute_pipeline_owner.get_or_null(rid);
-		auto *shader = shader_owner.get_or_null(rid);
+		auto *pipeline = compute_pipeline_owner.owns(rid) ? compute_pipeline_owner.get_or_null(rid) : nullptr;
+		auto *shader = shader_owner.owns(rid) ? shader_owner.get_or_null(rid) : nullptr;
 		if ((raster_pipeline && !raster_pipeline->qualification_return) || (framebuffer && !framebuffer->qualification_return)) {
 			return ERR_UNAUTHORIZED;
 		}
@@ -277,17 +277,17 @@ Error RenderingDevice::_qualification_pin_resources(QualificationTicket *ticket,
 		if (already) {
 			continue;
 		}
-		Buffer *buffer = storage_buffer_owner.get_or_null(rid);
+		Buffer *buffer = storage_buffer_owner.owns(rid) ? storage_buffer_owner.get_or_null(rid) : nullptr;
 		if (!buffer) {
-			buffer = uniform_buffer_owner.get_or_null(rid);
+			buffer = uniform_buffer_owner.owns(rid) ? uniform_buffer_owner.get_or_null(rid) : nullptr;
 		}
-		auto *set = uniform_set_owner.get_or_null(rid);
-		auto *pipeline = compute_pipeline_owner.get_or_null(rid);
-		auto *raster_pipeline = render_pipeline_owner.get_or_null(rid);
-		auto *framebuffer = framebuffer_owner.get_or_null(rid);
-		auto *shader = shader_owner.get_or_null(rid);
-		auto *texture = texture_owner.get_or_null(rid);
-		auto *sampler = sampler_owner.get_or_null(rid);
+		auto *set = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr;
+		auto *pipeline = compute_pipeline_owner.owns(rid) ? compute_pipeline_owner.get_or_null(rid) : nullptr;
+		auto *raster_pipeline = render_pipeline_owner.owns(rid) ? render_pipeline_owner.get_or_null(rid) : nullptr;
+		auto *framebuffer = framebuffer_owner.owns(rid) ? framebuffer_owner.get_or_null(rid) : nullptr;
+		auto *shader = shader_owner.owns(rid) ? shader_owner.get_or_null(rid) : nullptr;
+		auto *texture = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr;
+		auto *sampler = sampler_owner.owns(rid) ? sampler_owner.get_or_null(rid) : nullptr;
 		uint32_t *count = buffer ? &buffer->qualification_users : set ? &set->qualification_users
 				: pipeline											  ? &pipeline->qualification_users
 				: texture											  ? &texture->qualification_users
@@ -330,16 +330,16 @@ void RenderingDevice::_qualification_unpin_resources(QualificationTicket *ticket
 		return;
 	}
 	for (RID rid : ticket->resource_pins) {
-		Buffer *buffer = storage_buffer_owner.get_or_null(rid);
+		Buffer *buffer = storage_buffer_owner.owns(rid) ? storage_buffer_owner.get_or_null(rid) : nullptr;
 		if (!buffer) {
-			buffer = uniform_buffer_owner.get_or_null(rid);
+			buffer = uniform_buffer_owner.owns(rid) ? uniform_buffer_owner.get_or_null(rid) : nullptr;
 		}
-		auto *set = uniform_set_owner.get_or_null(rid);
-		auto *pipeline = compute_pipeline_owner.get_or_null(rid);
-		auto *raster_pipeline = render_pipeline_owner.get_or_null(rid);
-		auto *framebuffer = framebuffer_owner.get_or_null(rid);
-		auto *texture = texture_owner.get_or_null(rid);
-		auto *sampler = sampler_owner.get_or_null(rid);
+		auto *set = uniform_set_owner.owns(rid) ? uniform_set_owner.get_or_null(rid) : nullptr;
+		auto *pipeline = compute_pipeline_owner.owns(rid) ? compute_pipeline_owner.get_or_null(rid) : nullptr;
+		auto *raster_pipeline = render_pipeline_owner.owns(rid) ? render_pipeline_owner.get_or_null(rid) : nullptr;
+		auto *framebuffer = framebuffer_owner.owns(rid) ? framebuffer_owner.get_or_null(rid) : nullptr;
+		auto *texture = texture_owner.owns(rid) ? texture_owner.get_or_null(rid) : nullptr;
+		auto *sampler = sampler_owner.owns(rid) ? sampler_owner.get_or_null(rid) : nullptr;
 		uint32_t *count = buffer ? &buffer->qualification_users : set ? &set->qualification_users
 				: pipeline											  ? &pipeline->qualification_users
 				: texture											  ? &texture->qualification_users

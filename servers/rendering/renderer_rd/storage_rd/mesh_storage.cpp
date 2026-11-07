@@ -237,6 +237,52 @@ bool MeshStorage::free(RID p_rid) {
 
 /* MESH API */
 
+Error MeshStorage::mesh_selection_acquire(RID p_rid, NativeSelectionLease &r_lease) {
+	auto *rd = RD::get_singleton();
+	if (!rd || !rd->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (r_lease.is_active()) {
+		return ERR_ALREADY_IN_USE;
+	}
+	auto *mesh = mesh_owner.get_or_null(p_rid);
+	if (!mesh || !mesh->surface_count) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (mesh->selection_holds == UINT32_MAX) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	if (mesh->blend_shape_count || !mesh->instances.is_empty() || mesh->shadow_mesh.is_valid()) {
+		return ERR_UNAVAILABLE;
+	}
+	for (uint32_t i = 0; i < mesh->surface_count; ++i) {
+		const auto *surface = mesh->surfaces[i];
+		if (surface->external || surface->immutable_retired || surface->skin_buffer.is_valid()) {
+			return ERR_UNAVAILABLE;
+		}
+	}
+	++mesh->selection_holds;
+	r_lease.owner = this;
+	r_lease.device = rd;
+	r_lease.rid = p_rid;
+	return OK;
+}
+
+Error MeshStorage::mesh_selection_release(NativeSelectionLease &r_lease) {
+	if (r_lease.owner != this || !r_lease.device || r_lease.device != RD::get_singleton() || !r_lease.device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	auto *mesh = mesh_owner.get_or_null(r_lease.rid);
+	if (!mesh || !mesh->selection_holds) {
+		return ERR_INVALID_DATA;
+	}
+	--mesh->selection_holds;
+	r_lease.owner = nullptr;
+	r_lease.device = nullptr;
+	r_lease.rid = RID();
+	return OK;
+}
+
 RID MeshStorage::mesh_allocate() {
 	return mesh_owner.allocate_rid();
 }
@@ -246,6 +292,9 @@ void MeshStorage::mesh_initialize(RID p_rid) {
 }
 
 void MeshStorage::mesh_free(RID p_rid) {
+	const Mesh *selected = mesh_owner.get_or_null(p_rid);
+	ERR_FAIL_NULL(selected);
+	ERR_FAIL_COND_MSG(selected->selection_holds, "Mesh selection must return before free.");
 	mesh_clear(p_rid);
 	mesh_set_shadow_mesh(p_rid, RID());
 	Mesh *mesh = mesh_owner.get_or_null(p_rid);
@@ -270,6 +319,7 @@ void MeshStorage::mesh_set_blend_shape_count(RID p_mesh, int p_blend_shape_count
 
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL(mesh);
+	ERR_FAIL_COND_MSG(mesh->selection_holds, "Mesh selection must return before mutation.");
 
 	ERR_FAIL_COND(mesh->surface_count > 0); //surfaces already exist
 
@@ -280,6 +330,7 @@ void MeshStorage::mesh_set_blend_shape_count(RID p_mesh, int p_blend_shape_count
 void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::SurfaceData &p_surface) {
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL(mesh);
+	ERR_FAIL_COND_MSG(mesh->selection_holds, "Mesh selection must return before mutation.");
 
 	ERR_FAIL_COND(mesh->surface_count == RSE::MAX_MESH_SURFACES);
 
@@ -549,6 +600,9 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 Error MeshStorage::mesh_add_external_surface(RID p_mesh, const ExternalSurfaceDescriptor &p_surface, uint32_t &r_surface_index, uint64_t &r_generation) {
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL_V(mesh, ERR_DOES_NOT_EXIST);
+	if (mesh->selection_holds) {
+		return ERR_BUSY;
+	}
 	ERR_FAIL_COND_V(mesh->surface_count == RSE::MAX_MESH_SURFACES, ERR_OUT_OF_MEMORY);
 	ERR_FAIL_COND_V(p_surface.vertex_count == 0 || p_surface.index_count == 0, ERR_INVALID_PARAMETER);
 	ERR_FAIL_COND_V(p_surface.primitive != RSE::PRIMITIVE_TRIANGLES || mesh->blend_shape_count != 0 || !mesh->instances.is_empty(), ERR_INVALID_PARAMETER);
@@ -1263,6 +1317,7 @@ int MeshStorage::mesh_get_blend_shape_count(RID p_mesh) const {
 void MeshStorage::mesh_set_blend_shape_mode(RID p_mesh, RSE::BlendShapeMode p_mode) {
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL(mesh);
+	ERR_FAIL_COND_MSG(mesh->selection_holds, "Mesh selection must return before mutation.");
 	ERR_FAIL_INDEX((int)p_mode, 2);
 
 	mesh->blend_shape_mode = p_mode;
@@ -1278,6 +1333,7 @@ void MeshStorage::mesh_surface_update_vertex_region(RID p_mesh, int p_surface, i
 	ERR_FAIL_COND(p_data.is_empty());
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL(mesh);
+	ERR_FAIL_COND_MSG(mesh->selection_holds, "Mesh selection must return before mutation.");
 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_surface, mesh->surface_count);
 	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->immutable_holds, "Immutable native surface holds must return before an in-place mutation.");
 	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->external, "Indexed144 external buffers must be updated through their original owner.");
@@ -1297,6 +1353,7 @@ void MeshStorage::mesh_surface_update_attribute_region(RID p_mesh, int p_surface
 	ERR_FAIL_COND(p_data.is_empty());
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL(mesh);
+	ERR_FAIL_COND_MSG(mesh->selection_holds, "Mesh selection must return before mutation.");
 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_surface, mesh->surface_count);
 	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->immutable_holds, "Immutable native surface holds must return before an in-place mutation.");
 	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->external, "Indexed144 external buffers must be updated through their original owner.");
@@ -1316,6 +1373,7 @@ void MeshStorage::mesh_surface_update_skin_region(RID p_mesh, int p_surface, int
 	ERR_FAIL_COND(p_data.is_empty());
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL(mesh);
+	ERR_FAIL_COND_MSG(mesh->selection_holds, "Mesh selection must return before mutation.");
 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_surface, mesh->surface_count);
 	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->immutable_holds, "Immutable native surface holds must return before an in-place mutation.");
 	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->external, "Indexed144 external buffers must be updated through their original owner.");
@@ -1335,6 +1393,7 @@ void RendererRD::MeshStorage::mesh_surface_update_index_region(RID p_mesh, int p
 	ERR_FAIL_COND(p_data.is_empty());
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL(mesh);
+	ERR_FAIL_COND_MSG(mesh->selection_holds, "Mesh selection must return before mutation.");
 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_surface, mesh->surface_count);
 	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->immutable_holds, "Immutable native surface holds must return before an in-place mutation.");
 	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->external, "Indexed144 external buffers must be updated through their original owner.");
@@ -1353,6 +1412,7 @@ void RendererRD::MeshStorage::mesh_surface_update_index_region(RID p_mesh, int p
 void MeshStorage::mesh_surface_set_material(RID p_mesh, int p_surface, RID p_material) {
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL(mesh);
+	ERR_FAIL_COND_MSG(mesh->selection_holds, "Mesh selection must return before mutation.");
 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_surface, mesh->surface_count);
 	ERR_FAIL_COND_MSG(mesh->surfaces[p_surface]->immutable_holds, "Immutable native surface holds must return before an in-place mutation.");
 	mesh->surfaces[p_surface]->material = p_material;
@@ -1426,6 +1486,7 @@ int MeshStorage::mesh_get_surface_count(RID p_mesh) const {
 void MeshStorage::mesh_set_custom_aabb(RID p_mesh, const AABB &p_aabb) {
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL(mesh);
+	ERR_FAIL_COND_MSG(mesh->selection_holds, "Mesh selection must return before mutation.");
 	mesh->custom_aabb = p_aabb;
 
 	mesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_AABB);
@@ -1576,6 +1637,7 @@ void MeshStorage::mesh_set_shadow_mesh(RID p_mesh, RID p_shadow_mesh) {
 	ERR_FAIL_COND_MSG(p_mesh == p_shadow_mesh, "Cannot set a mesh as its own shadow mesh.");
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL(mesh);
+	ERR_FAIL_COND_MSG(mesh->selection_holds, "Mesh selection must return before mutation.");
 
 	Mesh *shadow_mesh = mesh_owner.get_or_null(mesh->shadow_mesh);
 	if (shadow_mesh) {
@@ -1595,6 +1657,7 @@ void MeshStorage::mesh_set_shadow_mesh(RID p_mesh, RID p_shadow_mesh) {
 void MeshStorage::mesh_clear(RID p_mesh) {
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL(mesh);
+	ERR_FAIL_COND_MSG(mesh->selection_holds, "Mesh selection must return before mutation.");
 
 	// Clear instance data before mesh data.
 	for (MeshInstance *mi : mesh->instances) {
@@ -1626,6 +1689,7 @@ void MeshStorage::mesh_clear(RID p_mesh) {
 void MeshStorage::mesh_surface_remove(RID p_mesh, int p_surface) {
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL(mesh);
+	ERR_FAIL_COND_MSG(mesh->selection_holds, "Mesh selection must return before mutation.");
 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_surface, mesh->surface_count);
 
 	// Clear instance data before mesh data.
@@ -1722,6 +1786,7 @@ Dependency *MeshStorage::mesh_get_dependency(RID p_mesh) const {
 RID MeshStorage::mesh_instance_create(RID p_base) {
 	Mesh *mesh = mesh_owner.get_or_null(p_base);
 	ERR_FAIL_NULL_V(mesh, RID());
+	ERR_FAIL_COND_V_MSG(mesh->selection_holds, RID(), "Mesh selection must return before instance creation.");
 	for (uint32_t i = 0; i < mesh->surface_count; i++) {
 		ERR_FAIL_COND_V_MSG(mesh->surfaces[i]->external, RID(), "Indexed144 external surfaces do not support deformation instances.");
 	}

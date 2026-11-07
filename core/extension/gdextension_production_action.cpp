@@ -58,7 +58,8 @@ Error Registry::production_dispatch_closure_locked(const ProductionRequest &requ
 	for (uint32_t i = 0; i < dispatch.set_count; ++i) {
 		const auto &slot = request.resources[dispatch.first_set_slot + i];
 		const auto *set = rd.uniform_set_owner.get_or_null(slot.primary);
-		if (!slot.imported || !set || !set->driver_id || slot.imported_unit_slot != dispatch.unit_slot || slot.shader_set != i || set->shader_id != pipeline->shader || set->format != pipeline->set_formats[i] || !set->shared_textures_to_update.is_empty() || !set->pending_clear_textures.is_empty() || slot.binding_count != shader->uniform_sets[i].size() || slot.first_binding > request.capacity.resource_uses || slot.binding_count > request.capacity.resource_uses - slot.first_binding) {
+		const bool deferred = !request.frozen && slot.output_set_deferred && !slot.imported && !set && slot.owned_serial && !slot.creating && !slot.retiring;
+		if ((!deferred && (!slot.imported || !set || !set->driver_id || set->shader_id != pipeline->shader || set->format != pipeline->set_formats[i] || !set->shared_textures_to_update.is_empty() || !set->pending_clear_textures.is_empty())) || slot.imported_unit_slot != dispatch.unit_slot || slot.shader_set != i || slot.binding_count != shader->uniform_sets[i].size() || slot.first_binding > request.capacity.resource_uses || slot.binding_count > request.capacity.resource_uses - slot.first_binding) {
 			return ERR_INVALID_DATA;
 		}
 		for (uint32_t b = 0; b < slot.binding_count; ++b) {
@@ -67,7 +68,16 @@ Error Registry::production_dispatch_closure_locked(const ProductionRequest &requ
 				return ERR_INVALID_DATA;
 			}
 			const auto &storage = request.resources[binding.resource_slot];
-			if (!storage.imported || storage.retiring || storage.declaration.resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1 || storage.use_count != 1 || !storage.uses[0].linked() || !storage.uses[0].same_physical() || !set->qualification_dependencies.has(storage.uses[0].physical)) {
+			bool physical_dependency = storage.use_count == 1 && storage.uses[0].linked() && storage.uses[0].same_physical() && (deferred || set->qualification_dependencies.has(storage.uses[0].physical));
+			if (storage.output_alias_prepared) {
+				physical_dependency = deferred && !storage.imported && storage.output_action_ordinal < action.declaration.action_ordinal && storage.output_action_ordinal < request.action_count && request.actions[storage.output_action_ordinal].prepared;
+				if (!deferred && production_output_alias_matches_locked(request, storage, rd)) {
+					for (const auto &dependency : set->production_output_dependencies) {
+						physical_dependency |= dependency.cell == storage.output_witness.cell;
+					}
+				}
+			}
+			if ((!storage.imported && !(deferred && storage.output_alias_prepared)) || storage.retiring || storage.declaration.resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1 || !physical_dependency) {
 				return ERR_INVALID_DATA;
 			}
 			bool covered = false;
@@ -121,6 +131,9 @@ Error Registry::production_capture_graph_locked(ProductionRequest &request, Rend
 	if (ordinal >= request.action_count || request.actions[ordinal].request != &request || request.actions[ordinal].declaration.action_ordinal != ordinal) {
 		return ERR_INVALID_DATA;
 	}
+	// A validated real action graph is append evidence. Failed preflight or
+	// merely creating a resource must not be reclassified as business append.
+	production_append_effect_enter_locked(request);
 	const auto &declaration = request.actions[ordinal].declaration;
 	for (uint32_t i = 0; i < request.graph_count; ++i) {
 		const auto &old = request.graphs[i];
@@ -399,7 +412,34 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 			return observed;
 		}
 	} else if (action.declaration.action_kind == GDEXTENSION_PRODUCTION_READBACK_V1) {
+		if (action.readback_slot >= request.readback_count) {
+			observed.error = ERR_INVALID_DATA;
+			return observed;
+		}
 		auto &cell = request.readbacks[action.readback_slot];
+		const auto &declaration = cell.declaration;
+		if (cell.request != &request || declaration.copy_action_ordinal != index || declaration.resource_slot >= request.resource_count ||
+				!production_use_matches_locked(request, action, declaration.resource_slot, declaration.byte_offset, declaration.byte_size, GDEXTENSION_PRODUCTION_READ_V1)) {
+			observed.error = ERR_INVALID_DATA;
+			return observed;
+		}
+		const auto &resource = request.resources[declaration.resource_slot];
+		if (resource.output_alias_prepared) {
+			// Only this exact original output action/root/source and factory
+			// witness permit the alias. No qualification return cell is invented.
+			if (declaration.producer_action_ordinal >= index || resource.output_action_ordinal != declaration.producer_action_ordinal ||
+					!production_output_alias_matches_locked(request, resource, rd)) {
+				observed.error = ERR_UNAUTHORIZED;
+				return observed;
+			}
+			const auto &writer = request.actions[declaration.producer_action_ordinal];
+			if (writer.output_state != ProductionActionCell::OutputState::BOUND || !production_output_source_matches_locked(request, writer, rd) ||
+					!declaration.byte_size || declaration.byte_offset > resource.declaration.physical_bytes ||
+					declaration.byte_size > resource.declaration.physical_bytes - declaration.byte_offset) {
+				observed.error = ERR_UNAUTHORIZED;
+				return observed;
+			}
+		}
 		if (cell.declaration.byte_offset > UINT32_MAX || cell.declaration.byte_size > UINT32_MAX) {
 			observed.error = ERR_PARAMETER_RANGE_ERROR;
 			return observed;
@@ -479,6 +519,7 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 			return observed;
 		}
 	}
+	production_append_effect_enter_locked(request);
 	transfer_effect_entered = true;
 	bool list_open = request.compute_list_open;
 	mutex.unlock();
@@ -559,12 +600,15 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 	} else if (observed.state == CheckedRecordAppend::State::Appended) {
 		++request.next_action;
 	}
+	// The original checked append is the sole operation fact, even before owner
+	// report observation. KnownPrefix/Unknown are never reminted as NotIssued.
+	action.original_append = observed;
 	++request.revision;
 	return observed;
 }
 
 Error Registry::production_close_segment_locked(ProductionRequest &request, GDExtensionProductionSegmentV2 &out, bool physical_scope_exit) {
-	if (request.capture_inflight || request.compute_list_open || request.effects_pending || request.source_device_lost || request.cancelled || request.segment.segment != request.acknowledged_segment) {
+	if (request.capture_inflight || (request.compute_list_open || request.draw_list_open) || request.effects_pending || request.source_device_lost || request.cancelled || request.segment.segment != request.acknowledged_segment) {
 		return ERR_BUSY;
 	}
 	if (request.graph_count == request.segment_graph_begin || request.segment.segment == UINT64_MAX || request.revision == UINT64_MAX) {
@@ -656,6 +700,9 @@ Error Registry::production_readback_delivery(BufferReadbackSourceCapture &captur
 }
 
 Error Registry::production_close_lists_locked(ProductionRequest &request, RenderingDevice &rd) {
+	if (request.draw_list_open) {
+		return production_raster_close_locked(request, rd);
+	}
 	if (!request.compute_list_open) {
 		return OK;
 	}
@@ -663,13 +710,14 @@ Error Registry::production_close_lists_locked(ProductionRequest &request, Render
 		return ERR_BUSY;
 	}
 	++request.capture_inflight;
+	production_append_effect_enter_locked(request);
 	mutex.unlock();
 	const auto closed = rd._compute_list_end_recorded();
 	mutex.lock();
 	CRASH_COND(!request.capture_inflight);
 	--request.capture_inflight;
 	request.compute_list_open = rd.compute_list.active;
-	if (!closed.is_valid() || request.compute_list_open) {
+	if (!closed.is_valid() || request.compute_list_open || request.draw_list_open) {
 		request.effects_pending = true;
 	}
 	++request.revision;

@@ -96,6 +96,7 @@ private:
 	struct MultiMesh;
 
 	struct Mesh {
+		uint32_t selection_holds = 0;
 		struct Surface {
 			RSE::PrimitiveType primitive = RSE::PRIMITIVE_POINTS;
 			bool external = false;
@@ -461,6 +462,24 @@ public:
 
 	// A strong original native geometry owner, not an output or material grant.
 	// Return explicitly only after the packet's original accepted uses close.
+	// CPU selection only: no VA, descriptor, shader version or pipeline custody.
+	class NativeSelectionLease {
+		friend class MeshStorage;
+		MeshStorage *owner = nullptr;
+		RenderingDevice *device = nullptr;
+		RID rid;
+		uint64_t generation = 0;
+
+	public:
+		NativeSelectionLease() = default;
+		NativeSelectionLease(const NativeSelectionLease &) = delete;
+		NativeSelectionLease &operator=(const NativeSelectionLease &) = delete;
+		~NativeSelectionLease() { CRASH_COND(owner); }
+		bool is_active() const { return owner != nullptr; }
+	};
+	Error mesh_selection_acquire(RID p_rid, NativeSelectionLease &r_lease);
+	Error mesh_selection_release(NativeSelectionLease &r_lease);
+
 	class NativeSurfaceHold {
 		bool physical_transferred = false, metadata_returned = false, metadata_return_active = false;
 		bool directory_frozen = false;

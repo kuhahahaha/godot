@@ -12,7 +12,6 @@ func _initialize() -> void:
 	call_deferred("_start")
 
 func _start() -> void:
-	RenderingServer.set_render_loop_enabled(false)
 	var method := "run_geometry" if OS.get_environment("ANGE_HEIGHTFIELD_GEOMETRY") == "1" else "run"
 	if method == "run_geometry" and OS.get_environment("ANGE_HEIGHTFIELD_EXTENTS_Y") != "":
 		method = "run_geometry_params"
@@ -30,7 +29,7 @@ func _start() -> void:
 func _process(_delta: float) -> bool:
 	var result: Dictionary = fixture.call("result")
 	if result.has("pass"):
-		print("HEIGHTFIELD_CLEAR_NATIVE_PASS ", JSON.stringify(result))
+		print("HEIGHTFIELD_CLEAR_NATIVE_PASS " if result["pass"] else "HEIGHTFIELD_CLEAR_NATIVE_FAIL ", JSON.stringify(result))
 		quit(0 if result["pass"] else 1)
 	elif Time.get_ticks_msec() - started > 30000:
 		print("HEIGHTFIELD_CLEAR_NATIVE_FAIL ", JSON.stringify(result))

@@ -43,7 +43,7 @@ template<class T> struct SelfList {
 struct RID { bool valid = true; bool is_null() { return !valid; } };
 struct Particles {
     int amount = 1;
-    bool inactive = false;
+    bool external = false, inactive = false;
     double inactive_time = 0;
     bool dirty = true, fail = false, retry_pending = false, frame_delta_committed = false, restart_request = false;
     unsigned frame_delta_committed_frame = UINT32_MAX;
@@ -72,7 +72,14 @@ struct Storage {
 };
 int main() {
     Storage storage;
-    Particles first, healthy, last;
+    Particles first, healthy, last, external;
+    external.external = true;
+    external.retry_pending = true;
+    external.frame_delta_committed = true;
+    external.frame_delta_committed_frame = 0;
+    external.inactive = true;
+    external.inactive_time = 7;
+    storage.particle_update_list.add(&external.update_list);
     first.fail = last.fail = true;
     storage.particle_update_list.add(&last.update_list);
     storage.particle_update_list.add(&healthy.update_list);
@@ -80,14 +87,19 @@ int main() {
     storage.update_particles();
     bool first_pass = first.attempts == 1 && healthy.attempts == 1 && last.attempts == 1 &&
             healthy.completed == 1 && !healthy.dirty && !healthy.update_list.in_list() &&
-            first.dirty && last.dirty && first.update_list.in_list() && last.update_list.in_list();
+            first.dirty && last.dirty && first.retry_pending && last.retry_pending &&
+            first.update_list.in_list() && last.update_list.in_list();
     first.fail = last.fail = false;
     storage.update_particles();
     bool second_pass = first.attempts == 2 && healthy.attempts == 1 && last.attempts == 2 &&
             first.completed == 1 && healthy.completed == 1 && last.completed == 1 &&
-            !first.dirty && !last.dirty && storage.particle_update_list.first() == nullptr;
-    std::printf("particle deferred retry: %d/2 checks passed\n", int(first_pass) + int(second_pass));
-    return first_pass && second_pass ? 0 : 1;
+            !first.dirty && !last.dirty && !first.retry_pending && !last.retry_pending &&
+            storage.particle_update_list.first() == nullptr;
+    const bool external_pass = external.attempts == 0 && external.completed == 0 && external.dirty &&
+            external.retry_pending && external.frame_delta_committed && external.frame_delta_committed_frame == 0 &&
+            external.inactive && external.inactive_time == 7 && !external.update_list.in_list();
+    std::printf("particle deferred retry: %d/3 checks passed\n", int(first_pass) + int(second_pass) + int(external_pass));
+    return first_pass && second_pass && external_pass ? 0 : 1;
 }
 '''
     with tempfile.TemporaryDirectory(prefix="particle-deferred-retry-") as temp:

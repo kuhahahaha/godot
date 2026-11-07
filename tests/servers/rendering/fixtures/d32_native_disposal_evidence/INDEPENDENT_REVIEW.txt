@@ -1,0 +1,39 @@
+Independent final read-only D32 disposal review — 2026-11-06
+Worktree: /Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104
+Reviewed frozen three-file increment and /tmp/b4-d32-disposal-impl-status.txt. No source edits/build/test execution by reviewer. Parent owns unified build/tests.
+
+Conclusion: no actionable correctness findings in this narrowly scoped original-owner disposal increment. Source supports its declared driver-return observation scope. It does not complete the separate custody, content/version, producer/reader membership, no-next-draw authorization or Scene integration obligations identified in /tmp/b4-d32-original-owner-gap.txt.
+
+Factory/reservation/rollback
+- New private depth texture factory uses exact D32 2D descriptor, sampling|depth attachment, no data/upload/clear prefix. Existing internal texture validation checks dimensions, usage support, format/view/swizzles before native texture_create. There is no later recoverable error on this empty-data path after driver allocation. Nonwrapping serial, cell and reserved original RID precede native creation; failed native creation releases the reserved RID and publishes neither RID nor witness.
+- New framebuffer factory authenticates original LIVE texture cell with same RD, RID, incarnation serial and actual TextureID. It excludes qualification, retiring, shared view/fallback, worker and wrong-profile targets. It reserves independent serial/cell/RID before original format/cache creation. A second factory failure leaves the first texture/witness LIVE for caller-owned explicit rollback; no hidden self-ack or ownership transfer is claimed.
+- Qualification semantics remain intact: added native witness parameter defaults null at original callers; original p_cell authentication and dependent-child increment still execute for qualified resources, with mutual exclusion between qualification/native witness modes. Null-safe p_cell assignment is required by the new original reserved-RID path and does not remove qualified authentication.
+
+Shared view/slice and identity
+- Both original Texture-copy factories (texture_create_shared:2304 and texture_create_shared_from_slice:2482) immediately reset native_disposal and native_disposal_rid/serial before any native view creation. They therefore cannot settle the parent cell or poison it by enqueuing a view's different RID/native object. Existing owner/dependency/tracker/fallback behavior is retained.
+- Free validation uses owner->native_disposal cell plus RID/nonreused serial/native texture ID; framebuffer uses exact original cache pointer plus independently nonreused serial. Its pending owner copy retains original cache identity after cache destruction. Record/cache address reuse cannot satisfy stale serial identity.
+- _native_disposal_free preserves existing idempotence for ENQUEUED/RETURNED, and mismatched live identity goes UNKNOWN without freeing that mismatched owner. Foreign devices are rejected by original observation path. Cells stay owned by observer plus live/pending object through driver free callbacks.
+
+Complete cache owner return
+- Original free_rid dependency recursion invalidates framebuffer before texture is queued; original framebuffer invalidation callback sees ENQUEUED and executes before physical queue drain. No new callback or parallel registry/free queue is added.
+- Ordinary framebuffer hook is after RDG::framebuffer_cache_free, which loops every cache storage_map pair, returns framebuffer_free and render_pass_free, then deletes cache. Bounded hook is after the identical original pair loop and cache deletion. Existing cursor.phase records framebuffer-free completion before pausing for render-pass free, so resume does not duplicate the first native free.
+- _free_pending_resources honors an active bounded cursor first, preventing bounded->ordinary handoff from repeating a half-freed pair. This behavior predates and is preserved by the increment.
+- Texture hooks in both paths run only after actual driver texture_free returns. Framebuffer cache queue precedes texture queue, so cache-owned children settle first. Device-wide framebuffer-format render pass remains independently owned and is correctly excluded from per-framebuffer witness scope.
+- Shared fallback disposal remains on original path; depth framebuffer factory explicitly excludes existing fallback targets. Witness remains a single original native object observation, not an aggregate sample dependency proof.
+
+Tests inspected, not executed
+- Two distinct model driver cache framebuffer/render-pass pairs, invalidation sees ENQUEUED, each driver free sees ENQUEUED, texture free requires all framebuffer cache pairs returned, refcounts/accounting/dependency/RID cleanup asserted.
+- Ordinary and one-receipt bounded subcases pause within a child pair and require no duplicate free; separate shared-format teardown avoids overclaiming cache ownership.
+- Native texture failure, empty/nonempty output behavior, format-pass failure after texture success, explicit first-texture rollback, serial exhaustion before further allocations.
+- Foreign device refusal, shared view does not copy witness, original incarnation serial poison produces UNKNOWN/no native free, stale enqueued target cannot create framebuffer; fixture-only repair explicitly confined to deterministic test teardown.
+- Generic immutable acquisition remains unchanged; D32/FB refusal is tested. The fixture driver does not request pending_clear, so D32 refusal exercises attachment usage rather than merely pending-clear state.
+
+Nonblocking coverage limits
+No added sliced-view runtime case, direct framebuffer/empty-cache case, return-time identity poison, or real no-draw pump/fence integration is executed in these CPU fixtures. Source inspection covers the corresponding hooks; existing bounded cursor/zero-budget generic tests remain available. The seeded native cache variants were created by deterministic driver methods and placed in original cache for disposal coverage; the test does not claim they were rendered. Build and actual test results remain required parent evidence.
+
+Physical driver-free return MUST NOT be described as producer/legacy/managed last-use, GPU completion, immutable content safety, HeightFrame publication, complete no-next-draw Scene teardown or E34 acceptance. Private factories are not yet integrated into ParticlesStorage and do not authorize an attachment producer or generic immutable hold. No changes in immutable_hold.cpp or NativeDisposalWitness's meaning were introduced.
+
+Reviewed SHA256:
+0b3bfbba2712fc278b5da213e9ec0b9fb9b3f5bbf21c9ae9afe7bf8636e3c630  servers/rendering/rendering_device.h
+0a033a5878b68c8320fa9c148cfe31b7232118d8895790cdbbbdb67f2df34208  servers/rendering/rendering_device.cpp
+a395b81636d3ae12927576dec663361e1777a351111f4bbc8120ab6c85f7d8ba  tests/servers/rendering/test_native_disposal.cpp

@@ -30,6 +30,7 @@
 
 #include "particles_storage.h"
 
+#include "servers/rendering/renderer_rd/effects/particles_external_guard.h"
 #include "servers/rendering/renderer_rd/effects/sort_effects.h"
 #include "servers/rendering/renderer_rd/renderer_compositor_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_owner.h"
@@ -61,6 +62,8 @@ ParticlesStorage::ParticlesStorage() {
 	/* Effects */
 
 	sort_effects = memnew(SortEffects);
+	external_guard = memnew(ParticlesExternalGuard);
+	external_guard_preparation_error = external_guard->prepare_pipelines();
 
 	/* Particles */
 
@@ -217,12 +220,25 @@ ParticlesStorage::~ParticlesStorage() {
 	material_storage->material_free(particles_shader.default_material);
 	material_storage->shader_free(particles_shader.default_shader);
 
+	if (external_guard) {
+		// RenderingServer's service-stop gate has already required every
+		// original production attachment to return before storage teardown.
+		const Error released = external_guard->release_pipelines();
+		CRASH_COND_MSG(released != OK, "Engine external guard must be released by its main-RD render-thread owner.");
+		memdelete(external_guard);
+		external_guard = nullptr;
+	}
+
 	if (sort_effects) {
 		memdelete(sort_effects);
 		sort_effects = nullptr;
 	}
 
 	singleton = nullptr;
+}
+
+bool ParticlesStorage::is_external_guard_prepared() const {
+	return external_guard && external_guard->is_prepared();
 }
 
 bool ParticlesStorage::free(RID p_rid) {
@@ -267,7 +283,18 @@ void ParticlesStorage::particles_free(RID p_rid) {
 		particles->dependency.deleted_notify(p_rid);
 		particles->update_list.remove_from_list();
 		particles->external = nullptr;
-		memdelete(external);
+		if (!external->metadata_lease.is_empty()) {
+			// Generation terminal permits logical RID destruction. Its original
+			// metadata resource remains live until this last CPU owner is gone.
+			// Move custody out before destroying an owner inside that allocation.
+			auto *registry = external->generation_registry;
+			GDExtensionDeviceExit::ProductionOutputMetadataLease metadata = static_cast<GDExtensionDeviceExit::ProductionOutputMetadataLease &&>(external->metadata_lease);
+			external->~ExternalOutputOwner();
+			const Error returned = registry->production_output_metadata_return(metadata);
+			CRASH_COND(returned != OK);
+		} else {
+			memdelete(external);
+		}
 		particles_owner.free(p_rid);
 		return;
 	}
@@ -947,7 +974,8 @@ AABB ParticlesStorage::particles_get_aabb(RID p_particles) const {
 	const Particles *particles = particles_owner.get_or_null(p_particles);
 	ERR_FAIL_NULL_V(particles, AABB());
 	if (particles->external) {
-		return particles->external->config.bounds;
+		const auto &config = particles->external->config;
+		return config.query_enabled ? config.bounds.merge(config.query_bounds) : config.bounds;
 	}
 
 	return particles->custom_aabb;

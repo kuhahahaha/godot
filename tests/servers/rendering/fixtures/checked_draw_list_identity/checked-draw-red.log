@@ -1,0 +1,317 @@
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_checked_draw_bind.cpp:426:
+TEST CASE:  [RenderingDevice][CheckedBind] checked draw leaves require the public begin list ID before effects
+
+tests/servers/rendering/test_checked_draw_bind.cpp:207: ERROR: CHECK( result.error == ERR_INVALID_PARAMETER ) is NOT correct!
+  values: CHECK( 0 == 31 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:208: ERROR: CHECK( result.effect == RD::NativeAppendEffect::NoNewEffect ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:209: ERROR: CHECK_FALSE( result.draw_handle.is_valid() ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:211: ERROR: CHECK_FALSE( result.capture_complete ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:214: ERROR: CHECK_FALSE( f.rd.draw_list.state.pipeline.is_valid() ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:207: ERROR: CHECK( result.error == ERR_INVALID_PARAMETER ) is NOT correct!
+  values: CHECK( 0 == 31 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:208: ERROR: CHECK( result.effect == RD::NativeAppendEffect::NoNewEffect ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:209: ERROR: CHECK_FALSE( result.draw_handle.is_valid() ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:211: ERROR: CHECK_FALSE( result.capture_complete ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:214: ERROR: CHECK_FALSE( f.rd.draw_list.state.pipeline.is_valid() ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:207: ERROR: CHECK( result.error == ERR_INVALID_PARAMETER ) is NOT correct!
+  values: CHECK( 0 == 31 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:208: ERROR: CHECK( result.effect == RD::NativeAppendEffect::NoNewEffect ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:209: ERROR: CHECK_FALSE( result.draw_handle.is_valid() ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:211: ERROR: CHECK_FALSE( result.capture_complete ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:214: ERROR: CHECK_FALSE( f.rd.draw_list.state.pipeline.is_valid() ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:216: ERROR: CHECK( f.rd.draw_list.state.draw_count == 0 ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:207: ERROR: CHECK( result.error == ERR_INVALID_PARAMETER ) is NOT correct!
+  values: CHECK( 0 == 31 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:214: ERROR: CHECK_FALSE( f.rd.draw_list.state.pipeline.is_valid() ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:216: ERROR: CHECK( f.rd.draw_list.state.draw_count == 0 ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:207: ERROR: CHECK( result.error == ERR_INVALID_PARAMETER ) is NOT correct!
+  values: CHECK( 0 == 31 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:208: ERROR: CHECK( result.effect == RD::NativeAppendEffect::NoNewEffect ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:209: ERROR: CHECK_FALSE( result.draw_handle.is_valid() ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:211: ERROR: CHECK_FALSE( result.capture_complete ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:214: ERROR: CHECK_FALSE( f.rd.draw_list.state.pipeline.is_valid() ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:216: ERROR: CHECK( f.rd.draw_list.state.draw_count == 0 ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:207: ERROR: CHECK( result.error == ERR_INVALID_PARAMETER ) is NOT correct!
+  values: CHECK( 0 == 31 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:208: ERROR: CHECK( result.effect == RD::NativeAppendEffect::NoNewEffect ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:209: ERROR: CHECK_FALSE( result.draw_handle.is_valid() ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:211: ERROR: CHECK_FALSE( result.capture_complete ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:214: ERROR: CHECK_FALSE( f.rd.draw_list.state.pipeline.is_valid() ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:216: ERROR: CHECK( f.rd.draw_list.state.draw_count == 0 ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:207: ERROR: CHECK( result.error == ERR_INVALID_PARAMETER ) is NOT correct!
+  values: CHECK( 0 == 31 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:214: ERROR: CHECK_FALSE( f.rd.draw_list.state.pipeline.is_valid() ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:216: ERROR: CHECK( f.rd.draw_list.state.draw_count == 0 ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:207: ERROR: CHECK( result.error == ERR_INVALID_PARAMETER ) is NOT correct!
+  values: CHECK( 0 == 31 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:208: ERROR: CHECK( result.effect == RD::NativeAppendEffect::NoNewEffect ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:209: ERROR: CHECK_FALSE( result.draw_handle.is_valid() ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:211: ERROR: CHECK_FALSE( result.capture_complete ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:214: ERROR: CHECK_FALSE( f.rd.draw_list.state.pipeline.is_valid() ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:216: ERROR: CHECK( f.rd.draw_list.state.draw_count == 0 ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:207: ERROR: CHECK( result.error == ERR_INVALID_PARAMETER ) is NOT correct!
+  values: CHECK( 0 == 31 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:208: ERROR: CHECK( result.effect == RD::NativeAppendEffect::NoNewEffect ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:209: ERROR: CHECK_FALSE( result.draw_handle.is_valid() ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:211: ERROR: CHECK_FALSE( result.capture_complete ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:214: ERROR: CHECK_FALSE( f.rd.draw_list.state.pipeline.is_valid() ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:216: ERROR: CHECK( f.rd.draw_list.state.draw_count == 0 ) is NOT correct!
+  values: CHECK( 3 == 0 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:207: ERROR: CHECK( result.error == ERR_INVALID_PARAMETER ) is NOT correct!
+  values: CHECK( 0 == 31 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:214: ERROR: CHECK_FALSE( f.rd.draw_list.state.pipeline.is_valid() ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:216: ERROR: CHECK( f.rd.draw_list.state.draw_count == 0 ) is NOT correct!
+  values: CHECK( 3 == 0 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:207: ERROR: CHECK( result.error == ERR_INVALID_PARAMETER ) is NOT correct!
+  values: CHECK( 0 == 31 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:208: ERROR: CHECK( result.effect == RD::NativeAppendEffect::NoNewEffect ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:209: ERROR: CHECK_FALSE( result.draw_handle.is_valid() ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:211: ERROR: CHECK_FALSE( result.capture_complete ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:214: ERROR: CHECK_FALSE( f.rd.draw_list.state.pipeline.is_valid() ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:216: ERROR: CHECK( f.rd.draw_list.state.draw_count == 0 ) is NOT correct!
+  values: CHECK( 3 == 0 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:207: ERROR: CHECK( result.error == ERR_INVALID_PARAMETER ) is NOT correct!
+  values: CHECK( 0 == 31 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:208: ERROR: CHECK( result.effect == RD::NativeAppendEffect::NoNewEffect ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:209: ERROR: CHECK_FALSE( result.draw_handle.is_valid() ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:211: ERROR: CHECK_FALSE( result.capture_complete ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:214: ERROR: CHECK_FALSE( f.rd.draw_list.state.pipeline.is_valid() ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:216: ERROR: CHECK( f.rd.draw_list.state.draw_count == 0 ) is NOT correct!
+  values: CHECK( 4 == 0 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:229: ERROR: CHECK( result.effect == RD::NativeAppendEffect::Recorded ) is NOT correct!
+  values: CHECK( 0 == 2 )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:230: ERROR: CHECK( result.capture_complete ) is NOT correct!
+  values: CHECK( false )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:231: ERROR: CHECK( f.rd.draw_graph.contains_record(result.draw_handle) ) is NOT correct!
+  values: CHECK( false )
+
+tests/servers/rendering/test_checked_draw_bind.cpp:234: ERROR: CHECK( f.rd.draw_list.state.draw_count == 1 ) is NOT correct!
+  values: CHECK( 5 == 1 )
+
+===============================================================================
+tests/servers/rendering/test_record_source.cpp:844:
+TEST CASE:  [RecordSource] original indirect draw retains exact identity native prefix and transfer
+
+tests/servers/rendering/test_record_source.cpp:615: ERROR: CHECK( bare_list.observed.error == ERR_INVALID_PARAMETER ) is NOT correct!
+  values: CHECK( 0 == 31 )
+
+tests/servers/rendering/test_record_source.cpp:616: ERROR: CHECK( bare_list.native.error == ERR_INVALID_PARAMETER ) is NOT correct!
+  values: CHECK( 0 == 31 )
+
+tests/servers/rendering/test_record_source.cpp:617: ERROR: CHECK( bare_list.observed.state == State::Rejected ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_record_source.cpp:620: ERROR: CHECK( bare_list.native.effect == RenderingDevice::NativeAppendEffect::NoNewEffect ) is NOT correct!
+  values: CHECK( 2 == 0 )
+
+tests/servers/rendering/test_record_source.cpp:622: ERROR: CHECK_FALSE( bare_list.native.capture_complete ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_record_source.cpp:623: ERROR: CHECK_FALSE( bare_list.observed.handle.is_valid() ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_record_source.cpp:624: ERROR: CHECK_FALSE( bare_list.native.draw_handle.is_valid() ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+tests/servers/rendering/test_record_source.cpp:626: ERROR: CHECK( device.draw_list.state.draw_count == 0 ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_record_source.cpp:627: ERROR: CHECK( device.storage_buffer_owner.get_or_null(rid)->transfer_worker_index == 0 ) is NOT correct!
+  values: CHECK( -1 == 0 )
+
+tests/servers/rendering/test_record_source.cpp:628: ERROR: CHECK( device.transfer_worker_operation_used_by_draw[0] == 0 ) is NOT correct!
+  values: CHECK( 9 == 0 )
+
+tests/servers/rendering/test_record_source.cpp:635: ERROR: CHECK( device.draw_list.state.draw_count == 0 ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_record_source.cpp:645: ERROR: CHECK( device.draw_list.state.draw_count == 0 ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+tests/servers/rendering/test_record_source.cpp:646: ERROR: CHECK( device.storage_buffer_owner.get_or_null(rid)->transfer_worker_index == 0 ) is NOT correct!
+  values: CHECK( -1 == 0 )
+
+tests/servers/rendering/test_record_source.cpp:651: ERROR: CHECK( suspended.observed.error == ERR_CANT_ACQUIRE_RESOURCE ) is NOT correct!
+  values: CHECK( 31 == 28 )
+
+tests/servers/rendering/test_record_source.cpp:652: ERROR: CHECK( suspended.native.error == ERR_CANT_ACQUIRE_RESOURCE ) is NOT correct!
+  values: CHECK( 31 == 28 )
+
+tests/servers/rendering/test_record_source.cpp:655: ERROR: CHECK( drawn.observed.error == OK ) is NOT correct!
+  values: CHECK( 31 == 0 )
+
+tests/servers/rendering/test_record_source.cpp:656: ERROR: CHECK( drawn.observed.state == State::Appended ) is NOT correct!
+  values: CHECK( 0 == 1 )
+
+tests/servers/rendering/test_record_source.cpp:659: ERROR: CHECK( device.draw_graph.contains_record(drawn.observed.handle) ) is NOT correct!
+  values: CHECK( false )
+
+tests/servers/rendering/test_record_source.cpp:664: ERROR: CHECK( drawn.native.effect == RenderingDevice::NativeAppendEffect::Recorded ) is NOT correct!
+  values: CHECK( 0 == 2 )
+
+tests/servers/rendering/test_record_source.cpp:665: ERROR: CHECK( drawn.native.capture_complete ) is NOT correct!
+  values: CHECK( false )
+
+tests/servers/rendering/test_record_source.cpp:666: ERROR: CHECK( drawn.native.has_transfer ) is NOT correct!
+  values: CHECK( false )
+
+tests/servers/rendering/test_record_source.cpp:668: ERROR: CHECK( drawn.native.transfer.operation == 9 ) is NOT correct!
+  values: CHECK( 0 == 9 )
+
+tests/servers/rendering/test_record_source.cpp:686: ERROR: CHECK( prefix.observed.state == State::Unknown ) is NOT correct!
+  values: CHECK( 0 == 2 )
+
+tests/servers/rendering/test_record_source.cpp:688: ERROR: CHECK( prefix.native.effect == RenderingDevice::NativeAppendEffect::NativePrefixOnly ) is NOT correct!
+  values: CHECK( 0 == 1 )
+
+tests/servers/rendering/test_record_source.cpp:689: ERROR: CHECK( prefix.native.capture_complete ) is NOT correct!
+  values: CHECK( false )
+
+tests/servers/rendering/test_record_source.cpp:690: ERROR: CHECK( prefix.native.prefix_count == 1 ) is NOT correct!
+  values: CHECK( 0 == 1 )
+
+tests/servers/rendering/test_record_source.cpp:691: ERROR: CHECK( device.draw_graph.contains_record(prefix.native.prefix_handles[0]) ) is NOT correct!
+  values: CHECK( false )
+
+tests/servers/rendering/test_record_source.cpp:697: ERROR: CHECK( indexed.observed.error == OK ) is NOT correct!
+  values: CHECK( 31 == 0 )
+
+tests/servers/rendering/test_record_source.cpp:698: ERROR: CHECK( indexed.observed.state == State::Appended ) is NOT correct!
+  values: CHECK( 0 == 1 )
+
+tests/servers/rendering/test_record_source.cpp:700: ERROR: CHECK( device.draw_graph.contains_record(indexed.observed.handle) ) is NOT correct!
+  values: CHECK( false )
+
+tests/servers/rendering/test_record_source.cpp:701: ERROR: CHECK( indexed.native.prefix_count == 1 ) is NOT correct!
+  values: CHECK( 0 == 1 )
+
+tests/servers/rendering/test_record_source.cpp:702: ERROR: CHECK( device.draw_graph.contains_record(indexed.native.prefix_handles[0]) ) is NOT correct!
+  values: CHECK( false )
+
+tests/servers/rendering/test_record_source.cpp:704: ERROR: CHECK( zero.observed.state == State::Appended ) is NOT correct!
+  values: CHECK( 0 == 1 )
+
+tests/servers/rendering/test_record_source.cpp:705: ERROR: CHECK( zero.observed.error == OK ) is NOT correct!
+  values: CHECK( 31 == 0 )
+
+tests/servers/rendering/test_record_source.cpp:706: ERROR: CHECK( device.draw_graph.contains_record(zero.native.draw_handle) ) is NOT correct!
+  values: CHECK( false )
+
+tests/servers/rendering/test_record_source.cpp:707: ERROR: CHECK( device.draw_list.state.draw_count == 3 ) is NOT correct!
+  values: CHECK( 1 == 3 )
+
+===============================================================================
+[doctest] test cases:   2 |   0 passed |   2 failed | 2184 skipped
+[doctest] assertions: 243 | 142 passed | 101 failed |
+[doctest] Status: FAILURE!
