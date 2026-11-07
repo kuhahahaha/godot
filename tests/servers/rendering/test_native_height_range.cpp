@@ -1,0 +1,478 @@
+/**************************************************************************/
+/*  test_native_height_range.cpp                                          */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
+// These controls exercise the original RD reducers, not actual GPU completion.
+#include "servers/rendering/native_height_range.h"
+#include "servers/rendering/rendering_device.h"
+#include "tests/servers/rendering/transfer_test_driver_base.h"
+#include "tests/test_macros.h"
+
+TEST_FORCE_LINK(test_native_height_range)
+
+class TestNativeHeightRangeAccess {
+	using RDD = RenderingDeviceDriver;
+	class Driver : public TransferTestDriverBase {
+	public:
+		uint32_t retains = 0, polls = 0, releases = 0, recycles = 0, issues = 0, command_ends = 0, segment_ends = 0;
+		bool retain_busy = false, release_busy = false;
+		RDD::FencePollResult completion;
+		bool native_call_observation_supported() const override { return true; }
+		bool native_issue_bound(NativeIssueKind kind, uint32_t commands, uint32_t &bound) const override {
+			if (kind != NativeIssueKind::MAIN_SLOT || commands != 1) {
+				return false;
+			}
+			bound = 1;
+			return true;
+		}
+		Error native_call_retain(uint64_t serial) override {
+			CHECK(serial == 71);
+			++retains;
+			return retain_busy ? ERR_BUSY : OK;
+		}
+		FencePollResult native_call_poll(uint64_t serial) override {
+			CHECK(serial == 71);
+			++polls;
+			return completion;
+		}
+		FencePollResult native_call_wait(uint64_t serial) override { return native_call_poll(serial); }
+		Error native_call_recycle(uint64_t serial) override {
+			CHECK(serial == 71);
+			++recycles;
+			return OK;
+		}
+		Error native_call_recycle_wait(uint64_t serial) override { return native_call_recycle(serial); }
+		void command_buffer_end(CommandBufferID) override { ++command_ends; }
+		void end_segment() override { ++segment_ends; }
+		Error command_queue_execute_and_present(CommandQueueID, VectorView<SemaphoreID>, VectorView<CommandBufferID>, VectorView<SemaphoreID>, FenceID, VectorView<SwapChainID>) override {
+			++issues;
+			record_queue_call_report(TestNativeHeightRangeAccess::report());
+			return OK;
+		}
+		Error native_call_release(uint64_t serial) override {
+			CHECK(serial == 71);
+			++releases;
+			return release_busy ? ERR_BUSY : OK;
+		}
+	};
+	struct Fixture {
+		Driver driver;
+		RenderingDevice rd;
+		Fixture() {
+			rd.driver = &driver;
+			rd.is_main_instance = true;
+			rd.render_thread_id = Thread::get_caller_id();
+			rd.frames.resize(1);
+			rd.frames[0].qualification_epoch = 1;
+			rd.frames[0].primary_command_buffer_begun = true;
+		}
+		~Fixture() {
+			// Test-owned synthetic rows only. Actual resource/graph cases must use
+			// original explicit return and ordinary disposal before detaching.
+			rd.native_height_ranges.clear();
+			rd.frames.clear();
+			rd.driver = nullptr;
+		}
+	};
+	static Ref<NativeHeightRange> sealed(Fixture &f) {
+		Ref<NativeHeightRange> range;
+		REQUIRE(f.rd._native_height_range_prepare(range) == OK);
+		REQUIRE(range.is_valid());
+		// Deliberately synthetic sealed member: only reducer tests use this.
+		// Actual graph mapping acceptance is a separate normal/bounded test.
+		range->graph_count = 1;
+		auto &member = range->graphs[0];
+		member.frame = 0;
+		member.frame_epoch = f.rd.frames[0].qualification_epoch;
+		member.state = NativeHeightRange::MemberState::Sealed;
+		member.slot = 2;
+		member.command_buffer = RDD::CommandBufferID(45);
+		range->recording_closed = true;
+		range->has_recorded_effect = true;
+		f.rd.frames[0].native_height_ranges.push_back(range);
+		return range;
+	}
+	static RDD::QueueCallReport report() {
+		RDD::QueueCallReport report;
+		RDD::NativeCallFact fact;
+		fact.serial = 71;
+		fact.completion_serial = 901;
+		fact.completion = RDD::CompletionCapability::CommandBuffer;
+		fact.issue = RDD::IssueFact::KnownAccepted;
+		report.calls.push_back(fact);
+		report.native_issue_count = 1;
+		report.issued = true;
+		return report;
+	}
+	static Error issue(Fixture &f, uint32_t slot, uint64_t buffer, Error error, const RDD::QueueCallReport &report) {
+		return f.rd._native_height_issue_slot(0, f.rd.frames[0].qualification_epoch, slot, RDD::CommandBufferID(buffer), error, report);
+	}
+	static Error observe(Fixture &f, const Ref<NativeHeightRange> &range, NativeHeightRange::Snapshot &out) {
+		RenderingDevice::NativeDisposalBudget budget{ 64, 64, UINT64_MAX };
+		RenderingDevice::NativeDisposalUsage usage;
+		return f.rd._native_height_range_observe(range, budget, usage, out);
+	}
+	static Error give_back(Fixture &f, const Ref<NativeHeightRange> &range) {
+		RenderingDevice::NativeDisposalBudget budget{ 64, 64, UINT64_MAX };
+		RenderingDevice::NativeDisposalUsage usage;
+		return f.rd._native_height_range_return(range, budget, usage);
+	}
+
+public:
+	static void wrong_slot_buffer_and_empty_busy() {
+		Fixture f;
+		auto range = sealed(f);
+		// Deleting exact slot/buffer matching makes these controls fail.
+		CHECK(issue(f, 1, 45, OK, report()) == OK);
+		CHECK(issue(f, 2, 46, OK, report()) == OK);
+		CHECK(range->source_count == 0);
+		CHECK_FALSE(range->graphs[0].issue_attempted);
+		CHECK(issue(f, 2, 45, ERR_BUSY, {}) == ERR_BUSY);
+		CHECK(range->source_count == 0);
+		CHECK_FALSE(range->graphs[0].issue_attempted);
+		CHECK(f.driver.retains == 0);
+		CHECK(issue(f, 2, 45, OK, report()) == OK);
+		CHECK(range->source_count == 1);
+		CHECK(range->graphs[0].issue_attempted);
+		CHECK(f.rd._native_height_retain_frame_sources(0) == OK);
+		CHECK(f.driver.retains == 1);
+	}
+	static void callback_identity_and_unknown_refinement() {
+		Fixture f;
+		auto range = sealed(f);
+		auto actual = report();
+		actual.calls.write[0].issue = RDD::IssueFact::IssuedUnknown;
+		CHECK(issue(f, 2, 45, OK, actual) == OK);
+		CHECK(f.rd._native_height_retain_frame_sources(0) == OK);
+		NativeHeightRange::Snapshot out;
+		f.driver.completion.completed = true;
+		f.driver.completion.completed_serial = 902;
+		f.driver.completion.resolved_issue = RDD::IssueFact::KnownAccepted;
+		CHECK(observe(f, range, out) == ERR_BUSY);
+		CHECK_FALSE(out.native_complete);
+		CHECK(give_back(f, range) == ERR_BUSY);
+		CHECK(f.driver.releases == 0);
+		f.driver.completion.completed_serial = 901;
+		f.driver.completion.resolved_issue = RDD::IssueFact::NotIssued;
+		CHECK(observe(f, range, out) == ERR_BUSY);
+		CHECK_FALSE(out.native_complete);
+		f.driver.completion.resolved_issue = RDD::IssueFact::KnownAccepted;
+		CHECK(observe(f, range, out) == OK);
+		CHECK(out.native_complete);
+		f.driver.release_busy = true;
+		CHECK(give_back(f, range) == ERR_BUSY);
+		CHECK(range->return_cursor == 0);
+		f.driver.release_busy = false;
+		CHECK(give_back(f, range) == OK);
+		const uint32_t polls = f.driver.polls;
+		const uint32_t releases = f.driver.releases;
+		CHECK(give_back(f, range) == OK);
+		CHECK(observe(f, range, out) == OK);
+		CHECK(out.native_complete);
+		CHECK(out.observers_returned);
+		CHECK(f.driver.polls == polls);
+		CHECK(f.driver.releases == releases);
+	}
+	static void retain_busy_and_two_independent_cells() {
+		Fixture f;
+		auto first = sealed(f);
+		auto second = sealed(f);
+		f.driver.retain_busy = true;
+		CHECK(issue(f, 2, 45, OK, report()) == ERR_BUSY);
+		CHECK(first->source_count == 1);
+		CHECK(second->source_count == 1);
+		CHECK(f.rd._native_height_retain_frame_sources(0) == ERR_BUSY);
+		CHECK_FALSE(first->sources[0].retained);
+		CHECK_FALSE(second->sources[0].retained);
+		f.driver.retain_busy = false;
+		CHECK(f.rd._native_height_retain_frame_sources(0) == OK);
+		CHECK(first->sources[0].retained);
+		CHECK(second->sources[0].retained);
+		const uint32_t retains = f.driver.retains;
+		CHECK(f.rd._native_height_retain_frame_sources(0) == OK);
+		CHECK(f.driver.retains == retains);
+		f.driver.completion.completed = true;
+		f.driver.completion.completed_serial = 901;
+		NativeHeightRange::Snapshot out;
+		CHECK(observe(f, first, out) == OK);
+		CHECK(give_back(f, first) == OK);
+		CHECK(first->sources[0].observer_returned);
+		CHECK_FALSE(second->sources[0].observer_returned);
+		CHECK(observe(f, second, out) == OK);
+		CHECK(out.native_complete);
+		CHECK(give_back(f, second) == OK);
+		CHECK(f.driver.releases == 2);
+	}
+	static void old_epoch_and_empty_close() {
+		Fixture f;
+		auto range = sealed(f);
+		++f.rd.frames[0].qualification_epoch;
+		CHECK(issue(f, 2, 45, OK, report()) == OK);
+		CHECK(range->source_count == 0);
+		CHECK_FALSE(range->graphs[0].issue_attempted);
+		Ref<NativeHeightRange> empty;
+		CHECK(f.rd._native_height_range_prepare(empty) == OK);
+		CHECK(f.rd._native_height_range_close(empty) == OK);
+		NativeHeightRange::Snapshot out;
+		CHECK(observe(f, empty, out) == OK);
+		CHECK(out.recording_closed);
+		CHECK_FALSE(out.has_recorded_effect);
+		CHECK_FALSE(out.native_complete);
+		CHECK(give_back(f, empty) == OK);
+		CHECK(f.driver.retains == 0);
+		CHECK(f.driver.releases == 0);
+	}
+	static void actual_issue_hooks_and_retain_barriers() {
+		for (bool bounded : { false, true }) {
+			Fixture f;
+			auto range = sealed(f);
+			range->graphs[0].slot = 0;
+			f.rd.frames[0].command_buffer = RDD::CommandBufferID(45);
+			f.driver.retain_busy = true;
+			if (bounded) {
+				// Start at the original already-sealed continuation's actual issue
+				// phase; no test enrollment hook is installed in production code.
+				f.rd.native_disposal_active = true;
+				auto &cursor = f.rd.native_disposal_continuation;
+				cursor.serial = 1;
+				cursor.phase = 2;
+				cursor.slot_count = 1;
+				RenderingDevice::NativeDisposalBudget budget{ 64, 64, UINT64_MAX };
+				RenderingDevice::NativeDisposalUsage usage;
+				CHECK(f.rd._native_disposal_maintenance_step(budget, usage) == ERR_BUSY);
+				CHECK(cursor.phase == 3);
+				CHECK(cursor.slot == 1);
+			} else {
+				CHECK(f.rd.execute_chained_cmds(false, {}, {}));
+			}
+			CHECK(f.driver.issues == 1);
+			CHECK(range->source_count == 1);
+			CHECK(range->graphs[0].issue_attempted);
+			CHECK_FALSE(range->sources[0].retained);
+			CHECK((bounded ? f.rd._native_disposal_stall_step(0) : f.rd._stall_for_frame(0, true)) == ERR_BUSY);
+			CHECK(f.driver.recycles == 0);
+			CHECK(f.driver.polls == 0);
+			f.driver.retain_busy = false;
+			CHECK(f.rd._native_height_retain_frame_sources(0) == OK);
+			CHECK(range->sources[0].retained);
+			CHECK(f.driver.issues == 1);
+			f.driver.completion.completed = true;
+			f.driver.completion.completed_serial = 901;
+			NativeHeightRange::Snapshot out;
+			CHECK(observe(f, range, out) == OK);
+			CHECK(out.native_complete);
+			CHECK(give_back(f, range) == OK);
+		}
+	}
+	static void sealed_flush_retry_blocks_getter_append() {
+		Fixture f;
+		auto range = sealed(f);
+		range->graphs[0].slot = 0;
+		auto &frame = f.rd.frames[0];
+		frame.command_buffer = RDD::CommandBufferID(45);
+		frame.qualification_graph_closed = frame.qualification_segment_closed = true;
+		f.driver.retain_busy = true;
+		CHECK(f.rd._execute_frame(false) == OK);
+		CHECK(f.driver.issues == 1);
+		CHECK(frame.fence_signaled);
+		CHECK(f.rd._flush_and_stall_for_all_frames(false) == ERR_BUSY);
+		CHECK(f.rd._recording_error() == ERR_BUSY);
+		// This public synchronous getter refuses at its original recording guard
+		// before creating a temporary buffer or appending another readback.
+		ERR_PRINT_OFF;
+		CHECK(f.rd.buffer_get_data(RID()).is_empty());
+		ERR_PRINT_ON;
+		CHECK(f.rd._end_frame() == OK);
+		CHECK(f.rd._execute_frame(false) == OK);
+		CHECK(f.driver.issues == 1);
+		CHECK(f.driver.command_ends == 0);
+		CHECK(f.driver.segment_ends == 0);
+		CHECK(f.driver.recycles == 0);
+	}
+	static void finite_capacity_and_foreign_range_refusal() {
+		Fixture f;
+		LocalVector<Ref<NativeHeightRange>> prepared;
+		prepared.resize(RenderingDevice::NATIVE_HEIGHT_RANGE_CAPACITY);
+		for (uint32_t i = 0; i < RenderingDevice::NATIVE_HEIGHT_RANGE_CAPACITY; ++i) {
+			CHECK(f.rd._native_height_range_prepare(prepared[i]) == OK);
+			CHECK(prepared[i].is_valid());
+		}
+		Ref<NativeHeightRange> exhausted;
+		CHECK(f.rd._native_height_range_prepare(exhausted) == ERR_BUSY);
+		CHECK(exhausted.is_null());
+		Fixture foreign_fixture;
+		Ref<NativeHeightRange> foreign;
+		REQUIRE(foreign_fixture.rd._native_height_range_prepare(foreign) == OK);
+		NativeHeightRange::Snapshot out;
+		RenderingDevice::NativeDisposalUsage foreign_usage;
+		CHECK(f.rd._native_height_range_observe(foreign, RenderingDevice::NativeDisposalBudget{ 64, 64, UINT64_MAX }, foreign_usage, out) == ERR_INVALID_PARAMETER);
+		CHECK_FALSE(out.native_complete);
+	}
+	static void post_drain_finalization_busy_cursor() {
+		Fixture f;
+		auto range = sealed(f);
+		CHECK(issue(f, 2, 45, OK, report()) == OK);
+		CHECK(f.rd._native_height_retain_frame_sources(0) == OK);
+		f.driver.completion.completed = true;
+		f.driver.completion.completed_serial = 901;
+		NativeHeightRange::Snapshot out;
+		CHECK(observe(f, range, out) == OK);
+		CHECK(out.native_complete);
+		f.rd.native_height_finalization_started = true;
+		f.rd.native_height_finalization_drained = true;
+		f.driver.release_busy = true;
+		CHECK(f.rd._native_height_ranges_prepare_finalization() == ERR_BUSY);
+		CHECK(f.rd.native_height_ranges.size() == 1);
+		CHECK_FALSE(range->observers_returned);
+		const uint32_t issues = f.driver.issues;
+		const uint32_t polls = f.driver.polls;
+		f.driver.release_busy = false;
+		CHECK(f.rd._native_height_ranges_prepare_finalization() == OK);
+		CHECK(f.rd.native_height_ranges.is_empty());
+		CHECK(range->observers_returned);
+		CHECK(f.driver.issues == issues);
+		CHECK(f.driver.polls == polls);
+		CHECK(f.driver.releases == 2);
+		// A retry of this post-drain phase never re-enters graph end or issue.
+		CHECK(f.rd._native_height_ranges_prepare_finalization() == OK);
+		CHECK(f.driver.issues == issues);
+		CHECK(f.driver.polls == polls);
+	}
+	static void preflight_zero_effect_restrictions() {
+		Fixture f;
+		Ref<NativeHeightRange> range;
+		CHECK(f.rd._native_height_range_prepare(range) == OK);
+		NativeDisposalWitness depth, framebuffer;
+		CHECK(f.rd._native_height_range_record_depth_clear(range, depth, framebuffer, 1.0f) == ERR_INVALID_PARAMETER);
+		CHECK_FALSE(range->has_recorded_effect);
+		f.rd.draw_list.active = true;
+		Ref<NativeHeightRange> blocked;
+		CHECK(f.rd._native_height_range_prepare(blocked) == ERR_BUSY);
+		f.rd.draw_list.active = false;
+		f.rd.frames[0].qualification_graph_closed = true;
+		CHECK(f.rd._native_height_range_prepare(blocked) == ERR_BUSY);
+		f.rd.frames[0].qualification_graph_closed = false;
+		CHECK(f.rd._native_height_range_close(range) == OK);
+		CHECK(f.rd._native_height_ranges_prepare_finalization() == OK);
+	}
+
+	static void known_no_effect_failure_settles_but_keeps_error() {
+		Fixture f;
+		Ref<NativeHeightRange> range;
+		REQUIRE(f.rd._native_height_range_prepare(range) == OK);
+		// Model the original checked begin's known pre-effect refusal. No graph
+		// handle/source is fabricated and the cell's sticky failure survives.
+		range->recording_started = true;
+		range->append_error = ERR_CANT_CREATE;
+		f.rd.frames[0].native_height_ranges.push_back(range);
+		CHECK(f.rd._native_height_range_close(range) == ERR_CANT_CREATE);
+		NativeHeightRange::Snapshot out;
+		CHECK(observe(f, range, out) == ERR_CANT_CREATE);
+		CHECK(out.append_error == ERR_CANT_CREATE);
+		CHECK_FALSE(out.has_recorded_effect);
+		CHECK_FALSE(out.native_complete);
+		CHECK(f.rd._native_height_ranges_prepare_finalization() == OK);
+		CHECK(f.rd.native_height_ranges.is_empty());
+		CHECK(f.rd.frames[0].native_height_ranges.is_empty());
+		CHECK(observe(f, range, out) == ERR_CANT_CREATE);
+		CHECK(out.append_error == ERR_CANT_CREATE);
+		CHECK_FALSE(out.native_complete);
+		CHECK(f.driver.polls == 0);
+		CHECK(f.driver.retains == 0);
+		CHECK(f.driver.releases == 0);
+		Ref<NativeHeightRange> unknown;
+		REQUIRE(f.rd._native_height_range_prepare(unknown) == OK);
+		unknown->uncaptured_prefix = true;
+		unknown->append_error = ERR_INVALID_DATA;
+		CHECK(f.rd._native_height_ranges_prepare_finalization() != OK);
+		CHECK(f.rd.native_height_ranges.size() == 1);
+		CHECK_FALSE(unknown->observers_returned);
+	}
+	static void failed_source_blocks_finalization() {
+		Fixture f;
+		auto range = sealed(f);
+		CHECK(issue(f, 2, 45, OK, report()) == OK);
+		CHECK(f.rd._native_height_retain_frame_sources(0) == OK);
+		f.driver.completion.completed = true;
+		f.driver.completion.completed_serial = 901;
+		f.driver.completion.native_error = true;
+		f.driver.completion.native_code = -8;
+		NativeHeightRange::Snapshot out;
+		CHECK(observe(f, range, out) == FAILED);
+		CHECK_FALSE(out.native_complete);
+		CHECK(out.completion_error == FAILED);
+		CHECK(f.rd._native_height_ranges_prepare_finalization() != OK);
+		CHECK(f.rd.driver == &f.driver);
+		CHECK_FALSE(f.rd.native_finalization_returned);
+		CHECK(f.rd.native_height_ranges.size() == 1);
+		CHECK(f.driver.releases == 0);
+		// There is no manufactured "device lost => complete" escape hatch.
+		// Destructive-finalize failure is tested in a subprocess, never in this
+		// doctest process: original frame wait CRASH_NOW / LAST_REF fail-stop.
+	}
+};
+
+TEST_CASE("[RenderingDevice][NativeHeightRange] exact slot buffer and empty BUSY") {
+	TestNativeHeightRangeAccess::wrong_slot_buffer_and_empty_busy();
+}
+TEST_CASE("[RenderingDevice][NativeHeightRange] original callback identity and observer return") {
+	TestNativeHeightRangeAccess::callback_identity_and_unknown_refinement();
+}
+TEST_CASE("[RenderingDevice][NativeHeightRange] native failure preserves finalization owner") {
+	TestNativeHeightRangeAccess::failed_source_blocks_finalization();
+}
+
+TEST_CASE("[RenderingDevice][NativeHeightRange] retain BUSY and shared source observers") {
+	TestNativeHeightRangeAccess::retain_busy_and_two_independent_cells();
+}
+TEST_CASE("[RenderingDevice][NativeHeightRange] old frame epoch and empty closure") {
+	TestNativeHeightRangeAccess::old_epoch_and_empty_close();
+}
+
+TEST_CASE("[RenderingDevice][NativeHeightRange] known no-effect failure settles without native success") {
+	TestNativeHeightRangeAccess::known_no_effect_failure_settles_but_keeps_error();
+}
+
+TEST_CASE("[RenderingDevice][NativeHeightRange] ordinary and bounded actual issue hooks retain before recycle") {
+	TestNativeHeightRangeAccess::actual_issue_hooks_and_retain_barriers();
+}
+TEST_CASE("[RenderingDevice][NativeHeightRange] sealed synchronous getter retry cannot append or issue again") {
+	TestNativeHeightRangeAccess::sealed_flush_retry_blocks_getter_append();
+}
+
+TEST_CASE("[RenderingDevice][NativeHeightRange] finite capacity and foreign range refusal") {
+	TestNativeHeightRangeAccess::finite_capacity_and_foreign_range_refusal();
+}
+TEST_CASE("[RenderingDevice][NativeHeightRange] preflight refuses invalid witnesses and active recording") {
+	TestNativeHeightRangeAccess::preflight_zero_effect_restrictions();
+}
+
+TEST_CASE("[RenderingDevice][NativeHeightRange] post-drain finalization BUSY resumes without reissue") {
+	TestNativeHeightRangeAccess::post_drain_finalization_busy_cursor();
+}

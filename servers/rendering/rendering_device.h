@@ -34,6 +34,7 @@
 #include "core/extension/gdextension_record_source.h"
 #include "servers/rendering/native_depth_allocation_projection.h"
 #include "servers/rendering/native_disposal_witness.h"
+#include "servers/rendering/native_height_range.h"
 
 #ifdef TESTS_ENABLED
 #include "modules/modules_enabled.gen.h" // IWYU pragma: keep. For test module feature macros.
@@ -122,6 +123,7 @@ class RenderingDevice : public RenderingDeviceCommons {
 	friend class ParticlesExternalGuardTestFixture;
 	friend class ParticlesExternalOutputTestFixture;
 	friend class NativeDepthAllocationTestFixture;
+	friend class NativeHeightRangeTestFixture;
 #endif
 
 	friend class RendererRD::MeshStorage;
@@ -160,6 +162,7 @@ private:
 	friend class TestQualificationFinalizeAccess;
 	friend class TestQualificationPhysicalAccess;
 	friend class TestNativeDisposalAccess;
+	friend class TestNativeHeightRangeAccess;
 	friend class TestCheckedBindAccess;
 	friend class TestVertexArrayRangeAccess;
 	friend class TestExternalOutputPrefixAccess;
@@ -1749,6 +1752,21 @@ private:
 		uint32_t recycles = 0;
 		uint32_t passes = 0;
 	};
+	static constexpr uint32_t NATIVE_HEIGHT_RANGE_CAPACITY = 64;
+	LocalVector<Ref<NativeHeightRange>> native_height_ranges;
+	uint64_t next_native_height_range_serial = 1;
+	bool native_height_finalization_started = false;
+	bool native_height_finalization_drained = false;
+	Error _native_height_range_validate(const Ref<NativeHeightRange> &p_range) const;
+	Error _native_height_range_prepare(Ref<NativeHeightRange> &r_range);
+	Error _native_height_range_record_depth_clear(const Ref<NativeHeightRange> &p_range, const NativeDisposalWitness &p_depth, const NativeDisposalWitness &p_framebuffer, float p_clear_depth);
+	Error _native_height_range_close(const Ref<NativeHeightRange> &p_range);
+	Error _native_height_range_observe(const Ref<NativeHeightRange> &p_range, const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage, NativeHeightRange::Snapshot &r_snapshot);
+	Error _native_height_range_return(const Ref<NativeHeightRange> &p_range, const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage);
+	void _native_height_seal_frame(uint32_t p_frame);
+	Error _native_height_issue_slot(uint32_t p_frame, uint64_t p_epoch, uint32_t p_slot, RDD::CommandBufferID p_command, Error p_error, const RDD::QueueCallReport &p_report);
+	Error _native_height_retain_frame_sources(uint32_t p_frame);
+	Error _native_height_ranges_prepare_finalization();
 	// WORK accounts command recording/CPU phases only. Receipts count actual
 	// native observation, ownership return, issue and physical free calls.
 	enum class NativeDisposalWork : uint8_t { POLL,
@@ -2447,6 +2465,7 @@ private:
 
 	struct Frame {
 		uint64_t qualification_epoch = 0;
+		LocalVector<Ref<NativeHeightRange>> native_height_ranges;
 		// Cursor over the original owner queues. Counts seal this drain's cutoff;
 		// callback/reentrant additions remain in the queues for the next safe epoch.
 		struct DisposalCursor {

@@ -10185,6 +10185,463 @@ bool RenderingDevice::_dependencies_make_mutable(RID p_id, RDG::ResourceTracker 
 /**** FRAME MANAGEMENT ****/
 /**************************/
 
+Error RenderingDevice::_native_height_range_validate(const Ref<NativeHeightRange> &p_range) const {
+	if (!is_main_instance || render_thread_id != Thread::get_caller_id() || !driver || native_finalization_returned) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (p_range.is_null() || p_range->device != uint64_t(get_instance_id()) || !p_range->serial) {
+		return ERR_INVALID_PARAMETER;
+	}
+	return OK;
+}
+
+Error RenderingDevice::_native_height_range_prepare(Ref<NativeHeightRange> &r_range) {
+	const Error ready = _native_disposal_preflight();
+	if (ready != OK) {
+		return ready;
+	}
+	if (r_range.is_valid()) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (native_height_finalization_started || production_finalization_started.load() || frame_wait_draining || native_disposal_active ||
+			!frames[frame].qualification_epoch || frames[frame].qualification_graph_closed || !frames[frame].primary_command_buffer_begun || draw_graph.has_driver_callbacks()) {
+		return ERR_BUSY;
+	}
+	if (native_height_ranges.size() >= NATIVE_HEIGHT_RANGE_CAPACITY) {
+		return ERR_BUSY;
+	}
+	uint32_t source_bound = 0;
+	if (!driver->native_call_observation_supported() || !driver->native_issue_bound(RDD::NativeIssueKind::MAIN_SLOT, 1, source_bound) || !source_bound) {
+		return ERR_UNAVAILABLE;
+	}
+	// Derive storage from the actual checked-result arrays, not a graph-counter
+	// interval. A single closed pass maps these members to one actual slot.
+	constexpr uint32_t graph_bound = 2 + sizeof(DrawListBeginResult::preparation_handles) / sizeof(RDG::RecordHandle) +
+			sizeof(DrawListBeginResult::prefix_handles) / sizeof(RDG::RecordHandle) + 1 + DrawAppendResult::PREFIX_CAPACITY;
+	if (source_bound > UINT32_MAX / graph_bound || !next_native_height_range_serial) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	const NativeHeightRange::Limits limits{ graph_bound, source_bound, graph_bound * source_bound };
+	Ref<NativeHeightRange> range = memnew(NativeHeightRange(uint64_t(get_instance_id()), next_native_height_range_serial++, limits));
+	range->graphs.resize(limits.graph_members);
+	range->sources.resize(limits.native_sources);
+	range->edges.resize(limits.source_edges);
+	native_height_ranges.reserve(NATIVE_HEIGHT_RANGE_CAPACITY);
+	native_height_ranges.push_back(range);
+	r_range = range;
+	return OK;
+}
+
+Error RenderingDevice::_native_height_range_record_depth_clear(const Ref<NativeHeightRange> &p_range, const NativeDisposalWitness &p_depth, const NativeDisposalWitness &p_framebuffer, float p_clear_depth) {
+	const Error valid = _native_height_range_validate(p_range);
+	if (valid != OK) {
+		return valid;
+	}
+	const Error ready = _native_disposal_preflight();
+	if (ready != OK) {
+		return ready;
+	}
+	if (native_height_finalization_started || production_finalization_started.load() || p_range->recording_started || p_range->recording_closed || p_range->observers_returned ||
+			frame_wait_draining || native_disposal_active || !frames[frame].qualification_epoch || frames[frame].qualification_graph_closed ||
+			!frames[frame].primary_command_buffer_begun || draw_graph.has_driver_callbacks()) {
+		return ERR_BUSY;
+	}
+	if (!Math::is_finite(p_clear_depth) || p_clear_depth < 0.0f || p_clear_depth > 1.0f || p_depth.cell.is_null() || p_framebuffer.cell.is_null()) {
+		return ERR_INVALID_PARAMETER;
+	}
+	_THREAD_SAFE_METHOD_
+	const RID depth_rid = RID::from_uint64(p_depth.cell->rid);
+	const RID framebuffer_rid = RID::from_uint64(p_framebuffer.cell->rid);
+	const Texture *texture = texture_owner.owns(depth_rid) ? texture_owner.get_or_null(depth_rid) : nullptr;
+	const Framebuffer *fb = framebuffer_owner.owns(framebuffer_rid) ? framebuffer_owner.get_or_null(framebuffer_rid) : nullptr;
+	if (!texture || !fb || p_depth.cell->device != uint64_t(get_instance_id()) || p_framebuffer.cell->device != uint64_t(get_instance_id()) ||
+			p_depth.cell->state != NativeDisposalWitness::State::LIVE || p_framebuffer.cell->state != NativeDisposalWitness::State::LIVE ||
+			texture->native_disposal.cell != p_depth.cell || fb->native_disposal.cell != p_framebuffer.cell ||
+			!p_depth.cell->matches(depth_rid.get_id(), texture->native_disposal_serial, texture->driver_id.id) ||
+			!p_framebuffer.cell->matches(framebuffer_rid.get_id(), fb->native_disposal_serial, fb->native_disposal_backing)) {
+		return ERR_INVALID_DATA;
+	}
+	// First recipe deliberately excludes every path that could prepare hidden
+	// copies or consume a transfer operation. No unrelated Frame report is joined.
+	if (texture->format != DATA_FORMAT_D32_SFLOAT || texture->type != TEXTURE_TYPE_2D || texture->samples != TEXTURE_SAMPLES_1 ||
+			texture->depth != 1 || texture->layers != 1 || texture->mipmaps != 1 || texture->owner.is_valid() || texture->shared_fallback ||
+			texture->transfer_worker_index >= 0 || texture->pending_clear || texture->native_external_access || texture->native_immutable_retire_requested ||
+			texture->qualification_return || texture->qualification_users || texture->production_disposal_uses || p_depth.cell->production_request ||
+			p_framebuffer.cell->production_request || fb->qualification_return || fb->qualification_dependency || fb->qualification_users || fb->invalidated_callback ||
+			texture->usage_flags != (TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) {
+		return ERR_UNAVAILABLE;
+	}
+	if (!fb->framebuffer_cache || uint64_t(uintptr_t(fb->framebuffer_cache)) != fb->native_disposal_backing ||
+			fb->texture_ids.size() != 1 || fb->texture_ids[0] != depth_rid || fb->framebuffer_cache->textures.size() != 1 ||
+			fb->framebuffer_cache->textures[0] != texture->driver_id || fb->view_count != 1 || !texture->draw_tracker ||
+			!framebuffer_formats.has(fb->format_id)) {
+		return ERR_INVALID_DATA;
+	}
+	const FramebufferFormatKey &key = framebuffer_formats[fb->format_id].E->key();
+	if (key.passes.size() != 1 || key.passes[0].depth_attachment != 0 || !key.passes[0].color_attachments.is_empty() || key.vrs_attachment != -1) {
+		return ERR_UNAVAILABLE;
+	}
+	// Finite custody is installed before the first actual checked append.
+	frames[frame].native_height_ranges.reserve(NATIVE_HEIGHT_RANGE_CAPACITY);
+	frames[frame].native_height_ranges.push_back(p_range);
+	p_range->recording_started = true;
+	auto save = [&](const RDG::RecordHandle &handle) {
+		if (!handle.is_valid()) {
+			return;
+		}
+		p_range->has_recorded_effect = true;
+		for (uint32_t i = 0; i < p_range->graph_count; ++i) {
+			const auto &old = p_range->graphs[i].handle;
+			if (old.graph_instance == handle.graph_instance && old.graph_frame == handle.graph_frame && old.kind == handle.kind && old.index == handle.index && old.offset == handle.offset) {
+				return;
+			}
+		}
+		if (p_range->graph_count == p_range->limits.graph_members) {
+			p_range->uncaptured_prefix = true;
+			p_range->append_error = ERR_PARAMETER_RANGE_ERROR;
+			return;
+		}
+		auto &member = p_range->graphs[p_range->graph_count++];
+		member.handle = handle;
+		member.frame = frame;
+		member.frame_epoch = frames[frame].qualification_epoch;
+	};
+	const auto begin = _draw_list_begin_recorded(framebuffer_rid, DRAW_CLEAR_DEPTH, {}, p_clear_depth, 0, Rect2(), 0);
+	save(begin.begin_handle);
+	save(begin.clear_handle);
+	for (uint32_t i = 0; i < begin.preparation_count; ++i) {
+		save(begin.preparation_handles[i]);
+	}
+	for (uint32_t i = 0; i < begin.prefix_count; ++i) {
+		save(begin.prefix_handles[i]);
+	}
+	if (begin.effect != NativeAppendEffect::NoNewEffect) {
+		p_range->has_recorded_effect = true;
+	}
+	if (begin.error != OK || !begin.capture_complete || !begin.begin_handle.is_valid() || !begin.clear_handle.is_valid()) {
+		p_range->append_error = begin.error != OK ? begin.error : ERR_INVALID_DATA;
+	}
+	// Only this exact successful begin may own an active list. Never end a
+	// caller list, reset global state, or replay a failed checked prefix.
+	if (draw_list.active && begin.begin_handle.is_valid() && draw_list.begin_handle.graph_instance == begin.begin_handle.graph_instance &&
+			draw_list.begin_handle.graph_frame == begin.begin_handle.graph_frame && draw_list.begin_handle.kind == begin.begin_handle.kind &&
+			draw_list.begin_handle.index == begin.begin_handle.index && draw_list.begin_handle.offset == begin.begin_handle.offset) {
+		const auto end = _draw_list_end_recorded();
+		save(end.draw_handle);
+		for (uint32_t i = 0; i < end.prefix_count; ++i) {
+			save(end.prefix_handles[i]);
+		}
+		if (end.error != OK || !end.capture_complete || !end.draw_handle.is_valid()) {
+			p_range->append_error = end.error != OK ? end.error : ERR_INVALID_DATA;
+			p_range->uncaptured_prefix = true;
+		}
+	} else if (p_range->has_recorded_effect) {
+		p_range->uncaptured_prefix = true;
+		p_range->append_error = ERR_INVALID_DATA;
+	}
+	return p_range->append_error;
+}
+
+Error RenderingDevice::_native_height_range_close(const Ref<NativeHeightRange> &p_range) {
+	const Error valid = _native_height_range_validate(p_range);
+	if (valid != OK) {
+		return valid;
+	}
+	p_range->recording_closed = true;
+	return p_range->append_error;
+}
+
+void RenderingDevice::_native_height_seal_frame(uint32_t p_frame) {
+	for (const Ref<NativeHeightRange> &range : frames[p_frame].native_height_ranges) {
+		for (uint32_t i = 0; i < range->graph_count; ++i) {
+			auto &member = range->graphs[i];
+			if (member.frame != p_frame || member.frame_epoch != frames[p_frame].qualification_epoch || member.state != NativeHeightRange::MemberState::Recorded) {
+				continue;
+			}
+			if (draw_graph.record_mapping_state(member.handle) != RDG::RecordMappingState::Recorded ||
+					!draw_graph.resolve_record_command_buffer_slot(member.handle, member.slot) ||
+					!draw_graph.resolve_record_command_buffer(member.handle, member.command_buffer) || !member.command_buffer) {
+				member.state = NativeHeightRange::MemberState::MappingFailed;
+				range->mapping_failed = true;
+				range->mapping_error = ERR_INVALID_DATA;
+				range->uncaptured_prefix = true;
+				continue;
+			}
+			member.state = NativeHeightRange::MemberState::Sealed;
+			// One exclusive closed pass must be mapped consistently for every
+			// actual header/clear/instruction/end handle, not just its tail.
+			if (i && (member.slot != range->graphs[0].slot || member.command_buffer != range->graphs[0].command_buffer)) {
+				range->mapping_failed = true;
+				range->mapping_error = ERR_INVALID_DATA;
+				range->uncaptured_prefix = true;
+			}
+		}
+	}
+}
+
+Error RenderingDevice::_native_height_issue_slot(uint32_t p_frame, uint64_t p_epoch, uint32_t p_slot, RDD::CommandBufferID p_command, Error p_error, const RDD::QueueCallReport &p_report) {
+	if (p_error == ERR_BUSY && p_report.calls.is_empty()) {
+		return ERR_BUSY; // The original slot has not attempted a native issue.
+	}
+	Error result = OK;
+	for (const Ref<NativeHeightRange> &range : frames[p_frame].native_height_ranges) {
+		for (uint32_t i = 0; i < range->graph_count; ++i) {
+			auto &member = range->graphs[i];
+			if (member.frame != p_frame || member.frame_epoch != p_epoch || member.state != NativeHeightRange::MemberState::Sealed ||
+					member.issue_attempted || member.slot != p_slot || member.command_buffer != p_command) {
+				continue;
+			}
+			member.issue_attempted = true;
+			member.state = NativeHeightRange::MemberState::IssueAttached;
+			if (p_report.native_issue_count > range->limits.native_sources) {
+				range->uncaptured_prefix = true;
+				range->issue_error = ERR_PARAMETER_RANGE_ERROR;
+			}
+			if (p_error != OK || p_report.error != OK || !p_report.issued) {
+				range->issue_error = p_error != OK ? p_error : (p_report.error != OK ? p_report.error : FAILED);
+			}
+			uint32_t member_sources = 0;
+			for (const auto &fact : p_report.calls) {
+				if (fact.presentation_only || fact.issue == RDD::IssueFact::NotIssued) {
+					continue;
+				}
+				if (!p_report.native_issue_count || !fact.serial || !fact.completion_serial || fact.completion == RDD::CompletionCapability::Disabled) {
+					range->uncaptured_prefix = true;
+					range->issue_error = ERR_INVALID_DATA;
+					continue;
+				}
+				uint32_t source = range->source_count;
+				for (uint32_t j = 0; j < range->source_count; ++j) {
+					const auto &old = range->sources[j].original;
+					if (old.serial == fact.serial) {
+						source = j;
+						if (old.completion_serial != fact.completion_serial || old.queue_index != fact.queue_index || old.issue != fact.issue ||
+								old.error != fact.error || old.native_code != fact.native_code || old.completion != fact.completion) {
+							range->uncaptured_prefix = true;
+							range->issue_error = ERR_INVALID_DATA;
+						}
+						break;
+					}
+				}
+				if (source == range->source_count) {
+					if (range->source_count == range->limits.native_sources) {
+						range->uncaptured_prefix = true;
+						range->issue_error = ERR_PARAMETER_RANGE_ERROR;
+						continue;
+					}
+					range->sources[range->source_count++].original = fact;
+				}
+				if (range->edge_count == range->limits.source_edges) {
+					range->uncaptured_prefix = true;
+					range->issue_error = ERR_PARAMETER_RANGE_ERROR;
+					continue;
+				}
+				range->edges[range->edge_count++] = { i, source };
+				++member_sources;
+			}
+			if (!member_sources) {
+				range->uncaptured_prefix = true;
+				range->issue_error = ERR_INVALID_DATA;
+			}
+			if (range->issue_error != OK) {
+				result = range->issue_error;
+			}
+		}
+	}
+	// A busy retain never replays this already attempted native slot. The Frame
+	// remains its original owner until the independent recycle barrier succeeds.
+	const Error retained = _native_height_retain_frame_sources(p_frame);
+	return result != OK ? result : retained;
+}
+
+Error RenderingDevice::_native_height_retain_frame_sources(uint32_t p_frame) {
+	for (const Ref<NativeHeightRange> &range : frames[p_frame].native_height_ranges) {
+		while (range->retain_cursor < range->source_count) {
+			auto &source = range->sources[range->retain_cursor];
+			if (!source.retained) {
+				if (!_native_disposal_admit(NativeDisposalWork::RETAIN)) {
+					return ERR_BUSY;
+				}
+				const Error error = driver->native_call_retain(source.original.serial);
+				if (error != OK) {
+					if (error != ERR_BUSY) {
+						source.retention_error = error;
+						range->retention_error = error;
+					}
+					return error;
+				}
+				source.retained = true;
+			}
+			++range->retain_cursor;
+		}
+		if (range->uncaptured_prefix) {
+			return ERR_INVALID_DATA; // The original Frame must not retire a lost prefix.
+		}
+	}
+	return OK;
+}
+
+Error RenderingDevice::_native_height_range_observe(const Ref<NativeHeightRange> &p_range, const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage, NativeHeightRange::Snapshot &r_snapshot) {
+	r_snapshot = {};
+	const Error valid = _native_height_range_validate(p_range);
+	if (valid != OK) {
+		return valid;
+	}
+	Error result = OK;
+	if (!p_range->native_complete && !p_range->observers_returned) {
+		while (p_range->poll_cursor < p_range->source_count) {
+			auto &source = p_range->sources[p_range->poll_cursor];
+			if (!source.retained) {
+				result = ERR_BUSY;
+				break;
+			}
+			if (source.completion_error != OK) {
+				result = source.completion_error;
+				break;
+			}
+			if (!source.complete) {
+				if (!_native_disposal_charge(p_budget, r_usage, NativeDisposalWork::POLL)) {
+					result = ERR_BUSY;
+					break;
+				}
+				const auto observed = driver->native_call_poll(source.original.serial);
+				if (observed.native_error) {
+					source.completion_error = FAILED;
+					source.completion_native_code = observed.native_code;
+					p_range->completion_error = FAILED;
+					result = FAILED;
+					break;
+				}
+				const bool accepted = source.original.issue == RDD::IssueFact::KnownAccepted ||
+						(source.original.issue == RDD::IssueFact::IssuedUnknown && observed.resolved_issue == RDD::IssueFact::KnownAccepted);
+				if (!accepted || source.original.error != OK || !observed.matches(source.original.completion_serial)) {
+					result = ERR_BUSY;
+					break;
+				}
+				source.complete = true;
+			}
+			++p_range->poll_cursor;
+		}
+	}
+	uint32_t sealed = 0, attempted = 0, retained = 0, completed = 0;
+	for (uint32_t i = 0; i < p_range->graph_count; ++i) {
+		const auto &member = p_range->graphs[i];
+		sealed += member.state == NativeHeightRange::MemberState::Sealed || member.state == NativeHeightRange::MemberState::IssueAttached;
+		attempted += member.issue_attempted;
+	}
+	for (uint32_t i = 0; i < p_range->source_count; ++i) {
+		retained += p_range->sources[i].retained;
+		completed += p_range->sources[i].complete;
+	}
+	const bool clean = p_range->append_error == OK && p_range->mapping_error == OK && p_range->issue_error == OK &&
+			p_range->retention_error == OK && p_range->completion_error == OK && !p_range->uncaptured_prefix;
+	if (clean && p_range->recording_closed && p_range->has_recorded_effect && p_range->graph_count && sealed == p_range->graph_count &&
+			attempted == p_range->graph_count && p_range->source_count && retained == p_range->source_count && completed == p_range->source_count) {
+		p_range->native_complete = true;
+	}
+	r_snapshot.recording_closed = p_range->recording_closed;
+	r_snapshot.has_recorded_effect = p_range->has_recorded_effect;
+	r_snapshot.mapping_closed = sealed == p_range->graph_count;
+	r_snapshot.issue_closed = attempted == p_range->graph_count;
+	r_snapshot.native_complete = p_range->native_complete;
+	r_snapshot.observers_returned = p_range->observers_returned;
+	r_snapshot.graph_members = p_range->graph_count;
+	r_snapshot.sealed_members = sealed;
+	r_snapshot.issued_sources = p_range->source_count;
+	r_snapshot.retained_sources = retained;
+	r_snapshot.completed_sources = completed;
+	r_snapshot.append_error = p_range->append_error;
+	r_snapshot.mapping_error = p_range->mapping_error;
+	r_snapshot.issue_error = p_range->issue_error;
+	r_snapshot.retention_error = p_range->retention_error;
+	r_snapshot.completion_error = p_range->completion_error;
+	r_snapshot.return_error = p_range->return_error;
+	for (Error error : { p_range->append_error, p_range->mapping_error, p_range->issue_error, p_range->retention_error, p_range->completion_error, p_range->return_error }) {
+		if (error != OK) {
+			return error;
+		}
+	}
+	if (result != OK) {
+		return result;
+	}
+	return p_range->has_recorded_effect && !p_range->native_complete ? ERR_BUSY : OK;
+}
+
+Error RenderingDevice::_native_height_range_return(const Ref<NativeHeightRange> &p_range, const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage) {
+	const Error valid = _native_height_range_validate(p_range);
+	if (valid != OK) {
+		return valid;
+	}
+	if (p_range->observers_returned) {
+		return OK;
+	}
+	const bool known_no_effect = !p_range->has_recorded_effect && !p_range->uncaptured_prefix && !p_range->graph_count && !p_range->source_count && !p_range->edge_count;
+	if (!p_range->recording_closed || (!p_range->native_complete && !known_no_effect)) {
+		return ERR_BUSY;
+	}
+	while (p_range->return_cursor < p_range->source_count) {
+		auto &source = p_range->sources[p_range->return_cursor];
+		if (source.retained && !source.observer_returned) {
+			if (!_native_disposal_charge(p_budget, r_usage, NativeDisposalWork::RELEASE)) {
+				return ERR_BUSY;
+			}
+			const Error error = driver->native_call_release(source.original.serial);
+			if (error != OK) {
+				if (error != ERR_BUSY) {
+					p_range->return_error = error;
+				}
+				return error;
+			}
+			source.observer_returned = true;
+		}
+		++p_range->return_cursor;
+	}
+	p_range->observers_returned = true;
+	for (uint32_t i = 0; i < native_height_ranges.size(); ++i) {
+		if (native_height_ranges[i] == p_range) {
+			native_height_ranges.remove_at(i);
+			break;
+		}
+	}
+	// No later seal/issue may retarget a returned cell in a recycled Frame.
+	for (auto &f : frames) {
+		for (uint32_t i = 0; i < f.native_height_ranges.size(); ++i) {
+			if (f.native_height_ranges[i] == p_range) {
+				f.native_height_ranges.remove_at(i);
+				break;
+			}
+		}
+	}
+	return OK;
+}
+
+Error RenderingDevice::_native_height_ranges_prepare_finalization() {
+	const NativeDisposalBudget budget{ UINT32_MAX, UINT32_MAX, UINT64_MAX };
+	NativeDisposalUsage usage;
+	while (!native_height_ranges.is_empty()) {
+		// Keep a local Ref: explicit return removes the original RD/Frame refs.
+		const Ref<NativeHeightRange> range = native_height_ranges[0];
+		range->recording_closed = true;
+		if (!range->has_recorded_effect && !range->uncaptured_prefix && !range->graph_count && !range->source_count && !range->edge_count) {
+			const Error returned = _native_height_range_return(range, budget, usage);
+			if (returned != OK) {
+				return returned;
+			}
+			continue;
+		}
+		NativeHeightRange::Snapshot snapshot;
+		const Error observed = _native_height_range_observe(range, budget, usage, snapshot);
+		if (observed != OK) {
+			return observed;
+		}
+		const Error returned = _native_height_range_return(range, budget, usage);
+		if (returned != OK) {
+			return returned;
+		}
+	}
+	return OK;
+}
+
 Error RenderingDevice::_native_disposal_preflight() const {
 	if (!is_main_instance || render_thread_id != Thread::get_caller_id() || !driver || native_finalization_returned) {
 		return ERR_UNAUTHORIZED;
@@ -10844,6 +11301,7 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
 					draw_graph.end(RENDER_GRAPH_REORDER == 1, RENDER_GRAPH_FULL_BARRIERS == 1, cursor.command_buffer, f.command_buffer_pool);
 				}
 				_seal_buffer_readback_records();
+				_native_height_seal_frame(frame);
 				_qualification_seal_tickets();
 				if (draw_graph.recording_failed()) {
 					return drain_trace.result(_fail_frame_issue(FAILED), "rd.return.21");
@@ -10923,6 +11381,10 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
 			++cursor.slot; // This exact slot was attempted; never submit it again.
 			f.qualification_issue_slot = cursor.slot;
 			_observe_buffer_readback_issue(slot, command, error, report);
+			const Error height_issue = _native_height_issue_slot(frame, f.qualification_epoch, slot, command, error, report);
+			if (height_issue != OK && height_issue != ERR_BUSY) {
+				return drain_trace.result(_fail_frame_issue(height_issue), "rd.height.issue_failed");
+			}
 			_qualification_issue_tickets(slot, report, error);
 			if (report.native_issue_count > bound) {
 				r_usage.issues = uint32_t(MIN(uint64_t(UINT32_MAX), uint64_t(r_usage.issues) + report.native_issue_count - bound));
@@ -11005,6 +11467,7 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
 				return drain_trace.result(ERR_BUSY, "rd.return.39");
 			}
 			draw_graph.begin(true);
+			f.native_height_ranges.clear();
 			f.qualification_epoch = next_qualification_frame_epoch++;
 			if (upload_staging_buffers.used) {
 				upload_staging_buffers.current = (upload_staging_buffers.current + 1) % upload_staging_buffers.blocks.size();
@@ -11049,6 +11512,10 @@ Error RenderingDevice::_native_disposal_maintenance_step(const NativeDisposalBud
 }
 
 Error RenderingDevice::_native_disposal_stall_step(uint32_t p_frame) {
+	const Error height_retain = _native_height_retain_frame_sources(p_frame);
+	if (height_retain != OK) {
+		return height_retain;
+	}
 	if (frame_issue_error != OK) {
 		return frame_issue_error;
 	}
@@ -12802,6 +13269,7 @@ Error RenderingDevice::_begin_frame(bool p_presented, bool p_nonblocking) {
 		return _fail_frame_issue(FAILED);
 	}
 
+	frames[frame].native_height_ranges.clear();
 	frames[frame].qualification_epoch = next_qualification_frame_epoch++;
 	// A refused free retained its exact original owner and edges. Retry only
 	// after a real frame return, in a fresh recording epoch with no old ticket
@@ -12987,6 +13455,7 @@ Error RenderingDevice::_end_frame(bool p_nonblocking) {
 		draw_graph.end(RENDER_GRAPH_REORDER == 1, RENDER_GRAPH_FULL_BARRIERS == 1, command_buffer, frames[frame].command_buffer_pool);
 	}
 	_seal_buffer_readback_records();
+	_native_height_seal_frame(frame);
 	_qualification_seal_tickets();
 	if (draw_graph.recording_failed()) {
 		return _fail_frame_issue(FAILED);
@@ -13073,6 +13542,11 @@ bool RenderingDevice::execute_chained_cmds(bool p_present_swap_chain, RenderingD
 			return false;
 		}
 		_observe_buffer_readback_issue(i, command_buffer, queue_error, report);
+		const Error height_issue = _native_height_issue_slot(frame, frames[frame].qualification_epoch, i, command_buffer, queue_error, report);
+		if (height_issue != OK && height_issue != ERR_BUSY) {
+			_fail_frame_issue(height_issue);
+			all_issued = false;
+		}
 		_qualification_issue_tickets(i, report, queue_error);
 		frames[frame].chain_reports.push_back(report);
 		frames[frame].qualification_issue_slot = i + 1;
@@ -13171,6 +13645,10 @@ Error RenderingDevice::_stall_for_frame(uint32_t p_frame, bool p_nonblocking) {
 	}
 	if (frame_wait_draining) {
 		return ERR_BUSY;
+	}
+	const Error height_retain = _native_height_retain_frame_sources(p_frame);
+	if (height_retain != OK) {
+		return height_retain;
 	}
 	frame_wait_native_code = 0;
 	frame_wait_native_code_valid = false;
@@ -14146,21 +14624,29 @@ Error RenderingDevice::_begin_production_finalization() {
 
 void RenderingDevice::finalize() {
 	ERR_RENDER_THREAD_GUARD();
+	native_height_finalization_started = true;
 	const Error entity_return = _begin_production_finalization();
 	ERR_FAIL_COND_MSG(entity_return != OK, "RenderingDevice native finalization is blocked by an original production entity obligation.");
 
-	if (!frames.is_empty()) {
-		// Wait for all frames to have finished rendering.
-		if (_flush_and_stall_for_all_frames(false) != OK) {
-			CRASH_NOW_MSG("Frame fence wait failed during destructive RenderingDevice finalization; dependent resources were not released.");
+	if (!native_height_finalization_drained) {
+		if (!frames.is_empty()) {
+			// Wait for all frames to have finished rendering.
+			if (_flush_and_stall_for_all_frames(false) != OK) {
+				CRASH_NOW_MSG("Frame fence wait failed during destructive RenderingDevice finalization; dependent resources were not released.");
+			}
 		}
-	}
 
-	// Wait for transfer workers to finish.
-	_submit_transfer_workers();
-	if (!_wait_for_transfer_workers()) {
-		CRASH_NOW_MSG("Transfer worker completion failed during destructive RenderingDevice finalization; dependent resources were not released.");
+		// Wait for transfer workers to finish.
+		_submit_transfer_workers();
+		if (!_wait_for_transfer_workers()) {
+			CRASH_NOW_MSG("Transfer worker completion failed during destructive RenderingDevice finalization; dependent resources were not released.");
+		}
+		native_height_finalization_drained = true;
 	}
+	// Returning an observer is distinct from successful frame/worker drain.
+	// BUSY preserves this post-drain phase, all cells, and the live driver.
+	const Error height_return = _native_height_ranges_prepare_finalization();
+	ERR_FAIL_COND_MSG(height_return != OK, "RenderingDevice finalization is blocked by an original native height range obligation.");
 
 	// The original owners remain authoritative while deferred roots are pending.
 	// All transfer workers are complete here, so retry through the ordinary free
