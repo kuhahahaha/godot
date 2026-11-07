@@ -454,6 +454,21 @@ struct CleanupAction::Storage : HolderRetirement {
 		destroy = [](HolderRetirement *p_cell) { memdelete(static_cast<Storage *>(p_cell)); };
 	}
 };
+bool Registry::scene_phase_holder_matches_locked(const CleanupAction &cleanup, const RecordRef &reference, NormalRelayToken token, bool installation) {
+	const auto *holder = cleanup.storage;
+	if (!holder || reference.registry != this || reference.slot >= RECORD_CAPACITY || holder->reference.registry != this || holder->reference.slot != reference.slot || holder->pending || holder->core_disposal_returned) {
+		return false;
+	}
+	const auto &record = records[reference.slot];
+	if (!record.attached || record.quiescing || record.close_started || record.guard_enrollment != GuardEnrollment::QUALIFIED || holder->generation != record.snapshot.library_generation) {
+		return false;
+	}
+	if (installation) {
+		return holder->thread_id == Thread::get_caller_id();
+	}
+	const auto *relay = find_normal_relay_locked(token);
+	return relay && relay->holder == holder->serial && relay->generation == holder->generation && relay->record == reference.slot;
+}
 Registry::NormalRelay *Registry::find_normal_relay_locked(NormalRelayToken p_token) {
 	if (p_token.registry_instance != instance || !p_token.serial) {
 		return nullptr;

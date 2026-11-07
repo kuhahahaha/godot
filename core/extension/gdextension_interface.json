@@ -10173,6 +10173,208 @@
                     "value": 8
                 }
             ]
+        },
+        {
+            "name": "GDExtensionSceneOpaque32V1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "bytes[32]",
+                    "type": "uint8_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionNormalRelayRefV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "token",
+                    "type": "GDExtensionSceneOpaque32V1"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionScenePhaseRegistrationRefV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "token",
+                    "type": "GDExtensionSceneOpaque32V1"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionScenePhaseSinkConfigV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "device_capability",
+                    "type": "GDExtensionSceneOpaque32V1"
+                },
+                {
+                    "name": "phase",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "max_operations",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionNativeScenePhaseV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "device_capability",
+                    "type": "GDExtensionSceneOpaque32V1"
+                },
+                {
+                    "name": "phase_token",
+                    "type": "GDExtensionSceneOpaque32V1"
+                },
+                {
+                    "name": "physical_context",
+                    "type": "GDExtensionSceneOpaque32V1"
+                },
+                {
+                    "name": "occurrence",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "expiry_serial",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionScenePhaseCloseV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "registration_closed",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "active_deliveries",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "relay_cell_released",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "relay_holder_closed",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionScenePhaseReceiverV1",
+            "kind": "function",
+            "arguments": [
+                {
+                    "name": "userdata",
+                    "type": "void*"
+                },
+                {
+                    "name": "phase",
+                    "type": "const GDExtensionNativeScenePhaseV1*"
+                },
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1"
+                },
+                {
+                    "name": "operation",
+                    "type": "const GDExtensionProductionOperationV1*"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionSceneOperationKeyV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "owner_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "transport_operation",
+                    "type": "GDExtensionProductionOperationV1"
+                },
+                {
+                    "name": "record_request",
+                    "type": "GDExtensionSceneOpaque32V1"
+                },
+                {
+                    "name": "operation_ref",
+                    "type": "GDExtensionSceneOpaque32V1"
+                },
+                {
+                    "name": "cursor_ref",
+                    "type": "GDExtensionSceneOpaque32V1"
+                },
+                {
+                    "name": "schedule_digest",
+                    "type": "GDExtensionSceneOpaque32V1"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionSceneReadOutcomeV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "native_error",
+                    "type": "int32_t"
+                },
+                {
+                    "name": "outcome",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "detail",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "phase_borrow",
+                    "type": "GDExtensionSceneOpaque32V1"
+                },
+                {
+                    "name": "record_permit",
+                    "type": "GDExtensionSceneOpaque32V1"
+                },
+                {
+                    "name": "record_fact",
+                    "type": "GDExtensionSceneOpaque32V1"
+                }
+            ]
         }
     ],
     "interface": [
@@ -21779,6 +21981,222 @@
                     ]
                 }
             ]
+        },
+        {
+            "name": "device_session_scene_operation_query_v1",
+            "since": "4.7",
+            "description": [
+                "Query an original accepted Scene action fact without issuing a phase permit."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Original live production request owned by this device attachment."
+                    ]
+                },
+                {
+                    "name": "action_ordinal",
+                    "type": "uint64_t",
+                    "description": [
+                        "Original action index within the retained request."
+                    ]
+                },
+                {
+                    "name": "key",
+                    "type": "const GDExtensionSceneOperationKeyV1*",
+                    "description": [
+                        "Immutable original operation, cursor and schedule association; caller bytes alone grant no authority."
+                    ]
+                },
+                {
+                    "name": "outcome",
+                    "type": "GDExtensionSceneReadOutcomeV1*",
+                    "description": [
+                        "Output carrying the original append fact or a refusal; no new record permission is issued by a query."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Structured native result. Busy preserves original in-flight custody for a later bounded service turn."
+                ]
+            }
+        },
+        {
+            "name": "device_session_scene_operation_bind_v1",
+            "since": "4.7",
+            "description": [
+                "Validate the original Scene operation transport. This entry returns unavailable until the original E09 operation/cursor exporter is joined."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Original live production request owned by this device attachment."
+                    ]
+                },
+                {
+                    "name": "action_ordinal",
+                    "type": "uint64_t",
+                    "description": [
+                        "Original action index within the retained request."
+                    ]
+                },
+                {
+                    "name": "key",
+                    "type": "const GDExtensionSceneOperationKeyV1*",
+                    "description": [
+                        "Immutable original operation, cursor and schedule association; caller bytes alone grant no authority."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Structured native result. Busy preserves original in-flight custody for a later bounded service turn."
+                ]
+            }
+        },
+        {
+            "name": "device_session_scene_phase_capability_v1",
+            "since": "4.7",
+            "description": [
+                "Obtain a locator for the original attachment device owner."
+            ],
+            "arguments": [
+                {
+                    "name": "attachment",
+                    "type": "GDExtensionProductionAttachmentRefV1",
+                    "description": [
+                        "Original accepted production attachment for the live device and library generation."
+                    ]
+                },
+                {
+                    "name": "out_capability",
+                    "type": "GDExtensionSceneOpaque32V1*",
+                    "description": [
+                        "Output locator for that original device owner; it must be validated when used."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Structured native result. Busy preserves original in-flight custody for a later bounded service turn."
+                ]
+            }
+        },
+        {
+            "name": "device_session_scene_phase_relay_v1",
+            "since": "4.7",
+            "description": [
+                "Install a typed phase receiver on an existing adopted extension Callable and retain its original normal-entry holder."
+            ],
+            "arguments": [
+                {
+                    "name": "callable",
+                    "type": "GDExtensionConstTypePtr",
+                    "description": [
+                        "Original adopted extension Callable retaining its existing holder and userdata."
+                    ]
+                },
+                {
+                    "name": "receiver",
+                    "type": "GDExtensionScenePhaseReceiverV1",
+                    "description": [
+                        "Typed receiver leaf installed once on that original Callable."
+                    ]
+                },
+                {
+                    "name": "out_relay",
+                    "type": "GDExtensionNormalRelayRefV1*",
+                    "description": [
+                        "Output opaque locator for the original normal-entry relay."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Structured native result. Busy preserves original in-flight custody for a later bounded service turn."
+                ]
+            }
+        },
+        {
+            "name": "device_session_scene_phase_register_v1",
+            "since": "4.7",
+            "description": [
+                "Register the original typed relay for the actual SceneBeforeParticles boundary with a bounded operation limit."
+            ],
+            "arguments": [
+                {
+                    "name": "relay",
+                    "type": "GDExtensionNormalRelayRefV1",
+                    "description": [
+                        "Opaque locator resolved against the original live normal-entry relay."
+                    ]
+                },
+                {
+                    "name": "attachment",
+                    "type": "GDExtensionProductionAttachmentRefV1",
+                    "description": [
+                        "Original accepted production attachment for the live device and library generation."
+                    ]
+                },
+                {
+                    "name": "config",
+                    "type": "const GDExtensionScenePhaseSinkConfigV1*",
+                    "description": [
+                        "Exact ABI, original device capability, phase and bounded operation limit."
+                    ]
+                },
+                {
+                    "name": "out_registration",
+                    "type": "GDExtensionScenePhaseRegistrationRefV1*",
+                    "description": [
+                        "Zero-initialized output for the original attachment registration."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Structured native result. Busy preserves original in-flight custody for a later bounded service turn."
+                ]
+            }
+        },
+        {
+            "name": "device_session_scene_phase_unregister_v1",
+            "since": "4.7",
+            "description": [
+                "Close future phase delivery and service original waiting controls and relay holder closure without requiring another draw."
+            ],
+            "arguments": [
+                {
+                    "name": "registration",
+                    "type": "GDExtensionScenePhaseRegistrationRefV1",
+                    "description": [
+                        "Opaque locator for the original phase registration to close."
+                    ]
+                },
+                {
+                    "name": "out_close",
+                    "type": "GDExtensionScenePhaseCloseV1*",
+                    "description": [
+                        "Output of actual registration, delivery and original holder closure observations."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Structured native result. Busy preserves original in-flight custody for a later bounded service turn."
+                ]
+            }
         }
     ]
 }

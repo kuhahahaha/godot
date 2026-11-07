@@ -2415,6 +2415,36 @@ GDExtensionDeviceSessionResultV1 Registry::production_release_locked(ProductionR
 			return result(ERR_BUSY, 16);
 		}
 	}
+	for (uint32_t i = 0; i < r->action_count; ++i) {
+		auto &content = r->actions[i].scene_attempt.content;
+		if (!content.is_valid()) {
+			continue;
+		}
+		if (reclaim) {
+			return result(ERR_BUSY, 16);
+		}
+		if (!budget && !usage) {
+			return result(OK);
+		} // Readiness only, no owner call.
+		if (!budget || !usage || !service_budget_active(*budget) || usage->passes >= MIN(budget->passes, 64u) || usage->receipts >= MIN(budget->receipts, 128u)) {
+			return result(ERR_BUSY, 16);
+		}
+		++r->capture_inflight;
+		++usage->passes;
+		++usage->receipts;
+		Ref<SceneReadContent> returning = content;
+		mutex.unlock();
+		const Error returned = returning->return_after_reads();
+		mutex.lock();
+		if (returned == OK) {
+			content.unref();
+		} // returning still pins destructor.
+		mutex.unlock();
+		returning.unref(); // Native owner destruction never runs under Registry.
+		mutex.lock();
+		--r->capture_inflight;
+		return result(returned == OK ? ERR_BUSY : returned, 16); // One charged owner return per turn.
+	}
 	// Native observer references may only be dropped in the original owner's
 	// final-release phase. RT readiness neither releases them nor signs R01 ACK.
 	if (!reclaim && native_issued) {
@@ -2862,7 +2892,29 @@ void Registry::production_control_execute_locked(ProductionRequest &request, Ren
 					}
 				}
 			}
-			cell.output.result = maintenance == OK ? production_release_locked(request, rd, false) : result(maintenance, 16);
+			if (maintenance != OK) {
+				cell.output.result = result(maintenance, 16);
+				break;
+			}
+			// The original immutable authorization already paid for this dispatch
+			// and any maintenance above. The release leaf resets its usage output,
+			// so offer only the residual slice and merge a separate usage result.
+			auto release_budget = cell.input.budget;
+			auto &used = cell.output.service_usage;
+			if (used.controls > 1 || used.controls > release_budget.controls || used.passes > MIN(release_budget.passes, 64u) || used.receipts > MIN(release_budget.receipts, 128u)) {
+				cell.output.result = result(ERR_INVALID_DATA, 19);
+				break;
+			}
+			release_budget.passes = MIN(release_budget.passes, 64u) - used.passes;
+			release_budget.receipts = MIN(release_budget.receipts, 128u) - used.receipts;
+			ProductionServiceUsage release_usage = {};
+			cell.output.result = production_release_locked(request, rd, false, &release_budget, &release_usage);
+			if (release_usage.controls || release_usage.passes > release_budget.passes || release_usage.receipts > release_budget.receipts) {
+				cell.output.result = result(ERR_INVALID_DATA, 19);
+				break;
+			}
+			used.passes += release_usage.passes;
+			used.receipts += release_usage.receipts;
 		} break;
 	}
 	production_report_locked(request, cell.output.report);
@@ -2923,6 +2975,11 @@ void Registry::production_control_dispatch(uint64_t registry, uint64_t attachmen
 			// A loss/sealed preflight does not erase already accepted cleanup. Pending
 			// native effects are still checked by the real release helper and retained.
 			drain_trace.result(OK, "entered_execute");
+			if (a->scene_registration && cell.input.kind == ProductionControlKind::RECORD && !a->scene_occurrence && !a->scene_closed) {
+				cell.scene_waiting = true;
+				return; // Original queued mailbox waits for actual SceneBeforeParticles.
+			}
+			cell.scene_waiting = false;
 			production_control_execute_locked(r, a->held_device);
 			return;
 		}

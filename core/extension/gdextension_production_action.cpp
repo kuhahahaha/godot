@@ -600,6 +600,9 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 	} else if (observed.state == CheckedRecordAppend::State::Appended) {
 		++request.next_action;
 	}
+	// The original checked append is the sole operation fact, even before owner
+	// report observation. KnownPrefix/Unknown are never reminted as NotIssued.
+	action.original_append = observed;
 	++request.revision;
 	return observed;
 }

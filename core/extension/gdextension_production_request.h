@@ -33,6 +33,7 @@
 #include "core/extension/gdextension_library_exit_guard.h"
 #include "core/extension/gdextension_production_resource_use.h"
 #include "core/extension/gdextension_record_source.h"
+#include "core/extension/gdextension_scene_phase.h"
 #include "servers/rendering/native_disposal_witness.h"
 
 class TestProductionResourceUseAccess;
@@ -253,8 +254,19 @@ class ProductionActionCell {
 	uint64_t payload_offset = 0, payload_bytes = 0;
 	uint32_t recorded_bytes = 0;
 	uint32_t readback_slot = UINT32_MAX;
+	// Original checked append fact, stored in its original action row. No once table.
+	CheckedRecordAppend original_append;
+	ScenePhaseAttempt scene_attempt;
+	GDExtensionSceneOperationKeyV1 scene_key = {};
+	bool scene_key_bound = false;
+	uint64_t original_append_fact_serial = 0;
 	bool prepared = false;
-	enum class OutputState : uint8_t { UNBOUND, RESERVING, BOUND, RETIRING, RETURNED, UNKNOWN };
+	enum class OutputState : uint8_t { UNBOUND,
+		RESERVING,
+		BOUND,
+		RETIRING,
+		RETURNED,
+		UNKNOWN };
 	struct OutputRole {
 		uint32_t role = 0, resource_slot = UINT32_MAX, use_index = UINT32_MAX;
 		uint64_t generation = 0, bytes = 0;
@@ -446,6 +458,7 @@ struct ProductionControlCell {
 	ProductionControlOutput output;
 	uint64_t serial;
 	ProductionControlState state;
+	bool scene_waiting = false;
 };
 class ProductionRequest {
 	friend class Registry;
@@ -547,6 +560,11 @@ class ProductionAttachment {
 	uint64_t metadata_frame = 0;
 	bool metadata_active = false, metadata_pending = false;
 	void *record_receiver_userdata = nullptr;
+	NormalRelayToken scene_relay;
+	GDExtensionScenePhaseSinkConfigV1 scene_config = {};
+	uint64_t scene_registration = 0, scene_occurrence = 0;
+	uint32_t scene_active = 0;
+	bool scene_closed = false, scene_relay_closed = false;
 	bool opened = false;
 	bool closing = false;
 	// Open must acquire the original device holder and operation-window receiver.

@@ -1,0 +1,26 @@
+Building for macOS 11.0+.
+WARNING: The screen reader support driver requires dependencies to be installed.
+You can install them by running `python3 misc/scripts/install_accesskit.py`.
+See the documentation for more information:
+	https://docs.godotengine.org/en/latest/engine_details/development/compiling/compiling_for_macos.html
+Alternatively, disable this driver by compiling with `accesskit=no` explicitly.
+WARNING: The ANGLE rendering driver requires dependencies to be installed.
+You can install them by running `python misc/scripts/install_angle.py`.
+See the documentation for more information:
+	https://docs.godotengine.org/en/latest/engine_details/development/compiling/compiling_for_windows.html
+Alternatively, disable this driver by compiling with `angle=no` explicitly.
+MoltenVK found at: /opt/homebrew/Frameworks/MoltenVK.xcframework
+Building for platform "macos", architecture "arm64", target "editor".
+Generating core/extension/gdextension_interface.gen.h ...
+Generating core/extension/gdextension_interface_dump.gen.h ...
+scons: *** [core/extension/gdextension_interface.gen.h] UnknownTypeError : Unknown type 'uint8_t[32]' for 'bytes' used in 'GDExtensionSceneOpaque32V1'
+Traceback (most recent call last):
+  File "/Users/macbookair/.local/lib/python3.12/site-packages/SCons/Action.py", line 1439, in execute
+    result = self.execfunction(target=target, source=rsources, env=env)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/core/extension/make_interface_header.py", line 60, in run
+    check_type(kind, type, valid_data_types)
+  File "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/core/extension/make_interface_header.py", line 217, in check_type
+    raise UnknownTypeError(member["type"], type["name"], member["name"])
+make_interface_header.UnknownTypeError: Unknown type 'uint8_t[32]' for 'bytes' used in 'GDExtensionSceneOpaque32V1'
+INFO: Time elapsed: 00:00:00.42

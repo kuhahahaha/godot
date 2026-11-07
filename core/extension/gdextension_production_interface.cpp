@@ -32,9 +32,89 @@
 #include "core/extension/gdextension_external_output_interface.h"
 #include "core/extension/gdextension_production_request.h"
 
+#include <cstring>
 #include <type_traits>
 
 namespace GDExtensionDeviceExit {
+namespace {
+struct SceneMemoryRange {
+	uintptr_t begin = 0, end = 0;
+};
+bool scene_object_range(const void *data, size_t bytes, size_t alignment, SceneMemoryRange &range) {
+	const uintptr_t begin = reinterpret_cast<uintptr_t>(data);
+	if (!begin || begin % alignment || bytes > UINTPTR_MAX - begin) {
+		return false;
+	}
+	range = { begin, begin + bytes };
+	return true;
+}
+template <class T>
+bool scene_object_range(const T *value, SceneMemoryRange &range) {
+	return scene_object_range(value, sizeof(T), alignof(T), range);
+}
+bool scene_ranges_overlap(const SceneMemoryRange &a, const SceneMemoryRange &b) {
+	return a.begin < b.end && b.begin < a.end;
+}
+} // namespace
+GDExtensionDeviceSessionResultV1 device_session_scene_operation_query_v1(GDExtensionProductionRequestRefV1 request, uint64_t ordinal, const GDExtensionSceneOperationKeyV1 *key, GDExtensionSceneReadOutcomeV1 *out) {
+	SceneMemoryRange input, output;
+	if (!scene_object_range(key, input) || !scene_object_range(out, output) || scene_ranges_overlap(input, output)) {
+		return { ERR_INVALID_PARAMETER, 0, 0, 0 };
+	}
+	return { Registry::get_singleton().scene_phase_query_operation(request, ordinal, *key, *out), 0, 0, 0 };
+}
+GDExtensionDeviceSessionResultV1 device_session_scene_operation_bind_v1(GDExtensionProductionRequestRefV1 request, uint64_t ordinal, const GDExtensionSceneOperationKeyV1 *key) {
+	SceneMemoryRange input;
+	if (!scene_object_range(key, input)) {
+		return { ERR_INVALID_PARAMETER, 0, 0, 0 };
+	}
+	return { Registry::get_singleton().scene_phase_bind_operation(request, ordinal, *key), 0, 0, 0 };
+}
+GDExtensionDeviceSessionResultV1 device_session_scene_phase_capability_v1(GDExtensionProductionAttachmentRefV1 attachment, GDExtensionSceneOpaque32V1 *out) {
+	SceneMemoryRange output;
+	if (!scene_object_range(out, output)) {
+		return { ERR_INVALID_PARAMETER, 0, 0, 0 };
+	}
+	return { Registry::get_singleton().scene_phase_capability(attachment, *out), 0, 0, 0 };
+}
+GDExtensionDeviceSessionResultV1 device_session_scene_phase_relay_v1(GDExtensionConstTypePtr callable, GDExtensionScenePhaseReceiverV1 receiver, GDExtensionNormalRelayRefV1 *out) {
+	SceneMemoryRange input, output;
+	if (!receiver || !scene_object_range(callable, sizeof(Callable), alignof(Callable), input) || !scene_object_range(out, output) || scene_ranges_overlap(input, output)) {
+		return { ERR_INVALID_PARAMETER, 0, 0, 0 };
+	}
+	const GDExtensionNormalRelayRefV1 empty{};
+	if (memcmp(out, &empty, sizeof(empty))) {
+		return { ERR_INVALID_PARAMETER, 0, 0, 0 };
+	}
+	NormalRelayToken token;
+	const Error error = Registry::get_singleton().scene_phase_install_relay(*reinterpret_cast<const Callable *>(callable), receiver, token);
+	if (error == OK) {
+		return { Registry::get_singleton().scene_phase_encode_relay(token, *out), 0, 0, 0 };
+	}
+	return { error, 0, 0, 0 };
+}
+GDExtensionDeviceSessionResultV1 device_session_scene_phase_register_v1(GDExtensionNormalRelayRefV1 relay, GDExtensionProductionAttachmentRefV1 attachment, const GDExtensionScenePhaseSinkConfigV1 *config, GDExtensionScenePhaseRegistrationRefV1 *out) {
+	SceneMemoryRange input, output;
+	if (!scene_object_range(config, input) || !scene_object_range(out, output) || scene_ranges_overlap(input, output)) {
+		return { ERR_INVALID_PARAMETER, 0, 0, 0 };
+	}
+	return { Registry::get_singleton().scene_phase_register(relay, attachment, *config, *out), 0, 0, 0 };
+}
+GDExtensionDeviceSessionResultV1 device_session_scene_phase_unregister_v1(GDExtensionScenePhaseRegistrationRefV1 registration, GDExtensionScenePhaseCloseV1 *out) {
+	SceneMemoryRange output;
+	if (!scene_object_range(out, output)) {
+		return { ERR_INVALID_PARAMETER, 0, 0, 0 };
+	}
+	return { Registry::get_singleton().scene_phase_unregister(registration, *out), 0, 0, 0 };
+}
+
+static_assert(std::is_same_v<decltype(&device_session_scene_operation_query_v1), GDExtensionInterfaceDeviceSessionSceneOperationQueryV1>);
+static_assert(std::is_same_v<decltype(&device_session_scene_operation_bind_v1), GDExtensionInterfaceDeviceSessionSceneOperationBindV1>);
+static_assert(std::is_same_v<decltype(&device_session_scene_phase_capability_v1), GDExtensionInterfaceDeviceSessionScenePhaseCapabilityV1>);
+static_assert(std::is_same_v<decltype(&device_session_scene_phase_relay_v1), GDExtensionInterfaceDeviceSessionScenePhaseRelayV1>);
+static_assert(std::is_same_v<decltype(&device_session_scene_phase_register_v1), GDExtensionInterfaceDeviceSessionScenePhaseRegisterV1>);
+static_assert(std::is_same_v<decltype(&device_session_scene_phase_unregister_v1), GDExtensionInterfaceDeviceSessionScenePhaseUnregisterV1>);
+
 namespace {
 static_assert(std::is_standard_layout_v<GDExtensionProductionCapacityV1> && std::is_trivially_copyable_v<GDExtensionProductionCapacityV1>);
 static_assert(std::is_standard_layout_v<GDExtensionProductionRasterActionV1> && std::is_trivially_copyable_v<GDExtensionProductionRasterActionV1>);
@@ -270,6 +350,12 @@ void register_production_interfaces() {
 	static_assert(std::is_same_v<decltype(&device_session_output_withdraw_v1), GDExtensionInterfaceDeviceSessionOutputWithdrawV1>);
 	GDExtension::register_interface_function("device_session_output_withdraw_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_output_withdraw_v1));
 
+	GDExtension::register_interface_function("device_session_scene_operation_query_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_scene_operation_query_v1));
+	GDExtension::register_interface_function("device_session_scene_operation_bind_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_scene_operation_bind_v1));
+	GDExtension::register_interface_function("device_session_scene_phase_capability_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_scene_phase_capability_v1));
+	GDExtension::register_interface_function("device_session_scene_phase_relay_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_scene_phase_relay_v1));
+	GDExtension::register_interface_function("device_session_scene_phase_register_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_scene_phase_register_v1));
+	GDExtension::register_interface_function("device_session_scene_phase_unregister_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_scene_phase_unregister_v1));
 	GDExtension::register_interface_function("device_session_production_reserve_v2", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_reserve_v2));
 	GDExtension::register_interface_function("device_session_production_prepare_dispatch_v2", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_prepare_dispatch_v2));
 	GDExtension::register_interface_function("device_session_production_prepare_copy_v2", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_prepare_copy_v2));

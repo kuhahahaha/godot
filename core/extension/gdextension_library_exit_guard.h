@@ -40,6 +40,8 @@ namespace RendererRD {
 class ParticlesStorage;
 class ExternalOutputOwner;
 } //namespace RendererRD
+template <class T>
+class Ref;
 class StringName;
 class RenderingDevice;
 class NativeDisposalWitness;
@@ -81,6 +83,7 @@ namespace TestProductionRequest {
 struct Access;
 }
 namespace GDExtensionDeviceExit {
+class SceneReadContent;
 struct CheckedRecordAppend;
 struct OriginalOperationIdentity;
 struct BufferReadbackSourceCapture;
@@ -895,6 +898,10 @@ private:
 	Error qualification_rt_ticket_locked(QualificationBridge *, const GDExtensionQualificationRtRequestV1 &, const uint8_t *, const uint8_t *, QualificationTicket *&);
 
 	void production_metadata_pump();
+	void scene_phase_dispatch(RenderingDevice &);
+	bool scene_phase_holder_matches_locked(const CleanupAction &, const RecordRef &, NormalRelayToken, bool);
+	uint64_t scene_phase_occurrence = 0;
+	Error scene_phase_call_relay(NormalRelayToken, const GDExtensionNativeScenePhaseV1 &, GDExtensionProductionRequestRefV1, const GDExtensionProductionOperationV1 &);
 	struct ProductionPhysicalFrame;
 	static thread_local ProductionPhysicalFrame *production_physical_frame;
 	// Core-only ambient bridge. Uses the original executing RECORD frame;
@@ -1175,6 +1182,14 @@ public:
 	Error register_callable_cleanup(const RecordRef &p_ref, uint64_t p_identity, CleanupAction &r_action, uint64_t &r_serial);
 	// Internal queue adapters may retain the token; the original Callable stays here.
 	// Release is fallible and must run on the original Callable destruction thread.
+	Error scene_phase_install_relay(const Callable &, GDExtensionScenePhaseReceiverV1, NormalRelayToken &);
+	Error scene_phase_encode_relay(NormalRelayToken, GDExtensionNormalRelayRefV1 &);
+	Error scene_phase_register(GDExtensionNormalRelayRefV1, GDExtensionProductionAttachmentRefV1, const GDExtensionScenePhaseSinkConfigV1 &, GDExtensionScenePhaseRegistrationRefV1 &);
+	Error scene_phase_unregister(GDExtensionScenePhaseRegistrationRefV1, GDExtensionScenePhaseCloseV1 &);
+	Error scene_phase_capability(GDExtensionProductionAttachmentRefV1, GDExtensionSceneOpaque32V1 &);
+	Error scene_phase_query_operation(GDExtensionProductionRequestRefV1, uint64_t, const GDExtensionSceneOperationKeyV1 &, GDExtensionSceneReadOutcomeV1 &);
+	Error scene_phase_bind_operation(GDExtensionProductionRequestRefV1, uint64_t, const GDExtensionSceneOperationKeyV1 &);
+	Error scene_phase_borrow(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, uint64_t, const GDExtensionSceneOperationKeyV1 &, const GDExtensionSceneOpaque32V1 &, const Ref<SceneReadContent> &, GDExtensionSceneReadOutcomeV1 &);
 	Error register_normal_relay(const Callable &p_callback, NormalRelayToken &r_token);
 	Error call_normal_relay(NormalRelayToken p_token, const Variant **p_arguments, int p_argcount, Variant &r_return_value, Callable::CallError &r_error);
 	Error cancel_normal_relay(NormalRelayToken p_token);

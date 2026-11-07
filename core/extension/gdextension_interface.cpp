@@ -45,8 +45,13 @@
 
 #include <optional>
 
+namespace GDExtensionDeviceExit {
+bool scene_phase_callable_metadata(const Callable &, NormalRelayToken, const CleanupAction *&, const RecordRef *&);
+}
+
 class CallableCustomExtension : public CallableCustom {
 	friend class GDExtensionDeviceExit::Registry;
+	friend bool GDExtensionDeviceExit::scene_phase_callable_metadata(const Callable &, GDExtensionDeviceExit::NormalRelayToken, const GDExtensionDeviceExit::CleanupAction *&, const GDExtensionDeviceExit::RecordRef *&);
 	GDExtensionDeviceExit::RecordRef owner;
 	GDExtensionDeviceExit::CleanupAction cleanup;
 	uint64_t cleanup_serial = 0;
@@ -80,6 +85,8 @@ class CallableCustomExtension : public CallableCustom {
 
 	ObjectID object;
 
+	GDExtensionScenePhaseReceiverV1 scene_phase_receiver = nullptr;
+	GDExtensionDeviceExit::NormalRelayToken scene_phase_relay;
 	GDExtensionCallableCustomCall call_func;
 	GDExtensionCallableCustomIsValid is_valid_func;
 	GDExtensionCallableCustomFree free_func;
@@ -342,6 +349,95 @@ Error Registry::register_normal_relay(const Callable &p_callback, NormalRelayTok
 		return ERR_UNAVAILABLE;
 	}
 	return register_normal_relay_holder(p_callback, custom->owner, custom->cleanup, r_token);
+}
+
+Error Registry::scene_phase_install_relay(const Callable &callable, GDExtensionScenePhaseReceiverV1 receiver, NormalRelayToken &token) {
+	if (!receiver || !callable.is_custom()) {
+		return ERR_INVALID_PARAMETER;
+	}
+	auto *custom = dynamic_cast<CallableCustomExtension *>(callable.get_custom());
+	if (!custom || !custom->adopted || !custom->owner.is_valid()) {
+		return ERR_UNAVAILABLE;
+	}
+	{
+		MutexLock lock(mutex);
+		if (!scene_phase_holder_matches_locked(custom->cleanup, custom->owner, {}, true)) {
+			return ERR_UNAUTHORIZED;
+		}
+	}
+	// This immutable original destruction-thread check precedes every access
+	// to the once-written typed leaf; no second thread may install it.
+	if (custom->scene_phase_receiver && custom->scene_phase_receiver != receiver) {
+		return ERR_ALREADY_IN_USE;
+	}
+	const auto *entry = RegistrationContext::current;
+	if (!entry || !entry->admitted || !entry->reference || entry->reference->registry != this || entry->reference->slot != custom->owner.slot) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (custom->scene_phase_receiver == receiver && custom->scene_phase_relay.serial) {
+		NormalRelaySnapshot snapshot;
+		const Error observed = observe_normal_relay(custom->scene_phase_relay, snapshot);
+		if (observed != OK || snapshot.cancelled || snapshot.release_requested) {
+			return ERR_UNAVAILABLE;
+		}
+		token = custom->scene_phase_relay;
+		return OK;
+	}
+	// register_normal_relay checks original owner/cleanup enrollment. Publish the
+	// typed leaf once, under that same original Callable holder, before use.
+	const Error error = register_normal_relay(callable, token);
+	if (error == OK) {
+		MutexLock lock(mutex);
+		custom->scene_phase_receiver = receiver;
+		custom->scene_phase_relay = token;
+	}
+	return error;
+}
+
+// Caller retains the original relay under Registry mutex. This inspects only
+// core Callable metadata and borrows its same original owner/cleanup holder.
+// The Registry caller must authenticate those holders before using the result.
+bool scene_phase_callable_metadata(const Callable &callable, NormalRelayToken token, const CleanupAction *&cleanup, const RecordRef *&owner) {
+	cleanup = nullptr;
+	owner = nullptr;
+	if (!callable.is_custom()) {
+		return false;
+	}
+	const auto *custom = dynamic_cast<const CallableCustomExtension *>(callable.get_custom());
+	if (!custom || !custom->adopted || !custom->scene_phase_receiver ||
+			custom->scene_phase_relay.registry_instance != token.registry_instance || custom->scene_phase_relay.serial != token.serial) {
+		return false;
+	}
+	cleanup = &custom->cleanup;
+	owner = &custom->owner;
+	return true;
+}
+
+Error Registry::scene_phase_call_relay(NormalRelayToken token, const GDExtensionNativeScenePhaseV1 &phase, GDExtensionProductionRequestRefV1 request, const GDExtensionProductionOperationV1 &operation) {
+	NormalRelay *relay = nullptr;
+	CallableCustomExtension *custom = nullptr;
+	{
+		MutexLock lock(mutex);
+		relay = find_normal_relay_locked(token);
+		if (!relay || relay->cancelled || relay->release_requested || relay->releasing || relay->callback.is_null()) {
+			return ERR_UNAVAILABLE;
+		}
+		custom = dynamic_cast<CallableCustomExtension *>(relay->callback.get_custom());
+		const auto *entry = RegistrationContext::current;
+		const auto &owner = records[relay->record];
+		if (!custom || !custom->scene_phase_receiver || custom->scene_phase_relay.registry_instance != token.registry_instance || custom->scene_phase_relay.serial != token.serial || !scene_phase_holder_matches_locked(custom->cleanup, custom->owner, token, false) || !entry || !entry->admitted || !entry->reference || entry->reference->registry != this || entry->reference->slot != relay->record || !owner.attached || owner.quiescing || owner.close_started || owner.guard_enrollment != GuardEnrollment::QUALIFIED || owner.snapshot.library_generation != relay->generation || relay->active_deliveries == UINT32_MAX) {
+			return ERR_UNAUTHORIZED;
+		}
+		++relay->active_deliveries;
+	}
+	// Original record receiver already owns CallbackScope and physical frame.
+	// Do not enter a nested scope: that would invalidate the borrowed context.
+	custom->scene_phase_receiver(custom->userdata, &phase, request, &operation);
+	{
+		MutexLock lock(mutex);
+		--relay->active_deliveries;
+	}
+	return OK;
 }
 
 bool is_typed_lifecycle_interface(const char *name);

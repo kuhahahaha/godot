@@ -157,6 +157,9 @@ void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
 	RenderCaptureTestHooks::observe_phase(RSG::rasterizer->get_frame_number(), false);
 #endif
 
+	if (RenderingDevice *device = RenderingDevice::get_singleton()) {
+		GDExtensionDeviceExit::Registry::get_singleton().scene_phase_dispatch(*device);
+	}
 	frame_setup_time = double(OS::get_singleton()->get_ticks_usec() - time_usec) / 1000.0;
 
 	GodotProfileZoneGrouped(_profile_zone, "particles_storage->update_particles");

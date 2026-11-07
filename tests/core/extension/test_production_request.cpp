@@ -4750,6 +4750,400 @@ struct Access {
 		const Error device = fixture.prepare_device(server);
 		return device == OK ? fixture.initialize_owner(1, false, false, receiver, userdata, false, 1, false, +[](void *, GDExtensionProductionAttachmentRefV1) {}, false, false, false, false, &plan) : device;
 	}
+	struct NativeScenePhaseProbe {
+		SingletonEnrollment *fixture = nullptr;
+		Callable callable;
+		GDExtensionDeviceExit::NormalRelayToken relay;
+		GDExtensionScenePhaseRegistrationRefV1 registration{};
+		GDExtensionSceneOpaque32V1 device_capability{};
+		GDExtensionProductionRequestRefV1 requests[2]{};
+		GDExtensionProductionPhysicalContextRefV1 contexts[2]{};
+		GDExtensionNativeScenePhaseV1 phases[2]{};
+		uint32_t typed_calls = 0, ordinary_calls = 0, legacy_calls = 0, frees = 0;
+		GDExtensionInterfaceDeviceSessionScenePhaseUnregisterV1 unregister_port = nullptr;
+		bool close_active = false;
+		static uint64_t word(const GDExtensionSceneOpaque32V1 &opaque, uint32_t index) {
+			uint64_t value = 0;
+			for (uint32_t i = 0; i < 8; ++i) {
+				value |= uint64_t(opaque.bytes[index * 8 + i]) << (8 * i);
+			}
+			return value;
+		}
+		static void ordinary(void *opaque, const GDExtensionConstVariantPtr *, GDExtensionInt, GDExtensionVariantPtr returned, GDExtensionCallError *error) {
+			auto &p = *static_cast<NativeScenePhaseProbe *>(opaque);
+			++p.ordinary_calls;
+			*reinterpret_cast<Variant *>(returned) = Variant();
+			*error = { GDEXTENSION_CALL_OK, 0, 0 };
+		}
+		static void legacy(void *opaque, GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const GDExtensionProductionOperationV1 *) {
+			++static_cast<NativeScenePhaseProbe *>(opaque)->legacy_calls;
+		}
+		static void free(void *opaque) { ++static_cast<NativeScenePhaseProbe *>(opaque)->frees; }
+		static void typed(void *opaque, const GDExtensionNativeScenePhaseV1 *phase, GDExtensionProductionRequestRefV1 request, const GDExtensionProductionOperationV1 *operation) {
+			using namespace GDExtensionDeviceExit;
+			auto &p = *static_cast<NativeScenePhaseProbe *>(opaque);
+			REQUIRE(phase != nullptr);
+			REQUIRE(operation != nullptr);
+			REQUIRE(p.typed_calls < 2);
+			const uint32_t index = p.typed_calls++;
+			p.phases[index] = *phase; // Observation copy, never later authorization.
+			p.contexts[index] = { word(phase->physical_context, 0), word(phase->physical_context, 1) };
+			CHECK(phase->abi.abi_version == 1);
+			CHECK(phase->abi.struct_size == sizeof(*phase));
+			CHECK(phase->abi.reserved == 0);
+			CHECK(memcmp(&phase->device_capability, &p.device_capability, sizeof(p.device_capability)) == 0);
+			CHECK(word(phase->phase_token, 1) == word(p.registration.token, 1));
+			CHECK(phase->occurrence != 0);
+			CHECK(phase->expiry_serial == p.contexts[index].frame_serial);
+			CHECK(word(phase->phase_token, 3) == phase->expiry_serial);
+			CHECK(word(phase->physical_context, 2) == request.handle_serial);
+			CHECK(operation->owner_request_nonce != 0);
+			CHECK(request.registry_instance == p.fixture->instance);
+			CHECK((request.handle_serial == p.requests[0].handle_serial || request.handle_serial == p.requests[1].handle_serial));
+			{
+				MutexLock lock(p.fixture->registry.mutex);
+				ProductionRequest *original = nullptr;
+				RenderingDevice *device = nullptr;
+				CHECK(p.fixture->registry.production_physical_request_locked(p.contexts[index], request, original, device, false) == OK);
+				CHECK(original != nullptr);
+				CHECK(device == &p.fixture->rd);
+				if (original) {
+					CHECK(original->control.state == ProductionControlState::EXECUTING);
+					CHECK(operation->owner_request_nonce == original->operation.owner_request_nonce);
+					CHECK(operation->record_generation == original->operation.record_generation);
+					CHECK(operation->canonical_begin == original->operation.canonical_begin);
+					CHECK(operation->canonical_end == original->operation.canonical_end);
+					CHECK(original->graph_count == 0);
+					CHECK(original->next_action == 0);
+				}
+			}
+			// Actual original APIs cannot free the current attachment/request
+			// across dispatch's unlocked callback; do not simulate a pin here.
+			CHECK(p.fixture->registry.production_close(p.fixture->attachment).native_error == ERR_BUSY);
+			CHECK(p.fixture->registry.production_release(request).native_error == ERR_BUSY);
+			NormalRelaySnapshot active;
+			REQUIRE(p.fixture->registry.observe_normal_relay(p.relay, active) == OK);
+			CHECK(active.active_deliveries == 1);
+			CHECK_FALSE(active.holder_closed);
+			if (p.close_active && index == 1) {
+				GDExtensionScenePhaseCloseV1 close{};
+				CHECK(p.unregister_port(p.registration, &close).native_error == ERR_BUSY);
+				CHECK(close.registration_closed == 1);
+				CHECK(close.active_deliveries == 1);
+				CHECK(close.relay_holder_closed == 0);
+				CHECK(p.frees == 0);
+			}
+		}
+	};
+	static void native_scene_phase_infrastructure(bool close_before_draw = false) {
+		using namespace GDExtensionDeviceExit;
+		auto *server = ordinal_server();
+		if (!server) {
+			return;
+		}
+		OrdinalPlan plan;
+		plan.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+		plan.action_count = plan.resource_count = plan.use_count = plan.readback_count = 0;
+		plan.attachment_requests = 2;
+		SingletonEnrollment fixture;
+		fixture.public_port = true;
+		NativeScenePhaseProbe probe;
+		probe.fixture = &fixture;
+		probe.close_active = true;
+		const auto capability = ordinal_port<GDExtensionInterfaceDeviceSessionScenePhaseCapabilityV1>("device_session_scene_phase_capability_v1");
+		const auto relay = ordinal_port<GDExtensionInterfaceDeviceSessionScenePhaseRelayV1>("device_session_scene_phase_relay_v1");
+		const auto register_phase = ordinal_port<GDExtensionInterfaceDeviceSessionScenePhaseRegisterV1>("device_session_scene_phase_register_v1");
+		probe.unregister_port = ordinal_port<GDExtensionInterfaceDeviceSessionScenePhaseUnregisterV1>("device_session_scene_phase_unregister_v1");
+		REQUIRE(capability != nullptr);
+		REQUIRE(relay != nullptr);
+		REQUIRE(register_phase != nullptr);
+		REQUIRE(probe.unregister_port != nullptr);
+		REQUIRE(ordinal_initialize(fixture, server, plan, &NativeScenePhaseProbe::legacy, &probe) == OK);
+		probe.requests[0] = { fixture.instance, fixture.request->serial };
+		const auto reserve = ordinal_port<GDExtensionInterfaceDeviceSessionProductionReserveV2>("device_session_production_reserve_v2");
+		auto second_operation = plan.operation;
+		++second_operation.owner_request_nonce;
+		REQUIRE(reserve(fixture.attachment, &second_operation, &plan.capacity, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0, &probe.requests[1]).native_error == OK);
+		{
+			MutexLock lock(fixture.registry.mutex);
+			fixture.registry.records[fixture.reference.slot].guard.entry_classes |= 1u << 8;
+		}
+		GDExtensionCallableCustomInfo2 info{};
+		info.callable_userdata = &probe;
+		info.call_func = &NativeScenePhaseProbe::ordinary;
+		info.free_func = &NativeScenePhaseProbe::free;
+		info.token = fixture.registry.records[fixture.reference.slot].original_owner;
+		const auto create = reinterpret_cast<GDExtensionInterfaceCallableCustomCreate2>(GDExtension::get_interface_function("callable_custom_create2"));
+		REQUIRE(create != nullptr);
+		create(reinterpret_cast<GDExtensionUninitializedTypePtr>(&probe.callable), &info);
+		REQUIRE(probe.callable.is_custom());
+		GDExtensionNormalRelayRefV1 relay_wire{};
+		const auto callable = reinterpret_cast<GDExtensionConstTypePtr>(&probe.callable);
+		CHECK(relay(nullptr, &NativeScenePhaseProbe::typed, &relay_wire).native_error == ERR_INVALID_PARAMETER);
+		CHECK(relay(callable, nullptr, &relay_wire).native_error == ERR_INVALID_PARAMETER);
+		CHECK(relay(callable, &NativeScenePhaseProbe::typed, nullptr).native_error == ERR_INVALID_PARAMETER);
+		CHECK(NativeScenePhaseProbe::word(relay_wire.token, 1) == 0);
+		REQUIRE(relay(callable, &NativeScenePhaseProbe::typed, &relay_wire).native_error == OK);
+		GDExtensionNormalRelayRefV1 duplicate_relay{};
+		REQUIRE(relay(callable, &NativeScenePhaseProbe::typed, &duplicate_relay).native_error == OK);
+		CHECK(memcmp(&duplicate_relay, &relay_wire, sizeof(relay_wire)) == 0);
+		CHECK(relay(callable, &NativeScenePhaseProbe::typed, &duplicate_relay).native_error == ERR_INVALID_PARAMETER);
+		CHECK(memcmp(&duplicate_relay, &relay_wire, sizeof(relay_wire)) == 0);
+		// Obtain the already installed original token only for Registry observers;
+		// do not assemble internal authority from exported wire bytes.
+		REQUIRE(fixture.registry.scene_phase_install_relay(probe.callable, &NativeScenePhaseProbe::typed, probe.relay) == OK);
+		GDExtensionNormalRelayRefV1 observed_relay{};
+		REQUIRE(fixture.registry.scene_phase_encode_relay(probe.relay, observed_relay) == OK);
+		CHECK(memcmp(&observed_relay, &relay_wire, sizeof(relay_wire)) == 0);
+		GDExtensionScenePhaseSinkConfigV1 config{};
+		config.abi = { 1, sizeof(config), 0 };
+		config.phase = config.max_operations = 1;
+		CHECK(capability(fixture.attachment, nullptr).native_error == ERR_INVALID_PARAMETER);
+		REQUIRE(capability(fixture.attachment, &config.device_capability).native_error == OK);
+		probe.device_capability = config.device_capability;
+		GDExtensionScenePhaseRegistrationRefV1 rejected_registration{};
+		CHECK(register_phase(relay_wire, fixture.attachment, nullptr, &rejected_registration).native_error == ERR_INVALID_PARAMETER);
+		CHECK(register_phase(relay_wire, fixture.attachment, &config, nullptr).native_error == ERR_INVALID_PARAMETER);
+		auto wrong_capability = config;
+		wrong_capability.device_capability.bytes[0] ^= 0x80;
+		CHECK(register_phase(relay_wire, fixture.attachment, &wrong_capability, &rejected_registration).native_error == ERR_INVALID_DATA);
+		CHECK(NativeScenePhaseProbe::word(rejected_registration.token, 1) == 0);
+		CHECK(probe.unregister_port({}, nullptr).native_error == ERR_INVALID_PARAMETER);
+		// A real same-owner normal relay lacks the installed typed phase leaf.
+		{
+			NativeScenePhaseProbe plain;
+			auto plain_info = info;
+			plain_info.callable_userdata = &plain;
+			create(reinterpret_cast<GDExtensionUninitializedTypePtr>(&plain.callable), &plain_info);
+			REQUIRE(plain.callable.is_custom());
+			REQUIRE(fixture.registry.register_normal_relay(plain.callable, plain.relay) == OK);
+			GDExtensionNormalRelayRefV1 plain_wire{};
+			memset(&plain_wire, 0xa5, sizeof(plain_wire));
+			const auto unchanged_wire = plain_wire;
+			CHECK(fixture.registry.scene_phase_encode_relay(plain.relay, plain_wire) == ERR_UNAUTHORIZED);
+			CHECK(memcmp(&plain_wire, &unchanged_wire, sizeof(plain_wire)) == 0);
+			REQUIRE(fixture.registry.cancel_normal_relay(plain.relay) == OK);
+			CHECK(fixture.registry.release_normal_relay_holder(plain.relay) == OK);
+			CHECK(plain.frees == 0);
+			plain.callable = Callable();
+			CHECK(plain.frees == 1);
+			fixture.frame.leave(); // Original outer-frame return acknowledges retired holders.
+			NormalRelaySnapshot returned;
+			REQUIRE(fixture.registry.observe_normal_relay(plain.relay, returned) == OK);
+			CHECK(returned.holder_closed);
+			CHECK(returned.cell_released);
+			REQUIRE(fixture.registry.forget_normal_relay(plain.relay) == OK);
+		}
+		// Reject key/output aliasing before either input or output is touched.
+		const auto query = ordinal_port<GDExtensionInterfaceDeviceSessionSceneOperationQueryV1>("device_session_scene_operation_query_v1");
+		REQUIRE(query != nullptr);
+		alignas(GDExtensionSceneOperationKeyV1) alignas(GDExtensionSceneReadOutcomeV1) uint8_t overlap[sizeof(GDExtensionSceneOperationKeyV1) + sizeof(GDExtensionSceneReadOutcomeV1)];
+		memset(overlap, 0xa5, sizeof(overlap));
+		uint8_t untouched[sizeof(overlap)];
+		memcpy(untouched, overlap, sizeof(overlap));
+		CHECK(query(probe.requests[0], 0, reinterpret_cast<const GDExtensionSceneOperationKeyV1 *>(overlap), reinterpret_cast<GDExtensionSceneReadOutcomeV1 *>(overlap)).native_error == ERR_INVALID_PARAMETER);
+		CHECK(memcmp(overlap, untouched, sizeof(overlap)) == 0);
+		memcpy(overlap, untouched, sizeof(overlap));
+		CHECK(query({}, 0, reinterpret_cast<const GDExtensionSceneOperationKeyV1 *>(overlap), reinterpret_cast<GDExtensionSceneReadOutcomeV1 *>(overlap)).native_error == ERR_INVALID_PARAMETER);
+		CHECK(memcmp(overlap, untouched, sizeof(overlap)) == 0);
+		memcpy(overlap, untouched, sizeof(overlap));
+		CHECK(query(probe.requests[0], 0, reinterpret_cast<const GDExtensionSceneOperationKeyV1 *>(overlap + 1), reinterpret_cast<GDExtensionSceneReadOutcomeV1 *>(overlap + sizeof(GDExtensionSceneOperationKeyV1))).native_error == ERR_INVALID_PARAMETER);
+		CHECK(memcmp(overlap, untouched, sizeof(overlap)) == 0);
+		for (uint32_t bad_budget : { 0u, 65u }) {
+			auto invalid = config;
+			invalid.max_operations = bad_budget;
+			GDExtensionScenePhaseRegistrationRefV1 rejected{};
+			CHECK(register_phase(relay_wire, fixture.attachment, &invalid, &rejected).native_error == ERR_INVALID_PARAMETER);
+			CHECK(NativeScenePhaseProbe::word(rejected.token, 1) == 0);
+		}
+		REQUIRE(register_phase(relay_wire, fixture.attachment, &config, &probe.registration).native_error == OK);
+		GDExtensionScenePhaseRegistrationRefV1 duplicate{};
+		REQUIRE(register_phase(relay_wire, fixture.attachment, &config, &duplicate).native_error == OK);
+		CHECK(memcmp(&duplicate, &probe.registration, sizeof(duplicate)) == 0);
+		auto different = config;
+		different.max_operations = 2;
+		GDExtensionScenePhaseRegistrationRefV1 conflict{};
+		CHECK(register_phase(relay_wire, fixture.attachment, &different, &conflict).native_error == ERR_ALREADY_IN_USE);
+		CHECK(NativeScenePhaseProbe::word(conflict.token, 1) == 0);
+		CHECK(probe.unregister_port(probe.registration, nullptr).native_error == ERR_INVALID_PARAMETER);
+		GDExtensionScenePhaseCloseV1 refused_close{};
+		const GDExtensionScenePhaseRegistrationRefV1 wrong_kind{ relay_wire.token };
+		CHECK(probe.unregister_port(wrong_kind, &refused_close).native_error == ERR_INVALID_DATA);
+		CHECK(refused_close.registration_closed == 0);
+		auto foreign_registration = probe.registration;
+		foreign_registration.token.bytes[0] ^= 0x80;
+		CHECK(probe.unregister_port(foreign_registration, &refused_close).native_error == ERR_INVALID_DATA);
+		CHECK(refused_close.registration_closed == 0);
+		uint64_t controls[2]{};
+		for (uint32_t i = 0; i < 2; ++i) {
+			REQUIRE(fixture.port.record_schedule(probe.requests[i], &controls[i]) == OK);
+		}
+		server->sync(); // Real original FIFO dispatch; never a phase issuer.
+		CHECK(probe.typed_calls == 0);
+		CHECK(probe.legacy_calls == 0);
+		for (uint32_t i = 0; i < 2; ++i) {
+			MutexLock lock(fixture.registry.mutex);
+			ProductionRequest *original = nullptr;
+			RenderingDevice *device = nullptr;
+			REQUIRE(fixture.registry.production_request_locked(probe.requests[i], false, original, device) == OK);
+			CHECK(original->control.state == ProductionControlState::QUEUED);
+		}
+		const auto consume = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRecordConsumeV2>("device_session_production_record_consume_v2");
+		GDExtensionProductionRecordReportV2 recorded{};
+		CHECK(consume(probe.requests[0], controls[0], &recorded).native_error == ERR_BUSY);
+		if (close_before_draw) {
+			// Close two actual waiting RECORD mailboxes without issuing a phase.
+			GDExtensionScenePhaseCloseV1 close{};
+			bool consumed[2] = {};
+			for (uint32_t i = 0; i < 2; ++i) {
+				CHECK(probe.unregister_port(probe.registration, &close).native_error == ERR_BUSY);
+				CHECK(close.registration_closed == 1);
+				CHECK(close.active_deliveries == 0);
+				CHECK(close.relay_cell_released == 0);
+				CHECK(close.relay_holder_closed == 0);
+				NormalRelaySnapshot waiting;
+				REQUIRE(fixture.registry.observe_normal_relay(probe.relay, waiting) == OK);
+				CHECK_FALSE(waiting.cancelled);
+				CHECK_FALSE(waiting.cell_released);
+				CHECK_FALSE(waiting.holder_closed);
+				server->sync();
+				uint32_t returned_this_turn = 0;
+				for (uint32_t j = 0; j < 2; ++j) {
+					if (consumed[j]) {
+						continue;
+					}
+					const Error returned = Error(consume(probe.requests[j], controls[j], &recorded).native_error);
+					CHECK((returned == OK || returned == ERR_BUSY));
+					if (returned == OK) {
+						consumed[j] = true;
+						++returned_this_turn;
+						CHECK(recorded.result.native_error == ERR_UNAVAILABLE);
+						CHECK(recorded.control_serial == controls[j]);
+						CHECK(recorded.request_serial == probe.requests[j].handle_serial);
+					}
+				}
+				CHECK(returned_this_turn == 1); // Original arena order need not equal reservation order.
+				CHECK(probe.typed_calls == 0);
+				CHECK(probe.ordinary_calls == 0);
+				CHECK(probe.legacy_calls == 0);
+				CHECK(probe.frees == 0);
+			}
+			CHECK(probe.unregister_port(probe.registration, &close).native_error == ERR_BUSY);
+			CHECK(close.active_deliveries == 0);
+			CHECK(close.relay_cell_released == 1);
+			CHECK(close.relay_holder_closed == 0);
+			CHECK(fixture.registry.forget_normal_relay(probe.relay) == ERR_BUSY);
+			probe.callable = Callable();
+			CHECK(probe.frees == 1);
+			REQUIRE(probe.unregister_port(probe.registration, &close).native_error == OK);
+			CHECK(close.relay_holder_closed == 1);
+			NormalRelaySnapshot forgotten;
+			CHECK(fixture.registry.observe_normal_relay(probe.relay, forgotten) == ERR_INVALID_DATA);
+			for (uint32_t i = 0; i < 2; ++i) {
+				REQUIRE(fixture.registry.production_cancel(probe.requests[i]).native_error == OK);
+				REQUIRE(fixture.registry.production_release(probe.requests[i]).native_error == OK);
+			}
+			fixture.cleanup_owner();
+			CHECK(fixture.owner_cleaned);
+			return;
+		}
+		for (uint32_t occurrence = 0; occurrence < 2; ++occurrence) {
+			server->draw(false, 0.0); // Actual production early hook, not TESTS observer or direct dispatcher.
+			server->sync();
+			CHECK(probe.typed_calls == occurrence + 1);
+			if (probe.typed_calls != occurrence + 1) {
+				// A missing actual hook must fail with original owners returned.
+				// Closing wakes at most one waiting mailbox per original FIFO turn;
+				// two requests plus the original relay release need three turns.
+				GDExtensionScenePhaseCloseV1 refused{};
+				for (uint32_t turn = 0; turn < 3; ++turn) {
+					const Error closed = Error(probe.unregister_port(probe.registration, &refused).native_error);
+					CHECK(closed == ERR_BUSY);
+					CHECK(refused.active_deliveries == 0);
+					server->sync();
+				}
+				for (uint32_t i = 0; i < 2; ++i) {
+					CHECK(consume(probe.requests[i], controls[i], &recorded).native_error == OK);
+					CHECK((recorded.result.native_error == OK || recorded.result.native_error == ERR_UNAVAILABLE));
+					CHECK(fixture.registry.production_cancel(probe.requests[i]).native_error == OK);
+					CHECK(fixture.registry.production_release(probe.requests[i]).native_error == OK);
+				}
+				CHECK(refused.relay_cell_released == 1);
+				CHECK(refused.relay_holder_closed == 0);
+				probe.callable = Callable();
+				CHECK(probe.frees == 1);
+				CHECK(probe.unregister_port(probe.registration, &refused).native_error == OK);
+				CHECK(refused.relay_holder_closed == 1);
+				fixture.cleanup_owner();
+				CHECK(fixture.owner_cleaned);
+				return;
+			}
+			CHECK(probe.ordinary_calls == 0);
+			CHECK(probe.legacy_calls == 0);
+			uint32_t returned = 0;
+			for (uint32_t i = 0; i < 2; ++i) {
+				MutexLock lock(fixture.registry.mutex);
+				ProductionRequest *original = nullptr;
+				RenderingDevice *device = nullptr;
+				REQUIRE(fixture.registry.production_request_locked(probe.requests[i], false, original, device) == OK);
+				returned += original->control.state == ProductionControlState::RETURNED;
+				CHECK(original->graph_count == 0);
+			}
+			CHECK(returned == occurrence + 1); // max_operations=1 applies to real mailbox delivery.
+			MutexLock lock(fixture.registry.mutex);
+			ProductionRequest *expired = nullptr;
+			RenderingDevice *device = nullptr;
+			const GDExtensionProductionRequestRefV1 delivered = { NativeScenePhaseProbe::word(probe.phases[occurrence].physical_context, 0), NativeScenePhaseProbe::word(probe.phases[occurrence].physical_context, 2) };
+			CHECK(fixture.registry.production_physical_request_locked(probe.contexts[occurrence], delivered, expired, device, false) == ERR_UNAUTHORIZED);
+			CHECK(expired == nullptr);
+		}
+		CHECK(probe.phases[1].occurrence > probe.phases[0].occurrence);
+		CHECK(probe.contexts[1].frame_serial != probe.contexts[0].frame_serial);
+		for (uint32_t i = 0; i < 2; ++i) {
+			REQUIRE(consume(probe.requests[i], controls[i], &recorded).native_error == OK);
+			CHECK(recorded.result.native_error == OK);
+		}
+		GDExtensionScenePhaseCloseV1 close{};
+		CHECK(probe.unregister_port(probe.registration, &close).native_error == ERR_BUSY);
+		CHECK(close.active_deliveries == 0);
+		CHECK(close.relay_cell_released == 1);
+		CHECK(close.relay_holder_closed == 0);
+		CHECK(probe.frees == 0);
+		CHECK(fixture.registry.forget_normal_relay(probe.relay) == ERR_BUSY);
+		probe.callable = Callable(); // Original destructor/free acknowledges its actual holder.
+		CHECK(probe.frees == 1);
+		NormalRelaySnapshot final_relay;
+		REQUIRE(fixture.registry.observe_normal_relay(probe.relay, final_relay) == OK);
+		CHECK(final_relay.active_deliveries == 0);
+		CHECK(final_relay.cancelled);
+		CHECK(final_relay.cell_released);
+		CHECK(final_relay.holder_closed);
+		CHECK(final_relay.destruction_thread == Thread::get_caller_id());
+		REQUIRE(probe.unregister_port(probe.registration, &close).native_error == OK);
+		CHECK(close.relay_holder_closed == 1);
+		CHECK(close.relay_cell_released == 1);
+		CHECK(fixture.registry.observe_normal_relay(probe.relay, final_relay) == ERR_INVALID_DATA);
+		const auto completed_close = close;
+		REQUIRE(probe.unregister_port(probe.registration, &close).native_error == OK);
+		CHECK(memcmp(&close, &completed_close, sizeof(close)) == 0);
+		// Closed registration returns the original queued control without a draw.
+		uint64_t closed_control = 0;
+		REQUIRE(fixture.port.record_schedule(probe.requests[0], &closed_control) == OK);
+		server->sync();
+		REQUIRE(consume(probe.requests[0], closed_control, &recorded).native_error == OK);
+		CHECK(recorded.result.native_error == ERR_UNAVAILABLE);
+		CHECK(probe.typed_calls == 2);
+		server->draw(false, 0.0);
+		server->sync();
+		CHECK(probe.typed_calls == 2);
+		for (uint32_t i = 0; i < 2; ++i) {
+			REQUIRE(fixture.registry.production_cancel(probe.requests[i]).native_error == OK);
+			REQUIRE(fixture.registry.production_release(probe.requests[i]).native_error == OK);
+		}
+		CHECK(fixture.registry.forget_normal_relay(probe.relay) == ERR_INVALID_DATA);
+		fixture.cleanup_owner();
+		CHECK(fixture.owner_cleaned);
+	}
 	static void record_history_zero(const GDExtensionProductionRecordHistoryV1 &value) {
 		CHECK(value.abi.abi_version == 0);
 		CHECK(value.abi.struct_size == 0);
@@ -11724,4 +12118,12 @@ TEST_CASE("[SceneTree][ProductionRequest][AliasReadbackIntegration] actual inter
 
 TEST_CASE("[SceneTree][ProductionRequest][AliasReadbackMapFailure] actual download map failure returns custody and retires original owners") {
 	TestProductionRequest::Access::output_alias_readback_complete(true);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][NativeScenePhase] actual early hook owns bounded typed delivery expiry and original relay close") {
+	TestProductionRequest::Access::native_scene_phase_infrastructure();
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][NativeScenePhaseCloseWaiting] actual unregister returns two original waiting controls without a draw") {
+	TestProductionRequest::Access::native_scene_phase_infrastructure(true);
 }

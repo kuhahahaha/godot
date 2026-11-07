@@ -1,0 +1,57 @@
+{
+  "base_commit": "69c7e1eb65f0a539c80ba5640e0fd9d6cf53bb08",
+  "sources": [
+    {
+      "path": "core/extension/gdextension_interface.cpp",
+      "sha256": "0d8cb446626e144455a99720cf9e8a306bd88e7c8174f587f234993c0d1a550e"
+    },
+    {
+      "path": "core/extension/gdextension_interface.json",
+      "sha256": "cc217f2c1d7e5001b4b456bbce1dbf8e9d2837b61e07b89edcd595d8456dfc31"
+    },
+    {
+      "path": "core/extension/gdextension_library_exit_guard.cpp",
+      "sha256": "ef5e70162c90bf14bc7cdecb28a4ec0720b1c74f6f7551c9b403506e9791c74f"
+    },
+    {
+      "path": "core/extension/gdextension_library_exit_guard.h",
+      "sha256": "1f4d43dc5396760951b15919d68e4cfe87218bb00f4f4cd40dce7621d2ec8d2e"
+    },
+    {
+      "path": "core/extension/gdextension_production_action.cpp",
+      "sha256": "65ca9e2367f35c59e03e49b307e6f9e4a06b3b0c471cc3ecfd3db025b4615e69"
+    },
+    {
+      "path": "core/extension/gdextension_production_interface.cpp",
+      "sha256": "7783becd1a31adcac8d24d851cbb7194cc24ed0aca177811bfb37ab1f97738fb"
+    },
+    {
+      "path": "core/extension/gdextension_production_request.cpp",
+      "sha256": "84b602ceed1846e0a0ff9e02166779b578fd82ef8ddde6584b8fa40c9f78339f"
+    },
+    {
+      "path": "core/extension/gdextension_production_request.h",
+      "sha256": "fa913102faa12acd69678d877fc394cbe10e8de7b599e8f37883df8b0a1953c9"
+    },
+    {
+      "path": "core/extension/gdextension_production_window.cpp",
+      "sha256": "9c5b7cc07f671d8e0f12f14ad465c0e084ecfb2e8410f4f2da3c9a423456cb3e"
+    },
+    {
+      "path": "core/extension/gdextension_scene_phase.h",
+      "sha256": "d4cbd9c1501e2404385fd21a612bda97f6101246ae763797e868513a14c9c31c"
+    },
+    {
+      "path": "servers/rendering/rendering_server_default.cpp",
+      "sha256": "cf056881f76a11a0c706985f637f024279002aed1bbdad0e5270d368b6ab081b"
+    },
+    {
+      "path": "tests/core/extension/test_native_scene_phase.cpp",
+      "sha256": "2baf9d8d033e895546ba2528616fd0f979fe93cee00c5de3805fdb4742cd2df0"
+    },
+    {
+      "path": "tests/core/extension/test_production_request.cpp",
+      "sha256": "5288ca971e5ba5603901c269426828fc72bd15482cdad988e8e192202dd931f6"
+    }
+  ]
+}
