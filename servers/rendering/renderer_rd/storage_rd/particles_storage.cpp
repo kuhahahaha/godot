@@ -2368,7 +2368,7 @@ void ParticlesStorage::update_particles() {
 			particles->frame_remainder = todo;
 		} else {
 			const double variable_delta = frame_delta * time_scale_double;
-			if (!Math::is_finite(variable_delta) || !_particles_process(particles, variable_delta)) {
+			if (!Math::is_finite(variable_delta) || !Math::is_finite((float)variable_delta) || !_particles_process(particles, variable_delta)) {
 				queue_retry();
 				continue;
 			}
