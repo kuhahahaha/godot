@@ -201,6 +201,10 @@ GDExtensionDeviceSessionResultV1 device_session_production_reserve_v2(GDExtensio
 	return Registry::get_singleton().production_reserve_v2(attachment, operation, capacity, actions, action_count, resources, resource_count, uses, use_count, readbacks, readback_count, out_request);
 }
 static_assert(std::is_same_v<decltype(&device_session_production_reserve_v2), GDExtensionInterfaceDeviceSessionProductionReserveV2>);
+GDExtensionDeviceSessionResultV1 device_session_production_prepare_output_v1(GDExtensionProductionRequestRefV1 request, const GDExtensionProductionOutputPrepareV1 *prepare) {
+	return Registry::get_singleton().production_prepare_output(request, prepare);
+}
+static_assert(std::is_same_v<decltype(&device_session_production_prepare_output_v1), GDExtensionInterfaceDeviceSessionProductionPrepareOutputV1>);
 GDExtensionDeviceSessionResultV1 device_session_production_prepare_dispatch_v2(GDExtensionProductionRequestRefV1 request, const GDExtensionProductionDispatchV2 *dispatch, const void *push, uint32_t push_bytes) {
 	return Registry::get_singleton().production_prepare_dispatch_v2(request, dispatch, push, push_bytes);
 }
@@ -250,6 +254,11 @@ void register_production_interfaces() {
 	GDExtension::register_interface_function("device_session_output_create_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_output_create_v1));
 	static_assert(std::is_same_v<decltype(&device_session_output_create_v2), GDExtensionInterfaceDeviceSessionOutputCreateV2>);
 	GDExtension::register_interface_function("device_session_output_create_v2", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_output_create_v2));
+	static_assert(std::is_same_v<decltype(&device_session_output_acquire_v1), GDExtensionInterfaceDeviceSessionOutputAcquireV1>);
+	GDExtension::register_interface_function("device_session_output_acquire_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_output_acquire_v1));
+	static_assert(std::is_same_v<decltype(&device_session_output_poll_v1), GDExtensionInterfaceDeviceSessionOutputPollV1>);
+	GDExtension::register_interface_function("device_session_output_poll_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_output_poll_v1));
+	GDExtension::register_interface_function("device_session_production_prepare_output_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_production_prepare_output_v1));
 	static_assert(std::is_same_v<decltype(&device_session_output_seal_v1), GDExtensionInterfaceDeviceSessionOutputSealV1>);
 	GDExtension::register_interface_function("device_session_output_seal_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_output_seal_v1));
 	static_assert(std::is_same_v<decltype(&device_session_output_cancel_v1), GDExtensionInterfaceDeviceSessionOutputCancelV1>);

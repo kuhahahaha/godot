@@ -34,6 +34,7 @@
 #include "servers/rendering/renderer_rd/storage_rd/external_output_packet.h"
 
 #include <cstddef>
+#include "external_output_storage.h"
 
 namespace RendererRD {
 Error ExternalOutputOwner::validate_native_selection(const ExternalOutputConfig &config, uint32_t &surface_count) {
@@ -257,6 +258,8 @@ Error ExternalOutputOwner::plan_metadata_layout(uint32_t p_views, uint32_t p_rea
 	if (cursor > UINT32_MAX ||
 			!append(p_views, sizeof(ViewCell), alignof(ViewCell), layout.view_offset) ||
 			!append(p_reads, sizeof(ReadCell), alignof(ReadCell), layout.read_offset) ||
+			!append(p_surfaces ? MAX_SLOTS : 0, sizeof(ExternalOutputStorage), alignof(ExternalOutputStorage), layout.storage_offset) ||
+			!append(p_surfaces, sizeof(SurfaceBinding), alignof(SurfaceBinding), layout.surface_binding_offset) ||
 			!append(p_surfaces, sizeof(SurfaceCell), alignof(SurfaceCell), layout.surface_offset) ||
 			alignment > alignof(std::max_align_t)) {
 		return ERR_PARAMETER_RANGE_ERROR;
@@ -474,8 +477,9 @@ Error ExternalOutputOwner::return_slot_pin(uint32_t p_slot) {
 		return error;
 	}
 	cell.original_registry = nullptr;
-	cell.original_request = {};
-	cell.original_revision = cell.lease_serial = 0;
+	// Keep exact cold incarnation identity for Poll after root return. These
+	// scalars confer no authority; a reused slot installs a new original tuple.
+	cell.original_revision = 0;
 	cell.output_group_returned = false;
 	cell.output_membership_group = 0;
 	cell.retire_surface = cell.retire_resource = 0;

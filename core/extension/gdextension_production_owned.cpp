@@ -331,6 +331,9 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 					return result(ERR_INVALID_DATA);
 				}
 			}
+			if (slot.output_set_deferred) {
+				return result(OK);
+			}
 		} else {
 			if ((error = production_request_locked(ref, true, request, rd)) != OK) {
 				return result(error);
@@ -346,7 +349,9 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 					return result(ERR_INVALID_DATA);
 				}
 				const auto &resource = request->resources[binding.resource_slot];
-				if (!resource.imported || resource.declaration.resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1 || resource.use_count != 1 || resource.retiring || binding.bytes != resource.declaration.physical_bytes || !resource.uses[0].same_physical() || !resource.uses[0].linked()) {
+				const bool original_physical = resource.imported && resource.use_count == 1 && resource.uses[0].same_physical() && resource.uses[0].linked();
+				const bool deferred_alias = resource.output_alias_prepared && !resource.imported && resource.output_action_ordinal < request->action_count && request->actions[resource.output_action_ordinal].prepared;
+				if ((!original_physical && !deferred_alias) || resource.declaration.resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1 || resource.retiring || binding.bytes != resource.declaration.physical_bytes) {
 					return result(ERR_INVALID_DATA);
 				}
 			}
@@ -363,6 +368,14 @@ GDExtensionDeviceSessionResultV1 Registry::production_set_create(GDExtensionProd
 				request->uses[slot.first_binding + i].binding = bindings[i];
 			}
 			request->binding_used += count;
+			for (uint32_t i = 0; i < count; ++i) {
+				slot.output_set_deferred |= request->resources[bindings[i].resource_slot].output_alias_prepared;
+			}
+			if (slot.output_set_deferred) {
+				// Preparation only. The original output action creates this exact
+				// set after its actual aliases exist, inside the same RECORD.
+				return result(OK);
+			}
 			slot.creating = true;
 			request->returns[index].pending = true;
 			request->returns[index].serial = slot.retire_serial;
@@ -661,8 +674,13 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 	const auto &attachment = *request.attachment;
 	const auto &owner = records[attachment.library];
 	const auto &device = device_records[attachment.device];
+	bool output_creation = kind == ProductionControlKind::SET_CREATE && slot.output_set_deferred && request.frozen && request.control.state == ProductionControlState::EXECUTING && request.control.input.kind == ProductionControlKind::RECORD && request.next_action < request.action_count;
+	if (output_creation) {
+		const auto &action = request.actions[request.next_action];
+		output_creation = action.request == &request && action.output_source_prepared && action.output_state == ProductionActionCell::OutputState::RESERVING && action.output_root;
+	}
 	// Queuing preparation is not a grant to create after NewWork was sealed.
-	if (attachment.closing || !owner.attached || owner.quiescing || owner.close_started || owner.close_error != OK || owner.guard_enrollment != GuardEnrollment::QUALIFIED || request.cancelled || request.release_started || request.frozen || !device.live || rd.production_finalization_started.load(std::memory_order_acquire)) {
+	if (attachment.closing || !owner.attached || owner.quiescing || owner.close_started || owner.close_error != OK || owner.guard_enrollment != GuardEnrollment::QUALIFIED || request.cancelled || request.release_started || (request.frozen && !output_creation) || !device.live || rd.production_finalization_started.load(std::memory_order_acquire)) {
 		return finish(ERR_BUSY);
 	}
 	if (!rd.driver) {
@@ -713,7 +731,8 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 		for (uint32_t i = 0; i < slot.binding_count; ++i) {
 			const auto &binding = request.uses[slot.first_binding + i].binding;
 			const auto &resource = request.resources[binding.resource_slot];
-			if (!resource.imported || resource.use_count != 1 || resource.retiring || !resource.uses[0].same_physical() || !resource.uses[0].linked()) {
+			const bool exact_alias = resource.output_alias_prepared && production_output_alias_matches_locked(request, resource, rd);
+			if (!resource.imported || resource.retiring || (!exact_alias && (resource.use_count != 1 || !resource.uses[0].same_physical() || !resource.uses[0].linked()))) {
 				return finish(ERR_INVALID_DATA);
 			}
 			bool reflected = false;
@@ -726,7 +745,7 @@ Error Registry::production_create_execute_locked(ProductionRequest &request, Ren
 			uniforms[i].uniform_type = RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER;
 			uniforms[i].binding = binding.binding;
 			uniforms[i].append_id(resource.primary);
-			if (!dependencies.has(resource.uses[0].physical)) {
+			if (!exact_alias && !dependencies.has(resource.uses[0].physical)) {
 				dependencies.push_back(resource.uses[0].physical);
 			}
 		}

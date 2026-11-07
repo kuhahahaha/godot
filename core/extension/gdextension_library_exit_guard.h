@@ -42,6 +42,7 @@ class ExternalOutputOwner;
 } //namespace RendererRD
 class StringName;
 class RenderingDevice;
+class NativeDisposalWitness;
 class RenderingServerDefault;
 class TestProductionResourceUseAccess;
 class TestQualificationPhysicalAccess;
@@ -899,6 +900,12 @@ private:
 	// Core-only ambient bridge. Uses the original executing RECORD frame;
 	// never interprets Dictionary tokens or grants source/Host/mapping admission.
 	Error production_output_pin_current(RenderingDevice &, ProductionOutputPin &);
+	bool production_output_source_matches_locked(const ProductionRequest &, const ProductionActionCell &, RenderingDevice &) const;
+	bool production_output_alias_matches_locked(const ProductionRequest &, const ProductionResourceSlot &, RenderingDevice &) const;
+	Error production_output_alias_bind_locked(ProductionRequest &, ProductionActionCell &, uint32_t, const ProductionOutputPin &, uint64_t, uint32_t, const NativeDisposalWitness &, RenderingDevice &);
+	bool production_output_action_pin_matches_locked(const ProductionRequest &, const ProductionOutputPin &, RenderingDevice &) const;
+	Error production_output_action_pin_locked(ProductionRequest &, ProductionActionCell &, RenderingDevice &, ProductionOutputPin &);
+	Error production_output_action_owner_bind_locked(ProductionRequest &, ProductionActionCell &, ProductionOutputPin &, RenderingDevice &, RID, uint64_t, uint32_t, uint64_t);
 	Error production_output_pin(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, RenderingDevice &, ProductionOutputPin &);
 	Error production_output_metadata_create(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, uint32_t, RenderingDevice &, uint64_t, uint32_t, ProductionOutputMetadataLease &);
 	Error production_output_metadata_validate(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const ProductionOutputMetadataLease &, RenderingDevice &, uint64_t, uint32_t);
@@ -1036,6 +1043,9 @@ public:
 	GDExtensionDeviceSessionResultV1 production_quote(const GDExtensionDeviceExitAbi *, GDExtensionDeviceExitSceneReadyContextRef, GDExtensionProducerRegistrationRefV1, GDExtensionDeviceRegistryContextRef, GDExtensionOriginalDeviceSessionRef, const GDExtensionProductionCapacityV1 *, GDExtensionProductionMetadataQuoteV1 *);
 	GDExtensionDeviceSessionResultV1 production_accept(const GDExtensionDeviceExitAbi *, GDExtensionDeviceExitSceneReadyContextRef, GDExtensionProducerRegistrationRefV1, GDExtensionDeviceRegistryContextRef, GDExtensionOriginalDeviceSessionRef, GDExtensionDeviceExitLibraryCodeHoldRef, const GDExtensionProductionMetadataQuoteV1 *, GDExtensionProductionAttachmentRefV1 *, GDExtensionProductionInstallationReportV1 *);
 	Error production_install_record_receiver(GDExtensionDeviceExitSceneReadyContextRef, GDExtensionProductionAttachmentRefV1, ProductionRecordReceiver, void *, ProductionMetadataReceiver = nullptr);
+	GDExtensionDeviceSessionResultV1 production_prepare_output(GDExtensionProductionRequestRefV1, const GDExtensionProductionOutputPrepareV1 *);
+	void production_output_acquire(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, uint64_t, const GDExtensionOutputAcquireInputV1 *, GDExtensionOutputAcquireResultV1 *);
+	void production_output_poll(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const GDExtensionOutputGenerationInputV1 *, GDExtensionOutputPollResultV1 *);
 	GDExtensionDeviceSessionResultV1 production_prepare_dispatch_v2(GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionDispatchV2 *input, const void *push, uint32_t bytes, uint32_t expected_contract = 2);
 	GDExtensionDeviceSessionResultV1 production_prepare_copy_v2(GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionCopyV2 *input, uint32_t expected_contract = 2);
 	GDExtensionDeviceSessionResultV1 production_prepare_upload_v2(GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionUploadV2 *input, const void *data, uint64_t bytes, uint32_t expected_contract = 2);

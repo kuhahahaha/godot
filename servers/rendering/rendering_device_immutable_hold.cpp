@@ -1143,6 +1143,14 @@ Error RenderingDevice::_production_output_drop_step(GDExtensionDeviceExit::Produ
 		if (dependents && !dependents->is_empty()) {
 			continue;
 		}
+		// Enqueue removes the ordinary RID dependency edge, but an output
+		// descriptor still pins its buffers until actual descriptor free.
+		// Skip this known blocked parent BEFORE spending a one-pass budget;
+		// otherwise it starves the very pending free that removes the pin.
+		const auto *output_buffer = storage_buffer_owner.owns(rid) ? storage_buffer_owner.get_or_null(rid) : nullptr;
+		if (output_buffer && output_buffer->native_disposal.cell.is_valid() && output_buffer->native_disposal.cell->production_dependent_sets) {
+			continue;
+		}
 		if (!_native_disposal_admit(NativeDisposalWork::WORK)) {
 			return ERR_BUSY;
 		}
@@ -1184,7 +1192,7 @@ Error RenderingDevice::_production_output_owned_reserve(GDExtensionProductionPhy
 	if (admitted != OK) {
 		return admitted;
 	}
-	if (actual_device != this || request != pin.request || request->next_action || request->graph_count || request->native_count || !request->next_disposal_group_serial) {
+	if (actual_device != this || request != pin.request || ((request->next_action || request->graph_count || request->native_count) && !registry.production_output_action_pin_matches_locked(*request, pin, *this)) || !request->next_disposal_group_serial) {
 		return ERR_BUSY;
 	}
 	uint64_t available = 0;
@@ -1238,7 +1246,7 @@ Error RenderingDevice::_production_output_owned_rollback(GDExtensionProductionPh
 	if (admitted != OK) {
 		return admitted;
 	}
-	if (actual_device != this || request != pin.request || request->next_action || request->graph_count || request->native_count || request->capture_inflight) {
+	if (actual_device != this || request != pin.request || ((request->next_action || request->graph_count || request->native_count) && !registry.production_output_action_pin_matches_locked(*request, pin, *this)) || request->capture_inflight) {
 		return ERR_BUSY;
 	}
 	const uint32_t begin = request->use_count + request->binding_used;
@@ -1523,7 +1531,7 @@ Error RenderingDevice::_production_output_owned_create_preflight_locked(GDExtens
 	if (admitted != OK) {
 		return admitted;
 	}
-	if (actual_device != this || request != pin.request || request->next_action || request->graph_count || request->native_count || request->capture_inflight) {
+	if (actual_device != this || request != pin.request || ((request->next_action || request->graph_count || request->native_count) && !registry.production_output_action_pin_matches_locked(*request, pin, *this)) || request->capture_inflight) {
 		return ERR_BUSY;
 	}
 	bool found = false;
@@ -1615,7 +1623,7 @@ Error RenderingDevice::_production_output_owned_uniform_set_create(GDExtensionPr
 		}
 	}
 	registry.production_native_effect_enter_locked(*request);
-	const Error created = _native_disposal_uniform_set_create(uniforms, shader, index, rid, witness);
+	const Error created = _native_disposal_uniform_set_create(uniforms, shader, index, rid, witness, request, group, pin.serial, ordinal);
 	if (created != OK) {
 		return created;
 	}

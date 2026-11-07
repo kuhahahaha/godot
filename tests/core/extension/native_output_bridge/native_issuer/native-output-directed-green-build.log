@@ -1,0 +1,21 @@
+Building for macOS 11.0+.
+WARNING: The screen reader support driver requires dependencies to be installed.
+You can install them by running `python3 misc/scripts/install_accesskit.py`.
+See the documentation for more information:
+	https://docs.godotengine.org/en/latest/engine_details/development/compiling/compiling_for_macos.html
+Alternatively, disable this driver by compiling with `accesskit=no` explicitly.
+WARNING: The ANGLE rendering driver requires dependencies to be installed.
+You can install them by running `python misc/scripts/install_angle.py`.
+See the documentation for more information:
+	https://docs.godotengine.org/en/latest/engine_details/development/compiling/compiling_for_windows.html
+Alternatively, disable this driver by compiling with `angle=no` explicitly.
+MoltenVK found at: /opt/homebrew/Frameworks/MoltenVK.xcframework
+Building for platform "macos", architecture "arm64", target "editor".
+Compiling servers/rendering/rendering_device_graph.cpp ...
+servers/rendering/rendering_device_graph.cpp:710:21: error: no viable overloaded '|='
+  710 |                         new_usage_access |= _usage_to_access_bits(RESOURCE_USAGE_COPY_FROM);
+      |                         ~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+1 error generated.
+Compiling core/extension/gdextension_production_output_poll.cpp ...
+scons: *** [bin/obj/servers/rendering/rendering_device_graph.macos.editor.arm64.o] Error 1
+INFO: Time elapsed: 00:00:06.95

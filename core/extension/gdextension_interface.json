@@ -6916,6 +6916,10 @@
                 {
                     "name": "GDEXTENSION_PRODUCTION_RASTER_FRAME_V1",
                     "value": 5
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1",
+                    "value": 6
                 }
             ]
         },
@@ -7036,6 +7040,10 @@
                 {
                     "name": "GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1",
                     "value": 2
+                },
+                {
+                    "name": "GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1",
+                    "value": 3
                 }
             ]
         },
@@ -9714,6 +9722,325 @@
                 {
                     "name": "pipeline_serial",
                     "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionOutputRoleV1",
+            "kind": "struct",
+            "description": [
+                "One immutable original native-output role association. Role uses the existing OutputConstantsV1 values; protected native commands and status are never producer writable. Absent role has zero bytes and UINT32_MAX locators."
+            ],
+            "members": [
+                {
+                    "name": "role",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "resource_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "use_index",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "allocation_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "bytes",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionProductionOutputPrepareV1",
+            "kind": "struct",
+            "description": [
+                "Frozen native action preparation, retaining original accepted resource/use locators and exact acquire input. The ordinal is the native request action ordinal, never the compiler Output SOURCE ordinal.",
+                "The three role entries are current records, aligned previous records and output metadata, in that order. Physical source association does not establish original Runtime selected-root or account authority; the original caller retains and checks those owners.",
+                "first_source_use/source_use_count select the complete contiguous source READ-use span inside this original accepted action. Every source backing, count, attribute, identity, validity and instance gate uses its own original use row with exact resource slot, byte offset, byte size and original resource generation. All action READ storage uses must belong to this span; the single source_resource_slot/source_use_index/source_generation is only a checked anchor within it and never grants authority over other sources. Original typed mapping retains each semantic role and maps it to these accepted rows."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "action_ordinal",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "canonical_suboperation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "source_recipe_substep",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "source_resource_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "source_use_index",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "source_generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "first_source_use",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "source_use_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "read_capacity",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "read_graph_capacity",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "roles[3]",
+                    "type": "GDExtensionProductionOutputRoleV1"
+                },
+                {
+                    "name": "input",
+                    "type": "GDExtensionOutputAcquireInputV1"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputCustodyV1",
+            "kind": "enum",
+            "values": [
+                {
+                    "name": "GDEXTENSION_OUTPUT_NO_CUSTODY_V1",
+                    "value": 0
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_CUSTODY_ACCEPTED_V1",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_CUSTODY_RETAINED_PREFIX_V1",
+                    "value": 2
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_CUSTODY_UNKNOWN_V1",
+                    "value": 3
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputAcquireResultV1",
+            "kind": "struct",
+            "description": [
+                "Actual native acquisition observation. A failure with retained-prefix or unknown custody must keep its original source and physical retirement obligations; status alone is not a no-effect receipt.",
+                "Writable descriptors retain exact original resource/use locators; a returned RID cannot import authority into another request. The copied token correlates the actual retained lease; token bytes alone grant no new authority.",
+                "state uses OutputLeaseStateV1; INVALID conveys no validated lease observation.",
+                "With no validated writable descriptors, resource_slots and use_indices are UINT32_MAX. action_ordinal is UINT64_MAX until an original action association is validated; writable_count alone bounds the active descriptors."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "status",
+                    "type": "GDExtensionOutputStatusV1"
+                },
+                {
+                    "name": "custody",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "state",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "lease_token",
+                    "type": "GDExtensionOutputTokenV1"
+                },
+                {
+                    "name": "writable_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "writables[3]",
+                    "type": "GDExtensionOutputWritableV1"
+                },
+                {
+                    "name": "resource_slots[3]",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "use_indices[3]",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "request_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "action_ordinal",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputPollResultV1",
+            "kind": "struct",
+            "description": [
+                "Read-only observation of the exact native output owner and original request. Does not schedule, append, advance an action or infer completion from time. known/possible/complete describe the original request obligations; physical_returned counts actual output physical returns across the whole validated generation.",
+                "state uses OutputGenerationStateV1; INVALID conveys no validated generation observation.",
+                "The request must match the original generation request or an actual slot request. action_ordinal identifies the unique matching slot action, or UINT64_MAX when no unique action association exists. Released remains observable until the actual metadata owner is freed; an empty returned generation pin does not imply that the owner is absent."
+            ],
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "status",
+                    "type": "GDExtensionOutputStatusV1"
+                },
+                {
+                    "name": "generation",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "state",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "custody",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "known",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "possible",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "complete",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "physical_returned",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "request_serial",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "action_ordinal",
+                    "type": "uint64_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputGenerationStateV1",
+            "kind": "enum",
+            "description": [
+                "Observable native owner state. INVALID is zero and denotes no validated owner observation, not a completion state."
+            ],
+            "values": [
+                {
+                    "name": "GDEXTENSION_OUTPUT_GENERATION_INVALID_V1",
+                    "value": 0
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_GENERATION_CONFIGURED_V1",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_GENERATION_ACTIVE_V1",
+                    "value": 2
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_GENERATION_WITHDRAWING_V1",
+                    "value": 3
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_GENERATION_RETIRING_V1",
+                    "value": 4
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_GENERATION_FAULTED_RETIRING_V1",
+                    "value": 5
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_GENERATION_RELEASED_V1",
+                    "value": 6
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputLeaseStateV1",
+            "kind": "enum",
+            "description": [
+                "Observable native owner state. INVALID is zero and denotes no validated owner observation, not a completion state."
+            ],
+            "values": [
+                {
+                    "name": "GDEXTENSION_OUTPUT_LEASE_INVALID_V1",
+                    "value": 0
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_LEASE_EMPTY_V1",
+                    "value": 1
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_LEASE_RESERVED_V1",
+                    "value": 2
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_LEASE_WRITING_V1",
+                    "value": 3
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_LEASE_SEALED_RECORDED_V1",
+                    "value": 4
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_LEASE_ADOPTED_V1",
+                    "value": 5
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_LEASE_EMPTY_OR_FAULT_PACKET_V1",
+                    "value": 6
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_LEASE_RETIRING_V1",
+                    "value": 7
+                },
+                {
+                    "name": "GDEXTENSION_OUTPUT_LEASE_RELEASED_V1",
+                    "value": 8
                 }
             ]
         }
@@ -20783,7 +21110,7 @@
             "description": [
                 "Synchronous original native ExternalOutput create body. Symbol availability grants no source, Host, charge, phase or completion authority.",
                 "All pointer extents must be live and accessible for this call. Nonempty RID spans must be aligned and pairwise disjoint from the input and output. No input pointer is retained. Detail strings have static engine lifetime.",
-                "Create and seal preserve the current original admission/record-bridge refusal. Cancel and withdraw use the existing native state transitions. Acquire and poll are not exported by this subset."
+                "Create and seal retain their original source/profile and record-bridge admission checks. Cancel and withdraw use the existing native state transitions. Separately exported acquire and poll preserve exact original request/action custody and do not imply profile availability."
             ],
             "arguments": [
                 {
@@ -20862,7 +21189,7 @@
             "description": [
                 "Synchronous original native ExternalOutput seal body. Symbol availability grants no source, Host, charge, phase or completion authority.",
                 "All pointer extents must be live and accessible for this call. Nonempty RID spans must be aligned and pairwise disjoint from the input and output. No input pointer is retained. Detail strings have static engine lifetime.",
-                "Create and seal preserve the current original admission/record-bridge refusal. Cancel and withdraw use the existing native state transitions. Acquire and poll are not exported by this subset."
+                "Create and seal retain their original source/profile and record-bridge admission checks. Cancel and withdraw use the existing native state transitions. Separately exported acquire and poll preserve exact original request/action custody and do not imply profile availability."
             ],
             "arguments": [
                 {
@@ -20901,7 +21228,7 @@
             "description": [
                 "Synchronous original native ExternalOutput cancel body. Symbol availability grants no source, Host, charge, phase or completion authority.",
                 "All pointer extents must be live and accessible for this call. Nonempty RID spans must be aligned and pairwise disjoint from the input and output. No input pointer is retained. Detail strings have static engine lifetime.",
-                "Create and seal preserve the current original admission/record-bridge refusal. Cancel and withdraw use the existing native state transitions. Acquire and poll are not exported by this subset."
+                "Create and seal retain their original source/profile and record-bridge admission checks. Cancel and withdraw use the existing native state transitions. Separately exported acquire and poll preserve exact original request/action custody and do not imply profile availability."
             ],
             "arguments": [
                 {
@@ -20939,7 +21266,7 @@
             "description": [
                 "Synchronous original native ExternalOutput withdraw body. Symbol availability grants no source, Host, charge, phase or completion authority.",
                 "All pointer extents must be live and accessible for this call. Nonempty RID spans must be aligned and pairwise disjoint from the input and output. No input pointer is retained. Detail strings have static engine lifetime.",
-                "Create and seal preserve the current original admission/record-bridge refusal. Cancel and withdraw use the existing native state transitions. Acquire and poll are not exported by this subset."
+                "Create and seal retain their original source/profile and record-bridge admission checks. Cancel and withdraw use the existing native state transitions. Separately exported acquire and poll preserve exact original request/action custody and do not imply profile availability."
             ],
             "arguments": [
                 {
@@ -21150,6 +21477,118 @@
                     "Operation result; retained physical prefixes remain owned on failure."
                 ]
             }
+        },
+        {
+            "name": "device_session_production_prepare_output_v1",
+            "since": "4.7",
+            "description": [
+                "Prepare the exact original native-output action before freeze. Copies only validated immutable data into prequoted original arena storage; availability is not source or account admission."
+            ],
+            "arguments": [
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Original accepted request owning the frozen action and its finite resource/use arena."
+                    ]
+                },
+                {
+                    "name": "prepare",
+                    "type": "const GDExtensionProductionOutputPrepareV1*",
+                    "description": [
+                        "Aligned readable preparation DTO, borrowed synchronously and copied only after original admission checks."
+                    ]
+                }
+            ],
+            "return_value": {
+                "type": "GDExtensionDeviceSessionResultV1",
+                "description": [
+                    "Original preparation status; success does not grant native acquisition or GPU completion."
+                ]
+            }
+        },
+        {
+            "name": "device_session_output_acquire_v1",
+            "since": "4.7",
+            "description": [
+                "Acquire only the exact original accepted/prepared native output action in its protected RECORD callback. Rechecks original action/frontier/source, finite role capacities and actual owner before native allocation.",
+                "All pointers designate live accessible aligned DTOs for this synchronous call. Invalid, overflowing or overlapping input/output extents leave the output untouched. Detail strings have static engine lifetime."
+            ],
+            "arguments": [
+                {
+                    "name": "physical_context",
+                    "type": "GDExtensionProductionPhysicalContextRefV1",
+                    "description": [
+                        "Actual protected RECORD callback context for this same original request."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Original accepted request owning the frozen action and its finite resource/use arena."
+                    ]
+                },
+                {
+                    "name": "action_ordinal",
+                    "type": "uint64_t",
+                    "description": [
+                        "Exact native accepted action ordinal; never a compiler Output SOURCE ordinal."
+                    ]
+                },
+                {
+                    "name": "input",
+                    "type": "const GDExtensionOutputAcquireInputV1*",
+                    "description": [
+                        "Aligned readable input DTO whose complete extent is disjoint from the output."
+                    ]
+                },
+                {
+                    "name": "out_result",
+                    "type": "GDExtensionOutputAcquireResultV1*",
+                    "description": [
+                        "Aligned writable result, left untouched when either DTO extent is invalid or overlaps the other."
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "device_session_output_poll_v1",
+            "since": "4.7",
+            "description": [
+                "Observe the same original output generation and request association without scheduling or appending. Original metadata owner must remain alive through this call.",
+                "All pointers designate live accessible aligned DTOs. Invalid, overflowing or overlapping extents leave the output untouched. Detail strings have static engine lifetime."
+            ],
+            "arguments": [
+                {
+                    "name": "physical_context",
+                    "type": "GDExtensionProductionPhysicalContextRefV1",
+                    "description": [
+                        "Actual protected RECORD callback context for this same original request."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "Original accepted request owning the frozen action and its finite resource/use arena."
+                    ]
+                },
+                {
+                    "name": "input",
+                    "type": "const GDExtensionOutputGenerationInputV1*",
+                    "description": [
+                        "Aligned readable input DTO whose complete extent is disjoint from the output."
+                    ]
+                },
+                {
+                    "name": "out_result",
+                    "type": "GDExtensionOutputPollResultV1*",
+                    "description": [
+                        "Aligned writable result, left untouched when either DTO extent is invalid or overlaps the other."
+                    ]
+                }
+            ]
         }
     ]
 }

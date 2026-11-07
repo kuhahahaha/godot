@@ -67,6 +67,7 @@ public:
 // All access is through the original main RD on its render thread.
 class NativeDisposalWitness {
 	friend class RenderingDevice;
+	friend class GDExtensionDeviceExit::Registry;
 #ifdef TESTS_ENABLED
 	friend class TestNativeDisposalAccess;
 	friend class TestExternalOutputPrefixAccess;
@@ -94,6 +95,7 @@ private:
 		GDExtensionDeviceExit::ProductionRequest *production_request = nullptr;
 		uint64_t production_request_serial = 0, production_group_serial = 0, production_pin_serial = 0;
 		uint32_t production_ordinal = UINT32_MAX;
+		uint32_t production_dependent_sets = 0;
 		State state = State::LIVE;
 		// Both the actual RD resource/pending-free entry and the observer retain
 		// this cell. No pointer into K storage or DSO callback survives here.

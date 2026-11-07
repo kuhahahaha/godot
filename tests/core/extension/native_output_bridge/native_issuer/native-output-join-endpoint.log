@@ -1,0 +1,8 @@
+ERROR: Command can't have itself as a dependency.
+   at: _add_command_to_graph (servers/rendering/rendering_device_graph.cpp:943)
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+[doctest] test cases:   1 |   1 passed | 0 failed | 2194 skipped
+[doctest] assertions: 251 | 251 passed | 0 failed |
+[doctest] Status: SUCCESS!

@@ -1147,7 +1147,7 @@ RenderingDevice::CopyAppendResult RenderingDevice::_buffer_copy_recorded(RID p_s
 		ERR_FAIL_V_MSG(ERR_INVALID_PARAMETER, "Destination buffer argument is not a valid buffer of any type.");
 	}
 
-	ERR_FAIL_COND_V((src_buffer->qualification_return && !_production_resource_permitted(p_src_buffer)) || (dst_buffer->qualification_return && !_production_resource_permitted(p_dst_buffer)), ERR_UNAUTHORIZED);
+	ERR_FAIL_COND_V(((src_buffer->qualification_return || (src_buffer->native_disposal.cell.is_valid() && src_buffer->native_disposal.cell->production_request)) && !_production_resource_permitted(p_src_buffer)) || ((dst_buffer->qualification_return || (dst_buffer->native_disposal.cell.is_valid() && dst_buffer->native_disposal.cell->production_request)) && !_production_resource_permitted(p_dst_buffer)), ERR_UNAUTHORIZED);
 	// Validate the copy's dimensions for both buffers.
 	ERR_FAIL_COND_V_MSG(uint64_t(p_src_offset) + uint64_t(p_size) > src_buffer->size, ERR_INVALID_PARAMETER, "Size is larger than the source buffer.");
 	ERR_FAIL_COND_V_MSG(uint64_t(p_dst_offset) + uint64_t(p_size) > dst_buffer->size, ERR_INVALID_PARAMETER, "Size is larger than the destination buffer.");
@@ -1610,7 +1610,7 @@ Error RenderingDevice::_buffer_get_data_async(RID p_buffer, const Callable &p_ca
 	Buffer *buffer = _get_buffer_from_owner(p_buffer);
 	ERR_FAIL_NULL_V(buffer, ERR_INVALID_PARAMETER);
 	const bool core = p_owned.is_valid() || p_capture;
-	ERR_FAIL_COND_V(buffer->qualification_return && !qualification_recording && !_production_resource_permitted(p_buffer), ERR_UNAUTHORIZED);
+	ERR_FAIL_COND_V((buffer->qualification_return || (buffer->native_disposal.cell.is_valid() && buffer->native_disposal.cell->production_request)) && !qualification_recording && !_production_resource_permitted(p_buffer), ERR_UNAUTHORIZED);
 	if (!p_size) {
 		p_size = buffer->size;
 	}
@@ -5322,6 +5322,7 @@ RID RenderingDevice::_uniform_set_create_qualification(const VectorView<RD::Unif
 	ERR_FAIL_NULL_V(shader, RID());
 
 	LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> qualification_dependencies;
+	LocalVector<NativeDisposalWitness> output_dependencies;
 	if (shader->qualification_return) {
 		qualification_dependencies.push_back(shader->qualification_return);
 	}
@@ -5342,6 +5343,25 @@ RID RenderingDevice::_uniform_set_create_qualification(const VectorView<RD::Unif
 			auto *buffer = storage_buffer_owner.owns(uniform.get_id(i)) ? storage_buffer_owner.get_or_null(uniform.get_id(i)) : nullptr;
 			if (buffer && buffer->qualification_return && !qualification_dependencies.has(buffer->qualification_return)) {
 				qualification_dependencies.push_back(buffer->qualification_return);
+			}
+			if (buffer && buffer->native_disposal.cell.is_valid() && buffer->native_disposal.cell->production_request) {
+				const auto &physical = **buffer->native_disposal.cell;
+				ERR_FAIL_COND_V(!p_production || physical.production_request != p_production || physical.production_request_serial != p_production->serial || physical.state != NativeDisposalWitness::State::LIVE || physical.production_dependent_sets == UINT32_MAX, RID());
+				// The original owned-set factory carries its actual predeclared
+				// group/root witness; nonowning E09 sets require exact aliases.
+				bool declared = p_native_disposal && p_native_disposal->cell.is_valid() && p_native_disposal->cell->production_request == p_production && p_native_disposal->cell->production_request_serial == p_production->serial && p_native_disposal->cell->production_group_serial == physical.production_group_serial && p_native_disposal->cell->production_pin_serial == physical.production_pin_serial;
+				bool duplicate = false;
+				for (uint32_t r = 0; r < p_production->resource_count; ++r) {
+					const auto &resource = p_production->resources[r];
+					declared |= resource.output_alias_prepared && resource.imported && !resource.retiring && resource.output_witness.cell == buffer->native_disposal.cell && resource.primary == uniform.get_id(i) && resource.output_root_serial == physical.production_pin_serial && resource.output_group_serial == physical.production_group_serial;
+				}
+				ERR_FAIL_COND_V(!declared, RID());
+				for (const auto &dependency : output_dependencies) {
+					duplicate |= dependency.cell == buffer->native_disposal.cell;
+				}
+				if (!duplicate) {
+					output_dependencies.push_back(buffer->native_disposal);
+				}
 			}
 		}
 	}
@@ -5785,6 +5805,10 @@ RID RenderingDevice::_uniform_set_create_qualification(const VectorView<RD::Unif
 				}
 			}
 		}
+	}
+	uniform_set.production_output_dependencies = output_dependencies;
+	for (auto &dependency : uniform_set.production_output_dependencies) {
+		++dependency.cell->production_dependent_sets;
 	}
 	uniform_set.qualification_dependencies = qualification_dependencies;
 	uniform_set.qualification_return = p_cell;
@@ -9974,7 +9998,7 @@ Error RenderingDevice::_native_disposal_storage_create(uint32_t p_bytes, BitFiel
 	return OK;
 }
 
-Error RenderingDevice::_native_disposal_uniform_set_create(const VectorView<Uniform> &p_uniforms, RID p_shader, uint32_t p_set, RID &r_rid, NativeDisposalWitness &r_witness) {
+Error RenderingDevice::_native_disposal_uniform_set_create(const VectorView<Uniform> &p_uniforms, RID p_shader, uint32_t p_set, RID &r_rid, NativeDisposalWitness &r_witness, const GDExtensionDeviceExit::ProductionRequest *p_owner, uint64_t p_group, uint64_t p_root, uint32_t p_ordinal) {
 	const Error ready = _native_disposal_preflight();
 	if (ready != OK) {
 		return ready;
@@ -10011,7 +10035,17 @@ Error RenderingDevice::_native_disposal_uniform_set_create(const VectorView<Unif
 	reserved.cell.instantiate();
 	reserved.cell->device = uint64_t(get_instance_id());
 	reserved.cell->serial = serial;
-	const RID rid = _uniform_set_create_qualification(p_uniforms, p_shader, p_set, false, nullptr, nullptr, &reserved);
+	if (p_owner) {
+		if (!p_owner->serial || !p_group || !p_root || p_ordinal == UINT32_MAX) {
+			return ERR_UNAUTHORIZED;
+		}
+		reserved.cell->production_request = const_cast<GDExtensionDeviceExit::ProductionRequest *>(p_owner);
+		reserved.cell->production_request_serial = p_owner->serial;
+		reserved.cell->production_group_serial = p_group;
+		reserved.cell->production_pin_serial = p_root;
+		reserved.cell->production_ordinal = p_ordinal;
+	}
+	const RID rid = _uniform_set_create_qualification(p_uniforms, p_shader, p_set, false, nullptr, nullptr, &reserved, p_owner);
 	if (rid.is_null()) {
 		return ERR_CANT_CREATE;
 	}
@@ -10058,6 +10092,9 @@ Error RenderingDevice::_native_disposal_free(const NativeDisposalWitness &p_witn
 		cell->state = NativeDisposalWitness::State::UNKNOWN;
 		return ERR_INVALID_DATA;
 	}
+	if (cell->production_dependent_sets) {
+		return ERR_BUSY;
+	}
 	// Original dependency recursion, invalidation and pending-free queue own
 	// disposal. No logical free, elapsed frame count or sync writes RETURNED.
 	free_rid(rid);
@@ -10067,6 +10104,9 @@ Error RenderingDevice::_native_disposal_free(const NativeDisposalWitness &p_witn
 bool RenderingDevice::_native_disposal_enqueue(NativeDisposalWitness &p_witness, uint64_t p_rid, uint64_t p_serial, uint64_t p_backing) {
 	if (p_witness.cell.is_null()) {
 		return true;
+	}
+	if (p_witness.cell->production_dependent_sets) {
+		return false;
 	}
 	if (p_witness.cell->device != uint64_t(get_instance_id())) {
 		p_witness.cell->state = NativeDisposalWitness::State::UNKNOWN;
@@ -11534,6 +11574,10 @@ Error RenderingDevice::_free_pending_resources_step(int p_frame, const NativeDis
 				driver->uniform_set_free(uniform_set->driver_id);
 				_production_disposal_returned(uniform_set->production_disposal_uses);
 				_native_disposal_returned(uniform_set->native_disposal, uniform_set->native_disposal_rid, uniform_set->native_disposal_serial, uniform_set->driver_id.id);
+				for (auto &dependency : uniform_set->production_output_dependencies) {
+					CRASH_COND(dependency.cell.is_null() || !dependency.cell->production_dependent_sets);
+					--dependency.cell->production_dependent_sets;
+				}
 				for (auto *cell : uniform_set->qualification_dependencies) {
 					CRASH_COND(!cell->dependent_children.load());
 					cell->dependent_children.fetch_sub(1);
@@ -11807,6 +11851,10 @@ void RenderingDevice::_free_pending_resources(int p_frame) {
 		driver->uniform_set_free(uniform_set->driver_id);
 		_production_disposal_returned(uniform_set->production_disposal_uses);
 		_native_disposal_returned(uniform_set->native_disposal, uniform_set->native_disposal_rid, uniform_set->native_disposal_serial, uniform_set->driver_id.id);
+		for (auto &dependency : uniform_set->production_output_dependencies) {
+			CRASH_COND(dependency.cell.is_null() || !dependency.cell->production_dependent_sets);
+			--dependency.cell->production_dependent_sets;
+		}
 		for (auto *cell : uniform_set->qualification_dependencies) {
 			CRASH_COND(!cell->dependent_children.load());
 			cell->dependent_children.fetch_sub(1);
@@ -14941,6 +14989,12 @@ bool RenderingDevice::_production_resource_permitted(RID rid) const {
 		if (!slot.imported || (slot.primary != rid && slot.secondary != rid)) {
 			continue;
 		}
+		// The original capture_inflight pin and RD recording lock stabilize
+		// these rows on RT while Registry is unlocked for the native call.
+		// Recheck owner closure as well as the exact actual factory witness.
+		if (slot.output_alias_prepared && GDExtensionDeviceExit::Registry::get_singleton().production_output_alias_matches_locked(*request, slot, *const_cast<RenderingDevice *>(this))) {
+			return true;
+		}
 		for (uint32_t u = 0; u < slot.use_count; ++u) {
 			const auto &use = slot.uses[u];
 			if (use.rid == rid.get_id() && use.request == request && use.request_serial == request->serial && use.same_physical() && use.linked() && !use.physical->use_closed.load()) {
@@ -15071,6 +15125,20 @@ void device_session_output_create_v2(GDExtensionProductionPhysicalContextRefV1 p
 		return;
 	}
 	storage->particles_external_create_typed_v2(p_context, p_request, p_input->config, p_input->metadata_resource_slot, *r_result);
+}
+void device_session_output_acquire_v1(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, uint64_t p_action_ordinal, const GDExtensionOutputAcquireInputV1 *p_input, GDExtensionOutputAcquireResultV1 *r_result) {
+	OutputMemoryRange input, output;
+	if (!output_object(r_result, output) || !output_object(p_input, input) || output_overlaps(input, output)) {
+		return;
+	}
+	Registry::get_singleton().production_output_acquire(p_context, p_request, p_action_ordinal, p_input, r_result);
+}
+void device_session_output_poll_v1(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputGenerationInputV1 *p_input, GDExtensionOutputPollResultV1 *r_result) {
+	OutputMemoryRange input, output;
+	if (!output_object(r_result, output) || !output_object(p_input, input) || output_overlaps(input, output)) {
+		return;
+	}
+	Registry::get_singleton().production_output_poll(p_context, p_request, p_input, r_result);
 }
 void device_session_output_seal_v1(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputSealInputV1 *p_input, GDExtensionOutputSealResultV1 *r_result) {
 	OutputMemoryRange input, output;

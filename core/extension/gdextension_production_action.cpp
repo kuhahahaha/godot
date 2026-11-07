@@ -58,7 +58,8 @@ Error Registry::production_dispatch_closure_locked(const ProductionRequest &requ
 	for (uint32_t i = 0; i < dispatch.set_count; ++i) {
 		const auto &slot = request.resources[dispatch.first_set_slot + i];
 		const auto *set = rd.uniform_set_owner.get_or_null(slot.primary);
-		if (!slot.imported || !set || !set->driver_id || slot.imported_unit_slot != dispatch.unit_slot || slot.shader_set != i || set->shader_id != pipeline->shader || set->format != pipeline->set_formats[i] || !set->shared_textures_to_update.is_empty() || !set->pending_clear_textures.is_empty() || slot.binding_count != shader->uniform_sets[i].size() || slot.first_binding > request.capacity.resource_uses || slot.binding_count > request.capacity.resource_uses - slot.first_binding) {
+		const bool deferred = !request.frozen && slot.output_set_deferred && !slot.imported && !set && slot.owned_serial && !slot.creating && !slot.retiring;
+		if ((!deferred && (!slot.imported || !set || !set->driver_id || set->shader_id != pipeline->shader || set->format != pipeline->set_formats[i] || !set->shared_textures_to_update.is_empty() || !set->pending_clear_textures.is_empty())) || slot.imported_unit_slot != dispatch.unit_slot || slot.shader_set != i || slot.binding_count != shader->uniform_sets[i].size() || slot.first_binding > request.capacity.resource_uses || slot.binding_count > request.capacity.resource_uses - slot.first_binding) {
 			return ERR_INVALID_DATA;
 		}
 		for (uint32_t b = 0; b < slot.binding_count; ++b) {
@@ -67,7 +68,16 @@ Error Registry::production_dispatch_closure_locked(const ProductionRequest &requ
 				return ERR_INVALID_DATA;
 			}
 			const auto &storage = request.resources[binding.resource_slot];
-			if (!storage.imported || storage.retiring || storage.declaration.resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1 || storage.use_count != 1 || !storage.uses[0].linked() || !storage.uses[0].same_physical() || !set->qualification_dependencies.has(storage.uses[0].physical)) {
+			bool physical_dependency = storage.use_count == 1 && storage.uses[0].linked() && storage.uses[0].same_physical() && (deferred || set->qualification_dependencies.has(storage.uses[0].physical));
+			if (storage.output_alias_prepared) {
+				physical_dependency = deferred && !storage.imported && storage.output_action_ordinal < action.declaration.action_ordinal && storage.output_action_ordinal < request.action_count && request.actions[storage.output_action_ordinal].prepared;
+				if (!deferred && production_output_alias_matches_locked(request, storage, rd)) {
+					for (const auto &dependency : set->production_output_dependencies) {
+						physical_dependency |= dependency.cell == storage.output_witness.cell;
+					}
+				}
+			}
+			if ((!storage.imported && !(deferred && storage.output_alias_prepared)) || storage.retiring || storage.declaration.resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1 || !physical_dependency) {
 				return ERR_INVALID_DATA;
 			}
 			bool covered = false;

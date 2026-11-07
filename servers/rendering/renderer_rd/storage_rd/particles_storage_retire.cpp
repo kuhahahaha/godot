@@ -377,7 +377,13 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 		if (!spend()) {
 			return ERR_BUSY;
 		}
-		memdelete_arr(slot.surfaces);
+		if (slot.surfaces_placement) {
+			for (uint32_t i = 0; i < slot.surface_count; ++i) {
+				slot.surfaces[i].~SurfaceBinding();
+			}
+		} else {
+			memdelete_arr(slot.surfaces);
+		}
 		slot.surfaces = nullptr;
 		slot.surface_count = slot.retire_surface = 0;
 		return OK;
@@ -442,6 +448,7 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 			}
 			if (resource.rid.is_valid()) {
 				++r_usage.receipts;
+				++slot.physical_returned;
 			}
 			++slot.retire_resource;
 			return OK;
@@ -451,7 +458,11 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 		}
 		// Each exact original witness was observed physically returned above.
 		// No ordinary disposal cursor or speculative free is used here.
-		delete slot.storage;
+		if (slot.storage_placement) {
+			slot.storage->~ExternalOutputStorage();
+		} else {
+			delete slot.storage;
+		}
 		slot.storage = nullptr;
 		return OK;
 	}

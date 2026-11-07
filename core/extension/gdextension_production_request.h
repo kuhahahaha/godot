@@ -209,6 +209,14 @@ class ProductionResourceSlot {
 	uint32_t shader_set = UINT32_MAX;
 	uint32_t first_binding = UINT32_MAX, binding_count = 0;
 	bool imported = false;
+	// Nonowning alias of an actual output DISPOSAL_MEMBER. The native group
+	// remains the sole free owner; owned_physical is never populated for this.
+	NativeDisposalWitness output_witness;
+	uint64_t output_action_ordinal = UINT64_MAX;
+	uint64_t output_group_serial = 0, output_root_serial = 0;
+	uint32_t output_member_ordinal = UINT32_MAX;
+	bool output_alias_prepared = false;
+	bool output_set_deferred = false;
 	uint32_t transfer_worker = UINT32_MAX;
 	uint64_t transfer_operation = 0, transfer_action_ordinal = 0;
 	bool transfer_pending = false, transfer_staged = false;
@@ -246,6 +254,23 @@ class ProductionActionCell {
 	uint32_t recorded_bytes = 0;
 	uint32_t readback_slot = UINT32_MAX;
 	bool prepared = false;
+	enum class OutputState : uint8_t { UNBOUND, RESERVING, BOUND, RETIRING, RETURNED, UNKNOWN };
+	struct OutputRole {
+		uint32_t role = 0, resource_slot = UINT32_MAX, use_index = UINT32_MAX;
+		uint64_t generation = 0, bytes = 0;
+	};
+	OutputState output_state = OutputState::UNBOUND;
+	GDExtensionOutputAcquireInputV1 output_input = {};
+	OutputRole output_roles[3];
+	ProductionResourceSlot *output_source = nullptr;
+	uint32_t output_source_use = UINT32_MAX;
+	uint32_t output_first_source_use = UINT32_MAX, output_source_use_count = 0;
+	uint64_t output_source_generation = 0;
+	RID output_particles;
+	uint64_t output_generation = 0, output_lease = 0, output_root = 0;
+	uint32_t output_slot = UINT32_MAX;
+	uint32_t output_read_capacity = 0, output_read_graph_capacity = 0, output_read_cursor = 0;
+	bool output_source_prepared = false;
 };
 class ProductionUseCell {
 	friend class Registry;

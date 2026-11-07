@@ -90,6 +90,13 @@ public:
 	uint32_t storage_bytes(uint32_t) const;
 	uint64_t storage_total_bytes() const;
 	NativeDisposalWitness &storage_witness(uint32_t);
+	// CPU Poll arithmetic model only. These helpers construct no admitted slot
+	// or completion. Caller creates/frees through original RD factories and must
+	// observe actual RETURNED witnesses before advancing the modeled receipts.
+	void poll_model_begin_storage();
+	RID &poll_model_resource_rid(uint32_t);
+	void poll_model_consume_receipt(uint32_t);
+	void poll_model_end_storage(uint32_t);
 	bool storage_tokens_empty() const;
 	bool storage_empty() const;
 	void discard_unattempted_storage();

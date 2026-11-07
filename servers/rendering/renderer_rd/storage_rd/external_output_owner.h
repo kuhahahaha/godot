@@ -45,6 +45,7 @@ class ExternalOutputStorage;
 // Source tags are frozen equality projections, never source or budget grants.
 // This object has no world, operation issuer, scheduler, or automatic submission.
 class ExternalOutputOwner {
+	friend class GDExtensionDeviceExit::Registry;
 	friend class ParticlesStorage;
 	friend class ExternalPacketViewLease;
 	friend class ExternalSurfaceSelection;
@@ -97,6 +98,8 @@ class ExternalOutputOwner {
 		PackedByteArray record_token;
 		PackedByteArray packet_token;
 		ExternalOutputStorage *storage = nullptr;
+		bool storage_placement = false, surfaces_placement = false;
+		uint32_t physical_returned = 0;
 		SurfaceBinding *surfaces = nullptr;
 		uint32_t surface_count = 0;
 		// Correlation only; the original finite accepted-arena reverse custody
@@ -106,6 +109,7 @@ class ExternalOutputOwner {
 		GDExtensionDeviceExit::Registry *original_registry = nullptr;
 		GDExtensionDeviceExit::ProductionOutputPin original_pin;
 		uint64_t original_revision = 0;
+		uint64_t original_action_ordinal = UINT64_MAX;
 		uint64_t lease_serial = 0;
 		uint64_t owned_group = 0, output_membership_group = 0;
 		uint32_t retire_surface = 0, retire_resource = 0;
@@ -165,6 +169,7 @@ class ExternalOutputOwner {
 	struct MetadataLayout {
 		uint32_t view_count = 0, read_count = 0, surface_count = 0;
 		uint32_t view_offset = 0, read_offset = 0, surface_offset = 0;
+		uint32_t storage_offset = 0, surface_binding_offset = 0;
 		uint32_t total_bytes = 0, alignment = 0;
 	};
 	static Error plan_metadata_layout(uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces, MetadataLayout &r_layout);

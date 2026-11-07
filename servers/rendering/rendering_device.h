@@ -1620,6 +1620,7 @@ private:
 		GDExtensionDeviceExit::QualificationPhysicalReturn *qualification_return = nullptr;
 		uint32_t qualification_users = 0;
 		LocalVector<GDExtensionDeviceExit::QualificationPhysicalReturn *> qualification_dependencies;
+		LocalVector<NativeDisposalWitness> production_output_dependencies;
 		uint32_t format = 0;
 		RID shader_id;
 		uint32_t shader_set = 0;
@@ -1688,7 +1689,7 @@ private:
 	Error _native_disposal_depth_framebuffer_create(const NativeDisposalWitness &p_texture, RID &r_rid, NativeDisposalWitness &r_witness);
 	Error _native_disposal_depth_sample_set_create(const NativeDisposalWitness &p_sampler, const NativeDisposalWitness &p_texture, RID p_shader, uint32_t p_set, uint32_t p_binding, RID &r_rid, NativeDisposalWitness &r_witness);
 	Error _native_disposal_storage_create(uint32_t p_bytes, BitField<StorageBufferUsage> p_usage, RID &r_rid, NativeDisposalWitness &r_witness);
-	Error _native_disposal_uniform_set_create(const VectorView<Uniform> &p_uniforms, RID p_shader, uint32_t p_set, RID &r_rid, NativeDisposalWitness &r_witness);
+	Error _native_disposal_uniform_set_create(const VectorView<Uniform> &p_uniforms, RID p_shader, uint32_t p_set, RID &r_rid, NativeDisposalWitness &r_witness, const GDExtensionDeviceExit::ProductionRequest *p_owner = nullptr, uint64_t p_group = 0, uint64_t p_root = 0, uint32_t p_ordinal = UINT32_MAX);
 	Error _native_disposal_free(const NativeDisposalWitness &p_witness);
 	Error _native_disposal_observe(const NativeDisposalWitness &p_witness, NativeDisposalWitness::Report &r_report) const;
 	Error _native_disposal_maintenance();

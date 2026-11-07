@@ -552,11 +552,14 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 	}
 	for (uint32_t i = 0; i < resource_count; ++i) {
 		const auto &r = resources[i];
+		if (r.ownership == GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1 && (contract_version != 2 || r.resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1)) {
+			return ERR_INVALID_DATA;
+		}
 		if (r.resource_kind == GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1 &&
 				(r.ownership != GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 || r.required_usage || !r.physical_bytes || r.physical_bytes > UINT32_MAX)) {
 			return ERR_INVALID_DATA;
 		}
-		if (((r.resource_kind < GDEXTENSION_PRODUCTION_STORAGE_V1 || r.resource_kind > GDEXTENSION_PRODUCTION_SET_V1) && r.resource_kind != GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1) || r.ownership < GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 || r.ownership > GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1 || !r.original_generation || (r.resource_kind == GDEXTENSION_PRODUCTION_UNIT_V1 && r.ownership != GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1) || (r.resource_kind == GDEXTENSION_PRODUCTION_STORAGE_V1 && !r.physical_bytes)) {
+		if (((r.resource_kind < GDEXTENSION_PRODUCTION_STORAGE_V1 || r.resource_kind > GDEXTENSION_PRODUCTION_SET_V1) && r.resource_kind != GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1) || r.ownership < GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 || r.ownership > GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1 || !r.original_generation || (r.resource_kind == GDEXTENSION_PRODUCTION_UNIT_V1 && r.ownership != GDEXTENSION_PRODUCTION_RETAINED_PREPARED_V1) || (r.resource_kind == GDEXTENSION_PRODUCTION_STORAGE_V1 && !r.physical_bytes)) {
 			return ERR_INVALID_DATA;
 		}
 	}
@@ -579,7 +582,10 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 		if (v.physical_unit < resource_count && resources[v.physical_unit].resource_kind == GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1) {
 			return ERR_INVALID_DATA;
 		}
-		if (v.action_ordinal != i || v.source_recipe_reserved || v.canonical_suboperation < op.canonical_begin || v.canonical_suboperation >= op.canonical_end || (i && v.canonical_suboperation < actions[i - 1].canonical_suboperation) || (contract_version == 1 && v.canonical_suboperation != op.canonical_begin + i) || v.action_kind < GDEXTENSION_PRODUCTION_DISPATCH_V1 || v.action_kind > GDEXTENSION_PRODUCTION_READBACK_V1 || v.list_boundary > GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1 || v.first_use > use_count || v.use_count > use_count - v.first_use) {
+		if (v.action_ordinal != i || v.source_recipe_reserved || v.canonical_suboperation < op.canonical_begin || v.canonical_suboperation >= op.canonical_end || (i && v.canonical_suboperation < actions[i - 1].canonical_suboperation) || (contract_version == 1 && v.canonical_suboperation != op.canonical_begin + i) || v.action_kind < GDEXTENSION_PRODUCTION_DISPATCH_V1 || (v.action_kind > GDEXTENSION_PRODUCTION_READBACK_V1 && (contract_version != 2 || v.action_kind != GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1)) || v.list_boundary > GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1 || v.first_use > use_count || v.use_count > use_count - v.first_use) {
+			return ERR_INVALID_DATA;
+		}
+		if (v.action_kind == GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1 && (v.physical_unit != UINT32_MAX || v.readback_slot != UINT32_MAX || v.list_boundary != GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1)) {
 			return ERR_INVALID_DATA;
 		}
 		if (v.action_kind == GDEXTENSION_PRODUCTION_DISPATCH_V1 && (v.physical_unit >= resource_count || resources[v.physical_unit].resource_kind != GDEXTENSION_PRODUCTION_UNIT_V1)) {
@@ -608,7 +614,9 @@ Error Registry::production_reserve_metadata_rows_locked(ProductionAttachment &a,
 						(use.access == GDEXTENSION_PRODUCTION_WRITE_V1 || use.access == GDEXTENSION_PRODUCTION_READ_WRITE_V1 || use.access == GDEXTENSION_PRODUCTION_ATOMIC_V1) &&
 						readback.byte_offset >= use.byte_offset && range(readback.byte_offset - use.byte_offset, readback.byte_size, use.byte_size);
 			}
-			if (!covered || writer.action_kind == GDEXTENSION_PRODUCTION_READBACK_V1) {
+			if (!covered || writer.action_kind == GDEXTENSION_PRODUCTION_READBACK_V1 ||
+					(resources[readback.resource_slot].ownership == GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1 && writer.action_kind != GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1) ||
+					(resources[readback.resource_slot].ownership != GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1 && writer.action_kind == GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1)) {
 				return ERR_INVALID_DATA;
 			}
 		}
@@ -861,7 +869,38 @@ Error Registry::production_freeze_locked(ProductionRequest &r) {
 		}
 	}
 	for (uint32_t i = 0; i < r.resource_count; ++i) {
-		if (!r.resources[i].imported && r.resources[i].declaration.resource_kind != GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1) {
+		const auto &resource = r.resources[i];
+		if (resource.output_alias_prepared) {
+			if (resource.declaration.ownership != GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1 || resource.output_action_ordinal >= r.action_count || !r.actions[resource.output_action_ordinal].prepared || resource.imported || resource.owned_serial || resource.use_count) {
+				return ERR_INVALID_DATA;
+			}
+			bool exact_role = false;
+			for (const auto &role : r.actions[resource.output_action_ordinal].output_roles) {
+				exact_role |= role.bytes && role.resource_slot == i && role.bytes == resource.declaration.physical_bytes && role.generation == resource.declaration.original_generation;
+			}
+			if (!exact_role) {
+				return ERR_INVALID_DATA;
+			}
+			continue;
+		}
+		if (resource.output_set_deferred) {
+			if (resource.declaration.resource_kind != GDEXTENSION_PRODUCTION_SET_V1 || resource.declaration.ownership != GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 || !resource.owned_serial || resource.imported || resource.creating || resource.use_count || resource.first_binding > r.capacity.resource_uses || resource.binding_count > r.capacity.resource_uses - resource.first_binding) {
+				return ERR_INVALID_DATA;
+			}
+			bool has_alias = false;
+			for (uint32_t b = 0; b < resource.binding_count; ++b) {
+				const auto slot = r.uses[resource.first_binding + b].binding.resource_slot;
+				if (slot >= r.resource_count || (!r.resources[slot].imported && !r.resources[slot].output_alias_prepared)) {
+					return ERR_INVALID_DATA;
+				}
+				has_alias |= r.resources[slot].output_alias_prepared;
+			}
+			if (!has_alias) {
+				return ERR_INVALID_DATA;
+			}
+			continue;
+		}
+		if (!resource.imported && resource.declaration.resource_kind != GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1) {
 			return ERR_UNCONFIGURED;
 		}
 	}
@@ -873,6 +912,9 @@ Error Registry::production_freeze_locked(ProductionRequest &r) {
 			}
 			const auto &writer = r.actions[readback.producer_action_ordinal];
 			const auto &resource = r.resources[readback.resource_slot];
+			if (resource.output_alias_prepared) {
+				return ERR_UNAVAILABLE; // No qualification readback source is fabricated from a disposal witness.
+			}
 			// Original import/create already authenticated storage generation,
 			// RID and backing serial and retained the exact physical dependency.
 			// Native record rechecks that same RID/backing before any effect.
@@ -2178,6 +2220,14 @@ Error Registry::production_output_unpin_locked(ProductionOutputPin &pin) {
 			const uint8_t state = member.disposal.state.load(std::memory_order_acquire);
 			if (state != 3 && state != 4 && state != 6 && state != 7) {
 				return ERR_BUSY;
+			}
+		}
+	}
+	if (cell.output_owner_kind == ProductionOutputOwnerKind::SLOT) {
+		for (uint32_t i = 0; i < request.action_count; ++i) {
+			auto &action = request.actions[i];
+			if (action.output_root == pin.serial && action.output_particles == cell.output_particles && action.output_generation == cell.output_generation && action.output_slot == cell.output_slot && action.output_lease == cell.output_lease) {
+				action.output_state = ProductionActionCell::OutputState::RETURNED;
 			}
 		}
 	}

@@ -213,6 +213,33 @@ bool ExternalLinkedOwnerTest::geometry_active() const {
 	const auto &slot = owner->slots[0];
 	return slot.surfaces && slot.surfaces[0].geometry.is_active();
 }
+void ExternalLinkedOwnerTest::poll_model_begin_storage() {
+	CRASH_COND(!empty_storage_mode || !exists() || owner->slot_count != 1);
+	auto &slot = owner->slots[0];
+	CRASH_COND(slot.storage || !slot.original_pin.is_empty() || slot.retire_resource);
+	// Deliberately private CPU storage incarnation; no Acquire/lease is issued.
+	slot.storage = new ExternalOutputStorage(*owner->device);
+}
+RID &ExternalLinkedOwnerTest::poll_model_resource_rid(uint32_t index) {
+	CRASH_COND(!owner->slots[0].storage || index >= ExternalOutputStorage::RESOURCE_COUNT);
+	return owner->slots[0].storage->resources[index].rid;
+}
+void ExternalLinkedOwnerTest::poll_model_consume_receipt(uint32_t index) {
+	auto &slot = owner->slots[0];
+	CRASH_COND(!slot.storage || index != slot.retire_resource || index >= ExternalOutputStorage::RESOURCE_COUNT || slot.storage->resources[index].rid.is_null());
+	// Models the original retirement receipt order only. The caller separately
+	// establishes the actual driver-free witness before this metadata projection.
+	++slot.physical_returned;
+	++slot.retire_resource;
+}
+void ExternalLinkedOwnerTest::poll_model_end_storage(uint32_t receipts) {
+	auto &slot = owner->slots[0];
+	CRASH_COND(!slot.storage || slot.retire_resource != receipts);
+	delete slot.storage;
+	slot.storage = nullptr;
+	// Original return_slot_pin resets cursor and retains cumulative return count.
+	slot.retire_resource = 0;
+}
 void ExternalLinkedOwnerTest::prepare_storage(uint32_t capacity, uint32_t surfaces) {
 	CRASH_COND(owner->has_live_slots() || owner->slots[0].storage || owner->slots[0].surfaces);
 	owner->config.profile = ExternalOutputConfig::INSTANCE_192;
