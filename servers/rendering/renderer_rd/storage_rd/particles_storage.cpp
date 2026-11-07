@@ -2632,6 +2632,22 @@ void ParticlesStorage::_heightfield_free_instance_target(ParticlesCollisionInsta
 	}
 }
 
+Size2i ParticlesStorage::_heightfield_size_for_collision(const ParticlesCollision &p_collision) {
+	const int resolutions[RSE::PARTICLES_COLLISION_HEIGHTFIELD_RESOLUTION_MAX] = { 256, 512, 1024, 2048, 4096, 8192 };
+	Size2i size;
+	if (p_collision.extents.x <= 0.0 || p_collision.extents.z <= 0.0) {
+		size.x = resolutions[p_collision.heightfield_resolution];
+		size.y = size.x;
+	} else if (p_collision.extents.x > p_collision.extents.z) {
+		size.x = resolutions[p_collision.heightfield_resolution];
+		size.y = MAX(1, int32_t(p_collision.extents.z / p_collision.extents.x * size.x));
+	} else {
+		size.y = resolutions[p_collision.heightfield_resolution];
+		size.x = MAX(1, int32_t(p_collision.extents.x / p_collision.extents.z * size.y));
+	}
+	return size;
+}
+
 void ParticlesStorage::_heightfield_invalidate_base_instances(RID p_collision) {
 	ParticlesCollision *collision = particles_collision_owner.get_or_null(p_collision);
 	ERR_FAIL_NULL(collision);
@@ -2658,18 +2674,7 @@ RID ParticlesStorage::particles_collision_get_heightfield_framebuffer(RID p_coll
 
 	if (instance->heightfield_texture == RID()) {
 		//create
-		const int resolutions[RSE::PARTICLES_COLLISION_HEIGHTFIELD_RESOLUTION_MAX] = { 256, 512, 1024, 2048, 4096, 8192 };
-		Size2i size;
-		if (particles_collision->extents.x <= 0.0 || particles_collision->extents.z <= 0.0) {
-			size.x = resolutions[particles_collision->heightfield_resolution];
-			size.y = size.x;
-		} else if (particles_collision->extents.x > particles_collision->extents.z) {
-			size.x = resolutions[particles_collision->heightfield_resolution];
-			size.y = MAX(1, int32_t(particles_collision->extents.z / particles_collision->extents.x * size.x));
-		} else {
-			size.y = resolutions[particles_collision->heightfield_resolution];
-			size.x = MAX(1, int32_t(particles_collision->extents.x / particles_collision->extents.z * size.y));
-		}
+		const Size2i size = _heightfield_size_for_collision(*particles_collision);
 
 		RD::TextureFormat tf;
 		tf.format = RD::DATA_FORMAT_D32_SFLOAT;

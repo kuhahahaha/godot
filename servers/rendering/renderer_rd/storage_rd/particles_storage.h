@@ -519,6 +519,7 @@ private:
 	};
 	void _heightfield_free_instance_target(ParticlesCollisionInstance *p_instance);
 	void _heightfield_invalidate_base_instances(RID p_collision);
+	static Size2i _heightfield_size_for_collision(const ParticlesCollision &p_collision);
 	uint64_t next_scene_source_key = 1;
 
 	mutable RID_Owner<ParticlesCollision, true> particles_collision_owner;
