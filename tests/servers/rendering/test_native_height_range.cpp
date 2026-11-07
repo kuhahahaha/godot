@@ -174,6 +174,59 @@ class TestNativeHeightRangeAccess {
 	static Error issue(Fixture &f, uint32_t slot, uint64_t buffer, Error error, const RDD::QueueCallReport &report) {
 		return f.rd._native_height_issue_slot(0, f.rd.frames[0].qualification_epoch, slot, RDD::CommandBufferID(buffer), error, report);
 	}
+
+public:
+	static void worker_preflight_refusal_guard() {
+		using Sink = RendererRD::HeightCaptureCheckedSink;
+		Fixture f;
+		f.rd.transfer_worker_pool.resize(1);
+		f.rd.transfer_worker_operation_used_by_draw.resize(1);
+		f.rd.transfer_worker_pool_size = 1;
+		f.rd.transfer_worker_pool[0] = memnew(RenderingDevice::TransferWorker);
+		auto *worker = f.rd.transfer_worker_pool[0];
+		worker->index = 0;
+		worker->operations_counter = 1;
+		worker->operations_processed = 0;
+		Sink sink(f.rd, 2, 0);
+		Ref<NativeHeightRange> range;
+		REQUIRE(sink.prepare_native_range(range) == OK);
+		worker->operations_processed = 1;
+		CHECK(f.rd._check_transfer_worker_operation(0, 1) == OK);
+		CHECK(f.rd.transfer_worker_operation_used_by_draw[0] == 1);
+		worker->operations_processed = 0;
+		f.rd.transfer_worker_operation_used_by_draw[0] = 0;
+		CHECK(f.rd._check_transfer_worker_operation(0, 1) == ERR_UNAVAILABLE);
+		CHECK(worker->thread_mutex.try_lock());
+		worker->thread_mutex.unlock();
+		CHECK(worker->operations_mutex.try_lock());
+		worker->operations_mutex.unlock();
+		sink.unwind();
+		range.unref();
+		memdelete(worker);
+		f.rd.transfer_worker_pool[0] = nullptr;
+		f.rd.transfer_worker_pool.clear();
+		f.rd.transfer_worker_operation_used_by_draw.clear();
+		f.rd.transfer_worker_pool_size = 0;
+
+		// The standalone clear recipe has no capture sink and keeps the legacy
+		// worker check available for its ordinary caller.
+		Ref<NativeHeightRange> clear_range;
+		REQUIRE(f.rd._native_height_range_prepare(clear_range) == OK);
+		f.rd.transfer_worker_pool.resize(1);
+		f.rd.transfer_worker_operation_used_by_draw.resize(1);
+		f.rd.transfer_worker_pool_size = 1;
+		f.rd.transfer_worker_pool[0] = memnew(RenderingDevice::TransferWorker);
+		worker = f.rd.transfer_worker_pool[0];
+		worker->index = 0;
+		worker->operations_counter = 1;
+		worker->operations_processed = 0;
+		CHECK(f.rd._check_transfer_worker_operation(0, 1) == OK);
+		memdelete(worker);
+		f.rd.transfer_worker_pool[0] = nullptr;
+		f.rd.transfer_worker_pool.clear();
+		f.rd.transfer_worker_operation_used_by_draw.clear();
+		f.rd.transfer_worker_pool_size = 0;
+	}
 	static Error observe(Fixture &f, const Ref<NativeHeightRange> &range, NativeHeightRange::Snapshot &out) {
 		RenderingDevice::NativeDisposalBudget budget{ 64, 64, UINT64_MAX };
 		RenderingDevice::NativeDisposalUsage usage;
@@ -313,7 +366,6 @@ public:
 			CHECK(f.driver.polls == 0);
 		}
 	}
-
 	[[noreturn]] static void actual_finalize_child(const String &mode) {
 		Driver driver;
 		driver.finalize_sentinel = true;
@@ -810,6 +862,7 @@ TEST_CASE("[RenderingDevice][NativeHeightRange] checked sink failed begin and un
 TEST_CASE("[RenderingDevice][NativeHeightRange] checked sink provenance duplicate and unsupported transfer quarantine") {
 	TestNativeHeightRangeAccess::checked_sink_provenance_and_missing_members();
 }
+
 TEST_CASE("[RenderingDevice][NativeHeightRange] original callback identity and observer return") {
 	TestNativeHeightRangeAccess::callback_identity_and_unknown_refinement();
 }
@@ -859,6 +912,10 @@ TEST_CASE("[RenderingDevice][NativeHeightRange] post-drain finalization BUSY res
 }
 TEST_CASE("[RenderingDevice][NativeHeightRange] finalization cannot guess live checked sink closed or empty") {
 	TestNativeHeightRangeAccess::finalization_does_not_close_live_checked_sink();
+}
+
+TEST_CASE("[RenderingDevice][NativeHeightRange] active checked sink refuses raw worker dependency before locks") {
+	TestNativeHeightRangeAccess::worker_preflight_refusal_guard();
 }
 
 // The normal full suite performs no destructive work. Only the isolated runner

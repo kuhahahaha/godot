@@ -1,12 +1,14 @@
 # Checked height worker preflight refusal — 2026-11-08
 
-This slice adds one narrow guard in `RenderingDevice::_check_transfer_worker_operation`.
-When an opted-in `HeightCaptureCheckedSink` is active for the current frame and
-qualification epoch, the operation returns `ERR_UNAVAILABLE` before worker locks,
-qualification source quoting, or native issue/admission. A clear-only native
-height range has no capture sink and is unaffected.
+This slice adds one narrow boundary in `RenderingDevice::_check_transfer_worker_operation`.
+After the original worker thread/operations locks are acquired, an operation at
+or below `operations_processed` is accepted as an original already-processed
+proof and creates no historical native source. An active opted-in
+`HeightCaptureCheckedSink` still returns `ERR_UNAVAILABLE` for a pending/current
+operation until the authenticated interval join is implemented. A clear-only
+native height range has no capture sink and keeps the legacy worker check.
 
-The guard is deliberately refusal-only. It does not create a worker watcher,
+This remains a narrow preflight boundary. It does not create a worker watcher,
 join a submit interval, retain a completion source, attach hidden reports, or
 claim geometry capture/completion. It prevents a raw transfer dependency from
 being accepted as a settled height prefix until the authenticated worker join
@@ -18,6 +20,8 @@ Validation:
 - exit 0
 - `git diff --check` passed
 
-A linked host test and GPU run were not performed. A focused fixture still needs
-to exercise an actual checked VA/IA path with an active sink and a worker-owned
-resource; synthetic sink reducers do not prove that call path.
+A linked host test and GPU run were not performed. The focused reducer now
+exercises settled-operation acceptance, pending-operation refusal, lock release,
+and clear-only legacy behavior. It still does not prove an actual checked VA/IA
+resource path, submit interval join, worker retain/completion, hidden sources,
+or producer/reader leases.
