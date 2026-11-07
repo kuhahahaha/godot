@@ -1,0 +1,10 @@
+{
+  "command": [
+    "python3",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r2-reservation131/runner/run_control.py",
+    "--scene-config",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r2-reservation131/RUN_CONFIG.json"
+  ],
+  "exit_code": 1,
+  "seconds": 20.75
+}

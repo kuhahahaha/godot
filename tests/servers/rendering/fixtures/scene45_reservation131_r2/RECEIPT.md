@@ -1,0 +1,11 @@
+# Original P01 full retry with reservation131
+
+The authorized caller repair changes only the private original probe RT segment reservation from128 to131. Old r1 is untouched; its957 frozen inputs matched before preparation. New DSO compile and link exited0, and the final successor freezes963 inputs. It retains the original c75363e host and234 actual native containers, original117 occurrence order and1290 samples, engine FACT_CAPACITY4096 and all original numeric/physical return checks.
+
+The first invocation was rejected by freeze validation after PREPARATION changed during handoff; no GPU ran in that invocation. Its original failure is retained. After the author stopped writing and freeze was finalized again, the actual Metal full positive ran20.75seconds. Native exit0, all117 occurrences completed,1290 samples matched21552 owned readback bytes,1526 completion facts and234 unit/936 storage physical returns. The original aggregate marker is present.
+
+**The original positive Python wrapper still failed (exit1).** Its qrt_original_returns check failed for occurrences60/66/116 because seven kind9 RECORD calls returned ERR_BUSY44 before later success. All other original checks passed on all117 occurrences. The frozen probe explicitly retries only ERR_BUSY/reason19; its logging omits reason, so the report does not invent a printed reason or the precise internal Busy branch. This is retained as a caller/oracle contract inconsistency, not silently reclassified as full qualification. No oracle or production Busy guard was weakened.
+
+The original positive RESULTS and inputs were saved before the separate cancel invocation. Manual after-hashing of all2952 actual positive input paths equals the before set; this supplements the after check that the failing wrapper did not reach. The same freeze's original cancel-prefix control then passed independently (exit0,9.49seconds), with original before/after equality. It does not replace positive wrapper success.
+
+Full P01 remains NOT_PASSED pending resolution of the precise retry contract and a complete original verifier pass. These native results do not issue E09, K06 HeightFrame, Runtime readiness, a Scene consumer view, or Sprite draw authority. Raw paths/hashes and the exact caller-only patch are archived; old full/partial revisions remain separate.

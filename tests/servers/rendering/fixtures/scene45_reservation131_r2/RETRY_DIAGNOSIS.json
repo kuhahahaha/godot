@@ -1,0 +1,184 @@
+{
+  "positive_occurrences": 117,
+  "runtime_exit": 0,
+  "failed_oracle_checks": {
+    "60": [
+      "qrt_original_returns"
+    ],
+    "66": [
+      "qrt_original_returns"
+    ],
+    "116": [
+      "qrt_original_returns"
+    ]
+  },
+  "nonzero_returns": [
+    {
+      "ordinal": 60,
+      "kind": 9,
+      "operation": 2308,
+      "slot": 4261,
+      "error": 44,
+      "reply_ack": 1
+    },
+    {
+      "ordinal": 60,
+      "kind": 9,
+      "operation": 2309,
+      "slot": 4262,
+      "error": 44,
+      "reply_ack": 1
+    },
+    {
+      "ordinal": 60,
+      "kind": 9,
+      "operation": 2310,
+      "slot": 4263,
+      "error": 44,
+      "reply_ack": 1
+    },
+    {
+      "ordinal": 66,
+      "kind": 9,
+      "operation": 2539,
+      "slot": 4684,
+      "error": 44,
+      "reply_ack": 1
+    },
+    {
+      "ordinal": 66,
+      "kind": 9,
+      "operation": 2540,
+      "slot": 4685,
+      "error": 44,
+      "reply_ack": 1
+    },
+    {
+      "ordinal": 116,
+      "kind": 9,
+      "operation": 4441,
+      "slot": 8186,
+      "error": 44,
+      "reply_ack": 1
+    },
+    {
+      "ordinal": 116,
+      "kind": 9,
+      "operation": 4442,
+      "slot": 8187,
+      "error": 44,
+      "reply_ack": 1
+    }
+  ],
+  "nonzero_total": 7,
+  "error_semantic": "ERR_BUSY=44; kind9=qualification_record_prepared; original caller retries only ERR_BUSY/reason19",
+  "cancel_executed": false,
+  "aggregate_markers": [
+    "ORIGINAL_SCENE_AGGREGATE observations=117 samples=1290 actual_owned_readback=1 same_retained_root=1"
+  ],
+  "all_native_facts_error_zero": true,
+  "original_oracle_modified": false,
+  "run_repeated": false,
+  "artifacts": [
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r2-reservation131/native-artifacts/POSITIVE.log",
+      "bytes": 816386,
+      "sha256": "59acec8975ceb1635199157a6400e66b8cbe6188fe72c26dd7e84561ae218e19"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r2-reservation131/native-artifacts/POSITIVE.rc",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r2-reservation131/native-artifacts/RESULTS.json",
+      "bytes": 1292410,
+      "sha256": "e27edbfc3b4a02dafe981c2af248f995404009ee50a844b92b5341096a149baa"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r2-reservation131/native-artifacts/RUN_INPUTS_BEFORE.json",
+      "bytes": 904988,
+      "sha256": "5df6554a4b1f8a94e7720ff956855c84f4ffcedb53bc9887529a57b30353f869"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r2-reservation131/RUN_CONFIG.json",
+      "bytes": 276229,
+      "sha256": "e3fedf88710153c68beac5c110327087ac7735698af7f786a85e98d105f6775a"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r2-reservation131/runner/probe.cpp",
+      "bytes": 44262,
+      "sha256": "51e38db85385164f7de82f2cb3425e23da709754175970fb0439ab9eefdf3bfa"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r2-reservation131/runner/run_control.py",
+      "bytes": 12264,
+      "sha256": "b104f959355878df0bcdbb3f70ac0d84b29cc5a9996cd4f0db595ab00bdabc4c"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r2-reservation131/runtime/probe.dylib",
+      "bytes": 13677912,
+      "sha256": "650bd06bc6ea9e2b3ece22cb904f823ee30ce33182791b0a98d2ae603e8b9737"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/core/extension/gdextension_qualification_ticket.cpp",
+      "bytes": 103199,
+      "sha256": "642005e1a345da4111c024ac2205e1fa0262a7b105129a616beec66eacd05e37"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/core/extension/gdextension_qualification_rt.cpp",
+      "bytes": 60215,
+      "sha256": "ae248f8f9a8fa1c779721412511744c122f168b3dd9bf293fb447d5729a9668e"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/core/error/error_list.h",
+      "bytes": 4676,
+      "sha256": "f0dde7784ec40f043a3c0b37fd0965a1e871b2ccd2fe67f3517a200c1952653d"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r2-reservation131/native-artifacts/occurrence-60/result_positive/owned_readback.bin",
+      "bytes": 104,
+      "sha256": "0db494666fb6c24a56d5dc9c6f3bf80ece5abed25b3bdb29d9f03c6b5aee4200"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r2-reservation131/native-artifacts/occurrence-60/result_positive/facts.bin",
+      "bytes": 1680,
+      "sha256": "85c00dbd0421ee3f4ede94b5e67048845ddc63655bc02caa81ce3ddc83438edd"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r2-reservation131/native-artifacts/occurrence-60/result_positive/report.bin",
+      "bytes": 184,
+      "sha256": "4f8fc9a0a2cfd28c667ea877a13533235a0463fffbd7b7fed5112e5ca3269bcb"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r2-reservation131/native-artifacts/occurrence-66/result_positive/owned_readback.bin",
+      "bytes": 104,
+      "sha256": "69dc43d594f0fa7e09269d49d30870930e5f2dab28abeefa3a3aee443417c9a9"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r2-reservation131/native-artifacts/occurrence-66/result_positive/facts.bin",
+      "bytes": 1680,
+      "sha256": "55daf93d2e48ad100b4a74d6bc0867a58d56598acefc3a68b0a7a5f83d94e385"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r2-reservation131/native-artifacts/occurrence-66/result_positive/report.bin",
+      "bytes": 184,
+      "sha256": "e45c2fedd75d1c497d99a3c7361354d0f525f35742c4f4b691c5f6b5a914cd9d"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r2-reservation131/native-artifacts/occurrence-116/result_positive/owned_readback.bin",
+      "bytes": 104,
+      "sha256": "123b217c00743dbbed80dab5f2606f1269b428ee1a8770f32ecc2be34032d058"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r2-reservation131/native-artifacts/occurrence-116/result_positive/facts.bin",
+      "bytes": 1568,
+      "sha256": "f8eb11ad70ad8e751e15d73b5163ef7a31bc1edc8e2e26896e1d294f3119a402"
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene45-native-qualification-successor-r2-reservation131/native-artifacts/occurrence-116/result_positive/report.bin",
+      "bytes": 184,
+      "sha256": "4dc0fbeb3428e6e0660fd938d11f902929fbdc95c4c35f029c5d318296a550dc"
+    }
+  ]
+}
