@@ -6043,7 +6043,7 @@ struct Access {
 		SingletonEnrollment *fixture = nullptr;
 		RendererRD::ExternalLinkedOwnerTest *native = nullptr;
 		RendererRD::ExternalOutputConfig config, expected_identity;
-		uint64_t expected_material_generations[2] = {};
+		uint64_t expected_material_generations[3] = {};
 		int failure = 0;
 		uint32_t calls = 0;
 		static void receive(void *opaque, GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionOperationV1 *) {
@@ -6110,7 +6110,7 @@ struct Access {
 																  : ERR_UNAUTHORIZED));
 			REQUIRE(p.native->exists());
 			CHECK(p.native->selection_inline_matches(p.expected_identity));
-			for (uint32_t i = 0; i < 2; ++i) {
+			for (uint32_t i = 0; i < uint32_t(p.expected_identity.surface_materials.size()); ++i) {
 				CHECK(p.native->selection_material_generation(i) == p.expected_material_generations[i]);
 			}
 			// Independent expected bytes have their own allocations. Each changed
@@ -6123,24 +6123,29 @@ struct Access {
 				tag->set(17, original);
 				CHECK(p.native->selection_inline_matches(p.expected_identity));
 			}
-			CHECK(p.native->selection_meshes() == (p.failure == 2 ? 0u : 1u));
-			CHECK(p.native->selection_materials() == (p.failure == 0 ? 2u : p.failure == 1 ? 1u
-																						   : 0u));
+			CHECK(p.native->selection_meshes() == (p.failure == 2 ? 0u : uint32_t(p.expected_identity.surfaces.size())));
+			CHECK(p.native->selection_materials() == (p.failure == 0 ? uint32_t(p.expected_identity.surface_materials.size()) : p.failure == 1 ? 1u
+																																			   : 0u));
 			CHECK(p.native->selection_faulted() == (p.failure != 0));
 			CHECK_FALSE(p.native->generation_pin().is_empty());
 			if (p.failure != 2) {
 				auto *meshes = RendererRD::MeshStorage::get_singleton();
 				auto *materials = RendererRD::MaterialStorage::get_singleton();
-				const RID mesh = p.config.surfaces[0], material = p.config.surface_materials[0];
+				for (const RID &mesh : p.config.surfaces) {
+					const int surfaces = meshes->mesh_get_surface_count(mesh);
+					ERR_PRINT_OFF;
+					meshes->mesh_clear(mesh);
+					meshes->mesh_free(mesh);
+					ERR_PRINT_ON;
+					CHECK(meshes->owns_mesh(mesh));
+					CHECK(meshes->mesh_get_surface_count(mesh) == surfaces);
+				}
+				const RID material = p.config.surface_materials[0];
 				const uint64_t before = materials->material_get_generation(material);
 				ERR_PRINT_OFF;
-				meshes->mesh_clear(mesh);
-				meshes->mesh_free(mesh);
 				materials->material_set_render_priority(material, 7);
 				materials->material_free(material);
 				ERR_PRINT_ON;
-				CHECK(meshes->owns_mesh(mesh));
-				CHECK(meshes->mesh_get_surface_count(mesh) == 2);
 				CHECK(materials->owns_material(material));
 				CHECK(materials->material_get_generation(material) == before);
 			}
@@ -6149,7 +6154,7 @@ struct Access {
 			}
 		}
 	};
-	static void generation_selection_lifecycle(int failure) {
+	static void generation_selection_lifecycle(int failure, bool multi_mesh = false) {
 		using namespace GDExtensionDeviceExit;
 		using MeshStorage = RendererRD::MeshStorage;
 		auto *server = ordinal_server();
@@ -6161,22 +6166,32 @@ struct Access {
 		REQUIRE(fixture.prepare_device(server) == OK);
 		auto *previous_meshes = MeshStorage::get_singleton();
 		auto *meshes = memnew(MeshStorage(MeshStorage::NativeHoldTestTag{}));
-		const RID mesh = meshes->mesh_allocate();
-		meshes->mesh_initialize(mesh);
-		auto *mesh_owner = meshes->mesh_owner.get_or_null(mesh);
-		// Original CPU mesh/surface owners, deliberately no VA or physical profile.
-		mesh_owner->surfaces = static_cast<MeshStorage::Mesh::Surface **>(memalloc(2 * sizeof(MeshStorage::Mesh::Surface *)));
-		mesh_owner->surface_count = 2;
-		for (uint32_t i = 0; i < 2; ++i) {
-			mesh_owner->surfaces[i] = memnew(MeshStorage::Mesh::Surface);
+		const uint32_t mesh_count = multi_mesh ? 2u : 1u;
+		const uint32_t material_count = multi_mesh ? 3u : 2u;
+		RID mesh_rids[2];
+		MeshStorage::Mesh *mesh_owners[2] = {};
+		for (uint32_t i = 0; i < mesh_count; ++i) {
+			mesh_rids[i] = meshes->mesh_allocate();
+			meshes->mesh_initialize(mesh_rids[i]);
+			mesh_owners[i] = meshes->mesh_owner.get_or_null(mesh_rids[i]);
+			// Two distinct original CPU owners with unequal 1+2 flattening.
+			// The default fixture keeps its original one-mesh/two-surface shape.
+			const uint32_t surface_count = multi_mesh ? i + 1 : 2u;
+			mesh_owners[i]->surfaces = static_cast<MeshStorage::Mesh::Surface **>(memalloc(surface_count * sizeof(MeshStorage::Mesh::Surface *)));
+			mesh_owners[i]->surface_count = surface_count;
+			for (uint32_t surface = 0; surface < surface_count; ++surface) {
+				mesh_owners[i]->surfaces[surface] = memnew(MeshStorage::Mesh::Surface);
+			}
 		}
-		void *materials = RendererRD::selection_materials_create();
+		void *materials = RendererRD::selection_materials_create(material_count);
 		GenerationSelectionProbe probe;
 		probe.failure = failure;
 		probe.config.profile = RendererRD::ExternalOutputConfig::INSTANCE_192;
 		probe.config.max_views = probe.config.max_inflight = 1;
-		probe.config.surfaces.push_back(mesh);
-		for (uint32_t i = 0; i < 2; ++i) {
+		for (uint32_t i = 0; i < mesh_count; ++i) {
+			probe.config.surfaces.push_back(mesh_rids[i]);
+		}
+		for (uint32_t i = 0; i < material_count; ++i) {
 			probe.config.surface_materials.push_back(RendererRD::selection_material_rid(materials, i));
 		}
 		PackedByteArray *tags[] = { &probe.config.producer_tag, &probe.config.device_tag, &probe.config.layout_digest, &probe.config.mapping_digest, &probe.config.numeric_profile_digest };
@@ -6187,16 +6202,24 @@ struct Access {
 		// Give the second original material a distinct genuine generation before
 		// snapshotting; an index swap or constant generation cannot pass.
 		RendererRD::MaterialStorage::get_singleton()->material_set_render_priority(probe.config.surface_materials[1], 4);
+		if (multi_mesh) {
+			RendererRD::MaterialStorage::get_singleton()->material_set_render_priority(probe.config.surface_materials[2], 4);
+			RendererRD::MaterialStorage::get_singleton()->material_set_render_priority(probe.config.surface_materials[2], 8);
+		}
 		for (const RID &rid : probe.config.surfaces) {
 			probe.expected_identity.surfaces.push_back(rid);
 		}
-		for (uint32_t i = 0; i < 2; ++i) {
+		for (uint32_t i = 0; i < material_count; ++i) {
 			const RID rid = probe.config.surface_materials[i];
 			probe.expected_identity.surface_materials.push_back(rid);
 			probe.expected_material_generations[i] = RendererRD::MaterialStorage::get_singleton()->material_get_generation(rid);
 			REQUIRE(probe.expected_material_generations[i] != 0);
 		}
-		REQUIRE(probe.expected_material_generations[0] != probe.expected_material_generations[1]);
+		for (uint32_t i = 0; i < material_count; ++i) {
+			for (uint32_t j = i + 1; j < material_count; ++j) {
+				REQUIRE(probe.expected_material_generations[i] != probe.expected_material_generations[j]);
+			}
+		}
 		PackedByteArray *expected_tags[] = { &probe.expected_identity.producer_tag, &probe.expected_identity.device_tag, &probe.expected_identity.layout_digest, &probe.expected_identity.mapping_digest, &probe.expected_identity.numeric_profile_digest };
 		for (uint32_t i = 0; i < 5; ++i) {
 			expected_tags[i]->resize(32);
@@ -6229,11 +6252,16 @@ struct Access {
 				CHECK(request.resources[0].metadata_returned);
 				CHECK(request.resources[0].metadata_data == nullptr);
 			}
-			CHECK(mesh_owner->selection_holds == (failure >= 2 ? 0u : 1u));
-			CHECK(RendererRD::selection_material_holds(materials, 0) == (failure >= 2 ? 0u : 1u));
-			CHECK(RendererRD::selection_material_holds(materials, 1) == (failure == 0 ? 1u : 0u));
-			const uint32_t initial_leases = failure == 0 ? 3 : failure == 1 ? 2
-																			: 0;
+			const uint32_t initial_meshes = failure >= 2 ? 0u : mesh_count;
+			const uint32_t initial_materials = failure == 0 ? material_count : failure == 1 ? 1u
+																							: 0u;
+			const uint32_t initial_leases = initial_meshes + initial_materials;
+			for (uint32_t i = 0; i < mesh_count; ++i) {
+				CHECK(mesh_owners[i]->selection_holds == (i < initial_meshes ? 1u : 0u));
+			}
+			for (uint32_t i = 0; i < material_count; ++i) {
+				CHECK(RendererRD::selection_material_holds(materials, i) == (i < initial_materials ? 1u : 0u));
+			}
 			// Destroy parser bytes before dropping all references. Expected identity
 			// was independently allocated and cannot keep parser storage alive.
 			for (auto *tag : tags) {
@@ -6246,12 +6274,15 @@ struct Access {
 			}
 			if (failure != 3) {
 				CHECK(native.selection_inline_matches(probe.expected_identity));
-				for (uint32_t i = 0; i < 2; ++i) {
+				for (uint32_t i = 0; i < material_count; ++i) {
 					CHECK(native.selection_material_generation(i) == probe.expected_material_generations[i]);
 				}
-				CHECK(mesh_owner->selection_holds == (failure == 2 ? 0u : 1u));
-				CHECK(RendererRD::selection_material_holds(materials, 0) == (failure == 2 ? 0u : 1u));
-				CHECK(RendererRD::selection_material_holds(materials, 1) == (failure == 0 ? 1u : 0u));
+				for (uint32_t i = 0; i < mesh_count; ++i) {
+					CHECK(mesh_owners[i]->selection_holds == (i < initial_meshes ? 1u : 0u));
+				}
+				for (uint32_t i = 0; i < material_count; ++i) {
+					CHECK(RendererRD::selection_material_holds(materials, i) == (i < initial_materials ? 1u : 0u));
+				}
 			}
 			const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
 			for (uint32_t turn = 0; turn < (failure == 3 ? 0u : initial_leases + 2); ++turn) {
@@ -6269,13 +6300,17 @@ struct Access {
 					REQUIRE(native.exists());
 					CHECK(native.selection_meshes() + native.selection_materials() == initial_leases - turn - 1);
 					CHECK(RendererRD::selection_shader_holds(materials) == native.selection_materials());
-					const uint32_t initially_retained_materials = failure == 0 ? 2u : 1u;
+					const uint32_t initially_retained_materials = initial_materials;
 					const uint32_t remaining_materials = turn + 1 < initially_retained_materials ? initially_retained_materials - turn - 1 : 0;
-					// Exact original RID order: material1 returns before material0.
-					for (uint32_t i = 0; i < 2; ++i) {
+					// Exact original RID suffix order, followed by mesh1 before mesh0.
+					for (uint32_t i = 0; i < material_count; ++i) {
 						CHECK(RendererRD::selection_material_holds(materials, i) == (i < remaining_materials ? 1u : 0u));
 					}
-					CHECK(mesh_owner->selection_holds == native.selection_meshes());
+					const uint32_t remaining_meshes = initial_leases - turn - 1 - remaining_materials;
+					CHECK(native.selection_meshes() == remaining_meshes);
+					for (uint32_t i = 0; i < mesh_count; ++i) {
+						CHECK(mesh_owners[i]->selection_holds == (i < remaining_meshes ? 1u : 0u));
+					}
 					CHECK_FALSE(request.resources[0].metadata_returned);
 				} else if (turn == initial_leases) {
 					CHECK_FALSE(out.output_generation.native_released);
@@ -6298,7 +6333,9 @@ struct Access {
 					}
 				}
 			}
-			CHECK(mesh_owner->selection_holds == 0);
+			for (uint32_t i = 0; i < mesh_count; ++i) {
+				CHECK(mesh_owners[i]->selection_holds == 0);
+			}
 			CHECK(RendererRD::selection_shader_holds(materials) == 0);
 			CHECK(request.graph_count == 0);
 			CHECK(request.native_count == 0);
@@ -6318,7 +6355,9 @@ struct Access {
 			CHECK(fixture.owner_cleaned);
 		}
 		RendererRD::selection_materials_destroy(materials);
-		meshes->mesh_free(mesh);
+		for (uint32_t i = 0; i < mesh_count; ++i) {
+			meshes->mesh_free(mesh_rids[i]);
+		}
 		memdelete(meshes);
 		MeshStorage::singleton = previous_meshes;
 	}
@@ -12297,6 +12336,13 @@ TEST_CASE("[SceneTree][ProductionRequest][GenerationSelection] stale second mate
 }
 TEST_CASE("[SceneTree][ProductionRequest][GenerationSelection] transaction closes post root refusal before first selection lease") {
 	TestProductionRequest::Access::generation_selection_lifecycle(2);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][GenerationSelection][GenerationSelectionMultiMesh] unequal original mesh surfaces acquire and return every selection row") {
+	TestProductionRequest::Access::generation_selection_lifecycle(0, true);
+}
+TEST_CASE("[SceneTree][ProductionRequest][GenerationSelection][GenerationSelectionMultiMesh] stale material preserves both unequal mesh prefixes until bounded return") {
+	TestProductionRequest::Access::generation_selection_lifecycle(1, true);
 }
 
 TEST_CASE("[SceneTree][ProductionRequest][GenerationGuardRefusal] actual unprepared engine component refuses private and public Instance192 paths") {

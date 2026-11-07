@@ -801,7 +801,8 @@ private:
 public:
 	struct SelectionMaterials {
 		MaterialStorage *storage = nullptr, *previous = nullptr;
-		RID shader, materials[2];
+		RID shader, materials[3];
+		uint32_t material_count = 2;
 	};
 	class SelectionShaderData : public MaterialStorage::ShaderData {
 	public:
@@ -817,8 +818,10 @@ public:
 		void set_next_pass(RID) override {}
 		bool update_parameters(const HashMap<StringName, Variant> &, bool, bool) override { return false; }
 	};
-	static void *selection_create() {
+	static void *selection_create(uint32_t material_count) {
+		CRASH_COND(material_count < 2 || material_count > 3);
 		auto *p = memnew(SelectionMaterials);
+		p->material_count = material_count;
 		p->previous = MaterialStorage::get_singleton();
 		p->storage = memnew(MaterialStorage(MaterialStorage::NativeHoldTestTag{}));
 		auto &storage = *p->storage;
@@ -827,7 +830,8 @@ public:
 		p->shader = storage.shader_allocate();
 		storage.shader_initialize(p->shader, false);
 		storage.shader_set_code(p->shader, "shader_type spatial;");
-		for (RID &material : p->materials) {
+		for (uint32_t i = 0; i < p->material_count; ++i) {
+			RID &material = p->materials[i];
 			material = storage.material_allocate();
 			storage.material_initialize(material);
 			storage.material_set_shader(material, p->shader);
@@ -846,8 +850,8 @@ public:
 	}
 	static void selection_destroy(void *opaque) {
 		auto *p = static_cast<SelectionMaterials *>(opaque);
-		for (RID material : p->materials) {
-			p->storage->material_free(material);
+		for (uint32_t i = 0; i < p->material_count; ++i) {
+			p->storage->material_free(p->materials[i]);
 		}
 		p->storage->shader_free(p->shader);
 		memdelete(p->storage);
@@ -1477,8 +1481,8 @@ public:
 		TestMaterialStorageNativeHoldDeviceAccess::restore(previous);
 	}
 };
-void *selection_materials_create() {
-	return TestMaterialStorageNativeHoldAccess::selection_create();
+void *selection_materials_create(uint32_t material_count) {
+	return TestMaterialStorageNativeHoldAccess::selection_create(material_count);
 }
 RID selection_material_rid(void *p, uint32_t i) {
 	return TestMaterialStorageNativeHoldAccess::selection_rid(p, i);

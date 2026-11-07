@@ -124,7 +124,7 @@ public:
 Error external_storage_poison_and_free(RenderingDevice &, NativeDisposalWitness &, NativeDisposalWitness::Report &);
 Error external_storage_restore_poison(RenderingDevice &, NativeDisposalWitness &, const NativeDisposalWitness::Report &);
 // Original CPU material/shader owners only; no ShaderRD version/pipeline readiness.
-void *selection_materials_create();
+void *selection_materials_create(uint32_t material_count = 2);
 RID selection_material_rid(void *, uint32_t);
 uint32_t selection_material_holds(void *, uint32_t);
 uint32_t selection_shader_holds(void *);
