@@ -28,7 +28,7 @@ def main() -> int:
 #include <cstdio>
 struct RID { int id=0; };
 struct Transform3D { int origin=0; };
-struct AABB { bool intersects=true; bool intersects_inclusive(const AABB &other) const { return intersects && other.intersects; } };
+struct AABB { float min=0,max=1; bool intersects_inclusive(const AABB &other) const { return min<=other.max && max>=other.min; } };
 struct Vector3 { float x=0,y=0,z=0; };
 namespace RSE { enum { INSTANCE_PARTICLES=1, INSTANCE_PARTICLES_COLLISION=2 }; enum ParticlesCollisionHeightfieldResolution { PARTICLES_COLLISION_HEIGHTFIELD_RESOLUTION_1024=2 }; }
 struct SceneHeightfieldSource { uint64_t source_key=0,shape_revision=0; RID collision_instance; Transform3D transform; Vector3 extents; RSE::ParticlesCollisionHeightfieldResolution resolution=RSE::PARTICLES_COLLISION_HEIGHTFIELD_RESOLUTION_1024; };
@@ -91,6 +91,12 @@ int main() {
     check(!scene.scene_heightfield_snapshot_pair({1},out,present) && !present,"recreated second field rejects ambiguous pair");
     right.collision_data.cull_mask=0;
     check(scene.scene_heightfield_snapshot_pair({1},out,present) && present && out.source_key==33 && out.shape_revision==12,"recreated source key and revision are fresh");
+    check(out.collision_instance.id==1,"selected field retains original collision instance RID");
+    receiver.scene_query_committed=true; receiver.scene_query_world={0,1};
+    left.transformed_aabb={2,3};
+    check(scene.scene_heightfield_snapshot_pair({1},out,present) && !present,"committed query excludes disjoint field");
+    left.transformed_aabb={1,2};
+    check(scene.scene_heightfield_snapshot_pair({1},out,present) && present && out.collision_instance.id==1,"committed query includes touching field with original RID");
     check(!scene.scene_heightfield_snapshot_pair({7},out,present) && !present,"unknown receiver rejects");
     return good?0:1;
 }

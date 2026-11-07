@@ -30,7 +30,7 @@ def main() -> int:
 #include <vector>
 struct RID { int id=0; };
 struct Transform3D { int origin=0; };
-struct AABB { bool intersects=true; bool intersects_inclusive(const AABB &other) const { return intersects && other.intersects; } };
+struct AABB { float min=0,max=1; bool intersects_inclusive(const AABB &other) const { return min<=other.max && max>=other.min; } };
 namespace RSE { enum { INSTANCE_PARTICLES=1, INSTANCE_PARTICLES_COLLISION=2 }; }
 struct SceneSphereSource { uint64_t source_key,shape_revision; Transform3D transform; float radius; };
 template<class T> struct Vector : std::vector<T> {
@@ -94,6 +94,11 @@ int main() {
     check(scene.scene_sphere_snapshot_pairs({1},2,out) && out.size()==1 && out[0].source_key==9,"released source is removed");
     storage.entries[2]={true,3,10,55,5};
     check(scene.scene_sphere_snapshot_pairs({1},2,out) && out.size()==2 && out[0].source_key==3 && out[0].shape_revision==10 && out[0].transform.origin==55 && out[0].radius==5,"recreated source carries new revision");
+    receiver.scene_query_committed=true; receiver.scene_query_world={0,1};
+    left.transformed_aabb={2,3}; right.transformed_aabb={1,2};
+    check(scene.scene_sphere_snapshot_pairs({1},2,out) && out.size()==1 && out[0].source_key==3,"committed query excludes disjoint source but includes touching edge");
+    receiver.scene_query_committed=false;
+    check(scene.scene_sphere_snapshot_pairs({1},2,out) && out.size()==2,"uncommitted query preserves pair membership");
     check(!scene.scene_sphere_snapshot_pairs({7},2,out),"invalid receiver rejects");
     return ok?0:1;
 }
