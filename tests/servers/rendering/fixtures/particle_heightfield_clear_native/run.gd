@@ -25,6 +25,8 @@ func _start() -> void:
 		method = "run_legacy_neighbor"
 	if OS.get_environment("ANGE_HEIGHTFIELD_FRAME_RESOURCES") == "1":
 		method = "run_frame_resources"
+	if OS.get_environment("ANGE_HEIGHTFIELD_CANDIDATE") == "1":
+		method = "run_candidate"
 	if not fixture.has_method(method):
 		print("HEIGHTFIELD_GEOMETRY_MISSING ", method)
 		quit(1)
@@ -74,7 +76,7 @@ func _start() -> void:
 	RenderingServer.call_on_render_thread(callback)
 
 func _process(_delta: float) -> bool:
-	if OS.get_environment("ANGE_HEIGHTFIELD_FRAME_RESOURCES") == "1":
+	if OS.get_environment("ANGE_HEIGHTFIELD_FRAME_RESOURCES") == "1" or OS.get_environment("ANGE_HEIGHTFIELD_CANDIDATE") == "1":
 		fixture.call("poll_frame_resources")
 	var result: Dictionary = fixture.call("result")
 	if result.has("pass"):

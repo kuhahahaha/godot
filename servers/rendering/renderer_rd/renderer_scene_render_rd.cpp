@@ -34,6 +34,7 @@
 #include "core/io/image.h"
 #include "servers/rendering/renderer_rd/environment/fog.h"
 #include "servers/rendering/renderer_rd/framebuffer_cache_rd.h"
+#include "servers/rendering/renderer_rd/height_capture_checked_sink.h"
 #include "servers/rendering/renderer_rd/shaders/decal_data_inc.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/light_data_inc.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/scene_data_inc.glsl.gen.h"
@@ -1576,6 +1577,15 @@ bool RendererSceneRenderRD::heightfield_capture_preflight(const Transform3D &p_t
 	r_camera = camera;
 	r_projection = projection;
 	return true;
+}
+
+Error RendererSceneRenderRD::render_particle_collider_heightfield_checked(RID p_framebuffer, const Transform3D &p_transform, const Vector3 &p_extents, const PagedArray<RenderGeometryInstance *> &p_instances, RendererRD::HeightCaptureCheckedSink &p_sink) {
+	Projection projection;
+	Transform3D camera;
+	if (!heightfield_capture_preflight(p_transform, p_extents, camera, projection)) {
+		return p_sink.reject(ERR_INVALID_PARAMETER);
+	}
+	return _render_particle_collider_heightfield_checked(p_framebuffer, camera, projection, p_instances, p_sink);
 }
 
 void RendererSceneRenderRD::render_particle_collider_heightfield(RID p_collision_instance, const Transform3D &p_transform, const PagedArray<RenderGeometryInstance *> &p_instances) {

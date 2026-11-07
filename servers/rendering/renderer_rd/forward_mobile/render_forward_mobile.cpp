@@ -1911,9 +1911,21 @@ void RenderForwardMobile::_render_sdfgi(Ref<RenderSceneBuffersRD> p_render_buffe
 }
 
 void RenderForwardMobile::_render_particle_collider_heightfield(RID p_fb, const Transform3D &p_cam_transform, const Projection &p_cam_projection, const PagedArray<RenderGeometryInstance *> &p_instances) {
-	RENDER_TIMESTAMP("Setup GPUParticlesCollisionHeightField3D");
+	_render_particle_collider_heightfield_impl(p_fb, p_cam_transform, p_cam_projection, p_instances, nullptr);
+}
 
-	RD::get_singleton()->draw_command_begin_label("Render Collider Heightfield");
+Error RenderForwardMobile::_render_particle_collider_heightfield_checked(RID p_fb, const Transform3D &p_cam_transform, const Projection &p_cam_projection, const PagedArray<RenderGeometryInstance *> &p_instances, RendererRD::HeightCaptureCheckedSink &r_sink) {
+	return _render_particle_collider_heightfield_impl(p_fb, p_cam_transform, p_cam_projection, p_instances, &r_sink);
+}
+
+Error RenderForwardMobile::_render_particle_collider_heightfield_impl(RID p_fb, const Transform3D &p_cam_transform, const Projection &p_cam_projection, const PagedArray<RenderGeometryInstance *> &p_instances, RendererRD::HeightCaptureCheckedSink *p_sink) {
+	if (p_sink && p_sink->get_error() != OK) {
+		return p_sink->get_error();
+	}
+	if (!p_sink) {
+		RENDER_TIMESTAMP("Setup GPUParticlesCollisionHeightField3D");
+		RD::get_singleton()->draw_command_begin_label("Render Collider Heightfield");
+	}
 
 	_update_render_base_uniform_set();
 
@@ -1945,14 +1957,23 @@ void RenderForwardMobile::_render_particle_collider_heightfield(RID p_fb, const 
 
 	RID rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_SECONDARY, nullptr, false, RID(), RendererRD::MaterialStorage::get_singleton()->samplers_rd_get_default());
 
-	RENDER_TIMESTAMP("Render Collider Heightfield");
+	if (!p_sink) {
+		RENDER_TIMESTAMP("Render Collider Heightfield");
+	}
 
 	{
 		//regular forward for now
 		RenderListParameters render_list_params(render_list[RENDER_LIST_SECONDARY].elements.ptr(), render_list[RENDER_LIST_SECONDARY].element_info.ptr(), render_list[RENDER_LIST_SECONDARY].elements.size(), false, pass_mode, rp_uniform_set, scene_shader.default_specialization);
-		_render_list_with_draw_list(&render_list_params, p_fb, RD::DRAW_CLEAR_DEPTH);
+		if (p_sink) {
+			_render_height_list_checked(&render_list_params, p_fb, *p_sink);
+		} else {
+			_render_list_with_draw_list(&render_list_params, p_fb, RD::DRAW_CLEAR_DEPTH);
+		}
 	}
-	RD::get_singleton()->draw_command_end_label();
+	if (!p_sink) {
+		RD::get_singleton()->draw_command_end_label();
+	}
+	return p_sink ? p_sink->get_error() : OK;
 }
 
 void RenderForwardMobile::base_uniforms_changed() {
@@ -2501,18 +2522,76 @@ void RenderForwardMobile::_render_list_with_draw_list(RenderListParameters *p_pa
 	RD::get_singleton()->draw_list_end();
 }
 
+Error RenderForwardMobile::_render_height_list_checked(RenderListParameters *p_params, RID p_framebuffer, RendererRD::HeightCaptureCheckedSink &r_sink) {
+	RD *rd = RD::get_singleton();
+	if (!rd->uniform_set_is_valid(render_base_uniform_set) || !rd->uniform_set_is_valid(p_params->render_pass_uniform_set) || !rd->uniform_set_is_valid(scene_shader.default_vec4_xform_uniform_set)) {
+		return r_sink.reject(ERR_INVALID_DATA);
+	}
+	const RD::FramebufferFormatID format = rd->framebuffer_get_format(p_framebuffer);
+	p_params->framebuffer_format = format;
+	LocalVector<PreparedHeightGeometry> prepared;
+	prepared.reserve(p_params->element_count);
+	// This is the existing resolver template in preparation mode, not a second
+	// resolver or a pipeline cache. No list is open during resource lookup.
+	_render_list_template<PASS_MODE_SHADOW>(RD::INVALID_ID, format, p_params, 0, p_params->element_count, &r_sink, &prepared);
+	if (r_sink.get_error() != OK) {
+		return r_sink.get_error();
+	}
+	if (r_sink.begin(p_framebuffer, RD::DRAW_CLEAR_DEPTH) != OK) {
+		return r_sink.finish();
+	}
+	if (r_sink.bind_uniform_set(render_base_uniform_set, SCENE_UNIFORM_SET) != OK ||
+			r_sink.bind_uniform_set(p_params->render_pass_uniform_set, RENDER_PASS_UNIFORM_SET) != OK ||
+			r_sink.bind_uniform_set(scene_shader.default_vec4_xform_uniform_set, TRANSFORMS_UNIFORM_SET) != OK) {
+		return r_sink.finish();
+	}
+	RID previous_vertex_array;
+	RID previous_index_array;
+	RID previous_pipeline;
+	RID previous_transforms;
+	RID previous_material;
+	for (const PreparedHeightGeometry &item : prepared) {
+		if (previous_vertex_array != item.vertex_array && r_sink.bind_vertex_array(item.vertex_array) != OK) {
+			return r_sink.finish();
+		}
+		previous_vertex_array = item.vertex_array;
+		if (previous_index_array != item.index_array && item.index_array.is_valid() && r_sink.bind_index_array(item.index_array) != OK) {
+			return r_sink.finish();
+		}
+		previous_index_array = item.index_array;
+		if (previous_pipeline != item.pipeline && r_sink.bind_pipeline(item.pipeline) != OK) {
+			return r_sink.finish();
+		}
+		previous_pipeline = item.pipeline;
+		if (item.transforms.is_valid() && previous_transforms != item.transforms && r_sink.bind_uniform_set(item.transforms, TRANSFORMS_UNIFORM_SET) != OK) {
+			return r_sink.finish();
+		}
+		previous_transforms = item.transforms;
+		if (item.material.is_valid() && previous_material != item.material && r_sink.bind_uniform_set(item.material, MATERIAL_UNIFORM_SET) != OK) {
+			return r_sink.finish();
+		}
+		previous_material = item.material;
+		if (r_sink.set_push_constant(&item.push_constant, item.push_constant_size) != OK || r_sink.draw_geometry_prepared(item.index_array.is_valid()) != OK) {
+			return r_sink.finish();
+		}
+	}
+	return r_sink.finish();
+}
+
 template <RenderForwardMobile::PassMode p_pass_mode>
-void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element) {
+void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element, RendererRD::HeightCaptureCheckedSink *p_height_sink, LocalVector<PreparedHeightGeometry> *p_height_geometry) {
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 	RendererRD::ParticlesStorage *particles_storage = RendererRD::ParticlesStorage::get_singleton();
 
 	RD::DrawListID draw_list = p_draw_list;
 	RD::FramebufferFormatID framebuffer_format = p_framebuffer_Format;
 
-	//global scope bindings
-	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, render_base_uniform_set, SCENE_UNIFORM_SET);
-	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, p_params->render_pass_uniform_set, RENDER_PASS_UNIFORM_SET);
-	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, scene_shader.default_vec4_xform_uniform_set, TRANSFORMS_UNIFORM_SET);
+	if (!p_height_sink) {
+		//global scope bindings
+		RD::get_singleton()->draw_list_bind_uniform_set(draw_list, render_base_uniform_set, SCENE_UNIFORM_SET);
+		RD::get_singleton()->draw_list_bind_uniform_set(draw_list, p_params->render_pass_uniform_set, RENDER_PASS_UNIFORM_SET);
+		RD::get_singleton()->draw_list_bind_uniform_set(draw_list, scene_shader.default_vec4_xform_uniform_set, TRANSFORMS_UNIFORM_SET);
+	}
 
 	RID material_uniform_set;
 	RID prev_material_uniform_set;
@@ -2528,6 +2607,8 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 	SceneShaderForwardMobile::ShaderData::PipelineKey pipeline_key;
 	uint32_t pipeline_hash = 0;
 	uint32_t prev_pipeline_hash = 0;
+	RID height_previous_pipeline;
+	bool height_saw_indexed = false;
 
 	bool shadow_pass = (p_pass_mode == PASS_MODE_SHADOW) || (p_pass_mode == PASS_MODE_SHADOW_DP);
 
@@ -2591,8 +2672,16 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 			mesh_surface = surf->surface;
 		}
 
-		if (!mesh_surface) {
+		if (!mesh_surface || (p_height_sink && !shader)) {
+			if (p_height_sink) {
+				p_height_sink->reject(ERR_INVALID_DATA);
+				return;
+			}
 			continue;
+		}
+		if (p_height_sink && surf->primitive != RSE::PRIMITIVE_TRIANGLES) {
+			p_height_sink->reject(ERR_UNAVAILABLE);
+			return;
 		}
 
 		//request a redraw if one of the shaders uses TIME
@@ -2669,6 +2758,11 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 				mesh_storage->mesh_surface_get_vertex_arrays_and_format(mesh_surface, input_mask, p_pass_mode == PASS_MODE_MOTION_VECTORS, emulate_point_size, vertex_array_rd, vertex_format);
 			}
 
+			if (p_height_sink && (!vertex_array_rd.is_valid() || vertex_format == RD::INVALID_ID)) {
+				p_height_sink->reject(ERR_INVALID_DATA);
+				return;
+			}
+
 			pipeline_key.vertex_format_id = vertex_format;
 
 			if (pipeline_key.ubershader) {
@@ -2707,6 +2801,18 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 			}
 		}
 
+		if (p_height_sink) {
+			if (!pipeline_valid) {
+				p_height_sink->reject(ERR_CANT_CREATE);
+				return;
+			}
+			if (pipeline_rd.is_valid()) {
+				height_previous_pipeline = pipeline_rd;
+			} else {
+				pipeline_rd = height_previous_pipeline;
+			}
+		}
+
 		if (pipeline_valid) {
 			if (!emulate_point_size) {
 				index_array_rd = mesh_storage->mesh_surface_get_index_array(mesh_surface, element_info.lod_index);
@@ -2714,34 +2820,36 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 				index_array_rd = RID();
 			}
 
-			if (prev_vertex_array_rd != vertex_array_rd) {
-				RD::get_singleton()->draw_list_bind_vertex_array(draw_list, vertex_array_rd);
-				prev_vertex_array_rd = vertex_array_rd;
-			}
-
-			if (prev_index_array_rd != index_array_rd) {
-				if (index_array_rd.is_valid()) {
-					RD::get_singleton()->draw_list_bind_index_array(draw_list, index_array_rd);
-				}
-				prev_index_array_rd = index_array_rd;
-			}
-
-			if (!pipeline_rd.is_null()) {
-				RD::get_singleton()->draw_list_bind_render_pipeline(draw_list, pipeline_rd);
-			}
-
-			if (xforms_uniform_set.is_valid() && prev_xforms_uniform_set != xforms_uniform_set) {
-				RD::get_singleton()->draw_list_bind_uniform_set(draw_list, xforms_uniform_set, TRANSFORMS_UNIFORM_SET);
-				prev_xforms_uniform_set = xforms_uniform_set;
-			}
-
-			if (material_uniform_set != prev_material_uniform_set) {
-				// Update uniform set.
-				if (material_uniform_set.is_valid() && RD::get_singleton()->uniform_set_is_valid(material_uniform_set)) { // Material may not have a uniform set.
-					RD::get_singleton()->draw_list_bind_uniform_set(draw_list, material_uniform_set, MATERIAL_UNIFORM_SET);
+			if (!p_height_sink) {
+				if (prev_vertex_array_rd != vertex_array_rd) {
+					RD::get_singleton()->draw_list_bind_vertex_array(draw_list, vertex_array_rd);
+					prev_vertex_array_rd = vertex_array_rd;
 				}
 
-				prev_material_uniform_set = material_uniform_set;
+				if (prev_index_array_rd != index_array_rd) {
+					if (index_array_rd.is_valid()) {
+						RD::get_singleton()->draw_list_bind_index_array(draw_list, index_array_rd);
+					}
+					prev_index_array_rd = index_array_rd;
+				}
+
+				if (!pipeline_rd.is_null()) {
+					RD::get_singleton()->draw_list_bind_render_pipeline(draw_list, pipeline_rd);
+				}
+
+				if (xforms_uniform_set.is_valid() && prev_xforms_uniform_set != xforms_uniform_set) {
+					RD::get_singleton()->draw_list_bind_uniform_set(draw_list, xforms_uniform_set, TRANSFORMS_UNIFORM_SET);
+					prev_xforms_uniform_set = xforms_uniform_set;
+				}
+
+				if (material_uniform_set != prev_material_uniform_set) {
+					// Update uniform set.
+					if (material_uniform_set.is_valid() && RD::get_singleton()->uniform_set_is_valid(material_uniform_set)) { // Material may not have a uniform set.
+						RD::get_singleton()->draw_list_bind_uniform_set(draw_list, material_uniform_set, MATERIAL_UNIFORM_SET);
+					}
+
+					prev_material_uniform_set = material_uniform_set;
+				}
 			}
 
 			if (surf->owner->base_flags & INSTANCE_DATA_FLAG_PARTICLES) {
@@ -2763,7 +2871,9 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 				push_constant_size = sizeof(SceneState::PushConstant) - sizeof(SceneState::PushConstantUbershader);
 			}
 
-			RD::get_singleton()->draw_list_set_push_constant(draw_list, &push_constant, push_constant_size);
+			if (!p_height_sink) {
+				RD::get_singleton()->draw_list_set_push_constant(draw_list, &push_constant, push_constant_size);
+			}
 
 			uint32_t instance_count = surf->owner->instance_count > 1 ? surf->owner->instance_count : 1;
 			if (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_USES_PARTICLE_TRAILS) {
@@ -2771,6 +2881,41 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 			}
 
 			bool indirect = bool(surf->owner->base_flags & INSTANCE_DATA_FLAG_MULTIMESH_INDIRECT);
+			if (p_height_sink) {
+				// Preserve unsupported original draw facts; never split an instanced
+				// or indirect source draw into fabricated single-instance receipts.
+				if (emulate_point_size || indirect || instance_count != 1) {
+					p_height_sink->reject(ERR_UNAVAILABLE);
+					return;
+				}
+				const bool source_indexed = mesh_storage->mesh_surface_get_format(mesh_surface) & RSE::ARRAY_FORMAT_INDEX;
+				if (source_indexed && !index_array_rd.is_valid()) {
+					p_height_sink->reject(ERR_INVALID_DATA);
+					return;
+				}
+				if (height_saw_indexed && !index_array_rd.is_valid()) {
+					// The present checked RD profile cannot clear a stale IA binding.
+					p_height_sink->reject(ERR_UNAVAILABLE);
+					return;
+				}
+				height_saw_indexed |= index_array_rd.is_valid();
+				const bool material_required = shader->ubo_size || !shader->texture_uniforms.is_empty();
+				if ((material_required && !material_uniform_set.is_valid()) || (material_uniform_set.is_valid() && !RD::get_singleton()->uniform_set_is_valid(material_uniform_set))) {
+					p_height_sink->reject(ERR_INVALID_DATA);
+					return;
+				}
+				PreparedHeightGeometry prepared;
+				prepared.vertex_array = vertex_array_rd;
+				prepared.index_array = index_array_rd;
+				prepared.pipeline = pipeline_rd;
+				prepared.transforms = xforms_uniform_set;
+				prepared.material = material_uniform_set;
+				prepared.push_constant = push_constant;
+				prepared.push_constant_size = push_constant_size;
+				p_height_geometry->push_back(prepared);
+				continue;
+			}
+
 			RID indirect_command;
 			if (indirect) {
 				indirect_command = mesh_storage->_multimesh_get_command_buffer_rd_rid(surf->owner->data->base);

@@ -40,6 +40,7 @@ namespace RendererRD {
 // The original native owner must keep the main RD alive through retirement.
 class ParticlesStorage::HeightFrameResources : public RefCounted {
 	friend class ParticlesStorage;
+	friend class HeightFrame;
 #ifdef TESTS_ENABLED
 	friend class ::ParticlesHeightfieldClearTestFixture;
 #endif

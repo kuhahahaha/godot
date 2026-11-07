@@ -73,6 +73,7 @@ struct ExternalPacketPipelineRequest;
 class ParticlesStorage : public RendererParticlesStorage {
 private:
 	class HeightFrameResources;
+	class HeightFrame;
 #if defined(TESTS_ENABLED) && defined(MODULE_PARTICLES_RUNTIME_TESTS_ENABLED)
 	friend class ::ParticlesRuntimeTestFixture;
 	friend class ::ParticlesHeightfieldClearTestFixture;

@@ -15,6 +15,7 @@
 #include <cstring>
 
 void ParticlesHeightfieldClearTestFixture::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("run_candidate"), &ParticlesHeightfieldClearTestFixture::run_candidate);
 	ClassDB::bind_method(D_METHOD("run_frame_resources"), &ParticlesHeightfieldClearTestFixture::run_frame_resources);
 	ClassDB::bind_method(D_METHOD("poll_frame_resources"), &ParticlesHeightfieldClearTestFixture::poll_frame_resources);
 	ClassDB::bind_method(D_METHOD("run"), &ParticlesHeightfieldClearTestFixture::run);
@@ -262,6 +263,14 @@ Error ParticlesHeightfieldClearTestFixture::sample_depth_pair() {
 	return rd->buffer_get_data_async(buffer, callable_mp(this, &ParticlesHeightfieldClearTestFixture::sample_done), 0, 8);
 }
 
+Error ParticlesHeightfieldClearTestFixture::run_candidate() {
+	if (started) {
+		return ERR_ALREADY_IN_USE;
+	}
+	candidate_capture = true;
+	return run_frame_resources();
+}
+
 Error ParticlesHeightfieldClearTestFixture::run_frame_resources() {
 	if (started) {
 		return ERR_ALREADY_IN_USE;
@@ -279,9 +288,9 @@ Error ParticlesHeightfieldClearTestFixture::run_frame_resources() {
 		return ERR_UNAVAILABLE;
 	}
 	using Resources = RendererRD::ParticlesStorage::HeightFrameResources;
-	Error error = Resources::allocate(*rd, 32, 32, frame_resources_a);
+	Error error = Resources::allocate(*rd, candidate_capture ? 256 : 32, candidate_capture ? 256 : 32, frame_resources_a);
 	if (error == OK) {
-		error = Resources::allocate(*rd, 32, 32, frame_resources_b);
+		error = Resources::allocate(*rd, candidate_capture ? 256 : 32, candidate_capture ? 256 : 32, frame_resources_b);
 	}
 	if (error == OK) {
 		first_texture = frame_resources_a->get_depth();
@@ -372,11 +381,18 @@ Error ParticlesHeightfieldClearTestFixture::run_frame_resources() {
 		result_data["checked_clears"] = checked_clears;
 	}
 
+	if (error == OK && candidate_capture) {
+		error = capture_candidate();
+	}
+
 	if (error == OK) {
 		error = sample_depth_pair();
 	}
 	if (error != OK) {
 		cleanup();
+		candidate_frame.unref();
+		rejected_candidate.unref();
+		postbind_candidate.unref();
 		retained_frame_resources_a.unref();
 		MutexLock lock(result_mutex);
 		frame_resources_error = error;
@@ -385,6 +401,146 @@ Error ParticlesHeightfieldClearTestFixture::run_frame_resources() {
 		result_data["error_code"] = error;
 	}
 	return error;
+}
+
+
+Error ParticlesHeightfieldClearTestFixture::capture_candidate() {
+	using Frame = RendererRD::ParticlesStorage::HeightFrame;
+	using Sink = RendererRD::HeightCaptureCheckedSink;
+	auto *storage = RendererRD::ParticlesStorage::get_singleton();
+	auto *renderer = RendererSceneRenderRD::get_singleton();
+	collision = storage->particles_collision_allocate();
+	storage->particles_collision_initialize(collision);
+	storage->particles_collision_set_collision_type(collision, RSE::PARTICLES_COLLISION_TYPE_HEIGHTFIELD_COLLIDE);
+	storage->particles_collision_set_box_extents(collision, Vector3(1, 1, 1));
+	storage->particles_collision_set_height_field_resolution(collision, RSE::PARTICLES_COLLISION_HEIGHTFIELD_RESOLUTION_256);
+	first_instance = storage->particles_collision_instance_create(collision);
+	storage->particles_collision_instance_set_active(first_instance, true);
+	Error error = Frame::create_candidate(*storage, first_instance, 1, frame_resources_b, 64, 32, candidate_frame);
+	if (error != OK) {
+		return error;
+	}
+	error = Frame::create_candidate(*storage, first_instance, 1, frame_resources_a, 0, 32, rejected_candidate);
+	if (error != OK) {
+		return error;
+	}
+	error = Frame::create_candidate(*storage, first_instance, 1, frame_resources_b, 5, 32, postbind_candidate);
+	if (error != OK) {
+		return error;
+	}
+	const auto frozen = candidate_frame->get_snapshot();
+	Transform3D changed;
+	changed.origin = Vector3(5, 6, 7);
+	storage->particles_collision_instance_set_transform(first_instance, changed);
+	storage->particles_collision_set_box_extents(collision, Vector3(2, 3, 4));
+	storage->particles_collision_set_height_field_mask(collision, 3);
+	storage->particles_collision_set_cull_mask(collision, 7);
+	const auto &snapshot = candidate_frame->get_snapshot();
+	const auto *live = storage->particles_collision_owner.get_or_null(collision);
+	const bool frozen_ok = snapshot.instance == first_instance && snapshot.base == collision && snapshot.source_generation != 0 &&
+			snapshot.shape_revision == frozen.shape_revision && live->scene_shape_revision != snapshot.shape_revision &&
+			snapshot.producer_occurrence == 1 && snapshot.transform == Transform3D() && snapshot.extents == Vector3(1, 1, 1) &&
+			snapshot.bounds == AABB(Vector3(-1, -1, -1), Vector3(2, 2, 2)) && snapshot.heightfield_mask == frozen.heightfield_mask &&
+			snapshot.heightfield_mask != live->heightfield_mask && snapshot.cull_mask == frozen.cull_mask && snapshot.cull_mask != live->cull_mask &&
+			snapshot.width == 256 && snapshot.height == 256 && snapshot.resolution == RSE::PARTICLES_COLLISION_HEIGHTFIELD_RESOLUTION_256 &&
+			snapshot.depth_allocation.rid == second_texture.get_id() && snapshot.depth_allocation.serial != 0 &&
+			snapshot.framebuffer_allocation.rid == frame_resources_b->get_framebuffer().get_id() && snapshot.framebuffer_allocation.serial != 0;
+
+	Array arrays;
+	arrays.resize(RSE::ARRAY_MAX);
+	arrays[RSE::ARRAY_VERTEX] = PackedVector3Array{ Vector3(-2, -0.5f, -2), Vector3(2, -0.5f, -2), Vector3(0, -0.5f, 2) };
+	arrays[RSE::ARRAY_INDEX] = PackedInt32Array{ 0, 1, 2 };
+	RenderingServerTypes::SurfaceData surface;
+	error = RenderingServer::get_singleton()->mesh_create_surface_data_from_arrays(&surface, RSE::PRIMITIVE_TRIANGLES, arrays);
+	if (error != OK) {
+		return error;
+	}
+	mesh = RSG::mesh_storage->mesh_allocate();
+	RSG::mesh_storage->mesh_initialize(mesh);
+	RSG::mesh_storage->mesh_add_surface(mesh, surface);
+	geometry = renderer->geometry_instance_create(mesh);
+	if (!geometry) {
+		return ERR_CANT_CREATE;
+	}
+	geometry->set_transform(Transform3D(), surface.aabb, surface.aabb);
+	PagedArrayPool<RenderGeometryInstance *> pool;
+	PagedArray<RenderGeometryInstance *> instances;
+	instances.set_page_pool(&pool);
+	instances.push_back(geometry);
+	// A zero business-record capacity refuses begin; resolver preparation is
+	// allowed and is not misreported as budget-before-work evidence.
+	const Error rejected = rejected_candidate->capture(*renderer, instances);
+	const auto &failed_prefix = rejected_candidate->get_capture_prefix();
+	const bool rejected_ok = rejected != OK && rejected_candidate->get_state() == Frame::State::FailedRetiring &&
+			failed_prefix.get_business_count() == 0 && !failed_prefix.has_open_list() && !failed_prefix.has_cleanup_attempt() &&
+			rejected_candidate->capture(*renderer, instances) == ERR_ALREADY_IN_USE;
+	// Five actual business slots accept begin, the three global sets and VA.
+	// The IA reservation then fails; the renderer wrapper must checked-unwind.
+	const Error postbind_error = postbind_candidate->capture(*renderer, instances);
+	const auto &postbind_prefix = postbind_candidate->get_capture_prefix();
+	const auto &postbind_cleanup = postbind_prefix.get_cleanup_record().draw;
+	bool postbind_restored = postbind_error != OK && postbind_candidate->get_state() == Frame::State::FailedRetiring &&
+			postbind_candidate->get_capture_error() == postbind_error && postbind_prefix.get_error() == postbind_error &&
+			postbind_prefix.get_business_count() == 5 && postbind_prefix.has_cleanup_attempt() && postbind_prefix.is_restored() &&
+			!postbind_prefix.has_open_list() && !postbind_prefix.is_restoration_unknown() &&
+			postbind_cleanup.error == OK && postbind_cleanup.effect == Sink::Effect::Recorded &&
+			postbind_cleanup.capture_complete && postbind_cleanup.draw_handle.is_valid();
+	if (postbind_prefix.get_business_count() == 5) {
+		const auto &begin = postbind_prefix.get_business_record(0);
+		const auto &vertex = postbind_prefix.get_business_record(4);
+		postbind_restored = postbind_restored && begin.operation == Sink::Operation::Begin &&
+				begin.begin.begin_handle.is_valid() && begin.begin.clear_handle.is_valid() &&
+				vertex.operation == Sink::Operation::VertexArray && vertex.bind.bind_handle.is_valid();
+		for (uint32_t i = 1; i <= 3; ++i) {
+			const auto &bind = postbind_prefix.get_business_record(i);
+			postbind_restored = postbind_restored && bind.operation == Sink::Operation::UniformSet &&
+					bind.bind.state_accepted && bind.bind.capture_complete;
+		}
+	}
+	// Seed B differently immediately before the checked producer: a producer
+	// no-op must fail the independent .25 observation below.
+	const auto seed = rd->draw_list_begin(frame_resources_b->get_framebuffer(), RD::DRAW_CLEAR_DEPTH, {}, 0.125f);
+	if (seed == RD::INVALID_ID) {
+		return ERR_CANT_CREATE;
+	}
+	rd->draw_list_end();
+	error = candidate_frame->capture(*renderer, instances);
+	const auto &prefix = candidate_frame->get_capture_prefix();
+	uint32_t uniforms = 0, vertices = 0, indices = 0, pipelines = 0, pushes = 0, draws = 0;
+	bool handles = prefix.get_business_count() >= 2;
+	for (uint32_t i = 0; i < prefix.get_business_count(); ++i) {
+		const auto &record = prefix.get_business_record(i);
+		switch (record.operation) {
+			case Sink::Operation::Begin:
+				handles = handles && record.begin.capture_complete && record.begin.begin_handle.is_valid() && record.begin.clear_handle.is_valid();
+				break;
+			case Sink::Operation::UniformSet: ++uniforms; handles = handles && record.bind.state_accepted && record.bind.capture_complete; break;
+			case Sink::Operation::VertexArray: ++vertices; handles = handles && record.bind.bind_handle.is_valid(); break;
+			case Sink::Operation::IndexArray: ++indices; handles = handles && record.bind.bind_handle.is_valid(); break;
+			case Sink::Operation::Pipeline: ++pipelines; handles = handles && record.draw.draw_handle.is_valid(); break;
+			case Sink::Operation::PushConstant: ++pushes; handles = handles && record.draw.draw_handle.is_valid(); break;
+			case Sink::Operation::Draw: ++draws; handles = handles && record.draw.capture_complete && record.draw.draw_handle.is_valid(); break;
+			case Sink::Operation::End: handles = handles && record.draw.capture_complete && record.draw.draw_handle.is_valid(); break;
+		}
+	}
+	const bool once = candidate_frame->capture(*renderer, instances) == ERR_ALREADY_IN_USE;
+	const bool captured = error == OK && candidate_frame->get_state() == Frame::State::CaptureRecorded && prefix.is_restored() &&
+			!prefix.has_open_list() && !prefix.has_cleanup_attempt() && !prefix.is_restoration_unknown() && handles &&
+			uniforms >= 3 && vertices == 1 && indices == 1 && pipelines == 1 && pushes == 1 && draws == 1;
+	{
+		MutexLock lock(result_mutex);
+		result_data["candidate_snapshot_frozen"] = frozen_ok;
+		result_data["candidate_failed_without_business_prefix"] = rejected_ok;
+		result_data["candidate_postbind_restored"] = postbind_restored;
+		result_data["candidate_capture_once"] = once;
+		result_data["candidate_state"] = captured ? "CaptureRecorded" : "FailedRetiring";
+		result_data["candidate_checked_handles"] = handles;
+		result_data["candidate_draws"] = draws;
+		result_data["candidate_index_binds"] = indices;
+		result_data["candidate_uniform_binds"] = uniforms;
+		result_data["candidate_pass"] = frozen_ok && rejected_ok && postbind_restored && once && captured;
+	}
+	return frozen_ok && rejected_ok && postbind_restored && once && captured ? OK : FAILED;
 }
 
 void ParticlesHeightfieldClearTestFixture::poll_frame_resources() {
@@ -437,7 +593,8 @@ void ParticlesHeightfieldClearTestFixture::retire_frame_resources() {
 		result_data["all_physical_returned"] = reports.size() == 4;
 		result_data["pass"] = reports.size() == 4 && frame_resources_error == OK && bool(result_data.get("sample_pass", false)) &&
 				bool(result_data.get("retained_busy", false)) && bool(result_data.get("distinct_rids", false)) &&
-				bool(result_data.get("failure_cut_restored", false)) && bool(result_data.get("ordinary_after_cut", false));
+				bool(result_data.get("failure_cut_restored", false)) && bool(result_data.get("ordinary_after_cut", false)) &&
+				(!candidate_capture || bool(result_data.get("candidate_pass", false)));
 		frame_resources_a.unref();
 		frame_resources_b.unref();
 	}
@@ -646,6 +803,9 @@ void ParticlesHeightfieldClearTestFixture::sample_done(const PackedByteArray &p_
 		// Readback callback proves the compute sample finished. Drop its actual
 		// descriptors before asking the original resource owner to retire.
 		cleanup();
+		candidate_frame.unref();
+		rejected_candidate.unref();
+		postbind_candidate.unref();
 		retained_frame_resources_a.unref();
 		MutexLock lock(result_mutex);
 		result_data["first_raw"] = raw[0];

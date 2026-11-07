@@ -5,7 +5,7 @@
 #include "core/object/ref_counted.h"
 #include "core/os/mutex.h"
 #include "core/variant/dictionary.h"
-#include "servers/rendering/renderer_rd/storage_rd/height_frame_resources.h"
+#include "servers/rendering/renderer_rd/storage_rd/height_frame.h"
 
 class RenderingDevice;
 class RenderGeometryInstance;
@@ -16,6 +16,10 @@ class ParticlesHeightfieldClearTestFixture : public RefCounted {
 	mutable Mutex result_mutex;
 	bool started = false;
 	bool frame_resources_capture = false;
+	bool candidate_capture = false;
+	Ref<RendererRD::ParticlesStorage::HeightFrame> candidate_frame;
+	Ref<RendererRD::ParticlesStorage::HeightFrame> rejected_candidate;
+	Ref<RendererRD::ParticlesStorage::HeightFrame> postbind_candidate;
 	bool frame_resources_sampled = false;
 	bool frame_resources_poll_pending = false;
 	Error frame_resources_error = OK;
@@ -50,6 +54,7 @@ class ParticlesHeightfieldClearTestFixture : public RefCounted {
 	RenderingDevice *rd = nullptr;
 	Error run_capture();
 	Error sample_depth_pair();
+	Error capture_candidate();
 	void retire_frame_resources();
 	void cleanup();
 	void sample_done(const PackedByteArray &p_bytes);
@@ -63,6 +68,7 @@ protected:
 public:
 	Error run();
 	Error run_frame_resources();
+	Error run_candidate();
 	void poll_frame_resources();
 	Error run_legacy_normal(int p_transform_case = 0);
 	Error run_legacy_neighbor(int p_case);

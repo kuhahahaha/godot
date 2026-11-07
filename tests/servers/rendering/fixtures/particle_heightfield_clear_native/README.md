@@ -150,3 +150,13 @@ not publish a HeightFrame, mint a Scene sample, connect the original budget or
 last-use bridge, or label physical disposal as producer Complete. Retained Ref
 count is an additional custody gate; the original native owner still supplies
 the producer/reader completion protocol when this component is integrated.
+
+### Immutable candidate capture
+
+`python3 tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_candidate.py --binary <tests-enabled-editor> --display-driver <driver> --rendering-driver <driver>` runs Mobile and Forward+ serially with `ANGE_HEIGHTFIELD_CANDIDATE=1`. The render-thread entry is `run_candidate`; the existing `poll_frame_resources` pumps physical disposal.
+
+This retains every resource-mode check (including the recoverable cut and four exact physical Returned identities). It additionally creates an active real collision instance and two 256×256 targets, freezes a candidate, then changes the live transform, extents, masks and shape revision. An indexed triangle at y=-.5 is captured using that frozen frame; independent GPU sampling must read A=.75 and B=.25 after B was reseeded .125. Required uniform/VA/IA/pipeline/push/draw/end records and once-only capture are checked. A second zero-business-capacity candidate must enter FailedRetiring with no business records and preserve A. Resolver preparation is permitted in that negative; it is not a no-work budget claim. Both candidates remain retained through async readback, then release their resource custody before the existing retirement pump.
+
+The successful state is only `CaptureRecorded`: no Current, operation, budget, native-source membership or Complete is manufactured.
+
+The candidate run also retains a capacity-five frame: actual begin + three global uniform bindings + VA fill its business slots, then IA reservation fails. It requires FailedRetiring, all five saved records, the sticky first error, and a real cleanup end handle with restored inactive list/attachments and no unknown state. The ordinary B=.125 clear and normal B=.25 capture then execute in the same session; this wrapper failure prefix remains retained through async readback. `candidate_postbind_restored` is required by the runner.
