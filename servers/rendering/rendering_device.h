@@ -32,6 +32,7 @@
 
 #include "core/extension/gdextension_qualification_physical.h"
 #include "core/extension/gdextension_record_source.h"
+#include "servers/rendering/native_depth_allocation_projection.h"
 #include "servers/rendering/native_disposal_witness.h"
 
 #ifdef TESTS_ENABLED
@@ -60,7 +61,7 @@ struct Access;
 namespace RendererRD {
 class TestParticlesProcessRetryAccess;
 class TestMultimeshRebuildAccess;
-}
+} //namespace RendererRD
 #endif
 
 #include <atomic>
@@ -120,6 +121,7 @@ class RenderingDevice : public RenderingDeviceCommons {
 	friend class ParticlesRuntimeTestFixture;
 	friend class ParticlesExternalGuardTestFixture;
 	friend class ParticlesExternalOutputTestFixture;
+	friend class NativeDepthAllocationTestFixture;
 #endif
 
 	friend class RendererRD::MeshStorage;
@@ -342,37 +344,37 @@ private:
 	bool _qualification_resource_busy(RID p_rid);
 	Error _qualification_pin_resources(GDExtensionDeviceExit::QualificationTicket *p_ticket, const LocalVector<RID> &p_resources);
 	void _qualification_unpin_resources(GDExtensionDeviceExit::QualificationTicket *p_ticket);
- Error _qualification_admit_frame_ticket(GDExtensionDeviceExit::QualificationTicket *p_ticket);
- Error _qualification_admit_worker(uint32_t p_worker, uint64_t p_operation, const RDD::QueueCallReport &p_prefix, uint32_t p_future);
- Error _qualification_admit_extra_main(uint32_t p_slots);
- Error _qualification_activate_cleanup_credits();
- Error _qualification_prepare_free(RID p_rid);
- void _qualification_defer_free(RID p_rid);
- void _qualification_retry_deferred_frees();
- LocalVector<RID> qualification_deferred_frees;
+	Error _qualification_admit_frame_ticket(GDExtensionDeviceExit::QualificationTicket *p_ticket);
+	Error _qualification_admit_worker(uint32_t p_worker, uint64_t p_operation, const RDD::QueueCallReport &p_prefix, uint32_t p_future);
+	Error _qualification_admit_extra_main(uint32_t p_slots);
+	Error _qualification_activate_cleanup_credits();
+	Error _qualification_prepare_free(RID p_rid);
+	void _qualification_defer_free(RID p_rid);
+	void _qualification_retry_deferred_frees();
+	LocalVector<RID> qualification_deferred_frees;
 
- Error _qualification_admit_native_serials(const uint64_t *p_serials,uint32_t p_count,uint32_t p_worker,bool p_copy=false);
- void _qualification_cancel_native_serials(const uint64_t *p_serials,uint32_t p_count,uint32_t p_worker,bool p_copy=false);
- bool _qualification_capture_hidden_source(const RDD::QueueCallReport &p_report);
- struct QualificationSourceAdmissionScope {
-  RenderingDevice &rd;
-  uint32_t worker;
-  RDD::NativeSourceAdmission admission;
-  RDD::NativeSourceAdmissionScope scope;
-  QualificationSourceAdmissionScope(RenderingDevice &p_rd,uint32_t p_worker=UINT32_MAX) : rd(p_rd),worker(p_worker),admission{this,admit,cancel,OK,capture_hidden,can_block},scope(admission) {}
-  static Error admit(void *p_owner,const uint64_t *p_serials,uint32_t p_count,bool p_copy) {
-   auto &self=*static_cast<QualificationSourceAdmissionScope *>(p_owner);
-   return self.rd._qualification_admit_native_serials(p_serials,p_count,self.worker,p_copy);
-  }
-  static bool can_block(void *p_owner);
-  static bool capture_hidden(void *p_owner,const RDD::QueueCallReport &p_report) {
-   return static_cast<QualificationSourceAdmissionScope *>(p_owner)->rd._qualification_capture_hidden_source(p_report);
-  }
-  static void cancel(void *p_owner,const uint64_t *p_serials,uint32_t p_count,bool p_copy) {
-   auto &self=*static_cast<QualificationSourceAdmissionScope *>(p_owner);
-   self.rd._qualification_cancel_native_serials(p_serials,p_count,self.worker,p_copy);
-  }
- };
+	Error _qualification_admit_native_serials(const uint64_t *p_serials, uint32_t p_count, uint32_t p_worker, bool p_copy = false);
+	void _qualification_cancel_native_serials(const uint64_t *p_serials, uint32_t p_count, uint32_t p_worker, bool p_copy = false);
+	bool _qualification_capture_hidden_source(const RDD::QueueCallReport &p_report);
+	struct QualificationSourceAdmissionScope {
+		RenderingDevice &rd;
+		uint32_t worker;
+		RDD::NativeSourceAdmission admission;
+		RDD::NativeSourceAdmissionScope scope;
+		QualificationSourceAdmissionScope(RenderingDevice &p_rd, uint32_t p_worker = UINT32_MAX) : rd(p_rd), worker(p_worker), admission{ this, admit, cancel, OK, capture_hidden, can_block }, scope(admission) {}
+		static Error admit(void *p_owner, const uint64_t *p_serials, uint32_t p_count, bool p_copy) {
+			auto &self = *static_cast<QualificationSourceAdmissionScope *>(p_owner);
+			return self.rd._qualification_admit_native_serials(p_serials, p_count, self.worker, p_copy);
+		}
+		static bool can_block(void *p_owner);
+		static bool capture_hidden(void *p_owner, const RDD::QueueCallReport &p_report) {
+			return static_cast<QualificationSourceAdmissionScope *>(p_owner)->rd._qualification_capture_hidden_source(p_report);
+		}
+		static void cancel(void *p_owner, const uint64_t *p_serials, uint32_t p_count, bool p_copy) {
+			auto &self = *static_cast<QualificationSourceAdmissionScope *>(p_owner);
+			self.rd._qualification_cancel_native_serials(p_serials, p_count, self.worker, p_copy);
+		}
+	};
 	void _qualification_add_frame_ticket(GDExtensionDeviceExit::QualificationTicket *p_ticket);
 	void _qualification_seal_tickets();
 	void _qualification_issue_tickets(uint32_t p_slot, const RDD::QueueCallReport &p_report, Error p_error);
@@ -1723,6 +1725,15 @@ private:
 	Error _native_disposal_uniform_set_create(const VectorView<Uniform> &p_uniforms, RID p_shader, uint32_t p_set, RID &r_rid, NativeDisposalWitness &r_witness, const GDExtensionDeviceExit::ProductionRequest *p_owner = nullptr, uint64_t p_group = 0, uint64_t p_root = 0, uint32_t p_ordinal = UINT32_MAX);
 	Error _native_disposal_free(const NativeDisposalWitness &p_witness);
 	Error _native_disposal_observe(const NativeDisposalWitness &p_witness, NativeDisposalWitness::Report &r_report) const;
+	// Live capture snapshots actual original driver bytes; later observation
+	// follows retained witnesses across RID invalidation and physical return.
+	Error _native_disposal_depth_allocation_quote(uint32_t p_width, uint32_t p_height, NativeDepthAllocationQuote &r_quote) const;
+	Error _native_disposal_depth_allocation_quote_observe(const NativeDepthAllocationQuote &p_quote, NativeDepthAllocationQuote::Report &r_report) const;
+	// Failed actual verification preserves created RID/witness and projection;
+	// the original owner must retire that prefix before its reservation returns.
+	Error _native_disposal_depth_texture_create_quoted(const NativeDepthAllocationQuote &p_quote, RID &r_rid, NativeDisposalWitness &r_witness, NativeDepthAllocationProjection &r_projection, NativeDepthAllocationQuote::CreateOutcome &r_outcome);
+	Error _native_disposal_depth_allocation_capture(const NativeDisposalWitness &p_depth, const NativeDisposalWitness &p_framebuffer, NativeDepthAllocationProjection &r_projection);
+	Error _native_disposal_depth_allocation_observe(const NativeDepthAllocationProjection &p_projection, NativeDepthAllocationProjection::Report &r_report) const;
 	Error _native_disposal_maintenance();
 	struct NativeDisposalBudget {
 		uint32_t receipts = 0;
@@ -2330,9 +2341,9 @@ private:
 		bool recording = false;
 		bool submitted = false;
 		bool qualification_observer_pending = false;
-  // Immutable current batch after a qualification dependency reserves it.
-  // Cleared only after exact source join/retain; not a frame-wide exclusion.
-  bool qualification_batch_sealed = false;
+		// Immutable current batch after a qualification dependency reserves it.
+		// Cleared only after exact source join/retain; not a frame-wide exclusion.
+		bool qualification_batch_sealed = false;
 		bool production_observer_pending = false;
 		bool submission_pending = false;
 		bool poisoned = false;
@@ -2495,8 +2506,8 @@ private:
 		RDD::FenceID fence;
 		bool fence_signaled = false;
 		bool primary_command_buffer_begun = true;
-  bool qualification_graph_closed = false, qualification_segment_closed = false, qualification_issue_busy = false;
-  uint32_t qualification_issue_slot = 0;
+		bool qualification_graph_closed = false, qualification_segment_closed = false, qualification_issue_busy = false;
+		uint32_t qualification_issue_slot = 0;
 		LocalVector<RenderingDeviceDriver::QueueCallReport> chain_reports;
 		// Owns source observer references transferred by the original hidden queue.
 		LocalVector<RDD::QueueCallReport> qualification_hidden_reports;

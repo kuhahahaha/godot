@@ -415,6 +415,21 @@ public:
 		uint64_t row_pitch = 0;
 	};
 
+	struct DepthAllocationQuote {
+		enum class Policy : uint8_t { Unavailable,
+			MetalHeapPool,
+			MetalHeapDedicated };
+		Policy policy = Policy::Unavailable;
+		uint64_t native_requirement = 0;
+		uint64_t owner_reservation = 0;
+		uint64_t alignment = 0;
+	};
+	// Optional original backend capability. No native allocation or reservation
+	// is performed here; unsupported paths cannot fabricate a finite bound.
+	virtual Error depth_allocation_quote(uint32_t p_width, uint32_t p_height, DepthAllocationQuote &r_quote) {
+		r_quote = {};
+		return ERR_UNAVAILABLE;
+	}
 	virtual TextureID texture_create(const TextureFormat &p_format, const TextureView &p_view) = 0;
 	virtual TextureID texture_create_from_extension(uint64_t p_native_texture, TextureType p_type, DataFormat p_format, uint32_t p_array_layers, bool p_depth_stencil, uint32_t p_mipmaps) = 0;
 	// texture_create_shared_*() can only use original, non-view textures as original. RenderingDevice is responsible for ensuring that.
@@ -564,46 +579,51 @@ public:
 		PREPARE_SEGMENT };
 	// An atomic call's new native-issue bound, not retained fact capacity. A
 	// supported no-issue preparation returns true with zero, not unsupported.
- struct NativeSourceAdmission {
-  void *owner = nullptr;
-  Error (*admit)(void *, const uint64_t *, uint32_t, bool) = nullptr;
-  void (*cancel)(void *, const uint64_t *, uint32_t, bool) = nullptr;
-  Error error = OK;
-  bool (*capture_hidden)(void *, const QueueCallReport &) = nullptr;
-  bool (*can_block)(void *) = nullptr;
- };
- class NativeSourceAdmissionScope {
-  NativeSourceAdmission *previous;
- public:
-  explicit NativeSourceAdmissionScope(NativeSourceAdmission &p_admission) : previous(active_native_source_admission) { active_native_source_admission=&p_admission; }
-  ~NativeSourceAdmissionScope() { active_native_source_admission=previous; }
- };
- static thread_local NativeSourceAdmission *active_native_source_admission;
- static Error admit_native_sources(const uint64_t *p_serials,uint32_t p_count,bool p_copy=false) {
-  if(!active_native_source_admission)return OK;
-  auto &admission=*active_native_source_admission;
-  return admission.error=admission.admit(admission.owner,p_serials,p_count,p_copy);
- }
- static Error admit_native_source(uint64_t p_serial,bool p_copy=false) { return admit_native_sources(&p_serial,1,p_copy); }
- static void cancel_native_sources(const uint64_t *p_serials,uint32_t p_count,bool p_copy=false) {
-  if(active_native_source_admission)active_native_source_admission->cancel(active_native_source_admission->owner,p_serials,p_count,p_copy);
- }
+	struct NativeSourceAdmission {
+		void *owner = nullptr;
+		Error (*admit)(void *, const uint64_t *, uint32_t, bool) = nullptr;
+		void (*cancel)(void *, const uint64_t *, uint32_t, bool) = nullptr;
+		Error error = OK;
+		bool (*capture_hidden)(void *, const QueueCallReport &) = nullptr;
+		bool (*can_block)(void *) = nullptr;
+	};
+	class NativeSourceAdmissionScope {
+		NativeSourceAdmission *previous;
 
- static bool native_source_can_block() {
-  auto *scope = active_native_source_admission;
-  return !scope || !scope->can_block || scope->can_block(scope->owner);
- }
- static bool capture_hidden_native_source(const QueueCallReport &p_report) {
-  auto *scope = active_native_source_admission;
-  return scope && scope->capture_hidden && scope->capture_hidden(scope->owner,p_report);
- }
+	public:
+		explicit NativeSourceAdmissionScope(NativeSourceAdmission &p_admission) : previous(active_native_source_admission) { active_native_source_admission = &p_admission; }
+		~NativeSourceAdmissionScope() { active_native_source_admission = previous; }
+	};
+	static thread_local NativeSourceAdmission *active_native_source_admission;
+	static Error admit_native_sources(const uint64_t *p_serials, uint32_t p_count, bool p_copy = false) {
+		if (!active_native_source_admission) {
+			return OK;
+		}
+		auto &admission = *active_native_source_admission;
+		return admission.error = admission.admit(admission.owner, p_serials, p_count, p_copy);
+	}
+	static Error admit_native_source(uint64_t p_serial, bool p_copy = false) { return admit_native_sources(&p_serial, 1, p_copy); }
+	static void cancel_native_sources(const uint64_t *p_serials, uint32_t p_count, bool p_copy = false) {
+		if (active_native_source_admission) {
+			active_native_source_admission->cancel(active_native_source_admission->owner, p_serials, p_count, p_copy);
+		}
+	}
+
+	static bool native_source_can_block() {
+		auto *scope = active_native_source_admission;
+		return !scope || !scope->can_block || scope->can_block(scope->owner);
+	}
+	static bool capture_hidden_native_source(const QueueCallReport &p_report) {
+		auto *scope = active_native_source_admission;
+		return scope && scope->capture_hidden && scope->capture_hidden(scope->owner, p_report);
+	}
 
 	virtual bool native_issue_bound(NativeIssueKind p_kind, uint32_t p_commands, uint32_t &r_bound) const { return false; }
- // Internal original-owner accounting profile. Unsupported drivers retain
- // their existing conservative qualification admission, without a fallback.
- virtual bool qualification_incremental_accounting_supported() const { return false; }
- virtual bool qualification_incremental_fact_bound(uint64_t p_graphs, uint32_t p_current, uint32_t &r_main, uint32_t &r_copy) const { return false; }
- virtual Error qualification_worker_source_quote(CommandBufferID p_command, QueueCallReport &r_prefix, uint32_t &r_future) const { return ERR_UNAVAILABLE; }
+	// Internal original-owner accounting profile. Unsupported drivers retain
+	// their existing conservative qualification admission, without a fallback.
+	virtual bool qualification_incremental_accounting_supported() const { return false; }
+	virtual bool qualification_incremental_fact_bound(uint64_t p_graphs, uint32_t p_current, uint32_t &r_main, uint32_t &r_copy) const { return false; }
+	virtual Error qualification_worker_source_quote(CommandBufferID p_command, QueueCallReport &r_prefix, uint32_t &r_future) const { return ERR_UNAVAILABLE; }
 	virtual uint32_t qualification_native_call_bound(uint32_t p_slots) const { return 0; }
 	// Original RD profile: main slots may wait and signal; transfer-worker
 	// submissions never wait. Backends without a tighter proof keep their old bound.
@@ -1091,7 +1111,10 @@ public:
 
 	virtual void begin_segment(uint32_t p_frame_index, uint32_t p_frames_drawn) = 0;
 	virtual void end_segment() = 0;
-	virtual Error end_segment_checked(bool p_nonblocking = false) { end_segment(); return OK; }
+	virtual Error end_segment_checked(bool p_nonblocking = false) {
+		end_segment();
+		return OK;
+	}
 
 	/**************/
 	/**** MISC ****/

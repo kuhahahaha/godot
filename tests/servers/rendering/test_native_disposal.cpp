@@ -49,6 +49,8 @@ public:
 	static void geometry_prepared();
 	static void geometry_prepared_multiple();
 	static void depth_disposal();
+	static void depth_allocation_projection();
+	static void depth_allocation_quote();
 	static void depth_factory_failures();
 	static void depth_identity();
 	static void pipeline_rid_capacity();
@@ -2878,4 +2880,242 @@ void TestNativeDisposalAccess::sampled_identity() {
 	CHECK(rd.reverse_dependency_map.is_empty());
 	detach(foreign);
 	detach(rd);
+}
+
+// Counterexamples: payload-size arithmetic instead of driver allocation, shared
+// attachment double counting, and a single returned child signing the pair.
+void TestNativeDisposalAccess::depth_allocation_projection() {
+	using namespace TestNativeDisposal;
+	class AllocationDriver : public DepthDisposalDriver {
+	public:
+		uint64_t actual_bytes = 8192;
+		uint64_t texture_get_allocation_size(TextureID) override { return actual_bytes; }
+	} driver;
+	RenderingDevice rd, foreign;
+	attach(rd, driver);
+	attach(foreign, driver);
+	RID depth, framebuffer;
+	NativeDisposalWitness depth_witness, framebuffer_witness;
+	// REQUIRE can unwind this fixture before the normal return checks. Keep
+	// teardown on the original test owner, not RD's uninitialized full finalize.
+	const auto cleanup = [&]() {
+		driver.actual_bytes = 8192; // The original allocation was made before subcases.
+		if (depth_witness.cell.is_valid() && state(depth_witness) == NativeDisposalWitness::State::LIVE) {
+			CHECK(release(rd, depth_witness) == OK);
+		}
+		if (framebuffer_witness.cell.is_valid() && state(framebuffer_witness) == NativeDisposalWitness::State::LIVE) {
+			CHECK(release(rd, framebuffer_witness) == OK);
+		}
+		dispose(rd);
+		// The shared format pass is outside both physical resource witnesses.
+		for (const auto &entry : rd.framebuffer_formats) {
+			driver.render_pass_free(entry.value.render_pass);
+		}
+		rd.framebuffer_formats.clear();
+		rd.framebuffer_format_cache.clear();
+		detach(foreign);
+		detach(rd);
+	};
+	struct Cleanup {
+		const decltype(cleanup) &finish;
+		~Cleanup() { finish(); }
+	} teardown{ cleanup };
+	REQUIRE(rd._native_disposal_depth_texture_create(8, 4, depth, depth_witness) == OK);
+	SUBCASE("partial allocation has only its actual depth child") {
+		driver.fail_pass = true;
+		ERR_PRINT_OFF;
+		CHECK(rd._native_disposal_depth_framebuffer_create(depth_witness, framebuffer, framebuffer_witness) == ERR_CANT_CREATE);
+		ERR_PRINT_ON;
+	}
+	SUBCASE("pair includes an original shared attachment") {
+		REQUIRE(rd._native_disposal_depth_framebuffer_create(depth_witness, framebuffer, framebuffer_witness) == OK);
+		auto *cache = rd.framebuffer_owner.get_or_null(framebuffer)->framebuffer_cache;
+		const auto pass = driver.render_pass_create({}, {}, {}, 1, {});
+		const auto child = driver.framebuffer_create(pass, cache->textures, cache->width, cache->height);
+		cache->storage_map.insert(1, { child, pass });
+	}
+	SUBCASE("unexposed driver allocation stays unknown") {
+		driver.actual_bytes = 0;
+	}
+	// Reject metadata that no longer matches the original incarnation or pair.
+	{
+		NativeDepthAllocationProjection rejected;
+		auto *texture = rd.texture_owner.get_or_null(depth);
+		++texture->native_disposal_serial;
+		CHECK(rd._native_disposal_depth_allocation_capture(depth_witness, framebuffer_witness, rejected) == ERR_INVALID_DATA);
+		--texture->native_disposal_serial;
+		texture->owner = depth;
+		CHECK(rd._native_disposal_depth_allocation_capture(depth_witness, framebuffer_witness, rejected) == ERR_UNAVAILABLE);
+		texture->owner = RID();
+		if (framebuffer.is_valid()) {
+			auto *fb = rd.framebuffer_owner.get_or_null(framebuffer);
+			const RID saved = fb->texture_ids[0];
+			fb->texture_ids.write[0] = RID();
+			CHECK(rd._native_disposal_depth_allocation_capture(depth_witness, framebuffer_witness, rejected) == ERR_INVALID_DATA);
+			fb->texture_ids.write[0] = saved;
+		}
+	}
+	NativeDepthAllocationProjection projection;
+	NativeDepthAllocationProjection::Report report;
+	REQUIRE(rd._native_disposal_depth_allocation_capture(depth_witness, framebuffer_witness, projection) == OK);
+	REQUIRE(rd._native_disposal_depth_allocation_observe(projection, report) == OK);
+	using Knowledge = NativeDepthAllocationProjection::ByteKnowledge;
+	CHECK(report.depth_driver_backing.knowledge == (driver.actual_bytes ? Knowledge::Known : Knowledge::UnknownNotExposed));
+	CHECK(report.depth_driver_backing.bytes == driver.actual_bytes);
+	CHECK(report.framebuffer_driver_backing.knowledge == Knowledge::UnknownNotExposed);
+	CHECK(report.framebuffer_object.knowledge == Knowledge::UnknownNotExposed);
+	CHECK(report.attachment_reference.knowledge == Knowledge::UnknownNotExposed);
+	CHECK(report.opaque_driver_overhead.knowledge == Knowledge::UnknownNotExposed);
+	CHECK(report.framebuffer_created == framebuffer.is_valid());
+	CHECK(report.depth.rid == depth.get_id());
+	CHECK(report.depth.serial == depth_witness.cell->serial);
+	const auto original_bytes = report.depth_driver_backing;
+	depth_witness.cell->state = NativeDisposalWitness::State::UNKNOWN;
+	CHECK(rd._native_disposal_depth_allocation_observe(projection, report) == ERR_INVALID_DATA);
+	CHECK(report.depth.state == NativeDisposalWitness::State::UNKNOWN);
+	CHECK(report.depth_driver_backing.knowledge == original_bytes.knowledge);
+	CHECK(report.depth_driver_backing.bytes == original_bytes.bytes);
+	CHECK_FALSE(report.all_created_children_returned);
+	depth_witness.cell->state = NativeDisposalWitness::State::LIVE;
+	REQUIRE(rd._native_disposal_depth_allocation_observe(projection, report) == OK);
+
+	CHECK(report.shared_attachment_depth.rid == (framebuffer.is_valid() ? depth.get_id() : 0));
+	CHECK_FALSE(report.all_created_children_returned);
+	CHECK(foreign._native_disposal_depth_allocation_observe(projection, report) == ERR_UNAUTHORIZED);
+	CHECK(rd._native_disposal_depth_allocation_capture(depth_witness, framebuffer_witness, projection) == ERR_INVALID_PARAMETER);
+	// Same witnesses remain readable after RID invalidation and driver return;
+	// observing the snapshot never re-reads a later incarnation's allocation.
+	driver.actual_bytes = 8192;
+	REQUIRE(release(rd, depth_witness) == OK);
+	REQUIRE(rd._native_disposal_depth_allocation_observe(projection, report) == OK);
+	CHECK_FALSE(report.all_created_children_returned);
+	if (framebuffer.is_valid()) {
+		uint32_t used = 0;
+		CHECK(step(rd, 1, 1, UINT64_MAX, used) == ERR_BUSY);
+		REQUIRE(rd._native_disposal_depth_allocation_observe(projection, report) == OK);
+		CHECK_FALSE(report.all_created_children_returned);
+	}
+	dispose(rd);
+	REQUIRE(rd._native_disposal_depth_allocation_observe(projection, report) == OK);
+	CHECK(report.all_created_children_returned);
+	CHECK(report.depth.state == NativeDisposalWitness::State::RETURNED);
+	CHECK(report.framebuffer.state == (framebuffer.is_valid() ? NativeDisposalWitness::State::RETURNED : NativeDisposalWitness::State::EMPTY));
+	const uint32_t creates = driver.texture_creates;
+	const uint32_t frees = driver.texture_frees;
+	REQUIRE(rd._native_disposal_depth_allocation_observe(projection, report) == OK);
+	CHECK(driver.texture_creates == creates);
+	CHECK(driver.texture_frees == frees);
+}
+TEST_CASE("[RenderingDevice][NativeDisposal][DepthAllocation] original allocation snapshot and all actual children return") {
+	TestNativeDisposalAccess::depth_allocation_projection();
+}
+
+// Counterexamples: caller byte estimates authorizing allocation, actual overflow
+// publishing success, and failed verification dropping the real cleanup prefix.
+void TestNativeDisposalAccess::depth_allocation_quote() {
+	using namespace TestNativeDisposal;
+	class QuoteDriver : public DepthDisposalDriver {
+	public:
+		uint64_t actual = 8192, reserved = 8192;
+		bool unsupported = false, dedicated = false;
+		Error depth_allocation_quote(uint32_t, uint32_t, DepthAllocationQuote &r_quote) override {
+			r_quote = {};
+			if (unsupported) {
+				return ERR_UNAVAILABLE;
+			}
+			r_quote.policy = dedicated ? DepthAllocationQuote::Policy::MetalHeapDedicated : DepthAllocationQuote::Policy::MetalHeapPool;
+			r_quote.native_requirement = reserved;
+			r_quote.owner_reservation = reserved;
+			r_quote.alignment = 256;
+			return OK;
+		}
+		uint64_t texture_get_allocation_size(TextureID) override { return actual; }
+	} driver;
+	RenderingDevice rd, foreign;
+	attach(rd, driver);
+	attach(foreign, driver);
+	RID texture;
+	NativeDisposalWitness witness;
+	NativeDepthAllocationProjection projection;
+	NativeDepthAllocationQuote::CreateOutcome outcome;
+	// A failed REQUIRE must still retire the original prefix and detach the
+	// partially initialized stub devices before their destructors finalize.
+	const auto cleanup = [&]() {
+		if (witness.cell.is_valid() && state(witness) == NativeDisposalWitness::State::LIVE) {
+			CHECK(release(rd, witness) == OK);
+		}
+		dispose(rd);
+		detach(foreign);
+		detach(rd);
+	};
+	struct Cleanup {
+		const decltype(cleanup) &finish;
+		~Cleanup() { finish(); }
+	} teardown{ cleanup };
+	NativeDepthAllocationQuote quote;
+	NativeDepthAllocationQuote::Report report;
+	REQUIRE(rd._native_disposal_depth_allocation_quote(8, 4, quote) == OK);
+	REQUIRE(rd._native_disposal_depth_allocation_quote_observe(quote, report) == OK);
+	CHECK(report.texture_owner_reservation.bytes == 8192);
+	CHECK(report.framebuffer_owner_reservation.knowledge == NativeDepthAllocationProjection::ByteKnowledge::Known);
+	CHECK(report.framebuffer_owner_reservation.bytes == 0);
+	CHECK(report.allocations == 2);
+	CHECK(report.parts == 1);
+	CHECK(report.shared_attachment_references == 1);
+	CHECK(report.framebuffer_driver_backing.knowledge == NativeDepthAllocationProjection::ByteKnowledge::UnknownNotExposed);
+	CHECK(foreign._native_disposal_depth_allocation_quote_observe(quote, report) == ERR_UNAUTHORIZED);
+	SUBCASE("finite native quote verifies actual owner bytes") {
+		CHECK(rd._native_disposal_depth_texture_create_quoted(quote, texture, witness, projection, outcome) == OK);
+		CHECK(outcome == NativeDepthAllocationQuote::CreateOutcome::CreatedVerified);
+	}
+	SUBCASE("actual over reservation retains an unpublished created prefix") {
+		driver.actual = 12288;
+		CHECK(rd._native_disposal_depth_texture_create_quoted(quote, texture, witness, projection, outcome) == ERR_OUT_OF_MEMORY);
+		CHECK(outcome == NativeDepthAllocationQuote::CreateOutcome::CreatedOverReservation);
+	}
+	SUBCASE("unexposed actual retains an unpublished created prefix") {
+		driver.actual = 0;
+		CHECK(rd._native_disposal_depth_texture_create_quoted(quote, texture, witness, projection, outcome) == ERR_UNAVAILABLE);
+		CHECK(outcome == NativeDepthAllocationQuote::CreateOutcome::CreatedActualUnknown);
+	}
+	SUBCASE("policy change refuses before native allocation") {
+		driver.dedicated = true;
+		CHECK(rd._native_disposal_depth_texture_create_quoted(quote, texture, witness, projection, outcome) == ERR_OUT_OF_MEMORY);
+		CHECK(outcome == NativeDepthAllocationQuote::CreateOutcome::NotCreated);
+		CHECK(driver.texture_creates == 0);
+	}
+	SUBCASE("larger refreshed requirement refuses before native allocation") {
+		driver.reserved = 16384;
+		CHECK(rd._native_disposal_depth_texture_create_quoted(quote, texture, witness, projection, outcome) == ERR_OUT_OF_MEMORY);
+		CHECK(outcome == NativeDepthAllocationQuote::CreateOutcome::NotCreated);
+		CHECK(driver.texture_creates == 0);
+	}
+	SUBCASE("unsupported original backend refuses before native allocation") {
+		driver.unsupported = true;
+		CHECK(rd._native_disposal_depth_texture_create_quoted(quote, texture, witness, projection, outcome) == ERR_UNAVAILABLE);
+		CHECK(outcome == NativeDepthAllocationQuote::CreateOutcome::NotCreated);
+		CHECK(driver.texture_creates == 0);
+	}
+	SUBCASE("a different device cannot consume the original quote") {
+		CHECK(foreign._native_disposal_depth_texture_create_quoted(quote, texture, witness, projection, outcome) == ERR_UNAUTHORIZED);
+		CHECK(outcome == NativeDepthAllocationQuote::CreateOutcome::NotCreated);
+		CHECK(driver.texture_creates == 0);
+	}
+	if (texture.is_valid()) {
+		NativeDepthAllocationProjection::Report actual;
+		REQUIRE(rd._native_disposal_depth_allocation_observe(projection, actual) == OK);
+		CHECK(actual.depth.rid == texture.get_id());
+		CHECK_FALSE(actual.all_created_children_returned);
+		REQUIRE(release(rd, witness) == OK);
+		dispose(rd);
+		REQUIRE(rd._native_disposal_depth_allocation_observe(projection, actual) == OK);
+		CHECK(actual.all_created_children_returned);
+		CHECK(driver.texture_frees == 1);
+	} else {
+		CHECK(witness.cell.is_null());
+		CHECK(driver.texture_frees == 0);
+	}
+}
+TEST_CASE("[RenderingDevice][NativeDisposal][DepthAllocationQuote] original finite quote gates creation and preserves failed actual prefix") {
+	TestNativeDisposalAccess::depth_allocation_quote();
 }

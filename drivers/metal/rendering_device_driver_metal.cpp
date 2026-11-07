@@ -211,7 +211,7 @@ Error RenderingDeviceDriverMetal::native_call_release(uint64_t serial) {
 RenderingDeviceDriverMetal::CompletionRecord *RenderingDeviceDriverMetal::register_completion_record(MTL::CommandBuffer *p_command_buffer, uint64_t p_serial, bool p_collection_locked, bool p_independent_source) {
 	const bool batch_source = active_completion_records && !p_independent_source;
 	const uint64_t serial = batch_source ? (active_native_serial_count ? (--active_native_serial_count, active_native_serial++) : 0) : reserve_native_call_serials(1);
-	if (!serial || (!batch_source && admit_native_source(serial,p_independent_source)!=OK)) {
+	if (!serial || (!batch_source && admit_native_source(serial, p_independent_source) != OK)) {
 		return nullptr;
 	}
 
@@ -504,6 +504,43 @@ bool RenderingDeviceDriverMetal::is_valid_linear(const TextureFormat &p_format) 
 			&& p_format.samples == TEXTURE_SAMPLES_1; // Linear textures must have 1 sample.
 }
 
+NS::SharedPtr<MTL::TextureDescriptor> RenderingDeviceDriverMetal::_depth_allocation_descriptor(uint32_t p_width, uint32_t p_height) const {
+	NS::SharedPtr<MTL::TextureDescriptor> desc = NS::TransferPtr(MTL::TextureDescriptor::alloc()->init());
+	desc->setTextureType(MTL::TextureType2D);
+	desc->setPixelFormat((MTL::PixelFormat)pixel_formats->getMTLPixelFormat(DATA_FORMAT_D32_SFLOAT));
+	desc->setWidth(p_width);
+	desc->setHeight(p_height);
+	desc->setDepth(1);
+	desc->setMipmapLevelCount(1);
+	desc->setResourceOptions(base_hazard_tracking | MTL::ResourceCPUCacheModeDefaultCache | MTL::ResourceStorageModePrivate);
+	desc->setUsage(MTL::TextureUsageShaderRead | MTL::TextureUsageRenderTarget);
+	return desc;
+}
+
+Error RenderingDeviceDriverMetal::depth_allocation_quote(uint32_t p_width, uint32_t p_height, DepthAllocationQuote &r_quote) {
+	r_quote = {};
+	// Match the original RD texture-create limit before descriptor construction
+	// or a native size query; oversized descriptors are not native probes.
+	const uint64_t max_size = limit_get(LIMIT_MAX_TEXTURE_SIZE_2D);
+	if (!p_width || !p_height || p_width > max_size || p_height > max_size) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (!allocator || !pixel_formats ||
+			!flags::any(pixel_formats->getCapabilities((MTL::PixelFormat)pixel_formats->getMTLPixelFormat(DATA_FORMAT_D32_SFLOAT)), kMTLFmtCapsDSAtt)) {
+		return ERR_UNAVAILABLE;
+	}
+	const auto desc = _depth_allocation_descriptor(p_width, p_height);
+	MetalAllocator::TextureAllocationQuote quote;
+	if (!allocator->texture_allocation_quote(desc.get(), quote)) {
+		return ERR_UNAVAILABLE;
+	}
+	r_quote.policy = quote.dedicated ? DepthAllocationQuote::Policy::MetalHeapDedicated : DepthAllocationQuote::Policy::MetalHeapPool;
+	r_quote.native_requirement = quote.native_requirement;
+	r_quote.owner_reservation = quote.owner_reservation;
+	r_quote.alignment = quote.alignment;
+	return OK;
+}
+
 RDD::TextureID RenderingDeviceDriverMetal::texture_create(const TextureFormat &p_format, const TextureView &p_view) {
 	NS::SharedPtr<MTL::TextureDescriptor> desc = NS::TransferPtr(MTL::TextureDescriptor::alloc()->init());
 	desc->setTextureType(TEXTURE_TYPE[p_format.texture_type]);
@@ -657,6 +694,14 @@ RDD::TextureID RenderingDeviceDriverMetal::texture_create(const TextureFormat &p
 	}
 
 	desc->setUsage(usage);
+
+	// Quote and actual creation use the same original standalone D32 recipe.
+	// All other descriptors retain the general construction above.
+	if (p_format.texture_type == TEXTURE_TYPE_2D && p_format.format == DATA_FORMAT_D32_SFLOAT &&
+			p_format.depth == 1 && p_format.array_layers == 1 && p_format.mipmaps == 1 && p_format.samples == TEXTURE_SAMPLES_1 &&
+			p_format.usage_bits == (TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) && p_format.shareable_formats.is_empty() && no_swizzle && can_be_attachment) {
+		desc = _depth_allocation_descriptor(p_format.width, p_format.height);
+	}
 
 	// Allocate memory.
 
@@ -3000,11 +3045,15 @@ Error RenderingDeviceDriverMetal::_copy_queue_copy_to_buffer(Span<uint8_t> p_src
 	MutexLock lock(copy_queue_mutex);
 	if (copy_queue_completion_record) {
 		const Error error = _copy_queue_flush();
-		if (error != OK) return error;
+		if (error != OK) {
+			return error;
+		}
 	}
 	if (_copy_queue_buffer_available() < p_src_data.size()) {
 		const Error error = _copy_queue_flush();
-		if (error != OK) return error;
+		if (error != OK) {
+			return error;
+		}
 	}
 
 	MTL::BlitCommandEncoder *blit_encoder = _copy_queue_blit_encoder();
@@ -3046,7 +3095,7 @@ Error RenderingDeviceDriverMetal::qualification_prepare_segment(QueueCallReport 
 		// before this original queue commits. Refusal is still zero native effects.
 		auto *record = register_completion_record(copy_queue_command_buffer.get(), 0, true, true);
 		if (!record) {
-   return active_native_source_admission && active_native_source_admission->error!=OK ? active_native_source_admission->error : ERR_PARAMETER_RANGE_ERROR;
+			return active_native_source_admission && active_native_source_admission->error != OK ? active_native_source_admission->error : ERR_PARAMETER_RANGE_ERROR;
 		}
 		record->observers = 1;
 		copy_queue_completion_record = record;
@@ -3100,7 +3149,7 @@ Error RenderingDeviceDriverMetal::_copy_queue_flush(bool p_nonblocking) {
 	// prepare path. Admission precedes registration, endEncoding and commit;
 	// refusal leaves the encoder, staging bytes and destination custody intact.
 	QueueCallReport report;
-	const Error error = qualification_prepare_segment(report,p_nonblocking || !native_source_can_block());
+	const Error error = qualification_prepare_segment(report, p_nonblocking || !native_source_can_block());
 	if (!report.calls.is_empty()) {
 		report.error = error == ERR_BUSY ? OK : error;
 		// prepare transfers one real observer. The existing Frame keeps it
