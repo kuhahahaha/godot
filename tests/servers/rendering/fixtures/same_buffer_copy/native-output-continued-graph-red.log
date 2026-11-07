@@ -1,0 +1,86 @@
+ERROR: Command can't have itself as a dependency.
+   at: _add_command_to_graph (servers/rendering/rendering_device_graph.cpp:943)
+ERROR: Command can't have itself as a dependency.
+   at: _add_command_to_graph (servers/rendering/rendering_device_graph.cpp:943)
+ERROR: Command can't have itself as a dependency.
+   at: _add_command_to_graph (servers/rendering/rendering_device_graph.cpp:943)
+ERROR: Command can't have itself as a dependency.
+   at: _add_command_to_graph (servers/rendering/rendering_device_graph.cpp:943)
+ERROR: Command can't have itself as a dependency.
+   at: _add_command_to_graph (servers/rendering/rendering_device_graph.cpp:943)
+ERROR: Command can't have itself as a dependency.
+   at: _add_command_to_graph (servers/rendering/rendering_device_graph.cpp:943)
+[doctest] doctest version is "2.4.12"
+[doctest] run with "--help" for options
+===============================================================================
+tests/servers/rendering/test_graph_same_buffer_copy.cpp:147:
+TEST CASE:  [R02][GraphSameBufferCopy] nonoverlapping copy retains both transfer accesses without self dependency
+
+tests/servers/rendering/test_graph_same_buffer_copy.cpp:155: ERROR: CHECK( errors.count == 0 ) is NOT correct!
+  values: CHECK( 1 == 0 )
+  logged: buffers require transitions: false
+
+tests/servers/rendering/test_graph_same_buffer_copy.cpp:159: ERROR: CHECK( fixture.buffer.usage_access.has_flag(RDD::BARRIER_ACCESS_COPY_WRITE_BIT) ) is NOT correct!
+  values: CHECK( false )
+  logged: buffers require transitions: false
+
+tests/servers/rendering/test_graph_same_buffer_copy.cpp:155: ERROR: CHECK( errors.count == 0 ) is NOT correct!
+  values: CHECK( 1 == 0 )
+  logged: buffers require transitions: true
+
+tests/servers/rendering/test_graph_same_buffer_copy.cpp:159: ERROR: CHECK( fixture.buffer.usage_access.has_flag(RDD::BARRIER_ACCESS_COPY_WRITE_BIT) ) is NOT correct!
+  values: CHECK( false )
+  logged: buffers require transitions: true
+
+===============================================================================
+tests/servers/rendering/test_graph_same_buffer_copy.cpp:164:
+TEST CASE:  [R02][GraphSameBufferCopy] same buffer copy orders prior and following readers and writers
+
+tests/servers/rendering/test_graph_same_buffer_copy.cpp:173: ERROR: CHECK( fixture.buffer.usage_access.has_flag(RDD::BARRIER_ACCESS_COPY_WRITE_BIT) ) is NOT correct!
+  values: CHECK( false )
+  logged: buffers require transitions: false
+
+tests/servers/rendering/test_graph_same_buffer_copy.cpp:176: ERROR: CHECK( errors.count == 0 ) is NOT correct!
+  values: CHECK( 1 == 0 )
+  logged: buffers require transitions: false
+
+tests/servers/rendering/test_graph_same_buffer_copy.cpp:173: ERROR: CHECK( fixture.buffer.usage_access.has_flag(RDD::BARRIER_ACCESS_COPY_WRITE_BIT) ) is NOT correct!
+  values: CHECK( false )
+  logged: buffers require transitions: true
+
+tests/servers/rendering/test_graph_same_buffer_copy.cpp:176: ERROR: CHECK( errors.count == 0 ) is NOT correct!
+  values: CHECK( 1 == 0 )
+  logged: buffers require transitions: true
+
+===============================================================================
+tests/servers/rendering/test_graph_same_buffer_copy.cpp:186:
+TEST CASE:  [R02][GraphSameBufferCopy] emitted barriers preserve incoming and outgoing transfer hazards
+
+tests/servers/rendering/test_graph_same_buffer_copy.cpp:200: ERROR: CHECK( errors.count == 0 ) is NOT correct!
+  values: CHECK( 1 == 0 )
+  logged: buffers require transitions: false
+
+tests/servers/rendering/test_graph_same_buffer_copy.cpp:213: ERROR: CHECK( fixture.driver.copies[2].source_access.has_flag(RDD::BARRIER_ACCESS_COPY_WRITE_BIT) ) is NOT correct!
+  values: CHECK( false )
+  logged: buffers require transitions: false
+
+tests/servers/rendering/test_graph_same_buffer_copy.cpp:214: ERROR: CHECK( fixture.driver.copies[2].destination_access.has_flag(RDD::BARRIER_ACCESS_COPY_READ_BIT) ) is NOT correct!
+  values: CHECK( false )
+  logged: buffers require transitions: false
+
+tests/servers/rendering/test_graph_same_buffer_copy.cpp:200: ERROR: CHECK( errors.count == 0 ) is NOT correct!
+  values: CHECK( 1 == 0 )
+  logged: buffers require transitions: true
+
+tests/servers/rendering/test_graph_same_buffer_copy.cpp:213: ERROR: CHECK( fixture.driver.copies[2].source_access.has_flag(RDD::BARRIER_ACCESS_COPY_WRITE_BIT) ) is NOT correct!
+  values: CHECK( false )
+  logged: buffers require transitions: true
+
+tests/servers/rendering/test_graph_same_buffer_copy.cpp:214: ERROR: CHECK( fixture.driver.copies[2].destination_access.has_flag(RDD::BARRIER_ACCESS_COPY_READ_BIT) ) is NOT correct!
+  values: CHECK( false )
+  logged: buffers require transitions: true
+
+===============================================================================
+[doctest] test cases:  3 |  0 passed |  3 failed | 2196 skipped
+[doctest] assertions: 94 | 80 passed | 14 failed |
+[doctest] Status: FAILURE!

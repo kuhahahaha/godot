@@ -639,6 +639,16 @@ RenderingDeviceGraph::RaytracingListInstruction *RenderingDeviceGraph::_allocate
 }
 
 void RenderingDeviceGraph::_add_command_to_graph(ResourceTracker **p_resource_trackers, ResourceUsage *p_resource_usages, uint32_t p_resource_count, int32_t p_command_index, RecordedCommand *r_command) {
+	bool same_buffer_copy = false;
+	if (r_command->type == RecordedCommand::TYPE_BUFFER_COPY && p_resource_count == 2 && p_resource_trackers[0] && p_resource_trackers[0] == p_resource_trackers[1] && p_resource_usages[0] == RESOURCE_USAGE_COPY_TO && p_resource_usages[1] == RESOURCE_USAGE_COPY_FROM) {
+		const auto *copy = static_cast<const RecordedBufferCopyCommand *>(r_command);
+		if (copy->source.id && copy->source.id == copy->destination.id && copy->source.id == p_resource_trackers[0]->buffer_driver_id.id) {
+			// One buffer is both read and written. Track it once as a writer,
+			// retaining both transfer accesses before deriving any barriers.
+			same_buffer_copy = true;
+			p_resource_count = 1;
+		}
+	}
 	// Assign the next stages derived from the stages the command requires first.
 	r_command->next_stages = r_command->self_stages;
 
@@ -696,6 +706,9 @@ void RenderingDeviceGraph::_add_command_to_graph(ResourceTracker **p_resource_tr
 		ResourceUsage new_resource_usage = p_resource_usages[i];
 		bool write_usage = _is_write_usage(new_resource_usage);
 		BitField<RDD::BarrierAccessBits> new_usage_access = _usage_to_access_bits(new_resource_usage);
+		if (same_buffer_copy) {
+			new_usage_access.set_flag(_usage_to_access_bits(RESOURCE_USAGE_COPY_FROM));
+		}
 		bool is_resource_a_slice = resource_tracker->parent != nullptr;
 		if (is_resource_a_slice) {
 			// This resource depends on a parent resource.
