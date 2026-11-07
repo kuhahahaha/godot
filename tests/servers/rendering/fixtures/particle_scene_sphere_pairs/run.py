@@ -30,6 +30,7 @@ def main() -> int:
 #include <vector>
 struct RID { int id=0; };
 struct Transform3D { int origin=0; };
+struct AABB { bool intersects=true; bool intersects_inclusive(const AABB &other) const { return intersects && other.intersects; } };
 namespace RSE { enum { INSTANCE_PARTICLES=1, INSTANCE_PARTICLES_COLLISION=2 }; }
 struct SceneSphereSource { uint64_t source_key,shape_revision; Transform3D transform; float radius; };
 template<class T> struct Vector : std::vector<T> {
@@ -42,6 +43,7 @@ struct PairList { SelfList<InstancePair> *head=nullptr; SelfList<InstancePair> *
 struct InstanceParticlesCollisionData { RID instance; uint32_t cull_mask=1; };
 struct Instance {
     int base_type=0; RID base; bool visible=true; void *scenario=nullptr; uint32_t layer_mask=1;
+    bool scene_query_committed=false; AABB scene_query_world; AABB transformed_aabb;
     PairList pairs; InstanceParticlesCollisionData collision_data; void *base_data=&collision_data;
 };
 struct InstancePair { Instance *a=nullptr,*b=nullptr; SelfList<InstancePair> link; InstancePair(Instance *x,Instance *y):a(x),b(y) { link.pair=this; } };

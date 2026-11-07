@@ -28,15 +28,17 @@ def main() -> int:
 #include <cstdio>
 struct RID { int id=0; };
 struct Transform3D { int origin=0; };
+struct AABB { bool intersects=true; bool intersects_inclusive(const AABB &other) const { return intersects && other.intersects; } };
 struct Vector3 { float x=0,y=0,z=0; };
 namespace RSE { enum { INSTANCE_PARTICLES=1, INSTANCE_PARTICLES_COLLISION=2 }; enum ParticlesCollisionHeightfieldResolution { PARTICLES_COLLISION_HEIGHTFIELD_RESOLUTION_1024=2 }; }
-struct SceneHeightfieldSource { uint64_t source_key=0,shape_revision=0; Transform3D transform; Vector3 extents; RSE::ParticlesCollisionHeightfieldResolution resolution=RSE::PARTICLES_COLLISION_HEIGHTFIELD_RESOLUTION_1024; };
+struct SceneHeightfieldSource { uint64_t source_key=0,shape_revision=0; RID collision_instance; Transform3D transform; Vector3 extents; RSE::ParticlesCollisionHeightfieldResolution resolution=RSE::PARTICLES_COLLISION_HEIGHTFIELD_RESOLUTION_1024; };
 struct Instance; struct InstancePair;
 template<class T> struct SelfList { T *pair=nullptr; SelfList *next_link=nullptr; T *self() const { return pair; } SelfList *next() const { return next_link; } };
 struct PairList { SelfList<InstancePair> *head=nullptr; SelfList<InstancePair> *first() const { return head; } };
 struct InstanceParticlesCollisionData { RID instance; uint32_t cull_mask=1; };
 struct Instance {
     int base_type=0; RID base; bool visible=true; void *scenario=nullptr; uint32_t layer_mask=1;
+    bool scene_query_committed=false; AABB scene_query_world; AABB transformed_aabb;
     PairList pairs; InstanceParticlesCollisionData collision_data; void *base_data=&collision_data;
 };
 struct InstancePair { Instance *a=nullptr,*b=nullptr; SelfList<InstancePair> link; InstancePair(Instance *x,Instance *y):a(x),b(y) { link.pair=this; } };
