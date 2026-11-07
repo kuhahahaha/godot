@@ -326,6 +326,7 @@ struct QualificationRtCell {
 	Vector<GDExtensionQualificationUploadSegmentV1> segments;
 	uint64_t serial = 0, retired_operation = 0, cleanup_child_serial = 0;
 	uint64_t raster_serial = 0;
+	uint64_t scene_depth_serial = 0;
 	QualificationTicket *ticket = nullptr;
 	LocalVector<QualificationResource *> resource_refs;
 	GDExtensionDeviceSessionResultV1 call_result = {};
@@ -374,6 +375,21 @@ struct Registry::QualificationBridge {
 	QualificationChildHistory<GDExtensionStorageCreateRequestV1, STORAGE_HISTORY_CAPACITY> storage_origins;
 	QualificationChildHistory<GDExtensionNativeUnitCreateRequestV1, UNIT_HISTORY_CAPACITY> unit_origins;
 	QualificationChildHistory<GDExtensionQualificationRasterCreateV1, UNIT_HISTORY_CAPACITY> raster_origins;
+	QualificationChildHistory<GDExtensionStorageSceneDepthQuoteRequestV1, STORAGE_HISTORY_CAPACITY> scene_depth_origins;
+	// Authentication/quote-only neighbor. No native pair is allocated here;
+	// the actual same-Ref Scene owner adapter is not installed in this renderer.
+	struct SceneDepth {
+		uint64_t serial = 0, retire_serial = 0, dependency_serial = 0;
+		uint32_t history_index = UINT32_MAX, accepted_rt_refs = 0;
+		GDExtensionStorageSceneDepthQuoteRequestV1 origin = {};
+		GDExtensionStorageSceneDepthCreateRequestV1 creation = {};
+		GDExtensionStorageSceneDepthRetireRequestV1 retirement = {};
+		NativeDepthAllocationQuote native_quote;
+		GDExtensionStorageSceneDepthQuoteV1 quote = {};
+		GDExtensionStorageSceneDepthReportV1 report = {}, create_report = {};
+		bool quoting = true, create_attempted = false, retiring = false, acknowledged = false, cleanup_serial_reserved = false;
+	};
+	SceneDepth *scene_depth[CHILD_CAPACITY] = {};
 	struct Storage {
 		uint64_t serial = 0, retire_serial = 0, dependency_serial = 0;
 		uint32_t history_index = UINT32_MAX;
@@ -465,6 +481,15 @@ inline void Registry::QualificationBridge::collect_retired_children_locked() {
 	const auto returned = [](const QualificationPhysicalReturn &cell) {
 		return cell.rid ? cell.use_closed.load() && cell.enqueued && cell.free_event && cell.free_event == cell.reserved_event && !cell.event_capacity_reserved : !cell.event_capacity_reserved;
 	};
+	for (auto *&child : bridge->scene_depth) {
+		if (!child || !child->acknowledged || child->quoting || child->accepted_rt_refs || child->cleanup_serial_reserved ||
+				(bridge->rt && bridge->rt->occupied && bridge->rt->scene_depth_serial == child->serial)) {
+			continue;
+		}
+		bridge->scene_depth_origins.archive_retired_origin(child->history_index, child->serial, child->retire_serial);
+		memdelete(child);
+		child = nullptr;
+	}
 	for (auto *&child : bridge->storage) {
 		if (!child || !child->acknowledged || child->history_index == UINT32_MAX || (bridge->rt && bridge->rt->occupied && bridge->rt->cleanup_child_serial == child->serial) || child->creating || child->queued || child->queue_ref_credit || child->cleanup_serial_reserved || child->maintenance_error != OK || referenced(child->physical)) {
 			continue;
@@ -515,15 +540,21 @@ inline Registry::QualificationBridge::ChildMetadataStats Registry::Qualification
 	constexpr uint64_t allocator_header = 0;
 #endif
 	stats.bridge_request_bytes = sizeof(*this) + allocator_header;
-	stats.storage_origin_credits = storage_origins.used_count();
+	stats.storage_origin_credits = storage_origins.used_count() + scene_depth_origins.used_count();
 	stats.unit_origin_credits = unit_origins.used_count() + raster_origins.used_count();
-	stats.storage_cold_origins = storage_origins.retired_count();
+	stats.storage_cold_origins = storage_origins.retired_count() + scene_depth_origins.retired_count();
 	stats.unit_cold_origins = unit_origins.retired_count() + raster_origins.retired_count();
-	stats.origin_arena_request_bytes = storage_origins.allocated_bytes() + unit_origins.allocated_bytes() + raster_origins.allocated_bytes();
+	stats.origin_arena_request_bytes = storage_origins.allocated_bytes() + scene_depth_origins.allocated_bytes() + unit_origins.allocated_bytes() + raster_origins.allocated_bytes();
 	const auto pin_bytes = [&](const QualificationPhysicalReturn &cell) {
 		const uint64_t capacity = cell.uses.get_capacity();
 		return capacity ? capacity * sizeof(QualificationTicket *) + allocator_header : 0;
 	};
+	for (const auto *child : scene_depth) {
+		if (child) {
+			++stats.storage_hot_cells;
+			stats.hot_cell_request_bytes += sizeof(*child) + allocator_header;
+		}
+	}
 	for (const auto *child : storage) {
 		if (!child) {
 			continue;

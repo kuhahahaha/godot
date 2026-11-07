@@ -221,6 +221,11 @@ void Registry::qualification_trim_cleanup_ref_credits_locked(QualificationBridge
 			return;
 		}
 	}
+	for (auto *child : bridge->scene_depth) {
+		if (child && !child->acknowledged) {
+			return;
+		}
+	}
 	for (auto *child : bridge->storage) {
 		if (child && !child->acknowledged) {
 			return;
@@ -282,6 +287,12 @@ GDExtensionDeviceSessionResultV1 Registry::qualification_close(GDExtensionQualif
 		if (entry == bridge) {
 			entry = nullptr;
 			break;
+		}
+	}
+	for (auto *child : bridge->scene_depth) {
+		if (child) {
+			CRASH_COND(!child->acknowledged || child->accepted_rt_refs || child->quoting);
+			memdelete(child);
 		}
 	}
 	for (auto *child : bridge->storage) {
@@ -1155,6 +1166,24 @@ void Registry::qualification_service(uint64_t bridge_serial, uint64_t serial, ui
 }
 
 Error Registry::qualification_cleanup_retire_matches_original_child_locked(QualificationBridge *bridge, uint32_t kind, const void *bytes) {
+	if (kind == 23) {
+		GDExtensionStorageSceneDepthRetireRequestV1 q;
+		memcpy(&q, bytes, sizeof(q));
+		uint32_t index;
+		const Error error = qualification_scene_depth_locked(bridge, q.facet, index);
+		if (error != OK) {
+			return error;
+		}
+		const auto *child = bridge->scene_depth[index];
+		if (child->quoting) {
+			return ERR_BUSY;
+		}
+		if (q.retire_attempt != 3 || q.allocation_slot != child->origin.allocation_slot || q.part != child->origin.part || q.allocation_generation != child->origin.allocation_generation ||
+				(child->retiring && memcmp(&q, &child->retirement, sizeof(q)))) {
+			return ERR_INVALID_DATA;
+		}
+		return OK;
+	}
 	// Read only under the original Registry lock. This authenticates existing
 	// cleanup ownership; it neither reserves a retirement nor changes a child.
 	if (kind == 16) {
@@ -1669,8 +1698,10 @@ static GDExtensionDeviceSessionResultV1 rt_observe(GDExtensionQualificationBridg
 static GDExtensionDeviceSessionResultV1 rt_release(GDExtensionQualificationBridgeRefV1 b, GDExtensionQualificationRtRefV1 r) {
 	return Registry::get_singleton().qualification_rt_release(b, r);
 }
+void register_qualification_scene_depth_interfaces();
 void register_qualification_typed_interfaces();
 void register_qualification_interfaces() {
+	register_qualification_scene_depth_interfaces();
 	register_qualification_typed_interfaces();
 	GDExtension::register_interface_function("device_session_system_scalar_record_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&system_scalar_record));
 	GDExtension::register_interface_function("device_session_system_scalar_observe_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&system_scalar_observe));

@@ -52,6 +52,7 @@ class TestQualificationAckAccess;
 class TestQualificationTicketAccess;
 class TestRecordSourceAccess;
 class TestQualificationRtAccess;
+class TestQualificationSceneDepthAccess;
 class RenderingDeviceDriver;
 #ifdef TESTS_ENABLED
 class TestVulkanCompletionAccess;
@@ -98,6 +99,9 @@ using ProductionMetadataReceiver = GDExtensionProductionMetadataReceiverV1;
 // entry, adds no work/service permission and survives nested normal callbacks.
 class ProductionCleanupExtent {
 	friend class ::RenderingDevice;
+#ifdef TESTS_ENABLED
+	friend class ::TestQualificationSceneDepthAccess;
+#endif
 	ProductionCleanupExtent *previous = nullptr;
 	static thread_local ProductionCleanupExtent *current;
 	ProductionCleanupExtent();
@@ -429,6 +433,9 @@ public:
 // One TLS stack covers bootstrap, normal entry and teardown so a nested foreign
 // generation or cleanup frame cannot borrow an outer registration authority.
 class RegistrationContext {
+#ifdef TESTS_ENABLED
+	friend class ::TestQualificationSceneDepthAccess;
+#endif
 	friend class CleanupAction;
 	friend class BindingLifetime;
 	friend class CallbackIdentityScope;
@@ -900,6 +907,7 @@ private:
 	friend class ::TestQualificationTicketAccess;
 	friend class ::TestRecordSourceAccess;
 	friend class ::TestQualificationRtAccess;
+	friend class ::TestQualificationSceneDepthAccess;
 #endif
 	friend class ::RenderingDevice;
 	friend class ::RenderingDeviceDriver;
@@ -1178,6 +1186,12 @@ public:
 	Error production_control_consume(GDExtensionProductionRequestRefV1, uint64_t, ProductionControlOutput *);
 
 	GDExtensionDeviceSessionResultV1 qualification_close(GDExtensionQualificationBridgeRefV1);
+	GDExtensionDeviceSessionResultV1 qualification_scene_depth_quote(GDExtensionQualificationBridgeRefV1, const GDExtensionStorageSceneDepthQuoteRequestV1 *, GDExtensionStorageSceneDepthQuoteV1 *);
+	GDExtensionDeviceSessionResultV1 qualification_scene_depth_create(GDExtensionQualificationBridgeRefV1, const GDExtensionStorageSceneDepthCreateRequestV1 *, GDExtensionStorageSceneDepthReportV1 *);
+	GDExtensionDeviceSessionResultV1 qualification_scene_depth_retire(GDExtensionQualificationBridgeRefV1, const GDExtensionStorageSceneDepthRetireRequestV1 *, GDExtensionStorageSceneDepthReportV1 *);
+	GDExtensionDeviceSessionResultV1 qualification_scene_depth_observe(GDExtensionQualificationBridgeRefV1, GDExtensionStorageSceneDepthRefV1, const GDExtensionQualificationBudgetV1 *, GDExtensionStorageSceneDepthReportV1 *);
+	GDExtensionDeviceSessionResultV1 qualification_scene_depth_release(GDExtensionQualificationBridgeRefV1, GDExtensionStorageSceneDepthRefV1);
+	Error qualification_scene_depth_locked(QualificationBridge *, GDExtensionStorageSceneDepthRefV1, uint32_t &);
 	GDExtensionDeviceSessionResultV1 qualification_storage_create(GDExtensionQualificationBridgeRefV1, const GDExtensionStorageCreateRequestV1 *, GDExtensionStorageBackingV1 *);
 	GDExtensionDeviceSessionResultV1 qualification_raster_unit_create(GDExtensionQualificationBridgeRefV1, const GDExtensionQualificationRasterCreateV1 *, const void *, uint64_t, GDExtensionQualificationRasterBackingV1 *);
 	GDExtensionDeviceSessionResultV1 qualification_raster_unit_retire(GDExtensionQualificationBridgeRefV1, const GDExtensionQualificationRasterRetireRequestV1 *, GDExtensionQualificationRasterRetireRefV1 *, GDExtensionQualificationRasterRetireReportV1 *);

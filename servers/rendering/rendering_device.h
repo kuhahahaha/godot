@@ -163,6 +163,7 @@ private:
 	friend class TestQualificationPhysicalAccess;
 	friend class TestNativeDisposalAccess;
 	friend class TestNativeHeightRangeAccess;
+	friend class TestQualificationSceneDepthAccess;
 	friend class TestCheckedBindAccess;
 	friend class TestVertexArrayRangeAccess;
 	friend class TestExternalOutputPrefixAccess;
