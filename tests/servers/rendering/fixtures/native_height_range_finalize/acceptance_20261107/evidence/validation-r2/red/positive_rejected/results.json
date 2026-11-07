@@ -1,0 +1,26 @@
+[
+  {
+    "mode": "busy",
+    "expected_exit": 0,
+    "actual_exit": 87,
+    "passed": false,
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=[RenderingDevice][NativeHeightRange] actual finalize child"
+    ]
+  },
+  {
+    "mode": "last_ref",
+    "expected_exit": 78,
+    "actual_exit": 87,
+    "passed": false,
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=[RenderingDevice][NativeHeightRange] actual finalize child"
+    ]
+  }
+]

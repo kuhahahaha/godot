@@ -1,0 +1,19 @@
+{
+  "engine_invoked": false,
+  "regex_extracted_from_actual_runner": true,
+  "bad_samples_rejected": [
+    "NHR_FINALIZE_ASSERTION_FAILED",
+    "ERROR: CHECK( serial == 71 ) is NOT correct!",
+    "FATAL ERROR",
+    "CHECK(serial == 71) failed",
+    "REQUIRE_FALSE(value) FAILED",
+    "test cases: 1 | 0 passed | 1 failed |",
+    "assertions: 8 | 7 passed | 1 failed |"
+  ],
+  "expected_samples_not_rejected": [
+    "ERROR: RenderingDevice finalization is blocked by an original native height range obligation.",
+    "NHR_FINALIZE_BUSY_RETRY releases=2 recycle=1 owner_live=1 returned=0",
+    "NHR_BEFORE_LAST_REF\nGDEXTENSION_CLOSE_FAILED error=044 route=3",
+    "NHR_FINALIZE_BEFORE\nNHR_DEPENDENT_FREE"
+  ]
+}

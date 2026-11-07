@@ -29,19 +29,31 @@
 /**************************************************************************/
 
 // These controls exercise the original RD reducers, not actual GPU completion.
+#include "core/os/os.h"
 #include "servers/rendering/native_height_range.h"
 #include "servers/rendering/rendering_device.h"
 #include "tests/servers/rendering/transfer_test_driver_base.h"
 #include "tests/test_macros.h"
 
+#include <cstdio>
+#include <cstdlib>
+
 TEST_FORCE_LINK(test_native_height_range)
 
 class TestNativeHeightRangeAccess {
 	using RDD = RenderingDeviceDriver;
+	static void child_require(bool condition) {
+		if (!condition) {
+			std::fprintf(stderr, "NHR_FINALIZE_ASSERTION_FAILED\n");
+			std::fflush(stderr);
+			std::_Exit(89);
+		}
+	}
 	class Driver : public TransferTestDriverBase {
 	public:
 		uint32_t retains = 0, polls = 0, releases = 0, recycles = 0, issues = 0, command_ends = 0, segment_ends = 0;
 		bool retain_busy = false, release_busy = false;
+		bool finalize_sentinel = false;
 		RDD::FencePollResult completion;
 		bool native_call_observation_supported() const override { return true; }
 		bool native_issue_bound(NativeIssueKind kind, uint32_t commands, uint32_t &bound) const override {
@@ -52,22 +64,43 @@ class TestNativeHeightRangeAccess {
 			return true;
 		}
 		Error native_call_retain(uint64_t serial) override {
-			CHECK(serial == 71);
+			if (finalize_sentinel) {
+				child_require(serial == 71);
+			} else {
+				CHECK(serial == 71);
+			}
 			++retains;
 			return retain_busy ? ERR_BUSY : OK;
 		}
 		FencePollResult native_call_poll(uint64_t serial) override {
-			CHECK(serial == 71);
+			if (finalize_sentinel) {
+				child_require(serial == 71);
+			} else {
+				CHECK(serial == 71);
+			}
 			++polls;
 			return completion;
 		}
 		FencePollResult native_call_wait(uint64_t serial) override { return native_call_poll(serial); }
 		Error native_call_recycle(uint64_t serial) override {
-			CHECK(serial == 71);
+			if (finalize_sentinel) {
+				child_require(serial == 71);
+			} else {
+				CHECK(serial == 71);
+			}
 			++recycles;
 			return OK;
 		}
 		Error native_call_recycle_wait(uint64_t serial) override { return native_call_recycle(serial); }
+		void command_pool_free(CommandPoolID) override {
+			if (finalize_sentinel) {
+				std::fprintf(stderr, "NHR_DEPENDENT_FREE\n");
+				std::fflush(stderr);
+				std::_Exit(87);
+			}
+			CRASH_NOW_MSG("Unexpected native-height fixture pool free.");
+			std::abort();
+		}
 		void command_buffer_end(CommandBufferID) override { ++command_ends; }
 		void end_segment() override { ++segment_ends; }
 		Error command_queue_execute_and_present(CommandQueueID, VectorView<SemaphoreID>, VectorView<CommandBufferID>, VectorView<SemaphoreID>, FenceID, VectorView<SwapChainID>) override {
@@ -76,7 +109,11 @@ class TestNativeHeightRangeAccess {
 			return OK;
 		}
 		Error native_call_release(uint64_t serial) override {
-			CHECK(serial == 71);
+			if (finalize_sentinel) {
+				child_require(serial == 71);
+			} else {
+				CHECK(serial == 71);
+			}
 			++releases;
 			return release_busy ? ERR_BUSY : OK;
 		}
@@ -145,6 +182,74 @@ class TestNativeHeightRangeAccess {
 	}
 
 public:
+	[[noreturn]] static void actual_finalize_child(const String &mode) {
+		Driver driver;
+		driver.finalize_sentinel = true;
+		RenderingDevice *const previous_singleton = RenderingDevice::get_singleton();
+		auto *rd = memnew(RenderingDevice);
+		rd->driver = &driver;
+		rd->is_main_instance = true;
+		rd->render_thread_id = Thread::get_caller_id();
+		rd->frames.resize(1);
+		auto &frame = rd->frames[0];
+		frame.qualification_epoch = 1;
+		frame.primary_command_buffer_begun = true;
+		Ref<NativeHeightRange> range;
+		const auto require = child_require;
+		require(RenderingDevice::get_singleton() == (previous_singleton ? previous_singleton : rd));
+		require(rd->_native_height_range_prepare(range) == OK);
+		// Exact synthetic sealed row for CPU lifecycle control only. The independent
+		// Metal fixture already proves real graph/issue/callback membership.
+		range->graph_count = 1;
+		auto &member = range->graphs[0];
+		member.frame = 0;
+		member.frame_epoch = frame.qualification_epoch;
+		member.state = NativeHeightRange::MemberState::Sealed;
+		member.slot = 0;
+		member.command_buffer = RDD::CommandBufferID(45);
+		range->recording_closed = true;
+		range->has_recorded_effect = true;
+		frame.native_height_ranges.push_back(range);
+		const auto original = report();
+		require(rd->_native_height_issue_slot(0, 1, 0, member.command_buffer, OK, original) == OK);
+		frame.chain_reports.push_back(original);
+		// This frame owns an issued no-fence call, no open/unsent command buffer.
+		// Do not set finalization_started/drained or cached native_complete here.
+		frame.primary_command_buffer_begun = false;
+		driver.completion.completed = true;
+		driver.completion.completed_serial = 901;
+		driver.release_busy = true;
+		std::fprintf(stderr, "NHR_FINALIZE_BEFORE\n");
+		std::fflush(stderr);
+		rd->finalize(); // ACTUAL public entry; reaches original frame/worker drain.
+		require(rd->native_height_finalization_started);
+		require(rd->native_height_finalization_drained);
+		require(!rd->native_finalization_returned && rd->driver == &driver);
+		require(rd->native_height_ranges.size() == 1 && range->native_complete);
+		require(!range->observers_returned && range->return_cursor == 0);
+		require(driver.releases == 1 && driver.recycles == 1);
+		const auto first_polls = driver.polls;
+		const auto first_issues = driver.issues;
+		const auto first_command_ends = driver.command_ends;
+		const auto first_segment_ends = driver.segment_ends;
+		rd->finalize(); // ACTUAL repeat; still blocked before graph/resource teardown.
+		require(!rd->native_finalization_returned && rd->driver == &driver);
+		require(rd->native_height_ranges.size() == 1 && !range->observers_returned);
+		require(range->return_cursor == 0 && driver.releases == 2);
+		require(driver.polls == first_polls && driver.issues == first_issues);
+		require(driver.command_ends == first_command_ends && driver.segment_ends == first_segment_ends);
+		require(driver.recycles == 1);
+		std::fprintf(stderr, "NHR_FINALIZE_BUSY_RETRY releases=2 recycle=1 owner_live=1 returned=0\n");
+		std::fflush(stderr);
+		if (mode == "last_ref") {
+			std::fprintf(stderr, "NHR_BEFORE_LAST_REF\n");
+			std::fflush(stderr);
+			memdelete(rd); // ACTUAL destructor: finalize BUSY, then LAST_REF _Exit78.
+			std::_Exit(88); // A returned destructor is an invalid positive result.
+		}
+		std::_Exit(0); // Isolated blocked owner: deliberately no unsafe detach/free.
+	}
+
 	static void wrong_slot_buffer_and_empty_busy() {
 		Fixture f;
 		auto range = sealed(f);
@@ -475,4 +580,13 @@ TEST_CASE("[RenderingDevice][NativeHeightRange] preflight refuses invalid witnes
 
 TEST_CASE("[RenderingDevice][NativeHeightRange] post-drain finalization BUSY resumes without reissue") {
 	TestNativeHeightRangeAccess::post_drain_finalization_busy_cursor();
+}
+
+// The normal full suite performs no destructive work. Only the isolated runner
+// enables this mode; all process exits below are confined to its child host.
+TEST_CASE("[RenderingDevice][NativeHeightRange] actual finalize child") {
+	const String mode = OS::get_singleton()->get_environment("GODOT_NHR_FINALIZE_CHILD");
+	if (mode == "busy" || mode == "last_ref") {
+		TestNativeHeightRangeAccess::actual_finalize_child(mode);
+	}
 }

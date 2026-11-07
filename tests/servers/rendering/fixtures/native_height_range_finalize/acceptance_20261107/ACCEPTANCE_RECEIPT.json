@@ -1,0 +1,45 @@
+{
+  "status": "PASS_ACTUAL_FINALIZE_LASTREF_CPU_LIFECYCLE",
+  "scope": "Actual public finalize repeated BUSY and heap-RD destructor LASTREF on original reducer with finite synthetic source; no real GPU teardown claim.",
+  "historical_validation_r1": "NOT_ACCEPTED_PENDING_P1; original logs retained",
+  "p1": "CLOSED: fatal child callback invariants and common GREEN/RED failed-diagnostic rejection",
+  "green_child_exits": {
+    "busy": 0,
+    "last_ref": 78
+  },
+  "red_guard_removed": {
+    "sentinel_exit": 87,
+    "controlled_runner_passed": true,
+    "normal_runner_rejected_both_modes": true,
+    "source_before": "69c3d7bf81ebf5ebd92692d1423805248b9971e9f829d1b19f2b22d633dd10fc",
+    "source_red": "43af7fd1b2d018182553e6baef7d055920c94983c4e3e6e1d1ac37033380e344",
+    "source_restored": "69c3d7bf81ebf5ebd92692d1423805248b9971e9f829d1b19f2b22d633dd10fc",
+    "negative_hash_locally_reconstructed": true,
+    "mutation_from": "\tERR_FAIL_COND_MSG(height_return != OK, \"RenderingDevice finalization is blocked by an original native height range obligation.\");",
+    "mutation_to": "\t(void)height_return; // controlled RED: omit finalization return guard",
+    "mutation_occurrences": 1,
+    "reconstructed_sha256": "43af7fd1b2d018182553e6baef7d055920c94983c4e3e6e1d1ac37033380e344",
+    "provenance": "Exact replacement supplied from parent controlled command history; reproduced offline from preserved original RD snapshot. No separate claim of a new contemporaneous source measurement."
+  },
+  "restored_host_sha256": "91eadbadd47d6c6c3227788da6cecc9cec4e7bc7a3a0f9cec90c80655b03c160",
+  "restored_cpu": {
+    "focused": {
+      "cases": 61,
+      "assertions": 6902,
+      "skipped": 2223
+    },
+    "full": {
+      "cases": 2281,
+      "assertions": 585821,
+      "skipped": 3
+    }
+  },
+  "final_source_files": 4,
+  "reviewer_engine_build_gpu_invoked": false,
+  "raw_evidence_entries": 46,
+  "archive_raw_hash_verification": {
+    "entries": 46,
+    "stored_and_decompressed_hashes_checked": true,
+    "original_workspace_bytes_compared": true
+  }
+}
