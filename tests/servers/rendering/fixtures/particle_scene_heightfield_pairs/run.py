@@ -28,6 +28,7 @@ def main() -> int:
 #include <cstdio>
 struct RID { int id=0; };
 struct Transform3D { int origin=0; };
+struct AABB { int start=0,end=1; bool intersects_inclusive(const AABB &other) const { return start<=other.end && end>=other.start; } };
 struct Vector3 { float x=0,y=0,z=0; };
 namespace RSE { enum { INSTANCE_PARTICLES=1, INSTANCE_PARTICLES_COLLISION=2 }; enum ParticlesCollisionHeightfieldResolution { PARTICLES_COLLISION_HEIGHTFIELD_RESOLUTION_1024=2 }; }
 struct SceneHeightfieldSource { uint64_t source_key=0,shape_revision=0; Transform3D transform; Vector3 extents; RSE::ParticlesCollisionHeightfieldResolution resolution=RSE::PARTICLES_COLLISION_HEIGHTFIELD_RESOLUTION_1024; };
@@ -37,6 +38,7 @@ struct PairList { SelfList<InstancePair> *head=nullptr; SelfList<InstancePair> *
 struct InstanceParticlesCollisionData { RID instance; uint32_t cull_mask=1; };
 struct Instance {
     int base_type=0; RID base; bool visible=true; void *scenario=nullptr; uint32_t layer_mask=1;
+    AABB scene_query_world, transformed_aabb; bool scene_query_committed=false;
     PairList pairs; InstanceParticlesCollisionData collision_data; void *base_data=&collision_data;
 };
 struct InstancePair { Instance *a=nullptr,*b=nullptr; SelfList<InstancePair> link; InstancePair(Instance *x,Instance *y):a(x),b(y) { link.pair=this; } };
@@ -89,6 +91,13 @@ int main() {
     check(!scene.scene_heightfield_snapshot_pair({1},out,present) && !present,"recreated second field rejects ambiguous pair");
     right.collision_data.cull_mask=0;
     check(scene.scene_heightfield_snapshot_pair({1},out,present) && present && out.source_key==33 && out.shape_revision==12,"recreated source key and revision are fresh");
+    receiver.scene_query_committed=true; receiver.scene_query_world={0,1};
+    left.transformed_aabb={2,3};
+    check(scene.scene_heightfield_snapshot_pair({1},out,present) && !present,"committed receiver query excludes a stale outside pair");
+    left.transformed_aabb={1,2};
+    check(scene.scene_heightfield_snapshot_pair({1},out,present) && present && out.source_key==33,"committed query includes touching source bounds");
+    receiver.scene_query_committed=false; left.transformed_aabb={2,3};
+    check(scene.scene_heightfield_snapshot_pair({1},out,present) && present && out.source_key==33,"uncommitted query preserves ordinary pair selection");
     check(!scene.scene_heightfield_snapshot_pair({7},out,present) && !present,"unknown receiver rejects");
     return good?0:1;
 }
