@@ -1,0 +1,52 @@
+[
+  {
+    "hook": "clang-format",
+    "exit": 0,
+    "output": "clang-format.............................................................Passed\nclang-format-glsl....................................(no files to check)Skipped\n"
+  },
+  {
+    "hook": "validate-includes",
+    "exit": 0,
+    "output": "validate-includes........................................................Passed\n"
+  },
+  {
+    "hook": "copyright-headers",
+    "exit": 0,
+    "output": "copyright-headers........................................................Passed\n"
+  },
+  {
+    "hook": "header-guards",
+    "exit": 0,
+    "output": "header-guards............................................................Passed\n"
+  },
+  {
+    "hook": "file-format",
+    "exit": 0,
+    "output": "file-format..............................................................Passed\n"
+  },
+  {
+    "hook": "codespell",
+    "exit": 0,
+    "output": "codespell................................................................Passed\n"
+  },
+  {
+    "hook": "validate-codeowners",
+    "exit": 0,
+    "output": "validate-codeowners......................................................Passed\n"
+  },
+  {
+    "hook": "ruff-check",
+    "exit": 0,
+    "output": "ruff check...............................................................Passed\n"
+  },
+  {
+    "hook": "ruff-format",
+    "exit": 0,
+    "output": "ruff format..............................................................Passed\n"
+  },
+  {
+    "hook": "mypy",
+    "exit": 0,
+    "output": "mypy.....................................................................Passed\n"
+  }
+]

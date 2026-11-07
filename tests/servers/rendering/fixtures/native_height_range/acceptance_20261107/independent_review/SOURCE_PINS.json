@@ -1,0 +1,50 @@
+{
+  "captured_at": "2026-11-07T14:33:29.782016+00:00",
+  "warning": "Implementation was actively being edited during source review; this is a read snapshot, not a frozen build provenance or final integration review.",
+  "files": {
+    "work/scene173-native-height-range-20261107/FIRST_SLICE.md": {
+      "bytes": 16978,
+      "sha256": "55cf494d272ed6b10e807c95d0d39f2545d2dacb936fb8846cbb0067f608271e"
+    },
+    "work/scene173-native-height-range-20261107/implementation/FINALIZATION.md": {
+      "bytes": 4485,
+      "sha256": "b390e1b0369e81b42f76cfc2a90017950f6136414f3c036074ffc1705aa0fdf0"
+    },
+    "work/scene173-native-height-range-20261107/implementation/test_native_height_range.cpp.draft": {
+      "bytes": 11773,
+      "sha256": "20ffe404a4f290a2c2344ccad6716951f6cf32d8d41f1881132b28bf6b2050db"
+    },
+    "servers/rendering/native_height_range.h": {
+      "bytes": 5442,
+      "sha256": "8657089d41a8d869959317b3c7644a0edcb5fd20647145f99b2d22abc456780f"
+    },
+    "servers/rendering/rendering_device.h": {
+      "bytes": 131046,
+      "sha256": "8ebd7390f6bcc63e7f7474dcc749f1fa0cbfcbdcd3f07f14cab7e2b77bbb5b74"
+    },
+    "servers/rendering/rendering_device.cpp": {
+      "bytes": 746034,
+      "sha256": "535e277d4947f375ec668f1fbfcb740926f4226f391df5bc8f6afe4b3ebc2159"
+    },
+    "servers/rendering/rendering_device_driver.h": {
+      "bytes": 55236,
+      "sha256": "9446494541b4e828716880bc12ede7d3c1abb09b30fbeec0bce19cf106738025"
+    },
+    "servers/rendering/rendering_device_graph.cpp": {
+      "bytes": 184096,
+      "sha256": "a6512f39ebbec0b0d36e4866d58e42e47c2e423bf17e51c27606945663475d64"
+    },
+    "core/extension/gdextension_qualification_rd.cpp": {
+      "bytes": 40817,
+      "sha256": "536bf13be5fd5ecb76e4a34355332932e29ddc4a4eaa7135a7758a56a954b058"
+    },
+    "drivers/metal/rendering_device_driver_metal.cpp": {
+      "bytes": 150018,
+      "sha256": "fbf9b0a98735bb8efaed901ec7e5e6694576c39fc6f764601e9d5dc780ea3bad"
+    },
+    "drivers/metal/rendering_device_driver_metal3.cpp": {
+      "bytes": 22070,
+      "sha256": "3af3215e96799ce51b5fe58eb53ff2223e437ff2aa4d8ef3417e373c7799d74c"
+    }
+  }
+}

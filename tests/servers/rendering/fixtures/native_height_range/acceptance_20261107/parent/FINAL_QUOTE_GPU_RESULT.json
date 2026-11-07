@@ -1,0 +1,19 @@
+{
+  "command": [
+    "python3",
+    "tests/servers/rendering/fixtures/native_depth_allocation/run_native.py",
+    "--godot",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+    "--sha256",
+    "1e4b08bf515d6c40e3b8a106c3d535bb8564e467c99a9a4bbdf2d3a5c06f739b",
+    "--out",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/final_quote_gpu"
+  ],
+  "environment": {
+    "GODOT_TEST_PHYSICS_3D_BACKEND": "GodotPhysics3D",
+    "GODOT_TEST_PHYSICS_3D_THREADED": "0"
+  },
+  "exit": 0,
+  "seconds": 1.69,
+  "host_sha256": "1e4b08bf515d6c40e3b8a106c3d535bb8564e467c99a9a4bbdf2d3a5c06f739b"
+}

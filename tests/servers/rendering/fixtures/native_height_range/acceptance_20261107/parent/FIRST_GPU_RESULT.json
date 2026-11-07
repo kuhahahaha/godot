@@ -1,0 +1,15 @@
+{
+  "command": [
+    "python3",
+    "tests/servers/rendering/fixtures/native_height_range/run_native.py",
+    "--godot",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+    "--sha256",
+    "06a0d2340f195748ab6ebc3665a4c17a892919db27c47f87dc2c4d756a98b6c8",
+    "--out",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/first_gpu"
+  ],
+  "exit": 1,
+  "seconds": 1.86,
+  "host_sha256": "06a0d2340f195748ab6ebc3665a4c17a892919db27c47f87dc2c4d756a98b6c8"
+}

@@ -1,0 +1,1202 @@
+{
+  "passed": true,
+  "host_sha256": "1e4b08bf515d6c40e3b8a106c3d535bb8564e467c99a9a4bbdf2d3a5c06f739b",
+  "sources_before": {
+    "modules/particles_runtime_tests/native_height_range_test_fixture.h": {
+      "bytes": 3973,
+      "sha256": "efdfef65ba34d36842ff253ff38567ffa9588689d52a873f3fa62bf1225fdae5"
+    },
+    "modules/particles_runtime_tests/native_height_range_test_fixture.cpp": {
+      "bytes": 21131,
+      "sha256": "772171c18df15c1f3763ffd91e9640ef7dbd4749a975ddfaf291ebb41de0d282"
+    },
+    "modules/particles_runtime_tests/register_types.cpp": {
+      "bytes": 3304,
+      "sha256": "ffe51f0bcfbc3af75650ed09d009ba9669540f8086e3da0a72b0535d5051260d"
+    },
+    "modules/particles_runtime_tests/config.py": {
+      "bytes": 148,
+      "sha256": "8a6606d2863710e709e0c5d2f22089b9b695df1817c7c6d414832d4c3d80581c"
+    },
+    "modules/particles_runtime_tests/SCsub": {
+      "bytes": 157,
+      "sha256": "3dbdfe30851ced12958d0967ecf4ff10814e829eba2ce9fa85f0c71b1faef0a0"
+    },
+    "servers/rendering/native_height_range.h": {
+      "bytes": 5456,
+      "sha256": "275cad52905be03664ccbd501286297674fcbdaddfdc4b58ddaf86ad2b2c1665"
+    },
+    "servers/rendering/native_depth_allocation_projection.h": {
+      "bytes": 5285,
+      "sha256": "9c635eb1ccf5aaa93c1c8a3b10a4005f6647c1019d59e048a0ce7982a2b5fdf5"
+    },
+    "servers/rendering/native_disposal_witness.h": {
+      "bytes": 5240,
+      "sha256": "e98592a01b167d4d1fd16c4dda880a5af8ca16053d50e94c3c99ccd9fc2a77fb"
+    },
+    "servers/rendering/rendering_device.h": {
+      "bytes": 131046,
+      "sha256": "8ebd7390f6bcc63e7f7474dcc749f1fa0cbfcbdcd3f07f14cab7e2b77bbb5b74"
+    },
+    "servers/rendering/rendering_device.cpp": {
+      "bytes": 746353,
+      "sha256": "69c3d7bf81ebf5ebd92692d1423805248b9971e9f829d1b19f2b22d633dd10fc"
+    },
+    "servers/rendering/rendering_device_driver.h": {
+      "bytes": 55236,
+      "sha256": "9446494541b4e828716880bc12ede7d3c1abb09b30fbeec0bce19cf106738025"
+    },
+    "servers/rendering/rendering_device_graph.h": {
+      "bytes": 42620,
+      "sha256": "ae8081a0aeffe0a4acc4b5646622eb6fbf298416353f63592c6a901bc6bcbbcd"
+    },
+    "servers/rendering/rendering_device_graph.cpp": {
+      "bytes": 184096,
+      "sha256": "a6512f39ebbec0b0d36e4866d58e42e47c2e423bf17e51c27606945663475d64"
+    },
+    "drivers/metal/metal_allocator.h": {
+      "bytes": 9765,
+      "sha256": "1440f26c7600ccdb20bfec559d500c71b085a6c89e965c2e49707fa4b109de5f"
+    },
+    "drivers/metal/metal_allocator.cpp": {
+      "bytes": 15553,
+      "sha256": "a8ac57a2f0eea3c837ef7439de8ba76399074c9848fcf3563c57d25dd135e706"
+    },
+    "drivers/metal/rendering_device_driver_metal.h": {
+      "bytes": 34682,
+      "sha256": "c05d74151123ed2bc8f07e7a600b99c10f1b6b395b6647beba71f1f27071a868"
+    },
+    "drivers/metal/rendering_device_driver_metal.cpp": {
+      "bytes": 150018,
+      "sha256": "fbf9b0a98735bb8efaed901ec7e5e6694576c39fc6f764601e9d5dc780ea3bad"
+    },
+    "main/main.cpp": {
+      "bytes": 220359,
+      "sha256": "ee9e9cc51309eaeb36f2a832b1035ed0c390865bedf1b48e34da7aeffcf162e7"
+    },
+    "tests/servers/rendering/fixtures/native_height_range/project.godot": {
+      "bytes": 133,
+      "sha256": "2d1bd6e7aadee04cbaaf8e292f5364068fc7c73107cbf5aad0ed6f9e3be5fc62"
+    },
+    "tests/servers/rendering/fixtures/native_height_range/run.gd": {
+      "bytes": 3643,
+      "sha256": "9a9eb7a1f422548162629280862352cc6a02f8b135608e8087ef80f28a1a844c"
+    },
+    "tests/servers/rendering/fixtures/native_height_range/run_native.py": {
+      "bytes": 14523,
+      "sha256": "3bea1628a08864d37dbaa4e61c3fcbd4d07471c5826d2da473d3a3c84ebf0a87"
+    },
+    "tests/servers/rendering/fixtures/native_height_range/README.md": {
+      "bytes": 4119,
+      "sha256": "c4d66c274560fddea6964fa4ef6fb6764ec549db95bd71bc0af4d60f5df43be2"
+    }
+  },
+  "host_and_sources_unchanged": true,
+  "source_identity_is_not_build_provenance": true,
+  "cases": [
+    {
+      "case_index": 0,
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/native_height_range",
+        "--render-thread",
+        "safe",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--script",
+        "run.gd",
+        "--",
+        "--case=0"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "typed_unavailable": false,
+      "report": {
+        "callbacks": 1,
+        "case_index": 0,
+        "checks": [
+          {
+            "check": "main_rd_rt",
+            "ok": true
+          },
+          {
+            "check": "loop_disabled_for_setup",
+            "ok": true
+          },
+          {
+            "check": "fixed_case",
+            "ok": true
+          },
+          {
+            "check": "quote_issued",
+            "ok": true
+          },
+          {
+            "check": "quote_observed",
+            "ok": true
+          },
+          {
+            "check": "quoted_depth_created",
+            "ok": true
+          },
+          {
+            "check": "framebuffer_created",
+            "ok": true
+          },
+          {
+            "check": "pair_captured",
+            "ok": true
+          },
+          {
+            "check": "initial_clear_recorded",
+            "ok": true
+          },
+          {
+            "check": "initial_clear_completed",
+            "ok": true
+          },
+          {
+            "check": "standalone_ready",
+            "ok": true
+          },
+          {
+            "check": "ranges_prepared",
+            "ok": true
+          },
+          {
+            "check": "ranges_recorded",
+            "ok": true
+          },
+          {
+            "check": "ranges_closed",
+            "ok": true
+          },
+          {
+            "check": "closed_not_complete",
+            "ok": true
+          },
+          {
+            "check": "pair_live_before_issue",
+            "ok": true
+          },
+          {
+            "check": "native_ranges_complete",
+            "ok": true
+          },
+          {
+            "check": "completion_is_not_physical_return",
+            "ok": true
+          },
+          {
+            "check": "correct_issue_path",
+            "ok": true
+          },
+          {
+            "check": "loop_disabled_for_return",
+            "ok": true
+          },
+          {
+            "check": "first_range_returned",
+            "ok": true
+          },
+          {
+            "check": "second_range_still_complete",
+            "ok": true
+          },
+          {
+            "check": "second_range_returned",
+            "ok": true
+          },
+          {
+            "check": "range_return_is_not_physical_return",
+            "ok": true
+          },
+          {
+            "check": "retire_framebuffer",
+            "ok": true
+          },
+          {
+            "check": "framebuffer_enqueued_not_returned",
+            "ok": true
+          },
+          {
+            "check": "framebuffer_returned_depth_live",
+            "ok": true
+          },
+          {
+            "check": "retire_depth",
+            "ok": true
+          },
+          {
+            "check": "depth_enqueued_not_returned",
+            "ok": true
+          },
+          {
+            "check": "both_physical_returned",
+            "ok": true
+          },
+          {
+            "check": "identities_preserved",
+            "ok": true
+          },
+          {
+            "check": "native_complete_after_return",
+            "ok": true
+          },
+          {
+            "check": "no_producer_claim",
+            "ok": true
+          },
+          {
+            "check": "cleanup_continuation_settled",
+            "ok": true
+          }
+        ],
+        "cleanup_continuation_active": false,
+        "cleanup_recording_error": 0,
+        "complete": true,
+        "deadline_usec": 40000000,
+        "device": {
+          "api": "4.0",
+          "driver": "metal",
+          "name": "Apple M3 Pro (Apple9)",
+          "renderer": "mobile"
+        },
+        "draws_at_native_complete": 0,
+        "draws_at_physical_return": 0,
+        "draws_before_range_issue": 0,
+        "elapsed_usec": 15093,
+        "error": 0,
+        "failures": [],
+        "independent_ranges": true,
+        "maintenance_calls": 8,
+        "observe_polls": 4,
+        "observer_releases": 2,
+        "path": "bounded",
+        "pending_clear_before_range": false,
+        "phase": 7,
+        "physical": {
+          "depth_enqueued": {
+            "all_created_children_returned": false,
+            "depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 2
+            },
+            "framebuffer": {
+              "rid": 3813930958848,
+              "serial": 14,
+              "state": 3
+            },
+            "observe_error": 0
+          },
+          "framebuffer_enqueued": {
+            "all_created_children_returned": false,
+            "depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 1
+            },
+            "framebuffer": {
+              "rid": 3813930958848,
+              "serial": 14,
+              "state": 2
+            },
+            "observe_error": 0
+          },
+          "framebuffer_returned": {
+            "all_created_children_returned": false,
+            "depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 1
+            },
+            "framebuffer": {
+              "rid": 3813930958848,
+              "serial": 14,
+              "state": 3
+            },
+            "observe_error": 0
+          },
+          "native_complete": {
+            "all_created_children_returned": false,
+            "depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 1
+            },
+            "framebuffer": {
+              "rid": 3813930958848,
+              "serial": 14,
+              "state": 1
+            },
+            "observe_error": 0
+          },
+          "observers_returned": {
+            "all_created_children_returned": false,
+            "depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 1
+            },
+            "framebuffer": {
+              "rid": 3813930958848,
+              "serial": 14,
+              "state": 1
+            },
+            "observe_error": 0
+          },
+          "recorded": {
+            "all_created_children_returned": false,
+            "depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 1
+            },
+            "framebuffer": {
+              "rid": 3813930958848,
+              "serial": 14,
+              "state": 1
+            },
+            "observe_error": 0
+          },
+          "returned": {
+            "all_created_children_returned": true,
+            "depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 3
+            },
+            "framebuffer": {
+              "rid": 3813930958848,
+              "serial": 14,
+              "state": 3
+            },
+            "observe_error": 0
+          }
+        },
+        "physical_prefix_returned": true,
+        "producer_complete": false,
+        "range_maintenance_calls": 3,
+        "ranges": {
+          "both_returned": [
+            {
+              "append_error": 0,
+              "completed_sources": 1,
+              "completion_error": 0,
+              "graph_members": 5,
+              "has_recorded_effect": true,
+              "issue_closed": true,
+              "issue_error": 0,
+              "issued_sources": 1,
+              "mapping_closed": true,
+              "mapping_error": 0,
+              "native_complete": true,
+              "observe_error": 0,
+              "observers_returned": true,
+              "recording_closed": true,
+              "retained_sources": 1,
+              "retention_error": 0,
+              "return_error": 0,
+              "sealed_members": 5
+            },
+            {
+              "append_error": 0,
+              "completed_sources": 1,
+              "completion_error": 0,
+              "graph_members": 5,
+              "has_recorded_effect": true,
+              "issue_closed": true,
+              "issue_error": 0,
+              "issued_sources": 1,
+              "mapping_closed": true,
+              "mapping_error": 0,
+              "native_complete": true,
+              "observe_error": 0,
+              "observers_returned": true,
+              "recording_closed": true,
+              "retained_sources": 1,
+              "retention_error": 0,
+              "return_error": 0,
+              "sealed_members": 5
+            }
+          ],
+          "closed": [
+            {
+              "append_error": 0,
+              "completed_sources": 0,
+              "completion_error": 0,
+              "graph_members": 5,
+              "has_recorded_effect": true,
+              "issue_closed": false,
+              "issue_error": 0,
+              "issued_sources": 0,
+              "mapping_closed": false,
+              "mapping_error": 0,
+              "native_complete": false,
+              "observe_error": 44,
+              "observers_returned": false,
+              "recording_closed": true,
+              "retained_sources": 0,
+              "retention_error": 0,
+              "return_error": 0,
+              "sealed_members": 0
+            },
+            {
+              "append_error": 0,
+              "completed_sources": 0,
+              "completion_error": 0,
+              "graph_members": 5,
+              "has_recorded_effect": true,
+              "issue_closed": false,
+              "issue_error": 0,
+              "issued_sources": 0,
+              "mapping_closed": false,
+              "mapping_error": 0,
+              "native_complete": false,
+              "observe_error": 44,
+              "observers_returned": false,
+              "recording_closed": true,
+              "retained_sources": 0,
+              "retention_error": 0,
+              "return_error": 0,
+              "sealed_members": 0
+            }
+          ],
+          "completed": [
+            {
+              "append_error": 0,
+              "completed_sources": 1,
+              "completion_error": 0,
+              "graph_members": 5,
+              "has_recorded_effect": true,
+              "issue_closed": true,
+              "issue_error": 0,
+              "issued_sources": 1,
+              "mapping_closed": true,
+              "mapping_error": 0,
+              "native_complete": true,
+              "observe_error": 0,
+              "observers_returned": false,
+              "recording_closed": true,
+              "retained_sources": 1,
+              "retention_error": 0,
+              "return_error": 0,
+              "sealed_members": 5
+            },
+            {
+              "append_error": 0,
+              "completed_sources": 1,
+              "completion_error": 0,
+              "graph_members": 5,
+              "has_recorded_effect": true,
+              "issue_closed": true,
+              "issue_error": 0,
+              "issued_sources": 1,
+              "mapping_closed": true,
+              "mapping_error": 0,
+              "native_complete": true,
+              "observe_error": 0,
+              "observers_returned": false,
+              "recording_closed": true,
+              "retained_sources": 1,
+              "retention_error": 0,
+              "return_error": 0,
+              "sealed_members": 5
+            }
+          ],
+          "first_returned": [
+            {
+              "append_error": 0,
+              "completed_sources": 1,
+              "completion_error": 0,
+              "graph_members": 5,
+              "has_recorded_effect": true,
+              "issue_closed": true,
+              "issue_error": 0,
+              "issued_sources": 1,
+              "mapping_closed": true,
+              "mapping_error": 0,
+              "native_complete": true,
+              "observe_error": 0,
+              "observers_returned": true,
+              "recording_closed": true,
+              "retained_sources": 1,
+              "retention_error": 0,
+              "return_error": 0,
+              "sealed_members": 5
+            },
+            {
+              "append_error": 0,
+              "completed_sources": 1,
+              "completion_error": 0,
+              "graph_members": 5,
+              "has_recorded_effect": true,
+              "issue_closed": true,
+              "issue_error": 0,
+              "issued_sources": 1,
+              "mapping_closed": true,
+              "mapping_error": 0,
+              "native_complete": true,
+              "observe_error": 0,
+              "observers_returned": false,
+              "recording_closed": true,
+              "retained_sources": 1,
+              "retention_error": 0,
+              "return_error": 0,
+              "sealed_members": 5
+            }
+          ],
+          "physical_returned": [
+            {
+              "append_error": 0,
+              "completed_sources": 1,
+              "completion_error": 0,
+              "graph_members": 5,
+              "has_recorded_effect": true,
+              "issue_closed": true,
+              "issue_error": 0,
+              "issued_sources": 1,
+              "mapping_closed": true,
+              "mapping_error": 0,
+              "native_complete": true,
+              "observe_error": 0,
+              "observers_returned": true,
+              "recording_closed": true,
+              "retained_sources": 1,
+              "retention_error": 0,
+              "return_error": 0,
+              "sealed_members": 5
+            },
+            {
+              "append_error": 0,
+              "completed_sources": 1,
+              "completion_error": 0,
+              "graph_members": 5,
+              "has_recorded_effect": true,
+              "issue_closed": true,
+              "issue_error": 0,
+              "issued_sources": 1,
+              "mapping_closed": true,
+              "mapping_error": 0,
+              "native_complete": true,
+              "observe_error": 0,
+              "observers_returned": true,
+              "recording_closed": true,
+              "retained_sources": 1,
+              "retention_error": 0,
+              "return_error": 0,
+              "sealed_members": 5
+            }
+          ],
+          "poll": [
+            {
+              "append_error": 0,
+              "completed_sources": 1,
+              "completion_error": 0,
+              "graph_members": 5,
+              "has_recorded_effect": true,
+              "issue_closed": true,
+              "issue_error": 0,
+              "issued_sources": 1,
+              "mapping_closed": true,
+              "mapping_error": 0,
+              "native_complete": true,
+              "observe_error": 0,
+              "observers_returned": false,
+              "recording_closed": true,
+              "retained_sources": 1,
+              "retention_error": 0,
+              "return_error": 0,
+              "sealed_members": 5
+            },
+            {
+              "append_error": 0,
+              "completed_sources": 1,
+              "completion_error": 0,
+              "graph_members": 5,
+              "has_recorded_effect": true,
+              "issue_closed": true,
+              "issue_error": 0,
+              "issued_sources": 1,
+              "mapping_closed": true,
+              "mapping_error": 0,
+              "native_complete": true,
+              "observe_error": 0,
+              "observers_returned": false,
+              "recording_closed": true,
+              "retained_sources": 1,
+              "retention_error": 0,
+              "return_error": 0,
+              "sealed_members": 5
+            }
+          ]
+        },
+        "recorded_frame": 0,
+        "reservation_refunded": false,
+        "retained_on_failure": false,
+        "schema": 1,
+        "started": true,
+        "texture_reservation_bytes": 16640,
+        "whole_output_released": false
+      },
+      "stdout_sha256": "9b76fe3dd270433fe580ac246b0eb86cfadfcf988453d90cc5c30a4e139af514",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "case_index": 1,
+      "command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+        "--path",
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/servers/rendering/fixtures/native_height_range",
+        "--render-thread",
+        "safe",
+        "--rendering-driver",
+        "metal",
+        "--rendering-method",
+        "mobile",
+        "--script",
+        "run.gd",
+        "--",
+        "--case=1"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "typed_unavailable": false,
+      "report": {
+        "callbacks": 4,
+        "case_index": 1,
+        "checks": [
+          {
+            "check": "main_rd_rt",
+            "ok": true
+          },
+          {
+            "check": "loop_disabled_for_setup",
+            "ok": true
+          },
+          {
+            "check": "fixed_case",
+            "ok": true
+          },
+          {
+            "check": "quote_issued",
+            "ok": true
+          },
+          {
+            "check": "quote_observed",
+            "ok": true
+          },
+          {
+            "check": "quoted_depth_created",
+            "ok": true
+          },
+          {
+            "check": "framebuffer_created",
+            "ok": true
+          },
+          {
+            "check": "pair_captured",
+            "ok": true
+          },
+          {
+            "check": "initial_clear_recorded",
+            "ok": true
+          },
+          {
+            "check": "initial_clear_completed",
+            "ok": true
+          },
+          {
+            "check": "standalone_ready",
+            "ok": true
+          },
+          {
+            "check": "ranges_prepared",
+            "ok": true
+          },
+          {
+            "check": "ranges_recorded",
+            "ok": true
+          },
+          {
+            "check": "ranges_closed",
+            "ok": true
+          },
+          {
+            "check": "closed_not_complete",
+            "ok": true
+          },
+          {
+            "check": "pair_live_before_issue",
+            "ok": true
+          },
+          {
+            "check": "native_ranges_complete",
+            "ok": true
+          },
+          {
+            "check": "completion_is_not_physical_return",
+            "ok": true
+          },
+          {
+            "check": "correct_issue_path",
+            "ok": true
+          },
+          {
+            "check": "loop_disabled_for_return",
+            "ok": true
+          },
+          {
+            "check": "first_range_returned",
+            "ok": true
+          },
+          {
+            "check": "second_range_still_complete",
+            "ok": true
+          },
+          {
+            "check": "second_range_returned",
+            "ok": true
+          },
+          {
+            "check": "range_return_is_not_physical_return",
+            "ok": true
+          },
+          {
+            "check": "retire_framebuffer",
+            "ok": true
+          },
+          {
+            "check": "framebuffer_enqueued_not_returned",
+            "ok": true
+          },
+          {
+            "check": "framebuffer_returned_depth_live",
+            "ok": true
+          },
+          {
+            "check": "retire_depth",
+            "ok": true
+          },
+          {
+            "check": "depth_enqueued_not_returned",
+            "ok": true
+          },
+          {
+            "check": "both_physical_returned",
+            "ok": true
+          },
+          {
+            "check": "identities_preserved",
+            "ok": true
+          },
+          {
+            "check": "native_complete_after_return",
+            "ok": true
+          },
+          {
+            "check": "no_producer_claim",
+            "ok": true
+          },
+          {
+            "check": "cleanup_continuation_settled",
+            "ok": true
+          }
+        ],
+        "cleanup_continuation_active": false,
+        "cleanup_recording_error": 0,
+        "complete": true,
+        "deadline_usec": 40000000,
+        "device": {
+          "api": "4.0",
+          "driver": "metal",
+          "name": "Apple M3 Pro (Apple9)",
+          "renderer": "mobile"
+        },
+        "draws_at_native_complete": 1,
+        "draws_at_physical_return": 2,
+        "draws_before_range_issue": 0,
+        "elapsed_usec": 26647,
+        "error": 0,
+        "failures": [],
+        "independent_ranges": true,
+        "maintenance_calls": 5,
+        "observe_polls": 4,
+        "observer_releases": 4,
+        "path": "ordinary",
+        "pending_clear_before_range": false,
+        "phase": 7,
+        "physical": {
+          "depth_enqueued": {
+            "all_created_children_returned": false,
+            "depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 2
+            },
+            "framebuffer": {
+              "rid": 3813930958848,
+              "serial": 14,
+              "state": 3
+            },
+            "observe_error": 0
+          },
+          "framebuffer_enqueued": {
+            "all_created_children_returned": false,
+            "depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 1
+            },
+            "framebuffer": {
+              "rid": 3813930958848,
+              "serial": 14,
+              "state": 2
+            },
+            "observe_error": 0
+          },
+          "framebuffer_returned": {
+            "all_created_children_returned": false,
+            "depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 1
+            },
+            "framebuffer": {
+              "rid": 3813930958848,
+              "serial": 14,
+              "state": 3
+            },
+            "observe_error": 0
+          },
+          "native_complete": {
+            "all_created_children_returned": false,
+            "depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 1
+            },
+            "framebuffer": {
+              "rid": 3813930958848,
+              "serial": 14,
+              "state": 1
+            },
+            "observe_error": 0
+          },
+          "observers_returned": {
+            "all_created_children_returned": false,
+            "depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 1
+            },
+            "framebuffer": {
+              "rid": 3813930958848,
+              "serial": 14,
+              "state": 1
+            },
+            "observe_error": 0
+          },
+          "recorded": {
+            "all_created_children_returned": false,
+            "depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 1
+            },
+            "framebuffer": {
+              "rid": 3813930958848,
+              "serial": 14,
+              "state": 1
+            },
+            "observe_error": 0
+          },
+          "returned": {
+            "all_created_children_returned": true,
+            "depth": {
+              "rid": 3809635991588,
+              "serial": 13,
+              "state": 3
+            },
+            "framebuffer": {
+              "rid": 3813930958848,
+              "serial": 14,
+              "state": 3
+            },
+            "observe_error": 0
+          }
+        },
+        "physical_prefix_returned": true,
+        "producer_complete": false,
+        "range_maintenance_calls": 0,
+        "ranges": {
+          "both_returned": [
+            {
+              "append_error": 0,
+              "completed_sources": 2,
+              "completion_error": 0,
+              "graph_members": 5,
+              "has_recorded_effect": true,
+              "issue_closed": true,
+              "issue_error": 0,
+              "issued_sources": 2,
+              "mapping_closed": true,
+              "mapping_error": 0,
+              "native_complete": true,
+              "observe_error": 0,
+              "observers_returned": true,
+              "recording_closed": true,
+              "retained_sources": 2,
+              "retention_error": 0,
+              "return_error": 0,
+              "sealed_members": 5
+            },
+            {
+              "append_error": 0,
+              "completed_sources": 2,
+              "completion_error": 0,
+              "graph_members": 5,
+              "has_recorded_effect": true,
+              "issue_closed": true,
+              "issue_error": 0,
+              "issued_sources": 2,
+              "mapping_closed": true,
+              "mapping_error": 0,
+              "native_complete": true,
+              "observe_error": 0,
+              "observers_returned": true,
+              "recording_closed": true,
+              "retained_sources": 2,
+              "retention_error": 0,
+              "return_error": 0,
+              "sealed_members": 5
+            }
+          ],
+          "closed": [
+            {
+              "append_error": 0,
+              "completed_sources": 0,
+              "completion_error": 0,
+              "graph_members": 5,
+              "has_recorded_effect": true,
+              "issue_closed": false,
+              "issue_error": 0,
+              "issued_sources": 0,
+              "mapping_closed": false,
+              "mapping_error": 0,
+              "native_complete": false,
+              "observe_error": 44,
+              "observers_returned": false,
+              "recording_closed": true,
+              "retained_sources": 0,
+              "retention_error": 0,
+              "return_error": 0,
+              "sealed_members": 0
+            },
+            {
+              "append_error": 0,
+              "completed_sources": 0,
+              "completion_error": 0,
+              "graph_members": 5,
+              "has_recorded_effect": true,
+              "issue_closed": false,
+              "issue_error": 0,
+              "issued_sources": 0,
+              "mapping_closed": false,
+              "mapping_error": 0,
+              "native_complete": false,
+              "observe_error": 44,
+              "observers_returned": false,
+              "recording_closed": true,
+              "retained_sources": 0,
+              "retention_error": 0,
+              "return_error": 0,
+              "sealed_members": 0
+            }
+          ],
+          "completed": [
+            {
+              "append_error": 0,
+              "completed_sources": 2,
+              "completion_error": 0,
+              "graph_members": 5,
+              "has_recorded_effect": true,
+              "issue_closed": true,
+              "issue_error": 0,
+              "issued_sources": 2,
+              "mapping_closed": true,
+              "mapping_error": 0,
+              "native_complete": true,
+              "observe_error": 0,
+              "observers_returned": false,
+              "recording_closed": true,
+              "retained_sources": 2,
+              "retention_error": 0,
+              "return_error": 0,
+              "sealed_members": 5
+            },
+            {
+              "append_error": 0,
+              "completed_sources": 2,
+              "completion_error": 0,
+              "graph_members": 5,
+              "has_recorded_effect": true,
+              "issue_closed": true,
+              "issue_error": 0,
+              "issued_sources": 2,
+              "mapping_closed": true,
+              "mapping_error": 0,
+              "native_complete": true,
+              "observe_error": 0,
+              "observers_returned": false,
+              "recording_closed": true,
+              "retained_sources": 2,
+              "retention_error": 0,
+              "return_error": 0,
+              "sealed_members": 5
+            }
+          ],
+          "first_returned": [
+            {
+              "append_error": 0,
+              "completed_sources": 2,
+              "completion_error": 0,
+              "graph_members": 5,
+              "has_recorded_effect": true,
+              "issue_closed": true,
+              "issue_error": 0,
+              "issued_sources": 2,
+              "mapping_closed": true,
+              "mapping_error": 0,
+              "native_complete": true,
+              "observe_error": 0,
+              "observers_returned": true,
+              "recording_closed": true,
+              "retained_sources": 2,
+              "retention_error": 0,
+              "return_error": 0,
+              "sealed_members": 5
+            },
+            {
+              "append_error": 0,
+              "completed_sources": 2,
+              "completion_error": 0,
+              "graph_members": 5,
+              "has_recorded_effect": true,
+              "issue_closed": true,
+              "issue_error": 0,
+              "issued_sources": 2,
+              "mapping_closed": true,
+              "mapping_error": 0,
+              "native_complete": true,
+              "observe_error": 0,
+              "observers_returned": false,
+              "recording_closed": true,
+              "retained_sources": 2,
+              "retention_error": 0,
+              "return_error": 0,
+              "sealed_members": 5
+            }
+          ],
+          "physical_returned": [
+            {
+              "append_error": 0,
+              "completed_sources": 2,
+              "completion_error": 0,
+              "graph_members": 5,
+              "has_recorded_effect": true,
+              "issue_closed": true,
+              "issue_error": 0,
+              "issued_sources": 2,
+              "mapping_closed": true,
+              "mapping_error": 0,
+              "native_complete": true,
+              "observe_error": 0,
+              "observers_returned": true,
+              "recording_closed": true,
+              "retained_sources": 2,
+              "retention_error": 0,
+              "return_error": 0,
+              "sealed_members": 5
+            },
+            {
+              "append_error": 0,
+              "completed_sources": 2,
+              "completion_error": 0,
+              "graph_members": 5,
+              "has_recorded_effect": true,
+              "issue_closed": true,
+              "issue_error": 0,
+              "issued_sources": 2,
+              "mapping_closed": true,
+              "mapping_error": 0,
+              "native_complete": true,
+              "observe_error": 0,
+              "observers_returned": true,
+              "recording_closed": true,
+              "retained_sources": 2,
+              "retention_error": 0,
+              "return_error": 0,
+              "sealed_members": 5
+            }
+          ],
+          "poll": [
+            {
+              "append_error": 0,
+              "completed_sources": 2,
+              "completion_error": 0,
+              "graph_members": 5,
+              "has_recorded_effect": true,
+              "issue_closed": true,
+              "issue_error": 0,
+              "issued_sources": 2,
+              "mapping_closed": true,
+              "mapping_error": 0,
+              "native_complete": true,
+              "observe_error": 0,
+              "observers_returned": false,
+              "recording_closed": true,
+              "retained_sources": 2,
+              "retention_error": 0,
+              "return_error": 0,
+              "sealed_members": 5
+            },
+            {
+              "append_error": 0,
+              "completed_sources": 2,
+              "completion_error": 0,
+              "graph_members": 5,
+              "has_recorded_effect": true,
+              "issue_closed": true,
+              "issue_error": 0,
+              "issued_sources": 2,
+              "mapping_closed": true,
+              "mapping_error": 0,
+              "native_complete": true,
+              "observe_error": 0,
+              "observers_returned": false,
+              "recording_closed": true,
+              "retained_sources": 2,
+              "retention_error": 0,
+              "return_error": 0,
+              "sealed_members": 5
+            }
+          ]
+        },
+        "recorded_frame": 0,
+        "reservation_refunded": false,
+        "retained_on_failure": false,
+        "schema": 1,
+        "started": true,
+        "texture_reservation_bytes": 16640,
+        "whole_output_released": false
+      },
+      "stdout_sha256": "f9c89057b7ef6d15639520e42aaaebb538ce1d00a60b6c64473c908e5b853a16",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}

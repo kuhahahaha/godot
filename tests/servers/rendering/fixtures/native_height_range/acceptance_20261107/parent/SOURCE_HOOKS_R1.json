@@ -1,0 +1,37 @@
+[
+  {
+    "hook": "clang-format",
+    "exit": 1,
+    "output": "clang-format.............................................................Failed\n- hook id: clang-format\n- files were modified by this hook\nclang-format-glsl....................................(no files to check)Skipped\n"
+  },
+  {
+    "hook": "validate-includes",
+    "exit": 0,
+    "output": "validate-includes........................................................Passed\n"
+  },
+  {
+    "hook": "copyright-headers",
+    "exit": 0,
+    "output": "copyright-headers........................................................Passed\n"
+  },
+  {
+    "hook": "header-guards",
+    "exit": 0,
+    "output": "header-guards............................................................Passed\n"
+  },
+  {
+    "hook": "file-format",
+    "exit": 0,
+    "output": "file-format..............................................................Passed\n"
+  },
+  {
+    "hook": "codespell",
+    "exit": 0,
+    "output": "codespell................................................................Passed\n"
+  },
+  {
+    "hook": "validate-codeowners",
+    "exit": 0,
+    "output": "validate-codeowners......................................................Passed\n"
+  }
+]

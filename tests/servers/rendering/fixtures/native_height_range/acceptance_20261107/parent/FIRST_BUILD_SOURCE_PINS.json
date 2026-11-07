@@ -1,0 +1,30 @@
+{
+  "servers/rendering/native_height_range.h": {
+    "bytes": 5456,
+    "sha256": "275cad52905be03664ccbd501286297674fcbdaddfdc4b58ddaf86ad2b2c1665"
+  },
+  "servers/rendering/rendering_device.h": {
+    "bytes": 131046,
+    "sha256": "8ebd7390f6bcc63e7f7474dcc749f1fa0cbfcbdcd3f07f14cab7e2b77bbb5b74"
+  },
+  "servers/rendering/rendering_device.cpp": {
+    "bytes": 746353,
+    "sha256": "69c3d7bf81ebf5ebd92692d1423805248b9971e9f829d1b19f2b22d633dd10fc"
+  },
+  "tests/servers/rendering/test_native_height_range.cpp": {
+    "bytes": 17186,
+    "sha256": "20d5ec5e2f4a10bbc1154a12f784bdbfcb260bd7f4eceb073d7afc2359c95736"
+  },
+  "modules/particles_runtime_tests/native_height_range_test_fixture.h": {
+    "bytes": 3951,
+    "sha256": "ab2cf1c6b04d12418d48f181337a260a2f52ccf99870217ae74a7e557450cf04"
+  },
+  "modules/particles_runtime_tests/native_height_range_test_fixture.cpp": {
+    "bytes": 19178,
+    "sha256": "b60c52a27669dc914076382e8c78121057bd1793ece8d9db77968aa99a0a717b"
+  },
+  "modules/particles_runtime_tests/register_types.cpp": {
+    "bytes": 3304,
+    "sha256": "ffe51f0bcfbc3af75650ed09d009ba9669540f8086e3da0a72b0535d5051260d"
+  }
+}

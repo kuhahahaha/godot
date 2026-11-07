@@ -1,0 +1,22 @@
+{
+  "name": "bounded_retain",
+  "final_sha256": "69c3d7bf81ebf5ebd92692d1423805248b9971e9f829d1b19f2b22d633dd10fc",
+  "negative_sha256": "03a8a84082058000df10daa863e55f3946e33e3673fb5fa74ef1493d5d22b71b",
+  "mutation_from": "const Error height_retain = _native_height_retain_frame_sources(p_frame);\n\tif (height_retain != OK) {\n\t\treturn height_retain;\n\t}",
+  "mutation_to": "// Controlled negative: omitted retain-before-recycle barrier.",
+  "function_position": [
+    520736
+  ],
+  "build_exit": 0,
+  "build_seconds": 19.61,
+  "host_sha256": "906b33d545c32ffdbcbdd95b20110c63ccd4e07809098ca12ebb6b09b835211f",
+  "test_command": [
+    "bin/godot.macos.editor.arm64",
+    "--headless",
+    "--test",
+    "--test-case=*NativeHeightRange*ordinary and bounded actual issue*",
+    "--reporters=xml",
+    "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene173-native-height-range-20261107/parent/red/bounded_retain/CPU.xml"
+  ],
+  "test_exit": 1
+}

@@ -1,0 +1,15 @@
+{
+  "command": [
+    "python3",
+    "tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_native.py",
+    "--binary",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+    "--display-driver",
+    "macos",
+    "--rendering-driver",
+    "metal"
+  ],
+  "exit": 0,
+  "seconds": 10.81,
+  "host_sha256": "1e4b08bf515d6c40e3b8a106c3d535bb8564e467c99a9a4bbdf2d3a5c06f739b"
+}

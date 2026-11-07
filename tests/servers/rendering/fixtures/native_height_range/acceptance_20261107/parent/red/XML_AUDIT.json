@@ -1,0 +1,93 @@
+[
+  {
+    "name": "slot_buffer",
+    "asserts": {
+      "successes": "11",
+      "failures": "5"
+    },
+    "cases": {
+      "successes": "0",
+      "failures": "1",
+      "skipped": "2282"
+    },
+    "failed_expressions": [
+      "range->source_count == 0",
+      "range->graphs[0].issue_attempted",
+      "range->source_count == 0",
+      "range->graphs[0].issue_attempted",
+      "f.driver.retains == 0"
+    ]
+  },
+  {
+    "name": "ordinary_issue",
+    "asserts": {
+      "successes": "34",
+      "failures": "7"
+    },
+    "cases": {
+      "successes": "0",
+      "failures": "1",
+      "skipped": "2282"
+    },
+    "failed_expressions": [
+      "range->source_count == 1",
+      "range->graphs[0].issue_attempted",
+      "f.driver.polls == 0",
+      "range->sources[0].retained",
+      "observe(f, range, out) == OK",
+      "out.native_complete",
+      "give_back(f, range) == OK"
+    ]
+  },
+  {
+    "name": "bounded_issue",
+    "asserts": {
+      "successes": "34",
+      "failures": "7"
+    },
+    "cases": {
+      "successes": "0",
+      "failures": "1",
+      "skipped": "2282"
+    },
+    "failed_expressions": [
+      "range->source_count == 1",
+      "range->graphs[0].issue_attempted",
+      "f.driver.polls == 0",
+      "range->sources[0].retained",
+      "observe(f, range, out) == OK",
+      "out.native_complete",
+      "give_back(f, range) == OK"
+    ]
+  },
+  {
+    "name": "ordinary_retain",
+    "asserts": {
+      "successes": "44",
+      "failures": "1"
+    },
+    "cases": {
+      "successes": "0",
+      "failures": "1",
+      "skipped": "2282"
+    },
+    "failed_expressions": [
+      "f.driver.polls == 0"
+    ]
+  },
+  {
+    "name": "bounded_retain",
+    "asserts": {
+      "successes": "44",
+      "failures": "1"
+    },
+    "cases": {
+      "successes": "0",
+      "failures": "1",
+      "skipped": "2282"
+    },
+    "failed_expressions": [
+      "f.driver.polls == 0"
+    ]
+  }
+]
