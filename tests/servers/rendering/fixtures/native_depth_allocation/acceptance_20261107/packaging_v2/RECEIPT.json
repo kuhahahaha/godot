@@ -1,0 +1,13 @@
+{
+  "purpose": "Encoding-only diff repack: exact original decompressed bytes preserved; prior wrapping records retained as deterministic gzip. Verifiers formatted separately to meet repository Python checks.",
+  "diffs": [
+    {
+      "prior_path": "independent_review/QUOTE_TEST_TEARDOWN.diff",
+      "path": "independent_review/QUOTE_TEST_TEARDOWN.diff.gz",
+      "original_bytes": 1772,
+      "original_sha256": "5bfc29e4d21752f9ef93be702376b25d3c4c611d56fc1da0843325ea255b3331",
+      "stored_bytes": 780,
+      "stored_sha256": "b5ec0edbadfe70cfbfe7cb4d21be45909befaa894d7b540ffd679ad4953cd87e"
+    }
+  ]
+}

@@ -16,3 +16,7 @@ The R2 policy adds `framebuffer_owner_reservation`: Known 0 is admission credit 
 These private helpers and fixtures do not establish production cross-DSO Scene/C or HeightFrame producer completion, whole-output release or reservation refund.
 
 Run `python3 verify_archive.py` here for offline stored/decompressed hashes, 19 source pins, CPU XML, GPU checks/credit/physical-unknown fields, hook results, historical hosts, RED reconstruction and unchanged historical R1 manifest entries. No current source files or engine are read. The old R1 verifier's exact directory inventory predates this appended `r2/` directory; use this verifier to validate both scopes without modifying old evidence.
+
+## Packaging v2
+
+Original diff payloads use deterministic gzip to retain exact whitespace without Git diff whitespace errors. `packaging_v2/RECEIPT.json` pins each original and stored hash; prior manifests, file maps, verifier and verification records are preserved there as gzip. This changes wrapping and verifier formatting only; source snapshots and raw evidence bytes are preserved. The R1 verifier excludes the appended R2 version directory from its own inventory.

@@ -552,14 +552,14 @@
       "stored_sha256": "8bc20f14a3f83eaeaa7317207ee901726d36025a4c08c8d3f141551156c6aac8"
     },
     {
-      "path": "independent_review/QUOTE_TEST_TEARDOWN.diff",
+      "path": "independent_review/QUOTE_TEST_TEARDOWN.diff.gz",
       "category": "independent_source_review_and_teardown",
-      "encoding": "identity",
+      "encoding": "gzip",
       "original_path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-depth-allocation-independent-20261107/QUOTE_TEST_TEARDOWN.diff",
       "original_bytes": 1772,
       "original_sha256": "5bfc29e4d21752f9ef93be702376b25d3c4c611d56fc1da0843325ea255b3331",
-      "stored_bytes": 1772,
-      "stored_sha256": "5bfc29e4d21752f9ef93be702376b25d3c4c611d56fc1da0843325ea255b3331"
+      "stored_bytes": 780,
+      "stored_sha256": "b5ec0edbadfe70cfbfe7cb4d21be45909befaa894d7b540ffd679ad4953cd87e"
     },
     {
       "path": "independent_review/QUOTE_TEST_TEARDOWN_IDENTITY.json",

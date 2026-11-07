@@ -34,3 +34,7 @@ python3 verify_archive.py
 ```
 
 Add `--compare-originals` only when all original workspace files still have their archived revision to compare every copied artifact against its original bytes. The live workspace has advanced for R2, so that optional comparison is expected to refuse changed production files; default verification checks the preserved snapshot independently. The verifier checks all stored/decompressed hashes, the exact archive inventory, final source pins, targeted RED identity/failure, final host identity, both 29-check GPU reports/logs and both raw CPU XML summaries. It reads mixed console/XML reporter output through an in-memory derivation only; raw XML files are preserved unchanged.
+
+## Packaging v2
+
+Original diff payloads use deterministic gzip to retain exact whitespace without Git diff whitespace errors. `packaging_v2/RECEIPT.json` pins each original and stored hash; prior manifests, file maps, verifier and verification records are preserved there as gzip. This changes wrapping and verifier formatting only; source snapshots and raw evidence bytes are preserved. The R1 verifier excludes the appended R2 version directory from its own inventory.

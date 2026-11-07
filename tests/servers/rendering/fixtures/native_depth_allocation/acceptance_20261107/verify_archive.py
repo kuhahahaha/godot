@@ -7,9 +7,9 @@ import argparse
 import gzip
 import hashlib
 import json
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
-import xml.etree.ElementTree as ET
 
 HERE = Path(__file__).resolve().parent
 FINAL_HOST = "7e2c5796c813a48b7587fbec6356c0ae9f90f735abf621cf0c6ea8e17b317774"
@@ -31,7 +31,9 @@ def document(path: str) -> Any:
 
 def verify(compare_originals: bool) -> dict[str, Any]:
     manifest = document("MANIFEST.json")
-    actual = {str(p.relative_to(HERE)) for p in HERE.rglob("*") if p.is_file()}
+    actual = {
+        str(p.relative_to(HERE)) for p in HERE.rglob("*") if p.is_file() and "r2" not in p.relative_to(HERE).parts
+    }
     assert actual == set(manifest["files"]) | {"MANIFEST.json", "ARCHIVE_VERIFICATION.json"}, (
         "archive inventory differs"
     )
@@ -64,7 +66,10 @@ def verify(compare_originals: bool) -> dict[str, Any]:
     assert red["passed"] is False and red["host_sha256"] == RED_HOST and red["host_and_sources_unchanged"] is True
     assert len(green["cases"]) == len(red["cases"]) == 2
     # Runtime source pins were captured after restoration, not from the mutant build.
-    assert red["sources_before"]["servers/rendering/rendering_device.cpp"]["sha256"] == pins["servers/rendering/rendering_device.cpp"]["sha256"]
+    assert (
+        red["sources_before"]["servers/rendering/rendering_device.cpp"]["sha256"]
+        == pins["servers/rendering/rendering_device.cpp"]["sha256"]
+    )
     assert document("parent/SOURCE_RESTORATION_R4.json")["restored"] is True
     assert (
         document("parent/SOURCE_RESTORATION_R4.json")["sha256"]

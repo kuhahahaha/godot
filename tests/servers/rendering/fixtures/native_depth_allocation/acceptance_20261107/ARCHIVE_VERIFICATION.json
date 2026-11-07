@@ -1,9 +1,9 @@
 {
   "status": "PASS_ARCHIVE_R1_HISTORICAL_NOT_FINAL",
   "copied_original_entries": 78,
-  "payload_files": 81,
+  "payload_files": 86,
   "original_bytes": 4282567,
-  "stored_original_bytes": 729389,
+  "stored_original_bytes": 728397,
   "compared_original_workspace_files": false,
   "final_source_pins": 19,
   "final_host_sha256": "7e2c5796c813a48b7587fbec6356c0ae9f90f735abf621cf0c6ea8e17b317774",
