@@ -5,11 +5,12 @@
 #include "servers/rendering/rendering_server.h"
 
 namespace TestProductionRequest {
-void *managed_scene_begin();
+void *managed_scene_begin(bool);
 Dictionary managed_scene_advance(void *);
 }
 void ParticlesScenePairsTestFixture::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("run"), &ParticlesScenePairsTestFixture::run);
+	ClassDB::bind_method(D_METHOD("run_phase"), &ParticlesScenePairsTestFixture::run_phase);
 	ClassDB::bind_method(D_METHOD("advance"), &ParticlesScenePairsTestFixture::advance);
 	ClassDB::bind_method(D_METHOD("result"), &ParticlesScenePairsTestFixture::result);
 }
@@ -17,6 +18,7 @@ Dictionary ParticlesScenePairsTestFixture::result() const {
 	MutexLock lock(result_mutex);
 	return result_data.duplicate(true);
 }
+void ParticlesScenePairsTestFixture::run_phase() { phase_mode = true;run(); }
 void ParticlesScenePairsTestFixture::run() {
 	auto *scene = RendererSceneCull::singleton;
 	auto *storage = RendererRD::ParticlesStorage::get_singleton();
@@ -151,7 +153,7 @@ void ParticlesScenePairsTestFixture::run() {
 	scene->free(scenario);
 	storage->particles_collision_free(sphere);
 	storage->particles_free(particles);
-	managed_scene = TestProductionRequest::managed_scene_begin();
+	managed_scene = TestProductionRequest::managed_scene_begin(phase_mode);
 	MutexLock lock(result_mutex);
 	result_data["checks"] = checks;
 }

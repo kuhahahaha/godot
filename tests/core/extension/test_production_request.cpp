@@ -11660,12 +11660,122 @@ struct Access {
 		uint32_t stage = 0;
 		Error record_error = ERR_UNAVAILABLE;
 		bool root_returned = false;
+		bool phase_mode = false;
+		Callable phase_callable;
+		GDExtensionScenePhaseRegistrationRefV1 phase_registration{};
+		GDExtensionProductionRequestRefV1 waiting_request{};
+		uint64_t waiting_control = 0;
+		bool waiting_close_started = false;
+		GDExtensionSceneOpaque32V1 phase_capability{};
+		GDExtensionProductionPhysicalContextRefV1 phase_context{};
+		uint32_t phase_calls = 0, ordinary_calls = 0, legacy_calls = 0, callable_frees = 0;
+		GDExtensionInterfaceDeviceSessionScenePhaseUnregisterV1 unregister_phase = nullptr;
+		static void ordinary(void *data, const GDExtensionConstVariantPtr *, GDExtensionInt,
+				GDExtensionVariantPtr returned, GDExtensionCallError *error) {
+			++static_cast<ManagedSceneHarness *>(data)->ordinary_calls;
+			*reinterpret_cast<Variant *>(returned) = Variant();*error = { GDEXTENSION_CALL_OK, 0, 0 };
+		}
+		static void free_callable(void *data) { ++static_cast<ManagedSceneHarness *>(data)->callable_frees; }
+		static void typed(void *data, const GDExtensionNativeScenePhaseV1 *phase,
+				GDExtensionProductionRequestRefV1 request, const GDExtensionProductionOperationV1 *operation) {
+			using namespace GDExtensionDeviceExit;
+			auto &self = *static_cast<ManagedSceneHarness *>(data);
+			CRASH_COND(!phase || !operation || self.phase_calls != 0);
+			++self.phase_calls;
+			self.phase_context = { NativeScenePhaseProbe::word(phase->physical_context, 0), NativeScenePhaseProbe::word(phase->physical_context, 1) };
+			self.check("managed_phase_original_occurrence", phase->occurrence != 0 && phase->expiry_serial == self.phase_context.frame_serial);
+			self.check("managed_phase_original_device", memcmp(&phase->device_capability, &self.phase_capability, sizeof(self.phase_capability)) == 0);
+			{
+				MutexLock lock(self.enrollment.registry.mutex);
+				ProductionRequest *original = nullptr;RenderingDevice *device = nullptr;
+				const Error live = self.enrollment.registry.production_physical_request_locked(self.phase_context, request, original, device, false);
+				self.check("managed_phase_live_original_frame", live == OK && original == self.enrollment.request && device == self.device &&
+						original->control.state == ProductionControlState::EXECUTING && operation->owner_request_nonce == original->operation.owner_request_nonce);
+			}
+			self.record_error = self.native->install_generation(self.phase_context, request, self.enrollment.registry);
+			if (self.record_error == OK) self.exercise_scene();
+		}
+		Error install_phase() {
+			using namespace GDExtensionDeviceExit;
+			// Same original adopted Callable enrollment as D's native phase fixture.
+			{
+				MutexLock lock(enrollment.registry.mutex);
+				enrollment.registry.records[enrollment.reference.slot].guard.entry_classes |= 1u << 8;
+			}
+			GDExtensionCallableCustomInfo2 info{};info.callable_userdata = this;
+			info.call_func = &ordinary;info.free_func = &free_callable;
+			info.token = enrollment.registry.records[enrollment.reference.slot].original_owner;
+			const auto create = reinterpret_cast<GDExtensionInterfaceCallableCustomCreate2>(GDExtension::get_interface_function("callable_custom_create2"));
+			CRASH_COND(!create);
+			create(reinterpret_cast<GDExtensionUninitializedTypePtr>(&phase_callable), &info);
+			const auto relay = reinterpret_cast<GDExtensionInterfaceDeviceSessionScenePhaseRelayV1>(gdextension_get_guarded_proc_address("device_session_scene_phase_relay_v1"));
+			const auto capability = reinterpret_cast<GDExtensionInterfaceDeviceSessionScenePhaseCapabilityV1>(gdextension_get_guarded_proc_address("device_session_scene_phase_capability_v1"));
+			const auto registration = reinterpret_cast<GDExtensionInterfaceDeviceSessionScenePhaseRegisterV1>(gdextension_get_guarded_proc_address("device_session_scene_phase_register_v1"));
+			unregister_phase = reinterpret_cast<GDExtensionInterfaceDeviceSessionScenePhaseUnregisterV1>(gdextension_get_guarded_proc_address("device_session_scene_phase_unregister_v1"));
+			CRASH_COND(!relay || !capability || !registration || !unregister_phase);
+			GDExtensionNormalRelayRefV1 wire{};
+			Error error = Error(relay(reinterpret_cast<GDExtensionConstTypePtr>(&phase_callable), &typed, &wire).native_error);
+			if (error != OK) return error;
+			GDExtensionScenePhaseSinkConfigV1 config{};config.abi = { 1, sizeof(config), 0 };
+			config.phase = config.max_operations = 1;
+			error = Error(capability(enrollment.attachment, &config.device_capability).native_error);
+			if (error != OK) return error;
+			phase_capability = config.device_capability;
+			return Error(registration(wire, enrollment.attachment, &config, &phase_registration).native_error);
+		}
+		void close_phase() {
+			using namespace GDExtensionDeviceExit;
+			check("managed_phase_typed_only", phase_calls == 1 && ordinary_calls == 0 && legacy_calls == 0);
+			{
+				MutexLock lock(enrollment.registry.mutex);
+				ProductionRequest *expired = nullptr;RenderingDevice *device = nullptr;
+				check("managed_phase_original_expiry", enrollment.registry.production_physical_request_locked(phase_context, ref, expired, device, false) == ERR_UNAUTHORIZED && !expired);
+			}
+			GDExtensionScenePhaseCloseV1 close{};
+			const Error closing = Error(unregister_phase(phase_registration, &close).native_error);
+			check("managed_phase_close_waits_holder", closing == ERR_BUSY && close.registration_closed == 1 && close.active_deliveries == 0 && close.relay_cell_released == 1 && close.relay_holder_closed == 0);
+			phase_callable = Callable();
+			check("managed_phase_original_free", callable_frees == 1);
+			const Error closed = Error(unregister_phase(phase_registration, &close).native_error);
+			check("managed_phase_original_close", closed == OK && close.registration_closed == 1 && close.active_deliveries == 0 && close.relay_cell_released == 1 && close.relay_holder_closed == 1);
+			CRASH_COND(closed != OK);
+		}
 		static void record(void *data, GDExtensionDeviceExit::ProductionPhysicalContextRef context,
 				GDExtensionProductionRequestRefV1 request, const GDExtensionProductionOperationV1 *) {
 			auto &self = *static_cast<ManagedSceneHarness *>(data);
+			++self.legacy_calls;
 			self.record_error = self.native->install_generation(context, request, self.enrollment.registry);
 		}
 		void check(const char *name, bool passed) { checks[name] = passed; }
+		Dictionary advance_phase_close() {
+			using namespace GDExtensionDeviceExit;
+			if (!waiting_close_started) {
+				// Wait until original FIFO dispatch has really deferred this RECORD.
+				MutexLock lock(enrollment.registry.mutex);
+				ProductionRequest *pending = nullptr;RenderingDevice *device = nullptr;
+				CRASH_COND(enrollment.registry.production_request_locked(waiting_request, false, pending, device) != OK);
+				if (!pending->control.scene_waiting || pending->control.state != ProductionControlState::QUEUED) return {};
+				waiting_close_started = true;
+			}
+			GDExtensionScenePhaseCloseV1 close{};
+			const Error closing = Error(unregister_phase(phase_registration, &close).native_error);
+			CRASH_COND(closing != ERR_BUSY);
+			check("managed_phase_no_draw_admission_closed", close.registration_closed == 1 && close.active_deliveries == 0);
+			ProductionControlOutput refused{};
+			const Error returned = enrollment.registry.production_control_consume(waiting_request, waiting_control, &refused);
+			if (returned == ERR_BUSY) return {};
+			CRASH_COND(returned != OK);
+			check("managed_phase_waiting_return_without_draw", refused.result.native_error == ERR_UNAVAILABLE &&
+					refused.request_serial == waiting_request.handle_serial && refused.control_serial == waiting_control && phase_calls == 1);
+			// This never-delivered, empty request has no pin/native source to retire;
+			// use D's exact original no-draw mailbox cancellation/release path.
+			CRASH_COND(enrollment.registry.production_cancel(waiting_request).native_error != OK);
+			CRASH_COND(enrollment.registry.production_release(waiting_request).native_error != OK);
+			waiting_request = {};
+			close_phase();native->withdraw_generation();stage = 1;
+			CRASH_COND(schedule(ProductionControlKind::OBSERVE) != OK);
+			return {};
+		}
 		Error schedule(GDExtensionDeviceExit::ProductionControlKind kind) {
 			using namespace GDExtensionDeviceExit;
 			if (kind == ProductionControlKind::RECORD) return enrollment.registry.production_record_schedule(ref, &control);
@@ -11676,7 +11786,8 @@ struct Access {
 					&budget);
 			return error == OK ? enrollment.registry.production_control_schedule(ref, control) : error;
 		}
-		Error begin() {
+		Error begin(bool p_phase_mode) {
+			phase_mode = p_phase_mode;
 			device = RenderingDevice::get_singleton();
 			auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
 			auto *storage = RendererRD::ParticlesStorage::get_singleton();
@@ -11685,8 +11796,18 @@ struct Access {
 			OrdinalPlan plan;
 			plan.capacity = { GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, 0, 1, 0, 0, 0, 0, 0, 0 };
 			plan.action_count = plan.resource_count = plan.use_count = plan.readback_count = 0;
+			plan.attachment_requests = phase_mode ? 2 : 1;
 			const Error error = enrollment.initialize_owner(1, false, false, &record, this, false, 1, false,
 					+[](void *, GDExtensionProductionAttachmentRefV1) {}, false, false, false, false, &plan, device);
+			if (error == OK && phase_mode) {
+				const Error installed = install_phase();CRASH_COND(installed != OK);
+				auto waiting_operation = plan.operation;++waiting_operation.owner_request_nonce;
+				auto waiting_capacity = plan.capacity;waiting_capacity.resource_uses = 0;
+				const auto reserve = reinterpret_cast<GDExtensionInterfaceDeviceSessionProductionReserveV2>(
+						gdextension_get_guarded_proc_address("device_session_production_reserve_v2"));
+				CRASH_COND(!reserve || reserve(enrollment.attachment, &waiting_operation, &waiting_capacity,
+						nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0, &waiting_request).native_error != OK);
+			}
 			// Never retain a SceneReady TLS frame between runtime callbacks.
 			enrollment.frame.leave();
 			if (error != OK) return error;
@@ -11741,13 +11862,20 @@ struct Access {
 		// Empty dictionary means the original queued control has not returned yet.
 		Dictionary advance() {
 			using namespace GDExtensionDeviceExit;
+			if (stage == 3) return advance_phase_close();
 			ProductionControlOutput output{};
 			const Error consumed = enrollment.registry.production_control_consume(ref, control, &output);
 			if (consumed == ERR_BUSY) return {};
 			CRASH_COND(consumed != OK); // Preserve real custody on unexpected issuer failure.
 			if (stage == 0) {
 				check("managed_original_record", output.result.native_error == OK && record_error == OK && !native->generation_pin().is_empty());
-				if (record_error == OK) exercise_scene();
+				if (phase_mode) {
+					// The one positive delivery came from actual draw. Future waiting
+					// refusal and holder teardown must no longer depend on a draw.
+					RenderingServer::get_singleton()->set_render_loop_enabled(false);
+					CRASH_COND(enrollment.registry.production_record_schedule(waiting_request, &waiting_control) != OK);
+					stage = 3;return {};
+				} else if (record_error == OK) exercise_scene();
 				native->withdraw_generation();stage = 1;
 			} else if (stage == 1 && native->released() && enrollment.request->maintenance_serial == 0) {
 				root_returned |= output.output_generation.native_released;
@@ -11774,9 +11902,9 @@ struct Access {
 		return GDExtensionDeviceExit::Registry::production_layout(capacity, out, current_commands, workers);
 	}
 };
-void *managed_scene_begin() {
+void *managed_scene_begin(bool phase_mode) {
 	auto *harness = memnew(Access::ManagedSceneHarness);
-	const Error error = harness->begin();
+	const Error error = harness->begin(phase_mode);
 	CRASH_COND_MSG(error != OK, "Managed Scene original test enrollment failed: " + itos(error));
 	return harness;
 }
