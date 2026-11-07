@@ -71,6 +71,7 @@ enum class ExternalPacketPass : uint8_t;
 struct ExternalPacketPipelineRequest;
 
 class ParticlesStorage : public RendererParticlesStorage {
+	friend class HeightCaptureCheckedSink;
 private:
 	class HeightFrameResources;
 	class HeightFrame;

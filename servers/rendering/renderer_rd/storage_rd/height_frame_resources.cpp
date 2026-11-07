@@ -54,6 +54,65 @@ Error ParticlesStorage::HeightFrameResources::allocate(RenderingDevice &p_device
 	return owner.allocation_error;
 }
 
+Error ParticlesStorage::HeightFrameResources::allocate_quoted(RenderingDevice &p_original_main_rd, const NativeDepthAllocationQuote &p_original_quote, Ref<HeightFrameResources> &r_original_owner, NativeDepthAllocationQuote::CreateOutcome &r_outcome) {
+	r_outcome = NativeDepthAllocationQuote::CreateOutcome::NotCreated;
+	ERR_FAIL_COND_V(r_original_owner.is_valid(), ERR_INVALID_PARAMETER);
+	NativeDepthAllocationQuote::Report quote;
+	const Error resolved = p_original_main_rd._native_disposal_depth_allocation_quote_observe(p_original_quote, quote);
+	if (resolved != OK) {
+		return resolved;
+	}
+	r_original_owner = Ref<HeightFrameResources>(memnew(HeightFrameResources(p_original_main_rd, quote.width, quote.height)));
+	HeightFrameResources &owner = **r_original_owner;
+	owner.allocation_quote = p_original_quote;
+	owner.allocation_error = p_original_main_rd._native_disposal_depth_texture_create_quoted(p_original_quote, owner.depth, owner.depth_witness, owner.depth_projection, owner.creation_outcome);
+	r_outcome = owner.creation_outcome;
+	if (owner.creation_outcome == NativeDepthAllocationQuote::CreateOutcome::NotCreated) {
+		owner.state = State::RELEASED;
+		return owner.allocation_error;
+	}
+	// The quoted factory may publish depth before detecting an actual-size
+	// failure. Its original owner and witness survive every such failure.
+	NativeDepthAllocationProjection::Report depth_observation;
+	owner.depth_projection_captured = p_original_main_rd._native_disposal_depth_allocation_observe(owner.depth_projection, depth_observation) == OK;
+	if (owner.allocation_error != OK) {
+		return owner.allocation_error;
+	}
+	owner.allocation_error = p_original_main_rd._native_disposal_depth_framebuffer_create(owner.depth_witness, owner.framebuffer, owner.framebuffer_witness);
+	if (owner.allocation_error != OK) {
+		return owner.allocation_error;
+	}
+	owner.allocation_error = p_original_main_rd._native_disposal_depth_allocation_capture(owner.depth_witness, owner.framebuffer_witness, owner.pair_projection);
+	owner.pair_projection_captured = owner.allocation_error == OK;
+	return owner.allocation_error;
+}
+
+Error ParticlesStorage::HeightFrameResources::observe_allocation(NativeDepthAllocationProjection::Report &r_original_observation) const {
+	r_original_observation = {};
+	if (pair_projection_captured) {
+		return device._native_disposal_depth_allocation_observe(pair_projection, r_original_observation);
+	}
+	Error projection_error = OK;
+	if (depth_projection_captured) {
+		projection_error = device._native_disposal_depth_allocation_observe(depth_projection, r_original_observation);
+	}
+	// A failed pair capture must not hide its real framebuffer. When no
+	// snapshot exists, original witnesses still expose identity and return;
+	// all byte fields remain typed UnknownNotExposed.
+	Observation observation;
+	const Error observed = observe(observation);
+	r_original_observation.depth = observation.depth;
+	r_original_observation.framebuffer = observation.framebuffer;
+	r_original_observation.framebuffer_created = framebuffer.is_valid();
+	if (framebuffer.is_valid()) {
+		r_original_observation.shared_attachment_depth = observation.depth;
+	}
+	r_original_observation.all_created_children_returned = observed == OK && projection_error == OK && depth.is_valid() &&
+			observation.depth.state == NativeDisposalWitness::State::RETURNED &&
+			(!framebuffer.is_valid() || observation.framebuffer.state == NativeDisposalWitness::State::RETURNED);
+	return projection_error != OK ? projection_error : observed;
+}
+
 Error ParticlesStorage::HeightFrameResources::retire_step() {
 	if (state == State::RELEASED) {
 		return OK;
@@ -98,6 +157,7 @@ Error ParticlesStorage::HeightFrameResources::observe(Observation &r_observation
 	r_observation = Observation();
 	r_observation.state = state;
 	r_observation.allocation_error = allocation_error;
+	r_observation.creation_outcome = creation_outcome;
 	Error depth_error = OK;
 	Error framebuffer_error = OK;
 	if (depth.is_valid()) {
@@ -107,6 +167,14 @@ Error ParticlesStorage::HeightFrameResources::observe(Observation &r_observation
 		framebuffer_error = device._native_disposal_observe(framebuffer_witness, r_observation.framebuffer);
 	}
 	return depth_error != OK ? depth_error : framebuffer_error;
+}
+
+bool ParticlesStorage::HeightFrameResources::is_quoted_verified() const {
+	if (state != State::ALLOCATED || allocation_error != OK || creation_outcome != NativeDepthAllocationQuote::CreateOutcome::CreatedVerified) {
+		return false;
+	}
+	NativeDepthAllocationQuote::Report quote;
+	return device._native_disposal_depth_allocation_quote_observe(allocation_quote, quote) == OK;
 }
 
 RID ParticlesStorage::HeightFrameResources::get_depth() const {

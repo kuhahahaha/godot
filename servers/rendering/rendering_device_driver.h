@@ -415,6 +415,21 @@ public:
 		uint64_t row_pitch = 0;
 	};
 
+	struct DepthAllocationQuote {
+		enum class Policy : uint8_t { Unavailable,
+			MetalHeapPool,
+			MetalHeapDedicated };
+		Policy policy = Policy::Unavailable;
+		uint64_t native_requirement = 0;
+		uint64_t owner_reservation = 0;
+		uint64_t alignment = 0;
+	};
+	// Optional original backend capability. No native allocation or reservation
+	// is performed here; unsupported paths cannot fabricate a finite bound.
+	virtual Error depth_allocation_quote(uint32_t p_width, uint32_t p_height, DepthAllocationQuote &r_quote) {
+		r_quote = {};
+		return ERR_UNAVAILABLE;
+	}
 	virtual TextureID texture_create(const TextureFormat &p_format, const TextureView &p_view) = 0;
 	virtual TextureID texture_create_from_extension(uint64_t p_native_texture, TextureType p_type, DataFormat p_format, uint32_t p_array_layers, bool p_depth_stencil, uint32_t p_mipmaps) = 0;
 	// texture_create_shared_*() can only use original, non-view textures as original. RenderingDevice is responsible for ensuring that.

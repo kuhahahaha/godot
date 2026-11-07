@@ -142,10 +142,29 @@ NS::SharedPtr<MTL::Heap> MetalHeapAllocator::_create_heap(uint32_t p_pool, uint6
 	return NS::TransferPtr(device->newHeap(desc.get()));
 }
 
+bool MetalHeapAllocator::_pool_allocation_units(uint64_t p_size, uint64_t p_align, uint32_t &r_units) {
+	r_units = 0;
+	if (!p_size || !p_align || (p_align & (p_align - 1))) {
+		return false;
+	}
+	const uint64_t padding = p_align > UNIT ? p_align - 1 : 0;
+	if (p_size > UINT64_MAX - padding || p_size + padding > UINT64_MAX - (UNIT - 1)) {
+		return false;
+	}
+	const uint64_t units = (p_size + padding + UNIT - 1) / UNIT;
+	if (units > UINT32_MAX) {
+		return false;
+	}
+	r_units = uint32_t(units);
+	return true;
+}
+
 bool MetalHeapAllocator::_pool_allocate(uint32_t p_pool, uint64_t p_size, uint64_t p_align, MetalAllocation &r_allocation, MTL::Heap *&r_heap, uint64_t &r_offset) {
 	Pool &pool = pools[p_pool];
-	uint64_t padded = p_size + (p_align > UNIT ? p_align - 1 : 0);
-	uint32_t units = (uint32_t)((padded + UNIT - 1) / UNIT);
+	uint32_t units = 0;
+	if (!_pool_allocation_units(p_size, p_align, units)) {
+		return false;
+	}
 
 	SpinLockGuard lock(pool.mutex);
 
@@ -163,7 +182,7 @@ bool MetalHeapAllocator::_pool_allocate(uint32_t p_pool, uint64_t p_size, uint64
 	}
 
 	if (block_index == UINT32_MAX) {
-		uint64_t block_size = MAX(_preferred_block_size(p_pool), (padded + UNIT - 1) & ~(UNIT - 1));
+		uint64_t block_size = MAX(_preferred_block_size(p_pool), uint64_t(units) * UNIT);
 		NS::SharedPtr<MTL::Heap> heap = _create_heap(p_pool, block_size);
 		ERR_FAIL_NULL_V_MSG(heap.get(), false, "Unable to create placement heap.");
 
@@ -319,20 +338,45 @@ MetalBuffer MetalHeapAllocator::new_buffer(NS::UInteger p_length, MTL::ResourceO
 	return result;
 }
 
+bool MetalHeapAllocator::texture_allocation_quote(const MTL::TextureDescriptor *p_desc, TextureAllocationQuote &r_quote) {
+	r_quote = {};
+	const MTL::SizeAndAlign sa = device->heapTextureSizeAndAlign(p_desc);
+	if (!sa.size || !sa.align || (sa.align & (sa.align - 1))) {
+		return false;
+	}
+	TextureAllocationQuote quote;
+	quote.native_requirement = sa.size;
+	quote.alignment = sa.align;
+	quote.dedicated = sa.size > _preferred_block_size(_pool_for_texture(p_desc)) / 2;
+	if (quote.dedicated) {
+		quote.owner_reservation = sa.size;
+	} else {
+		uint32_t units = 0;
+		if (!_pool_allocation_units(sa.size, sa.align, units)) {
+			return false;
+		}
+		quote.owner_reservation = uint64_t(units) * UNIT;
+	}
+	r_quote = quote;
+	return true;
+}
+
 MetalTexture MetalHeapAllocator::new_texture(const MTL::TextureDescriptor *p_desc) {
 	uint32_t pool_index = _pool_for_texture(p_desc);
-	MTL::SizeAndAlign sa = device->heapTextureSizeAndAlign(p_desc);
-
+	TextureAllocationQuote quote;
 	MetalTexture result;
+	if (!texture_allocation_quote(p_desc, quote)) {
+		return result;
+	}
 	MTL::Heap *heap = nullptr;
-	if (sa.size > _preferred_block_size(pool_index) / 2) {
-		if (!_dedicated_allocate(pool_index, sa.size, result.allocation, heap)) {
+	if (quote.dedicated) {
+		if (!_dedicated_allocate(pool_index, quote.native_requirement, result.allocation, heap)) {
 			return result;
 		}
 		result.texture = NS::TransferPtr(heap->newTexture(p_desc, 0));
 	} else {
 		uint64_t offset = 0;
-		if (!_pool_allocate(pool_index, sa.size, sa.align, result.allocation, heap, offset)) {
+		if (!_pool_allocate(pool_index, quote.native_requirement, quote.alignment, result.allocation, heap, offset)) {
 			return result;
 		}
 		result.texture = NS::TransferPtr(heap->newTexture(p_desc, offset));

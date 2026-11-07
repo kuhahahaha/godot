@@ -30,7 +30,7 @@
 
 #pragma once
 
-#include "servers/rendering/native_disposal_witness.h"
+#include "servers/rendering/native_depth_allocation_projection.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 
 namespace RendererRD {
@@ -41,6 +41,8 @@ namespace RendererRD {
 class ParticlesStorage::HeightFrameResources : public RefCounted {
 	friend class ParticlesStorage;
 	friend class HeightFrame;
+	friend class HeightCaptureCheckedSink;
+	friend class ::GDExtensionDeviceExit::Registry;
 #ifdef TESTS_ENABLED
 	friend class ::ParticlesHeightfieldClearTestFixture;
 #endif
@@ -54,6 +56,7 @@ class ParticlesStorage::HeightFrameResources : public RefCounted {
 	struct Observation {
 		State state = State::ALLOCATED;
 		Error allocation_error = OK;
+		NativeDepthAllocationQuote::CreateOutcome creation_outcome = NativeDepthAllocationQuote::CreateOutcome::NotCreated;
 		NativeDisposalWitness::Report depth;
 		NativeDisposalWitness::Report framebuffer;
 	};
@@ -66,6 +69,12 @@ class ParticlesStorage::HeightFrameResources : public RefCounted {
 	NativeDisposalWitness depth_witness;
 	NativeDisposalWitness framebuffer_witness;
 	Error allocation_error = OK;
+	NativeDepthAllocationQuote allocation_quote;
+	NativeDepthAllocationQuote::CreateOutcome creation_outcome = NativeDepthAllocationQuote::CreateOutcome::NotCreated;
+	NativeDepthAllocationProjection depth_projection;
+	NativeDepthAllocationProjection pair_projection;
+	bool depth_projection_captured = false;
+	bool pair_projection_captured = false;
 	State state = State::ALLOCATED;
 	RetireTarget retire_target = RetireTarget::FRAMEBUFFER;
 
@@ -77,6 +86,9 @@ class ParticlesStorage::HeightFrameResources : public RefCounted {
 	// failure r_owner retains the successfully created depth and its witness.
 	static Error allocate(RenderingDevice &p_device, uint32_t p_width, uint32_t p_height, Ref<HeightFrameResources> &r_owner);
 
+	static Error allocate_quoted(RenderingDevice &p_original_main_rd, const NativeDepthAllocationQuote &p_original_quote, Ref<HeightFrameResources> &r_original_owner, NativeDepthAllocationQuote::CreateOutcome &r_outcome);
+	Error observe_allocation(NativeDepthAllocationProjection::Report &r_original_observation) const;
+
 	// Called only by the original native owner after its original last-use
 	// protocol permits retirement. Refcount is an additional retention gate,
 	// never a substitute for native producer/reader completion.
@@ -86,6 +98,7 @@ class ParticlesStorage::HeightFrameResources : public RefCounted {
 	// Two fixed observations; these are physical disposal facts, not Complete.
 	Error observe(Observation &r_observation) const;
 
+	bool is_quoted_verified() const;
 	RID get_depth() const;
 	RID get_framebuffer() const;
 	uint32_t get_width() const { return width; }

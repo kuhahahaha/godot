@@ -10713,6 +10713,160 @@ Error RenderingDevice::_native_disposal_stall_step(uint32_t p_frame) {
 	return OK;
 }
 
+Error RenderingDevice::_native_disposal_depth_allocation_quote(uint32_t p_width, uint32_t p_height, NativeDepthAllocationQuote &r_quote) const {
+	const Error ready = _native_disposal_preflight();
+	if (ready != OK) {
+		return ready;
+	}
+	if (!p_width || !p_height || r_quote.device) {
+		return ERR_INVALID_PARAMETER;
+	}
+	_THREAD_SAFE_METHOD_
+	RDD::DepthAllocationQuote native;
+	const Error error = driver->depth_allocation_quote(p_width, p_height, native);
+	if (error != OK) {
+		return error;
+	}
+	if ((native.policy != RDD::DepthAllocationQuote::Policy::MetalHeapPool && native.policy != RDD::DepthAllocationQuote::Policy::MetalHeapDedicated) || !native.native_requirement || !native.owner_reservation ||
+			native.native_requirement > native.owner_reservation || !native.alignment || (native.alignment & (native.alignment - 1))) {
+		return ERR_INVALID_DATA;
+	}
+	NativeDepthAllocationQuote quote;
+	quote.device = uint64_t(get_instance_id());
+	quote.report.width = p_width;
+	quote.report.height = p_height;
+	quote.report.policy = native.policy == RDD::DepthAllocationQuote::Policy::MetalHeapPool ? NativeDepthAllocationQuote::Policy::MetalHeapPool : NativeDepthAllocationQuote::Policy::MetalHeapDedicated;
+	quote.report.texture_native_requirement = { NativeDepthAllocationProjection::ByteKnowledge::Known, native.native_requirement };
+	quote.report.texture_owner_reservation = { NativeDepthAllocationProjection::ByteKnowledge::Known, native.owner_reservation };
+	quote.report.framebuffer_owner_reservation = { NativeDepthAllocationProjection::ByteKnowledge::Known, 0 };
+	quote.report.alignment = native.alignment;
+	quote.report.allocations = 2;
+	quote.report.parts = 1;
+	quote.report.shared_attachment_references = 1;
+	r_quote = quote;
+	return OK;
+}
+
+Error RenderingDevice::_native_disposal_depth_allocation_quote_observe(const NativeDepthAllocationQuote &p_quote, NativeDepthAllocationQuote::Report &r_report) const {
+	r_report = {};
+	if (!is_main_instance || render_thread_id != Thread::get_caller_id() || !p_quote.device || p_quote.device != uint64_t(get_instance_id())) {
+		return ERR_UNAUTHORIZED;
+	}
+	r_report = p_quote.report;
+	return OK;
+}
+
+Error RenderingDevice::_native_disposal_depth_texture_create_quoted(const NativeDepthAllocationQuote &p_quote, RID &r_rid, NativeDisposalWitness &r_witness, NativeDepthAllocationProjection &r_projection, NativeDepthAllocationQuote::CreateOutcome &r_outcome) {
+	r_outcome = NativeDepthAllocationQuote::CreateOutcome::NotCreated;
+	NativeDepthAllocationQuote::Report quote;
+	const Error observed = _native_disposal_depth_allocation_quote_observe(p_quote, quote);
+	if (observed != OK) {
+		return observed;
+	}
+	if (r_projection.device || r_rid.is_valid() || r_witness.cell.is_valid()) {
+		return ERR_INVALID_PARAMETER;
+	}
+	// This recheck binds the original quote to the current original allocator
+	// policy before native effect. C still owns the retained E05 reservation.
+	NativeDepthAllocationQuote current;
+	const Error requoted = _native_disposal_depth_allocation_quote(quote.width, quote.height, current);
+	if (requoted != OK) {
+		return requoted;
+	}
+	if (current.report.policy != quote.policy || current.report.alignment != quote.alignment || current.report.texture_owner_reservation.bytes > quote.texture_owner_reservation.bytes) {
+		return ERR_OUT_OF_MEMORY;
+	}
+	const Error created = _native_disposal_depth_texture_create(quote.width, quote.height, r_rid, r_witness);
+	if (created != OK) {
+		return created;
+	}
+	r_outcome = NativeDepthAllocationQuote::CreateOutcome::CreatedActualUnknown;
+	const Error captured = _native_disposal_depth_allocation_capture(r_witness, NativeDisposalWitness(), r_projection);
+	if (captured != OK) {
+		return captured;
+	}
+	if (r_projection.depth_driver_backing.knowledge != NativeDepthAllocationProjection::ByteKnowledge::Known) {
+		return ERR_UNAVAILABLE;
+	}
+	if (r_projection.depth_driver_backing.bytes > quote.texture_owner_reservation.bytes) {
+		r_outcome = NativeDepthAllocationQuote::CreateOutcome::CreatedOverReservation;
+		return ERR_OUT_OF_MEMORY;
+	}
+	r_outcome = NativeDepthAllocationQuote::CreateOutcome::CreatedVerified;
+	return OK;
+}
+
+Error RenderingDevice::_native_disposal_depth_allocation_capture(const NativeDisposalWitness &p_depth, const NativeDisposalWitness &p_framebuffer, NativeDepthAllocationProjection &r_projection) {
+	if (r_projection.device) {
+		return ERR_INVALID_PARAMETER;
+	}
+	NativeDisposalWitness::Report depth_report;
+	const Error observed = _native_disposal_observe(p_depth, depth_report);
+	if (observed != OK) {
+		return observed;
+	}
+	_THREAD_SAFE_METHOD_
+	const RID depth_rid = RID::from_uint64(depth_report.rid);
+	const Texture *texture = texture_owner.owns(depth_rid) ? texture_owner.get_or_null(depth_rid) : nullptr;
+	if (!texture || depth_report.state != NativeDisposalWitness::State::LIVE || texture->native_disposal.cell != p_depth.cell ||
+			!p_depth.cell->matches(depth_report.rid, texture->native_disposal_serial, texture->driver_id.id)) {
+		return ERR_INVALID_DATA;
+	}
+	if (texture->owner.is_valid() || texture->shared_fallback || texture->transfer_worker_index >= 0 || texture->format != DATA_FORMAT_D32_SFLOAT ||
+			texture->type != TEXTURE_TYPE_2D || texture->depth != 1 || texture->layers != 1 || texture->mipmaps != 1 || texture->samples != TEXTURE_SAMPLES_1 || texture->usage_flags != (TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) {
+		return ERR_UNAVAILABLE;
+	}
+	if (p_framebuffer.cell.is_valid()) {
+		NativeDisposalWitness::Report framebuffer_report;
+		const Error framebuffer_observed = _native_disposal_observe(p_framebuffer, framebuffer_report);
+		if (framebuffer_observed != OK) {
+			return framebuffer_observed;
+		}
+		const RID framebuffer_rid = RID::from_uint64(framebuffer_report.rid);
+		const Framebuffer *fb = framebuffer_owner.owns(framebuffer_rid) ? framebuffer_owner.get_or_null(framebuffer_rid) : nullptr;
+		if (!fb || framebuffer_report.state != NativeDisposalWitness::State::LIVE || fb->native_disposal.cell != p_framebuffer.cell ||
+				!p_framebuffer.cell->matches(framebuffer_report.rid, fb->native_disposal_serial, fb->native_disposal_backing) ||
+				!fb->framebuffer_cache || uint64_t(uintptr_t(fb->framebuffer_cache)) != fb->native_disposal_backing ||
+				fb->texture_ids.size() != 1 || fb->texture_ids[0] != depth_rid || fb->framebuffer_cache->textures.size() != 1 || fb->framebuffer_cache->textures[0] != texture->driver_id) {
+			return ERR_INVALID_DATA;
+		}
+	}
+	if (!driver) {
+		return ERR_UNAVAILABLE;
+	}
+	NativeDepthAllocationProjection projection;
+	projection.device = uint64_t(get_instance_id());
+	projection.depth = p_depth;
+	projection.framebuffer = p_framebuffer;
+	// This standalone original texture has no shared/view backing. The driver
+	// exposes its allocation only, never opaque driver or framebuffer overhead.
+	const uint64_t actual = driver->texture_get_allocation_size(texture->driver_id);
+	if (actual) {
+		projection.depth_driver_backing = { NativeDepthAllocationProjection::ByteKnowledge::Known, actual };
+	}
+	r_projection = projection;
+	return OK;
+}
+
+Error RenderingDevice::_native_disposal_depth_allocation_observe(const NativeDepthAllocationProjection &p_projection, NativeDepthAllocationProjection::Report &r_report) const {
+	r_report = {};
+	if (!is_main_instance || render_thread_id != Thread::get_caller_id() || !p_projection.device || p_projection.device != uint64_t(get_instance_id())) {
+		return ERR_UNAUTHORIZED;
+	}
+	r_report.depth_driver_backing = p_projection.depth_driver_backing;
+	r_report.framebuffer_created = p_projection.framebuffer.cell.is_valid();
+	const Error depth_error = _native_disposal_observe(p_projection.depth, r_report.depth);
+	Error framebuffer_error = OK;
+	if (r_report.framebuffer_created) {
+		framebuffer_error = _native_disposal_observe(p_projection.framebuffer, r_report.framebuffer);
+		r_report.shared_attachment_depth = r_report.depth;
+	}
+	r_report.all_created_children_returned = depth_error == OK && framebuffer_error == OK &&
+			r_report.depth.state == NativeDisposalWitness::State::RETURNED &&
+			(!r_report.framebuffer_created || r_report.framebuffer.state == NativeDisposalWitness::State::RETURNED);
+	return depth_error != OK ? depth_error : framebuffer_error;
+}
+
 Error RenderingDevice::_native_disposal_maintenance() {
 	if (native_disposal_active) {
 		const NativeDisposalBudget budget{ UINT32_MAX, UINT32_MAX, UINT64_MAX };

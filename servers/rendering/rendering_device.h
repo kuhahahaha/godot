@@ -32,6 +32,7 @@
 
 #include "core/extension/gdextension_qualification_physical.h"
 #include "core/extension/gdextension_record_source.h"
+#include "servers/rendering/native_depth_allocation_projection.h"
 #include "servers/rendering/native_disposal_witness.h"
 
 #ifdef TESTS_ENABLED
@@ -1694,6 +1695,15 @@ private:
 	Error _native_disposal_uniform_set_create(const VectorView<Uniform> &p_uniforms, RID p_shader, uint32_t p_set, RID &r_rid, NativeDisposalWitness &r_witness, const GDExtensionDeviceExit::ProductionRequest *p_owner = nullptr, uint64_t p_group = 0, uint64_t p_root = 0, uint32_t p_ordinal = UINT32_MAX);
 	Error _native_disposal_free(const NativeDisposalWitness &p_witness);
 	Error _native_disposal_observe(const NativeDisposalWitness &p_witness, NativeDisposalWitness::Report &r_report) const;
+	// Live capture snapshots actual original driver bytes; later observation
+	// follows retained witnesses across RID invalidation and physical return.
+	Error _native_disposal_depth_allocation_quote(uint32_t p_width, uint32_t p_height, NativeDepthAllocationQuote &r_quote) const;
+	Error _native_disposal_depth_allocation_quote_observe(const NativeDepthAllocationQuote &p_quote, NativeDepthAllocationQuote::Report &r_report) const;
+	// Failed actual verification preserves created RID/witness and projection;
+	// the original owner must retire that prefix before its reservation returns.
+	Error _native_disposal_depth_texture_create_quoted(const NativeDepthAllocationQuote &p_quote, RID &r_rid, NativeDisposalWitness &r_witness, NativeDepthAllocationProjection &r_projection, NativeDepthAllocationQuote::CreateOutcome &r_outcome);
+	Error _native_disposal_depth_allocation_capture(const NativeDisposalWitness &p_depth, const NativeDisposalWitness &p_framebuffer, NativeDepthAllocationProjection &r_projection);
+	Error _native_disposal_depth_allocation_observe(const NativeDepthAllocationProjection &p_projection, NativeDepthAllocationProjection::Report &r_report) const;
 	Error _native_disposal_maintenance();
 	struct NativeDisposalBudget {
 		uint32_t receipts = 0;

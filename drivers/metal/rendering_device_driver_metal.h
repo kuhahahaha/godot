@@ -273,6 +273,7 @@ public:
 private:
 	// Returns true if the texture is a valid linear format.
 	bool is_valid_linear(const TextureFormat &p_format) const;
+	NS::SharedPtr<MTL::TextureDescriptor> _depth_allocation_descriptor(uint32_t p_width, uint32_t p_height) const;
 
 public:
 	struct TextureInfo : MetalTexture {
@@ -286,6 +287,7 @@ public:
 		bool imported = false;
 	};
 
+	Error depth_allocation_quote(uint32_t p_width, uint32_t p_height, DepthAllocationQuote &r_quote) override final;
 	virtual TextureID texture_create(const TextureFormat &p_format, const TextureView &p_view) override final;
 	virtual TextureID texture_create_from_extension(uint64_t p_native_texture, TextureType p_type, DataFormat p_format, uint32_t p_array_layers, bool p_depth_stencil, uint32_t p_mipmaps) override final;
 	virtual TextureID texture_create_shared(TextureID p_original_texture, const TextureView &p_view) override final;

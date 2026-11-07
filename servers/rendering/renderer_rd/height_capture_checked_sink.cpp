@@ -30,6 +30,8 @@
 
 #include "height_capture_checked_sink.h"
 
+#include "servers/rendering/renderer_rd/storage_rd/height_frame_resources.h"
+
 namespace RendererRD {
 
 HeightCaptureCheckedSink::HeightCaptureCheckedSink(RenderingDevice &p_rd, uint32_t p_native_capacity, uint32_t p_transfer_capacity) :
@@ -37,6 +39,30 @@ HeightCaptureCheckedSink::HeightCaptureCheckedSink(RenderingDevice &p_rd, uint32
 	business.resize(p_native_capacity);
 	transfers.resize(p_transfer_capacity);
 	cleanup.operation = Operation::End;
+}
+
+HeightCaptureCheckedSink::~HeightCaptureCheckedSink() = default;
+
+Error HeightCaptureCheckedSink::begin_quoted_target(const Ref<ParticlesStorage::HeightFrameResources> &p_resources, uint32_t p_draw_flags, VectorView<Color> p_clear_colors, float p_clear_depth, uint32_t p_clear_stencil, const Rect2 &p_region, uint32_t p_breadcrumb) {
+	if (begin_attempted || quoted_resources.is_valid() || p_resources.is_null()) {
+		return fail(ERR_INVALID_PARAMETER);
+	}
+	if (&p_resources->device != &rd || !p_resources->is_quoted_verified()) {
+		return fail(ERR_UNAUTHORIZED);
+	}
+	// Original witness observation also enforces the original main RD/RT.
+	ParticlesStorage::HeightFrameResources::Observation observation;
+	const Error observed = p_resources->observe(observation);
+	if (observed != OK) {
+		return fail(observed);
+	}
+	if (observation.depth.state != NativeDisposalWitness::State::LIVE || observation.framebuffer.state != NativeDisposalWitness::State::LIVE) {
+		return fail(ERR_INVALID_DATA);
+	}
+	// Retained across checked failures and finish; the original prefix/frame
+	// owner must outlive actual producer/reader last-use before dropping it.
+	quoted_resources = p_resources;
+	return begin(p_resources->get_framebuffer(), p_draw_flags, p_clear_colors, p_clear_depth, p_clear_stencil, p_region, p_breadcrumb);
 }
 
 Error HeightCaptureCheckedSink::fail(Error p_error) {

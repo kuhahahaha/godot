@@ -32,12 +32,13 @@
 #define HEIGHT_CAPTURE_CHECKED_SINK_H
 
 #include "servers/rendering/rendering_device.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 
 namespace RendererRD {
 
 // Bounded storage for the original checked RD results. This is not an operation
 // issuer, completion proof, source-membership proof, or a published HeightFrame.
-// It neither retains resources nor manufactures owner resource receipts.
+// Quoted targets retain their original owner; this issues no resource receipt.
 // The caller must explicitly finish/unwind before releasing this object and must
 // retain resources through the original native owner's retirement/close proof.
 class HeightCaptureCheckedSink {
@@ -74,6 +75,7 @@ public:
 
 private:
 	RenderingDevice &rd;
+	Ref<ParticlesStorage::HeightFrameResources> quoted_resources;
 	LocalVector<NativeRecord> business;
 	LocalVector<Transfer> transfers;
 	uint32_t business_count = 0;
@@ -99,10 +101,11 @@ public:
 	// Capacities are caller-provided finite working storage, not budget grants.
 	// A separate cleanup slot is reserved here even when business storage fills.
 	HeightCaptureCheckedSink(RenderingDevice &p_rd, uint32_t p_native_capacity, uint32_t p_transfer_capacity);
-	~HeightCaptureCheckedSink() = default; // Never secretly end a list or free RIDs.
+	~HeightCaptureCheckedSink(); // Never secretly end a list or free RIDs.
 	HeightCaptureCheckedSink(const HeightCaptureCheckedSink &) = delete;
 	HeightCaptureCheckedSink &operator=(const HeightCaptureCheckedSink &) = delete;
 
+	Error begin_quoted_target(const Ref<ParticlesStorage::HeightFrameResources> &p_resources, uint32_t p_draw_flags, VectorView<Color> p_clear_colors = {}, float p_clear_depth = 0.0f, uint32_t p_clear_stencil = 0, const Rect2 &p_region = Rect2(), uint32_t p_breadcrumb = 0);
 	Error begin(RID p_framebuffer, uint32_t p_draw_flags, VectorView<Color> p_clear_colors = {}, float p_clear_depth = 0.0f, uint32_t p_clear_stencil = 0, const Rect2 &p_region = Rect2(), uint32_t p_breadcrumb = 0);
 	Error bind_uniform_set(RID p_uniform_set, uint32_t p_index);
 	Error bind_vertex_array(RID p_vertex_array);

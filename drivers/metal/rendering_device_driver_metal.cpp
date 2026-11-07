@@ -503,6 +503,43 @@ bool RenderingDeviceDriverMetal::is_valid_linear(const TextureFormat &p_format) 
 			&& p_format.samples == TEXTURE_SAMPLES_1; // Linear textures must have 1 sample.
 }
 
+NS::SharedPtr<MTL::TextureDescriptor> RenderingDeviceDriverMetal::_depth_allocation_descriptor(uint32_t p_width, uint32_t p_height) const {
+	NS::SharedPtr<MTL::TextureDescriptor> desc = NS::TransferPtr(MTL::TextureDescriptor::alloc()->init());
+	desc->setTextureType(MTL::TextureType2D);
+	desc->setPixelFormat((MTL::PixelFormat)pixel_formats->getMTLPixelFormat(DATA_FORMAT_D32_SFLOAT));
+	desc->setWidth(p_width);
+	desc->setHeight(p_height);
+	desc->setDepth(1);
+	desc->setMipmapLevelCount(1);
+	desc->setResourceOptions(base_hazard_tracking | MTL::ResourceCPUCacheModeDefaultCache | MTL::ResourceStorageModePrivate);
+	desc->setUsage(MTL::TextureUsageShaderRead | MTL::TextureUsageRenderTarget);
+	return desc;
+}
+
+Error RenderingDeviceDriverMetal::depth_allocation_quote(uint32_t p_width, uint32_t p_height, DepthAllocationQuote &r_quote) {
+	r_quote = {};
+	// Match the original RD texture-create limit before descriptor construction
+	// or a native size query; oversized descriptors are not native probes.
+	const uint64_t max_size = limit_get(LIMIT_MAX_TEXTURE_SIZE_2D);
+	if (!p_width || !p_height || p_width > max_size || p_height > max_size) {
+		return ERR_INVALID_PARAMETER;
+	}
+	if (!allocator || !pixel_formats ||
+			!flags::any(pixel_formats->getCapabilities((MTL::PixelFormat)pixel_formats->getMTLPixelFormat(DATA_FORMAT_D32_SFLOAT)), kMTLFmtCapsDSAtt)) {
+		return ERR_UNAVAILABLE;
+	}
+	const auto desc = _depth_allocation_descriptor(p_width, p_height);
+	MetalAllocator::TextureAllocationQuote quote;
+	if (!allocator->texture_allocation_quote(desc.get(), quote)) {
+		return ERR_UNAVAILABLE;
+	}
+	r_quote.policy = quote.dedicated ? DepthAllocationQuote::Policy::MetalHeapDedicated : DepthAllocationQuote::Policy::MetalHeapPool;
+	r_quote.native_requirement = quote.native_requirement;
+	r_quote.owner_reservation = quote.owner_reservation;
+	r_quote.alignment = quote.alignment;
+	return OK;
+}
+
 RDD::TextureID RenderingDeviceDriverMetal::texture_create(const TextureFormat &p_format, const TextureView &p_view) {
 	NS::SharedPtr<MTL::TextureDescriptor> desc = NS::TransferPtr(MTL::TextureDescriptor::alloc()->init());
 	desc->setTextureType(TEXTURE_TYPE[p_format.texture_type]);
@@ -656,6 +693,14 @@ RDD::TextureID RenderingDeviceDriverMetal::texture_create(const TextureFormat &p
 	}
 
 	desc->setUsage(usage);
+
+	// Quote and actual creation use the same original standalone D32 recipe.
+	// All other descriptors retain the general construction above.
+	if (p_format.texture_type == TEXTURE_TYPE_2D && p_format.format == DATA_FORMAT_D32_SFLOAT &&
+			p_format.depth == 1 && p_format.array_layers == 1 && p_format.mipmaps == 1 && p_format.samples == TEXTURE_SAMPLES_1 &&
+			p_format.usage_bits == (TEXTURE_USAGE_SAMPLING_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) && p_format.shareable_formats.is_empty() && no_swizzle && can_be_attachment) {
+		desc = _depth_allocation_descriptor(p_format.width, p_format.height);
+	}
 
 	// Allocate memory.
 
