@@ -11661,6 +11661,8 @@ struct Access {
 		Error record_error = ERR_UNAVAILABLE;
 		bool root_returned = false;
 		bool phase_mode = false;
+		bool viewport_mode = false;
+		RID viewport_scenario, viewport_receiver, viewport_source, viewport_collision;
 		Callable phase_callable;
 		GDExtensionScenePhaseRegistrationRefV1 phase_registration{};
 		GDExtensionProductionRequestRefV1 waiting_request{};
@@ -11700,7 +11702,10 @@ struct Access {
 						original->control.state == ProductionControlState::EXECUTING && operation->owner_request_nonce == original->operation.owner_request_nonce);
 			}
 			self.record_error = self.native->install_generation(self.phase_context, request, self.enrollment.registry);
-			if (self.record_error == OK) self.exercise_scene();
+			if (self.record_error == OK) {
+				if (self.viewport_mode) self.exercise_viewport_receiver();
+				else self.exercise_scene();
+			}
 		}
 		Error install_phase() {
 			using namespace GDExtensionDeviceExit;
@@ -11822,6 +11827,39 @@ struct Access {
 			ref = { enrollment.instance, enrollment.request->serial };
 			return schedule(GDExtensionDeviceExit::ProductionControlKind::RECORD);
 		}
+		void exercise_viewport_receiver() {
+			auto *scene = RendererSceneCull::singleton;
+			auto *storage = RendererRD::ParticlesStorage::get_singleton();
+			viewport_collision = storage->particles_collision_allocate();
+			storage->particles_collision_initialize(viewport_collision);
+			storage->particles_collision_set_collision_type(viewport_collision, RSE::PARTICLES_COLLISION_TYPE_SPHERE_COLLIDE);
+			storage->particles_collision_set_sphere_radius(viewport_collision, 0.1f);
+			viewport_receiver = scene->instance_allocate();scene->instance_initialize(viewport_receiver);
+			scene->instance_set_base(viewport_receiver, native->particle_rid());
+			scene->instance_set_scenario(viewport_receiver, viewport_scenario);
+			viewport_source = scene->instance_allocate();scene->instance_initialize(viewport_source);
+			scene->instance_set_base(viewport_source, viewport_collision);
+			scene->instance_set_scenario(viewport_source, viewport_scenario);
+			const AABB query(Vector3(-1, -1, -1), Vector3(2, 2, 2));
+			check("viewport_receiver_query_committed", scene->scene_receiver_commit_query(viewport_receiver, native->generation, device, Transform3D(), query, query, 1) == OK);
+			scene->update_dirty_instances();
+			RendererSceneCull::SceneSphereSnapshot snapshot;
+			check("viewport_receiver_snapshot", scene->scene_sphere_snapshot(viewport_receiver, native->generation, device, 4, snapshot) == OK && snapshot.sources.size() == 1);
+			check("viewport_original_root_live", !native->generation_pin().is_empty());
+		}
+		void finish_viewport_observation() {
+			CRASH_COND(!viewport_mode || stage != 4);
+			auto *scene = RendererSceneCull::singleton;
+			check("viewport_receiver_retained_until_observation", viewport_receiver.is_valid() && !native->generation_pin().is_empty());
+			scene->free(viewport_source);viewport_source = RID();
+			scene->free(viewport_receiver);viewport_receiver = RID();
+			RendererRD::ParticlesStorage::get_singleton()->particles_collision_free(viewport_collision);viewport_collision = RID();
+			// The script has completed actual viewport readback. Resume the same
+			// original no-future-draw mailbox/holder/owner close sequence.
+			RenderingServer::get_singleton()->set_render_loop_enabled(false);
+			CRASH_COND(enrollment.registry.production_record_schedule(waiting_request, &waiting_control) != OK);
+			stage = 3;
+		}
 		void exercise_scene() {
 			auto *scene = RendererSceneCull::singleton;
 			auto *storage = RendererRD::ParticlesStorage::get_singleton();
@@ -11897,6 +11935,7 @@ struct Access {
 		// Empty dictionary means the original queued control has not returned yet.
 		Dictionary advance() {
 			using namespace GDExtensionDeviceExit;
+			if (stage == 4) return {}; // Retain the receiver during actual viewport observations.
 			if (stage == 3) return advance_phase_close();
 			ProductionControlOutput output{};
 			const Error consumed = enrollment.registry.production_control_consume(ref, control, &output);
@@ -11904,6 +11943,7 @@ struct Access {
 			CRASH_COND(consumed != OK); // Preserve real custody on unexpected issuer failure.
 			if (stage == 0) {
 				check("managed_original_record", output.result.native_error == OK && record_error == OK && !native->generation_pin().is_empty());
+				if (viewport_mode) { stage = 4;return {}; }
 				if (phase_mode) {
 					// The one positive delivery came from actual draw. Future waiting
 					// refusal and holder teardown must no longer depend on a draw.
@@ -11942,6 +11982,20 @@ void *managed_scene_begin(bool phase_mode) {
 	const Error error = harness->begin(phase_mode);
 	CRASH_COND_MSG(error != OK, "Managed Scene original test enrollment failed: " + itos(error));
 	return harness;
+}
+void *managed_scene_begin_viewport(RID scenario) {
+	auto *harness = memnew(Access::ManagedSceneHarness);
+	harness->viewport_mode = true;
+	harness->viewport_scenario = scenario; // Borrowed from the live SubViewport world.
+	const Error error = harness->begin(true);
+	CRASH_COND_MSG(error != OK, "Viewport managed Scene enrollment failed: " + itos(error));
+	return harness;
+}
+bool managed_scene_viewport_ready(void *opaque) {
+	return static_cast<Access::ManagedSceneHarness *>(opaque)->stage == 4;
+}
+void managed_scene_finish_viewport(void *opaque) {
+	static_cast<Access::ManagedSceneHarness *>(opaque)->finish_viewport_observation();
 }
 Dictionary managed_scene_advance(void *opaque) {
 	auto *harness = static_cast<Access::ManagedSceneHarness *>(opaque);

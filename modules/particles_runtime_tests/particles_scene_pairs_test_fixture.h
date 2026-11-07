@@ -8,11 +8,14 @@ class ParticlesScenePairsTestFixture : public RefCounted {
 	Dictionary result_data;
 	void *managed_scene = nullptr;
 	bool phase_mode = false;
+	bool viewport_mode = false;
 protected:
 	static void _bind_methods();
 public:
 	void run();
 	void run_phase();
+	void run_viewport_invariance(RID p_scenario);
+	void finish_viewport_observation();
 	void advance();
 	Dictionary result() const;
 };
