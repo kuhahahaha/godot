@@ -81,7 +81,7 @@ void Registry::production_output_metadata_move(ProductionOutputMetadataLease &ou
 }
 
 Error Registry::production_output_metadata_create(ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref,
-		uint32_t slot, RenderingDevice &expected, uint64_t bytes, uint32_t alignment, ProductionOutputMetadataLease &out) {
+		uint32_t slot, RenderingDevice &expected, uint64_t bytes, uint32_t alignment, ProductionOutputMetadataLease &out, bool p_exact_bytes) {
 	MutexLock lock(mutex);
 	if (!out.is_empty()) {
 		return ERR_ALREADY_IN_USE;
@@ -108,7 +108,7 @@ Error Registry::production_output_metadata_create(ProductionPhysicalContextRef c
 			declaration.ownership != GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1 || declaration.required_usage) {
 		return ERR_INVALID_DATA;
 	}
-	if (bytes > declaration.physical_bytes || declaration.physical_bytes > UINT32_MAX) {
+	if ((p_exact_bytes && bytes != declaration.physical_bytes) || bytes > declaration.physical_bytes || declaration.physical_bytes > UINT32_MAX) {
 		return ERR_PARAMETER_RANGE_ERROR;
 	}
 	if (resource.metadata_created) {

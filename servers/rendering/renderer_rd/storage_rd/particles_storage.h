@@ -95,6 +95,7 @@ private:
 	static Error _production_output_service(GDExtensionDeviceExit::ProductionOutputOwnerKind p_kind, RID p_particles, uint64_t p_generation, uint32_t p_slot, uint64_t p_lease_serial, GDExtensionDeviceExit::ProductionOutputPin &p_pin, const GDExtensionProductionServiceBudgetV1 &p_budget, GDExtensionDeviceExit::ProductionServiceUsage &r_usage);
 	static Error _external_typed_context(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, bool);
 	uint64_t next_external_generation = 1;
+	static bool _external_decode_create(const GDExtensionOutputCreateInputV1 &, ExternalOutputConfig &, uint32_t &, GDExtensionOutputCreateResultV1 &);
 	void _external_create_typed(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionOutputCreateInputV1 &, uint32_t, uint32_t, uint32_t, uint32_t, GDExtensionOutputCreateResultV1 &);
 	void _external_create_received(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const ExternalOutputConfig &, GDExtensionDeviceExit::ProductionOutputMetadataLease &, uint32_t, uint32_t, uint32_t, GDExtensionOutputCreateResultV1 &);
 	GDExtensionOutputStatusV1 _external_seal_body(RID, const uint8_t *, const GDExtensionOutputCommonInputV1 &, const uint8_t *);
@@ -538,6 +539,8 @@ public:
 	Error _external_storage_prepare_owned_prefix(GDExtensionProductionPhysicalContextRefV1, RID, uint32_t);
 	Error _external_pipeline_prepare_owned_prefix(GDExtensionProductionPhysicalContextRefV1, RID, uint32_t, uint32_t, ExternalPipelinePreparation &);
 	void particles_external_create_typed(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionOutputCreateInputV1 &, GDExtensionOutputCreateResultV1 &);
+	void particles_external_metadata_query(const GDExtensionOutputMetadataQueryInputV1 &, GDExtensionOutputMetadataQueryResultV1 &);
+	void particles_external_create_typed_v3(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionOutputCreateInputV3 &, GDExtensionOutputCreateResultV1 &);
 	void particles_external_create_typed_v2(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionOutputCreateInputV1 &, uint32_t, GDExtensionOutputCreateResultV1 &);
 	static uint64_t particles_external_scene_metadata_bytes();
 	void particles_external_seal_typed(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionOutputSealInputV1 &, GDExtensionOutputSealResultV1 &);

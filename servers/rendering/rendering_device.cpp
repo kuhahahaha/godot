@@ -15064,7 +15064,8 @@ void output_interface_failure(T &r_result, Error p_error, const char *p_detail, 
 	r_result.abi = { 1, sizeof(T), 0 };
 	r_result.status = { int32_t(p_error), p_length, p_detail };
 }
-bool output_create_spans(const OutputMemoryRange &p_input, const OutputMemoryRange &p_output, const GDExtensionOutputCreateInputV1 &p_config, GDExtensionOutputCreateResultV1 &r_result) {
+template <typename T>
+bool output_create_spans(const OutputMemoryRange &p_input, const OutputMemoryRange &p_output, const GDExtensionOutputCreateInputV1 &p_config, T &r_result) {
 	OutputMemoryRange surfaces, materials;
 	if (!output_range(p_config.surfaces.data, p_config.surfaces.count, sizeof(uint64_t), alignof(uint64_t), surfaces) ||
 			!output_range(p_config.surface_materials.data, p_config.surface_materials.count, sizeof(uint64_t), alignof(uint64_t), materials)) {
@@ -15103,6 +15104,36 @@ void device_session_output_create_v1(GDExtensionProductionPhysicalContextRefV1 p
 		return;
 	}
 	storage->particles_external_create_typed(p_context, p_request, *p_input, *r_result);
+}
+void device_session_output_metadata_query_v1(const GDExtensionOutputMetadataQueryInputV1 *p_input, GDExtensionOutputMetadataQueryResultV1 *r_result) {
+	OutputMemoryRange input, output;
+	if (!output_object(r_result, output) || !output_object(p_input, input) || output_overlaps(input, output)) {
+		return;
+	}
+	if (!output_create_spans(input, output, p_input->config, *r_result)) {
+		return;
+	}
+	auto *storage = RendererRD::ParticlesStorage::get_singleton();
+	if (!storage) {
+		output_interface_failure(*r_result, ERR_UNAVAILABLE, "renderer_unavailable", 20);
+		return;
+	}
+	storage->particles_external_metadata_query(*p_input, *r_result);
+}
+void device_session_output_create_v3(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputCreateInputV3 *p_input, GDExtensionOutputCreateResultV1 *r_result) {
+	OutputMemoryRange input, output;
+	if (!output_object(r_result, output) || !output_object(p_input, input) || output_overlaps(input, output)) {
+		return;
+	}
+	if (!output_create_spans(input, output, p_input->config, *r_result)) {
+		return;
+	}
+	auto *storage = RendererRD::ParticlesStorage::get_singleton();
+	if (!storage) {
+		output_interface_failure(*r_result, ERR_UNAVAILABLE, "renderer_unavailable", 20);
+		return;
+	}
+	storage->particles_external_create_typed_v3(p_context, p_request, *p_input, *r_result);
 }
 void device_session_output_create_v2(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputCreateInputV2 *p_input, GDExtensionOutputCreateResultV1 *r_result) {
 	OutputMemoryRange input, output;

@@ -9394,6 +9394,136 @@
             ]
         },
         {
+            "name": "GDExtensionOutputMetadataLimitsV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "view_lease_capacity",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "read_lease_capacity",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "surface_lease_capacity",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputMetadataRequirementsV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "required_metadata_bytes",
+                    "type": "uint64_t"
+                },
+                {
+                    "name": "layout_version",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "required_alignment",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "slot_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "flattened_surface_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "binding_count",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "limits",
+                    "type": "GDExtensionOutputMetadataLimitsV1"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputMetadataQueryInputV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "config",
+                    "type": "GDExtensionOutputCreateInputV1"
+                },
+                {
+                    "name": "limits",
+                    "type": "GDExtensionOutputMetadataLimitsV1"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputMetadataQueryResultV1",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "status",
+                    "type": "GDExtensionOutputStatusV1"
+                },
+                {
+                    "name": "requirements",
+                    "type": "GDExtensionOutputMetadataRequirementsV1"
+                }
+            ]
+        },
+        {
+            "name": "GDExtensionOutputCreateInputV3",
+            "kind": "struct",
+            "members": [
+                {
+                    "name": "abi",
+                    "type": "GDExtensionDeviceExitAbi"
+                },
+                {
+                    "name": "config",
+                    "type": "GDExtensionOutputCreateInputV1"
+                },
+                {
+                    "name": "requirements",
+                    "type": "GDExtensionOutputMetadataRequirementsV1"
+                },
+                {
+                    "name": "metadata_resource_slot",
+                    "type": "uint32_t"
+                },
+                {
+                    "name": "reserved",
+                    "type": "uint32_t"
+                }
+            ]
+        },
+        {
             "name": "GDExtensionOutputWritableV1",
             "kind": "struct",
             "members": [
@@ -21586,6 +21716,66 @@
                     "type": "GDExtensionOutputPollResultV1*",
                     "description": [
                         "Aligned writable result, left untouched when either DTO extent is invalid or overlaps the other."
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "device_session_output_create_v3",
+            "since": "4.7",
+            "description": [
+                "Exact version-3 Create transport. Recomputes versioned native metadata requirements and requires exact accepted metadata bytes before allocation. V2 is unchanged. Query grants no account, source, selection, or physical custody. Currently SceneOnly with all consumer limits zero; render profiles remain unavailable."
+            ],
+            "arguments": [
+                {
+                    "name": "physical_context",
+                    "type": "GDExtensionProductionPhysicalContextRefV1",
+                    "description": [
+                        "Actual synchronous protected RECORD callback context; expires when that callback returns."
+                    ]
+                },
+                {
+                    "name": "request",
+                    "type": "GDExtensionProductionRequestRefV1",
+                    "description": [
+                        "The original accepted request owning the metadata resource row and generation custody."
+                    ]
+                },
+                {
+                    "name": "input",
+                    "type": "const GDExtensionOutputCreateInputV3*",
+                    "description": [
+                        "Exact ABI3 configuration, complete native requirements projection including explicit finite limits, and original metadata resource slot. Create recomputes requirements before allocation."
+                    ]
+                },
+                {
+                    "name": "out_result",
+                    "type": "GDExtensionOutputCreateResultV1*",
+                    "description": [
+                        "Unchanged V1 result. If either DTO extent or a nonempty RID span is null, misaligned, overflowing or overlaps the output, the result is untouched. Other checked contract failures write CONTRACT with no new RID or generation."
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "device_session_output_metadata_query_v1",
+            "since": "4.7",
+            "description": [
+                "Read-only native requirements on the actual main render thread. No production context is needed and none is issued. No native factory, selection lease, account credit or stable quote handle is created. Caller must provide disjoint readable input spans and writable output. Create recomputes all requirements. Currently SceneOnly with explicit zero consumer limits only."
+            ],
+            "arguments": [
+                {
+                    "name": "input",
+                    "type": "const GDExtensionOutputMetadataQueryInputV1*",
+                    "description": [
+                        "Borrowed exact V1 configuration and explicit finite consumer limits. Query performs no allocation, pin, or selection retention."
+                    ]
+                },
+                {
+                    "name": "out_result",
+                    "type": "GDExtensionOutputMetadataQueryResultV1*",
+                    "description": [
+                        "Versioned native requirements and status only, with no RID, generation, resource slot or authorization. Invalid or overlapping pointer extents leave output untouched; checked contract errors return status."
                     ]
                 }
             ]

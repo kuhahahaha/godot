@@ -938,8 +938,7 @@ struct Access {
 		GDExtensionProductionMetadataQuoteV1 observed = {};
 		GDExtensionProductionAttachmentRefV1 attachment = {};
 		GDExtensionProductionInstallationReportV1 report = {};
-		const auto result = p_accept ? registry.production_accept(&Enrollment::ABI, { instance, 5 }, { instance, 9 }, { instance, 6 }, { instance, 7 }, { instance, 3 }, &baseline, &attachment, &report) :
-				registry.production_quote(&Enrollment::ABI, { instance, 5 }, { instance, 9 }, { instance, 6 }, { instance, 7 }, &capacity, &observed);
+		const auto result = p_accept ? registry.production_accept(&Enrollment::ABI, { instance, 5 }, { instance, 9 }, { instance, 6 }, { instance, 7 }, { instance, 3 }, &baseline, &attachment, &report) : registry.production_quote(&Enrollment::ABI, { instance, 5 }, { instance, 9 }, { instance, 6 }, { instance, 7 }, &capacity, &observed);
 		{
 			std::lock_guard<std::mutex> lock(contention.mutex);
 			contention.returned = true;
@@ -5037,7 +5036,8 @@ struct Access {
 		GDExtensionOutputCreateResultV1 created{};
 		GDExtensionDeviceExit::ProductionOutputMetadataLease unrelated;
 		GDExtensionDeviceExit::ProductionOutputPin unrelated_pin;
-		bool extra_metadata = false, bound_unlinked = false;
+		bool extra_metadata = false, bound_unlinked = false, use_v3 = false;
+		int metadata_delta = 0;
 		uint32_t calls = 0;
 		~SceneMetadataProbe() {
 			if (!unrelated_pin.is_empty()) {
@@ -5063,7 +5063,65 @@ struct Access {
 				input.config.bounds.size[axis] = input.config.query_bounds.size[axis] = 1;
 			}
 			input.metadata_resource_slot = 0;
-			probe.create(context, ref, &input, &probe.created);
+			if (probe.use_v3) {
+				auto query = reinterpret_cast<GDExtensionInterfaceDeviceSessionOutputMetadataQueryV1>(gdextension_get_guarded_proc_address("device_session_output_metadata_query_v1"));
+				auto create = reinterpret_cast<GDExtensionInterfaceDeviceSessionOutputCreateV3>(gdextension_get_guarded_proc_address("device_session_output_create_v3"));
+				REQUIRE(query != nullptr);
+				REQUIRE(create != nullptr);
+				GDExtensionOutputMetadataQueryInputV1 q{};
+				q.abi = production_dto_abi<GDExtensionOutputMetadataQueryInputV1>();
+				q.config = input.config;
+				q.limits.abi = production_dto_abi<GDExtensionOutputMetadataLimitsV1>();
+				GDExtensionOutputMetadataQueryResultV1 quote{};
+				const uint64_t revision = fixture.request->revision;
+				q.abi.abi_version = 2;
+				query(&q, &quote);
+				CHECK(quote.status.error == ERR_INVALID_PARAMETER);
+				q.abi.abi_version = 1;
+				q.limits.read_lease_capacity = UINT32_MAX;
+				query(&q, &quote);
+				CHECK(quote.status.error == ERR_INVALID_PARAMETER);
+				q.limits.read_lease_capacity = 0;
+				query(&q, &quote);
+				REQUIRE(quote.status.error == OK);
+				CHECK(quote.requirements.required_metadata_bytes == RendererRD::ParticlesStorage::particles_external_scene_metadata_bytes());
+				CHECK(quote.requirements.binding_count == 0);
+				CHECK(quote.requirements.flattened_surface_count == 0);
+				CHECK(fixture.request->revision == revision); // Query cannot allocate or pin.
+				GDExtensionOutputCreateInputV3 v3{};
+				v3.abi = { 3, sizeof(v3), 0 };
+				v3.config = input.config;
+				v3.requirements = quote.requirements;
+				v3.metadata_resource_slot = 0;
+				create({}, {}, &v3, &probe.created);
+				CHECK(probe.created.status.error != OK);
+				CHECK(probe.created.particles == 0);
+				CHECK(fixture.request->revision == revision);
+				v3.requirements.required_metadata_bytes = UINT64_MAX;
+				create(context, ref, &v3, &probe.created);
+				CHECK(probe.created.status.error == ERR_INVALID_PARAMETER);
+				CHECK(fixture.request->revision == revision);
+				v3.requirements = quote.requirements;
+				v3.requirements.layout_version++;
+				create(context, ref, &v3, &probe.created);
+				CHECK(probe.created.status.error == ERR_INVALID_PARAMETER);
+				CHECK(fixture.request->revision == revision);
+				v3.requirements = quote.requirements;
+				create(context, ref, &v3, &probe.created);
+				if (probe.metadata_delta) {
+					CHECK(probe.created.status.error == ERR_PARAMETER_RANGE_ERROR);
+					CHECK(probe.created.particles == 0);
+					CHECK(probe.created.generation == 0);
+					CHECK(fixture.request->revision == revision);
+					CHECK_FALSE(fixture.request->resources[0].metadata_created);
+					CHECK(fixture.request->resources[0].metadata_data == nullptr);
+					CHECK(fixture.request->output_owner_head == UINT32_MAX);
+					CHECK_FALSE(fixture.request->native_effect_entered);
+					return;
+				}
+			} else {
+				probe.create(context, ref, &input, &probe.created);
+			}
 			REQUIRE(probe.created.status.error == OK);
 			CHECK(probe.created.abi.abi_version == 1);
 			CHECK(probe.created.abi.struct_size == sizeof(probe.created));
@@ -5096,7 +5154,7 @@ struct Access {
 			CHECK(probe.native->withdrawing());
 		}
 	};
-	static void output_scene_metadata(bool extra_metadata, bool bound_unlinked = false) {
+	static void output_scene_metadata(bool extra_metadata, bool bound_unlinked = false, bool use_v3 = false, int metadata_delta = 0) {
 		using namespace GDExtensionDeviceExit;
 		auto *server = ordinal_server();
 		if (!server || !check_step(RendererRD::ParticlesStorage::get_singleton() == nullptr)) {
@@ -5111,7 +5169,7 @@ struct Access {
 		plan.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, metadata_rows, metadata_rows, 0, 0, 0, metadata_rows, 0, 0 };
 		plan.action_count = plan.use_count = plan.readback_count = 0;
 		plan.resource_count = extra_metadata ? 2 : 1;
-		plan.resources[0] = { GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1, 0, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, RendererRD::ParticlesStorage::particles_external_scene_metadata_bytes(), 0 };
+		plan.resources[0] = { GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1, 0, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, uint64_t(int64_t(RendererRD::ParticlesStorage::particles_external_scene_metadata_bytes()) + metadata_delta), 0 };
 		plan.resources[1] = { GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1, 0, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 32, 0 };
 		SingletonEnrollment fixture;
 		fixture.public_port = true;
@@ -5119,6 +5177,8 @@ struct Access {
 		probe.fixture = &fixture;
 		probe.extra_metadata = extra_metadata;
 		probe.bound_unlinked = bound_unlinked;
+		probe.use_v3 = use_v3;
+		probe.metadata_delta = metadata_delta;
 		probe.create = reinterpret_cast<GDExtensionInterfaceDeviceSessionOutputCreateV2>(gdextension_get_guarded_proc_address("device_session_output_create_v2"));
 		probe.withdraw = reinterpret_cast<GDExtensionInterfaceDeviceSessionOutputWithdrawV1>(gdextension_get_guarded_proc_address("device_session_output_withdraw_v1"));
 		REQUIRE(probe.create != nullptr);
@@ -5134,6 +5194,26 @@ struct Access {
 		GDExtensionProductionRecordReportV2 recorded{};
 		REQUIRE(consume(ref, record_control, &recorded).native_error == OK);
 		REQUIRE(probe.calls == 1);
+		if (use_v3 && metadata_delta) {
+			CHECK(recorded.report.physical_returns_pending == 0);
+			CHECK(request.graph_count == 0);
+			CHECK(request.native_count == 0);
+			CHECK_FALSE(native.exists());
+			const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+			for (uint32_t turn = 0; turn < 8 && request.serial; ++turn) {
+				GDExtensionProductionServiceBudgetV1 remaining{};
+				GDExtensionProductionReportV2 report{};
+				const Error error = Error(release(ref, &budget, &remaining, &report).native_error);
+				CHECK((error == OK || error == ERR_BUSY));
+				if (request.serial) {
+					server->sync();
+				}
+			}
+			CHECK(request.serial == 0);
+			fixture.cleanup_owner();
+			CHECK(fixture.owner_cleaned);
+			return;
+		}
 		CHECK(recorded.report.physical_returns_pending == (extra_metadata ? 2u : 1u));
 		CHECK(request.action_count == 0);
 		CHECK(request.graph_count == 0);
@@ -5929,10 +6009,7 @@ struct Access {
 			Error error;
 			if (mutation >= 10) {
 				REQUIRE(fixture.prepare_device(server) == OK);
-				REQUIRE(fixture.initialize_owner(1, false, false,
-						+[](void *, ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const GDExtensionProductionOperationV1 *) {},
-						nullptr, false, 1, false, +[](void *, GDExtensionProductionAttachmentRefV1) {},
-						false, false, false, false, &plan, nullptr, true) == OK);
+				REQUIRE(fixture.initialize_owner(1, false, false, +[](void *, ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const GDExtensionProductionOperationV1 *) {}, nullptr, false, 1, false, +[](void *, GDExtensionProductionAttachmentRefV1) {}, false, false, false, false, &plan, nullptr, true) == OK);
 				const auto &a = plan.actions[0];
 				const GDExtensionProductionActionV1 action = { a.canonical_suboperation, a.action_kind, a.physical_unit, a.first_use, a.use_count, a.list_boundary, a.readback_slot };
 				GDExtensionProductionRequestRefV1 rejected{};
@@ -6097,8 +6174,7 @@ struct Access {
 		REQUIRE(probe.withdraw != nullptr);
 		REQUIRE(probe.append != nullptr);
 		REQUIRE(fixture.prepare_device(server) == OK);
-		REQUIRE(fixture.initialize_owner(1, false, false, &NativeSceneAcquireProbe::receive, &probe, false, 1, false,
-				+[](void *, GDExtensionProductionAttachmentRefV1) {}, false, false, false, false, &pool, nullptr, true) == OK);
+		REQUIRE(fixture.initialize_owner(1, false, false, &NativeSceneAcquireProbe::receive, &probe, false, 1, false, +[](void *, GDExtensionProductionAttachmentRefV1) {}, false, false, false, false, &pool, nullptr, true) == OK);
 		RendererRD::ExternalLinkedOwnerTest native(fixture.rd, true);
 		probe.native = &native;
 		auto operation = pool.operation;
@@ -6170,7 +6246,9 @@ struct Access {
 		REQUIRE(source_buffer->draw_tracker != nullptr);
 		REQUIRE(destination_buffer->draw_tracker != nullptr);
 		CHECK(source_buffer->draw_tracker != destination_buffer->draw_tracker);
-		for (uint32_t i = 0; i < 4; ++i) { fixture.driver.upload_memory[0][i] = uint8_t(17 + i); }
+		for (uint32_t i = 0; i < 4; ++i) {
+			fixture.driver.upload_memory[0][i] = uint8_t(17 + i);
+		}
 		const GDExtensionProductionCopyV2 copy = { production_dto_abi<GDExtensionProductionCopyV2>(), 0, 11, 3, 0, 0, 1, 0, 4, 4 };
 		REQUIRE(prepare_copy(ref, &copy).native_error == OK);
 		probe.input.abi = production_dto_abi<GDExtensionOutputAcquireInputV1>();
@@ -6178,7 +6256,9 @@ struct Access {
 		probe.input.common.generation = probe.created.generation;
 		probe.input.common.present_seq = probe.input.content_version = probe.input.view_epoch = 1;
 		probe.input.common.current_camera = { 1, 1, 1 };
-		for (uint32_t axis = 0; axis < 3; ++axis) { probe.input.common.bounds.size[axis] = 1; }
+		for (uint32_t axis = 0; axis < 3; ++axis) {
+			probe.input.common.bounds.size[axis] = 1;
+		}
 		GDExtensionProductionOutputPrepareV1 prepared{};
 		prepared.abi = production_dto_abi<GDExtensionProductionOutputPrepareV1>();
 		prepared.action_ordinal = 1;
@@ -6190,7 +6270,9 @@ struct Access {
 		prepared.source_generation = 1;
 		prepared.input = probe.input;
 		const uint32_t roles[] = { 1, 2, 7 };
-		for (uint32_t i = 0; i < 3; ++i) { prepared.roles[i] = { roles[i], UINT32_MAX, UINT32_MAX, 0, 0, 0 }; }
+		for (uint32_t i = 0; i < 3; ++i) {
+			prepared.roles[i] = { roles[i], UINT32_MAX, UINT32_MAX, 0, 0, 0 };
+		}
 		auto missing = prepared;
 		missing.source_use_count = 1;
 		CHECK(prepare(ref, &missing).native_error == ERR_INVALID_DATA);
@@ -6271,7 +6353,9 @@ struct Access {
 			CHECK(original->serial == 0);
 		}
 		CHECK(fixture.driver.upload_copies == 1);
-		for (uint32_t i = 0; i < 4; ++i) { CHECK(fixture.driver.upload_memory[1][4 + i] == uint8_t(17 + i)); }
+		for (uint32_t i = 0; i < 4; ++i) {
+			CHECK(fixture.driver.upload_memory[1][4 + i] == uint8_t(17 + i));
+		}
 		CHECK(fixture.driver.output_storage_count == 2);
 		CHECK(fixture.driver.output_storage_frees == 2);
 		fixture.cleanup_owner();
@@ -10487,3 +10571,15 @@ TEST_CASE("[ProductionRequest][QuoteLockOrder] main SceneReady accept survives b
 	TestProductionRequest::Access::quote_lock_contention(true);
 }
 #endif
+
+TEST_CASE("[SceneTree][ProductionRequest][MetadataV3] native SceneOnly requirements recompute before original Create") {
+	TestProductionRequest::Access::output_scene_metadata(false, false, true);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][MetadataV3] exact accepted row size rejects undersize and oversize before effects") {
+	TestProductionRequest::Access::output_scene_metadata(false, false, true, -1);
+	TestProductionRequest::Access::output_scene_metadata(false, false, true, 1);
+}
+TEST_CASE("[SceneTree][ProductionRequest][MetadataV3] V2 preserves larger accepted metadata semantics") {
+	TestProductionRequest::Access::output_scene_metadata(false, false, false, 1);
+}

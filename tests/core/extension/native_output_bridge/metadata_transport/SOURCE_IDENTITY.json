@@ -1,0 +1,49 @@
+{
+  "base": "450d4638c8576cf875064c033c55700f4c344aa3",
+  "files": [
+    {
+      "path": "core/extension/gdextension_external_output_interface.h",
+      "sha256": "df09ab2a125036eeff2b8d2123e695f6e8134b5715d5143ff0c80360e5dd3e84"
+    },
+    {
+      "path": "core/extension/gdextension_interface.json",
+      "sha256": "a7887c9a1f2880d03ed98aacdc27cf004dd6f454143da963a8bb8199c1c2ffcb"
+    },
+    {
+      "path": "core/extension/gdextension_library_exit_guard.h",
+      "sha256": "ae8301f5df689601c3559bb048f32689ef9122437866b0da508fa7a73b8cb027"
+    },
+    {
+      "path": "core/extension/gdextension_production_interface.cpp",
+      "sha256": "a414e170972c13295e821929f01a7ab23257895338451f99055bf59d74dd4d30"
+    },
+    {
+      "path": "core/extension/gdextension_production_metadata.cpp",
+      "sha256": "b960507daa21f11b91c7b7f6c3caa99f91635094decf5b1e72bb14f68786e20e"
+    },
+    {
+      "path": "modules/particles_runtime_tests/particles_external_guard_test_fixture.cpp",
+      "sha256": "fc7b121cecc2da1f46d8adac0660396b2b8cb240b88eebb69ae6b8e8684f397d"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/particles_storage.h",
+      "sha256": "a4783fced99291ebced1d81b97906287189c48eb6a639ed1ede42700bcef07d8"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/particles_storage_external.cpp",
+      "sha256": "1b3608471086c5d6e19da18ef4239286a63fd4f6b2251267888f118d787e9f33"
+    },
+    {
+      "path": "servers/rendering/rendering_device.cpp",
+      "sha256": "605cbdc68ba68e97fa610de417b5619132511698259a257cf5e0a8c559c59ffb"
+    },
+    {
+      "path": "tests/core/extension/test_production_request.cpp",
+      "sha256": "f23ae73a4e7703d496e2a8b73fb0c629578b8fe5291341af771a5404a77b8d21"
+    },
+    {
+      "path": "tests/servers/rendering/test_external_output_create_interface.cpp",
+      "sha256": "6250b0c29484ebdda7f7cc93bf319e7feeb2c1280e517acdc778b585efd2ee24"
+    }
+  ]
+}

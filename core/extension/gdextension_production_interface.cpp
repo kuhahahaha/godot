@@ -252,6 +252,10 @@ static_assert(std::is_same_v<decltype(&device_session_production_release_v2), GD
 void register_production_interfaces() {
 	static_assert(std::is_same_v<decltype(&device_session_output_create_v1), GDExtensionInterfaceDeviceSessionOutputCreateV1>);
 	GDExtension::register_interface_function("device_session_output_create_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_output_create_v1));
+	static_assert(std::is_same_v<decltype(&device_session_output_metadata_query_v1), GDExtensionInterfaceDeviceSessionOutputMetadataQueryV1>);
+	GDExtension::register_interface_function("device_session_output_metadata_query_v1", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_output_metadata_query_v1));
+	static_assert(std::is_same_v<decltype(&device_session_output_create_v3), GDExtensionInterfaceDeviceSessionOutputCreateV3>);
+	GDExtension::register_interface_function("device_session_output_create_v3", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_output_create_v3));
 	static_assert(std::is_same_v<decltype(&device_session_output_create_v2), GDExtensionInterfaceDeviceSessionOutputCreateV2>);
 	GDExtension::register_interface_function("device_session_output_create_v2", reinterpret_cast<GDExtensionInterfaceFunctionPtr>(&device_session_output_create_v2));
 	static_assert(std::is_same_v<decltype(&device_session_output_acquire_v1), GDExtensionInterfaceDeviceSessionOutputAcquireV1>);

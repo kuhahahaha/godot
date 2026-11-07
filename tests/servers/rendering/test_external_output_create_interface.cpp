@@ -30,6 +30,10 @@
 
 #include "core/error/error_list.h"
 #include "core/extension/gdextension_external_output_interface.h"
+#include "core/os/thread.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
+#include "servers/rendering/rendering_server.h"
+#include "tests/servers/rendering/test_external_output_custody_bridge.h"
 #include "tests/test_macros.h"
 
 #include <cstddef>
@@ -294,4 +298,248 @@ TEST_CASE("[B4][OutputAcquirePollWire] valid DTO extents cannot acquire or obser
 	CHECK(observed.physical_returned == 0);
 	CHECK(observed.request_serial == 0);
 	CHECK(observed.action_ordinal == UINT64_MAX);
+}
+
+namespace TestExternalOutputMetadataInterface {
+using namespace GDExtensionDeviceExit;
+using Query = void (*)(const GDExtensionOutputMetadataQueryInputV1 *, GDExtensionOutputMetadataQueryResultV1 *);
+using Create = void (*)(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionOutputCreateInputV3 *, GDExtensionOutputCreateResultV1 *);
+static_assert(std::is_same_v<Query, GDExtensionInterfaceDeviceSessionOutputMetadataQueryV1>);
+static_assert(std::is_same_v<Create, GDExtensionInterfaceDeviceSessionOutputCreateV3>);
+static_assert(std::is_same_v<Query, decltype(&device_session_output_metadata_query_v1)>);
+static_assert(std::is_same_v<Create, decltype(&device_session_output_create_v3)>);
+static_assert(std::is_standard_layout_v<GDExtensionOutputMetadataQueryInputV1>);
+static_assert(std::is_standard_layout_v<GDExtensionOutputMetadataQueryResultV1>);
+static_assert(std::is_standard_layout_v<GDExtensionOutputCreateInputV3>);
+static_assert(offsetof(GDExtensionOutputMetadataQueryResultV1, abi) == 0);
+
+static GDExtensionOutputMetadataQueryInputV1 query_input() {
+	GDExtensionOutputMetadataQueryInputV1 value{};
+	value.abi = { 1, sizeof(value), 0 };
+	value.config.abi = { 1, sizeof(value.config), 0 };
+	value.limits.abi = { 1, sizeof(value.limits), 0 };
+	return value;
+}
+static GDExtensionOutputCreateInputV3 create_input() {
+	GDExtensionOutputCreateInputV3 value{};
+	value.abi = { 3, sizeof(value), 0 };
+	value.config.abi = { 1, sizeof(value.config), 0 };
+	value.requirements.abi = { 1, sizeof(value.requirements), 0 };
+	value.requirements.limits.abi = { 1, sizeof(value.requirements.limits), 0 };
+	return value;
+}
+template <typename Result>
+static void refused(const Result &p_result, Error p_error) {
+	CHECK(p_result.abi.abi_version == 1);
+	CHECK(p_result.abi.struct_size == sizeof(Result));
+	CHECK(p_result.abi.reserved == 0);
+	CHECK(p_result.status.error == p_error);
+	CHECK(p_result.status.detail_length > 0);
+	CHECK(p_result.status.detail != nullptr);
+}
+static void cleared(const GDExtensionOutputMetadataQueryResultV1 &p_result) {
+	const GDExtensionOutputMetadataRequirementsV1 empty{};
+	CHECK(memcmp(&p_result.requirements, &empty, sizeof(empty)) == 0);
+}
+static void cleared(const GDExtensionOutputCreateResultV1 &p_result) {
+	CHECK(p_result.particles == 0);
+	CHECK(p_result.generation == 0);
+	CHECK(p_result.capabilities == 0);
+	CHECK(p_result.reserved == 0);
+}
+
+// All nested checks run before renderer lookup. Exercise each borrowed RID
+// span independently, preserving the complete caller allocation on no-write paths.
+template <typename Input, typename Result, typename Call>
+static void nested_spans(Input p_input, Call p_call) {
+	for (uint32_t span = 0; span < 2; ++span) {
+		for (uint32_t variant = 0; variant < 7; ++variant) {
+			auto input = p_input;
+			Result result;
+			memset(&result, 0xa5, sizeof(result));
+			const auto result_before = result;
+			auto &selected = span ? input.config.surface_materials : input.config.surfaces;
+			selected.count = 1;
+			switch (variant) {
+				case 0:
+					selected.data = nullptr;
+					break;
+				case 1:
+					selected.data = reinterpret_cast<const uint64_t *>(uintptr_t(1));
+					break;
+				case 2:
+					selected.data = reinterpret_cast<const uint64_t *>(UINTPTR_MAX - 7);
+					selected.count = 2;
+					break;
+				case 3:
+					selected.data = reinterpret_cast<const uint64_t *>(&result);
+					break;
+				case 4:
+					selected.data = reinterpret_cast<const uint64_t *>(&input);
+					break;
+				case 5:
+					// Include the tail after config: query limits / V3 resource selector.
+					selected.data = reinterpret_cast<const uint64_t *>(reinterpret_cast<const uint8_t *>(&input) + sizeof(Input) - sizeof(uint64_t));
+					break;
+				case 6:
+					// A partial output overlap must not clear even the result header.
+					selected.data = reinterpret_cast<const uint64_t *>(reinterpret_cast<const uint8_t *>(&result) + sizeof(Result) - sizeof(uint64_t));
+					selected.count = 2;
+					break;
+			}
+			const auto input_before = input;
+			p_call(&input, &result);
+			CHECK(memcmp(&input_before, &input, sizeof(input)) == 0);
+			if (variant == 4 || variant == 5) {
+				refused(result, ERR_INVALID_PARAMETER);
+				REQUIRE(result.status.detail_length == 8);
+				CHECK(memcmp(result.status.detail, "CONTRACT", 8) == 0);
+				cleared(result);
+			} else {
+				CHECK(memcmp(&result_before, &result, sizeof(result)) == 0);
+			}
+		}
+	}
+	for (uint32_t partial = 0; partial < 2; ++partial) {
+		auto input = p_input;
+		uint64_t shared[3] = { 11, 22, 33 };
+		input.config.surfaces = { shared, 2, 0 };
+		input.config.surface_materials = { shared + partial, 2, 0 };
+		const auto input_before = input;
+		Result result;
+		memset(&result, 0xa5, sizeof(result));
+		p_call(&input, &result);
+		refused(result, ERR_INVALID_PARAMETER);
+		REQUIRE(result.status.detail_length == 8);
+		CHECK(memcmp(result.status.detail, "CONTRACT", 8) == 0);
+		cleared(result);
+		CHECK(memcmp(&input_before, &input, sizeof(input)) == 0);
+		CHECK(shared[0] == 11);
+		CHECK(shared[1] == 22);
+		CHECK(shared[2] == 33);
+	}
+}
+} // namespace TestExternalOutputMetadataInterface
+
+TEST_CASE("[B4][OutputMetadataWire] guarded query and V3 signatures reject invalid and overlapping outer extents without writes") {
+	using namespace TestExternalOutputMetadataInterface;
+	using TestExternalOutputAcquirePollInterface::invalid_extents;
+	using TestExternalOutputAcquirePollInterface::port;
+	const auto query = port<Query>("device_session_output_metadata_query_v1");
+	const auto create = port<Create>("device_session_output_create_v3");
+	REQUIRE(query != nullptr);
+	REQUIRE(create != nullptr);
+	invalid_extents<GDExtensionOutputMetadataQueryInputV1, GDExtensionOutputMetadataQueryResultV1>([&](const auto *input, auto *result) { query(input, result); });
+	invalid_extents<GDExtensionOutputCreateInputV3, GDExtensionOutputCreateResultV1>([&](const auto *input, auto *result) { create({}, {}, input, result); });
+}
+
+TEST_CASE("[B4][OutputMetadataWire] both nested spans reject invalid extents output outer and mutual overlaps") {
+	using namespace TestExternalOutputMetadataInterface;
+	using TestExternalOutputAcquirePollInterface::port;
+	const auto query = port<Query>("device_session_output_metadata_query_v1");
+	const auto create = port<Create>("device_session_output_create_v3");
+	REQUIRE(query != nullptr);
+	REQUIRE(create != nullptr);
+	nested_spans<GDExtensionOutputMetadataQueryInputV1, GDExtensionOutputMetadataQueryResultV1>(query_input(), [&](const auto *input, auto *result) { query(input, result); });
+	nested_spans<GDExtensionOutputCreateInputV3, GDExtensionOutputCreateResultV1>(create_input(), [&](const auto *input, auto *result) { create({}, {}, input, result); });
+}
+
+TEST_CASE("[B4][OutputMetadataWire] renderer absence wrong thread and absent original context preserve input") {
+	using namespace TestExternalOutputMetadataInterface;
+	using TestExternalOutputAcquirePollInterface::port;
+	const auto query = port<Query>("device_session_output_metadata_query_v1");
+	const auto create = port<Create>("device_session_output_create_v3");
+	REQUIRE(query != nullptr);
+	REQUIRE(create != nullptr);
+	REQUIRE(RendererRD::ParticlesStorage::get_singleton() == nullptr);
+	auto input = query_input();
+	auto creation = create_input();
+	// Valid SceneOnly fields ensure refusal is not a malformed config fallback.
+	input.config.profile = 3;
+	input.config.space = 1;
+	input.config.max_views = 1;
+	input.config.max_inflight = 1;
+	input.config.query_enabled = 1;
+	for (uint32_t i = 0; i < 3; ++i) {
+		input.config.bounds.size[i] = 1;
+		input.config.query_bounds.size[i] = 1;
+	}
+	creation.config = input.config;
+	const auto input_before = input;
+	const auto creation_before = creation;
+	GDExtensionOutputMetadataQueryResultV1 quoted;
+	GDExtensionOutputCreateResultV1 created;
+	memset(&quoted, 0xa5, sizeof(quoted));
+	memset(&created, 0xa5, sizeof(created));
+	query(&input, &quoted);
+	create({}, {}, &creation, &created);
+	refused(quoted, ERR_UNAVAILABLE);
+	refused(created, ERR_UNAVAILABLE);
+	cleared(quoted);
+	cleared(created);
+	CHECK(memcmp(&input_before, &input, sizeof(input)) == 0);
+	CHECK(memcmp(&creation_before, &creation, sizeof(creation)) == 0);
+
+	// Existing empty component setup installs storage only. It creates no
+	// protected RECORD, owner, admission, request, pin or renderer authority.
+	RenderingDevice device;
+	{
+		RendererRD::ExternalLinkedOwnerTest fixture(device, true);
+		memset(&quoted, 0xa5, sizeof(quoted));
+		memset(&created, 0xa5, sizeof(created));
+		query(&input, &quoted);
+		create({}, {}, &creation, &created);
+		// A preceding SceneTree test may leave a real server/main RD alive.
+		// Query needs the main render thread, but no production context.
+		auto *server = RenderingServer::get_singleton();
+		auto *rd = RenderingDevice::get_singleton();
+		const bool main_renderer = rd && server && server->is_on_render_thread() && server->get_rendering_device() == rd;
+		if (main_renderer) {
+			CHECK(quoted.status.error == OK);
+			CHECK(quoted.abi.abi_version == 1);
+			CHECK(quoted.abi.struct_size == sizeof(quoted));
+			CHECK(quoted.requirements.required_metadata_bytes == RendererRD::ParticlesStorage::particles_external_scene_metadata_bytes());
+			CHECK(quoted.requirements.required_alignment > 0);
+			CHECK(quoted.requirements.slot_count == 1);
+			CHECK(quoted.requirements.flattened_surface_count == 0);
+			CHECK(quoted.requirements.binding_count == 0);
+		} else {
+			refused(quoted, ERR_UNAUTHORIZED);
+			cleared(quoted);
+		}
+		refused(created, ERR_UNAUTHORIZED);
+		cleared(created);
+#ifdef THREADS_ENABLED
+		struct WrongThreadQuery {
+			Query query;
+			const GDExtensionOutputMetadataQueryInputV1 *input;
+			GDExtensionOutputMetadataQueryResultV1 result;
+			Thread::ID caller = Thread::UNASSIGNED_ID;
+			static void run(void *p_data) {
+				auto &probe = *static_cast<WrongThreadQuery *>(p_data);
+				probe.caller = Thread::get_caller_id();
+				probe.query(probe.input, &probe.result);
+			}
+		} wrong{ query, &input, {} };
+		memset(&wrong.result, 0xa5, sizeof(wrong.result));
+		Thread worker;
+		const Thread::ID worker_id = worker.start(&WrongThreadQuery::run, &wrong);
+		worker.wait_to_finish();
+		CHECK(worker_id != Thread::UNASSIGNED_ID);
+		CHECK(wrong.caller == worker_id);
+		CHECK(wrong.caller != Thread::get_caller_id());
+		refused(wrong.result, ERR_UNAUTHORIZED);
+		cleared(wrong.result);
+		const char query_detail[] = "main_render_thread_required";
+		REQUIRE(wrong.result.status.detail_length == sizeof(query_detail) - 1);
+		CHECK(memcmp(wrong.result.status.detail, query_detail, sizeof(query_detail) - 1) == 0);
+#endif
+		const char create_detail[] = "original_record_context_required";
+		REQUIRE(created.status.detail_length == sizeof(create_detail) - 1);
+		CHECK(memcmp(created.status.detail, create_detail, sizeof(create_detail) - 1) == 0);
+		CHECK(memcmp(&input_before, &input, sizeof(input)) == 0);
+		CHECK(memcmp(&creation_before, &creation, sizeof(creation)) == 0);
+		CHECK_FALSE(fixture.exists());
+	}
+	CHECK(RendererRD::ParticlesStorage::get_singleton() == nullptr);
 }

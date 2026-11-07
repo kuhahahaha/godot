@@ -907,7 +907,7 @@ private:
 	Error production_output_action_pin_locked(ProductionRequest &, ProductionActionCell &, RenderingDevice &, ProductionOutputPin &);
 	Error production_output_action_owner_bind_locked(ProductionRequest &, ProductionActionCell &, ProductionOutputPin &, RenderingDevice &, RID, uint64_t, uint32_t, uint64_t);
 	Error production_output_pin(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, RenderingDevice &, ProductionOutputPin &);
-	Error production_output_metadata_create(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, uint32_t, RenderingDevice &, uint64_t, uint32_t, ProductionOutputMetadataLease &);
+	Error production_output_metadata_create(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, uint32_t, RenderingDevice &, uint64_t, uint32_t, ProductionOutputMetadataLease &, bool p_exact_bytes = false);
 	Error production_output_metadata_validate(ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const ProductionOutputMetadataLease &, RenderingDevice &, uint64_t, uint32_t);
 	Error production_output_metadata_bind(ProductionOutputMetadataLease &, const ProductionOutputPin &);
 	Error production_output_metadata_return(ProductionOutputMetadataLease &);

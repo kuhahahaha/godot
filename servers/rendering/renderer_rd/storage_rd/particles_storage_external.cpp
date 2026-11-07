@@ -31,6 +31,7 @@
 #include "core/extension/gdextension_library_exit_guard.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_owner.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
+#include "servers/rendering/rendering_server.h"
 
 #include <limits>
 
@@ -259,53 +260,45 @@ uint64_t ParticlesStorage::particles_external_scene_metadata_bytes() {
 void ParticlesStorage::particles_external_create_typed_v2(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputCreateInputV1 &p_input, uint32_t p_metadata_slot, GDExtensionOutputCreateResultV1 &r_result) {
 	_external_create_typed(p_context, p_request, p_input, p_metadata_slot, 0, 0, 0, r_result);
 }
-void ParticlesStorage::_external_create_typed(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputCreateInputV1 &p_input, uint32_t p_metadata_slot, uint32_t p_view_capacity, uint32_t p_read_capacity, uint32_t p_surface_capacity, GDExtensionOutputCreateResultV1 &r_result) {
-	r_result = {};
-	r_result.abi = { 1, sizeof(r_result), 0 };
-	const Error context_error = _external_typed_context(p_context, p_request, true);
-	if (context_error != OK) {
-		r_result.status = output_status(context_error, "original_record_context_required");
-		return;
-	}
+bool ParticlesStorage::_external_decode_create(const GDExtensionOutputCreateInputV1 &p_input, ExternalOutputConfig &config, uint32_t &surface_count, GDExtensionOutputCreateResultV1 &r_result) {
 	r_result.status = output_status(ERR_INVALID_PARAMETER, "CONTRACT");
 	if (!valid_abi(p_input.abi, sizeof(p_input)) || p_input.profile < 1 || p_input.profile > 3 || p_input.space < 1 || p_input.space > 2 || p_input.motion > 1 || p_input.query_enabled > 1 || (p_input.pass_mask & ~uint32_t(0x1f)) || p_input.surfaces.reserved || p_input.surface_materials.reserved ||
 			(p_input.surfaces.count && !p_input.surfaces.data) || (p_input.surface_materials.count && !p_input.surface_materials.data)) {
-		return;
+		return false;
 	}
 	if (p_input.capacity > (1u << 20) || !p_input.max_views || p_input.max_views > 8 || !p_input.max_inflight || p_input.max_inflight > 4) {
 		r_result.status = output_status(ERR_INVALID_PARAMETER, "LIMIT");
-		return;
+		return false;
 	}
 	if (p_input.surface_materials.count > ExternalOutputConfig::MAX_FLATTENED_SURFACES) {
 		r_result.status = output_status(ERR_INVALID_PARAMETER, "LIMIT");
-		return;
+		return false;
 	}
 	AABB bounds, geometry_bounds, query_bounds;
 	if (!decode_bounds(p_input.bounds, bounds, true) || !decode_bounds(p_input.query_bounds, query_bounds, p_input.query_enabled != 0)) {
-		return;
+		return false;
 	}
 	if (p_input.query_enabled) {
 		const AABB cull_bounds = bounds.merge(query_bounds);
 		if (!cull_bounds.is_finite() || !cull_bounds.get_end().is_finite()) {
-			return;
+			return false;
 		}
 	}
 	if (p_input.profile == 1 && (!p_input.surfaces.count || p_input.surfaces.count > ExternalOutputConfig::MAX_MESH_RIDS || !p_input.surface_materials.count)) {
-		return;
+		return false;
 	}
 	if (p_input.profile == 2 && (p_input.surfaces.count || !p_input.surface_materials.count || !decode_bounds(p_input.geometry_bounds, geometry_bounds, true))) {
-		return;
+		return false;
 	}
 	if (p_input.profile != 2) {
 		const GDExtensionOutputBoundsV1 absent{};
 		if (memcmp(&p_input.geometry_bounds, &absent, sizeof(absent)) != 0) {
-			return;
+			return false;
 		}
 	}
 	if (p_input.profile == 3 && (p_input.capacity || p_input.surfaces.count || p_input.surface_materials.count || p_input.pass_mask || p_input.motion || !p_input.query_enabled)) {
-		return;
+		return false;
 	}
-	ExternalOutputConfig config;
 	config.profile = ExternalOutputConfig::Profile(p_input.profile);
 	config.capacity = p_input.capacity;
 	config.max_views = p_input.max_views;
@@ -332,10 +325,25 @@ void ParticlesStorage::_external_create_typed(GDExtensionProductionPhysicalConte
 	copy_tag(p_input.layout_digest, config.layout_digest);
 	copy_tag(p_input.mapping_digest, config.mapping_digest);
 	copy_tag(p_input.numeric_profile_digest, config.numeric_profile_digest);
-	uint32_t surface_count = 0;
 	const Error selection_error = ExternalOutputOwner::validate_native_selection(config, surface_count);
 	if (selection_error != OK) {
 		r_result.status = output_status(selection_error, "native_output_selection");
+		return false;
+	}
+	return true;
+}
+
+void ParticlesStorage::_external_create_typed(GDExtensionProductionPhysicalContextRefV1 p_context, GDExtensionProductionRequestRefV1 p_request, const GDExtensionOutputCreateInputV1 &p_input, uint32_t p_metadata_slot, uint32_t p_view_capacity, uint32_t p_read_capacity, uint32_t p_surface_capacity, GDExtensionOutputCreateResultV1 &r_result) {
+	r_result = {};
+	r_result.abi = { 1, sizeof(r_result), 0 };
+	const Error context_error = _external_typed_context(p_context, p_request, true);
+	if (context_error != OK) {
+		r_result.status = output_status(context_error, "original_record_context_required");
+		return;
+	}
+	ExternalOutputConfig config;
+	uint32_t surface_count = 0;
+	if (!_external_decode_create(p_input, config, surface_count, r_result)) {
 		return;
 	}
 	if (p_metadata_slot == UINT32_MAX) {
@@ -569,4 +577,102 @@ Error ParticlesStorage::particles_external_end_draw_list() {
 	// Cannot attest native list closure without original recorded read cells.
 	return ERR_UNAVAILABLE;
 }
+} // namespace RendererRD
+
+namespace RendererRD {
+void ParticlesStorage::particles_external_metadata_query(const GDExtensionOutputMetadataQueryInputV1 &input, GDExtensionOutputMetadataQueryResultV1 &out) {
+	out = {};
+	out.abi = { 1, sizeof(out), 0 };
+	out.status = output_status(ERR_INVALID_PARAMETER, "CONTRACT");
+	if (!valid_abi(input.abi, sizeof(input)) || !valid_abi(input.limits.abi, sizeof(input.limits)) || input.limits.reserved) {
+		return;
+	}
+	auto *rd = RenderingDevice::get_singleton();
+	auto *server = RenderingServer::get_singleton();
+	if (!rd || !server || !server->is_on_render_thread() || server->get_rendering_device() != rd) {
+		out.status = output_status(ERR_UNAUTHORIZED, "main_render_thread_required");
+		return;
+	}
+	ExternalOutputConfig config;
+	uint32_t surfaces = 0;
+	GDExtensionOutputCreateResultV1 decoded{};
+	if (!_external_decode_create(input.config, config, surfaces, decoded)) {
+		out.status = decoded.status;
+		return;
+	}
+	// Transport is installed before render-profile placement/selection support.
+	if (config.profile != ExternalOutputConfig::SCENE_ONLY) {
+		out.status = output_status(ERR_UNAVAILABLE, "native_profile_preparation_required");
+		return;
+	}
+	if (input.limits.view_lease_capacity || input.limits.read_lease_capacity || input.limits.surface_lease_capacity) {
+		return;
+	}
+	ExternalOutputOwner::MetadataLayout layout;
+	const Error planned = ExternalOutputOwner::plan_metadata_layout(0, 0, 0, layout);
+	if (planned != OK) {
+		out.status = output_status(planned, "native_metadata_layout");
+		return;
+	}
+	auto &q = out.requirements;
+	q.abi = { 1, sizeof(q), 0 };
+	q.layout_version = 1;
+	q.required_metadata_bytes = layout.total_bytes;
+	q.required_alignment = layout.alignment;
+	q.slot_count = config.max_views * config.max_inflight;
+	q.flattened_surface_count = 0;
+	q.binding_count = 0;
+	q.limits = input.limits;
+	out.status = output_status(OK, "");
+}
+
+void ParticlesStorage::particles_external_create_typed_v3(GDExtensionProductionPhysicalContextRefV1 context, GDExtensionProductionRequestRefV1 request, const GDExtensionOutputCreateInputV3 &input, GDExtensionOutputCreateResultV1 &out) {
+	out = {};
+	out.abi = { 1, sizeof(out), 0 };
+	out.status = output_status(ERR_INVALID_PARAMETER, "CONTRACT");
+	if (input.abi.abi_version != 3 || input.abi.struct_size != sizeof(input) || input.abi.reserved || input.reserved || input.metadata_resource_slot == UINT32_MAX || !valid_abi(input.requirements.abi, sizeof(input.requirements)) || input.requirements.reserved) {
+		return;
+	}
+	const Error authenticated = _external_typed_context(context, request, true);
+	if (authenticated != OK) {
+		out.status = output_status(authenticated, "original_record_context_required");
+		return;
+	}
+	GDExtensionOutputMetadataQueryInputV1 query{};
+	query.abi = { 1, sizeof(query), 0 };
+	query.config = input.config;
+	query.limits = input.requirements.limits;
+	GDExtensionOutputMetadataQueryResultV1 quote{};
+	particles_external_metadata_query(query, quote);
+	if (quote.status.error != OK) {
+		out.status = quote.status;
+		return;
+	}
+	const auto &a = input.requirements;
+	const auto &b = quote.requirements;
+	if (a.layout_version != b.layout_version || a.required_metadata_bytes != b.required_metadata_bytes || a.required_alignment != b.required_alignment || a.slot_count != b.slot_count || a.flattened_surface_count != b.flattened_surface_count || a.binding_count != b.binding_count) {
+		return;
+	}
+	ExternalOutputConfig config;
+	uint32_t surfaces = 0;
+	if (!_external_decode_create(input.config, config, surfaces, out)) {
+		return;
+	}
+	if (!next_external_generation) {
+		out.status = output_status(ERR_PARAMETER_RANGE_ERROR, "generation_exhausted");
+		return;
+	}
+	auto &registry = GDExtensionDeviceExit::Registry::get_singleton();
+	GDExtensionDeviceExit::ProductionOutputMetadataLease metadata;
+	const Error allocated = registry.production_output_metadata_create(context, request, input.metadata_resource_slot, *RenderingDevice::get_singleton(), b.required_metadata_bytes, b.required_alignment, metadata, true);
+	if (allocated != OK) {
+		out.status = output_status(allocated, "original_output_metadata_required");
+		return;
+	}
+	_external_create_received(context, request, config, metadata, 0, 0, 0, out);
+	if (!metadata.is_empty()) {
+		CRASH_COND(registry.production_output_metadata_return(metadata) != OK);
+	}
+}
+
 } // namespace RendererRD
