@@ -490,6 +490,7 @@ private:
 
 	struct ParticlesCollision {
 		RSE::ParticlesCollisionType type = RSE::PARTICLES_COLLISION_TYPE_SPHERE_ATTRACT;
+		uint64_t scene_shape_revision = 1;
 		uint32_t cull_mask = 0xFFFFFFFF;
 		float radius = 1.0;
 		Vector3 extents = Vector3(1, 1, 1);
@@ -497,10 +498,8 @@ private:
 		float attractor_attenuation = 1.0;
 		float attractor_directionality = 0.0;
 		RID field_texture;
-		RID heightfield_texture;
-		RID heightfield_fb;
-		Size2i heightfield_fb_size;
 		uint32_t heightfield_mask = (1 << 20) - 1;
+		HashSet<RID> instances;
 
 		RSE::ParticlesCollisionHeightfieldResolution heightfield_resolution = RSE::PARTICLES_COLLISION_HEIGHTFIELD_RESOLUTION_1024;
 
@@ -510,8 +509,15 @@ private:
 	struct ParticlesCollisionInstance {
 		RID collision;
 		Transform3D transform;
+		uint64_t scene_source_key = 0;
 		bool active = false;
+		RID heightfield_texture;
+		RID heightfield_fb;
+		Size2i heightfield_fb_size;
 	};
+	void _heightfield_free_instance_target(ParticlesCollisionInstance *p_instance);
+	void _heightfield_invalidate_base_instances(RID p_collision);
+	uint64_t next_scene_source_key = 1;
 
 	mutable RID_Owner<ParticlesCollision, true> particles_collision_owner;
 
@@ -555,6 +561,8 @@ public:
 	virtual Error particles_external_withdraw(RID p_particles, const PackedByteArray &p_generation) override;
 	virtual Dictionary particles_external_poll(RID p_particles, const PackedByteArray &p_generation) override;
 	bool particles_is_external(RID p_particles) const override;
+	// Validates the original immutable output owner; no tag grants custody.
+	Error particles_scene_validate_receiver(RID p_particles, uint64_t p_generation, const RenderingDevice *p_device) const;
 	// Core-only native cache/read providers. No ClassDB method or record grant.
 	uint32_t particles_external_surface_count(RID p_particles) const;
 	Error particles_external_surface_acquire(RID p_particles, uint32_t p_ordinal, ExternalSurfaceSelection &r_selection);
@@ -728,7 +736,8 @@ public:
 	virtual AABB particles_collision_get_aabb(RID p_particles_collision) const override;
 	Vector3 particles_collision_get_extents(RID p_particles_collision) const;
 	virtual bool particles_collision_is_heightfield(RID p_particles_collision) const override;
-	RID particles_collision_get_heightfield_framebuffer(RID p_particles_collision) const;
+	RID particles_collision_get_heightfield_framebuffer(RID p_collision_instance) const;
+	RID particles_collision_instance_get_collision(RID p_collision_instance) const;
 	virtual uint32_t particles_collision_get_height_field_mask(RID p_particles_collision) const override;
 	virtual void particles_collision_set_height_field_mask(RID p_particles_collision, uint32_t p_heightfield_mask) override;
 	virtual uint32_t particles_collision_get_cull_mask(RID p_particles_collision) const override;
@@ -742,6 +751,8 @@ public:
 	virtual void particles_collision_instance_free(RID p_rid) override;
 	virtual void particles_collision_instance_set_transform(RID p_collision_instance, const Transform3D &p_transform) override;
 	virtual void particles_collision_instance_set_active(RID p_collision_instance, bool p_active) override;
+	bool particles_collision_instance_get_scene_sphere(RID p_collision_instance, uint64_t &r_source_key, uint64_t &r_shape_revision, Transform3D &r_transform, float &r_radius) const;
+	bool particles_collision_instance_get_scene_heightfield(RID p_collision_instance, uint64_t &r_source_key, uint64_t &r_shape_revision, Transform3D &r_transform, Vector3 &r_extents, RSE::ParticlesCollisionHeightfieldResolution &r_resolution) const;
 };
 
 } // namespace RendererRD

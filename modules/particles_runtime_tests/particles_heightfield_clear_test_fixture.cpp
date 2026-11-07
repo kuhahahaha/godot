@@ -14,6 +14,7 @@
 void ParticlesHeightfieldClearTestFixture::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("run"), &ParticlesHeightfieldClearTestFixture::run);
 	ClassDB::bind_method(D_METHOD("run_geometry", "height"), &ParticlesHeightfieldClearTestFixture::run_geometry);
+	ClassDB::bind_method(D_METHOD("run_geometry_params", "height", "extents_y", "transform_y"), &ParticlesHeightfieldClearTestFixture::run_geometry_params);
 	ClassDB::bind_method(D_METHOD("result"), &ParticlesHeightfieldClearTestFixture::result);
 }
 
@@ -23,10 +24,16 @@ Dictionary ParticlesHeightfieldClearTestFixture::result() const {
 }
 
 Error ParticlesHeightfieldClearTestFixture::run_geometry(float p_height) {
+	return run_geometry_params(p_height, 1.0f, 0.0f);
+}
+
+Error ParticlesHeightfieldClearTestFixture::run_geometry_params(float p_height, float p_extents_y, float p_transform_y) {
 	if (started) {
 		return ERR_ALREADY_IN_USE;
 	}
 	geometry_height = p_height;
+	capture_extents_y = p_extents_y;
+	capture_transform_y = p_transform_y;
 	geometry_capture = true;
 	return run();
 }
@@ -57,17 +64,15 @@ Error ParticlesHeightfieldClearTestFixture::run_capture() {
 		MutexLock lock(result_mutex);
 		result_data["driver"] = rd->get_device_name();
 	}
-	// The legacy API owns one heightfield per base collision, not per instance.
-	first_collision = storage->particles_collision_allocate();
-	second_collision = storage->particles_collision_allocate();
-	for (const RID collision : { first_collision, second_collision }) {
-		storage->particles_collision_initialize(collision);
-		storage->particles_collision_set_collision_type(collision, RSE::PARTICLES_COLLISION_TYPE_HEIGHTFIELD_COLLIDE);
-		storage->particles_collision_set_box_extents(collision, Vector3(1, 1, 1));
-		storage->particles_collision_set_height_field_resolution(collision, RSE::PARTICLES_COLLISION_HEIGHTFIELD_RESOLUTION_256);
-	}
-	const RID first_framebuffer = storage->particles_collision_get_heightfield_framebuffer(first_collision);
-	const RID second_framebuffer = storage->particles_collision_get_heightfield_framebuffer(second_collision);
+	collision = storage->particles_collision_allocate();
+	storage->particles_collision_initialize(collision);
+	storage->particles_collision_set_collision_type(collision, RSE::PARTICLES_COLLISION_TYPE_HEIGHTFIELD_COLLIDE);
+	storage->particles_collision_set_box_extents(collision, Vector3(1, capture_extents_y, 1));
+	storage->particles_collision_set_height_field_resolution(collision, RSE::PARTICLES_COLLISION_HEIGHTFIELD_RESOLUTION_256);
+	first_instance = storage->particles_collision_instance_create(collision);
+	second_instance = storage->particles_collision_instance_create(collision);
+	const RID first_framebuffer = storage->particles_collision_get_heightfield_framebuffer(first_instance);
+	const RID second_framebuffer = storage->particles_collision_get_heightfield_framebuffer(second_instance);
 	if (first_framebuffer.is_null() || second_framebuffer.is_null() || first_framebuffer == second_framebuffer) {
 		return ERR_UNAVAILABLE;
 	}
@@ -108,10 +113,12 @@ Error ParticlesHeightfieldClearTestFixture::run_capture() {
 		geometry->set_transform(transform, surface.aabb, transform.xform(surface.aabb));
 		instances.push_back(geometry);
 	}
-	scene->render_particle_collider_heightfield(second_collision, Transform3D(), instances);
+	Transform3D capture_transform;
+	capture_transform.origin.y = capture_transform_y;
+	scene->render_particle_collider_heightfield(second_instance, capture_transform, instances);
 
-	const auto *first_data = storage->particles_collision_owner.get_or_null(first_collision);
-	const auto *second_data = storage->particles_collision_owner.get_or_null(second_collision);
+	const auto *first_data = storage->particles_collision_instance_owner.get_or_null(first_instance);
+	const auto *second_data = storage->particles_collision_instance_owner.get_or_null(second_instance);
 	first_texture = first_data ? first_data->heightfield_texture : RID();
 	second_texture = second_data ? second_data->heightfield_texture : RID();
 	if (first_texture.is_null() || second_texture.is_null() || first_texture == second_texture) {
@@ -186,7 +193,8 @@ void ParticlesHeightfieldClearTestFixture::sample_done(const PackedByteArray &p_
 		MutexLock lock(result_mutex);
 		result_data["first_raw"] = raw[0];
 		result_data["second_raw"] = raw[1];
-		result_data["pass"] = p_bytes.size() == 8 && raw[0] >= 0.749f && raw[0] <= 0.751f && Math::abs(raw[1] - (geometry_capture ? (geometry_height + 1.0f) * 0.5f : 0.0f)) <= 0.001f;
+		const float expected = geometry_capture ? (geometry_height - capture_transform_y + capture_extents_y) / (2.0f * capture_extents_y) : 0.0f;
+		result_data["pass"] = p_bytes.size() == 8 && raw[0] >= 0.749f && raw[0] <= 0.751f && Math::abs(raw[1] - expected) <= 0.001f;
 	}
 }
 
@@ -209,11 +217,15 @@ void ParticlesHeightfieldClearTestFixture::cleanup() {
 	}
 	auto *storage = RendererRD::ParticlesStorage::get_singleton();
 	if (storage) {
-		for (RID *collision : { &first_collision, &second_collision }) {
-			if (collision->is_valid()) {
-				storage->particles_collision_free(*collision);
-				*collision = RID();
+		for (RID *instance : { &first_instance, &second_instance }) {
+			if (instance->is_valid()) {
+				storage->particles_collision_instance_free(*instance);
+				*instance = RID();
 			}
+		}
+		if (collision.is_valid()) {
+			storage->particles_collision_free(collision);
+			collision = RID();
 		}
 	}
 }

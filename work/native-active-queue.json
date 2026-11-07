@@ -1,0 +1,120 @@
+{
+  "goal_status": "active",
+  "completed_commits": [
+    "0aa7046111",
+    "9558cdc895",
+    "17ab27472c",
+    "e433d4ef40",
+    "3e9a7997de",
+    "2b7524bf4e",
+    "16b9cf1bea",
+    "79865a185d",
+    "c660ad1f51",
+    "450d4638c8",
+    "f70990f9c1",
+    "8c623ea4d0",
+    "a5a79c7b9a",
+    "e9f596d726",
+    "b04a74f5f8",
+    "b76c96023a",
+    "69c7e1eb65",
+    "f6c28a9bd8",
+    "ad550946d6",
+    "776fd86b5a"
+  ],
+  "frozen_diagnostic": "work/fixed-core-native-drain-20261107/FIXED_ARTIFACT.json",
+  "in_progress": [
+    {
+      "task": "Real Metal request drain diagnosis",
+      "owner": "A unique runner; main + D inspect",
+      "state": "matching frozen editor handed off; Host/Core combined trace requested"
+    },
+    {
+      "task": "Actual native acquire/poll and original action/source/resource issuer",
+      "owner": "D root ABI/acceptance/exports; Astra native owner+E09 alias/use/free; Sol audits/tests",
+      "state": "original alias acquire/readback and map-failure original-tail cleanup committed69c7e1eb65; returned failed bytes remain not-ready; all8frees+request release CPU verified"
+    },
+    {
+      "task": "public Instance192 Create",
+      "owner": "D root + Astra; Sol independent reviews",
+      "state": "internal receiver guard+selection committeda5a79c7b9a; actual unprepared refusal verified7/796; successful normal engine guard receiver/public seal+consumer still pending"
+    },
+    {
+      "task": "K06 shared native Scene early phase and original append custody",
+      "owner": "D root; Sol isolated implementation; main fixed single K06 envelope; remote Scene specific producers",
+      "state": "actual typed earlyhook/public wrappers/no-draw2waiting and holderACK committed+pushedf6c28a9bd8; focused4/420 combined222/94138 exit0; original E09 bind gate closed",
+      "contract": "/Users/macbookair/Documents/Codex/2026-10-15/xu-y/scene57-source-api-contract-20261107/IMPLEMENTATION_OWNERSHIP.md"
+    }
+  ],
+  "remaining": [
+    "public Instance192 create with original shader/material/selection custody, no SceneOnly gate bypass",
+    "actual source/preparation and account join",
+    "selected view/camera retained custody",
+    "Instance192 packet renderer consumption",
+    "native complete and no-next-draw physical retirement"
+  ],
+  "validation_scope": "Controlled tests do not certify GPU acceptance. No local milestone marks full queue complete.",
+  "latest_validation": {
+    "focused_cases": 22,
+    "focused_assertions": 6305,
+    "combined_cases": 233,
+    "combined_assertions": 95463,
+    "exit_code": 0,
+    "receipt": "tests/servers/rendering/fixtures/scene_complete_prerequisite/RECEIPT.md"
+  },
+  "queued_after_native_output_atomic": [
+    {
+      "task": "Scene43 retained D32 public production profile",
+      "scope": [
+        "depth-only record/copy",
+        "HEIGHT_RASTER bind and indexed effect capture",
+        "producer/read-use completion and content COW",
+        "fixed API/header/codec and minimal real call order"
+      ],
+      "state": "source inventory complete; Scene-specific producer owned remote per fixed K06 IMPLEMENTATION_OWNERSHIP, D shared phase/custody candidate in progress"
+    },
+    {
+      "task": "Scene45 source slot and Metal capacity accounting",
+      "facts": [
+        "original117/1290 remains incomplete",
+        "ordinal0 512 error5 source-slot6348>4096",
+        "ordinal1 512 not run",
+        "ordinal2 152 error2 Metal5564>4096"
+      ],
+      "constraints": "Preserve original runner/samples/quota. Do not reduce samples or increase quota. Inspect actual bound and reusable space after current NativeOutput atomic implementation.",
+      "state": "source audit complete: no confirmed retention/nonreuse bug; zero-pending bounds still exceed4096; exact incremental admission needs original locks/dependency gates",
+      "source_audit": "work/scene45-capacity-accounting-source-audit.md"
+    }
+  ],
+  "current_build": {
+    "state": "complete Scene prerequisite applied and built; focused Scene/generation CPU checks green; hardware original 117/1290 blocked at fixed RT128<required131; E09 bind and GPU/retirement remain pending",
+    "log": "work/native-scene-phase-hook-restored-build-r1.log",
+    "scope": "No full Scene content permission or hardware qualification"
+  },
+  "latest_native_join_validation": {
+    "combined_cases": 233,
+    "combined_assertions": 95463,
+    "focused_cases": 1,
+    "focused_assertions": 959,
+    "exit": 0,
+    "run": "work/native-output-continued-scene45-worker-fallback-combined-final.json",
+    "binary_sha256": "786fc72c43ba6d8bae30be004b3c835280b052848244da996882c29bf2068e36",
+    "limits": "CPU/dummy actual RS hook; original E09 exporter+Scene content/full GPU remain pending"
+  },
+  "independent_native_followups": [
+    {
+      "task": "Nonoverlapping same-buffer COPY graph self-dependency",
+      "state": "fixed committed16b9cf1bea; actual RED14 failures/GREEN94 assertions; CPU/mock only",
+      "source": "RenderingDeviceGraph::_add_command_to_graph line943 sees same source/destination draw_tracker for one COPY; production_prepare_copy permits nonoverlapping same-resource byte ranges",
+      "evidence": "work/native-output-join-endpoint.log / work/native-output-join-endpoint-run.json",
+      "endpoint_acceptance": "251 assertions passed but unexpected ERROR makes this endpoint run unaccepted; replacing endpoint prefix with two distinct actual buffers, not suppressing the original issue"
+    }
+  ],
+  "current_next_actions": [
+    "K06 actual early hook public wrappers RED\u2192GREEN plus actual nohook counterfactual and no-next-draw close",
+    "Exact original E09 operation+cursor+schedule exporter and original Scene0e55 prerequisite source from main/Scene owner",
+    "Astra mechanicalchecked sink candidate retained, full original Height range/transfer/closure join still needed",
+    "Receiver62 camera preflight held for independent profile/math findings; no partialScene tree overlay",
+    "Normal engineguard successful receiver and hardware GPU acceptance remain A unique runner; full goal active"
+  ]
+}

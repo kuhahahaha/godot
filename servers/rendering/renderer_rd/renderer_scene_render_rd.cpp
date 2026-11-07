@@ -1548,17 +1548,48 @@ Transform3D RendererSceneRenderRD::heightfield_capture_camera(const Transform3D 
 	return camera;
 }
 
-void RendererSceneRenderRD::render_particle_collider_heightfield(RID p_collider, const Transform3D &p_transform, const PagedArray<RenderGeometryInstance *> &p_instances) {
+bool RendererSceneRenderRD::heightfield_capture_preflight(const Transform3D &p_transform, const Vector3 &p_extents, Transform3D &r_camera, Projection &r_projection) {
+	const real_t determinant = p_transform.basis.determinant();
+	if (!p_transform.is_finite() || !Math::is_finite(determinant) || determinant == 0.0) {
+		return false;
+	}
+	const Vector3 extents = p_extents * p_transform.basis.get_scale();
+	if (!extents.is_finite() || extents.x <= 0.0 || extents.y <= 0.0 || extents.z <= 0.0) {
+		return false;
+	}
+	Projection projection;
+	projection.set_orthogonal(-extents.x, extents.x, -extents.z, extents.z, 0, extents.y * 2.0);
+	const real_t projection_determinant = projection.determinant();
+	if (!Math::is_finite(projection_determinant) || projection_determinant == 0.0) {
+		return false;
+	}
+	const Projection inverse_projection = projection.inverse();
+	for (int column = 0; column < 4; ++column) {
+		if (!projection[column].is_finite() || !inverse_projection[column].is_finite()) {
+			return false;
+		}
+	}
+	const Transform3D camera = heightfield_capture_camera(p_transform, extents.y);
+	if (!camera.is_finite() || !camera.affine_inverse().is_finite()) {
+		return false;
+	}
+	r_camera = camera;
+	r_projection = projection;
+	return true;
+}
+
+void RendererSceneRenderRD::render_particle_collider_heightfield(RID p_collision_instance, const Transform3D &p_transform, const PagedArray<RenderGeometryInstance *> &p_instances) {
 	RendererRD::ParticlesStorage *particles_storage = RendererRD::ParticlesStorage::get_singleton();
+	const RID collider = particles_storage->particles_collision_instance_get_collision(p_collision_instance);
 
-	ERR_FAIL_COND(!particles_storage->particles_collision_is_heightfield(p_collider));
-	Vector3 extents = particles_storage->particles_collision_get_extents(p_collider) * p_transform.basis.get_scale();
+	ERR_FAIL_COND(!particles_storage->particles_collision_is_heightfield(collider));
 	Projection cm;
-	cm.set_orthogonal(-extents.x, extents.x, -extents.z, extents.z, 0, extents.y * 2.0);
+	Transform3D cam_xform;
+	// Validate all capture constants before acquiring a framebuffer or recording work.
+	ERR_FAIL_COND(!heightfield_capture_preflight(p_transform, particles_storage->particles_collision_get_extents(collider), cam_xform, cm));
 
-	Transform3D cam_xform = heightfield_capture_camera(p_transform, extents.y);
-
-	RID fb = particles_storage->particles_collision_get_heightfield_framebuffer(p_collider);
+	RID fb = particles_storage->particles_collision_get_heightfield_framebuffer(p_collision_instance);
+	ERR_FAIL_COND(fb.is_null());
 
 	_render_particle_collider_heightfield(fb, cam_xform, cm, p_instances);
 }

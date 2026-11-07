@@ -14,10 +14,13 @@ class ParticlesHeightfieldClearTestFixture : public RefCounted {
 	bool started = false;
 	bool geometry_capture = false;
 	float geometry_height = 0;
+	float capture_extents_y = 1.0f;
+	float capture_transform_y = 0.0f;
 	RID mesh;
 	RenderGeometryInstance *geometry = nullptr;
-	RID first_collision;
-	RID second_collision;
+	RID collision;
+	RID first_instance;
+	RID second_instance;
 	RID shader;
 	RID pipeline;
 	RID buffer;
@@ -36,5 +39,6 @@ protected:
 public:
 	Error run();
 	Error run_geometry(float p_height);
+	Error run_geometry_params(float p_height, float p_extents_y, float p_transform_y);
 	Dictionary result() const;
 };

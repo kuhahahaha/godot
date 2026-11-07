@@ -1599,6 +1599,11 @@ void ParticlesStorage::particles_collision_instance_free(RID p_rid) {
 	particles_collision_instance_owner.free(p_rid);
 }
 
+RID ParticlesStorage::particles_collision_instance_get_collision(RID p_collision_instance) const {
+	const ParticlesCollisionInstance *instance = particles_collision_instance_owner.get_or_null(p_collision_instance);
+	return instance ? instance->collision : RID();
+}
+
 void ParticlesStorage::particles_collision_instance_set_transform(RID p_collision_instance, const Transform3D &p_transform) {
 	ParticlesCollisionInstance *pci = particles_collision_instance_owner.get_or_null(p_collision_instance);
 	ERR_FAIL_NULL(pci);

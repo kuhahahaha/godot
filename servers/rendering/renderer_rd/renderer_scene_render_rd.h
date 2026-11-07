@@ -173,6 +173,7 @@ private:
 
 public:
 	static Transform3D heightfield_capture_camera(const Transform3D &p_transform, float p_scaled_half_height);
+	static bool heightfield_capture_preflight(const Transform3D &p_transform, const Vector3 &p_extents, Transform3D &r_camera, Projection &r_projection);
 	static RendererSceneRenderRD *get_singleton() { return singleton; }
 
 	/* LIGHTING */
@@ -263,7 +264,7 @@ public:
 
 	virtual void render_material(const Transform3D &p_cam_transform, const Projection &p_cam_projection, bool p_cam_orthogonal, const PagedArray<RenderGeometryInstance *> &p_instances, RID p_framebuffer, const Rect2i &p_region) override;
 
-	virtual void render_particle_collider_heightfield(RID p_collider, const Transform3D &p_transform, const PagedArray<RenderGeometryInstance *> &p_instances) override;
+	virtual void render_particle_collider_heightfield(RID p_collision_instance, const Transform3D &p_transform, const PagedArray<RenderGeometryInstance *> &p_instances) override;
 
 	virtual void set_scene_pass(uint64_t p_pass) override {
 		scene_pass = p_pass;
