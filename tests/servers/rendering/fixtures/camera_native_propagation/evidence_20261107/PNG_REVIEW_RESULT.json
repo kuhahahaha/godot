@@ -1,0 +1,599 @@
+{
+  "status": "PASS",
+  "mode": "offline-standard-library-no-GPU",
+  "images": [
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/sprite-camera-native-propagation-20261107/retain_restored_gpu/mobile/first.png",
+      "png_sha256": "5fc440eacb6c7d5986d2e587f5815eecd40cbf512d07f33ef2d851f1dcbec50d",
+      "rgba_sha256": "50d9dafec320766ca41e7d461948892b96c7bf3b4e6fd95991523ae30c7be7b8",
+      "width": 128,
+      "height": 128,
+      "rgba_bytes": 65536,
+      "nonuniform_pixels": 988,
+      "reported_hash_and_count_match": true,
+      "color_type": 6,
+      "filters": [
+        1,
+        2,
+        4
+      ],
+      "chunks": [
+        "IHDR",
+        "sRGB",
+        "IDAT",
+        "IEND"
+      ],
+      "all_chunk_crcs_valid": true
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/sprite-camera-native-propagation-20261107/retain_restored_gpu/mobile/second.png",
+      "png_sha256": "4a432985e7db314b92b9e5161ebb8789659277e9bb5f11fcc6f13368660b5a16",
+      "rgba_sha256": "79a633382babdbe5914e2dddec0dd13ba202fec7ca2c4f4bad7a1a2d30df88c8",
+      "width": 128,
+      "height": 128,
+      "rgba_bytes": 65536,
+      "nonuniform_pixels": 1014,
+      "reported_hash_and_count_match": true,
+      "color_type": 6,
+      "filters": [
+        1,
+        2,
+        4
+      ],
+      "chunks": [
+        "IHDR",
+        "sRGB",
+        "IDAT",
+        "IEND"
+      ],
+      "all_chunk_crcs_valid": true
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/sprite-camera-native-propagation-20261107/retain_restored_gpu/mobile/unregistered.png",
+      "png_sha256": "5fc440eacb6c7d5986d2e587f5815eecd40cbf512d07f33ef2d851f1dcbec50d",
+      "rgba_sha256": "50d9dafec320766ca41e7d461948892b96c7bf3b4e6fd95991523ae30c7be7b8",
+      "width": 128,
+      "height": 128,
+      "rgba_bytes": 65536,
+      "nonuniform_pixels": 988,
+      "reported_hash_and_count_match": true,
+      "color_type": 6,
+      "filters": [
+        1,
+        2,
+        4
+      ],
+      "chunks": [
+        "IHDR",
+        "sRGB",
+        "IDAT",
+        "IEND"
+      ],
+      "all_chunk_crcs_valid": true
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/sprite-camera-native-propagation-20261107/retain_restored_gpu/forward_plus/first.png",
+      "png_sha256": "d5dd6a7152411b634a2d1dd488d34ab5fed0727b943fddf58aea13117ce5020b",
+      "rgba_sha256": "d8db115b2dac0a38871bbdd239e22ecd4471fac8e906f3cdf597b8ea0ca8f6f3",
+      "width": 128,
+      "height": 128,
+      "rgba_bytes": 65536,
+      "nonuniform_pixels": 988,
+      "reported_hash_and_count_match": true,
+      "color_type": 6,
+      "filters": [
+        1,
+        2,
+        4
+      ],
+      "chunks": [
+        "IHDR",
+        "sRGB",
+        "IDAT",
+        "IEND"
+      ],
+      "all_chunk_crcs_valid": true
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/sprite-camera-native-propagation-20261107/retain_restored_gpu/forward_plus/second.png",
+      "png_sha256": "c4750e678abd067e38120f72c84ef25204de7e633bcfb44c9b615fc267571f8e",
+      "rgba_sha256": "4259de89740dc63a29fa8b384ffefeb06a25c2c434cfc4e5724e3319a5a82e4a",
+      "width": 128,
+      "height": 128,
+      "rgba_bytes": 65536,
+      "nonuniform_pixels": 1014,
+      "reported_hash_and_count_match": true,
+      "color_type": 6,
+      "filters": [
+        1,
+        2,
+        4
+      ],
+      "chunks": [
+        "IHDR",
+        "sRGB",
+        "IDAT",
+        "IEND"
+      ],
+      "all_chunk_crcs_valid": true
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/sprite-camera-native-propagation-20261107/retain_restored_gpu/forward_plus/unregistered.png",
+      "png_sha256": "d5dd6a7152411b634a2d1dd488d34ab5fed0727b943fddf58aea13117ce5020b",
+      "rgba_sha256": "d8db115b2dac0a38871bbdd239e22ecd4471fac8e906f3cdf597b8ea0ca8f6f3",
+      "width": 128,
+      "height": 128,
+      "rgba_bytes": 65536,
+      "nonuniform_pixels": 988,
+      "reported_hash_and_count_match": true,
+      "color_type": 6,
+      "filters": [
+        1,
+        2,
+        4
+      ],
+      "chunks": [
+        "IHDR",
+        "sRGB",
+        "IDAT",
+        "IEND"
+      ],
+      "all_chunk_crcs_valid": true
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/sprite-camera-native-propagation-20261107/retain_omitted_gpu/mobile/first.png",
+      "png_sha256": "5fc440eacb6c7d5986d2e587f5815eecd40cbf512d07f33ef2d851f1dcbec50d",
+      "rgba_sha256": "50d9dafec320766ca41e7d461948892b96c7bf3b4e6fd95991523ae30c7be7b8",
+      "width": 128,
+      "height": 128,
+      "rgba_bytes": 65536,
+      "nonuniform_pixels": 988,
+      "reported_hash_and_count_match": true,
+      "color_type": 6,
+      "filters": [
+        1,
+        2,
+        4
+      ],
+      "chunks": [
+        "IHDR",
+        "sRGB",
+        "IDAT",
+        "IEND"
+      ],
+      "all_chunk_crcs_valid": true
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/sprite-camera-native-propagation-20261107/retain_omitted_gpu/mobile/second.png",
+      "png_sha256": "4a432985e7db314b92b9e5161ebb8789659277e9bb5f11fcc6f13368660b5a16",
+      "rgba_sha256": "79a633382babdbe5914e2dddec0dd13ba202fec7ca2c4f4bad7a1a2d30df88c8",
+      "width": 128,
+      "height": 128,
+      "rgba_bytes": 65536,
+      "nonuniform_pixels": 1014,
+      "reported_hash_and_count_match": true,
+      "color_type": 6,
+      "filters": [
+        1,
+        2,
+        4
+      ],
+      "chunks": [
+        "IHDR",
+        "sRGB",
+        "IDAT",
+        "IEND"
+      ],
+      "all_chunk_crcs_valid": true
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/sprite-camera-native-propagation-20261107/retain_omitted_gpu/mobile/unregistered.png",
+      "png_sha256": "5fc440eacb6c7d5986d2e587f5815eecd40cbf512d07f33ef2d851f1dcbec50d",
+      "rgba_sha256": "50d9dafec320766ca41e7d461948892b96c7bf3b4e6fd95991523ae30c7be7b8",
+      "width": 128,
+      "height": 128,
+      "rgba_bytes": 65536,
+      "nonuniform_pixels": 988,
+      "reported_hash_and_count_match": true,
+      "color_type": 6,
+      "filters": [
+        1,
+        2,
+        4
+      ],
+      "chunks": [
+        "IHDR",
+        "sRGB",
+        "IDAT",
+        "IEND"
+      ],
+      "all_chunk_crcs_valid": true
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/sprite-camera-native-propagation-20261107/retain_omitted_gpu/forward_plus/first.png",
+      "png_sha256": "d5dd6a7152411b634a2d1dd488d34ab5fed0727b943fddf58aea13117ce5020b",
+      "rgba_sha256": "d8db115b2dac0a38871bbdd239e22ecd4471fac8e906f3cdf597b8ea0ca8f6f3",
+      "width": 128,
+      "height": 128,
+      "rgba_bytes": 65536,
+      "nonuniform_pixels": 988,
+      "reported_hash_and_count_match": true,
+      "color_type": 6,
+      "filters": [
+        1,
+        2,
+        4
+      ],
+      "chunks": [
+        "IHDR",
+        "sRGB",
+        "IDAT",
+        "IEND"
+      ],
+      "all_chunk_crcs_valid": true
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/sprite-camera-native-propagation-20261107/retain_omitted_gpu/forward_plus/second.png",
+      "png_sha256": "c4750e678abd067e38120f72c84ef25204de7e633bcfb44c9b615fc267571f8e",
+      "rgba_sha256": "4259de89740dc63a29fa8b384ffefeb06a25c2c434cfc4e5724e3319a5a82e4a",
+      "width": 128,
+      "height": 128,
+      "rgba_bytes": 65536,
+      "nonuniform_pixels": 1014,
+      "reported_hash_and_count_match": true,
+      "color_type": 6,
+      "filters": [
+        1,
+        2,
+        4
+      ],
+      "chunks": [
+        "IHDR",
+        "sRGB",
+        "IDAT",
+        "IEND"
+      ],
+      "all_chunk_crcs_valid": true
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/sprite-camera-native-propagation-20261107/retain_omitted_gpu/forward_plus/unregistered.png",
+      "png_sha256": "d5dd6a7152411b634a2d1dd488d34ab5fed0727b943fddf58aea13117ce5020b",
+      "rgba_sha256": "d8db115b2dac0a38871bbdd239e22ecd4471fac8e906f3cdf597b8ea0ca8f6f3",
+      "width": 128,
+      "height": 128,
+      "rgba_bytes": 65536,
+      "nonuniform_pixels": 988,
+      "reported_hash_and_count_match": true,
+      "color_type": 6,
+      "filters": [
+        1,
+        2,
+        4
+      ],
+      "chunks": [
+        "IHDR",
+        "sRGB",
+        "IDAT",
+        "IEND"
+      ],
+      "all_chunk_crcs_valid": true
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/sprite-camera-native-propagation-20261107/final_viewport_gpu/mobile/side_before.png",
+      "png_sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9",
+      "rgba_sha256": "3235d4d3f8e63c27cd916647c8a0b2cb29eef7ab92813e73daaa068b936b2a21",
+      "width": 128,
+      "height": 128,
+      "rgba_bytes": 65536,
+      "nonuniform_pixels": 1300,
+      "reported_hash_and_count_match": true,
+      "color_type": 6,
+      "filters": [
+        1,
+        2,
+        4
+      ],
+      "chunks": [
+        "IHDR",
+        "sRGB",
+        "IDAT",
+        "IEND"
+      ],
+      "all_chunk_crcs_valid": true
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/sprite-camera-native-propagation-20261107/final_viewport_gpu/mobile/side_after.png",
+      "png_sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9",
+      "rgba_sha256": "3235d4d3f8e63c27cd916647c8a0b2cb29eef7ab92813e73daaa068b936b2a21",
+      "width": 128,
+      "height": 128,
+      "rgba_bytes": 65536,
+      "nonuniform_pixels": 1300,
+      "reported_hash_and_count_match": true,
+      "color_type": 6,
+      "filters": [
+        1,
+        2,
+        4
+      ],
+      "chunks": [
+        "IHDR",
+        "sRGB",
+        "IDAT",
+        "IEND"
+      ],
+      "all_chunk_crcs_valid": true
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/sprite-camera-native-propagation-20261107/final_viewport_gpu/mobile/top_before.png",
+      "png_sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9",
+      "rgba_sha256": "3235d4d3f8e63c27cd916647c8a0b2cb29eef7ab92813e73daaa068b936b2a21",
+      "width": 128,
+      "height": 128,
+      "rgba_bytes": 65536,
+      "nonuniform_pixels": 1300,
+      "reported_hash_and_count_match": true,
+      "color_type": 6,
+      "filters": [
+        1,
+        2,
+        4
+      ],
+      "chunks": [
+        "IHDR",
+        "sRGB",
+        "IDAT",
+        "IEND"
+      ],
+      "all_chunk_crcs_valid": true
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/sprite-camera-native-propagation-20261107/final_viewport_gpu/mobile/top_after.png",
+      "png_sha256": "a158938cd3a26d658c0e2b9e3974f920f8ce7ba4493501f51deb194cd838dfd9",
+      "rgba_sha256": "3235d4d3f8e63c27cd916647c8a0b2cb29eef7ab92813e73daaa068b936b2a21",
+      "width": 128,
+      "height": 128,
+      "rgba_bytes": 65536,
+      "nonuniform_pixels": 1300,
+      "reported_hash_and_count_match": true,
+      "color_type": 6,
+      "filters": [
+        1,
+        2,
+        4
+      ],
+      "chunks": [
+        "IHDR",
+        "sRGB",
+        "IDAT",
+        "IEND"
+      ],
+      "all_chunk_crcs_valid": true
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/sprite-camera-native-propagation-20261107/final_viewport_gpu/forward_plus/side_before.png",
+      "png_sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de",
+      "rgba_sha256": "ff6c135a03a63519d78a8d98187c3c6c91478ba31f8cc3413a6fea642ed734fc",
+      "width": 128,
+      "height": 128,
+      "rgba_bytes": 65536,
+      "nonuniform_pixels": 1300,
+      "reported_hash_and_count_match": true,
+      "color_type": 6,
+      "filters": [
+        1,
+        2,
+        4
+      ],
+      "chunks": [
+        "IHDR",
+        "sRGB",
+        "IDAT",
+        "IEND"
+      ],
+      "all_chunk_crcs_valid": true
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/sprite-camera-native-propagation-20261107/final_viewport_gpu/forward_plus/side_after.png",
+      "png_sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de",
+      "rgba_sha256": "ff6c135a03a63519d78a8d98187c3c6c91478ba31f8cc3413a6fea642ed734fc",
+      "width": 128,
+      "height": 128,
+      "rgba_bytes": 65536,
+      "nonuniform_pixels": 1300,
+      "reported_hash_and_count_match": true,
+      "color_type": 6,
+      "filters": [
+        1,
+        2,
+        4
+      ],
+      "chunks": [
+        "IHDR",
+        "sRGB",
+        "IDAT",
+        "IEND"
+      ],
+      "all_chunk_crcs_valid": true
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/sprite-camera-native-propagation-20261107/final_viewport_gpu/forward_plus/top_before.png",
+      "png_sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de",
+      "rgba_sha256": "ff6c135a03a63519d78a8d98187c3c6c91478ba31f8cc3413a6fea642ed734fc",
+      "width": 128,
+      "height": 128,
+      "rgba_bytes": 65536,
+      "nonuniform_pixels": 1300,
+      "reported_hash_and_count_match": true,
+      "color_type": 6,
+      "filters": [
+        1,
+        2,
+        4
+      ],
+      "chunks": [
+        "IHDR",
+        "sRGB",
+        "IDAT",
+        "IEND"
+      ],
+      "all_chunk_crcs_valid": true
+    },
+    {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/sprite-camera-native-propagation-20261107/final_viewport_gpu/forward_plus/top_after.png",
+      "png_sha256": "2bda3237ae9995a61e4115c5c718efe4f5a4fe629810d97de532fd7c66b157de",
+      "rgba_sha256": "ff6c135a03a63519d78a8d98187c3c6c91478ba31f8cc3413a6fea642ed734fc",
+      "width": 128,
+      "height": 128,
+      "rgba_bytes": 65536,
+      "nonuniform_pixels": 1300,
+      "reported_hash_and_count_match": true,
+      "color_type": 6,
+      "filters": [
+        1,
+        2,
+        4
+      ],
+      "chunks": [
+        "IHDR",
+        "sRGB",
+        "IDAT",
+        "IEND"
+      ],
+      "all_chunk_crcs_valid": true
+    }
+  ],
+  "decoder_self_test": [
+    {
+      "color_type": 2,
+      "filters_0_to_4": true,
+      "known_rgba_equal": true,
+      "crc_corruption_rejected": true
+    },
+    {
+      "color_type": 6,
+      "filters_0_to_4": true,
+      "known_rgba_equal": true,
+      "crc_corruption_rejected": true
+    }
+  ],
+  "green": {
+    "log": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/sprite-camera-native-propagation-20261107/RETAIN_RESTORED_GPU.log",
+      "sha256": "16bd9a510050f53c558b87094aec8f96fb2897d4ea8962a8809d95a2a3ef8397",
+      "diagnostics_absent": true,
+      "process_result_sha256": "ca79526bb76e0606659ac09934e7bc1e9d60f177002a5b83b847eb4bee49c000"
+    },
+    "runner_exit_code": 0,
+    "seconds": 2.11,
+    "backends": {
+      "mobile": {
+        "renderer_device": "Metal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M3 Pro (Apple9)",
+        "exit_code": 0,
+        "all_24_checks_true": true,
+        "target_cache_false": false,
+        "false_checks": [],
+        "all_images_one_draw": true,
+        "camera_image_changed": true,
+        "registration_image_unchanged": true
+      },
+      "forward_plus": {
+        "renderer_device": "Metal 4.0 - Forward+ - Using Device #0: Apple - Apple M3 Pro (Apple9)",
+        "exit_code": 0,
+        "all_24_checks_true": true,
+        "target_cache_false": false,
+        "false_checks": [],
+        "all_images_one_draw": true,
+        "camera_image_changed": true,
+        "registration_image_unchanged": true
+      }
+    }
+  },
+  "red": {
+    "log": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/sprite-camera-native-propagation-20261107/RETAIN_OMITTED_GPU.log",
+      "sha256": "d181b809d814df96de78ec45761f160cc536df4c02ad70c391b29fcf9ae7dc48",
+      "diagnostics_absent": true,
+      "process_result_sha256": "43d1021435fc24b836c8e41c42edc8d71b980b7f8544d8dd90a7da8fb662f556"
+    },
+    "runner_exit_code": 1,
+    "seconds": 4.52,
+    "backends": {
+      "mobile": {
+        "renderer_device": "Metal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M3 Pro (Apple9)",
+        "exit_code": 1,
+        "all_24_checks_true": false,
+        "target_cache_false": true,
+        "false_checks": [
+          "old_ref_survives_free",
+          "old_ref_survives_invalidate",
+          "production_cache_nonnull_1",
+          "production_cache_nonnull_2"
+        ],
+        "all_images_one_draw": true,
+        "camera_image_changed": true,
+        "registration_image_unchanged": true
+      },
+      "forward_plus": {
+        "renderer_device": "Metal 4.0 - Forward+ - Using Device #0: Apple - Apple M3 Pro (Apple9)",
+        "exit_code": 1,
+        "all_24_checks_true": false,
+        "target_cache_false": true,
+        "false_checks": [
+          "old_ref_survives_free",
+          "old_ref_survives_invalidate",
+          "production_cache_nonnull_1",
+          "production_cache_nonnull_2"
+        ],
+        "all_images_one_draw": true,
+        "camera_image_changed": true,
+        "registration_image_unchanged": true
+      }
+    }
+  },
+  "red_green_all_six_rgba_equal": true,
+  "viewport": {
+    "log": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/sprite-camera-native-propagation-20261107/FINAL_VIEWPORT_GPU.log",
+      "sha256": "158a2e45b93be37b93686e36976818a3c665c2d1379941fce2b3a9b48bacc172",
+      "diagnostics_absent": true,
+      "process_result_sha256": "d053ef383aece85e943f8e6ff7a210fa62c56050ce037e9cab48cc60634a9cdf"
+    },
+    "runner_exit_code": 0,
+    "backends": {
+      "mobile": {
+        "renderer_device": "Metal 4.0 - Forward Mobile - Using Device #0: Apple - Apple M3 Pro (Apple9)",
+        "views": {
+          "side": {
+            "before_after_rgba_equal": true,
+            "draw_calls_each": 2,
+            "nonuniform_pixels_each": 1300
+          },
+          "top": {
+            "before_after_rgba_equal": true,
+            "draw_calls_each": 2,
+            "nonuniform_pixels_each": 1300
+          }
+        },
+        "all_reported_checks_true": true
+      },
+      "forward_plus": {
+        "renderer_device": "Metal 4.0 - Forward+ - Using Device #0: Apple - Apple M3 Pro (Apple9)",
+        "views": {
+          "side": {
+            "before_after_rgba_equal": true,
+            "draw_calls_each": 2,
+            "nonuniform_pixels_each": 1300
+          },
+          "top": {
+            "before_after_rgba_equal": true,
+            "draw_calls_each": 2,
+            "nonuniform_pixels_each": 1300
+          }
+        },
+        "all_reported_checks_true": true
+      }
+    }
+  },
+  "decoded_png_count": 20
+}

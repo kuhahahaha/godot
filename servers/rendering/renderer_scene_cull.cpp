@@ -2966,7 +2966,10 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 	// Freeze the token only after CameraData is fully constructed. This keeps
 	// failed/unsupported camera setup from consuming a source ordinal.
 	if (p_viewport.is_valid() && RSG::viewport) {
-		RSG::viewport->viewport_begin_camera_capture(p_viewport, camera_data);
+		camera_data.source_viewport = p_viewport;
+		if (!RSG::viewport->viewport_begin_camera_capture(p_viewport, camera_data).is_valid()) {
+			camera_data.source_viewport = RID();
+		}
 	}
 
 	RID environment = _render_get_environment(p_camera, p_scenario);

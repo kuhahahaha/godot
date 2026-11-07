@@ -32,6 +32,7 @@
 #include "core/object/ref_counted.h"
 #include "core/os/mutex.h"
 #include "core/variant/dictionary.h"
+#include "servers/rendering/renderer_viewport.h"
 class ParticlesScenePairsTestFixture : public RefCounted {
 	GDCLASS(ParticlesScenePairsTestFixture, RefCounted)
 	mutable Mutex result_mutex;
@@ -39,11 +40,19 @@ class ParticlesScenePairsTestFixture : public RefCounted {
 	void *managed_scene = nullptr;
 	bool phase_mode = false;
 	bool viewport_mode = false;
+	Ref<RendererViewport::Viewport::CameraCapture> camera_native_old_capture;
+	RID camera_native_viewport;
+	Transform3D camera_native_old_transform;
+	Projection camera_native_old_projection;
 
 protected:
 	static void _bind_methods();
 
 public:
+	void camera_native_register(RID p_viewport, int64_t p_present_seq);
+	void camera_native_observe(RID p_viewport, Transform3D p_expected, int64_t p_stage);
+	void camera_native_invalidate(RID p_viewport);
+	void camera_native_finish(RID p_viewport);
 	void run();
 	void run_phase();
 	void run_viewport_invariance(RID p_scenario);

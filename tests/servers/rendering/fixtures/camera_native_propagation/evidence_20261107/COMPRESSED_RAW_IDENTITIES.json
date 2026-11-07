@@ -1,0 +1,38 @@
+[
+  {
+    "archive": "FINAL_FULL_CPU.xml.gz",
+    "raw_bytes": 1159727,
+    "raw_sha256": "826aa94cfa23a467a995249acd578f166d6491b8f2693a8a83b65c2172de2620"
+  },
+  {
+    "archive": "FINAL_FOCUSED.xml.gz",
+    "raw_bytes": 364835,
+    "raw_sha256": "752a3d53878477e66247f8b72531b582f248274f5c2a077dddc363e1311260c8"
+  },
+  {
+    "archive": "FINAL_CONFIGURED_FULL_CPU.xml.gz",
+    "raw_bytes": 1159470,
+    "raw_sha256": "f7d5e6f8cc36f38c8c1e44c106fa8c63fe979c2b9bead17f38be868a59f3ec06"
+  },
+  {
+    "archive": "FINAL_CONFIGURED_FULL_CPU.log.gz",
+    "raw_bytes": 5083,
+    "raw_sha256": "c292dacb88a868a049b7aacfce42b91e7922b3fc359aaec7387ebbe0c2dc9423"
+  },
+  {
+    "archive": "FINAL_FULL_CPU.log.gz",
+    "raw_bytes": 5224,
+    "raw_sha256": "d303d6cc54126e580915dab77ddcb962b3362e0467a4496a72edecfa348bfd3c"
+  },
+  {
+    "archive": "PNG_REVIEW_SOURCE.py.gz",
+    "raw_bytes": 17861,
+    "raw_sha256": "079e5638fa0dd80d4f76ac9c4fe3a13fc7a5851981a18509ed427c6033f419b2"
+  },
+  {
+    "archive": "SOURCE_REVIEW.md.gz",
+    "raw_bytes": 3878,
+    "raw_sha256": "0dee56d2f7d566a920d7436ae52afefa8f184d7a7a326e7d4599079ed9d1ef82",
+    "source": "work/sprite-camera-native-propagation-independent-review-20261107/REVIEW.md"
+  }
+]
