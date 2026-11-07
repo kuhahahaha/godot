@@ -63,6 +63,7 @@ public:
 	bool metadata_directory_in_slab(uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces) const;
 	static Error selection_metadata_bytes(const ExternalOutputConfig &, uint64_t &, uint32_t *p_alignment = nullptr);
 	Error create_selection_component(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const ExternalOutputConfig &, GDExtensionDeviceExit::ProductionOutputMetadataLease &, int p_failure);
+	void unprepared_guard_refusal(GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const ExternalOutputConfig &, GDExtensionDeviceExit::ProductionOutputMetadataLease &);
 	uint32_t selection_meshes() const;
 	uint32_t selection_materials() const;
 	bool selection_inline_matches(const ExternalOutputConfig &) const;

@@ -5465,6 +5465,56 @@ struct Access {
 			REQUIRE(RendererRD::ExternalLinkedOwnerTest::selection_metadata_bytes(p.config, bytes, &alignment) == OK);
 			GDExtensionDeviceExit::ProductionOutputMetadataLease metadata;
 			REQUIRE(p.fixture->registry.production_output_metadata_create(context, ref, 0, p.fixture->rd, bytes, alignment, metadata, true) == OK);
+			if (p.failure == 3) {
+				const uint64_t revision = p.fixture->request->revision;
+				p.native->unprepared_guard_refusal(context, ref, p.config, metadata);
+				CHECK(p.fixture->request->revision == revision);
+				CHECK(p.fixture->request->output_owner_head == UINT32_MAX);
+				CHECK(p.fixture->request->resources[0].metadata_root_serial == 0);
+				CHECK_FALSE(p.fixture->request->resources[0].metadata_generation_bound);
+				CHECK_FALSE(metadata.is_empty());
+				// Public profile refusal remains separate from internal guard status.
+				uint64_t meshes[] = { p.config.surfaces[0].get_id() };
+				uint64_t materials[] = { p.config.surface_materials[0].get_id(), p.config.surface_materials[1].get_id() };
+				GDExtensionOutputMetadataQueryInputV1 input{};
+				input.abi = { 1, sizeof(input), 0 };
+				input.limits.abi = { 1, sizeof(input.limits), 0 };
+				input.config.abi = { 1, sizeof(input.config), 0 };
+				input.config.profile = 1;
+				input.config.space = 1;
+				input.config.max_views = input.config.max_inflight = 1;
+				input.config.surfaces.data = meshes;
+				input.config.surfaces.count = 1;
+				input.config.surface_materials.data = materials;
+				input.config.surface_materials.count = 2;
+				for (uint32_t axis = 0; axis < 3; ++axis) {
+					input.config.bounds.size[axis] = 1;
+				}
+				auto query = ordinal_port<GDExtensionInterfaceDeviceSessionOutputMetadataQueryV1>("device_session_output_metadata_query_v1");
+				auto create = ordinal_port<GDExtensionInterfaceDeviceSessionOutputCreateV3>("device_session_output_create_v3");
+				REQUIRE(query != nullptr);
+				REQUIRE(create != nullptr);
+				GDExtensionOutputMetadataQueryResultV1 quoted{};
+				query(&input, &quoted);
+				CHECK(quoted.status.error == ERR_UNAVAILABLE);
+				CHECK(quoted.requirements.required_metadata_bytes == 0);
+				GDExtensionOutputCreateInputV3 v3{};
+				v3.abi = { 3, sizeof(v3), 0 };
+				v3.config = input.config;
+				v3.metadata_resource_slot = 0;
+				v3.requirements.abi = { 1, sizeof(v3.requirements), 0 };
+				v3.requirements.limits = input.limits;
+				GDExtensionOutputCreateResultV1 result{};
+				create(context, ref, &v3, &result);
+				CHECK(result.status.error == ERR_UNAVAILABLE);
+				CHECK(result.particles == 0);
+				CHECK(result.generation == 0);
+				CHECK(p.fixture->request->revision == revision);
+				REQUIRE(p.fixture->registry.production_output_metadata_return(metadata) == OK);
+				CHECK(metadata.is_empty());
+				CHECK(p.fixture->request->revision == revision + 1);
+				return;
+			}
 			const Error result = p.native->create_selection_component(context, ref, p.config, metadata, p.failure);
 			CHECK(metadata.is_empty());
 			CHECK(result == (p.failure == 0 ? OK : p.failure == 1 ? ERR_INVALID_DATA
@@ -5553,9 +5603,14 @@ struct Access {
 			GDExtensionProductionRecordReportV2 recorded{};
 			REQUIRE(consume(ref, serial, &recorded).native_error == OK);
 			REQUIRE(probe.calls == 1);
-			CHECK(recorded.report.physical_returns_pending == 1);
-			CHECK(mesh_owner->selection_holds == (failure == 2 ? 0u : 1u));
-			CHECK(RendererRD::selection_material_holds(materials, 0) == (failure == 2 ? 0u : 1u));
+			CHECK(recorded.report.physical_returns_pending == (failure == 3 ? 0u : 1u));
+			if (failure == 3) {
+				CHECK_FALSE(native.exists());
+				CHECK(request.resources[0].metadata_returned);
+				CHECK(request.resources[0].metadata_data == nullptr);
+			}
+			CHECK(mesh_owner->selection_holds == (failure >= 2 ? 0u : 1u));
+			CHECK(RendererRD::selection_material_holds(materials, 0) == (failure >= 2 ? 0u : 1u));
 			CHECK(RendererRD::selection_material_holds(materials, 1) == (failure == 0 ? 1u : 0u));
 			const uint32_t initial_leases = failure == 0 ? 3 : failure == 1 ? 2
 																			: 0;
@@ -5566,7 +5621,7 @@ struct Access {
 				*tag = PackedByteArray();
 			}
 			const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
-			for (uint32_t turn = 0; turn < initial_leases + 2; ++turn) {
+			for (uint32_t turn = 0; turn < (failure == 3 ? 0u : initial_leases + 2); ++turn) {
 				REQUIRE(fixture.registry.production_control_accept(ref, ProductionControlKind::OBSERVE, &serial, &budget) == OK);
 				REQUIRE(fixture.registry.production_control_schedule(ref, serial) == OK);
 				server->sync();
@@ -10775,4 +10830,8 @@ TEST_CASE("[SceneTree][ProductionRequest][GenerationSelection] stale second mate
 }
 TEST_CASE("[SceneTree][ProductionRequest][GenerationSelection] transaction closes post root refusal before first selection lease") {
 	TestProductionRequest::Access::generation_selection_lifecycle(2);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][GenerationGuardRefusal] actual unprepared engine component refuses private and public Instance192 paths") {
+	TestProductionRequest::Access::generation_selection_lifecycle(3);
 }

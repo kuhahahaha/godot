@@ -97,7 +97,9 @@ private:
 	uint64_t next_external_generation = 1;
 	static bool _external_decode_create(const GDExtensionOutputCreateInputV1 &, ExternalOutputConfig &, uint32_t &, GDExtensionOutputCreateResultV1 &);
 	void _external_create_typed(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionOutputCreateInputV1 &, uint32_t, uint32_t, uint32_t, uint32_t, GDExtensionOutputCreateResultV1 &);
-	void _external_create_received(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const ExternalOutputConfig &, GDExtensionDeviceExit::ProductionOutputMetadataLease &, uint32_t, uint32_t, uint32_t, GDExtensionOutputCreateResultV1 &);
+	Error _external_instance_preparation_error() const;
+	Error _external_metadata_requirements(const ExternalOutputConfig &, const GDExtensionOutputMetadataLimitsV1 &, GDExtensionOutputMetadataRequirementsV1 &) const;
+	void _external_create_received(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const ExternalOutputConfig &, GDExtensionDeviceExit::ProductionOutputMetadataLease &, uint32_t, uint32_t, uint32_t, GDExtensionOutputCreateResultV1 &, bool p_generation_selection = false);
 	GDExtensionOutputStatusV1 _external_seal_body(RID, const uint8_t *, const GDExtensionOutputCommonInputV1 &, const uint8_t *);
 	Error _external_cancel_body(RID, const uint8_t *);
 	Error _external_withdraw_body(RID, uint64_t);

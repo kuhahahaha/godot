@@ -187,6 +187,40 @@ Error ExternalLinkedOwnerTest::create_selection_component(GDExtensionDeviceExit:
 	}
 	return error;
 }
+void ExternalLinkedOwnerTest::unprepared_guard_refusal(GDExtensionDeviceExit::ProductionPhysicalContextRef context,
+		GDExtensionProductionRequestRefV1 request, const ExternalOutputConfig &config, GDExtensionDeviceExit::ProductionOutputMetadataLease &metadata) {
+	CRASH_COND(!empty_storage_mode || owner || metadata.is_empty());
+	CHECK(storage->get_external_guard() == nullptr);
+	CHECK_FALSE(storage->is_external_guard_prepared());
+	const Error expected = storage->get_external_guard_preparation_error();
+	REQUIRE(expected == ERR_UNCONFIGURED);
+	GDExtensionOutputMetadataLimitsV1 limits{};
+	limits.abi = { 1, sizeof(limits), 0 };
+	limits.view_lease_capacity = 1;
+	limits.read_lease_capacity = 2;
+	limits.surface_lease_capacity = 7;
+	GDExtensionOutputMetadataRequirementsV1 requirements{};
+	CHECK(storage->_external_metadata_requirements(config, limits, requirements) == expected);
+	CHECK(requirements.abi.abi_version == 0);
+	CHECK(requirements.required_metadata_bytes == 0);
+	CHECK(requirements.required_alignment == 0);
+	CHECK(requirements.slot_count == 0);
+	const void *data = metadata.get_data();
+	const uint64_t bytes = metadata.get_size();
+	const uint64_t generation_before = storage->next_external_generation;
+	GDExtensionOutputCreateResultV1 result{};
+	result.abi = { 1, sizeof(result), 0 };
+	storage->_external_create_received(context, request, config, metadata, 1, 2, 7, result, true);
+	CHECK(result.status.error == expected);
+	CHECK(result.particles == 0);
+	CHECK(result.generation == 0);
+	CHECK(result.capabilities == 0);
+	CHECK(metadata.get_data() == data);
+	CHECK(metadata.get_size() == bytes);
+	CHECK(storage->next_external_generation == generation_before);
+	CHECK(storage->particles_owner.get_rid_count() == 0);
+	CHECK(owner == nullptr);
+}
 uint32_t ExternalLinkedOwnerTest::selection_meshes() const {
 	CRASH_COND(!exists());
 	return owner->retained_mesh_count;
