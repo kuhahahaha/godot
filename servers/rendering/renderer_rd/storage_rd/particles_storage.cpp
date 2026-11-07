@@ -799,17 +799,17 @@ void ParticlesStorage::particles_emit(RID p_particles, const Transform3D &p_tran
 	ERR_FAIL_COND_MSG(!p_transform.is_finite() || !p_velocity.is_finite() || !Math::is_finite(p_color.r) || !Math::is_finite(p_color.g) || !Math::is_finite(p_color.b) || !Math::is_finite(p_color.a) || !Math::is_finite(p_custom.r) || !Math::is_finite(p_custom.g) || !Math::is_finite(p_custom.b) || !Math::is_finite(p_custom.a), "Particle emission inputs must contain only finite values.");
 	ERR_FAIL_COND(particles->amount == 0);
 
-	if (particles->emitting) {
-		particles->clear = true;
-		particles->emitting = false;
-	}
-
 	if (particles->emission_buffer == nullptr) {
 		_particles_allocate_emission_buffer(particles);
 		if (particles->emission_buffer == nullptr || particles->emission_storage_buffer.is_null()) {
 			ERR_PRINT("Failed to allocate particle emission buffer.");
 			return;
 		}
+	}
+
+	if (particles->emitting) {
+		particles->clear = true;
+		particles->emitting = false;
 	}
 
 	particles->inactive = false;
