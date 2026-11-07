@@ -2,9 +2,12 @@
 
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
+#include "core/os/os.h"
+#include "core/string/print_string.h"
 #include "servers/rendering/renderer_rd/height_capture_checked_sink.h"
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/mesh_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/rendering_device.h"
@@ -205,7 +208,11 @@ Error ParticlesHeightfieldClearTestFixture::run_capture() {
 }
 
 Error ParticlesHeightfieldClearTestFixture::sample_depth_pair() {
-	const String code = "#version 450\nlayout(local_size_x=1) in; layout(set=0,binding=0) uniform sampler s; layout(set=0,binding=1) uniform texture2D first_depth; layout(set=0,binding=2) uniform texture2D second_depth; layout(set=0,binding=3,std430) buffer Out { float values[2]; } out_data; void main() { out_data.values[0]=texture(sampler2D(first_depth,s),vec2(0.5)).r; out_data.values[1]=texture(sampler2D(second_depth,s),vec2(0.5)).r; }";
+	String code = "#version 450\nlayout(local_size_x=1) in; layout(set=0,binding=0) uniform sampler s; layout(set=0,binding=1) uniform texture2D first_depth; layout(set=0,binding=2) uniform texture2D second_depth; layout(set=0,binding=3,std430) buffer Out { float values[2]; } out_data; void main() { out_data.values[0]=texture(sampler2D(first_depth,s),vec2(0.5)).r; out_data.values[1]=texture(sampler2D(second_depth,s),vec2(0.5)).r; }";
+	const bool geometry_refusal = candidate_capture && OS::get_singleton()->get_environment("ANGE_HEIGHTFIELD_GEOMETRY_REFUSAL") == "1";
+	if (geometry_refusal) {
+		code = code.replace("float values[2]", "float values[3]").replace("void main()", "layout(set=0,binding=4) uniform texture2D ordinary_depth; void main()").replace("out_data.values[1]=texture", "out_data.values[2]=texture(sampler2D(ordinary_depth,s),vec2(0.5)).r; out_data.values[1]=texture");
+	}
 	RenderingDevice::ShaderStageSPIRVData stage;
 	stage.shader_stage = RenderingDevice::SHADER_STAGE_COMPUTE;
 	String error;
@@ -222,7 +229,7 @@ Error ParticlesHeightfieldClearTestFixture::sample_depth_pair() {
 		return ERR_CANT_CREATE;
 	}
 	pipeline = rd->compute_pipeline_create(shader);
-	buffer = rd->storage_buffer_create(8);
+	buffer = rd->storage_buffer_create(geometry_refusal ? 12 : 8);
 	sampler = rd->sampler_create(RenderingDevice::SamplerState());
 	if (pipeline.is_null() || buffer.is_null() || sampler.is_null()) {
 		return ERR_CANT_CREATE;
@@ -248,6 +255,17 @@ Error ParticlesHeightfieldClearTestFixture::sample_depth_pair() {
 	u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
 	u.append_id(buffer);
 	uniforms.push_back(u);
+	if (geometry_refusal) {
+		const auto *instance = RendererRD::ParticlesStorage::get_singleton()->particles_collision_instance_owner.get_or_null(first_instance);
+		if (!instance || instance->heightfield_texture.is_null()) {
+			return ERR_INVALID_DATA;
+		}
+		u.clear_ids();
+		u.binding = 4;
+		u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
+		u.append_id(instance->heightfield_texture);
+		uniforms.push_back(u);
+	}
 	uniform_set = rd->uniform_set_create(uniforms, shader, 0);
 	if (uniform_set.is_null() || pipeline.is_null()) {
 		return ERR_UNAVAILABLE;
@@ -260,7 +278,7 @@ Error ParticlesHeightfieldClearTestFixture::sample_depth_pair() {
 	rd->compute_list_bind_uniform_set(compute, uniform_set, 0);
 	rd->compute_list_dispatch(compute, 1, 1, 1);
 	rd->compute_list_end();
-	return rd->buffer_get_data_async(buffer, callable_mp(this, &ParticlesHeightfieldClearTestFixture::sample_done), 0, 8);
+	return rd->buffer_get_data_async(buffer, callable_mp(this, &ParticlesHeightfieldClearTestFixture::sample_done), 0, geometry_refusal ? 12 : 8);
 }
 
 Error ParticlesHeightfieldClearTestFixture::run_candidate() {
@@ -407,6 +425,8 @@ Error ParticlesHeightfieldClearTestFixture::run_frame_resources() {
 Error ParticlesHeightfieldClearTestFixture::capture_candidate() {
 	using Frame = RendererRD::ParticlesStorage::HeightFrame;
 	using Sink = RendererRD::HeightCaptureCheckedSink;
+	const bool geometry_refusal = OS::get_singleton()->get_environment("ANGE_HEIGHTFIELD_GEOMETRY_REFUSAL") == "1";
+	Ref<Frame> instanced_candidate;
 	auto *storage = RendererRD::ParticlesStorage::get_singleton();
 	auto *renderer = RendererSceneRenderRD::get_singleton();
 	collision = storage->particles_collision_allocate();
@@ -416,7 +436,7 @@ Error ParticlesHeightfieldClearTestFixture::capture_candidate() {
 	storage->particles_collision_set_height_field_resolution(collision, RSE::PARTICLES_COLLISION_HEIGHTFIELD_RESOLUTION_256);
 	first_instance = storage->particles_collision_instance_create(collision);
 	storage->particles_collision_instance_set_active(first_instance, true);
-	Error error = Frame::create_candidate(*storage, first_instance, 1, frame_resources_b, 64, 32, candidate_frame);
+	Error error = Frame::create_candidate(*storage, first_instance, geometry_refusal ? 2 : 1, frame_resources_b, 64, 32, candidate_frame);
 	if (error != OK) {
 		return error;
 	}
@@ -427,6 +447,12 @@ Error ParticlesHeightfieldClearTestFixture::capture_candidate() {
 	error = Frame::create_candidate(*storage, first_instance, 1, frame_resources_b, 5, 32, postbind_candidate);
 	if (error != OK) {
 		return error;
+	}
+	if (geometry_refusal) {
+		error = Frame::create_candidate(*storage, first_instance, 1, frame_resources_a, 64, 32, instanced_candidate);
+		if (error != OK) {
+			return error;
+		}
 	}
 	const auto frozen = candidate_frame->get_snapshot();
 	Transform3D changed;
@@ -439,7 +465,7 @@ Error ParticlesHeightfieldClearTestFixture::capture_candidate() {
 	const auto *live = storage->particles_collision_owner.get_or_null(collision);
 	const bool frozen_ok = snapshot.instance == first_instance && snapshot.base == collision && snapshot.source_generation != 0 &&
 			snapshot.shape_revision == frozen.shape_revision && live->scene_shape_revision != snapshot.shape_revision &&
-			snapshot.producer_occurrence == 1 && snapshot.transform == Transform3D() && snapshot.extents == Vector3(1, 1, 1) &&
+			snapshot.producer_occurrence == (geometry_refusal ? 2u : 1u) && snapshot.transform == Transform3D() && snapshot.extents == Vector3(1, 1, 1) &&
 			snapshot.bounds == AABB(Vector3(-1, -1, -1), Vector3(2, 2, 2)) && snapshot.heightfield_mask == frozen.heightfield_mask &&
 			snapshot.heightfield_mask != live->heightfield_mask && snapshot.cull_mask == frozen.cull_mask && snapshot.cull_mask != live->cull_mask &&
 			snapshot.width == 256 && snapshot.height == 256 && snapshot.resolution == RSE::PARTICLES_COLLISION_HEIGHTFIELD_RESOLUTION_256 &&
@@ -497,6 +523,77 @@ Error ParticlesHeightfieldClearTestFixture::capture_candidate() {
 					bind.bind.state_accepted && bind.bind.capture_complete;
 		}
 	}
+	bool instanced_restored = !geometry_refusal;
+	if (geometry_refusal) {
+		auto *meshes = RendererRD::MeshStorage::get_singleton();
+		const RID multimesh = meshes->multimesh_allocate();
+		meshes->multimesh_initialize(multimesh);
+		meshes->multimesh_allocate_data(multimesh, 2, RSE::MULTIMESH_TRANSFORM_3D);
+		meshes->multimesh_set_mesh(multimesh, mesh);
+		meshes->multimesh_instance_set_transform(multimesh, 0, Transform3D());
+		Transform3D second_transform;
+		second_transform.origin.x = 0.25f;
+		meshes->multimesh_instance_set_transform(multimesh, 1, second_transform);
+		meshes->_update_dirty_multimeshes();
+		const int actual_instances = meshes->multimesh_get_instances_to_draw(multimesh);
+		RenderGeometryInstance *instanced_geometry = renderer->geometry_instance_create(multimesh);
+		if (!instanced_geometry) {
+			meshes->multimesh_free(multimesh);
+			return ERR_CANT_CREATE;
+		}
+		const AABB instanced_bounds = meshes->multimesh_get_aabb(multimesh);
+		instanced_geometry->set_transform(Transform3D(), instanced_bounds, instanced_bounds);
+		PagedArray<RenderGeometryInstance *> instanced_geometry_list;
+		instanced_geometry_list.set_page_pool(&pool);
+		instanced_geometry_list.push_back(instanced_geometry);
+		print_line("HEIGHTFIELD_EXPECTED_GEOMETRY_REFUSAL_BEGIN");
+		const Error refused = instanced_candidate->capture(*renderer, instanced_geometry_list);
+		print_line("HEIGHTFIELD_EXPECTED_GEOMETRY_REFUSAL_END");
+		const auto &refused_prefix = instanced_candidate->get_capture_prefix();
+		const auto &refused_cleanup = refused_prefix.get_cleanup_record().draw;
+		uint32_t refused_draws = 0;
+		bool actual_draw_refusal = false;
+		for (uint32_t i = 0; i < refused_prefix.get_business_count(); ++i) {
+			const auto &record = refused_prefix.get_business_record(i);
+			if (record.operation == Sink::Operation::Draw) {
+				++refused_draws;
+				actual_draw_refusal = record.draw.error == ERR_UNAVAILABLE && record.draw.effect == Sink::Effect::NoNewEffect && !record.draw.draw_handle.is_valid() && record.draw.prefix_count == 0;
+			}
+		}
+		instanced_restored = actual_instances == 2 && refused == ERR_UNAVAILABLE &&
+				instanced_candidate->get_state() == Frame::State::FailedRetiring && instanced_candidate->get_capture_error() == ERR_UNAVAILABLE &&
+				refused_prefix.get_error() == ERR_UNAVAILABLE && refused_draws == 1 && actual_draw_refusal &&
+				refused_prefix.has_cleanup_attempt() && refused_prefix.is_restored() && !refused_prefix.has_open_list() && !refused_prefix.is_restoration_unknown() &&
+				refused_cleanup.error == OK && refused_cleanup.effect == Sink::Effect::Recorded && refused_cleanup.capture_complete && refused_cleanup.draw_handle.is_valid();
+		renderer->geometry_instance_free(instanced_geometry);
+		meshes->multimesh_free(multimesh);
+		{
+			MutexLock lock(result_mutex);
+			result_data["geometry_refusal_instances"] = actual_instances;
+			result_data["geometry_refusal_error"] = int(refused);
+			result_data["geometry_refusal_state"] = instanced_candidate->get_state() == Frame::State::FailedRetiring ? "FailedRetiring" : "unexpected";
+			result_data["geometry_refusal_at_rd_draw"] = actual_draw_refusal && refused_draws == 1;
+			result_data["geometry_refusal_restored"] = instanced_restored;
+			result_data["geometry_refusal_occurrence"] = int64_t(instanced_candidate->get_snapshot().producer_occurrence);
+			result_data["geometry_recovery_occurrence"] = int64_t(snapshot.producer_occurrence);
+			result_data["geometry_refusal_depth_serial"] = int64_t(instanced_candidate->get_snapshot().depth_allocation.serial);
+			result_data["geometry_recovery_depth_serial"] = int64_t(snapshot.depth_allocation.serial);
+		}
+		if (!instanced_restored) {
+			return FAILED;
+		}
+		// The original ordinary renderer must work in the same RD session after
+		// cleanup. Its separate D32 target is sampled alongside the candidates.
+		storage->particles_collision_set_box_extents(collision, Vector3(1, 1, 1));
+		storage->particles_collision_instance_set_transform(first_instance, Transform3D());
+		renderer->render_particle_collider_heightfield(first_instance, Transform3D(), instances);
+		// Restore the independent sentinel after the rejected capture's clear0.
+		const auto sentinel = rd->draw_list_begin(frame_resources_a->get_framebuffer(), RD::DRAW_CLEAR_DEPTH, {}, 0.75f);
+		if (sentinel == RD::INVALID_ID) {
+			return ERR_CANT_CREATE;
+		}
+		rd->draw_list_end();
+	}
 	// Seed B differently immediately before the checked producer: a producer
 	// no-op must fail the independent .25 observation below.
 	const auto seed = rd->draw_list_begin(frame_resources_b->get_framebuffer(), RD::DRAW_CLEAR_DEPTH, {}, 0.125f);
@@ -538,9 +635,9 @@ Error ParticlesHeightfieldClearTestFixture::capture_candidate() {
 		result_data["candidate_draws"] = draws;
 		result_data["candidate_index_binds"] = indices;
 		result_data["candidate_uniform_binds"] = uniforms;
-		result_data["candidate_pass"] = frozen_ok && rejected_ok && postbind_restored && once && captured;
+		result_data["candidate_pass"] = frozen_ok && rejected_ok && postbind_restored && instanced_restored && once && captured;
 	}
-	return frozen_ok && rejected_ok && postbind_restored && once && captured ? OK : FAILED;
+	return frozen_ok && rejected_ok && postbind_restored && instanced_restored && once && captured ? OK : FAILED;
 }
 
 void ParticlesHeightfieldClearTestFixture::poll_frame_resources() {
@@ -794,9 +891,11 @@ void ParticlesHeightfieldClearTestFixture::legacy_sample_done(const PackedByteAr
 }
 
 void ParticlesHeightfieldClearTestFixture::sample_done(const PackedByteArray &p_bytes) {
-	float raw[2] = { 99.0f, 99.0f };
-	if (p_bytes.size() == 8) {
-		std::memcpy(raw, p_bytes.ptr(), 8);
+	const bool geometry_refusal = candidate_capture && OS::get_singleton()->get_environment("ANGE_HEIGHTFIELD_GEOMETRY_REFUSAL") == "1";
+	const int expected_bytes = geometry_refusal ? 12 : 8;
+	float raw[3] = { 99.0f, 99.0f, 99.0f };
+	if (p_bytes.size() == expected_bytes) {
+		std::memcpy(raw, p_bytes.ptr(), expected_bytes);
 	}
 
 	if (frame_resources_capture) {
@@ -810,7 +909,12 @@ void ParticlesHeightfieldClearTestFixture::sample_done(const PackedByteArray &p_
 		MutexLock lock(result_mutex);
 		result_data["first_raw"] = raw[0];
 		result_data["second_raw"] = raw[1];
-		result_data["sample_pass"] = p_bytes.size() == 8 && Math::abs(raw[0] - 0.75f) <= 0.001f && Math::abs(raw[1] - 0.25f) <= 0.001f;
+		const bool ordinary_recovered = !geometry_refusal || Math::abs(raw[2] - 0.25f) <= 0.001f;
+		if (geometry_refusal) {
+			result_data["geometry_refusal_ordinary_raw"] = raw[2];
+			result_data["geometry_refusal_ordinary_recovered"] = ordinary_recovered && p_bytes.size() == expected_bytes;
+		}
+		result_data["sample_pass"] = p_bytes.size() == expected_bytes && Math::abs(raw[0] - 0.75f) <= 0.001f && Math::abs(raw[1] - 0.25f) <= 0.001f && ordinary_recovered;
 		frame_resources_sampled = true;
 		return;
 	}

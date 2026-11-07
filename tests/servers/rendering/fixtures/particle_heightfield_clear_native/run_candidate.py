@@ -19,6 +19,8 @@ HERE = Path(__file__).resolve().parent
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, required=True)
+    parser.add_argument("--geometry-refusal", action="store_true",
+                        help="Require current RD refusal of a real two-instance MultiMesh and same-session recovery")
     parser.add_argument("--display-driver", default="x11")
     parser.add_argument("--rendering-driver", default="vulkan")
     args = parser.parse_args()
@@ -30,10 +32,13 @@ def main():
         for key in ("ANGE_HEIGHTFIELD_GEOMETRY", "ANGE_HEIGHTFIELD_GEOMETRY_HEIGHT",
                     "ANGE_HEIGHTFIELD_EXTENTS_Y", "ANGE_HEIGHTFIELD_TRANSFORM_Y",
                     "ANGE_HEIGHTFIELD_TRANSFORM_CASE", "ANGE_HEIGHTFIELD_LEGACY_NORMAL",
+                    "ANGE_HEIGHTFIELD_GEOMETRY_REFUSAL",
                     "ANGE_HEIGHTFIELD_LEGACY_NEIGHBOR_CASE"):
             env.pop(key, None)
         env["ANGE_HEIGHTFIELD_FRAME_RESOURCES"] = "1"
         env["ANGE_HEIGHTFIELD_CANDIDATE"] = "1"
+        if args.geometry_refusal:
+            env["ANGE_HEIGHTFIELD_GEOMETRY_REFUSAL"] = "1"
         print(f"HEIGHTFIELD_CANDIDATE_CASE renderer={method}", flush=True)
         print("COMMAND " + json.dumps(command), flush=True)
         result = subprocess.run(command, env=env, text=True, stdout=subprocess.PIPE,
@@ -41,7 +46,20 @@ def main():
         print(result.stdout, flush=True)
         if result.returncode != 0:
             raise SystemExit(f"Resource case exited {result.returncode}")
-        if "ERROR:" in result.stdout or "WARNING:" in result.stdout:
+        if args.geometry_refusal:
+            lines = result.stdout.splitlines()
+            begins = [i for i, line in enumerate(lines) if line == "HEIGHTFIELD_EXPECTED_GEOMETRY_REFUSAL_BEGIN"]
+            ends = [i for i, line in enumerate(lines) if line == "HEIGHTFIELD_EXPECTED_GEOMETRY_REFUSAL_END"]
+            errors = [(i, line) for i, line in enumerate(lines) if "ERROR:" in line]
+            condition = ('Condition "!draw_list.state.pipeline.is_valid() || p_instances != 1 || '
+                         'p_procedural_vertices != 0" is true. Returning: result.failure(ERR_UNAVAILABLE)')
+            if (len(begins) != 1 or len(ends) != 1 or len(errors) != 1
+                    or not begins[0] < errors[0][0] < ends[0]
+                    or condition not in errors[0][1]
+                    or "_draw_list_draw_recorded" not in "\n".join(lines[errors[0][0]:ends[0]])
+                    or "WARNING:" in result.stdout):
+                raise SystemExit("Expected exactly the scoped RD instance-profile refusal and no other error/warning")
+        elif "ERROR:" in result.stdout or "WARNING:" in result.stdout:
             raise SystemExit("Resource case emitted an error or cleanup warning")
         if f" - {renderer} - " not in result.stdout or args.rendering_driver.lower() not in result.stdout.lower():
             raise SystemExit(f"Missing actual {args.rendering_driver}/{renderer} evidence")
@@ -75,7 +93,24 @@ def main():
                 or len({entry.get("serial") for entry in reports}) != 4
                 or not all(entry.get("returned") and entry.get("serial", 0) > 0 for entry in reports)):
             raise SystemExit(f"Incomplete independent raw/retention/physical-return evidence on {renderer}")
-    print("HEIGHTFIELD_CANDIDATE_MATRIX_PASS 2 real GPU cases")
+        if args.geometry_refusal:
+            refusal_serial = sample.get("geometry_refusal_depth_serial", 0)
+            recovery_serial = sample.get("geometry_recovery_depth_serial", 0)
+            if (sample.get("geometry_refusal_instances") != 2
+                    or sample.get("geometry_refusal_error") != 2  # ERR_UNAVAILABLE, core/error/error_list.h
+                    or sample.get("geometry_refusal_state") != "FailedRetiring"
+                    or not sample.get("geometry_refusal_at_rd_draw")
+                    or not sample.get("geometry_refusal_restored")
+                    or not sample.get("geometry_refusal_ordinary_recovered")
+                    or not math.isclose(sample.get("geometry_refusal_ordinary_raw", float("nan")), 0.25, abs_tol=0.001)
+                    or sample.get("geometry_refusal_occurrence") != 1
+                    or sample.get("geometry_recovery_occurrence") != 2
+                    or not refusal_serial or not recovery_serial or refusal_serial == recovery_serial):
+                raise SystemExit(f"Incomplete real MultiMesh refusal/recovery evidence on {renderer}")
+    if args.geometry_refusal:
+        print("HEIGHTFIELD_GEOMETRY_REFUSAL_MATRIX_PASS 2 real GPU cases")
+    else:
+        print("HEIGHTFIELD_CANDIDATE_MATRIX_PASS 2 real GPU cases")
 
 
 if __name__ == "__main__":
