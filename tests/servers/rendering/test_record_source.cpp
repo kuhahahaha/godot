@@ -439,6 +439,8 @@ public:
 		worker->operations_processed = 9;
 		CHECK(device._check_transfer_worker_buffer(&buffer) == OK);
 		CHECK(buffer.transfer_worker_index == -1);
+		// Continue the original pending batch after the marker lifecycle probe.
+		worker->operations_processed = 0;
 		CHECK(a.credits.workers == 2);
 		CHECK(b.credits.workers == 2);
 		uint32_t offset = 0;
