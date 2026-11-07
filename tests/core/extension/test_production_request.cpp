@@ -11680,7 +11680,14 @@ struct Access {
 				GDExtensionProductionRequestRefV1 request, const GDExtensionProductionOperationV1 *operation) {
 			using namespace GDExtensionDeviceExit;
 			auto &self = *static_cast<ManagedSceneHarness *>(data);
-			CRASH_COND(!phase || !operation || self.phase_calls != 0);
+			if (!phase || !operation) {
+				self.check("managed_phase_callback_payload", false);
+				return;
+			}
+			if (self.phase_calls != 0) {
+				self.check("managed_phase_single_delivery", false);
+				return;
+			}
 			++self.phase_calls;
 			self.phase_context = { NativeScenePhaseProbe::word(phase->physical_context, 0), NativeScenePhaseProbe::word(phase->physical_context, 1) };
 			self.check("managed_phase_original_occurrence", phase->occurrence != 0 && phase->expiry_serial == self.phase_context.frame_serial);
