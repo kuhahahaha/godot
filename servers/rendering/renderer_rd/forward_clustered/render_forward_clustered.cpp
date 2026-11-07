@@ -639,9 +639,8 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 
 			bool indirect = bool(surf->owner->base_flags & INSTANCE_DATA_FLAG_MULTIMESH_INDIRECT);
 			if (p_height_sink) {
-				// Preserve unsupported original draw facts; never split an instanced
-				// or indirect source draw into fabricated single-instance receipts.
-				if (emulate_point_size || indirect || instance_count != 1) {
+				// Keep indirect and emulated-point draws outside the prepared profile.
+				if (emulate_point_size || indirect) {
 					p_height_sink->reject(ERR_UNAVAILABLE);
 					return;
 				}
@@ -669,6 +668,7 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 				prepared.material = material_uniform_set;
 				prepared.push_constant = push_constant;
 				prepared.push_constant_size = push_constant_size;
+				prepared.instance_count = instance_count;
 				p_height_geometry->push_back(prepared);
 				i += element_info.repeat - 1;
 				continue;
@@ -825,7 +825,7 @@ Error RenderForwardClustered::_render_height_list_checked(RenderListParameters *
 			return r_sink.finish();
 		}
 		previous_material = item.material;
-		if (r_sink.set_push_constant(&item.push_constant, item.push_constant_size) != OK || r_sink.draw_geometry_prepared(item.index_array.is_valid()) != OK) {
+		if (r_sink.set_push_constant(&item.push_constant, item.push_constant_size) != OK || r_sink.draw_geometry_prepared(item.index_array.is_valid(), item.instance_count) != OK) {
 			return r_sink.finish();
 		}
 	}

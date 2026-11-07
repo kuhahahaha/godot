@@ -433,6 +433,7 @@ private:
 		RID material;
 		SceneState::PushConstant push_constant;
 		uint32_t push_constant_size = 0;
+		uint32_t instance_count;
 	};
 	Error _render_height_list_checked(RenderListParameters *p_params, RID p_framebuffer, RendererRD::HeightCaptureCheckedSink &r_sink);
 	Error _render_particle_collider_heightfield_impl(RID p_fb, const Transform3D &p_cam_transform, const Projection &p_cam_projection, const PagedArray<RenderGeometryInstance *> &p_instances, RendererRD::HeightCaptureCheckedSink *p_sink);
