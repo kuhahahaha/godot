@@ -1,0 +1,217 @@
+{
+  "schema": 1,
+  "status": "PASS: fixed native compatibility only",
+  "transport_source_revision": "08a727807d772cf413024643d334b1a71b68e040",
+  "scope": "Independent receipt audit of existing incoming opaque physical-copy and fixed main-Metal particle native runner evidence after Scene/height adoption; no new run or build.",
+  "host": {
+    "runtime_stamp": "4.7.2.stable.custom_build.828f2f807 (2026-11-07 10:31:15 UTC)",
+    "compiled_state": "828f2f807c base plus height test-substrate delta adopted by 08a727807d; no postcommit rebuild claim",
+    "artifact": {
+      "bytes": 157524424,
+      "sha256": "1ad44f2d6045e4a7e29155a730dbb10a8128d279285bf72a51f952dfb55535f3"
+    },
+    "controlled_build_selection": {
+      "schema": 1,
+      "core_stamp": "5f8994a7744ff8245a48174eebabb1fb4c62957f237d081afdae11dd56023706",
+      "compiler_route": "BuiltinGlslangV1",
+      "compiler_stamp": "5b8b179152a3eac3b7e246257acb4008c26e6c2500e2f6d9b32f261532ad9c71",
+      "platform": "macos",
+      "architecture": "arm64",
+      "target_kind": "Executable"
+    },
+    "pinned_particle_host": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k06-owner-interface-20261107/SCENE117_PINNED_HOST/editor.arm64",
+    "current_and_pinned_host_equal": true,
+    "builder_input_count": 122,
+    "current_builder_input_mismatches": 0,
+    "builder_record": "core/engine_build_identity.gen.json",
+    "source_manifest_alone_is_build_provenance": false
+  },
+  "incoming": {
+    "returncode": 0,
+    "timeout": false,
+    "checks_passed": 22,
+    "checks_total": 22,
+    "input_pins": 263,
+    "original_closure_pins": 243,
+    "explicit_scene_extra_pins": 20,
+    "before_after_entries_including_manifest": 264,
+    "before_after_equal": true,
+    "current_pin_mismatches": 0,
+    "dso_reused_from_original_r5": true,
+    "dso": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/native-numeric-unit-correlation-20261029/runtime/probe_incoming.dylib",
+      "bytes": 509352,
+      "sha256": "a83a31ec2b723383412fc4278ce7dc681adf5787a7f8f57e87e2787773766972"
+    },
+    "generated_header": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/core/extension/gdextension_interface.gen.h",
+      "bytes": 377688,
+      "sha256": "f56e7d0a3678b37b59c5ced213604829f0223cb0bc38bf1d1e92700a9927e1b1"
+    },
+    "fifo_records": 3,
+    "publications": 3,
+    "completion_rows": 3,
+    "native_facts": 6,
+    "native_facts_per_request": 2,
+    "completion_known_and_complete_per_request": 2,
+    "completion_possible_per_request": 0,
+    "formal_negatives": 4,
+    "owned": {
+      "bytes": 16,
+      "sha256": "9708c8d10605801dbc22634c51e439545cd57c603709ee6278be767d67d8d4ef"
+    },
+    "drain_ring_enabled": false,
+    "drain_ring_evidence": false,
+    "closure": "Three callbacks and requests returned; backing physically returned; bridge/session/context closed; fixture destroyed before binding terminal; SDK user levels and DSO unload verified by original runner."
+  },
+  "particle": {
+    "returncode": 0,
+    "native_checks_passed": 390,
+    "native_checks_total": 390,
+    "outer_checks_passed": 8,
+    "outer_checks_total": 8,
+    "current_source_pins": 15,
+    "current_source_mismatches": 0,
+    "raw_stdout_native_result_equal": true,
+    "file_inventory_entries": 4,
+    "file_inventory_mismatches": 0,
+    "expected_engine_error_count": 13,
+    "expected_engine_errors": {
+      "Failed to reset particle sub-emitter buffer.": 2,
+      "Failed to update particle emission buffer.": 2,
+      "Failed to update particle frame parameters buffer.": 8,
+      "Failed to create particle fallback trail buffer.": 1
+    },
+    "unexpected_engine_errors": 0,
+    "gpu_pass": true,
+    "native_resource_count": 29,
+    "allocation_count": 31,
+    "readbacks_completed_queued": [
+      6,
+      6
+    ],
+    "sdf_readbacks_completed_queued": [
+      2,
+      2
+    ],
+    "fixture_released": true,
+    "holder_qualified": false,
+    "ange_product_qualified": false,
+    "whole_output_released": false
+  },
+  "preserved_evidence": {
+    "original_r5": "work/readback-v2-publication-native-20261107/metal_r5",
+    "original_r5_rewritten": false,
+    "active_slot_backup": "work/k06-owner-interface-20261107/SCENE117_INCOMING/ACTIVE_SLOT_BEFORE",
+    "backup_file_count": 8
+  },
+  "limits": [
+    "Incoming proves opaque physical copy only; no logical publication, semantic initializedness, padding or Full qualification.",
+    "No drain ring was enabled; no drain-ring ordering claim.",
+    "Particle success applies to the existing fixed native retry/readback/physical-return fixture.",
+    "No external Scene connect/pair, E09/K06, product-holder or whole-output qualification.",
+    "08a727807d is source adoption/transport, not a freshly stamped or rebuilt host."
+  ],
+  "evidence": [
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_INCOMING/COMMAND.json",
+      "bytes": 419,
+      "sha256": "186795d6afe12aa53d888384008501a1cbcdbbebdc069ca320167233861b1581"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_INCOMING/RUN_EXIT.json",
+      "bytes": 68,
+      "sha256": "046364b6f695e5e7b3a809b9dfaad9b7a833ad8928300581d7cbf98ba03d5daa"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_INCOMING/RUN.log",
+      "bytes": 26,
+      "sha256": "c1214d47263ba4fb8e48eaa4cf7614b295371d98ac538be262e1a8a54283e425"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_INCOMING/FREEZE.log",
+      "bytes": 185,
+      "sha256": "d00e4ea1decf1453c710562fd823c0e237509f031f724048d14af6ca4fde0b3b"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_INCOMING/CURRENT_INCOMING_INPUTS.json",
+      "bytes": 71947,
+      "sha256": "aef1c7b55a838156948b562f43c1b8d781f978841ef6cddcb93668dc42e5afae"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_INCOMING/INCOMING_RUN_INPUTS_BEFORE.json",
+      "bytes": 65418,
+      "sha256": "d1b3ea9cd21f0ae2a1ccacaeff725ded9eba9732026009a2432eb891c8308d7c"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_INCOMING/INCOMING_RUN_INPUTS_AFTER.json",
+      "bytes": 65418,
+      "sha256": "d1b3ea9cd21f0ae2a1ccacaeff725ded9eba9732026009a2432eb891c8308d7c"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_INCOMING/INCOMING_RESULTS.json",
+      "bytes": 3145,
+      "sha256": "ea8b329dd2e0a5b1a7235884b02c7280623564a252e6411603ae74c2130122ac"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_INCOMING/INCOMING.log",
+      "bytes": 4844,
+      "sha256": "6cd27edcd408b3996db13f84c7f25d0158006eb5d645c1032e9e1d0b21e7bfd9"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_INCOMING/INCOMING.rc",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_INCOMING/INCOMING_WORKING_TREE.diff",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_INCOMING/incoming_owned.bin",
+      "bytes": 16,
+      "sha256": "9708c8d10605801dbc22634c51e439545cd57c603709ee6278be767d67d8d4ef"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_PARTICLE_NATIVE/RESULT.json",
+      "bytes": 44211,
+      "sha256": "8fbfce5c48414f3b33b113f84d127a219f2ef9c35b290d68d0fe6687069db417"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_PARTICLE_NATIVE/FILES.json",
+      "bytes": 508,
+      "sha256": "32d12852b4a2eaf382cbf3ad0d237cabc3b920748c7913ecdf342274e7afc10f"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_PARTICLE_NATIVE/stdout.log",
+      "bytes": 25985,
+      "sha256": "733a3b9a8bd86e20e5aa0c0dd77f3fed81c7bdd81df0ea7211ecdf459c9146e2"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_PARTICLE_NATIVE/stderr.log",
+      "bytes": 3076,
+      "sha256": "7e76e25b68cf4f325601979c53459be1c236a0f35a3e371ddaf571e813ab378a"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_PARTICLE_NATIVE/controlled_build.json",
+      "bytes": 530,
+      "sha256": "c31b239bb8e8246c55bbb584314ce6fa1b7e3e43614cb0a53d6808137cb3f6c5"
+    },
+    {
+      "path": "core/engine_build_identity.gen.json",
+      "bytes": 86573,
+      "sha256": "6f913403022834e395f7ea03505e48ca11f566e4c74e63daae65848435fb3bfc"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_HOST_BUILD.json",
+      "bytes": 530,
+      "sha256": "c31b239bb8e8246c55bbb584314ce6fa1b7e3e43614cb0a53d6808137cb3f6c5"
+    },
+    {
+      "path": "work/k06-owner-interface-20261107/SCENE117_HEIGHT_NEIGHBORS_BUILD.log",
+      "bytes": 2266,
+      "sha256": "eca88a0ea239780e95a862c836a571b17e78a2f501a03e10e2849e51231eeb50"
+    }
+  ]
+}
