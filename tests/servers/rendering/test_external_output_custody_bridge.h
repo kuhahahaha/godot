@@ -43,9 +43,13 @@ class ExternalLinkedOwnerTest {
 	ParticlesStorage *storage = nullptr;
 	ExternalOutputOwner *owner = nullptr;
 	RID particles;
+	bool owns_storage = true;
+	void initialize_owner(RenderingDevice &, bool);
 
 public:
 	explicit ExternalLinkedOwnerTest(RenderingDevice &, bool p_query_enabled = false);
+	// Borrow the existing RD owner; retain only this fixture particle and root.
+	ExternalLinkedOwnerTest(RenderingDevice &, ParticlesStorage &, bool p_query_enabled);
 	~ExternalLinkedOwnerTest();
 	GDExtensionDeviceExit::ProductionOutputPin &pin(uint32_t);
 	void install(uint32_t, GDExtensionDeviceExit::Registry &, GDExtensionProductionRequestRefV1);

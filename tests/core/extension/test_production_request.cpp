@@ -46,6 +46,7 @@
 #include "tests/servers/rendering/test_external_output_custody_bridge.h"
 #include "tests/servers/rendering/transfer_test_driver_base.h"
 #include "tests/test_macros.h"
+#include "servers/rendering/renderer_scene_cull.h"
 
 #include <cstring>
 
@@ -1094,7 +1095,14 @@ struct Access {
 			return request ? OK : ERR_INVALID_DATA;
 		}
 		bool owner_cleaned = false;
-		void cleanup_owner() {
+		void cleanup_owner(bool runtime = false) {
+			const auto check = [runtime](bool passed) {
+				if (runtime) {
+					CRASH_COND_MSG(!passed, "Original runtime enrollment cleanup failed");
+					return passed;
+				}
+				return Access::check_step(passed);
+			};
 			using namespace GDExtensionDeviceExit;
 			// This CPU fixture never initialized native RD state. Suppress native
 			// teardown on every destructor path, including partial setup/refund failure.
@@ -1110,48 +1118,48 @@ struct Access {
 			if (request && request->serial) {
 				const GDExtensionProductionRequestRefV1 ref = { instance, request->serial };
 				if (request->control.state == ProductionControlState::PENDING) {
-					if (!Access::check_step(registry.production_control_schedule(ref, request->control.serial) == OK)) {
+					if (!check(registry.production_control_schedule(ref, request->control.serial) == OK)) {
 						return;
 					}
 					server->sync();
 				}
 				if (request->control.state == ProductionControlState::RETURNED) {
 					ProductionControlOutput output = {};
-					if (!Access::check_step(registry.production_control_consume(ref, request->control.serial, &output) == OK)) {
+					if (!check(registry.production_control_consume(ref, request->control.serial, &output) == OK)) {
 						return;
 					}
 				}
 				if (request->serial) {
-					if (!Access::check_step(registry.production_cancel(ref).native_error == OK)) {
+					if (!check(registry.production_cancel(ref).native_error == OK)) {
 						return;
 					}
-					if (!Access::check_step(registry.production_release(ref).native_error == OK)) {
+					if (!check(registry.production_release(ref).native_error == OK)) {
 						return;
 					}
 				}
 			}
 			if (attachment.handle_serial) {
-				if (!Access::check_step((public_port ? port.close(attachment) : registry.production_close(attachment)).native_error == OK)) {
+				if (!check((public_port ? port.close(attachment) : registry.production_close(attachment)).native_error == OK)) {
 					return;
 				}
 			}
 			if (qualification.handle_serial) {
-				if (!Access::check_step(registry.qualification_close(qualification).native_error == OK)) {
+				if (!check(registry.qualification_close(qualification).native_error == OK)) {
 					return;
 				}
 			}
 			if (producer.handle_serial) {
-				if (!Access::check_step(registry.release_producer_registration_view(producer) == OK)) {
+				if (!check(registry.release_producer_registration_view(producer) == OK)) {
 					return;
 				}
 			}
 			if (context.handle_serial) {
-				if (!Access::check_step(registry.release_device_reference(instance, context.handle_serial, false).native_error == OK)) {
+				if (!check(registry.release_device_reference(instance, context.handle_serial, false).native_error == OK)) {
 					return;
 				}
 			}
 			if (session.handle_serial) {
-				if (!Access::check_step(registry.release_device_reference(instance, session.handle_serial, true).native_error == OK)) {
+				if (!check(registry.release_device_reference(instance, session.handle_serial, true).native_error == OK)) {
 					return;
 				}
 			}
@@ -1159,16 +1167,16 @@ struct Access {
 			if (reference.is_valid()) {
 				MutexLock lock(registry.mutex);
 				auto &record = registry.records[reference.slot];
-				if (!Access::check_step(record.private_refs == 2)) {
+				if (!check(record.private_refs == 2)) {
 					return;
 				}
-				if (!Access::check_step(record.external_refs == 0)) {
+				if (!check(record.external_refs == 0)) {
 					return;
 				}
-				if (!Access::check_step(record.cleanup_reservations == 0)) {
+				if (!check(record.cleanup_reservations == 0)) {
 					return;
 				}
-				if (!Access::check_step(holder.production_children == 0)) {
+				if (!check(holder.production_children == 0)) {
 					return;
 				}
 				record.holders = nullptr;
@@ -7023,10 +7031,143 @@ struct Access {
 		CHECK(registry.production_serials.next == production_serial);
 		CHECK(registry.frame_serials.next == frame_serial);
 	}
+	// Runtime-only test bridge: controls always use the original queued FIFO.
+	struct ManagedSceneHarness {
+		SingletonEnrollment enrollment;
+		RendererRD::ExternalLinkedOwnerTest *native = nullptr;
+		RenderingDevice *device = nullptr;
+		Dictionary checks;
+		GDExtensionProductionRequestRefV1 ref{};
+		uint64_t control = 0;
+		uint32_t stage = 0;
+		Error record_error = ERR_UNAVAILABLE;
+		bool root_returned = false;
+		static void record(void *data, GDExtensionDeviceExit::ProductionPhysicalContextRef context,
+				GDExtensionProductionRequestRefV1 request, const GDExtensionProductionOperationV1 *) {
+			auto &self = *static_cast<ManagedSceneHarness *>(data);
+			self.record_error = self.native->install_generation(context, request, self.enrollment.registry);
+		}
+		void check(const char *name, bool passed) { checks[name] = passed; }
+		Error schedule(GDExtensionDeviceExit::ProductionControlKind kind) {
+			using namespace GDExtensionDeviceExit;
+			if (kind == ProductionControlKind::RECORD) return enrollment.registry.production_record_schedule(ref, &control);
+			const GDExtensionProductionServiceBudgetV1 budget = {
+				production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0
+			};
+			Error error = enrollment.registry.production_control_accept(ref, kind, &control,
+					&budget);
+			return error == OK ? enrollment.registry.production_control_schedule(ref, control) : error;
+		}
+		Error begin() {
+			device = RenderingDevice::get_singleton();
+			auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
+			auto *storage = RendererRD::ParticlesStorage::get_singleton();
+			if (!device || !storage || !server || !server->is_on_render_thread()) return ERR_UNAVAILABLE;
+			enrollment.server = server;
+			OrdinalPlan plan;
+			plan.capacity = { GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, 0, 1, 0, 0, 0, 0, 0, 0 };
+			plan.action_count = plan.resource_count = plan.use_count = plan.readback_count = 0;
+			const Error error = enrollment.initialize_owner(1, false, false, &record, this, false, 1, false,
+					+[](void *, GDExtensionProductionAttachmentRefV1) {}, false, false, false, false, &plan, device);
+			// Never retain a SceneReady TLS frame between runtime callbacks.
+			enrollment.frame.leave();
+			if (error != OK) return error;
+			native = memnew(RendererRD::ExternalLinkedOwnerTest(*device, *storage, true));
+			ref = { enrollment.instance, enrollment.request->serial };
+			return schedule(GDExtensionDeviceExit::ProductionControlKind::RECORD);
+		}
+		void exercise_scene() {
+			auto *scene = RendererSceneCull::singleton;
+			auto *storage = RendererRD::ParticlesStorage::get_singleton();
+			const AABB envelope(Vector3(-2, -2, -2), Vector3(4, 4, 4));
+			const AABB query_a(Vector3(-1, -1, -1), Vector3(1, 2, 2));
+			const AABB query_b(Vector3(0, -1, -1), Vector3(1, 2, 2));
+			RID scenario = scene->scenario_allocate();scene->scenario_initialize(scenario);
+			RID sphere = storage->particles_collision_allocate();storage->particles_collision_initialize(sphere);
+			storage->particles_collision_set_collision_type(sphere, RSE::PARTICLES_COLLISION_TYPE_SPHERE_COLLIDE);
+			storage->particles_collision_set_sphere_radius(sphere, 0.1f);
+			auto instance = [&](RID base, Vector3 position) {
+				RID id = scene->instance_allocate();scene->instance_initialize(id);
+				scene->instance_set_base(id, base);scene->instance_set_scenario(id, scenario);
+				scene->instance_set_transform(id, Transform3D(Basis(), position));return id;
+			};
+			const RID left = instance(native->particle_rid(), Vector3());
+			const RID right = instance(native->particle_rid(), Vector3());
+			const RID source_a = instance(sphere, Vector3(-0.5f, 0, 0));
+			const RID source_b = instance(sphere, Vector3(0.5f, 0, 0));
+			check("managed_commit_left", scene->scene_receiver_commit_query(left, native->generation, device, Transform3D(), envelope, query_a, 1) == OK);
+			check("managed_commit_right", scene->scene_receiver_commit_query(right, native->generation, device, Transform3D(), envelope, query_b, 1) == OK);
+			RendererSceneCull::SceneSphereSnapshot a,b,rejected;
+			check("managed_dirty_rejected", scene->scene_sphere_snapshot(left, native->generation, device, 4, rejected) == ERR_UNAVAILABLE);
+			scene->update_dirty_instances();
+			check("managed_same_base_left", scene->scene_sphere_snapshot(left, native->generation, device, 4, a) == OK && a.sources.size() == 1 && a.sources[0].transform.origin.x < 0 && a.query_bounds == query_a && a.bounds_revision == 1 && a.pose_revision > 0);
+			check("managed_same_base_right", scene->scene_sphere_snapshot(right, native->generation, device, 4, b) == OK && b.sources.size() == 1 && b.sources[0].transform.origin.x > 0 && b.query_bounds == query_b && b.bounds_revision == 1);
+			check("managed_distinct_source", a.sources.size() == 1 && b.sources.size() == 1 && a.sources[0].source_key != b.sources[0].source_key);
+			check("managed_bad_generation", scene->scene_receiver_commit_query(left, native->generation + 1, device, Transform3D(), envelope, query_a, 2) == ERR_INVALID_DATA);
+			{
+				RenderingDevice foreign;
+				check("managed_foreign_device", scene->scene_receiver_commit_query(left, native->generation, &foreign, Transform3D(), envelope, query_a, 2) == ERR_INVALID_DATA);
+			}
+			check("managed_outside_envelope", scene->scene_receiver_commit_query(left, native->generation, device, Transform3D(), envelope, AABB(Vector3(20, 0, 0), Vector3(1, 1, 1)), 2) == ERR_INVALID_PARAMETER);
+			check("managed_stale_revision", scene->scene_receiver_commit_query(left, native->generation, device, Transform3D(), envelope, query_a, 1) == ERR_INVALID_PARAMETER);
+			rejected = b;
+			check("managed_rejected_snapshot_zero", scene->scene_sphere_snapshot(right, native->generation + 1, device, 4, rejected) == ERR_INVALID_DATA && rejected.sources.is_empty() && rejected.bounds_revision == 0);
+			check("managed_commit_requery", scene->scene_receiver_commit_query(left, native->generation, device, Transform3D(), envelope, query_b, 2) == OK);
+			scene->update_dirty_instances();
+			RendererSceneCull::SceneSphereSnapshot changed,unchanged;
+			check("managed_left_revision", scene->scene_sphere_snapshot(left, native->generation, device, 4, changed) == OK && changed.bounds_revision == 2 && changed.pose_revision > a.pose_revision && changed.sources.size() == 1 && b.sources.size() == 1 && changed.sources[0].source_key == b.sources[0].source_key);
+			check("managed_right_unchanged", scene->scene_sphere_snapshot(right, native->generation, device, 4, unchanged) == OK && unchanged.bounds_revision == b.bounds_revision && unchanged.pose_revision == b.pose_revision && unchanged.pair_revision == b.pair_revision && unchanged.query_bounds == b.query_bounds);
+			scene->free(source_a);scene->free(source_b);scene->free(left);scene->free(right);scene->free(scenario);
+			storage->particles_collision_free(sphere);
+		}
+		// Empty dictionary means the original queued control has not returned yet.
+		Dictionary advance() {
+			using namespace GDExtensionDeviceExit;
+			ProductionControlOutput output{};
+			const Error consumed = enrollment.registry.production_control_consume(ref, control, &output);
+			if (consumed == ERR_BUSY) return {};
+			CRASH_COND(consumed != OK); // Preserve real custody on unexpected issuer failure.
+			if (stage == 0) {
+				check("managed_original_record", output.result.native_error == OK && record_error == OK && !native->generation_pin().is_empty());
+				if (record_error == OK) exercise_scene();
+				native->withdraw_generation();stage = 1;
+			} else if (stage == 1 && native->released() && enrollment.request->maintenance_serial == 0) {
+				root_returned |= output.output_generation.native_released;
+				check("managed_original_root_return", root_returned);
+				stage = 2;
+			} else if (stage == 2 && output.result.native_error == OK && output.owner_return.native_error == OK) {
+				enrollment.request = nullptr; // RELEASE consume may reclaim its arena.
+				check("managed_original_request_release", output.owner_return.native_error == OK);
+				memdelete(native);native = nullptr;
+				// All queued controls and custody have returned. This closes only
+				// fixture handles; never sync the currently executing RT callback.
+				enrollment.server = nullptr;enrollment.cleanup_owner(true);
+				check("managed_enrollment_cleanup", enrollment.owner_cleaned);
+				return checks;
+			}
+			if (stage == 1) root_returned |= output.output_generation.native_released;
+			const Error queued = schedule(stage == 2 ? ProductionControlKind::RELEASE : ProductionControlKind::OBSERVE);
+			CRASH_COND(queued != OK);
+			return {};
+		}
+	};
+
 	static Error quote(const GDExtensionProductionCapacityV1 &capacity, GDExtensionProductionMetadataQuoteV1 &out, uint32_t current_commands = 0, uint32_t workers = 0) {
 		return GDExtensionDeviceExit::Registry::production_layout(capacity, out, current_commands, workers);
 	}
 };
+void *managed_scene_begin() {
+	auto *harness = memnew(Access::ManagedSceneHarness);
+	const Error error = harness->begin();
+	CRASH_COND_MSG(error != OK, "Managed Scene original test enrollment failed: " + itos(error));
+	return harness;
+}
+Dictionary managed_scene_advance(void *opaque) {
+	auto *harness = static_cast<Access::ManagedSceneHarness *>(opaque);
+	Dictionary result = harness->advance();
+	if (!result.is_empty()) memdelete(harness);
+	return result;
+}
 TEST_CASE("[ProductionRequest] quote checks dimensions before reserving real cells") {
 	GDExtensionProductionCapacityV1 capacity = {};
 	capacity.abi = GDExtensionDeviceExit::production_dto_abi<GDExtensionProductionCapacityV1>();

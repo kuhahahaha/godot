@@ -15,6 +15,7 @@ func _start() -> void:
 func _process(_delta: float) -> bool:
 	if fixture == null:
 		return false
+	RenderingServer.call_on_render_thread(Callable(fixture, "advance"))
 	var result: Dictionary = fixture.call("result")
 	if result.has("pass"):
 		print("SCENE_PAIRS_NATIVE ", JSON.stringify(result))

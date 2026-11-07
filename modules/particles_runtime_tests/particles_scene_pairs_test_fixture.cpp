@@ -4,8 +4,13 @@
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/rendering_server.h"
 
+namespace TestProductionRequest {
+void *managed_scene_begin();
+Dictionary managed_scene_advance(void *);
+}
 void ParticlesScenePairsTestFixture::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("run"), &ParticlesScenePairsTestFixture::run);
+	ClassDB::bind_method(D_METHOD("advance"), &ParticlesScenePairsTestFixture::advance);
 	ClassDB::bind_method(D_METHOD("result"), &ParticlesScenePairsTestFixture::result);
 }
 Dictionary ParticlesScenePairsTestFixture::result() const {
@@ -146,11 +151,22 @@ void ParticlesScenePairsTestFixture::run() {
 	scene->free(scenario);
 	storage->particles_collision_free(sphere);
 	storage->particles_free(particles);
+	managed_scene = TestProductionRequest::managed_scene_begin();
+	MutexLock lock(result_mutex);
+	result_data["checks"] = checks;
+}
+void ParticlesScenePairsTestFixture::advance() {
+	if (!managed_scene) return;
+	const Dictionary managed_checks = TestProductionRequest::managed_scene_advance(managed_scene);
+	if (managed_checks.is_empty()) return;
+	managed_scene = nullptr;
+	MutexLock lock(result_mutex);
+	Dictionary checks = result_data["checks"];
+	checks.merge(managed_checks);
 	bool passed = true;
 	for (const Variant &key : checks.keys()) {
 		passed = passed && bool(checks[key]);
 	}
-	MutexLock lock(result_mutex);
 	result_data["checks"] = checks;
 	result_data["pass"] = passed;
 }
