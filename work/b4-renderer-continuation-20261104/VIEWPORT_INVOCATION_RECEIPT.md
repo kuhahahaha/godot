@@ -12,3 +12,6 @@ Validation: compile_commands.json compiler flags, with -o/-c removed and -fsynta
 
 
 Review correction: viewport RID now retains its first presentation view ID across withdrawal/resource invalidation. A different view ID is rejected even with a higher epoch, preventing A1→resize→B1→resize→A1 from replacing the single original lineage's tombstone. This is one field on the original viewport owner, not another registry. Rebinding another original public view requires a distinct native viewport lifetime. Added the exact attempted-switch sequence regression, including explicit withdrawal and a high foreign epoch. Production/test TU syntax checks and diff check passed; unified host rebuild/runtime remain parent's work.
+
+
+Runtime fixture correction: the headless Dummy RenderingMethod buffer factory returns null. The new invocation test now uses a finite CPU-only RenderSceneBuffers subclass implementing no-op configuration setters, so owner identity/mismatch and resize revocation do not depend on a GPU factory. Added explicit null-ref cleanup/return after the retain assertion, because this test configuration can continue after REQUIRE. This does not qualify attachments, device lifetime or GPU execution. The test TU syntax check and diff check passed; parent owns the updated runtime run.

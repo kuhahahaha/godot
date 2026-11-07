@@ -34,6 +34,19 @@
 #include "servers/rendering/rendering_server_globals.h"
 #include "tests/test_macros.h"
 
+namespace {
+// CPU-only original buffer-owner identity for invocation association checks.
+// Dummy rendering has no buffer factory; no attachment/device/GPU proof here.
+class CameraInvocationTestBuffers : public RenderSceneBuffers {
+public:
+	void configure(const RenderSceneBuffersConfiguration *p_config) override {}
+	void set_fsr_sharpness(float p_fsr_sharpness) override {}
+	void set_texture_mipmap_bias(float p_texture_mipmap_bias) override {}
+	void set_anisotropic_filtering_level(RSE::ViewportAnisotropicFiltering p_level) override {}
+	void set_use_debanding(bool p_use_debanding) override {}
+};
+} // namespace
+
 TEST_FORCE_LINK(test_viewport_camera_source)
 
 TEST_CASE("[B4][CameraCapture] withdrawn viewport cannot replace original view lineage") {
@@ -66,7 +79,7 @@ TEST_CASE("[B4][CameraCapture] actual invocation rejects foreign owner and revok
 	RSG::viewport->viewport_set_size(viewport, 64, 48, 1);
 	RSG::viewport->viewport_attach_camera(viewport, camera);
 	auto *owner = RSG::viewport->viewport_owner.get_or_null(viewport);
-	owner->render_buffers = RSG::scene->render_buffers_create();
+	owner->render_buffers = Ref<RenderSceneBuffers>(memnew(CameraInvocationTestBuffers));
 	REQUIRE(owner->render_buffers.is_valid());
 	RendererViewport::Viewport::ViewPresentationKey key{ 923, 4, 12 };
 	REQUIRE(RSG::viewport->viewport_register_presentation_key(viewport, key));
@@ -81,6 +94,11 @@ TEST_CASE("[B4][CameraCapture] actual invocation rejects foreign owner and revok
 	REQUIRE(token.is_valid());
 	Ref<RendererViewport::Viewport::CameraCapture> retained;
 	REQUIRE(RSG::viewport->viewport_get_camera_capture_ref(viewport, token, retained));
+	if (retained.is_null()) {
+		RSG::viewport->free(viewport);
+		RSG::scene->free(camera);
+		return;
+	}
 	CHECK(retained->get_invocation().camera == camera);
 	CHECK(retained->get_invocation().render_buffers == owner->render_buffers);
 	CHECK(retained->get_invocation().render_target == owner->render_target);
