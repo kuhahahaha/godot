@@ -22,8 +22,14 @@ def main():
     parser.add_argument("--rendering-driver", default="vulkan")
     args = parser.parse_args()
     observed = {}
-    cases = [(height, 1.0, 0.0) for height in (None, -0.5, 0.0, 0.5)] + [(0.25, 2.0, -0.5)]
-    for height, extents_y, transform_y in cases:
+    cases = [(height, ey, ty, "") for height, ey, ty in (
+        (None, 1.0, 0.0), (-0.5, 1.0, 0.0), (0.0, 1.0, 0.0),
+        (0.5, 1.0, 0.0), (0.25, 2.0, -0.5),
+    )]
+    cases.extend((0.5, 1.0, 0.0, transform_case) for transform_case in (
+        "rotated", "rotated_uniform", "rotated_nonuniform",
+    ))
+    for height, extents_y, transform_y, transform_case in cases:
         for method, renderer in (("mobile", "Forward Mobile"), ("forward_plus", "Forward+")):
             command = [
                 str(args.binary.resolve()),
@@ -39,11 +45,15 @@ def main():
                 "res://run.gd",
             ]
             env = os.environ.copy()
+            env.pop("ANGE_HEIGHTFIELD_LEGACY_NORMAL", None)
             env["ANGE_HEIGHTFIELD_GEOMETRY"] = "0" if height is None else "1"
             env["ANGE_HEIGHTFIELD_GEOMETRY_HEIGHT"] = str(height or 0.0)
+            env.pop("ANGE_HEIGHTFIELD_TRANSFORM_CASE", None)
+            if transform_case:
+                env["ANGE_HEIGHTFIELD_TRANSFORM_CASE"] = transform_case
             env["ANGE_HEIGHTFIELD_EXTENTS_Y"] = str(extents_y)
             env["ANGE_HEIGHTFIELD_TRANSFORM_Y"] = str(transform_y)
-            print(f"HEIGHTFIELD_NATIVE_CASE renderer={method} height={height} extents_y={extents_y} transform_y={transform_y}", flush=True)
+            print(f"HEIGHTFIELD_NATIVE_CASE renderer={method} height={height} extents_y={extents_y} transform_y={transform_y} transform_case={transform_case or 'identity'}", flush=True)
             print("COMMAND " + json.dumps(command), flush=True)
             result = subprocess.run(
                 command, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=90
@@ -60,7 +70,9 @@ def main():
                 for line in result.stdout.splitlines()
                 if "HEIGHTFIELD_CLEAR_NATIVE_PASS " in line
             ]
-            expected = 0.0 if height is None else (height - transform_y + extents_y) / (2.0 * extents_y)
+            # Transformed geometry is authored at local y=.5, half-height=1.
+            # This oracle does not reuse the production capture transform math.
+            expected = 0.75 if transform_case else 0.0 if height is None else (height - transform_y + extents_y) / (2.0 * extents_y)
             if (
                 len(samples) != 1
                 or not samples[0].get("pass")
@@ -69,10 +81,10 @@ def main():
                 or not math.isclose(samples[0].get("second_raw", float("nan")), expected, abs_tol=0.001)
             ):
                 raise SystemExit(f"Missing independent D32 samples on {renderer}, height={height}")
-            observed[(height, extents_y, transform_y, method)] = samples[0]["second_raw"]
-        if not math.isclose(observed[(height, extents_y, transform_y, "mobile")], observed[(height, extents_y, transform_y, "forward_plus")], abs_tol=0.001):
+            observed[(height, extents_y, transform_y, transform_case, method)] = samples[0]["second_raw"]
+        if not math.isclose(observed[(height, extents_y, transform_y, transform_case, "mobile")], observed[(height, extents_y, transform_y, transform_case, "forward_plus")], abs_tol=0.001):
             raise SystemExit(f"Mobile/Forward+ depth mismatch at height={height}")
-    print("HEIGHTFIELD_NATIVE_MATRIX_PASS 10 real GPU cases")
+    print("HEIGHTFIELD_NATIVE_MATRIX_PASS 16 real GPU cases")
 
 
 if __name__ == "__main__":
