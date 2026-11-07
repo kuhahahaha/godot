@@ -306,9 +306,46 @@ Error ParticlesHeightfieldClearTestFixture::run_frame_resources() {
 		return ERR_UNAVAILABLE;
 	}
 	using Resources = RendererRD::ParticlesStorage::HeightFrameResources;
-	Error error = Resources::allocate(*rd, candidate_capture ? 256 : 32, candidate_capture ? 256 : 32, frame_resources_a);
-	if (error == OK) {
-		error = Resources::allocate(*rd, candidate_capture ? 256 : 32, candidate_capture ? 256 : 32, frame_resources_b);
+	quoted_resources_capture = OS::get_singleton()->get_environment("ANGE_HEIGHTFIELD_QUOTED_RESOURCES") == "1";
+	Error error = OK;
+	if (quoted_resources_capture) {
+		bool verified = true;
+		for (Ref<Resources> *owner : { &frame_resources_a, &frame_resources_b }) {
+			NativeDepthAllocationQuote quote;
+			error = rd->_native_disposal_depth_allocation_quote(candidate_capture ? 256 : 32, candidate_capture ? 256 : 32, quote);
+			if (error != OK) {
+				break;
+			}
+			NativeDepthAllocationQuote::CreateOutcome outcome;
+			error = Resources::allocate_quoted(*rd, quote, *owner, outcome);
+			if (error != OK) {
+				break;
+			}
+			NativeDepthAllocationQuote::Report reservation;
+			NativeDepthAllocationProjection::Report actual;
+			error = rd->_native_disposal_depth_allocation_quote_observe(quote, reservation);
+			if (error == OK) {
+				error = (*owner)->observe_allocation(actual);
+			}
+			verified = verified && error == OK && (*owner)->is_quoted_verified() &&
+					outcome == NativeDepthAllocationQuote::CreateOutcome::CreatedVerified && actual.framebuffer_created &&
+					actual.depth_driver_backing.knowledge == NativeDepthAllocationProjection::ByteKnowledge::Known &&
+					actual.depth_driver_backing.bytes > 0 && actual.depth_driver_backing.bytes <= reservation.texture_owner_reservation.bytes &&
+					actual.depth.state == NativeDisposalWitness::State::LIVE && actual.framebuffer.state == NativeDisposalWitness::State::LIVE &&
+					actual.shared_attachment_depth.serial == actual.depth.serial && !actual.all_created_children_returned;
+		}
+		{
+			MutexLock lock(result_mutex);
+			result_data["quoted_allocation_verified"] = verified && error == OK;
+		}
+		if (!verified && error == OK) {
+			error = FAILED;
+		}
+	} else {
+		error = Resources::allocate(*rd, candidate_capture ? 256 : 32, candidate_capture ? 256 : 32, frame_resources_a);
+		if (error == OK) {
+			error = Resources::allocate(*rd, candidate_capture ? 256 : 32, candidate_capture ? 256 : 32, frame_resources_b);
+		}
 	}
 	if (error == OK) {
 		first_texture = frame_resources_a->get_depth();
@@ -350,7 +387,7 @@ Error ParticlesHeightfieldClearTestFixture::run_frame_resources() {
 				// Explicit test cut after a real empty begin. Cleanup end is an
 				// original checked receipt, never a successful business end.
 				RendererRD::HeightCaptureCheckedSink cut(*rd, 4, 0);
-				error = cut.begin(targets[i], RD::DRAW_CLEAR_DEPTH, {}, 0.125f);
+				error = quoted_resources_capture ? cut.begin_quoted_target(frame_resources_b, RD::DRAW_CLEAR_DEPTH, {}, 0.125f) : cut.begin(targets[i], RD::DRAW_CLEAR_DEPTH, {}, 0.125f);
 				if (error == OK) {
 					cut.reject(ERR_CANT_CREATE);
 				}
@@ -379,7 +416,7 @@ Error ParticlesHeightfieldClearTestFixture::run_frame_resources() {
 				}
 			}
 			RendererRD::HeightCaptureCheckedSink sink(*rd, 4, 0);
-			error = sink.begin(targets[i], RD::DRAW_CLEAR_DEPTH, {}, clear_depths[i]);
+			error = quoted_resources_capture ? sink.begin_quoted_target(i == 0 ? frame_resources_a : frame_resources_b, RD::DRAW_CLEAR_DEPTH, {}, clear_depths[i]) : sink.begin(targets[i], RD::DRAW_CLEAR_DEPTH, {}, clear_depths[i]);
 			const Error finished = sink.finish();
 			const bool count_ok = sink.get_business_count() >= 2;
 			bool recorded = error == OK && finished == OK && sink.get_error() == OK && sink.is_restored() && count_ok;
@@ -677,6 +714,15 @@ void ParticlesHeightfieldClearTestFixture::retire_frame_resources() {
 			reports.push_back(entry);
 			returned = returned && report.state == NativeDisposalWitness::State::RETURNED;
 		}
+		if (quoted_resources_capture) {
+			NativeDepthAllocationProjection::Report allocation;
+			const Error projected = (*owner)->observe_allocation(allocation);
+			if (projected != OK) {
+				first_error = projected;
+			}
+			returned = returned && allocation.all_created_children_returned &&
+					allocation.depth.serial == observation.depth.serial && allocation.framebuffer.serial == observation.framebuffer.serial;
+		}
 		returned = returned && observation.state == Resources::State::RELEASED;
 	}
 	MutexLock lock(result_mutex);
@@ -688,6 +734,9 @@ void ParticlesHeightfieldClearTestFixture::retire_frame_resources() {
 	}
 	if (returned) {
 		result_data["all_physical_returned"] = reports.size() == 4;
+		if (quoted_resources_capture) {
+			result_data["quoted_projection_returned"] = first_error == OK;
+		}
 		result_data["pass"] = reports.size() == 4 && frame_resources_error == OK && bool(result_data.get("sample_pass", false)) &&
 				bool(result_data.get("retained_busy", false)) && bool(result_data.get("distinct_rids", false)) &&
 				bool(result_data.get("failure_cut_restored", false)) && bool(result_data.get("ordinary_after_cut", false)) &&

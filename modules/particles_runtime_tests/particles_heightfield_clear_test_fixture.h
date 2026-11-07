@@ -16,6 +16,7 @@ class ParticlesHeightfieldClearTestFixture : public RefCounted {
 	mutable Mutex result_mutex;
 	bool started = false;
 	bool frame_resources_capture = false;
+	bool quoted_resources_capture = false;
 	bool candidate_capture = false;
 	Ref<RendererRD::ParticlesStorage::HeightFrame> candidate_frame;
 	Ref<RendererRD::ParticlesStorage::HeightFrame> rejected_candidate;

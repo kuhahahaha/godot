@@ -19,6 +19,7 @@ HERE = Path(__file__).resolve().parent
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, required=True)
+    parser.add_argument("--quoted", action="store_true", help="Require original native quote, same-owner allocation/sink and retained projection return")
     parser.add_argument("--display-driver", default="x11")
     parser.add_argument("--rendering-driver", default="vulkan")
     args = parser.parse_args()
@@ -32,6 +33,11 @@ def main():
                     "ANGE_HEIGHTFIELD_TRANSFORM_CASE", "ANGE_HEIGHTFIELD_LEGACY_NORMAL",
                     "ANGE_HEIGHTFIELD_LEGACY_NEIGHBOR_CASE"):
             env.pop(key, None)
+        env.pop("ANGE_HEIGHTFIELD_CANDIDATE", None)
+        env.pop("ANGE_HEIGHTFIELD_GEOMETRY_REFUSAL", None)
+        env.pop("ANGE_HEIGHTFIELD_QUOTED_RESOURCES", None)
+        if args.quoted:
+            env["ANGE_HEIGHTFIELD_QUOTED_RESOURCES"] = "1"
         env["ANGE_HEIGHTFIELD_FRAME_RESOURCES"] = "1"
         print(f"HEIGHTFIELD_RESOURCES_CASE renderer={method}", flush=True)
         print("COMMAND " + json.dumps(command), flush=True)
@@ -49,6 +55,8 @@ def main():
         if len(samples) != 1:
             raise SystemExit("Missing unique completed resource observation")
         sample = samples[0]
+        if args.quoted and (not sample.get("quoted_allocation_verified") or not sample.get("quoted_projection_returned")):
+            raise SystemExit(f"Missing original quoted allocation/projection evidence on {renderer}")
         reports = sample.get("physical_reports", [])
         identities = [sample.get(key) for key in ("first_depth_rid", "second_depth_rid",
                       "first_framebuffer_rid", "second_framebuffer_rid")]
@@ -64,7 +72,7 @@ def main():
                 or len({entry.get("serial") for entry in reports}) != 4
                 or not all(entry.get("returned") and entry.get("serial", 0) > 0 for entry in reports)):
             raise SystemExit(f"Incomplete independent raw/retention/physical-return evidence on {renderer}")
-    print("HEIGHTFIELD_RESOURCES_MATRIX_PASS 2 real GPU cases")
+    print("HEIGHTFIELD_QUOTED_RESOURCES_MATRIX_PASS 2 real GPU cases" if args.quoted else "HEIGHTFIELD_RESOURCES_MATRIX_PASS 2 real GPU cases")
 
 
 if __name__ == "__main__":
