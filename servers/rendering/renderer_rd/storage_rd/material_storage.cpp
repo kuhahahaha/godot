@@ -1153,6 +1153,49 @@ void MaterialStorage::MaterialData::free_parameters_uniform_set(RID p_uniform_se
 	}
 }
 
+Error MaterialStorage::material_selection_acquire(RID p_rid, NativeSelectionLease &r_lease, uint64_t p_expected_generation) {
+	auto *rd = RD::get_singleton();
+	if (!rd || !rd->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	if (r_lease.is_active()) {
+		return ERR_ALREADY_IN_USE;
+	}
+	MaterialData *data = nullptr;
+	const Error ready = material_get_native_preparation_data(p_rid, p_expected_generation, data);
+	if (ready != OK) {
+		return ready;
+	}
+	auto *material = material_owner.get_or_null(p_rid);
+	if (material->selection_holds == UINT32_MAX || material->shader->selection_holds == UINT32_MAX) {
+		return ERR_PARAMETER_RANGE_ERROR;
+	}
+	++material->selection_holds;
+	++material->shader->selection_holds;
+	r_lease.owner = this;
+	r_lease.device = rd;
+	r_lease.rid = p_rid;
+	r_lease.generation = material->generation;
+	return OK;
+}
+
+Error MaterialStorage::material_selection_release(NativeSelectionLease &r_lease) {
+	if (r_lease.owner != this || !r_lease.device || r_lease.device != RD::get_singleton() || !r_lease.device->native_immutable_is_render_thread()) {
+		return ERR_UNAUTHORIZED;
+	}
+	auto *material = material_owner.get_or_null(r_lease.rid);
+	if (!material || material->generation != r_lease.generation || !material->selection_holds || !material->shader || !material->shader->selection_holds) {
+		return ERR_INVALID_DATA;
+	}
+	--material->selection_holds;
+	--material->shader->selection_holds;
+	r_lease.owner = nullptr;
+	r_lease.device = nullptr;
+	r_lease.rid = RID();
+	r_lease.generation = 0;
+	return OK;
+}
+
 bool MaterialStorage::MaterialData::native_immutable_busy() const {
 	auto *rd = RD::get_singleton();
 	if (!rd) {
@@ -1165,10 +1208,13 @@ bool MaterialStorage::MaterialData::native_immutable_busy() const {
 	}
 	auto *storage = MaterialStorage::get_singleton();
 	const auto *material = storage ? storage->get_material(self) : nullptr;
-	return material && material->native_immutable_holds != 0;
+	return material && (material->native_immutable_holds != 0 || material->selection_holds != 0);
 }
 
 bool MaterialStorage::_shader_native_immutable_busy(const Shader *p_shader) {
+	if (p_shader && p_shader->selection_holds) {
+		return true;
+	}
 	if (!p_shader || !p_shader->data) {
 		return false;
 	}
@@ -2443,6 +2489,7 @@ void MaterialStorage::shader_initialize(RID p_rid, bool p_embedded) {
 void MaterialStorage::shader_free(RID p_rid) {
 	Shader *shader = shader_owner.get_or_null(p_rid);
 	ERR_FAIL_NULL(shader);
+	ERR_FAIL_COND_MSG(shader->selection_holds, "Original selection must return before owner replacement or free.");
 
 	{
 		MutexLock lock(*shader->mutex);
@@ -2746,6 +2793,7 @@ void MaterialStorage::material_initialize(RID p_rid) {
 void MaterialStorage::material_free(RID p_rid) {
 	Material *material = material_owner.get_or_null(p_rid);
 	ERR_FAIL_NULL(material);
+	ERR_FAIL_COND_MSG(material->selection_holds, "Original selection must return before owner replacement or free.");
 
 	// Need to clear texture arrays to prevent spin locking of their RID's.
 	// This happens when the app is being closed.
@@ -2769,6 +2817,7 @@ void MaterialStorage::material_set_shader(RID p_material, RID p_shader) {
 void MaterialStorage::_material_set_shader(RID p_material, RID p_shader, bool p_freeing) {
 	Material *material = material_owner.get_or_null(p_material);
 	ERR_FAIL_NULL(material);
+	ERR_FAIL_COND_MSG(material->selection_holds, "Original selection must return before owner replacement or free.");
 	ERR_FAIL_COND_MSG(!p_freeing && material->data && material->data->native_immutable_busy(), "Material native inputs are immutable while retained.");
 	if (material->generation != UINT64_MAX) {
 		material->generation++;

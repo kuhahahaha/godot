@@ -1,0 +1,29 @@
+{
+  "base": "79865a185d07a18874b8a9c02806cec752aa4d97",
+  "files": [
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/material_storage.cpp",
+      "sha256": "9c2ade7618e6bd89a04e19beb40d376ae1263992d8f3f26ab833eed30375c13e"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/material_storage.h",
+      "sha256": "db9bad3d0f1b984c2ec3ef6d499c6bacefe9d414e731265010d6b59719862f2b"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/mesh_storage.cpp",
+      "sha256": "77bf85f81091ff1a1bc1f40822d6fbf817c85f707ffa75ed0403c94b8e4c33e2"
+    },
+    {
+      "path": "servers/rendering/renderer_rd/storage_rd/mesh_storage.h",
+      "sha256": "907e64669adac18d5656c6515093dde94bf32c020c565c6411be541f71f0250c"
+    },
+    {
+      "path": "tests/servers/rendering/test_material_storage_native_hold.cpp",
+      "sha256": "8f578a06586bc3baf1ad89d3739d9295b40ddeb15f1a688dd54785f392f62897"
+    },
+    {
+      "path": "tests/servers/rendering/test_mesh_storage_external.cpp",
+      "sha256": "27242666674fa9adde2864103c905bc4423b5eb4faf1cb08af9ebb8b73cd6e5b"
+    }
+  ]
+}

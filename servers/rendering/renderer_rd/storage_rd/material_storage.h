@@ -110,6 +110,24 @@ public:
 		int32_t priority = 0;
 	};
 	// Explicit Core physical retention. No packet or Runtime authority is issued.
+	// CPU selection only: no VA, descriptor, shader version or pipeline custody.
+	class NativeSelectionLease {
+		friend class MaterialStorage;
+		MaterialStorage *owner = nullptr;
+		RenderingDevice *device = nullptr;
+		RID rid;
+		uint64_t generation = 0;
+
+	public:
+		NativeSelectionLease() = default;
+		NativeSelectionLease(const NativeSelectionLease &) = delete;
+		NativeSelectionLease &operator=(const NativeSelectionLease &) = delete;
+		~NativeSelectionLease() { CRASH_COND(owner); }
+		bool is_active() const { return owner != nullptr; }
+	};
+	Error material_selection_acquire(RID p_rid, NativeSelectionLease &r_lease, uint64_t p_expected_generation);
+	Error material_selection_release(NativeSelectionLease &r_lease);
+
 	class NativeMaterialHold {
 		bool physical_transferred = false, metadata_returned = false, metadata_return_active = false;
 		friend class MaterialStorage;
@@ -316,6 +334,7 @@ private:
 	struct Material;
 
 	struct Shader {
+		uint32_t selection_holds = 0;
 		Mutex *mutex = nullptr;
 		ShaderData *data = nullptr;
 		String code;
@@ -342,6 +361,7 @@ private:
 		RID self;
 		uint64_t generation = 1;
 		uint32_t native_immutable_holds = 0;
+		uint32_t selection_holds = 0;
 		MaterialData *data = nullptr;
 		Shader *shader = nullptr;
 		//shortcut to shader data and type
