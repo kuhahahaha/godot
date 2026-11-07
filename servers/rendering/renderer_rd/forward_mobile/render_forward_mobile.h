@@ -45,6 +45,9 @@ namespace RendererSceneRenderImplementation {
 
 class RenderForwardMobile : public RendererSceneRenderRD {
 	friend SceneShaderForwardMobile;
+#ifdef TESTS_ENABLED
+	friend class TestMobileNativePassSelection;
+#endif
 
 protected:
 	struct GeometryInstanceSurfaceDataCache;
@@ -126,6 +129,22 @@ private:
 		PASS_MODE_MOTION_VECTORS,
 	};
 
+	// Fixed native pass inputs selected before draw_list_begin. Surface
+	// lightmap selection remains dynamic; this grants no external draw authority.
+	struct NativePassSelection {
+		PassMode pass_mode = PASS_MODE_COLOR;
+		SceneShaderForwardMobile::ShaderVersion version = SceneShaderForwardMobile::SHADER_VERSION_MAX;
+		SceneShaderForwardMobile::ShaderVersion lightmap_version = SceneShaderForwardMobile::SHADER_VERSION_MAX;
+		RD::FramebufferFormatID framebuffer_format = 0;
+		uint32_t subpass = 0;
+
+		SceneShaderForwardMobile::ShaderVersion version_for_surface(bool p_uses_lightmap) const {
+			return p_uses_lightmap ? lightmap_version : version;
+		}
+	};
+
+	static bool _select_native_pass(PassMode p_pass_mode, uint32_t p_view_count, bool p_defer_opaque_fog, RD::FramebufferFormatID p_framebuffer_format, uint32_t p_subpass, NativePassSelection &r_selection);
+
 	struct RenderElementInfo;
 
 	struct RenderListParameters {
@@ -142,11 +161,11 @@ private:
 		SceneShaderForwardMobile::ShaderSpecialization base_specialization;
 		float lod_distance_multiplier = 0.0;
 		float screen_mesh_lod_threshold = 0.0;
-		RD::FramebufferFormatID framebuffer_format = 0;
 		uint32_t element_offset = 0;
 		uint32_t subpass = 0;
 		bool use_material_feedback = false;
 		bool defer_opaque_fog = false;
+		NativePassSelection native_pass;
 
 		RenderListParameters(GeometryInstanceSurfaceDataCache **p_elements, RenderElementInfo *p_element_info, int p_element_count, bool p_reverse_cull, PassMode p_pass_mode, RID p_render_pass_uniform_set, SceneShaderForwardMobile::ShaderSpecialization p_base_specialization, bool p_force_wireframe = false, const Vector2 &p_uv_offset = Vector2(), float p_lod_distance_multiplier = 0.0, float p_screen_mesh_lod_threshold = 0.0, uint32_t p_view_count = 1, uint32_t p_element_offset = 0, bool p_use_material_feedback = false) {
 			elements = p_elements;
@@ -422,8 +441,8 @@ private:
 	static_assert(std::is_trivially_constructible_v<RenderElementInfo>);
 
 	template <PassMode p_pass_mode>
-	_FORCE_INLINE_ void _render_list_template(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element);
-	void _render_list(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element);
+	_FORCE_INLINE_ void _render_list_template(RenderingDevice::DrawListID p_draw_list, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element);
+	void _render_list(RenderingDevice::DrawListID p_draw_list, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element);
 	void _render_list_with_draw_list(RenderListParameters *p_params, RID p_framebuffer, BitField<RD::DrawFlags> p_clear_colors = RD::DRAW_DEFAULT_ALL, const Vector<Color> &p_clear_color_values = Vector<Color>(), float p_clear_depth_value = 0.0, uint32_t p_clear_stencil_value = 0, const Rect2 &p_region = Rect2());
 
 	RenderList render_list[RENDER_LIST_MAX];

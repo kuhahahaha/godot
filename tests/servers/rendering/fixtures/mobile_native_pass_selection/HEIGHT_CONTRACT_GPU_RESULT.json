@@ -1,0 +1,13 @@
+{
+  "label": "HEIGHT_CONTRACT_GPU",
+  "command": [
+    "python3",
+    "tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_legacy_native.py",
+    "--binary",
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+    "--display-driver",
+    "macos"
+  ],
+  "exit_code": 0,
+  "seconds": 5.74
+}

@@ -1320,8 +1320,16 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 			c.write[1] = Color(0, 0, 0, 0);
 			clear_flags |= RD::DRAW_CLEAR_COLOR_1;
 		}
-		RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(opaque_framebuffer, clear_flags, c, 0.0f, 0, p_render_data->render_region, breadcrumb);
 		RD::FramebufferFormatID fb_format = RD::get_singleton()->framebuffer_get_format(opaque_framebuffer);
+		NativePassSelection opaque_pass;
+		ERR_FAIL_COND_MSG(!_select_native_pass(PASS_MODE_COLOR, p_render_data->scene_data->view_count, defer_fog, fb_format, 0, opaque_pass), "Invalid native pass selection");
+		NativePassSelection merged_alpha_pass;
+		if (merge_transparent_pass && render_list[RENDER_LIST_ALPHA].element_info.size() > 0) {
+			// The existing fog branch switches this container to subpass 1
+			// before sky and merged alpha, without deferring alpha's fog.
+			ERR_FAIL_COND_MSG(!_select_native_pass(PASS_MODE_COLOR_TRANSPARENT, p_render_data->scene_data->view_count, false, fb_format, defer_fog ? 1u : 0u, merged_alpha_pass), "Invalid native pass selection");
+		}
+		RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(opaque_framebuffer, clear_flags, c, 0.0f, 0, p_render_data->render_region, breadcrumb);
 
 		if (copy_canvas) {
 			if (p_render_data->scene_data->view_count > 1) {
@@ -1336,11 +1344,9 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 
 		if (render_list[RENDER_LIST_OPAQUE].elements.size() > 0) {
 			RenderListParameters render_list_params(render_list[RENDER_LIST_OPAQUE].elements.ptr(), render_list[RENDER_LIST_OPAQUE].element_info.ptr(), render_list[RENDER_LIST_OPAQUE].elements.size(), reverse_cull, PASS_MODE_COLOR, rp_uniform_set, base_specialization, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, !is_reflection_probe);
-			render_list_params.defer_opaque_fog = defer_fog;
-			render_list_params.framebuffer_format = fb_format;
-			render_list_params.subpass = RD::get_singleton()->draw_list_get_current_pass(); // Should now always be 0.
+			render_list_params.native_pass = opaque_pass;
 
-			_render_list(draw_list, fb_format, &render_list_params, 0, render_list_params.element_count);
+			_render_list(draw_list, &render_list_params, 0, render_list_params.element_count);
 		}
 
 		RD::get_singleton()->draw_command_end_label(); //Render Opaque
@@ -1367,10 +1373,9 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 				rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_ALPHA, p_render_data, is_multiview, radiance_texture, samplers, true);
 
 				RenderListParameters render_list_params(render_list[RENDER_LIST_ALPHA].elements.ptr(), render_list[RENDER_LIST_ALPHA].element_info.ptr(), render_list[RENDER_LIST_ALPHA].elements.size(), reverse_cull, PASS_MODE_COLOR_TRANSPARENT, rp_uniform_set, base_specialization, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, !is_reflection_probe);
-				render_list_params.framebuffer_format = fb_format;
-				render_list_params.subpass = RD::get_singleton()->draw_list_get_current_pass(); // Should now always be 0.
+				render_list_params.native_pass = merged_alpha_pass;
 
-				_render_list(draw_list, fb_format, &render_list_params, 0, render_list_params.element_count);
+				_render_list(draw_list, &render_list_params, 0, render_list_params.element_count);
 
 				RD::get_singleton()->draw_command_end_label(); // Render Transparent Subpass
 			}
@@ -1441,11 +1446,11 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 				//_setup_environment(p_render_data, is_reflection_probe, screen_size, screen_size, p_default_bg_color, false);
 
 				RenderListParameters render_list_params(render_list[RENDER_LIST_ALPHA].elements.ptr(), render_list[RENDER_LIST_ALPHA].element_info.ptr(), render_list[RENDER_LIST_ALPHA].elements.size(), reverse_cull, PASS_MODE_COLOR, rp_uniform_set, base_specialization, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, !is_reflection_probe);
-				render_list_params.framebuffer_format = fb_format;
-				render_list_params.subpass = RD::get_singleton()->draw_list_get_current_pass(); // Should now always be 0.
+				// Preserve the original pre-begin current-pass value for this separate list.
+				ERR_FAIL_COND_MSG(!_select_native_pass(render_list_params.pass_mode, render_list_params.view_count, render_list_params.defer_opaque_fog, fb_format, RD::get_singleton()->draw_list_get_current_pass(), render_list_params.native_pass), "Invalid native pass selection");
 
 				draw_list = RD::get_singleton()->draw_list_begin(framebuffer, RD::DRAW_DEFAULT_ALL, Vector<Color>(), 1.0f, 0, p_render_data->render_region, breadcrumb);
-				_render_list(draw_list, fb_format, &render_list_params, 0, render_list_params.element_count);
+				_render_list(draw_list, &render_list_params, 0, render_list_params.element_count);
 				RD::get_singleton()->draw_list_end();
 
 				RD::get_singleton()->draw_command_end_label(); // Render Transparent Pass
@@ -1823,8 +1828,10 @@ void RenderForwardMobile::_render_material(const Transform3D &p_cam_transform, c
 			Color(0, 0, 0, 0),
 			Color(0, 0, 0, 0)
 		};
+		const RD::FramebufferFormatID fb_format = RD::get_singleton()->framebuffer_get_format(p_framebuffer);
+		ERR_FAIL_COND_MSG(!_select_native_pass(render_list_params.pass_mode, render_list_params.view_count, render_list_params.defer_opaque_fog, fb_format, render_list_params.subpass, render_list_params.native_pass), "Invalid native pass selection");
 		RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_framebuffer, RD::DRAW_CLEAR_ALL, clear, 0.0f, 0, p_region);
-		_render_list(draw_list, RD::get_singleton()->framebuffer_get_format(p_framebuffer), &render_list_params, 0, render_list_params.element_count);
+		_render_list(draw_list, &render_list_params, 0, render_list_params.element_count);
 		RD::get_singleton()->draw_list_end();
 	}
 
@@ -1874,6 +1881,8 @@ void RenderForwardMobile::_render_uv2(const PagedArray<RenderGeometryInstance *>
 			Color(0, 0, 0, 0)
 		};
 
+		const RD::FramebufferFormatID fb_format = RD::get_singleton()->framebuffer_get_format(p_framebuffer);
+		ERR_FAIL_COND_MSG(!_select_native_pass(render_list_params.pass_mode, render_list_params.view_count, render_list_params.defer_opaque_fog, fb_format, render_list_params.subpass, render_list_params.native_pass), "Invalid native pass selection");
 		RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_framebuffer, RD::DRAW_CLEAR_ALL, clear, 0.0f, 0, p_region);
 
 		const int uv_offset_count = 9;
@@ -1895,10 +1904,10 @@ void RenderForwardMobile::_render_uv2(const PagedArray<RenderGeometryInstance *>
 			ofs.x /= p_region.size.width;
 			ofs.y /= p_region.size.height;
 			render_list_params.uv_offset = ofs;
-			_render_list(draw_list, RD::get_singleton()->framebuffer_get_format(p_framebuffer), &render_list_params, 0, render_list_params.element_count); //first wireframe, for pseudo conservative
+			_render_list(draw_list, &render_list_params, 0, render_list_params.element_count); //first wireframe, for pseudo conservative
 		}
 		render_list_params.uv_offset = Vector2();
-		_render_list(draw_list, RD::get_singleton()->framebuffer_get_format(p_framebuffer), &render_list_params, 0, render_list_params.element_count); //second regular triangles
+		_render_list(draw_list, &render_list_params, 0, render_list_params.element_count); //second regular triangles
 
 		RD::get_singleton()->draw_list_end();
 	}
@@ -2467,47 +2476,94 @@ void RenderForwardMobile::_setup_environment(const RenderDataRD *p_render_data, 
 
 /// RENDERING ///
 
-void RenderForwardMobile::_render_list(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element) {
-	//use template for faster performance (pass mode comparisons are inlined)
+bool RenderForwardMobile::_select_native_pass(PassMode p_pass_mode, uint32_t p_view_count, bool p_defer_opaque_fog, RD::FramebufferFormatID p_framebuffer_format, uint32_t p_subpass, NativePassSelection &r_selection) {
+	NativePassSelection selected;
+	selected.pass_mode = p_pass_mode;
+	selected.framebuffer_format = p_framebuffer_format;
+	selected.subpass = p_subpass;
 
-	switch (p_params->pass_mode) {
-		case PASS_MODE_COLOR: {
-			_render_list_template<PASS_MODE_COLOR>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
-		} break;
+	switch (p_pass_mode) {
+		case PASS_MODE_COLOR:
 		case PASS_MODE_COLOR_TRANSPARENT: {
-			_render_list_template<PASS_MODE_COLOR_TRANSPARENT>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+			if (p_defer_opaque_fog) {
+				selected.version = p_view_count > 1 ? SceneShaderForwardMobile::SHADER_VERSION_COLOR_FOG_MASK_MULTIVIEW : SceneShaderForwardMobile::SHADER_VERSION_COLOR_FOG_MASK;
+				selected.lightmap_version = p_view_count > 1 ? SceneShaderForwardMobile::SHADER_VERSION_LIGHTMAP_FOG_MASK_MULTIVIEW : SceneShaderForwardMobile::SHADER_VERSION_LIGHTMAP_FOG_MASK;
+			} else {
+				selected.version = p_view_count > 1 ? SceneShaderForwardMobile::SHADER_VERSION_COLOR_PASS_MULTIVIEW : SceneShaderForwardMobile::SHADER_VERSION_COLOR_PASS;
+				selected.lightmap_version = p_view_count > 1 ? SceneShaderForwardMobile::SHADER_VERSION_LIGHTMAP_COLOR_PASS_MULTIVIEW : SceneShaderForwardMobile::SHADER_VERSION_LIGHTMAP_COLOR_PASS;
+			}
 		} break;
 		case PASS_MODE_SHADOW: {
-			_render_list_template<PASS_MODE_SHADOW>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+			selected.version = p_view_count > 1 ? SceneShaderForwardMobile::SHADER_VERSION_SHADOW_PASS_MULTIVIEW : SceneShaderForwardMobile::SHADER_VERSION_SHADOW_PASS;
+			selected.lightmap_version = selected.version;
 		} break;
 		case PASS_MODE_SHADOW_DP: {
-			_render_list_template<PASS_MODE_SHADOW_DP>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+			if (p_view_count > 1) {
+				return false;
+			}
+			selected.version = SceneShaderForwardMobile::SHADER_VERSION_SHADOW_PASS_DP;
+			selected.lightmap_version = selected.version;
 		} break;
 		case PASS_MODE_DEPTH_MATERIAL: {
-			_render_list_template<PASS_MODE_DEPTH_MATERIAL>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+			if (p_view_count > 1) {
+				return false;
+			}
+			selected.version = SceneShaderForwardMobile::SHADER_VERSION_DEPTH_PASS_WITH_MATERIAL;
+			selected.lightmap_version = selected.version;
 		} break;
 		case PASS_MODE_MOTION_VECTORS: {
-			_render_list_template<PASS_MODE_MOTION_VECTORS>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+			// Preserve the original motion version even for a mono view.
+			selected.version = SceneShaderForwardMobile::SHADER_VERSION_MOTION_VECTORS_MULTIVIEW;
+			selected.lightmap_version = selected.version;
+		} break;
+		default:
+			return false;
+	}
+
+	r_selection = selected;
+	return true;
+}
+
+void RenderForwardMobile::_render_list(RenderingDevice::DrawListID p_draw_list, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element) {
+	//use template for faster performance (pass mode comparisons are inlined)
+
+	switch (p_params->native_pass.pass_mode) {
+		case PASS_MODE_COLOR: {
+			_render_list_template<PASS_MODE_COLOR>(p_draw_list, p_params, p_from_element, p_to_element);
+		} break;
+		case PASS_MODE_COLOR_TRANSPARENT: {
+			_render_list_template<PASS_MODE_COLOR_TRANSPARENT>(p_draw_list, p_params, p_from_element, p_to_element);
+		} break;
+		case PASS_MODE_SHADOW: {
+			_render_list_template<PASS_MODE_SHADOW>(p_draw_list, p_params, p_from_element, p_to_element);
+		} break;
+		case PASS_MODE_SHADOW_DP: {
+			_render_list_template<PASS_MODE_SHADOW_DP>(p_draw_list, p_params, p_from_element, p_to_element);
+		} break;
+		case PASS_MODE_DEPTH_MATERIAL: {
+			_render_list_template<PASS_MODE_DEPTH_MATERIAL>(p_draw_list, p_params, p_from_element, p_to_element);
+		} break;
+		case PASS_MODE_MOTION_VECTORS: {
+			_render_list_template<PASS_MODE_MOTION_VECTORS>(p_draw_list, p_params, p_from_element, p_to_element);
 		}
 	}
 }
 
 void RenderForwardMobile::_render_list_with_draw_list(RenderListParameters *p_params, RID p_framebuffer, BitField<RD::DrawFlags> p_draw_flags, const Vector<Color> &p_clear_color_values, float p_clear_depth_value, uint32_t p_clear_stencil_value, const Rect2 &p_region) {
 	RD::FramebufferFormatID fb_format = RD::get_singleton()->framebuffer_get_format(p_framebuffer);
-	p_params->framebuffer_format = fb_format;
+	ERR_FAIL_COND_MSG(!_select_native_pass(p_params->pass_mode, p_params->view_count, p_params->defer_opaque_fog, fb_format, p_params->subpass, p_params->native_pass), "Invalid native pass selection");
 
 	RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_framebuffer, p_draw_flags, p_clear_color_values, p_clear_depth_value, p_clear_stencil_value, p_region);
-	_render_list(draw_list, fb_format, p_params, 0, p_params->element_count);
+	_render_list(draw_list, p_params, 0, p_params->element_count);
 	RD::get_singleton()->draw_list_end();
 }
 
 template <RenderForwardMobile::PassMode p_pass_mode>
-void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element) {
+void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_draw_list, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element) {
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 	RendererRD::ParticlesStorage *particles_storage = RendererRD::ParticlesStorage::get_singleton();
 
 	RD::DrawListID draw_list = p_draw_list;
-	RD::FramebufferFormatID framebuffer_format = p_framebuffer_Format;
 
 	//global scope bindings
 	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, render_base_uniform_set, SCENE_UNIFORM_SET);
@@ -2616,38 +2672,10 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 		pipeline_key.primitive_type = surf->primitive;
 		RID xforms_uniform_set = surf->owner->transforms_uniform_set;
 
-		switch (p_pass_mode) {
-			case PASS_MODE_COLOR:
-			case PASS_MODE_COLOR_TRANSPARENT: {
-				if (element_info.uses_lightmap) {
-					pipeline_key.version = p_params->view_count > 1 ? SceneShaderForwardMobile::SHADER_VERSION_LIGHTMAP_COLOR_PASS_MULTIVIEW : SceneShaderForwardMobile::SHADER_VERSION_LIGHTMAP_COLOR_PASS;
-				} else {
-					pipeline_key.version = p_params->view_count > 1 ? SceneShaderForwardMobile::SHADER_VERSION_COLOR_PASS_MULTIVIEW : SceneShaderForwardMobile::SHADER_VERSION_COLOR_PASS;
-				}
-				if (p_params->defer_opaque_fog) {
-					bool lightmap = pipeline_key.version == SceneShaderForwardMobile::SHADER_VERSION_LIGHTMAP_COLOR_PASS || pipeline_key.version == SceneShaderForwardMobile::SHADER_VERSION_LIGHTMAP_COLOR_PASS_MULTIVIEW;
-					pipeline_key.version = p_params->view_count > 1 ? (lightmap ? SceneShaderForwardMobile::SHADER_VERSION_LIGHTMAP_FOG_MASK_MULTIVIEW : SceneShaderForwardMobile::SHADER_VERSION_COLOR_FOG_MASK_MULTIVIEW) : (lightmap ? SceneShaderForwardMobile::SHADER_VERSION_LIGHTMAP_FOG_MASK : SceneShaderForwardMobile::SHADER_VERSION_COLOR_FOG_MASK);
-				}
-			} break;
-			case PASS_MODE_SHADOW: {
-				pipeline_key.version = p_params->view_count > 1 ? SceneShaderForwardMobile::SHADER_VERSION_SHADOW_PASS_MULTIVIEW : SceneShaderForwardMobile::SHADER_VERSION_SHADOW_PASS;
-			} break;
-			case PASS_MODE_SHADOW_DP: {
-				ERR_FAIL_COND_MSG(p_params->view_count > 1, "Multiview not supported for shadow DP pass");
-				pipeline_key.version = SceneShaderForwardMobile::SHADER_VERSION_SHADOW_PASS_DP;
-			} break;
-			case PASS_MODE_DEPTH_MATERIAL: {
-				ERR_FAIL_COND_MSG(p_params->view_count > 1, "Multiview not supported for material pass");
-				pipeline_key.version = SceneShaderForwardMobile::SHADER_VERSION_DEPTH_PASS_WITH_MATERIAL;
-			} break;
-			case PASS_MODE_MOTION_VECTORS: {
-				pipeline_key.version = SceneShaderForwardMobile::SHADER_VERSION_MOTION_VECTORS_MULTIVIEW;
-			}
-		}
-
-		pipeline_key.framebuffer_format_id = framebuffer_format;
+		pipeline_key.version = p_params->native_pass.version_for_surface(element_info.uses_lightmap);
+		pipeline_key.framebuffer_format_id = p_params->native_pass.framebuffer_format;
 		pipeline_key.wireframe = p_params->force_wireframe;
-		pipeline_key.render_pass = p_params->subpass;
+		pipeline_key.render_pass = p_params->native_pass.subpass;
 		pipeline_key.ubershader = 0;
 		pipeline_key.indexed144 = mesh_storage->mesh_surface_is_external(mesh_surface);
 
