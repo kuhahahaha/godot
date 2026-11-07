@@ -4735,6 +4735,102 @@ struct Access {
 		CHECK_MESSAGE(entry != nullptr, "Missing installed ordinal procedure: ", name);
 		return entry;
 	}
+
+#ifdef THREADS_ENABLED
+	struct SceneReleaseState {
+		GDExtensionDeviceExit::Registry *registry = nullptr;
+		uint32_t calls = 0, destroys = 0, unlocked_checks = 0;
+		bool acquired = false;
+		static void probe_lock(void *p) {
+			auto &s = *static_cast<SceneReleaseState *>(p);
+			s.acquired = s.registry->mutex.try_lock();
+			if (s.acquired) {
+				s.registry->mutex.unlock();
+			}
+		}
+		void check_unlocked() {
+			acquired = false;
+			Thread worker;
+			worker.start(&probe_lock, this);
+			CHECK(worker.is_started());
+			if (worker.is_started()) {
+				worker.wait_to_finish();
+			}
+			CHECK(acquired);
+			unlocked_checks += acquired ? 1 : 0;
+		}
+	};
+	class SceneReleaseContent : public GDExtensionDeviceExit::SceneReadContent {
+		SceneReleaseState *state;
+
+	public:
+		explicit SceneReleaseContent(SceneReleaseState *p) : state(p) {}
+		Error validate(const GDExtensionSceneOpaque32V1 &, const GDExtensionSceneOpaque32V1 &) const override { return ERR_UNAUTHORIZED; }
+		Error return_after_reads() override {
+			state->check_unlocked();
+			return ++state->calls == 1 ? ERR_BUSY : OK;
+		}
+		~SceneReleaseContent() override {
+			state->check_unlocked();
+			++state->destroys;
+		}
+	};
+	static void scene_release_content_budget() {
+		using namespace GDExtensionDeviceExit;
+		auto *server = ordinal_server();
+		if (!server) {
+			return;
+		}
+		OrdinalPlan plan;
+		SceneReleaseState state;
+		SingletonEnrollment fixture;
+		fixture.public_port = true;
+		REQUIRE(ordinal_initialize(fixture, server, plan) == OK);
+		auto &request = *fixture.request;
+		const GDExtensionProductionRequestRefV1 ref{ fixture.instance, request.serial };
+		REQUIRE(fixture.registry.production_cancel(ref).native_error == OK);
+		CHECK(request.native_count == 0);
+		CHECK(request.graph_count == 0);
+		CHECK(request.maintenance_serial == 0);
+		state.registry = &fixture.registry;
+		// Cleanup-only white-box injection: never a Scene key or sample grant.
+		{
+			MutexLock lock(fixture.registry.mutex);
+			CHECK_FALSE(request.actions[0].scene_key_bound);
+			request.actions[0].scene_attempt.content = Ref<SceneReadContent>(memnew(SceneReleaseContent(&state)));
+			CHECK(fixture.registry.production_release_locked(request, &fixture.rd, true).native_error == ERR_BUSY);
+			CHECK(fixture.registry.production_release_locked(request, &fixture.rd, false).native_error == OK);
+		}
+		CHECK(state.calls == 0);
+		for (uint32_t turn = 0; turn < 3; ++turn) {
+			const GDExtensionProductionServiceBudgetV1 budget{ production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+			uint64_t serial = 0;
+			REQUIRE(fixture.registry.production_control_accept(ref, ProductionControlKind::RELEASE, &serial, &budget) == OK);
+			REQUIRE(fixture.registry.production_control_schedule(ref, serial) == OK);
+			server->sync();
+			REQUIRE(request.control.state == ProductionControlState::RETURNED);
+			const auto usage = request.control.output.service_usage;
+			CHECK(usage.controls == 1);
+			CHECK(usage.passes == (turn < 2 ? 1u : 0u));
+			CHECK(usage.receipts == (turn < 2 ? 1u : 0u));
+			CHECK(request.control.output.result.native_error == (turn < 2 ? ERR_BUSY : OK));
+			CHECK(state.calls == (turn == 0 ? 1u : 2u));
+			CHECK(state.destroys == (turn == 0 ? 0u : 1u));
+			CHECK_FALSE(request.actions[0].scene_key_bound);
+			const auto calls_before_owner = state.calls;
+			ProductionControlOutput output{};
+			REQUIRE(fixture.registry.production_control_consume(ref, serial, &output) == OK);
+			CHECK(state.calls == calls_before_owner);
+			CHECK(output.owner_usage.passes == 0);
+			CHECK(output.owner_usage.receipts == 0);
+		}
+		CHECK(request.serial == 0);
+		CHECK(state.unlocked_checks == 3);
+		fixture.cleanup_owner();
+		CHECK(fixture.owner_cleaned);
+	}
+#endif
+
 	static RenderingServerDefault *ordinal_server() {
 		auto *server = Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton());
 		if (!check_step(server && !server->create_thread && server->server_thread == Thread::get_caller_id() && !RenderingDevice::get_singleton())) {
@@ -12127,3 +12223,9 @@ TEST_CASE("[SceneTree][ProductionRequest][NativeScenePhase] actual early hook ow
 TEST_CASE("[SceneTree][ProductionRequest][NativeScenePhaseCloseWaiting] actual unregister returns two original waiting controls without a draw") {
 	TestProductionRequest::Access::native_scene_phase_infrastructure(true);
 }
+
+#ifdef THREADS_ENABLED
+TEST_CASE("[SceneTree][ProductionRequest][NativeSceneReleaseBudget] original RT RELEASE returns actual retained content outside Registry mutex") {
+	TestProductionRequest::Access::scene_release_content_budget();
+}
+#endif
