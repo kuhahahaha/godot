@@ -474,7 +474,7 @@ bool RenderForwardMobile::_render_buffers_can_be_storage() {
 	return false;
 }
 
-RID RenderForwardMobile::_setup_render_pass_uniform_set(RenderListType p_render_list, const RenderDataRD *p_render_data, bool p_is_multiview, RID p_radiance_texture, const RendererRD::MaterialStorage::Samplers &p_samplers, bool p_use_directional_shadow_atlas, uint32_t p_pass_offset) {
+RID RenderForwardMobile::_setup_render_pass_uniform_set(RenderListType p_render_list, const RenderDataRD *p_render_data, bool p_is_multiview, RID p_radiance_texture, const RendererRD::MaterialStorage::Samplers &p_samplers, bool p_use_directional_shadow_atlas, uint32_t p_pass_offset, Error *p_error) {
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 	RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
 
@@ -527,6 +527,10 @@ RID RenderForwardMobile::_setup_render_pass_uniform_set(RenderListType p_render_
 			scene_state.instance_buffer[p_render_list].prepare_for_upload();
 		}
 		RID instance_buffer = scene_state.instance_buffer[p_render_list]._get(0u);
+		if (p_error && instance_buffer.is_null()) {
+			*p_error = ERR_CANT_CREATE;
+			return RID();
+		}
 		u.append_id(instance_buffer);
 		uniforms.push_back(u);
 	}
@@ -757,7 +761,11 @@ RID RenderForwardMobile::_setup_render_pass_uniform_set(RenderListType p_render_
 	}
 #endif // MODULE_TEXTURE_STREAMING_ENABLED
 
-	return UniformSetCacheRD::get_singleton()->get_cache_vec(scene_shader.default_shader_rd, RENDER_PASS_UNIFORM_SET, uniforms);
+	const RID uniform_set = UniformSetCacheRD::get_singleton()->get_cache_vec(scene_shader.default_shader_rd, RENDER_PASS_UNIFORM_SET, uniforms);
+	if (p_error && uniform_set.is_null()) {
+		*p_error = ERR_CANT_CREATE;
+	}
+	return uniform_set;
 }
 
 void RenderForwardMobile::_setup_lightmaps(const RenderDataRD *p_render_data, const PagedArray<RID> &p_lightmaps, const Transform3D &p_cam_transform) {
@@ -1927,7 +1935,12 @@ Error RenderForwardMobile::_render_particle_collider_heightfield_impl(RID p_fb, 
 		RD::get_singleton()->draw_command_begin_label("Render Collider Heightfield");
 	}
 
-	_update_render_base_uniform_set();
+	Error setup_error = OK;
+	Error *setup_result = p_sink ? &setup_error : nullptr;
+	_update_render_base_uniform_set(setup_result);
+	if (p_sink && setup_error != OK) {
+		return p_sink->reject(setup_error);
+	}
 
 	RenderSceneDataRD scene_data;
 	scene_data.flip_y = true;
@@ -1947,15 +1960,24 @@ Error RenderForwardMobile::_render_particle_collider_heightfield_impl(RID p_fb, 
 	render_data.instances = &p_instances;
 
 	Size2i screen_size = RD::get_singleton()->framebuffer_get_size(p_fb);
-	_setup_environment(&render_data, true, screen_size, screen_size, Color(), false, false);
+	_setup_environment(&render_data, true, screen_size, screen_size, Color(), false, false, setup_result);
+	if (p_sink && setup_error != OK) {
+		return p_sink->reject(setup_error);
+	}
 
 	PassMode pass_mode = PASS_MODE_SHADOW;
 
 	_fill_render_list(RENDER_LIST_SECONDARY, &render_data, pass_mode);
 	render_list[RENDER_LIST_SECONDARY].sort_by_key();
-	_fill_instance_data(RENDER_LIST_SECONDARY);
+	_fill_instance_data(RENDER_LIST_SECONDARY, 0, -1, true, setup_result);
+	if (p_sink && setup_error != OK) {
+		return p_sink->reject(setup_error);
+	}
 
-	RID rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_SECONDARY, nullptr, false, RID(), RendererRD::MaterialStorage::get_singleton()->samplers_rd_get_default());
+	RID rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_SECONDARY, nullptr, false, RID(), RendererRD::MaterialStorage::get_singleton()->samplers_rd_get_default(), false, 0u, setup_result);
+	if (p_sink && setup_error != OK) {
+		return p_sink->reject(setup_error);
+	}
 
 	if (!p_sink) {
 		RENDER_TIMESTAMP("Render Collider Heightfield");
@@ -1983,7 +2005,7 @@ void RenderForwardMobile::base_uniforms_changed() {
 	render_base_uniform_set = RID();
 }
 
-void RenderForwardMobile::_update_render_base_uniform_set() {
+void RenderForwardMobile::_update_render_base_uniform_set(Error *p_error) {
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 
 	if (render_base_uniform_set.is_null() || !RD::get_singleton()->uniform_set_is_valid(render_base_uniform_set) || (lightmap_texture_array_version != light_storage->lightmap_array_get_version())) {
@@ -2096,9 +2118,9 @@ void RenderForwardMobile::_update_render_base_uniform_set() {
 		}
 
 		{ // Lookup-table for Area Lights - Linearly transformed cosines (LTC)
-			if (ltc.lut1_texture.is_null() || ltc.lut2_texture.is_null()) {
+			int dimensions = LTC_LUT_DIMENSIONS;
+			if (ltc.lut1_texture.is_null()) {
 				Ref<Image> lut1_image;
-				int dimensions = LTC_LUT_DIMENSIONS;
 				int lut1_bytes = 4 * dimensions * dimensions;
 				size_t lut1_size = lut1_bytes * 4; // float
 
@@ -2108,8 +2130,17 @@ void RenderForwardMobile::_update_render_base_uniform_set() {
 				memcpy(lut1_data.ptrw(), LTC_LUT1, lut1_size);
 				lut1_image = Image::create_from_data(dimensions, dimensions, false, Image::FORMAT_RGBAF, lut1_data);
 
+				if (p_error && lut1_image.is_null()) {
+					*p_error = ERR_CANT_CREATE;
+					return;
+				}
 				ltc.lut1_texture = RS::get_singleton()->texture_2d_create(lut1_image);
-
+				if (p_error && ltc.lut1_texture.is_null()) {
+					*p_error = ERR_CANT_CREATE;
+					return;
+				}
+			}
+			if (ltc.lut2_texture.is_null()) {
 				int lut2_bytes = 4 * dimensions * dimensions;
 				size_t lut2_size = lut2_bytes * 4;
 
@@ -2120,7 +2151,15 @@ void RenderForwardMobile::_update_render_base_uniform_set() {
 				memcpy(lut2_data.ptrw(), LTC_LUT2, lut2_size);
 				lut2_image = Image::create_from_data(dimensions, dimensions, false, Image::FORMAT_RGBAF, lut2_data);
 
+				if (p_error && lut2_image.is_null()) {
+					*p_error = ERR_CANT_CREATE;
+					return;
+				}
 				ltc.lut2_texture = RS::get_singleton()->texture_2d_create(lut2_image);
+				if (p_error && ltc.lut2_texture.is_null()) {
+					*p_error = ERR_CANT_CREATE;
+					return;
+				}
 			}
 		}
 
@@ -2128,7 +2167,12 @@ void RenderForwardMobile::_update_render_base_uniform_set() {
 			RD::Uniform u;
 			u.binding = 15;
 			u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
-			u.append_id(RendererRD::TextureStorage::get_singleton()->texture_get_rd_texture(ltc.lut1_texture));
+			const RID texture = RendererRD::TextureStorage::get_singleton()->texture_get_rd_texture(ltc.lut1_texture);
+			if (p_error && texture.is_null()) {
+				*p_error = ERR_CANT_CREATE;
+				return;
+			}
+			u.append_id(texture);
 			uniforms.push_back(u);
 		}
 
@@ -2136,7 +2180,12 @@ void RenderForwardMobile::_update_render_base_uniform_set() {
 			RD::Uniform u;
 			u.binding = 16;
 			u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
-			u.append_id(RendererRD::TextureStorage::get_singleton()->texture_get_rd_texture(ltc.lut2_texture));
+			const RID texture = RendererRD::TextureStorage::get_singleton()->texture_get_rd_texture(ltc.lut2_texture);
+			if (p_error && texture.is_null()) {
+				*p_error = ERR_CANT_CREATE;
+				return;
+			}
+			u.append_id(texture);
 			uniforms.push_back(u);
 		}
 
@@ -2150,6 +2199,9 @@ void RenderForwardMobile::_update_render_base_uniform_set() {
 		}
 
 		render_base_uniform_set = UniformSetCacheRD::get_singleton()->get_cache_vec(scene_shader.default_shader_rd, SCENE_UNIFORM_SET, uniforms);
+	}
+	if (p_error && !RD::get_singleton()->uniform_set_is_valid(render_base_uniform_set)) {
+		*p_error = ERR_CANT_CREATE;
 	}
 }
 
@@ -2177,7 +2229,7 @@ void RenderForwardMobile::SceneState::grow_instance_buffer(RenderListType p_rend
 	}
 }
 
-void RenderForwardMobile::_fill_instance_data(RenderListType p_render_list, uint32_t p_offset, int32_t p_max_elements, bool p_update_buffer) {
+void RenderForwardMobile::_fill_instance_data(RenderListType p_render_list, uint32_t p_offset, int32_t p_max_elements, bool p_update_buffer, Error *p_error) {
 	RenderList *rl = &render_list[p_render_list];
 	uint32_t element_total = p_max_elements >= 0 ? uint32_t(p_max_elements) : rl->elements.size();
 
@@ -2186,11 +2238,19 @@ void RenderForwardMobile::_fill_instance_data(RenderListType p_render_list, uint
 	uint64_t frame = RSG::rasterizer->get_frame_number();
 
 	scene_state.grow_instance_buffer(p_render_list, p_offset + element_total, p_offset != 0u);
+	if (p_error && element_total > 0u && scene_state.instance_buffer[p_render_list]._get(0u).is_null()) {
+		*p_error = ERR_CANT_CREATE;
+		return;
+	}
 	if (!scene_state.curr_gpu_ptr[p_render_list] && element_total > 0u) {
 		// The old buffer was replaced for another larger one. We must start copying from scratch.
 		element_total += p_offset;
 		p_offset = 0u;
 		scene_state.curr_gpu_ptr[p_render_list] = reinterpret_cast<SceneState::InstanceData *>(scene_state.instance_buffer[p_render_list].map_raw_for_upload(0u));
+		if (p_error && !scene_state.curr_gpu_ptr[p_render_list]) {
+			*p_error = ERR_CANT_CREATE;
+			return;
+		}
 	}
 	for (uint32_t i = 0; i < element_total; i++) {
 		GeometryInstanceSurfaceDataCache *surface = rl->elements[i + p_offset];
@@ -2470,7 +2530,7 @@ void RenderForwardMobile::_fill_render_list(RenderListType p_render_list, const 
 	}
 }
 
-void RenderForwardMobile::_setup_environment(const RenderDataRD *p_render_data, bool p_no_fog, const Size2i &p_screen_size, const Size2 &p_viewport_size, const Color &p_default_bg_color, bool p_opaque_render_buffers, bool p_pancake_shadows) {
+void RenderForwardMobile::_setup_environment(const RenderDataRD *p_render_data, bool p_no_fog, const Size2i &p_screen_size, const Size2 &p_viewport_size, const Color &p_default_bg_color, bool p_opaque_render_buffers, bool p_pancake_shadows, Error *p_error) {
 	RID env = is_environment(p_render_data->environment) ? p_render_data->environment : RID();
 	RID reflection_probe_instance = p_render_data->reflection_probe.is_valid() ? RendererRD::LightStorage::get_singleton()->reflection_probe_instance_get_probe(p_render_data->reflection_probe) : RID();
 
@@ -2483,7 +2543,12 @@ void RenderForwardMobile::_setup_environment(const RenderDataRD *p_render_data, 
 
 	// Start a new setup.
 	scene_state.uniform_buffers.prepare_for_upload();
-	p_render_data->scene_data->update_ubo(scene_state.uniform_buffers.get_for_upload(0u), get_debug_draw_mode(), env, reflection_probe_instance, p_render_data->camera_attributes, p_pancake_shadows, p_screen_size, p_viewport_size, p_default_bg_color, luminance_multiplier, p_opaque_render_buffers, false);
+	const RID uniform_buffer = scene_state.uniform_buffers.get_for_upload(0u);
+	if (p_error && uniform_buffer.is_null()) {
+		*p_error = ERR_CANT_CREATE;
+		return;
+	}
+	p_render_data->scene_data->update_ubo(uniform_buffer, get_debug_draw_mode(), env, reflection_probe_instance, p_render_data->camera_attributes, p_pancake_shadows, p_screen_size, p_viewport_size, p_default_bg_color, luminance_multiplier, p_opaque_render_buffers, false, p_error);
 }
 
 /// RENDERING ///
