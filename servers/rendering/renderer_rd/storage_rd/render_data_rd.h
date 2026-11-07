@@ -141,13 +141,14 @@ public:
 	// Called by the actual common RD render_scene receiver before either forward
 	// renderer sees this object. The explicit viewport and complete payload must
 	// match the original native capture. No token lookup selects a viewport.
-	bool retain_native_camera_source(RendererViewport &p_viewports, const RendererSceneRender::CameraData &p_camera) {
+	bool retain_native_camera_source(RendererViewport &p_viewports, const RendererSceneRender::CameraData &p_camera, const Ref<RenderSceneBuffers> &p_invocation_buffers = Ref<RenderSceneBuffers>()) {
 		if (packet_identity.retired || native_retirement_receipt_issued || !p_camera.source_viewport.is_valid() ||
 				!packet_identity.camera_source_matches(p_camera.source_view_id, p_camera.source_view_epoch, p_camera.source_capture_ordinal)) {
 			return false;
 		}
 		if (native_camera_source.is_valid()) {
-			return camera_payload_matches(native_camera_source->get_camera_data(), p_camera);
+			return camera_payload_matches(native_camera_source->get_camera_data(), p_camera) &&
+					(p_invocation_buffers.is_null() || native_camera_source->get_invocation().render_buffers == p_invocation_buffers);
 		}
 		const RendererViewport::Viewport::CameraSourceToken token{ p_camera.source_view_id, p_camera.source_view_epoch, p_camera.source_capture_ordinal };
 		RendererSceneRender::CameraData original{};
@@ -156,7 +157,13 @@ public:
 		if (!p_viewports.viewport_get_camera_capture(p_camera.source_viewport, token, original) || !camera_payload_matches(original, p_camera)) {
 			return false;
 		}
-		return p_viewports.viewport_get_camera_capture_ref(p_camera.source_viewport, token, native_camera_source);
+		Ref<RendererViewport::Viewport::CameraCapture> captured;
+		if (!p_viewports.viewport_get_camera_capture_ref(p_camera.source_viewport, token, captured) ||
+				(p_invocation_buffers.is_valid() && (captured->get_invocation().render_buffers != p_invocation_buffers || !captured->get_invocation().camera.is_valid()))) {
+			return false;
+		}
+		native_camera_source = captured;
+		return true;
 	}
 
 	// Passes can borrow this exact retained sample, including both XR eyes. It is

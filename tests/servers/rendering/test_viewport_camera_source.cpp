@@ -30,10 +30,56 @@
 
 #include "servers/rendering/renderer_rd/storage_rd/render_data_rd.h"
 #include "servers/rendering/renderer_viewport.h"
+#include "servers/rendering/rendering_method.h"
 #include "servers/rendering/rendering_server_globals.h"
 #include "tests/test_macros.h"
 
 TEST_FORCE_LINK(test_viewport_camera_source)
+
+TEST_CASE("[B4][CameraCapture] actual invocation rejects foreign owner and revokes changed resources") {
+	const RID viewport = RSG::viewport->viewport_allocate();
+	RSG::viewport->viewport_initialize(viewport);
+	const RID camera = RSG::scene->camera_allocate();
+	RSG::scene->camera_initialize(camera);
+	RSG::viewport->viewport_set_size(viewport, 64, 48, 1);
+	RSG::viewport->viewport_attach_camera(viewport, camera);
+	auto *owner = RSG::viewport->viewport_owner.get_or_null(viewport);
+	owner->render_buffers = RSG::scene->render_buffers_create();
+	REQUIRE(owner->render_buffers.is_valid());
+	RendererViewport::Viewport::ViewPresentationKey key{ 923, 4, 12 };
+	REQUIRE(RSG::viewport->viewport_register_presentation_key(viewport, key));
+	RendererSceneRender::CameraData data{};
+	data.set_camera(Transform3D(), Projection(), false, false, Vector2(), 0, 1);
+	const auto original = data;
+	CHECK_FALSE(RSG::viewport->viewport_begin_camera_capture(viewport, data, viewport, owner->render_buffers).is_valid());
+	CHECK_FALSE(RSG::viewport->viewport_begin_camera_capture(viewport, data, camera, Ref<RenderSceneBuffers>()).is_valid());
+	CHECK(owner->camera_capture_ordinal == 0);
+	CHECK(data.source_capture_ordinal == original.source_capture_ordinal);
+	const auto token = RSG::viewport->viewport_begin_camera_capture(viewport, data, camera, owner->render_buffers);
+	REQUIRE(token.is_valid());
+	Ref<RendererViewport::Viewport::CameraCapture> retained;
+	REQUIRE(RSG::viewport->viewport_get_camera_capture_ref(viewport, token, retained));
+	CHECK(retained->get_invocation().camera == camera);
+	CHECK(retained->get_invocation().render_buffers == owner->render_buffers);
+	CHECK(retained->get_invocation().render_target == owner->render_target);
+	CHECK(retained->get_invocation().target_size == Size2i(64, 48));
+	CHECK(retained->get_invocation().view_count == 1);
+	RSG::viewport->viewport_set_size(viewport, 96, 48, 1);
+	CHECK_FALSE(RSG::viewport->viewport_register_presentation_key(viewport, key));
+	CHECK_FALSE(RSG::viewport->viewport_get_camera_capture_ref(viewport, token, retained));
+	CHECK_FALSE(RSG::viewport->viewport_begin_camera_capture(viewport, data, camera, owner->render_buffers).is_valid());
+	CHECK(owner->camera_capture_ordinal == token.capture_ordinal);
+	CHECK(retained->get_invocation().target_size == Size2i(64, 48));
+	key.view_epoch++; // Imported owner transition; native code never issues this.
+	REQUIRE(RSG::viewport->viewport_register_presentation_key(viewport, key));
+	const auto next = RSG::viewport->viewport_begin_camera_capture(viewport, data, camera, owner->render_buffers);
+	CHECK(next.capture_ordinal == token.capture_ordinal + 1);
+	CHECK(retained->get_token() == token);
+	RSG::viewport->free(viewport);
+	CHECK(retained->get_invocation().camera == camera);
+	CHECK(retained->get_invocation().render_buffers.is_valid());
+	RSG::scene->free(camera);
+}
 
 TEST_CASE("[B4][CameraCapture] retained native camera payload survives source retirement") {
 	REQUIRE(RSG::viewport != nullptr);
@@ -347,6 +393,8 @@ TEST_CASE("[B4][E15] viewport camera source requires explicit C01 registration")
 	RSG::viewport->viewport_set_size(viewport, 17, 19, 1);
 	CHECK_FALSE(RSG::viewport->viewport_get_presentation_key(viewport).view_id != 0);
 	CHECK_FALSE(RSG::viewport->viewport_begin_camera_capture(viewport).is_valid());
+	CHECK_FALSE(RSG::viewport->viewport_register_presentation_key(viewport, key));
+	key.view_epoch++;
 	CHECK(RSG::viewport->viewport_register_presentation_key(viewport, key));
 	RSG::viewport->viewport_attach_camera(viewport, RID::from_uint64(1));
 	CHECK_FALSE(RSG::viewport->viewport_get_presentation_key(viewport).view_id != 0);

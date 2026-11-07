@@ -2967,7 +2967,7 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 	// failed/unsupported camera setup from consuming a source ordinal.
 	if (p_viewport.is_valid() && RSG::viewport) {
 		camera_data.source_viewport = p_viewport;
-		if (!RSG::viewport->viewport_begin_camera_capture(p_viewport, camera_data).is_valid()) {
+		if (!RSG::viewport->viewport_begin_camera_capture(p_viewport, camera_data, p_camera, p_render_buffers).is_valid()) {
 			camera_data.source_viewport = RID();
 		}
 	}
