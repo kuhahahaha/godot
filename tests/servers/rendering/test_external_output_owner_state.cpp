@@ -348,12 +348,14 @@ bool ExternalLinkedOwnerTest::preparation_rows_match_slots(bool p_probe_duplicat
 		// This slice creates metadata only. Even a successful real Acquire
 		// must leave every row closed and without a pass/resource allowance.
 		if (!row.source_sealed || row.max_resources || row.pipeline_pin || row.pipeline_original_root || row.pipeline_owned_group ||
-				row.created_pipeline.is_valid() || row.geometry[0].is_active() || row.geometry[1].is_active() || row.material.is_active()) {
+				row.pipeline_context.registry_instance || row.pipeline_context.frame_serial || row.native_cache_queried ||
+				row.last_error != ERR_UNCONFIGURED || row.selected_geometry != UINT32_MAX || row.created_pipeline.is_valid() || row.geometry[0].is_active() || row.geometry[1].is_active() || row.material.is_active()) {
 			return false;
 		}
 		if (slot.surfaces) {
 			if (slot.surface_count != owner->generation_material_count || !slot.surfaces_placement ||
 					slot.surfaces[surface_index].preparation_row != &row || slot.surfaces[surface_index].preparation ||
+					slot.surfaces[surface_index].pipeline_owned_group || slot.surfaces[surface_index].created_pipeline.is_valid() || slot.surfaces[surface_index].pipeline_group_returned ||
 					row.owner != owner || row.generation != owner->generation || row.serial != slot.lease_serial) {
 				return false;
 			}
@@ -362,6 +364,14 @@ bool ExternalLinkedOwnerTest::preparation_rows_match_slots(bool p_probe_duplicat
 		}
 	}
 	return true;
+}
+Error ExternalLinkedOwnerTest::prepare_pipeline_prefix(GDExtensionProductionPhysicalContextRefV1 p_context, uint32_t p_slot, uint32_t p_surface, uint32_t p_max_resources) {
+	CRASH_COND(!exists() || p_slot >= owner->slot_count || !owner->slots[p_slot].surfaces || p_surface >= owner->slots[p_slot].surface_count);
+	auto *row = owner->slots[p_slot].surfaces[p_surface].preparation_row;
+	CRASH_COND(!row);
+	// Locate only the row installed by the actual Acquire. Do not open it,
+	// manufacture a pass, or change the original action's factory authority.
+	return storage->_external_pipeline_prepare_owned_prefix(p_context, particles, p_slot, p_surface, *row, p_max_resources);
 }
 uint64_t ExternalLinkedOwnerTest::selection_material_generation(uint32_t index) const {
 	CRASH_COND(!exists() || index >= owner->generation_material_count);

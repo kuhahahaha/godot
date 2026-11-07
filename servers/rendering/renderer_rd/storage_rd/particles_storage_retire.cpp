@@ -63,19 +63,22 @@ Error ParticlesStorage::_external_storage_prepare_owned_prefix(GDExtensionProduc
 	return error;
 }
 
-Error ParticlesStorage::_external_pipeline_prepare_owned_prefix(GDExtensionProductionPhysicalContextRefV1 context, RID particle_rid, uint32_t slot_index, uint32_t surface_index, ExternalPipelinePreparation &preparation) {
+Error ParticlesStorage::_external_pipeline_prepare_owned_prefix(GDExtensionProductionPhysicalContextRefV1 context, RID particle_rid, uint32_t slot_index, uint32_t surface_index, ExternalPipelinePreparation &preparation, uint32_t max_resources) {
 	Particles *particles = particles_owner.get_or_null(particle_rid);
 	if (!particles || !particles->external) {
 		return ERR_INVALID_PARAMETER;
 	}
+	if (!max_resources) {
+		return ERR_INVALID_PARAMETER;
+	}
 	auto &owner = *particles->external;
-	if (preparation.owner != &owner || preparation.generation != owner.generation || !preparation.serial || !preparation.max_resources || preparation.source_sealed ||
-			preparation.pipeline_pin || preparation.created_pipeline.is_valid() || preparation.geometry[0].is_active() || preparation.geometry[1].is_active() || preparation.material.is_active() ||
+	if (preparation.owner != &owner || preparation.generation != owner.generation || !preparation.serial ||
 			!owner.device || owner.device != RenderingDevice::get_singleton() || slot_index >= owner.slot_count) {
 		return ERR_UNCONFIGURED;
 	}
 	auto &slot = owner.slots[slot_index];
-	if (!slot.original_registry || !slot.surfaces || surface_index >= slot.surface_count || slot.publication_closed ||
+	if (!owner.admits_work() || slot.state != ExternalOutputOwner::LeaseState::RESERVED ||
+			!slot.original_registry || !slot.surfaces || surface_index >= slot.surface_count || slot.publication_closed || slot.pass_uses_closed ||
 			!_production_output_owner_matches(GDExtensionDeviceExit::ProductionOutputOwnerKind::SLOT, particle_rid, owner.generation, slot_index, slot.lease_serial, slot.original_pin, *owner.device, slot.original_request)) {
 		return ERR_UNAUTHORIZED;
 	}
@@ -85,20 +88,27 @@ Error ParticlesStorage::_external_pipeline_prepare_owned_prefix(GDExtensionProdu
 			surface.preparation_row != &owner.preparation_rows[preparation_index] || &preparation != surface.preparation_row || preparation.serial != slot.lease_serial) {
 		return ERR_UNAUTHORIZED;
 	}
-	if (surface.preparation || surface.pipeline_owned_group || surface.created_pipeline.is_valid() || surface.pipeline_group_returned) {
+	if (surface.preparation || surface.pipeline_owned_group || surface.created_pipeline.is_valid() || surface.pipeline_group_returned ||
+			!preparation.source_sealed || preparation.max_resources || preparation.pipeline_pin || preparation.pipeline_original_root || preparation.pipeline_owned_group ||
+			preparation.pipeline_context.registry_instance || preparation.pipeline_context.frame_serial || preparation.native_cache_queried ||
+			preparation.created_pipeline.is_valid() || preparation.geometry[0].is_active() || preparation.geometry[1].is_active() || preparation.material.is_active()) {
 		return ERR_ALREADY_IN_USE;
 	}
-	// Idempotent original locator bind. This never manufactures source/charge
-	// admission: owner/row/directory must already be installed by that caller.
-	Error error = slot.original_registry->production_output_owner_bind(slot.original_pin, *owner.device, particle_rid, owner.generation, slot_index, slot.lease_serial);
+	// The real Acquire has already linked this exact row's original action
+	// owner. Do not re-run the pre-action owner_bind gate. The owned factory
+	// authenticates the current physical invocation and original RESERVING
+	// action; a later BOUND pin is not a new preparation opportunity.
+	const Error error = owner.device->_production_output_owned_reserve(context, slot.original_pin, 1, surface.pipeline_owned_group);
 	if (error != OK) {
+		// Reserve refuses before assigning any group. The row is still closed,
+		// with no allowance or cached context, and needs no rollback grant.
 		return error;
 	}
-	error = owner.device->_production_output_owned_reserve(context, slot.original_pin, 1, surface.pipeline_owned_group);
-	if (error != OK) {
-		return error; // No pipeline allocation or geometry derivation occurred.
-	}
+	// Only a successfully retained original group can open the row. There is
+	// no failing operation between that reservation and installing its owner.
 	surface.preparation = &preparation;
+	preparation.max_resources = max_resources;
+	preparation.source_sealed = false;
 	preparation.pipeline_context = context;
 	preparation.pipeline_pin = &slot.original_pin;
 	preparation.pipeline_owned_group = surface.pipeline_owned_group;

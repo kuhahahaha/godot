@@ -7860,6 +7860,7 @@ struct Access {
 		GDExtensionProductionRequestRefV1 create_ref{};
 		GDExtensionOutputAcquireInputV1 input{};
 		GDExtensionOutputAcquireResultV1 acquired{};
+		GDExtensionDeviceExit::ProductionPhysicalContextRef completed_context{};
 		bool closing = false;
 		uint32_t create_calls = 0, acquire_calls = 0;
 		static void receive(void *opaque, GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionOperationV1 *) {
@@ -7892,6 +7893,34 @@ struct Access {
 			acquire(context, ref, 0, &p.input, &p.acquired);
 			REQUIRE(p.acquired.status.error == OK);
 			CHECK(p.native->preparation_rows_match_slots(true));
+			// A genuine acquired BOUND pin is not another preparation window.
+			// Exercise the real prefix entry without mutating its closed row or
+			// synthesizing RESERVING, native pass inputs, or a source grant.
+			auto reject_pipeline_prefix = [&](ProductionPhysicalContextRef attempted_context, uint32_t allowance, Error expected) {
+				const auto revision = f.request->revision;
+				const auto frontier = f.request->next_action, graphs = f.request->graph_count, natives = f.request->native_count;
+				const auto groups = f.request->next_disposal_group_serial;
+				const auto allocations = f.driver.alias_allocations, frees = f.driver.alias_frees;
+				const auto commands = f.rd.draw_graph.qualification_command_count();
+				for (uint32_t surface = 0; surface < 2; ++surface) {
+					CHECK(p.native->prepare_pipeline_prefix(attempted_context, 0, surface, allowance) == expected);
+					CHECK(p.native->preparation_rows_match_slots());
+				}
+				CHECK(f.request->revision == revision);
+				CHECK(f.request->next_action == frontier);
+				CHECK(f.request->graph_count == graphs);
+				CHECK(f.request->native_count == natives);
+				CHECK(f.request->next_disposal_group_serial == groups);
+				CHECK(f.request->actions[0].output_state == ProductionActionCell::OutputState::BOUND);
+				CHECK(f.driver.alias_allocations == allocations);
+				CHECK(f.driver.alias_frees == frees);
+				CHECK(f.rd.draw_graph.qualification_command_count() == commands);
+			};
+			reject_pipeline_prefix(context, 0, ERR_INVALID_PARAMETER);
+			reject_pipeline_prefix({}, 1, ERR_UNAUTHORIZED);
+			reject_pipeline_prefix(context, 1, ERR_BUSY);
+			reject_pipeline_prefix(context, 1, ERR_BUSY); // Refusal must leave retry state unchanged.
+			p.completed_context = context; // Test-only stale-invocation rejection after this callback returns.
 			CHECK(p.acquired.writable_count == 3);
 			++p.acquire_calls;
 			CHECK(f.request->next_action == 1);
@@ -8146,6 +8175,10 @@ struct Access {
 		REQUIRE(consume(ref, control, &recorded).native_error == OK);
 		CHECK(probe.acquire_calls == 1);
 		CHECK(request.next_action == 3);
+		const auto groups_before_expired_context = request.next_disposal_group_serial;
+		CHECK(native.prepare_pipeline_prefix(probe.completed_context, 0, 0, 1) == ERR_UNAUTHORIZED);
+		CHECK(request.next_disposal_group_serial == groups_before_expired_context);
+		CHECK(native.preparation_rows_match_slots());
 		// Both actual owners retire through original controls, without repairing flags.
 		const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
 		GDExtensionProductionReportV2 report{};

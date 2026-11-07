@@ -545,7 +545,8 @@ public:
 
 	// Synchronous typed bodies only. Registration/Host anchor is not supplied here.
 	Error _external_storage_prepare_owned_prefix(GDExtensionProductionPhysicalContextRefV1, RID, uint32_t);
-	Error _external_pipeline_prepare_owned_prefix(GDExtensionProductionPhysicalContextRefV1, RID, uint32_t, uint32_t, ExternalPipelinePreparation &);
+	// The assigned row stays closed until the original owned reservation succeeds.
+	Error _external_pipeline_prepare_owned_prefix(GDExtensionProductionPhysicalContextRefV1, RID, uint32_t, uint32_t, ExternalPipelinePreparation &, uint32_t p_max_resources);
 	void particles_external_create_typed(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionOutputCreateInputV1 &, GDExtensionOutputCreateResultV1 &);
 	void particles_external_metadata_query(const GDExtensionOutputMetadataQueryInputV1 &, GDExtensionOutputMetadataQueryResultV1 &);
 	void particles_external_create_typed_v3(GDExtensionProductionPhysicalContextRefV1, GDExtensionProductionRequestRefV1, const GDExtensionOutputCreateInputV3 &, GDExtensionOutputCreateResultV1 &);
