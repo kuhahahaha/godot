@@ -413,7 +413,7 @@ bool scene_phase_callable_metadata(const Callable &callable, NormalRelayToken to
 	return true;
 }
 
-Error Registry::scene_phase_call_relay(NormalRelayToken token, const GDExtensionNativeScenePhaseV1 &phase, GDExtensionProductionRequestRefV1 request, const GDExtensionProductionOperationV1 &operation) {
+Error Registry::scene_phase_call_relay(NormalRelayToken token, const GDExtensionNativeScenePhaseV1 &p_phase, GDExtensionProductionRequestRefV1 request, const GDExtensionProductionOperationV1 &operation) {
 	NormalRelay *relay = nullptr;
 	CallableCustomExtension *custom = nullptr;
 	{
@@ -432,7 +432,7 @@ Error Registry::scene_phase_call_relay(NormalRelayToken token, const GDExtension
 	}
 	// Original record receiver already owns CallbackScope and physical frame.
 	// Do not enter a nested scope: that would invalidate the borrowed context.
-	custom->scene_phase_receiver(custom->userdata, &phase, request, &operation);
+	custom->scene_phase_receiver(custom->userdata, &p_phase, request, &operation);
 	{
 		Lock lock(*this);
 		--relay->active_deliveries;

@@ -239,8 +239,7 @@ public:
 	static void record_next_graph(RenderingDevice &device) {
 		auto &frame = device.frames[0];
 		frame.fence_signaled = false;
-		frame.primary_command_buffer_begun = true;
-		device.draw_graph.begin();
+		// The RD recording epoch was opened by _begin_frame(), not just graph.begin().
 		auto &request = frame.download_buffer_get_data_requests[0];
 		const auto region = frame.download_buffer_copy_regions[0];
 		const auto handle = device.draw_graph.add_buffer_get_data(RenderingDeviceDriver::BufferID(71), nullptr, RenderingDeviceDriver::BufferID(51), region);
@@ -865,7 +864,11 @@ TEST_CASE("[R01][FrameWait] split issue preserves earlier call report and unatte
 }
 
 TEST_CASE("[R01][FrameWait] reused native slot cannot overwrite an earlier graph issue") {
-	Driver driver;
+	struct ReuseDriver : Driver {
+		void buffer_free(BufferID p_buffer) override {
+			CHECK(p_buffer == BufferID(61));
+		}
+	} driver;
 	driver.result = OK;
 	driver.queue_result = OK;
 	driver.native_issued = true;
@@ -879,6 +882,8 @@ TEST_CASE("[R01][FrameWait] reused native slot cannot overwrite an earlier graph
 	CHECK(device._stall_for_frame(0) == OK);
 	CHECK(callbacks == 0);
 	CHECK(result->copies[0].issue_report.submission_serial == 23);
+	// Reuse must open a fresh RD epoch, including its command issue cursor.
+	REQUIRE(device._begin_frame() == OK);
 	TestFrameWaitAccess::next_segment(device, result, callable_mp_static(receive));
 	TestFrameWaitAccess::record_next_graph(device);
 	CHECK(device._end_frame() == OK);

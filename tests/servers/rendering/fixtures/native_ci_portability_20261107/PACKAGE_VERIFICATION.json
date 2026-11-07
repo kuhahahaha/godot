@@ -1,0 +1,10 @@
+{
+  "exact_original_copy_files": 25,
+  "raw_reference_hashes_rechecked": 22,
+  "source_identity_hashes_rechecked": 3,
+  "exact_remote_original_byte_slices_rechecked": 8,
+  "gzip_archives_with_exact_original_bytes_and_deterministic_mtime0": 13,
+  "ignored_package_files": [],
+  "no_source_edits_build_test_GPU_stage_commit_in_packaging": true,
+  "historical_host_identity": "5c806589c961a3a360790c29cf138164c801d66f1a385f5ce2b8dd9b60140852; byte-verified when original final CPU package was assembled; later parent Mobile successor host is separate evidence"
+}

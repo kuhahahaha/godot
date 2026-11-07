@@ -1,0 +1,25 @@
+{
+  "label": "FINAL_FULL_CPU",
+  "command": [
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+    "--headless",
+    "--test",
+    "--reporters=xml",
+    "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/sprite-camera-native-propagation-20261107/FINAL_FULL_CPU.xml"
+  ],
+  "exit_code": 1,
+  "seconds": 20.46,
+  "assertions": [
+    {
+      "successes": "584847",
+      "failures": "1"
+    }
+  ],
+  "cases": [
+    {
+      "successes": "2262",
+      "failures": "1",
+      "skipped": "3"
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  native_drain_diagnostic.h                                            */
+/*  native_drain_diagnostic.h                                             */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -28,8 +28,7 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#ifndef NATIVE_DRAIN_DIAGNOSTIC_H
-#define NATIVE_DRAIN_DIAGNOSTIC_H
+#pragma once
 
 #include "core/os/os.h"
 #include "core/os/thread.h"
@@ -45,10 +44,39 @@
 namespace NativeDrainDiagnostic {
 inline std::atomic<uint32_t> lines_reserved{ 0 };
 inline std::atomic<uint64_t> next_pair{ 1 };
+// MSVC owns the secure CRT copy; other platforms retain getenv's borrowed value.
+class EnvironmentValue {
+	const char *value = nullptr;
+#ifdef _MSC_VER
+	char *owned_value = nullptr;
+#endif
+
+public:
+	explicit EnvironmentValue(const char *p_name) {
+#ifdef _MSC_VER
+		size_t size = 0;
+		if (_dupenv_s(&owned_value, &size, p_name) == 0) {
+			value = owned_value;
+		}
+#else
+		value = std::getenv(p_name);
+#endif
+	}
+	~EnvironmentValue() {
+#ifdef _MSC_VER
+		std::free(owned_value);
+#endif
+	}
+	EnvironmentValue(const EnvironmentValue &) = delete;
+	EnvironmentValue &operator=(const EnvironmentValue &) = delete;
+	const char *get() const { return value; }
+};
 inline bool enabled() {
 	static const bool value = []() {
-		const char *setting = std::getenv("ANGE_NATIVE_DRAIN_DIAGNOSTIC");
-		const char *ring = std::getenv("ANGE_NATIVE_DRAIN_DIAGNOSTIC_RING");
+		const EnvironmentValue setting_value("ANGE_NATIVE_DRAIN_DIAGNOSTIC");
+		const EnvironmentValue ring_value("ANGE_NATIVE_DRAIN_DIAGNOSTIC_RING");
+		const char *setting = setting_value.get();
+		const char *ring = ring_value.get();
 		return (setting && std::strcmp(setting, "1") == 0) || (ring && *ring);
 	}();
 	return value;
@@ -62,7 +90,8 @@ struct Sink {
 	bool quota_reported = false;
 	bool ring_failed = false;
 	Sink() {
-		const char *path = std::getenv("ANGE_NATIVE_DRAIN_DIAGNOSTIC_RING");
+		const EnvironmentValue path_value("ANGE_NATIVE_DRAIN_DIAGNOSTIC_RING");
+		const char *path = path_value.get();
 		if (!path || !*path) {
 			std::fprintf(stderr, "[NATIVE-DRAIN-CORE] diagnostic=ring_disabled stderr_limit=4096 no_cleanup_arm_required=1\n");
 			std::fflush(stderr);
@@ -72,9 +101,15 @@ struct Sink {
 			failure("ring_path_not_absolute", EINVAL);
 			return;
 		}
+		int open_error = 0;
+#ifdef _MSC_VER
+		open_error = fopen_s(&ring, path, "w+b");
+#else
 		ring = std::fopen(path, "w+b");
+		open_error = errno;
+#endif
 		if (!ring) {
-			failure("ring_open_failed", errno);
+			failure("ring_open_failed", open_error);
 			return;
 		}
 		// Fixed-size sparse initialization; no growing log and no background work.
@@ -178,4 +213,3 @@ public:
 	}
 };
 } // namespace NativeDrainDiagnostic
-#endif

@@ -1,0 +1,17 @@
+[
+  {
+    "path": "core/extension/gdextension_interface.cpp",
+    "bytes": 100021,
+    "sha256": "09cb81fa64a0b8e54e32547717891fb015b0ed8156e60c870d005417d04ed6bc"
+  },
+  {
+    "path": "core/io/native_drain_diagnostic.h",
+    "bytes": 8434,
+    "sha256": "8b7868f86f044e3d02258bead2eaaa8a22585788b53c1f5df6ce734f28af8c32"
+  },
+  {
+    "path": "tests/servers/rendering/test_rendering_device_frame_wait.cpp",
+    "bytes": 41021,
+    "sha256": "adde3dab916724170e91da48694f90459e9ff3dbdd02dc30120662ddcb12a37d"
+  }
+]
