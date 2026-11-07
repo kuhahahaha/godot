@@ -12228,6 +12228,104 @@ struct Access {
 		CHECK(fixture.owner_cleaned);
 	}
 
+	static void source_writer_chunks() {
+		using namespace GDExtensionDeviceExit;
+		auto *server = ordinal_server();
+		if (!server) {
+			return;
+		}
+		const auto reserve = ordinal_port<GDExtensionInterfaceDeviceSessionProductionReserveReadbackSourcesV1>("device_session_production_reserve_readback_sources_v1");
+		const auto upload = ordinal_port<GDExtensionInterfaceDeviceSessionProductionPrepareUploadV2>("device_session_production_prepare_upload_v2");
+		const auto readback = ordinal_port<GDExtensionInterfaceDeviceSessionProductionPrepareReadbackV2>("device_session_production_prepare_readback_v2");
+		if (!check_step(reserve && upload && readback)) {
+			return;
+		}
+		OrdinalPlan pool;
+		pool.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 4, 1, 4, 4, 2048, 2, 1, 8, 8 };
+		SingletonEnrollment fixture;
+		fixture.public_port = true;
+		if (!check_step(fixture.prepare_device(server) == OK) ||
+				!check_step(fixture.initialize_owner(1, false, false, +[](void *, ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const GDExtensionProductionOperationV1 *) {}, nullptr, false, 1, false, +[](void *, GDExtensionProductionAttachmentRefV1) {}, false, false, false, false, &pool, nullptr, true) == OK)) {
+			return;
+		}
+		const GDExtensionProductionResourceV1 resource{ GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 16, 0 };
+		const GDExtensionProductionActionV2 split_actions[] = {
+			{ 0, 11, 7, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
+			{ 1, 11, 8, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 1, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
+			{ 2, 11, 9, 0, GDEXTENSION_PRODUCTION_READBACK_V1, UINT32_MAX, 2, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, 0 },
+			{ 3, 11, 10, 0, GDEXTENSION_PRODUCTION_READBACK_V1, UINT32_MAX, 3, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, 1 }
+		};
+		const GDExtensionProductionUseV1 split_uses[] = {
+			{ 0, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 4, 0 },
+			{ 0, GDEXTENSION_PRODUCTION_WRITE_V1, 4, 4, 0 },
+			{ 0, GDEXTENSION_PRODUCTION_READ_V1, 0, 4, 0 },
+			{ 0, GDEXTENSION_PRODUCTION_READ_V1, 4, 4, 0 }
+		};
+		const GDExtensionProductionReadbackSourceV1 split_rows[] = {
+			{ 0, GDEXTENSION_PRODUCTION_READBACK_REQUEST_WRITER_V1, 2, 0, 4, { 0 }, {} },
+			{ 0, GDEXTENSION_PRODUCTION_READBACK_REQUEST_WRITER_V1, 3, 4, 4, { 1 }, {} }
+		};
+		{
+			// Neither chunk writer covers the whole range; the last writer is
+			// not authority for the union of both physical upload actions.
+			GDExtensionProductionReadbackSourceV1 row = split_rows[0];
+			row.writer.producer_action_ordinal = 1;
+			row.byte_size = 8;
+			GDExtensionProductionUseV1 uses[] = { split_uses[0], split_uses[1], split_uses[2] };
+			uses[2].byte_size = 8;
+			const uint64_t next_serial = fixture.registry.production_serials.next;
+			GDExtensionProductionRequestRefV1 rejected{};
+			CHECK(reserve(fixture.attachment, &pool.operation, &pool.capacity, split_actions, 3, &resource, 1, uses, 3, &row, 1, &rejected).native_error == ERR_INVALID_DATA);
+			CHECK(rejected.registry_instance == 0);
+			CHECK(rejected.handle_serial == 0);
+			CHECK(fixture.registry.production_serials.next == next_serial);
+			CHECK(fixture.request == nullptr);
+			CHECK(fixture.driver.issues == 0);
+		}
+		GDExtensionProductionRequestRefV1 ref{};
+		if (!check_step(reserve(fixture.attachment, &pool.operation, &pool.capacity, split_actions, 4, &resource, 1, split_uses, 4, split_rows, 2, &ref).native_error == OK)) {
+			return;
+		}
+		{
+			MutexLock lock(fixture.registry.mutex);
+			RenderingDevice *rd = nullptr;
+			if (!check_step(fixture.registry.production_request_locked(ref, false, fixture.request, rd) == OK)) {
+				return;
+			}
+		}
+		auto &request = *fixture.request;
+		const uint8_t payloads[2][4] = { { 2, 3, 5, 7 }, { 11, 13, 17, 19 } };
+		for (uint32_t i = 0; i < 2; ++i) {
+			const GDExtensionProductionUploadV2 prepared{ production_dto_abi<GDExtensionProductionUploadV2>(), i, 11, 7 + i, 0, 0, 0, 4 * i, 4 };
+			if (!check_step(upload(ref, &prepared, payloads[i], sizeof(payloads[i])).native_error == OK) ||
+					!check_step(readback(ref, 2 + i, i).native_error == OK)) {
+				return;
+			}
+			CHECK(request.actions[i].prepared);
+			CHECK(request.actions[i].upload.destination_offset == 4 * i);
+			CHECK(request.actions[i].upload.bytes == 4);
+			CHECK(request.actions[i].payload_bytes == sizeof(payloads[i]));
+			CHECK(std::memcmp(request.attachment->payload + request.actions[i].payload_offset, payloads[i], sizeof(payloads[i])) == 0);
+			CHECK(request.actions[2 + i].prepared);
+			CHECK(request.readbacks[i].declaration.source_kind == GDEXTENSION_PRODUCTION_READBACK_REQUEST_WRITER_V1);
+			CHECK(request.readbacks[i].declaration.producer_action_ordinal == i);
+			CHECK(request.readbacks[i].declaration.copy_action_ordinal == 2 + i);
+			CHECK(request.readbacks[i].declaration.byte_offset == 4 * i);
+			CHECK(request.readbacks[i].declaration.byte_size == 4);
+			CHECK(request.actions[i].declaration.canonical_suboperation == 11);
+		}
+		CHECK(request.payload_used == 8);
+		CHECK(request.actions[0].payload_offset != request.actions[1].payload_offset);
+		// This installed reserve/prepare fixture does not import, append or execute
+		// a GPU dispatch. Payload custody proves real chunk preparation, not bytes
+		// downloaded from a native producer or a semantic publication gate.
+		CHECK_FALSE(request.frozen);
+		CHECK(request.graph_count == 0);
+		CHECK(request.native_count == 0);
+		CHECK(fixture.driver.issues == 0);
+		fixture.cleanup_owner();
+		CHECK(fixture.owner_cleaned);
+	}
 	static void ordinal_readback_producer() {
 		// The valid control and each invalid request go through original accepted
 		// arenas and the installed reserve_v2 entry, before any native effects.
@@ -12517,6 +12615,10 @@ TEST_CASE("[ProductionRequest][IncomingReadback] typed source reserve entry is i
 }
 TEST_CASE("[SceneTree][ProductionRequest][IncomingReadback] installed typed reserve selects V2 controls without a fabricated import") {
 	Access::incoming_installed_reserve();
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][ReadbackSource] adjacent writer chunks prepare separate copies and reject a whole range last writer") {
+	Access::source_writer_chunks();
 }
 
 TEST_CASE("[SceneTree][ProductionRequest][IncomingReadback] created output prefix rejects before custody and imported schedule retries after RD contention") {

@@ -60,6 +60,14 @@ struct Access {
 		uint32_t queue_issues = 0, fence_polls = 0, fence_recycles = 0, native_recycles = 0;
 		uint32_t sources_per_issue = 1, preparations = 0;
 		uint32_t screen_acquires = 0;
+		// Opt-in T11 native-boundary controls. The worker itself is allocated,
+		// recorded, submitted and recycled only by the original RD methods.
+		bool worker_mode = false, source_ready[128] = {};
+		uint8_t worker_memory[16 * 1024] = {};
+		uint64_t worker_buffer_id = 0, worker_serial = 0, main_serial = 0;
+		uint32_t worker_resets = 0, worker_recycles = 0, main_worker_waits = 0;
+		uint32_t worker_pool_frees = 0, worker_fence_frees = 0;
+		bool worker_retain_required = false;
 		FramebufferID swap_chain_acquire_framebuffer(CommandQueueID, SwapChainID, bool &resize) override {
 			++screen_acquires;
 			resize = false;
@@ -172,14 +180,18 @@ struct Access {
 		bool live[32] = {};
 		BufferID buffer_create(uint64_t bytes, BitField<BufferUsageBits>, MemoryAllocationType, uint64_t) override {
 			CHECK(bytes > 0);
-			CHECK(bytes <= 256);
+			const bool worker_staging = worker_mode && bytes == sizeof(worker_memory) && !worker_buffer_id;
+			CHECK((bytes <= 256 || worker_staging));
 			CHECK(allocations + 1 < 32);
-			if (!bytes || bytes > 256 || allocations + 1 >= 32) {
+			if (!bytes || (bytes > 256 && !worker_staging) || allocations + 1 >= 32) {
 				return {};
 			}
 			const uint32_t id = ++allocations;
 			sizes[id] = uint32_t(bytes);
 			live[id] = true;
+			if (worker_staging) {
+				worker_buffer_id = id;
+			}
 			return BufferID(id);
 		}
 		uint8_t *buffer_map(BufferID id) override {
@@ -188,7 +200,7 @@ struct Access {
 				return nullptr;
 			}
 			++maps;
-			return memory[id.id];
+			return id.id == worker_buffer_id ? worker_memory : memory[id.id];
 		}
 		uint8_t *buffer_map_observed(BufferID id, int64_t &native_code) override {
 			native_code = 0;
@@ -243,18 +255,43 @@ struct Access {
 				if (region.src_offset + region.size > sizes[from.id] || region.dst_offset + region.size > sizes[to.id]) {
 					return;
 				}
-				memcpy(memory[to.id] + region.dst_offset, memory[from.id] + region.src_offset, region.size);
+				uint8_t *destination = to.id == worker_buffer_id ? worker_memory : memory[to.id];
+				const uint8_t *source = from.id == worker_buffer_id ? worker_memory : memory[from.id];
+				memcpy(destination + region.dst_offset, source + region.src_offset, region.size);
 				++copy_calls;
 			}
 		}
-		CommandBufferID command_buffer_create(CommandPoolID) override { return CommandBufferID(91); }
+		FenceID fence_create() override {
+			CHECK(worker_mode);
+			return FenceID(98);
+		}
+		void fence_free(FenceID id) override {
+			CHECK(worker_mode);
+			CHECK(id == FenceID(98));
+			++worker_fence_frees;
+		}
+		CommandPoolID command_pool_create(CommandQueueFamilyID family, CommandBufferType type) override {
+			CHECK(worker_mode);
+			CHECK(family == CommandQueueFamilyID(2));
+			CHECK(type == COMMAND_BUFFER_TYPE_PRIMARY);
+			return CommandPoolID(97);
+		}
+		void command_pool_free(CommandPoolID id) override {
+			CHECK(worker_mode);
+			CHECK(id == CommandPoolID(97));
+			++worker_pool_frees;
+		}
+		CommandBufferID command_buffer_create(CommandPoolID pool) override { return CommandBufferID(worker_mode && pool == CommandPoolID(97) ? 96 : 91); }
 		bool command_buffer_begin(CommandBufferID id) override {
-			CHECK((id == CommandBufferID(90) || id == CommandBufferID(91)));
+			CHECK((id == CommandBufferID(90) || id == CommandBufferID(91) || (worker_mode && id == CommandBufferID(96))));
 			return true;
 		}
-		void command_buffer_end(CommandBufferID id) override { CHECK((id == CommandBufferID(90) || id == CommandBufferID(91))); }
+		void command_buffer_end(CommandBufferID id) override { CHECK((id == CommandBufferID(90) || id == CommandBufferID(91) || (worker_mode && id == CommandBufferID(96)))); }
 		bool command_pool_reset(CommandPoolID id) override {
-			CHECK(id == CommandPoolID(94));
+			CHECK((id == CommandPoolID(94) || (worker_mode && id == CommandPoolID(97))));
+			if (id == CommandPoolID(97)) {
+				++worker_resets;
+			}
 			return true;
 		}
 		void begin_segment(uint32_t frame, uint32_t) override { CHECK(frame == 0); }
@@ -281,14 +318,28 @@ struct Access {
 			}
 		}
 		FencePollResult fence_poll(FenceID id, uint64_t serial) override {
-			CHECK(id == FenceID(93));
+			CHECK((id == FenceID(93) || (worker_mode && id == FenceID(98))));
 			CHECK(serial > 0);
 			++fence_polls;
+			if (worker_mode) {
+				REQUIRE((serial > 2000 && serial < 2128));
+				CHECK(serial == (id == FenceID(98) ? worker_serial : main_serial) + 2000);
+				return { source_ready[serial - 2000], native_error, serial, native_error ? -27 : 0 };
+			}
 			return { complete, native_error, serial, native_error ? -27 : 0 };
 		}
 		Error fence_recycle(FenceID id, uint64_t serial) override {
-			CHECK(id == FenceID(93));
+			CHECK((id == FenceID(93) || (worker_mode && id == FenceID(98))));
 			CHECK(serial > 0);
+			if (worker_mode && id == FenceID(98)) {
+				CHECK(serial == worker_serial + 2000);
+				CHECK(source_ready[worker_serial]);
+				if (worker_retain_required) {
+					CHECK(retains[worker_serial] > 0);
+					CHECK(retain_error == OK);
+				}
+				++worker_recycles;
+			}
 			++fence_recycles;
 			return OK;
 		}
@@ -381,7 +432,7 @@ struct Access {
 				}
 			}
 
-			return { complete && (serial != hidden_serial || hidden_ready), native_error, serial + 1000, native_error ? -27 : 0, unknown ? IssueFact::NotIssued : IssueFact::KnownAccepted };
+			return { (worker_mode ? source_ready[serial] : complete) && (serial != hidden_serial || hidden_ready), native_error, serial + 1000, native_error ? -27 : 0, unknown ? IssueFact::NotIssued : IssueFact::KnownAccepted };
 		}
 		Error qualification_prepare_segment(QueueCallReport &report, bool nonblocking = true) override {
 			CHECK(nonblocking);
@@ -423,8 +474,24 @@ struct Access {
 			return false;
 		}
 		uint32_t record_native_call_bound(uint32_t slots) const override { return slots * sources_per_issue; }
-		Error command_queue_execute_and_present(CommandQueueID, VectorView<SemaphoreID>, VectorView<CommandBufferID>, VectorView<SemaphoreID>, FenceID, VectorView<SwapChainID>) override {
+		Error command_queue_execute_and_present(CommandQueueID queue, VectorView<SemaphoreID> waits, VectorView<CommandBufferID> commands, VectorView<SemaphoreID> signals, FenceID fence, VectorView<SwapChainID>) override {
 			CHECK((sources_per_issue == 1 || sources_per_issue == 2));
+			if (worker_mode) {
+				REQUIRE(commands.size() == 1);
+				if (queue == CommandQueueID(2)) {
+					CHECK(commands[0] == CommandBufferID(96));
+					CHECK(fence == FenceID(98));
+					CHECK(waits.size() == 0);
+					REQUIRE(signals.size() == 1);
+					CHECK(signals[0] == SemaphoreID(92));
+				} else {
+					CHECK(queue == CommandQueueID(1));
+					CHECK(commands[0] == CommandBufferID(90));
+					REQUIRE(waits.size() == 1);
+					CHECK(waits[0] == SemaphoreID(92));
+					++main_worker_waits;
+				}
+			}
 			QueueCallReport report;
 			for (uint32_t source = 0; source < sources_per_issue; ++source) {
 				uint32_t index = UINT32_MAX;
@@ -435,7 +502,10 @@ struct Access {
 				NativeCallFact fact;
 				fact.serial = next_serial++;
 				fact.completion_serial = fact.serial + 1000;
-				fact.queue_index = 1;
+				fact.queue_index = worker_mode ? queue.id : 1;
+				if (worker_mode) {
+					(queue == CommandQueueID(2) ? worker_serial : main_serial) = fact.serial;
+				}
 				fact.completion = CompletionCapability::Fence;
 				fact.issue = unknown ? IssueFact::IssuedUnknown : IssueFact::KnownAccepted;
 				fact.error = issue_error;
@@ -667,7 +737,11 @@ struct Access {
 			if (production_quote_error != OK) {
 				return {};
 			}
-			CHECK(quote.graph_slots == uint64_t(capacity.graph_memberships) * 2 + uint64_t(capacity.requests) * 2);
+			// One existing graph command per request, plus each reserved graph;
+			// every possible frame also reserves main + worker source slots.
+			const uint64_t expected_frames = uint64_t(capacity.graph_memberships) + capacity.requests;
+			const uint64_t expected_slots = uint64_t(capacity.requests) + capacity.graph_memberships + expected_frames * (uint64_t(rd.transfer_worker_pool_max_size) + 1);
+			CHECK(quote.graph_slots == expected_slots);
 			GDExtensionProductionAttachmentRefV1 attachment = {};
 			GDExtensionProductionInstallationReportV1 report = {};
 			const auto production_accept_error = registry->production_accept(&ABI, { INSTANCE, 5 }, { INSTANCE, 9 }, { INSTANCE, 6 }, { INSTANCE, 7 }, { INSTANCE, 3 }, &quote, &attachment, &report).native_error;
@@ -1676,6 +1750,28 @@ struct Access {
 	}
 	static void execute_transfers(Enrollment &e, Request &r, bool deliver, Request *additional = nullptr) {
 		using namespace GDExtensionDeviceExit;
+		if (e.driver.worker_mode) {
+			// Original RD worker submission and main semaphore chain. As below,
+			// only the local Registry's main capture is dispatched mechanically:
+			// qualification hooks otherwise target the installed singleton.
+			REQUIRE(e.rd._end_frame(true) == OK);
+			{
+				MutexLock lock(e.registry->mutex);
+				e.registry->production_seal_graphs_locked(e.rd);
+			}
+			REQUIRE(e.rd._execute_frame(false) == OK);
+			{
+				MutexLock lock(e.registry->mutex);
+				for (uint32_t slot = 0; slot < e.rd.frames[0].chain_reports.size(); ++slot) {
+					const auto &report = e.rd.frames[0].chain_reports[slot];
+					e.registry->production_capture_issue_locked(e.rd, slot, NativeSourceIssueView{ report }, report.error);
+				}
+			}
+			if (deliver) {
+				CHECK(e.rd._stall_for_frame(0, true) == OK);
+			}
+			return;
+		}
 		RDG::CommandBufferPool pool;
 		auto primary = RDD::CommandBufferID(90);
 		e.rd.draw_graph.end(false, false, primary, pool);
@@ -2344,6 +2440,9 @@ struct Access {
 	static Request *borrowed_readback_setup(Enrollment &e, bool incoming_pool = false) {
 		using namespace GDExtensionDeviceExit;
 		auto c = capacity(4);
+		if (e.driver.worker_mode) {
+			c.native_memberships *= 2; // Original quote covers main + worker per graph.
+		}
 		c.retained_payload_bytes = c.readback_bytes = 16;
 		c.readbacks = 1;
 		auto pool = c;
@@ -2686,6 +2785,248 @@ struct Access {
 		e.rd._free_pending_resources(0);
 		CHECK(e.driver.buffer_frees == 1);
 		CHECK(physical.free_event != 0);
+	}
+
+	static void incoming_worker_roundtrip(uint32_t mode) {
+		using namespace GDExtensionDeviceExit;
+		// 0: pending recording; 1: submitted before append plus retain Busy;
+		// 2: completed/recycled before append; 3: worker -> prior UPLOAD -> read.
+		Enrollment e;
+		e.driver.worker_mode = true;
+		e.rd.transfer_worker_pool_max_size = 1;
+		e.rd.transfer_worker_pool.resize(1);
+		e.rd.transfer_worker_operation_used_by_draw.resize(1);
+		e.rd.transfer_queue = RDD::CommandQueueID(2);
+		e.rd.transfer_queue_family = RDD::CommandQueueFamilyID(2);
+		e.rd.frames[0].transfer_worker_semaphores.push_back(e.driver.semaphore_create());
+		auto *producer = borrowed_readback_setup(e, true);
+		REQUIRE(producer != nullptr);
+		e.rd.frames[0].primary_command_buffer_begun = e.driver.command_buffer_begin(e.rd.frames[0].command_buffer);
+		const auto attachment_ref = GDExtensionProductionAttachmentRefV1{ Enrollment::INSTANCE, producer->attachment->serial };
+		const RID rid = RID::from_uint64(e.original_storage->backing.rid);
+		auto *buffer = e.rd.storage_buffer_owner.get_or_null(rid);
+		REQUIRE(buffer != nullptr);
+		uint8_t initial[16];
+		for (uint32_t i = 0; i < 16; ++i) {
+			initial[i] = uint8_t(i ^ 0xa7);
+		}
+		REQUIRE(e.rd._buffer_initialize(buffer, Span<uint8_t>(initial, 16), 1) == OK);
+		REQUIRE(e.rd.transfer_worker_pool_size == 1);
+		auto *worker = e.rd.transfer_worker_pool[0];
+		REQUIRE(worker != nullptr);
+		const uint64_t operation = buffer->transfer_worker_operation;
+		CHECK(buffer->transfer_worker_index == 0);
+		CHECK(operation == 1);
+		CHECK(worker->operations_counter == operation);
+		CHECK(worker->operations_processed == 0);
+		CHECK(worker->operations_submitted == 0);
+		CHECK(worker->recording);
+		CHECK_FALSE(worker->submitted);
+		CHECK(worker->staging_buffer_size_in_use == 16);
+		CHECK(e.driver.worker_serial == 0);
+		auto poll_worker = [&]() {
+			MutexLock lock(worker->thread_mutex);
+			return e.rd._wait_for_transfer_worker(worker, false);
+		};
+		if (mode == 1 || mode == 2) {
+			MutexLock lock(worker->thread_mutex);
+			e.rd._end_transfer_worker(worker);
+			e.rd._submit_transfer_worker(worker, e.rd.frames[0].transfer_worker_semaphores[0]);
+			REQUIRE(worker->submitted);
+			CHECK(worker->operations_submitted == operation);
+			CHECK(worker->last_submission.calls.size() == 1);
+			CHECK(worker->submission_serial == e.driver.worker_serial + 2000);
+		}
+		if (mode == 1) {
+			CHECK_FALSE(poll_worker());
+			CHECK(worker->operations_processed == 0);
+			CHECK(worker->submitted);
+			CHECK(e.driver.worker_recycles == 0);
+			CHECK(e.driver.worker_resets == 0);
+		}
+		if (mode == 2) {
+			e.driver.source_ready[e.driver.worker_serial] = true;
+			REQUIRE(poll_worker());
+			CHECK(worker->operations_processed == operation);
+			CHECK_FALSE(worker->submitted);
+			CHECK(worker->submission_serial == 0);
+			CHECK(worker->staging_buffer_size_in_use == 0);
+			CHECK(e.driver.worker_recycles == 1);
+			CHECK(e.driver.worker_resets == 1);
+			CHECK(e.driver.retains[e.driver.worker_serial] == 0);
+		}
+
+		auto c = capacity(4);
+		c.native_memberships *= 2;
+		c.readbacks = 1;
+		c.retained_payload_bytes = c.readback_bytes = 16;
+		const GDExtensionProductionOperationV1 op{ production_dto_abi<GDExtensionProductionOperationV1>(), 254, 1, 10, 11 };
+		const GDExtensionProductionActionV2 action{ 0, 10, 0, 0, GDEXTENSION_PRODUCTION_READBACK_V1, 0, 0, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, 0 };
+		const GDExtensionProductionUseV1 use{ 0, GDEXTENSION_PRODUCTION_READ_V1, 0, 16, 0 };
+		const GDExtensionProductionReadbackSourceV1 row{ 0, GDEXTENSION_PRODUCTION_READBACK_RETAINED_INCOMING_V1, 0, 0, 16, {}, { 1, e.original_storage->backing.backing_serial } };
+		Request *r = nullptr;
+		{
+			MutexLock lock(e.registry->mutex);
+			REQUIRE(e.registry->production_reserve_metadata_rows_locked(*producer->attachment, op, c, { nullptr, &action }, 1, &producer->resources[0].declaration, 1, &use, 1, { nullptr, nullptr, 0, &row }, 1, r, 2) == OK);
+		}
+		REQUIRE(r != nullptr);
+		const GDExtensionProductionRequestRefV1 ref{ Enrollment::INSTANCE, r->serial };
+		REQUIRE(e.registry->production_import_storage(ref, 0, &e.original_storage->backing).native_error == OK);
+		REQUIRE(e.registry->production_prepare_readback_v2(ref, 0, 0).native_error == OK);
+		if (mode == 3) {
+			REQUIRE(effect(e, *producer, 0).state == CheckedRecordAppend::State::Appended);
+			CHECK(producer->resources[0].transfer_pending);
+			CHECK(producer->resources[0].transfer_operation == operation);
+			CHECK(buffer->transfer_worker_index == -1);
+		}
+		REQUIRE(effect(e, *r, 0).state == CheckedRecordAppend::State::Appended);
+		CHECK(buffer->transfer_worker_index == -1);
+		CHECK(r->readbacks[0].source.issued == 16);
+		CHECK(r->readbacks[0].source.completed == 0);
+		CHECK_FALSE(r->readbacks[0].source.delivered);
+		CHECK(r->resources[0].transfer_pending == (mode < 2));
+		if (mode < 2) {
+			CHECK(r->resources[0].transfer_worker == worker->index);
+			CHECK(r->resources[0].transfer_operation == operation);
+			CHECK(r->resources[0].transfer_action_ordinal == 0);
+		}
+		e.driver.worker_retain_required = mode != 2;
+		if (mode == 1) {
+			// The graph appeared after the original submit. Join its exact earlier
+			// report now; even a complete fence cannot bypass failed retention.
+			e.driver.retain_error = ERR_BUSY;
+			CHECK(e.rd._submit_transfer_workers(e.rd.frames[0].command_buffer, true) == ERR_BUSY);
+			REQUIRE(r->native_count == 1);
+			CHECK_FALSE(r->natives[0].member.retained);
+			CHECK(worker->production_observer_pending);
+			e.driver.source_ready[e.driver.worker_serial] = true;
+			CHECK_FALSE(poll_worker());
+			CHECK(worker->submitted);
+			CHECK(worker->operations_processed == 0);
+			CHECK(worker->staging_buffer_size_in_use == 16);
+			CHECK(e.driver.worker_recycles == 0);
+			CHECK(e.driver.worker_resets == 0);
+			e.driver.retain_error = OK;
+			REQUIRE(poll_worker());
+			CHECK(r->natives[0].member.retained);
+			CHECK_FALSE(worker->production_observer_pending);
+			CHECK(worker->operations_processed == operation);
+		}
+		execute_transfers(e, *r, false, mode == 3 ? producer : nullptr);
+		REQUIRE(e.driver.worker_serial != 0);
+		REQUIRE(e.driver.main_serial != 0);
+		CHECK(e.driver.worker_serial != e.driver.main_serial);
+		CHECK(e.driver.queue_issues == 2);
+		CHECK(e.driver.main_worker_waits == 1);
+		CHECK(e.rd.frames[0].semaphores_to_wait_on.is_empty());
+		auto worker_members = [&](Request &request) {
+			uint32_t count = 0;
+			for (uint32_t n = 0; n < request.native_count; ++n) {
+				const auto &native = request.natives[n];
+				if (native.member.source.serial == e.driver.worker_serial) {
+					++count;
+					CHECK(native.member.source.queue_index == 2);
+					CHECK(native.member.source.completion_serial == e.driver.worker_serial + 1000);
+					CHECK(native.member.retained);
+					CHECK(native.fact.membership_parent == 0);
+				}
+			}
+			return count;
+		};
+		CHECK(worker_members(*r) == (mode < 2 ? 1u : 0u));
+		CHECK(worker_members(*producer) == (mode == 3 ? 1u : 0u));
+		CHECK_FALSE(r->resources[0].transfer_pending);
+		CHECK_FALSE(producer->resources[0].transfer_pending);
+		if (mode == 3) {
+			uint32_t path_length = 0;
+			CHECK(e.rd.draw_graph.has_dependency_path(producer->graphs[0].handle, r->graphs[0].handle, path_length));
+			CHECK(path_length > 0);
+			CHECK(producer->graphs[0].fact.command_slot == r->graphs[0].fact.command_slot);
+		}
+		uint8_t bytes[16] = {};
+		uint64_t written = 77;
+		auto blocked_copy = [&]() {
+			CHECK(e.registry->production_copy(ref, r->revision, 0, bytes, sizeof(bytes), &written).native_error == ERR_BUSY);
+			CHECK(written == 77);
+			CHECK_FALSE(r->readbacks[0].source.delivered);
+			CHECK(r->readbacks[0].source.completed == 0);
+			CHECK(e.original_storage->physical.production_uses != nullptr);
+			CHECK(e.original_storage->physical.free_event == 0);
+			CHECK(e.driver.buffer_frees == 0);
+		};
+		auto observe = [&](Request &request) {
+			const auto limit = budget(8, 4);
+			const auto before = e.driver.receipt_calls();
+			const auto output = turn(e, request, ProductionControlKind::OBSERVE, limit);
+			CHECK(output.service_usage.receipts <= limit.receipts);
+			CHECK(output.service_usage.passes <= limit.passes);
+			CHECK(e.driver.receipt_calls() - before <= limit.receipts);
+			CHECK((output.result.native_error == OK || output.result.native_error == ERR_BUSY));
+		};
+		observe(*r);
+		blocked_copy();
+		if (mode == 0 || mode == 3) {
+			CHECK_FALSE(poll_worker());
+			CHECK(worker->operations_processed == 0);
+			CHECK(worker->submitted);
+			CHECK(e.driver.worker_recycles == 0);
+			CHECK(e.driver.worker_resets == 0);
+			e.rd._free_transfer_workers();
+			CHECK(e.rd.transfer_worker_pool_size == 1);
+			CHECK(e.driver.worker_pool_frees == 0);
+			CHECK(e.driver.worker_fence_frees == 0);
+			e.driver.source_ready[e.driver.worker_serial] = true;
+			REQUIRE(poll_worker());
+			CHECK(worker->operations_processed == operation);
+			CHECK_FALSE(worker->submitted);
+			CHECK(worker->submission_serial == 0);
+			CHECK(worker->staging_buffer_size_in_use == 0);
+		}
+		CHECK(e.driver.worker_recycles == 1);
+		CHECK(e.driver.worker_resets == 1);
+		observe(*r); // Worker completion alone cannot publish an unfinished copy.
+		blocked_copy();
+		e.driver.source_ready[e.driver.main_serial] = true;
+		for (uint32_t i = 0; i < 128 && !r->readbacks[0].source.delivered; ++i) {
+			observe(*r);
+		}
+		REQUIRE(r->readbacks[0].source.delivered);
+		REQUIRE(finish_owned_maintenance(e, *r, budget(8, 4)));
+		REQUIRE(e.registry->production_copy(ref, r->revision, 0, bytes, sizeof(bytes), &written).native_error == OK);
+		CHECK(written == 16);
+		CHECK(r->readbacks[0].source.completed == 16);
+		CHECK(r->readbacks[0].source.returned == 16);
+		for (uint32_t i = 0; i < 16; ++i) {
+			CHECK(bytes[i] == uint8_t(i ^ (mode == 3 ? 0x5a : 0xa7)));
+		}
+		if (mode == 3) {
+			observe(*producer);
+		}
+		for (auto *request : { producer, r }) {
+			const GDExtensionProductionRequestRefV1 request_ref{ Enrollment::INSTANCE, request->serial };
+			REQUIRE(e.registry->production_cancel(request_ref).native_error == OK);
+			REQUIRE(finish_owned_maintenance(e, *request, budget(8, 4)));
+			REQUIRE(turn(e, *request, ProductionControlKind::RELEASE, budget()).owner_return.native_error == OK);
+			CHECK(request->serial == 0);
+		}
+		CHECK(e.original_storage->physical.production_uses == nullptr);
+		REQUIRE(e.registry->production_close(attachment_ref).native_error == OK);
+		CHECK(e.driver.releases[e.driver.worker_serial] == (mode == 2 ? 0u : 1u));
+		auto &physical = e.original_storage->physical;
+		physical.use_closed.store(true);
+		e.rd.qualification_retiring = true;
+		e.rd.free_rid(rid);
+		e.rd.qualification_retiring = false;
+		CHECK(physical.enqueued);
+		CHECK(physical.free_event == 0);
+		e.rd._free_pending_resources(0);
+		CHECK(physical.free_event != 0);
+		CHECK(e.driver.buffer_frees == 1);
+		e.rd._free_transfer_workers();
+		CHECK(e.rd.transfer_worker_pool_size == 0);
+		CHECK(e.driver.worker_pool_frees == 1);
+		CHECK(e.driver.worker_fence_frees == 1);
+		CHECK(e.driver.buffer_frees == 2);
 	}
 
 	static void incoming_reflected_read(uint32_t mode) {
@@ -3214,6 +3555,18 @@ TEST_CASE("[SceneTree][ProductionNativeObserve][OwnedFrameDraw] ordinary drawing
 }
 TEST_CASE("[ProductionNativeObserve][IncomingReadback] original uploaded backing is copied without a request writer") {
 	Access::incoming_readback_roundtrip();
+}
+TEST_CASE("[ProductionNativeObserve][IncomingReadback][T11Worker] pending original worker is captured before incoming completion") {
+	Access::incoming_worker_roundtrip(0);
+}
+TEST_CASE("[ProductionNativeObserve][IncomingReadback][T11Worker] submitted original worker joins incoming and retain Busy prevents recycle") {
+	Access::incoming_worker_roundtrip(1);
+}
+TEST_CASE("[ProductionNativeObserve][IncomingReadback][T11Worker] completed and recycled original worker leaves no stale incoming membership") {
+	Access::incoming_worker_roundtrip(2);
+}
+TEST_CASE("[ProductionNativeObserve][IncomingReadback][T11Worker] prior upload retains worker dependency and orders later incoming bytes") {
+	Access::incoming_worker_roundtrip(3);
 }
 TEST_CASE("[ProductionNativeObserve][IncomingReadback] physical alias partial prefix write refuses before effects") {
 	Access::incoming_readback_roundtrip(1);

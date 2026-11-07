@@ -1,0 +1,133 @@
+{
+  "scope": "Original transfer-worker lifecycle with finite driver and SourceV1 request/graph capture; installed split writer chunk reserve/prepare; no new Metal or semantic publication claim",
+  "base_revision": "897b8c6592edb30ebfd5d4aba03b8159232007db",
+  "host": {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+    "bytes": 157507832,
+    "sha256": "11683043a2baa1d0e674ffc64b2d6765d7a6c371b0e3824eb965d5c7feab4e75"
+  },
+  "host_metadata": {
+    "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64.controlled_build.json",
+    "bytes": 530,
+    "sha256": "aea2a372706f7a5c3d25189026aae2d55286a4ef0c915b2a86fecd5d09ad7b66"
+  },
+  "source": {
+    "tests/core/extension/test_production_native_observe.cpp": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/core/extension/test_production_native_observe.cpp",
+      "bytes": 169795,
+      "sha256": "3af0256eb8e2b66d86597bca4d7b9062d043300607b02bd7d7d90a04b043444a"
+    },
+    "tests/core/extension/test_production_request.cpp": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/tests/core/extension/test_production_request.cpp",
+      "bytes": 715315,
+      "sha256": "25c3fd11f6e66d24d2d1f211aaf0e08665559f4ba9b1b76bbec63a45810e3416"
+    },
+    "core/extension/gdextension_production_action.cpp": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/core/extension/gdextension_production_action.cpp",
+      "bytes": 44477,
+      "sha256": "48bedcb13ed7818192e398a66788ead95eaf1491a14d051e948be400eee87c5c"
+    }
+  },
+  "focused_cases": 5,
+  "focused_assertions": 1270,
+  "final_cases": {
+    "successes": "214",
+    "failures": "0",
+    "skipped": "2044"
+  },
+  "final_assertions": {
+    "successes": "90642",
+    "failures": "0"
+  },
+  "controlled_sensitivity": {
+    "original_sha256": "48bedcb13ed7818192e398a66788ead95eaf1491a14d051e948be400eee87c5c",
+    "mutation": "Delay original worker capture until its real last_completion matches original submission; only pending test selected; eventual original join remains allowed",
+    "mutant_build_exit": 0,
+    "mutant_test_exit": 1,
+    "mutant_assertions": {
+      "successes": "284",
+      "failures": "2"
+    },
+    "mutant_cases": {
+      "successes": "0",
+      "failures": "1",
+      "skipped": "2257"
+    },
+    "restored_sha256": "48bedcb13ed7818192e398a66788ead95eaf1491a14d051e948be400eee87c5c",
+    "restored_build_exit": 0
+  },
+  "invalid_diagnostic_mutant": {
+    "original_sha256": "48bedcb13ed7818192e398a66788ead95eaf1491a14d051e948be400eee87c5c",
+    "mutation": "Only production_capture_issue_locked returns before worker capture; main graph capture unchanged",
+    "mutant_build_exit": 0,
+    "mutant_test_exit": -6,
+    "mutant_assertions": {
+      "successes": "271",
+      "failures": "11"
+    },
+    "mutant_cases": {
+      "successes": "0",
+      "failures": "1",
+      "skipped": "2257"
+    },
+    "restored_sha256": "48bedcb13ed7818192e398a66788ead95eaf1491a14d051e948be400eee87c5c",
+    "restored_build_exit": 0
+  },
+  "evidence": {
+    "T11_CHUNKS_R1.xml": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/readback-v2-publication-native-20261107/T11_CHUNKS_R1.xml",
+      "bytes": 362526,
+      "sha256": "0440f8f34bc5badc6191698d453eaae7be049f65d113a5d20698d7ec021ad0dc"
+    },
+    "T11_CHUNKS_R2.xml": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/readback-v2-publication-native-20261107/T11_CHUNKS_R2.xml",
+      "bytes": 361126,
+      "sha256": "15c4c593106885e5e6bd51e4d9e2618db9b2b92d3b7d9905d48271223f727f03"
+    },
+    "T11_CHUNKS_FINAL_GREEN.xml": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/readback-v2-publication-native-20261107/T11_CHUNKS_FINAL_GREEN.xml",
+      "bytes": 385196,
+      "sha256": "af45431bfb0bb1c7b04e618f4421620539afcf9d7c7dd2300f2659884413c8ed"
+    },
+    "T11_CHUNKS_FINAL_COMMAND.json": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/readback-v2-publication-native-20261107/T11_CHUNKS_FINAL_COMMAND.json",
+      "bytes": 362,
+      "sha256": "b77fdc0b24b77d35af767ce7fa4189782637217071bfeb4536181627b14ed69d"
+    },
+    "T11_CAPTURE_DELAY_MUTANT.xml": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/readback-v2-publication-native-20261107/T11_CAPTURE_DELAY_MUTANT.xml",
+      "bytes": 361374,
+      "sha256": "32e578665d34b19f6f26623246541721cc42ba0dcba0fd07de45d8c320df7b1d"
+    },
+    "T11_CAPTURE_DELAY_MUTANT.log": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/readback-v2-publication-native-20261107/T11_CAPTURE_DELAY_MUTANT.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "T11_CAPTURE_DELAY_RESULT.json": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/readback-v2-publication-native-20261107/T11_CAPTURE_DELAY_RESULT.json",
+      "bytes": 598,
+      "sha256": "f22e70cad11dd72909b0f52d361a3c713fafc3bcf4f4ca376bae1c8494535798"
+    },
+    "T11_CAPTURE_MUTANT.xml": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/readback-v2-publication-native-20261107/T11_CAPTURE_MUTANT.xml",
+      "bytes": 29163,
+      "sha256": "894b888440180532406a4a12383af6425a5ecfcf68b73b0ad6edaabca11c4f93"
+    },
+    "T11_CAPTURE_MUTATION_RESULT.json": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/readback-v2-publication-native-20261107/T11_CAPTURE_MUTATION_RESULT.json",
+      "bytes": 540,
+      "sha256": "189d70bed09ac36394075fc2b488c6a82df1e7d444a0a44a8650987ee4387832"
+    },
+    "T11_IMPLEMENTATION_REVIEW.md": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/readback-v2-publication-native-20261107/T11_IMPLEMENTATION_REVIEW.md",
+      "bytes": 7106,
+      "sha256": "381a0456eef65732450bf491aa2d7cf466712c34716814ce076487e83f5fd192"
+    },
+    "REQUEST_WRITER_CHUNK_CONTRACT.md": {
+      "path": "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/readback-v2-publication-native-20261107/REQUEST_WRITER_CHUNK_CONTRACT.md",
+      "bytes": 7108,
+      "sha256": "86b025507f4ebcdcb958ca3d1bdef5593d906281e2aacfeb67258da7a83021ba"
+    }
+  }
+}
