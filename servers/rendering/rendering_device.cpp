@@ -9754,7 +9754,7 @@ void RenderingDevice::_flush_barriers_for_transfer_worker(TransferWorker *p_tran
 	}
 }
 
-Error RenderingDevice::_check_transfer_worker_operation(uint32_t index, uint64_t operation) {
+Error RenderingDevice::_check_transfer_worker_operation(uint32_t index, uint64_t operation, bool *r_processed) {
 	auto *worker = transfer_worker_pool[index];
 	// Never hold operations while waiting for thread: aggregate submit uses the
 	// original thread -> operations order. A retry publishes no new dependency.
@@ -9869,6 +9869,9 @@ Error RenderingDevice::_check_transfer_worker_operation(uint32_t index, uint64_t
 			}
 		}
 	}
+	if (r_processed != nullptr) {
+		*r_processed = worker->operations_processed >= operation;
+	}
 	auto &used = transfer_worker_operation_used_by_draw[index];
 	used = MAX(used, operation);
 	return OK;
@@ -9877,8 +9880,9 @@ Error RenderingDevice::_check_transfer_worker_buffer(Buffer *buffer) {
 	if (buffer->transfer_worker_index < 0) {
 		return OK;
 	}
-	const Error error = _check_transfer_worker_operation(buffer->transfer_worker_index, buffer->transfer_worker_operation);
-	if (error == OK) {
+	bool processed = false;
+	const Error error = _check_transfer_worker_operation(buffer->transfer_worker_index, buffer->transfer_worker_operation, &processed);
+	if (error == OK && processed) {
 		buffer->transfer_worker_index = -1;
 	}
 	return error;
@@ -9887,29 +9891,36 @@ Error RenderingDevice::_check_transfer_worker_texture(Texture *texture) {
 	if (texture->transfer_worker_index < 0) {
 		return OK;
 	}
-	const Error error = _check_transfer_worker_operation(texture->transfer_worker_index, texture->transfer_worker_operation);
-	if (error == OK) {
+	bool processed = false;
+	const Error error = _check_transfer_worker_operation(texture->transfer_worker_index, texture->transfer_worker_operation, &processed);
+	if (error == OK && processed) {
 		texture->transfer_worker_index = -1;
 	}
 	return error;
 }
 Error RenderingDevice::_check_transfer_worker_vertex_array(VertexArray *array) {
-	for (uint32_t i = 0; i < array->transfer_worker_indices.size(); ++i) {
-		const Error error = _check_transfer_worker_operation(array->transfer_worker_indices[i], array->transfer_worker_operations[i]);
+	for (uint32_t i = 0; i < array->transfer_worker_indices.size();) {
+		bool processed = false;
+		const Error error = _check_transfer_worker_operation(array->transfer_worker_indices[i], array->transfer_worker_operations[i], &processed);
 		if (error != OK) {
 			return error;
 		}
+		if (processed) {
+			array->transfer_worker_indices.remove_at(i);
+			array->transfer_worker_operations.remove_at(i);
+		} else {
+			i++;
+		}
 	}
-	array->transfer_worker_indices.clear();
-	array->transfer_worker_operations.clear();
 	return OK;
 }
 Error RenderingDevice::_check_transfer_worker_index_array(IndexArray *array) {
 	if (array->transfer_worker_index < 0) {
 		return OK;
 	}
-	const Error error = _check_transfer_worker_operation(array->transfer_worker_index, array->transfer_worker_operation);
-	if (error == OK) {
+	bool processed = false;
+	const Error error = _check_transfer_worker_operation(array->transfer_worker_index, array->transfer_worker_operation, &processed);
+	if (error == OK && processed) {
 		array->transfer_worker_index = -1;
 	}
 	return error;

@@ -430,9 +430,15 @@ public:
 		CHECK(a.worker_credits.is_empty());
 		REQUIRE(b.credits.release_worker_quote(7) == OK);
 		CHECK(device._check_transfer_worker_buffer(&buffer) == OK);
-		CHECK(buffer.transfer_worker_index == -1);
+		// Admission succeeds before the transfer thread has processed operation 9.
+		// Keep the resource marker so a later ordinary caller can authenticate the
+		// same operation instead of silently losing the dependency.
+		CHECK(buffer.transfer_worker_index == 0);
 		CHECK(device.transfer_worker_operation_used_by_draw[0] == 9);
 		CHECK(worker->qualification_batch_sealed);
+		worker->operations_processed = 9;
+		CHECK(device._check_transfer_worker_buffer(&buffer) == OK);
+		CHECK(buffer.transfer_worker_index == -1);
 		CHECK(a.credits.workers == 2);
 		CHECK(b.credits.workers == 2);
 		uint32_t offset = 0;

@@ -91,6 +91,10 @@ class TestCheckedBindAccess {
 			for (uint32_t i = 0; i < 2; ++i) {
 				auto *worker = memnew(RD::TransferWorker);
 				worker->index = i;
+			// This fixture models completed uploads; the marker-retention path is
+			// covered by the transfer worker tests with operations_processed below the
+			// authenticated operation.
+			worker->operations_processed = UINT64_MAX;
 				rd.transfer_worker_pool.push_back(worker);
 			}
 			rd.transfer_worker_pool_size = 2;

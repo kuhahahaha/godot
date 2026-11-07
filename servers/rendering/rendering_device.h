@@ -2409,7 +2409,7 @@ private:
 	void _submit_transfer_worker(TransferWorker *p_transfer_worker, VectorView<RDD::SemaphoreID> p_signal_semaphores = VectorView<RDD::SemaphoreID>(), bool p_operations_locked = false);
 	bool _wait_for_transfer_worker(TransferWorker *p_transfer_worker, bool p_blocking = false);
 	void _flush_barriers_for_transfer_worker(TransferWorker *p_transfer_worker, bool p_barriers_locked = false);
-	Error _check_transfer_worker_operation(uint32_t p_transfer_worker_index, uint64_t p_transfer_worker_operation);
+	Error _check_transfer_worker_operation(uint32_t p_transfer_worker_index, uint64_t p_transfer_worker_operation, bool *r_processed = nullptr);
 	Error _check_transfer_worker_buffer(Buffer *p_buffer);
 	Error _check_transfer_worker_texture(Texture *p_texture);
 	Error _check_transfer_worker_vertex_array(VertexArray *p_vertex_array);
