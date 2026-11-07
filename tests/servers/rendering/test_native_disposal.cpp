@@ -597,7 +597,6 @@ TEST_CASE("[RenderingDevice][NativeDisposal][PipelineRIDCapacity] ordinary facto
 	ERR_PRINT_ON;
 }
 
-
 TEST_CASE("[RenderingDevice][NativeDisposal] large accepted queue drains with single-call turns") {
 	RenderingDevice rd;
 	Driver driver;
@@ -800,9 +799,6 @@ TEST_CASE("[RenderingDevice][NativeDisposal] failed native creation leaves no wi
 
 void TestNativeDisposalAccess::checked_pipeline_compatibility() {
 	using namespace TestNativeDisposal;
-	using RD = RenderingDevice;
-	using RDD = RenderingDeviceDriver;
-	using RDG = RenderingDeviceGraph;
 	struct TupleDriver : RasterCapacityDriver {
 		uint64_t next_pass = 500;
 		uint32_t created_passes = 0, created_pipelines = 0, freed_pipelines = 0;
@@ -913,7 +909,9 @@ void TestNativeDisposalAccess::checked_pipeline_compatibility() {
 	rejected(wrong_format);
 	rd.draw_list_end();
 	rd.draw_graph.begin();
-	for (RID pipeline : { right, wrong_format, wrong_pass, wrong_both }) { rd.free_rid(pipeline); }
+	for (RID pipeline : { right, wrong_format, wrong_pass, wrong_both }) {
+		rd.free_rid(pipeline);
+	}
 	rd.free_rid(shader);
 	rd.free_rid(framebuffer);
 	rd.free_rid(other_framebuffer);
@@ -923,7 +921,9 @@ void TestNativeDisposalAccess::checked_pipeline_compatibility() {
 	CHECK(driver.shader_frees == 1);
 	CHECK(rd.dependency_map.is_empty());
 	CHECK(rd.reverse_dependency_map.is_empty());
-	for (const auto &entry : rd.framebuffer_formats) { driver.render_pass_free(entry.value.render_pass); }
+	for (const auto &entry : rd.framebuffer_formats) {
+		driver.render_pass_free(entry.value.render_pass);
+	}
 	rd.framebuffer_formats.clear();
 	rd.framebuffer_format_cache.clear();
 	detach(rd);
@@ -1292,7 +1292,9 @@ struct GeometryPreparedDriver : TestNativeDisposal::RasterCapacityDriver {
 	}
 	BufferID buffer_create(uint64_t size, BitField<BufferUsageBits> usage, MemoryAllocationType, uint64_t) override {
 		CHECK(((next_buffer == 10 && size == 128) || (next_buffer == 11 && size == 16)));
-		if (next_buffer == 11) { CHECK(usage.has_flag(BUFFER_USAGE_UNIFORM_BIT)); }
+		if (next_buffer == 11) {
+			CHECK(usage.has_flag(BUFFER_USAGE_UNIFORM_BIT));
+		}
 		return BufferID(next_buffer++);
 	}
 	void buffer_free(BufferID buffer) override {
@@ -1311,12 +1313,20 @@ struct GeometryPreparedDriver : TestNativeDisposal::RasterCapacityDriver {
 		++set_creates;
 		return UniformSetID(multiple_sets ? 60 + set : 61);
 	}
-	void uniform_set_free(UniformSetID set) override { CHECK(((!multiple_sets && set == UniformSetID(61)) || (multiple_sets && set.id >= 60 && set.id <= 64))); ++set_frees; }
+	void uniform_set_free(UniformSetID set) override {
+		CHECK(((!multiple_sets && set == UniformSetID(61)) || (multiple_sets && set.id >= 60 && set.id <= 64)));
+		++set_frees;
+	}
 	uint32_t uniform_sets_get_dynamic_offsets(VectorView<UniformSetID> sets, ShaderID shader, uint32_t first, uint32_t count) const override {
 		CHECK(shader == ShaderID(301));
-		if (!multiple_sets) { CHECK(first == 0); CHECK(count == 1); }
+		if (!multiple_sets) {
+			CHECK(first == 0);
+			CHECK(count == 1);
+		}
 		REQUIRE(sets.size() >= count);
-		for (uint32_t i = 0; i < count; ++i) { CHECK(sets[i] == UniformSetID(multiple_sets ? 60 + first + i : 61)); }
+		for (uint32_t i = 0; i < count; ++i) {
+			CHECK(sets[i] == UniformSetID(multiple_sets ? 60 + first + i : 61));
+		}
 		++dynamic_queries;
 		return 0x55;
 	}
@@ -1324,15 +1334,22 @@ struct GeometryPreparedDriver : TestNativeDisposal::RasterCapacityDriver {
 		CHECK(command_buffer == CommandBufferID(11));
 		CHECK(set == UniformSetID(multiple_sets ? 60 + index : 61));
 		CHECK(shader == ShaderID(301));
-		if (!multiple_sets) { CHECK(index == 0); }
+		if (!multiple_sets) {
+			CHECK(index == 0);
+		}
 		native_calls.push_back(multiple_sets ? 100 + index : 1);
 	}
 	void command_bind_render_uniform_sets(CommandBufferID command_buffer, VectorView<UniformSetID> sets, ShaderID shader, uint32_t first, uint32_t count, uint32_t dynamic_mask) override {
 		CHECK(command_buffer == CommandBufferID(11));
 		CHECK(shader == ShaderID(301));
-		if (!multiple_sets) { CHECK(first == 0); CHECK(count == 1); }
+		if (!multiple_sets) {
+			CHECK(first == 0);
+			CHECK(count == 1);
+		}
 		REQUIRE(sets.size() >= count);
-		for (uint32_t i = 0; i < count; ++i) { CHECK(sets[i] == UniformSetID(multiple_sets ? 60 + first + i : 61)); }
+		for (uint32_t i = 0; i < count; ++i) {
+			CHECK(sets[i] == UniformSetID(multiple_sets ? 60 + first + i : 61));
+		}
 		CHECK(dynamic_mask == 0x55);
 		native_calls.push_back(multiple_sets ? 200 + first * 10 + count : 2);
 	}
@@ -1340,14 +1357,26 @@ struct GeometryPreparedDriver : TestNativeDisposal::RasterCapacityDriver {
 		CHECK(attributes.size() == 1);
 		return VertexFormatID(7);
 	}
-	void vertex_format_free(VertexFormatID format) override { CHECK(format == VertexFormatID(7)); ++vertex_format_frees; }
+	void vertex_format_free(VertexFormatID p_format) override {
+		CHECK(p_format == VertexFormatID(7));
+		++vertex_format_frees;
+	}
 	uint64_t buffer_get_dynamic_offsets(Span<BufferID>) override { return 0; }
 	uint64_t api_trait_get(ApiTrait trait) override { return trait == API_TRAIT_HONORS_PIPELINE_BARRIERS && honors_barriers; }
-	uint64_t limit_get(Limit limit) override { CHECK(limit == LIMIT_MAX_BOUND_UNIFORM_SETS); return 8; }
+	uint64_t limit_get(Limit limit) override {
+		CHECK(limit == LIMIT_MAX_BOUND_UNIFORM_SETS);
+		return 8;
+	}
 	void set_object_name(ObjectType type, ID id, const String &name) override {
 		CHECK(name.begins_with("RID:"));
-		if (type == OBJECT_TYPE_BUFFER) { CHECK((id.id == 10 || id.id == 11)); return; }
-		if (type == OBJECT_TYPE_UNIFORM_SET) { CHECK(((!multiple_sets && id.id == 61) || (multiple_sets && id.id >= 60 && id.id <= 64))); return; }
+		if (type == OBJECT_TYPE_BUFFER) {
+			CHECK((id.id == 10 || id.id == 11));
+			return;
+		}
+		if (type == OBJECT_TYPE_UNIFORM_SET) {
+			CHECK(((!multiple_sets && id.id == 61) || (multiple_sets && id.id >= 60 && id.id <= 64)));
+			return;
+		}
 		RasterCapacityDriver::set_object_name(type, id, name);
 	}
 };
@@ -1374,7 +1403,9 @@ void TestNativeDisposalAccess::geometry_prepared() {
 			const bool compatible_origin = batching && honors_barriers;
 			const RID origin_shader = compatible_origin ? rd.shader_create_from_bytecode(container->to_bytes()) : shader;
 			REQUIRE(origin_shader.is_valid());
-			if (compatible_origin) { CHECK(origin_shader != shader); }
+			if (compatible_origin) {
+				CHECK(origin_shader != shader);
+			}
 			const auto framebuffer_format = rd.framebuffer_format_create(Vector<RenderingDevice::AttachmentFormat>());
 			rd.draw_graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RDD::CommandQueueFamilyID(1), 0);
 			rd.draw_graph.begin(true);
@@ -1528,12 +1559,18 @@ void TestNativeDisposalAccess::geometry_prepared() {
 			rd.draw_graph.end(false, false, primary, pool);
 			Vector<uint64_t> expected_calls;
 			for (uint32_t draw = 0; draw < 3; ++draw) {
-				if (!honors_barriers) { expected_calls.push_back(1); }
-				if (draw != 1 || !batching) { expected_calls.push_back(2); }
+				if (!honors_barriers) {
+					expected_calls.push_back(1);
+				}
+				if (draw != 1 || !batching) {
+					expected_calls.push_back(2);
+				}
 				expected_calls.push_back(3);
 			}
 			REQUIRE(driver.native_calls.size() == expected_calls.size());
-			for (int i = 0; i < expected_calls.size(); ++i) { CHECK(driver.native_calls[i] == expected_calls[i]); }
+			for (int i = 0; i < expected_calls.size(); ++i) {
+				CHECK(driver.native_calls[i] == expected_calls[i]);
+			}
 			CHECK(driver.dynamic_queries == (batching ? 2 : 3));
 			for (const auto &record : { first.draw_handle, second.draw_handle, third.draw_handle, end.draw_handle }) {
 				CHECK(rd.draw_graph.record_mapping_state(record) == RDG::RecordMappingState::Recorded);
@@ -1559,7 +1596,9 @@ void TestNativeDisposalAccess::geometry_prepared() {
 			rd.free_rid(set);
 			rd.free_rid(uniform_buffer);
 			rd.free_rid(vertex_buffer);
-			if (compatible_origin) { rd.free_rid(origin_shader); }
+			if (compatible_origin) {
+				rd.free_rid(origin_shader);
+			}
 			rd.free_rid(shader);
 			dispose(rd);
 			CHECK(driver.set_creates == 1);
@@ -1569,10 +1608,14 @@ void TestNativeDisposalAccess::geometry_prepared() {
 			CHECK(driver.shader_frees == (compatible_origin ? 2 : 1));
 			CHECK(rd.dependency_map.is_empty());
 			CHECK(rd.reverse_dependency_map.is_empty());
-			for (auto &entry : rd.framebuffer_formats) { driver.render_pass_free(entry.value.render_pass); }
+			for (auto &entry : rd.framebuffer_formats) {
+				driver.render_pass_free(entry.value.render_pass);
+			}
 			rd.framebuffer_formats.clear();
 			rd.framebuffer_format_cache.clear();
-			for (auto &entry : rd.vertex_formats) { driver.vertex_format_free(entry.value.driver_id); }
+			for (auto &entry : rd.vertex_formats) {
+				driver.vertex_format_free(entry.value.driver_id);
+			}
 			rd.vertex_formats.clear();
 			rd.vertex_format_cache.clear();
 			CHECK(driver.vertex_format_frees == 1);
@@ -1707,7 +1750,9 @@ void TestNativeDisposalAccess::geometry_prepared_multiple() {
 		const uint64_t *expected = sparse ? sparse_calls : contiguous_calls;
 		const uint32_t expected_count = sparse ? 6 : 4;
 		REQUIRE(driver.native_calls.size() == int(expected_count));
-		for (uint32_t i = 0; i < expected_count; ++i) { CHECK(driver.native_calls[i] == expected[i]); }
+		for (uint32_t i = 0; i < expected_count; ++i) {
+			CHECK(driver.native_calls[i] == expected[i]);
+		}
 		CHECK(driver.dynamic_queries == (sparse ? 3 : 1));
 		for (uint32_t i = 0; i < draw.prefix_count; ++i) {
 			const auto &prefix = draw.prefix_handles[i];
@@ -1736,10 +1781,14 @@ void TestNativeDisposalAccess::geometry_prepared_multiple() {
 		CHECK(driver.shader_frees == 1);
 		CHECK(rd.dependency_map.is_empty());
 		CHECK(rd.reverse_dependency_map.is_empty());
-		for (auto &entry : rd.framebuffer_formats) { driver.render_pass_free(entry.value.render_pass); }
+		for (auto &entry : rd.framebuffer_formats) {
+			driver.render_pass_free(entry.value.render_pass);
+		}
 		rd.framebuffer_formats.clear();
 		rd.framebuffer_format_cache.clear();
-		for (auto &entry : rd.vertex_formats) { driver.vertex_format_free(entry.value.driver_id); }
+		for (auto &entry : rd.vertex_formats) {
+			driver.vertex_format_free(entry.value.driver_id);
+		}
 		rd.vertex_formats.clear();
 		rd.vertex_format_cache.clear();
 		CHECK(driver.vertex_format_frees == 1);
