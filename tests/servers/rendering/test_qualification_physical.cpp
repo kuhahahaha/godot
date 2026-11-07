@@ -2318,6 +2318,40 @@ public:
 		device._free_pending_resources(0);
 		CHECK(cell.free_event != 0);
 	}
+	static void texture_worker_processed_marker_allows_retirement(RenderingDevice &device) {
+		using namespace GDExtensionDeviceExit;
+		QualificationPhysicalReturn cell;
+		cell.bridge = 11;
+		cell.child = 31;
+		cell.serial = 43;
+		RenderingDevice::TextureFormat format;
+		format.format = RenderingDevice::DATA_FORMAT_R32G32B32A32_SFLOAT;
+		format.texture_type = RenderingDevice::TEXTURE_TYPE_2D;
+		format.width = format.height = 2;
+		format.depth = format.array_layers = format.mipmaps = 1;
+		format.samples = RenderingDevice::TEXTURE_SAMPLES_1;
+		format.usage_bits = RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT | RenderingDevice::TEXTURE_USAGE_CAN_UPDATE_BIT;
+		RID rid = create_qualified_texture(device, format, &cell, 0);
+		REQUIRE(rid.is_valid());
+		device.render_thread_id = Thread::get_caller_id();
+		auto *worker = memnew(RenderingDevice::TransferWorker);
+		worker->index = 0;
+		worker->operations_counter = 1;
+		worker->operations_processed = 1;
+		device.transfer_worker_pool.push_back(worker);
+		device.transfer_worker_operation_used_by_draw.push_back(0);
+		auto *texture = device.texture_owner.get_or_null(rid);
+		texture->transfer_worker_index = 0;
+		texture->transfer_worker_operation = 1;
+		cell.use_closed = true;
+		device.qualification_retiring = true;
+		device.free_rid(rid);
+		CHECK_FALSE(device.texture_owner.owns(rid));
+		CHECK(cell.enqueued);
+		CHECK(cell.free_event == 0);
+		device._free_pending_resources(0);
+		CHECK(cell.free_event != 0);
+	}
 	static void texture_ticket_pin(RenderingDevice &device) {
 		using namespace GDExtensionDeviceExit;
 		auto &registry = Registry::get_singleton();
@@ -6000,6 +6034,15 @@ TEST_CASE("[Qualification][T1] worker refusal preserves texture dependencies") {
 	TestQualificationPhysicalAccess::texture_worker_refusal_preserves_dependencies(device);
 	CHECK(driver.texture_frees == 1);
 	CHECK(driver.frees == 1);
+	TestQualificationPhysicalAccess::detach(device);
+}
+
+TEST_CASE("[Qualification][T1] processed texture worker marker is cleared before retirement") {
+	RenderingDevice device;
+	TestQualificationPhysical::Driver driver;
+	TestQualificationPhysicalAccess::attach(device, driver);
+	TestQualificationPhysicalAccess::texture_worker_processed_marker_allows_retirement(device);
+	CHECK(driver.texture_frees == 1);
 	TestQualificationPhysicalAccess::detach(device);
 }
 
