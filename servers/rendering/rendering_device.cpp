@@ -12409,16 +12409,7 @@ Error RenderingDevice::_qualification_prepare_free(RID rid) {
 		if (texture_owner.owns(current)) {
 			auto *texture = texture_owner.get_or_null(current);
 			if (texture) {
-				if (texture->transfer_worker_index >= 0 && uint32_t(texture->transfer_worker_index) >= transfer_worker_pool.size()) {
-					error = ERR_BUSY;
-				} else {
-					error = _check_transfer_worker_texture(texture);
-				}
-				if (error == OK && texture->transfer_worker_index >= 0) {
-					// The marker is retained until its exact operation is processed;
-					// do not let _free_internal reject without a retry path.
-					error = ERR_BUSY;
-				}
+				error = _check_transfer_worker_texture(texture);
 			}
 		} else {
 			Buffer *buffer = nullptr;
@@ -12535,6 +12526,7 @@ void RenderingDevice::free_rid(RID p_rid) {
 	auto *framebuffer = framebuffer_owner.owns(p_rid) ? framebuffer_owner.get_or_null(p_rid) : nullptr;
 	auto *uniform_set = uniform_set_owner.owns(p_rid) ? uniform_set_owner.get_or_null(p_rid) : nullptr;
 	ERR_FAIL_COND_MSG(!qualification_retiring && ((raster_pipeline && raster_pipeline->qualification_return) || (framebuffer && framebuffer->qualification_return) || (buffer && buffer->qualification_return) || (shader && shader->qualification_return) || (pipeline && pipeline->qualification_return) || (texture && texture->qualification_return) || (sampler && sampler->qualification_return) || (uniform_set && uniform_set->qualification_return)), "Qualification resources require their original owner retirement acknowledgment.");
+	ERR_FAIL_COND_MSG(texture && texture->qualification_return && texture->transfer_worker_index >= 0, "Qualification texture has an unsettled transfer worker.");
 	ERR_FAIL_COND_MSG(_qualification_resource_busy(p_rid), "Qualification ticket still owns this resource or one of its dependents.");
 	bool *retiring = nullptr;
 	if (auto *holds = _native_immutable_counter(p_rid, &retiring)) {
