@@ -40,12 +40,14 @@ func _start() -> void:
 		match transform_case:
 			"", "identity":
 				legacy_transform_case = 0
-			"rotated":
+			"rotation":
 				legacy_transform_case = 1
-			"rotated_uniform":
+			"uniform":
 				legacy_transform_case = 2
-			"rotated_nonuniform":
+			"nonuniform":
 				legacy_transform_case = 3
+			"tilt_nonuniform_rotation":
+				legacy_transform_case = 4
 			_:
 				quit(1)
 				return

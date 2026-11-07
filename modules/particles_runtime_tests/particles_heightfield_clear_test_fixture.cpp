@@ -43,15 +43,15 @@ Error ParticlesHeightfieldClearTestFixture::run_legacy_normal(int p_transform_ca
 	if (started) {
 		return ERR_ALREADY_IN_USE;
 	}
-	if (p_transform_case < 0 || p_transform_case > 3) {
+	if (p_transform_case < 0 || p_transform_case > 4) {
 		return ERR_INVALID_PARAMETER;
 	}
 	legacy_normal_capture = true;
-	transformed_capture = p_transform_case != 0;
+	legacy_transform_case = p_transform_case;
 	if (p_transform_case == 2) {
 		capture_scale = Vector3(2, 2, 2);
-	} else if (p_transform_case == 3) {
-		capture_scale = Vector3(2, 3, 4);
+	} else if (p_transform_case == 3 || p_transform_case == 4) {
+		capture_scale = Vector3(2, 1, 3);
 	}
 	return run_geometry(0.0f);
 }
@@ -113,7 +113,7 @@ Error ParticlesHeightfieldClearTestFixture::run_capture() {
 	collision = storage->particles_collision_allocate();
 	storage->particles_collision_initialize(collision);
 	storage->particles_collision_set_collision_type(collision, RSE::PARTICLES_COLLISION_TYPE_HEIGHTFIELD_COLLIDE);
-	storage->particles_collision_set_box_extents(collision, Vector3(1, capture_extents_y, 1));
+	storage->particles_collision_set_box_extents(collision, legacy_normal_capture && legacy_transform_case == 4 ? Vector3(2, 2, 2) : Vector3(1, capture_extents_y, 1));
 	storage->particles_collision_set_height_field_resolution(collision, RSE::PARTICLES_COLLISION_HEIGHTFIELD_RESOLUTION_256);
 	first_instance = storage->particles_collision_instance_create(collision);
 	second_instance = storage->particles_collision_instance_create(collision);
@@ -127,7 +127,7 @@ Error ParticlesHeightfieldClearTestFixture::run_capture() {
 	// Transformed captures expect .75: seed the second target differently so
 	// a renderer no-op cannot pass without actually clearing and drawing.
 	for (const RID framebuffer : { first_framebuffer, second_framebuffer }) {
-		const float seed = transformed_capture && framebuffer == second_framebuffer ? 0.125f : 0.75f;
+		const float seed = (transformed_capture || legacy_normal_capture) && framebuffer == second_framebuffer ? 0.125f : 0.75f;
 		const auto list = rd->draw_list_begin(framebuffer, RD::DRAW_CLEAR_DEPTH, {}, seed);
 		if (list == RD::INVALID_ID) {
 			return ERR_UNAVAILABLE;
@@ -139,7 +139,12 @@ Error ParticlesHeightfieldClearTestFixture::run_capture() {
 	instances.set_page_pool(&pool);
 	Transform3D capture_transform;
 	capture_transform.origin.y = capture_transform_y;
-	if (transformed_capture) {
+	if (legacy_normal_capture) {
+		if (legacy_transform_case == 1 || legacy_transform_case == 4) {
+			capture_transform.basis = Basis(Vector3(0, 0, 1), Math::PI / 2.0);
+		}
+		capture_transform.basis.scale_local(capture_scale);
+	} else if (transformed_capture) {
 		capture_transform.basis = Basis(Vector3(0, 0, 1), Math::PI / 2.0);
 		capture_transform.basis.scale_local(capture_scale);
 		capture_transform.origin = Vector3(10, 20, 30);
@@ -152,6 +157,13 @@ Error ParticlesHeightfieldClearTestFixture::run_capture() {
 			Vector3(-1, 0, -1), Vector3(1, 0, -1), Vector3(1, 0, 1),
 			Vector3(-1, 0, -1), Vector3(1, 0, 1), Vector3(-1, 0, 1)
 		};
+		if (legacy_normal_capture && legacy_transform_case == 4) {
+			// Contract plane y=.5*x+.25*z over local x/z in [-2,2].
+			arrays[RSE::ARRAY_VERTEX] = PackedVector3Array{
+				Vector3(-2, -1.5f, -2), Vector3(2, 0.5f, -2), Vector3(2, 1.5f, 2),
+				Vector3(-2, -1.5f, -2), Vector3(2, 1.5f, 2), Vector3(-2, -0.5f, 2)
+			};
+		}
 		RenderingServerTypes::SurfaceData surface;
 		const Error prepared = RenderingServer::get_singleton()->mesh_create_surface_data_from_arrays(&surface, RSE::PRIMITIVE_TRIANGLES, arrays);
 		if (prepared != OK) {
@@ -166,7 +178,7 @@ Error ParticlesHeightfieldClearTestFixture::run_capture() {
 		}
 		Transform3D transform;
 		transform.origin.y = geometry_height;
-		if (transformed_capture) {
+		if (transformed_capture || legacy_normal_capture) {
 			// Author geometry in field-local coordinates, then place it in world.
 			transform = capture_transform * transform;
 		}
@@ -320,14 +332,15 @@ Error ParticlesHeightfieldClearTestFixture::run_legacy_process(const Transform3D
 	materials->material_initialize(legacy_material);
 	materials->material_set_shader(legacy_material, legacy_shader);
 	const Vector3 neighbor_positions[] = { Vector3(0, 1, 0), Vector3(1.125f, 0, 0), Vector3(0.125f, 0, 0), Vector3(1, 0, 0), Vector3(1, 0, 0), Vector3() };
-	materials->material_set_param(legacy_material, "start_position", legacy_neighbor_case >= 0 ? neighbor_positions[legacy_neighbor_case] : p_field_transform.origin);
+	const Vector3 height_positions[] = { Vector3(0, 0.125f, 0), Vector3(-0.125f, 0, 0), Vector3(0, 0.125f, 0), Vector3(0, 0.125f, 0), Vector3(-0.125f, 0, 0) };
+	materials->material_set_param(legacy_material, "start_position", legacy_neighbor_case >= 0 ? neighbor_positions[legacy_neighbor_case] : height_positions[legacy_transform_case]);
 	materials->_update_queued_materials();
 	legacy_particle = storage->particles_allocate();
 	storage->particles_initialize(legacy_particle);
 	storage->particles_set_amount(legacy_particle, 1);
 	storage->particles_set_lifetime(legacy_particle, 1.0);
 	storage->particles_set_use_local_coordinates(legacy_particle, false);
-	storage->particles_set_collision_base_size(legacy_particle, legacy_neighbor_case >= 0 ? 0.25f : 0.1f);
+	storage->particles_set_collision_base_size(legacy_particle, 0.25f);
 	storage->particles_set_process_material(legacy_particle, legacy_material);
 	storage->particles_set_emitting(legacy_particle, true);
 	storage->particles_collision_instance_set_transform(second_instance, p_field_transform);
@@ -391,15 +404,16 @@ void ParticlesHeightfieldClearTestFixture::legacy_sample_done(const PackedByteAr
 	const Vector3 normal(value.velocity[0], value.velocity[1], value.velocity[2]);
 	const Vector3 position(value.xform[12], value.xform[13], value.xform[14]);
 	const float depth = value.custom[3];
-	// Independent world-plane oracle, not a copy of native collision math.
-	// All rotated fields have the separately specified world plane x=10,
-	// outward normal -X and world-space particle radius .1, regardless of scale.
+	// Fixed independent CASESET oracles, never derived through tested matrices.
 	const bool neighbor = legacy_neighbor_case >= 0;
 	const bool attractor = legacy_neighbor_case >= 3;
-	const float expected_depth = legacy_neighbor_case == 0 ? 0.25f : legacy_neighbor_case == 1 || legacy_neighbor_case == 2 ? 0.125f : 0.1f;
-	const Vector3 expected_normal = legacy_neighbor_case == 1 || legacy_neighbor_case == 2 ? Vector3(1, 0, 0) : transformed_capture ? Vector3(-1, 0, 0) : Vector3(0, 1, 0);
+	const bool tilt = !neighbor && legacy_transform_case == 4;
+	const float expected_depth = neighbor ? (legacy_neighbor_case == 0 ? 0.25f : 0.125f) : tilt ? 0.12087344460380706f : 0.125f;
+	const Vector3 height_expected_normals[] = { Vector3(0, 1, 0), Vector3(-1, 0, 0), Vector3(0, 1, 0), Vector3(0, 1, 0), Vector3(-0.9669875568304565f, -0.2417468892076141f, -0.08058229640253803f) };
+	const Vector3 expected_normal = neighbor ? (legacy_neighbor_case == 1 || legacy_neighbor_case == 2 ? Vector3(1, 0, 0) : Vector3(0, 1, 0)) : height_expected_normals[legacy_transform_case];
 	const Vector3 neighbor_expected_positions[] = { Vector3(0, 1.25f, 0), Vector3(1.25f, 0, 0), Vector3(0.25f, 0, 0), Vector3(1, 0, 0), Vector3(1, 0, 0), Vector3() };
-	const Vector3 expected_position = neighbor ? neighbor_expected_positions[legacy_neighbor_case] : transformed_capture ? Vector3(9.9f, 20, 30) : Vector3(0, expected_depth, 0);
+	const Vector3 height_expected_positions[] = { Vector3(0, 0.25f, 0), Vector3(-0.25f, 0, 0), Vector3(0, 0.25f, 0), Vector3(0, 0.25f, 0), Vector3(-149.0f / 616.0f, -9.0f / 308.0f, -3.0f / 308.0f) };
+	const Vector3 expected_position = neighbor ? neighbor_expected_positions[legacy_neighbor_case] : height_expected_positions[legacy_transform_case];
 	bool passed = size_ok && (value.active & 1) && normal.distance_to(expected_normal) < (1.0f / 4096.0f) &&
 			Math::abs(depth - expected_depth) < (1.0f / 4096.0f) && position.distance_to(expected_position) < (1.0f / 4096.0f);
 	const Vector3 force(value.custom[0], value.custom[1], value.custom[2]);
@@ -419,8 +433,8 @@ void ParticlesHeightfieldClearTestFixture::legacy_sample_done(const PackedByteAr
 	result_data["normal"] = normal_values;
 	result_data["position"] = position_values;
 	result_data["depth"] = depth;
+	result_data["collided"] = !attractor && depth >= 0.0f;
 	if (neighbor) {
-		result_data["collided"] = !attractor && depth >= 0.0f;
 		Array force_values;
 		for (int axis = 0; axis < 3; ++axis) {
 			force_values.push_back(force[axis]);

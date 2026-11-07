@@ -17,6 +17,7 @@ class ParticlesHeightfieldClearTestFixture : public RefCounted {
 	bool geometry_capture = false;
 	bool transformed_capture = false;
 	bool legacy_normal_capture = false;
+	int legacy_transform_case = 0;
 	RID legacy_particle;
 	RID legacy_shader;
 	RID legacy_material;

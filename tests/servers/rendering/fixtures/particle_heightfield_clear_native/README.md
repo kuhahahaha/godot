@@ -62,17 +62,26 @@ and corrects position by normal times depth. The fixture asynchronously reads
 the actual particle buffer before freeing particle, material, shader and capture
 resources. The initial velocity sentinel is -7, so no simulation cannot pass.
 
-Four scenes run on Mobile and Forward+ (eight cases): identity, plus Z rotation
-90 degrees with translation (10,20,30) and local scales (1,1,1), (2,2,2), or
-(2,3,4). Geometry and the actual collision instance use the same field transform;
-the particle itself has identity scale and world collision radius 0.1.
-Independent world-plane expectations are normal (0,1,0), depth 0.1 and corrected
-position (0,0.1,0) for identity; the other three expect normal (-1,0,0), depth
-0.1 and position (9.9,20,30). They are fixed values, not derived through the
-production capture or collider matrix code. The runner also requires active,
-one actual process frame, one collider, real renderer evidence and no errors or
-warnings. This verifies the transformed planar legacy height branch; H25 sloped
-geometry remains unverified; single-source neighbor controls are described below.
+Five exact CASESET scenes run on Mobile and Forward+ (ten cases): identity,
+rotation, uniform, nonuniform, and tilt_nonuniform_rotation. All have origin 0
+and a world-space particle radius of 0.25 without collision scale. Identity,
+uniform scale (2,2,2), and nonuniform scale (2,1,3) start at (0,0.125,0) over
+local plane y=0: expected normal (0,1,0), depth 0.125 and corrected position
+(0,0.25,0). Rotation is Z90 with particle (-0.125,0,0): expected normal (-1,0,0),
+depth 0.125 and position (-0.25,0,0).
+
+The tilted case uses raw extents (2,2,2), local plane y=0.5*x+0.25*z over
+x/z in [-2,2], field Rz90*diag(2,1,3), and particle (-0.125,0,0). Independent
+CASESET expectations are normal
+(-0.9669875568304565,-0.2417468892076141,-0.08058229640253803), depth
+0.12087344460380706 and corrected position (-149/616,-9/308,-3/308).
+Geometry and actual collider use the same field transform. Fixed world-space
+oracles do not call production capture or collider matrix helpers. Legacy
+normal/depth/position tolerances are 2^-12; actual COLLIDED, active, one process
+frame and one collider are also required. These are unconnected direct numerical
+controls; source/record/owner-use evidence is still required for complete H25
+acceptance. The separate 16-case D32 capture matrix retains its original
+transformed geometry cases and parameters.
 
 
 ## Actual legacy neighbor controls
