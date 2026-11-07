@@ -413,6 +413,12 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 		}
 	} else if (action.declaration.action_kind == GDEXTENSION_PRODUCTION_READBACK_V1) {
 		auto &cell = request.readbacks[action.readback_slot];
+		// Static alias plans are accepted; recording waits for original
+		// factory/witness and complete readback integration verification.
+		if (request.resources[cell.declaration.resource_slot].output_alias_prepared) {
+			observed.error = ERR_UNAVAILABLE;
+			return observed;
+		}
 		if (cell.declaration.byte_offset > UINT32_MAX || cell.declaration.byte_size > UINT32_MAX) {
 			observed.error = ERR_PARAMETER_RANGE_ERROR;
 			return observed;

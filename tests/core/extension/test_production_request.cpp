@@ -10070,6 +10070,186 @@ struct Access {
 		fixture.cleanup_owner();
 		CHECK(fixture.owner_cleaned);
 	}
+	static void output_alias_readback_freeze() {
+		using namespace GDExtensionDeviceExit;
+		auto *server = ordinal_server();
+		if (!server) {
+			return;
+		}
+		const auto prepare = ordinal_port<GDExtensionInterfaceDeviceSessionProductionPrepareOutputV1>("device_session_production_prepare_output_v1");
+		const auto prepare_read = ordinal_port<GDExtensionInterfaceDeviceSessionProductionPrepareReadbackV2>("device_session_production_prepare_readback_v2");
+		const auto release = ordinal_port<GDExtensionInterfaceDeviceSessionProductionReleaseV2>("device_session_production_release_v2");
+		REQUIRE(prepare);
+		REQUIRE(prepare_read);
+		REQUIRE(release);
+		OrdinalPlan plan;
+		plan.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 2, 2, 3, 8, 2048, 1, 2, 0, 4 };
+		plan.action_count = plan.resource_count = 2;
+		plan.use_count = 3;
+		plan.readback_count = 1;
+		plan.actions[0] = { 0, 11, 7, 0, GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1, UINT32_MAX, 0, 2, GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1, UINT32_MAX };
+		plan.actions[1] = { 1, 11, 9, 0, GDEXTENSION_PRODUCTION_READBACK_V1, UINT32_MAX, 2, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, 0 };
+		plan.resources[0] = { GDEXTENSION_PRODUCTION_STORAGE_V1, 0, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 16, 0 };
+		plan.resources[1] = { GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1, 3, 16, 0 };
+		plan.uses[0] = { 0, GDEXTENSION_PRODUCTION_READ_V1, 0, 16, 0 };
+		plan.uses[1] = { 1, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 16, 0 };
+		plan.uses[2] = { 1, GDEXTENSION_PRODUCTION_READ_V1, 4, 4, 0 };
+		plan.readback = { 1, 0, 0, 1, 4, 4 };
+		SingletonEnrollment fixture;
+		fixture.public_port = true;
+		REQUIRE(ordinal_initialize(fixture, server, plan) == OK);
+		fixture.driver.output_storage_factory = true;
+		fixture.rd.draw_graph.initialize(&fixture.driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RDD::CommandQueueFamilyID(1), 0);
+		fixture.rd.draw_graph.begin();
+		fixture.rd.frames[0].qualification_epoch = 1;
+		fixture.rd.frames[0].fence = RDD::FenceID(93);
+		fixture.rd.frames[0].command_buffer = RDD::CommandBufferID(90);
+		fixture.rd.frames[0].command_pool = RDD::CommandPoolID(94);
+		fixture.rd.main_queue = RDD::CommandQueueID(1);
+		fixture.rd.frames_drawn = 3;
+		auto &request = *fixture.request;
+		const GDExtensionProductionRequestRefV1 ref{ fixture.instance, request.serial };
+		const GDExtensionStorageCreateRequestV1 origin{ Enrollment::ABI, 16, 0, 0, 1, 1, 0 };
+		GDExtensionStorageBackingV1 backing{};
+		REQUIRE(fixture.port.storage_create(ref, 0, &origin, &backing).native_error == ERR_BUSY);
+		server->sync();
+		REQUIRE(fixture.port.storage_create(ref, 0, &origin, &backing).native_error == OK);
+		GDExtensionProductionOutputPrepareV1 prepared{};
+		prepared.abi = production_dto_abi<GDExtensionProductionOutputPrepareV1>();
+		prepared.action_ordinal = 0;
+		prepared.canonical_suboperation = 11;
+		prepared.source_recipe_substep = 7;
+		prepared.source_resource_slot = prepared.source_use_index = prepared.first_source_use = 0;
+		prepared.source_use_count = prepared.source_generation = 1;
+		prepared.input.abi = production_dto_abi<GDExtensionOutputAcquireInputV1>();
+		// Schema-only metadata identity: no Create/acquire or usable RID is claimed.
+		prepared.input.particles = prepared.input.common.generation = 1;
+		prepared.input.common.current_camera = { 1, 1, 1 };
+		for (uint32_t axis = 0; axis < 3; ++axis) {
+			prepared.input.common.bounds.size[axis] = 1;
+		}
+		prepared.roles[0] = { 1, 1, 1, 0, 3, 16 };
+		prepared.roles[1] = { 2, UINT32_MAX, UINT32_MAX, 0, 0, 0 };
+		prepared.roles[2] = { 7, UINT32_MAX, UINT32_MAX, 0, 0, 0 };
+		REQUIRE(prepare(ref, &prepared).native_error == OK);
+		REQUIRE(prepare_read(ref, 1, 0).native_error == OK);
+		{
+			MutexLock rd_lock(fixture.rd._thread_safe_);
+			MutexLock lock(fixture.registry.mutex);
+			auto &source = request.resources[0];
+			CHECK(fixture.registry.production_output_source_matches_locked(request, request.actions[0], fixture.rd));
+			const uint64_t serial = source.backing_serial;
+			++source.backing_serial;
+			CHECK_FALSE(fixture.registry.production_output_source_matches_locked(request, request.actions[0], fixture.rd));
+			source.backing_serial = serial;
+			const uint64_t generation = request.actions[0].output_source_generation;
+			++request.actions[0].output_source_generation;
+			CHECK_FALSE(fixture.registry.production_output_source_matches_locked(request, request.actions[0], fixture.rd));
+			request.actions[0].output_source_generation = generation;
+			request.uses[0].declaration.access = GDEXTENSION_PRODUCTION_WRITE_V1;
+			CHECK_FALSE(fixture.registry.production_output_source_matches_locked(request, request.actions[0], fixture.rd));
+			request.uses[0].declaration.access = GDEXTENSION_PRODUCTION_READ_V1;
+			CHECK(fixture.registry.production_output_source_matches_locked(request, request.actions[0], fixture.rd));
+			// An unbound plan is not an actual witness/root, even after lawful prepare.
+			CHECK_FALSE(fixture.registry.production_output_alias_matches_locked(request, request.resources[1], fixture.rd));
+		}
+		const uint32_t attempts = fixture.driver.output_storage_attempts;
+		// Negative-only corruption probes operate on real accepted/prepared rows.
+		// None installs a witness, changes action progress or manufactures readiness.
+		for (uint32_t mutation = 0; mutation <= 10; ++mutation) {
+			MutexLock lock(fixture.registry.mutex);
+			auto &writer = request.actions[0];
+			auto &copy = request.actions[1];
+			auto &read = request.readbacks[0].declaration;
+			const auto old_writer = writer.declaration, old_copy = copy.declaration;
+			const auto old_role = writer.output_roles[0];
+			const auto old_read = read;
+			const auto old_use = request.uses[2].declaration;
+			const uint32_t old_copy_slot = copy.readback_slot;
+			const bool old_source_prepared = writer.output_source_prepared;
+			switch (mutation) {
+				case 0:
+					++writer.output_roles[0].generation;
+					break;
+				case 1:
+					--writer.output_roles[0].bytes;
+					break;
+				case 2:
+					writer.output_roles[0].use_index = 0;
+					break;
+				case 3:
+					writer.declaration.action_kind = GDEXTENSION_PRODUCTION_DISPATCH_V1;
+					break;
+				case 4:
+					writer.output_source_prepared = false;
+					break;
+				case 5:
+					copy.readback_slot = UINT32_MAX;
+					break;
+				case 6:
+					copy.declaration.readback_slot = UINT32_MAX;
+					break;
+				case 7:
+					request.uses[2].declaration.access = GDEXTENSION_PRODUCTION_WRITE_V1;
+					break;
+				case 8:
+					read.byte_offset = 16;
+					break;
+				case 9:
+					read.producer_action_ordinal = 1;
+					break;
+				case 10:
+					break; // Valid unbound plan freezes without a fabricated physical cell.
+			}
+			const Error error = fixture.registry.production_freeze_locked(request);
+			CHECK_MESSAGE(error == (mutation == 10 ? OK : ERR_INVALID_DATA), "alias freeze mutation=", mutation);
+			CHECK(request.frozen == (mutation == 10));
+			CHECK(request.next_action == 0);
+			CHECK(request.graph_count == 0);
+			CHECK(request.native_count == 0);
+			CHECK(request.readbacks[0].source.issued == 0);
+			CHECK(request.readbacks[0].source.returned == 0);
+			NativeDisposalWitness::Report witness_report;
+			CHECK(fixture.rd._native_disposal_observe(request.resources[1].output_witness, witness_report) == ERR_UNAUTHORIZED);
+			CHECK(witness_report.state == NativeDisposalWitness::State::EMPTY);
+			CHECK_FALSE(request.resources[1].imported);
+			writer.declaration = old_writer;
+			copy.declaration = old_copy;
+			writer.output_roles[0] = old_role;
+			read = old_read;
+			request.uses[2].declaration = old_use;
+			copy.readback_slot = old_copy_slot;
+			writer.output_source_prepared = old_source_prepared;
+		}
+		CHECK(fixture.driver.output_storage_attempts == attempts);
+		CHECK(fixture.driver.issues == 0);
+		// No alias ever bound; return the real source allocation through original custody.
+		REQUIRE(fixture.port.cancel(ref).native_error == OK);
+		const GDExtensionStorageRetireRequestV1 retirement{ Enrollment::ABI, backing.backing, backing.rid, backing.backing_serial, 0, 0, 1, 1, 0 };
+		GDExtensionStorageRetireRefV1 retired{};
+		GDExtensionStorageRetireReportV1 returned{};
+		REQUIRE(fixture.port.storage_retire(ref, 0, &retirement, &retired, &returned).native_error == OK);
+		GDExtensionProductionServiceBudgetV1 budget{ production_dto_abi<GDExtensionProductionServiceBudgetV1>(), 0, 1, 1, 1, 0 };
+		for (uint32_t turn = 0; turn < 64 && !returned.state; ++turn) {
+			budget.deadline_micros = OS::get_singleton()->get_ticks_usec() + 10000000;
+			const Error e = Error(fixture.port.storage_observe(ref, retired, &budget, &returned).native_error);
+			CHECK((e == OK || e == ERR_BUSY));
+			server->sync();
+		}
+		REQUIRE(returned.state == 1);
+		REQUIRE(fixture.port.storage_release(ref, retired).native_error == OK);
+		for (uint32_t turn = 0; turn < 64 && request.serial; ++turn) {
+			budget.deadline_micros = OS::get_singleton()->get_ticks_usec() + 10000000;
+			GDExtensionProductionServiceBudgetV1 remaining{};
+			GDExtensionProductionReportV2 report{};
+			const Error e = Error(release(ref, &budget, &remaining, &report).native_error);
+			CHECK((e == OK || e == ERR_BUSY));
+			server->sync();
+		}
+		REQUIRE(request.serial == 0);
+		fixture.cleanup_owner();
+		CHECK(fixture.owner_cleaned);
+	}
 	static void ordinal_readback_producer() {
 		// The valid control and each invalid request go through original accepted
 		// arenas and the installed reserve_v2 entry, before any native effects.
@@ -10527,6 +10707,9 @@ TEST_CASE("[SceneTree][ProductionRequest][LinkedOwnerComponent] original OBSERVE
 }
 TEST_CASE("[SceneTree][ProductionRequest][OrdinalV2] zero arena returns actual protected FIFO control without V1 consumption") {
 	Access::ordinal_zero_control();
+}
+TEST_CASE("[SceneTree][ProductionRequest][OutputAliasReadbackFreeze] original accepted alias plan validates exact producer role and read span without physical effects") {
+	Access::output_alias_readback_freeze();
 }
 TEST_CASE("[SceneTree][ProductionRequest][OrdinalV2] readback producer must cover exact target storage access and bytes") {
 	Access::ordinal_readback_producer();

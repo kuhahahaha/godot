@@ -913,7 +913,38 @@ Error Registry::production_freeze_locked(ProductionRequest &r) {
 			const auto &writer = r.actions[readback.producer_action_ordinal];
 			const auto &resource = r.resources[readback.resource_slot];
 			if (resource.output_alias_prepared) {
-				return ERR_UNAVAILABLE; // No qualification readback source is fabricated from a disposal witness.
+				// Freeze validates only the original unbound alias plan. READBACK
+				// recording stays gated pending real factory/witness integration.
+				const auto &copy = r.actions[readback.copy_action_ordinal];
+				if (resource.request != &r || resource.request_serial != r.serial ||
+						resource.declaration.resource_kind != GDEXTENSION_PRODUCTION_STORAGE_V1 ||
+						resource.declaration.ownership != GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1 ||
+						resource.output_action_ordinal != readback.producer_action_ordinal ||
+						writer.request != &r || writer.declaration.action_ordinal != readback.producer_action_ordinal ||
+						writer.declaration.action_kind != GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1 || !writer.output_source_prepared ||
+						copy.request != &r || copy.declaration.action_ordinal != readback.copy_action_ordinal ||
+						copy.declaration.action_kind != GDEXTENSION_PRODUCTION_READBACK_V1 || copy.readback_slot != i ||
+						copy.declaration.readback_slot != i || !readback.byte_size ||
+						!range(readback.byte_offset, readback.byte_size, resource.declaration.physical_bytes) ||
+						!production_use_matches_locked(r, copy, readback.resource_slot, readback.byte_offset, readback.byte_size, GDEXTENSION_PRODUCTION_READ_V1)) {
+					return ERR_INVALID_DATA;
+				}
+				bool covered = false;
+				for (const auto &role : writer.output_roles) {
+					if (!role.bytes || role.resource_slot != readback.resource_slot || role.use_index >= r.use_count ||
+							role.use_index < writer.declaration.first_use || role.use_index - writer.declaration.first_use >= writer.declaration.use_count) {
+						continue;
+					}
+					const auto &use = r.uses[role.use_index];
+					covered |= role.bytes == resource.declaration.physical_bytes && role.generation == resource.declaration.original_generation &&
+							use.request == &r && use.declaration.resource_slot == readback.resource_slot &&
+							use.declaration.access == GDEXTENSION_PRODUCTION_WRITE_V1 && !use.declaration.byte_offset &&
+							use.declaration.byte_size == role.bytes && range(readback.byte_offset, readback.byte_size, role.bytes);
+				}
+				if (!covered) {
+					return ERR_INVALID_DATA;
+				}
+				continue;
 			}
 			// Original import/create already authenticated storage generation,
 			// RID and backing serial and retained the exact physical dependency.
