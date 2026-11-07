@@ -30,8 +30,10 @@
 
 #include "core/extension/gdextension_production_request.h"
 #include "core/extension/gdextension_qualification_internal.h"
+#include "core/object/callable_mp.h"
 #include "core/os/os.h"
 #include "core/os/thread.h"
+#include "servers/rendering/renderer_compositor.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_default.h"
 #include "tests/servers/rendering/transfer_test_driver_base.h"
@@ -57,6 +59,12 @@ struct Access {
 		// emits command_copy_buffer; no readback completion fields are injected.
 		uint32_t queue_issues = 0, fence_polls = 0, fence_recycles = 0, native_recycles = 0;
 		uint32_t sources_per_issue = 1, preparations = 0;
+		uint32_t screen_acquires = 0;
+		FramebufferID swap_chain_acquire_framebuffer(CommandQueueID, SwapChainID, bool &resize) override {
+			++screen_acquires;
+			resize = false;
+			return {}; // A controlled unavailable surface; never fabricates a drawable.
+		}
 		bool hidden_mode = false, hidden_pending = false, hidden_busy_seen = false, hidden_ready = false;
 		uint64_t hidden_serial = 0;
 		uint32_t hidden_issues = 0;
@@ -2895,6 +2903,113 @@ struct Access {
 		CHECK(e.driver.buffer_frees == frees_before + 1);
 		CHECK(physical.free_event != 0);
 	}
+	static inline uint32_t ordinary_frame_callbacks = 0;
+	static void ordinary_frame_drawn() { ++ordinary_frame_callbacks; }
+	static void ordinary_frame_owner_deferral(bool draw) {
+		using namespace GDExtensionDeviceExit;
+		auto *server = draw ? Object::cast_to<RenderingServerDefault>(RenderingServer::get_singleton()) : nullptr;
+		auto *compositor = draw ? RendererCompositor::get_singleton() : nullptr;
+		if (draw) {
+			REQUIRE(server != nullptr);
+			REQUIRE(compositor != nullptr);
+			REQUIRE(Thread::is_main_thread());
+			REQUIRE(server->is_on_render_thread());
+			REQUIRE(RenderingDevice::get_singleton() == nullptr);
+			server->sync();
+		}
+		Enrollment e;
+		auto *r = owned_setup(e, false);
+		REQUIRE(r != nullptr);
+		e.driver.complete = true;
+		const GDExtensionProductionAttachmentRefV1 attachment{ Enrollment::INSTANCE, r->attachment->serial };
+		const GDExtensionProductionRequestRefV1 ref{ Enrollment::INSTANCE, r->serial };
+		REQUIRE(e.registry->production_cancel(ref).native_error == OK);
+		GDExtensionStorageRetireRefV1 retires[2]{};
+		GDExtensionStorageRetireReportV1 reports[2]{};
+		for (uint32_t slot = 0; slot < 2; ++slot) {
+			REQUIRE(retire_storage(e, *r, slot, retires[slot]));
+		}
+		const auto small = budget(1, 1);
+		for (uint32_t attempt = 0; attempt < 32 && !e.rd.native_disposal_active; ++attempt) {
+			const auto error = observe_storage(e, ref, retires[0], &small, &reports[0]).native_error;
+			REQUIRE((error == OK || error == ERR_BUSY));
+		}
+		// Original accepted service and real storage retirement create this cursor.
+		// No owner/active/frozen/completion fields are installed by the test.
+		REQUIRE(e.rd.native_disposal_active);
+		REQUIRE(e.rd.native_disposal_continuation.production_owner == r);
+		REQUIRE(r->maintenance_serial == e.rd.native_disposal_continuation.serial);
+		CHECK(e.rd.frame_wait_error == OK);
+		CHECK(e.rd.frame_issue_error == OK);
+		CHECK(e.rd._recording_error() == ERR_BUSY);
+		const auto before_cursor = e.rd.native_disposal_continuation;
+		const auto before_receipts = e.driver.receipt_calls();
+		const auto before_preparations = e.driver.preparations;
+		const auto before_graph = e.rd.draw_graph.qualification_command_count();
+		const auto before_frames = e.rd.frames_drawn;
+		const uint64_t before_compositor = compositor ? compositor->get_frame_number() : 0;
+		if (draw) {
+			ordinary_frame_callbacks = 0;
+			server->request_frame_drawn_callback(callable_mp_static(&Access::ordinary_frame_drawn));
+			server->draw(false, 0.01); // Original ordinary scheduler, independent of owner service.
+			CHECK(ordinary_frame_callbacks == 0);
+			CHECK(compositor->get_frame_number() == before_compositor);
+			CHECK(server->has_changed()); // A deferred draw retains the demand to retry.
+		} else {
+			// Surface metadata only. The controlled driver returns no drawable;
+			// even attempting acquire while the owner holds the frame is forbidden.
+			constexpr DisplayServerEnums::WindowID screen = 77;
+			e.rd.screen_swap_chains[screen] = RDD::SwapChainID(120);
+			e.rd.screen_framebuffers[screen] = RDD::FramebufferID(121);
+			CHECK(e.rd.frames[e.rd.frame].swap_chains_to_present.is_empty());
+			CHECK(e.rd.screen_prepare_for_drawing(screen) == ERR_BUSY);
+			CHECK(e.driver.screen_acquires == 0);
+			CHECK(e.rd.screen_framebuffers.has(screen));
+			if (e.rd.screen_framebuffers.has(screen)) {
+				CHECK(e.rd.screen_framebuffers[screen] == RDD::FramebufferID(121));
+			}
+			CHECK(e.rd.frames[e.rd.frame].swap_chains_to_present.is_empty());
+			e.rd.screen_framebuffers.erase(screen);
+			e.rd.screen_swap_chains.erase(screen);
+		}
+		const auto &after_cursor = e.rd.native_disposal_continuation;
+		CHECK(e.rd.native_disposal_active);
+		CHECK(after_cursor.production_owner == before_cursor.production_owner);
+		CHECK(after_cursor.serial == before_cursor.serial);
+		CHECK(after_cursor.phase == before_cursor.phase);
+		CHECK(after_cursor.target == before_cursor.target);
+		CHECK(after_cursor.end_phase == before_cursor.end_phase);
+		CHECK(after_cursor.begin_phase == before_cursor.begin_phase);
+		CHECK(after_cursor.slot == before_cursor.slot);
+		CHECK(e.driver.receipt_calls() == before_receipts);
+		CHECK(e.driver.preparations == before_preparations);
+		CHECK(e.rd.draw_graph.qualification_command_count() == before_graph);
+		CHECK(e.rd.frames_drawn == before_frames);
+		// The same original owner, with the same one-receipt/one-pass bound,
+		// services the real return. Ordinary draw never adopts or drains it.
+		for (uint32_t slot = 0; slot < 2; ++slot) {
+			for (uint32_t attempt = 0; attempt < 128 && !reports[slot].state; ++attempt) {
+				const auto error = observe_storage(e, ref, retires[slot], &small, &reports[slot]).native_error;
+				REQUIRE((error == OK || error == ERR_BUSY));
+			}
+			REQUIRE(reports[slot].state == 1);
+			CHECK(reports[slot].event_seq != 0);
+			REQUIRE(e.registry->production_storage_release(ref, retires[slot]).native_error == OK);
+		}
+		REQUIRE(finish_owned_maintenance(e, *r, small));
+		CHECK(e.rd._recording_error() == OK);
+		CHECK(e.driver.buffer_frees == 2);
+		if (draw) {
+			server->draw(false, 0.01);
+			CHECK(ordinary_frame_callbacks == 1);
+			CHECK(compositor->get_frame_number() == before_compositor + 1);
+			CHECK_FALSE(server->has_changed());
+		}
+		REQUIRE(e.registry->production_release(ref).native_error == OK);
+		CHECK(r->serial == 0);
+		REQUIRE(e.registry->production_close(attachment).native_error == OK);
+		CHECK(e.rd.production_entity_holds == nullptr);
+	}
 	static void maintenance_cursor_owner() {
 		using namespace GDExtensionDeviceExit;
 		Enrollment e;
@@ -3090,6 +3205,12 @@ struct Access {
 };
 TEST_CASE("[ProductionNativeObserve] zero budgets and bounded fair original serial polling") {
 	Access::bounds_and_fairness();
+}
+TEST_CASE("[ProductionNativeObserve][OwnedFrameDraw] screen preparation cannot acquire or alter an owner suspended frame") {
+	Access::ordinary_frame_owner_deferral(false);
+}
+TEST_CASE("[SceneTree][ProductionNativeObserve][OwnedFrameDraw] ordinary drawing defers until the original bounded owner returns") {
+	Access::ordinary_frame_owner_deferral(true);
 }
 TEST_CASE("[ProductionNativeObserve][IncomingReadback] original uploaded backing is copied without a request writer") {
 	Access::incoming_readback_roundtrip();

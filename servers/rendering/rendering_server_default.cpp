@@ -131,6 +131,15 @@ void RenderingServerDefault::request_frame_drawn_callback(const Callable &p_call
 }
 
 void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
+	if (RenderingDevice *device = RenderingDevice::get_singleton()) {
+		if (device->is_main_instance && device->native_disposal_active.load(std::memory_order_acquire) && device->native_disposal_continuation.production_owner && device->frame_issue_error.load() == OK && device->frame_wait_error.load() == OK && !device->frame_wait_native_code_valid.load()) {
+			// Only the original FIFO owner may spend its bounded continuation.
+			// Keep renderer state and drawn callbacks pending until that owner
+			// returns the frame; a real issue/wait error keeps its existing path.
+			redraw_request();
+			return;
+		}
+	}
 	GodotProfileZoneGroupedFirst(_profile_zone, "rasterizer->begin_frame");
 	RSG::rasterizer->begin_frame(frame_step);
 

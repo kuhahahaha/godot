@@ -6545,6 +6545,10 @@ Error RenderingDevice::screen_create(DisplayServerEnums::WindowID p_screen) {
 
 Error RenderingDevice::screen_prepare_for_drawing(DisplayServerEnums::WindowID p_screen) {
 	_THREAD_SAFE_METHOD_
+	const Error recording_error = _recording_error();
+	if (recording_error != OK) {
+		return recording_error; // Preserve the suspended frame before acquire or presentation.
+	}
 
 	// After submitting work, acquire the swapchain image(s).
 	HashMap<DisplayServerEnums::WindowID, RDD::SwapChainID>::ConstIterator it = screen_swap_chains.find(p_screen);
