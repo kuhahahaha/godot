@@ -1,0 +1,11 @@
+# Callback-return close contention
+
+Implementation: `533f44f07f9261c208c09841fbf3887954d8dd01`. Pure RD mutex contention before a close call now returns Busy while preserving the known open list/captured prefix for original FIFO CANCEL retry. It does not introduce an irreversible effects_pending latch. Existing unknown effects remain latched; prior relay errors remain conservative; a failed cutoff does not advertise a normal pause. No ABI change.
+
+The regression holds the actual RD recursive mutex from a different thread across protected RECORD callback return using semaphore rendezvous, then joins that thread before assertions. It consumes the exact returned RECORD, closes through the same request's original FIFO CANCEL mailbox, checks prefix graph and four original physical-custody identities, and reuses bounded OBSERVE and public RELEASE to prove actual physical return. No pending flag, completion or resource identity is injected.
+
+Actual RED: first test-only compile failed because private resource-use methods were inaccessible; this was repaired with existing owner-side reverse-edge observations and is not the RED evidence. The rebuilt test on old production then failed first at effects_pending=false, followed by CANCEL Busy and stuck action frontier/retirement; isolated process exited 78 (retained-owner close failure), with no timeout.
+
+GREEN build: `scons -Q tests=yes platform=macos target=editor debug_symbols=no module_particles_runtime_tests_enabled=yes -j2`, exit 0, 10.74s. Isolated `*[CloseContention]*`: 1 case, 2569 assertions, exit 0, no diagnostics or timeout. Combined ProductionRequest/ParticlesReadback/ParticlesProcessRetry/K03 MetalCompletion: 116 cases, 62109 assertions, exit 0; three existing intentional pipeline factory refusal diagnostics. Editor: 157359032 bytes, SHA256 `524742cc065423a4090d78f2196cd83bc9057788db3bb5ee54629d690657597b`.
+
+Independent review: spec PASS, quality PASS. Full logs and report: `work/scene-close-contention-20261107/`. This proves original RD/control/retirement behavior with a CPU test driver, not real Metal draw or complete product closure. Runtime coverage is raster contention; compute/previous-error preservation was source reviewed.
