@@ -296,6 +296,9 @@ bool RendererSceneCull::scene_heightfield_snapshot_pair(RID p_receiver, SceneHei
 		if (source->base_type != RSE::INSTANCE_PARTICLES_COLLISION || !source->visible || source->scenario != receiver->scenario) {
 			continue;
 		}
+		if (receiver->scene_query_committed && !receiver->scene_query_world.intersects_inclusive(source->transformed_aabb)) {
+			continue;
+		}
 		const InstanceParticlesCollisionData *collision = static_cast<const InstanceParticlesCollisionData *>(source->base_data);
 		if (!(collision->cull_mask & receiver->layer_mask)) {
 			continue;

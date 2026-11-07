@@ -11863,6 +11863,34 @@ struct Access {
 			RendererSceneCull::SceneSphereSnapshot changed,unchanged;
 			check("managed_left_revision", scene->scene_sphere_snapshot(left, native->generation, device, 4, changed) == OK && changed.bounds_revision == 2 && changed.pose_revision > a.pose_revision && changed.sources.size() == 1 && b.sources.size() == 1 && changed.sources[0].source_key == b.sources[0].source_key);
 			check("managed_right_unchanged", scene->scene_sphere_snapshot(right, native->generation, device, 4, unchanged) == OK && unchanged.bounds_revision == b.bounds_revision && unchanged.pose_revision == b.pose_revision && unchanged.pair_revision == b.pair_revision && unchanged.query_bounds == b.query_bounds);
+			// Same broad envelope, different committed queries: source selection
+			// belongs to the scene receiver instance, for height as for sphere.
+			RID height = storage->particles_collision_allocate();storage->particles_collision_initialize(height);
+			storage->particles_collision_set_collision_type(height, RSE::PARTICLES_COLLISION_TYPE_HEIGHTFIELD_COLLIDE);
+			storage->particles_collision_set_box_extents(height, Vector3(0.1f, 0.1f, 0.1f));
+			const RID height_a = instance(height, Vector3(-0.5f, 0, 0));
+			const RID height_b = instance(height, Vector3(0.5f, 0, 0));
+			check("managed_height_restore_left_query", scene->scene_receiver_commit_query(left, native->generation, device, Transform3D(), envelope, query_a, 3) == OK);
+			scene->update_dirty_instances();
+			RendererSceneCull::SceneHeightfieldSource height_left, height_right;
+			bool height_present = false;
+			check("managed_height_query_left", scene->scene_heightfield_snapshot_pair(left, height_left, height_present) && height_present && height_left.transform.origin.x == -0.5f);
+			height_present = false;
+			check("managed_height_query_right", scene->scene_heightfield_snapshot_pair(right, height_right, height_present) && height_present && height_right.transform.origin.x == 0.5f);
+			check("managed_height_distinct_source", height_left.source_key != 0 && height_right.source_key != 0 && height_left.source_key != height_right.source_key);
+			const RID height_extra = instance(height, Vector3(0.75f, 0, 0));
+			scene->update_dirty_instances();
+			height_present = false;
+			check("managed_height_query_ambiguous", !scene->scene_heightfield_snapshot_pair(right, height_right, height_present) && !height_present);
+			height_present = false;
+			check("managed_height_other_query_unaffected", scene->scene_heightfield_snapshot_pair(left, height_left, height_present) && height_present && height_left.transform.origin.x == -0.5f);
+			const AABB empty_query(Vector3(-1, 1, -1), Vector3(2, 0.5f, 2));
+			check("managed_height_commit_empty_query", scene->scene_receiver_commit_query(left, native->generation, device, Transform3D(), envelope, empty_query, 4) == OK);
+			scene->update_dirty_instances();
+			height_present = true;
+			check("managed_height_query_empty", scene->scene_heightfield_snapshot_pair(left, height_left, height_present) && !height_present);
+			scene->free(height_a);scene->free(height_b);scene->free(height_extra);
+			storage->particles_collision_free(height);
 			scene->free(source_a);scene->free(source_b);scene->free(left);scene->free(right);scene->free(scenario);
 			storage->particles_collision_free(sphere);
 		}
