@@ -5,6 +5,7 @@
 #include "core/object/ref_counted.h"
 #include "core/os/mutex.h"
 #include "core/variant/dictionary.h"
+#include "servers/rendering/renderer_rd/storage_rd/height_frame_resources.h"
 
 class RenderingDevice;
 class RenderGeometryInstance;
@@ -14,6 +15,13 @@ class ParticlesHeightfieldClearTestFixture : public RefCounted {
 	Dictionary result_data;
 	mutable Mutex result_mutex;
 	bool started = false;
+	bool frame_resources_capture = false;
+	bool frame_resources_sampled = false;
+	bool frame_resources_poll_pending = false;
+	Error frame_resources_error = OK;
+	Ref<RendererRD::ParticlesStorage::HeightFrameResources> frame_resources_a;
+	Ref<RendererRD::ParticlesStorage::HeightFrameResources> frame_resources_b;
+	Ref<RendererRD::ParticlesStorage::HeightFrameResources> retained_frame_resources_a;
 	bool geometry_capture = false;
 	bool transformed_capture = false;
 	bool legacy_normal_capture = false;
@@ -41,6 +49,8 @@ class ParticlesHeightfieldClearTestFixture : public RefCounted {
 	RID second_texture;
 	RenderingDevice *rd = nullptr;
 	Error run_capture();
+	Error sample_depth_pair();
+	void retire_frame_resources();
 	void cleanup();
 	void sample_done(const PackedByteArray &p_bytes);
 	Error run_legacy_process(const Transform3D &p_field_transform);
@@ -52,6 +62,8 @@ protected:
 
 public:
 	Error run();
+	Error run_frame_resources();
+	void poll_frame_resources();
 	Error run_legacy_normal(int p_transform_case = 0);
 	Error run_legacy_neighbor(int p_case);
 	Error run_geometry(float p_height);

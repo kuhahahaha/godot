@@ -2,6 +2,7 @@
 
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
+#include "servers/rendering/renderer_rd/height_capture_checked_sink.h"
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
@@ -14,6 +15,8 @@
 #include <cstring>
 
 void ParticlesHeightfieldClearTestFixture::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("run_frame_resources"), &ParticlesHeightfieldClearTestFixture::run_frame_resources);
+	ClassDB::bind_method(D_METHOD("poll_frame_resources"), &ParticlesHeightfieldClearTestFixture::poll_frame_resources);
 	ClassDB::bind_method(D_METHOD("run"), &ParticlesHeightfieldClearTestFixture::run);
 	ClassDB::bind_method(D_METHOD("run_legacy_neighbor", "case"), &ParticlesHeightfieldClearTestFixture::run_legacy_neighbor);
 	ClassDB::bind_method(D_METHOD("run_legacy_normal", "transform_case"), &ParticlesHeightfieldClearTestFixture::run_legacy_normal, DEFVAL(0));
@@ -197,6 +200,10 @@ Error ParticlesHeightfieldClearTestFixture::run_capture() {
 	if (legacy_normal_capture) {
 		return run_legacy_process(capture_transform);
 	}
+	return sample_depth_pair();
+}
+
+Error ParticlesHeightfieldClearTestFixture::sample_depth_pair() {
 	const String code = "#version 450\nlayout(local_size_x=1) in; layout(set=0,binding=0) uniform sampler s; layout(set=0,binding=1) uniform texture2D first_depth; layout(set=0,binding=2) uniform texture2D second_depth; layout(set=0,binding=3,std430) buffer Out { float values[2]; } out_data; void main() { out_data.values[0]=texture(sampler2D(first_depth,s),vec2(0.5)).r; out_data.values[1]=texture(sampler2D(second_depth,s),vec2(0.5)).r; }";
 	RenderingDevice::ShaderStageSPIRVData stage;
 	stage.shader_stage = RenderingDevice::SHADER_STAGE_COMPUTE;
@@ -253,6 +260,187 @@ Error ParticlesHeightfieldClearTestFixture::run_capture() {
 	rd->compute_list_dispatch(compute, 1, 1, 1);
 	rd->compute_list_end();
 	return rd->buffer_get_data_async(buffer, callable_mp(this, &ParticlesHeightfieldClearTestFixture::sample_done), 0, 8);
+}
+
+Error ParticlesHeightfieldClearTestFixture::run_frame_resources() {
+	if (started) {
+		return ERR_ALREADY_IN_USE;
+	}
+	started = true;
+	{
+		MutexLock lock(result_mutex);
+		frame_resources_capture = true;
+	}
+	rd = RenderingDevice::get_singleton();
+	if (!rd || !RenderingServer::get_singleton()->is_on_render_thread()) {
+		MutexLock lock(result_mutex);
+		result_data["pass"] = false;
+		result_data["error_code"] = ERR_UNAVAILABLE;
+		return ERR_UNAVAILABLE;
+	}
+	using Resources = RendererRD::ParticlesStorage::HeightFrameResources;
+	Error error = Resources::allocate(*rd, 32, 32, frame_resources_a);
+	if (error == OK) {
+		error = Resources::allocate(*rd, 32, 32, frame_resources_b);
+	}
+	if (error == OK) {
+		first_texture = frame_resources_a->get_depth();
+		second_texture = frame_resources_b->get_depth();
+		retained_frame_resources_a = frame_resources_a;
+		Resources::Observation before;
+		Resources::Observation after;
+		error = frame_resources_a->observe(before);
+		const Error busy = frame_resources_a->retire_step();
+		const Error after_error = frame_resources_a->observe(after);
+		const bool unchanged = error == OK && after_error == OK && busy == ERR_BUSY &&
+				before.state == Resources::State::ALLOCATED && before.state == after.state &&
+				before.depth.rid == after.depth.rid && before.depth.serial == after.depth.serial && before.depth.state == after.depth.state &&
+				before.framebuffer.rid == after.framebuffer.rid && before.framebuffer.serial == after.framebuffer.serial && before.framebuffer.state == after.framebuffer.state &&
+				first_texture == frame_resources_a->get_depth();
+		const bool distinct = first_texture != second_texture &&
+				frame_resources_a->get_framebuffer() != frame_resources_b->get_framebuffer();
+		{
+			MutexLock lock(result_mutex);
+			result_data["driver"] = rd->get_device_name();
+			result_data["retained_busy"] = unchanged;
+			result_data["distinct_rids"] = distinct;
+			result_data["first_depth_rid"] = int64_t(first_texture.get_id());
+			result_data["second_depth_rid"] = int64_t(second_texture.get_id());
+			result_data["first_framebuffer_rid"] = int64_t(frame_resources_a->get_framebuffer().get_id());
+			result_data["second_framebuffer_rid"] = int64_t(frame_resources_b->get_framebuffer().get_id());
+		}
+		if (!unchanged || !distinct) {
+			error = FAILED;
+		}
+	}
+	if (error == OK) {
+		// Independent raw constants; no height algorithm computes the oracle.
+		const RID targets[] = { frame_resources_a->get_framebuffer(), frame_resources_b->get_framebuffer() };
+		const float clear_depths[] = { 0.75f, 0.25f };
+		Array checked_clears;
+		for (uint32_t i = 0; i < 2; i++) {
+			if (i == 1) {
+				// Explicit test cut after a real empty begin. Cleanup end is an
+				// original checked receipt, never a successful business end.
+				RendererRD::HeightCaptureCheckedSink cut(*rd, 4, 0);
+				error = cut.begin(targets[i], RD::DRAW_CLEAR_DEPTH, {}, 0.125f);
+				if (error == OK) {
+					cut.reject(ERR_CANT_CREATE);
+				}
+				const Error finished = cut.finish();
+				const auto &cleanup_record = cut.get_cleanup_record();
+				const bool recovered = finished == ERR_CANT_CREATE && cut.get_error() == ERR_CANT_CREATE &&
+						cut.has_cleanup_attempt() && cut.is_restored() && !cut.has_open_list() && !cut.is_restoration_unknown() &&
+						cleanup_record.draw.effect == RendererRD::HeightCaptureCheckedSink::Effect::Recorded && cleanup_record.draw.capture_complete && cleanup_record.draw.draw_handle.is_valid();
+				{
+					MutexLock lock(result_mutex);
+					result_data["failure_cut_restored"] = recovered;
+				}
+				if (!recovered) {
+					error = FAILED;
+					break;
+				}
+				const auto ordinary = rd->draw_list_begin(targets[i], RD::DRAW_CLEAR_DEPTH, {}, 0.5f);
+				if (ordinary == RD::INVALID_ID) {
+					error = ERR_CANT_CREATE;
+					break;
+				}
+				rd->draw_list_end();
+				{
+					MutexLock lock(result_mutex);
+					result_data["ordinary_after_cut"] = true;
+				}
+			}
+			RendererRD::HeightCaptureCheckedSink sink(*rd, 4, 0);
+			error = sink.begin(targets[i], RD::DRAW_CLEAR_DEPTH, {}, clear_depths[i]);
+			const Error finished = sink.finish();
+			const bool count_ok = sink.get_business_count() >= 2;
+			bool recorded = error == OK && finished == OK && sink.get_error() == OK && sink.is_restored() && count_ok;
+			if (count_ok) {
+				const auto &begin = sink.get_business_record(0).begin;
+				const auto &end_record = sink.get_business_record(sink.get_business_count() - 1).draw;
+				recorded = recorded && begin.effect == RendererRD::HeightCaptureCheckedSink::Effect::Recorded && begin.capture_complete && begin.begin_handle.is_valid() && begin.clear_handle.is_valid() &&
+						end_record.effect == RendererRD::HeightCaptureCheckedSink::Effect::Recorded && end_record.capture_complete && end_record.draw_handle.is_valid();
+			}
+			checked_clears.push_back(recorded);
+			if (!recorded) {
+				error = FAILED;
+				break;
+			}
+		}
+		MutexLock lock(result_mutex);
+		result_data["checked_clears"] = checked_clears;
+	}
+
+	if (error == OK) {
+		error = sample_depth_pair();
+	}
+	if (error != OK) {
+		cleanup();
+		retained_frame_resources_a.unref();
+		MutexLock lock(result_mutex);
+		frame_resources_error = error;
+		frame_resources_sampled = true;
+		result_data["sample_pass"] = false;
+		result_data["error_code"] = error;
+	}
+	return error;
+}
+
+void ParticlesHeightfieldClearTestFixture::poll_frame_resources() {
+	{
+		MutexLock lock(result_mutex);
+		if (!frame_resources_capture || !frame_resources_sampled || frame_resources_poll_pending || result_data.has("pass")) {
+			return;
+		}
+		frame_resources_poll_pending = true;
+	}
+	RenderingServer::get_singleton()->call_on_render_thread(callable_mp(this, &ParticlesHeightfieldClearTestFixture::retire_frame_resources));
+}
+
+void ParticlesHeightfieldClearTestFixture::retire_frame_resources() {
+	using Resources = RendererRD::ParticlesStorage::HeightFrameResources;
+	Error first_error = OK;
+	bool returned = true;
+	Array reports;
+	for (const Ref<Resources> *owner : { &frame_resources_a, &frame_resources_b }) {
+		if (owner->is_null()) {
+			continue;
+		}
+		const Error retired = (*owner)->retire_step();
+		Resources::Observation observation;
+		const Error observed = (*owner)->observe(observation);
+		if ((retired != OK && retired != ERR_BUSY) || observed != OK) {
+			first_error = retired != OK && retired != ERR_BUSY ? retired : observed;
+		}
+		for (const auto &report : { observation.depth, observation.framebuffer }) {
+			if (!report.rid) {
+				continue; // Uncreated allocation suffix has no physical-return claim.
+			}
+			Dictionary entry;
+			entry["rid"] = int64_t(report.rid);
+			entry["serial"] = int64_t(report.serial);
+			entry["returned"] = report.state == NativeDisposalWitness::State::RETURNED;
+			reports.push_back(entry);
+			returned = returned && report.state == NativeDisposalWitness::State::RETURNED;
+		}
+		returned = returned && observation.state == Resources::State::RELEASED;
+	}
+	MutexLock lock(result_mutex);
+	frame_resources_poll_pending = false;
+	result_data["physical_reports"] = reports;
+	if (first_error != OK) {
+		frame_resources_error = first_error;
+		result_data["error_code"] = first_error;
+	}
+	if (returned) {
+		result_data["all_physical_returned"] = reports.size() == 4;
+		result_data["pass"] = reports.size() == 4 && frame_resources_error == OK && bool(result_data.get("sample_pass", false)) &&
+				bool(result_data.get("retained_busy", false)) && bool(result_data.get("distinct_rids", false)) &&
+				bool(result_data.get("failure_cut_restored", false)) && bool(result_data.get("ordinary_after_cut", false));
+		frame_resources_a.unref();
+		frame_resources_b.unref();
+	}
 }
 
 Error ParticlesHeightfieldClearTestFixture::run_neighbor_setup() {
@@ -454,6 +642,18 @@ void ParticlesHeightfieldClearTestFixture::sample_done(const PackedByteArray &p_
 		std::memcpy(raw, p_bytes.ptr(), 8);
 	}
 
+	if (frame_resources_capture) {
+		// Readback callback proves the compute sample finished. Drop its actual
+		// descriptors before asking the original resource owner to retire.
+		cleanup();
+		retained_frame_resources_a.unref();
+		MutexLock lock(result_mutex);
+		result_data["first_raw"] = raw[0];
+		result_data["second_raw"] = raw[1];
+		result_data["sample_pass"] = p_bytes.size() == 8 && Math::abs(raw[0] - 0.75f) <= 0.001f && Math::abs(raw[1] - 0.25f) <= 0.001f;
+		frame_resources_sampled = true;
+		return;
+	}
 	cleanup();
 	{
 		MutexLock lock(result_mutex);

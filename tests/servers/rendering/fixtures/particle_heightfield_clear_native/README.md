@@ -115,3 +115,38 @@ freed before their associated material, collider and texture. These are
 connection, original record dependency and owner-use join remain absent. Numeric
 agreement cannot certify complete H25 acceptance, multi-source interaction order
 or the remaining sloped-height coverage.
+
+## Scene height resource pair and checked empty-list control
+
+`run_resources.py` adds a separate two-case Mobile/Forward+ mode; the existing
+16-case capture runner and legacy modes retain their inputs and expectations.
+
+```sh
+python3 tests/servers/rendering/fixtures/particle_heightfield_clear_native/run_resources.py --binary /absolute/path/to/godot --display-driver macos --rendering-driver metal
+```
+
+The main RD creates two independent `HeightFrameResources` D32/framebuffer
+pairs. An extra retained Ref to A makes retirement return Busy while its state,
+RID and allocation serial remain unchanged. Checked clear/end seeds A to raw
+0.75 and B to raw 0.25. Their actual begin/clear/end handles, capture flags and
+restored list/attachment state are checked. An independent empty-list test cut
+begins B at 0.125, explicitly rejects with `ERR_CANT_CREATE`, and verifies the
+original checked cleanup end and sticky first error. An ordinary B clear/end
+then succeeds in the same session before the final checked B clear.
+
+The original fixture shader samples both depth textures into its own SSBO;
+asynchronous readback must return the independent constants 0.75 and 0.25.
+The callback releases the actual descriptors and extra A Ref. The script then
+requests bounded render-thread retirement steps through a mutex-protected
+single pending callback. Each original framebuffer must physically return
+before its depth is retired. Passing requires all four exact RID/serial
+witnesses to report Returned; elapsed time or a number of frames never stands
+in for that observation. The script fails after 30 seconds without success.
+The Python runner also verifies the actual driver/renderer, distinct RIDs,
+retention result, checked restoration, numeric samples and four return reports.
+
+This mode verifies the resource pair and checked empty-list component. It does
+not publish a HeightFrame, mint a Scene sample, connect the original budget or
+last-use bridge, or label physical disposal as producer Complete. Retained Ref
+count is an additional custody gate; the original native owner still supplies
+the producer/reader completion protocol when this component is integrated.

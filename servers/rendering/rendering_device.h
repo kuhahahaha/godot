@@ -45,6 +45,7 @@ class ProductionAttachment;
 namespace RendererRD {
 class ExternalOutputStorage;
 class ExternalPipelinePreparation;
+class HeightCaptureCheckedSink;
 class ParticlesStorage;
 class MaterialStorage;
 class MeshStorage;
@@ -144,6 +145,7 @@ private:
 	friend class RenderingServerDefault;
 	friend class RendererRD::ExternalOutputStorage;
 	friend class RendererRD::ExternalPipelinePreparation;
+	friend class RendererRD::HeightCaptureCheckedSink;
 	friend class RendererRD::ParticlesStorage;
 	friend class RendererRD::MaterialStorage;
 #ifdef TESTS_ENABLED
