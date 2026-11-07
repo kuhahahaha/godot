@@ -412,12 +412,33 @@ CheckedRecordAppend Registry::production_record_effect_locked(ProductionRequest 
 			return observed;
 		}
 	} else if (action.declaration.action_kind == GDEXTENSION_PRODUCTION_READBACK_V1) {
-		auto &cell = request.readbacks[action.readback_slot];
-		// Static alias plans are accepted; recording waits for original
-		// factory/witness and complete readback integration verification.
-		if (request.resources[cell.declaration.resource_slot].output_alias_prepared) {
-			observed.error = ERR_UNAVAILABLE;
+		if (action.readback_slot >= request.readback_count) {
+			observed.error = ERR_INVALID_DATA;
 			return observed;
+		}
+		auto &cell = request.readbacks[action.readback_slot];
+		const auto &declaration = cell.declaration;
+		if (cell.request != &request || declaration.copy_action_ordinal != index || declaration.resource_slot >= request.resource_count ||
+				!production_use_matches_locked(request, action, declaration.resource_slot, declaration.byte_offset, declaration.byte_size, GDEXTENSION_PRODUCTION_READ_V1)) {
+			observed.error = ERR_INVALID_DATA;
+			return observed;
+		}
+		const auto &resource = request.resources[declaration.resource_slot];
+		if (resource.output_alias_prepared) {
+			// Only this exact original output action/root/source and factory
+			// witness permit the alias. No qualification return cell is invented.
+			if (declaration.producer_action_ordinal >= index || resource.output_action_ordinal != declaration.producer_action_ordinal ||
+					!production_output_alias_matches_locked(request, resource, rd)) {
+				observed.error = ERR_UNAUTHORIZED;
+				return observed;
+			}
+			const auto &writer = request.actions[declaration.producer_action_ordinal];
+			if (writer.output_state != ProductionActionCell::OutputState::BOUND || !production_output_source_matches_locked(request, writer, rd) ||
+					!declaration.byte_size || declaration.byte_offset > resource.declaration.physical_bytes ||
+					declaration.byte_size > resource.declaration.physical_bytes - declaration.byte_offset) {
+				observed.error = ERR_UNAUTHORIZED;
+				return observed;
+			}
 		}
 		if (cell.declaration.byte_offset > UINT32_MAX || cell.declaration.byte_size > UINT32_MAX) {
 			observed.error = ERR_PARAMETER_RANGE_ERROR;

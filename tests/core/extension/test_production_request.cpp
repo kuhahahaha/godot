@@ -185,6 +185,11 @@ struct Access {
 			++releases;
 			return OK;
 		}
+		bool alias_readback_mode = false;
+		uint8_t alias_bytes[16][1024] = {}, alias_upload[64] = {}, alias_download[64] = {};
+		uint64_t alias_sizes[16] = {};
+		bool alias_live[16] = {}, alias_upload_live = false, alias_download_live = false;
+		uint32_t alias_allocations = 0, alias_frees = 0, alias_upload_copies = 0, alias_download_copies = 0;
 		bool output_storage_factory = false;
 		uint32_t output_storage_attempts = 0, output_storage_count = 0, output_storage_frees = 0, output_storage_fail_at = 0;
 		uint64_t output_storage_bytes[7] = {};
@@ -204,11 +209,48 @@ struct Access {
 		uint8_t upload_memory[3][128] = {};
 		uint32_t upload_copies = 0;
 		uint8_t *buffer_map(BufferID id) override {
+			if (alias_readback_mode) {
+				if (id == BufferID(500) && alias_upload_live) {
+					return alias_upload;
+				}
+				if (id == BufferID(501) && alias_download_live) {
+					return alias_download;
+				}
+				FAIL_CHECK("Unknown alias integration staging map");
+				return nullptr;
+			}
 			CHECK((upload_mode && id == BufferID(2) && staging_live));
 			return upload_mode && id == BufferID(2) && staging_live ? upload_memory[2] : nullptr;
 		}
-		void buffer_unmap(BufferID id) override { CHECK((upload_mode && id == BufferID(2) && staging_live)); }
+		void buffer_unmap(BufferID id) override {
+			if (alias_readback_mode) {
+				CHECK(((id == BufferID(500) && alias_upload_live) || (id == BufferID(501) && alias_download_live)));
+				return;
+			}
+			CHECK((upload_mode && id == BufferID(2) && staging_live));
+		}
 		void command_copy_buffer(CommandBufferID, BufferID source, BufferID destination, VectorView<BufferCopyRegion> regions) override {
+			if (alias_readback_mode) {
+				const bool upload = source == BufferID(500);
+				const uint64_t native_id = upload ? destination.id : source.id;
+				REQUIRE(native_id >= 300);
+				REQUIRE(native_id < 316);
+				const uint32_t index = uint32_t(native_id - 300);
+				REQUIRE(alias_live[index]);
+				CHECK((upload ? alias_upload_live : (destination == BufferID(501) && alias_download_live)));
+				for (uint32_t region_index = 0; region_index < regions.size(); ++region_index) {
+					const auto &region = regions[region_index];
+					REQUIRE(region.src_offset + region.size <= (upload ? 64 : alias_sizes[index]));
+					REQUIRE(region.dst_offset + region.size <= (upload ? alias_sizes[index] : 64));
+					memcpy((upload ? alias_bytes[index] : alias_download) + region.dst_offset, (upload ? alias_upload : alias_bytes[index]) + region.src_offset, region.size);
+				}
+				if (upload) {
+					++alias_upload_copies;
+				} else {
+					++alias_download_copies;
+				}
+				return;
+			}
 			if (native_output_copy) {
 				CHECK(source == BufferID(300));
 				CHECK(destination == BufferID(301));
@@ -235,6 +277,29 @@ struct Access {
 		}
 
 		BufferID buffer_create(uint64_t bytes, BitField<BufferUsageBits> usage, MemoryAllocationType allocation, uint64_t) override {
+			if (alias_readback_mode) {
+				CHECK(Thread::get_caller_id() == execution_thread);
+				if (allocation == MEMORY_ALLOCATION_TYPE_CPU) {
+					REQUIRE(bytes == 64);
+					if (usage.has_flag(BUFFER_USAGE_TRANSFER_FROM_BIT)) {
+						REQUIRE_FALSE(alias_upload_live);
+						alias_upload_live = true;
+						return BufferID(500);
+					}
+					REQUIRE(usage.has_flag(BUFFER_USAGE_TRANSFER_TO_BIT));
+					REQUIRE_FALSE(alias_download_live);
+					alias_download_live = true;
+					return BufferID(501);
+				}
+				REQUIRE(allocation == MEMORY_ALLOCATION_TYPE_GPU);
+				REQUIRE(usage.has_flag(BUFFER_USAGE_STORAGE_BIT));
+				REQUIRE(bytes <= 1024);
+				REQUIRE(alias_allocations < 16);
+				const uint32_t index = alias_allocations++;
+				alias_sizes[index] = bytes;
+				alias_live[index] = true;
+				return BufferID(300 + index);
+			}
 			CHECK(Thread::get_caller_id() == execution_thread);
 			if (output_storage_factory) {
 				CHECK(allocation == MEMORY_ALLOCATION_TYPE_GPU);
@@ -277,6 +342,24 @@ struct Access {
 			return BufferID(1);
 		}
 		void buffer_free(BufferID id) override {
+			if (alias_readback_mode) {
+				if (id == BufferID(500)) {
+					REQUIRE(alias_upload_live);
+					alias_upload_live = false;
+					return;
+				}
+				if (id == BufferID(501)) {
+					REQUIRE(alias_download_live);
+					alias_download_live = false;
+					return;
+				}
+				REQUIRE(id.id >= 300);
+				REQUIRE(id.id < 316);
+				REQUIRE(alias_live[id.id - 300]);
+				alias_live[id.id - 300] = false;
+				++alias_frees;
+				return;
+			}
 			CHECK(Thread::get_caller_id() == execution_thread);
 			if (id.id >= 300 && id.id < 307) {
 				const uint32_t index = uint32_t(id.id - 300);
@@ -6599,6 +6682,430 @@ struct Access {
 		fixture.cleanup_owner();
 		CHECK(fixture.owner_cleaned);
 	}
+	struct NativeAliasReadbackProbe {
+		SingletonEnrollment *fixture = nullptr;
+		RendererRD::ExternalLinkedOwnerTest *native = nullptr;
+		RendererRD::ExternalOutputConfig config;
+		GDExtensionProductionRequestRefV1 create_ref{};
+		GDExtensionOutputAcquireInputV1 input{};
+		GDExtensionOutputAcquireResultV1 acquired{};
+		bool closing = false;
+		uint32_t create_calls = 0, acquire_calls = 0;
+		static void receive(void *opaque, GDExtensionDeviceExit::ProductionPhysicalContextRef context, GDExtensionProductionRequestRefV1 ref, const GDExtensionProductionOperationV1 *) {
+			using namespace GDExtensionDeviceExit;
+			auto &p = *static_cast<NativeAliasReadbackProbe *>(opaque);
+			auto &f = *p.fixture;
+			if (ref.handle_serial == p.create_ref.handle_serial) {
+				if (p.closing) {
+					p.native->withdraw_generation();
+					return;
+				}
+				uint64_t bytes = 0;
+				uint32_t alignment = 0;
+				REQUIRE(RendererRD::ExternalLinkedOwnerTest::selection_metadata_bytes(p.config, bytes, &alignment) == OK);
+				ProductionOutputMetadataLease metadata;
+				REQUIRE(f.registry.production_output_metadata_create(context, ref, 0, f.rd, bytes, alignment, metadata, true) == OK);
+				REQUIRE(p.native->create_selection_component(context, ref, p.config, metadata, 0) == OK);
+				CHECK(metadata.is_empty());
+				++p.create_calls;
+				return;
+			}
+			auto cancel = ordinal_port<GDExtensionInterfaceDeviceSessionOutputCancelV1>("device_session_output_cancel_v1");
+			if (p.closing) {
+				GDExtensionOutputCancelInputV1 input{ production_dto_abi<GDExtensionOutputCancelInputV1>(), p.input.particles, p.acquired.lease_token };
+				REQUIRE(cancel(context, ref, &input).error == OK);
+				return;
+			}
+			auto acquire = ordinal_port<GDExtensionInterfaceDeviceSessionOutputAcquireV1>("device_session_output_acquire_v1");
+			auto append = ordinal_port<GDExtensionInterfaceDeviceSessionProductionAppendV2>("device_session_production_append_v2");
+			acquire(context, ref, 0, &p.input, &p.acquired);
+			REQUIRE(p.acquired.status.error == OK);
+			CHECK(p.acquired.writable_count == 3);
+			++p.acquire_calls;
+			CHECK(f.request->next_action == 1);
+			GDExtensionProductionAppendV2 uploaded{};
+			REQUIRE(append(context, ref, 1, f.request->revision, &uploaded).native_error == OK);
+			auto &request = *f.request;
+			auto &writer = request.actions[0];
+			auto &source = request.resources[0];
+			auto &alias = request.resources[1];
+			auto &readback = request.readbacks[0];
+			REQUIRE(request.next_action == 2);
+			REQUIRE(writer.output_state == ProductionActionCell::OutputState::BOUND);
+			REQUIRE(readback.source.issued == 0);
+			// Corrupt only an existing association for one rejected append, then
+			// restore it before assertions or the next operation. No factory cell,
+			// owner state, readiness or completion is manufactured by these cases.
+			auto reject_readback = [&](const char *label, auto &field, auto replacement, Error expected = ERR_UNAUTHORIZED) {
+				INFO(label);
+				const auto revision = request.revision;
+				const auto graphs = request.graph_count, natives = request.native_count, frontier = request.next_action, captures = request.capture_inflight;
+				const auto commands = f.rd.draw_graph.qualification_command_count();
+				const auto downloads = f.rd.frames[0].download_buffer_get_data_requests.size();
+				const auto staging_fill = f.rd.download_staging_buffers.blocks[0].fill_amount;
+				const auto issued = readback.source.issued, completed = readback.source.completed, returned = readback.source.returned;
+				const auto segment_count = readback.capture.count, segment_capacity = readback.capture.capacity;
+				const auto *segments = readback.capture.segments;
+				const bool native_effect = request.native_effect_entered, append_effect = request.append_effect_entered, pending = request.effects_pending;
+				const bool control_effect = request.control.record_history.control_effect_entered, control_append = request.control.record_history.control_append_entered;
+				const auto driver_issues = f.driver.issues, driver_allocations = f.driver.alias_allocations, driver_frees = f.driver.alias_frees;
+				const auto uploads = f.driver.alias_upload_copies, download_copies = f.driver.alias_download_copies;
+				GDExtensionProductionAppendV2 refused{};
+				Error error = OK;
+				{
+					struct Restore {
+						decltype(field) target;
+						decltype(replacement) original;
+						~Restore() { target = original; }
+					} restore{ field, field };
+					field = replacement;
+					error = Error(append(context, ref, 2, revision, &refused).native_error);
+				}
+				CHECK(error == expected);
+				CHECK(refused.state == GDEXTENSION_PRODUCTION_REJECTED_V1);
+				CHECK(refused.graph_fact_count == 0);
+				CHECK(request.revision == revision);
+				CHECK(request.graph_count == graphs);
+				CHECK(request.native_count == natives);
+				CHECK(request.next_action == frontier);
+				CHECK(request.capture_inflight == captures);
+				CHECK(f.rd.draw_graph.qualification_command_count() == commands);
+				CHECK(f.rd.frames[0].download_buffer_get_data_requests.size() == downloads);
+				CHECK(f.rd.download_staging_buffers.blocks[0].fill_amount == staging_fill);
+				CHECK(readback.source.issued == issued);
+				CHECK(readback.source.completed == completed);
+				CHECK(readback.source.returned == returned);
+				CHECK_FALSE(readback.source.delivered);
+				CHECK(readback.capture.count == segment_count);
+				CHECK(readback.capture.capacity == segment_capacity);
+				CHECK(readback.capture.segments == segments);
+				CHECK(request.native_effect_entered == native_effect);
+				CHECK(request.append_effect_entered == append_effect);
+				CHECK(request.effects_pending == pending);
+				CHECK(request.control.record_history.control_effect_entered == control_effect);
+				CHECK(request.control.record_history.control_append_entered == control_append);
+				CHECK(f.driver.issues == driver_issues);
+				CHECK(f.driver.alias_allocations == driver_allocations);
+				CHECK(f.driver.alias_frees == driver_frees);
+				CHECK(f.driver.alias_upload_copies == uploads);
+				CHECK(f.driver.alias_download_copies == download_copies);
+				REQUIRE(error == expected);
+				REQUIRE(request.next_action == frontier);
+			};
+			// RESERVING still passes the shared alias matcher; READBACK itself
+			// must require the original acquire's completed BOUND association.
+			reject_readback("writer not BOUND", writer.output_state, ProductionActionCell::OutputState::RESERVING);
+			reject_readback("source generation mismatch", writer.output_source_generation, writer.output_source_generation + 1);
+			reject_readback("source backing mismatch", source.backing_serial, source.backing_serial + 1);
+			reject_readback("other actual alias witness", alias.output_witness, request.resources[2].output_witness);
+			reject_readback("alias root mismatch", alias.output_root_serial, alias.output_root_serial + 1);
+			reject_readback("alias group mismatch", alias.output_group_serial, alias.output_group_serial + 1);
+			reject_readback("alias member mismatch", alias.output_member_ordinal, UINT32_MAX);
+			reject_readback("alias backing mismatch", alias.backing_serial, alias.backing_serial + 1);
+			reject_readback("alias required usage absent", alias.declaration.required_usage, UINT64_MAX);
+			reject_readback("readback use is not READ", request.uses[5].declaration.access, uint32_t(GDEXTENSION_PRODUCTION_WRITE_V1), ERR_INVALID_DATA);
+			GDExtensionProductionAppendV2 downloaded{};
+			REQUIRE(append(context, ref, 2, request.revision, &downloaded).native_error == OK);
+			CHECK(f.request->next_action == 3);
+			CHECK(f.request->readbacks[0].source.issued == 4);
+			CHECK_FALSE(f.request->readbacks[0].source.delivered);
+		}
+	};
+	static void output_alias_readback_complete() {
+		using namespace GDExtensionDeviceExit;
+		auto *server = ordinal_server();
+		if (!server || !check_step(RendererRD::ParticlesStorage::get_singleton() == nullptr)) {
+			return;
+		}
+		const auto reserve = ordinal_port<GDExtensionInterfaceDeviceSessionProductionReserveV2>("device_session_production_reserve_v2");
+		const auto prepare = ordinal_port<GDExtensionInterfaceDeviceSessionProductionPrepareOutputV1>("device_session_production_prepare_output_v1");
+		const auto prepare_copy = ordinal_port<GDExtensionInterfaceDeviceSessionProductionPrepareCopyV2>("device_session_production_prepare_copy_v2");
+		const auto consume = ordinal_port<GDExtensionInterfaceDeviceSessionProductionRecordConsumeV2>("device_session_production_record_consume_v2");
+		const auto observe = ordinal_port<GDExtensionInterfaceDeviceSessionProductionObserveV2>("device_session_production_observe_v2");
+		const auto release = ordinal_port<GDExtensionInterfaceDeviceSessionProductionReleaseV2>("device_session_production_release_v2");
+		REQUIRE(reserve != nullptr);
+		REQUIRE(prepare != nullptr);
+		REQUIRE(prepare_copy != nullptr);
+		REQUIRE(consume != nullptr);
+		REQUIRE(observe != nullptr);
+		REQUIRE(release != nullptr);
+		OrdinalPlan pool;
+		pool.capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 3, 5, 64, 16, 4096, 1, 5, 4, 4 };
+		pool.attachment_requests = 2;
+		SingletonEnrollment fixture;
+		fixture.public_port = true;
+		NativeAliasReadbackProbe probe;
+		probe.fixture = &fixture;
+		REQUIRE(fixture.prepare_device(server) == OK);
+		using MeshStorage = RendererRD::MeshStorage;
+		auto *previous_meshes = MeshStorage::get_singleton();
+		auto *meshes = memnew(MeshStorage(MeshStorage::NativeHoldTestTag{}));
+		const RID mesh = meshes->mesh_allocate();
+		meshes->mesh_initialize(mesh);
+		auto *mesh_row = meshes->mesh_owner.get_or_null(mesh);
+		mesh_row->surfaces = static_cast<MeshStorage::Mesh::Surface **>(memalloc(2 * sizeof(MeshStorage::Mesh::Surface *)));
+		mesh_row->surface_count = 2;
+		for (uint32_t i = 0; i < 2; ++i) {
+			mesh_row->surfaces[i] = memnew(MeshStorage::Mesh::Surface);
+		}
+		void *materials = RendererRD::selection_materials_create();
+		probe.config.profile = RendererRD::ExternalOutputConfig::INSTANCE_192;
+		probe.config.capacity = 1;
+		probe.config.max_views = probe.config.max_inflight = 1;
+		probe.config.bounds = AABB(Vector3(), Vector3(1, 1, 1));
+		probe.config.surfaces.push_back(mesh);
+		for (uint32_t i = 0; i < 2; ++i) {
+			probe.config.surface_materials.push_back(RendererRD::selection_material_rid(materials, i));
+		}
+		PackedByteArray *tags[] = { &probe.config.producer_tag, &probe.config.device_tag, &probe.config.layout_digest, &probe.config.mapping_digest, &probe.config.numeric_profile_digest };
+		for (auto *tag : tags) {
+			tag->resize(32);
+			tag->fill(0);
+		}
+		uint64_t metadata_bytes = 0;
+		REQUIRE(RendererRD::ExternalLinkedOwnerTest::selection_metadata_bytes(probe.config, metadata_bytes) == OK);
+
+		REQUIRE(fixture.initialize_owner(1, false, false, &NativeAliasReadbackProbe::receive, &probe, false, 1, false, +[](void *, GDExtensionProductionAttachmentRefV1) {}, false, false, false, false, &pool, nullptr, true) == OK);
+		RendererRD::ExternalLinkedOwnerTest native(fixture.rd, true);
+		probe.native = &native;
+		auto operation = pool.operation;
+		const GDExtensionProductionCapacityV1 create_capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 0, 1, 1, 0, 0, 0, 1, 0, 0 };
+		const GDExtensionProductionResourceV1 metadata = { GDEXTENSION_PRODUCTION_OUTPUT_METADATA_V1, 0, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, metadata_bytes, 0 };
+		REQUIRE(reserve(fixture.attachment, &operation, &create_capacity, nullptr, 0, &metadata, 1, nullptr, 0, nullptr, 0, &probe.create_ref).native_error == OK);
+		Request *create_request = nullptr;
+		{
+			MutexLock lock(fixture.registry.mutex);
+			RenderingDevice *rd = nullptr;
+			REQUIRE(fixture.registry.production_request_locked(probe.create_ref, false, create_request, rd) == OK);
+		}
+		fixture.request = create_request;
+		uint64_t control = 0;
+		REQUIRE(fixture.port.record_schedule(probe.create_ref, &control) == OK);
+		server->sync();
+		GDExtensionProductionRecordReportV2 recorded{};
+		REQUIRE(consume(probe.create_ref, control, &recorded).native_error == OK);
+		REQUIRE(probe.create_calls == 1);
+		REQUIRE(native.exists());
+		// The second request uses the actual first Create result, never a predicted RID.
+		++operation.owner_request_nonce;
+		const GDExtensionProductionCapacityV1 capacity = { production_dto_abi<GDExtensionProductionCapacityV1>(), 1, 3, 4, 63, 16, 4096, 1, 4, 4, 4 };
+		const GDExtensionProductionActionV2 actions[] = {
+			{ 0, 11, 7, 0, GDEXTENSION_PRODUCTION_NATIVE_OUTPUT_V1, UINT32_MAX, 0, 4, GDEXTENSION_PRODUCTION_LIST_CONTINUE_V1, UINT32_MAX },
+			{ 1, 11, 8, 0, GDEXTENSION_PRODUCTION_UPLOAD_V1, UINT32_MAX, 4, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, UINT32_MAX },
+			{ 2, 11, 9, 0, GDEXTENSION_PRODUCTION_READBACK_V1, UINT32_MAX, 5, 1, GDEXTENSION_PRODUCTION_LIST_CLOSE_AFTER_V1, 0 }
+		};
+		const GDExtensionProductionResourceV1 sources[] = {
+			{ GDEXTENSION_PRODUCTION_STORAGE_V1, 0, 0, GDEXTENSION_PRODUCTION_CREATED_BY_OWNER_V1, 1, 16, 0 },
+			{ GDEXTENSION_PRODUCTION_STORAGE_V1, 1, 0, GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1, 3, 192, 0 },
+			{ GDEXTENSION_PRODUCTION_STORAGE_V1, 2, 0, GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1, 3, 192, 0 },
+			{ GDEXTENSION_PRODUCTION_STORAGE_V1, 7, 0, GDEXTENSION_PRODUCTION_OUTPUT_ALIAS_V1, 3, 32, 0 }
+		};
+		const GDExtensionProductionUseV1 uses[] = {
+			{ 0, GDEXTENSION_PRODUCTION_READ_V1, 0, 16, 0 }, { 1, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 192, 0 },
+			{ 2, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 192, 0 }, { 3, GDEXTENSION_PRODUCTION_WRITE_V1, 0, 32, 0 },
+			{ 1, GDEXTENSION_PRODUCTION_WRITE_V1, 4, 4, 0 }, { 1, GDEXTENSION_PRODUCTION_READ_V1, 4, 4, 0 }
+		};
+		const GDExtensionProductionReadbackV2 readback = { 1, 0, 0, 2, 4, 4 };
+		GDExtensionProductionRequestRefV1 ref{};
+		REQUIRE(reserve(fixture.attachment, &operation, &capacity, actions, 3, sources, 4, uses, 6, &readback, 1, &ref).native_error == OK);
+		{
+			MutexLock lock(fixture.registry.mutex);
+			RenderingDevice *rd = nullptr;
+			REQUIRE(fixture.registry.production_request_locked(ref, false, fixture.request, rd) == OK);
+		}
+		auto &request = *fixture.request;
+		fixture.rd.draw_graph.initialize(&fixture.driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RDD::CommandQueueFamilyID(1), 0);
+		fixture.rd.draw_graph.begin();
+		fixture.rd.frames[0].qualification_epoch = 1;
+		fixture.rd.frames[0].fence = RDD::FenceID(93);
+		fixture.rd.frames[0].command_buffer = RDD::CommandBufferID(90);
+		fixture.rd.frames[0].command_pool = RDD::CommandPoolID(94);
+		fixture.rd.main_queue = RDD::CommandQueueID(1);
+		fixture.rd.frames_drawn = 3;
+		fixture.driver.alias_readback_mode = true;
+		fixture.rd.upload_staging_buffers.block_size = fixture.rd.upload_staging_buffers.max_size = 64;
+		fixture.rd.upload_staging_buffers.usage_bits = RDD::BUFFER_USAGE_TRANSFER_FROM_BIT;
+		fixture.rd.download_staging_buffers.block_size = fixture.rd.download_staging_buffers.max_size = 64;
+		fixture.rd.download_staging_buffers.usage_bits = RDD::BUFFER_USAGE_TRANSFER_TO_BIT;
+		REQUIRE(fixture.rd._insert_staging_block(fixture.rd.upload_staging_buffers) == OK);
+		REQUIRE(fixture.rd._insert_staging_block(fixture.rd.download_staging_buffers) == OK);
+		const GDExtensionStorageCreateRequestV1 origin = { Enrollment::ABI, 16, 0, 0, 1, 1, 0 };
+		GDExtensionStorageBackingV1 backings[1]{};
+		for (uint32_t slot = 0; slot < 1; ++slot) {
+			CHECK(fixture.port.storage_create(ref, slot, &origin, &backings[slot]).native_error == ERR_BUSY);
+			server->sync();
+			REQUIRE(fixture.port.storage_create(ref, slot, &origin, &backings[slot]).native_error == OK);
+		}
+		const uint8_t pattern[] = { 17, 18, 19, 20 };
+		const auto upload = ordinal_port<GDExtensionInterfaceDeviceSessionProductionPrepareUploadV2>("device_session_production_prepare_upload_v2");
+		const auto prepare_read = ordinal_port<GDExtensionInterfaceDeviceSessionProductionPrepareReadbackV2>("device_session_production_prepare_readback_v2");
+		const GDExtensionProductionUploadV2 uploading{ production_dto_abi<GDExtensionProductionUploadV2>(), 1, 11, 8, 0, 1, 0, 4, 4 };
+		REQUIRE(upload(ref, &uploading, pattern, 4).native_error == OK);
+		REQUIRE(prepare_read(ref, 2, 0).native_error == OK);
+		probe.input.abi = production_dto_abi<GDExtensionOutputAcquireInputV1>();
+		probe.input.particles = native.particle_rid().get_id();
+		probe.input.common.generation = RendererRD::ExternalLinkedOwnerTest::generation;
+		probe.input.common.present_seq = probe.input.content_version = probe.input.view_epoch = 1;
+		probe.input.common.current_camera = { 1, 1, 1 };
+		for (uint32_t axis = 0; axis < 3; ++axis) {
+			probe.input.common.bounds.size[axis] = 1;
+		}
+		GDExtensionProductionOutputPrepareV1 prepared{};
+		prepared.abi = production_dto_abi<GDExtensionProductionOutputPrepareV1>();
+		prepared.action_ordinal = 0;
+		prepared.canonical_suboperation = 11;
+		prepared.source_recipe_substep = 7;
+		prepared.source_resource_slot = 0;
+		prepared.source_use_index = prepared.first_source_use = 0;
+		prepared.source_use_count = 1;
+		prepared.source_generation = 1;
+		prepared.input = probe.input;
+		prepared.roles[0] = { 1, 1, 1, 0, 3, 192 };
+		prepared.roles[1] = { 2, 2, 2, 0, 3, 192 };
+		prepared.roles[2] = { 7, 3, 3, 0, 3, 32 };
+		REQUIRE(prepare(ref, &prepared).native_error == OK);
+		REQUIRE(fixture.port.record_schedule(ref, &control) == OK);
+		server->sync();
+		REQUIRE(consume(ref, control, &recorded).native_error == OK);
+		CHECK(probe.acquire_calls == 1);
+		CHECK(request.next_action == 3);
+		// Both actual owners retire through original controls, without repairing flags.
+		const GDExtensionProductionServiceBudgetV1 budget = { production_dto_abi<GDExtensionProductionServiceBudgetV1>(), OS::get_singleton()->get_ticks_usec() + 10000000, 1, 1, 1, 0 };
+		GDExtensionProductionReportV2 report{};
+		const auto copy_bytes = ordinal_port<GDExtensionInterfaceDeviceSessionProductionCopyV1>("device_session_production_copy_v1");
+		uint8_t returned_bytes[4] = {};
+		uint64_t written = 0;
+		CHECK(copy_bytes(ref, request.revision, 0, returned_bytes, 4, &written).native_error == ERR_BUSY);
+		CHECK(written == 0);
+		for (uint32_t turn = 0; turn < 128 && written != 4; ++turn) {
+			auto offered = budget;
+			offered.deadline_micros = OS::get_singleton()->get_ticks_usec() + 10000000;
+			const Error e = Error(observe(ref, &offered, &report).native_error);
+			CHECK((e == OK || e == ERR_BUSY));
+			server->sync();
+			if (request.control.state == ProductionControlState::RETURNED) {
+				const Error consumed = Error(observe(ref, &offered, &report).native_error);
+				CHECK((consumed == OK || consumed == ERR_BUSY));
+			}
+			const Error copied = Error(copy_bytes(ref, request.revision, 0, returned_bytes, 4, &written).native_error);
+			CHECK((copied == OK || copied == ERR_BUSY));
+		}
+		REQUIRE(request.readbacks[0].source.delivered);
+		CHECK(request.readbacks[0].source.completed == 4);
+		CHECK(request.readbacks[0].source.returned == 4);
+		REQUIRE(copy_bytes(ref, request.revision, 0, returned_bytes, 4, &written).native_error == OK);
+		CHECK(written == 4);
+		CHECK(memcmp(returned_bytes, pattern, 4) == 0);
+		// Public copy failures are pure observations: neither destination nor
+		// written is reset by stale-revision or insufficient-capacity rejection.
+		const auto copy_revision = request.revision;
+		const auto copy_graphs = request.graph_count, copy_natives = request.native_count;
+		const auto copy_issues = fixture.driver.issues, copy_polls = fixture.driver.polls;
+		uint8_t unchanged_bytes[] = { 0xa1, 0xb2, 0xc3, 0xd4 };
+		const uint8_t sentinel_bytes[] = { 0xa1, 0xb2, 0xc3, 0xd4 };
+		uint64_t unchanged_written = 99;
+		REQUIRE(copy_revision > 0);
+		CHECK(copy_bytes(ref, copy_revision - 1, 0, unchanged_bytes, 4, &unchanged_written).native_error == ERR_DOES_NOT_EXIST);
+		CHECK(unchanged_written == 99);
+		CHECK(memcmp(unchanged_bytes, sentinel_bytes, 4) == 0);
+		CHECK(copy_bytes(ref, copy_revision, 0, unchanged_bytes, 3, &unchanged_written).native_error == ERR_PARAMETER_RANGE_ERROR);
+		CHECK(unchanged_written == 99);
+		CHECK(memcmp(unchanged_bytes, sentinel_bytes, 4) == 0);
+		CHECK(request.revision == copy_revision);
+		CHECK(request.graph_count == copy_graphs);
+		CHECK(request.native_count == copy_natives);
+		CHECK(fixture.driver.issues == copy_issues);
+		CHECK(fixture.driver.polls == copy_polls);
+		CHECK(request.capture_inflight == 0);
+		CHECK(fixture.driver.alias_upload_copies == 1);
+		CHECK(fixture.driver.alias_download_copies == 1);
+		probe.closing = true;
+		REQUIRE(fixture.port.record_schedule(ref, &control) == OK);
+		server->sync();
+		REQUIRE(consume(ref, control, &recorded).native_error == OK);
+
+		for (uint32_t turn = 0; turn < 64 && request.output_owner_head != UINT32_MAX; ++turn) {
+			auto offered = budget;
+			offered.deadline_micros = OS::get_singleton()->get_ticks_usec() + 10000000;
+			const Error e = Error(observe(ref, &offered, &report).native_error);
+			CHECK((e == OK || e == ERR_BUSY));
+			server->sync();
+			if (request.control.state == ProductionControlState::RETURNED) {
+				const Error consumed = Error(observe(ref, &offered, &report).native_error);
+				CHECK((consumed == OK || consumed == ERR_BUSY));
+			}
+		}
+		CHECK(request.control.state == ProductionControlState::OWNER_CONSUMED);
+		CHECK(request.output_owner_head == UINT32_MAX);
+		probe.closing = true;
+		REQUIRE(fixture.port.record_schedule(probe.create_ref, &control) == OK);
+		server->sync();
+		REQUIRE(consume(probe.create_ref, control, &recorded).native_error == OK);
+		for (uint32_t turn = 0; turn < 64 && !native.released(); ++turn) {
+			auto offered = budget;
+			offered.deadline_micros = OS::get_singleton()->get_ticks_usec() + 10000000;
+			// The public report cannot carry native_released; preserve and consume
+			// the original complete generation result through its original control.
+			uint64_t serial = 0;
+			REQUIRE(fixture.registry.production_control_accept(probe.create_ref, ProductionControlKind::OBSERVE, &serial, &offered) == OK);
+			REQUIRE(fixture.registry.production_control_schedule(probe.create_ref, serial) == OK);
+			server->sync();
+			REQUIRE(create_request->control.state == ProductionControlState::RETURNED);
+			ProductionControlOutput output{};
+			REQUIRE(fixture.registry.production_control_consume(probe.create_ref, serial, &output) == OK);
+			CHECK((output.result.native_error == OK || output.result.native_error == ERR_BUSY));
+		}
+		REQUIRE(native.released());
+		native.free_created();
+		for (uint32_t slot = 0; slot < 1; ++slot) {
+			const auto &backing = backings[slot];
+			const GDExtensionStorageRetireRequestV1 retirement = { Enrollment::ABI, backing.backing, backing.rid, backing.backing_serial, 0, 0, 1, 1, 0 };
+			GDExtensionStorageRetireRefV1 retired{};
+			GDExtensionStorageRetireReportV1 returned{};
+			REQUIRE(fixture.port.storage_retire(ref, slot, &retirement, &retired, &returned).native_error == OK);
+			for (uint32_t turn = 0; turn < 64 && !returned.state; ++turn) {
+				auto offered = budget;
+				offered.deadline_micros = OS::get_singleton()->get_ticks_usec() + 10000000;
+				const Error e = Error(fixture.port.storage_observe(ref, retired, &offered, &returned).native_error);
+				CHECK((e == OK || e == ERR_BUSY));
+				server->sync();
+			}
+			REQUIRE(returned.state == 1);
+			REQUIRE(fixture.port.storage_release(ref, retired).native_error == OK);
+		}
+		for (const auto target : { ref, probe.create_ref }) {
+			Request *original = target.handle_serial == ref.handle_serial ? &request : create_request;
+			for (uint32_t turn = 0; turn < 64 && original->serial; ++turn) {
+				auto offered = budget;
+				offered.deadline_micros = OS::get_singleton()->get_ticks_usec() + 10000000;
+				GDExtensionProductionServiceBudgetV1 remaining{};
+				const Error e = Error(release(target, &offered, &remaining, &report).native_error);
+				CHECK((e == OK || e == ERR_BUSY));
+				server->sync();
+			}
+			CHECK(original->serial == 0);
+		}
+		CHECK(fixture.driver.alias_allocations == 8);
+		CHECK(fixture.driver.alias_frees == 8);
+		for (auto &block : fixture.rd.upload_staging_buffers.blocks) {
+			fixture.driver.buffer_unmap(block.driver_id);
+			fixture.driver.buffer_free(block.driver_id);
+		}
+		fixture.rd.upload_staging_buffers.blocks.clear();
+		for (auto &block : fixture.rd.download_staging_buffers.blocks) {
+			fixture.driver.buffer_unmap(block.driver_id);
+			fixture.driver.buffer_free(block.driver_id);
+		}
+		fixture.rd.download_staging_buffers.blocks.clear();
+		CHECK_FALSE(fixture.driver.alias_upload_live);
+		CHECK_FALSE(fixture.driver.alias_download_live);
+		RendererRD::selection_materials_destroy(materials);
+		meshes->mesh_free(mesh);
+		memdelete(meshes);
+		MeshStorage::singleton = previous_meshes;
+		fixture.cleanup_owner();
+		CHECK(fixture.owner_cleaned);
+	}
 	struct OutputPollAggregationProbe {
 		NativeSceneAcquireProbe original;
 		GDExtensionInterfaceDeviceSessionOutputPollV1 poll = nullptr;
@@ -11017,4 +11524,8 @@ TEST_CASE("[SceneTree][ProductionRequest][GenerationSelection] transaction close
 
 TEST_CASE("[SceneTree][ProductionRequest][GenerationGuardRefusal] actual unprepared engine component refuses private and public Instance192 paths") {
 	TestProductionRequest::Access::generation_selection_lifecycle(3);
+}
+
+TEST_CASE("[SceneTree][ProductionRequest][AliasReadbackIntegration] actual internal acquire upload and single download preserve byte custody") {
+	TestProductionRequest::Access::output_alias_readback_complete();
 }
