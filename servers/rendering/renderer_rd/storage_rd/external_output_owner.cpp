@@ -30,10 +30,9 @@
 
 #include "external_output_owner.h"
 
-#include "external_output_storage.h"
-
 #include "core/extension/gdextension_library_exit_guard.h"
 #include "servers/rendering/renderer_rd/storage_rd/external_output_packet.h"
+#include "servers/rendering/renderer_rd/storage_rd/external_output_storage.h"
 
 #include <cstddef>
 
@@ -264,6 +263,7 @@ Error ExternalOutputOwner::plan_metadata_layout(uint32_t p_views, uint32_t p_rea
 			!append(p_reads, sizeof(ReadCell), alignof(ReadCell), layout.read_offset) ||
 			!append(layout.storage_count, sizeof(ExternalOutputStorage), alignof(ExternalOutputStorage), layout.storage_offset) ||
 			!append(layout.binding_count, sizeof(SurfaceBinding), alignof(SurfaceBinding), layout.surface_binding_offset) ||
+			!append(layout.binding_count, sizeof(ExternalPipelinePreparation), alignof(ExternalPipelinePreparation), layout.preparation_offset) ||
 			!append(p_mesh_selections, sizeof(GenerationMeshSelection), alignof(GenerationMeshSelection), layout.mesh_selection_offset) ||
 			!append(p_material_selections, sizeof(GenerationMaterialSelection), alignof(GenerationMaterialSelection), layout.material_selection_offset) ||
 			!append(p_surfaces, sizeof(SurfaceCell), alignof(SurfaceCell), layout.surface_offset) ||
@@ -300,7 +300,7 @@ Error ExternalOutputOwner::install_metadata_directory(GDExtensionDeviceExit::Pro
 		GDExtensionProductionRequestRefV1 request, GDExtensionDeviceExit::Registry &registry,
 		const GDExtensionDeviceExit::ProductionOutputMetadataLease &lease,
 		uint32_t p_views, uint32_t p_reads, uint32_t p_surfaces, bool p_generation_selection) {
-	if (metadata_directory_installed || view_cells || read_cells || surface_cells || view_capacity || read_capacity || surface_capacity) {
+	if (metadata_directory_installed || view_cells || read_cells || surface_cells || preparation_rows || view_capacity || read_capacity || surface_capacity || preparation_capacity) {
 		return ERR_ALREADY_IN_USE;
 	}
 	if (state != GenerationState::CONFIGURED || has_live_slots()) {
@@ -348,6 +348,9 @@ Error ExternalOutputOwner::install_metadata_directory(GDExtensionDeviceExit::Pro
 	for (uint32_t i = 0; i < p_surfaces; ++i) {
 		new (base + layout.surface_offset + size_t(i) * sizeof(SurfaceCell)) SurfaceCell;
 	}
+	for (uint32_t i = 0; i < layout.binding_count; ++i) {
+		new (base + layout.preparation_offset + size_t(i) * sizeof(ExternalPipelinePreparation)) ExternalPipelinePreparation;
+	}
 	for (uint32_t i = 0; i < mesh_selections; ++i) {
 		auto *row = new (base + layout.mesh_selection_offset + size_t(i) * sizeof(GenerationMeshSelection)) GenerationMeshSelection;
 		row->mesh = config.surfaces[i];
@@ -362,6 +365,8 @@ Error ExternalOutputOwner::install_metadata_directory(GDExtensionDeviceExit::Pro
 	generation_mesh_count = mesh_selections;
 	generation_material_count = material_selections;
 	binding_capacity = layout.binding_count;
+	preparation_rows = layout.binding_count ? reinterpret_cast<ExternalPipelinePreparation *>(base + layout.preparation_offset) : nullptr;
+	preparation_capacity = layout.binding_count;
 	storage_capacity = layout.storage_count;
 	if (p_generation_selection) {
 		// Identity resides in quoted rows; do not retain parser Vector storage.
@@ -377,6 +382,68 @@ Error ExternalOutputOwner::install_metadata_directory(GDExtensionDeviceExit::Pro
 	surface_capacity = p_surfaces;
 	metadata_directory_installed = true;
 	metadata_directories_placement = true;
+	return OK;
+}
+
+Error ExternalOutputOwner::bind_preparation_rows(uint32_t p_slot) {
+	if (p_slot >= slot_count || !metadata_directories_placement || !preparation_rows) {
+		return ERR_INVALID_PARAMETER;
+	}
+	auto &slot = slots[p_slot];
+	if (slot.state != LeaseState::RESERVED || slot.original_pin.is_empty() || !slot.lease_serial ||
+			!slot.surfaces || !slot.surfaces_placement || !slot.surface_count || slot.publication_closed) {
+		return ERR_UNAUTHORIZED;
+	}
+	const uint64_t first = uint64_t(p_slot) * slot.surface_count;
+	if (first > preparation_capacity || slot.surface_count > preparation_capacity - first) {
+		return ERR_OUT_OF_MEMORY;
+	}
+	// All rows are preflighted before associating any. An old incarnation or
+	// unresolved native prefix must never be overwritten by a new Acquire.
+	for (uint32_t i = 0; i < slot.surface_count; ++i) {
+		const auto &row = preparation_rows[first + i];
+		if (slot.surfaces[i].preparation_row || slot.surfaces[i].preparation || row.owner || row.serial || row.generation || !row.source_sealed ||
+				row.pipeline_pin || row.pipeline_original_root || row.pipeline_owned_group || row.created_pipeline.is_valid() ||
+				row.geometry[0].is_active() || row.geometry[1].is_active() || row.material.is_active()) {
+			return ERR_ALREADY_IN_USE;
+		}
+	}
+	for (uint32_t i = 0; i < slot.surface_count; ++i) {
+		auto &row = preparation_rows[first + i];
+		row.owner = this;
+		row.generation = generation;
+		row.serial = slot.lease_serial;
+		slot.surfaces[i].preparation_row = &row;
+	}
+	// No pass is selected or opened: source_sealed stays true and the resource
+	// allowance stays zero until the original renderer preparation opportunity.
+	return OK;
+}
+
+Error ExternalOutputOwner::return_preparation_row(uint32_t p_slot, uint32_t p_surface) {
+	if (p_slot >= slot_count || !slots[p_slot].surfaces || p_surface >= slots[p_slot].surface_count) {
+		return ERR_INVALID_PARAMETER;
+	}
+	auto &slot = slots[p_slot];
+	auto &surface = slot.surfaces[p_surface];
+	if (!surface.preparation_row) {
+		return surface.preparation ? ERR_INVALID_DATA : OK; // Unbound prefix or legacy component metadata.
+	}
+	const uint64_t index = uint64_t(p_slot) * slot.surface_count + p_surface;
+	if (!preparation_rows || index >= preparation_capacity || surface.preparation_row != &preparation_rows[index]) {
+		return ERR_INVALID_DATA;
+	}
+	auto &row = *surface.preparation_row;
+	if (row.owner != this || row.generation != generation || row.serial != slot.lease_serial) {
+		return ERR_INVALID_DATA;
+	}
+	if (surface.preparation || !row.source_sealed || row.pipeline_pin || row.pipeline_original_root || row.pipeline_owned_group ||
+			row.created_pipeline.is_valid() || row.geometry[0].is_active() || row.geometry[1].is_active() || row.material.is_active()) {
+		return ERR_BUSY;
+	}
+	row.~ExternalPipelinePreparation();
+	new (&row) ExternalPipelinePreparation;
+	surface.preparation_row = nullptr;
 	return OK;
 }
 
@@ -436,7 +503,19 @@ Error ExternalOutputOwner::return_reserved_cells() {
 			return ERR_BUSY;
 		}
 	}
+	for (uint32_t i = 0; i < preparation_capacity; ++i) {
+		const auto &row = preparation_rows[i];
+		if (row.owner || row.serial || row.generation || !row.source_sealed || row.pipeline_pin || row.pipeline_original_root || row.pipeline_owned_group ||
+				row.created_pipeline.is_valid() || row.geometry[0].is_active() || row.geometry[1].is_active() || row.material.is_active()) {
+			return ERR_BUSY;
+		}
+	}
 	if (metadata_directories_placement) {
+		for (uint32_t i = 0; i < preparation_capacity; ++i) {
+			preparation_rows[i].~ExternalPipelinePreparation();
+		}
+		preparation_rows = nullptr;
+		preparation_capacity = 0;
 		for (uint32_t i = 0; i < generation_material_count; ++i) {
 			generation_materials[i].~GenerationMaterialSelection();
 		}

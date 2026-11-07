@@ -162,6 +162,9 @@ public:
 // This is not a source grant: the caller has validated its original selection,
 // preparation opportunity and metadata/backing reservations before native work.
 class ExternalPipelinePreparation {
+#ifdef TESTS_ENABLED
+	friend class ExternalLinkedOwnerTest;
+#endif
 	friend class ParticlesStorage;
 	friend class RendererSceneRenderImplementation::SceneShaderForwardClustered;
 	friend class RendererSceneRenderImplementation::SceneShaderForwardMobile;

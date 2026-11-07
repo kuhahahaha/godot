@@ -80,6 +80,11 @@ Error ParticlesStorage::_external_pipeline_prepare_owned_prefix(GDExtensionProdu
 		return ERR_UNAUTHORIZED;
 	}
 	auto &surface = slot.surfaces[surface_index];
+	const uint64_t preparation_index = uint64_t(slot_index) * slot.surface_count + surface_index;
+	if (!owner.preparation_rows || preparation_index >= owner.preparation_capacity ||
+			surface.preparation_row != &owner.preparation_rows[preparation_index] || &preparation != surface.preparation_row || preparation.serial != slot.lease_serial) {
+		return ERR_UNAUTHORIZED;
+	}
 	if (surface.preparation || surface.pipeline_owned_group || surface.created_pipeline.is_valid() || surface.pipeline_group_returned) {
 		return ERR_ALREADY_IN_USE;
 	}
@@ -132,7 +137,7 @@ Error ParticlesStorage::_production_output_generation_ready(RID particles, uint6
 		return ERR_UNAUTHORIZED;
 	}
 	const auto &owner = *get_singleton()->particles_owner.get_or_null(particles)->external;
-	if (owner.surface_cells || owner.view_cells || owner.read_cells || owner.generation_meshes || owner.generation_materials || owner.has_generation_selection_custody() || owner.surface_capacity || owner.view_capacity || owner.read_capacity) {
+	if (owner.surface_cells || owner.view_cells || owner.read_cells || owner.generation_meshes || owner.generation_materials || owner.preparation_rows || owner.preparation_capacity || owner.has_generation_selection_custody() || owner.surface_capacity || owner.view_capacity || owner.read_capacity) {
 		return ERR_BUSY;
 	}
 	return owner.generation_returnable(unused, returned);
@@ -199,7 +204,7 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 			r_usage.controls = 1;
 			return OK;
 		}
-		if (owner.surface_cells || owner.view_cells || owner.read_cells || owner.generation_meshes || owner.generation_materials) {
+		if (owner.surface_cells || owner.view_cells || owner.read_cells || owner.generation_meshes || owner.generation_materials || owner.preparation_rows) {
 			// Directory destruction is its own charged phase. A one-pass turn
 			// retains the generation root and terminal result until a later turn.
 			if (r_usage.passes >= MIN(p_budget.passes, 64u) || r_usage.receipts >= MIN(p_budget.receipts, 128u) ||
@@ -410,6 +415,10 @@ Error ParticlesStorage::_production_output_service(GDExtensionDeviceExit::Produc
 			row.created_pipeline = RID();
 			row.source_sealed = true;
 			surface.preparation = nullptr;
+		}
+		error = owner.return_preparation_row(p_slot, slot.retire_surface);
+		if (error != OK) {
+			return error;
 		}
 		++slot.retire_surface;
 		return OK;

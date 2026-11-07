@@ -73,6 +73,7 @@ public:
 	uint32_t selection_meshes() const;
 	uint32_t selection_materials() const;
 	bool selection_inline_matches(const ExternalOutputConfig &) const;
+	bool preparation_rows_match_slots(bool p_probe_duplicate = false) const;
 	uint64_t selection_material_generation(uint32_t) const;
 	bool selection_faulted() const;
 	void forget_auto_returned();

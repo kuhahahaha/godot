@@ -77,6 +77,9 @@ class ExternalOutputOwner {
 		RELEASED,
 	};
 	struct SurfaceBinding {
+		// Reserved metadata is distinct from an opened native pass prefix.
+		// The stable row belongs to this slot incarnation; it grants no pass.
+		ExternalPipelinePreparation *preparation_row = nullptr;
 		ExternalPipelinePreparation *preparation = nullptr;
 		RID created_pipeline;
 		uint64_t pipeline_owned_group = 0;
@@ -182,6 +185,10 @@ class ExternalOutputOwner {
 	bool generation_selection_unpublished = false;
 	bool generation_config_inline = false;
 	uint32_t binding_capacity = 0, storage_capacity = 0;
+	ExternalPipelinePreparation *preparation_rows = nullptr;
+	uint32_t preparation_capacity = 0;
+	Error bind_preparation_rows(uint32_t);
+	Error return_preparation_row(uint32_t, uint32_t);
 	bool generation_selection_attempted = false;
 	bool generation_selection_complete = false;
 	bool has_generation_selection_custody() const { return retained_mesh_count || retained_material_count; }
@@ -189,7 +196,7 @@ class ExternalOutputOwner {
 	struct MetadataLayout {
 		uint32_t view_count = 0, read_count = 0, surface_count = 0;
 		uint32_t view_offset = 0, read_offset = 0, surface_offset = 0;
-		uint32_t storage_offset = 0, surface_binding_offset = 0;
+		uint32_t storage_offset = 0, surface_binding_offset = 0, preparation_offset = 0;
 		uint32_t total_bytes = 0, alignment = 0;
 		uint32_t mesh_selection_count = 0, material_selection_count = 0;
 		uint32_t mesh_selection_offset = 0, material_selection_offset = 0;
@@ -244,7 +251,7 @@ class ExternalOutputOwner {
 
 public:
 	~ExternalOutputOwner() {
-		CRASH_COND(surface_cells || view_cells || read_cells || generation_meshes || generation_materials || has_generation_selection_custody() || !generation_pin.is_empty());
+		CRASH_COND(surface_cells || view_cells || read_cells || generation_meshes || generation_materials || preparation_rows || preparation_capacity || has_generation_selection_custody() || !generation_pin.is_empty());
 		// No destructor fabricates native/source return or drops accepted uses.
 		CRASH_COND(state != GenerationState::RELEASED);
 		for (uint32_t i = 0; i < slot_count; ++i) {

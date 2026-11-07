@@ -7891,6 +7891,7 @@ struct Access {
 			auto append = ordinal_port<GDExtensionInterfaceDeviceSessionProductionAppendV2>("device_session_production_append_v2");
 			acquire(context, ref, 0, &p.input, &p.acquired);
 			REQUIRE(p.acquired.status.error == OK);
+			CHECK(p.native->preparation_rows_match_slots(true));
 			CHECK(p.acquired.writable_count == 3);
 			++p.acquire_calls;
 			CHECK(f.request->next_action == 1);
@@ -8257,6 +8258,7 @@ struct Access {
 		}
 		CHECK(request.control.state == ProductionControlState::OWNER_CONSUMED);
 		CHECK(request.output_owner_head == UINT32_MAX);
+		CHECK(native.preparation_rows_match_slots());
 		probe.closing = true;
 		REQUIRE(fixture.port.record_schedule(probe.create_ref, &control) == OK);
 		server->sync();

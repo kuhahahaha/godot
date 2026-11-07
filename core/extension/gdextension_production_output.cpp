@@ -617,9 +617,12 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 		}
 		// The executing original RECORD and installed independent root retain
 		// the action/slot while each factory reacquires the Registry lock.
-		unlock_mutex_for_call();
-		error = slot.storage->allocate_instance192_owned(context, slot.original_pin, slot.owned_group, owner.config.capacity, surfaces);
-		relock_mutex_after_call();
+		error = owner.bind_preparation_rows(slot_index);
+		if (error == OK) {
+			unlock_mutex_for_call();
+			error = slot.storage->allocate_instance192_owned(context, slot.original_pin, slot.owned_group, owner.config.capacity, surfaces);
+			relock_mutex_after_call();
+		}
 		if (error == OK) {
 			uint32_t member = 0;
 			for (uint32_t i = 0; i < Storage::RESOURCE_COUNT; ++i) {
@@ -682,6 +685,9 @@ void Registry::production_output_acquire(ProductionPhysicalContextRef context, G
 				slot.storage = nullptr;
 			}
 			for (uint32_t i = 0; i < slot.surface_count; ++i) {
+				// Only unopened metadata is rolled back here. Native prefixes
+				// keep the slot and its stable preparation row in retirement.
+				CRASH_COND(owner.return_preparation_row(slot_index, i) != OK);
 				slot.surfaces[i].~SurfaceBinding();
 			}
 			slot.surfaces = nullptr;
