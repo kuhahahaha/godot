@@ -4864,6 +4864,7 @@ struct Access {
 		GDExtensionProductionPhysicalContextRefV1 contexts[2]{};
 		GDExtensionNativeScenePhaseV1 phases[2]{};
 		uint32_t typed_calls = 0, ordinary_calls = 0, legacy_calls = 0, frees = 0;
+		Thread::ID free_thread = 0;
 		GDExtensionInterfaceDeviceSessionScenePhaseUnregisterV1 unregister_port = nullptr;
 		bool close_active = false;
 		static uint64_t word(const GDExtensionSceneOpaque32V1 &opaque, uint32_t index) {
@@ -4882,7 +4883,11 @@ struct Access {
 		static void legacy(void *opaque, GDExtensionDeviceExit::ProductionPhysicalContextRef, GDExtensionProductionRequestRefV1, const GDExtensionProductionOperationV1 *) {
 			++static_cast<NativeScenePhaseProbe *>(opaque)->legacy_calls;
 		}
-		static void free(void *opaque) { ++static_cast<NativeScenePhaseProbe *>(opaque)->frees; }
+		static void free(void *opaque) {
+			auto &p = *static_cast<NativeScenePhaseProbe *>(opaque);
+			p.free_thread = Thread::get_caller_id();
+			++p.frees;
+		}
 		static void typed(void *opaque, const GDExtensionNativeScenePhaseV1 *phase, GDExtensionProductionRequestRefV1 request, const GDExtensionProductionOperationV1 *operation) {
 			using namespace GDExtensionDeviceExit;
 			auto &p = *static_cast<NativeScenePhaseProbe *>(opaque);
@@ -4939,7 +4944,7 @@ struct Access {
 			}
 		}
 	};
-	static void native_scene_phase_infrastructure(bool close_before_draw = false, bool close_fifo_full = false) {
+	static void native_scene_phase_infrastructure(bool close_before_draw = false, bool close_fifo_full = false, bool close_wrong_thread = false) {
 		using namespace GDExtensionDeviceExit;
 		auto *server = ordinal_server();
 		if (!server) {
@@ -5078,6 +5083,118 @@ struct Access {
 		foreign_registration.token.bytes[0] ^= 0x80;
 		CHECK(probe.unregister_port(foreign_registration, &refused_close).native_error == ERR_INVALID_DATA);
 		CHECK(refused_close.registration_closed == 0);
+		if (close_wrong_thread) {
+#ifdef THREADS_ENABLED
+			// No RECORD is queued: Busy must come from the original holder's
+			// destruction-thread gate, not a waiting mailbox or active delivery.
+			const Thread::ID owner_thread = Thread::get_caller_id();
+			const auto registration = probe.registration;
+			NormalRelaySnapshot initial;
+			REQUIRE(fixture.registry.observe_normal_relay(probe.relay, initial) == OK);
+			CHECK(initial.destruction_thread == owner_thread);
+			CHECK(initial.active_deliveries == 0);
+			CHECK_FALSE(initial.cancelled);
+			CHECK_FALSE(initial.release_requested);
+			CHECK_FALSE(initial.cell_released);
+			CHECK_FALSE(initial.holder_closed);
+			CHECK(probe.frees == 0);
+			CHECK(probe.free_thread == 0);
+			struct ForeignUnregister {
+				GDExtensionScenePhaseRegistrationRefV1 registration{};
+				GDExtensionInterfaceDeviceSessionScenePhaseUnregisterV1 port = nullptr;
+				GDExtensionScenePhaseCloseV1 close{};
+				Thread::ID thread = 0;
+				Error error = FAILED;
+				static void run(void *opaque) {
+					auto &test = *static_cast<ForeignUnregister *>(opaque);
+					test.thread = Thread::get_caller_id();
+					test.error = Error(test.port(test.registration, &test.close).native_error);
+				}
+			} foreign;
+			foreign.registration = registration;
+			foreign.port = probe.unregister_port;
+			Thread worker;
+			worker.start(&ForeignUnregister::run, &foreign);
+			const bool started = worker.is_started();
+			CHECK(started);
+			if (started) {
+				worker.wait_to_finish(); // Join before assertions or owner observations.
+			}
+			CHECK(foreign.thread != 0);
+			CHECK(foreign.thread != owner_thread);
+			CHECK(foreign.error == ERR_BUSY);
+			CHECK(foreign.close.abi.abi_version == 1);
+			CHECK(foreign.close.abi.struct_size == sizeof(foreign.close));
+			CHECK(foreign.close.abi.reserved == 0);
+			CHECK(foreign.close.registration_closed == 1);
+			CHECK(foreign.close.active_deliveries == 0);
+			CHECK(foreign.close.relay_cell_released == 0);
+			CHECK(foreign.close.relay_holder_closed == 0);
+			CHECK(memcmp(&foreign.registration, &registration, sizeof(registration)) == 0);
+			CHECK(memcmp(&probe.registration, &registration, sizeof(registration)) == 0);
+			NormalRelaySnapshot observed;
+			REQUIRE(fixture.registry.observe_normal_relay(probe.relay, observed) == OK);
+			CHECK(observed.destruction_thread == initial.destruction_thread);
+			CHECK(observed.active_deliveries == 0);
+			CHECK(observed.cancelled);
+			CHECK_FALSE(observed.release_requested);
+			CHECK_FALSE(observed.cell_released);
+			CHECK_FALSE(observed.holder_closed);
+			CHECK(probe.frees == 0);
+			CHECK(probe.free_thread == 0);
+			CHECK(probe.typed_calls == 0);
+			CHECK(probe.ordinary_calls == 0);
+			CHECK(probe.legacy_calls == 0);
+			GDExtensionScenePhaseCloseV1 close{};
+			CHECK(probe.unregister_port(registration, &close).native_error == ERR_BUSY);
+			CHECK(close.registration_closed == 1);
+			CHECK(close.active_deliveries == 0);
+			CHECK(close.relay_cell_released == 1);
+			CHECK(close.relay_holder_closed == 0);
+			REQUIRE(fixture.registry.observe_normal_relay(probe.relay, observed) == OK);
+			CHECK(observed.destruction_thread == owner_thread);
+			CHECK(observed.active_deliveries == 0);
+			CHECK(observed.cancelled);
+			CHECK(observed.release_requested);
+			CHECK(observed.cell_released);
+			CHECK_FALSE(observed.holder_closed);
+			CHECK(probe.frees == 0);
+			CHECK(probe.free_thread == 0);
+			CHECK(fixture.registry.forget_normal_relay(probe.relay) == ERR_BUSY);
+			probe.callable = Callable(); // Actual last owner-thread alias, never a fabricated ACK.
+			CHECK(probe.frees == 1);
+			CHECK(probe.free_thread == owner_thread);
+			CHECK(probe.free_thread == initial.destruction_thread);
+			REQUIRE(fixture.registry.observe_normal_relay(probe.relay, observed) == OK);
+			CHECK(observed.destruction_thread == owner_thread);
+			CHECK(observed.active_deliveries == 0);
+			CHECK(observed.cancelled);
+			CHECK(observed.release_requested);
+			CHECK(observed.cell_released);
+			CHECK(observed.holder_closed);
+			REQUIRE(probe.unregister_port(registration, &close).native_error == OK);
+			CHECK(close.registration_closed == 1);
+			CHECK(close.active_deliveries == 0);
+			CHECK(close.relay_cell_released == 1);
+			CHECK(close.relay_holder_closed == 1);
+			CHECK(fixture.registry.observe_normal_relay(probe.relay, observed) == ERR_INVALID_DATA);
+			const auto completed_close = close;
+			REQUIRE(probe.unregister_port(registration, &close).native_error == OK);
+			CHECK(memcmp(&close, &completed_close, sizeof(close)) == 0);
+			for (uint32_t i = 0; i < 2; ++i) {
+				REQUIRE(fixture.registry.production_cancel(probe.requests[i]).native_error == OK);
+				REQUIRE(fixture.registry.production_release(probe.requests[i]).native_error == OK);
+			}
+			fixture.cleanup_owner();
+			CHECK(fixture.owner_cleaned);
+			CHECK(probe.frees == 1);
+			CHECK(probe.free_thread == owner_thread);
+			CHECK(probe.typed_calls == 0);
+			CHECK(probe.ordinary_calls == 0);
+			CHECK(probe.legacy_calls == 0);
+			return;
+#endif
+		}
 		uint64_t controls[2]{};
 		for (uint32_t i = 0; i < 2; ++i) {
 			REQUIRE(fixture.port.record_schedule(probe.requests[i], &controls[i]) == OK);
@@ -13577,6 +13694,10 @@ TEST_CASE("[SceneTree][ProductionRequest][NativeScenePhaseCloseFifoFull] actual 
 }
 
 #ifdef THREADS_ENABLED
+TEST_CASE("[SceneTree][ProductionRequest][NativeScenePhaseCloseWrongThread] original owner retries foreign unregister and frees its typed holder exactly once") {
+	TestProductionRequest::Access::native_scene_phase_infrastructure(false, false, true);
+}
+
 TEST_CASE("[SceneTree][ProductionRequest][NativeSceneReleaseBudget] original RT RELEASE returns actual retained content outside Registry mutex") {
 	TestProductionRequest::Access::scene_release_content_budget();
 }

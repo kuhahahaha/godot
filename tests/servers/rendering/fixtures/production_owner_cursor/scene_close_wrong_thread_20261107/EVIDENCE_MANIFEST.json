@@ -1,0 +1,114 @@
+{
+  "scope": "CPU wrong-thread regression receipt; no production bug fix or GPU qualification",
+  "files": [
+    {
+      "path": "RECEIPT.md",
+      "bytes": 4334,
+      "sha256": "e2b4601c29a5d69f62810f640b41cd2c8d0b14fa6d8b9a922e85c65fb13be420"
+    },
+    {
+      "path": "RESULT.json",
+      "bytes": 2695,
+      "sha256": "15a3ff0a119dc5d362b579eed82fed304aeaa7ad77a7bb12a9fb890fb1df380b"
+    },
+    {
+      "path": "NEIGHBORS_COMPLETE_COMMAND.json",
+      "bytes": 455,
+      "sha256": "d846530c2be2988aae480dad00a99bd4e301f9683174cc3c8739439c7dea3a09"
+    },
+    {
+      "path": "HOST_CONTROLLED_BUILD.json",
+      "bytes": 530,
+      "sha256": "3ea9d3f0d18faf2d97c1493650cfaa19b6434508d7f997d224f9c58094e14def"
+    },
+    {
+      "path": "FOCUSED.xml",
+      "bytes": 361044,
+      "sha256": "13942a3710a4faa0c766810bf7983a23e1254f0dc8208f8c070d89859e5da4f1"
+    },
+    {
+      "path": "FOCUSED_OUTPUT.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "NEIGHBORS.xml",
+      "bytes": 361865,
+      "sha256": "4a29dbe78b19a7e358415d5d5ded5c01d86d1d4b5f5f7d647b44f920f682cf13"
+    },
+    {
+      "path": "NEIGHBORS_OUTPUT.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "NEIGHBORS_COMPLETE.xml",
+      "bytes": 362121,
+      "sha256": "6bbad747310252ff4c7a3d27f443e5ea0de729cea2802ded11da36916988347a"
+    },
+    {
+      "path": "NEIGHBORS_COMPLETE_OUTPUT.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "COMBINED.xml",
+      "bytes": 385705,
+      "sha256": "791358c4b1b616ac460ab18e9b18a33c1dcdb77ba4897dfacd778aefac6b1a28"
+    },
+    {
+      "path": "COMBINED_OUTPUT.txt",
+      "bytes": 495,
+      "sha256": "1fbf3d30a19652bfad6bc356bc349d15201ec079f2ea1a085db33445ab47d7ac"
+    }
+  ],
+  "original_output_copies": [
+    {
+      "original": "FOCUSED.log",
+      "tracked_copy": "FOCUSED_OUTPUT.txt",
+      "byte_identical": true,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original": "NEIGHBORS.log",
+      "tracked_copy": "NEIGHBORS_OUTPUT.txt",
+      "byte_identical": true,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original": "NEIGHBORS_COMPLETE.log",
+      "tracked_copy": "NEIGHBORS_COMPLETE_OUTPUT.txt",
+      "byte_identical": true,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "original": "COMBINED.log",
+      "tracked_copy": "COMBINED_OUTPUT.txt",
+      "byte_identical": true,
+      "bytes": 495,
+      "sha256": "1fbf3d30a19652bfad6bc356bc349d15201ec079f2ea1a085db33445ab47d7ac"
+    }
+  ],
+  "stage_files": [
+    "tests/core/extension/test_production_request.cpp",
+    "tests/servers/rendering/fixtures/production_owner_cursor/scene_close_wrong_thread_20261107/RECEIPT.md",
+    "tests/servers/rendering/fixtures/production_owner_cursor/scene_close_wrong_thread_20261107/RESULT.json",
+    "tests/servers/rendering/fixtures/production_owner_cursor/scene_close_wrong_thread_20261107/NEIGHBORS_COMPLETE_COMMAND.json",
+    "tests/servers/rendering/fixtures/production_owner_cursor/scene_close_wrong_thread_20261107/HOST_CONTROLLED_BUILD.json",
+    "tests/servers/rendering/fixtures/production_owner_cursor/scene_close_wrong_thread_20261107/FOCUSED.xml",
+    "tests/servers/rendering/fixtures/production_owner_cursor/scene_close_wrong_thread_20261107/FOCUSED_OUTPUT.txt",
+    "tests/servers/rendering/fixtures/production_owner_cursor/scene_close_wrong_thread_20261107/NEIGHBORS.xml",
+    "tests/servers/rendering/fixtures/production_owner_cursor/scene_close_wrong_thread_20261107/NEIGHBORS_OUTPUT.txt",
+    "tests/servers/rendering/fixtures/production_owner_cursor/scene_close_wrong_thread_20261107/NEIGHBORS_COMPLETE.xml",
+    "tests/servers/rendering/fixtures/production_owner_cursor/scene_close_wrong_thread_20261107/NEIGHBORS_COMPLETE_OUTPUT.txt",
+    "tests/servers/rendering/fixtures/production_owner_cursor/scene_close_wrong_thread_20261107/COMBINED.xml",
+    "tests/servers/rendering/fixtures/production_owner_cursor/scene_close_wrong_thread_20261107/COMBINED_OUTPUT.txt",
+    "tests/servers/rendering/fixtures/production_owner_cursor/scene_close_wrong_thread_20261107/EVIDENCE_MANIFEST.json",
+    "tests/servers/rendering/fixtures/production_owner_cursor/scene_close_wrong_thread_20261107/SHA256SUMS.txt"
+  ],
+  "archive_origin": "work/scene-close-wrong-thread-20261107",
+  "execution_location_note": "Original commands ran from the continuation worktree and wrote XML under work/scene-close-wrong-thread-20261107; copying the archive did not rerun tests."
+}

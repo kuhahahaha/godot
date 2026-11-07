@@ -1,0 +1,75 @@
+[
+  {
+    "label": "FOCUSED",
+    "command": [
+      "bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=*[NativeScenePhaseCloseWrongThread]*",
+      "--reporters=xml",
+      "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene-close-wrong-thread-20261107/FOCUSED.xml"
+    ],
+    "exit_code": 0,
+    "seconds": 2.34,
+    "executed_cases": 1,
+    "assertions": 185,
+    "assertion_failures": 0,
+    "case_failures": 0,
+    "output_evidence": "FOCUSED_OUTPUT.txt"
+  },
+  {
+    "label": "NEIGHBORS",
+    "command": [
+      "bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=*[NativeScenePhase]*,*original normal relay observes exact Callable retirement*",
+      "--reporters=xml",
+      "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene-close-wrong-thread-20261107/NEIGHBORS.xml"
+    ],
+    "exit_code": 0,
+    "seconds": 0.13,
+    "executed_cases": 2,
+    "assertions": 479,
+    "assertion_failures": 0,
+    "case_failures": 0,
+    "output_evidence": "NEIGHBORS_OUTPUT.txt"
+  },
+  {
+    "label": "NEIGHBORS_COMPLETE",
+    "command": [
+      "bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=*NativeScenePhase*,*original normal relay observes exact Callable retirement*",
+      "--reporters=xml",
+      "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene-close-wrong-thread-20261107/NEIGHBORS_COMPLETE.xml"
+    ],
+    "exit_code": 0,
+    "seconds": 0.37,
+    "executed_cases": 5,
+    "assertions": 1102,
+    "assertion_failures": 0,
+    "case_failures": 0,
+    "output_evidence": "NEIGHBORS_COMPLETE_OUTPUT.txt",
+    "run_note": "Parent reran the complete neighbor filter to preserve the exact command; exit0,0.37s. FOCUSED/COMBINED retain their original runs."
+  },
+  {
+    "label": "COMBINED",
+    "command": [
+      "bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=*ProductionRequest*,*ProductionNativeObserve*,*RecordSource*,*ExternalOutput*,*[K03][P2]*,*EngineGuardLifecycle*,*GenerationMetadataLayout*,*SceneOnlyRouting*,*ReadbackSource*,*ScenePhase*",
+      "--reporters=xml",
+      "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/scene-close-wrong-thread-20261107/COMBINED.xml"
+    ],
+    "exit_code": 0,
+    "seconds": 4.1,
+    "executed_cases": 217,
+    "assertions": 90839,
+    "assertion_failures": 0,
+    "case_failures": 0,
+    "output_evidence": "COMBINED_OUTPUT.txt"
+  }
+]
