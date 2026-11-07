@@ -1001,8 +1001,8 @@ struct Access {
 		const auto original_private_refs = registry.records[0].private_refs;
 		struct Contention {
 			Enrollment &fixture;
-			std::mutex mutex;
-			std::condition_variable condition;
+			std::mutex mutex{};
+			std::condition_variable condition{};
 			bool held = false, returned = false;
 			bool returned_while_held = false, window_expired = false, registry_acquired = false;
 			static void run(void *p_data) {
@@ -7735,7 +7735,7 @@ struct Access {
 #ifdef THREADS_ENABLED
 		struct Contention {
 			Mutex *mutex;
-			Semaphore ready;
+			Semaphore ready{};
 			std::atomic<bool> finished{ false }, holding{ false };
 			bool timeout = false;
 			static void run(void *data) {
@@ -12306,7 +12306,7 @@ struct Access {
 #ifdef THREADS_ENABLED
 		struct Contention {
 			Mutex *mutex;
-			Semaphore ready;
+			Semaphore ready{};
 			std::atomic<bool> finished{ false }, holding{ false };
 			bool timeout = false;
 			static void run(void *data) {
@@ -12831,8 +12831,8 @@ struct Access {
 			{
 				MutexLock lock(enrollment.registry.mutex);
 				ProductionRequest *expired = nullptr;
-				RenderingDevice *device = nullptr;
-				check("managed_phase_original_expiry", enrollment.registry.production_physical_request_locked(phase_context, ref, expired, device, false) == ERR_UNAUTHORIZED && !expired);
+				RenderingDevice *actual_device = nullptr;
+				check("managed_phase_original_expiry", enrollment.registry.production_physical_request_locked(phase_context, ref, expired, actual_device, false) == ERR_UNAUTHORIZED && !expired);
 			}
 			GDExtensionScenePhaseCloseV1 close{};
 			const Error closing = Error(unregister_phase(phase_registration, &close).native_error);
@@ -12856,8 +12856,8 @@ struct Access {
 				// Wait until original FIFO dispatch has really deferred this RECORD.
 				MutexLock lock(enrollment.registry.mutex);
 				ProductionRequest *pending = nullptr;
-				RenderingDevice *device = nullptr;
-				CRASH_COND(enrollment.registry.production_request_locked(waiting_request, false, pending, device) != OK);
+				RenderingDevice *actual_device = nullptr;
+				CRASH_COND(enrollment.registry.production_request_locked(waiting_request, false, pending, actual_device) != OK);
 				if (!pending->control.scene_waiting || pending->control.state != ProductionControlState::QUEUED) {
 					return {};
 				}

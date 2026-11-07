@@ -29,8 +29,8 @@
 /**************************************************************************/
 
 #include "core/extension/gdextension_qualification_internal.h"
-#include "core/os/thread.h"
 #include "core/os/semaphore.h"
+#include "core/os/thread.h"
 #include "tests/servers/rendering/transfer_test_driver_base.h"
 #include "tests/test_macros.h"
 
@@ -156,391 +156,641 @@ class TestRecordSourceAccess {
 	}
 
 public:
- static void incremental_credits() {
-  using namespace GDExtensionDeviceExit;
-  QualificationFactCredits credits;
-  CHECK(credits.initialize(4096,528,2645,5)==OK);
-  CHECK(credits.occupied()==3178);
-  CHECK(credits.reserve_workers(918)==OK);
-  CHECK(credits.occupied()==4096);
-  CHECK(credits.reserve_workers(1)==ERR_PARAMETER_RANGE_ERROR);
-  CHECK(credits.occupied()==4096);
-  CHECK(credits.admit_native(2,true)==OK);
-  CHECK(credits.pending==2);
-  CHECK(credits.occupied()==4096);
-  CHECK(credits.commit_native(1)==OK);
-  CHECK(credits.cancel_native(1,true)==OK);
-  CHECK(credits.pending==0);
-  CHECK(credits.committed==1);
-  CHECK(credits.release_worker_quote(917)==OK);
-  CHECK(credits.occupied()==3179);
-  CHECK(credits.commit_graph()==OK);
-  CHECK(credits.committed==2);
-  CHECK(credits.occupied()==3179);
-  CHECK(credits.commit_native(1)==ERR_INVALID_DATA);
-  CHECK(credits.committed==2); // completion never recycles a receipt frontier
-  QualificationFactCredits overflow;
-  CHECK(overflow.initialize(4096,UINT64_MAX,0,0)==ERR_PARAMETER_RANGE_ERROR);
-  CHECK(overflow.capacity==0);
- }
- static void copy_credits_preserve_main_cleanup() {
-  using namespace GDExtensionDeviceExit;
-  QualificationFactCredits credits;
-  REQUIRE(credits.initialize(4096,528,1587,5,1058)==OK);
-  CHECK(credits.occupied()==3178);REQUIRE(credits.reserve_workers(918)==OK);
-  REQUIRE(credits.admit_native(1058,false,true)==OK);
-  CHECK(credits.copy==0);CHECK(credits.main==1587);CHECK(credits.cleanup==5);
-  CHECK(credits.admit_native(1,false,true)==ERR_PARAMETER_RANGE_ERROR);
-  CHECK(credits.main==1587);CHECK(credits.cleanup==5);CHECK(credits.occupied()==4096);
-  REQUIRE(credits.cancel_native(1058,false,true)==OK);
-  CHECK(credits.copy==1058);CHECK(credits.pending==0);CHECK(credits.main==1587);
-  RenderingDevice device;Driver driver;device.driver=&driver;DeviceCleanup cleanup{device};device.frames.resize(1);
-  QualificationTicket ticket;REQUIRE(ticket.credits.initialize(8,1,1,5,1)==OK);
-  device.frames[0].qualification_tickets.push_back(&ticket);
-  REQUIRE(device._qualification_activate_cleanup_credits()==OK);
-  CHECK(ticket.credits.cleanup==5);CHECK(ticket.credits.main==1);CHECK(ticket.credits.copy==1);
-  ticket.admission_closed=true;
-  REQUIRE(device._qualification_activate_cleanup_credits()==OK);
-  CHECK(ticket.credits.cleanup==0);CHECK(ticket.credits.main==4);CHECK(ticket.credits.copy==3);
-  CHECK(ticket.credits.occupied()==8);
-  REQUIRE(device._qualification_activate_cleanup_credits()==OK);CHECK(ticket.credits.occupied()==8);
-  device.frames[0].qualification_tickets.clear();
- }
- static void incremental_shared_frame() {
-  using namespace GDExtensionDeviceExit;
-  RenderingDevice device;Driver driver;device.driver=&driver;DeviceCleanup cleanup{device};
-  device.frames.resize(1);device.frames[0].qualification_epoch=81;
-  QualificationTicket a,b;
-  REQUIRE(a.credits.initialize(12,1,5,1)==OK);
-  REQUIRE(b.credits.initialize(12,1,1,1)==OK);
-  device.frames[0].qualification_tickets.push_back(&a);
-  device.frames[0].qualification_tickets.push_back(&b);
-  const uint64_t batch[]={17,18};
-  // Ownership is scoped to the actual Registry and the current thread.
-  auto &original_registry = Registry::get_singleton();
-  REQUIRE(!Registry::Lock::owns(original_registry));
-  {
-   Registry *other_registry = memnew(Registry);
-   Registry::Lock lock(original_registry);
-   CHECK(Registry::Lock::owns(original_registry));
-   CHECK(!Registry::Lock::owns(*other_registry));
-   { Registry::Lock borrowed(original_registry, Registry::Lock::TRY_OR_BORROW); CHECK(borrowed.is_locked()); }
-   CHECK(Registry::Lock::owns(original_registry));
-   lock.temp_unlock();
-   CHECK(!Registry::Lock::owns(original_registry));
-   { Registry::Lock reacquired(original_registry, Registry::Lock::TRY_OR_BORROW); CHECK(reacquired.is_locked()); }
-   CHECK(!Registry::Lock::owns(original_registry));
-   lock.temp_relock();
-   CHECK(Registry::Lock::owns(original_registry));
-   { Registry::Lock other(*other_registry); CHECK(Registry::Lock::owns(*other_registry)); CHECK(Registry::Lock::owns(original_registry)); }
-   CHECK(!Registry::Lock::owns(*other_registry));
-   CHECK(device._qualification_admit_native_serials(batch,1,UINT32_MAX)==OK);
-   device._qualification_cancel_native_serials(batch,1,UINT32_MAX);
-   memdelete(other_registry);
-  }
-  CHECK(!Registry::Lock::owns(original_registry));
+	static void incremental_credits() {
+		using namespace GDExtensionDeviceExit;
+		QualificationFactCredits credits;
+		CHECK(credits.initialize(4096, 528, 2645, 5) == OK);
+		CHECK(credits.occupied() == 3178);
+		CHECK(credits.reserve_workers(918) == OK);
+		CHECK(credits.occupied() == 4096);
+		CHECK(credits.reserve_workers(1) == ERR_PARAMETER_RANGE_ERROR);
+		CHECK(credits.occupied() == 4096);
+		CHECK(credits.admit_native(2, true) == OK);
+		CHECK(credits.pending == 2);
+		CHECK(credits.occupied() == 4096);
+		CHECK(credits.commit_native(1) == OK);
+		CHECK(credits.cancel_native(1, true) == OK);
+		CHECK(credits.pending == 0);
+		CHECK(credits.committed == 1);
+		CHECK(credits.release_worker_quote(917) == OK);
+		CHECK(credits.occupied() == 3179);
+		CHECK(credits.commit_graph() == OK);
+		CHECK(credits.committed == 2);
+		CHECK(credits.occupied() == 3179);
+		CHECK(credits.commit_native(1) == ERR_INVALID_DATA);
+		CHECK(credits.committed == 2); // completion never recycles a receipt frontier
+		QualificationFactCredits overflow;
+		CHECK(overflow.initialize(4096, UINT64_MAX, 0, 0) == ERR_PARAMETER_RANGE_ERROR);
+		CHECK(overflow.capacity == 0);
+	}
+	static void copy_credits_preserve_main_cleanup() {
+		using namespace GDExtensionDeviceExit;
+		QualificationFactCredits credits;
+		REQUIRE(credits.initialize(4096, 528, 1587, 5, 1058) == OK);
+		CHECK(credits.occupied() == 3178);
+		REQUIRE(credits.reserve_workers(918) == OK);
+		REQUIRE(credits.admit_native(1058, false, true) == OK);
+		CHECK(credits.copy == 0);
+		CHECK(credits.main == 1587);
+		CHECK(credits.cleanup == 5);
+		CHECK(credits.admit_native(1, false, true) == ERR_PARAMETER_RANGE_ERROR);
+		CHECK(credits.main == 1587);
+		CHECK(credits.cleanup == 5);
+		CHECK(credits.occupied() == 4096);
+		REQUIRE(credits.cancel_native(1058, false, true) == OK);
+		CHECK(credits.copy == 1058);
+		CHECK(credits.pending == 0);
+		CHECK(credits.main == 1587);
+		RenderingDevice device;
+		Driver driver;
+		device.driver = &driver;
+		DeviceCleanup cleanup{ device };
+		device.frames.resize(1);
+		QualificationTicket ticket;
+		REQUIRE(ticket.credits.initialize(8, 1, 1, 5, 1) == OK);
+		device.frames[0].qualification_tickets.push_back(&ticket);
+		REQUIRE(device._qualification_activate_cleanup_credits() == OK);
+		CHECK(ticket.credits.cleanup == 5);
+		CHECK(ticket.credits.main == 1);
+		CHECK(ticket.credits.copy == 1);
+		ticket.admission_closed = true;
+		REQUIRE(device._qualification_activate_cleanup_credits() == OK);
+		CHECK(ticket.credits.cleanup == 0);
+		CHECK(ticket.credits.main == 4);
+		CHECK(ticket.credits.copy == 3);
+		CHECK(ticket.credits.occupied() == 8);
+		REQUIRE(device._qualification_activate_cleanup_credits() == OK);
+		CHECK(ticket.credits.occupied() == 8);
+		device.frames[0].qualification_tickets.clear();
+	}
+	static void incremental_shared_frame() {
+		using namespace GDExtensionDeviceExit;
+		RenderingDevice device;
+		Driver driver;
+		device.driver = &driver;
+		DeviceCleanup cleanup{ device };
+		device.frames.resize(1);
+		device.frames[0].qualification_epoch = 81;
+		QualificationTicket a, b;
+		REQUIRE(a.credits.initialize(12, 1, 5, 1) == OK);
+		REQUIRE(b.credits.initialize(12, 1, 1, 1) == OK);
+		device.frames[0].qualification_tickets.push_back(&a);
+		device.frames[0].qualification_tickets.push_back(&b);
+		const uint64_t batch[] = { 17, 18 };
+		// Ownership is scoped to the actual Registry and the current thread.
+		auto &original_registry = Registry::get_singleton();
+		REQUIRE(!Registry::Lock::owns(original_registry));
+		{
+			Registry *other_registry = memnew(Registry);
+			Registry::Lock lock(original_registry);
+			CHECK(Registry::Lock::owns(original_registry));
+			CHECK(!Registry::Lock::owns(*other_registry));
+			{
+				Registry::Lock borrowed(original_registry, Registry::Lock::TRY_OR_BORROW);
+				CHECK(borrowed.is_locked());
+			}
+			CHECK(Registry::Lock::owns(original_registry));
+			lock.temp_unlock();
+			CHECK(!Registry::Lock::owns(original_registry));
+			{
+				Registry::Lock reacquired(original_registry, Registry::Lock::TRY_OR_BORROW);
+				CHECK(reacquired.is_locked());
+			}
+			CHECK(!Registry::Lock::owns(original_registry));
+			lock.temp_relock();
+			CHECK(Registry::Lock::owns(original_registry));
+			{
+				Registry::Lock other(*other_registry);
+				CHECK(Registry::Lock::owns(*other_registry));
+				CHECK(Registry::Lock::owns(original_registry));
+			}
+			CHECK(!Registry::Lock::owns(*other_registry));
+			CHECK(device._qualification_admit_native_serials(batch, 1, UINT32_MAX) == OK);
+			device._qualification_cancel_native_serials(batch, 1, UINT32_MAX);
+			memdelete(other_registry);
+		}
+		CHECK(!Registry::Lock::owns(original_registry));
 
-  CHECK(device._qualification_admit_native_serials(batch,2,UINT32_MAX)==ERR_PARAMETER_RANGE_ERROR);
-  CHECK(a.credits.main==5);CHECK(b.credits.main==1);
-  CHECK(a.admitted_native_serials.is_empty());CHECK(b.admitted_native_serials.is_empty());
-  CHECK(device._qualification_admit_native_serials(batch,1,UINT32_MAX)==OK);
-  CHECK(a.credits.pending==1);CHECK(b.credits.pending==1);
-  CHECK(device._qualification_admit_native_serials(batch,1,UINT32_MAX)==OK);
-  CHECK(a.credits.pending==1);CHECK(b.credits.pending==1);
-  device._qualification_cancel_native_serials(batch,1,UINT32_MAX);
-  CHECK(a.credits.pending==0);CHECK(b.credits.pending==0);
-  CHECK(a.credits.main==5);CHECK(b.credits.main==1);
+		CHECK(device._qualification_admit_native_serials(batch, 2, UINT32_MAX) == ERR_PARAMETER_RANGE_ERROR);
+		CHECK(a.credits.main == 5);
+		CHECK(b.credits.main == 1);
+		CHECK(a.admitted_native_serials.is_empty());
+		CHECK(b.admitted_native_serials.is_empty());
+		CHECK(device._qualification_admit_native_serials(batch, 1, UINT32_MAX) == OK);
+		CHECK(a.credits.pending == 1);
+		CHECK(b.credits.pending == 1);
+		CHECK(device._qualification_admit_native_serials(batch, 1, UINT32_MAX) == OK);
+		CHECK(a.credits.pending == 1);
+		CHECK(b.credits.pending == 1);
+		device._qualification_cancel_native_serials(batch, 1, UINT32_MAX);
+		CHECK(a.credits.pending == 0);
+		CHECK(b.credits.pending == 0);
+		CHECK(a.credits.main == 5);
+		CHECK(b.credits.main == 1);
 #ifdef THREADS_ENABLED
-  auto &registry=Registry::get_singleton();
-  struct Contention { Registry *registry;Semaphore entered,release; } contention{&registry};
-  Thread holder;holder.start([](void *data){auto &state=*static_cast<Contention*>(data);Registry::Lock lock(*state.registry);state.entered.post();state.release.wait();},&contention);
-  contention.entered.wait();
-  { Registry::Lock refused(registry, Registry::Lock::TRY_OR_BORROW); CHECK(!refused.is_locked()); CHECK(!Registry::Lock::owns(registry)); }
-  CHECK(device._qualification_admit_native_serials(batch,1,UINT32_MAX)==ERR_BUSY);
-  contention.release.post();holder.wait_to_finish();
+		auto &registry = Registry::get_singleton();
+		struct Contention {
+			Registry *registry;
+			Semaphore entered{}, release{};
+		} contention{ &registry };
+		Thread holder;
+		holder.start([](void *data) {auto &state=*static_cast<Contention*>(data);Registry::Lock lock(*state.registry);state.entered.post();state.release.wait(); }, &contention);
+		contention.entered.wait();
+		{
+			Registry::Lock refused(registry, Registry::Lock::TRY_OR_BORROW);
+			CHECK(!refused.is_locked());
+			CHECK(!Registry::Lock::owns(registry));
+		}
+		CHECK(device._qualification_admit_native_serials(batch, 1, UINT32_MAX) == ERR_BUSY);
+		contention.release.post();
+		holder.wait_to_finish();
 #endif
-  CHECK(a.credits.pending==0);CHECK(b.credits.pending==0);
-  // Adopting an existing hidden prefix is also before membership publication.
-  device.frames[0].qualification_tickets.clear();
-  RDD::QueueCallReport hidden;hidden.calls.push_back(member().source);hidden.issued=true;
-  device.frames[0].qualification_hidden_reports.push_back(hidden);
-  QualificationTicket c;
-  REQUIRE(c.credits.initialize(8,1,6,1)==OK);
-  CHECK(device._qualification_admit_frame_ticket(&c)==ERR_PARAMETER_RANGE_ERROR);
-  CHECK(c.frame_refs==0);CHECK(device.frames[0].qualification_tickets.is_empty());
-  CHECK(c.admitted_native_serials.is_empty());
-  QualificationTicket d;REQUIRE(d.credits.initialize(9,1,6,1)==OK);
-  CHECK(device._qualification_admit_frame_ticket(&d)==OK);
-  CHECK(d.frame_refs==1);CHECK(d.credits.pending==1);
-  CHECK(d.admitted_native_serials.size()==1);
-  REQUIRE(d.credits.commit_graph()==OK);
-  GDExtensionQualificationFactV1 graph{};graph.command_slot=0;d.facts.push_back(graph);
-  d.graphs.push_back({{},0,0,0,81,true,false});
-  device._qualification_add_frame_ticket(&d);
-  REQUIRE(d.natives.size()==1);CHECK(d.natives[0].source.serial==17);
-  CHECK(d.credits.pending==0);CHECK(d.credits.committed==2);
-  device._qualification_add_frame_ticket(&d);
-  CHECK(d.facts.size()==2);CHECK(d.natives.size()==1);
-  device.frames[0].qualification_hidden_reports.clear();
- }
- static void incremental_worker_batch() {
-  using namespace GDExtensionDeviceExit;
-  struct ExactDriver:Driver {
-   uint64_t serial=17;
-   Error qualification_worker_source_quote(CommandBufferID,QueueCallReport &prefix,uint32_t &future)const override{prefix={};future=2;return OK;}
-   Error command_queue_execute_and_present(CommandQueueID,VectorView<SemaphoreID>,VectorView<CommandBufferID>,VectorView<SemaphoreID>,FenceID,VectorView<SwapChainID>)override{
-    const Error admission=admit_native_source(serial);if(admission!=OK){QueueCallReport report;report.error=admission;record_queue_call_report(report);return admission;}
-    uint32_t fact_index = UINT32_MAX;
-    if (!claim_native_fact(fact_index)) return ERR_PARAMETER_RANGE_ERROR;
-    ++calls;NativeCallFact source;source.serial=serial;source.completion_serial=serial;source.queue_index=1;source.issue=IssueFact::IssuedUnknown;source.completion=CompletionCapability::CommandBuffer;
-    finish_native_fact(fact_index, source, serial);return OK;
-   }
-   Error native_call_retain(uint64_t source)override{CHECK(source==serial);++retains;return OK;}
-  } driver;
-  RenderingDevice device;device.driver=&driver;DeviceCleanup cleanup{device};
-  device.frames.resize(1);device.frames[0].qualification_epoch=81;device.frames[0].transfer_worker_semaphores.push_back(RDD::SemaphoreID(62));
-  QualificationTicket a,b;
-  struct WorkerFixtureCleanup {
-   RenderingDevice &device;
-   RenderingDevice::TransferWorker *worker = nullptr;
-   ~WorkerFixtureCleanup() {
-    for (auto &frame : device.frames) {
-     frame.qualification_tickets.clear();
-     frame.qualification_hidden_reports.clear();
-    }
-    device.transfer_worker_pool.clear();
-    device.transfer_worker_pool_available_list.clear();
-    device.transfer_worker_operation_used_by_draw.clear();
-    device.transfer_worker_pool_size = device.transfer_worker_pool_max_size = 0;
-    if (worker) memdelete(worker);
-   }
-  } worker_cleanup{device};
-  REQUIRE(a.credits.initialize(32,4,20,1)==OK);REQUIRE(b.credits.initialize(32,4,20,1)==OK);
-  device.frames[0].qualification_tickets.push_back(&a);device.frames[0].qualification_tickets.push_back(&b);
-  auto *worker=memnew(RenderingDevice::TransferWorker);worker_cleanup.worker=worker;worker->index=0;worker->operations_counter=9;worker->recording=true;worker->command_buffer=RDD::CommandBufferID(61);worker->command_fence=RDD::FenceID(91);
-  device.transfer_worker_pool.push_back(worker);device.transfer_worker_pool_size=device.transfer_worker_pool_max_size=1;device.transfer_worker_operation_used_by_draw.resize(1);device.transfer_worker_operation_used_by_draw[0]=0;device.transfer_worker_pool_available_list.push_back(0);
-  RenderingDevice::Buffer buffer;buffer.transfer_worker_index=0;buffer.transfer_worker_operation=9;
-  REQUIRE(b.credits.reserve_workers(7)==OK);
-  CHECK(device._check_transfer_worker_buffer(&buffer)==ERR_PARAMETER_RANGE_ERROR);
-  CHECK(buffer.transfer_worker_index==0);CHECK(device.transfer_worker_operation_used_by_draw[0]==0);CHECK_FALSE(worker->qualification_batch_sealed);CHECK(driver.calls==0);
-  CHECK(a.credits.workers==0);CHECK(a.worker_credits.is_empty());
-  REQUIRE(b.credits.release_worker_quote(7)==OK);
-  CHECK(device._check_transfer_worker_buffer(&buffer)==OK);
-  CHECK(buffer.transfer_worker_index==-1);CHECK(device.transfer_worker_operation_used_by_draw[0]==9);CHECK(worker->qualification_batch_sealed);
-  CHECK(a.credits.workers==2);CHECK(b.credits.workers==2);
-  uint32_t offset=0;
-  CHECK(device._acquire_transfer_worker(1,1,offset)==nullptr); // no wait on this frame's own sealed batch
-  CHECK(driver.calls==0);
-  auto parent=[&](QualificationTicket &ticket,uint64_t epoch){REQUIRE(ticket.credits.commit_graph()==OK);GDExtensionQualificationFactV1 fact{};fact.command_slot=0;ticket.graphs.push_back({{},ticket.facts.size(),0,0,epoch,true,false});ticket.facts.push_back(fact);};
-  parent(a,81);parent(b,81);
-  CHECK(device._submit_transfer_workers({},true)==OK);
-  CHECK(driver.calls==1);CHECK_FALSE(worker->qualification_batch_sealed);
-  CHECK(a.credits.workers==0);CHECK(b.credits.workers==0);
-  REQUIRE(a.natives.size()==1);CHECK(a.natives[0].source.serial==17);
-  CHECK(a.facts.size()==2);CHECK(b.facts.size()==2);
-  // Same exact submitted source deduplicates, but a later operation and serial
-  // on the same physical worker requires a new independent quote/fact.
-  device._qualification_issue_tickets(UINT32_MAX,worker->last_submission,OK);
-  CHECK(a.facts.size()==2);
-  worker->operations_processed=9;worker->operations_counter=10;worker->recording=true;worker->submitted=false;driver.serial=18;
-  device.frames[0].qualification_epoch=82;device.frames[0].qualification_hidden_reports.clear();
-  buffer.transfer_worker_index=0;buffer.transfer_worker_operation=10;
-  CHECK(device._check_transfer_worker_buffer(&buffer)==OK);CHECK(worker->qualification_batch_sealed);
-  parent(a,82);parent(b,82);
-  CHECK(device._submit_transfer_workers({},true)==OK);
-  CHECK(driver.calls==2);CHECK_FALSE(worker->qualification_batch_sealed);
-  REQUIRE(a.natives.size()==2);CHECK(a.natives[1].source.serial==18);
-  CHECK(a.facts.size()==4);CHECK(a.credits.committed==4);CHECK(a.credits.workers==0);
- }
- static void deferred_free_busy_root() {
-  RenderingDevice device;Driver driver;device.driver=&driver;DeviceCleanup cleanup{device};
-  device.frames.resize(1);
-  RenderingDevice::Buffer buffer;buffer.draw_tracker=RDG::resource_tracker_create();buffer.qualification_users=1;
-  const RID rid=device.uniform_buffer_owner.make_rid(buffer);
-  device._qualification_defer_free(rid);device._qualification_defer_free(rid);
-  REQUIRE(device.qualification_deferred_frees.size()==1);
-  ERR_PRINT_OFF;
-  device._qualification_retry_deferred_frees();
-  device._qualification_retry_deferred_frees();
-  ERR_PRINT_ON;
-  CHECK(device.uniform_buffer_owner.owns(rid));
-  REQUIRE(device.qualification_deferred_frees.size()==1);
-  CHECK(device.qualification_deferred_frees[0]==rid);
-  CHECK(device.frames[0].buffers_to_dispose_of.is_empty());
-  device.uniform_buffer_owner.get_or_null(rid)->qualification_users=0;
-  device._qualification_retry_deferred_frees();
-  CHECK_FALSE(device.uniform_buffer_owner.owns(rid));
-  CHECK(device.qualification_deferred_frees.is_empty());
-  CHECK(device.frames[0].buffers_to_dispose_of.size()==1); // queued, not a physical-return claim
- }
- static void copy_source_segment_retry() {
-  using namespace GDExtensionDeviceExit;
-  struct CopyDriver:Driver {
-   uint32_t segment_calls=0;
-   Error end_segment_checked(bool)override {
-    ++segment_calls;
-    if(segment_calls>1)return OK;
-    const uint64_t serial=17;
-    const Error error=admit_native_source(serial,true);
-    if(error!=OK)return error;
-    ++calls;QueueCallReport report;NativeCallFact source;
-    source.serial=serial;source.completion_serial=serial;source.queue_index=2;
-    source.issue=IssueFact::IssuedUnknown;source.completion=CompletionCapability::CommandBuffer;
-    source.frame_observer_owned=true;report.calls.push_back(source);report.issued=true;report.native_issue_count=1;
-    CHECK(capture_hidden_native_source(report));
-    return ERR_BUSY;
-   }
-  } driver;
-  RenderingDevice device;device.driver=&driver;DeviceCleanup cleanup{device};
-  device.frames.resize(1);auto &frame=device.frames[0];frame.qualification_epoch=81;
-  frame.qualification_graph_closed=true;
-  QualificationTicket ticket;
-  REQUIRE(ticket.credits.initialize(8,1,1,1,1)==OK);
-  REQUIRE(ticket.credits.commit_graph()==OK);
-  GDExtensionQualificationFactV1 graph{};graph.command_slot=0;ticket.facts.push_back(graph);
-  ticket.graphs.push_back({{},0,0,0,81,true,false});frame.qualification_tickets.push_back(&ticket);
-  CHECK(device._end_frame(true)==ERR_BUSY);
-  CHECK(driver.calls==1);CHECK(driver.segment_calls==1);
-  CHECK(frame.qualification_graph_closed);CHECK_FALSE(frame.qualification_segment_closed);
-  REQUIRE(frame.qualification_hidden_reports.size()==1);
-  REQUIRE(ticket.natives.size()==1);CHECK(ticket.natives[0].source.serial==17);
-  CHECK(ticket.credits.pending==0);CHECK(ticket.credits.committed==2);CHECK_FALSE(ticket.append_failed);
-  CHECK(device._end_frame(true)==OK);
-  CHECK(frame.qualification_segment_closed);CHECK(driver.segment_calls==2);CHECK(driver.calls==1);
-  CHECK(device._end_frame(true)==OK);CHECK(driver.segment_calls==2);
-  CHECK(ticket.natives.size()==1);CHECK(ticket.facts.size()==2);
-  frame.qualification_tickets.clear();frame.qualification_hidden_reports.clear();
- }
- static void enrollment_pool_refusal_restores_registry() {
-  using namespace GDExtensionDeviceExit;
-  RenderingDevice device;Driver driver;device.driver=&driver;DeviceCleanup cleanup{device};
-  device.frames.resize(1);device.frames[0].qualification_epoch=81;
-  QualificationTicket ticket;REQUIRE(ticket.credits.initialize(8,1,1,1,1)==OK);
+		CHECK(a.credits.pending == 0);
+		CHECK(b.credits.pending == 0);
+		// Adopting an existing hidden prefix is also before membership publication.
+		device.frames[0].qualification_tickets.clear();
+		RDD::QueueCallReport hidden;
+		hidden.calls.push_back(member().source);
+		hidden.issued = true;
+		device.frames[0].qualification_hidden_reports.push_back(hidden);
+		QualificationTicket c;
+		REQUIRE(c.credits.initialize(8, 1, 6, 1) == OK);
+		CHECK(device._qualification_admit_frame_ticket(&c) == ERR_PARAMETER_RANGE_ERROR);
+		CHECK(c.frame_refs == 0);
+		CHECK(device.frames[0].qualification_tickets.is_empty());
+		CHECK(c.admitted_native_serials.is_empty());
+		QualificationTicket d;
+		REQUIRE(d.credits.initialize(9, 1, 6, 1) == OK);
+		CHECK(device._qualification_admit_frame_ticket(&d) == OK);
+		CHECK(d.frame_refs == 1);
+		CHECK(d.credits.pending == 1);
+		CHECK(d.admitted_native_serials.size() == 1);
+		REQUIRE(d.credits.commit_graph() == OK);
+		GDExtensionQualificationFactV1 graph{};
+		graph.command_slot = 0;
+		d.facts.push_back(graph);
+		d.graphs.push_back({ {}, 0, 0, 0, 81, true, false });
+		device._qualification_add_frame_ticket(&d);
+		REQUIRE(d.natives.size() == 1);
+		CHECK(d.natives[0].source.serial == 17);
+		CHECK(d.credits.pending == 0);
+		CHECK(d.credits.committed == 2);
+		device._qualification_add_frame_ticket(&d);
+		CHECK(d.facts.size() == 2);
+		CHECK(d.natives.size() == 1);
+		device.frames[0].qualification_hidden_reports.clear();
+	}
+	static void incremental_worker_batch() {
+		using namespace GDExtensionDeviceExit;
+		struct ExactDriver : Driver {
+			uint64_t serial = 17;
+			Error qualification_worker_source_quote(CommandBufferID, QueueCallReport &prefix, uint32_t &future) const override {
+				prefix = {};
+				future = 2;
+				return OK;
+			}
+			Error command_queue_execute_and_present(CommandQueueID, VectorView<SemaphoreID>, VectorView<CommandBufferID>, VectorView<SemaphoreID>, FenceID, VectorView<SwapChainID>) override {
+				const Error admission = admit_native_source(serial);
+				if (admission != OK) {
+					QueueCallReport report;
+					report.error = admission;
+					record_queue_call_report(report);
+					return admission;
+				}
+				uint32_t fact_index = UINT32_MAX;
+				if (!claim_native_fact(fact_index)) {
+					return ERR_PARAMETER_RANGE_ERROR;
+				}
+				++calls;
+				NativeCallFact source;
+				source.serial = serial;
+				source.completion_serial = serial;
+				source.queue_index = 1;
+				source.issue = IssueFact::IssuedUnknown;
+				source.completion = CompletionCapability::CommandBuffer;
+				finish_native_fact(fact_index, source, serial);
+				return OK;
+			}
+			Error native_call_retain(uint64_t source) override {
+				CHECK(source == serial);
+				++retains;
+				return OK;
+			}
+		} driver;
+		RenderingDevice device;
+		device.driver = &driver;
+		DeviceCleanup cleanup{ device };
+		device.frames.resize(1);
+		device.frames[0].qualification_epoch = 81;
+		device.frames[0].transfer_worker_semaphores.push_back(RDD::SemaphoreID(62));
+		QualificationTicket a, b;
+		struct WorkerFixtureCleanup {
+			RenderingDevice &device;
+			RenderingDevice::TransferWorker *worker = nullptr;
+			~WorkerFixtureCleanup() {
+				for (auto &frame : device.frames) {
+					frame.qualification_tickets.clear();
+					frame.qualification_hidden_reports.clear();
+				}
+				device.transfer_worker_pool.clear();
+				device.transfer_worker_pool_available_list.clear();
+				device.transfer_worker_operation_used_by_draw.clear();
+				device.transfer_worker_pool_size = device.transfer_worker_pool_max_size = 0;
+				if (worker) {
+					memdelete(worker);
+				}
+			}
+		} worker_cleanup{ device };
+		REQUIRE(a.credits.initialize(32, 4, 20, 1) == OK);
+		REQUIRE(b.credits.initialize(32, 4, 20, 1) == OK);
+		device.frames[0].qualification_tickets.push_back(&a);
+		device.frames[0].qualification_tickets.push_back(&b);
+		auto *worker = memnew(RenderingDevice::TransferWorker);
+		worker_cleanup.worker = worker;
+		worker->index = 0;
+		worker->operations_counter = 9;
+		worker->recording = true;
+		worker->command_buffer = RDD::CommandBufferID(61);
+		worker->command_fence = RDD::FenceID(91);
+		device.transfer_worker_pool.push_back(worker);
+		device.transfer_worker_pool_size = device.transfer_worker_pool_max_size = 1;
+		device.transfer_worker_operation_used_by_draw.resize(1);
+		device.transfer_worker_operation_used_by_draw[0] = 0;
+		device.transfer_worker_pool_available_list.push_back(0);
+		RenderingDevice::Buffer buffer;
+		buffer.transfer_worker_index = 0;
+		buffer.transfer_worker_operation = 9;
+		REQUIRE(b.credits.reserve_workers(7) == OK);
+		CHECK(device._check_transfer_worker_buffer(&buffer) == ERR_PARAMETER_RANGE_ERROR);
+		CHECK(buffer.transfer_worker_index == 0);
+		CHECK(device.transfer_worker_operation_used_by_draw[0] == 0);
+		CHECK_FALSE(worker->qualification_batch_sealed);
+		CHECK(driver.calls == 0);
+		CHECK(a.credits.workers == 0);
+		CHECK(a.worker_credits.is_empty());
+		REQUIRE(b.credits.release_worker_quote(7) == OK);
+		CHECK(device._check_transfer_worker_buffer(&buffer) == OK);
+		CHECK(buffer.transfer_worker_index == -1);
+		CHECK(device.transfer_worker_operation_used_by_draw[0] == 9);
+		CHECK(worker->qualification_batch_sealed);
+		CHECK(a.credits.workers == 2);
+		CHECK(b.credits.workers == 2);
+		uint32_t offset = 0;
+		CHECK(device._acquire_transfer_worker(1, 1, offset) == nullptr); // no wait on this frame's own sealed batch
+		CHECK(driver.calls == 0);
+		auto parent = [&](QualificationTicket &ticket, uint64_t epoch) {REQUIRE(ticket.credits.commit_graph()==OK);GDExtensionQualificationFactV1 fact{};fact.command_slot=0;ticket.graphs.push_back({{},ticket.facts.size(),0,0,epoch,true,false});ticket.facts.push_back(fact); };
+		parent(a, 81);
+		parent(b, 81);
+		CHECK(device._submit_transfer_workers({}, true) == OK);
+		CHECK(driver.calls == 1);
+		CHECK_FALSE(worker->qualification_batch_sealed);
+		CHECK(a.credits.workers == 0);
+		CHECK(b.credits.workers == 0);
+		REQUIRE(a.natives.size() == 1);
+		CHECK(a.natives[0].source.serial == 17);
+		CHECK(a.facts.size() == 2);
+		CHECK(b.facts.size() == 2);
+		// Same exact submitted source deduplicates, but a later operation and serial
+		// on the same physical worker requires a new independent quote/fact.
+		device._qualification_issue_tickets(UINT32_MAX, worker->last_submission, OK);
+		CHECK(a.facts.size() == 2);
+		worker->operations_processed = 9;
+		worker->operations_counter = 10;
+		worker->recording = true;
+		worker->submitted = false;
+		driver.serial = 18;
+		device.frames[0].qualification_epoch = 82;
+		device.frames[0].qualification_hidden_reports.clear();
+		buffer.transfer_worker_index = 0;
+		buffer.transfer_worker_operation = 10;
+		CHECK(device._check_transfer_worker_buffer(&buffer) == OK);
+		CHECK(worker->qualification_batch_sealed);
+		parent(a, 82);
+		parent(b, 82);
+		CHECK(device._submit_transfer_workers({}, true) == OK);
+		CHECK(driver.calls == 2);
+		CHECK_FALSE(worker->qualification_batch_sealed);
+		REQUIRE(a.natives.size() == 2);
+		CHECK(a.natives[1].source.serial == 18);
+		CHECK(a.facts.size() == 4);
+		CHECK(a.credits.committed == 4);
+		CHECK(a.credits.workers == 0);
+	}
+	static void deferred_free_busy_root() {
+		RenderingDevice device;
+		Driver driver;
+		device.driver = &driver;
+		DeviceCleanup cleanup{ device };
+		device.frames.resize(1);
+		RenderingDevice::Buffer buffer;
+		buffer.draw_tracker = RDG::resource_tracker_create();
+		buffer.qualification_users = 1;
+		const RID rid = device.uniform_buffer_owner.make_rid(buffer);
+		device._qualification_defer_free(rid);
+		device._qualification_defer_free(rid);
+		REQUIRE(device.qualification_deferred_frees.size() == 1);
+		ERR_PRINT_OFF;
+		device._qualification_retry_deferred_frees();
+		device._qualification_retry_deferred_frees();
+		ERR_PRINT_ON;
+		CHECK(device.uniform_buffer_owner.owns(rid));
+		REQUIRE(device.qualification_deferred_frees.size() == 1);
+		CHECK(device.qualification_deferred_frees[0] == rid);
+		CHECK(device.frames[0].buffers_to_dispose_of.is_empty());
+		device.uniform_buffer_owner.get_or_null(rid)->qualification_users = 0;
+		device._qualification_retry_deferred_frees();
+		CHECK_FALSE(device.uniform_buffer_owner.owns(rid));
+		CHECK(device.qualification_deferred_frees.is_empty());
+		CHECK(device.frames[0].buffers_to_dispose_of.size() == 1); // queued, not a physical-return claim
+	}
+	static void copy_source_segment_retry() {
+		using namespace GDExtensionDeviceExit;
+		struct CopyDriver : Driver {
+			uint32_t segment_calls = 0;
+			Error end_segment_checked(bool) override {
+				++segment_calls;
+				if (segment_calls > 1) {
+					return OK;
+				}
+				const uint64_t serial = 17;
+				const Error error = admit_native_source(serial, true);
+				if (error != OK) {
+					return error;
+				}
+				++calls;
+				QueueCallReport report;
+				NativeCallFact source;
+				source.serial = serial;
+				source.completion_serial = serial;
+				source.queue_index = 2;
+				source.issue = IssueFact::IssuedUnknown;
+				source.completion = CompletionCapability::CommandBuffer;
+				source.frame_observer_owned = true;
+				report.calls.push_back(source);
+				report.issued = true;
+				report.native_issue_count = 1;
+				CHECK(capture_hidden_native_source(report));
+				return ERR_BUSY;
+			}
+		} driver;
+		RenderingDevice device;
+		device.driver = &driver;
+		DeviceCleanup cleanup{ device };
+		device.frames.resize(1);
+		auto &frame = device.frames[0];
+		frame.qualification_epoch = 81;
+		frame.qualification_graph_closed = true;
+		QualificationTicket ticket;
+		REQUIRE(ticket.credits.initialize(8, 1, 1, 1, 1) == OK);
+		REQUIRE(ticket.credits.commit_graph() == OK);
+		GDExtensionQualificationFactV1 graph{};
+		graph.command_slot = 0;
+		ticket.facts.push_back(graph);
+		ticket.graphs.push_back({ {}, 0, 0, 0, 81, true, false });
+		frame.qualification_tickets.push_back(&ticket);
+		CHECK(device._end_frame(true) == ERR_BUSY);
+		CHECK(driver.calls == 1);
+		CHECK(driver.segment_calls == 1);
+		CHECK(frame.qualification_graph_closed);
+		CHECK_FALSE(frame.qualification_segment_closed);
+		REQUIRE(frame.qualification_hidden_reports.size() == 1);
+		REQUIRE(ticket.natives.size() == 1);
+		CHECK(ticket.natives[0].source.serial == 17);
+		CHECK(ticket.credits.pending == 0);
+		CHECK(ticket.credits.committed == 2);
+		CHECK_FALSE(ticket.append_failed);
+		CHECK(device._end_frame(true) == OK);
+		CHECK(frame.qualification_segment_closed);
+		CHECK(driver.segment_calls == 2);
+		CHECK(driver.calls == 1);
+		CHECK(device._end_frame(true) == OK);
+		CHECK(driver.segment_calls == 2);
+		CHECK(ticket.natives.size() == 1);
+		CHECK(ticket.facts.size() == 2);
+		frame.qualification_tickets.clear();
+		frame.qualification_hidden_reports.clear();
+	}
+	static void enrollment_pool_refusal_restores_registry() {
+		using namespace GDExtensionDeviceExit;
+		RenderingDevice device;
+		Driver driver;
+		device.driver = &driver;
+		DeviceCleanup cleanup{ device };
+		device.frames.resize(1);
+		device.frames[0].qualification_epoch = 81;
+		QualificationTicket ticket;
+		REQUIRE(ticket.credits.initialize(8, 1, 1, 1, 1) == OK);
 #ifdef THREADS_ENABLED
-  struct PoolHolder { BinaryMutex *pool;Semaphore entered,release; } state{&device.transfer_worker_pool_mutex};
-  Thread holder;holder.start([](void *p){auto &state=*static_cast<PoolHolder*>(p);state.pool->lock();state.entered.post();state.release.wait();state.pool->unlock();},&state);
-  state.entered.wait();
-  auto &registry=Registry::get_singleton();
-  {
-   Registry::Lock lock(registry);
-   {
-    RenderingDevice::QualificationSourceAdmissionScope scope(device);
-    CHECK_FALSE(RDD::native_source_can_block());
-    lock.temp_unlock();CHECK(RDD::native_source_can_block());lock.temp_relock();
-    CHECK_FALSE(RDD::native_source_can_block());
-   }
-   CHECK(device._qualification_admit_frame_ticket(&ticket)==ERR_BUSY);
-   CHECK(Registry::Lock::owns(registry));
-   CHECK_FALSE(ticket.recording);CHECK(ticket.frame_refs==0);
-   CHECK(ticket.credits.workers==0);CHECK(ticket.admitted_native_serials.is_empty());
-   CHECK(device.frames[0].qualification_tickets.is_empty());
-  }
-  state.release.post();holder.wait_to_finish();
+		struct PoolHolder {
+			BinaryMutex *pool;
+			Semaphore entered{}, release{};
+		} state{ &device.transfer_worker_pool_mutex };
+		Thread holder;
+		holder.start([](void *p) {auto &probe=*static_cast<PoolHolder*>(p);probe.pool->lock();probe.entered.post();probe.release.wait();probe.pool->unlock(); }, &state);
+		state.entered.wait();
+		auto &registry = Registry::get_singleton();
+		{
+			Registry::Lock lock(registry);
+			{
+				RenderingDevice::QualificationSourceAdmissionScope scope(device);
+				CHECK_FALSE(RDD::native_source_can_block());
+				lock.temp_unlock();
+				CHECK(RDD::native_source_can_block());
+				lock.temp_relock();
+				CHECK_FALSE(RDD::native_source_can_block());
+			}
+			CHECK(device._qualification_admit_frame_ticket(&ticket) == ERR_BUSY);
+			CHECK(Registry::Lock::owns(registry));
+			CHECK_FALSE(ticket.recording);
+			CHECK(ticket.frame_refs == 0);
+			CHECK(ticket.credits.workers == 0);
+			CHECK(ticket.admitted_native_serials.is_empty());
+			CHECK(device.frames[0].qualification_tickets.is_empty());
+		}
+		state.release.post();
+		holder.wait_to_finish();
 #endif
-  CHECK(device._qualification_admit_frame_ticket(&ticket)==OK);
-  CHECK_FALSE(ticket.recording);CHECK(ticket.frame_refs==1);
-  device.frames[0].qualification_tickets.clear();
- }
+		CHECK(device._qualification_admit_frame_ticket(&ticket) == OK);
+		CHECK_FALSE(ticket.recording);
+		CHECK(ticket.frame_refs == 1);
+		device.frames[0].qualification_tickets.clear();
+	}
 
- static void hidden_root_failure_retirement() {
-  using namespace GDExtensionDeviceExit;
-  RenderingDevice device;Driver driver;device.driver=&driver;DeviceCleanup cleanup{device};
-  device.frames.resize(1);auto &frame=device.frames[0];frame.qualification_epoch=81;
-  RenderingDevice::Buffer buffer;buffer.draw_tracker=RDG::resource_tracker_create();
-  const RID rid=device.uniform_buffer_owner.make_rid(buffer);
-  QualificationTicket ticket;REQUIRE(ticket.credits.initialize(8,1,1,1,1)==OK);
-  ticket.frame_refs=1;frame.qualification_tickets.push_back(&ticket);
-  {
-   Registry::Lock lock(Registry::get_singleton());
-   LocalVector<RID> resources;resources.push_back(rid);
-   REQUIRE(device._qualification_pin_resources(&ticket,resources)==OK);
-  }
-  RDD::QueueCallReport report;auto source=member().source;
-  source.queue_index=2;source.completion_serial=17;source.issue=RDD::IssueFact::IssuedUnknown;source.completion=RDD::CompletionCapability::CommandBuffer;source.frame_observer_owned=true;
-  report.calls.push_back(source);report.issued=true;report.native_issue_count=1;
-  {
-   RenderingDevice::QualificationSourceAdmissionScope scope(device);
-   REQUIRE(RDD::admit_native_source(17,true)==OK);
-   REQUIRE(RDD::capture_hidden_native_source(report));
-  }
-  REQUIRE(ticket.facts.size()==1);REQUIRE(ticket.natives.size()==1);
-  CHECK(ticket.facts[0].parent_fact==UINT32_MAX);CHECK(ticket.graphs.is_empty());
-  CHECK(ticket.facts[0].native_serial==17);CHECK(ticket.credits.committed==1);
-  CHECK(ticket.report.state!=8);CHECK_FALSE(ticket.physically_retired.load());
-  driver.observed.completed=true;driver.observed.completed_serial=17;driver.observed.resolved_issue=RDD::IssueFact::KnownAccepted;
-  REQUIRE(device._qualification_poll_tickets(0)==OK);
-  CHECK(ticket.facts[0].completion==2);CHECK(ticket.report.state!=8);
-  CHECK_FALSE(ticket.physically_retired.load());
-  // The original Frame observer returns through its actual hidden-report path.
-  REQUIRE(device._stall_for_frame(0,true)==OK);
-  CHECK(frame.qualification_hidden_reports.is_empty());CHECK(driver.releases==1);
-  ticket.append_failed=true;ticket.report.native_error=ERR_CANT_CREATE;
-  // Controlled original frame-return callback, with no invented graph/main fact.
-  device._qualification_return_frame_tickets(0);
-  CHECK(ticket.physically_retired.load());CHECK(ticket.report.state!=8);
-  CHECK(ticket.facts.size()==1);CHECK(ticket.facts[0].parent_fact==UINT32_MAX);
-  CHECK(ticket.resource_pins.is_empty());CHECK(device.uniform_buffer_owner.get_or_null(rid)->qualification_users==0);
-  REQUIRE(release_native_source(driver,ticket.natives[0])==OK);
-  CHECK(driver.releases==2);CHECK(ticket.natives[0].owner_released);
-  device.free_rid(rid);
-  CHECK_FALSE(device.uniform_buffer_owner.owns(rid));CHECK(frame.buffers_to_dispose_of.size()==1);
- }
- static void hidden_root_never_maps_missing_main() {
-  using namespace GDExtensionDeviceExit;
-  struct GraphDriver:Driver {
-   uint32_t copies=0;
-   void command_copy_buffer(CommandBufferID,BufferID from,BufferID to,VectorView<BufferCopyRegion> regions)override {
-    CHECK(from==BufferID(5));CHECK(to==BufferID(6));REQUIRE(regions.size()==1);CHECK(regions[0].size==4);++copies;
-   }
-  } driver;
-  RenderingDevice device;device.driver=&driver;DeviceCleanup cleanup{device};
-  device.draw_graph.initialize(&driver,[](RenderingDeviceDriver *,VectorView<RenderingDeviceDriver::AttachmentLoadOp>,VectorView<RenderingDeviceDriver::AttachmentStoreOp>,void *){return RenderingDeviceDriver::RenderPassID();},1,RDD::CommandQueueFamilyID(1),0);
-  device.draw_graph.begin();
-  device.frames.resize(1);auto &frame=device.frames[0];frame.qualification_epoch=81;
-  QualificationTicket ticket;REQUIRE(ticket.credits.initialize(8,1,1,1,1)==OK);
-  ticket.frame_refs=1;frame.qualification_tickets.push_back(&ticket);
-  RDD::QueueCallReport report;auto source=member().source;source.queue_index=2;source.completion_serial=17;source.issue=RDD::IssueFact::IssuedUnknown;source.completion=RDD::CompletionCapability::CommandBuffer;
-  report.calls.push_back(source);report.issued=true;
-  {
-   RenderingDevice::QualificationSourceAdmissionScope scope(device);
-   REQUIRE(RDD::admit_native_source(17,true)==OK);REQUIRE(RDD::capture_hidden_native_source(report));
-  }
-  auto *from=RDG::resource_tracker_create();auto *to=RDG::resource_tracker_create();
-  from->buffer_driver_id=RDD::BufferID(5);to->buffer_driver_id=RDD::BufferID(6);
-  const auto handle=device.draw_graph.add_buffer_copy(RDD::BufferID(5),from,RDD::BufferID(6),to,{0,0,4});
-  REQUIRE(handle.is_valid());
-  {
-   auto &registry=Registry::get_singleton();Registry::Lock lock(registry);
-   // Actual production add_graph initializes the unsealed command slot to UINT32_MAX.
-   registry.qualification_add_upload_graph(&ticket,&device,handle.graph_instance,handle.graph_frame,handle.kind,handle.index,handle.offset,5,0,4);
-  }
-  REQUIRE(ticket.graphs.size()==1);CHECK_FALSE(ticket.graphs[0].sealed);
-  CHECK(ticket.facts[1].command_slot==UINT32_MAX);CHECK(ticket.facts[1].native_serial==0);CHECK(ticket.facts[1].issue==0);
-  driver.observed.completed=true;driver.observed.completed_serial=17;driver.observed.resolved_issue=RDD::IssueFact::KnownAccepted;
-  REQUIRE(device._qualification_poll_tickets(0)==OK);
-  CHECK(ticket.facts[1].native_serial==0);CHECK(ticket.facts[1].issue==0);
-  RDD::CommandBufferID primary(60);device.draw_graph.end(true,false,primary,frame.command_buffer_pool);
-  device._qualification_seal_tickets();
-  CHECK(driver.copies==1);CHECK(ticket.graphs[0].sealed);CHECK(ticket.facts[1].command_slot==0);
-  CHECK(ticket.facts[1].native_serial==0);CHECK(ticket.facts[1].issue==0);
-  CHECK(ticket.facts[0].parent_fact==UINT32_MAX); // Never attach a later arbitrary graph.
-  // Make every independent success prerequisite true. The missing original
-  // main mapping alone must still prevent READY after the hidden source returns.
-  ticket.recorded=true;ticket.ordering_closed=true;ticket.frame_refs=0;
-  ticket.graphs[0].returned=true;ticket.origin.observed_backing_serial=5;ticket.origin.readback_size=4;
-  ticket.original_readback_serial=23;ticket.result.instantiate();REQUIRE(ticket.result->bytes.resize(4)==OK);
-  ticket.result->request_serial=23;ticket.result->source_backing_serial=5;ticket.result->source_size=4;
-  ticket.result->issued_size=4;ticket.result->completed_size=4;ticket.result->delivered=true;
-  CHECK(ticket.readback_complete(0));
-  driver.observed.completed=true;driver.observed.completed_serial=17;driver.observed.resolved_issue=RDD::IssueFact::KnownAccepted;
-  REQUIRE(device._qualification_poll_tickets(0)==OK);
-  CHECK(ticket.facts[0].completion==2);CHECK(ticket.facts[1].issue==0);
-  CHECK(ticket.facts[1].native_serial==0);CHECK(ticket.report.state!=8);
-  CHECK_FALSE(ticket.physically_retired.load());
-  REQUIRE(release_native_source(driver,ticket.natives[0])==OK);
-  frame.qualification_tickets.clear();frame.qualification_hidden_reports.clear();
-  RDG::resource_tracker_free(from);RDG::resource_tracker_free(to);
- }
+	static void hidden_root_failure_retirement() {
+		using namespace GDExtensionDeviceExit;
+		RenderingDevice device;
+		Driver driver;
+		device.driver = &driver;
+		DeviceCleanup cleanup{ device };
+		device.frames.resize(1);
+		auto &frame = device.frames[0];
+		frame.qualification_epoch = 81;
+		RenderingDevice::Buffer buffer;
+		buffer.draw_tracker = RDG::resource_tracker_create();
+		const RID rid = device.uniform_buffer_owner.make_rid(buffer);
+		QualificationTicket ticket;
+		REQUIRE(ticket.credits.initialize(8, 1, 1, 1, 1) == OK);
+		ticket.frame_refs = 1;
+		frame.qualification_tickets.push_back(&ticket);
+		{
+			Registry::Lock lock(Registry::get_singleton());
+			LocalVector<RID> resources;
+			resources.push_back(rid);
+			REQUIRE(device._qualification_pin_resources(&ticket, resources) == OK);
+		}
+		RDD::QueueCallReport report;
+		auto source = member().source;
+		source.queue_index = 2;
+		source.completion_serial = 17;
+		source.issue = RDD::IssueFact::IssuedUnknown;
+		source.completion = RDD::CompletionCapability::CommandBuffer;
+		source.frame_observer_owned = true;
+		report.calls.push_back(source);
+		report.issued = true;
+		report.native_issue_count = 1;
+		{
+			RenderingDevice::QualificationSourceAdmissionScope scope(device);
+			REQUIRE(RDD::admit_native_source(17, true) == OK);
+			REQUIRE(RDD::capture_hidden_native_source(report));
+		}
+		REQUIRE(ticket.facts.size() == 1);
+		REQUIRE(ticket.natives.size() == 1);
+		CHECK(ticket.facts[0].parent_fact == UINT32_MAX);
+		CHECK(ticket.graphs.is_empty());
+		CHECK(ticket.facts[0].native_serial == 17);
+		CHECK(ticket.credits.committed == 1);
+		CHECK(ticket.report.state != 8);
+		CHECK_FALSE(ticket.physically_retired.load());
+		driver.observed.completed = true;
+		driver.observed.completed_serial = 17;
+		driver.observed.resolved_issue = RDD::IssueFact::KnownAccepted;
+		REQUIRE(device._qualification_poll_tickets(0) == OK);
+		CHECK(ticket.facts[0].completion == 2);
+		CHECK(ticket.report.state != 8);
+		CHECK_FALSE(ticket.physically_retired.load());
+		// The original Frame observer returns through its actual hidden-report path.
+		REQUIRE(device._stall_for_frame(0, true) == OK);
+		CHECK(frame.qualification_hidden_reports.is_empty());
+		CHECK(driver.releases == 1);
+		ticket.append_failed = true;
+		ticket.report.native_error = ERR_CANT_CREATE;
+		// Controlled original frame-return callback, with no invented graph/main fact.
+		device._qualification_return_frame_tickets(0);
+		CHECK(ticket.physically_retired.load());
+		CHECK(ticket.report.state != 8);
+		CHECK(ticket.facts.size() == 1);
+		CHECK(ticket.facts[0].parent_fact == UINT32_MAX);
+		CHECK(ticket.resource_pins.is_empty());
+		CHECK(device.uniform_buffer_owner.get_or_null(rid)->qualification_users == 0);
+		REQUIRE(release_native_source(driver, ticket.natives[0]) == OK);
+		CHECK(driver.releases == 2);
+		CHECK(ticket.natives[0].owner_released);
+		device.free_rid(rid);
+		CHECK_FALSE(device.uniform_buffer_owner.owns(rid));
+		CHECK(frame.buffers_to_dispose_of.size() == 1);
+	}
+	static void hidden_root_never_maps_missing_main() {
+		using namespace GDExtensionDeviceExit;
+		struct GraphDriver : Driver {
+			uint32_t copies = 0;
+			void command_copy_buffer(CommandBufferID, BufferID from, BufferID to, VectorView<BufferCopyRegion> regions) override {
+				CHECK(from == BufferID(5));
+				CHECK(to == BufferID(6));
+				REQUIRE(regions.size() == 1);
+				CHECK(regions[0].size == 4);
+				++copies;
+			}
+		} driver;
+		RenderingDevice device;
+		device.driver = &driver;
+		DeviceCleanup cleanup{ device };
+		device.draw_graph.initialize(&driver, [](RenderingDeviceDriver *, VectorView<RenderingDeviceDriver::AttachmentLoadOp>, VectorView<RenderingDeviceDriver::AttachmentStoreOp>, void *) { return RenderingDeviceDriver::RenderPassID(); }, 1, RDD::CommandQueueFamilyID(1), 0);
+		device.draw_graph.begin();
+		device.frames.resize(1);
+		auto &frame = device.frames[0];
+		frame.qualification_epoch = 81;
+		QualificationTicket ticket;
+		REQUIRE(ticket.credits.initialize(8, 1, 1, 1, 1) == OK);
+		ticket.frame_refs = 1;
+		frame.qualification_tickets.push_back(&ticket);
+		RDD::QueueCallReport report;
+		auto source = member().source;
+		source.queue_index = 2;
+		source.completion_serial = 17;
+		source.issue = RDD::IssueFact::IssuedUnknown;
+		source.completion = RDD::CompletionCapability::CommandBuffer;
+		report.calls.push_back(source);
+		report.issued = true;
+		{
+			RenderingDevice::QualificationSourceAdmissionScope scope(device);
+			REQUIRE(RDD::admit_native_source(17, true) == OK);
+			REQUIRE(RDD::capture_hidden_native_source(report));
+		}
+		auto *from = RDG::resource_tracker_create();
+		auto *to = RDG::resource_tracker_create();
+		from->buffer_driver_id = RDD::BufferID(5);
+		to->buffer_driver_id = RDD::BufferID(6);
+		const auto handle = device.draw_graph.add_buffer_copy(RDD::BufferID(5), from, RDD::BufferID(6), to, { 0, 0, 4 });
+		REQUIRE(handle.is_valid());
+		{
+			auto &registry = Registry::get_singleton();
+			Registry::Lock lock(registry);
+			// Actual production add_graph initializes the unsealed command slot to UINT32_MAX.
+			registry.qualification_add_upload_graph(&ticket, &device, handle.graph_instance, handle.graph_frame, handle.kind, handle.index, handle.offset, 5, 0, 4);
+		}
+		REQUIRE(ticket.graphs.size() == 1);
+		CHECK_FALSE(ticket.graphs[0].sealed);
+		CHECK(ticket.facts[1].command_slot == UINT32_MAX);
+		CHECK(ticket.facts[1].native_serial == 0);
+		CHECK(ticket.facts[1].issue == 0);
+		driver.observed.completed = true;
+		driver.observed.completed_serial = 17;
+		driver.observed.resolved_issue = RDD::IssueFact::KnownAccepted;
+		REQUIRE(device._qualification_poll_tickets(0) == OK);
+		CHECK(ticket.facts[1].native_serial == 0);
+		CHECK(ticket.facts[1].issue == 0);
+		RDD::CommandBufferID primary(60);
+		device.draw_graph.end(true, false, primary, frame.command_buffer_pool);
+		device._qualification_seal_tickets();
+		CHECK(driver.copies == 1);
+		CHECK(ticket.graphs[0].sealed);
+		CHECK(ticket.facts[1].command_slot == 0);
+		CHECK(ticket.facts[1].native_serial == 0);
+		CHECK(ticket.facts[1].issue == 0);
+		CHECK(ticket.facts[0].parent_fact == UINT32_MAX); // Never attach a later arbitrary graph.
+		// Make every independent success prerequisite true. The missing original
+		// main mapping alone must still prevent READY after the hidden source returns.
+		ticket.recorded = true;
+		ticket.ordering_closed = true;
+		ticket.frame_refs = 0;
+		ticket.graphs[0].returned = true;
+		ticket.origin.observed_backing_serial = 5;
+		ticket.origin.readback_size = 4;
+		ticket.original_readback_serial = 23;
+		ticket.result.instantiate();
+		REQUIRE(ticket.result->bytes.resize(4) == OK);
+		ticket.result->request_serial = 23;
+		ticket.result->source_backing_serial = 5;
+		ticket.result->source_size = 4;
+		ticket.result->issued_size = 4;
+		ticket.result->completed_size = 4;
+		ticket.result->delivered = true;
+		CHECK(ticket.readback_complete(0));
+		driver.observed.completed = true;
+		driver.observed.completed_serial = 17;
+		driver.observed.resolved_issue = RDD::IssueFact::KnownAccepted;
+		REQUIRE(device._qualification_poll_tickets(0) == OK);
+		CHECK(ticket.facts[0].completion == 2);
+		CHECK(ticket.facts[1].issue == 0);
+		CHECK(ticket.facts[1].native_serial == 0);
+		CHECK(ticket.report.state != 8);
+		CHECK_FALSE(ticket.physically_retired.load());
+		REQUIRE(release_native_source(driver, ticket.natives[0]) == OK);
+		frame.qualification_tickets.clear();
+		frame.qualification_hidden_reports.clear();
+		RDG::resource_tracker_free(from);
+		RDG::resource_tracker_free(to);
+	}
 
 	static void bounds() {
 		using namespace GDExtensionDeviceExit;
@@ -1236,15 +1486,33 @@ TEST_CASE("[RecordSource] ordinary push and backend descriptor preparation prese
 	TestRecordSourceAccess::normal_push_dispatch();
 }
 
-TEST_CASE("[RecordSource] incremental credits preserve the exact 4096 receipt frontier") { TestRecordSourceAccess::incremental_credits(); }
-TEST_CASE("[RecordSource] incremental shared frame admission is atomic before prefix adoption") { TestRecordSourceAccess::incremental_shared_frame(); }
-TEST_CASE("[RecordSource] original worker batches seal reserve settle and count fresh serials") { TestRecordSourceAccess::incremental_worker_batch(); }
+TEST_CASE("[RecordSource] incremental credits preserve the exact 4096 receipt frontier") {
+	TestRecordSourceAccess::incremental_credits();
+}
+TEST_CASE("[RecordSource] incremental shared frame admission is atomic before prefix adoption") {
+	TestRecordSourceAccess::incremental_shared_frame();
+}
+TEST_CASE("[RecordSource] original worker batches seal reserve settle and count fresh serials") {
+	TestRecordSourceAccess::incremental_worker_batch();
+}
 
-TEST_CASE("[RecordSource] deferred roots survive busy void-free retries until original owner removal") { TestRecordSourceAccess::deferred_free_busy_root(); }
-TEST_CASE("[RecordSource] copy source capture survives segment retry without replaying a closed graph") { TestRecordSourceAccess::copy_source_segment_retry(); }
-TEST_CASE("[RecordSource] enrollment pool refusal restores the original Registry lock and recording pin") { TestRecordSourceAccess::enrollment_pool_refusal_restores_registry(); }
+TEST_CASE("[RecordSource] deferred roots survive busy void-free retries until original owner removal") {
+	TestRecordSourceAccess::deferred_free_busy_root();
+}
+TEST_CASE("[RecordSource] copy source capture survives segment retry without replaying a closed graph") {
+	TestRecordSourceAccess::copy_source_segment_retry();
+}
+TEST_CASE("[RecordSource] enrollment pool refusal restores the original Registry lock and recording pin") {
+	TestRecordSourceAccess::enrollment_pool_refusal_restores_registry();
+}
 
-TEST_CASE("[RecordSource] hidden native root observes a failed prefix and returns its original resource owner") { TestRecordSourceAccess::hidden_root_failure_retirement(); }
-TEST_CASE("[RecordSource] successful hidden root never maps a graph missing its original main source") { TestRecordSourceAccess::hidden_root_never_maps_missing_main(); }
+TEST_CASE("[RecordSource] hidden native root observes a failed prefix and returns its original resource owner") {
+	TestRecordSourceAccess::hidden_root_failure_retirement();
+}
+TEST_CASE("[RecordSource] successful hidden root never maps a graph missing its original main source") {
+	TestRecordSourceAccess::hidden_root_never_maps_missing_main();
+}
 
-TEST_CASE("[RecordSource] independent copy admission preserves reserved main slots and cleanup") { TestRecordSourceAccess::copy_credits_preserve_main_cleanup(); }
+TEST_CASE("[RecordSource] independent copy admission preserves reserved main slots and cleanup") {
+	TestRecordSourceAccess::copy_credits_preserve_main_cleanup();
+}
