@@ -1,0 +1,38 @@
+{
+  "source_before": "d1dcc010516b005fdf8e2847855512666032ed8d2060097bca0613d3c9332ea5",
+  "source_red": "d760bb9fa73c6b5af81dfb351d657298004ea3976043dfef3b69b0a43fd9df1b",
+  "old": "\tif (p_range->return_error != OK) {\n\t\treturn p_range->return_error;\n\t}\n",
+  "new": "",
+  "build_command": [
+    "scons",
+    "-Q",
+    "tests=yes",
+    "platform=macos",
+    "target=editor",
+    "debug_symbols=no",
+    "module_particles_runtime_tests_enabled=yes",
+    "-j6"
+  ],
+  "build_exit": 0,
+  "seconds": 18.51,
+  "host_sha256": "37bc5fe75cd8c07ee2e61b261f4389f7793a6b31629e2fba9ef850ba2ee7c9f6",
+  "test_command": [
+    "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+    "--headless",
+    "--test",
+    "--test-case=[RenderingDevice][NativeHeightRange] failed observer return is sticky and not replayed",
+    "--reporters=xml",
+    "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k01-general-checked-prefix-20261107/controlled-red/sticky_release/CPU.xml"
+  ],
+  "test_exit": 1,
+  "assertions": {
+    "successes": "14",
+    "failures": "6"
+  },
+  "cases": {
+    "successes": "0",
+    "failures": "1",
+    "skipped": "2296"
+  },
+  "source_restored": "d1dcc010516b005fdf8e2847855512666032ed8d2060097bca0613d3c9332ea5"
+}

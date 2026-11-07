@@ -10535,6 +10535,14 @@ Error RenderingDevice::_native_height_range_observe(const Ref<NativeHeightRange>
 	}
 	const bool clean = p_range->append_error == OK && p_range->mapping_error == OK && p_range->issue_error == OK &&
 			p_range->retention_error == OK && p_range->completion_error == OK && !p_range->uncaptured_prefix;
+	const bool prefix_clean = p_range->recording_closed && p_range->has_recorded_effect && p_range->graph_count &&
+			sealed == p_range->graph_count && attempted == p_range->graph_count && p_range->source_count &&
+			retained == p_range->source_count && completed == p_range->source_count &&
+			p_range->mapping_error == OK && p_range->issue_error == OK && p_range->retention_error == OK &&
+			p_range->completion_error == OK && !p_range->uncaptured_prefix;
+	if (prefix_clean) {
+		p_range->prefix_settled = true;
+	}
 	if (clean && p_range->recording_closed && p_range->has_recorded_effect && p_range->graph_count && sealed == p_range->graph_count &&
 			attempted == p_range->graph_count && p_range->source_count && retained == p_range->source_count && completed == p_range->source_count) {
 		p_range->native_complete = true;
@@ -10544,6 +10552,7 @@ Error RenderingDevice::_native_height_range_observe(const Ref<NativeHeightRange>
 	r_snapshot.mapping_closed = sealed == p_range->graph_count;
 	r_snapshot.issue_closed = attempted == p_range->graph_count;
 	r_snapshot.native_complete = p_range->native_complete;
+	r_snapshot.prefix_settled = p_range->prefix_settled;
 	r_snapshot.observers_returned = p_range->observers_returned;
 	r_snapshot.graph_members = p_range->graph_count;
 	r_snapshot.sealed_members = sealed;
@@ -10564,7 +10573,7 @@ Error RenderingDevice::_native_height_range_observe(const Ref<NativeHeightRange>
 	if (result != OK) {
 		return result;
 	}
-	return p_range->has_recorded_effect && !p_range->native_complete ? ERR_BUSY : OK;
+	return p_range->has_recorded_effect && !p_range->native_complete && !p_range->prefix_settled ? ERR_BUSY : OK;
 }
 
 Error RenderingDevice::_native_height_range_return(const Ref<NativeHeightRange> &p_range, const NativeDisposalBudget &p_budget, NativeDisposalUsage &r_usage) {
@@ -10575,8 +10584,11 @@ Error RenderingDevice::_native_height_range_return(const Ref<NativeHeightRange> 
 	if (p_range->observers_returned) {
 		return OK;
 	}
+	if (p_range->return_error != OK) {
+		return p_range->return_error;
+	}
 	const bool known_no_effect = !p_range->has_recorded_effect && !p_range->uncaptured_prefix && !p_range->graph_count && !p_range->source_count && !p_range->edge_count;
-	if (!p_range->recording_closed || (!p_range->native_complete && !known_no_effect)) {
+	if (!p_range->recording_closed || (!p_range->native_complete && !p_range->prefix_settled && !known_no_effect)) {
 		return ERR_BUSY;
 	}
 	while (p_range->return_cursor < p_range->source_count) {
@@ -10631,7 +10643,13 @@ Error RenderingDevice::_native_height_ranges_prepare_finalization() {
 		}
 		NativeHeightRange::Snapshot snapshot;
 		const Error observed = _native_height_range_observe(range, budget, usage, snapshot);
-		if (observed != OK) {
+		// A checked capture can leave a sticky business error after its complete
+		// native prefix has settled. Preserve that error in the snapshot, but do
+		// not strand already-observed native sources or block finalization.
+		const bool sticky_business_error = snapshot.prefix_settled && snapshot.append_error != OK &&
+				snapshot.mapping_error == OK && snapshot.issue_error == OK && snapshot.retention_error == OK &&
+				snapshot.completion_error == OK && snapshot.return_error == OK;
+		if (observed != OK && !sticky_business_error) {
 			return observed;
 		}
 		const Error returned = _native_height_range_return(range, budget, usage);

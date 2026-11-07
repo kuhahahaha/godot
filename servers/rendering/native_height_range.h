@@ -53,6 +53,7 @@ public:
 		bool mapping_closed = false;
 		bool issue_closed = false;
 		bool native_complete = false;
+		bool prefix_settled = false;
 		bool observers_returned = false;
 		uint32_t graph_members = 0;
 		uint32_t sealed_members = 0;
@@ -126,6 +127,7 @@ private:
 	bool uncaptured_prefix = false;
 	bool mapping_failed = false;
 	bool native_complete = false; // Cached only after authoritative observation.
+	bool prefix_settled = false; // Physical prefix is fully observed and returnable; does not imply business success.
 	bool observers_returned = false;
 	Error append_error = OK;
 	Error mapping_error = OK;

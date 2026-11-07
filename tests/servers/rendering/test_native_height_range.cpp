@@ -52,7 +52,7 @@ class TestNativeHeightRangeAccess {
 	class Driver : public TransferTestDriverBase {
 	public:
 		uint32_t retains = 0, polls = 0, releases = 0, recycles = 0, issues = 0, command_ends = 0, segment_ends = 0;
-		bool retain_busy = false, release_busy = false;
+		bool retain_busy = false, release_busy = false, release_fail = false;
 		bool finalize_sentinel = false;
 		RDD::FencePollResult completion;
 		bool native_call_observation_supported() const override { return true; }
@@ -115,6 +115,9 @@ class TestNativeHeightRangeAccess {
 				CHECK(serial == 71);
 			}
 			++releases;
+			if (release_fail) {
+				return FAILED;
+			}
 			return release_busy ? ERR_BUSY : OK;
 		}
 	};
@@ -541,6 +544,91 @@ public:
 		// Destructive-finalize failure is tested in a subprocess, never in this
 		// doctest process: original frame wait CRASH_NOW / LAST_REF fail-stop.
 	}
+	static void settled_prefix_keeps_business_error_but_returns_sources() {
+		Fixture f;
+		auto range = sealed(f);
+		CHECK(issue(f, 2, 45, OK, report()) == OK);
+		CHECK(f.rd._native_height_retain_frame_sources(0) == OK);
+		f.driver.completion.completed = true;
+		f.driver.completion.completed_serial = 901;
+		NativeHeightRange::Snapshot out;
+		// The checked sink may have captured a real native prefix before a
+		// later business operation failed. Keep that sticky error, but allow
+		// mechanical observer retirement once every source is settled.
+		range->append_error = ERR_CANT_CREATE;
+		CHECK(f.rd._native_height_range_close(range) == ERR_CANT_CREATE);
+		CHECK(observe(f, range, out) == ERR_CANT_CREATE);
+		CHECK(out.prefix_settled);
+		CHECK_FALSE(out.native_complete);
+		CHECK(out.append_error == ERR_CANT_CREATE);
+		CHECK(f.rd._native_height_ranges_prepare_finalization() == OK);
+		CHECK(f.rd.native_height_ranges.is_empty());
+		CHECK(range->observers_returned);
+		CHECK(f.driver.releases == 1);
+	}
+	static void failed_prefix_release_is_sticky_and_not_replayed() {
+		Fixture f;
+		auto range = sealed(f);
+		CHECK(issue(f, 2, 45, OK, report()) == OK);
+		CHECK(f.rd._native_height_retain_frame_sources(0) == OK);
+		f.driver.completion.completed = true;
+		f.driver.completion.completed_serial = 901;
+		NativeHeightRange::Snapshot out;
+		range->append_error = ERR_CANT_CREATE;
+		CHECK(f.rd._native_height_range_close(range) == ERR_CANT_CREATE);
+		CHECK(observe(f, range, out) == ERR_CANT_CREATE);
+		f.driver.release_fail = true;
+		CHECK(give_back(f, range) == FAILED);
+		CHECK(f.driver.releases == 1);
+		f.driver.release_fail = false;
+		CHECK(give_back(f, range) == FAILED);
+		CHECK(f.driver.releases == 1);
+		CHECK(f.rd._native_height_ranges_prepare_finalization() == ERR_CANT_CREATE);
+		CHECK(observe(f, range, out) == ERR_CANT_CREATE);
+		CHECK(out.return_error == FAILED);
+		CHECK(f.driver.releases == 1);
+		CHECK_FALSE(range->observers_returned);
+		CHECK(f.rd.native_height_ranges.size() == 1);
+	}
+	static void business_failure_does_not_settle_unsafe_prefix() {
+		enum class Fault { Mapping, Issue, Retention, Completion, Uncaptured, Unresolved, WrongSerial };
+		for (Fault fault : { Fault::Mapping, Fault::Issue, Fault::Retention, Fault::Completion, Fault::Uncaptured, Fault::Unresolved, Fault::WrongSerial }) {
+			CAPTURE(int(fault));
+			Fixture f;
+			auto range = sealed(f); // Synthetic reducer member; no new issuer.
+			auto original = report();
+			if (fault == Fault::Unresolved) {
+				original.calls.write[0].issue = RDD::IssueFact::IssuedUnknown;
+			}
+			REQUIRE(issue(f, 2, 45, OK, original) == OK);
+			f.driver.completion.completed = true;
+			f.driver.completion.completed_serial = fault == Fault::WrongSerial ? 902 : 901;
+			f.driver.completion.resolved_issue = fault == Fault::Unresolved ? RDD::IssueFact::IssuedUnknown : RDD::IssueFact::KnownAccepted;
+			if (fault == Fault::Mapping) {
+				range->mapping_error = ERR_INVALID_DATA;
+			} else if (fault == Fault::Issue) {
+				range->issue_error = FAILED;
+			} else if (fault == Fault::Retention) {
+				range->retention_error = FAILED;
+			} else if (fault == Fault::Completion) {
+				f.driver.completion.native_error = true;
+			} else if (fault == Fault::Uncaptured) {
+				range->uncaptured_prefix = true;
+			}
+			range->append_error = ERR_CANT_CREATE;
+			NativeHeightRange::Snapshot out;
+			CHECK(observe(f, range, out) == ERR_CANT_CREATE);
+			CHECK(out.append_error == ERR_CANT_CREATE);
+			CHECK_FALSE(out.prefix_settled);
+			CHECK_FALSE(out.native_complete);
+			CHECK(give_back(f, range) == ERR_BUSY);
+			CHECK(f.rd._native_height_ranges_prepare_finalization() != OK);
+			CHECK_FALSE(range->observers_returned);
+			CHECK(f.rd.native_height_ranges.size() == 1);
+			CHECK(f.rd.frames[0].native_height_ranges.size() == 1);
+			CHECK(f.driver.releases == 0);
+		}
+	}
 };
 
 TEST_CASE("[RenderingDevice][NativeHeightRange] exact slot buffer and empty BUSY") {
@@ -551,6 +639,18 @@ TEST_CASE("[RenderingDevice][NativeHeightRange] original callback identity and o
 }
 TEST_CASE("[RenderingDevice][NativeHeightRange] native failure preserves finalization owner") {
 	TestNativeHeightRangeAccess::failed_source_blocks_finalization();
+}
+
+TEST_CASE("[RenderingDevice][NativeHeightRange] settled native prefix returns despite sticky business error") {
+	TestNativeHeightRangeAccess::settled_prefix_keeps_business_error_but_returns_sources();
+}
+
+TEST_CASE("[RenderingDevice][NativeHeightRange] failed observer return is sticky and not replayed") {
+	TestNativeHeightRangeAccess::failed_prefix_release_is_sticky_and_not_replayed();
+}
+
+TEST_CASE("[RenderingDevice][NativeHeightRange] business failure cannot settle unsafe native prefix") {
+	TestNativeHeightRangeAccess::business_failure_does_not_settle_unsafe_prefix();
 }
 
 TEST_CASE("[RenderingDevice][NativeHeightRange] retain BUSY and shared source observers") {

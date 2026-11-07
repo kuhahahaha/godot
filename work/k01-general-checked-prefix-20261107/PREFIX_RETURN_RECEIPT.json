@@ -1,0 +1,180 @@
+{
+  "scope": "K01 mechanical known-prefix observer return; not full geometry enrollment/Scene producer/reader/Complete",
+  "source_pins": {
+    "servers/rendering/native_height_range.h": "7ec8a6fcb70963ac8d61c6ed4344d0213263df40f35bb9f49e2b5a63e77fbbf9",
+    "servers/rendering/rendering_device.cpp": "d1dcc010516b005fdf8e2847855512666032ed8d2060097bca0613d3c9332ea5",
+    "tests/servers/rendering/test_native_height_range.cpp": "33cfad2d25887b5ecb59f85b8d8da1bdc68c5b6ff01515a8d85c6e413c9f92d9"
+  },
+  "restored_build": {
+    "command": [
+      "scons",
+      "-Q",
+      "tests=yes",
+      "platform=macos",
+      "target=editor",
+      "debug_symbols=no",
+      "module_particles_runtime_tests_enabled=yes",
+      "-j6"
+    ],
+    "exit": 0,
+    "seconds": 25.09,
+    "host_sha256": "3fa28354f1def1610043c973bad71f8f20cb4c5e475eb013ae9696cc69214806"
+  },
+  "height": {
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=*NativeHeightRange*",
+      "--reporters=xml",
+      "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k01-general-checked-prefix-20261107/validation-final/height.xml"
+    ],
+    "exit": 0,
+    "seconds": 1.69,
+    "host_sha256": "3fa28354f1def1610043c973bad71f8f20cb4c5e475eb013ae9696cc69214806",
+    "assertions": {
+      "successes": "486",
+      "failures": "0"
+    },
+    "cases": {
+      "successes": "15",
+      "failures": "0",
+      "skipped": "2282"
+    }
+  },
+  "focused": {
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--test-case=*SceneDepthR2*,*QualificationRt*,*ChildMetadata*,*NativeDisposal*,*NativeHeightRange*,*FrameWait*",
+      "--reporters=xml",
+      "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k01-general-checked-prefix-20261107/validation-final/focused.xml"
+    ],
+    "exit": 0,
+    "seconds": 0.14,
+    "host_sha256": "3fa28354f1def1610043c973bad71f8f20cb4c5e475eb013ae9696cc69214806",
+    "assertions": {
+      "successes": "14627",
+      "failures": "0"
+    },
+    "cases": {
+      "successes": "78",
+      "failures": "0",
+      "skipped": "2219"
+    }
+  },
+  "full_configured": {
+    "command": [
+      "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+      "--headless",
+      "--test",
+      "--reporters=xml",
+      "--out=work/k01-general-checked-prefix-20261107/validation-final/full-physics.xml"
+    ],
+    "environment": {
+      "GODOT_TEST_PHYSICS_3D_BACKEND": "GodotPhysics3D",
+      "GODOT_TEST_PHYSICS_3D_THREADED": "0"
+    },
+    "exit": 0,
+    "host_sha256": "3fa28354f1def1610043c973bad71f8f20cb4c5e475eb013ae9696cc69214806",
+    "assertions": {
+      "successes": "593067",
+      "failures": "0"
+    },
+    "cases": {
+      "successes": "2294",
+      "failures": "0",
+      "skipped": "3"
+    }
+  },
+  "controlled_red": {
+    "business_gate": {
+      "source_before": "d1dcc010516b005fdf8e2847855512666032ed8d2060097bca0613d3c9332ea5",
+      "source_red": "4c472db95defd92ab5689cc5bc5e0d11f7a985b347c1989350d810dcd6fc6702",
+      "old": "if (observed != OK && !sticky_business_error) {",
+      "new": "if (observed != OK) {",
+      "build_command": [
+        "scons",
+        "-Q",
+        "tests=yes",
+        "platform=macos",
+        "target=editor",
+        "debug_symbols=no",
+        "module_particles_runtime_tests_enabled=yes",
+        "-j6"
+      ],
+      "build_exit": 0,
+      "seconds": 22.84,
+      "host_sha256": "1d437e21eb1715907d31c487f3fe26ca5a79a9e1def7ef500f2788298553d901",
+      "test_command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+        "--headless",
+        "--test",
+        "--test-case=[RenderingDevice][NativeHeightRange] settled native prefix returns despite sticky business error",
+        "--reporters=xml",
+        "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k01-general-checked-prefix-20261107/controlled-red/business_gate/CPU.xml"
+      ],
+      "test_exit": 1,
+      "assertions": {
+        "successes": "11",
+        "failures": "4"
+      },
+      "cases": {
+        "successes": "0",
+        "failures": "1",
+        "skipped": "2296"
+      },
+      "source_restored": "d1dcc010516b005fdf8e2847855512666032ed8d2060097bca0613d3c9332ea5"
+    },
+    "sticky_release": {
+      "source_before": "d1dcc010516b005fdf8e2847855512666032ed8d2060097bca0613d3c9332ea5",
+      "source_red": "d760bb9fa73c6b5af81dfb351d657298004ea3976043dfef3b69b0a43fd9df1b",
+      "old": "\tif (p_range->return_error != OK) {\n\t\treturn p_range->return_error;\n\t}\n",
+      "new": "",
+      "build_command": [
+        "scons",
+        "-Q",
+        "tests=yes",
+        "platform=macos",
+        "target=editor",
+        "debug_symbols=no",
+        "module_particles_runtime_tests_enabled=yes",
+        "-j6"
+      ],
+      "build_exit": 0,
+      "seconds": 18.51,
+      "host_sha256": "37bc5fe75cd8c07ee2e61b261f4389f7793a6b31629e2fba9ef850ba2ee7c9f6",
+      "test_command": [
+        "/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/bin/godot.macos.editor.arm64",
+        "--headless",
+        "--test",
+        "--test-case=[RenderingDevice][NativeHeightRange] failed observer return is sticky and not replayed",
+        "--reporters=xml",
+        "--out=/Users/macbookair/Documents/Codex/2026-10-20/godot-ange/worktrees/b4-renderer-continuation-20261104/work/k01-general-checked-prefix-20261107/controlled-red/sticky_release/CPU.xml"
+      ],
+      "test_exit": 1,
+      "assertions": {
+        "successes": "14",
+        "failures": "6"
+      },
+      "cases": {
+        "successes": "0",
+        "failures": "1",
+        "skipped": "2296"
+      },
+      "source_restored": "d1dcc010516b005fdf8e2847855512666032ed8d2060097bca0613d3c9332ea5"
+    }
+  },
+  "historical_rejected": [
+    "initial test duplicate-global-registration hang, terminated after 84.4s; fixture corrected",
+    "unconfigured full run valid_config physics assertion failure; configured required backend run passes"
+  ],
+  "independent_review": "REVIEW_PREFIX_RETURN.md: P1/P2 closed",
+  "unrun": [
+    "real geometry sink enrollment",
+    "transfer-worker geometry prefix",
+    "Scene producer/read last-use",
+    "actual GPU failed-business-prefix retirement"
+  ]
+}
